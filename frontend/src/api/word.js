@@ -59,3 +59,17 @@ export function getRandomWords(count) {
     params: { count }
   })
 }
+
+// Excel批量导入单词
+export function importWords(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request({
+    url: '/api/words/import',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}

@@ -17,4 +17,5 @@ public interface WordService {
     List<Word> getRandomWords(int count);
     List<Word> searchWords(String keyword);
     Map<String, Object> getWordStats();
+    boolean batchCreateWords(List<Word> words);
 }

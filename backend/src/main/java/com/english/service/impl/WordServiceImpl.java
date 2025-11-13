@@ -171,4 +171,20 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
 
         return stats;
     }
+
+    @Override
+    public boolean batchCreateWords(List<Word> words) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            for (Word word : words) {
+                word.setCreatedTime(now);
+                word.setUpdatedTime(now);
+                word.setDeleted(0);
+            }
+            return saveBatch(words);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 }
