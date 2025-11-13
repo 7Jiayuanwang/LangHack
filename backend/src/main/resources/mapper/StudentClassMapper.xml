@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.StudentClassMapper">
+
+    <!-- 学生班级关联结果映射 -->
+    <resultMap id="StudentClassWithDetailsMap" type="com.english.entity.StudentClass">
+        <id property="id" column="id"/>
+        <result property="studentId" column="student_id"/>
+        <result property="classId" column="class_id"/>
+        <result property="joinTime" column="join_time"/>
+
+        <!-- 关联学生信息 -->
+        <association property="student" javaType="com.english.entity.User">
+            <id property="id" column="student_id"/>
+            <result property="username" column="student_username"/>
+            <result property="nickname" column="student_nickname"/>
+            <result property="realName" column="student_real_name"/>
+            <result property="email" column="student_email"/>
+        </association>
+
+        <!-- 关联班级信息 -->
+        <association property="classInfo" javaType="com.english.entity.Class">
+            <id property="id" column="class_id"/>
+            <result property="name" column="class_name"/>
+            <result property="description" column="class_description"/>
+            <result property="createdTime" column="class_created_time"/>
+        </association>
+    </resultMap>
+
+    <!-- 分页查询学生班级关联列表（包含学生和班级信息） -->
+    <select id="selectStudentClassesWithDetails" resultMap="StudentClassWithDetailsMap">
+        SELECT
+            sc.id,
+            sc.student_id,
+            sc.class_id,
+            sc.join_time,
+            u.username as student_username,
+            u.nickname as student_nickname,
+            u.real_name as student_real_name,
+            u.email as student_email,
+            c.name as class_name,
+            c.description as class_description,
+            c.created_time as class_created_time
+        FROM student_classes sc
+        LEFT JOIN users u ON sc.student_id = u.id
+        LEFT JOIN classes c ON sc.class_id = c.id
+        WHERE 1=1
+        <if test="classId != null">
+            AND sc.class_id = #{classId}
+        </if>
+        <if test="studentId != null">
+            AND sc.student_id = #{studentId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (u.username LIKE CONCAT('%', #{keyword}, '%')
+                 OR u.nickname LIKE CONCAT('%', #{keyword}, '%')
+                 OR u.real_name LIKE CONCAT('%', #{keyword}, '%')
+                 OR c.name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY sc.join_time DESC
+    </select>
+
+    <!-- 根据班级ID查询学生列表 -->
+    <select id="selectStudentsByClassId" resultType="com.english.entity.StudentClass">
+        SELECT
+            sc.id,
+            sc.student_id,
+            sc.class_id,
+            sc.join_time
+        FROM student_classes sc
+        WHERE sc.class_id = #{classId}
+        ORDER BY sc.join_time ASC
+    </select>
+
+    <!-- 根据学生ID查询班级列表 -->
+    <select id="selectClassesByStudentId" resultType="com.english.entity.StudentClass">
+        SELECT
+            sc.id,
+            sc.student_id,
+            sc.class_id,
+            sc.join_time
+        FROM student_classes sc
+        WHERE sc.student_id = #{studentId}
+        ORDER BY sc.join_time DESC
+    </select>
+
+    <!-- 检查学生是否已在班级中 -->
+    <select id="checkStudentInClass" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM student_classes
+        WHERE student_id = #{studentId} AND class_id = #{classId}
+    </select>
+
+    <!-- 获取班级学生数量 -->
+    <select id="selectStudentCountByClassId" resultType="java.lang.Long">
+        SELECT COUNT(*) FROM student_classes WHERE class_id = #{classId}
+    </select>
+
+    <!-- 获取学生加入的班级数量 -->
+    <select id="selectClassCountByStudentId" resultType="java.lang.Long">
+        SELECT COUNT(*) FROM student_classes WHERE student_id = #{studentId}
+    </select>
+
+</mapper>

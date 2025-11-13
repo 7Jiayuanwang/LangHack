@@ -1,0 +1,75 @@
+package com.english.service;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 生词本服务接口
+ */
+public interface VocabularyBooksService {
+
+    /**
+     * 统计学生的生词数量
+     */
+    int countByStudentId(Long studentId);
+
+    /**
+     * 获取学生最近添加的单词
+     */
+    List<Map<String, Object>> getRecentWords(Long studentId, int limit);
+
+    /**
+     * 检查学生是否已有指定单词
+     */
+    boolean existsByStudentAndWord(Long studentId, Long wordId);
+
+    /**
+     * 添加单词到生词本
+     */
+    void addToVocabulary(Long studentId, Long wordId);
+
+    /**
+     * 获取生词本列表（分页）
+     */
+    Map<String, Object> getVocabularyWithPagination(Map<String, Object> params);
+
+    /**
+     * 更新单词掌握程度
+     */
+    void updateMasteryLevel(Long studentId, Long wordId, String masteryLevel);
+
+    /**
+     * 获取单词详情（包含学习状态）
+     */
+    Map<String, Object> getWordDetailWithLearningState(Long studentId, Long wordId);
+
+    /**
+     * 创建学习会话
+     */
+    Map<String, Object> createStudySession(Long studentId, Long unitId);
+
+    /**
+     * 处理学习结果
+     */
+    void processStudyResults(Long studentId, Map<String, Object> results);
+
+    /**
+     * 获取单词学习统计
+     */
+    Map<String, Object> getWordStudyStats(Long studentId, String period, Long courseId, Long unitId);
+
+    /**
+     * 获取单词学习统计（简化版本）
+     */
+    Map<String, Object> getWordStudyStats(Long studentId, String period);
+
+    /**
+     * 批量删除生词
+     */
+    void batchDeleteVocabulary(Long studentId, List<Long> wordIds);
+
+    /**
+     * 批量更新掌握程度
+     */
+    void batchUpdateMasteryLevel(Long studentId, List<Long> wordIds, String masteryLevel);
+}
