@@ -28,6 +28,18 @@
             <el-icon><Edit /></el-icon>
             <span>我的任务</span>
           </el-menu-item>
+          <el-menu-item index="/student/practice">
+            <el-icon><EditPen /></el-icon>
+            <span>在线练习</span>
+          </el-menu-item>
+          <el-menu-item index="/student/weakness">
+            <el-icon><TrendCharts /></el-icon>
+            <span>薄弱点分析</span>
+          </el-menu-item>
+          <el-menu-item index="/student/suggestions">
+            <el-icon><Promotion /></el-icon>
+            <span>学习建议</span>
+          </el-menu-item>
         </el-menu>
       </el-aside>
 
@@ -69,6 +81,7 @@
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { DataBoard, Reading, Document, Edit, EditPen, TrendCharts, Promotion, ArrowDown } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()

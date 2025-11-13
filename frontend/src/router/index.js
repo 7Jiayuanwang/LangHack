@@ -125,6 +125,24 @@ const routes = [
         name: 'StudentClasses',
         component: () => import('@/views/student/Classes.vue'),
         meta: { title: '我的班级', roles: ['STUDENT'] }
+      },
+      {
+        path: 'practice',
+        name: 'StudentPractice',
+        component: () => import('@/views/student/Practice.vue'),
+        meta: { title: '在线练习', roles: ['STUDENT'] }
+      },
+      {
+        path: 'weakness',
+        name: 'StudentWeakness',
+        component: () => import('@/views/student/WeaknessAnalysis.vue'),
+        meta: { title: '薄弱点分析', roles: ['STUDENT'] }
+      },
+      {
+        path: 'suggestions',
+        name: 'StudentSuggestions',
+        component: () => import('@/views/student/LearningSuggestion.vue'),
+        meta: { title: '学习建议', roles: ['STUDENT'] }
       }
     ]
   }
