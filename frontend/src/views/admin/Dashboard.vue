@@ -182,14 +182,17 @@ let answerTrendInstance = null
 let knowledgePointInstance = null
 
 onMounted(async () => {
-  await loadDashboardData()
-  await nextTick()
   initCharts()
+  await nextTick()
+  await loadDashboardData()
 })
 
 const loadDashboardData = async () => {
+  // 先加载模拟数据，确保页面有内容
+  loadMockData()
+
   try {
-    // 加载平台统计
+    // 尝试加载真实API数据
     const platformRes = await getPlatformStats()
     if (platformRes.data) {
       stats.totalUsers = platformRes.data.totalUsers || 0
@@ -219,9 +222,8 @@ const loadDashboardData = async () => {
       renderKnowledgePointChart(questionRes.data.byCategory || {})
     }
   } catch (error) {
-    console.error('加载仪表板数据失败:', error)
-    // 使用模拟数据
-    loadMockData()
+    console.error('加载仪表板数据失败，使用模拟数据:', error)
+    // API失败时已经有模拟数据了
   }
 }
 
