@@ -2,24 +2,29 @@ package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.english.dto.LearningStatsDTO;
 import com.english.entity.AnswerRecord;
 import com.english.entity.Question;
+import com.english.entity.User;
 import com.english.mapper.AnswerRecordMapper;
 import com.english.mapper.QuestionMapper;
+import com.english.mapper.UserMapper;
 import com.english.service.AnswerRecordService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class AnswerRecordServiceImpl extends ServiceImpl<AnswerRecordMapper, AnswerRecord> implements AnswerRecordService {
 
     @Autowired
     private QuestionMapper questionMapper;
+
+    @Autowired
+    private UserMapper userMapper;
 
     @Override
     public void saveAnswerRecord(AnswerRecord record) {
@@ -96,5 +101,50 @@ public class AnswerRecordServiceImpl extends ServiceImpl<AnswerRecordMapper, Ans
         stats.put("recentActivity", recentCount);
 
         return stats;
+    }
+
+    @Override
+    public List<LearningStatsDTO.ActiveStudentDTO> getActiveStudentRanking(int limit) {
+        // 获取所有答题记录，按学生分组
+        List<AnswerRecord> allRecords = list();
+
+        // 按学生ID分组统计
+        Map<Long, List<AnswerRecord>> recordsByStudent = allRecords.stream()
+                .collect(Collectors.groupingBy(AnswerRecord::getStudentId));
+
+        // 计算每个学生的统计数据
+        List<LearningStatsDTO.ActiveStudentDTO> ranking = new ArrayList<>();
+
+        for (Map.Entry<Long, List<AnswerRecord>> entry : recordsByStudent.entrySet()) {
+            Long studentId = entry.getKey();
+            List<AnswerRecord> records = entry.getValue();
+
+            // 获取学生信息
+            User student = userMapper.selectById(studentId);
+            if (student == null || !"STUDENT".equals(student.getRole())) {
+                continue;
+            }
+
+            // 统计答题数和正确率
+            int answerCount = records.size();
+            long correctCount = records.stream()
+                    .filter(r -> r.getIsCorrect() != null && r.getIsCorrect() == 1)
+                    .count();
+
+            int accuracy = answerCount > 0 ? (int) Math.round((double) correctCount / answerCount * 100) : 0;
+
+            LearningStatsDTO.ActiveStudentDTO dto = new LearningStatsDTO.ActiveStudentDTO();
+            dto.setStudentName(student.getRealName() != null ? student.getRealName() : student.getUsername());
+            dto.setAnswerCount(answerCount);
+            dto.setAccuracy(accuracy);
+
+            ranking.add(dto);
+        }
+
+        // 按答题数降序排序，取前N个
+        return ranking.stream()
+                .sorted(Comparator.comparing(LearningStatsDTO.ActiveStudentDTO::getAnswerCount).reversed())
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 }
