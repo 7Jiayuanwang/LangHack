@@ -1,5 +1,14 @@
 import request from '@/utils/request'
 
+// 获取单元列表（带分页）
+export function getUnits(params) {
+  return request({
+    url: '/api/units',
+    method: 'get',
+    params
+  })
+}
+
 // 根据课程ID获取单元列表
 export function getUnitsByCourse(courseId) {
   return request({
@@ -39,5 +48,14 @@ export function deleteUnit(id) {
   return request({
     url: `/api/units/${id}`,
     method: 'delete'
+  })
+}
+
+// 批量删除单元
+export function batchDeleteUnits(ids) {
+  return request({
+    url: '/api/units/batch',
+    method: 'delete',
+    data: ids
   })
 }
