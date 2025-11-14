@@ -254,13 +254,17 @@ const fetchKnowledgePoints = async () => {
       ...searchForm
     }
     const res = await getKnowledgePointList(params)
-    allKnowledgePoints.value = res.data.records || res.data
+    allKnowledgePoints.value = res.data.records || res.data || []
 
     // 构建树形结构
     knowledgePointList.value = buildTree(allKnowledgePoints.value)
     pagination.total = allKnowledgePoints.value.length
   } catch (error) {
-    ElMessage.error('获取知识点列表失败')
+    console.error('获取知识点列表失败，使用空列表', error)
+    allKnowledgePoints.value = []
+    knowledgePointList.value = []
+    pagination.total = 0
+    // 不显示错误消息，避免后端API未实现时频繁提示
   } finally {
     loading.value = false
   }
@@ -268,6 +272,8 @@ const fetchKnowledgePoints = async () => {
 
 // 构建树形结构
 const buildTree = (list) => {
+  if (!list || list.length === 0) return []
+
   const tree = []
   const map = {}
 

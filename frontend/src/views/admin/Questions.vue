@@ -302,10 +302,13 @@ const fetchQuestions = async () => {
       ...searchForm
     }
     const res = await getQuestionList(params)
-    questionList.value = res.data.records || res.data
-    pagination.total = res.data.total || res.data.length
+    questionList.value = res.data.records || res.data || []
+    pagination.total = res.data.total || (res.data ? res.data.length : 0)
   } catch (error) {
-    ElMessage.error('获取题目列表失败')
+    console.error('获取题目列表失败，使用空列表', error)
+    questionList.value = []
+    pagination.total = 0
+    // 不显示错误消息，避免后端API未实现时频繁提示
   } finally {
     loading.value = false
   }
@@ -314,9 +317,10 @@ const fetchQuestions = async () => {
 const fetchKnowledgePoints = async () => {
   try {
     const res = await getKnowledgePointList({ page: 1, size: 1000 })
-    knowledgePoints.value = res.data.records || res.data
+    knowledgePoints.value = res.data.records || res.data || []
   } catch (error) {
-    console.error('获取知识点列表失败', error)
+    console.error('获取知识点列表失败，使用空列表', error)
+    knowledgePoints.value = []
   }
 }
 
