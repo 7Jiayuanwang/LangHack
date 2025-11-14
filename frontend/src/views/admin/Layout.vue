@@ -36,6 +36,14 @@
             <el-icon><Grid /></el-icon>
             <span>班级管理</span>
           </el-menu-item>
+          <el-menu-item index="/admin/questions">
+            <el-icon><EditPen /></el-icon>
+            <span>题库管理</span>
+          </el-menu-item>
+          <el-menu-item index="/admin/knowledge-points">
+            <el-icon><CollectionTag /></el-icon>
+            <span>知识点管理</span>
+          </el-menu-item>
         </el-menu>
       </el-aside>
 
@@ -77,7 +85,7 @@
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DataBoard, Reading, Document, Notebook, User, Grid, ArrowDown } from '@element-plus/icons-vue'
+import { DataBoard, Reading, Document, Notebook, User, Grid, EditPen, CollectionTag, ArrowDown } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()

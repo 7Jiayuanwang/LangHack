@@ -53,6 +53,18 @@ const routes = [
         name: 'AdminClasses',
         component: () => import('@/views/admin/Classes.vue'),
         meta: { title: '班级管理', roles: ['ADMIN'] }
+      },
+      {
+        path: 'questions',
+        name: 'AdminQuestions',
+        component: () => import('@/views/admin/Questions.vue'),
+        meta: { title: '题库管理', roles: ['ADMIN'] }
+      },
+      {
+        path: 'knowledge-points',
+        name: 'AdminKnowledgePoints',
+        component: () => import('@/views/admin/KnowledgePoints.vue'),
+        meta: { title: '知识点管理', roles: ['ADMIN'] }
       }
     ]
   },
