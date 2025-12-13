@@ -210,9 +210,7 @@ import {
 import {
   generateLearningSuggestions,
   getLearningSuggestions,
-  completeSuggestion as completeSuggestionApi,
-  ignoreSuggestion as ignoreSuggestionApi,
-  updateSuggestionProgress
+  completeSuggestion as completeSuggestionApi
 } from '@/api/weakness'
 
 // 响应式数据

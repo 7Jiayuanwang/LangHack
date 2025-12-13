@@ -1,6 +1,7 @@
 package com.english.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDateTime;
 
 @TableName("users")
@@ -13,6 +14,7 @@ public class User {
     private String username;
 
     @TableField("password")
+    @JsonIgnore
     private String password;
 
     @TableField("email")

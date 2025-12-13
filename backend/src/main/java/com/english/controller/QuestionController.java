@@ -1,10 +1,13 @@
 package com.english.controller;
 
+import com.english.constants.RoleConstants;
 import com.english.dto.Result;
 import com.english.entity.Question;
 import com.english.service.QuestionService;
+import com.english.util.SecurityUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -66,7 +69,7 @@ public class QuestionController {
      * 创建题目（管理员/教师）
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('" + RoleConstants.Annotation.ADMIN + "', '" + RoleConstants.Annotation.TEACHER + "')")
     public Result<String> createQuestion(@RequestBody Question question) {
         try {
             questionService.createQuestion(question);
@@ -80,7 +83,7 @@ public class QuestionController {
      * 更新题目（管理员/教师）
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('" + RoleConstants.Annotation.ADMIN + "', '" + RoleConstants.Annotation.TEACHER + "')")
     public Result<String> updateQuestion(@PathVariable Long id, @RequestBody Question question) {
         try {
             question.setId(id);
@@ -95,7 +98,7 @@ public class QuestionController {
      * 删除题目（管理员）
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.ADMIN + "')")
     public Result<String> deleteQuestion(@PathVariable Long id) {
         try {
             questionService.deleteQuestion(id);
@@ -122,13 +125,16 @@ public class QuestionController {
      * 获取推荐题目（学生）
      */
     @GetMapping("/recommended")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<List<Question>> getRecommendedQuestions(
-            @RequestParam Long studentId,
             @RequestParam(required = false) Long knowledgePointId,
-            @RequestParam(defaultValue = "10") int count) {
+            @RequestParam(defaultValue = "10") int count,
+            Authentication authentication) {
 
         try {
+            // 从认证信息中获取学生ID，而不是从请求参数
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+
             List<Question> questions = questionService.getRecommendedQuestions(
                 studentId, knowledgePointId, count);
             return Result.success(questions);

@@ -32,12 +32,3 @@ export function getQuestionStats() {
     method: 'get'
   })
 }
-
-// 获取最近活跃用户
-export function getRecentActiveUsers(days = 7) {
-  return request({
-    url: '/api/admin/stats/active-users',
-    method: 'get',
-    params: { days }
-  })
-}

@@ -161,8 +161,6 @@ import {
   analyzeWeakness as analyzeWeaknessApi,
   getWeaknessList,
   getWeaknessDetail,
-  getWeaknessChartData,
-  getImprovementTrend,
   getTargetedPractice
 } from '@/api/weakness'
 

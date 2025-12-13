@@ -153,13 +153,22 @@ public class AdminStatsController {
 
     /**
      * 获取题库统计数据
+     * 添加分页限制，防止一次性加载过多数据
      */
     @GetMapping("/questions")
-    public Result<QuestionStatsDTO> getQuestionStats() {
+    public Result<QuestionStatsDTO> getQuestionStats(
+            @RequestParam(defaultValue = "100") int pageSize,
+            @RequestParam(defaultValue = "1000") int maxSize) {
+
+        // 限制分页大小
+        pageSize = Math.min(pageSize, maxSize);
+        pageSize = Math.max(pageSize, 1);
+
         QuestionStatsDTO stats = new QuestionStatsDTO();
 
         QueryWrapper<Question> baseQuery = new QueryWrapper<>();
-        baseQuery.eq("deleted", 0);
+        baseQuery.eq("deleted", 0)
+                 .last("LIMIT " + pageSize);
         List<Question> allQuestions = questionService.list(baseQuery);
 
         // 按题型统计

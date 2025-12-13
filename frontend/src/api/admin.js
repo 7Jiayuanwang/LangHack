@@ -31,21 +31,6 @@ export function deleteUser(id) {
   })
 }
 
-export function getUserStats() {
-  return request({
-    url: '/api/admin/stats',
-    method: 'get'
-  })
-}
-
-export function getCourses(params) {
-  return request({
-    url: '/api/courses',
-    method: 'get',
-    params
-  })
-}
-
 export function getCourseList(params) {
   return request({
     url: '/api/courses',

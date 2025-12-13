@@ -108,13 +108,20 @@ public class LearningSuggestionServiceImpl extends ServiceImpl<LearningSuggestio
     }
 
     @Override
-    public void completeSuggestion(Long suggestionId) {
+    public void completeSuggestion(Long suggestionId, Long studentId) {
         LearningSuggestion suggestion = getById(suggestionId);
-        if (suggestion != null) {
-            suggestion.setStatus("COMPLETED");
-            suggestion.setCompletedTime(LocalDateTime.now());
-            updateById(suggestion);
+        if (suggestion == null) {
+            throw new RuntimeException("学习建议不存在");
         }
+
+        // 验证建议是否属于当前学生
+        if (!suggestion.getStudentId().equals(studentId)) {
+            throw new RuntimeException("您没有权限操作此学习建议");
+        }
+
+        suggestion.setStatus("COMPLETED");
+        suggestion.setCompletedTime(LocalDateTime.now());
+        updateById(suggestion);
     }
 
     /**

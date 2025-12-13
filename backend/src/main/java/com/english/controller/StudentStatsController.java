@@ -1,8 +1,9 @@
 package com.english.controller;
 
+import com.english.constants.RoleConstants;
 import com.english.dto.Result;
-import com.english.entity.User;
 import com.english.service.*;
+import com.english.util.SecurityUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -25,19 +26,16 @@ public class StudentStatsController {
     private VocabularyBooksService vocabularyBooksService;
 
     @Autowired
-    private StudentClassesService studentClassesService;
-
-    @Autowired
-    private UserService userService;
+    private StudentClassService studentClassService;
 
     /**
      * 获取今日学习统计
      */
     @GetMapping("/today")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getTodayLearningStats(Authentication authentication) {
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> stats = learningRecordsService.getTodayLearningStats(studentId);
 
@@ -51,7 +49,7 @@ public class StudentStatsController {
      * 获取学习统计数据
      */
     @GetMapping("/overview")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getLearningOverview(
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String startDate,
@@ -59,7 +57,7 @@ public class StudentStatsController {
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> params = new HashMap<>();
             params.put("period", period);
@@ -78,7 +76,7 @@ public class StudentStatsController {
      * 获取详细学习记录
      */
     @GetMapping("/records")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getLearningRecords(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -89,7 +87,7 @@ public class StudentStatsController {
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> params = new HashMap<>();
             params.put("studentId", studentId);
@@ -112,7 +110,7 @@ public class StudentStatsController {
      * 获取单词学习统计
      */
     @GetMapping("/words")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getWordStudyStats(
             @RequestParam(required = false) String period,
             @RequestParam(required = false) Long courseId,
@@ -120,7 +118,7 @@ public class StudentStatsController {
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> stats = vocabularyBooksService.getWordStudyStats(studentId, period, courseId, unitId);
 
@@ -134,13 +132,13 @@ public class StudentStatsController {
      * 获取课程学习统计
      */
     @GetMapping("/courses")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getCourseLearningStats(
             @RequestParam(required = false) Long courseId,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> stats;
 
@@ -162,14 +160,14 @@ public class StudentStatsController {
      * 获取学习时长统计
      */
     @GetMapping("/study-time")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getStudyTimeStats(
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String granularity, // daily, weekly, monthly
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> params = new HashMap<>();
             params.put("period", period);
@@ -187,13 +185,13 @@ public class StudentStatsController {
      * 获取学习进度报告
      */
     @GetMapping("/progress-report")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getProgressReport(
             @RequestParam(required = false) String type, // weekly, monthly
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> report = learningRecordsService.generateProgressReport(studentId, type);
 
@@ -207,10 +205,10 @@ public class StudentStatsController {
      * 获取学习成就统计
      */
     @GetMapping("/achievements")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getAchievementStats(Authentication authentication) {
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> achievements = learningRecordsService.getAchievementStats(studentId);
 
@@ -224,14 +222,21 @@ public class StudentStatsController {
      * 获取学习排名统计
      */
     @GetMapping("/ranking")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getLearningRanking(
             @RequestParam(required = false) String type, // class, course, global
             @RequestParam(required = false) Long targetId, // 班级ID或课程ID
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+
+            // 如果查询班级排名,验证学生是否属于该班级
+            if ("class".equals(type) && targetId != null) {
+                if (!studentClassService.isStudentInClass(studentId, targetId)) {
+                    return Result.error("您没有权限查看该班级的排名数据");
+                }
+            }
 
             Map<String, Object> ranking = learningRecordsService.getLearningRanking(studentId, type, targetId);
 
@@ -245,7 +250,7 @@ public class StudentStatsController {
      * 导出学习数据
      */
     @GetMapping("/export")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> exportLearningData(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
@@ -253,7 +258,7 @@ public class StudentStatsController {
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> params = new HashMap<>();
             params.put("startDate", startDate);
@@ -266,14 +271,5 @@ public class StudentStatsController {
         } catch (Exception e) {
             return Result.error("导出学习数据失败：" + e.getMessage());
         }
-    }
-
-    /**
-     * 获取当前学生ID
-     */
-    private Long getCurrentStudentId(Authentication authentication) {
-        String username = authentication.getName();
-        User user = userService.getUserByUsername(username);
-        return user != null ? user.getId() : null;
     }
 }

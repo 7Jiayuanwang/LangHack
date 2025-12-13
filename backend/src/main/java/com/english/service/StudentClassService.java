@@ -70,4 +70,29 @@ public interface StudentClassService {
      * 教师移除学生出班级
      */
     void removeStudentFromClass(Long teacherId, Long classId, Long studentId);
+
+    /**
+     * 统计学生加入的班级数量
+     */
+    int countByStudentId(Long studentId);
+
+    /**
+     * 获取学生加入的班级列表（包含课程和教师信息）
+     */
+    List<Map<String, Object>> getStudentClassesWithDetails(Long studentId);
+
+    /**
+     * 获取学生的课程列表（包含学习进度）
+     */
+    List<Map<String, Object>> getStudentCoursesWithProgress(Long studentId);
+
+    /**
+     * 获取学生加入的班级ID列表
+     */
+    List<Long> getClassIdsByStudentId(Long studentId);
+
+    /**
+     * 获取学生班级关联信息
+     */
+    Map<String, Object> getStudentClassInfo(Long studentId, Long classId);
 }

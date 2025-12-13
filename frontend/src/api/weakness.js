@@ -1,20 +1,18 @@
 import request from '@/utils/request'
 
-// 触发薄弱点分析
-export function analyzeWeakness(data) {
+// 触发薄弱点分析 - 不需要传递studentId,后端从Authentication获取
+export function analyzeWeakness() {
   return request({
     url: '/api/student/weakness/analyze',
-    method: 'post',
-    data
+    method: 'post'
   })
 }
 
-// 获取薄弱点列表
-export function getWeaknessList(params) {
+// 获取薄弱点列表 - 不需要传递studentId,后端从Authentication获取
+export function getWeaknessList() {
   return request({
     url: '/api/student/weakness/list',
-    method: 'get',
-    params
+    method: 'get'
   })
 }
 
@@ -26,15 +24,6 @@ export function getWeaknessDetail(knowledgePointId) {
   })
 }
 
-// 获取薄弱点统计图表数据
-export function getWeaknessChartData(params) {
-  return request({
-    url: '/api/student/weakness/chart',
-    method: 'get',
-    params
-  })
-}
-
 // 获取针对性练习推荐
 export function getTargetedPractice(knowledgePointId) {
   return request({
@@ -43,21 +32,19 @@ export function getTargetedPractice(knowledgePointId) {
   })
 }
 
-// 生成学习建议
-export function generateLearningSuggestions(data) {
+// 生成学习建议 - 不需要传递studentId,后端从Authentication获取
+export function generateLearningSuggestions() {
   return request({
     url: '/api/student/suggestions/generate',
-    method: 'post',
-    data
+    method: 'post'
   })
 }
 
-// 获取学习建议列表
-export function getLearningSuggestions(params) {
+// 获取学习建议列表 - 不需要传递studentId,后端从Authentication获取
+export function getLearningSuggestions() {
   return request({
-    url: '/api/student/suggestions/list',
-    method: 'get',
-    params
+    url: '/api/student/suggestions',
+    method: 'get'
   })
 }
 
@@ -65,15 +52,7 @@ export function getLearningSuggestions(params) {
 export function completeSuggestion(suggestionId) {
   return request({
     url: `/api/student/suggestions/${suggestionId}/complete`,
-    method: 'post'
-  })
-}
-
-// 忽略建议
-export function ignoreSuggestion(suggestionId) {
-  return request({
-    url: `/api/student/suggestions/${suggestionId}/ignore`,
-    method: 'post'
+    method: 'put'
   })
 }
 
@@ -82,24 +61,6 @@ export function getSuggestionDetail(suggestionId) {
   return request({
     url: `/api/student/suggestions/${suggestionId}`,
     method: 'get'
-  })
-}
-
-// 更新建议进度
-export function updateSuggestionProgress(suggestionId, data) {
-  return request({
-    url: `/api/student/suggestions/${suggestionId}/progress`,
-    method: 'put',
-    data
-  })
-}
-
-// 获取薄弱点改善趋势
-export function getImprovementTrend(params) {
-  return request({
-    url: '/api/student/weakness/trend',
-    method: 'get',
-    params
   })
 }
 

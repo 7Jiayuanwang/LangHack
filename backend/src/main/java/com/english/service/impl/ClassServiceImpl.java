@@ -7,7 +7,11 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Class;
 import com.english.entity.Course;
 import com.english.entity.User;
+import com.english.entity.StudentClass;
+import com.english.entity.Assignment;
 import com.english.mapper.ClassMapper;
+import com.english.mapper.StudentClassMapper;
+import com.english.mapper.AssignmentMapper;
 import com.english.service.ClassService;
 import com.english.service.CourseService;
 import com.english.service.UserService;
@@ -28,6 +32,12 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private StudentClassMapper studentClassMapper;
+
+    @Autowired
+    private AssignmentMapper assignmentMapper;
 
     @Override
     public Map<String, Object> getClassesByPage(Map<String, Object> params) {
@@ -120,7 +130,22 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
         }
 
         // 检查班级是否还有学生
-        // TODO: 添加学生班级关联检查
+        QueryWrapper<StudentClass> studentClassWrapper = new QueryWrapper<>();
+        studentClassWrapper.eq("class_id", id);
+        Long studentCount = studentClassMapper.selectCount(studentClassWrapper);
+        if (studentCount > 0) {
+            throw new RuntimeException("班级中还有学生，无法删除。请先移除所有学生或使用强制删除功能。");
+        }
+
+        // 检查班级是否还有作业
+        QueryWrapper<Assignment> assignmentWrapper = new QueryWrapper<>();
+        assignmentWrapper.eq("class_id", id);
+        Long assignmentCount = assignmentMapper.selectCount(assignmentWrapper);
+        if (assignmentCount > 0) {
+            throw new RuntimeException("班级中还有作业，无法删除。请先删除所有作业或使用强制删除功能。");
+        }
+
+        // 如果没有学生和作业，则删除班级
         removeById(id);
     }
 

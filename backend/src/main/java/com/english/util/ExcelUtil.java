@@ -2,6 +2,7 @@ package com.english.util;
 
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -23,8 +24,21 @@ public class ExcelUtil {
     public static List<Map<String, String>> readExcel(MultipartFile file) throws IOException {
         List<Map<String, String>> dataList = new ArrayList<>();
 
-        try (InputStream inputStream = file.getInputStream();
-             Workbook workbook = new XSSFWorkbook(inputStream)) {
+        String filename = file.getOriginalFilename();
+        if (filename == null) {
+            throw new IOException("文件名为空");
+        }
+
+        Workbook workbook = null;
+        try (InputStream inputStream = file.getInputStream()) {
+            // 根据文件扩展名选择对应的Workbook实现
+            if (filename.toLowerCase().endsWith(".xlsx")) {
+                workbook = new XSSFWorkbook(inputStream);
+            } else if (filename.toLowerCase().endsWith(".xls")) {
+                workbook = new HSSFWorkbook(inputStream);
+            } else {
+                throw new IOException("不支持的文件格式");
+            }
 
             Sheet sheet = workbook.getSheetAt(0); // 读取第一个sheet
 
@@ -58,6 +72,14 @@ public class ExcelUtil {
                 }
 
                 dataList.add(rowData);
+            }
+        } finally {
+            if (workbook != null) {
+                try {
+                    workbook.close();
+                } catch (IOException e) {
+                    // 忽略关闭异常
+                }
             }
         }
 
@@ -106,11 +128,13 @@ public class ExcelUtil {
     }
 
     /**
-     * 验证Excel文件格式
+     * 验证Excel文件格式（已废弃，使用FileValidationUtil.validateExcelFile代替）
      *
      * @param file 上传的文件
      * @return 是否为Excel文件
+     * @deprecated 使用 {@link FileValidationUtil#validateExcelFile(MultipartFile)} 代替
      */
+    @Deprecated
     public static boolean isExcelFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return false;

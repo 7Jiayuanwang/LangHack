@@ -12,6 +12,8 @@ import com.english.service.CourseService;
 import com.english.service.WordService;
 import com.english.service.ClassService;
 import com.english.service.impl.DataCleanupServiceImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +27,9 @@ import java.util.Map;
 @RequestMapping("/api/admin")
 //所有接口的基础路径，前端访问需以/api/admin开头
 public class AdminController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
+
 //注入各种，服务层对象（用户，课程等）
     @Autowired private UserService userService;
     @Autowired private CourseService courseService;
@@ -59,8 +64,12 @@ public class AdminController {
             users.forEach(user -> user.setPassword(null));
 
             return Result.success(result);
+        } catch (IllegalArgumentException e) {
+            logger.warn("获取用户列表参数错误: {}", e.getMessage());
+            return Result.error("参数错误");
         } catch (Exception e) {
-            return Result.error(e.getMessage());
+            logger.error("获取用户列表失败", e);
+            return Result.error("获取用户列表失败，请稍后重试");
         }
     }
 
@@ -80,8 +89,12 @@ public class AdminController {
 
             userService.createUser(user);
             return Result.success("用户创建成功");
+        } catch (IllegalArgumentException e) {
+            logger.warn("创建用户参数错误: {}", e.getMessage());
+            return Result.error("参数错误");
         } catch (Exception e) {
-            return Result.error(e.getMessage());
+            logger.error("创建用户失败", e);
+            return Result.error("创建用户失败，请稍后重试");
         }
     }
 
@@ -113,8 +126,12 @@ public class AdminController {
 
             userService.updateUser(user);
             return Result.success("用户更新成功");
+        } catch (IllegalArgumentException e) {
+            logger.warn("更新用户参数错误: {}", e.getMessage());
+            return Result.error("参数错误");
         } catch (Exception e) {
-            return Result.error(e.getMessage());
+            logger.error("更新用户失败，用户ID: {}", id, e);
+            return Result.error("更新用户失败，请稍后重试");
         }
     }
 
@@ -134,8 +151,12 @@ public class AdminController {
             userService.deleteUser(id);
             // 返回系统支持的角色：STUDENT（学生）、TEACHER（教师）、ADMIN（管理员）
             return Result.success("用户删除成功");
+        } catch (IllegalArgumentException e) {
+            logger.warn("删除用户参数错误: {}", e.getMessage());
+            return Result.error("参数错误");
         } catch (Exception e) {
-            return Result.error(e.getMessage());
+            logger.error("删除用户失败，用户ID: {}", id, e);
+            return Result.error("删除用户失败，请稍后重试");
         }
     }
 
@@ -177,8 +198,12 @@ public class AdminController {
             stats.putAll(classStats);
 
             return Result.success(stats);
+        } catch (IllegalArgumentException e) {
+            logger.warn("获取统计数据参数错误: {}", e.getMessage());
+            return Result.error("参数错误");
         } catch (Exception e) {
-            return Result.error(e.getMessage());
+            logger.error("获取统计数据失败", e);
+            return Result.error("获取统计数据失败，请稍后重试");
         }
     }
 
@@ -192,8 +217,12 @@ public class AdminController {
             // 手动触发数据清理
             dataCleanupService.cleanupInconsistentData();
             return Result.success("数据清理完成，请查看控制台输出获取详细信息");
-        } catch (Exception e) {
+        } catch (IllegalStateException e) {
+            logger.warn("数据清理失败: {}", e.getMessage());
             return Result.error("数据清理失败: " + e.getMessage());
+        } catch (Exception e) {
+            logger.error("数据清理失败", e);
+            return Result.error("数据清理失败，请稍后重试");
         }
     }
 
@@ -206,8 +235,12 @@ public class AdminController {
         try {
             dataCleanupService.printDataStatistics();
             return Result.success("数据统计信息已打印到控制台");
-        } catch (Exception e) {
+        } catch (IllegalStateException e) {
+            logger.warn("获取数据统计失败: {}", e.getMessage());
             return Result.error("获取数据统计失败: " + e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取数据统计失败", e);
+            return Result.error("获取数据统计失败，请稍后重试");
         }
     }
 }

@@ -1,8 +1,9 @@
 package com.english.controller;
 
+import com.english.constants.RoleConstants;
 import com.english.dto.Result;
-import com.english.entity.User;
 import com.english.service.*;
+import com.english.util.SecurityUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -27,19 +28,16 @@ public class StudentWordController {
     @Autowired
     private WordService wordsService;
 
-    @Autowired
-    private UserService userService;
-
     /**
      * 获取单词详细信息（支持点击查词）
      */
     @GetMapping("/{wordId}/detail")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getWordDetail(
             @PathVariable Long wordId,
             Authentication authentication) {
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> detail = vocabularyBooksService.getWordDetailWithLearningState(studentId, wordId);
 
@@ -56,13 +54,18 @@ public class StudentWordController {
      * 添加单词到生词本
      */
     @PostMapping("/vocabulary")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<String> addToVocabulary(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
         try {
-            Long studentId = getCurrentStudentId(authentication);
-            Long wordId = Long.valueOf(request.get("wordId").toString());
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+
+            Object wordIdObj = request.get("wordId");
+            if (wordIdObj == null) {
+                return Result.error("单词ID不能为空");
+            }
+            Long wordId = Long.valueOf(wordIdObj.toString());
 
             // 检查是否已存在
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
@@ -85,7 +88,7 @@ public class StudentWordController {
      * 获取生词本列表
      */
     @GetMapping("/vocabulary")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getVocabularyList(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -97,7 +100,7 @@ public class StudentWordController {
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> params = new HashMap<>();
             params.put("studentId", studentId);
@@ -121,15 +124,18 @@ public class StudentWordController {
      * 更新生词掌握程度
      */
     @PutMapping("/vocabulary/{wordId}/mastery")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<String> updateMasteryLevel(
             @PathVariable Long wordId,
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
             String masteryLevel = (String) request.get("masteryLevel");
+            if (masteryLevel == null || masteryLevel.trim().isEmpty()) {
+                return Result.error("掌握程度不能为空");
+            }
             Boolean isCorrect = (Boolean) request.getOrDefault("isCorrect", false);
 
             // 更新生词本记录
@@ -150,14 +156,19 @@ public class StudentWordController {
      * 开始单词学习会话
      */
     @PostMapping("/study/session")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> startStudySession(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
-            Long unitId = Long.valueOf(request.get("unitId").toString());
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+
+            Object unitIdObj = request.get("unitId");
+            if (unitIdObj == null) {
+                return Result.error("单元ID不能为空");
+            }
+            Long unitId = Long.valueOf(unitIdObj.toString());
 
             Map<String, Object> session = vocabularyBooksService.createStudySession(studentId, unitId);
 
@@ -171,13 +182,13 @@ public class StudentWordController {
      * 提交单词学习结果
      */
     @PostMapping("/study/submit")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<String> submitStudyResult(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             vocabularyBooksService.processStudyResults(studentId, request);
 
@@ -191,13 +202,13 @@ public class StudentWordController {
      * 获取单词学习统计
      */
     @GetMapping("/study/stats")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getWordStudyStats(
             @RequestParam(required = false) String period,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             Map<String, Object> stats = vocabularyBooksService.getWordStudyStats(studentId, period);
 
@@ -211,13 +222,13 @@ public class StudentWordController {
      * 批量操作生词本
      */
     @PostMapping("/vocabulary/batch")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<String> batchOperateVocabulary(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
             String operation = (String) request.get("operation");
             Object wordIdsObj = request.get("wordIds");
 
@@ -246,12 +257,4 @@ public class StudentWordController {
         }
     }
 
-    /**
-     * 获取当前学生ID
-     */
-    private Long getCurrentStudentId(Authentication authentication) {
-        String username = authentication.getName();
-        User user = userService.getUserByUsername(username);
-        return user != null ? user.getId() : null;
-    }
 }

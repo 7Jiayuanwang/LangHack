@@ -1,14 +1,14 @@
 package com.english.controller;
 
+import com.english.constants.RoleConstants;
 import com.english.dto.Result;
-import com.english.entity.User;
 import com.english.service.*;
+import com.english.util.SecurityUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -22,29 +22,26 @@ public class StudentAssignmentController {
     private AssignmentService assignmentsService;
 
     @Autowired
-    private StudentClassesService studentClassesService;
+    private StudentClassService studentClassService;
 
     @Autowired
     private LearningRecordsService learningRecordsService;
-
-    @Autowired
-    private UserService userService;
 
     /**
      * 获取学生任务列表
      */
     @GetMapping
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getStudentAssignments(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String courseId,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             // 获取学生加入的班级
-            java.util.List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+            java.util.List<Long> classIds = studentClassService.getClassIdsByStudentId(studentId);
 
             // 查询这些班级的任务
             Map<String, Object> result = assignmentsService.getStudentAssignmentsWithStatus(classIds, studentId, status);
@@ -59,13 +56,13 @@ public class StudentAssignmentController {
      * 获取任务详情
      */
     @GetMapping("/{assignmentId}")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getAssignmentDetail(
             @PathVariable Long assignmentId,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             // 检查权限
             if (!canAccessAssignment(studentId, assignmentId)) {
@@ -84,13 +81,13 @@ public class StudentAssignmentController {
      * 开始执行任务
      */
     @PostMapping("/{assignmentId}/start")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> startAssignment(
             @PathVariable Long assignmentId,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             // 检查权限
             if (!canAccessAssignment(studentId, assignmentId)) {
@@ -109,13 +106,13 @@ public class StudentAssignmentController {
      * 获取任务学习内容
      */
     @GetMapping("/{assignmentId}/content")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getAssignmentContent(
             @PathVariable Long assignmentId,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             // 检查权限
             if (!canAccessAssignment(studentId, assignmentId)) {
@@ -134,14 +131,14 @@ public class StudentAssignmentController {
      * 提交任务完成情况
      */
     @PostMapping("/{assignmentId}/complete")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<String> completeAssignment(
             @PathVariable Long assignmentId,
             @RequestBody Map<String, Object> completionData,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             // 检查权限
             if (!canAccessAssignment(studentId, assignmentId)) {
@@ -160,13 +157,13 @@ public class StudentAssignmentController {
      * 获取任务完成统计
      */
     @GetMapping("/{assignmentId}/progress")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getAssignmentProgress(
             @PathVariable Long assignmentId,
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             // 检查权限
             if (!canAccessAssignment(studentId, assignmentId)) {
@@ -185,7 +182,7 @@ public class StudentAssignmentController {
      * 获取任务学习记录
      */
     @GetMapping("/{assignmentId}/records")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
     public Result<Map<String, Object>> getAssignmentRecords(
             @PathVariable Long assignmentId,
             @RequestParam(defaultValue = "1") int page,
@@ -193,7 +190,7 @@ public class StudentAssignmentController {
             Authentication authentication) {
 
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
 
             // 检查权限
             if (!canAccessAssignment(studentId, assignmentId)) {
@@ -215,21 +212,12 @@ public class StudentAssignmentController {
     private boolean canAccessAssignment(Long studentId, Long assignmentId) {
         try {
             // 获取学生加入的班级ID列表
-            java.util.List<Long> studentClassIds = studentClassesService.getClassIdsByStudentId(studentId);
+            java.util.List<Long> studentClassIds = studentClassService.getClassIdsByStudentId(studentId);
 
             // 检查任务是否属于学生加入的班级
             return assignmentsService.isAssignmentInClasses(assignmentId, studentClassIds);
         } catch (Exception e) {
             return false;
         }
-    }
-
-    /**
-     * 获取当前学生ID
-     */
-    private Long getCurrentStudentId(Authentication authentication) {
-        String username = authentication.getName();
-        User user = userService.getUserByUsername(username);
-        return user != null ? user.getId() : null;
     }
 }

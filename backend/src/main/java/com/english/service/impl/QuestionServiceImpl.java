@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.english.dto.PracticeSessionDTO;
+import com.english.entity.AnswerRecord;
 import com.english.entity.Question;
 import com.english.entity.WeaknessAnalysis;
+import com.english.mapper.AnswerRecordMapper;
 import com.english.mapper.QuestionMapper;
 import com.english.mapper.WeaknessAnalysisMapper;
 import com.english.service.QuestionService;
@@ -21,6 +24,9 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
 
     @Autowired
     private WeaknessAnalysisMapper weaknessAnalysisMapper;
+
+    @Autowired
+    private AnswerRecordMapper answerRecordMapper;
 
     @Override
     public Map<String, Object> getQuestionsByPage(Map<String, Object> params) {
@@ -150,4 +156,101 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
 
         return list(queryWrapper);
     }
+
+    @Override
+    public PracticeSessionDTO.QuestionDetailDTO getQuestionDetailForPractice(Long questionId, Long studentId) {
+        Question question = getById(questionId);
+        if (question == null) {
+            throw new RuntimeException("题目不存在");
+        }
+
+        PracticeSessionDTO.QuestionDetailDTO dto = new PracticeSessionDTO.QuestionDetailDTO();
+        dto.setId(question.getId());
+        dto.setTitle(question.getTitle());
+        dto.setQuestionType(question.getQuestionType());
+        dto.setDifficulty(question.getDifficulty());
+        dto.setExamType(question.getExamType());
+        dto.setExamLevel(question.getExamLevel());
+        dto.setOptions(question.getOptions());
+        dto.setScore(question.getScore());
+        dto.setKnowledgePointIds(question.getKnowledgePointIds());
+
+        // Check if student has answered this question
+        QueryWrapper<AnswerRecord> recordWrapper = new QueryWrapper<>();
+        recordWrapper.eq("student_id", studentId);
+        recordWrapper.eq("question_id", questionId);
+        recordWrapper.orderByDesc("answer_time");
+        recordWrapper.last("LIMIT 1");
+
+        AnswerRecord latestRecord = answerRecordMapper.selectOne(recordWrapper);
+        if (latestRecord != null) {
+            dto.setHasAnswered(true);
+            dto.setStudentAnswer(latestRecord.getStudentAnswer());
+            dto.setIsCorrect(latestRecord.getIsCorrect() != null && latestRecord.getIsCorrect() == 1);
+        } else {
+            dto.setHasAnswered(false);
+        }
+
+        return dto;
+    }
+
+    @Override
+    public PracticeSessionDTO.QuestionAnalysisDTO getQuestionAnalysis(Long questionId, Long studentId) {
+        Question question = getById(questionId);
+        if (question == null) {
+            throw new RuntimeException("题目不存在");
+        }
+
+        PracticeSessionDTO.QuestionAnalysisDTO dto = new PracticeSessionDTO.QuestionAnalysisDTO();
+        dto.setQuestionId(question.getId());
+        dto.setCorrectAnswer(question.getCorrectAnswer());
+        dto.setExplanation(question.getExplanation());
+        dto.setKnowledgePointIds(question.getKnowledgePointIds());
+
+        // Get student's statistics for this question
+        QueryWrapper<AnswerRecord> recordWrapper = new QueryWrapper<>();
+        recordWrapper.eq("student_id", studentId);
+        recordWrapper.eq("question_id", questionId);
+
+        List<AnswerRecord> records = answerRecordMapper.selectList(recordWrapper);
+        int totalAttempts = records.size();
+        long correctAttempts = records.stream()
+            .filter(r -> r.getIsCorrect() != null && r.getIsCorrect() == 1)
+            .count();
+
+        dto.setTotalAttempts(totalAttempts);
+        dto.setCorrectAttempts((int) correctAttempts);
+        dto.setAccuracyRate(totalAttempts > 0 ? (double) correctAttempts / totalAttempts * 100 : 0.0);
+
+        return dto;
+    }
+
+    @Override
+    public List<Question> getWrongQuestions(Long studentId) {
+        // Get all wrong answer records for this student
+        QueryWrapper<AnswerRecord> recordWrapper = new QueryWrapper<>();
+        recordWrapper.eq("student_id", studentId);
+        recordWrapper.eq("is_correct", 0);
+        recordWrapper.orderByDesc("answer_time");
+
+        List<AnswerRecord> wrongRecords = answerRecordMapper.selectList(recordWrapper);
+
+        // Get unique question IDs
+        Set<Long> wrongQuestionIds = wrongRecords.stream()
+            .map(AnswerRecord::getQuestionId)
+            .collect(Collectors.toSet());
+
+        if (wrongQuestionIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // Get questions
+        QueryWrapper<Question> questionWrapper = new QueryWrapper<>();
+        questionWrapper.in("id", wrongQuestionIds);
+        questionWrapper.eq("deleted", 0);
+        questionWrapper.orderByDesc("created_time");
+
+        return list(questionWrapper);
+    }
 }
+

@@ -1,0 +1,22 @@
+# 依赖目录
+target/
+
+# IDE 配置
+.idea/
+*.iml
+.vscode/
+
+# 日志
+logs/
+*.log
+
+# 系统文件
+.DS_Store
+
+# 测试报告
+test-output/
+surefire-reports/
+
+# 临时文件
+*.tmp
+*.bak

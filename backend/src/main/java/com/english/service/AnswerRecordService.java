@@ -12,4 +12,8 @@ public interface AnswerRecordService extends IService<AnswerRecord> {
     List<AnswerRecord> getStudentAnswerRecords(Long studentId);
     Map<String, Object> getStudentAnswerStats(Long studentId);
     List<LearningStatsDTO.ActiveStudentDTO> getActiveStudentRanking(int limit);
+
+    // Additional method for favorite questions tracking
+    void toggleFavorite(Long questionId, Long studentId);
+    List<Long> getFavoriteQuestions(Long studentId);
 }

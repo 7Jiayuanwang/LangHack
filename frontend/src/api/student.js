@@ -233,15 +233,6 @@ export function exportLearningData(params) {
   })
 }
 
-// 批量操作生词本
-export function batchOperateVocabulary(data) {
-  return request({
-    url: '/api/student/words/vocabulary/batch',
-    method: 'post',
-    data
-  })
-}
-
 // 获取单词学习统计
 export function getWordStudyStats(params) {
   return request({

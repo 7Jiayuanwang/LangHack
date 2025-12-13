@@ -195,7 +195,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { getCourses, createCourse, updateCourse, deleteCourse as deleteCourseApi } from '@/api/admin'
+import { getCourseList, createCourse, updateCourse, deleteCourse as deleteCourseApi } from '@/api/admin'
 import { getTextsByCourse } from '@/api/text'
 
 const router = useRouter()
@@ -258,7 +258,7 @@ const loadCourses = async () => {
       size: pagination.size,
       ...searchForm
     }
-    const response = await getCourses(params)
+    const response = await getCourseList(params)
     courses.value = response.data.records
     pagination.total = response.data.total
   } catch (error) {

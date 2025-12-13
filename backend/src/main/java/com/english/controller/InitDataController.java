@@ -15,6 +15,7 @@ import com.english.service.UnitService;
 import com.english.service.WordService;
 import com.english.service.TextService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,9 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 数据初始化控制器
+ * 注意：此控制器仅在开发环境(dev)中生效，生产环境无法访问
+ */
 @RestController
-
-
+@Profile("dev")
 @RequestMapping("/api/init")
 public class InitDataController {
 

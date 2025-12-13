@@ -5,9 +5,17 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Course;
+import com.english.entity.Unit;
+import com.english.entity.Text;
+import com.english.entity.UnitWord;
 import com.english.mapper.CourseMapper;
+import com.english.mapper.UnitMapper;
+import com.english.mapper.TextMapper;
+import com.english.mapper.UnitWordMapper;
 import com.english.service.CourseService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -16,6 +24,15 @@ import java.util.Map;
 
 @Service
 public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> implements CourseService {
+
+    @Autowired
+    private UnitMapper unitMapper;
+
+    @Autowired
+    private TextMapper textMapper;
+
+    @Autowired
+    private UnitWordMapper unitWordMapper;
 
     @Override
     public Map<String, Object> getCoursesByPage(Map<String, Object> params) {
@@ -77,12 +94,50 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
     }
 
     @Override
+    @Transactional
     public void deleteCourse(Long id) {
-        Course course = new Course();
-        course.setId(id);
-        course.setDeleted(1);
-        course.setUpdatedAt(LocalDateTime.now());
-        updateById(course);
+        Course course = getById(id);
+        if (course == null) {
+            throw new RuntimeException("课程不存在");
+        }
+
+        // 获取该课程下的所有单元
+        QueryWrapper<Unit> unitWrapper = new QueryWrapper<>();
+        unitWrapper.eq("course_id", id);
+        List<Unit> units = unitMapper.selectList(unitWrapper);
+
+        if (!units.isEmpty()) {
+            List<Long> unitIds = units.stream().map(Unit::getId).collect(java.util.stream.Collectors.toList());
+
+            // 删除单元下的所有课文（软删除）
+            for (Long unitId : unitIds) {
+                QueryWrapper<Text> textWrapper = new QueryWrapper<>();
+                textWrapper.eq("unit_id", unitId);
+                textWrapper.eq("deleted", 0);
+                List<Text> texts = textMapper.selectList(textWrapper);
+
+                for (Text text : texts) {
+                    text.setDeleted(1);
+                    text.setUpdatedAt(LocalDateTime.now());
+                    textMapper.updateById(text);
+                }
+            }
+
+            // 删除单元-单词关联
+            QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
+            unitWordWrapper.in("unit_id", unitIds);
+            unitWordMapper.delete(unitWordWrapper);
+
+            // 删除所有单元
+            unitMapper.delete(unitWrapper);
+        }
+
+        // 软删除课程
+        Course deleteCourse = new Course();
+        deleteCourse.setId(id);
+        deleteCourse.setDeleted(1);
+        deleteCourse.setUpdatedAt(LocalDateTime.now());
+        updateById(deleteCourse);
     }
 
     @Override

@@ -21,6 +21,9 @@ public class JwtUtil {
     @Value("${spring.security.jwt.expiration}")
     private Long expiration;
 
+    @Value("${spring.security.jwt.refresh-expiration:2592000000}") // 默认30天
+    private Long refreshExpiration;
+
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
@@ -28,17 +31,45 @@ public class JwtUtil {
     public String generateToken(String username, String role) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", role);
-        return createToken(claims, username);
+        claims.put("type", "access");
+        return createToken(claims, username, expiration);
     }
 
-    private String createToken(Map<String, Object> claims, String subject) {
+    public String generateRefreshToken(String username, String role) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
+        claims.put("type", "refresh");
+        return createToken(claims, username, refreshExpiration);
+    }
+
+    private String createToken(Map<String, Object> claims, String subject, Long expirationTime) {
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(subject)
                 .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
+    }
+
+    public Boolean canTokenBeRefreshed(String token) {
+        try {
+            String tokenType = getClaimFromToken(token, claims -> claims.get("type", String.class));
+            return "refresh".equals(tokenType) && !isTokenExpired(token);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public String refreshToken(String token) {
+        if (!canTokenBeRefreshed(token)) {
+            throw new IllegalArgumentException("Token cannot be refreshed");
+        }
+
+        String username = getUsernameFromToken(token);
+        String role = getRoleFromToken(token);
+
+        return generateToken(username, role);
     }
 
     public Boolean validateToken(String token, String username) {

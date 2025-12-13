@@ -50,12 +50,3 @@ export function deleteUnit(id) {
     method: 'delete'
   })
 }
-
-// 批量删除单元
-export function batchDeleteUnits(ids) {
-  return request({
-    url: '/api/units/batch',
-    method: 'delete',
-    data: ids
-  })
-}

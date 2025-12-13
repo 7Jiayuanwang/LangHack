@@ -5,16 +5,25 @@ spring:
   application:
     name: english-learning-platform
 
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB      # 单个文件最大10MB
+      max-request-size: 10MB   # 请求最大10MB
+      file-size-threshold: 1MB # 文件大于1MB时写入磁盘
+
   datasource:
-    url: jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8
-    username: root
-    password: root
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   security:
     jwt:
-      secret: englishLearningPlatformSecretKey2023
-      expiration: 86400000 # 24小时
+      secret: ${JWT_SECRET:englishLearningPlatformSecretKey2023}
+      expiration: ${JWT_EXPIRATION:86400000} # 24小时 (Access Token)
+      refresh-expiration: ${JWT_REFRESH_EXPIRATION:2592000000} # 30天 (Refresh Token)
 
 mybatis-plus:
   configuration:
@@ -30,5 +39,5 @@ mybatis-plus:
 
 logging:
   level:
-    com.english: debug
-    org.springframework.security: debug
+    com.english: ${LOG_LEVEL:debug}
+    org.springframework.security: ${LOG_LEVEL:debug}

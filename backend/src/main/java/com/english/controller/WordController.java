@@ -5,7 +5,9 @@ import com.english.dto.Result;
 import com.english.entity.Word;
 import com.english.service.WordService;
 import com.english.util.ExcelUtil;
+import com.english.util.FileValidationUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -149,22 +151,27 @@ public class WordController {
     /**
      * Excel批量导入单词
      * Excel格式：word, phonetic, definition, example_sentence, difficulty, part_of_speech
+     * 使用事务确保批量导入的原子性
      */
     @PostMapping("/import")
+    @Transactional(rollbackFor = Exception.class)
     public Result<Map<String, Object>> importWords(@RequestParam("file") MultipartFile file) {
         try {
-            // 验证文件
-            if (!ExcelUtil.isExcelFile(file)) {
-                return Result.error("请上传Excel文件（.xlsx或.xls）");
+            // 1. 综合安全验证文件（大小、类型、文件名安全性、magic number验证）
+            FileValidationUtil.ValidationResult validationResult =
+                FileValidationUtil.validateUploadedExcelFile(file);
+
+            if (!validationResult.isValid()) {
+                return Result.error(validationResult.getMessage());
             }
 
-            // 读取Excel
+            // 2. 读取Excel
             List<Map<String, String>> dataList = ExcelUtil.readExcel(file);
             if (dataList.isEmpty()) {
                 return Result.error("Excel文件为空或格式错误");
             }
 
-            // 转换为Word对象列表
+            // 3. 转换为Word对象列表
             List<Word> words = new ArrayList<>();
             int successCount = 0;
             int failCount = 0;
@@ -211,7 +218,7 @@ public class WordController {
                 }
             }
 
-            // 批量保存
+            // 4. 批量保存
             if (!words.isEmpty()) {
                 boolean saved = wordService.batchCreateWords(words);
                 if (!saved) {
@@ -219,7 +226,7 @@ public class WordController {
                 }
             }
 
-            // 返回结果
+            // 5. 返回结果
             Map<String, Object> result = new HashMap<>();
             result.put("total", dataList.size());
             result.put("success", successCount);

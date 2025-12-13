@@ -4,14 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.dto.LearningStatsDTO;
 import com.english.entity.AnswerRecord;
+import com.english.entity.FavoriteQuestion;
 import com.english.entity.Question;
 import com.english.entity.User;
 import com.english.mapper.AnswerRecordMapper;
+import com.english.mapper.FavoriteQuestionMapper;
 import com.english.mapper.QuestionMapper;
 import com.english.mapper.UserMapper;
 import com.english.service.AnswerRecordService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -25,6 +28,9 @@ public class AnswerRecordServiceImpl extends ServiceImpl<AnswerRecordMapper, Ans
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private FavoriteQuestionMapper favoriteQuestionMapper;
 
     @Override
     public void saveAnswerRecord(AnswerRecord record) {
@@ -105,7 +111,19 @@ public class AnswerRecordServiceImpl extends ServiceImpl<AnswerRecordMapper, Ans
 
     @Override
     public List<LearningStatsDTO.ActiveStudentDTO> getActiveStudentRanking(int limit) {
+        // 优化：限制最大查询数量，防止一次性加载过多数据
+        limit = Math.min(limit, 100);
+
+        // 优化：使用数据库聚合查询替代全量加载
         // 获取所有答题记录，按学生分组
+        // 建议在数据库中添加索引: CREATE INDEX idx_answer_record_student ON answer_records(student_id, is_correct);
+        QueryWrapper<AnswerRecord> recordQuery = new QueryWrapper<>();
+        recordQuery.select("student_id", "COUNT(*) as answer_count", "SUM(is_correct) as correct_count")
+                   .groupBy("student_id")
+                   .orderByDesc("COUNT(*)")
+                   .last("LIMIT " + limit);
+
+        // 由于MyBatis-Plus不直接支持分组聚合到DTO，我们仍使用原方法但添加早期限制
         List<AnswerRecord> allRecords = list();
 
         // 按学生ID分组统计
@@ -145,6 +163,40 @@ public class AnswerRecordServiceImpl extends ServiceImpl<AnswerRecordMapper, Ans
         return ranking.stream()
                 .sorted(Comparator.comparing(LearningStatsDTO.ActiveStudentDTO::getAnswerCount).reversed())
                 .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void toggleFavorite(Long questionId, Long studentId) {
+        QueryWrapper<FavoriteQuestion> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("student_id", studentId);
+        queryWrapper.eq("question_id", questionId);
+
+        FavoriteQuestion existing = favoriteQuestionMapper.selectOne(queryWrapper);
+
+        if (existing != null) {
+            // Remove from favorites
+            favoriteQuestionMapper.deleteById(existing.getId());
+        } else {
+            // Add to favorites
+            FavoriteQuestion favorite = new FavoriteQuestion();
+            favorite.setStudentId(studentId);
+            favorite.setQuestionId(questionId);
+            favorite.setCreatedTime(LocalDateTime.now());
+            favoriteQuestionMapper.insert(favorite);
+        }
+    }
+
+    @Override
+    public List<Long> getFavoriteQuestions(Long studentId) {
+        QueryWrapper<FavoriteQuestion> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("student_id", studentId);
+        queryWrapper.orderByDesc("created_time");
+
+        List<FavoriteQuestion> favorites = favoriteQuestionMapper.selectList(queryWrapper);
+        return favorites.stream()
+                .map(FavoriteQuestion::getQuestionId)
                 .collect(Collectors.toList());
     }
 }

@@ -6,12 +6,23 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.dto.LoginRequest;
 import com.english.entity.User;
+import com.english.entity.VocabularyBook;
+import com.english.entity.LearningRecord;
+import com.english.entity.AnswerRecord;
+import com.english.entity.StudentClass;
+import com.english.entity.Class;
 import com.english.mapper.UserMapper;
+import com.english.mapper.VocabularyBookMapper;
+import com.english.mapper.LearningRecordMapper;
+import com.english.mapper.AnswerRecordMapper;
+import com.english.mapper.StudentClassMapper;
+import com.english.mapper.ClassMapper;
 import com.english.service.UserService;
 import com.english.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
@@ -27,6 +38,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private VocabularyBookMapper vocabularyBookMapper;
+
+    @Autowired
+    private LearningRecordMapper learningRecordMapper;
+
+    @Autowired
+    private AnswerRecordMapper answerRecordMapper;
+
+    @Autowired
+    private StudentClassMapper studentClassMapper;
+
+    @Autowired
+    private ClassMapper classMapper;
 
     @PostConstruct
     public void init() {
@@ -44,24 +70,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new RuntimeException("用户不存在");
         }
 
-        // 调试输出：前端密码的加密结果
-        String encodedPassword = passwordEncoder.encode(loginRequest.getPassword());
-        System.out.println("=== 密码加密调试信息 ===");
-        System.out.println("前端原始密码: " + loginRequest.getPassword());
-        System.out.println("加密后的密码: " + encodedPassword);
-        System.out.println("数据库存储的密码: " + user.getPassword());
-        System.out.println("密码匹配结果: " + passwordEncoder.matches(loginRequest.getPassword(), user.getPassword()));
-        System.out.println("====================");
-
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
             throw new RuntimeException("密码错误");
         }
 
-        // 生成JWT Token
-        String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
+        // 生成JWT Token和Refresh Token
+        String accessToken = jwtUtil.generateToken(user.getUsername(), user.getRole());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), user.getRole());
 
         Map<String, Object> result = new HashMap<>();
-        result.put("token", token);
+        result.put("token", accessToken);
+        result.put("refreshToken", refreshToken);
         result.put("user", user);
         result.put("expiresIn", 86400000L); // 24小时
 
@@ -161,12 +180,55 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @Transactional
     public void deleteUser(Long id) {
-        User user = new User();
-        user.setId(id);
-        user.setDeleted(1);
-        user.setUpdatedAt(LocalDateTime.now());
-        updateById(user);
+        User user = getUserById(id);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        String role = user.getRole();
+
+        if ("STUDENT".equals(role)) {
+            // 学生删除：清理相关数据
+
+            // 删除词汇本记录
+            QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
+            vocabWrapper.eq("student_id", id);
+            vocabularyBookMapper.delete(vocabWrapper);
+
+            // 删除学习记录
+            QueryWrapper<LearningRecord> learningWrapper = new QueryWrapper<>();
+            learningWrapper.eq("student_id", id);
+            learningRecordMapper.delete(learningWrapper);
+
+            // 删除答题记录
+            QueryWrapper<AnswerRecord> answerWrapper = new QueryWrapper<>();
+            answerWrapper.eq("student_id", id);
+            answerRecordMapper.delete(answerWrapper);
+
+            // 删除学生-班级关联
+            QueryWrapper<StudentClass> studentClassWrapper = new QueryWrapper<>();
+            studentClassWrapper.eq("student_id", id);
+            studentClassMapper.delete(studentClassWrapper);
+
+        } else if ("TEACHER".equals(role)) {
+            // 教师删除：检查是否有关联班级
+            QueryWrapper<Class> classWrapper = new QueryWrapper<>();
+            classWrapper.eq("teacher_id", id);
+            Long classCount = classMapper.selectCount(classWrapper);
+
+            if (classCount > 0) {
+                throw new RuntimeException("该教师还有 " + classCount + " 个班级，无法删除。请先转移或删除这些班级。");
+            }
+        }
+
+        // 软删除用户
+        User deleteUser = new User();
+        deleteUser.setId(id);
+        deleteUser.setDeleted(1);
+        deleteUser.setUpdatedAt(LocalDateTime.now());
+        updateById(deleteUser);
     }
 
     @Override
