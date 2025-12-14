@@ -39,10 +39,10 @@ public class User {
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
-    private LocalDateTime createdAt;
+    private LocalDateTime createdTime;
 
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
+    private LocalDateTime updatedTime;
 
     // Getters and Setters
     public Long getId() {
@@ -125,19 +125,19 @@ public class User {
         this.deleted = deleted;
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+    public LocalDateTime getCreatedTime() {
+        return createdTime;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    public void setCreatedTime(LocalDateTime createdTime) {
+        this.createdTime = createdTime;
     }
 
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
+    public LocalDateTime getUpdatedTime() {
+        return updatedTime;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public void setUpdatedTime(LocalDateTime updatedTime) {
+        this.updatedTime = updatedTime;
     }
 }

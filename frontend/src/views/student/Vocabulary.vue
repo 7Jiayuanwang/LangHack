@@ -338,7 +338,7 @@ onMounted(() => {
 
 <style scoped>
 .vocabulary {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

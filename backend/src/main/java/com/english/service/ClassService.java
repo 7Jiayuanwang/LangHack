@@ -1,10 +1,11 @@
 package com.english.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.entity.Class;
 import java.util.List;
 import java.util.Map;
 
-public interface ClassService {
+public interface ClassService extends IService<Class> {
 
     /**
      * 分页查询班级列表

@@ -502,7 +502,7 @@ onMounted(() => {
 
 <style scoped>
 .users-management {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

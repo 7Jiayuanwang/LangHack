@@ -553,7 +553,7 @@ onMounted(() => {
 
 <style scoped>
 .learning-suggestion-page {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

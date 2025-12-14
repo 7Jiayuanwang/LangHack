@@ -708,7 +708,7 @@ onMounted(async () => {
 
 <style scoped>
 .texts-management {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

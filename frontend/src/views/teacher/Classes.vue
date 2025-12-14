@@ -417,7 +417,7 @@ onMounted(() => {
 
 <style scoped>
 .classes-management {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

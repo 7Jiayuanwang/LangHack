@@ -1,11 +1,12 @@
 package com.english.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.entity.Course;
 
 import java.util.List;
 import java.util.Map;
 
-public interface CourseService {
+public interface CourseService extends IService<Course> {
     Map<String, Object> getCoursesByPage(Map<String, Object> params);
     Course getCourseById(Long id);
     void createCourse(Course course);

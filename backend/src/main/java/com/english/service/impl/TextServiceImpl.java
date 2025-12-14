@@ -69,14 +69,14 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (text.getDifficulty() == null) {
             text.setDifficulty("MEDIUM");
         }
-        text.setCreatedAt(LocalDateTime.now());
-        text.setUpdatedAt(LocalDateTime.now());
+        text.setCreatedTime(LocalDateTime.now());
+        text.setUpdatedTime(LocalDateTime.now());
         text.setDeleted(0);
         save(text);
     }
 
     public void updateText(Text text) {
-        text.setUpdatedAt(LocalDateTime.now());
+        text.setUpdatedTime(LocalDateTime.now());
         updateById(text);
     }
 
@@ -213,8 +213,8 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         text.setOrderNum(orderNum != null ? orderNum : 1);
         text.setDifficulty("MEDIUM");
         text.setDeleted(0);
-        text.setCreatedAt(LocalDateTime.now());
-        text.setUpdatedAt(LocalDateTime.now());
+        text.setCreatedTime(LocalDateTime.now());
+        text.setUpdatedTime(LocalDateTime.now());
 
         save(text);
         return 1;

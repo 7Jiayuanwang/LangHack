@@ -39,7 +39,6 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
         int page = (int) params.get("page");
         int size = (int) params.get("size");
         String keyword = (String) params.get("keyword");
-        String status = (String) params.get("status");
 
         Page<Course> pageParam = new Page<>(page, size);
         QueryWrapper<Course> queryWrapper = new QueryWrapper<>();
@@ -50,10 +49,6 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
                 .or()
                 .like("description", keyword)
             );
-        }
-
-        if (status != null && !status.trim().isEmpty()) {
-            queryWrapper.eq("status", status);
         }
 
         queryWrapper.eq("deleted", 0);
@@ -78,18 +73,15 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
 
     @Override
     public void createCourse(Course course) {
-        if (course.getStatus() == null) {
-            course.setStatus("ACTIVE");
-        }
-        course.setCreatedAt(LocalDateTime.now());
-        course.setUpdatedAt(LocalDateTime.now());
+        course.setCreatedTime(LocalDateTime.now());
+        course.setUpdatedTime(LocalDateTime.now());
         course.setDeleted(0);
         save(course);
     }
 
     @Override
     public void updateCourse(Course course) {
-        course.setUpdatedAt(LocalDateTime.now());
+        course.setUpdatedTime(LocalDateTime.now());
         updateById(course);
     }
 
@@ -118,7 +110,7 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
 
                 for (Text text : texts) {
                     text.setDeleted(1);
-                    text.setUpdatedAt(LocalDateTime.now());
+                    text.setUpdatedTime(LocalDateTime.now());
                     textMapper.updateById(text);
                 }
             }
@@ -136,14 +128,13 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
         Course deleteCourse = new Course();
         deleteCourse.setId(id);
         deleteCourse.setDeleted(1);
-        deleteCourse.setUpdatedAt(LocalDateTime.now());
+        deleteCourse.setUpdatedTime(LocalDateTime.now());
         updateById(deleteCourse);
     }
 
     @Override
     public List<Course> getActiveCourses() {
         QueryWrapper<Course> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("status", "ACTIVE");
         queryWrapper.eq("deleted", 0);
         queryWrapper.orderByDesc("created_time");
         return list(queryWrapper);
@@ -159,7 +150,6 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
                 .like("description", keyword)
             );
         }
-        queryWrapper.eq("status", "ACTIVE");
         queryWrapper.eq("deleted", 0);
         queryWrapper.orderByDesc("created_time");
         return list(queryWrapper);
@@ -169,19 +159,11 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
     public Map<String, Object> getCourseStats() {
         Map<String, Object> stats = new HashMap<>();
 
-        QueryWrapper<Course> activeWrapper = new QueryWrapper<>();
-        activeWrapper.eq("status", "ACTIVE");
-        activeWrapper.eq("deleted", 0);
-        Long activeCount = count(activeWrapper);
+        QueryWrapper<Course> totalWrapper = new QueryWrapper<>();
+        totalWrapper.eq("deleted", 0);
+        Long totalCount = count(totalWrapper);
 
-        QueryWrapper<Course> inactiveWrapper = new QueryWrapper<>();
-        inactiveWrapper.eq("status", "INACTIVE");
-        inactiveWrapper.eq("deleted", 0);
-        Long inactiveCount = count(inactiveWrapper);
-
-        stats.put("totalActive", activeCount);
-        stats.put("totalInactive", inactiveCount);
-        stats.put("totalCourses", activeCount + inactiveCount);
+        stats.put("totalCourses", totalCount);
 
         return stats;
     }

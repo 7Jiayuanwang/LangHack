@@ -484,7 +484,7 @@ onMounted(() => {
 
 <style scoped>
 .weakness-analysis-page {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

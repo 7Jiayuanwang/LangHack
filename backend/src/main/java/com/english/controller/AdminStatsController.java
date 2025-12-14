@@ -72,7 +72,7 @@ public class AdminStatsController {
         stats.setTotalWords((int) wordService.count(wordQuery));
 
         // 统计班级数
-        QueryWrapper<Class> classQuery = new QueryWrapper<>();
+        QueryWrapper<com.english.entity.Class> classQuery = new QueryWrapper<>();
         classQuery.eq("deleted", 0);
         stats.setTotalClasses((int) classService.count(classQuery));
 
@@ -92,19 +92,16 @@ public class AdminStatsController {
         UserStatsDTO stats = new UserStatsDTO();
 
         // 统计各角色用户数
-        QueryWrapper<User> baseQuery = new QueryWrapper<>();
-        baseQuery.eq("deleted", 0);
-
-        QueryWrapper<User> adminQuery = new QueryWrapper<>(baseQuery);
-        adminQuery.eq("role", "ADMIN");
+        QueryWrapper<User> adminQuery = new QueryWrapper<>();
+        adminQuery.eq("deleted", 0).eq("role", "ADMIN");
         stats.setAdminCount((int) userService.count(adminQuery));
 
-        QueryWrapper<User> teacherQuery = new QueryWrapper<>(baseQuery);
-        teacherQuery.eq("role", "TEACHER");
+        QueryWrapper<User> teacherQuery = new QueryWrapper<>();
+        teacherQuery.eq("deleted", 0).eq("role", "TEACHER");
         stats.setTeacherCount((int) userService.count(teacherQuery));
 
-        QueryWrapper<User> studentQuery = new QueryWrapper<>(baseQuery);
-        studentQuery.eq("role", "STUDENT");
+        QueryWrapper<User> studentQuery = new QueryWrapper<>();
+        studentQuery.eq("deleted", 0).eq("role", "STUDENT");
         stats.setStudentCount((int) userService.count(studentQuery));
 
         // 获取最近注册的10个用户

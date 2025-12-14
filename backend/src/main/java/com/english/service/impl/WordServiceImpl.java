@@ -81,15 +81,15 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
         }
         // 统一转换为小写存储
         word.setWord(word.getWord().toLowerCase().trim());
-        word.setCreatedAt(LocalDateTime.now());
-        word.setUpdatedAt(LocalDateTime.now());
+        word.setCreatedTime(LocalDateTime.now());
+        word.setUpdatedTime(LocalDateTime.now());
         word.setDeleted(0);
         return save(word);
     }
 
     @Override
     public boolean updateWord(Word word) {
-        word.setUpdatedAt(LocalDateTime.now());
+        word.setUpdatedTime(LocalDateTime.now());
         return updateById(word);
     }
 
@@ -98,7 +98,7 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
         Word word = new Word();
         word.setId(id);
         word.setDeleted(1);
-        word.setUpdatedAt(LocalDateTime.now());
+        word.setUpdatedTime(LocalDateTime.now());
         return updateById(word);
     }
 

@@ -77,7 +77,6 @@
             <el-card class="course-card" shadow="hover">
               <div class="course-header">
                 <h4>{{ course.name }}</h4>
-                <el-tag :type="getStatusType(course.status)">{{ getStatusText(course.status) }}</el-tag>
               </div>
               <div class="course-description">
                 <p>{{ course.description || '暂无描述' }}</p>
@@ -122,9 +121,6 @@
           <h4>课程信息</h4>
           <el-descriptions :column="2" border>
             <el-descriptions-item label="课程名称">{{ currentCourse.name }}</el-descriptions-item>
-            <el-descriptions-item label="课程状态">
-              <el-tag :type="getStatusType(currentCourse.status)">{{ getStatusText(currentCourse.status) }}</el-tag>
-            </el-descriptions-item>
             <el-descriptions-item label="班级数量">{{ getClassCountByCourse(currentCourse.id) }}</el-descriptions-item>
             <el-descriptions-item label="学生总数">{{ getStudentCountByCourse(currentCourse.id) }}</el-descriptions-item>
           </el-descriptions>
@@ -385,7 +381,7 @@ onMounted(() => {
 
 <style scoped>
 .courses-preview {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

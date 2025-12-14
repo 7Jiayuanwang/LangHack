@@ -31,7 +31,7 @@ public class Assignment {
     private LocalDateTime createdTime;
 
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
+    private LocalDateTime updatedTime;
 
     // 关联字段（不映射到数据库）
     @TableField(exist = false)
@@ -114,12 +114,12 @@ public class Assignment {
         this.createdTime = createdTime;
     }
 
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
+    public LocalDateTime getUpdatedTime() {
+        return updatedTime;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public void setUpdatedTime(LocalDateTime updatedTime) {
+        this.updatedTime = updatedTime;
     }
 
     public String getClassName() {

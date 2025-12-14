@@ -7,8 +7,8 @@ WORKDIR /app
 # 复制 package.json 和 lock 文件
 COPY package*.json ./
 
-# 安装依赖
-RUN npm ci --registry=https://registry.npmmirror.com
+# 安装依赖（使用 npm install 代替 npm ci 以提高兼容性）
+RUN npm install --registry=https://registry.npmmirror.com --legacy-peer-deps
 
 # 复制源代码
 COPY . .

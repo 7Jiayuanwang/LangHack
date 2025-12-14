@@ -169,5 +169,7 @@ const handleCommand = async (command) => {
 .el-main {
   background-color: #f0f2f5;
   padding: 20px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
 }
 </style>

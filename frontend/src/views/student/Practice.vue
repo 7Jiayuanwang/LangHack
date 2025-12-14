@@ -12,7 +12,7 @@
       </template>
 
       <div v-if="!practiceStarted" class="practice-intro">
-        <el-empty description="点击"开始新练习"开始答题">
+        <el-empty description="点击 开始新练习 开始答题">
           <el-button type="primary" @click="startNewPractice">开始新练习</el-button>
         </el-empty>
       </div>
@@ -504,7 +504,7 @@ onUnmounted(() => {
 
 <style scoped>
 .practice-page {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

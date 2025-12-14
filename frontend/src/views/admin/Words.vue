@@ -570,7 +570,7 @@ onMounted(() => {
 
 <style scoped>
 .words-management {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

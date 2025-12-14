@@ -496,7 +496,7 @@ onMounted(() => {
 
 <style scoped>
 .assignments-management {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

@@ -498,7 +498,7 @@ const getExamTypeLabel = (examType) => {
 
 <style scoped>
 .questions-container {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

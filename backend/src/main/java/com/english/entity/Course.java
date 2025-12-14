@@ -18,20 +18,17 @@ public class Course {
     @TableField("cover_image")
     private String coverImage;
 
-    @TableField("created_by")
-    private Long createdBy;
-
-    @TableField("status")
-    private String status;
+    @TableField("teacher_id")
+    private Long teacherId;
 
     @TableField("deleted")
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
-    private LocalDateTime createdAt;
+    private LocalDateTime createdTime;
 
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
+    private LocalDateTime updatedTime;
 
     // Getters and Setters
     public Long getId() {
@@ -66,20 +63,12 @@ public class Course {
         this.coverImage = coverImage;
     }
 
-    public Long getCreatedBy() {
-        return createdBy;
+    public Long getTeacherId() {
+        return teacherId;
     }
 
-    public void setCreatedBy(Long createdBy) {
-        this.createdBy = createdBy;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
+    public void setTeacherId(Long teacherId) {
+        this.teacherId = teacherId;
     }
 
     public Integer getDeleted() {
@@ -90,19 +79,19 @@ public class Course {
         this.deleted = deleted;
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+    public LocalDateTime getCreatedTime() {
+        return createdTime;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    public void setCreatedTime(LocalDateTime createdTime) {
+        this.createdTime = createdTime;
     }
 
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
+    public LocalDateTime getUpdatedTime() {
+        return updatedTime;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public void setUpdatedTime(LocalDateTime updatedTime) {
+        this.updatedTime = updatedTime;
     }
 }

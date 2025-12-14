@@ -430,7 +430,7 @@ const getImportanceColor = (importance) => {
 
 <style scoped>
 .knowledge-points-container {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

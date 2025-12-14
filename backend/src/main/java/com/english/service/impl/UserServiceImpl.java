@@ -152,8 +152,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         // 密码加密
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setCreatedTime(LocalDateTime.now());
+        user.setUpdatedTime(LocalDateTime.now());
         user.setDeleted(0);
         user.setStatus("ACTIVE");
 
@@ -175,7 +175,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             user.setPassword(existingUser.getPassword());
         }
 
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
     }
 
@@ -227,33 +227,38 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User deleteUser = new User();
         deleteUser.setId(id);
         deleteUser.setDeleted(1);
-        deleteUser.setUpdatedAt(LocalDateTime.now());
+        deleteUser.setUpdatedTime(LocalDateTime.now());
         updateById(deleteUser);
     }
 
     @Override
     public void initDefaultAdmin() {
-        QueryWrapper<User> wrapper = new QueryWrapper<>();
-        wrapper.eq("username", "admin");
-        wrapper.eq("deleted", 0);
-        User existingAdmin = getOne(wrapper);
+        try {
+            QueryWrapper<User> wrapper = new QueryWrapper<>();
+            wrapper.eq("username", "admin");
+            wrapper.eq("deleted", 0);
+            User existingAdmin = getOne(wrapper);
 
-        if (existingAdmin == null) {
-            User admin = new User();
-            admin.setUsername("admin");
-            admin.setPassword(passwordEncoder.encode("admin123"));
-            admin.setNickname("系统管理员");
-            admin.setEmail("admin@english.com");
-            admin.setRole("ADMIN");
-            admin.setStatus("ACTIVE");
-            admin.setCreatedAt(LocalDateTime.now());
-            admin.setUpdatedAt(LocalDateTime.now());
-            admin.setDeleted(0);
+            if (existingAdmin == null) {
+                User admin = new User();
+                admin.setUsername("admin");
+                admin.setPassword(passwordEncoder.encode("admin123"));
+                admin.setNickname("系统管理员");
+                admin.setEmail("admin@english.com");
+                admin.setRole("ADMIN");
+                admin.setStatus("ACTIVE");
+                admin.setCreatedTime(LocalDateTime.now());
+                admin.setUpdatedTime(LocalDateTime.now());
+                admin.setDeleted(0);
 
-            save(admin);
-            System.out.println("✅ 默认管理员账户创建成功: admin/admin123");
-        } else {
-            System.out.println("✅ 默认管理员账户已存在: admin");
+                save(admin);
+                System.out.println("✅ 默认管理员账户创建成功: admin/admin123");
+            } else {
+                System.out.println("✅ 默认管理员账户已存在: admin");
+            }
+        } catch (Exception e) {
+            System.err.println("❌ 初始化默认管理员失败: " + e.getMessage());
+            // 不抛出异常,避免影响应用启动
         }
     }
 
@@ -320,7 +325,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = new User();
         user.setId(id);
         user.setStatus(status);
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
     }
 
@@ -329,7 +334,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = new User();
         user.setId(id);
         user.setPassword(passwordEncoder.encode(newPassword));
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
     }
 }

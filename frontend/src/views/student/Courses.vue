@@ -583,7 +583,7 @@ onMounted(() => {
 
 <style scoped>
 .courses-learning {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

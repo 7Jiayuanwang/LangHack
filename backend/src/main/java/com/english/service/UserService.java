@@ -1,12 +1,13 @@
 package com.english.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.dto.LoginRequest;
 import com.english.entity.User;
 
 import java.util.List;
 import java.util.Map;
 
-public interface UserService {
+public interface UserService extends IService<User> {
     Map<String, Object> login(LoginRequest loginRequest);
     User getUserById(Long id);
     User getUserByUsername(String username);

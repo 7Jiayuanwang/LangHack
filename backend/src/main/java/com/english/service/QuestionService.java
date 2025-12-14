@@ -1,12 +1,13 @@
 package com.english.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.dto.PracticeSessionDTO;
 import com.english.entity.Question;
 
 import java.util.List;
 import java.util.Map;
 
-public interface QuestionService {
+public interface QuestionService extends IService<Question> {
     Map<String, Object> getQuestionsByPage(Map<String, Object> params);
     Question getQuestionById(Long id);
     void createQuestion(Question question);

@@ -11,12 +11,6 @@
       <!-- 搜索栏 -->
       <div class="search-bar">
         <el-form :inline="true" :model="searchForm" class="search-form">
-          <el-form-item label="状态">
-            <el-select v-model="searchForm.status" placeholder="请选择" clearable>
-              <el-option label="启用" value="ACTIVE" />
-              <el-option label="禁用" value="INACTIVE" />
-            </el-select>
-          </el-form-item>
           <el-form-item label="关键词">
             <el-input v-model="searchForm.keyword" placeholder="课程名称/描述" clearable />
           </el-form-item>
@@ -95,13 +89,6 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="课程描述" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="scope">
-            <el-tag :type="scope.row.status === 'ACTIVE' ? 'success' : 'danger'">
-              {{ scope.row.status === 'ACTIVE' ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="createdTime" label="创建时间" width="180">
           <template #default="scope">
             {{ formatTime(scope.row.createdTime) }}
@@ -154,12 +141,6 @@
         </el-form-item>
         <el-form-item label="封面图片" prop="coverImage">
           <el-input v-model="courseForm.coverImage" placeholder="图片URL" />
-        </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-select v-model="courseForm.status" style="width: 100%">
-            <el-option label="启用" value="ACTIVE" />
-            <el-option label="禁用" value="INACTIVE" />
-          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -215,7 +196,6 @@ const currentText = ref({}) // 当前查看的课文
 
 // 搜索表单
 const searchForm = reactive({
-  status: '',
   keyword: ''
 })
 
@@ -231,8 +211,7 @@ const courseForm = reactive({
   id: null,
   name: '',
   description: '',
-  coverImage: '',
-  status: 'ACTIVE'
+  coverImage: ''
 })
 
 // 表单验证规则
@@ -244,9 +223,6 @@ const courseRules = {
   description: [
     { required: true, message: '请输入课程描述', trigger: 'blur' },
     { max: 500, message: '课程描述不能超过 500 个字符', trigger: 'blur' }
-  ],
-  status: [
-    { required: true, message: '请选择状态', trigger: 'change' }
   ]
 }
 
@@ -267,7 +243,6 @@ const loadCourses = async () => {
 }
 
 const resetSearch = () => {
-  searchForm.status = ''
   searchForm.keyword = ''
   pagination.current = 1
   loadCourses()
@@ -286,8 +261,7 @@ const editCourse = (course) => {
     id: course.id,
     name: course.name,
     description: course.description,
-    coverImage: course.coverImage,
-    status: course.status
+    coverImage: course.coverImage
   })
 }
 
@@ -296,8 +270,7 @@ const resetCourseForm = () => {
     id: null,
     name: '',
     description: '',
-    coverImage: '',
-    status: 'ACTIVE'
+    coverImage: ''
   })
 }
 
@@ -413,7 +386,7 @@ onMounted(() => {
 
 <style scoped>
 .courses-management {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

@@ -390,7 +390,7 @@ onMounted(() => {
 
 <style scoped>
 .student-classes {
-  padding: 20px;
+  height: 100%;
 }
 
 .card-header {

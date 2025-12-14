@@ -197,7 +197,7 @@ public class WordController {
 
                     Word word = new Word();
                     word.setWord(wordText.trim());
-                    word.setPhonetic(row.getOrDefault("phonetic", ""));
+                    word.setPronunciation(row.getOrDefault("phonetic", ""));
                     word.setDefinition(row.getOrDefault("definition", ""));
                     word.setExampleSentence(row.getOrDefault("example_sentence", ""));
 

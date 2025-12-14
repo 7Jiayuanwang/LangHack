@@ -1,12 +1,13 @@
 package com.english.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.entity.Text;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
 
-public interface TextService {
+public interface TextService extends IService<Text> {
     Map<String, Object> getTextsByPage(Map<String, Object> params);
     Text getTextById(Long id);
     void createText(Text text);

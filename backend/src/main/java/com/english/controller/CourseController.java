@@ -20,14 +20,14 @@ public class CourseController {
 
     @GetMapping
     public Result<Map<String, Object>> getCourseList(
-            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "1") int current,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status) {
 
         try {
             Map<String, Object> params = new HashMap<>();
-            params.put("page", page);
+            params.put("page", current);
             params.put("size", size);
             params.put("keyword", keyword);
             params.put("status", status);

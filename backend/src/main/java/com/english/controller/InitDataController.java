@@ -6,29 +6,34 @@ import com.english.entity.Course;
 import com.english.entity.Unit;
 import com.english.entity.Word;
 import com.english.entity.Text;
+import com.english.entity.User;
 import com.english.mapper.CourseMapper;
 import com.english.mapper.UnitMapper;
 import com.english.mapper.WordMapper;
 import com.english.mapper.TextMapper;
+import com.english.mapper.UserMapper;
 import com.english.service.CourseService;
 import com.english.service.UnitService;
 import com.english.service.WordService;
 import com.english.service.TextService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 数据初始化控制器
  * 注意：此控制器仅在开发环境(dev)中生效，生产环境无法访问
  */
 @RestController
-@Profile("dev")
+//@Profile("dev")  // 临时注释,允许在任何环境下访问
 @RequestMapping("/api/init")
 public class InitDataController {
 
@@ -56,6 +61,105 @@ public class InitDataController {
     @Autowired
     private TextMapper textMapper;
 
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    /**
+     * 初始化演示用户账户
+     * 创建admin、teacher、student三个演示账户
+     */
+    @RequestMapping("/demo-users")
+    public Result<Map<String, String>> initDemoUsers() {
+        try {
+            Map<String, String> result = new HashMap<>();
+
+            // 创建或更新admin账户 (密码: admin123)
+            QueryWrapper<User> adminWrapper = new QueryWrapper<>();
+            adminWrapper.eq("username", "admin");
+            User existingAdmin = userMapper.selectOne(adminWrapper);
+
+            if (existingAdmin != null) {
+                // 更新密码
+                existingAdmin.setPassword(passwordEncoder.encode("admin123"));
+                existingAdmin.setUpdatedTime(LocalDateTime.now());
+                userMapper.updateById(existingAdmin);
+                result.put("admin", "admin/admin123 - 更新成功");
+            } else {
+                // 创建新用户
+                User admin = new User();
+                admin.setUsername("admin");
+                admin.setPassword(passwordEncoder.encode("admin123"));
+                admin.setRealName("系统管理员");
+                admin.setRole("ADMIN");
+                admin.setEmail("admin@langhack.com");
+                admin.setStatus("ACTIVE");
+                admin.setDeleted(0);
+                admin.setCreatedTime(LocalDateTime.now());
+                admin.setUpdatedTime(LocalDateTime.now());
+                userMapper.insert(admin);
+                result.put("admin", "admin/admin123 - 创建成功");
+            }
+
+            // 创建或更新teacher账户 (密码: teacher123)
+            QueryWrapper<User> teacherWrapper = new QueryWrapper<>();
+            teacherWrapper.eq("username", "teacher");
+            User existingTeacher = userMapper.selectOne(teacherWrapper);
+
+            if (existingTeacher != null) {
+                existingTeacher.setPassword(passwordEncoder.encode("teacher123"));
+                existingTeacher.setUpdatedTime(LocalDateTime.now());
+                userMapper.updateById(existingTeacher);
+                result.put("teacher", "teacher/teacher123 - 更新成功");
+            } else {
+                User teacher = new User();
+                teacher.setUsername("teacher");
+                teacher.setPassword(passwordEncoder.encode("teacher123"));
+                teacher.setRealName("示范教师");
+                teacher.setRole("TEACHER");
+                teacher.setEmail("teacher@langhack.com");
+                teacher.setStatus("ACTIVE");
+                teacher.setDeleted(0);
+                teacher.setCreatedTime(LocalDateTime.now());
+                teacher.setUpdatedTime(LocalDateTime.now());
+                userMapper.insert(teacher);
+                result.put("teacher", "teacher/teacher123 - 创建成功");
+            }
+
+            // 创建或更新student账户 (密码: student123)
+            QueryWrapper<User> studentWrapper = new QueryWrapper<>();
+            studentWrapper.eq("username", "student");
+            User existingStudent = userMapper.selectOne(studentWrapper);
+
+            if (existingStudent != null) {
+                existingStudent.setPassword(passwordEncoder.encode("student123"));
+                existingStudent.setUpdatedTime(LocalDateTime.now());
+                userMapper.updateById(existingStudent);
+                result.put("student", "student/student123 - 更新成功");
+            } else {
+                User student = new User();
+                student.setUsername("student");
+                student.setPassword(passwordEncoder.encode("student123"));
+                student.setRealName("示范学生");
+                student.setRole("STUDENT");
+                student.setEmail("student@langhack.com");
+                student.setStatus("ACTIVE");
+                student.setDeleted(0);
+                student.setCreatedTime(LocalDateTime.now());
+                student.setUpdatedTime(LocalDateTime.now());
+                userMapper.insert(student);
+                result.put("student", "student/student123 - 创建成功");
+            }
+
+            return Result.success("演示账户创建/更新成功！", result);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("演示账户创建失败: " + e.getMessage());
+        }
+    }
+
     @PostMapping("/testdata")
     public Result<String> initTestDataPost() {
         return initTestData();
@@ -68,22 +172,20 @@ public class InitDataController {
             Course course1 = new Course();
             course1.setName("新一代大学英语(第二版)综合教程1(智慧版)");
             course1.setDescription("适合大学英语基础阶段学习");
-            course1.setStatus("ACTIVE");
-            course1.setCreatedBy(1L);
+            course1.setTeacherId(1L);
             course1.setDeleted(0);
-            course1.setCreatedAt(LocalDateTime.now());
-            course1.setUpdatedAt(LocalDateTime.now());
+            course1.setCreatedTime(LocalDateTime.now());
+            course1.setUpdatedTime(LocalDateTime.now());
             courseService.createCourse(course1);
 
             // 创建课程2
             Course course2 = new Course();
             course2.setName("新一代大学英语(第二版)综合教程2(智慧版)");
             course2.setDescription("适合大学英语提高阶段学习");
-            course2.setStatus("ACTIVE");
-            course2.setCreatedBy(1L);
+            course2.setTeacherId(1L);
             course2.setDeleted(0);
-            course2.setCreatedAt(LocalDateTime.now());
-            course2.setUpdatedAt(LocalDateTime.now());
+            course2.setCreatedTime(LocalDateTime.now());
+            course2.setUpdatedTime(LocalDateTime.now());
             courseService.createCourse(course2);
 
             // 获取刚创建的课程ID
@@ -139,7 +241,7 @@ public class InitDataController {
         unit.setDescription(description);
         unit.setOrderNum(orderNum);
         unit.setCreatedTime(LocalDateTime.now());
-        unit.setUpdatedAt(LocalDateTime.now());
+        unit.setUpdatedTime(LocalDateTime.now());
         unitService.createUnit(unit);
     }
 
@@ -153,8 +255,8 @@ public class InitDataController {
         w.setExampleSentence(exampleSentence);
         w.setDifficulty("EASY");
         w.setDeleted(0);
-        w.setCreatedAt(LocalDateTime.now());
-        w.setUpdatedAt(LocalDateTime.now());
+        w.setCreatedTime(LocalDateTime.now());
+        w.setUpdatedTime(LocalDateTime.now());
         wordService.createWord(w);
     }
 

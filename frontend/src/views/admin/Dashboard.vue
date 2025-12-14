@@ -482,7 +482,7 @@ const getAccuracyColor = (accuracy) => {
 
 <style scoped>
 .dashboard {
-  padding: 20px;
+  height: 100%;
 }
 
 .stat-card {

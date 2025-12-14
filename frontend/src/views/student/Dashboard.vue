@@ -305,7 +305,7 @@ onMounted(() => {
 
 <style scoped>
 .dashboard {
-  padding: 20px;
+  height: 100%;
 }
 
 .stat-card {

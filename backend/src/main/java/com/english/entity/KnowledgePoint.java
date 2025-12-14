@@ -22,7 +22,7 @@ public class KnowledgePoint {
     private String examType;
 
     @TableField("level")
-    private String level;
+    private Integer level;
 
     @TableField("parent_id")
     private Long parentId;
@@ -31,7 +31,7 @@ public class KnowledgePoint {
     private String description;
 
     @TableField("importance")
-    private String importance;
+    private Integer importance;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
@@ -77,11 +77,11 @@ public class KnowledgePoint {
         this.examType = examType;
     }
 
-    public String getLevel() {
+    public Integer getLevel() {
         return level;
     }
 
-    public void setLevel(String level) {
+    public void setLevel(Integer level) {
         this.level = level;
     }
 
@@ -101,11 +101,11 @@ public class KnowledgePoint {
         this.description = description;
     }
 
-    public String getImportance() {
+    public Integer getImportance() {
         return importance;
     }
 
-    public void setImportance(String importance) {
+    public void setImportance(Integer importance) {
         this.importance = importance;
     }
 
