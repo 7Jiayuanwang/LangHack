@@ -50,6 +50,11 @@ public interface AssignmentService extends IService<Assignment> {
     List<Assignment> getRecentAssignments(Long teacherId, Integer limit);
 
     /**
+     * 获取教师的最近任务列表（包含统计信息）
+     */
+    List<Map<String, Object>> getRecentAssignmentsWithStats(Long teacherId, Integer limit);
+
+    /**
      * 验证教师权限
      */
     boolean validateTeacherPermission(Long teacherId, Long assignmentId);
@@ -90,4 +95,21 @@ public interface AssignmentService extends IService<Assignment> {
      * 检查任务是否属于指定班级
      */
     boolean isAssignmentInClasses(Long assignmentId, List<Long> classIds);
+
+    // ========== 教师端进度统计相关 ==========
+
+    /**
+     * 获取任务的学生进度统计（教师端使用）
+     */
+    List<Map<String, Object>> getAssignmentProgress(Long assignmentId);
+
+    /**
+     * 根据课程ID获取任务列表
+     */
+    List<Map<String, Object>> getAssignmentsByCourseId(Long courseId, Long studentId);
+
+    /**
+     * 根据单元ID获取任务列表
+     */
+    List<Map<String, Object>> getAssignmentsByUnitId(Long unitId, Long studentId);
 }

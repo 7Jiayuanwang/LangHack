@@ -1,942 +1,625 @@
 <template>
   <div class="texts-management">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>课文管理 - 三级导航</span>
-        </div>
-      </template>
-
-      <!-- 三级导航结构 -->
-      <el-row :gutter="20">
-        <!-- 左侧：课程列表 -->
-        <el-col :span="6">
-          <div class="nav-section">
-            <h3>课程列表</h3>
-            <el-menu
-              :default-active="String(selectedCourseId)"
-              @select="handleCourseSelect"
-            >
-              <el-menu-item
-                v-for="course in courses"
-                :key="course.id"
-                :index="String(course.id)"
-              >
-                <span>{{ course.name }}</span>
-              </el-menu-item>
-            </el-menu>
-          </div>
-        </el-col>
-
-        <!-- 中间：单元列表 -->
-        <el-col :span="6">
-          <div class="nav-section">
-            <div class="content-header">
-              <h3>单元列表</h3>
-              <el-button
-                v-if="selectedCourseId"
-                type="primary"
-                size="small"
-                @click="showAddUnitDialog"
-              >
-                添加单元
-              </el-button>
-            </div>
-            <el-empty v-if="!selectedCourseId" description="请先选择课程" :image-size="80" />
-            <div v-else class="unit-list">
-              <div
-                v-for="unit in units"
-                :key="unit.id"
-                class="unit-item"
-                :class="{ active: unit.id === selectedUnitId }"
-                @click="handleUnitSelect(String(unit.id))"
-              >
-                <div class="unit-info">
-                  <div class="unit-name">{{ unit.name }}</div>
-                  <div class="unit-desc">{{ unit.description }}</div>
-                </div>
-                <div class="unit-actions" @click.stop>
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click="handleEditUnit(unit)"
-                    :icon="Edit"
-                    link
-                  />
-                  <el-button
-                    type="danger"
-                    size="small"
-                    @click="handleDeleteUnit(unit)"
-                    :icon="Delete"
-                    link
-                  />
-                </div>
-              </div>
-              <el-empty v-if="units.length === 0" description="暂无单元，请添加" :image-size="80" />
-            </div>
-          </div>
-        </el-col>
-
-        <!-- 右侧：内容列表 -->
-        <el-col :span="12">
-          <div class="nav-section">
-            <div class="content-header">
-              <h3>内容列表</h3>
-              <el-button
-                v-if="selectedUnitId"
-                type="primary"
-                size="small"
-                @click="showUploadDialog"
-              >
-                导入内容
-              </el-button>
-            </div>
-            <el-empty v-if="!selectedUnitId" description="请先选择单元" :image-size="80" />
-            <div v-else class="content-list">
-              <div
-                v-for="text in texts"
-                :key="text.id"
-                class="content-item"
-                @click="openReader(text)"
-              >
-                <div class="content-info">
-                  <h4>{{ text.title }}</h4>
-                  <div class="content-meta">
-                    <el-tag size="small" :type="getContentTypeTag(text.contentType).type">
-                      {{ getContentTypeTag(text.contentType).label }}
-                    </el-tag>
-                    <el-tag size="small" type="info">{{ text.difficulty }}</el-tag>
-                    <span class="order-num">序号: {{ text.orderNum }}</span>
-                  </div>
-                </div>
-                <div class="content-actions">
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click.stop="handleEditText(text)"
-                    :icon="Edit"
-                  >
-                    编辑
-                  </el-button>
-                  <el-button
-                    type="danger"
-                    size="small"
-                    @click.stop="handleDeleteText(text)"
-                    :icon="Delete"
-                  >
-                    删除
-                  </el-button>
-                </div>
-              </div>
-              <el-empty v-if="texts.length === 0" description="暂无内容，请导入" :image-size="80" />
-            </div>
-          </div>
-        </el-col>
-      </el-row>
-    </el-card>
-
-    <!-- 单元编辑对话框 -->
-    <el-dialog
-      v-model="unitDialogVisible"
-      :title="isEditUnit ? '编辑单元' : '添加单元'"
-      width="500px"
-    >
-      <el-form :model="unitForm" label-width="100px">
-        <el-form-item label="单元名称">
-          <el-input v-model="unitForm.name" placeholder="请输入单元名称" />
-        </el-form-item>
-        <el-form-item label="单元描述">
-          <el-input
-            v-model="unitForm.description"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入单元描述"
-          />
-        </el-form-item>
-        <el-form-item label="排序序号">
-          <el-input-number v-model="unitForm.orderNum" :min="1" :max="100" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="unitDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveUnit" :loading="savingUnit">
-          保存
+    <div class="header">
+      <h2>课文管理</h2>
+      <div class="actions">
+        <el-button type="primary" @click="showAddDialog">
+          <el-icon><Plus /></el-icon>
+          添加课文
         </el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 上传对话框 -->
-    <el-dialog v-model="uploadDialogVisible" title="导入内容" width="500px">
-      <el-form :model="uploadForm" label-width="100px">
-        <el-form-item label="内容类型">
-          <el-radio-group v-model="uploadForm.contentType">
-            <el-radio label="ARTICLE">课文</el-radio>
-            <el-radio label="EXERCISE">练习题</el-radio>
-            <el-radio label="VOCABULARY">词汇</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="自定义标题">
-          <el-input
-            v-model="uploadForm.customTitle"
-            placeholder="留空则使用文件名"
-            clearable
-          />
-        </el-form-item>
-        <el-form-item label="排序序号">
-          <el-input-number v-model="uploadForm.orderNum" :min="1" :max="100" />
-        </el-form-item>
-        <el-form-item label="选择文件">
-          <el-upload
-            ref="uploadRef"
-            :auto-upload="false"
-            :limit="1"
-            :on-change="handleFileChange"
-            :file-list="fileList"
-            accept=".txt,.doc,.docx"
-          >
-            <el-button type="primary">选择文档</el-button>
-            <template #tip>
-              <div class="el-upload__tip">支持 .txt, .doc, .docx 文件</div>
-            </template>
-          </el-upload>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="uploadDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleUpload" :loading="uploading">
-          确定上传
+        <el-button @click="loadTexts">
+          <el-icon><Refresh /></el-icon>
+          刷新
         </el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 阅读器对话框 -->
-    <el-dialog
-      v-model="readerVisible"
-      :title="currentText.title"
-      width="80%"
-      class="reader-dialog"
-      :fullscreen="readerFullscreen"
-    >
-      <template #header>
-        <div class="reader-header">
-          <h2>{{ currentText.title }}</h2>
-          <div class="reader-controls">
-            <el-button-group>
-              <el-button size="small" @click="changeFontSize('small')">小</el-button>
-              <el-button size="small" @click="changeFontSize('medium')">中</el-button>
-              <el-button size="small" @click="changeFontSize('large')">大</el-button>
-            </el-button-group>
-            <el-switch
-              v-model="nightMode"
-              active-text="夜间"
-              inactive-text="日间"
-              style="margin-left: 10px"
-            />
-            <el-button
-              size="small"
-              :icon="readerFullscreen ? 'Minimize' : 'FullScreen'"
-              @click="readerFullscreen = !readerFullscreen"
-              style="margin-left: 10px"
-            >
-              {{ readerFullscreen ? '退出全屏' : '全屏' }}
-            </el-button>
-          </div>
-        </div>
-      </template>
-
-      <div class="reader-container" :class="{ 'night-mode': nightMode }">
-        <div class="reader-content-wrapper">
-          <div
-            class="reader-content"
-            :class="['font-' + fontSize]"
-            @click="handleTextClick"
-          >
-            <p
-              v-for="(paragraph, index) in getFormattedContent(currentText.content)"
-              :key="index"
-            >
-              {{ paragraph }}
-            </p>
-          </div>
-          <div class="word-detail-panel" v-if="selectedWord">
-            <el-card shadow="never">
-              <template #header>
-                <h3>{{ selectedWord.word }}</h3>
-                <span class="pronunciation">{{ selectedWord.pronunciation }}</span>
-              </template>
-              <div v-if="loadingWord" v-loading="true" style="height: 100px"></div>
-              <div v-else-if="selectedWord.definition">
-                <p><strong>词性：</strong>{{ selectedWord.partOfSpeech }}</p>
-                <p><strong>释义：</strong>{{ selectedWord.definition }}</p>
-                <p v-if="selectedWord.exampleSentence">
-                  <strong>例句：</strong>{{ selectedWord.exampleSentence }}
-                </p>
-              </div>
-              <el-empty v-else description="词典中暂无此单词" :image-size="60" />
-            </el-card>
-          </div>
-        </div>
       </div>
-    </el-dialog>
+    </div>
 
-    <!-- 编辑对话框 -->
-    <el-dialog v-model="editDialogVisible" title="编辑内容" width="70%">
-      <el-form :model="editForm" label-width="100px">
-        <el-form-item label="标题">
-          <el-input v-model="editForm.title" placeholder="请输入标题" />
-        </el-form-item>
-        <el-form-item label="内容类型">
-          <el-radio-group v-model="editForm.contentType">
-            <el-radio label="ARTICLE">课文</el-radio>
-            <el-radio label="EXERCISE">练习题</el-radio>
-            <el-radio label="VOCABULARY">词汇</el-radio>
-          </el-radio-group>
+    <!-- 搜索栏 -->
+    <div class="search-bar">
+      <el-form :inline="true" :model="searchForm" class="search-form">
+        <el-form-item label="关键词">
+          <el-input
+            v-model="searchForm.keyword"
+            placeholder="搜索标题或内容"
+            clearable
+            style="width: 200px"
+            @keyup.enter="handleSearch"
+          />
         </el-form-item>
         <el-form-item label="难度">
-          <el-radio-group v-model="editForm.difficulty">
-            <el-radio label="EASY">简单</el-radio>
-            <el-radio label="MEDIUM">中等</el-radio>
-            <el-radio label="HARD">困难</el-radio>
-          </el-radio-group>
+          <el-select v-model="searchForm.difficulty" placeholder="选择难度" clearable style="width: 120px">
+            <el-option label="简单" value="EASY" />
+            <el-option label="中等" value="MEDIUM" />
+            <el-option label="困难" value="HARD" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="排序序号">
-          <el-input-number v-model="editForm.orderNum" :min="1" :max="100" />
-        </el-form-item>
-        <el-form-item label="内容">
-          <el-input
-            v-model="editForm.content"
-            type="textarea"
-            :rows="15"
-            placeholder="请输入内容"
-          />
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch">
+            <el-icon><Search /></el-icon>
+            搜索
+          </el-button>
+          <el-button @click="resetSearch">
+            <el-icon><RefreshLeft /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
+    </div>
+
+    <!-- 统计信息 -->
+    <div class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.totalEasy || 0 }}</div>
+        <div class="stat-label">简单课文</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.totalMedium || 0 }}</div>
+        <div class="stat-label">中等课文</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.totalHard || 0 }}</div>
+        <div class="stat-label">困难课文</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.totalTexts || 0 }}</div>
+        <div class="stat-label">总课文数</div>
+      </div>
+    </div>
+
+    <!-- 课文列表 -->
+    <div class="texts-table">
+      <el-table
+        v-loading="loading"
+        :data="texts"
+        stripe
+        border
+        style="width: 100%"
+        empty-text="暂无课文数据"
+      >
+        <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="content" label="内容预览" min-width="300" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="content-preview">
+              {{ getContentPreview(row.content) }}
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="difficulty" label="难度" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getDifficultyType(row.difficulty)">
+              {{ getDifficultyText(row.difficulty) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="audioUrl" label="音频" width="120">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.audioUrl"
+              type="primary"
+              size="small"
+              text
+              @click="playAudio(row.audioUrl)"
+            >
+              播放
+            </el-button>
+            <span v-else class="no-audio">无音频</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdTime" label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatTime(row.createdTime) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" @click="viewText(row)">
+              查看
+            </el-button>
+            <el-button type="success" size="small" @click="editText(row)">
+              编辑
+            </el-button>
+            <el-button type="danger" size="small" @click="deleteText(row)">
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination">
+        <el-pagination
+          v-model:current-page="pagination.current"
+          v-model:page-size="pagination.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
+    </div>
+
+    <!-- 添加/编辑课文对话框 -->
+    <TextEditDialog
+      v-model="editDialogVisible"
+      :text-data="selectedText"
+      :unit-id="selectedUnitId"
+      @success="loadTexts"
+    />
+
+    <!-- 查看课文对话框 -->
+    <el-dialog
+      v-model="viewDialogVisible"
+      title="课文详情"
+      width="min(700px, 90%)"
+    >
+      <div class="text-detail">
+        <h3>{{ currentText.title }}</h3>
+        <div class="text-meta">
+          <el-tag :type="getDifficultyType(currentText.difficulty)">
+            {{ getDifficultyText(currentText.difficulty) }}
+          </el-tag>
+          <span class="create-time">创建时间：{{ formatTime(currentText.createdTime) }}</span>
+        </div>
+        <div class="text-content">
+          <pre>{{ currentText.content }}</pre>
+        </div>
+        <div v-if="currentText.audioUrl" class="text-audio">
+          <h4>音频</h4>
+          <el-button type="primary" @click="playAudio(currentText.audioUrl)">
+            <el-icon><VideoPlay /></el-icon>
+            播放音频
+          </el-button>
+        </div>
+      </div>
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveEdit" :loading="saving">
-          保存
-        </el-button>
+        <span class="dialog-footer">
+          <el-button @click="viewDialogVisible = false">关闭</el-button>
+          <el-button type="success" @click="editText(currentText)">编辑</el-button>
+        </span>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit } from '@element-plus/icons-vue'
-import { useRoute } from 'vue-router'
-import { getCourseList } from '@/api/admin'
-import { getUnitsByCourse, createUnit, updateUnit, deleteUnit } from '@/api/unit'
-import { getTextsByCourse, importTextFromWord, deleteText, updateText } from '@/api/text'
-import { getWordByWord } from '@/api/word'
+import { Plus, Search, RefreshLeft, Refresh, Edit, Delete, VideoPlay } from '@element-plus/icons-vue'
+import * as adminApi from '@/api/admin'
+import TextEditDialog from '@/components/TextEditDialog.vue'
 
-const route = useRoute()
-
-// 数据
+// 响应式数据
+const texts = ref([])
+const stats = ref({})
 const courses = ref([])
 const units = ref([])
-const texts = ref([])
-const selectedCourseId = ref(null)
-const selectedUnitId = ref(null)
-const uploadDialogVisible = ref(false)
-const uploading = ref(false)
-const fileList = ref([])
-const uploadForm = reactive({
-  file: null,
-  contentType: 'ARTICLE',
-  orderNum: 1,
-  customTitle: ''
-})
-
-// 编辑相关
-const editDialogVisible = ref(false)
-const saving = ref(false)
-const editForm = reactive({
-  id: null,
-  title: '',
-  content: '',
-  contentType: 'ARTICLE',
-  difficulty: 'MEDIUM',
-  orderNum: 1,
-  unitId: null
-})
-
-// 单元编辑相关
-const unitDialogVisible = ref(false)
-const isEditUnit = ref(false)
-const savingUnit = ref(false)
-const unitForm = reactive({
-  id: null,
-  name: '',
-  description: '',
-  orderNum: 1,
-  courseId: null
-})
-
-// 阅读器相关
-const readerVisible = ref(false)
-const readerFullscreen = ref(false)
+const loading = ref(false)
+const viewDialogVisible = ref(false)
 const currentText = ref({})
-const fontSize = ref('medium')
-const nightMode = ref(false)
-const selectedWord = ref(null)
-const loadingWord = ref(false)
+const editDialogVisible = ref(false)
+const selectedText = ref(null)
+const selectedUnitId = ref(null)
 
-// 加载课程列表
+// 搜索表单
+const searchForm = reactive({
+  keyword: '',
+  difficulty: ''
+})
+
+// 分页数据
+const pagination = reactive({
+  current: 1,
+  size: 20,
+  total: 0
+})
+
+// 方法定义
 const loadCourses = async () => {
   try {
-    const res = await getCourseList({ page: 1, size: 100 })
-    courses.value = res.data.records
-  } catch (error) {
-    ElMessage.error('加载课程失败')
-  }
-}
-
-// 选择课程
-const handleCourseSelect = async (courseId) => {
-  selectedCourseId.value = parseInt(courseId)
-  selectedUnitId.value = null
-  texts.value = []
-  await loadUnits()
-}
-
-// 加载单元列表
-const loadUnits = async () => {
-  if (!selectedCourseId.value) return
-  try {
-    const res = await getUnitsByCourse(selectedCourseId.value)
-    units.value = res.data
-  } catch (error) {
-    ElMessage.error('加载单元失败')
-  }
-}
-
-// 选择单元
-const handleUnitSelect = async (unitId) => {
-  selectedUnitId.value = parseInt(unitId)
-  await loadTexts()
-}
-
-// 加载内容列表
-const loadTexts = async () => {
-  if (!selectedCourseId.value) return
-  try {
-    const res = await getTextsByCourse(selectedCourseId.value)
-    // 过滤当前单元的内容并排序
-    texts.value = res.data
-      .filter(t => t.unitId === selectedUnitId.value)
-      .sort((a, b) => a.orderNum - b.orderNum)
-  } catch (error) {
-    ElMessage.error('加载内容失败')
-  }
-}
-
-// 显示上传对话框
-const showUploadDialog = () => {
-  fileList.value = []
-  uploadForm.file = null
-  uploadForm.contentType = 'ARTICLE'
-  uploadForm.orderNum = texts.value.length + 1
-  uploadForm.customTitle = ''
-  uploadDialogVisible.value = true
-}
-
-// 文件选择
-const handleFileChange = (file) => {
-  uploadForm.file = file.raw
-}
-
-// 上传文件
-const handleUpload = async () => {
-  if (!uploadForm.file) {
-    ElMessage.warning('请选择文件')
-    return
-  }
-
-  const formData = new FormData()
-  formData.append('file', uploadForm.file)
-  formData.append('unitId', selectedUnitId.value)
-  formData.append('courseId', selectedCourseId.value)
-  formData.append('contentType', uploadForm.contentType)
-  formData.append('orderNum', uploadForm.orderNum)
-
-  // 添加自定义标题
-  if (uploadForm.customTitle && uploadForm.customTitle.trim()) {
-    formData.append('customTitle', uploadForm.customTitle.trim())
-  }
-
-  uploading.value = true
-  try {
-    await importTextFromWord(formData)
-    ElMessage.success('导入成功')
-    uploadDialogVisible.value = false
-    loadTexts()
-  } catch (error) {
-    ElMessage.error(error.message || '导入失败')
-  } finally {
-    uploading.value = false
-  }
-}
-
-// 打开阅读器
-const openReader = (text) => {
-  currentText.value = text
-  selectedWord.value = null
-  readerVisible.value = true
-  fontSize.value = 'medium'
-  nightMode.value = false
-}
-
-// 修改字体大小
-const changeFontSize = (size) => {
-  fontSize.value = size
-}
-
-// 格式化内容为段落
-const getFormattedContent = (content) => {
-  if (!content) return []
-  return content.split('\n').filter(p => p.trim())
-}
-
-// 获取内容类型标签
-const getContentTypeTag = (contentType) => {
-  const types = {
-    'ARTICLE': { label: '课文', type: 'primary' },
-    'EXERCISE': { label: '练习题', type: 'success' },
-    'VOCABULARY': { label: '词汇', type: 'warning' }
-  }
-  return types[contentType] || { label: '未知', type: 'info' }
-}
-
-// 处理文本点击（查词）
-const handleTextClick = async (event) => {
-  const selection = window.getSelection()
-  const word = selection.toString().trim()
-
-  if (!word) return
-
-  if (!/^[a-zA-Z]+$/.test(word)) {
-    ElMessage.warning('请选择一个有效的英文单词')
-    return
-  }
-
-  loadingWord.value = true
-  selectedWord.value = { word: word.toLowerCase() }
-
-  try {
-    const res = await getWordByWord(word.toLowerCase())
-    selectedWord.value = res.data
-  } catch (error) {
-    selectedWord.value = {
-      word: word.toLowerCase(),
-      definition: null
+    const response = await adminApi.getCourses({
+      page: 1,
+      size: 100 // 获取所有课程
+    })
+    if (response.code === 200) {
+      courses.value = Array.isArray(response.data?.records) ? response.data.records : (Array.isArray(response.data) ? response.data : [])
     }
-  } finally {
-    loadingWord.value = false
+  } catch (error) {
+    ElMessage.error('加载课程列表失败')
   }
 }
 
-// 编辑内容
-const handleEditText = (text) => {
-  editForm.id = text.id
-  editForm.title = text.title
-  editForm.content = text.content
-  editForm.contentType = text.contentType || 'ARTICLE'
-  editForm.difficulty = text.difficulty || 'MEDIUM'
-  editForm.orderNum = text.orderNum || 1
-  editForm.unitId = text.unitId
+const loadUnits = async (courseId) => {
+  if (!courseId) {
+    units.value = []
+    return
+  }
+
+  try {
+    const response = await adminApi.getUnitsByCourseId(courseId)
+    if (response.code === 200) {
+      units.value = response.data || []
+    } else {
+      units.value = []
+      ElMessage.error(response.message || '加载单元列表失败')
+    }
+  } catch (error) {
+    units.value = []
+    ElMessage.error('加载单元列表失败')
+  }
+}
+
+const loadStats = async () => {
+  try {
+    // 获取所有课文的统计信息（不分页）
+    const response = await adminApi.getTexts({ page: 1, size: 10000 })
+    
+    if (response.code === 200) {
+      const allTexts = response.data?.records || []
+      
+      // 计算各难度的课文数量
+      stats.value = {
+        totalEasy: allTexts.filter(t => t.difficulty === 'EASY').length,
+        totalMedium: allTexts.filter(t => t.difficulty === 'MEDIUM').length,
+        totalHard: allTexts.filter(t => t.difficulty === 'HARD').length,
+        totalTexts: allTexts.length
+      }
+    }
+  } catch (error) {
+    console.error('加载统计信息失败:', error)
+    // 出错时显示0
+    stats.value = {
+      totalEasy: 0,
+      totalMedium: 0,
+      totalHard: 0,
+      totalTexts: 0
+    }
+  }
+}
+
+const loadTexts = async () => {
+  loading.value = true
+  try {
+    const params = {
+      page: pagination.current,
+      size: pagination.size
+    }
+
+    if (searchForm.keyword) {
+      params.keyword = searchForm.keyword
+    }
+    if (searchForm.difficulty) {
+      params.difficulty = searchForm.difficulty
+    }
+
+    const response = await adminApi.getTexts(params)
+
+    if (response.code === 200) {
+      texts.value = response.data?.records || []
+      pagination.total = response.data?.total || 0
+    }
+  } catch (error) {
+    ElMessage.error('加载课文列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleSearch = () => {
+  pagination.current = 1
+  loadTexts()
+}
+
+const resetSearch = () => {
+  searchForm.keyword = ''
+  searchForm.difficulty = ''
+  pagination.current = 1
+  loadTexts()
+}
+
+const handleSizeChange = (size) => {
+  pagination.size = size
+  pagination.current = 1
+  loadTexts()
+}
+
+const handleCurrentChange = (page) => {
+  pagination.current = page
+  loadTexts()
+}
+
+const showAddDialog = () => {
+  selectedText.value = null
+  selectedUnitId.value = null  // 清空 unitId，确保显示课程和单元选择器
   editDialogVisible.value = true
 }
 
-// 保存编辑
-const handleSaveEdit = async () => {
-  if (!editForm.title || !editForm.title.trim()) {
-    ElMessage.warning('请输入标题')
-    return
-  }
-  if (!editForm.content || !editForm.content.trim()) {
-    ElMessage.warning('请输入内容')
-    return
-  }
+const viewText = (text) => {
+  currentText.value = { ...text }
+  viewDialogVisible.value = true
+}
 
-  saving.value = true
-  try {
-    await updateText(editForm.id, {
-      title: editForm.title.trim(),
-      content: editForm.content.trim(),
-      contentType: editForm.contentType,
-      difficulty: editForm.difficulty,
-      orderNum: editForm.orderNum,
-      unitId: editForm.unitId
+const editText = (text) => {
+  selectedText.value = { ...text }
+  selectedUnitId.value = text.unitId
+  editDialogVisible.value = true
+}
+
+const deleteText = (text) => {
+  ElMessageBox.confirm(
+    `确定要删除课文 "${text.title}" 吗？此操作不可恢复！`,
+    '删除确认',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  )
+    .then(async () => {
+      try {
+        const response = await adminApi.deleteText(text.id)
+
+        if (response.code === 200) {
+          ElMessage.success('删除成功')
+          loadTexts()
+          loadStats()
+        } else {
+          ElMessage.error(response.message || '删除失败')
+        }
+      } catch (error) {
+        ElMessage.error('删除失败')
+      }
     })
-    ElMessage.success('保存成功')
-    editDialogVisible.value = false
-    await loadTexts()
-  } catch (error) {
-    ElMessage.error('保存失败: ' + (error.message || error))
-  } finally {
-    saving.value = false
-  }
+    .catch(() => {
+      // 用户取消删除
+    })
 }
 
-// 删除内容
-const handleDeleteText = async (text) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除《${text.title}》吗？删除后无法恢复！`,
-      '删除确认',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
+let currentAudio = null
 
-    await deleteText(text.id)
-    ElMessage.success('删除成功')
-    await loadTexts()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败: ' + (error.message || error))
-    }
-  }
+const playAudio = (audioUrl) => {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null }
+  currentAudio = new Audio(audioUrl)
+  currentAudio.play().catch(error => {
+    ElMessage.error('音频播放失败')
+    console.error('Audio playback error:', error)
+  })
 }
 
-// ========== 单元管理方法 ==========
+onBeforeUnmount(() => {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null }
+})
 
-// 显示添加单元对话框
-const showAddUnitDialog = () => {
-  isEditUnit.value = false
-  unitForm.id = null
-  unitForm.name = ''
-  unitForm.description = ''
-  unitForm.orderNum = units.value.length + 1
-  unitForm.courseId = selectedCourseId.value
-  unitDialogVisible.value = true
+const getContentPreview = (content) => {
+  if (!content) return ''
+  const maxLength = 100
+  return content.length > maxLength ? content.substring(0, maxLength) + '...' : content
 }
 
-// 编辑单元
-const handleEditUnit = (unit) => {
-  isEditUnit.value = true
-  unitForm.id = unit.id
-  unitForm.name = unit.name
-  unitForm.description = unit.description
-  unitForm.orderNum = unit.orderNum
-  unitForm.courseId = unit.courseId
-  unitDialogVisible.value = true
+const getDifficultyType = (difficulty) => {
+  const types = {
+    EASY: 'success',
+    MEDIUM: 'warning',
+    HARD: 'danger'
+  }
+  return types[difficulty] || 'info'
 }
 
-// 保存单元
-const handleSaveUnit = async () => {
-  if (!unitForm.name || !unitForm.name.trim()) {
-    ElMessage.warning('请输入单元名称')
-    return
+const getDifficultyText = (difficulty) => {
+  const texts = {
+    EASY: '简单',
+    MEDIUM: '中等',
+    HARD: '困难'
   }
-
-  savingUnit.value = true
-  try {
-    if (isEditUnit.value) {
-      // 更新单元
-      await updateUnit(unitForm.id, {
-        name: unitForm.name.trim(),
-        description: unitForm.description?.trim() || '',
-        orderNum: unitForm.orderNum,
-        courseId: unitForm.courseId
-      })
-      ElMessage.success('单元更新成功')
-    } else {
-      // 创建单元
-      await createUnit({
-        name: unitForm.name.trim(),
-        description: unitForm.description?.trim() || '',
-        orderNum: unitForm.orderNum,
-        courseId: selectedCourseId.value
-      })
-      ElMessage.success('单元创建成功')
-    }
-    unitDialogVisible.value = false
-    await loadUnits()
-  } catch (error) {
-    ElMessage.error('保存失败: ' + (error.message || error))
-  } finally {
-    savingUnit.value = false
-  }
+  return texts[difficulty] || difficulty
 }
 
-// 删除单元
-const handleDeleteUnit = async (unit) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除单元《${unit.name}》吗？删除后该单元下的所有内容也会被删除！`,
-      '删除确认',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-
-    await deleteUnit(unit.id)
-    ElMessage.success('删除成功')
-    // 如果删除的是当前选中的单元，清空选择
-    if (selectedUnitId.value === unit.id) {
-      selectedUnitId.value = null
-      texts.value = []
-    }
-    await loadUnits()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败: ' + (error.message || error))
-    }
-  }
+const formatTime = (time) => {
+  if (!time) return ''
+  const date = new Date(time)
+  return date.toLocaleString('zh-CN')
 }
 
-// 初始化
-onMounted(async () => {
-  await loadCourses()
-
-  // 检查路由参数，如果有 courseId 则自动选中该课程
-  const courseIdParam = route.query.courseId
-  if (courseIdParam) {
-    const courseId = parseInt(courseIdParam)
-    selectedCourseId.value = courseId
-    await loadUnits()
-  }
+// 生命周期
+onMounted(() => {
+  loadCourses()
+  loadStats()
+  loadTexts()
 })
 </script>
 
 <style scoped>
 .texts-management {
-  height: 100%;
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.card-header {
+.header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.nav-section {
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  padding: 15px;
-  height: 600px;
-  overflow-y: auto;
-}
-
-.nav-section h3 {
-  margin: 0 0 15px 0;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #409eff;
-  color: #303133;
-}
-
-/* 单元列表样式 */
-.unit-list {
-  margin-top: 10px;
-}
-
-.unit-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  margin-bottom: 8px;
-  background: #f5f7fa;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.3s;
-  border: 2px solid transparent;
-}
-
-.unit-item:hover {
-  background: #e6f7ff;
-  transform: translateX(3px);
-}
-
-.unit-item.active {
-  background: #e6f7ff;
-  border-color: #409eff;
-}
-
-.unit-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.unit-name {
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.unit-desc {
-  font-size: 12px;
-  color: #909399;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.unit-actions {
-  display: flex;
-  gap: 5px;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.unit-item:hover .unit-actions {
-  opacity: 1;
-}
-
-.content-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.content-header h3 {
-  margin: 0;
-}
-
-.content-list {
-  margin-top: 10px;
-}
-
-.content-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px;
-  margin-bottom: 10px;
-  background: #f5f7fa;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.content-item:hover {
-  background: #e6f7ff;
-  transform: translateX(5px);
-}
-
-.content-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.content-info h4 {
-  margin: 0 0 8px 0;
-  color: #409eff;
-}
-
-.content-meta {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.order-num {
-  font-size: 12px;
-  color: #909399;
-}
-
-/* 阅读器样式 */
-.reader-dialog :deep(.el-dialog__body) {
-  padding: 0;
-}
-
-.reader-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.reader-header h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.reader-controls {
-  display: flex;
-  align-items: center;
-}
-
-.reader-container {
-  min-height: 500px;
-  background: #fff;
-  transition: all 0.3s;
-}
-
-.reader-container.night-mode {
-  background: #1e1e1e;
-  color: #d4d4d4;
-}
-
-.reader-content-wrapper {
-  display: flex;
-  gap: 20px;
-  padding: 30px;
-}
-
-.reader-content {
-  flex: 1;
-  line-height: 2;
-  user-select: text;
-  cursor: text;
-  transition: all 0.3s;
-}
-
-.reader-content p {
   margin-bottom: 20px;
-  text-indent: 2em;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e4e7ed;
 }
 
-.reader-content.font-small {
-  font-size: 14px;
+.header h2 {
+  margin: 0;
+  color: #303133;
+  font-weight: 500;
 }
 
-.reader-content.font-medium {
-  font-size: 16px;
+.actions {
+  display: flex;
+  gap: 12px;
 }
 
-.reader-content.font-large {
-  font-size: 20px;
+.search-bar {
+  margin-bottom: 20px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
 }
 
-.night-mode .reader-content {
-  color: #d4d4d4;
+.search-form {
+  margin: 0;
 }
 
-.word-detail-panel {
-  width: 300px;
-  position: sticky;
-  top: 0;
+.stats-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
 }
 
-.word-detail-panel h3 {
-  margin: 0 0 5px 0;
+.stat-card {
+  text-align: center;
+  padding: 20px;
+  background-color: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: bold;
   color: #409eff;
+  margin-bottom: 8px;
 }
 
-.pronunciation {
-  color: #909399;
+.stat-label {
   font-size: 14px;
+  color: #909399;
 }
 
-.word-detail-panel p {
-  margin: 10px 0;
+.texts-table {
+  background-color: #fff;
+  border-radius: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.content-preview {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.4;
+}
+
+.pagination {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.no-audio {
+  color: #909399;
+  font-size: 12px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.text-detail {
+  padding: 20px 0;
+}
+
+.text-detail h3 {
+  margin: 0 0 16px 0;
+  color: #303133;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.text-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.create-time {
+  font-size: 13px;
+  color: #909399;
+}
+
+.text-content {
+  margin-bottom: 20px;
+}
+
+.text-content pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
   line-height: 1.6;
+  font-family: inherit;
+  color: #303133;
+  margin: 0;
 }
 
-.night-mode .word-detail-panel {
-  background: #252526;
-  color: #d4d4d4;
+.text-audio h4 {
+  margin: 0 0 12px 0;
+  color: #606266;
+  font-size: 14px;
+  font-weight: normal;
+}
+
+@media (max-width: 768px) {
+  .texts-management {
+    padding: 16px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .search-form {
+    display: block;
+  }
+
+  .search-form .el-form-item {
+    margin-right: 0;
+    margin-bottom: 16px;
+  }
+
+  .stats-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+}
+
+.exercise-section {
+  margin-top: 20px;
+}
+
+.section-title {
+  font-weight: bold;
+  color: #333;
 }
 </style>

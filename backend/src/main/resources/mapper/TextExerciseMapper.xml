@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.TextExerciseMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.english.entity.TextExercise">
+        <id column="id" property="id" jdbcType="BIGINT"/>
+        <result column="text_id" property="textId" jdbcType="BIGINT"/>
+        <result column="question" property="question" jdbcType="LONGVARCHAR"/>
+        <result column="exercise_type" property="exerciseType" jdbcType="VARCHAR"/>
+        <result column="order_num" property="orderNum" jdbcType="INTEGER"/>
+        <result column="created_by" property="createdBy" jdbcType="BIGINT"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+        <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <!-- 基础字段 -->
+    <sql id="Base_Column_List">
+        id, text_id, question, exercise_type, order_num, created_by, created_time, updated_time
+    </sql>
+
+    <!-- 根据课文ID获取习题列表 -->
+    <select id="getExercisesByTextId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM text_exercises
+        WHERE text_id = #{textId}
+        ORDER BY order_num ASC, created_time ASC
+    </select>
+
+    <!-- 获取课文习题数量 -->
+    <select id="countExercisesByTextId" resultType="int">
+        SELECT COUNT(*)
+        FROM text_exercises
+        WHERE text_id = #{textId}
+    </select>
+
+    <!-- 删除课文的所有习题 -->
+    <delete id="deleteExercisesByTextId">
+        DELETE FROM text_exercises
+        WHERE text_id = #{textId}
+    </delete>
+
+</mapper>

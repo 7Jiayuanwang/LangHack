@@ -1,13 +1,12 @@
 package com.english.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.dto.LoginRequest;
 import com.english.entity.User;
 
 import java.util.List;
 import java.util.Map;
 
-public interface UserService extends IService<User> {
+public interface UserService {
     Map<String, Object> login(LoginRequest loginRequest);
     User getUserById(Long id);
     User getUserByUsername(String username);
@@ -20,6 +19,7 @@ public interface UserService extends IService<User> {
     List<User> getTeachers();
     List<User> getStudents();
     Map<String, Object> getUserStats();
+    List<User> searchUsers(String keyword, String role);
     void updateUserStatus(Long id, String status);
     void resetPassword(Long id, String newPassword);
 }

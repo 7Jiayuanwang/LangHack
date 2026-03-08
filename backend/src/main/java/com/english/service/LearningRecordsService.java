@@ -26,7 +26,7 @@ public interface LearningRecordsService {
     /**
      * 获取课文详情（包含单词标注）
      */
-    Map<String, Object> getTextDetailWithAnnotation(Long studentId, Long textId);
+    Map<String, Object> getTextDetailWithAnnotation(Long studentId, Long textId, Long assignmentId);
 
     /**
      * 记录课文查看
@@ -34,14 +34,44 @@ public interface LearningRecordsService {
     void recordTextView(Long studentId, Long textId);
 
     /**
+     * 记录课文查看（增强版，支持任务关联和学习时长）
+     */
+    void recordTextView(Long studentId, Long textId, Long assignmentId, Integer duration);
+
+    /**
+     * 获取特定课文的累计阅读时间（用于课文任务完成判断）
+     */
+    int getTextReadTimeForSpecificText(Long studentId, Long textId, Long assignmentId);
+
+    /**
      * 记录单词查看
      */
     void recordWordView(Long studentId, Long wordId);
 
     /**
+     * 记录单词查看（增强版，支持任务关联和学习时长）
+     */
+    void recordWordView(Long studentId, Long wordId, Long assignmentId, Integer duration);
+
+    /**
+     * 记录学习活动（通用方法）
+     */
+    void recordLearning(Long studentId, String type, Long wordId, Integer duration, Long textId, Long assignmentId);
+
+    /**
      * 记录添加生词
      */
     void recordVocabularyAdd(Long studentId, Long wordId);
+
+    /**
+     * 开始阅读会话
+     */
+    Long startReadingSession(Long studentId, Long textId, Long assignmentId);
+
+    /**
+     * 完成阅读会话
+     */
+    void completeReadingSession(Long recordId);
 
     /**
      * 记录单词复习

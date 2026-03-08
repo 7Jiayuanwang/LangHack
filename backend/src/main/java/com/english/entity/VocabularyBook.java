@@ -31,6 +31,7 @@ public class VocabularyBook {
      * 添加时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField(value = "added_time", fill = FieldFill.INSERT)
     private LocalDateTime addedTime;
 
     /**
@@ -49,10 +50,33 @@ public class VocabularyBook {
      */
     private String masteryLevel;
 
+    /**
+     * SM-2 复习次数 (成功复习次数)
+     */
+    private Integer repetition;
+
+    /**
+     * SM-2 复习间隔 (天)
+     */
+    private Integer intervalDays;
+
+    /**
+     * SM-2 难度因子
+     */
+    private Double easinessFactor;
+
+    /**
+     * 下次复习时间
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime nextReviewTime;
+
     public VocabularyBook() {
-        this.addedTime = LocalDateTime.now();
         this.reviewCount = 0;
         this.masteryLevel = "NEW";
+        this.repetition = 0;
+        this.intervalDays = 0;
+        this.easinessFactor = 2.5;
     }
 
     // Getters and Setters
@@ -112,6 +136,38 @@ public class VocabularyBook {
         this.masteryLevel = masteryLevel;
     }
 
+    public Integer getRepetition() {
+        return repetition;
+    }
+
+    public void setRepetition(Integer repetition) {
+        this.repetition = repetition;
+    }
+
+    public Integer getIntervalDays() {
+        return intervalDays;
+    }
+
+    public void setIntervalDays(Integer intervalDays) {
+        this.intervalDays = intervalDays;
+    }
+
+    public Double getEasinessFactor() {
+        return easinessFactor;
+    }
+
+    public void setEasinessFactor(Double easinessFactor) {
+        this.easinessFactor = easinessFactor;
+    }
+
+    public LocalDateTime getNextReviewTime() {
+        return nextReviewTime;
+    }
+
+    public void setNextReviewTime(LocalDateTime nextReviewTime) {
+        this.nextReviewTime = nextReviewTime;
+    }
+
     @Override
     public String toString() {
         return "VocabularyBook{" +
@@ -122,6 +178,10 @@ public class VocabularyBook {
                 ", reviewCount=" + reviewCount +
                 ", lastReviewed=" + lastReviewed +
                 ", masteryLevel=" + masteryLevel +
+                ", repetition=" + repetition +
+                ", intervalDays=" + intervalDays +
+                ", easinessFactor=" + easinessFactor +
+                ", nextReviewTime=" + nextReviewTime +
                 '}';
     }
 }

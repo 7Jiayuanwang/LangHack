@@ -42,6 +42,7 @@
       </div>
 
       <!-- 班级列表 -->
+      <div class="table-wrapper">
       <el-table v-loading="loading" :data="classes" stripe>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="班级名称" min-width="150" />
@@ -66,14 +67,32 @@
             <el-tag size="small">{{ getStudentCount(row.id) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="showDetailDialog(row)">查看</el-button>
-            <el-button type="warning" size="small" @click="showEditDialog(row)">编辑</el-button>
-            <el-button type="danger" size="small" @click="deleteClass(row)">删除</el-button>
+            <div class="action-buttons">
+              <el-button 
+                size="small" 
+                type="primary" 
+                :icon="View" 
+                @click="showDetailDialog(row)"
+                title="查看详情"
+              >
+                查看
+              </el-button>
+              <el-dropdown trigger="click" @command="(cmd) => handleDropdownCommand(cmd, row)">
+                <el-button size="small" :icon="MoreFilled" circle />
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item :icon="Edit" command="edit">编辑班级</el-dropdown-item>
+                    <el-dropdown-item :icon="Delete" command="delete" divided>删除班级</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <!-- 分页 -->
       <div class="pagination-wrapper">
@@ -93,7 +112,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑班级' : '创建班级'"
-      width="600px"
+      width="min(600px, 90%)"
       @close="resetForm"
     >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
@@ -138,7 +157,7 @@
     </el-dialog>
 
     <!-- 班级详情对话框 -->
-    <el-dialog v-model="detailVisible" title="班级详情" width="800px">
+    <el-dialog v-model="detailVisible" title="班级详情" width="min(800px, 90%)">
       <div v-if="currentClass">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="班级ID">{{ currentClass.id }}</el-descriptions-item>
@@ -155,6 +174,7 @@
         <!-- 学生列表 -->
         <div style="margin-top: 20px;">
           <h3>班级学生</h3>
+          <div class="table-wrapper">
           <el-table v-loading="studentsLoading" :data="classStudents" stripe>
             <el-table-column prop="id" label="ID" width="80" />
             <el-table-column label="用户名" prop="student.username" />
@@ -175,6 +195,7 @@
               </template>
             </el-table-column>
           </el-table>
+          </div>
         </div>
       </div>
     </el-dialog>
@@ -184,6 +205,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { View, MoreFilled, Edit, Delete } from '@element-plus/icons-vue'
 
 // 数据状态
 const loading = ref(false)
@@ -254,15 +276,15 @@ const loadClasses = async () => {
 
     const response = await fetch(`/api/classes?${params}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        classes.value = data.data.records
-        pagination.total = data.data.total
+        classes.value = data.data?.records || []
+        pagination.total = data.data?.total || 0
       } else {
         ElMessage.error(data.message || '加载班级列表失败')
       }
@@ -282,14 +304,14 @@ const loadCourses = async () => {
   try {
     const response = await fetch('/api/courses?size=100', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        courses.value = data.data.records
+        courses.value = data.data?.records || []
       }
     }
   } catch (error) {
@@ -302,14 +324,14 @@ const loadTeachers = async () => {
   try {
     const response = await fetch('/api/admin/users?role=TEACHER&size=100', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        teachers.value = data.data.records
+        teachers.value = data.data?.records || []
       }
     }
   } catch (error) {
@@ -344,14 +366,14 @@ const loadClassStudents = async (classId) => {
   try {
     const response = await fetch(`/api/classes/${classId}/students`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        classStudents.value = data.data
+        classStudents.value = Array.isArray(data.data) ? data.data : []
       }
     }
   } catch (error) {
@@ -370,13 +392,13 @@ const getStudentCount = (classId) => {
   // 异步获取学生数量
   fetch(`/api/classes/${classId}/students`, {
     headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
+      'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
     }
   })
   .then(response => response.json())
   .then(data => {
     if (data.code === 200) {
-      studentCountCache.value.set(classId, data.data.length)
+      studentCountCache.value.set(classId, Array.isArray(data.data) ? data.data.length : 0)
     }
   })
   .catch(error => {
@@ -401,7 +423,7 @@ const submitForm = async () => {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       },
       body: JSON.stringify(form)
     })
@@ -446,7 +468,7 @@ const deleteClass = async (row) => {
     const response = await fetch(`/api/classes/${row.id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
@@ -486,10 +508,10 @@ const removeStudent = async (row) => {
       }
     )
 
-    const response = await fetch(`/api/classes/${currentClass.value.id}/students/${row.student.id}`, {
+    const response = await fetch(`/api/classes/${currentClass.value.id}/students/${row.student?.id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
@@ -547,6 +569,18 @@ const formatDateTime = (dateTime) => {
   return new Date(dateTime).toLocaleString('zh-CN')
 }
 
+// 处理下拉菜单命令
+const handleDropdownCommand = (command, row) => {
+  switch (command) {
+    case 'edit':
+      showEditDialog(row)
+      break
+    case 'delete':
+      deleteClass(row)
+      break
+  }
+}
+
 // 初始化
 onMounted(() => {
   // 初始化时清理缓存，确保数据是最新的
@@ -559,8 +593,46 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.action-buttons .el-button {
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.action-buttons .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-buttons .el-button--circle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-buttons .el-dropdown {
+  margin-left: 2px;
+}
+
 .classes-management {
-  height: 100%;
+  padding: 20px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .card-header {
@@ -584,5 +656,28 @@ onMounted(() => {
 h3 {
   margin: 20px 0 10px;
   color: #333;
+}
+
+@media (max-width: 768px) {
+  .classes-management {
+    padding: 12px;
+  }
+
+  .filter-bar {
+    padding: 12px;
+  }
+
+  .filter-bar .el-form {
+    display: block;
+  }
+
+  .filter-bar .el-form-item {
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  .pagination-wrapper {
+    text-align: center;
+  }
 }
 </style>

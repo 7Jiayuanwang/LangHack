@@ -29,6 +29,11 @@ public interface VocabularyBooksService {
     void addToVocabulary(Long studentId, Long wordId);
 
     /**
+     * 添加单词到生词本并设置掌握程度
+     */
+    void addToVocabularyWithLevel(Long studentId, Long wordId, String masteryLevel);
+
+    /**
      * 获取生词本列表（分页）
      */
     Map<String, Object> getVocabularyWithPagination(Map<String, Object> params);
@@ -36,7 +41,7 @@ public interface VocabularyBooksService {
     /**
      * 更新单词掌握程度
      */
-    void updateMasteryLevel(Long studentId, Long wordId, String masteryLevel);
+    void updateMasteryLevel(Long studentId, Long wordId, String masteryLevel, Map<String, Object> sm2Params);
 
     /**
      * 获取单词详情（包含学习状态）
@@ -72,4 +77,14 @@ public interface VocabularyBooksService {
      * 批量更新掌握程度
      */
     void batchUpdateMasteryLevel(Long studentId, List<Long> wordIds, String masteryLevel);
+
+    /**
+     * 从生词本移除单词
+     */
+    void removeFromVocabulary(Long studentId, Long wordId);
+
+    /**
+     * 获取生词本统计信息
+     */
+    Map<String, Object> getVocabularyStats(Long studentId);
 }

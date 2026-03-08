@@ -1,82 +1,128 @@
 <template>
-  <div class="teacher-layout">
-    <el-container>
-      <el-aside width="200px">
-        <div class="logo">
-          <h3>教师端</h3>
-        </div>
-        <el-menu
-          :default-active="$route.path"
-          router
-          background-color="#304156"
-          text-color="#bfcbd9"
-          active-text-color="#409EFF"
-        >
-          <el-menu-item index="/teacher/dashboard">
-            <el-icon><DataBoard /></el-icon>
-            <span>仪表盘</span>
-          </el-menu-item>
-          <el-menu-item index="/teacher/classes">
-            <el-icon><School /></el-icon>
-            <span>班级管理</span>
-          </el-menu-item>
-          <el-menu-item index="/teacher/assignments">
-            <el-icon><Edit /></el-icon>
-            <span>任务管理</span>
-          </el-menu-item>
-          <el-menu-item index="/teacher/courses">
-            <el-icon><Reading /></el-icon>
-            <span>课程浏览</span>
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
+  <div class="mobile-layout">
+    <!-- 顶部标题栏 -->
+    <header class="mobile-header teacher-header">
+      <div class="header-left">
+        <h1 class="page-title">{{ pageTitle }}</h1>
+      </div>
+    </header>
 
-      <el-container>
-        <el-header>
-          <div class="header-content">
-            <div class="breadcrumb">
-              <el-breadcrumb separator="/">
-                <el-breadcrumb-item :to="{ path: '/teacher' }">首页</el-breadcrumb-item>
-                <el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item>
-              </el-breadcrumb>
-            </div>
-            <div class="user-info">
-              <el-dropdown @command="handleCommand">
-                <span class="el-dropdown-link">
-                  {{ userStore.userInfo.realName || userStore.userInfo.username }}
-                  <el-icon class="el-icon--right"><arrow-down /></el-icon>
-                </span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="profile">个人资料</el-dropdown-item>
-                    <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </div>
-        </el-header>
-
-        <el-main>
+    <!-- 主内容区域 -->
+    <main class="mobile-main">
+      <div class="content-container">
+        <transition name="fade" mode="out-in">
           <router-view />
-        </el-main>
-      </el-container>
-    </el-container>
+        </transition>
+      </div>
+    </main>
+
+    <!-- 底部导航栏 -->
+    <nav class="mobile-nav">
+      <div class="nav-container">
+        <router-link
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: $route.path === item.path || $route.path.startsWith(item.path + '/') }"
+        >
+          <div class="nav-icon">
+            <component :is="item.icon" />
+          </div>
+          <span class="nav-label">{{ item.label }}</span>
+          <div class="nav-badge" v-if="item.badge">{{ item.badge }}</div>
+        </router-link>
+        
+        <!-- 用户菜单 - 移到底部导航栏最右侧 -->
+        <div class="nav-item user-menu-item">
+          <el-dropdown @command="handleCommand" placement="top-end">
+            <div class="nav-user-avatar">
+              <div class="nav-icon">
+                <img :src="userAvatar" :alt="userStore.userInfo?.realName || '教师'" class="avatar-img" />
+              </div>
+              <span class="nav-label">我的</span>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人资料</el-dropdown-item>
+                <el-dropdown-item command="settings">设置</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </div>
+    </nav>
   </div>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  DataBoard,
+  School,
+  Edit,
+  Reading
+} from '@element-plus/icons-vue'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
+
+// 导航项配置
+const navItems = ref([
+  {
+    path: '/teacher/dashboard',
+    label: '首页',
+    icon: DataBoard,
+    badge: null
+  },
+  {
+    path: '/teacher/classes',
+    label: '班级',
+    icon: School,
+    badge: null
+  },
+  {
+    path: '/teacher/assignments',
+    label: '任务',
+    icon: Edit,
+    badge: null
+  },
+  {
+    path: '/teacher/courses',
+    label: '课程',
+    icon: Reading,
+    badge: null
+  }
+])
+
+// 页面标题
+const pageTitle = computed(() => {
+  const routeMap = {
+    '/teacher/dashboard': '教学首页',
+    '/teacher/classes': '班级管理',
+    '/teacher/assignments': '任务管理',
+    '/teacher/courses': '课程浏览'
+  }
+  return route.meta?.title || routeMap[route.path] || '教师端'
+})
+
+// 用户头像
+const userAvatar = computed(() => {
+  return userStore.userInfo?.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+})
 
 const handleCommand = async (command) => {
   switch (command) {
     case 'profile':
       ElMessage.info('个人资料功能开发中')
+      break
+    case 'settings':
+      ElMessage.info('设置功能开发中')
       break
     case 'logout':
       try {
@@ -94,65 +140,348 @@ const handleCommand = async (command) => {
       break
   }
 }
+
+// 更新导航徽章（例如待处理任务数）
+onMounted(() => {
+  // 这里可以添加获取待处理任务数的逻辑
+  // navItems.value[2].badge = '5' // 例如待处理任务数量
+})
 </script>
 
 <style scoped>
-.teacher-layout {
+.mobile-layout {
   height: 100vh;
-}
-
-.logo {
-  height: 60px;
+  width: 100vw;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #2b2f3a;
-  color: #fff;
-  border-bottom: 1px solid #3a3f51;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  overflow: hidden;
 }
 
-.logo h3 {
-  margin: 0;
-  font-size: 16px;
+/* 顶部标题栏 - 教师端特色 */
+.mobile-header.teacher-header {
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--border-light);
+  position: relative;
+  z-index: 100;
+  box-shadow: var(--shadow-light);
 }
 
-.el-aside {
-  background-color: #304156;
-}
-
-.el-header {
-  background-color: #fff;
-  border-bottom: 1px solid #e6e6e6;
-  padding: 0 20px;
-}
-
-.header-content {
+.mobile-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 100%;
+  padding: 0 16px;
+  height: 56px;
 }
 
-.breadcrumb {
+.header-left {
   flex: 1;
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  background: var(--gradient-secondary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.el-dropdown-link {
-  display: flex;
-  align-items: center;
+/* 用户菜单项样式 - 在底部导航栏 */
+.user-menu-item {
   cursor: pointer;
-  color: #606266;
 }
 
-.el-main {
-  background-color: #f0f2f5;
-  padding: 20px;
-  height: calc(100vh - 60px);
+.nav-user-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--secondary-color);
+}
+
+.user-menu-item.active .avatar-img,
+.user-menu-item:hover .avatar-img {
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.2);
+}
+
+/* 主内容区域 */
+.mobile-main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-container {
+  flex: 1;
   overflow-y: auto;
+  padding: 16px;
+  background: var(--bg-secondary);
+}
+
+/* 底部导航栏 */
+.mobile-nav {
+  background: var(--surface-color);
+  border-top: 1px solid var(--border-light);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+  position: relative;
+  z-index: 100;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+.nav-container {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  text-decoration: none;
+  color: var(--text-tertiary);
+  transition: all 0.3s ease;
+  position: relative;
+  min-width: 44px;
+  border-radius: 12px;
+  margin: 0 4px;
+}
+
+.nav-item:hover {
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+}
+
+.nav-item.active {
+  color: var(--secondary-color);
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.1) 0%, rgba(78, 205, 196, 0.05) 100%);
+}
+
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-bottom: 4px;
+  transition: transform 0.3s ease;
+}
+
+.nav-item.active .nav-icon {
+  transform: scale(1.1);
+}
+
+.nav-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.2;
+  transition: font-size 0.3s ease;
+}
+
+.nav-item.active .nav-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nav-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: var(--secondary-color);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1;
+  box-shadow: 0 2px 4px rgba(78, 205, 196, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 2px 4px rgba(78, 205, 196, 0.3);
+  }
+  50% {
+    box-shadow: 0 2px 8px rgba(78, 205, 196, 0.6);
+  }
+  100% {
+    box-shadow: 0 2px 4px rgba(78, 205, 196, 0.3);
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+  .mobile-header {
+    padding: 0 12px;
+    height: 52px;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .content-container {
+    padding: 12px;
+  }
+
+  .nav-item {
+    padding: 6px 8px;
+    min-width: 40px;
+    margin: 0 2px;
+  }
+
+  .nav-icon {
+    width: 22px;
+    height: 22px;
+    margin-bottom: 3px;
+  }
+
+  .nav-label {
+    font-size: 10px;
+  }
+
+  .nav-item.active .nav-label {
+    font-size: 11px;
+  }
+
+
+}
+
+@media (max-width: 360px) {
+  .mobile-header {
+    padding: 0 8px;
+    height: 48px;
+  }
+
+  .page-title {
+    font-size: 15px;
+  }
+
+  .content-container {
+    padding: 8px;
+  }
+
+  .nav-item {
+    padding: 4px 6px;
+    margin: 0 1px;
+  }
+
+  .nav-icon {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 2px;
+  }
+
+  .nav-label {
+    font-size: 9px;
+  }
+
+  .nav-item.active .nav-label {
+    font-size: 10px;
+  }
+}
+
+/* 横屏适配 */
+@media (max-height: 600px) and (orientation: landscape) {
+  .mobile-header {
+    height: 44px;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .nav-container {
+    padding: 4px 0;
+  }
+
+  .nav-item {
+    padding: 4px 8px;
+  }
+
+  .nav-icon {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 2px;
+  }
+
+  .nav-label {
+    font-size: 9px;
+  }
+}
+
+/* 过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* 安全区域适配 */
+@supports (padding: max(0px)) {
+  .mobile-header {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-top: max(0px, env(safe-area-inset-top));
+  }
+
+  .content-container {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+}
+
+/* 提升触摸体验 */
+.nav-item,
+.user-menu-item {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* 自定义滚动条 */
+.content-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.content-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content-container::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 2px;
+}
+
+.content-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
 }
 </style>

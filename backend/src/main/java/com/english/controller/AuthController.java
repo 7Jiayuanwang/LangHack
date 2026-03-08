@@ -1,67 +1,76 @@
 package com.english.controller;
 
 import com.english.dto.LoginRequest;
-import com.english.dto.RefreshTokenRequest;
 import com.english.dto.Result;
 import com.english.entity.User;
+import com.english.exception.BusinessException;
 import com.english.service.UserService;
-import com.english.util.JwtUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
+import javax.validation.Valid;
+import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
-
     @Autowired
     private UserService userService;
 
-    @Autowired
-    private JwtUtil jwtUtil;
-
     @PostMapping("/login")
-    public Result<Map<String, Object>> login(@RequestBody LoginRequest loginRequest) {
+    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest) {
         try {
             Map<String, Object> loginResult = userService.login(loginRequest);
             return Result.success("登录成功", loginResult);
-        } catch (IllegalArgumentException e) {
-            logger.warn("登录失败，用户名: {}, 原因: {}", loginRequest.getUsername(), e.getMessage());
-            return Result.error("用户名或密码错误");
+        } catch (BusinessException e) {
+            // 业务异常（账号/密码错误等）：透传用户友好消息
+            return Result.error(e.getMessage() != null ? e.getMessage() : "登录失败");
         } catch (Exception e) {
-            logger.error("登录失败，用户名: {}", loginRequest.getUsername(), e);
+            // 非预期异常（IO/SQL等）：不泄露内部细节
             return Result.error("登录失败，请稍后重试");
         }
     }
 
     @PostMapping("/register")
     public Result<String> register(@RequestBody User user) {
+        // 输入校验
+        if (user.getUsername() == null || user.getUsername().trim().isEmpty()) {
+            return Result.error("用户名不能为空");
+        }
+        if (user.getUsername().length() < 3 || user.getUsername().length() > 50) {
+            return Result.error("用户名长度须在 3~50 个字符之间");
+        }
+        if (!user.getUsername().matches("^[a-zA-Z0-9_\\-\\.@]+$")) {
+            return Result.error("用户名只能包含字母、数字及 _ - . @ 符号");
+        }
+        if (user.getPassword() == null || user.getPassword().length() < 6) {
+            return Result.error("密码长度不能少于 6 位");
+        }
+        if (user.getPassword().length() > 100) {
+            return Result.error("密码长度不能超过 100 位");
+        }
         try {
             // 检查用户名是否已存在
             if (userService.getUserByUsername(user.getUsername()) != null) {
                 return Result.error("用户名已存在");
             }
 
-            // 设置默认角色为学生
-            if (user.getRole() == null || user.getRole().isEmpty()) {
-                user.setRole("STUDENT");
-            }
+            // 强制设置角色为普通用户
+            user.setRole("USER");
+
+            // 设置默认状态为活跃
+            user.setStatus("ACTIVE");
 
             userService.createUser(user);
-            return Result.success("注册成功");
-        } catch (IllegalArgumentException e) {
-            logger.warn("注册失败，用户名: {}, 原因: {}", user.getUsername(), e.getMessage());
-            return Result.error("参数错误");
+            return Result.success("注册成功，您已注册为普通用户");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("注册失败，用户名: {}", user.getUsername(), e);
             return Result.error("注册失败，请稍后重试");
         }
     }
@@ -70,6 +79,9 @@ public class AuthController {
     public Result<User> getUserInfo() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null) {
+                return Result.error("未授权访问");
+            }
             String username = authentication.getName();
 
             User user = userService.getUserByUsername(username);
@@ -79,67 +91,31 @@ public class AuthController {
                 return Result.success(user);
             }
             return Result.error("用户不存在");
-        } catch (IllegalStateException e) {
-            logger.warn("获取用户信息失败: {}", e.getMessage());
-            return Result.error("获取用户信息失败");
         } catch (Exception e) {
-            logger.error("获取用户信息失败", e);
-            return Result.error("获取用户信息失败，请稍后重试");
+            return Result.error("获取用户信息失败");
         }
     }
 
-    @PostMapping("/logout")
+    @GetMapping("/search")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public Result<List<User>> searchUsers(
+            @RequestParam String keyword,
+            @RequestParam(required = false) String role) {
+        try {
+            List<User> users = userService.searchUsers(keyword, role);
+            // 不返回密码信息
+            if (users != null) {
+                users.forEach(user -> user.setPassword(null));
+            }
+            return Result.success(users != null ? users : java.util.Collections.emptyList());
+        } catch (Exception e) {
+            return Result.error("搜索失败，请稍后重试");
+        }
+    }
+
+    @GetMapping("/logout")
     public Result<String> logout() {
         // JWT是无状态的，客户端删除token即可
         return Result.success("退出登录成功");
-    }
-
-    /**
-     * 刷新Token
-     * 使用refresh token获取新的access token
-     */
-    @PostMapping("/refresh")
-    public Result<Map<String, Object>> refreshToken(@RequestBody RefreshTokenRequest request) {
-        try {
-            String refreshToken = request.getToken();
-
-            if (refreshToken == null || refreshToken.trim().isEmpty()) {
-                return Result.error("Refresh token不能为空");
-            }
-
-            // 验证refresh token是否可以刷新
-            if (!jwtUtil.canTokenBeRefreshed(refreshToken)) {
-                return Result.error("Refresh token无效或已过期");
-            }
-
-            // 生成新的access token
-            String newAccessToken = jwtUtil.refreshToken(refreshToken);
-
-            // 获取用户信息
-            String username = jwtUtil.getUsernameFromToken(refreshToken);
-            User user = userService.getUserByUsername(username);
-
-            if (user == null) {
-                return Result.error("用户不存在");
-            }
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("token", newAccessToken);
-            result.put("refreshToken", refreshToken); // 保持原refresh token
-            result.put("expiresIn", 86400000L); // 24小时
-
-            return Result.success("Token刷新成功", result);
-        } catch (IllegalArgumentException e) {
-            logger.warn("Token刷新失败: {}", e.getMessage());
-            return Result.error("Token刷新失败: " + e.getMessage());
-        } catch (Exception e) {
-            logger.error("Token刷新失败", e);
-            return Result.error("Token刷新失败，请重新登录");
-        }
-    }
-
-    @GetMapping("/health")
-    public Result<String> health() {
-        return Result.success("ok");
     }
 }

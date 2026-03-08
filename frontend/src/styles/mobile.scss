@@ -1,0 +1,87 @@
+// 移动端 Element Plus 优化
+@media screen and (max-width: 768px) {
+  // 修复 Element Plus 在移动端的触摸体验
+  .el-button {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+
+    &--small {
+      min-height: 36px;
+      min-width: 36px;
+    }
+  }
+
+  // 输入框优化
+  .el-input,
+  .el-select,
+  .el-textarea {
+    font-size: 16px; // 防止 iOS 缩放
+
+    .el-input__inner,
+    .el-textarea__inner {
+      min-height: 44px;
+    }
+  }
+
+  // 表单优化
+  .el-form-item {
+    margin-bottom: 20px;
+  }
+
+  // 对话框优化
+  .el-dialog {
+    width: 90% !important;
+    margin: 5% auto !important;
+    border-radius: 12px;
+
+    &__header {
+      padding: 16px 20px 10px;
+    }
+
+    &__body {
+      padding: 10px 20px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+
+    &__footer {
+      padding: 10px 20px 16px;
+    }
+  }
+
+  // 消息框优化
+  .el-message-box {
+    width: 80% !important;
+  }
+
+  // 导航菜单优化
+  .el-menu {
+    .el-menu-item,
+    .el-sub-menu__title {
+      min-height: 44px;
+      line-height: 44px;
+    }
+  }
+
+  // 表格优化
+  .el-table {
+    font-size: 12px;
+
+    .el-table__body-wrapper {
+      overflow-x: auto;
+    }
+
+    .el-table__cell {
+      padding: 8px 0;
+    }
+  }
+}
+
+// 安全区域适配
+.mobile-safe-area {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}

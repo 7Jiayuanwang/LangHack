@@ -1,8 +1,7 @@
 package com.english.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.entity.Text;
-import org.springframework.web.multipart.MultipartFile;
+import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
 import java.util.Map;
@@ -14,11 +13,29 @@ public interface TextService extends IService<Text> {
     void updateText(Text text);
     void deleteText(Long id);
     List<Text> getTextsByUnit(Long unitId);
-    List<Text> getTextsByCourse(Long courseId);
+
+    /**
+     * 根据单元ID获取课文列表（别名方法，兼容性）
+     */
+    default List<Text> getTextsByUnitId(Long unitId) {
+        return getTextsByUnit(unitId);
+    }
     List<Text> getTextsByDifficulty(String difficulty);
     List<Text> searchTexts(String keyword);
     Map<String, Object> getTextStats();
 
-    // 文档导入（支持 txt, doc, docx）
-    int importTextFromFile(Long unitId, Long courseId, MultipartFile file, String contentType, Integer orderNum, String customTitle) throws Exception;
+    // 新增用户课文相关方法
+    List<Text> getTextsByUploader(Long uploaderId);
+    List<Text> getPublicTexts(int page, int size, String difficulty, String keyword);
+    Integer getMaxOrderInUnit(Long unitId);
+
+    /**
+     * 原子递增查看次数
+     */
+    void incrementViewCount(Long textId);
+
+    /**
+     * 原子递增点赞次数
+     */
+    void incrementLikeCount(Long textId);
 }

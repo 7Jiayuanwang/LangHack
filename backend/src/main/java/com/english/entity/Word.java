@@ -30,14 +30,30 @@ public class Word {
     @TableField("difficulty")
     private String difficulty;
 
+    @TableField("synonyms")
+    private String synonyms;
+
+    @TableField("antonyms")
+    private String antonyms;
+
+    @TableField("wordnet_id")
+    private String wordnetId;
+
+    @TableField("multiple_definitions")
+    private String multipleDefinitions;
+
+    @TableField("source")
+    private String source;
+
     @TableField("deleted")
+    @TableLogic(value = "0", delval = "1")
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
-    private LocalDateTime createdTime;
+    private LocalDateTime createdAt;
 
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedTime;
+    private LocalDateTime updatedAt;
 
     // Getters and Setters
     public Long getId() {
@@ -104,6 +120,45 @@ public class Word {
         this.difficulty = difficulty;
     }
 
+    public String getSynonyms() {
+        return synonyms;
+    }
+
+    public void setSynonyms(String synonyms) {
+        this.synonyms = synonyms;
+    }
+
+    public String getAntonyms() {
+        return antonyms;
+    }
+
+    public void setAntonyms(String antonyms) {
+        this.antonyms = antonyms;
+    }
+
+    public String getWordnetId() {
+        return wordnetId;
+    }
+
+    public void setWordnetId(String wordnetId) {
+        this.wordnetId = wordnetId;
+    }
+
+    public String getMultipleDefinitions() {
+        return multipleDefinitions;
+    }
+
+    public void setMultipleDefinitions(String multipleDefinitions) {
+        this.multipleDefinitions = multipleDefinitions;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
+    }
 
     public Integer getDeleted() {
         return deleted;
@@ -113,19 +168,19 @@ public class Word {
         this.deleted = deleted;
     }
 
-    public LocalDateTime getCreatedTime() {
-        return createdTime;
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 
-    public void setCreatedTime(LocalDateTime createdTime) {
-        this.createdTime = createdTime;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 
-    public LocalDateTime getUpdatedTime() {
-        return updatedTime;
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 
-    public void setUpdatedTime(LocalDateTime updatedTime) {
-        this.updatedTime = updatedTime;
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

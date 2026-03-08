@@ -9,36 +9,38 @@
       </template>
 
       <!-- 班级列表 -->
-      <el-table v-loading="loading" :data="classes" stripe>
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="班级名称" min-width="150" />
-        <el-table-column label="所属课程" min-width="150">
-          <template #default="{ row }">
-            {{ row.course?.name || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="任课教师" min-width="120">
-          <template #default="{ row }">
-            {{ row.teacher?.nickname || row.teacher?.realName || row.teacher?.username || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="班级描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="joinTime" label="加入时间" width="180">
-          <template #default="{ row }">
-            {{ formatDateTime(row.joinTime) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="createdTime" label="班级创建时间" width="180">
-          <template #default="{ row }">
-            {{ formatDateTime(row.createdTime) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button type="danger" size="small" @click="leaveClass(row)">退出班级</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll-wrapper">
+        <el-table v-loading="loading" :data="classes" stripe>
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="name" label="班级名称" min-width="150" />
+          <el-table-column label="所属课程" min-width="150">
+            <template #default="{ row }">
+              {{ row.course?.name || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="任课教师" min-width="120">
+            <template #default="{ row }">
+              {{ row.teacher?.nickname || row.teacher?.realName || row.teacher?.username || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="班级描述" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="joinTime" label="加入时间" width="180">
+            <template #default="{ row }">
+              {{ formatDateTime(row.joinTime) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="createdTime" label="班级创建时间" width="180">
+            <template #default="{ row }">
+              {{ formatDateTime(row.createdTime) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="{ row }">
+              <el-button type="danger" size="small" @click="leaveClass(row)">退出班级</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
       <!-- 空状态 -->
       <el-empty v-if="classes.length === 0" description="暂未加入任何班级">
@@ -50,15 +52,17 @@
     <el-dialog
       v-model="joinDialogVisible"
       title="加入班级"
-      width="500px"
+      width="min(500px, 92vw)"
       @close="resetJoinForm"
     >
       <el-form ref="joinFormRef" :model="joinForm" :rules="joinFormRules" label-width="100px">
         <el-form-item label="班级ID" prop="classId">
-          <el-input
+          <el-input-number
             v-model="joinForm.classId"
             placeholder="请输入班级ID"
-            type="number"
+            :min="1"
+            :precision="0"
+            style="width: 100%"
           />
         </el-form-item>
         <el-form-item>
@@ -83,7 +87,7 @@
     <el-dialog
       v-model="availableClassesVisible"
       title="可加入的班级"
-      width="800px"
+      width="min(800px, 96vw)"
     >
       <el-input
         v-model="searchKeyword"
@@ -97,38 +101,40 @@
         </template>
       </el-input>
 
-      <el-table v-loading="availableLoading" :data="availableClasses" stripe>
-        <el-table-column prop="id" label="班级ID" width="80" />
-        <el-table-column prop="name" label="班级名称" min-width="150" />
-        <el-table-column label="所属课程" min-width="150">
-          <template #default="{ row }">
-            {{ row.course?.name || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="任课教师" min-width="120">
-          <template #default="{ row }">
-            {{ row.teacher?.nickname || row.teacher?.realName || row.teacher?.username || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="班级描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="createdTime" label="创建时间" width="180">
-          <template #default="{ row }">
-            {{ formatDateTime(row.createdTime) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              type="primary"
-              size="small"
-              @click="quickJoinClass(row)"
-              :disabled="isJoinedClass(row.id)"
-            >
-              {{ isJoinedClass(row.id) ? '已加入' : '加入' }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll-wrapper">
+        <el-table v-loading="availableLoading" :data="availableClasses" stripe>
+          <el-table-column prop="id" label="班级ID" width="80" />
+          <el-table-column prop="name" label="班级名称" min-width="150" />
+          <el-table-column label="所属课程" min-width="150">
+            <template #default="{ row }">
+              {{ row.course?.name || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="任课教师" min-width="120">
+            <template #default="{ row }">
+              {{ row.teacher?.nickname || row.teacher?.realName || row.teacher?.username || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="班级描述" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="createdTime" label="创建时间" width="180">
+            <template #default="{ row }">
+              {{ formatDateTime(row.createdTime) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                type="primary"
+                size="small"
+                @click="quickJoinClass(row)"
+                :disabled="isJoinedClass(row.id)"
+              >
+                {{ isJoinedClass(row.id) ? '已加入' : '加入' }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
       <el-empty v-if="availableClasses.length === 0" description="暂无可加入的班级">
         <el-button type="primary" @click="showJoinDialog">输入班级ID加入</el-button>
@@ -161,8 +167,7 @@ const joinFormRef = ref(null)
 // 表单验证规则
 const joinFormRules = {
   classId: [
-    { required: true, message: '请输入班级ID', trigger: 'blur' },
-    { type: 'number', message: '班级ID必须是数字', trigger: 'blur' }
+    { required: true, message: '请输入班级ID', trigger: 'blur' }
   ]
 }
 
@@ -172,14 +177,14 @@ const loadClasses = async () => {
   try {
     const response = await fetch('/api/classes/student/me', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        classes.value = data.data
+        classes.value = Array.isArray(data.data) ? data.data : []
       } else {
         ElMessage.error(data.message || '加载班级列表失败')
       }
@@ -208,7 +213,7 @@ const loadAvailableClasses = async () => {
 
     const response = await fetch(`/api/classes/search?${params.toString()}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
@@ -217,7 +222,7 @@ const loadAvailableClasses = async () => {
       if (data.code === 200) {
         // 过滤掉已加入的班级
         const joinedClassIds = classes.value.map(c => c.id)
-        availableClasses.value = data.data.filter(cls => !joinedClassIds.includes(cls.id))
+        availableClasses.value = (Array.isArray(data.data) ? data.data : []).filter(cls => !joinedClassIds.includes(cls.id))
       } else {
         ElMessage.error(data.message || '加载班级列表失败')
       }
@@ -255,7 +260,7 @@ const submitJoinForm = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       },
       body: JSON.stringify({
         classId: joinForm.classId
@@ -293,7 +298,7 @@ const quickJoinClass = async (classInfo) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       },
       body: JSON.stringify({
         classId: classInfo.id
@@ -335,7 +340,7 @@ const leaveClass = async (classInfo) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       },
       body: JSON.stringify({
         classId: classInfo.id
@@ -390,12 +395,29 @@ onMounted(() => {
 
 <style scoped>
 .student-classes {
-  height: 100%;
+  padding: 20px;
+  background-color: var(--bg-secondary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+  min-height: calc(100vh - 120px);
+}
+
+.student-classes :deep(.el-card) {
+  border-radius: 20px;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.table-scroll-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 </style>

@@ -42,7 +42,7 @@
             c.description as class_description,
             c.created_time as class_created_time
         FROM student_classes sc
-        LEFT JOIN users u ON sc.student_id = u.id
+        LEFT JOIN users u ON sc.student_id = u.id AND u.deleted = 0
         LEFT JOIN classes c ON sc.class_id = c.id
         WHERE 1=1
         <if test="classId != null">
@@ -61,25 +61,43 @@
     </select>
 
     <!-- 根据班级ID查询学生列表 -->
-    <select id="selectStudentsByClassId" resultType="com.english.entity.StudentClass">
+    <select id="selectStudentsByClassId" resultMap="StudentClassWithDetailsMap">
         SELECT
             sc.id,
             sc.student_id,
             sc.class_id,
-            sc.join_time
+            sc.join_time,
+            u.username as student_username,
+            u.nickname as student_nickname,
+            u.real_name as student_real_name,
+            u.email as student_email,
+            c.name as class_name,
+            c.description as class_description,
+            c.created_time as class_created_time
         FROM student_classes sc
+        LEFT JOIN users u ON sc.student_id = u.id AND u.deleted = 0
+        LEFT JOIN classes c ON sc.class_id = c.id
         WHERE sc.class_id = #{classId}
         ORDER BY sc.join_time ASC
     </select>
 
     <!-- 根据学生ID查询班级列表 -->
-    <select id="selectClassesByStudentId" resultType="com.english.entity.StudentClass">
+    <select id="selectClassesByStudentId" resultMap="StudentClassWithDetailsMap">
         SELECT
             sc.id,
             sc.student_id,
             sc.class_id,
-            sc.join_time
+            sc.join_time,
+            u.username as student_username,
+            u.nickname as student_nickname,
+            u.real_name as student_real_name,
+            u.email as student_email,
+            c.name as class_name,
+            c.description as class_description,
+            c.created_time as class_created_time
         FROM student_classes sc
+        LEFT JOIN users u ON sc.student_id = u.id AND u.deleted = 0
+        LEFT JOIN classes c ON sc.class_id = c.id
         WHERE sc.student_id = #{studentId}
         ORDER BY sc.join_time DESC
     </select>

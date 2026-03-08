@@ -1,0 +1,112 @@
+package com.english.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.english.entity.Text;
+import com.english.entity.Underline;
+import com.english.exception.BusinessException;
+import com.english.mapper.UnderlineMapper;
+import com.english.service.TextService;
+import com.english.service.UnderlineService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+public class UnderlineServiceImpl implements UnderlineService {
+
+    private static final Logger log = LoggerFactory.getLogger(UnderlineServiceImpl.class);
+
+    @Autowired
+    private UnderlineMapper underlineMapper;
+
+    @Autowired
+    private TextService textService;
+
+    @Override
+    @Transactional
+    public void createUnderline(Long userId, Long textId, String selectedText, Integer startIndex, Integer endIndex,
+            String serializedRange) {
+        if (userId == null || textId == null) {
+            throw new IllegalArgumentException("userId 和 textId 不能为空");
+        }
+
+        // 校验文本存在且未被删除
+        Text text = textService.getTextById(textId);
+        if (text == null) {
+            throw new BusinessException("课文不存在或已删除");
+        }
+
+        Underline underline = new Underline();
+        underline.setUserId(userId);
+        underline.setTextId(textId);
+        underline.setSelectedText(selectedText);
+        underline.setStartIndex(startIndex);
+        underline.setEndIndex(endIndex);
+        underline.setSerializedRange(serializedRange);
+        underlineMapper.insert(underline);
+    }
+
+    @Override
+    public List<Underline> getUnderlinesByTextId(Long textId) {
+        if (textId == null) {
+            throw new IllegalArgumentException("textId 不能为空");
+        }
+        QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("text_id", textId);
+        return underlineMapper.selectList(queryWrapper);
+    }
+
+    @Override
+    public List<Underline> getUnderlinesByTextIdAndUserId(Long textId, Long userId) {
+        QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("text_id", textId).eq("user_id", userId);
+        return underlineMapper.selectList(queryWrapper);
+    }
+
+    @Override
+    @Transactional
+    public void deleteUnderlinesByTextId(Long textId) {
+        if (textId == null) {
+            throw new IllegalArgumentException("textId 不能为空");
+        }
+        QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("text_id", textId);
+        int deleted = underlineMapper.delete(queryWrapper);
+        if (deleted > 0) {
+            log.info("级联删除 textId={} 的所有划线记录，共 {} 条", textId, deleted);
+        }
+    }
+
+    @Override
+    public Underline getUnderlineById(Long underlineId) {
+        if (underlineId == null) {
+            return null;
+        }
+        return underlineMapper.selectById(underlineId);
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteUnderline(Long underlineId, Long userId) {
+        if (underlineId == null || userId == null) {
+            return false;
+        }
+
+        // 先验证该 underline 确实属于该用户
+        QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("id", underlineId).eq("user_id", userId);
+        Underline underline = underlineMapper.selectOne(queryWrapper);
+
+        if (underline == null) {
+            return false;  // 不存在或无权限
+        }
+
+        // 删除
+        int deleted = underlineMapper.delete(queryWrapper);
+        return deleted > 0;
+    }
+}

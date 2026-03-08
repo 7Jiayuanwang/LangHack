@@ -1,11 +1,10 @@
 package com.english.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.entity.Class;
 import java.util.List;
 import java.util.Map;
 
-public interface ClassService extends IService<Class> {
+public interface ClassService {
 
     /**
      * 分页查询班级列表
@@ -66,4 +65,14 @@ public interface ClassService extends IService<Class> {
      * 验证教师是否可以管理班级
      */
     boolean validateTeacherPermission(Long teacherId, Long classId);
+
+    /**
+     * 根据班级名称获取班级（用于批量导入）
+     */
+    Class getClassByName(String name);
+
+    /**
+     * 创建班级（用于批量导入，无需验证课程和教师）
+     */
+    void createClassForImport(Class classInfo);
 }

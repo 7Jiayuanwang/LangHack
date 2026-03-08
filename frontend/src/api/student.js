@@ -8,13 +8,6 @@ export function getStudentDashboard() {
   })
 }
 
-// 获取今日学习统计
-export function getTodayLearningStats() {
-  return request({
-    url: '/api/student/stats/today',
-    method: 'get'
-  })
-}
 
 // 获取学生课程列表
 export function getStudentCourses() {
@@ -41,9 +34,25 @@ export function getUnitContent(unitId) {
 }
 
 // 获取课文详细内容
-export function getTextDetail(textId) {
+export function getTextDetail(params) {
+  // 如果传入的是数字，保持原有逻辑
+  if (typeof params === 'number') {
+    return request({
+      url: `/api/student/learning/texts/${params}`,
+      method: 'get'
+    })
+  }
+
+  // 如果传入的是对象，使用查询参数
+  const { textId, assignmentId } = params
+  let url = `/api/student/learning/texts/${textId}`
+
+  if (assignmentId) {
+    url += `?assignmentId=${assignmentId}`
+  }
+
   return request({
-    url: `/api/student/learning/texts/${textId}`,
+    url,
     method: 'get'
   })
 }
@@ -59,7 +68,7 @@ export function getWordDetail(wordId) {
 // 添加单词到生词本
 export function addToVocabulary(data) {
   return request({
-    url: '/api/student/words/vocabulary',
+    url: '/api/student/learning/vocabulary/add',
     method: 'post',
     data
   })
@@ -71,6 +80,20 @@ export function getVocabularyList(params) {
     url: '/api/student/words/vocabulary',
     method: 'get',
     params
+  }).then(response => {
+    // 防御：确保响应中 data 字段是数组或具有 records 属性
+    if (response && typeof response === 'object' && response.data) {
+      if (Array.isArray(response.data)) {
+        response.data = { records: response.data, total: response.data.length }
+      } else if (!response.data.records) {
+        response.data.records = []
+      }
+    } else if (response && typeof response === 'object') {
+      response = { ...response, data: { records: [], total: 0 } }
+    } else {
+      response = { data: { records: [], total: 0 } }
+    }
+    return response
   })
 }
 
@@ -83,23 +106,6 @@ export function updateMasteryLevel(wordId, data) {
   })
 }
 
-// 开始单词学习会话
-export function startStudySession(data) {
-  return request({
-    url: '/api/student/words/study/session',
-    method: 'post',
-    data
-  })
-}
-
-// 提交单词学习结果
-export function submitStudyResult(data) {
-  return request({
-    url: '/api/student/words/study/submit',
-    method: 'post',
-    data
-  })
-}
 
 // 获取学生任务列表
 export function getStudentAssignments(params) {
@@ -233,11 +239,275 @@ export function exportLearningData(params) {
   })
 }
 
+// 批量操作生词本
+export function batchOperateVocabulary(data) {
+  return request({
+    url: '/api/student/words/vocabulary/batch',
+    method: 'post',
+    data
+  })
+}
+
 // 获取单词学习统计
 export function getWordStudyStats(params) {
   return request({
     url: '/api/student/words/study/stats',
     method: 'get',
     params
+  })
+}
+
+// 获取今日学习统计
+export function getTodayLearningStats() {
+  return request({
+    url: '/api/student/stats/today',
+    method: 'get'
+  })
+}
+
+// 开始学习会话
+export function startStudySession(unitId) {
+  return request({
+    url: '/api/student/words/study/session',
+    method: 'post',
+    data: { unitId }
+  })
+}
+
+// 提交学习结果
+export function submitStudyResult(data) {
+  return request({
+    url: '/api/student/words/study/submit',
+    method: 'post',
+    data
+  })
+}
+
+// ==================== 新增的生词本和WordNet相关API ====================
+
+// 获取生词本（更新版API）
+export function getVocabulary(params) {
+  return request({
+    url: '/api/student/learning/vocabulary',
+    method: 'get',
+    params
+  })
+}
+
+// 检查单词是否在生词本中
+export function checkVocabularyStatus(word) {
+  return request({
+    url: '/api/student/learning/vocabulary/check',
+    method: 'get',
+    params: { word }
+  })
+}
+
+// 通过单词添加到生词本（支持WordNet）
+export function addWordToVocabulary(data) {
+  return request({
+    url: '/api/student/learning/vocabulary',
+    method: 'post',
+    data
+  })
+}
+
+// 从生词本移除单词
+export function removeFromVocabulary(wordId) {
+  return request({
+    url: `/api/student/learning/vocabulary/${wordId}`,
+    method: 'delete'
+  })
+}
+
+// 更新掌握程度
+export function updateVocabularyMastery(wordId, data) {
+  return request({
+    url: `/api/student/learning/vocabulary/${wordId}/mastery`,
+    method: 'put',
+    data
+  })
+}
+
+// 获取生词本统计
+export function getVocabularyStats() {
+  return request({
+    url: '/api/student/learning/vocabulary/stats',
+    method: 'get'
+  })
+}
+
+// ==================== 学习记录相关API ====================
+
+// 记录课文学习
+export function recordTextView(data) {
+  return request({
+    url: '/api/student/learning/record/text-view',
+    method: 'post',
+    data
+  })
+}
+
+// 记录单词学习
+export function recordWordView(data) {
+  return request({
+    url: '/api/student/learning/record/word-view',
+    method: 'post',
+    data
+  })
+}
+
+// 通用学习记录接口
+export function recordLearning(data) {
+  return request({
+    url: '/api/student/learning/record/learning',
+    method: 'post',
+    data
+  })
+}
+
+// 标记课文为完成
+export function markTextAsCompleted(textId, assignmentId = null) {
+  return request({
+    url: `/api/student/learning/texts/${textId}/complete`,
+    method: 'post',
+    params: assignmentId ? { assignmentId } : {}
+  })
+}
+
+// 开始阅读课文并创建会话记录
+export function startReading(textId, assignmentId = null) {
+  return request({
+    url: `/api/student/learning/texts/${textId}/start`,
+    method: 'post',
+    params: assignmentId ? { assignmentId } : {}
+  })
+}
+
+// 完成阅读课文会话
+export function completeReading(recordId) {
+  return request({
+    url: `/api/student/learning/records/${recordId}/complete`,
+    method: 'post'
+  })
+}
+
+// 默认导出所有API方法
+export function createUnderline(data) {
+  return request({
+    url: '/api/underlines',
+    method: 'post',
+    data
+  })
+}
+
+export function getUnderlines(textId) {
+  return request({
+    url: `/api/underlines/text/${textId}`,
+    method: 'get'
+  })
+}
+
+export function deleteUnderline(underlineId) {
+  return request({
+    url: `/api/underlines/${underlineId}`,
+    method: 'delete'
+  })
+}
+
+const studentApi = {
+  getStudentDashboard,
+  getStudentCourses,
+  getCourseUnits,
+  getUnitContent,
+  getTextDetail,
+  getWordDetail,
+  addToVocabulary,
+  getVocabularyList,
+  updateMasteryLevel,
+  getStudentAssignments,
+  startAssignment,
+  getLearningOverview,
+  getLearningRecords,
+  getMyClasses,
+  searchClasses,
+  joinClass,
+  leaveClass,
+  getWordLearningStats,
+  getCourseLearningStats,
+  getStudyTimeStats,
+  getProgressReport,
+  getAchievementStats,
+  getLearningRanking,
+  exportLearningData,
+  batchOperateVocabulary,
+  getWordStudyStats,
+  getTodayLearningStats,
+  startStudySession,
+  submitStudyResult,
+  // 新增的API
+  getVocabulary,
+  checkVocabularyStatus,
+  addWordToVocabulary,
+  removeFromVocabulary,
+  updateVocabularyMastery,
+  getVocabularyStats,
+  recordTextView,
+  recordWordView,
+  recordLearning,
+  markTextAsCompleted,
+  startReading,
+  completeReading,
+  createUnderline,
+  getUnderlines,
+  deleteUnderline
+}
+
+export default studentApi
+
+// ==================== WordNet相关API ====================
+
+// 获取单词详细信息（WordNet增强版）
+export function getWordNetInfo(word) {
+  return request({
+    url: `/api/wordnet/word/${word}`,
+    method: 'get'
+  })
+}
+
+// 获取文本中的可点击单词
+export function getClickableWordsFromText(text) {
+  return request({
+    url: '/api/wordnet/text/words',
+    method: 'post',
+    data: { text }
+  })
+}
+
+// 批量获取单词信息
+export function getBatchWordInfo(words) {
+  // 输入验证
+  if (!Array.isArray(words) || words.length === 0) {
+    return Promise.reject(new Error('单词数组不能为空'))
+  }
+  if (words.length > 200) {
+    return Promise.reject(new Error('单词数量不能超过 200'))
+  }
+
+  return request({
+    url: '/api/wordnet/words/batch',
+    method: 'post',
+    data: {
+      words: words.slice(0, 200)  // 强制截断防止超限
+    },
+    timeout: 30000
+  })
+}
+
+// 获取WordNet服务状态
+export function getWordNetStatus() {
+  return request({
+    url: '/api/wordnet/status',
+    method: 'get'
   })
 }

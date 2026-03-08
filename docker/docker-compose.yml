@@ -1,0 +1,158 @@
+version: '3.8'
+
+services:
+
+  # ─────────────────────────────────────────────
+  # MySQL 主库
+  # ─────────────────────────────────────────────
+  mysql-master:
+    image: mysql:8.0
+    container_name: langhack-mysql-master
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_master_data:/var/lib/mysql
+      - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+      # 若有项目级初始化 SQL，可同时挂载
+      - ../database:/docker-entrypoint-initdb.d/project:ro
+    networks:
+      - langhack-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ─────────────────────────────────────────────
+  # MySQL 从库（只读副本）
+  # ─────────────────────────────────────────────
+  mysql-slave:
+    image: mysql:8.0
+    container_name: langhack-mysql-slave
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_slave_data:/var/lib/mysql
+      - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
+    networks:
+      - langhack-network
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  # ─────────────────────────────────────────────
+  # Redis 缓存
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:6-alpine
+    container_name: langhack-redis
+    restart: unless-stopped
+    command: >
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - langhack-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────
+  # Spring Boot 后端应用
+  # ─────────────────────────────────────────────
+  app:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: langhack-app
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_PROFILES_ACTIVE: prod
+      # 主库
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      # 从库（读写分离，可选）
+      DB_SLAVE_URL: ${DB_SLAVE_URL}
+      DB_SLAVE_USERNAME: ${DB_SLAVE_USERNAME:-${DB_USERNAME}}
+      DB_SLAVE_PASSWORD: ${DB_SLAVE_PASSWORD:-${DB_PASSWORD}}
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 认证 & AI
+      JWT_SECRET: ${JWT_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      TUTOR_API_BASE_URL: ${TUTOR_API_BASE_URL}
+      # 腾讯翻译（可选）
+      TENCENT_SECRET_ID: ${TENCENT_SECRET_ID:-}
+      TENCENT_SECRET_KEY: ${TENCENT_SECRET_KEY:-}
+    ports:
+      - "8080:8080"
+    volumes:
+      - app_logs:/app/logs
+      - app_uploads:/app/uploads
+    networks:
+      - langhack-network
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+# ─────────────────────────────────────────────
+# 网络
+# ─────────────────────────────────────────────
+networks:
+  langhack-network:
+    driver: bridge
+
+# ─────────────────────────────────────────────
+# 持久化卷
+# ─────────────────────────────────────────────
+volumes:
+  mysql_master_data:
+    driver: local
+  mysql_slave_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_logs:
+    driver: local
+  app_uploads:
+    driver: local

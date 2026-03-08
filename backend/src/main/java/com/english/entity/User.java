@@ -1,7 +1,6 @@
 package com.english.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDateTime;
 
 @TableName("users")
@@ -14,7 +13,6 @@ public class User {
     private String username;
 
     @TableField("password")
-    @JsonIgnore
     private String password;
 
     @TableField("email")
@@ -39,10 +37,10 @@ public class User {
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
-    private LocalDateTime createdTime;
+    private LocalDateTime createdAt;
 
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedTime;
+    private LocalDateTime updatedAt;
 
     // Getters and Setters
     public Long getId() {
@@ -125,19 +123,19 @@ public class User {
         this.deleted = deleted;
     }
 
-    public LocalDateTime getCreatedTime() {
-        return createdTime;
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 
-    public void setCreatedTime(LocalDateTime createdTime) {
-        this.createdTime = createdTime;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 
-    public LocalDateTime getUpdatedTime() {
-        return updatedTime;
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 
-    public void setUpdatedTime(LocalDateTime updatedTime) {
-        this.updatedTime = updatedTime;
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

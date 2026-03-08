@@ -44,8 +44,8 @@
             u.real_name as teacher_real_name,
             u.email as teacher_email
         FROM classes c
-        LEFT JOIN courses co ON c.course_id = co.id
-        LEFT JOIN users u ON c.teacher_id = u.id
+        LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
+        LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
         WHERE 1=1
         <if test="courseId != null">
             AND c.course_id = #{courseId}
@@ -75,8 +75,8 @@
             u.real_name as teacher_real_name,
             u.email as teacher_email
         FROM classes c
-        LEFT JOIN courses co ON c.course_id = co.id
-        LEFT JOIN users u ON c.teacher_id = u.id
+        LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
+        LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
         WHERE c.id = #{id}
     </select>
 
@@ -127,8 +127,8 @@
             u.email as teacher_email
         FROM classes c
         INNER JOIN student_classes sc ON c.id = sc.class_id
-        LEFT JOIN courses co ON c.course_id = co.id
-        LEFT JOIN users u ON c.teacher_id = u.id
+        LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
+        LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
         WHERE sc.student_id = #{studentId}
         ORDER BY sc.join_time DESC
     </select>

@@ -1,45 +1,39 @@
-# 前端 Dockerfile - 多阶段构建
-# Stage 1: 构建阶段
+# Stage 1: Build the Vue application
 FROM node:18-alpine AS builder
+
+# Accept build arguments
+ARG VITE_API_BASE_URL
+ARG VITE_TUTOR_API_BASE_URL
+
+# Set environment variables for the build process
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_TUTOR_API_BASE_URL=$VITE_TUTOR_API_BASE_URL
 
 WORKDIR /app
 
-# 复制 package.json 和 lock 文件
+# Copy package.json and package-lock.json
 COPY package*.json ./
 
-# 安装依赖（使用 npm install 代替 npm ci 以提高兼容性）
-RUN npm install --registry=https://registry.npmmirror.com --legacy-peer-deps
+# Install dependencies
+RUN npm install
 
-# 复制源代码
+# Copy source code
 COPY . .
 
-# 构建生产版本
+# Build the application
 RUN npm run build
 
-# Stage 2: 运行阶段
+# Stage 2: Serve the application with Nginx
 FROM nginx:alpine
 
-# 删除默认配置
-RUN rm -rf /etc/nginx/conf.d/default.conf
-
-# 复制自定义 nginx 配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# 从构建阶段复制构建产物
+# Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# 设置时区
-ENV TZ=Asia/Shanghai
-RUN apk add --no-cache tzdata && \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone
+# Copy custom Nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 暴露端口
+# Expose port 80
 EXPOSE 80
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:80/ || exit 1
-
-# 启动 Nginx
+# Start Nginx
 CMD ["nginx", "-g", "daemon off;"]

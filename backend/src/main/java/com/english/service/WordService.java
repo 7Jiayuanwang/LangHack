@@ -18,5 +18,4 @@ public interface WordService extends IService<Word> {
     List<Word> getRandomWords(int count);
     List<Word> searchWords(String keyword);
     Map<String, Object> getWordStats();
-    boolean batchCreateWords(List<Word> words);
 }

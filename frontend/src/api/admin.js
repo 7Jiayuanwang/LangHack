@@ -31,7 +31,24 @@ export function deleteUser(id) {
   })
 }
 
-export function getCourseList(params) {
+export function importUsers(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request({
+    url: '/api/admin/users/import',
+    method: 'post',
+    data: formData
+  })
+}
+
+export function getUserStats() {
+  return request({
+    url: '/api/admin/stats',
+    method: 'get'
+  })
+}
+
+export function getCourses(params) {
   return request({
     url: '/api/courses',
     method: 'get',
@@ -66,5 +83,85 @@ export function getCourseStats() {
   return request({
     url: '/api/courses/stats',
     method: 'get'
+  })
+}
+
+// ========== 课文管理相关 ==========
+
+export function getTexts(params) {
+  return request({
+    url: '/api/admin/texts',
+    method: 'get',
+    params
+  })
+}
+
+export function createText(data) {
+  return request({
+    url: '/api/admin/texts',
+    method: 'post',
+    data
+  })
+}
+
+export function updateText(id, data) {
+  return request({
+    url: `/api/admin/texts/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+export function deleteText(id) {
+  return request({
+    url: `/api/admin/texts/${id}`,
+    method: 'delete'
+  })
+}
+
+export function getTextDetail(textId) {
+  return request({
+    url: `/api/admin/texts/${textId}`,
+    method: 'get'
+  })
+}
+
+export function getTextsByUnitId(unitId) {
+  return request({
+    url: `/api/admin/units/${unitId}/texts`,
+    method: 'get'
+  })
+}
+
+export function addTextToUnit(unitId, textId) {
+  return request({
+    url: `/api/admin/units/${unitId}/texts/${textId}`,
+    method: 'post'
+  })
+}
+
+export function removeTextFromUnit(unitId, textId) {
+  return request({
+    url: `/api/admin/units/${unitId}/texts/${textId}`,
+    method: 'delete'
+  })
+}
+
+// ========== 单元管理相关 ==========
+
+export function getUnitsByCourseId(courseId) {
+  return request({
+    url: `/api/admin/courses/${courseId}/units`,
+    method: 'get'
+  })
+}
+
+// ========== 班级管理相关 ==========
+
+export function getClasses(params) {
+  return request({
+    url: '/api/classes',
+    method: 'get',
+    params
   })
 }

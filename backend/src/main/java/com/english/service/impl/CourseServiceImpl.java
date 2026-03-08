@@ -6,14 +6,13 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Course;
 import com.english.entity.Unit;
-import com.english.entity.Text;
-import com.english.entity.UnitWord;
+import com.english.exception.BusinessException;
 import com.english.mapper.CourseMapper;
 import com.english.mapper.UnitMapper;
-import com.english.mapper.TextMapper;
-import com.english.mapper.UnitWordMapper;
 import com.english.service.CourseService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.english.service.UnitService;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,20 +24,21 @@ import java.util.Map;
 @Service
 public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> implements CourseService {
 
-    @Autowired
-    private UnitMapper unitMapper;
+    private final UnitMapper unitMapper;
+    private final UnitService unitService;
 
-    @Autowired
-    private TextMapper textMapper;
-
-    @Autowired
-    private UnitWordMapper unitWordMapper;
+    public CourseServiceImpl(UnitMapper unitMapper, UnitService unitService) {
+        this.unitMapper = unitMapper;
+        this.unitService = unitService;
+    }
 
     @Override
+    @Cacheable(value = "courses", key = "'page:' + #params.get('page') + ':' + #params.get('size') + ':' + (#params.get('keyword') ?: 'null') + ':' + (#params.get('status') ?: 'null')", unless = "#result == null")
     public Map<String, Object> getCoursesByPage(Map<String, Object> params) {
-        int page = (int) params.get("page");
-        int size = (int) params.get("size");
-        String keyword = (String) params.get("keyword");
+        int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
+        int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
+        String keyword = (String) params.getOrDefault("keyword", null);
+        String status = (String) params.getOrDefault("status", null);
 
         Page<Course> pageParam = new Page<>(page, size);
         QueryWrapper<Course> queryWrapper = new QueryWrapper<>();
@@ -49,6 +49,10 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
                 .or()
                 .like("description", keyword)
             );
+        }
+
+        if (status != null && !status.trim().isEmpty()) {
+            queryWrapper.eq("status", status);
         }
 
         queryWrapper.eq("deleted", 0);
@@ -67,80 +71,76 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
     }
 
     @Override
+    @Cacheable(value = "courses", key = "'id:' + #id", unless = "#result == null")
     public Course getCourseById(Long id) {
-        return getById(id);
+        QueryWrapper<Course> wrapper = new QueryWrapper<>();
+        wrapper.eq("id", id).eq("deleted", 0);
+        return getOne(wrapper);
     }
 
     @Override
+    @Transactional
+    @CacheEvict(value = "courses", allEntries = true)
     public void createCourse(Course course) {
-        course.setCreatedTime(LocalDateTime.now());
-        course.setUpdatedTime(LocalDateTime.now());
+        if (course.getStatus() == null) {
+            course.setStatus("ACTIVE");
+        }
+        course.setCreatedAt(LocalDateTime.now());
+        course.setUpdatedAt(LocalDateTime.now());
         course.setDeleted(0);
         save(course);
     }
 
     @Override
+    @Transactional
+    @CacheEvict(value = "courses", allEntries = true)
     public void updateCourse(Course course) {
-        course.setUpdatedTime(LocalDateTime.now());
+        course.setUpdatedAt(LocalDateTime.now());
         updateById(course);
     }
 
     @Override
     @Transactional
+    @CacheEvict(value = "courses", allEntries = true)
     public void deleteCourse(Long id) {
-        Course course = getById(id);
+        // 1. 验证课程是否存在
+        Course course = getCourseById(id);
         if (course == null) {
-            throw new RuntimeException("课程不存在");
+            throw new BusinessException("课程不存在");
         }
 
-        // 获取该课程下的所有单元
-        QueryWrapper<Unit> unitWrapper = new QueryWrapper<>();
-        unitWrapper.eq("course_id", id);
-        List<Unit> units = unitMapper.selectList(unitWrapper);
+        // 2. 查询该课程下所有单元
+        QueryWrapper<Unit> unitQuery = new QueryWrapper<>();
+        unitQuery.eq("course_id", id);
+        List<Unit> units = unitMapper.selectList(unitQuery);
 
-        if (!units.isEmpty()) {
-            List<Long> unitIds = units.stream().map(Unit::getId).collect(java.util.stream.Collectors.toList());
-
-            // 删除单元下的所有课文（软删除）
-            for (Long unitId : unitIds) {
-                QueryWrapper<Text> textWrapper = new QueryWrapper<>();
-                textWrapper.eq("unit_id", unitId);
-                textWrapper.eq("deleted", 0);
-                List<Text> texts = textMapper.selectList(textWrapper);
-
-                for (Text text : texts) {
-                    text.setDeleted(1);
-                    text.setUpdatedTime(LocalDateTime.now());
-                    textMapper.updateById(text);
-                }
+        // 3. 对每个单元调用 unitService.deleteUnit() 执行级联删除
+        if (units != null && !units.isEmpty()) {
+            for (Unit unit : units) {
+                unitService.deleteUnit(unit.getId());
             }
-
-            // 删除单元-单词关联
-            QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
-            unitWordWrapper.in("unit_id", unitIds);
-            unitWordMapper.delete(unitWordWrapper);
-
-            // 删除所有单元
-            unitMapper.delete(unitWrapper);
         }
 
-        // 软删除课程
-        Course deleteCourse = new Course();
-        deleteCourse.setId(id);
-        deleteCourse.setDeleted(1);
-        deleteCourse.setUpdatedTime(LocalDateTime.now());
-        updateById(deleteCourse);
+        // 4. 软删除课程本身
+        Course courseUpdate = new Course();
+        courseUpdate.setId(id);
+        courseUpdate.setDeleted(1);
+        courseUpdate.setUpdatedAt(LocalDateTime.now());
+        updateById(courseUpdate);
     }
 
     @Override
+    @Cacheable(value = "courses", key = "'active'", unless = "#result == null || #result.isEmpty()")
     public List<Course> getActiveCourses() {
         QueryWrapper<Course> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("status", "ACTIVE");
         queryWrapper.eq("deleted", 0);
         queryWrapper.orderByDesc("created_time");
         return list(queryWrapper);
     }
 
     @Override
+    @Cacheable(value = "courses", key = "'keyword:' + (#keyword ?: 'null')", unless = "#result == null || #result.isEmpty()")
     public List<Course> getCoursesByKeyword(String keyword) {
         QueryWrapper<Course> queryWrapper = new QueryWrapper<>();
         if (keyword != null && !keyword.trim().isEmpty()) {
@@ -150,20 +150,30 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
                 .like("description", keyword)
             );
         }
+        queryWrapper.eq("status", "ACTIVE");
         queryWrapper.eq("deleted", 0);
         queryWrapper.orderByDesc("created_time");
         return list(queryWrapper);
     }
 
     @Override
+    @Cacheable(value = "stats", key = "'courseStats'", unless = "#result == null")
     public Map<String, Object> getCourseStats() {
         Map<String, Object> stats = new HashMap<>();
 
-        QueryWrapper<Course> totalWrapper = new QueryWrapper<>();
-        totalWrapper.eq("deleted", 0);
-        Long totalCount = count(totalWrapper);
+        QueryWrapper<Course> activeWrapper = new QueryWrapper<>();
+        activeWrapper.eq("status", "ACTIVE");
+        activeWrapper.eq("deleted", 0);
+        Long activeCount = count(activeWrapper);
 
-        stats.put("totalCourses", totalCount);
+        QueryWrapper<Course> inactiveWrapper = new QueryWrapper<>();
+        inactiveWrapper.eq("status", "INACTIVE");
+        inactiveWrapper.eq("deleted", 0);
+        Long inactiveCount = count(inactiveWrapper);
+
+        stats.put("totalActive", activeCount);
+        stats.put("totalInactive", inactiveCount);
+        stats.put("totalCourses", activeCount + inactiveCount);
 
         return stats;
     }

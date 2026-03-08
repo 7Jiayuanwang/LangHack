@@ -18,17 +18,20 @@ public class Course {
     @TableField("cover_image")
     private String coverImage;
 
-    @TableField("teacher_id")
-    private Long teacherId;
+    @TableField("created_by")
+    private Long createdBy;
+
+    @TableField("status")
+    private String status;
 
     @TableField("deleted")
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
-    private LocalDateTime createdTime;
+    private LocalDateTime createdAt;
 
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedTime;
+    private LocalDateTime updatedAt;
 
     // Getters and Setters
     public Long getId() {
@@ -63,12 +66,20 @@ public class Course {
         this.coverImage = coverImage;
     }
 
-    public Long getTeacherId() {
-        return teacherId;
+    public Long getCreatedBy() {
+        return createdBy;
     }
 
-    public void setTeacherId(Long teacherId) {
-        this.teacherId = teacherId;
+    public void setCreatedBy(Long createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public Integer getDeleted() {
@@ -79,19 +90,19 @@ public class Course {
         this.deleted = deleted;
     }
 
-    public LocalDateTime getCreatedTime() {
-        return createdTime;
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 
-    public void setCreatedTime(LocalDateTime createdTime) {
-        this.createdTime = createdTime;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 
-    public LocalDateTime getUpdatedTime() {
-        return updatedTime;
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 
-    public void setUpdatedTime(LocalDateTime updatedTime) {
-        this.updatedTime = updatedTime;
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

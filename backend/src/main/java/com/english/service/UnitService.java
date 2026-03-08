@@ -37,6 +37,4 @@ public interface UnitService extends IService<Unit> {
      * 删除单元
      */
     void deleteUnit(Long id);
-
-    boolean checkUnitBelongToCourse(Long unitId, Long courseId);
 }

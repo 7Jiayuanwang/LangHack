@@ -4,15 +4,9 @@
       <template #header>
         <div class="card-header">
           <span>用户管理</span>
-          <div>
-            <el-button type="success" @click="handleExport">
-              <el-icon><Download /></el-icon>
-              导出用户
-            </el-button>
-            <el-button type="primary" @click="showAddDialog">
-              <el-icon><Plus /></el-icon>
-              添加用户
-            </el-button>
+          <div class="header-buttons">
+            <el-button type="success" @click="showImportDialog">批量导入</el-button>
+            <el-button type="primary" @click="showAddDialog">添加用户</el-button>
           </div>
         </div>
       </template>
@@ -21,73 +15,33 @@
       <div class="search-bar">
         <el-form :inline="true" :model="searchForm" class="search-form">
           <el-form-item label="角色">
-            <el-select v-model="searchForm.role" placeholder="请选择" clearable style="width: 120px">
+            <el-select v-model="searchForm.role" placeholder="请选择" clearable>
               <el-option label="管理员" value="ADMIN" />
               <el-option label="教师" value="TEACHER" />
               <el-option label="学生" value="STUDENT" />
             </el-select>
           </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="searchForm.status" placeholder="请选择" clearable style="width: 120px">
-              <el-option label="正常" value="0" />
-              <el-option label="禁用" value="1" />
-            </el-select>
-          </el-form-item>
           <el-form-item label="关键词">
-            <el-input v-model="searchForm.keyword" placeholder="用户名/姓名/邮箱" clearable style="width: 200px" />
+            <el-input v-model="searchForm.keyword" placeholder="用户名/姓名/邮箱" clearable />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="loadUsers">
-              <el-icon><Search /></el-icon>
-              搜索
-            </el-button>
-            <el-button @click="resetSearch">
-              <el-icon><Refresh /></el-icon>
-              重置
-            </el-button>
+            <el-button type="primary" @click="loadUsers">搜索</el-button>
+            <el-button @click="resetSearch">重置</el-button>
           </el-form-item>
         </el-form>
       </div>
 
-      <!-- 批量操作 -->
-      <div class="batch-actions" v-if="selectedUsers.length > 0">
-        <el-alert
-          :title="`已选择 ${selectedUsers.length} 个用户`"
-          type="info"
-          :closable="false"
-          style="margin-bottom: 15px"
-        >
-          <template #default>
-            <el-button size="small" type="danger" @click="batchDelete">批量删除</el-button>
-            <el-button size="small" type="warning" @click="batchResetPassword">批量重置密码</el-button>
-          </template>
-        </el-alert>
-      </div>
-
       <!-- 用户列表 -->
-      <el-table
-        :data="users"
-        stripe
-        v-loading="loading"
-        @selection-change="handleSelectionChange"
-      >
-        <el-table-column type="selection" width="55" />
-        <el-table-column prop="id" label="ID" width="80" sortable />
-        <el-table-column prop="username" label="用户名" width="150" />
-        <el-table-column prop="realName" label="真实姓名" width="120" />
-        <el-table-column prop="email" label="邮箱" min-width="180" />
-        <el-table-column prop="phone" label="手机号" width="130" />
-        <el-table-column prop="role" label="角色" width="100">
+      <div class="table-wrapper">
+      <el-table :data="users" stripe>
+        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="username" label="用户名" />
+        <el-table-column prop="realName" label="真实姓名" />
+        <el-table-column prop="email" label="邮箱" />
+        <el-table-column prop="role" label="角色">
           <template #default="scope">
             <el-tag :type="getRoleType(scope.row.role)">
               {{ getRoleText(scope.row.role) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="deleted" label="状态" width="100">
-          <template #default="scope">
-            <el-tag :type="scope.row.deleted === 0 ? 'success' : 'danger'">
-              {{ scope.row.deleted === 0 ? '正常' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -96,21 +50,37 @@
             {{ formatTime(scope.row.createdTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
-            <el-button size="small" type="primary" @click="editUser(scope.row)">编辑</el-button>
-            <el-button size="small" type="warning" @click="resetPassword(scope.row)">重置密码</el-button>
-            <el-button
-              size="small"
-              :type="scope.row.deleted === 0 ? 'danger' : 'success'"
-              @click="toggleUserStatus(scope.row)"
-              :disabled="scope.row.id === 1"
-            >
-              {{ scope.row.deleted === 0 ? '禁用' : '启用' }}
-            </el-button>
+            <div class="action-buttons">
+              <el-button 
+                size="small" 
+                type="primary" 
+                :icon="Edit" 
+                @click="editUser(scope.row)"
+                title="编辑用户"
+              >
+                编辑
+              </el-button>
+              <el-dropdown trigger="click" @command="(cmd) => handleDropdownCommand(cmd, scope.row)">
+                <el-button size="small" :icon="MoreFilled" circle />
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item 
+                      :icon="Delete" 
+                      command="delete" 
+                      :disabled="scope.row.id === 1"
+                    >
+                      删除用户
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <!-- 分页 -->
       <div class="pagination">
@@ -126,71 +96,39 @@
       </div>
     </el-card>
 
-    <!-- 添加/编辑���户对话框 -->
+    <!-- 添加/编辑用户对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑用户' : '添加用户'"
-      width="600px"
+      width="min(500px, 90%)"
     >
       <el-form
         ref="userFormRef"
         :model="userForm"
         :rules="userRules"
-        label-width="100px"
+        label-width="80px"
       >
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="用户名" prop="username">
-              <el-input v-model="userForm.username" :disabled="isEdit" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="真实姓名" prop="realName">
-              <el-input v-model="userForm.realName" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="邮箱" prop="email">
-              <el-input v-model="userForm.email" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="手机号" prop="phone">
-              <el-input v-model="userForm.phone" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="角色" prop="role">
-              <el-select v-model="userForm.role" style="width: 100%">
-                <el-option label="管理员" value="ADMIN" />
-                <el-option label="教师" value="TEACHER" />
-                <el-option label="学生" value="STUDENT" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="状态" prop="deleted">
-              <el-select v-model="userForm.deleted" style="width: 100%">
-                <el-option label="正常" :value="0" />
-                <el-option label="禁用" :value="1" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item :label="isEdit ? '新密码' : '密码'" prop="password">
-          <el-input
-            v-model="userForm.password"
-            type="password"
-            :placeholder="isEdit ? '留空则不修���密码' : '请输入密码'"
-            show-password
-          />
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="userForm.username" :disabled="isEdit" />
+        </el-form-item>
+        <el-form-item label="密码" prop="password" v-if="!isEdit">
+          <el-input v-model="userForm.password" type="password" />
+        </el-form-item>
+        <el-form-item label="新密码" prop="password" v-if="isEdit">
+          <el-input v-model="userForm.password" type="password" placeholder="留空则不修改" />
+        </el-form-item>
+        <el-form-item label="真实姓名" prop="realName">
+          <el-input v-model="userForm.realName" />
+        </el-form-item>
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="userForm.email" />
+        </el-form-item>
+        <el-form-item label="角色" prop="role">
+          <el-select v-model="userForm.role" style="width: 100%">
+            <el-option label="管理员" value="ADMIN" />
+            <el-option label="教师" value="TEACHER" />
+            <el-option label="学生" value="STUDENT" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -200,28 +138,124 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 批量导入对话框 -->
+    <el-dialog
+      v-model="importDialogVisible"
+      title="批量导入用户"
+      width="min(600px, 90%)"
+    >
+      <el-alert
+        title="导入说明"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 20px"
+      >
+        <div style="line-height: 1.8">
+          <p>1. 支持 .xls 和 .xlsx 格式的Excel文件</p>
+          <p>2. Excel格式要求: <strong>序号 | 班级 | 学号 | 姓名</strong></p>
+          <p>3. 第1、2行为标题行,数据从第3行开始</p>
+          <p>4. 学号作为用户名,默认密码为 <strong>123456</strong></p>
+          <p>5. 如果用户名已存在,将更新用户信息</p>
+          <p>6. <strong style="color: #409EFF;">如果班级不存在，将自动创建新班级</strong></p>
+          <p>7. <strong style="color: #409EFF;">用户会自动加入对应班级</strong></p>
+        </div>
+      </el-alert>
+
+      <el-upload
+        ref="uploadRef"
+        :auto-upload="false"
+        :limit="1"
+        :on-change="handleFileChange"
+        :on-exceed="handleExceed"
+        accept=".xls,.xlsx"
+        drag
+      >
+        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+        <div class="el-upload__text">
+          将文件拖到此处,或<em>点击选择文件</em>
+        </div>
+        <template #tip>
+          <div class="el-upload__tip">
+            只能上传 .xls/.xlsx 文件
+          </div>
+        </template>
+      </el-upload>
+
+      <div v-if="importResult" class="import-result" style="margin-top: 20px">
+        <el-alert
+          :title="'导入完成'"
+          :type="importResult.failCount > 0 || importResult.classJoinFailedCount > 0 ? 'warning' : 'success'"
+          :closable="false"
+        >
+          <div style="line-height: 1.8">
+            <!-- 用户统计 -->
+            <p><strong>用户导入结果：</strong></p>
+            <p>成功创建: <strong>{{ importResult.successCount }}</strong> 个用户</p>
+            <p>成功更新: <strong>{{ importResult.updateCount }}</strong> 个用户</p>
+            <p v-if="importResult.failCount > 0">失败: <strong style="color: red">{{ importResult.failCount }}</strong> 个</p>
+
+            <!-- 新增：班级统计 -->
+            <el-divider />
+            <p><strong>班级操作结果：</strong></p>
+            <p v-if="importResult.classCreatedCount > 0">
+              新建班级: <strong style="color: #67C23A">{{ importResult.classCreatedCount }}</strong> 个
+              <span v-if="importResult.createdClassNames && importResult.createdClassNames.length > 0">
+                ({{ importResult.createdClassNames.join(', ') }})
+              </span>
+            </p>
+            <p>成功加入班级: <strong>{{ importResult.classJoinedCount }}</strong> 个用户</p>
+            <p v-if="importResult.classJoinFailedCount > 0">
+              加入班级失败: <strong style="color: #E6A23C">{{ importResult.classJoinFailedCount }}</strong> 个
+            </p>
+
+            <!-- 错误详情 -->
+            <div v-if="importResult.errors && importResult.errors.length > 0">
+              <el-divider />
+              <p style="color: #E6A23C; font-weight: bold">错误详情:</p>
+              <div style="max-height: 200px; overflow-y: auto">
+                <p v-for="(error, index) in importResult.errors" :key="index" style="color: #E6A23C; margin: 2px 0">
+                  {{ error }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </el-alert>
+      </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="closeImportDialog">取消</el-button>
+          <el-button type="primary" @click="submitImport" :loading="importing">开始导入</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Download, Search, Refresh } from '@element-plus/icons-vue'
-import { getUsers, createUser, updateUser, deleteUser as deleteUserApi } from '@/api/admin'
+import { Edit, MoreFilled, Delete, UploadFilled } from '@element-plus/icons-vue'
+import { getUsers, createUser, updateUser, deleteUser as deleteUserApi, importUsers } from '@/api/admin'
 
 // 响应式数据
 const users = ref([])
-const selectedUsers = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const saving = ref(false)
-const loading = ref(false)
 const userFormRef = ref()
+
+// 批量导入相关
+const importDialogVisible = ref(false)
+const importing = ref(false)
+const uploadRef = ref()
+const importFile = ref(null)
+const importResult = ref(null)
 
 // 搜索表单
 const searchForm = reactive({
   role: '',
-  status: '',
   keyword: ''
 })
 
@@ -239,9 +273,7 @@ const userForm = reactive({
   password: '',
   realName: '',
   email: '',
-  phone: '',
-  role: 'STUDENT',
-  deleted: 0
+  role: 'STUDENT'
 })
 
 // 表单验证规则
@@ -251,7 +283,7 @@ const userRules = {
     { min: 3, max: 20, message: '用户名长度在 3 到 20 个字符', trigger: 'blur' }
   ],
   password: [
-    { required: !isEdit.value, message: '请输入密码', trigger: 'blur' },
+    { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码长度不能少于 6 个字符', trigger: 'blur' }
   ],
   realName: [
@@ -260,9 +292,6 @@ const userRules = {
   email: [
     { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
   ],
-  phone: [
-    { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
-  ],
   role: [
     { required: true, message: '请选择角色', trigger: 'change' }
   ]
@@ -270,33 +299,26 @@ const userRules = {
 
 // 方法
 const loadUsers = async () => {
-  loading.value = true
   try {
     const params = {
-      current: pagination.current,
+      page: pagination.current,
       size: pagination.size,
-      ...searchForm
+      role: searchForm.role || undefined,
+      keyword: searchForm.keyword || undefined
     }
     const response = await getUsers(params)
-    users.value = response.data.records || response.data
-    pagination.total = response.data.total || users.value.length
+    users.value = response.data?.records || []
+    pagination.total = response.data?.total || 0
   } catch (error) {
     ElMessage.error('加载用户列表失败')
-  } finally {
-    loading.value = false
   }
 }
 
 const resetSearch = () => {
   searchForm.role = ''
-  searchForm.status = ''
   searchForm.keyword = ''
   pagination.current = 1
   loadUsers()
-}
-
-const handleSelectionChange = (selection) => {
-  selectedUsers.value = selection
 }
 
 const showAddDialog = () => {
@@ -314,9 +336,7 @@ const editUser = (user) => {
     password: '',
     realName: user.realName,
     email: user.email,
-    phone: user.phone,
-    role: user.role,
-    deleted: user.deleted
+    role: user.role
   })
 }
 
@@ -327,9 +347,7 @@ const resetUserForm = () => {
     password: '',
     realName: '',
     email: '',
-    phone: '',
-    role: 'STUDENT',
-    deleted: 0
+    role: 'STUDENT'
   })
 }
 
@@ -350,7 +368,7 @@ const saveUser = async () => {
         dialogVisible.value = false
         loadUsers()
       } catch (error) {
-        ElMessage.error(error.message || '操作失败')
+        ElMessage.error('操作失败，请稍后重试')
       } finally {
         saving.value = false
       }
@@ -358,116 +376,30 @@ const saveUser = async () => {
   })
 }
 
-const toggleUserStatus = async (user) => {
+// 处理下拉菜单命令
+const handleDropdownCommand = (command, row) => {
+  switch (command) {
+    case 'delete':
+      deleteUser(row)
+      break
+  }
+}
+
+const deleteUser = async (user) => {
   try {
-    const action = user.deleted === 0 ? '禁用' : '启用'
-    await ElMessageBox.confirm(`确认${action}用户 "${user.username}" 吗？`, '提示', {
+    await ElMessageBox.confirm(`确认删除用户 "${user.username}" 吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
 
-    await updateUser(user.id, { ...user, deleted: user.deleted === 0 ? 1 : 0 })
-    ElMessage.success(`${action}成功`)
+    await deleteUserApi(user.id)
+    ElMessage.success('用户删除成功')
     loadUsers()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '操作失败')
+      ElMessage.error('删除失败，请稍后重试')
     }
-  }
-}
-
-const resetPassword = async (user) => {
-  try {
-    await ElMessageBox.prompt('请输入新密码（至少6位）', '重置密码', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputPattern: /.{6,}/,
-      inputErrorMessage: '密码至少6位'
-    }).then(async ({ value }) => {
-      await updateUser(user.id, { ...user, password: value })
-      ElMessage.success('密码重置成功')
-    })
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('密码重置失败')
-    }
-  }
-}
-
-const batchDelete = async () => {
-  try {
-    await ElMessageBox.confirm(`确认删除选中的 ${selectedUsers.value.length} 个用户吗？`, '批量删除', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
-    for (const user of selectedUsers.value) {
-      if (user.id !== 1) {
-        await deleteUserApi(user.id)
-      }
-    }
-    ElMessage.success('批量删除成功')
-    loadUsers()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('批量删除失败')
-    }
-  }
-}
-
-const batchResetPassword = async () => {
-  try {
-    await ElMessageBox.prompt('请输入新密码（将应用到所有选中用户）', '批量重置密码', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputPattern: /.{6,}/,
-      inputErrorMessage: '密码至少6位'
-    }).then(async ({ value }) => {
-      for (const user of selectedUsers.value) {
-        await updateUser(user.id, { ...user, password: value })
-      }
-      ElMessage.success('批量重置密码成功')
-    })
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('批量重置密码失败')
-    }
-  }
-}
-
-const handleExport = () => {
-  try {
-    // 准备导出数据
-    const exportData = users.value.map(user => ({
-      '用户ID': user.id,
-      '用户名': user.username,
-      '真实姓名': user.realName,
-      '邮箱': user.email,
-      '手机号': user.phone,
-      '角色': getRoleText(user.role),
-      '状态': user.deleted === 0 ? '正常' : '禁用',
-      '创建时间': formatTime(user.createdTime)
-    }))
-
-    // 转换为CSV
-    const headers = Object.keys(exportData[0])
-    const csvContent = [
-      headers.join(','),
-      ...exportData.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
-    ].join('\n')
-
-    // 创建Blob并下载
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `用户列表_${new Date().getTime()}.csv`
-    link.click()
-
-    ElMessage.success('导出成功')
-  } catch (error) {
-    ElMessage.error('导出失败')
   }
 }
 
@@ -491,7 +423,59 @@ const getRoleText = (role) => {
 
 const formatTime = (time) => {
   if (!time) return ''
-  return new Date(time).toLocaleString('zh-CN')
+  return new Date(time).toLocaleString()
+}
+
+// 批量导入相关方法
+const showImportDialog = () => {
+  importDialogVisible.value = true
+  importFile.value = null
+  importResult.value = null
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles()
+  }
+}
+
+const closeImportDialog = () => {
+  importDialogVisible.value = false
+  importFile.value = null
+  importResult.value = null
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles()
+  }
+}
+
+const handleFileChange = (file) => {
+  importFile.value = file.raw
+  importResult.value = null
+}
+
+const handleExceed = () => {
+  ElMessage.warning('只能上传一个文件')
+}
+
+const submitImport = async () => {
+  if (!importFile.value) {
+    ElMessage.warning('请先选择要导入的Excel文件')
+    return
+  }
+
+  importing.value = true
+  importResult.value = null
+
+  try {
+    const response = await importUsers(importFile.value)
+    importResult.value = response.data
+
+    ElMessage.success('导入完成')
+
+    // 刷新用户列表
+    loadUsers()
+  } catch (error) {
+    ElMessage.error('导入失败，请稍后重试')
+  } finally {
+    importing.value = false
+  }
 }
 
 // 生命周期
@@ -501,8 +485,51 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.header-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.action-buttons .el-button {
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.action-buttons .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-buttons .el-button--circle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-buttons .el-dropdown {
+  margin-left: 2px;
+}
+
 .users-management {
-  height: 100%;
+  padding: 20px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .card-header {
@@ -515,12 +542,28 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.batch-actions {
-  margin-bottom: 15px;
-}
-
 .pagination {
   margin-top: 20px;
   text-align: right;
+}
+
+@media (max-width: 768px) {
+  .users-management {
+    padding: 12px;
+  }
+
+  .search-bar .el-form {
+    display: block;
+  }
+
+  .search-bar .el-form-item {
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  .header-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 </style>

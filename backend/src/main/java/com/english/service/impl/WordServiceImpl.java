@@ -8,6 +8,7 @@ import com.english.entity.Word;
 import com.english.mapper.WordMapper;
 import com.english.service.WordService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -19,11 +20,14 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
 
     @Override
     public Map<String, Object> getWordsByPage(Map<String, Object> params) {
-        int page = (int) params.get("page");
-        int size = (int) params.get("size");
+        int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
+        int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
+        // Boundary validation to prevent negative offset/limit
+        page = Math.max(1, page);
+        size = Math.max(1, Math.min(size, 100));
         String keyword = (String) params.get("keyword");
         String difficulty = (String) params.get("difficulty");
-        Long unitId = (Long) params.get("unitId");
+        Long unitId = params.get("unitId") != null ? Long.valueOf(params.get("unitId").toString()) : null;
 
         Page<Word> pageParam = new Page<>(page, size);
         QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
@@ -34,7 +38,7 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
                 .or()
                 .like("definition", keyword)
                 .or()
-                .like("example_sentence", keyword)
+                .like("example", keyword)
             );
         }
 
@@ -63,11 +67,14 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
 
     @Override
     public Word getWordById(Long id) {
-        return getById(id);
+        QueryWrapper<Word> wrapper = new QueryWrapper<>();
+        wrapper.eq("id", id).eq("deleted", 0);
+        return getOne(wrapper);
     }
 
     @Override
     public Word getWordByWord(String word) {
+        if (word == null) return null;
         QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("word", word.toLowerCase());
         queryWrapper.eq("deleted", 0);
@@ -75,30 +82,35 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
     }
 
     @Override
+    @Transactional
     public boolean createWord(Word word) {
         if (word.getDifficulty() == null) {
             word.setDifficulty("MEDIUM");
         }
         // 统一转换为小写存储
-        word.setWord(word.getWord().toLowerCase().trim());
-        word.setCreatedTime(LocalDateTime.now());
-        word.setUpdatedTime(LocalDateTime.now());
+        if (word.getWord() != null) {
+            word.setWord(word.getWord().toLowerCase().trim());
+        }
+        word.setCreatedAt(LocalDateTime.now());
+        word.setUpdatedAt(LocalDateTime.now());
         word.setDeleted(0);
         return save(word);
     }
 
     @Override
+    @Transactional
     public boolean updateWord(Word word) {
-        word.setUpdatedTime(LocalDateTime.now());
+        word.setUpdatedAt(LocalDateTime.now());
         return updateById(word);
     }
 
     @Override
+    @Transactional
     public boolean deleteWord(Long id) {
         Word word = new Word();
         word.setId(id);
         word.setDeleted(1);
-        word.setUpdatedTime(LocalDateTime.now());
+        word.setUpdatedAt(LocalDateTime.now());
         return updateById(word);
     }
 
@@ -122,9 +134,31 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
 
     @Override
     public List<Word> getRandomWords(int count) {
+        // 参数边界校验
+        int safeCount = Math.max(1, Math.min(count, 100));
+
+        QueryWrapper<Word> countWrapper = new QueryWrapper<>();
+        countWrapper.eq("deleted", 0);
+        Long total = count(countWrapper);
+
+        if (total == null || total == 0) {
+            return new java.util.ArrayList<>();
+        }
+
+        // 如果可用单词数少于请求数，直接返回所有单词
+        if (total <= safeCount) {
+            QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("deleted", 0);
+            return list(queryWrapper);
+        }
+
+        // 随机选择 offset (避免 ORDER BY RAND() 的全表扫描性能问题)
+        int offset = (int) (Math.random() * (total - safeCount));
+
         QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("deleted", 0);
-        queryWrapper.orderByDesc("created_time").last("LIMIT " + count);
+        queryWrapper.last("LIMIT " + offset + ", " + safeCount);
+
         return list(queryWrapper);
     }
 
@@ -137,7 +171,7 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
                 .or()
                 .like("definition", keyword)
                 .or()
-                .like("example_sentence", keyword)
+                .like("example", keyword)
             );
         }
         queryWrapper.eq("deleted", 0);
@@ -170,21 +204,5 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
         stats.put("totalWords", easyCount + mediumCount + hardCount);
 
         return stats;
-    }
-
-    @Override
-    public boolean batchCreateWords(List<Word> words) {
-        try {
-            LocalDateTime now = LocalDateTime.now();
-            for (Word word : words) {
-                word.setCreatedTime(now);
-                word.setUpdatedTime(now);
-                word.setDeleted(0);
-            }
-            return saveBatch(words);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false;
-        }
     }
 }

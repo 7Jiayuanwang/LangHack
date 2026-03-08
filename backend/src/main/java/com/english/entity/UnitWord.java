@@ -31,10 +31,10 @@ public class UnitWord {
      * 创建时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
     public UnitWord() {
-        this.createdTime = LocalDateTime.now();
     }
 
     // Getters and Setters

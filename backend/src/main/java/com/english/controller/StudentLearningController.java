@@ -1,17 +1,32 @@
 package com.english.controller;
 
-import com.english.constants.RoleConstants;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.english.dto.Result;
+import com.english.entity.User;
+import com.english.entity.Class;
+import com.english.entity.Unit;
+import com.english.entity.Word;
+import com.english.entity.Text;
+import com.english.entity.UnitWord;
+import com.english.mapper.ClassMapper;
+import com.english.mapper.UnitMapper;
+import com.english.mapper.UnitWordMapper;
+import com.english.mapper.WordMapper;
+import com.english.mapper.TextMapper;
+import com.english.entity.TextLearningRecord;
+import com.english.mapper.TextLearningRecordMapper;
+import com.english.exception.BusinessException;
 import com.english.service.*;
-import com.english.util.SecurityUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 学生学习控制器
@@ -20,8 +35,10 @@ import java.util.Map;
 @RequestMapping("/api/student/learning")
 public class StudentLearningController {
 
+    private static final Logger logger = LoggerFactory.getLogger(StudentLearningController.class);
+
     @Autowired
-    private StudentClassService studentClassService;
+    private StudentClassesService studentClassesService;
 
     @Autowired
     private VocabularyBooksService vocabularyBooksService;
@@ -30,21 +47,51 @@ public class StudentLearningController {
     private LearningRecordsService learningRecordsService;
 
     @Autowired
+    private UserService userService;
+
+    @Autowired
     private AssignmentService assignmentService;
+
+    @Autowired
+    private ScoreRecordService scoreRecordService;
+
+    @Autowired
+    private ClassMapper classMapper;
+
+    @Autowired
+    private UnitMapper unitMapper;
+
+    @Autowired
+    private WordMapper wordMapper;
+
+    @Autowired
+    private TextMapper textMapper;
+
+    @Autowired
+    private UnitWordMapper unitWordMapper;
+
+    @Autowired
+    private TextLearningRecordMapper textLearningRecordMapper;
+
+    @Autowired
+    private WordNetService wordNetService;
+
+    @Autowired
+    private ArticleVersionService articleVersionService;
 
     /**
      * 获取学生仪表板数据
      */
     @GetMapping("/dashboard")
-    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<Map<String, Object>> getDashboardData(Authentication authentication) {
         try {
-            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+            Long studentId = getCurrentStudentId(authentication);
 
             Map<String, Object> dashboard = new HashMap<>();
 
             // 统计课程数量 - 基于student_classes
-            dashboard.put("enrolledCourses", studentClassService.countByStudentId(studentId));
+            dashboard.put("enrolledCourses", studentClassesService.countByStudentId(studentId));
 
             // 统计生词数量 - 基于vocabulary_books
             dashboard.put("vocabularyCount", vocabularyBooksService.countByStudentId(studentId));
@@ -56,17 +103,52 @@ public class StudentLearningController {
             dashboard.put("todayStudyTime", learningRecordsService.getTodayStudyTime(studentId));
 
             // 班级列表 - 基于student_classes关联classes和courses
-            dashboard.put("myClasses", studentClassService.getStudentClassesWithDetails(studentId));
+            dashboard.put("myClasses", studentClassesService.getStudentClassesWithDetails(studentId));
 
             // 待办任务 - 基于assignments
             dashboard.put("pendingAssignmentsList", getPendingAssignments(studentId));
 
-            // 最近生词 - 基于vocabulary_books按added_time排序
-            dashboard.put("recentWords", vocabularyBooksService.getRecentWords(studentId, 10));
+            // 学习推荐 - 从学生课程中随机推荐内容
+            dashboard.put("learningRecommendation", getLearningRecommendation(studentId));
+
+            // 获取学生平均分数（加权平均分）
+            Map<String, Object> scoreStats = scoreRecordService.getStudentAverageScore(studentId, null, null);
+            if (scoreStats == null) scoreStats = new HashMap<>();
+
+            // 使用加权平均分，如果没有则使用简单平均分
+            Object weightedAvg = scoreStats.get("weightedAverageScore");
+            Object simpleAvg = scoreStats.get("averageScore");
+            Object totalScore = scoreStats.get("totalScore");
+            Object totalCount = scoreStats.get("totalCount");
+
+            // 优先使用加权平均分
+            double finalAverageScore = 0.0;
+            if (weightedAvg != null) {
+                finalAverageScore = ((Number) weightedAvg).doubleValue();
+            } else if (simpleAvg != null) {
+                finalAverageScore = ((Number) simpleAvg).doubleValue();
+            }
+
+            dashboard.put("averageScore", Math.round(finalAverageScore * 100.0) / 100.0); // 使用加权平均分，保留2位小数
+            dashboard.put("scoreStats", scoreStats); // 包含完整的分数统计信息
+
+            // 添加调试日志
+            logger.debug("Dashboard分数统计 - 学生ID: {}, 加权平均分: {}, 简单平均分: {}, 累加分数: {}, 记录数: {}",
+                    studentId, weightedAvg, simpleAvg, totalScore, totalCount);
+
+            // 如果分数统计为空或记录数为0，记录警告
+            int totalCountInt = totalCount instanceof Number ? ((Number) totalCount).intValue() : 0;
+            if (totalCount == null || totalCountInt == 0) {
+                logger.debug("学生 {} 暂无分数记录", studentId);
+            }
 
             return Result.success(dashboard);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
-            return Result.error("获取仪表板数据失败：" + e.getMessage());
+            logger.error("获取仪表板数据失败", e);
+
+            return Result.error("获取仪表板数据失败，请稍后重试");
         }
     }
 
@@ -74,18 +156,22 @@ public class StudentLearningController {
      * 获取学生的课程列表
      */
     @GetMapping("/courses")
-    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<Map<String, Object>> getStudentCourses(Authentication authentication) {
         try {
-            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+            Long studentId = getCurrentStudentId(authentication);
 
             Map<String, Object> result = new HashMap<>();
             // 查询学生加入的班级及其关联的课程
-            result.put("courses", studentClassService.getStudentCoursesWithProgress(studentId));
+            result.put("courses", studentClassesService.getStudentCoursesWithProgress(studentId));
 
             return Result.success(result);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
-            return Result.error("获取课程列表失败：" + e.getMessage());
+            logger.error("获取课程列表失败", e);
+
+            return Result.error("获取课程列表失败，请稍后重试");
         }
     }
 
@@ -93,20 +179,24 @@ public class StudentLearningController {
      * 获取课程下的单元列表
      */
     @GetMapping("/courses/{courseId}/units")
-    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<Map<String, Object>> getCourseUnits(
             @PathVariable Long courseId,
             Authentication authentication) {
         try {
-            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+            Long studentId = getCurrentStudentId(authentication);
 
             Map<String, Object> result = new HashMap<>();
             // 查询课程下的所有单元
             result.put("units", learningRecordsService.getUnitsWithLearningStats(studentId, courseId));
 
             return Result.success(result);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
-            return Result.error("获取单元列表失败：" + e.getMessage());
+            logger.error("获取单元列表失败", e);
+
+            return Result.error("获取单元列表失败，请稍后重试");
         }
     }
 
@@ -114,18 +204,22 @@ public class StudentLearningController {
      * 获取单元详细内容（课文和单词）
      */
     @GetMapping("/units/{unitId}/content")
-    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<Map<String, Object>> getUnitContent(
             @PathVariable Long unitId,
             Authentication authentication) {
         try {
-            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+            Long studentId = getCurrentStudentId(authentication);
 
             Map<String, Object> content = learningRecordsService.getUnitContentWithLearningStates(studentId, unitId);
 
             return Result.success(content);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
-            return Result.error("获取单元内容失败：" + e.getMessage());
+            logger.error("获取单元内容失败", e);
+
+            return Result.error("获取单元内容失败，请稍后重试");
         }
     }
 
@@ -133,109 +227,902 @@ public class StudentLearningController {
      * 获取课文详细内容
      */
     @GetMapping("/texts/{textId}")
-    @PreAuthorize("hasRole('" + RoleConstants.Annotation.STUDENT + "')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<Map<String, Object>> getTextDetail(
             @PathVariable Long textId,
+            @RequestParam(required = false) Long assignmentId,
             Authentication authentication) {
         try {
-            Long studentId = SecurityUtil.getCurrentStudentId(authentication);
+            Long studentId = getCurrentStudentId(authentication);
 
-            Map<String, Object> detail = learningRecordsService.getTextDetailWithAnnotation(studentId, textId);
+            // 触发异步版本生成（如果缺失）
+            articleVersionService.checkAndGenerateVersions(textId);
 
-            // 记录课文学习记录
-            learningRecordsService.recordTextView(studentId, textId);
+            Map<String, Object> detail = learningRecordsService.getTextDetailWithAnnotation(studentId, textId,
+                    assignmentId);
+
+            // 移除自动记录逻辑，学习记录由前端学习页面管理
+            // 这样可以避免每次刷新页面都增加学习时长
 
             return Result.success(detail);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
-            return Result.error("获取课文详情失败：" + e.getMessage());
+            logger.error("获取课文详情失败", e);
+
+            return Result.error("获取课文详情失败，请稍后重试");
         }
+    }
+
+    /**
+     * 记录课文学习
+     */
+    @PostMapping("/record/text-view")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<String> recordTextView(@RequestBody Map<String, Object> params, Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            Object textIdObj = params.get("textId");
+            if (textIdObj == null) {
+                return Result.error("textId不能为空");
+            }
+            Long textId = Long.valueOf(textIdObj.toString());
+            Long assignmentId = params.get("assignmentId") != null ? Long.valueOf(params.get("assignmentId").toString())
+                    : null;
+            Integer duration = params.get("duration") != null ? Integer.valueOf(params.get("duration").toString()) : 15;
+            // 学习时长校验：不允许负数，上限3小时，防止客户端伪造数据
+            if (duration < 0) return Result.error("学习时长不能为负数");
+            if (duration > 10800) return Result.error("学习时长超过合理范围");
+
+            learningRecordsService.recordTextView(studentId, textId, assignmentId, duration);
+
+            return Result.success("课文学习记录已保存");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("记录课文学习失败", e);
+
+            return Result.error("记录课文学习失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 开始阅读课文
+     */
+    @PostMapping("/texts/{textId}/start")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Long> startReading(
+            @PathVariable Long textId,
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            logger.info("开始阅读课文调用: studentId={}, textId={}, assignmentId={}", studentId, textId, assignmentId);
+            Long recordId = learningRecordsService.startReadingSession(studentId, textId, assignmentId);
+            logger.info("阅读会话创建成功: recordId={}", recordId);
+            return Result.success(recordId);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("开始阅读失败", e);
+
+            return Result.error("开始阅读失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 完成阅读课文（手动提交）
+     */
+    @PostMapping("/records/{recordId}/complete")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<String> completeReading(
+            @PathVariable Long recordId,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            TextLearningRecord record = textLearningRecordMapper.selectById(recordId);
+            if (record == null) {
+                return Result.error("阅读记录不存在");
+            }
+            if (!studentId.equals(record.getStudentId())) {
+                return Result.error("无权操作此记录");
+            }
+            logger.info("完成阅读课文调用: recordId={}, studentId={}", recordId, studentId);
+            learningRecordsService.completeReadingSession(recordId);
+            return Result.success("阅读已完成");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("完成阅读失败", e);
+
+            return Result.error("完成阅读失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 标记课文为已完成
+     */
+    @PostMapping("/texts/{textId}/complete")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> markTextAsCompleted(
+            @PathVariable Long textId,
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            logger.info("标记课文完成调用: studentId={}, textId={}, assignmentId={}", studentId, textId, assignmentId);
+
+            // 验证课文是否存在
+            Text text = textMapper.selectById(textId);
+            if (text == null) {
+                return Result.error("课文不存在");
+            }
+
+            // 查找该学生对该课文最近一条未完成的阅读记录
+            QueryWrapper<TextLearningRecord> qw = new QueryWrapper<>();
+            qw.eq("student_id", studentId)
+              .eq("text_id", textId)
+              .eq("is_completed", 0)
+              .orderByDesc("created_time")
+              .last("LIMIT 1");
+            if (assignmentId != null) {
+                qw.eq("assignment_id", assignmentId);
+            }
+            TextLearningRecord record = textLearningRecordMapper.selectOne(qw);
+
+            LocalDateTime now = LocalDateTime.now();
+            if (record != null) {
+                // 标记已有记录为完成
+                record.setEndTime(now);
+                record.setIsCompleted(1);
+                long duration = java.time.Duration.between(record.getStartTime(), now).getSeconds();
+                record.setDurationSeconds((int) Math.min(duration, Integer.MAX_VALUE));
+                record.setUpdatedTime(now);
+                textLearningRecordMapper.updateById(record);
+            } else {
+                // 没有未完成记录，创建一条已完成的记录
+                record = new TextLearningRecord();
+                record.setStudentId(studentId);
+                record.setTextId(textId);
+                record.setAssignmentId(assignmentId);
+                record.setStartTime(now);
+                record.setEndTime(now);
+                record.setIsCompleted(1);
+                record.setDurationSeconds(0);
+                record.setCreatedTime(now);
+                record.setUpdatedTime(now);
+                textLearningRecordMapper.insert(record);
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("message", "课文已标记为完成");
+            result.put("recordId", record.getId());
+
+            return Result.success(result);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("标记课文完成失败", e);
+
+            return Result.error("标记课文完成失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 通用学习记录API（支持各种学习活动）
+     */
+    @PostMapping("/record/learning")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<String> recordLearning(@RequestBody Map<String, Object> params, Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            String type = (String) params.get("type");
+            Long wordId = params.get("wordId") != null ? Long.valueOf(params.get("wordId").toString()) : null;
+            Integer duration = params.get("duration") != null ? Integer.valueOf(params.get("duration").toString())
+                    : null;
+            // 学习时长校验：不允许负数，上限3小时，防止客户端伪造数据
+            if (duration != null && duration < 0) return Result.error("学习时长不能为负数");
+            if (duration != null && duration > 10800) return Result.error("学习时长超过合理范围");
+            Long textId = params.get("textId") != null ? Long.valueOf(params.get("textId").toString()) : null;
+            Long assignmentId = params.get("assignmentId") != null ? Long.valueOf(params.get("assignmentId").toString())
+                    : null;
+
+            learningRecordsService.recordLearning(studentId, type, wordId, duration, textId, assignmentId);
+
+            logger.debug("记录学习活动: 学生={}, 类型={}, 时长={}秒{}",
+                    studentId, type, duration, assignmentId != null ? ", 任务ID=" + assignmentId : "");
+
+            return Result.success("学习记录已保存");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("记录学习失败", e);
+
+            return Result.error("记录学习失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 记录单词学习
+     */
+    @PostMapping("/record/word-view")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<String> recordWordView(@RequestBody Map<String, Object> params, Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            Object wordIdObj0 = params.get("wordId");
+            if (wordIdObj0 == null) {
+                return Result.error("wordId不能为空");
+            }
+            Long wordId = Long.valueOf(wordIdObj0.toString());
+            Long assignmentId = params.get("assignmentId") != null ? Long.valueOf(params.get("assignmentId").toString())
+                    : null;
+            Integer duration = params.get("duration") != null ? Integer.valueOf(params.get("duration").toString()) : 15;
+            // 学习时长校验：不允许负数，上限3小时，防止客户端伪造数据
+            if (duration < 0) return Result.error("学习时长不能为负数");
+            if (duration > 10800) return Result.error("学习时长超过合理范围");
+
+            learningRecordsService.recordWordView(studentId, wordId, assignmentId, duration);
+
+            return Result.success("单词学习记录已保存");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("记录单词学习失败", e);
+
+            return Result.error("记录单词学习失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 添加单词到生词本
+     */
+    @PostMapping("/vocabulary/add")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<String> addToVocabulary(@RequestBody Map<String, Object> params, Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            Object wordIdObj1 = params.get("wordId");
+            if (wordIdObj1 == null) {
+                return Result.error("wordId不能为空");
+            }
+            Long wordId = Long.valueOf(wordIdObj1.toString());
+
+            if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
+                // 如果已存在，更新掌握程度为学习中
+                vocabularyBooksService.updateMasteryLevel(studentId, wordId, "LEARNING", null);
+                return Result.success("单词已在生词本中");
+            }
+
+            // 添加到生词本，并直接设置为学习中状态
+            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordId, "LEARNING");
+
+            return Result.success("单词已添加到生词本");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("添加到生词本失败", e);
+
+            return Result.error("添加到生词本失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 获取当前学生ID
+     */
+    private Long getCurrentStudentId(Authentication authentication) {
+        String username = authentication.getName();
+        User user = userService.getUserByUsername(username);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        return user.getId();
     }
 
     /**
      * 获取待完成任务数量
      */
     private int getPendingAssignmentsCount(Long studentId) {
-        // 获取学生所在的所有班级ID
-        List<Long> classIds = studentClassService.getClassIdsByStudentId(studentId);
+        try {
+            // 获取学生的班级ID列表
+            List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+            logger.debug("获取待完成任务: 学生ID={}, 加入的班级IDs={}", studentId, classIds);
 
-        if (classIds == null || classIds.isEmpty()) {
-            return 0;
-        }
-
-        // 获取这些班级的所有任务（带状态）
-        Map<String, Object> assignmentsData = assignmentService.getStudentAssignmentsWithStatus(classIds, studentId, null);
-
-        if (assignmentsData == null || !assignmentsData.containsKey("assignments")) {
-            return 0;
-        }
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> assignments = (List<Map<String, Object>>) assignmentsData.get("assignments");
-
-        // 筛选出待完成的任务（未完成且未过期）
-        int pendingCount = 0;
-        for (Map<String, Object> assignment : assignments) {
-            String status = (String) assignment.get("status");
-            // 统计未开始和进行中的任务（排除已完成和已过期）
-            if ("not-started".equals(status) || "in-progress".equals(status)) {
-                pendingCount++;
+            if (classIds.isEmpty()) {
+                logger.debug("学生未加入任何班级");
+                return 0;
             }
-        }
 
-        return pendingCount;
+            // 使用AssignmentService获取学生任务
+            Map<String, Object> assignmentsData = assignmentService.getStudentAssignmentsWithStatus(classIds, studentId,
+                    null);
+            Object assignmentsObj = assignmentsData.get("assignments");
+            List<Map<String, Object>> assignments = (assignmentsObj instanceof List)
+                    ? (List<Map<String, Object>>) assignmentsObj : null;
+
+            if (assignments == null || assignments.isEmpty()) {
+                logger.debug("没有找到任何任务");
+                return 0;
+            }
+
+            logger.debug("获取到的任务数量: {}", assignments.size());
+
+            // 过滤未过期且未完成的任务
+            long pendingCount = assignments.stream()
+                    .filter(assignment -> {
+                        // 首先检查任务状态和进度，过滤已完成的任务（这是最重要的判断）
+                        Object status = assignment.get("status");
+                        Object progressObj = assignment.get("progress");
+
+                        // 优先使用状态判断，如果状态是completed，则过滤掉
+                        if (status != null) {
+                            String statusString = status.toString().trim();
+                            if ("completed".equalsIgnoreCase(statusString)) {
+                                logger.debug("任务 {} 已完成（状态={}），不包含在待办任务中", assignment.get("title"), statusString);
+                                return false;
+                            }
+                        }
+
+                        // 如果没有状态字段或状态不是completed，使用进度判断（进度>=100视为完成）
+                        if (progressObj != null) {
+                            try {
+                                // 处理不同类型的进度值（Integer, Long, Double, String等）
+                                double progress;
+                                if (progressObj instanceof Number) {
+                                    progress = ((Number) progressObj).doubleValue();
+                                } else {
+                                    progress = Double.parseDouble(progressObj.toString());
+                                }
+                                if (progress >= 100.0) {
+                                    logger.debug("任务 {} 已完成（进度={}>=100），不包含在待办任务中", assignment.get("title"), progress);
+                                    return false;
+                                }
+                            } catch (NumberFormatException e) {
+                                logger.warn("任务 {} 进度解析失败: {}, 错误: {}", assignment.get("title"), progressObj,
+                                        e.getMessage());
+                                // 解析失败，继续使用其他判断
+                            }
+                        }
+
+                        // 如果任务未完成，再检查是否过期
+                        Object deadline = assignment.get("deadline");
+                        if (deadline == null) {
+                            logger.debug("任务 {} 未完成且无截止时间，包含在待办任务中", assignment.get("title"));
+                            return true;
+                        }
+                        try {
+                            LocalDateTime deadlineTime = LocalDateTime.parse(deadline.toString());
+                            boolean isNotExpired = LocalDateTime.now().isBefore(deadlineTime);
+                            logger.debug("任务 {} 截止时间: {}, 是否未过期: {}", assignment.get("title"), deadlineTime,
+                                    isNotExpired);
+                            return isNotExpired;
+                        } catch (Exception e) {
+                            logger.warn("解析任务截止时间失败: {}, 错误: {}", deadline, e.getMessage());
+                            return true; // 如果解析失败，算作未过期
+                        }
+                    })
+                    .count();
+
+            logger.debug("最终待完成任务数量: {}", pendingCount);
+            return (int) pendingCount;
+        } catch (Exception e) {
+            logger.error("获取待完成任务数量失败", e);
+            return 0;
+        }
     }
 
     /**
      * 获取待完成任务列表
      */
-    private Object getPendingAssignments(Long studentId) {
-        // 获取学生所在的所有班级ID
-        List<Long> classIds = studentClassService.getClassIdsByStudentId(studentId);
+    private List<Map<String, Object>> getPendingAssignments(Long studentId) {
+        try {
+            // 获取学生的班级ID列表
+            List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+            logger.debug("获取待完成任务列表: 学生ID={}, 加入的班级IDs={}", studentId, classIds);
 
-        if (classIds == null || classIds.isEmpty()) {
-            return new Object[0];
-        }
-
-        // 获取这些班级的所有任务（带状态）
-        Map<String, Object> assignmentsData = assignmentService.getStudentAssignmentsWithStatus(classIds, studentId, null);
-
-        if (assignmentsData == null || !assignmentsData.containsKey("assignments")) {
-            return new Object[0];
-        }
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> assignments = (List<Map<String, Object>>) assignmentsData.get("assignments");
-
-        // 筛选出待完成的任务（未完成且未过期），并只返回必要的字段
-        List<Map<String, Object>> pendingAssignments = new java.util.ArrayList<>();
-        for (Map<String, Object> assignment : assignments) {
-            String status = (String) assignment.get("status");
-            // 只返回未开始和进行中的任务（排除已完成和已过期）
-            if ("not-started".equals(status) || "in-progress".equals(status)) {
-                Map<String, Object> pendingAssignment = new HashMap<>();
-                pendingAssignment.put("id", assignment.get("id"));
-                pendingAssignment.put("title", assignment.get("title"));
-                pendingAssignment.put("deadline", assignment.get("deadline"));
-                pendingAssignment.put("className", assignment.get("className"));
-                pendingAssignment.put("unitName", assignment.get("unitName"));
-                pendingAssignment.put("status", status);
-                pendingAssignment.put("progress", assignment.get("progress"));
-                pendingAssignments.add(pendingAssignment);
+            if (classIds.isEmpty()) {
+                logger.debug("学生未加入任何班级");
+                return new ArrayList<>();
             }
+
+            // 使用AssignmentService获取学生任务
+            Map<String, Object> assignmentsData = assignmentService.getStudentAssignmentsWithStatus(classIds, studentId,
+                    null);
+            Object assignmentsObj2 = assignmentsData.get("assignments");
+            List<Map<String, Object>> assignments = (assignmentsObj2 instanceof List)
+                    ? (List<Map<String, Object>>) assignmentsObj2 : null;
+
+            logger.debug("获取到的任务数量: {}", assignments != null ? assignments.size() : 0);
+
+            if (assignments == null || assignments.isEmpty()) {
+                logger.debug("没有找到任何任务");
+                return new ArrayList<>();
+            }
+
+            // 过滤未过期且未完成的任务并按截止时间排序
+            List<Map<String, Object>> pendingAssignments = assignments.stream()
+                    .filter(assignment -> {
+                        // 首先检查任务状态和进度，过滤已完成的任务（这是最重要的判断）
+                        Object status = assignment.get("status");
+                        Object progressObj = assignment.get("progress");
+
+                        // 优先使用状态判断，如果状态是completed，则过滤掉
+                        if (status != null) {
+                            String statusString = status.toString().trim();
+                            if ("completed".equalsIgnoreCase(statusString)) {
+                                logger.debug("任务 {} 已完成（状态={}），不包含在待办列表中", assignment.get("title"), statusString);
+                                return false;
+                            }
+                        }
+
+                        // 如果没有状态字段或状态不是completed，使用进度判断（进度>=100视为完成）
+                        if (progressObj != null) {
+                            try {
+                                // 处理不同类型的进度值（Integer, Long, Double, String等）
+                                double progress;
+                                if (progressObj instanceof Number) {
+                                    progress = ((Number) progressObj).doubleValue();
+                                } else {
+                                    progress = Double.parseDouble(progressObj.toString());
+                                }
+                                if (progress >= 100.0) {
+                                    logger.debug("任务 {} 已完成（进度={}>=100），不包含在待办列表中", assignment.get("title"), progress);
+                                    return false;
+                                }
+                            } catch (NumberFormatException e) {
+                                logger.warn("任务 {} 进度解析失败: {}, 错误: {}", assignment.get("title"), progressObj,
+                                        e.getMessage());
+                                // 解析失败，继续使用其他判断
+                            }
+                        }
+
+                        // 如果任务未完成，再检查是否过期
+                        Object deadline = assignment.get("deadline");
+                        if (deadline == null) {
+                            logger.debug("任务 {} 无截止时间，包含在待办列表中", assignment.get("title"));
+                            return true;
+                        }
+                        try {
+                            LocalDateTime deadlineTime = LocalDateTime.parse(deadline.toString());
+                            boolean isNotExpired = LocalDateTime.now().isBefore(deadlineTime);
+                            logger.debug("任务 {} 截止时间: {}, 是否未过期: {}", assignment.get("title"), deadlineTime,
+                                    isNotExpired);
+                            return isNotExpired;
+                        } catch (Exception e) {
+                            logger.warn("解析任务截止时间失败: {}, 错误: {}, 包含在待办列表中", deadline, e.getMessage());
+                            return true; // 如果解析失败，算作未过期
+                        }
+                    })
+                    .sorted((a, b) -> {
+                        try {
+                            LocalDateTime deadlineA = a.get("deadline") != null
+                                    ? LocalDateTime.parse(a.get("deadline").toString())
+                                    : LocalDateTime.MAX;
+                            LocalDateTime deadlineB = b.get("deadline") != null
+                                    ? LocalDateTime.parse(b.get("deadline").toString())
+                                    : LocalDateTime.MAX;
+                            return deadlineA.compareTo(deadlineB);
+                        } catch (Exception e) {
+                            return 0; // 排序失败时保持原顺序
+                        }
+                    })
+                    .limit(10)
+                    .collect(Collectors.toList());
+
+            logger.debug("最终返回的待办任务数量: {}", pendingAssignments.size());
+            return pendingAssignments;
+        } catch (Exception e) {
+            logger.error("获取待完成任务列表失败", e);
+            return new ArrayList<>();
         }
-
-        // 按截止时间排序，最近截止的排在前面
-        pendingAssignments.sort((a, b) -> {
-            Object deadlineA = a.get("deadline");
-            Object deadlineB = b.get("deadline");
-
-            if (deadlineA == null && deadlineB == null) return 0;
-            if (deadlineA == null) return 1;
-            if (deadlineB == null) return -1;
-
-            return ((java.time.LocalDateTime) deadlineA).compareTo((java.time.LocalDateTime) deadlineB);
-        });
-
-        return pendingAssignments;
     }
+
+    /**
+     * 获取学习推荐 - 从学生课程中随机推荐内容
+     */
+    private Map<String, Object> getLearningRecommendation(Long studentId) {
+        try {
+            // 获取学生的课程列表
+            List<Map<String, Object>> studentCourses = studentClassesService.getStudentCoursesWithProgress(studentId);
+            if (studentCourses == null || studentCourses.isEmpty()) {
+                return new HashMap<>();
+            }
+
+            // 随机选择一个课程
+            Random random = new Random();
+            Map<String, Object> randomCourse = studentCourses.get(random.nextInt(studentCourses.size()));
+            Object courseIdObj = randomCourse.get("courseId");
+            if (courseIdObj == null) {
+                return new HashMap<>(); // 课程数据不完整，返回空 map 而非 null
+            }
+            Long courseId = Long.valueOf(courseIdObj.toString());
+
+            // 随机选择推荐类型：单词或课文
+            boolean recommendWord = random.nextBoolean();
+
+            Map<String, Object> recommendation = new HashMap<>();
+            recommendation.put("type", recommendWord ? "word" : "text");
+            recommendation.put("courseId", courseId);
+            recommendation.put("courseName", randomCourse.get("courseName"));
+
+            if (recommendWord) {
+                // 推荐单词：从课程中随机选择一个单词
+                return getRecommendedWord(courseId, recommendation);
+            } else {
+                // 推荐课文：从课程中随机选择一篇课文
+                return getRecommendedText(courseId, recommendation);
+            }
+
+        } catch (Exception e) {
+            logger.error("获取学习推荐失败", e);
+            return new HashMap<>();
+        }
+    }
+
+    /**
+     * 获取推荐的单词
+     */
+    private Map<String, Object> getRecommendedWord(Long courseId, Map<String, Object> recommendation) {
+        try {
+            // 查询课程下的所有单元
+            QueryWrapper<Unit> unitWrapper = new QueryWrapper<>();
+            unitWrapper.eq("course_id", courseId);
+            List<Unit> units = unitMapper.selectList(unitWrapper);
+            if (units == null) units = new ArrayList<>();
+
+            if (units.isEmpty()) {
+                return new HashMap<>(recommendation);
+            }
+
+            // 随机选择一个单元
+            Random random = new Random();
+            Unit randomUnit = units.get(random.nextInt(units.size()));
+
+            // 查询单元下的单词
+            QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
+            unitWordWrapper.eq("unit_id", randomUnit.getId());
+            List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
+            if (unitWords == null) unitWords = new ArrayList<>();
+
+            if (unitWords.isEmpty()) {
+                return new HashMap<>(recommendation);
+            }
+
+            // 随机选择一个单词
+            UnitWord randomUnitWord = unitWords.get(random.nextInt(unitWords.size()));
+            Word word = wordMapper.selectById(randomUnitWord.getWordId());
+
+            if (word == null || (word.getDeleted() != null && word.getDeleted() == 1)) {
+                return new HashMap<>(recommendation);
+            }
+
+            // 构建推荐数据
+            recommendation.put("id", word.getId());
+            recommendation.put("title", word.getWord());
+            recommendation.put("content", word.getDefinition());
+            recommendation.put("pronunciation", word.getPronunciation());
+            recommendation.put("unitId", randomUnit.getId());
+            recommendation.put("unitName", randomUnit.getName());
+
+            return recommendation;
+
+        } catch (Exception e) {
+            logger.error("获取推荐单词失败", e);
+            return new HashMap<>(recommendation);
+        }
+    }
+
+    /**
+     * 获取推荐的课文
+     */
+    private Map<String, Object> getRecommendedText(Long courseId, Map<String, Object> recommendation) {
+        try {
+            // 查询课程下的所有单元
+            QueryWrapper<Unit> unitWrapper = new QueryWrapper<>();
+            unitWrapper.eq("course_id", courseId);
+            List<Unit> units = unitMapper.selectList(unitWrapper);
+            if (units == null) units = new ArrayList<>();
+
+            if (units.isEmpty()) {
+                return new HashMap<>(recommendation);
+            }
+
+            // 随机选择一个单元
+            Random random = new Random();
+            Unit randomUnit = units.get(random.nextInt(units.size()));
+
+            // 查询单元下的课文
+            QueryWrapper<Text> textWrapper = new QueryWrapper<>();
+            textWrapper.eq("unit_id", randomUnit.getId());
+            textWrapper.eq("deleted", 0);
+            List<Text> texts = textMapper.selectList(textWrapper);
+            if (texts == null) texts = new ArrayList<>();
+
+            if (texts.isEmpty()) {
+                return new HashMap<>(recommendation);
+            }
+
+            // 随机选择一篇课文
+            Random textRandom = new Random();
+            Text randomText = texts.get(textRandom.nextInt(texts.size()));
+
+            // 构建推荐数据
+            recommendation.put("id", randomText.getId());
+            recommendation.put("title", randomText.getTitle());
+            String content = randomText.getContent() != null ? randomText.getContent() : "";
+            recommendation.put("content", content.length() > 100 ? content.substring(0, 100) + "..." : content);
+            recommendation.put("unitId", randomUnit.getId());
+            recommendation.put("unitName", randomUnit.getName());
+
+            return recommendation;
+
+        } catch (Exception e) {
+            logger.error("获取推荐课文失败", e);
+            return new HashMap<>(recommendation);
+        }
+    }
+
+    // ==================== 新增的生词本相关API ====================
+
+    /**
+     * 获取生词本（带分页和筛选）
+     */
+    @GetMapping("/vocabulary")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> getVocabulary(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String masteryLevel,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String difficulty,
+            Authentication authentication) {
+        try {
+            // 分页参数边界校验
+            page = Math.max(1, page);
+            size = Math.max(1, Math.min(size, 100));
+
+            // 关键词长度限制
+            if (keyword != null && keyword.length() > 100) {
+                keyword = keyword.substring(0, 100);
+            }
+
+            Long studentId = getCurrentStudentId(authentication);
+
+            Map<String, Object> params = new HashMap<>();
+            params.put("page", page);
+            params.put("size", size);
+            params.put("keyword", keyword);
+            params.put("masteryLevel", masteryLevel);
+            params.put("sortBy", sortBy);
+            params.put("difficulty", difficulty);
+            params.put("studentId", studentId);
+
+            Map<String, Object> result = vocabularyBooksService.getVocabularyWithPagination(params);
+            return Result.success(result);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取生词本失败", e);
+
+            return Result.error("获取生词本失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 检查单词是否在生词本中
+     */
+    @GetMapping("/vocabulary/check")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Boolean> checkVocabularyStatus(
+            @RequestParam String word,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+
+            // 查询单词ID
+            QueryWrapper<Word> wordWrapper = new QueryWrapper<>();
+            wordWrapper.eq("word", word.toLowerCase());
+            wordWrapper.eq("deleted", 0);
+            Word wordEntity = wordMapper.selectOne(wordWrapper);
+
+            if (wordEntity == null) {
+                return Result.success(false);
+            }
+
+            boolean exists = vocabularyBooksService.existsByStudentAndWord(studentId, wordEntity.getId());
+            return Result.success(exists);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("检查生词本状态失败", e);
+
+            return Result.error("检查生词本状态失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 通过单词添加到生词本（支持WordNet词汇）
+     */
+    @PostMapping("/vocabulary")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<String> addToVocabularyByWord(@RequestBody Map<String, Object> params,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            Object wordObj = params.get("word");
+            if (wordObj == null) {
+                return Result.error("word不能为空");
+            }
+            String word = wordObj.toString().toLowerCase();
+            Long unitId = params.get("unitId") != null ? Long.valueOf(params.get("unitId").toString()) : null;
+
+            // 查询单词是否存在
+            QueryWrapper<Word> wordWrapper = new QueryWrapper<>();
+            wordWrapper.eq("word", word);
+            wordWrapper.eq("deleted", 0);
+            Word wordEntity = wordMapper.selectOne(wordWrapper);
+
+            if (wordEntity == null) {
+                // 如果数据库中没有该单词，尝试从WordNet获取并保存（使用getOrCreateWord确保持久化）
+                Map<String, Object> wordNetInfo = wordNetService.getOrCreateWord(word);
+                if (Boolean.TRUE.equals(wordNetInfo.get("found"))) {
+                    // WordNet查询成功后，单词已自动保存到数据库
+                    wordWrapper = new QueryWrapper<>();
+                    wordWrapper.eq("word", word);
+                    wordEntity = wordMapper.selectOne(wordWrapper);
+                }
+
+                if (wordEntity == null) {
+                    return Result.error("单词不存在，无法添加到生词本");
+                }
+            }
+
+            // 检查是否已在生词本中
+            if (vocabularyBooksService.existsByStudentAndWord(studentId, wordEntity.getId())) {
+                return Result.success("单词已在生词本中");
+            }
+
+            // 添加到生词本
+            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordEntity.getId(), "LEARNING");
+
+            return Result.success("单词已添加到生词本");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("添加到生词本失败", e);
+
+            return Result.error("添加到生词本失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 从生词本移除单词
+     */
+    @DeleteMapping("/vocabulary/{wordId}")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<String> removeFromVocabulary(@PathVariable Long wordId, Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            vocabularyBooksService.removeFromVocabulary(studentId, wordId);
+            return Result.success("单词已从生词本移除");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("移除生词失败", e);
+
+            return Result.error("移除生词失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 更新单词掌握程度
+     */
+    @PutMapping("/vocabulary/{wordId}/mastery")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<String> updateMasteryLevel(
+            @PathVariable Long wordId,
+            @RequestBody Map<String, Object> params,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            Object masteryLevelObj = params.get("masteryLevel");
+            String masteryLevel = masteryLevelObj != null ? masteryLevelObj.toString() : null;
+
+            // 验证masteryLevel枚举值
+            if (masteryLevel == null || !java.util.Set.of("NEW", "LEARNING", "REVIEWING", "MASTERED").contains(masteryLevel)) {
+                return Result.error("无效的掌握程度");
+            }
+
+            vocabularyBooksService.updateMasteryLevel(studentId, wordId, masteryLevel, params);
+            return Result.success("掌握程度已更新");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("更新掌握程度失败", e);
+
+            return Result.error("更新掌握程度失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 获取生词本统计信息
+     */
+    @GetMapping("/vocabulary/stats")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> getVocabularyStats(Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            Map<String, Object> stats = vocabularyBooksService.getVocabularyStats(studentId);
+            return Result.success(stats);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取生词本统计失败", e);
+
+            return Result.error("获取生词本统计失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 标记单词为已完成
+     */
+    @PostMapping("/words/{wordId}/complete")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> markWordAsCompleted(
+            @PathVariable Long wordId,
+            @RequestParam(required = false) Long assignmentId,
+            @RequestParam(required = false, defaultValue = "30") Integer duration,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+
+            // 学习时长校验：不允许负数，上限3小时
+            if (duration != null && duration < 0) return Result.error("学习时长不能为负数");
+            if (duration != null && duration > 10800) return Result.error("学习时长超过合理范围");
+
+            // 验证单词是否存在
+            Word word = wordMapper.selectById(wordId);
+            if (word == null || (word.getDeleted() != null && word.getDeleted() == 1)) {
+                return Result.error("单词不存在");
+            }
+
+            // 记录完成单词的学习记录，支持任务关联
+            learningRecordsService.recordWordView(studentId, wordId);
+
+            // 如果有任务ID，记录任务关联的学习活动
+            if (assignmentId != null) {
+                learningRecordsService.recordLearning(studentId, "WORD_COMPLETE", wordId, duration, null, assignmentId);
+            }
+
+            logger.debug("单词完成标记 - 学生={}, 单词ID={}{}, 时长={}秒",
+                    studentId, wordId,
+                    assignmentId != null ? ", 任务ID=" + assignmentId : "",
+                    duration);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("message", "单词已标记为完成");
+
+            // 如果有任务ID，返回更新后的任务进度
+            if (assignmentId != null) {
+                Map<String, Object> progress = assignmentService.getAssignmentProgress(assignmentId, studentId);
+                if (progress != null) {
+                    result.put("progress", progress);
+                    Object completionRateObj = progress.get("completionRate");
+                    result.put("completionRate", completionRateObj != null ? completionRateObj : 0.0);
+
+                    logger.debug("任务进度更新 - 任务ID={}, 完成率={}%", assignmentId, completionRateObj != null ? completionRateObj : 0.0);
+                }
+            }
+
+            return Result.success(result);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("标记单词完成失败", e);
+
+            return Result.error("标记单词完成失败，请稍后重试");
+        }
+    }
+
 }

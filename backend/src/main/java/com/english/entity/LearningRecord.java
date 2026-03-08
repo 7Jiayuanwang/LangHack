@@ -27,6 +27,9 @@ public class LearningRecord {
      */
     private Long wordId;
 
+    @TableField("text_id")
+    private Long textId;
+
     /**
      * 任务ID
      */
@@ -56,10 +59,10 @@ public class LearningRecord {
      * 创建时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
     public LearningRecord() {
-        this.createdTime = LocalDateTime.now();
         this.durationSeconds = 0;
         this.correctCount = 0;
         this.totalCount = 0;
@@ -88,6 +91,14 @@ public class LearningRecord {
 
     public void setWordId(Long wordId) {
         this.wordId = wordId;
+    }
+
+    public Long getTextId() {
+        return textId;
+    }
+
+    public void setTextId(Long textId) {
+        this.textId = textId;
     }
 
     public Long getAssignmentId() {

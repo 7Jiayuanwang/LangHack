@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Markdown 测试</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <h1>Markdown 渲染测试</h1>
+  <div id="content"></div>
+  
+  <script>
+    const markdown = `# 标题
+这是一段测试文本
+
+![图片](/api/media/7/download)
+
+## 二级标题
+- 列表项1
+- 列表项2`;
+
+    document.getElementById('content').innerHTML = marked.parse(markdown);
+    console.log('渲染结果:', marked.parse(markdown));
+  </script>
+</body>
+</html>

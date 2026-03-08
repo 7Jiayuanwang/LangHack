@@ -2,17 +2,19 @@ package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.*;
 import com.english.entity.Class;
 import com.english.mapper.*;
-import com.english.service.AssignmentService;
-import com.english.service.CourseService;
-import com.english.service.StudentClassService;
+import com.english.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -21,8 +23,13 @@ import java.util.stream.Collectors;
 @Service
 public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignment> implements AssignmentService {
 
+    private static final Logger logger = LoggerFactory.getLogger(AssignmentServiceImpl.class);
+
     @Autowired
     private AssignmentMapper assignmentMapper;
+
+    @Autowired
+    private TextExerciseMapper textExerciseMapper;
 
     @Autowired
     private UnitWordMapper unitWordMapper;
@@ -47,13 +54,40 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
     @Autowired
     private UnitMapper unitMapper;
+
     @Autowired
     private WordMapper wordMapper;
 
+    /**
+     * 获取未删除的任务（替代 getById 以确保软删除过滤）
+     */
+    private Assignment getActiveAssignment(Long id) {
+        if (id == null) return null;
+        QueryWrapper<Assignment> wrapper = new QueryWrapper<>();
+        wrapper.eq("id", id).eq("deleted", 0);
+        return getOne(wrapper);
+    }
+
+    @Autowired
+    private StudentClassesService studentClassesService;
+
+    @Autowired
+    private LearningRecordsService learningRecordsService;
+
+    @Autowired
+    private TextExerciseService textExerciseService;
+
+    @Autowired
+    private StudentExerciseAnswerMapper studentExerciseAnswerMapper;
+
+    // 在类定义的开头添加这些常量
+    private static final int MIN_TEXT_READ_TIME_SECONDS = 600; // 10分钟
+    private static final double COMPLETION_THRESHOLD = 80.0; // 完成阈值80%
+
     @Override
     public Map<String, Object> getAssignmentsByPage(Map<String, Object> params) {
-        int page = (int) params.get("page");
-        int size = (int) params.get("size");
+        int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
+        int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
         Long teacherId = params.get("teacherId") != null ? Long.valueOf(params.get("teacherId").toString()) : null;
         Long classId = params.get("classId") != null ? Long.valueOf(params.get("classId").toString()) : null;
         String status = (String) params.get("status");
@@ -83,7 +117,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     public void createAssignment(Assignment assignment) {
         // unit_id在数据库中是NOT NULL，确保有值
         if (assignment.getUnitId() == null) {
-            throw new RuntimeException("单元ID不能为空");
+            throw new BusinessException("单元ID不能为空");
         }
 
         save(assignment);
@@ -98,14 +132,18 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     @Override
     @Transactional
     public void deleteAssignment(Long id) {
-        // 物理删除
-        removeById(id);
+        // 软删除：设置 deleted=1（与 Course/Text/Media 保持一致）
+        update(null, new UpdateWrapper<Assignment>()
+                .eq("id", id)
+                .set("deleted", 1));
     }
 
-    
     @Override
     public Map<String, Object> getTeacherStats(Long teacherId) {
         Map<String, Object> stats = assignmentMapper.selectTeacherStats(teacherId);
+        if (stats == null) {
+            stats = new HashMap<>();
+        }
 
         // 确保返回的数值不为null
         stats.putIfAbsent("total_classes", 0);
@@ -122,7 +160,11 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
         // 为每个班级添加学生数量
         for (Map<String, Object> classMap : classes) {
-            Long classId = (Long) classMap.get("id");
+            Object idObj = classMap.get("id");
+            Long classId = null;
+            if (idObj != null) {
+                classId = idObj instanceof Long ? (Long) idObj : Long.valueOf(idObj.toString());
+            }
             if (classId != null) {
                 classMap.put("studentCount", getStudentCount(classId));
             } else {
@@ -137,11 +179,13 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
      * 获取班级学生数量
      */
     private Integer getStudentCount(Long classId) {
-        if (classId == null) return 0;
+        if (classId == null)
+            return 0;
         try {
             List<StudentClass> studentClasses = studentClassService.getStudentsByClassId(classId);
             return studentClasses.size();
         } catch (Exception e) {
+            logger.error("获取班级学生数量失败", e);
             return 0;
         }
     }
@@ -152,9 +196,42 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     }
 
     @Override
+    public List<Map<String, Object>> getRecentAssignmentsWithStats(Long teacherId, Integer limit) {
+        // 获取最近的任务列表
+        List<Assignment> assignments = assignmentMapper.selectRecentAssignments(teacherId, limit);
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Assignment assignment : assignments) {
+            Map<String, Object> assignmentMap = new HashMap<>();
+            assignmentMap.put("id", assignment.getId());
+            assignmentMap.put("title", assignment.getTitle());
+            assignmentMap.put("deadline", assignment.getDeadline());
+            assignmentMap.put("unitId", assignment.getUnitId());
+
+            // 获取班级信息
+            Long classId = assignment.getClassId();
+            Class classInfo = classMapper.selectById(classId);
+            String className = classInfo != null ? classInfo.getName() : "未知班级";
+            assignmentMap.put("className", className);
+
+            // 获取学生总数
+            Integer studentCount = getStudentCount(assignment.getClassId());
+            assignmentMap.put("studentCount", studentCount);
+
+            // 获取完成人数
+            Integer completedCount = getCompletedCount(assignment.getId());
+            assignmentMap.put("completedCount", completedCount);
+
+            result.add(assignmentMap);
+        }
+
+        return result;
+    }
+
+    @Override
     public boolean validateTeacherPermission(Long teacherId, Long assignmentId) {
-        Assignment assignment = getById(assignmentId);
-        return assignment != null && teacherId.equals(assignment.getCreatedBy());
+        Assignment assignment = getActiveAssignment(assignmentId);
+        return assignment != null && java.util.Objects.equals(teacherId, assignment.getCreatedBy());
     }
 
     // ========== 学生端方法实现 ==========
@@ -162,8 +239,23 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     @Override
     public Map<String, Object> getStudentAssignmentsWithStatus(List<Long> classIds, Long studentId, String status) {
         QueryWrapper<Assignment> wrapper = new QueryWrapper<>();
-        wrapper.in("class_id", classIds)
-              .orderByDesc("created_time");
+
+        // 防止空集合导致的SQL语法错误
+        if (classIds != null && !classIds.isEmpty()) {
+            wrapper.in("class_id", classIds);
+        } else {
+            // 如果没有班级ID，返回空结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("assignments", new ArrayList<>());
+            result.put("total", 0);
+            return result;
+        }
+
+        // 学生只能看到已发布的任务，过滤 DRAFT/CLOSED 和已删除的
+        wrapper.eq("status", "PUBLISHED");
+        wrapper.eq("deleted", 0);
+
+        wrapper.orderByDesc("created_time");
 
         List<Assignment> assignments = list(wrapper);
 
@@ -194,18 +286,23 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             assignmentMap.put("progress", Math.round(progress));
 
             // 计算任务状态
-            String assignmentStatus = calculateAssignmentStatus(progress, assignment.getDeadline());
+            String assignmentStatus = calculateAssignmentStatus(progress, assignment.getDeadline(),
+                    assignment, studentId);
             if (status != null && !status.isEmpty() && !status.equals(assignmentStatus)) {
                 continue; // 如果指定了状态筛选，跳过不匹配的任务
             }
             assignmentMap.put("status", assignmentStatus);
 
             // 统计信息
-            assignmentMap.put("totalWords", calculateTotalWordsInUnit(assignment.getUnitId()));
+            List<Word> assignmentWords = getAssignmentWords(assignment);
+            List<com.english.entity.Text> assignmentTexts = getAssignmentTexts(assignment);
+
+            assignmentMap.put("totalWords", assignmentWords.size());
             assignmentMap.put("learnedWords", calculateWordsLearnedInAssignment(assignment.getId(), studentId));
-            assignmentMap.put("totalTexts", calculateTotalTextsInUnit(assignment.getUnitId()));
+            assignmentMap.put("totalTexts", assignmentTexts.size());
             assignmentMap.put("readTexts", calculateTextsReadInAssignment(assignment.getId(), studentId));
             assignmentMap.put("studyTime", calculateStudyTimeInAssignment(assignment.getId(), studentId));
+            assignmentMap.put("assignmentType", getAssignmentType(assignment));
 
             enrichedAssignments.add(assignmentMap);
         }
@@ -219,7 +316,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
     @Override
     public Map<String, Object> getAssignmentDetailWithProgress(Long assignmentId, Long studentId) {
-        Assignment assignment = getById(assignmentId);
+        Assignment assignment = getActiveAssignment(assignmentId);
         if (assignment == null) {
             return Collections.emptyMap();
         }
@@ -235,15 +332,20 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         detail.put("createdBy", assignment.getCreatedBy());
 
         // 添加进度统计逻辑
-        detail.put("progress", calculateAssignmentProgress(assignmentId, studentId));
+        double progress = calculateAssignmentProgress(assignmentId, studentId);
+        detail.put("progress", progress);
         detail.put("completed", isAssignmentCompleted(assignmentId, studentId));
+
+        // 添加状态计算（与列表视图保持一致）
+        String status = calculateAssignmentStatus(progress, assignment.getDeadline(), assignment, studentId);
+        detail.put("status", status);
 
         return detail;
     }
 
     @Override
     public Map<String, Object> startAssignment(Long assignmentId, Long studentId) {
-        Assignment assignment = getById(assignmentId);
+        Assignment assignment = getActiveAssignment(assignmentId);
         if (assignment == null) {
             return Collections.emptyMap();
         }
@@ -265,18 +367,18 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
     @Override
     public Map<String, Object> getAssignmentContent(Long assignmentId, Long studentId) {
-        Assignment assignment = getById(assignmentId);
+        Assignment assignment = getActiveAssignment(assignmentId);
         if (assignment == null) {
             return Collections.emptyMap();
         }
 
         Map<String, Object> content = new HashMap<>();
         content.put("unitId", assignment.getUnitId());
+        content.put("assignmentType", getAssignmentType(assignment));
 
-        // 查询单元的课文列表
-        QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-        textWrapper.eq("unit_id", assignment.getUnitId());
-        List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
+        // 获取任务指定的课文和单词
+        List<com.english.entity.Text> texts = getAssignmentTexts(assignment);
+        List<Word> words = getAssignmentWords(assignment);
 
         // 获取课文信息并添加学生学习状态
         List<Map<String, Object>> textList = new ArrayList<>();
@@ -288,51 +390,81 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             textMap.put("difficulty", text.getDifficulty());
             textMap.put("audioUrl", text.getAudioUrl());
 
-            // 检查学生的学习状态
-            boolean isRead = checkTextReadStatus(studentId, assignmentId, text.getId());
-            int readTime = getTextReadTime(studentId, assignmentId, text.getId());
+            // 获取这篇课文的阅读时间（独立计算）
+            int readTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(), assignmentId);
+            boolean isRead = readTime > 0; // 有阅读时间就算读过
 
-            textMap.put("completed", isRead);
+            final int MIN_READ_TIME_SECONDS = 600; // 10分钟
+            boolean readingCompleted = readTime >= MIN_READ_TIME_SECONDS;
+            boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
+
+            boolean completed;
+            String assignmentType = getAssignmentType(assignment);
+
+            if ("TEXTS".equals(assignmentType) || "UNIT".equals(assignmentType)) {
+                // 课文任务和单元任务：都需要阅读时间达标且完成习题
+                completed = readingCompleted && exercisesCompleted;
+            } else {
+                // 其他任务（如单词任务）的课文完成判断：只需要有阅读记录
+                completed = isRead;
+            }
+
+            textMap.put("completed", completed);
+            textMap.put("viewed", isRead);
             textMap.put("studyTime", readTime);
+            textMap.put("readingCompleted", readingCompleted);
+            textMap.put("exercisesCompleted", exercisesCompleted);
 
             textList.add(textMap);
         }
         content.put("texts", textList);
 
-        // 查询单元的单词列表
-        QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
-        unitWordWrapper.eq("unit_id", assignment.getUnitId());
-        List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
-
         // 获取单词详细信息并添加学生学习状态
         List<Map<String, Object>> wordList = new ArrayList<>();
-        for (UnitWord unitWord : unitWords) {
-            Word word = wordMapper.selectById(unitWord.getWordId());
-            if (word != null) {
-                Map<String, Object> wordMap = new HashMap<>();
-                wordMap.put("id", word.getId());
-                wordMap.put("word", word.getWord());
-                wordMap.put("pronunciation", word.getPronunciation());
-                wordMap.put("definition", word.getDefinition());
-                wordMap.put("exampleSentence", word.getExampleSentence());
-                wordMap.put("audioUrl", word.getAudioUrl());
-                wordMap.put("partOfSpeech", word.getPartOfSpeech());
-                wordMap.put("difficulty", word.getDifficulty());
+        for (Word word : words) {
+            Map<String, Object> wordMap = new HashMap<>();
+            wordMap.put("id", word.getId());
+            wordMap.put("word", word.getWord());
+            wordMap.put("pronunciation", word.getPronunciation());
+            wordMap.put("definition", word.getDefinition());
+            wordMap.put("exampleSentence", word.getExampleSentence());
+            wordMap.put("audioUrl", word.getAudioUrl());
+            wordMap.put("partOfSpeech", word.getPartOfSpeech());
+            wordMap.put("difficulty", word.getDifficulty());
 
-                // 检查学生的生词本状态
-                QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
-                vocabWrapper.eq("student_id", studentId).eq("word_id", word.getId());
-                VocabularyBook vocabBook = vocabularyBookMapper.selectOne(vocabWrapper);
+            // 检查学习记录中的单词学习状态（包括浏览和完成）
+            QueryWrapper<LearningRecord> recordWrapper = new QueryWrapper<>();
+            recordWrapper.eq("student_id", studentId)
+                    .eq("assignment_id", assignmentId)
+                    .and(wrapper -> wrapper.eq("record_type", "WORD_COMPLETE").or().eq("record_type", "VIEW"))
+                    .eq("word_id", word.getId()).isNull("text_id");
 
-                boolean completed = vocabBook != null && !"NEW".equals(vocabBook.getMasteryLevel());
-                int reviewCount = vocabBook != null ? vocabBook.getReviewCount() : 0;
+            boolean learnedByTask = learningRecordMapper.selectCount(recordWrapper) > 0;
 
-                wordMap.put("completed", completed);
-                wordMap.put("reviewCount", reviewCount);
-                wordMap.put("masteryLevel", vocabBook != null ? vocabBook.getMasteryLevel() : "NEW");
+            // 检查是否完成了单词学习（通过WORD_COMPLETE记录）
+            QueryWrapper<LearningRecord> completeWrapper = new QueryWrapper<>();
+            completeWrapper.eq("student_id", studentId)
+                    .eq("assignment_id", assignmentId)
+                    .eq("record_type", "WORD_COMPLETE")
+                    .eq("word_id", word.getId()).isNull("text_id");
 
-                wordList.add(wordMap);
-            }
+            boolean completedByTask = learningRecordMapper.selectCount(completeWrapper) > 0;
+
+            // 检查学生的生词本状态（作为备选）
+            QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
+            vocabWrapper.eq("student_id", studentId).eq("word_id", word.getId());
+            VocabularyBook vocabBook = vocabularyBookMapper.selectOne(vocabWrapper);
+
+            boolean completed = completedByTask || (vocabBook != null && !"NEW".equals(vocabBook.getMasteryLevel()));
+            int reviewCount = vocabBook != null ? vocabBook.getReviewCount() : 0;
+
+            wordMap.put("completed", completed);
+            wordMap.put("reviewCount", reviewCount);
+            wordMap.put("masteryLevel", vocabBook != null ? vocabBook.getMasteryLevel() : "NEW");
+            wordMap.put("learnedByTask", learnedByTask); // 标记是否通过任务学习过
+            wordMap.put("completedByTask", completedByTask); // 标记是否通过任务完成
+
+            wordList.add(wordMap);
         }
         content.put("words", wordList);
 
@@ -340,19 +472,22 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     }
 
     @Override
+    @Transactional
     public void completeAssignment(Long assignmentId, Long studentId, Map<String, Object> completionData) {
         // 记录任务完成的学习记录
         LearningRecord record = new LearningRecord();
         record.setStudentId(studentId);
         record.setAssignmentId(assignmentId);
-        record.setWordId(0L); // 任务完成记录，不关联具体单词
+        record.setWordId(null); // 任务完成记录，不关联具体单词
         record.setRecordType("COMPLETE");
-        record.setDurationSeconds(completionData.get("studyTime") != null ?
-            ((Number) completionData.get("studyTime")).intValue() * 60 : 0); // 分钟转秒
-        record.setCorrectCount(completionData.get("completedItems") != null ?
-            ((Number) completionData.get("completedItems")).intValue() : 0);
-        record.setTotalCount(completionData.get("totalItems") != null ?
-            ((Number) completionData.get("totalItems")).intValue() : 1);
+        record.setDurationSeconds(
+                completionData.get("studyTime") != null ? ((Number) completionData.get("studyTime")).intValue() * 60
+                        : 0); // 分钟转秒
+        record.setCorrectCount(completionData.get("completedItems") != null
+                ? ((Number) completionData.get("completedItems")).intValue()
+                : 0);
+        record.setTotalCount(
+                completionData.get("totalItems") != null ? ((Number) completionData.get("totalItems")).intValue() : 1);
         record.setCreatedTime(LocalDateTime.now());
 
         learningRecordMapper.insert(record);
@@ -375,7 +510,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
     @Override
     public boolean isAssignmentInClasses(Long assignmentId, List<Long> classIds) {
-        Assignment assignment = getById(assignmentId);
+        Assignment assignment = getActiveAssignment(assignmentId);
         return assignment != null && classIds.contains(assignment.getClassId());
     }
 
@@ -383,46 +518,234 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
      * 计算任务进度
      */
     private double calculateAssignmentProgress(Long assignmentId, Long studentId) {
-        Assignment assignment = getById(assignmentId);
+        Assignment assignment = getActiveAssignment(assignmentId);
         if (assignment == null) {
             return 0.0;
         }
 
-        // 获取任务关联单元的单词
-        QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
-        unitWordWrapper.eq("unit_id", assignment.getUnitId());
-        List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
+        // 根据任务类型获取要学习的内容
+        List<Word> words = getAssignmentWords(assignment);
+        List<com.english.entity.Text> texts = getAssignmentTexts(assignment);
 
-        if (unitWords.isEmpty()) {
-            return 0.0;
+        if (words == null) words = new ArrayList<>();
+        if (texts == null) texts = new ArrayList<>();
+
+        int totalWords = words.size();
+        int totalTexts = texts.size();
+
+        // 计算单词学习进度
+        double wordProgress = 0.0;
+        if (totalWords > 0) {
+            List<Long> wordIds = words.stream().map(Word::getId).collect(Collectors.toList());
+
+            // 通过学习记录或生词本计算学习进度
+            int learnedWords = calculateWordsLearnedInAssignment(assignmentId, studentId);
+            wordProgress = (double) learnedWords / totalWords * 100;
         }
 
-        List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).collect(Collectors.toList());
+        // 根据任务类型计算进度
+        String assignmentType = getAssignmentType(assignment);
 
-        // 查询学生已学习的单词
-        QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
-        vocabWrapper.eq("student_id", studentId)
-                   .in("word_id", wordIds)
-                   .ne("mastery_level", "NEW");
+        // 计算课文学习进度
+        double textProgress = 0.0;
+        if (totalTexts > 0) {
+            if ("TEXTS".equals(assignmentType)) {
 
-        int learnedWords = Math.toIntExact(vocabularyBookMapper.selectCount(vocabWrapper));
-        int totalWords = wordIds.size();
+                int completedTexts = 0;
 
-        return totalWords > 0 ? (double) learnedWords / totalWords * 100 : 0.0;
+                for (com.english.entity.Text text : texts) {
+                    // 获取这篇课文的阅读时间
+                    int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
+                            assignmentId);
+                    boolean readingCompleted = textReadTime >= MIN_TEXT_READ_TIME_SECONDS;
+
+                    // 检查这篇课文的习题完成情况
+                    boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
+
+                    // 必须同时满足阅读时间和习题完成
+                    if (readingCompleted && exercisesCompleted) {
+                        completedTexts++;
+                    }
+                }
+                textProgress = (double) completedTexts / totalTexts * 100;
+
+            } else {
+                // 单元任务：基于阅读时间和习题完成情况计算进度（与课文任务相同）
+                final int MIN_READ_TIME_SECONDS = 600; // 10分钟
+                int completedTexts = 0;
+
+                for (com.english.entity.Text text : texts) {
+                    // 检查阅读时间
+                    int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
+                            assignmentId);
+                    boolean readingCompleted = textReadTime >= MIN_READ_TIME_SECONDS;
+
+                    // 检查习题完成情况
+                    boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
+
+                    // 必须同时满足阅读时间和习题完成
+                    if (readingCompleted && exercisesCompleted) {
+                        completedTexts++;
+                    }
+                }
+                textProgress = (double) completedTexts / totalTexts * 100;
+            }
+        }
+
+        // 根据任务类型计算总体进度
+        double overallProgress;
+
+        switch (assignmentType) {
+            case "TEXTS":
+                // 课文任务：只看课文进度
+                overallProgress = textProgress;
+                break;
+
+            case "WORDS":
+                // 单词任务：只看单词进度
+                overallProgress = wordProgress;
+                break;
+
+            case "UNIT":
+            default:
+                // 单元任务：如果有两者都有则加权平均，否则使用现有的逻辑
+                if (totalWords > 0 && totalTexts > 0) {
+                    // 两者都有，加权平均
+                    overallProgress = (wordProgress + textProgress) / 2;
+                } else if (totalWords > 0) {
+                    // 只有单词
+                    overallProgress = wordProgress;
+                } else if (totalTexts > 0) {
+                    // 只有课文
+                    overallProgress = textProgress;
+                } else {
+                    // 都没有，返回0
+                    overallProgress = 0.0;
+                }
+                break;
+        }
+
+        logger.debug("任务进度计算 - 任务类型: {}, 单词进度: {}%, 课文进度: {}%, 综合进度: {}%",
+                getAssignmentType(assignment), wordProgress, textProgress, overallProgress);
+
+        return overallProgress;
     }
 
     /**
      * 检查任务是否完成
      */
+    /**
+     * 检查任务是否完成
+     */
     private boolean isAssignmentCompleted(Long assignmentId, Long studentId) {
-        return calculateAssignmentProgress(assignmentId, studentId) >= 80.0; // 80%以上算完成
+        Assignment assignment = getActiveAssignment(assignmentId);
+        if (assignment == null) {
+            return false;
+        }
+
+        String assignmentType = getAssignmentType(assignment);
+        List<Word> words = getAssignmentWords(assignment);
+        List<com.english.entity.Text> texts = getAssignmentTexts(assignment);
+
+        switch (assignmentType) {
+            case "TEXTS":
+                // 课文任务：需要每篇课文都达到足够的阅读时间并且完成习题
+                if (texts.isEmpty()) {
+                    return true; // 没有课文的任务算完成
+                }
+
+                // 检查每篇指定课文的阅读时间是否达到要求且完成习题
+                int completedTexts = 0;
+                for (com.english.entity.Text text : texts) {
+                    int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
+                            assignmentId);
+                    boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
+
+                    // 必须同时满足阅读时间和习题完成
+                    if (textReadTime >= MIN_TEXT_READ_TIME_SECONDS && exercisesCompleted) {
+                        completedTexts++;
+                    }
+                }
+
+                return completedTexts >= texts.size();
+
+            case "WORDS":
+                // 单词任务：需要掌握所有单词
+                if (words.isEmpty())
+                    return true;
+
+                int masteredWords = 0;
+                for (Word word : words) {
+                    boolean wordMastered = isWordMastered(studentId, word.getId(), assignmentId);
+                    if (wordMastered) {
+                        masteredWords++;
+                    }
+                }
+                return masteredWords >= words.size();
+
+            case "UNIT":
+            default:
+                // 单元任务：需要所有课文和单词都完成
+                // 检查课文
+                boolean textsCompleted = true;
+                if (!texts.isEmpty()) {
+                    for (com.english.entity.Text text : texts) {
+                        int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId,
+                                text.getId(), assignmentId);
+                        boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
+
+                        if (!(textReadTime >= MIN_TEXT_READ_TIME_SECONDS && exercisesCompleted)) {
+                            textsCompleted = false;
+                            break;
+                        }
+                    }
+                }
+
+                // 检查单词
+                boolean wordsCompleted = true;
+                if (!words.isEmpty()) {
+                    for (Word word : words) {
+                        if (!isWordMastered(studentId, word.getId(), assignmentId)) {
+                            wordsCompleted = false;
+                            break;
+                        }
+                    }
+                }
+
+                return textsCompleted && wordsCompleted;
+        }
+    }
+
+    /**
+     * 检查单词是否真正掌握
+     */
+    private boolean isWordMastered(Long studentId, Long wordId, Long assignmentId) {
+        // 1. 检查是否有任务完成记录
+        QueryWrapper<LearningRecord> completeWrapper = new QueryWrapper<>();
+        completeWrapper.eq("student_id", studentId)
+                .eq("assignment_id", assignmentId)
+                .eq("record_type", "WORD_COMPLETE")
+                .eq("word_id", wordId)
+                .isNull("text_id");
+
+        if (learningRecordMapper.selectCount(completeWrapper) > 0) {
+            return true;
+        }
+
+        // 2. 检查生词本掌握程度（不是NEW）
+        QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
+        vocabWrapper.eq("student_id", studentId)
+                .eq("word_id", wordId)
+                .ne("mastery_level", "NEW");
+
+        return vocabularyBookMapper.selectCount(vocabWrapper) > 0;
     }
 
     /**
      * 计算在任务中学习的单词数量
      */
     private int calculateWordsLearnedInAssignment(Long assignmentId, Long studentId) {
-        Assignment assignment = getById(assignmentId);
+        Assignment assignment = getActiveAssignment(assignmentId);
         if (assignment == null) {
             return 0;
         }
@@ -432,101 +755,146 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         unitWordWrapper.eq("unit_id", assignment.getUnitId());
         List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
 
-        if (unitWords.isEmpty()) {
+        if (unitWords == null || unitWords.isEmpty()) {
             return 0;
         }
 
         List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).collect(Collectors.toList());
 
-        // 查询学生已学习的单词
-        QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
-        vocabWrapper.eq("student_id", studentId)
-                   .in("word_id", wordIds)
-                   .ne("mastery_level", "NEW");
+        // 通过学习记录查询学生已学习的单词
+        // 查询该任务中的所有单词学习记录（包括浏览和完成）
+        QueryWrapper<LearningRecord> recordWrapper = new QueryWrapper<>();
+        recordWrapper.eq("student_id", studentId)
+                .eq("assignment_id", assignmentId)
+                .and(wrapper -> wrapper.eq("record_type", "WORD_COMPLETE").or().eq("record_type", "VIEW"))
+                .in("word_id", wordIds)
+                .isNull("text_id");
 
-        return Math.toIntExact(vocabularyBookMapper.selectCount(vocabWrapper));
+        List<LearningRecord> learningRecords = learningRecordMapper.selectList(recordWrapper);
+
+        // 获取有学习记录的单词ID集合
+        Set<Long> learnedWordIds = (learningRecords != null ? learningRecords : Collections.<LearningRecord>emptyList()).stream()
+                .map(LearningRecord::getWordId)
+                .collect(Collectors.toSet());
+
+        logger.debug("任务单词学习统计 - 学生={}, 任务={}, 总单词={}, 学习记录数={}, 已学习单词={}",
+                studentId, assignmentId, wordIds.size(), learningRecords != null ? learningRecords.size() : 0, learnedWordIds.size());
+
+        // 如果没有通过学习记录找到学习的单词，回退到生词本查询
+        if (learnedWordIds.isEmpty()) {
+            QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
+            vocabWrapper.eq("student_id", studentId)
+                    .in("word_id", wordIds)
+                    .ne("mastery_level", "NEW");
+
+            return Math.toIntExact(vocabularyBookMapper.selectCount(vocabWrapper));
+        }
+
+        return learnedWordIds.size();
     }
 
     /**
-     * 计算在任务中阅读的课文数量
+     * 计算在任务中阅读的课文数量（针对整个单元）
      */
     private int calculateTextsReadInAssignment(Long assignmentId, Long studentId) {
-        Assignment assignment = getById(assignmentId);
+        Assignment assignment = getActiveAssignment(assignmentId);
         if (assignment == null) {
             return 0;
         }
 
-        // 获取任务关联单元的课文
-        QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-        textWrapper.eq("unit_id", assignment.getUnitId());
-        List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
+        // 获取任务关联的课文
+        List<com.english.entity.Text> texts = getAssignmentTexts(assignment);
+        int readCount = 0;
 
+        for (com.english.entity.Text text : texts) {
+            // 检查这篇课文是否有阅读记录
+            QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
+            wrapper.eq("student_id", studentId)
+                    .eq("assignment_id", assignmentId)
+                    .eq("record_type", "TEXT_VIEW")
+                    .eq("text_id", text.getId()); // 关键：按课文ID过滤
+
+            if (learningRecordMapper.selectCount(wrapper) > 0) {
+                readCount++;
+            }
+        }
+
+        return readCount;
+    }
+
+    /**
+     * 计算在任务中阅读指定课文的数量
+     */
+    private int calculateTextsReadInAssignmentForSpecificTexts(Long assignmentId, Long studentId,
+            List<com.english.entity.Text> texts) {
         if (texts.isEmpty()) {
             return 0;
         }
 
-        List<Long> textIds = texts.stream().map(com.english.entity.Text::getId).collect(Collectors.toList());
+        // 检查每个课文的学习状态
+        int readCount = 0;
+        for (com.english.entity.Text text : texts) {
+            boolean isRead = checkTextReadStatus(studentId, assignmentId, text.getId());
+            if (isRead) {
+                readCount++;
+            }
+        }
 
-        // 查询学生的课文学习记录
-        QueryWrapper<LearningRecord> recordWrapper = new QueryWrapper<>();
-        recordWrapper.eq("student_id", studentId)
-                   .in("assignment_id", assignmentId)
-                   .eq("record_type", "VIEW");
-
-        return Math.toIntExact(learningRecordMapper.selectCount(recordWrapper));
+        return readCount;
     }
 
     /**
      * 计算在任务中的学习时间（分钟）
      */
     private int calculateStudyTimeInAssignment(Long assignmentId, Long studentId) {
-        // 获取任务关联单元的单词
-        Assignment assignment = getById(assignmentId);
-        if (assignment == null) {
-            return 0;
-        }
-
-        QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
-        unitWordWrapper.eq("unit_id", assignment.getUnitId());
-        List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
-
-        if (unitWords.isEmpty()) {
-            return 0;
-        }
-
-        List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).collect(Collectors.toList());
-
-        // 查询学习记录
+        // 查询该任务的所有学习记录
         QueryWrapper<LearningRecord> recordWrapper = new QueryWrapper<>();
         recordWrapper.eq("student_id", studentId)
-                   .in("word_id", wordIds)
-                   .or()
-                   .eq("assignment_id", assignmentId);
+                .eq("assignment_id", assignmentId);
+
         List<LearningRecord> records = learningRecordMapper.selectList(recordWrapper);
 
-        // 计算总学习时间（转换为分钟）
-        return records.stream().mapToInt(record ->
-            record.getDurationSeconds() != null ? record.getDurationSeconds() / 60 : 0
-        ).sum();
+        // 先求和所有秒数，再除以60转换为分钟（避免逐条除60导致小值截断为0）
+        long totalSeconds = records.stream()
+                .mapToLong(record -> record.getDurationSeconds() != null ? record.getDurationSeconds() : 0).sum();
+        return (int) Math.min(totalSeconds / 60, Integer.MAX_VALUE);
     }
 
     /**
-     * 计算任务状态
+     * 计算任务状态（推荐版本）
      */
-    private String calculateAssignmentStatus(double progress, LocalDateTime deadline) {
+    private String calculateAssignmentStatus(double progress, LocalDateTime deadline,
+            Assignment assignment, Long studentId) {
         LocalDateTime now = LocalDateTime.now();
 
         if (deadline != null && now.isAfter(deadline)) {
             return "expired";
         }
 
-        if (progress >= 100.0) {
+        // 检查任务是否已完成（使用统一的标准）
+        boolean isCompleted = isAssignmentCompleted(assignment.getId(), studentId);
+        if (isCompleted) {
             return "completed";
-        } else if (progress > 0.0) {
-            return "in-progress";
-        } else {
-            return "not-started";
         }
+
+        // 检查是否有任何学习活动（不仅仅是进度）
+        // 进度可能为0，但学生可能已经开始学习（例如学习了10秒，但需要600秒才算完成）
+        if (progress > 0.0) {
+            return "in-progress";
+        }
+
+        // 即使进度为0，也检查是否有学习记录
+        // 这样可以正确反映学生已经开始学习但还未达到完成标准的情况
+        QueryWrapper<LearningRecord> recordWrapper = new QueryWrapper<>();
+        recordWrapper.eq("student_id", studentId)
+                .eq("assignment_id", assignment.getId());
+
+        long recordCount = learningRecordMapper.selectCount(recordWrapper);
+        if (recordCount > 0) {
+            return "in-progress";
+        }
+
+        return "not-started";
     }
 
     /**
@@ -553,11 +921,23 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     private boolean checkTextReadStatus(Long studentId, Long assignmentId, Long textId) {
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId)
-              .eq("assignment_id", assignmentId)
-              .eq("record_type", "VIEW")
-              .isNotNull("word_id"); // 表示这是一个课文学习记录
+                .eq("assignment_id", assignmentId)
+                .eq("record_type", "TEXT_VIEW")
+                .eq("text_id", textId); // 现在可以正确使用 text_id 字段
 
         return learningRecordMapper.selectCount(wrapper) > 0;
+    }
+
+    /**
+     * 记录课文学习时间（统一的记录方法）
+     */
+    public void recordTextLearningTime(Long studentId, Long assignmentId, Long textId, Integer durationSeconds) {
+        if (studentId == null || textId == null || durationSeconds == null || durationSeconds <= 0) {
+            return;
+        }
+
+        // 使用 LearningRecordsService 来记录课文学习
+        learningRecordsService.recordTextView(studentId, textId, assignmentId, durationSeconds);
     }
 
     /**
@@ -566,13 +946,317 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     private int getTextReadTime(Long studentId, Long assignmentId, Long textId) {
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId)
-              .eq("assignment_id", assignmentId)
-              .eq("record_type", "VIEW")
-              .isNotNull("word_id");
+                .eq("assignment_id", assignmentId)
+                .eq("record_type", "TEXT_VIEW") // 课文学习记录类型
+                .eq("text_id", textId);
 
         List<LearningRecord> records = learningRecordMapper.selectList(wrapper);
-        return records.stream()
-                .mapToInt(record -> record.getDurationSeconds() != null ? record.getDurationSeconds() / 60 : 0)
+        // 先求和所有秒数，再除以60转换为分钟（避免逐条除60导致小值截断为0）
+        long totalSeconds = records.stream()
+                .mapToLong(record -> record.getDurationSeconds() != null ? record.getDurationSeconds() : 0)
                 .sum();
+        return (int) (totalSeconds / 60);
+    }
+
+    @Override
+    public List<Map<String, Object>> getAssignmentProgress(Long assignmentId) {
+        Assignment assignment = getActiveAssignment(assignmentId);
+        if (assignment == null) {
+            return new ArrayList<>();
+        }
+
+        // 获取班级中的所有学生
+        List<StudentClass> studentClasses = studentClassService.getStudentsByClassId(assignment.getClassId());
+        List<Map<String, Object>> progressList = new ArrayList<>();
+
+        for (StudentClass studentClass : studentClasses) {
+            Long studentId = studentClass.getStudentId();
+            Map<String, Object> studentProgress = new HashMap<>();
+
+            // 基本信息
+            studentProgress.put("studentId", studentId);
+            studentProgress.put("username",
+                    studentClass.getStudent() != null ? studentClass.getStudent().getUsername() : "未知");
+            studentProgress.put("realName", studentClass.getStudent() != null
+                    ? (studentClass.getStudent().getRealName() != null
+                        ? studentClass.getStudent().getRealName()
+                        : studentClass.getStudent().getNickname())
+                    : "未知");
+
+            // 计算学习进度
+            double progress = calculateAssignmentProgress(assignmentId, studentId);
+            studentProgress.put("progress", Math.round(progress));
+
+            // 统计信息
+            studentProgress.put("wordsLearned", calculateWordsLearnedInAssignment(assignmentId, studentId));
+            studentProgress.put("textsRead", calculateTextsReadInAssignment(assignmentId, studentId));
+            studentProgress.put("studyTime", calculateStudyTimeInAssignment(assignmentId, studentId));
+
+            // 检查是否完成（基于80%进度标准）
+            boolean isCompleted = progress >= 80.0;
+            studentProgress.put("completed", isCompleted);
+
+            // 完成时间
+            if (isCompleted) {
+                // 查询最后一条学习记录作为完成时间
+                QueryWrapper<LearningRecord> recordWrapper = new QueryWrapper<>();
+                recordWrapper.eq("student_id", studentId)
+                        .eq("assignment_id", assignmentId)
+                        .orderByDesc("created_time")
+                        .last("LIMIT 1");
+
+                LearningRecord lastRecord = learningRecordMapper.selectOne(recordWrapper);
+                if (lastRecord != null) {
+                    studentProgress.put("completedAt", lastRecord.getCreatedTime());
+                }
+            }
+
+            // 计算得分（基于进度）
+            int score = isCompleted ? (int) Math.round(progress) : 0;
+            studentProgress.put("score", score);
+
+            progressList.add(studentProgress);
+        }
+
+        return progressList;
+    }
+
+    /**
+     * 获取任务的完成人数
+     */
+    private Integer getCompletedCount(Long assignmentId) {
+        try {
+            List<Map<String, Object>> progressData = getAssignmentProgress(assignmentId);
+            return (int) progressData.stream().filter(student -> Boolean.TRUE.equals(student.get("completed"))).count();
+        } catch (Exception e) {
+            logger.error("获取任务完成人数失败", e);
+            return 0;
+        }
+    }
+
+    /**
+     * 获取任务类型
+     */
+    private String getAssignmentType(Assignment assignment) {
+        if (assignment.isTextsTask()) {
+            return "TEXTS";
+        } else if (assignment.isWordsTask()) {
+            return "WORDS";
+        } else {
+            return "UNIT"; // 默认为单元任务
+        }
+    }
+
+    /**
+     * 获取任务指定的课文列表
+     */
+    private List<com.english.entity.Text> getAssignmentTexts(Assignment assignment) {
+        List<Long> textIds = assignment.getTextIds();
+
+        if (textIds != null && !textIds.isEmpty()) {
+            // 课文任务：返回指定的课文
+            QueryWrapper<com.english.entity.Text> wrapper = new QueryWrapper<>();
+            wrapper.in("id", textIds);
+            wrapper.eq("deleted", 0);
+            return textMapper.selectList(wrapper);
+        } else if (assignment.isUnitTask() || !assignment.isTextsTask()) {
+            // 单元任务或其他任务：返回整个单元的课文
+            QueryWrapper<com.english.entity.Text> wrapper = new QueryWrapper<>();
+            wrapper.eq("unit_id", assignment.getUnitId());
+            wrapper.eq("deleted", 0);
+            return textMapper.selectList(wrapper);
+        }
+
+        return new ArrayList<>();
+    }
+
+    /**
+     * 获取任务指定的单词列表
+     */
+    private List<Word> getAssignmentWords(Assignment assignment) {
+        List<Long> wordIds = assignment.getWordIds();
+
+        if (wordIds != null && !wordIds.isEmpty()) {
+            // 单词任务：返回指定的单词
+            QueryWrapper<Word> wrapper = new QueryWrapper<>();
+            wrapper.in("id", wordIds);
+            wrapper.eq("deleted", 0);
+            return wordMapper.selectList(wrapper);
+        } else if (assignment.isUnitTask() || !assignment.isWordsTask()) {
+            // 单元任务或其他任务：返回整个单元的单词
+            QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
+            unitWordWrapper.eq("unit_id", assignment.getUnitId());
+            List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
+
+            if (unitWords == null || unitWords.isEmpty()) {
+                return new ArrayList<>();
+            }
+
+            List<Long> allWordIds = unitWords.stream()
+                    .map(UnitWord::getWordId)
+                    .collect(Collectors.toList());
+
+            if (!allWordIds.isEmpty()) {
+                QueryWrapper<Word> wrapper = new QueryWrapper<>();
+                wrapper.in("id", allWordIds);
+                wrapper.eq("deleted", 0);
+                return wordMapper.selectList(wrapper);
+            }
+        }
+
+        return new ArrayList<>();
+    }
+
+    /**
+     * 检查学生是否完成了指定课文的所有习题
+     */
+    private boolean checkTextExercisesCompleted(Long studentId, Long textId, Long assignmentId) {
+        try {
+            // 1. 获取这篇课文的所有习题ID
+            QueryWrapper<TextExercise> wrapper = new QueryWrapper<>();
+            wrapper.eq("text_id", textId);
+            List<TextExercise> textExercises = textExerciseMapper.selectList(wrapper);
+
+            if (textExercises == null || textExercises.isEmpty()) {
+                return true; // 没有习题，认为已完成
+            }
+
+            List<Long> exerciseIds = textExercises.stream()
+                    .map(TextExercise::getId)
+                    .collect(Collectors.toList());
+
+            // 2. 查询学生对这些习题的答题记录
+            QueryWrapper<StudentExerciseAnswer> answerWrapper = new QueryWrapper<>();
+            answerWrapper.eq("student_id", studentId)
+                    .eq("assignment_id", assignmentId)
+                    .in("exercise_id", exerciseIds)
+                    .isNotNull("answer_content")
+                    .ne("answer_content", "");
+
+            List<StudentExerciseAnswer> validAnswers = studentExerciseAnswerMapper.selectList(answerWrapper);
+
+            // 3. 提取已答题的习题ID
+            Set<Long> answeredExerciseIds = (validAnswers != null ? validAnswers : Collections.<StudentExerciseAnswer>emptyList()).stream()
+                    .map(StudentExerciseAnswer::getExerciseId)
+                    .collect(Collectors.toSet());
+
+            // 4. 检查是否所有习题都有有效答案
+            return exerciseIds.stream().allMatch(answeredExerciseIds::contains);
+
+        } catch (Exception e) {
+            logger.error("检查课文习题完成情况失败", e);
+            return false;
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> getAssignmentsByCourseId(Long courseId, Long studentId) {
+        // 查询课程下的所有单元
+        QueryWrapper<Unit> unitWrapper = new QueryWrapper<>();
+        unitWrapper.eq("course_id", courseId);
+        List<Unit> units = unitMapper.selectList(unitWrapper);
+
+        if (units == null || units.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Long> unitIds = units.stream().map(Unit::getId).collect(Collectors.toList());
+
+        // 查询这些单元的任务（学生只能看到已发布且未删除的任务）
+        QueryWrapper<Assignment> assignmentWrapper = new QueryWrapper<>();
+        assignmentWrapper.in("unit_id", unitIds);
+        assignmentWrapper.eq("status", "PUBLISHED");
+        assignmentWrapper.eq("deleted", 0);
+        assignmentWrapper.orderByDesc("created_time");
+        List<Assignment> assignments = list(assignmentWrapper);
+
+        if (assignments == null) {
+            return new ArrayList<>();
+        }
+
+        // 获取学生加入的班级ID列表
+        List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+
+        // 过滤出学生所在班级的任务，并添加详细信息
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Assignment assignment : assignments) {
+            if (classIds != null && classIds.contains(assignment.getClassId())) {
+                Map<String, Object> assignmentMap = new HashMap<>();
+                assignmentMap.put("id", assignment.getId());
+                assignmentMap.put("title", assignment.getTitle());
+                assignmentMap.put("description", assignment.getDescription());
+                assignmentMap.put("deadline", assignment.getDeadline());
+                assignmentMap.put("createdTime", assignment.getCreatedTime());
+                assignmentMap.put("classId", assignment.getClassId());
+                assignmentMap.put("unitId", assignment.getUnitId());
+
+                // 获取班级和单元名称
+                Class clazz = classMapper.selectById(assignment.getClassId());
+                assignmentMap.put("className", clazz != null ? clazz.getName() : "未知班级");
+
+                Unit unit = unitMapper.selectById(assignment.getUnitId());
+                assignmentMap.put("unitName", unit != null ? unit.getName() : "未知单元");
+
+                // 计算进度
+                double progress = calculateAssignmentProgress(assignment.getId(), studentId);
+                assignmentMap.put("progress", Math.round(progress));
+                assignmentMap.put("status", calculateAssignmentStatus(progress, assignment.getDeadline(),
+                        assignment, studentId));
+
+                result.add(assignmentMap);
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    public List<Map<String, Object>> getAssignmentsByUnitId(Long unitId, Long studentId) {
+        // 查询该单元的任务（学生只能看到已发布且未删除的任务）
+        QueryWrapper<Assignment> assignmentWrapper = new QueryWrapper<>();
+        assignmentWrapper.eq("unit_id", unitId);
+        assignmentWrapper.eq("status", "PUBLISHED");
+        assignmentWrapper.eq("deleted", 0);
+        assignmentWrapper.orderByDesc("created_time");
+        List<Assignment> assignments = list(assignmentWrapper);
+
+        if (assignments == null) {
+            return new ArrayList<>();
+        }
+
+        // 获取学生加入的班级ID列表
+        List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+
+        // 过滤出学生所在班级的任务，并添加详细信息
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Assignment assignment : assignments) {
+            if (classIds != null && classIds.contains(assignment.getClassId())) {
+                Map<String, Object> assignmentMap = new HashMap<>();
+                assignmentMap.put("id", assignment.getId());
+                assignmentMap.put("title", assignment.getTitle());
+                assignmentMap.put("description", assignment.getDescription());
+                assignmentMap.put("deadline", assignment.getDeadline());
+                assignmentMap.put("createdTime", assignment.getCreatedTime());
+                assignmentMap.put("classId", assignment.getClassId());
+                assignmentMap.put("unitId", assignment.getUnitId());
+
+                // 获取班级和单元名称
+                Class clazz = classMapper.selectById(assignment.getClassId());
+                assignmentMap.put("className", clazz != null ? clazz.getName() : "未知班级");
+
+                Unit unit = unitMapper.selectById(assignment.getUnitId());
+                assignmentMap.put("unitName", unit != null ? unit.getName() : "未知单元");
+
+                // 计算进度
+                double progress = calculateAssignmentProgress(assignment.getId(), studentId);
+                assignmentMap.put("progress", Math.round(progress));
+                assignmentMap.put("status", calculateAssignmentStatus(progress, assignment.getDeadline(),
+                        assignment, studentId));
+
+                result.add(assignmentMap);
+            }
+        }
+
+        return result;
     }
 }

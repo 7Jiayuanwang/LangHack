@@ -1,0 +1,256 @@
+{
+    "unit": "6-2 iExplore 1: Reading",
+    "count": 45,
+    "words": [
+        {
+            "word": "disappointment",
+            "explanation": "n. [U] a feeling of sadness because sth. is not as good as you expected or has not happened in the way you hoped 失望；沮丧",
+            "example": "We could see the disappointment in her eyes.",
+            "phonetic": "disappointment.mp3"
+        },
+        {
+            "word": "correspondent",
+            "explanation": "n. [C] a person who reports news from a particular country or on a particular subject for a newspaper or a television or radio station 记者；通讯员",
+            "example": "I was a correspondent for The New York Times before I came to China.",
+            "phonetic": "correspondent.mp3"
+        },
+        {
+            "word": "setback",
+            "explanation": "n. [C] sth. that delays or prevents progress, or makes things worse than they were 阻碍前进的事物；挫折",
+            "example": "She has suﬀered a serious setback in her political career.",
+            "phonetic": "setback.mp3"
+        },
+        {
+            "word": "comeback",
+            "explanation": "n. [C, usu. sing.] a return to being powerful, popular, or famous again after being unpopular or unknown for a long time 东山再起；再度流行",
+            "example": "The miniskirt made a comeback in the late 1980s.",
+            "phonetic": "comeback.mp3"
+        },
+        {
+            "word": "pivot",
+            "explanation": "vi. to turn quickly on your feet so that you face in the opposite direction（以脚为支点）转身",
+            "example": "She pivots gracefully on the stage.",
+            "phonetic": "pivot.mp3"
+        },
+        {
+            "word": "scholar",
+            "explanation": "n. [C] sb. who knows a lot about a particular subject, esp. one that is not a science subject 学者（尤指精通某一门文科学问的人）",
+            "phonetic": "scholar.mp3"
+        },
+        {
+            "word": "misfortune",
+            "explanation": "n. [C, U] very bad luck, or sth. that happens to you as a result of bad luck 不幸；厄运；不幸事故；灾难",
+            "example": "I had the misfortune to share a room with someone who snored loudly.",
+            "phonetic": "misfortune.mp3"
+        },
+        {
+            "word": "forever",
+            "explanation": "ad. for all future time; always 永远",
+            "example": "I think that we will live together forever.",
+            "phonetic": "forever.mp3"
+        },
+        {
+            "word": "electric",
+            "explanation": "a. needing electricity to work, produced by electricity, or used for carrying electricity 用电的；电动的；用来导电的",
+            "example": "Is the car electric or gas?",
+            "phonetic": "electric.mp3"
+        },
+        {
+            "word": "bulb",
+            "explanation": "n. [C] ( or light ~ ) 灯泡",
+            "phonetic": "bulb.mp3"
+        },
+        {
+            "word": "phonograph",
+            "explanation": "n. [C] a record player 留声机；电唱机",
+            "phonetic": "phonograph.mp3"
+        },
+        {
+            "word": "motion picture",
+            "explanation": "n. [C] a movie 电影",
+            "phonetic": "motion picture.mp3"
+        },
+        {
+            "word": "experiment",
+            "explanation": "n. [C, U] a scientific test done to find out how sth. will react in a particular situation, or to find out if a particular idea is true 实验",
+            "example": "This experiment does no harm to the environment.",
+            "phonetic": "experiment.mp3"
+        },
+        {
+            "word": "rejection",
+            "explanation": "n. [C, U] the act of not accepting, believing in, or agreeing with sth. 拒绝；摈弃",
+            "example": "Their rejection of the plan is a blow to us.",
+            "phonetic": "rejection.mp3"
+        },
+        {
+            "word": "publisher",
+            "explanation": "n. [C] a person or company whose business is to arrange the writing, production, and sale of books, newspapers, etc.（书、报纸等的） 出版者；出版商；出版社",
+            "phonetic": "publisher.mp3"
+        },
+        {
+            "word": "theme park",
+            "explanation": "n. [C] 主题公园",
+            "phonetic": "theme park.mp3"
+        },
+        {
+            "word": "innovator",
+            "explanation": "n. [C] sb. who introduces changes and new ideas 革新者；创新者",
+            "phonetic": "innovator.mp3"
+        },
+        {
+            "word": "beginner",
+            "explanation": "n. [C] sb. who has just started to do or learn sth. 生手；初学者",
+            "phonetic": "beginner.mp3"
+        },
+        {
+            "word": "emotion",
+            "explanation": "n. [C, U] a strong human feeling such as love, hate, or anger 强烈的情感；激情",
+            "example": "Mom received the bad news without showing any visible sign of emotion.",
+            "phonetic": "emotion.mp3"
+        },
+        {
+            "word": "necessarily",
+            "explanation": "ad. always or in every situation 总是；必定；必然",
+            "phonetic": "necessarily.mp3"
+        },
+        {
+            "word": "optimist",
+            "explanation": "n. [C] sb. who is always hopeful and always believes that good things will happen 乐观者；乐观主义者",
+            "example": "Every change is a change for the better to an optimist.",
+            "phonetic": "optimist.mp3"
+        },
+        {
+            "word": "discomfort",
+            "explanation": "n. [U] slight pain or a bad feeling 不舒服；不适",
+            "example": "A cushion will help reduce the discomfort of sitting on the ﬂoor.",
+            "phonetic": "discomfort.mp3"
+        },
+        {
+            "word": "inconvenience",
+            "explanation": "n. [C, U] an annoying problem or situation, esp. one that forces you to make an extra effort to do sth. 不方便；不便之处；（尤指）麻烦事",
+            "example": "We apologize for any inconvenience the delayed ﬂight has caused you.",
+            "phonetic": "inconvenience.mp3"
+        },
+        {
+            "word": "overnight",
+            "explanation": "a. happening after a very short time 突然间的",
+            "example": "The play was an overnight success.",
+            "phonetic": "overnight.mp3"
+        },
+        {
+            "word": "inspire",
+            "explanation": "vt. to encourage sb. by making them feel confident and eager to achieve sth. great 鼓舞；激励",
+            "example": "The country needs a leader who can inspire its people.",
+            "phonetic": "inspire.mp3"
+        },
+        {
+            "word": "passion",
+            "explanation": "n. [C, U] a very strong deeply felt emotion 强烈的情感；激情",
+            "example": "She spoke with great passion about her plan for the drama club.",
+            "phonetic": "passion.mp3"
+        },
+        {
+            "word": "emotionally",
+            "explanation": "ad. in a manner that is relating to feelings and the way they affect your life 感情上地",
+            "example": "We are still emotionally attached to our parents after graduation.",
+            "phonetic": "emotionally.mp3"
+        },
+        {
+            "word": "stand for",
+            "explanation": "if a letter, number, picture, or sign stands for sth., it represents a word, name, or idea, esp. in a short form 代表；象征；意味着",
+            "example": "In many cultures, the gesture \"V\" stands for victory.",
+            "phonetic": "stand for.mp3"
+        },
+        {
+            "word": "have sth. in common (with sb.)",
+            "explanation": "to have the same interests, attitudes, qualities, etc. as another person or group（与某人）在某方面有共同之处",
+            "example": "He does not have much in common with the other kids in high school.",
+            "phonetic": "have sth. in common (with sb.).mp3"
+        },
+        {
+            "word": "rise above",
+            "explanation": "to go above or beyond the limits of sth. 超越；克服",
+            "example": "He has managed to rise above the financial problems and finished the task on time.",
+            "phonetic": "rise above.mp3"
+        },
+        {
+            "word": "deal with",
+            "explanation": "to take the correct action for a problem, piece of work, etc. 处理",
+            "example": "We must deal with the difficult situation before it gets out of control.",
+            "phonetic": "deal with.mp3"
+        },
+        {
+            "word": "take on",
+            "explanation": "to adopt 采用；采纳；采取",
+            "example": "He took on new ways of life after he got married.",
+            "phonetic": "take on.mp3"
+        },
+        {
+            "word": "of all time",
+            "explanation": "used for talking about people or things that are better than all others that have existed 有史以来（最好）的",
+            "example": "Who's your favorite basketball player of all time?",
+            "phonetic": "of all time.mp3"
+        },
+        {
+            "word": "do away with",
+            "explanation": "to get rid of sth. 摆脱；废除",
+            "example": "Do you think we should do away with old traditions?",
+            "phonetic": "do away with.mp3"
+        },
+        {
+            "word": "go wrong",
+            "explanation": "to make a mistake during a process so that you do not get the right result（在过程中）出错，弄错",
+            "example": "Follow these instructions and you won't go wrong.",
+            "phonetic": "go wrong.mp3"
+        },
+        {
+            "word": "not necessarily",
+            "explanation": "not always or not in every situation 不一定；未必",
+            "example": "Our customers won't necessarily understand why we are raising our prices.",
+            "phonetic": "not necessarily.mp3"
+        },
+        {
+            "word": "Rick Newman",
+            "explanation": "里克 · 纽曼（美国记者）",
+            "phonetic": "Rick Newman.mp3"
+        },
+        {
+            "word": "U.S. News & World Report",
+            "explanation": "《美国新闻与世界报道》（美国杂志）",
+            "phonetic": "U.S. News & World Report.mp3"
+        },
+        {
+            "word": "Thomas Edison",
+            "explanation": "托马斯・爱迪生（1847-1931，美国发明家）",
+            "phonetic": "Thomas Edison.mp3"
+        },
+        {
+            "word": "Harry Potter",
+            "explanation": "《哈利 · 波特》（系列小说名）",
+            "phonetic": "Harry Potter.mp3"
+        },
+        {
+            "word": "J. K. Rowling",
+            "explanation": "J. K. 罗琳（1965-，英国作家）",
+            "phonetic": "J. K. Rowling.mp3"
+        },
+        {
+            "word": "Steve Jobs",
+            "explanation": "史蒂夫 · 乔布斯（1995-2011，苹果公司前CEO）",
+            "phonetic": "Steve Jobs.mp3"
+        },
+        {
+            "word": "Pixar",
+            "explanation": "皮克斯动画工作室（美国）",
+            "phonetic": "Pixar.mp3"
+        },
+        {
+            "word": "Stanford",
+            "explanation": "（Standford University）斯坦福大学（美国）",
+            "phonetic": "Stanford.mp3"
+        },
+        {
+            "word": "已学完全部44个生词啦！"
+        }
+    ]
+}

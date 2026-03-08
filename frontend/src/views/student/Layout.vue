@@ -1,95 +1,201 @@
 <template>
-  <div class="student-layout">
-    <el-container>
-      <el-aside width="200px">
-        <div class="logo">
-          <h3>学生端</h3>
+  <div class="trending-app">
+    <!-- 状态栏占位 -->
+    <div class="status-bar"></div>
+
+    <!-- 顶部导航栏 - 时尚设计 -->
+    <header class="trend-header">
+      <div class="header-container">
+        <div class="header-center">
+          <h1 class="page-title">{{ pageTitle }}</h1>
         </div>
-        <el-menu
-          :default-active="$route.path"
-          router
-          background-color="#304156"
-          text-color="#bfcbd9"
-          active-text-color="#409EFF"
+      </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="main-content">
+      <div class="content-wrapper">
+        <router-view />
+      </div>
+    </main>
+
+    <!-- 底部导航栏 - 小红书风格 -->
+    <nav class="trend-nav">
+      <div class="nav-wrapper">
+        <router-link
+          v-for="(item, index) in navigationItems"
+          :key="index"
+          :to="item.path"
+          class="nav-item"
+          :class="{ 'nav-item--active': isActiveRoute(item.path) }"
         >
-          <el-menu-item index="/student/dashboard">
-            <el-icon><DataBoard /></el-icon>
-            <span>仪表盘</span>
-          </el-menu-item>
-          <el-menu-item index="/student/courses">
-            <el-icon><Reading /></el-icon>
-            <span>课程学习</span>
-          </el-menu-item>
-          <el-menu-item index="/student/vocabulary">
-            <el-icon><Document /></el-icon>
-            <span>生词本</span>
-          </el-menu-item>
-          <el-menu-item index="/student/assignments">
-            <el-icon><Edit /></el-icon>
-            <span>我的任务</span>
-          </el-menu-item>
-          <el-menu-item index="/student/practice">
-            <el-icon><EditPen /></el-icon>
-            <span>在线练习</span>
-          </el-menu-item>
-          <el-menu-item index="/student/weakness">
-            <el-icon><TrendCharts /></el-icon>
-            <span>薄弱点分析</span>
-          </el-menu-item>
-          <el-menu-item index="/student/suggestions">
-            <el-icon><Promotion /></el-icon>
-            <span>学习建议</span>
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
-
-      <el-container>
-        <el-header>
-          <div class="header-content">
-            <div class="breadcrumb">
-              <el-breadcrumb separator="/">
-                <el-breadcrumb-item :to="{ path: '/student' }">首页</el-breadcrumb-item>
-                <el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item>
-              </el-breadcrumb>
-            </div>
-            <div class="user-info">
-              <el-dropdown @command="handleCommand">
-                <span class="el-dropdown-link">
-                  {{ userStore.userInfo.realName || userStore.userInfo.username }}
-                  <el-icon class="el-icon--right"><arrow-down /></el-icon>
-                </span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="profile">个人资料</el-dropdown-item>
-                    <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
+          <div class="nav-icon-wrapper">
+            <component :is="item.icon" class="nav-icon" />
+            <div class="nav-icon-ripple"></div>
           </div>
-        </el-header>
+          <span class="nav-label">{{ item.label }}</span>
+          <div class="nav-dot" v-if="item.badge"></div>
+        </router-link>
+        
+        <!-- 用户菜单 - 移到底部导航栏最右侧 -->
+        <div class="nav-item" :class="{ 'nav-item--active': showUserMenu }" @click="toggleUserMenu">
+          <div class="nav-icon-wrapper">
+            <img :src="userAvatar" class="nav-user-avatar" :alt="userStore.userInfo?.realName || '用户'" />
+            <div class="nav-icon-ripple"></div>
+          </div>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+    </nav>
 
-        <el-main>
-          <router-view />
-        </el-main>
-      </el-container>
-    </el-container>
+    <!-- 用户下拉菜单 - 从底部弹出 -->
+    <div class="user-menu-simple" v-if="showUserMenu" @click.self="closeUserMenu">
+      <div class="simple-menu">
+        <div class="simple-menu-header">
+          <div class="simple-avatar">
+            <img :src="userAvatar" :alt="userStore.userInfo?.realName || '用户'" />
+          </div>
+          <span class="simple-username">{{ userStore.userInfo?.realName || userStore.userInfo?.username }}</span>
+          <span class="simple-role">{{ roleDisplayName }}</span>
+        </div>
+        <div class="simple-menu-actions">
+          <button class="simple-btn" @click="handleUserAction('logout')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16,17 21,12 16,7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            退出登录
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DataBoard, Reading, Document, Edit, EditPen, TrendCharts, Promotion, ArrowDown } from '@element-plus/icons-vue'
+import {
+  DataBoard,
+  Reading,
+  House,
+  Edit,
+  Document,
+  ChatLineRound
+} from '@element-plus/icons-vue'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
+const showUserMenu = ref(false)
+const screenWidth = ref(window.innerWidth)
 
-const handleCommand = async (command) => {
-  switch (command) {
+// 导航项配置 - 时尚设计
+const navigationItems = ref([
+  {
+    path: '/student/dashboard',
+    label: '发现',
+    icon: markRaw(DataBoard),
+    badge: null
+  },
+  // 暂时隐藏课程菜单
+  // {
+  //   path: '/student/courses',
+  //   label: '课程',
+  //   icon: markRaw(Reading),
+  //   badge: null
+  // },
+  {
+    path: '/student/classes',
+    label: '社区',
+    icon: markRaw(House),
+    badge: null
+  },
+  {
+    path: '/student/assignments',
+    label: '任务',
+    icon: markRaw(Edit),
+    badge: null
+  },
+  {
+    path: '/student/articles',
+    label: '文章',
+    icon: markRaw(ChatLineRound),
+    badge: null
+  },
+  {
+    path: '/student/vocabulary',
+    label: '单词',
+    icon: markRaw(Document),
+    badge: null
+  },
+  {
+    path: '/student/ai-video',
+    label: '视频',
+    icon: markRaw(Reading),
+    badge: null
+  }
+])
+
+// 页面标题
+const pageTitle = computed(() => {
+  const routeMap = {
+    '/student/dashboard': '发现',
+    '/student/courses': '课程学习',
+    '/student/classes': '学习社区',
+    '/student/assignments': '学习任务',
+    '/student/articles': '',
+    '/student/vocabulary': '单词本',
+    '/student/ai-video': 'AI 视频字幕',
+    '/student/user-texts': '我的创作'
+  }
+  return routeMap[route.path] || route.meta?.title || '英语学习'
+})
+
+// 角色显示名称
+const roleDisplayName = computed(() => {
+  const roleMap = {
+    'ADMIN': '管理员',
+    'TEACHER': '教师',
+    'STUDENT': '学习者',
+    'USER': '创作者'
+  }
+  return roleMap[userStore.userRole] || '用户'
+})
+
+// 用户头像
+const userAvatar = computed(() => {
+  return userStore.userInfo?.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+})
+
+// 检查路由是否激活
+const isActiveRoute = (path) => {
+  return route.path === path || route.path.startsWith(path + '/')
+}
+
+// 切换用户菜单
+const toggleUserMenu = () => {
+  showUserMenu.value = !showUserMenu.value
+}
+
+// 关闭用户菜单
+const closeUserMenu = () => {
+  showUserMenu.value = false
+}
+
+// 处理用户操作
+const handleUserAction = async (action) => {
+  closeUserMenu()
+
+  switch (action) {
     case 'profile':
       ElMessage.info('个人资料功能开发中')
+      break
+    case 'settings':
+      ElMessage.info('设置功能开发中')
       break
     case 'logout':
       try {
@@ -107,65 +213,661 @@ const handleCommand = async (command) => {
       break
   }
 }
+
+// 监听屏幕宽度变化
+const handleResize = () => {
+  screenWidth.value = window.innerWidth
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 </script>
 
 <style scoped>
-.student-layout {
+/* 时尚应用容器 */
+.trending-app {
   height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  overflow: hidden;
+  position: relative;
 }
 
-.logo {
-  height: 60px;
+/* 状态栏 */
+.status-bar {
+  height: env(safe-area-inset-top, 0);
+  background: var(--bg-primary);
+  position: relative;
+  z-index: 1000;
+}
+
+/* 时尚顶部导航 */
+.trend-header {
+  background: var(--bg-primary);
+  position: relative;
+  z-index: 999;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.header-container {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background-color: #2b2f3a;
-  color: #fff;
-  border-bottom: 1px solid #3a3f51;
-}
-
-.logo h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.el-aside {
-  background-color: #304156;
-}
-
-.el-header {
-  background-color: #fff;
-  border-bottom: 1px solid #e6e6e6;
+  justify-content: space-between;
+  height: 56px;
   padding: 0 20px;
+  max-width: 100%;
 }
 
-.header-content {
+.header-center {
+  flex: 1;
+  text-align: center;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+/* 用户头像在底部导航栏 */
+.nav-user-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary-color);
+  transition: all 0.3s ease;
+}
+
+.nav-item--active .nav-user-avatar {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+  transform: scale(1.1);
+}
+
+/* 主内容区域 */
+.main-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-secondary);
+}
+
+/* 时尚底部导航 */
+.trend-nav {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--glass-border);
+  position: relative;
+  z-index: 998;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.nav-wrapper {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 100%;
+  padding: 8px 2px 12px 2px;
+  max-width: 100%;
+  margin: 0 auto;
+  width: 100%;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  gap: 2px;
 }
 
-.breadcrumb {
+.nav-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 500;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  padding: 4px 2px;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.nav-item:hover {
+  transform: translateY(-1px);
+}
+
+.nav-item--active {
+  color: var(--primary-color);
+  background: rgba(0, 102, 204, 0.08);
+}
+
+.nav-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-bottom: 4px;
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 2;
+  position: relative;
+}
+
+.nav-item--active .nav-icon {
+  transform: scale(1.2);
+  filter: drop-shadow(0 2px 4px rgba(0, 102, 204, 0.3));
+}
+
+.nav-icon-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: var(--primary-color);
+  opacity: 0.2;
+  transform: translate(-50%, -50%);
+  transition: all 0.4s ease;
+}
+
+.nav-item--active .nav-icon-ripple {
+  width: 32px;
+  height: 32px;
+  opacity: 0.1;
+}
+
+.nav-label {
+  font-size: 8px;
+  line-height: 1.2;
+  text-align: center;
+  font-weight: 600;
+  transition: font-size 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 1px;
+}
+
+.nav-item--active .nav-label {
+  font-size: 10px;
+}
+
+.nav-dot {
+  position: absolute;
+  top: 6px;
+  right: calc(50% - 14px);
+  width: 6px;
+  height: 6px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 8px rgba(0, 102, 204, 0.4);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
+
+/* 简单的用户菜单 - 紧贴"我的"按钮上方弹出 */
+.user-menu-simple {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1001;
+  background: rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.2s ease;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0) + 60px);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.simple-menu {
+  background: var(--bg-primary);
+  border-radius: 16px;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  min-width: 200px;
+  max-width: 280px;
+  margin-right: 20px;
+  margin-bottom: 4px;
+  animation: slideUpFromBottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUpFromBottom {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.simple-menu-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--separator-color);
+  text-align: center;
+}
+
+.simple-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  margin: 0 auto 8px;
+  overflow: hidden;
+}
+
+.simple-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.simple-username {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.simple-role {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+.simple-menu-actions {
+  padding: 8px;
+}
+
+.simple-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.simple-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--error-color);
+}
+
+.simple-btn svg {
+  flex-shrink: 0;
+}
+
+.menu-container {
+  background: var(--bg-modal);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 20px 20px 0 0;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  min-width: 300px;
+  max-width: 100%;
+  margin-bottom: env(safe-area-inset-bottom, 0);
+  animation: slideUpMenu 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUpMenu {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.slide-up-enter-active {
+  animation: slideUpMenu 0.4s ease;
+}
+
+.slide-up-leave-active {
+  animation: slideUpMenu 0.4s ease reverse;
+}
+
+.menu-header {
+  display: flex;
+  align-items: center;
+  padding: 24px 24px 20px 24px;
+  border-bottom: 1px solid var(--separator-color);
+}
+
+.profile-avatar {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin-right: 16px;
+}
+
+.profile-avatar::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  right: -3px;
+  bottom: -3px;
+  border-radius: 50%;
+  background: var(--gradient-brand);
+  z-index: 0;
+}
+
+.profile-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  position: relative;
+  z-index: 1;
+  background: white;
+  border: 3px solid white;
+}
+
+.profile-info {
   flex: 1;
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
+.profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  letter-spacing: -0.5px;
 }
 
-.el-dropdown-link {
+.profile-role {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin: 0;
+  background: var(--bg-tertiary);
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.menu-actions {
+  padding: 8px 0;
+}
+
+.menu-action {
+  width: 100%;
   display: flex;
   align-items: center;
+  padding: 16px 24px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 16px;
+  color: var(--text-primary);
   cursor: pointer;
-  color: #606266;
+  transition: all 0.2s ease;
+  gap: 16px;
+  position: relative;
 }
 
-.el-main {
-  background-color: #f0f2f5;
-  padding: 20px;
-  height: calc(100vh - 60px);
-  overflow-y: auto;
+.menu-action:hover {
+  background: var(--bg-tertiary);
+}
+
+.menu-action--danger {
+  color: var(--error-color);
+}
+
+.menu-action--danger:hover {
+  background: rgba(255, 59, 48, 0.08);
+}
+
+.action-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.menu-action:hover .action-icon {
+  color: var(--text-secondary);
+}
+
+.menu-action--danger .action-icon {
+  color: var(--error-color);
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+  .header-container {
+    padding: 0 16px;
+  }
+
+  .page-title {
+    font-size: 17px;
+  }
+
+  .content-wrapper {
+    padding: 16px;
+  }
+
+  .nav-wrapper {
+    padding: 6px 2px 10px 2px;
+  }
+
+  .nav-item {
+    padding: 3px 1px;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 0;
+  }
+
+  .nav-icon-wrapper {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 2px;
+  }
+
+  .nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .nav-label {
+    font-size: 8px;
+  }
+
+  .nav-item--active .nav-label {
+    font-size: 9px;
+  }
+
+  .user-menu-simple {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0) + 58px);
+  }
+
+  .simple-menu {
+    max-width: 260px;
+    margin-right: 16px;
+    margin-bottom: 3px;
+  }
+
+  .menu-container {
+    min-width: 100%;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .menu-header {
+    padding: 20px 20px 16px 20px;
+  }
+
+  .profile-avatar {
+    width: 50px;
+    height: 50px;
+  }
+
+  .profile-name {
+    font-size: 16px;
+  }
+
+  .profile-role {
+    font-size: 12px;
+  }
+
+  .menu-action {
+    padding: 14px 20px;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 360px) {
+  .header-container {
+    padding: 0 12px;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .nav-wrapper {
+    padding: 4px 0 8px 0;
+  }
+
+  .nav-item {
+    padding: 3px 1px;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .nav-icon-wrapper {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 2px;
+  }
+
+  .nav-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .nav-label {
+    font-size: 8px;
+  }
+}
+
+/* 横屏适配 */
+@media (max-height: 600px) and (orientation: landscape) {
+  .header-container {
+    height: 48px;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .nav-wrapper {
+    padding: 4px 0 6px 0;
+  }
+
+  .nav-icon-wrapper {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 2px;
+  }
+
+  .nav-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .nav-label {
+    font-size: 8px;
+  }
+
+  .menu-container {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+}
+
+/* 触摸优化 */
+.nav-item,
+.user-section,
+.menu-action {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* 自定义滚动条 */
+.content-wrapper::-webkit-scrollbar {
+  width: 4px;
+}
+
+.content-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
 }
 </style>

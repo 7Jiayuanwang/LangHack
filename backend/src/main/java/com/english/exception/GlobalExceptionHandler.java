@@ -1,0 +1,117 @@
+package com.english.exception;
+
+import com.english.dto.Result;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+
+import java.util.stream.Collectors;
+
+/**
+ * 全局异常处理器 — 捕获 DispatcherServlet 分发链中的异常。
+ *
+ * 注意: Spring Security 过滤器链（Filter 层）抛出的 AccessDeniedException /
+ * AuthenticationException 不会到达此处；它们由 SecurityConfig 中注册的
+ * SecurityExceptionHandler bean 处理。
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 参数校验失败 (使用 @Valid / @Validated 注解时)
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleValidation(MethodArgumentNotValidException e) {
+        String msg = e.getBindingResult().getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)
+                .collect(Collectors.joining("; "));
+        log.warn("Validation failed: {}", msg);
+        return Result.error(400, "参数校验失败: " + msg);
+    }
+
+    /**
+     * 请求体不可读 (格式错误 / Content-Type 不匹配)
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("Request body not readable: {}", e.getMessage());
+        return Result.error(400, "请求格式错误，请检查请求体");
+    }
+
+    /**
+     * 非法参数 (业务代码主动抛出)
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleIllegalArgument(IllegalArgumentException e) {
+        log.warn("Illegal argument: {}", e.getMessage());
+        return Result.error(400, e.getMessage() != null ? e.getMessage() : "参数非法");
+    }
+
+    /**
+     * 唯一键约束冲突 (需要在 DataIntegrityViolationException 之前处理)
+     */
+    @ExceptionHandler(DuplicateKeyException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleDuplicateKey(DuplicateKeyException e) {
+        log.warn("唯一约束冲突: {}", e.getMessage());
+        return Result.error(400, "操作冲突，请稍后重试");
+    }
+
+    /**
+     * 数据完整性违反 (唯一约束冲突等)
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        String msg = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : "";
+        if (msg.contains("Duplicate entry")) {
+            log.warn("唯一约束冲突: {}", msg);
+            return Result.error("操作冲突，请稍后重试");
+        }
+        log.error("数据完整性违反", e);
+        return Result.error("数据操作失败");
+    }
+
+    /**
+     * 业务逻辑异常 — message 可安全展示给前端
+     */
+    @ExceptionHandler(BusinessException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleBusinessException(BusinessException e) {
+        log.warn("Business exception: {}", e.getMessage());
+        String message = e.getMessage() != null ? e.getMessage() : "业务处理失败";
+        return Result.error(400, message);
+    }
+
+    /**
+     * 其他运行时异常
+     * 不对外暴露异常细节，仅记录日志。
+     */
+    @ExceptionHandler(RuntimeException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public Result<?> handleRuntimeException(RuntimeException e) {
+        log.error("Runtime exception: {}", e.getMessage(), e);
+        return Result.error("服务异常，请稍后重试");
+    }
+
+    /**
+     * 兜底处理器
+     */
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public Result<?> handleException(Exception e) {
+        log.error("Unexpected exception: {}", e.getMessage(), e);
+        return Result.error("系统错误，请联系管理员");
+    }
+}

@@ -1,9 +1,8 @@
-//基于 Spring Security 的 JWT（JSON Web Token）认证过滤器，用于在 Spring Boot 应用中实现基于 JWT 的身份验证功能。
-//        主要作用是拦截 HTTP 请求，解析并验证请求头中的 JWT 令牌，进而完成用户身份认证并将认证信息存入 Spring Security 的上下文
-
 package com.english.config;
 
 import com.english.util.JwtUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -21,6 +20,8 @@ import java.util.Collections;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
     @Autowired
     private JwtUtil jwtUtil;
 
@@ -33,7 +34,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String username = null;
         String jwtToken = null;
 
-        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
+        // 检查 Authorization header：必须是 "Bearer " 开头，且总长度 > 7
+        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ") && requestTokenHeader.length() > 7) {
             jwtToken = requestTokenHeader.substring(7);
             try {
                 username = jwtUtil.getUsernameFromToken(jwtToken);
@@ -46,7 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 String role = jwtUtil.getRoleFromToken(jwtToken);
 
-                if (jwtUtil.validateToken(jwtToken, username)) {
+                if (role != null && !role.trim().isEmpty() && jwtUtil.validateToken(jwtToken, username)) {
                     UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
                             username,

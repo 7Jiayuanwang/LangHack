@@ -1,23 +1,24 @@
 <template>
   <div class="courses-learning">
+    <!-- 课程列表 -->
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>课程学习</span>
+          <span>我的课程</span>
           <div class="header-actions">
             <el-input
               v-model="searchKeyword"
               placeholder="搜索课程"
-              style="width: 200px; margin-right: 10px"
+              class="course-search-input"
               clearable
               @input="loadCourses"
             />
+            <el-button type="primary" @click="$router.push('/student/classes')">加入班级</el-button>
           </div>
         </div>
       </template>
 
-      <!-- 课程列表 -->
-      <el-row :gutter="20">
+      <el-row :gutter="20" v-loading="loading">
         <el-col
           v-for="course in courses"
           :key="course.id"
@@ -39,16 +40,24 @@
               </div>
             </div>
             <div class="course-info">
-              <h3>{{ course.name }}</h3>
-              <p class="description">{{ course.description }}</p>
+              <h3>{{ course.courseName }}</h3>
+              <p class="description">{{ course.courseDescription }}</p>
+              <div class="class-info">
+                <span class="class-name">{{ course.className }}</span>
+                <span class="teacher-name">{{ course.teacherName }}</span>
+              </div>
               <div class="course-stats">
                 <div class="stat-item">
                   <span class="label">单元数：</span>
-                  <span class="value">{{ course.unitCount }}</span>
+                  <span class="value">{{ course.totalUnits }}</span>
                 </div>
                 <div class="stat-item">
-                  <span class="label">学习进度：</span>
-                  <span class="value">{{ course.completedUnits }}/{{ course.unitCount }}</span>
+                  <span class="label">已学习：</span>
+                  <span class="value">{{ course.learnedWords }}个单词</span>
+                </div>
+                <div class="stat-item">
+                  <span class="label">学习时长：</span>
+                  <span class="value">{{ course.studyTime }}分钟</span>
                 </div>
               </div>
               <div class="progress-bar">
@@ -59,7 +68,7 @@
                 />
               </div>
               <div class="course-meta">
-                <span class="enroll-date">加入时间：{{ formatDate(course.enrollDate) }}</span>
+                <span class="join-date">加入时间：{{ formatDate(course.joinTime) }}</span>
               </div>
             </div>
           </el-card>
@@ -67,523 +76,971 @@
       </el-row>
 
       <!-- 空状态 -->
-      <el-empty v-if="courses.length === 0" description="暂无课程">
-        <el-button type="primary" @click="loadCourses">刷新课程</el-button>
+      <el-empty v-if="!loading && courses.length === 0" description="暂无课程">
+        <el-button type="primary" @click="$router.push('/student/classes')">加入班级</el-button>
       </el-empty>
     </el-card>
 
-    <!-- 课程单元对话框 -->
+    <!-- 课程单元学习对话框 -->
     <el-dialog
-      v-model="unitsDialogVisible"
-      :title="currentCourse.name + ' - 单元列表'"
-      width="800px"
+      v-model="unitDialogVisible"
+      :title="`${currentCourse?.courseName || '课程'} - 学习内容`"
+      width="min(1200px, 96vw)"
       top="5vh"
+      :close-on-click-modal="false"
     >
-      <div class="units-container">
-        <el-row :gutter="20">
-          <el-col
-            v-for="unit in currentCourseUnits"
-            :key="unit.id"
-            :xs="24"
-            :sm="12"
-            :md="8"
-          >
-            <el-card class="unit-card" :class="{ completed: unit.completed }" @click="enterUnit(unit)">
-              <div class="unit-header">
-                <h4>{{ unit.name }}</h4>
-                <el-tag v-if="unit.completed" type="success" size="small">已完成</el-tag>
-              </div>
-              <p class="unit-description">{{ unit.description }}</p>
-              <div class="unit-content">
-                <div class="content-item">
-                  <el-icon><Document /></el-icon>
-                  <span>课文：{{ unit.textCount }}篇</span>
-                </div>
-                <div class="content-item">
-                  <el-icon><Reading /></el-icon>
-                  <span>单词：{{ unit.wordCount }}个</span>
-                </div>
-              </div>
-              <div class="unit-progress">
-                <span>学习进度：</span>
-                <el-progress
-                  :percentage="unit.progress"
-                  :color="getProgressColor(unit.progress)"
-                  :stroke-width="4"
-                  :show-text="false"
-                  style="flex: 1; margin-left: 10px;"
-                />
-                <span class="progress-text">{{ unit.progress }}%</span>
-              </div>
-            </el-card>
-          </el-col>
-        </el-row>
-      </div>
-    </el-dialog>
-
-    <!-- 单元学习对话框 -->
-    <el-dialog
-      v-model="studyDialogVisible"
-      :title="currentUnit.name"
-      width="90%"
-      top="2vh"
-      fullscreen
-    >
-      <div class="study-container">
-        <el-tabs v-model="activeTab" type="border-card">
-          <el-tab-pane label="课文学习" name="texts">
-            <div class="texts-section">
-              <el-table :data="currentUnitTexts" stripe>
-                <el-table-column prop="title" label="课文标题" />
-                <el-table-column prop="difficulty" label="难度" width="100">
-                  <template #default="scope">
-                    <el-tag :type="getDifficultyType(scope.row.difficulty)">
-                      {{ getDifficultyText(scope.row.difficulty) }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="completed" label="状态" width="100">
-                  <template #default="scope">
-                    <el-tag :type="scope.row.completed ? 'success' : 'info'">
-                      {{ scope.row.completed ? '已完成' : '未学习' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="150">
-                  <template #default="scope">
-                    <el-button size="small" @click="studyText(scope.row)">
-                      {{ scope.row.completed ? '复习' : '学习' }}
-                    </el-button>
-                    <el-button size="small" type="success" @click="addWordsToVocabulary(scope.row)">
-                      收藏单词
-                    </el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
+      <div class="course-content">
+        <el-tabs v-model="activeTab">
+          <!-- 单元学习 -->
+          <el-tab-pane label="单元学习" name="units">
+            <el-row :gutter="20">
+              <el-col
+                v-for="unit in units"
+                :key="unit.id"
+                :xs="24"
+                :sm="12"
+                :md="8"
+              >
+                <el-card class="unit-card" :class="{ completed: unit.progress >= 100 }" @click="enterUnit(unit)">
+                  <div class="unit-header">
+                    <h4>{{ unit.name }}</h4>
+                    <el-tag v-if="unit.progress >= 100" type="success" size="small">已完成</el-tag>
+                    <el-tag v-else-if="unit.progress > 0" type="warning" size="small">学习中</el-tag>
+                    <el-tag v-else type="info" size="small">未开始</el-tag>
+                  </div>
+                  <p class="unit-description">{{ unit.description }}</p>
+                  <div class="unit-content">
+                    <div class="content-item">
+                      <el-icon><Document /></el-icon>
+                      <span>课文：{{ unit.textCount || unit.texts?.length || 0 }}篇</span>
+                    </div>
+                    <div class="content-item">
+                      <el-icon><Reading /></el-icon>
+                      <span>单词：{{ unit.wordCount || unit.words?.length || 0 }}个</span>
+                    </div>
+                  </div>
+                  <div class="learning-stats" v-if="unit.learnedWords > 0">
+                    <div class="stat-row">
+                      <span>已学习：{{ unit.learnedWords }}/{{ unit.wordCount }}个单词</span>
+                    </div>
+                    <div class="stat-row">
+                      <span>学习时长：{{ unit.studyTime }}分钟</span>
+                    </div>
+                    <div class="progress-bar">
+                      <el-progress :percentage="unit.progress" :show-text="false" stroke-width="4" />
+                    </div>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
           </el-tab-pane>
 
-          <el-tab-pane label="单词学习" name="words">
-            <div class="words-section">
-              <div class="words-grid">
-                <div
-                  v-for="word in currentUnitWords"
-                  :key="word.id"
-                  class="word-card"
-                  @click="viewWordDetail(word)"
-                >
-                  <div class="word-header">
-                    <h3>{{ word.word }}</h3>
-                    <el-tag :type="getDifficultyType(word.difficulty)" size="small">
-                      {{ getDifficultyText(word.difficulty) }}
-                    </el-tag>
-                  </div>
-                  <div class="pronunciation" v-if="word.pronunciation">
-                    {{ word.pronunciation }}
-                  </div>
-                  <div class="definition">{{ word.definition }}</div>
-                  <div class="word-actions">
-                    <el-button size="small" circle @click.stop="playAudio(word)">
-                      <el-icon><VideoPlay /></el-icon>
-                    </el-button>
-                    <el-button size="small" circle type="success" @click.stop="addToVocabulary(word)">
-                      <el-icon><Star /></el-icon>
-                    </el-button>
-                  </div>
+          <!-- 生词复习 -->
+          <el-tab-pane label="生词复习" name="vocabulary">
+            <div class="vocabulary-review">
+              <div class="review-header">
+                <h3>课程生词本</h3>
+                <div class="review-stats">
+                  <span>新词：<strong>{{ vocabularyStats.newWords }}</strong></span>
+                  <span>学习中：<strong>{{ vocabularyStats.learningWords }}</strong></span>
+                  <span>已掌握：<strong>{{ vocabularyStats.masteredWords }}</strong></span>
                 </div>
-              </div>
-            </div>
-          </el-tab-pane>
-
-          <el-tab-pane label="单词测试" name="test">
-            <div class="test-section">
-              <div class="test-header">
-                <h3>单词测试</h3>
-                <div class="test-info">
-                  <span>总题数：{{ testWords.length }}</span>
-                  <span>当前进度：{{ currentTestIndex + 1 }}/{{ testWords.length }}</span>
-                  <span>正确率：{{ getTestAccuracy() }}%</span>
-                </div>
-              </div>
-
-              <div v-if="testWords.length > 0" class="test-content">
-                <div class="test-question">
-                  <h4>{{ currentTestWord.definition }}</h4>
-                  <p class="example" v-if="currentTestWord.exampleSentence">
-                    例句：{{ currentTestWord.exampleSentence }}
-                  </p>
-                </div>
-
-                <div class="test-options">
-                  <el-radio-group v-model="selectedAnswer">
-                    <el-radio
-                      v-for="option in testOptions"
-                      :key="option.id"
-                      :label="option.word"
-                      class="test-option"
-                    >
-                      {{ option.word }}
-                    </el-radio>
-                  </el-radio-group>
-                </div>
-
-                <div class="test-actions">
-                  <el-button @click="skipQuestion">跳过</el-button>
-                  <el-button type="primary" @click="submitAnswer" :disabled="!selectedAnswer">
-                    {{ currentTestIndex < testWords.length - 1 ? '下一题' : '完成测试' }}
+                <div class="review-actions">
+                  <el-select v-model="masteryFilter" placeholder="筛选掌握程度" clearable @change="loadVocabulary" style="width: 150px; margin-right: 10px">
+                    <el-option label="全部" value="" />
+                    <el-option label="新词" value="NEW" />
+                    <el-option label="学习中" value="LEARNING" />
+                    <el-option label="已掌握" value="MASTERED" />
+                  </el-select>
+                  <el-button type="primary" @click="startReview" :disabled="vocabularyList.length === 0">
+                    开始复习
                   </el-button>
                 </div>
+              </div>
 
-                <div v-if="showResult" class="test-result">
-                  <el-alert
-                    :title="isCorrect ? '回答正确！' : '回答错误'"
-                    :type="isCorrect ? 'success' : 'error'"
-                    :closable="false"
-                    show-icon
-                  >
-                    <template v-if="!isCorrect">
-                      <p>正确答案：<strong>{{ currentTestWord.word }}</strong></p>
-                    </template>
-                  </el-alert>
+              <div class="vocabulary-list" v-loading="vocabularyLoading">
+                <div
+                  v-for="item in vocabularyList"
+                  :key="item.id"
+                  class="vocabulary-item"
+                  @click="showWordDetail(item)"
+                >
+                  <div class="word-main">
+                    <div class="word-header">
+                      <h3 class="word">{{ item.word }}</h3>
+                      <div class="word-meta">
+                        <el-tag
+                          :type="getMasteryType(item.masteryLevel)"
+                          size="small"
+                        >
+                          {{ getMasteryText(item.masteryLevel) }}
+                        </el-tag>
+                        <span class="review-count">复习{{ item.reviewCount }}次</span>
+                      </div>
+                    </div>
+                    <div class="pronunciation" v-if="item.pronunciation">
+                      {{ item.pronunciation }}
+                    </div>
+                    <div class="definition">{{ item.definition }}</div>
+                    <div class="example" v-if="item.exampleSentence">
+                      <span class="example-label">例句：</span>
+                      {{ item.exampleSentence }}
+                    </div>
+                  </div>
+                  <div class="word-actions">
+                    <el-button size="small" @click.stop="playAudio(item)" :disabled="!item.audioUrl">
+                      <el-icon><VideoPlay /></el-icon>
+                    </el-button>
+                    <el-button size="small" @click.stop="markAsLearned(item)" v-if="item.masteryLevel !== 'MASTERED'">
+                      <el-icon><Check /></el-icon>
+                    </el-button>
+                  </div>
                 </div>
               </div>
 
-              <div v-else class="no-test-data">
-                <el-empty description="暂无测试题目">
-                  <el-button type="primary" @click="startTest">开始测试</el-button>
-                </el-empty>
+              <el-empty v-if="!vocabularyLoading && vocabularyList.length === 0" description="暂无生词" />
+            </div>
+          </el-tab-pane>
+
+          <!-- 学习统计 -->
+          <el-tab-pane label="学习统计" name="stats">
+            <div class="course-stats" v-loading="statsLoading">
+              <el-row :gutter="20">
+                <el-col :span="8">
+                  <el-card class="stat-card">
+                    <div class="stat-content">
+                      <div class="stat-number">{{ courseOverview.totalWords }}</div>
+                      <div class="stat-label">总词汇量</div>
+                    </div>
+                  </el-card>
+                </el-col>
+                <el-col :span="8">
+                  <el-card class="stat-card">
+                    <div class="stat-content">
+                      <div class="stat-number">{{ courseOverview.masteredWords }}</div>
+                      <div class="stat-label">已掌握</div>
+                    </div>
+                  </el-card>
+                </el-col>
+                <el-col :span="8">
+                  <el-card class="stat-card">
+                    <div class="stat-content">
+                      <div class="stat-number">{{ courseOverview.totalTime }}</div>
+                      <div class="stat-label">学习时长(分)</div>
+                    </div>
+                  </el-card>
+                </el-col>
+              </el-row>
+
+              <div class="progress-chart">
+                <h4>单元学习进度</h4>
+                <div class="unit-progress-list">
+                  <div v-for="unit in units" :key="unit.id" class="unit-progress-item">
+                    <span class="unit-name">{{ unit.name }}</span>
+                    <el-progress :percentage="unit.progress" :stroke-width="8" />
+                    <span class="progress-text">{{ unit.learnedWords }}/{{ unit.wordCount }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </el-tab-pane>
         </el-tabs>
       </div>
     </el-dialog>
+
+    <!-- 单元内容学习对话框 -->
+    <el-dialog
+      v-model="contentDialogVisible"
+      :title="currentUnit.name + ' - 内容学习'"
+      width="min(1000px, 96vw)"
+      top="3vh"
+      :close-on-click-modal="false"
+    >
+      <div class="unit-learning">
+        <el-tabs v-model="contentTab">
+          <!-- 课文学习 -->
+          <el-tab-pane label="课文学习" name="texts">
+            <div class="text-list">
+              <div v-for="text in unitTexts" :key="text.id" class="text-item">
+                <div class="text-header">
+                  <h4>{{ text.title }}</h4>
+                  <div class="text-meta">
+                    <el-tag :type="getDifficultyType(text.difficulty)" size="small">
+                      {{ text.difficulty }}
+                    </el-tag>
+                    <el-button size="small" @click="startTextLearning(text)">
+                      开始学习
+                    </el-button>
+                  </div>
+                </div>
+                <p class="text-preview">{{ getTextPreview(text.content) }}</p>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <!-- 单词学习 -->
+          <el-tab-pane label="单词学习" name="words">
+            <div class="word-learning-control">
+              <div class="learning-header">
+                <h3>单词学习 - {{ currentUnit.name }}</h3>
+                <div class="learning-actions">
+                  <el-button type="primary" @click="startWordLearning" :disabled="unitWords.length === 0">
+                    开始学习
+                  </el-button>
+                  <el-button @click="startWordTest" :disabled="unitWords.length === 0">
+                    单词测试
+                  </el-button>
+                </div>
+              </div>
+
+              <div class="word-list">
+                <el-row :gutter="10">
+                  <el-col :span="6" v-for="word in unitWords" :key="word.id">
+                    <el-card class="word-item" @click="showWordDetail(word)">
+                      <div class="word-content">
+                        <h4>{{ word.word }}</h4>
+                        <p class="pronunciation">{{ word.pronunciation }}</p>
+                        <p class="definition">{{ word.definition }}</p>
+                      </div>
+                      <div class="word-status">
+                        <el-tag v-if="word.inVocabulary" :type="getMasteryType(word.masteryLevel)" size="small">
+                          {{ getMasteryText(word.masteryLevel) }}
+                        </el-tag>
+                      </div>
+                    </el-card>
+                  </el-col>
+                </el-row>
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+      </div>
+    </el-dialog>
+
+    <!-- 单词详情弹窗 -->
+    <el-dialog v-model="wordDialogVisible" title="单词详解" width="min(500px, 92vw)">
+      <div class="word-detail" v-if="selectedWord">
+        <div class="word-header">
+          <h2>{{ selectedWord.word }}</h2>
+          <el-button @click="playAudio(selectedWord)" :disabled="!selectedWord.audioUrl">
+            <el-icon><VideoPlay /></el-icon> 播放
+          </el-button>
+        </div>
+
+        <div class="word-content">
+          <p class="pronunciation">{{ selectedWord.pronunciation }}</p>
+          <div class="definition">{{ selectedWord.definition }}</div>
+          <div class="example-sentence" v-if="selectedWord.exampleSentence">
+            <span class="example-label">例句：</span>
+            {{ selectedWord.exampleSentence }}
+          </div>
+          <div class="word-meta-info">
+            <el-tag>{{ selectedWord.partOfSpeech }}</el-tag>
+            <el-tag :type="getDifficultyType(selectedWord.difficulty)">
+              {{ selectedWord.difficulty }}
+            </el-tag>
+          </div>
+        </div>
+
+        <div class="word-actions">
+          <el-button
+            type="primary"
+            @click="addToVocabulary(selectedWord)"
+            :disabled="selectedWord.inVocabulary"
+          >
+            {{ selectedWord.inVocabulary ? '已在生词本' : '加入生词本' }}
+          </el-button>
+          <el-button @click="markAsLearned(selectedWord)" v-if="selectedWord.masteryLevel !== 'MASTERED'">
+            标记为已认识
+          </el-button>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 复习对话框 -->
+    <el-dialog v-model="reviewDialogVisible" title="生词复习" width="min(800px, 96vw)" :close-on-click-modal="false">
+      <div class="review-session" v-if="reviewWords.length > 0 && currentReviewIndex < reviewWords.length">
+        <div class="review-progress">
+          <span>进度：{{ currentReviewIndex + 1 }} / {{ reviewWords.length }}</span>
+          <el-progress :percentage="reviewProgress" />
+        </div>
+
+        <div class="word-card" :class="{ flipped: showAnswer }">
+          <div class="card-front" v-show="!showAnswer">
+            <h2 class="word">{{ currentReviewWord.word }}</h2>
+            <div class="card-actions">
+              <el-button @click="playAudio(currentReviewWord)" :disabled="!currentReviewWord.audioUrl">
+                <el-icon><VideoPlay /></el-icon> 播放发音
+              </el-button>
+              <el-button type="primary" @click="showAnswer = true">显示答案</el-button>
+            </div>
+          </div>
+
+          <div class="card-back" v-show="showAnswer">
+            <h2 class="word">{{ currentReviewWord.word }}</h2>
+            <p class="pronunciation">{{ currentReviewWord.pronunciation }}</p>
+            <div class="definition">{{ currentReviewWord.definition }}</div>
+            <div class="example" v-if="currentReviewWord.exampleSentence">
+              <span class="example-label">例句：</span>
+              {{ currentReviewWord.exampleSentence }}
+            </div>
+            <div class="review-actions">
+              <el-button type="danger" @click="submitReview('UNKNOWN')">不认识</el-button>
+              <el-button type="warning" @click="submitReview('UNCERTAIN')">模糊</el-button>
+              <el-button type="success" @click="submitReview('KNOWN')">认识</el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="review-complete" v-else>
+        <h3>复习完成！</h3>
+        <div class="review-summary">
+          <div class="summary-item">
+            <span>总复习单词：</span>
+            <strong>{{ reviewSummary.totalWords }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>认识：</span>
+            <strong class="known">{{ reviewSummary.knownWords }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>模糊：</span>
+            <strong class="uncertain">{{ reviewSummary.uncertainWords }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>不认识：</span>
+            <strong class="unknown">{{ reviewSummary.unknownWords }}</strong>
+          </div>
+        </div>
+        <div class="review-actions-complete">
+          <el-button type="primary" @click="reviewDialogVisible = false">完成</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, onActivated } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import {
+  getStudentCourses,
+  getCourseUnits,
+  getUnitContent,
+  getTextDetail,
+  getWordDetail,
+  addToVocabulary as addToVocabularyAPI,
+  getVocabularyList,
+  updateMasteryLevel,
+  startStudySession,
+  submitStudyResult
+} from '@/api/student'
 
-// 响应式数据
-const courses = ref([])
+const router = useRouter()
+const route = useRoute()
+
+const loading = ref(false)
 const searchKeyword = ref('')
-const unitsDialogVisible = ref(false)
-const studyDialogVisible = ref(false)
-const activeTab = ref('texts')
+const courses = ref([])
 
-// 当前选中的课程和单元
+// 课程单元对话框
+const unitDialogVisible = ref(false)
 const currentCourse = ref({})
-const currentCourseUnits = ref([])
+const units = ref([])
+const activeTab = ref('units')
+
+// 生词复习相关
+const vocabularyLoading = ref(false)
+const vocabularyList = ref([])
+const vocabularyStats = reactive({
+  newWords: 0,
+  learningWords: 0,
+  masteredWords: 0
+})
+const masteryFilter = ref('')
+
+// 学习统计相关
+const statsLoading = ref(false)
+const courseOverview = reactive({
+  totalWords: 0,
+  masteredWords: 0,
+  totalTime: 0
+})
+
+// 单元内容学习对话框
+const contentDialogVisible = ref(false)
 const currentUnit = ref({})
-const currentUnitTexts = ref([])
-const currentUnitWords = ref([])
+const unitTexts = ref([])
+const unitWords = ref([])
+const contentTab = ref('texts')
 
-// 测试相关
-const testWords = ref([])
-const currentTestIndex = ref(0)
-const currentTestWord = ref({})
-const testOptions = ref([])
-const selectedAnswer = ref('')
-const showResult = ref(false)
-const isCorrect = ref(false)
-const testResults = ref([])
+// 单词详情弹窗
+const wordDialogVisible = ref(false)
+const selectedWord = ref(null)
 
-// 方法
+// 复习模式相关
+const reviewDialogVisible = ref(false)
+const reviewWords = ref([])
+const currentReviewIndex = ref(0)
+const showAnswer = ref(false)
+const reviewSummary = reactive({
+  totalWords: 0,
+  knownWords: 0,
+  uncertainWords: 0,
+  unknownWords: 0
+})
+
+// 加载课程列表
 const loadCourses = async () => {
+  loading.value = true
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    const mockCourses = [
-      {
-        id: 1,
-        name: '新概念英语第一册',
-        description: '适合英语初学者的经典教材，包含基础语法和常用词汇',
-        coverImage: null,
-        unitCount: 12,
-        completedUnits: 8,
-        enrollDate: '2024-01-10T00:00:00'
-      },
-      {
-        id: 2,
-        name: '大学英语四级',
-        description: '大学英语四级考试备考课程，包含听力、阅读、写作和翻译',
-        coverImage: null,
-        unitCount: 10,
-        completedUnits: 3,
-        enrollDate: '2024-01-12T00:00:00'
-      },
-      {
-        id: 3,
-        name: '商务英语',
-        description: '商务环境下的英语沟通技能训练',
-        coverImage: null,
-        unitCount: 8,
-        completedUnits: 2,
-        enrollDate: '2024-01-15T00:00:00'
-      }
-    ]
-
-    // 应用搜索过滤
-    if (searchKeyword.value) {
-      courses.value = mockCourses.filter(course =>
-        course.name.toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
-        course.description.toLowerCase().includes(searchKeyword.value.toLowerCase())
-      )
-    } else {
-      courses.value = mockCourses
+    const response = await getStudentCourses()
+    if (response?.code === 200 && response?.data) {
+      // 后端返回的是 { courses: [...] } 结构
+      courses.value = Array.isArray(response.data?.courses) ? response.data.courses : []
     }
   } catch (error) {
-    ElMessage.error('加载课程列表失败')
+    console.error('加载课程失败:', error)
+    ElMessage.error('加载课程失败')
+  } finally {
+    loading.value = false
   }
 }
 
+// 进入课程
 const enterCourse = async (course) => {
+  // 先校验 courseId 再打开对话框，避免空状态弹窗
+  if (!course.courseId) {
+    ElMessage.error('课程ID不存在')
+    return
+  }
+
+  currentCourse.value = course
+  unitDialogVisible.value = true
+  activeTab.value = 'units'
+
+  await loadUnits(course.courseId)
+  await loadVocabulary()
+  await loadCourseStats()
+
+  // 刷新课程列表以更新进度
+  await refreshCourseProgress(course.courseId)
+}
+
+// 刷新课程进度
+const refreshCourseProgress = async (courseId) => {
   try {
-    currentCourse.value = course
-
-    // 模拟加载单元列表
-    await new Promise(resolve => setTimeout(resolve, 300))
-
-    currentCourseUnits.value = [
-      {
-        id: 1,
-        name: '第一单元',
-        description: '基础问候语和自我介绍',
-        textCount: 3,
-        wordCount: 25,
-        progress: 100,
-        completed: true
-      },
-      {
-        id: 2,
-        name: '第二单元',
-        description: '日常对话和时间表达',
-        textCount: 4,
-        wordCount: 30,
-        progress: 75,
-        completed: false
-      },
-      {
-        id: 3,
-        name: '第三单元',
-        description: '方位和地点描述',
-        textCount: 3,
-        wordCount: 28,
-        progress: 50,
-        completed: false
+    const response = await getStudentCourses()
+    if (response?.code === 200 && response?.data) {
+      const updatedCourses = response.data?.courses || []
+      const updatedCourse = updatedCourses.find(c => c.courseId === courseId)
+      if (updatedCourse) {
+        // 更新课程列表中的对应课程
+        const courseIndex = courses.value.findIndex(c => c.courseId === courseId)
+        if (courseIndex !== -1) {
+          courses.value[courseIndex] = { ...courses.value[courseIndex], ...updatedCourse }
+        }
+        // 如果当前打开的课程，也更新
+        if (currentCourse.value.courseId === courseId) {
+          currentCourse.value = { ...currentCourse.value, ...updatedCourse }
+        }
       }
-    ]
-
-    unitsDialogVisible.value = true
+    }
   } catch (error) {
-    ElMessage.error('加载单元列表失败')
+    console.error('刷新课程进度失败:', error)
   }
 }
 
-const enterUnit = async (unit) => {
+// 加载单元列表
+const loadUnits = async (courseId) => {
   try {
-    currentUnit.value = unit
+    if (!courseId) {
+      console.error('courseId 为空')
+      return
+    }
 
-    // 模拟加载课文列表
-    await new Promise(resolve => setTimeout(resolve, 300))
+    const response = await getCourseUnits(courseId)
+    if (response?.code === 200 && response?.data) {
+      // 后端返回的是 { units: [...] } 结构
+      units.value = Array.isArray(response.data?.units) ? response.data.units : []
 
-    currentUnitTexts.value = [
-      {
-        id: 1,
-        title: 'Greetings and Introductions',
-        difficulty: 'EASY',
-        completed: true,
-        content: 'Hello! My name is Tom. What is your name? Nice to meet you!'
-      },
-      {
-        id: 2,
-        title: 'Daily Conversations',
-        difficulty: 'MEDIUM',
-        completed: false,
-        content: 'How are you today? I\'m fine, thank you. And you?'
-      },
-      {
-        id: 3,
-        title: 'Time and Dates',
-        difficulty: 'MEDIUM',
-        completed: false,
-        content: 'What time is it? It\'s 3 o\'clock in the afternoon.'
+      // 更新当前课程的进度信息
+      if (currentCourse.value.courseId === courseId) {
+        updateCourseProgress()
+        // 同时刷新课程列表中的进度
+        await refreshCourseProgress(courseId)
       }
-    ]
-
-    // 模拟加载单词列表
-    currentUnitWords.value = [
-      {
-        id: 1,
-        word: 'hello',
-        pronunciation: '/həˈləʊ/',
-        definition: '你好；喂',
-        exampleSentence: 'Hello, how are you?',
-        difficulty: 'EASY'
-      },
-      {
-        id: 2,
-        word: 'name',
-        pronunciation: '/neɪm/',
-        definition: '名字；名称',
-        exampleSentence: 'What is your name?',
-        difficulty: 'EASY'
-      },
-      {
-        id: 3,
-        word: 'conversation',
-        pronunciation: '/ˌkɒnvəˈseɪʃn/',
-        definition: '对话；会话',
-        exampleSentence: 'We had a long conversation.',
-        difficulty: 'MEDIUM'
-      }
-    ]
-
-    activeTab.value = 'texts'
-    studyDialogVisible.value = true
+    }
   } catch (error) {
+    console.error('加载单元失败:', error)
+    ElMessage.error('加载单元失败')
+  }
+}
+
+// 更新课程进度
+const updateCourseProgress = () => {
+  if (!currentCourse.value.courseId) return
+  
+  // 计算已学习单元数
+  const learnedUnits = units.value.filter(unit => unit.progress >= 80).length
+  const totalUnits = units.value.length
+  
+  // 更新当前课程对象
+  const courseIndex = courses.value.findIndex(c => c.courseId === currentCourse.value.courseId)
+  if (courseIndex !== -1) {
+    courses.value[courseIndex].learnedUnits = learnedUnits
+    courses.value[courseIndex].totalUnits = totalUnits
+    // 同步更新currentCourse
+    currentCourse.value.learnedUnits = learnedUnits
+    currentCourse.value.totalUnits = totalUnits
+  }
+}
+
+// 加载课程生词本
+const loadVocabulary = async () => {
+  vocabularyLoading.value = true
+  try {
+    const params = {
+      courseId: currentCourse.value.courseId,
+      masteryLevel: masteryFilter.value
+    }
+    const response = await getVocabularyList(params)
+    if (response?.code === 200 && response?.data) {
+      vocabularyList.value = Array.isArray(response.data?.records) ? response.data.records : []
+
+      // 统计生词数据
+      vocabularyStats.newWords = vocabularyList.value.filter(w => w.masteryLevel === 'NEW').length
+      vocabularyStats.learningWords = vocabularyList.value.filter(w => w.masteryLevel === 'LEARNING').length
+      vocabularyStats.masteredWords = vocabularyList.value.filter(w => w.masteryLevel === 'MASTERED').length
+    }
+  } catch (error) {
+    console.error('加载生词本失败:', error)
+  } finally {
+    vocabularyLoading.value = false
+  }
+}
+
+// 加载课程统计
+const loadCourseStats = async () => {
+  statsLoading.value = true
+  try {
+    // 这里可以调用统计API
+    // 暂时使用单元数据统计
+    courseOverview.totalWords = units.value.reduce((sum, unit) => sum + (unit.wordCount || 0), 0)
+    courseOverview.masteredWords = units.value.reduce((sum, unit) => sum + (unit.masteredWords || 0), 0)
+    courseOverview.totalTime = units.value.reduce((sum, unit) => sum + (unit.studyTime || 0), 0)
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+  } finally {
+    statsLoading.value = false
+  }
+}
+
+// 进入单元学习
+const enterUnit = async (unit) => {
+  currentUnit.value = unit
+  contentDialogVisible.value = true
+  contentTab.value = 'texts'
+
+  await loadUnitContent(unit.id)
+}
+
+// 加载单元内容
+const loadUnitContent = async (unitId) => {
+  try {
+    const response = await getUnitContent(unitId)
+
+    if (response?.code === 200 && response?.data) {
+      unitTexts.value = Array.isArray(response.data?.texts) ? response.data.texts : []
+      unitWords.value = Array.isArray(response.data?.words) ? response.data.words : []
+    } else {
+      console.error('API响应错误:', response)
+    }
+  } catch (error) {
+    console.error('加载单元内容失败:', error)
     ElMessage.error('加载单元内容失败')
   }
 }
 
-const studyText = (text) => {
-  ElMessage.info(`学习课文：${text.title}`)
+// 开始课文学习
+const startTextLearning = (text) => {
+  router.push({
+    path: '/student/text-learning',
+    query: {
+      textId: text.id,
+      courseId: currentCourse.value.courseId,
+      unitId: currentUnit.value.id,
+      from: 'course'
+    }
+  })
 }
 
-const addWordsToVocabulary = (text) => {
-  ElMessage.success(`已将 ${text.title} 中的单词添加到生词本`)
+// 开始单词学习
+const startWordLearning = () => {
+  router.push(`/student/word-learning?unitId=${currentUnit.value.id}`)
 }
 
-const viewWordDetail = (word) => {
-  ElMessage.info(`查看单词详情：${word.word}`)
+// 开始单词测试
+const startWordTest = () => {
+  router.push(`/student/word-test?unitId=${currentUnit.value.id}`)
 }
 
-const playAudio = (word) => {
-  ElMessage.info(`播放发音：${word.word}`)
+// 显示单词详情
+const showWordDetail = async (word) => {
+  try {
+    // 对于生词本记录，使用wordId字段；对于其他情况，使用id字段
+    const wordId = word?.wordId || word?.id
+    if (!wordId) {
+      ElMessage.error('单词ID不存在')
+      return
+    }
+    const response = await getWordDetail(wordId)
+    if (response?.code === 200 && response?.data) {
+      selectedWord.value = response.data
+      wordDialogVisible.value = true
+    }
+  } catch (error) {
+    console.error('获取单词详情失败:', error)
+    ElMessage.error('获取单词详情失败')
+  }
 }
 
-const addToVocabulary = (word) => {
-  ElMessage.success(`已将单词 "${word.word}" 添加到生词本`)
+// 添加到生词本
+const addToVocabulary = async (word) => {
+  try {
+    const response = await addToVocabularyAPI({
+      wordId: word?.wordId || word?.id
+    })
+    if (response?.code === 200) {
+      // 根据响应结果显示不同的消息
+      if (response.data && typeof response.data === 'string' && response.data.includes('已在生词本中')) {
+        ElMessage.info('单词已在生词本中')
+      } else {
+        ElMessage.success('已添加到生词本')
+      }
+      word.inVocabulary = true
+      word.masteryLevel = 'NEW'
+      loadVocabulary() // 刷新生词本列表
+    }
+  } catch (error) {
+    console.error('添加生词失败:', error)
+    ElMessage.error('添加生词失败')
+  }
 }
 
-const startTest = () => {
-  if (currentUnitWords.value.length === 0) {
-    ElMessage.warning('该单元暂无单词，无法进行测试')
+// 标记为已认识
+const markAsLearned = async (word) => {
+  try {
+    const wordId = word?.id || word?.wordId
+    if (!wordId) {
+      ElMessage.error('单词ID不存在')
+      return
+    }
+    const response = await updateMasteryLevel(wordId, {
+      masteryLevel: 'MASTERED',
+      isCorrect: true
+    })
+    if (response?.code === 200) {
+      ElMessage.success('已标记为已掌握')
+      word.masteryLevel = 'MASTERED'
+      loadVocabulary() // 刷新生词本列表
+    }
+  } catch (error) {
+    console.error('标记失败:', error)
+    ElMessage.error('标记失败')
+  }
+}
+
+// 复习计算属性
+const currentReviewWord = computed(() => {
+  return reviewWords.value[currentReviewIndex.value] || {
+    word: '', definition: '', pronunciation: '', exampleSentence: '', audioUrl: null
+  }
+})
+
+const reviewProgress = computed(() => {
+  if (reviewWords.value.length === 0) return 100
+  return Math.round((currentReviewIndex.value / reviewWords.value.length) * 100)
+})
+
+// 提交复习结果
+const submitReview = async (result) => {
+  const currentWord = reviewWords.value[currentReviewIndex.value]
+  if (!currentWord) return
+
+  reviewSummary.totalWords++
+  if (result === 'KNOWN') reviewSummary.knownWords++
+  else if (result === 'UNCERTAIN') reviewSummary.uncertainWords++
+  else reviewSummary.unknownWords++
+
+  try {
+    const wordId = currentWord?.id || currentWord?.wordId
+    if (!wordId) {
+      console.error('单词ID不存在')
+      return
+    }
+    const masteryLevel = result === 'KNOWN' ? 'MASTERED' : 'LEARNING'
+    await updateMasteryLevel(wordId, {
+      masteryLevel,
+      isCorrect: result === 'KNOWN'
+    })
+  } catch (error) {
+    console.error('更新单词状态失败:', error)
+  }
+
+  currentReviewIndex.value++
+  showAnswer.value = false
+}
+
+// 开始复习
+const startReview = () => {
+  if (vocabularyList.value.length === 0) {
+    ElMessage.warning('当前课程暂无生词，无法开始复习')
     return
   }
-
-  testWords.value = [...currentUnitWords.value]
-  currentTestIndex.value = 0
-  testResults.value = []
-  loadTestQuestion()
-}
-
-const loadTestQuestion = () => {
-  currentTestWord.value = testWords.value[currentTestIndex.value]
-
-  // 生成选项（正确答案 + 3个错误答案）
-  const allWords = [...currentUnitWords.value].filter(w => w.id !== currentTestWord.value.id)
-  const wrongAnswers = []
-  for (let i = 0; i < 3 && i < allWords.length; i++) {
-    const randomIndex = Math.floor(Math.random() * allWords.length)
-    wrongAnswers.push(allWords.splice(randomIndex, 1)[0])
+  
+  // 筛选需要复习的单词（排除已掌握的）
+  const reviewableWords = vocabularyList.value.filter(word => word.masteryLevel !== 'MASTERED')
+  
+  if (reviewableWords.length === 0) {
+    ElMessage.info('所有单词已掌握，无需复习')
+    return
   }
-
-  testOptions.value = [currentTestWord.value, ...wrongAnswers].sort(() => Math.random() - 0.5)
-  selectedAnswer.value = ''
-  showResult.value = false
+  
+  // 打开复习对话框
+  reviewWords.value = reviewableWords
+  currentReviewIndex.value = 0
+  showAnswer.value = false
+  reviewDialogVisible.value = true
+  Object.assign(reviewSummary, {
+    totalWords: 0,
+    knownWords: 0,
+    uncertainWords: 0,
+    unknownWords: 0
+  })
 }
 
-const submitAnswer = () => {
-  isCorrect.value = selectedAnswer.value === currentTestWord.value.word
-  testResults.value.push({
-    word: currentTestWord.value.word,
-    correct: isCorrect.value,
-    userAnswer: selectedAnswer.value
-  })
+// 播放音频
+let currentAudio = null
 
-  showResult.value = true
-
-  setTimeout(() => {
-    if (currentTestIndex.value < testWords.value.length - 1) {
-      currentTestIndex.value++
-      loadTestQuestion()
-    } else {
-      // 测试完成
-      const accuracy = getTestAccuracy()
-      ElMessage.success(`测试完成！正确率：${accuracy}%`)
-      activeTab.value = 'words'
+const playAudio = (word) => {
+  if (word?.audioUrl) {
+    if (currentAudio) {
+      currentAudio.pause()
+      currentAudio.onended = null
+      currentAudio.onerror = null
+      currentAudio = null
     }
-  }, 2000)
-}
-
-const skipQuestion = () => {
-  testResults.value.push({
-    word: currentTestWord.value.word,
-    correct: false,
-    userAnswer: '跳过'
-  })
-
-  if (currentTestIndex.value < testWords.value.length - 1) {
-    currentTestIndex.value++
-    loadTestQuestion()
-  } else {
-    const accuracy = getTestAccuracy()
-    ElMessage.success(`测试完成！正确率：${accuracy}%`)
-    activeTab.value = 'words'
+    currentAudio = new Audio(word.audioUrl)
+    currentAudio.onended = () => {
+      currentAudio = null
+    }
+    currentAudio.play().catch(error => {
+      console.error('播放音频失败:', error)
+      ElMessage.error('播放音频失败')
+    })
   }
 }
 
-const getTestAccuracy = () => {
-  if (testResults.value.length === 0) return 0
-  const correctCount = testResults.value.filter(r => r.correct).length
-  return Math.round((correctCount / testResults.value.length) * 100)
-}
-
-// 工具方法
+// 获取课程进度
 const getCourseProgress = (course) => {
-  return Math.round((course.completedUnits / course.unitCount) * 100)
+  // 优先使用后端返回的progress字段
+  if (course.progress !== undefined && course.progress !== null) {
+    return Math.round(course.progress)
+  }
+  // 如果没有progress字段，使用learnedUnits计算
+  if (!course.totalUnits) return 0
+  return Math.round(((course.learnedUnits || 0) / course.totalUnits) * 100)
 }
 
+// 获取进度条颜色
 const getProgressColor = (percentage) => {
   if (percentage >= 80) return '#67c23a'
   if (percentage >= 50) return '#e6a23c'
   return '#f56c6c'
 }
 
+// 获取掌握程度类型
+const getMasteryType = (level) => {
+  const types = {
+    'NEW': 'info',
+    'LEARNING': 'warning',
+    'MASTERED': 'success'
+  }
+  return types[level] || 'info'
+}
+
+// 获取掌握程度文本
+const getMasteryText = (level) => {
+  const texts = {
+    'NEW': '新词',
+    'LEARNING': '学习中',
+    'MASTERED': '已掌握'
+  }
+  return texts[level] || '未知'
+}
+
+// 获取难度类型
 const getDifficultyType = (difficulty) => {
   const types = {
     'EASY': 'success',
     'MEDIUM': 'warning',
     'HARD': 'danger'
   }
-  return types[difficulty] || ''
+  return types[difficulty] || 'info'
 }
 
-const getDifficultyText = (difficulty) => {
-  const texts = {
-    'EASY': '简单',
-    'MEDIUM': '中等',
-    'HARD': '困难'
+// 获取课文预览
+const getTextPreview = (content) => {
+  if (!content) return ''
+  return content.length > 100 ? content.substring(0, 100) + '...' : content
+}
+
+// 格式化日期
+const formatDate = (date) => {
+  if (!date) return ''
+  return new Date(date).toLocaleDateString('zh-CN')
+}
+
+// 监听路由变化，从其他页面返回时刷新
+watch(() => route.path, (newPath, oldPath) => {
+  if (newPath === '/student/courses') {
+    // 如果是从课文学习页面返回，强制刷新
+    if (oldPath === '/student/text-learning') {
+      loadCourses()
+      // 如果打开了课程对话框，刷新单元数据
+      if (unitDialogVisible.value && currentCourse.value.courseId) {
+        setTimeout(() => {
+          loadUnits(currentCourse.value.courseId).then(() => {
+            loadVocabulary()
+            loadCourseStats()
+            refreshCourseProgress(currentCourse.value.courseId)
+          })
+        }, 300)
+      }
+    } else {
+      loadCourses()
+    }
+    
+    // 检查是否有刷新参数
+    if (route.query.refresh) {
+      // 如果打开了课程对话框，刷新单元数据
+      if (unitDialogVisible.value && currentCourse.value.courseId) {
+        loadUnits(currentCourse.value.courseId).then(() => {
+          loadVocabulary()
+          loadCourseStats()
+          refreshCourseProgress(currentCourse.value.courseId)
+        })
+      }
+    }
+    // 检查是否有课程ID参数，如果有则打开课程对话框
+    if (route.query.courseId) {
+      const courseId = Number(route.query.courseId)
+      // 等待课程列表加载完成
+      setTimeout(() => {
+        const course = courses.value.find(c => c.courseId === courseId)
+        if (course) {
+          enterCourse(course)
+        }
+      }, 300)
+    }
   }
-  return texts[difficulty] || difficulty
+}, { immediate: false })
+
+// 监听路由查询参数变化
+watch(() => route.query, (newQuery) => {
+  if (route.path === '/student/courses' && newQuery.refresh) {
+    // 刷新课程列表
+    loadCourses().then(() => {
+      // 如果打开了课程对话框，刷新单元数据
+      if (unitDialogVisible.value && currentCourse.value.courseId) {
+        loadUnits(currentCourse.value.courseId).then(() => {
+          loadVocabulary()
+          loadCourseStats()
+          refreshCourseProgress(currentCourse.value.courseId)
+        })
+      }
+      // 如果有课程ID参数，打开课程对话框
+      if (newQuery.courseId) {
+        const courseId = Number(newQuery.courseId)
+        const course = courses.value.find(c => c.courseId === courseId)
+        if (course && !unitDialogVisible.value) {
+          setTimeout(() => {
+            enterCourse(course)
+          }, 300)
+        }
+      }
+    })
+  }
+}, { deep: true })
+
+// 监听自定义刷新事件（命名函数以便 onUnmounted 时正确移除）
+const handleCourseRefresh = () => {
+  if (route.path === '/student/courses') {
+    loadCourses()
+    if (unitDialogVisible.value && currentCourse.value.courseId) {
+      loadUnits(currentCourse.value.courseId).then(() => {
+        loadVocabulary()
+        loadCourseStats()
+        refreshCourseProgress(currentCourse.value.courseId)
+      })
+    }
+  }
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('course-refresh', handleCourseRefresh)
 }
 
-const formatDate = (dateString) => {
-  return new Date(dateString).toLocaleDateString()
-}
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('course-refresh', handleCourseRefresh)
+  }
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio.onended = null
+    currentAudio.onerror = null
+    currentAudio = null
+  }
+})
 
-// 生命周期
+// 组件激活时刷新（用于keep-alive场景）
+onActivated(() => {
+  loadCourses()
+  // 如果当前打开了课程对话框，刷新单元数据
+  if (unitDialogVisible.value && currentCourse.value.courseId) {
+    loadUnits(currentCourse.value.courseId)
+    loadVocabulary()
+    loadCourseStats()
+  }
+})
+
 onMounted(() => {
   loadCourses()
+
+  // 检查是否有传入的课程ID
+  const courseId = route.query.courseId
+  if (courseId) {
+    // 找到对应课程并打开
+    setTimeout(() => {
+      if (Array.isArray(courses.value)) {
+        const course = courses.value.find(c => c.courseId == courseId)
+        if (course) {
+          enterCourse(course)
+        }
+      }
+    }, 1000)
+  }
 })
 </script>
 
 <style scoped>
 .courses-learning {
-  height: 100%;
+  padding: 20px;
+  background-color: var(--bg-secondary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+  min-height: calc(100vh - 120px);
 }
 
 .card-header {
@@ -592,67 +1049,115 @@ onMounted(() => {
   align-items: center;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.course-search-input {
+  width: 200px;
+}
+
+@media (max-width: 600px) {
+  .course-search-input {
+    width: 100%;
+  }
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .header-actions {
+    width: 100%;
+  }
+}
+
 .course-card {
   margin-bottom: 20px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 20px;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 }
 
 .course-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
 }
 
 .course-cover {
-  height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #f5f7fa;
-  border-radius: 4px;
-  margin-bottom: 15px;
+  height: 140px;
+  overflow: hidden;
+  position: relative;
 }
 
 .cover-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 4px;
+  transition: transform 0.5s ease;
+}
+
+.course-card:hover .cover-image {
+  transform: scale(1.05);
 }
 
 .cover-placeholder {
-  color: #c0c4cc;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.course-info {
+  padding: 15px;
 }
 
 .course-info h3 {
-  margin: 0 0 8px;
+  margin: 0 0 8px 0;
+  color: #333;
   font-size: 16px;
-  color: #303133;
 }
 
 .description {
-  margin: 0 0 12px;
-  color: #606266;
+  color: #666;
   font-size: 14px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  margin: 8px 0;
+  height: 40px;
   overflow: hidden;
 }
 
+.class-info {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0;
+  font-size: 12px;
+  color: #888;
+}
+
 .course-stats {
-  margin-bottom: 12px;
+  margin: 10px 0;
 }
 
 .stat-item {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 4px;
-  font-size: 13px;
+  margin: 4px 0;
+  font-size: 12px;
 }
 
 .stat-item .label {
-  color: #909399;
+  color: #666;
 }
 
 .stat-item .value {
@@ -661,19 +1166,21 @@ onMounted(() => {
 }
 
 .progress-bar {
-  margin-bottom: 12px;
+  margin: 10px 0;
 }
 
 .course-meta {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.join-date {
   font-size: 12px;
-  color: #909399;
+  color: #888;
 }
 
-.units-container {
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
+/* 单元卡片样式 */
 .unit-card {
   margin-bottom: 15px;
   cursor: pointer;
@@ -681,12 +1188,11 @@ onMounted(() => {
 }
 
 .unit-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
 }
 
 .unit-card.completed {
-  border-left: 4px solid #67c23a;
+  border: 2px solid #67c23a;
 }
 
 .unit-header {
@@ -698,67 +1204,91 @@ onMounted(() => {
 
 .unit-header h4 {
   margin: 0;
-  color: #303133;
+  color: #333;
 }
 
 .unit-description {
-  margin: 0 0 12px;
-  color: #606266;
+  color: #666;
   font-size: 14px;
+  margin: 8px 0;
 }
 
 .unit-content {
-  margin-bottom: 12px;
+  margin: 10px 0;
 }
 
 .content-item {
   display: flex;
   align-items: center;
-  margin-bottom: 4px;
-  font-size: 13px;
-  color: #606266;
+  margin: 5px 0;
+  font-size: 12px;
+  color: #666;
 }
 
 .content-item .el-icon {
   margin-right: 5px;
-  color: #409EFF;
 }
 
-.unit-progress {
+.learning-stats {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.stat-row {
   display: flex;
-  align-items: center;
-  font-size: 13px;
-  color: #606266;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #666;
+  margin: 4px 0;
 }
 
-.progress-text {
-  margin-left: 10px;
-  min-width: 35px;
-}
-
-.study-container {
-  max-height: 80vh;
+/* 生词复习样式 */
+.vocabulary-review {
+  max-height: 600px;
   overflow-y: auto;
 }
 
-.words-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 15px;
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.word-card {
+.review-stats {
+  display: flex;
+  gap: 20px;
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+}
+
+.vocabulary-list {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.vocabulary-item {
   padding: 15px;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   cursor: pointer;
-  transition: all 0.3s;
-  position: relative;
+  transition: background-color 0.3s;
 }
 
-.word-card:hover {
-  border-color: #409EFF;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.vocabulary-item:hover {
+  background-color: #f8f9fa;
+}
+
+.word-main {
+  flex: 1;
 }
 
 .word-header {
@@ -770,90 +1300,413 @@ onMounted(() => {
 
 .word-header h3 {
   margin: 0;
-  color: #303133;
-  font-size: 18px;
+  color: #333;
+}
+
+.word-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-count {
+  font-size: 12px;
+  color: #666;
 }
 
 .pronunciation {
-  color: #606266;
+  color: #666;
   font-style: italic;
-  margin-bottom: 8px;
-  font-size: 14px;
+  margin: 4px 0;
 }
 
 .definition {
-  color: #303133;
-  margin-bottom: 12px;
-  line-height: 1.5;
+  color: #333;
+  margin: 8px 0;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.example {
+  color: #666;
+  font-size: 14px;
+  margin-top: 8px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.example-label {
+  font-weight: bold;
 }
 
 .word-actions {
-  position: absolute;
-  top: 10px;
-  right: 10px;
   display: flex;
   gap: 5px;
 }
 
-.test-section {
-  padding: 20px;
+/* 课程统计样式 */
+.course-stats {
+  padding: 20px 0;
 }
 
-.test-header {
+.stat-card {
+  text-align: center;
+}
+
+.stat-number {
+  font-size: 32px;
+  font-weight: bold;
+  color: #409EFF;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  color: #666;
+  font-size: 14px;
+}
+
+.progress-chart {
+  margin-top: 30px;
+}
+
+.progress-chart h4 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.unit-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.unit-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.unit-name {
+  width: 120px;
+  font-size: 14px;
+  color: #333;
+}
+
+.unit-progress-item .el-progress {
+  flex: 1;
+}
+
+.progress-text {
+  width: 60px;
+  text-align: right;
+  font-size: 12px;
+  color: #666;
+}
+
+/* 单元学习样式 */
+.unit-learning {
+  min-height: 500px;
+}
+
+.text-list {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.text-item {
+  padding: 15px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.text-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.text-header h4 {
+  margin: 0;
+  color: #333;
+}
+
+.text-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.text-preview {
+  color: #666;
+  line-height: 1.5;
+}
+
+.word-learning-control {
+  min-height: 500px;
+}
+
+.learning-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.test-info {
+.learning-actions {
   display: flex;
-  gap: 20px;
-  font-size: 14px;
-  color: #606266;
+  gap: 10px;
 }
 
-.test-question {
-  text-align: center;
-  margin-bottom: 30px;
+.word-list {
+  max-height: 500px;
+  overflow-y: auto;
 }
 
-.test-question h4 {
-  font-size: 18px;
-  color: #303133;
+.word-item {
   margin-bottom: 10px;
-}
-
-.test-question .example {
-  color: #606266;
-  font-style: italic;
-}
-
-.test-options {
-  margin-bottom: 30px;
-}
-
-.test-option {
-  display: block;
-  margin-bottom: 10px;
-  padding: 10px;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
   cursor: pointer;
   transition: all 0.3s;
 }
 
-.test-option:hover {
-  border-color: #409EFF;
-  background-color: #f0f9ff;
+.word-item:hover {
+  transform: translateY(-2px);
 }
 
-.test-actions {
+.word-content h4 {
+  margin: 0 0 5px 0;
+  color: #333;
+}
+
+.word-content .pronunciation {
+  color: #666;
+  font-style: italic;
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.word-content .definition {
+  color: #333;
+  font-size: 12px;
+  margin: 5px 0;
+}
+
+/* 复习模式样式 */
+.review-session {
+  padding: 20px;
+}
+
+.review-progress {
+  margin-bottom: 30px;
   text-align: center;
+}
+
+.review-progress span {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 16px;
+  color: #666;
+}
+
+.word-card {
+  max-width: 600px;
+  margin: 0 auto;
+  min-height: 400px;
+  position: relative;
+  perspective: 1000px;
+}
+
+.card-front,
+.card-back {
+  width: 100%;
+  height: 100%;
+  padding: 40px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: transform 0.6s;
+  backface-visibility: hidden;
+}
+
+.card-back {
+  transform: rotateY(180deg);
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.word-card.flipped .card-front {
+  transform: rotateY(-180deg);
+}
+
+.word-card.flipped .card-back {
+  transform: rotateY(0);
+}
+
+.word-card .word {
+  font-size: 48px;
+  font-weight: bold;
+  margin-bottom: 30px;
+  color: #333;
+}
+
+.word-card .pronunciation {
+  font-size: 20px;
+  color: #666;
   margin-bottom: 20px;
 }
 
-.test-result {
+.word-card .definition {
+  font-size: 18px;
+  line-height: 1.6;
   margin-bottom: 20px;
+  color: #333;
+}
+
+.word-card .example {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.example-label {
+  font-weight: bold;
+  color: #409eff;
+}
+
+.card-actions {
+  margin-top: 30px;
+  display: flex;
+  gap: 15px;
+}
+
+.review-actions {
+  margin-top: 30px;
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+.review-complete {
+  text-align: center;
+  padding: 40px;
+}
+
+.review-complete h3 {
+  font-size: 28px;
+  margin-bottom: 30px;
+  color: #67c23a;
+}
+
+.review-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 30px;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.summary-item strong {
+  font-size: 18px;
+}
+
+.summary-item .known {
+  color: #67c23a;
+}
+
+.summary-item .uncertain {
+  color: #e6a23c;
+}
+
+.summary-item .unknown {
+  color: #f56c6c;
+}
+
+.review-actions-complete {
+  margin-top: 30px;
+}
+
+.word-status {
+  margin-top: 8px;
+}
+
+/* 单词详情弹窗样式 */
+.word-detail {
+  padding: 20px 0;
+}
+
+.word-detail .word-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.word-detail h2 {
+  margin: 0;
+  color: #333;
+}
+
+.word-content {
+  margin-bottom: 20px;
+}
+
+.word-content .pronunciation {
+  color: #666;
+  font-style: italic;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.word-content .definition {
+  color: #333;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 15px;
+}
+
+.example-sentence {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 15px;
+}
+
+.example-label {
+  font-weight: bold;
+}
+
+.word-meta-info {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.word-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
 }
 </style>

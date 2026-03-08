@@ -11,6 +11,12 @@
       <!-- 搜索栏 -->
       <div class="search-bar">
         <el-form :inline="true" :model="searchForm" class="search-form">
+          <el-form-item label="状态">
+            <el-select v-model="searchForm.status" placeholder="请选择" clearable>
+              <el-option label="启用" value="ACTIVE" />
+              <el-option label="禁用" value="INACTIVE" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="关键词">
             <el-input v-model="searchForm.keyword" placeholder="课程名称/描述" clearable />
           </el-form-item>
@@ -22,85 +28,49 @@
       </div>
 
       <!-- 课程列表 -->
-      <el-table :data="courses" stripe @expand-change="handleExpandChange">
-        <el-table-column type="expand">
-          <template #default="scope">
-            <div class="expand-content">
-              <h4>课文列表</h4>
-              <el-button
-                size="small"
-                type="primary"
-                @click="goToTexts(scope.row.id)"
-                style="margin-bottom: 10px"
-              >
-                前往课文管理
-              </el-button>
-              <div v-loading="loadingTexts[scope.row.id]">
-                <el-table
-                  v-if="courseTexts[scope.row.id] && courseTexts[scope.row.id].length > 0"
-                  :data="courseTexts[scope.row.id]"
-                  size="small"
-                  style="width: 100%"
-                >
-                  <el-table-column prop="title" label="课文标题">
-                    <template #default="textScope">
-                      <el-link
-                        type="primary"
-                        @click="openTextReader(textScope.row)"
-                        :underline="false"
-                      >
-                        {{ textScope.row.title }}
-                      </el-link>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="contentType" label="类型" width="100">
-                    <template #default="textScope">
-                      <el-tag size="small" :type="getContentTypeTag(textScope.row.contentType).type">
-                        {{ getContentTypeTag(textScope.row.contentType).label }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="difficulty" label="难度" width="80">
-                    <template #default="textScope">
-                      <el-tag size="small" type="info">{{ textScope.row.difficulty }}</el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="orderNum" label="序号" width="80" />
-                </el-table>
-                <el-empty
-                  v-else
-                  description="暂无课文"
-                  :image-size="60"
-                />
-              </div>
-            </div>
-          </template>
-        </el-table-column>
+      <div class="table-wrapper">
+      <el-table :data="courses" stripe>
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="课程名称">
+        <el-table-column prop="name" label="课程名称" />
+        <el-table-column prop="description" label="课程描述" show-overflow-tooltip />
+        <el-table-column prop="status" label="状态" width="100">
           <template #default="scope">
-            <el-link
-              type="primary"
-              @click="goToTexts(scope.row.id)"
-              :underline="false"
-            >
-              {{ scope.row.name }}
-            </el-link>
+            <el-tag :type="scope.row.status === 'ACTIVE' ? 'success' : 'danger'">
+              {{ scope.row.status === 'ACTIVE' ? '启用' : '禁用' }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="description" label="课程描述" show-overflow-tooltip />
         <el-table-column prop="createdTime" label="创建时间" width="180">
           <template #default="scope">
             {{ formatTime(scope.row.createdTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="scope">
-            <el-button size="small" @click="editCourse(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="deleteCourse(scope.row)">删除</el-button>
+            <div class="action-buttons">
+              <el-button 
+                size="small" 
+                type="primary" 
+                :icon="Setting" 
+                @click="manageUnits(scope.row)"
+                title="管理单元"
+              >
+                单元
+              </el-button>
+              <el-dropdown trigger="click" @command="(cmd) => handleDropdownCommand(cmd, scope.row)">
+                <el-button size="small" :icon="MoreFilled" circle />
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item :icon="Edit" command="edit">编辑课程</el-dropdown-item>
+                    <el-dropdown-item :icon="Delete" command="delete" divided>删除课程</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <!-- 分页 -->
       <div class="pagination">
@@ -120,7 +90,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑课程' : '添加课程'"
-      width="600px"
+      width="min(600px, 90%)"
     >
       <el-form
         ref="courseFormRef"
@@ -142,6 +112,12 @@
         <el-form-item label="封面图片" prop="coverImage">
           <el-input v-model="courseForm.coverImage" placeholder="图片URL" />
         </el-form-item>
+        <el-form-item label="状态" prop="status">
+          <el-select v-model="courseForm.status" style="width: 100%">
+            <el-option label="启用" value="ACTIVE" />
+            <el-option label="禁用" value="INACTIVE" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
@@ -150,36 +126,15 @@
         </span>
       </template>
     </el-dialog>
-
-    <!-- 课文阅读器对话框 -->
-    <el-dialog
-      v-model="readerVisible"
-      :title="currentText.title"
-      width="80%"
-      class="reader-dialog"
-    >
-      <div class="reader-container">
-        <div class="reader-content">
-          <p
-            v-for="(paragraph, index) in getFormattedContent(currentText.content)"
-            :key="index"
-          >
-            {{ paragraph }}
-          </p>
-        </div>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { getCourseList, createCourse, updateCourse, deleteCourse as deleteCourseApi } from '@/api/admin'
-import { getTextsByCourse } from '@/api/text'
-
-const router = useRouter()
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Setting, MoreFilled, Edit, Delete } from '@element-plus/icons-vue'
+import { getCourses, createCourse, updateCourse, deleteCourse as deleteCourseApi } from '@/api/admin'
 
 // 响应式数据
 const courses = ref([])
@@ -187,15 +142,11 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const saving = ref(false)
 const courseFormRef = ref()
-
-// 课文相关
-const courseTexts = ref({}) // 存储每个课程的课文列表
-const loadingTexts = ref({}) // 加载状态
-const readerVisible = ref(false) // 阅读器显示状态
-const currentText = ref({}) // 当前查看的课文
+const router = useRouter()
 
 // 搜索表单
 const searchForm = reactive({
+  status: '',
   keyword: ''
 })
 
@@ -211,7 +162,8 @@ const courseForm = reactive({
   id: null,
   name: '',
   description: '',
-  coverImage: ''
+  coverImage: '',
+  status: 'ACTIVE'
 })
 
 // 表单验证规则
@@ -223,6 +175,9 @@ const courseRules = {
   description: [
     { required: true, message: '请输入课程描述', trigger: 'blur' },
     { max: 500, message: '课程描述不能超过 500 个字符', trigger: 'blur' }
+  ],
+  status: [
+    { required: true, message: '请选择状态', trigger: 'change' }
   ]
 }
 
@@ -234,15 +189,16 @@ const loadCourses = async () => {
       size: pagination.size,
       ...searchForm
     }
-    const response = await getCourseList(params)
-    courses.value = response.data.records
-    pagination.total = response.data.total
+    const response = await getCourses(params)
+    courses.value = response.data?.records || []
+    pagination.total = response.data?.total || 0
   } catch (error) {
     ElMessage.error('加载课程列表失败')
   }
 }
 
 const resetSearch = () => {
+  searchForm.status = ''
   searchForm.keyword = ''
   pagination.current = 1
   loadCourses()
@@ -261,7 +217,8 @@ const editCourse = (course) => {
     id: course.id,
     name: course.name,
     description: course.description,
-    coverImage: course.coverImage
+    coverImage: course.coverImage,
+    status: course.status
   })
 }
 
@@ -270,7 +227,8 @@ const resetCourseForm = () => {
     id: null,
     name: '',
     description: '',
-    coverImage: ''
+    coverImage: '',
+    status: 'ACTIVE'
   })
 }
 
@@ -291,7 +249,7 @@ const saveCourse = async () => {
         dialogVisible.value = false
         loadCourses()
       } catch (error) {
-        ElMessage.error(error.message || '操作失败')
+        ElMessage.error('操作失败，请稍后重试')
       } finally {
         saving.value = false
       }
@@ -312,70 +270,37 @@ const deleteCourse = async (course) => {
     loadCourses()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error('删除失败，请稍后重试')
     }
   }
+}
+
+// 处理下拉菜单命令
+const handleDropdownCommand = (command, row) => {
+  switch (command) {
+    case 'edit':
+      editCourse(row)
+      break
+    case 'delete':
+      deleteCourse(row)
+      break
+  }
+}
+
+const manageUnits = (course) => {
+  // 跳转到单元管理页面，并传递课程ID
+  router.push({
+    path: '/admin/units',
+    query: {
+      courseId: course.id,
+      courseName: course.name
+    }
+  })
 }
 
 const formatTime = (time) => {
   if (!time) return ''
   return new Date(time).toLocaleString()
-}
-
-// 跳转到课文管理页面
-const goToTexts = (courseId) => {
-  router.push({
-    path: '/admin/texts',
-    query: { courseId: courseId }
-  })
-}
-
-// 加载课程的课文列表（用于展开行）
-const loadCourseTexts = async (courseId) => {
-  if (courseTexts.value[courseId]) {
-    return // 已加载过，不重复加载
-  }
-
-  loadingTexts.value[courseId] = true
-  try {
-    const res = await getTextsByCourse(courseId)
-    courseTexts.value[courseId] = res.data.sort((a, b) => a.orderNum - b.orderNum)
-  } catch (error) {
-    ElMessage.error('加载课文列表失败')
-    courseTexts.value[courseId] = []
-  } finally {
-    loadingTexts.value[courseId] = false
-  }
-}
-
-// 打开课文阅读器
-const openTextReader = (text) => {
-  currentText.value = text
-  readerVisible.value = true
-}
-
-// 格式化课文内容为段落
-const getFormattedContent = (content) => {
-  if (!content) return []
-  return content.split('\n').filter(p => p.trim())
-}
-
-// 获取内容类型标签
-const getContentTypeTag = (contentType) => {
-  const types = {
-    'ARTICLE': { label: '课文', type: 'primary' },
-    'EXERCISE': { label: '练习题', type: 'success' },
-    'VOCABULARY': { label: '词汇', type: 'warning' }
-  }
-  return types[contentType] || { label: '未知', type: 'info' }
-}
-
-// 处理表格展开事件
-const handleExpandChange = (row, expandedRows) => {
-  // 如果展开了这一行，则加载课文数据
-  if (expandedRows.some(r => r.id === row.id)) {
-    loadCourseTexts(row.id)
-  }
 }
 
 // 生命周期
@@ -385,8 +310,46 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.action-buttons .el-button {
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.action-buttons .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-buttons .el-button--circle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-buttons .el-dropdown {
+  margin-left: 2px;
+}
+
 .courses-management {
-  height: 100%;
+  padding: 20px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .card-header {
@@ -404,35 +367,18 @@ onMounted(() => {
   text-align: right;
 }
 
-/* 展开内容样式 */
-.expand-content {
-  padding: 20px;
-  background: #f5f7fa;
-  border-radius: 4px;
-}
+@media (max-width: 768px) {
+  .courses-management {
+    padding: 12px;
+  }
 
-.expand-content h4 {
-  margin: 0 0 10px 0;
-  color: #303133;
-}
+  .search-bar .el-form {
+    display: block;
+  }
 
-/* 阅读器样式 */
-.reader-dialog :deep(.el-dialog__body) {
-  padding: 20px;
-}
-
-.reader-container {
-  min-height: 400px;
-  background: #fff;
-}
-
-.reader-content {
-  line-height: 2;
-  font-size: 16px;
-}
-
-.reader-content p {
-  margin-bottom: 15px;
-  text-indent: 2em;
+  .search-bar .el-form-item {
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard">
     <el-row :gutter="20">
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card class="stat-card">
           <div class="stat-content">
             <div class="stat-icon classes">
@@ -15,7 +15,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card class="stat-card">
           <div class="stat-content">
             <div class="stat-icon students">
@@ -29,7 +29,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card class="stat-card">
           <div class="stat-content">
             <div class="stat-icon assignments">
@@ -43,7 +43,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card class="stat-card">
           <div class="stat-content">
             <div class="stat-icon completions">
@@ -59,7 +59,7 @@
     </el-row>
 
     <el-row :gutter="20" class="mt-20">
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header>
             <div class="card-header">
@@ -84,7 +84,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header>
             <div class="card-header">
@@ -103,8 +103,8 @@
                 <div class="progress-info">
                   <span>完成进度：{{ assignment.completedCount }}/{{ assignment.totalCount }}</span>
                   <el-progress
-                    :percentage="Math.round((assignment.completedCount / assignment.totalCount) * 100)"
-                    :color="getProgressColor(assignment.completedCount / assignment.totalCount)"
+                    :percentage="assignment.totalCount > 0 ? Math.round((assignment.completedCount / assignment.totalCount) * 100) : 0"
+                    :color="assignment.totalCount > 0 ? getProgressColor(assignment.completedCount / assignment.totalCount) : '#909399'"
                   />
                 </div>
               </div>
@@ -138,53 +138,67 @@ const loadDashboardData = async () => {
     // 加载统计数据
     const statsResponse = await fetch('/api/assignments/teacher/stats', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
     if (statsResponse.ok) {
-      const statsData = await statsResponse.json()
-      if (statsData.code === 200) {
-        const result = statsData.data
-        stats.totalClasses = result.total_classes || 0
-        stats.totalStudents = result.total_students || 0
-        stats.totalAssignments = result.total_assignments || 0
-        stats.completedTasks = result.completed_tasks || 0
+      try {
+        const statsData = await statsResponse.json()
+        if (statsData.code === 200) {
+          const result = statsData.data || {}
+          stats.totalClasses = result.total_classes || 0
+          stats.totalStudents = result.total_students || 0
+          stats.totalAssignments = result.total_assignments || 0
+          stats.completedTasks = result.completed_tasks || 0
+        }
+      } catch (parseError) {
+        console.error('统计数据解析失败:', parseError)
       }
     }
 
     // 加载班级列表
     const classesResponse = await fetch('/api/assignments/teacher/classes', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
     if (classesResponse.ok) {
-      const classesData = await classesResponse.json()
-      if (classesData.code === 200) {
-        classes.value = classesData.data || []
+      try {
+        const classesData = await classesResponse.json()
+        if (classesData.code === 200) {
+          // 兼容分页响应 { records: [...] } 和直接数组两种格式
+          const raw = classesData.data
+          classes.value = Array.isArray(raw) ? raw : (Array.isArray(raw?.records) ? raw.records : [])
+        }
+      } catch (parseError) {
+        console.error('班级列表解析失败:', parseError)
       }
     }
 
     // 加载最近任务
     const assignmentsResponse = await fetch('/api/assignments/teacher/recent?limit=5', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
     })
 
     if (assignmentsResponse.ok) {
-      const assignmentsData = await assignmentsResponse.json()
-      if (assignmentsData.code === 200) {
-        recentAssignments.value = assignmentsData.data.map(assignment => ({
-          id: assignment.id,
-          title: assignment.title,
-          className: assignment.className,
-          deadline: assignment.deadline,
-          completedCount: assignment.completedCount || 0,
-          totalCount: assignment.studentCount || 0
-        })) || []
+      try {
+        const assignmentsData = await assignmentsResponse.json()
+        if (assignmentsData.code === 200) {
+          recentAssignments.value = Array.isArray(assignmentsData.data) ? assignmentsData.data.map(assignment => ({
+            id: assignment.id,
+            title: assignment.title,
+            className: assignment.className || '未知班级',
+            deadline: assignment.deadline,
+            completedCount: assignment.completedCount || 0,
+            totalCount: assignment.studentCount || 0
+          })) : []
+        }
+      } catch (parseError) {
+        console.error('任务列表解析失败:', parseError)
       }
     }
   } catch (error) {
@@ -215,28 +229,48 @@ onMounted(() => {
 
 <style scoped>
 .dashboard {
-  height: 100%;
+  padding: 20px;
+  background: linear-gradient(to bottom, #f5f7fa 0%, #ffffff 100%);
+  min-height: calc(100vh - 56px);
 }
 
 .stat-card {
   margin-bottom: 20px;
+  border: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .stat-content {
   display: flex;
   align-items: center;
+  padding: 8px;
 }
 
 .stat-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-right: 20px;
-  font-size: 24px;
+  font-size: 28px;
   color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.1) rotate(5deg);
 }
 
 .stat-icon.classes {
@@ -255,72 +289,206 @@ onMounted(() => {
   background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
 }
 
+.stat-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .stat-info h3 {
   margin: 0;
-  font-size: 28px;
-  font-weight: bold;
-  color: #333;
+  font-size: 32px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #333 0%, #666 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover .stat-info h3 {
+  transform: scale(1.05);
 }
 
 .stat-info p {
-  margin: 5px 0 0;
-  color: #666;
+  margin: 8px 0 0;
+  color: #888;
   font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 .mt-20 {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-weight: 600;
+  font-size: 16px;
 }
 
 .class-list,
 .assignment-list {
-  max-height: 300px;
+  max-height: 500px;
   overflow-y: auto;
+  padding: 4px;
+}
+
+.class-list::-webkit-scrollbar,
+.assignment-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.class-list::-webkit-scrollbar-track,
+.assignment-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.class-list::-webkit-scrollbar-thumb,
+.assignment-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.class-list::-webkit-scrollbar-thumb:hover,
+.assignment-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .class-item,
 .assignment-item {
-  padding: 15px;
+  padding: 18px 16px;
   border-bottom: 1px solid #f0f0f0;
+  min-height: 120px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: #fafafa;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.class-item:hover,
+.assignment-item:hover {
+  background: #f0f7ff;
+  border-color: #409eff;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
 }
 
 .class-item:last-child,
 .assignment-item:last-child {
-  border-bottom: none;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 0;
 }
 
 .class-info h4,
 .assignment-info h4 {
-  margin: 0 0 8px 0;
-  color: #333;
-  font-size: 16px;
+  margin: 0 0 12px 0;
+  color: #303133;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  transition: color 0.3s ease;
+}
+
+.class-item:hover .class-info h4,
+.assignment-item:hover .assignment-info h4 {
+  color: #409eff;
 }
 
 .class-info p,
 .assignment-info p {
-  margin: 4px 0;
-  color: #666;
+  margin: 8px 0;
+  color: #606266;
   font-size: 14px;
+  line-height: 1.8;
+  display: flex;
+  align-items: center;
+}
+
+.class-info p:before,
+.assignment-info p:before {
+  content: '•';
+  color: #909399;
+  margin-right: 8px;
+  font-weight: bold;
 }
 
 .class-actions {
-  margin-top: 10px;
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.class-actions .el-button {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.class-actions .el-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
 }
 
 .progress-info {
-  margin-top: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
 }
 
 .progress-info span {
-  font-size: 12px;
-  color: #666;
+  font-size: 13px;
+  color: #909399;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.progress-info .el-progress {
+  margin-top: 4px;
+}
+
+.el-card {
+  border: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.el-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .dashboard {
+    padding: 16px;
+  }
+
+  .stat-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .stat-icon {
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  .stat-info h3 {
+    font-size: 28px;
+  }
+
+  .mt-20 {
+    margin-top: 12px;
+  }
+
+  .stat-card {
+    margin-bottom: 12px;
+  }
 }
 </style>
