@@ -300,6 +300,21 @@ import InteractiveText from '@/components/InteractiveText.vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline } from '@/api/student'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+
+// 配置 DOMPurify：允许 img 标签及其属性，允许 data-word 自定义属性
+const SANITIZE_CONFIG = {
+  ADD_TAGS: ['img'],
+  ADD_ATTR: ['src', 'alt', 'title', 'width', 'height', 'loading', 'data-word', 'class', 'target', 'rel'],
+  ALLOW_DATA_ATTR: true
+}
+
+// 配置 marked：自定义图片渲染，支持 lazy loading
+const renderer = new marked.Renderer()
+renderer.image = function({ href, title, text }) {
+  const titleAttr = title ? ` title="${title}"` : ''
+  return `<img src="${href}" alt="${text || ''}"${titleAttr} loading="lazy" />`
+}
+marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
 import rangy from 'rangy'
 import 'rangy/lib/rangy-classapplier'
@@ -506,7 +521,7 @@ const loadTextDetail = async () => {
           currentVersion.value = 'original'
           const originalMarkdown = textVersions.value['original'] || data.markdownContent || ''
           // 渲染 Markdown 并添加点击功能
-          let renderedHtml = DOMPurify.sanitize(marked(originalMarkdown))
+          let renderedHtml = DOMPurify.sanitize(marked(originalMarkdown), SANITIZE_CONFIG)
           renderedHtml = addClickableWordsToHtml(renderedHtml)
           textContent.value = renderedHtml
         } else {
@@ -515,7 +530,7 @@ const loadTextDetail = async () => {
           textVersions.value = { 'original': markdownContent }
           availableVersions.value = ['original']
           currentVersion.value = 'original'
-          let renderedHtml = DOMPurify.sanitize(marked(markdownContent))
+          let renderedHtml = DOMPurify.sanitize(marked(markdownContent), SANITIZE_CONFIG)
           renderedHtml = addClickableWordsToHtml(renderedHtml)
           textContent.value = renderedHtml
         }
@@ -1014,7 +1029,7 @@ const addClickableWordsToHtml = (sanitizedHtml) => {
     return match
   })
   // 再次净化，防止正则替换引入意外的不安全内容
-  return DOMPurify.sanitize(withSpans)
+  return DOMPurify.sanitize(withSpans, SANITIZE_CONFIG)
 }
 
 // 处理 Markdown 内容的点击事件（事件委托）
@@ -1263,7 +1278,7 @@ const switchVersion = (version) => {
   
   if (isMarkdown.value) {
     // Markdown 格式，需要渲染
-    let renderedHtml = DOMPurify.sanitize(marked(versionContent))
+    let renderedHtml = DOMPurify.sanitize(marked(versionContent), SANITIZE_CONFIG)
     renderedHtml = addClickableWordsToHtml(renderedHtml)
     textContent.value = renderedHtml
   } else {

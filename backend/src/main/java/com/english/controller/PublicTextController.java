@@ -213,12 +213,32 @@ public class PublicTextController {
             dto.setContentType(text.getContentType());
             dto.setMarkdownContent(text.getMarkdownContent());
 
-            // 添加所有可用版本
-            dto.addVersion("original", text.getContent());
-            dto.addVersion("cet4", text.getCet4Content());
-            dto.addVersion("cet6", text.getCet6Content());
-            dto.addVersion("academic", text.getAcademicContent());
-            dto.addVersion("chinese_parallel", text.getChineseParallelContent());
+            // 根据内容类型返回相应版本
+            if ("MARKDOWN".equals(text.getContentType())) {
+                // Markdown内容，返回Markdown版本
+                if (text.getMarkdownContent() != null && !text.getMarkdownContent().trim().isEmpty()) {
+                    dto.addVersion("original", text.getMarkdownContent());
+                }
+                if (text.getCet4MarkdownContent() != null && !text.getCet4MarkdownContent().trim().isEmpty()) {
+                    dto.addVersion("cet4", text.getCet4MarkdownContent());
+                }
+                if (text.getCet6MarkdownContent() != null && !text.getCet6MarkdownContent().trim().isEmpty()) {
+                    dto.addVersion("cet6", text.getCet6MarkdownContent());
+                }
+                if (text.getAcademicMarkdownContent() != null && !text.getAcademicMarkdownContent().trim().isEmpty()) {
+                    dto.addVersion("academic", text.getAcademicMarkdownContent());
+                }
+                if (text.getChineseParallelMarkdownContent() != null && !text.getChineseParallelMarkdownContent().trim().isEmpty()) {
+                    dto.addVersion("chinese_parallel", text.getChineseParallelMarkdownContent());
+                }
+            } else {
+                // 纯文本内容
+                dto.addVersion("original", text.getContent());
+                dto.addVersion("cet4", text.getCet4Content());
+                dto.addVersion("cet6", text.getCet6Content());
+                dto.addVersion("academic", text.getAcademicContent());
+                dto.addVersion("chinese_parallel", text.getChineseParallelContent());
+            }
 
             return Result.success(dto);
         } catch (Exception e) {
