@@ -31,7 +31,7 @@
       </div>
 
       <!-- 任务列表 -->
-      <div class="table-wrapper">
+      <div v-if="assignments.length > 0" class="table-wrapper">
       <el-table v-loading="loading" :data="assignments" stripe>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="任务标题" min-width="150" />
@@ -103,6 +103,7 @@
       v-model="dialogVisible"
       :title="isEdit ? '编辑任务' : '布置任务'"
       width="min(800px, 90%)"
+      @close="resetAssignmentForm"
     >
       <el-form
         ref="assignmentFormRef"
@@ -353,10 +354,32 @@ const assignmentRules = {
     { required: true, message: '请选择任务类型', trigger: 'change' }
   ],
   textIds: [
-    { required: true, message: '请至少选择一篇课文', trigger: 'change' }
+    {
+      required: true,
+      message: '请至少选择一篇课文',
+      trigger: 'change',
+      validator: (rule, value, callback) => {
+        if (assignmentForm.assignmentType === 'TEXTS' && (!value || value.length === 0)) {
+          callback(new Error('请至少选择一篇课文'))
+        } else {
+          callback()
+        }
+      }
+    }
   ],
   wordIds: [
-    { required: true, message: '请至少选择一个单词', trigger: 'change' }
+    {
+      required: true,
+      message: '请至少选择一个单词',
+      trigger: 'change',
+      validator: (rule, value, callback) => {
+        if (assignmentForm.assignmentType === 'WORDS' && (!value || value.length === 0)) {
+          callback(new Error('请至少选择一个单词'))
+        } else {
+          callback()
+        }
+      }
+    }
   ],
   deadline: [
     { required: true, message: '请选择截止时间', trigger: 'change' }
@@ -388,7 +411,7 @@ const loadAssignments = async () => {
       const data = await response.json()
 
       if (data.code === 200) {
-        let assignmentsData = Array.isArray(data.data?.records) ? data.data.records : []
+        let assignmentsData = Array.isArray(data.data?.records) ? data.data.records : (Array.isArray(data.data) ? data.data : [])
 
         if (assignmentsData.length === 0) {
           assignments.value = []
@@ -432,7 +455,7 @@ const loadAssignments = async () => {
     } else {
       const errorText = await response.text()
       console.error('HTTP错误:', response.status, errorText)
-      ElMessage.error('加载任务列表失败: ' + response.status)
+      ElMessage.error('加载任务列表失败')
     }
   } catch (error) {
     console.error('加载任务列表失败:', error)
@@ -752,7 +775,7 @@ const viewProgress = async (assignment) => {
 
     if (response.ok) {
       const data = await response.json()
-      if (data.code === 200) {
+      if (data.code === 200 && data.data) {
         const progressData = Array.isArray(data.data) ? data.data : []
         studentProgress.value = progressData
 

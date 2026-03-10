@@ -23,38 +23,45 @@ public class TextLearningRecord {
     /**
      * 学生ID
      */
+    @TableField("student_id")
     private Long studentId;
 
     /**
      * 课文ID
      */
+    @TableField("text_id")
     private Long textId;
 
     /**
      * 关联的任务ID
      */
+    @TableField("assignment_id")
     private Long assignmentId;
 
     /**
      * 阅读开始时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField("start_time")
     private LocalDateTime startTime;
 
     /**
      * 阅读结束(完成)时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField("end_time")
     private LocalDateTime endTime;
 
     /**
      * 阅读时长(秒)
      */
+    @TableField("duration_seconds")
     private Integer durationSeconds;
 
     /**
      * 是否已完成阅读
      */
+    @TableField("is_completed")
     private Integer isCompleted;
 
     /**

@@ -85,8 +85,12 @@ public class BilibiliProxyController {
             ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, buildRequest(), String.class);
             String body = resp.getBody();
             if (body == null || body.isBlank()) return error("B站返回空响应");
+            // 返回响应前自动由 RestTemplate 处理资源释放
             return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
         } catch (Exception e) {
+            // 仅记录异常类型，不输出详细消息防止信息泄漏
+            org.slf4j.LoggerFactory.getLogger(BilibiliProxyController.class)
+                .debug("Failed to fetch bilibili view: {}", bvid);
             return error("请求B站API失败");
         }
     }
@@ -111,6 +115,9 @@ public class BilibiliProxyController {
             if (body == null || body.isBlank()) return error("字幕列表返回空响应");
             return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
         } catch (Exception e) {
+            // 仅记录异常类型，不输出详细消息防止信息泄漏
+            org.slf4j.LoggerFactory.getLogger(BilibiliProxyController.class)
+                .debug("Failed to fetch bilibili player: bvid={}, cid={}", bvid, cid);
             return error("请求字幕列表失败");
         }
     }
@@ -121,7 +128,7 @@ public class BilibiliProxyController {
      */
     @GetMapping("/subtitle-file")
     public ResponseEntity<String> subtitleFile(@RequestParam String url) {
-        if (url == null || url.contains("..") || url.contains("//") ||
+        if (url == null || url.contains("..") ||
             !SUBTITLE_URL_PATTERN.matcher(url).matches()) {
             return ResponseEntity.badRequest()
                 .contentType(MediaType.APPLICATION_JSON)
@@ -134,6 +141,9 @@ public class BilibiliProxyController {
             if (body == null || body.isBlank()) return error("字幕文件返回空响应");
             return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
         } catch (Exception e) {
+            // 仅记录异常类型，不输出详细消息防止信息泄漏
+            org.slf4j.LoggerFactory.getLogger(BilibiliProxyController.class)
+                .debug("Failed to fetch subtitle file from hdslb");
             return error("下载字幕文件失败");
         }
     }

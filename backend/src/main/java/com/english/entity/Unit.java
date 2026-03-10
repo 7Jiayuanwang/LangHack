@@ -12,10 +12,8 @@ public class Unit {
     @TableField("course_id")
     private Long courseId;
 
-    @TableField("name")
     private String name;
 
-    @TableField("description")
     private String description;
 
     @TableField("order_num")

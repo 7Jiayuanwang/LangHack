@@ -77,11 +77,11 @@ public class WordNetService {
             // 优先查询ECDICT
             if (ecdictService.isECDICTAvailable()) {
                 Map<String, Object> ecdictResult = ecdictService.getWordInfo(word);
-                if (ecdictResult.get("found") != null && (Boolean) ecdictResult.get("found")) {
+                if (Boolean.TRUE.equals(ecdictResult.get("found"))) {
                     result = ecdictResult;
                     result.put("primarySource", "ecdict");
                     return result;
-                } else if (ecdictResult.get("fuzzy") != null && (Boolean) ecdictResult.get("fuzzy")) {
+                } else if (Boolean.TRUE.equals(ecdictResult.get("fuzzy"))) {
                     result = ecdictResult;
                     result.put("primarySource", "ecdict_fuzzy");
                     return result;
@@ -213,7 +213,7 @@ public class WordNetService {
             if (ecdictService.isECDICTAvailable()) {
                 Map<String, Object> ecdictResult = ecdictService.getWordInfo(word);
 
-                if (ecdictResult.get("found") != null && (Boolean) ecdictResult.get("found")) {
+                if (Boolean.TRUE.equals(ecdictResult.get("found"))) {
                     // 从ECDICT获取到信息，创建数据库记录
                     Word newWord = createWordFromECDICT(word, ecdictResult);
 

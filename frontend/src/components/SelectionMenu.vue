@@ -24,10 +24,16 @@ import { computed } from 'vue'
 import { CopyDocument, EditPen, Share, ChatLineRound } from '@element-plus/icons-vue'
 
 const props = defineProps({
-  visible: Boolean,
+  visible: {
+    type: Boolean,
+    required: true
+  },
   position: {
     type: Object,
-    default: () => ({ x: 0, y: 0 })
+    default: () => ({ x: 0, y: 0 }),
+    validator: (value) => {
+      return value && typeof value.x === 'number' && typeof value.y === 'number'
+    }
   },
   underlineLabel: {
     type: String,

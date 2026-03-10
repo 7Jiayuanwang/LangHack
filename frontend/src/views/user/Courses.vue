@@ -73,11 +73,14 @@ const loadCourses = async () => {
       const data = response.data
       courses.value = (Array.isArray(data) ? data : (Array.isArray(data?.records) ? data.records : [])).map(course => ({
         ...course,
-        textCount: course.textCount || 0,
-        wordCount: course.wordCount || 0
+        id: course?.id,
+        name: course?.name || course?.courseName || '未知课程',
+        description: course?.description || '暂无描述',
+        textCount: course?.textCount || 0,
+        wordCount: course?.wordCount || 0
       }))
     } else {
-      ElMessage.error(response.message || '获取课程列表失败')
+      ElMessage.error('获取课程列表失败')
     }
   } catch (error) {
     ElMessage.error('获取课程列表失败')

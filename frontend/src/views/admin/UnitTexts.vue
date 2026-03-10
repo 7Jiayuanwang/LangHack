@@ -199,15 +199,8 @@ const currentText = ref({})
 const router = useRouter()
 const route = useRoute()
 
-// 从路由参数获取信息
-const props = defineProps({
-  unitId: {
-    type: [String, Number],
-    required: true
-  }
-})
-
-const unitId = ref(Number(props.unitId))
+// 从路由参数获取单元ID
+const unitId = ref(0)
 const unitName = ref(route.query.unitName || '')
 const courseId = ref(route.query.courseId ? Number(route.query.courseId) : null)
 const courseName = ref(route.query.courseName || '')
@@ -261,11 +254,19 @@ const loadTexts = async () => {
         allTexts = allTexts.filter(text => text.difficulty === searchForm.difficulty)
       }
 
+      // 更新总数
+      pagination.total = allTexts.length
+
+      // 如果当前页超出范围，重置到第一页
+      const maxPage = Math.ceil(pagination.total / pagination.size) || 1
+      if (pagination.current > maxPage) {
+        pagination.current = 1
+      }
+
       // 前端分页
       const start = (pagination.current - 1) * pagination.size
       const end = start + pagination.size
       texts.value = allTexts.slice(start, end)
-      pagination.total = allTexts.length
     }
   } catch (error) {
     console.error('加载课文列表失败:', error)
@@ -448,6 +449,12 @@ const formatTime = (time) => {
 
 // 生命周期
 onMounted(() => {
+  // 从路由参数中获取unitId
+  const routeUnitId = route.params.unitId || route.query.unitId
+  if (routeUnitId) {
+    unitId.value = Number(routeUnitId)
+  }
+
   // 检查是否有有效的unitId
   if (!unitId.value) {
     ElMessage.warning('无效的单元ID，请从单元管理页面重新进入')

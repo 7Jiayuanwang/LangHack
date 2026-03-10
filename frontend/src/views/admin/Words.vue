@@ -401,6 +401,8 @@ const deleteWord = (word) => {
 }
 
 const handleSubmit = async () => {
+  if (!formRef.value) return
+
   try {
     await formRef.value.validate()
     saving.value = true

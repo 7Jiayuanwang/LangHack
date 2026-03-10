@@ -17,6 +17,7 @@ public class TextExercise {
 
     private String question;
 
+    @TableField("exercise_type")
     private String exerciseType;
 
     @TableField("order_num")

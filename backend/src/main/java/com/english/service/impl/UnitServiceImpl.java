@@ -37,7 +37,17 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements Un
     public Map<String, Object> getUnitsByPage(Map<String, Object> params) {
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
-        Long courseId = params.get("courseId") != null ? Long.valueOf(params.get("courseId").toString()) : null;
+        // 分页参数边界校验
+        page = Math.max(1, page);
+        size = Math.max(1, Math.min(size, 100));
+        Long courseId = null;
+        if (params.get("courseId") != null) {
+            try {
+                courseId = Long.valueOf(params.get("courseId").toString());
+            } catch (NumberFormatException e) {
+                throw new BusinessException("courseId 格式错误");
+            }
+        }
         String keyword = (String) params.get("keyword");
 
         QueryWrapper<Unit> queryWrapper = new QueryWrapper<>();

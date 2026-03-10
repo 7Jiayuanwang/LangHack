@@ -113,10 +113,16 @@ import MarkdownEditor from './MarkdownEditor.vue'
 import { createText, updateText, getCourses, getUnitsByCourseId } from '@/api/admin'
 
 const props = defineProps({
-  modelValue: Boolean,
+  modelValue: {
+    type: Boolean,
+    required: true
+  },
   textData: {
     type: Object,
-    default: null
+    default: null,
+    validator: (value) => {
+      return value === null || (typeof value === 'object' && !Array.isArray(value))
+    }
   },
   unitId: {
     type: Number,
@@ -160,7 +166,8 @@ const rules = {
 watch(() => visible.value, (newVal) => {
   if (newVal && props.textData) {
     // 对话框打开时，加载数据
-    formData.id = props.textData.id
+    // 确保 textData 存在且有有效的 id
+    formData.id = props.textData.id || null
     formData.title = props.textData.title || ''
     formData.content = props.textData.content || ''
     markdownContent.value = props.textData.markdownContent || ''
@@ -168,10 +175,10 @@ watch(() => visible.value, (newVal) => {
     formData.difficulty = props.textData.difficulty || 'MEDIUM'
     formData.tags = props.textData.tags || ''
     formData.audioUrl = props.textData.audioUrl || ''
-    formData.isPublic = props.textData.isPublic || 1
+    formData.isPublic = props.textData.isPublic != null ? props.textData.isPublic : 1
     formData.courseId = props.textData.courseId || null
     formData.unitId = props.textData.unitId || props.unitId
-    
+
     // 如果有courseId，加载对应的单元
     if (props.textData.courseId) {
       loadUnitsByCourse(props.textData.courseId)
@@ -190,7 +197,7 @@ watch(() => visible.value, (newVal) => {
     formData.courseId = null
     formData.unitId = props.unitId
   }
-  
+
   // 加载课程列表（仅在没有传入unitId时）
   if (newVal && !props.unitId) {
     loadCourses()

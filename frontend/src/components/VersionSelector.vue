@@ -19,7 +19,10 @@ import { computed } from 'vue'
 const props = defineProps({
   versions: {
     type: Object,
-    required: true
+    required: true,
+    validator: (value) => {
+      return value !== null && typeof value === 'object'
+    }
   },
   selectedVersion: {
     type: String,

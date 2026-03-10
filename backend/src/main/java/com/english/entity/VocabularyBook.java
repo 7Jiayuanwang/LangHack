@@ -20,11 +20,13 @@ public class VocabularyBook {
     /**
      * 学生ID
      */
+    @TableField("student_id")
     private Long studentId;
 
     /**
      * 单词ID
      */
+    @TableField("word_id")
     private Long wordId;
 
     /**
@@ -37,17 +39,20 @@ public class VocabularyBook {
     /**
      * 复习次数
      */
+    @TableField("review_count")
     private Integer reviewCount;
 
     /**
      * 最后复习时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField("last_reviewed")
     private LocalDateTime lastReviewed;
 
     /**
      * 掌握程度：NEW-新词，LEARNING-学习中，MASTERED-已掌握
      */
+    @TableField("mastery_level")
     private String masteryLevel;
 
     /**
@@ -58,17 +63,20 @@ public class VocabularyBook {
     /**
      * SM-2 复习间隔 (天)
      */
+    @TableField("interval_days")
     private Integer intervalDays;
 
     /**
      * SM-2 难度因子
      */
+    @TableField("easiness_factor")
     private Double easinessFactor;
 
     /**
      * 下次复习时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField("next_review_time")
     private LocalDateTime nextReviewTime;
 
     public VocabularyBook() {

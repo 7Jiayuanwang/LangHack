@@ -20,11 +20,13 @@ public class LearningRecord {
     /**
      * 学生ID
      */
+    @TableField("student_id")
     private Long studentId;
 
     /**
      * 单词ID
      */
+    @TableField("word_id")
     private Long wordId;
 
     @TableField("text_id")
@@ -33,26 +35,31 @@ public class LearningRecord {
     /**
      * 任务ID
      */
+    @TableField("assignment_id")
     private Long assignmentId;
 
     /**
      * 记录类型：VIEW-浏览，REVIEW-复习，TEST-测试
      */
+    @TableField("record_type")
     private String recordType;
 
     /**
      * 学习时长（秒）
      */
+    @TableField("duration_seconds")
     private Integer durationSeconds;
 
     /**
      * 正确次数
      */
+    @TableField("correct_count")
     private Integer correctCount;
 
     /**
      * 总次数
      */
+    @TableField("total_count")
     private Integer totalCount;
 
     /**

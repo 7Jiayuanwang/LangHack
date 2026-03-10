@@ -32,12 +32,37 @@ export function deleteUser(id) {
 }
 
 export function importUsers(file) {
+  // 文件类型白名单
+  const allowedTypes = ['text/csv', 'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+  const maxSize = 10 * 1024 * 1024 // 10MB
+
+  // 输入验证
+  if (!file) {
+    return Promise.reject(new Error('文件不能为空'))
+  }
+
+  if (!allowedTypes.includes(file.type)) {
+    return Promise.reject(new Error('仅支持 CSV 和 Excel 文件'))
+  }
+
+  if (file.size > maxSize) {
+    return Promise.reject(new Error('文件大小不能超过 10MB'))
+  }
+
+  // 验证文件扩展名（防止 MIME 类型伪造）
+  const ext = file.name.split('.').pop().toLowerCase()
+  if (!['csv', 'xls', 'xlsx'].includes(ext)) {
+    return Promise.reject(new Error('不支持的文件格式'))
+  }
+
   const formData = new FormData()
   formData.append('file', file)
   return request({
     url: '/api/admin/users/import',
     method: 'post',
-    data: formData
+    data: formData,
+    timeout: 60000  // 批量导入超时时间延长到 60 秒
   })
 }
 

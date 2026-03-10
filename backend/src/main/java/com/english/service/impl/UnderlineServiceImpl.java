@@ -62,6 +62,9 @@ public class UnderlineServiceImpl implements UnderlineService {
 
     @Override
     public List<Underline> getUnderlinesByTextIdAndUserId(Long textId, Long userId) {
+        if (textId == null || userId == null) {
+            throw new IllegalArgumentException("textId 和 userId 不能为空");
+        }
         QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("text_id", textId).eq("user_id", userId);
         return underlineMapper.selectList(queryWrapper);

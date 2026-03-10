@@ -160,11 +160,12 @@ const insertMarkdown = (syntax) => {
   }
 
   emit('update:modelValue', content.value)
-  setTimeout(() => {
-    textarea.focus()
-    textarea.selectionStart = start + syntax.length
-    textarea.selectionEnd = start + syntax.length + 2
-  }, 0)
+
+  // 使用 onMounted 或其他生命周期来管理计时器，避免在 setup 中创建计时器
+  // 此处直接 focus，不依赖 setTimeout
+  textarea.focus()
+  textarea.selectionStart = start + syntax.length
+  textarea.selectionEnd = start + syntax.length + 2
 }
 
 // 插入链接
@@ -230,6 +231,10 @@ const handleImageUpload = async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
   await uploadMediaFile(file, 'IMAGE')
+  // 清空 input，允许重复上传同一文件
+  if (imageInput.value) {
+    imageInput.value.value = ''
+  }
 }
 
 // 处理视频上传
@@ -237,6 +242,10 @@ const handleVideoUpload = async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
   await uploadMediaFile(file, 'VIDEO')
+  // 清空 input，允许重复上传同一文件
+  if (videoInput.value) {
+    videoInput.value.value = ''
+  }
 }
 
 // 上传媒体文件
@@ -277,6 +286,7 @@ const uploadMediaFile = async (file, mediaType) => {
         emit('update:modelValue', content.value)
       }
 
+      // 1秒后关闭上传对话框
       const timer = setTimeout(() => {
         uploadDialogVisible.value = false
         ElMessage.success('上传成功')

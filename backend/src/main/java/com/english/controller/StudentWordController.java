@@ -219,11 +219,15 @@ public class StudentWordController {
 
         try {
             Long studentId = getCurrentStudentId(authentication);
-            String masteryLevel = (String) request.get("masteryLevel");
+            Object masteryLevelObj = request.get("masteryLevel");
+            if (masteryLevelObj == null) {
+                return Result.error("掌握程度不能为空");
+            }
+            String masteryLevel = masteryLevelObj.toString().trim();
             Object isCorrectObj = request.get("isCorrect");
 
             // 验证masteryLevel枚举值
-            if (masteryLevel == null || !java.util.Set.of("NEW", "LEARNING", "REVIEWING", "MASTERED").contains(masteryLevel)) {
+            if (masteryLevel.isEmpty() || !java.util.Set.of("NEW", "LEARNING", "REVIEWING", "MASTERED").contains(masteryLevel)) {
                 return Result.error("无效的掌握程度");
             }
 

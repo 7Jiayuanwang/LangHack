@@ -503,7 +503,14 @@ const removeStudent = async (student) => {
     const classId = currentClassId.value
     if (!classId) return
 
-    const response = await fetch(`/api/classes/${classId}/students/${student.student?.id}`, {
+    // 验证学生ID存在
+    const studentId = student.student?.id
+    if (!studentId) {
+      ElMessage.error('学生信息不完整，无法移除')
+      return
+    }
+
+    const response = await fetch(`/api/classes/${classId}/students/${studentId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`

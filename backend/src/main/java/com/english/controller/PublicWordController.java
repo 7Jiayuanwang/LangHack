@@ -102,8 +102,10 @@ public class PublicWordController {
     @GetMapping("/{wordId}")
     public Result<Word> getWordDetail(@PathVariable Long wordId) {
         try {
-            Word word = wordService.getById(wordId);
-            if (word == null || (word.getDeleted() != null && word.getDeleted() == 1)) {
+            QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("id", wordId).eq("deleted", 0);
+            Word word = wordService.getOne(queryWrapper);
+            if (word == null) {
                 return Result.error("单词不存在");
             }
             return Result.success(word);

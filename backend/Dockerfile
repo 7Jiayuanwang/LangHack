@@ -17,16 +17,14 @@ RUN mvn package -DskipTests -B
 # ─────────────────────────────────────────────
 # 阶段二：运行（轻量 JRE 17）
 # ─────────────────────────────────────────────
-FROM openjdk:17-jre-slim
+FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
 # 安装 curl（docker-compose healthcheck 使用）和时区数据
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl tzdata \
+RUN apk add --no-cache curl tzdata \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
-    && echo "Asia/Shanghai" > /etc/timezone \
-    && rm -rf /var/lib/apt/lists/*
+    && echo "Asia/Shanghai" > /etc/timezone
 
 # 从构建阶段复制可执行 jar
 COPY --from=builder /app/target/*.jar app.jar

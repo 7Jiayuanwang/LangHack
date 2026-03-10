@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -189,6 +190,7 @@ public class WordNetController {
      * @return 单词详细信息（包含是否为新创建的标识）
      */
     @GetMapping("/word/{word}/get-or-create")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getOrCreateWord(@PathVariable String word) {
         try {
             if (word == null || word.isEmpty() || word.length() > 100) {

@@ -51,13 +51,13 @@ export const useUserStore = defineStore('user', {
 
         this.token = token
         this.userInfo = user
-        this.userRole = user.role
+        this.userRole = user.role || ''
 
         // localStorage 操作异常处理
         try {
           localStorage.setItem('token', token)
           localStorage.setItem('userInfo', JSON.stringify(user))
-          localStorage.setItem('userRole', user.role)
+          localStorage.setItem('userRole', user.role || '')
         } catch (storageError) {
           console.warn('Failed to save to localStorage:', storageError)
           // 继续，因为 Pinia store 中的状态已更新
@@ -91,7 +91,13 @@ export const useUserStore = defineStore('user', {
     },
 
     updateUserInfo(userInfo) {
-      this.userInfo = userInfo
+      if (!userInfo || typeof userInfo !== 'object') {
+        console.error('Invalid userInfo provided to updateUserInfo')
+        return Promise.reject(new Error('Invalid userInfo'))
+      }
+
+      this.userInfo = { ...this.userInfo, ...userInfo }
+
       if (userInfo.role) {
         this.userRole = userInfo.role
         try {
@@ -100,12 +106,14 @@ export const useUserStore = defineStore('user', {
           console.warn('Failed to save userRole to localStorage:', storageError)
         }
       }
+
       try {
-        localStorage.setItem('userInfo', JSON.stringify(userInfo))
+        localStorage.setItem('userInfo', JSON.stringify(this.userInfo))
       } catch (storageError) {
         console.warn('Failed to save userInfo to localStorage:', storageError)
       }
-      return Promise.resolve(userInfo)
+
+      return Promise.resolve(this.userInfo)
     }
   }
 })

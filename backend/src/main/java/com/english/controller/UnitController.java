@@ -38,37 +38,17 @@ public class UnitController {
     private ClassService classService;
 
     /**
-     * 分页查询单元列表
+     * 获取单元总数
      */
-    @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
-    public Result<Map<String, Object>> getUnits(
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) Long courseId,
-            @RequestParam(required = false) String keyword) {
-
+    @GetMapping("/count")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public Result<Long> getUnitCount() {
         try {
-            // 分页参数边界校验
-            page = Math.max(1, page);
-            size = Math.max(1, Math.min(size, 100));
-
-            // 关键词长度限制
-            if (keyword != null && keyword.length() > 100) {
-                keyword = keyword.substring(0, 100);
-            }
-
-            Map<String, Object> params = new HashMap<>();
-            params.put("page", page);
-            params.put("size", size);
-            params.put("courseId", courseId);
-            params.put("keyword", keyword);
-
-            Map<String, Object> result = unitService.getUnitsByPage(params);
-            return Result.success(result);
+            long count = unitService.count();
+            return Result.success(count);
         } catch (Exception e) {
-            log.error("获取单元列表失败", e);
-            return Result.error("获取单元列表失败，请稍后重试");
+            log.error("获取单元总数失败", e);
+            return Result.error("获取单元总数失败，请稍后重试");
         }
     }
 
@@ -102,6 +82,41 @@ public class UnitController {
         } catch (Exception e) {
             log.error("获取单元详情失败", e);
             return Result.error("获取单元详情失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 分页查询单元列表
+     */
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
+    public Result<Map<String, Object>> getUnits(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Long courseId,
+            @RequestParam(required = false) String keyword) {
+
+        try {
+            // 分页参数边界校验
+            page = Math.max(1, page);
+            size = Math.max(1, Math.min(size, 100));
+
+            // 关键词长度限制
+            if (keyword != null && keyword.length() > 100) {
+                keyword = keyword.substring(0, 100);
+            }
+
+            Map<String, Object> params = new HashMap<>();
+            params.put("page", page);
+            params.put("size", size);
+            params.put("courseId", courseId);
+            params.put("keyword", keyword);
+
+            Map<String, Object> result = unitService.getUnitsByPage(params);
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("获取单元列表失败", e);
+            return Result.error("获取单元列表失败，请稍后重试");
         }
     }
 
@@ -226,18 +241,4 @@ public class UnitController {
         }
     }
 
-    /**
-     * 获取单元总数
-     */
-    @GetMapping("/count")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    public Result<Long> getUnitCount() {
-        try {
-            long count = unitService.count();
-            return Result.success(count);
-        } catch (Exception e) {
-            log.error("获取单元总数失败", e);
-            return Result.error("获取单元总数失败，请稍后重试");
-        }
-    }
 }

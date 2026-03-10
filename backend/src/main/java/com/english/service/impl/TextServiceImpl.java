@@ -161,12 +161,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         // 级联删除该课文的所有划线记录（数据清理）
         underlineService.deleteUnderlinesByTextId(id);
 
-        // 逻辑删除：设置 deleted=1，保留数据
-        Text deleteText = new Text();
-        deleteText.setId(id);
-        deleteText.setDeleted(1);
-        deleteText.setUpdatedAt(LocalDateTime.now());
-        updateById(deleteText);
+        // 逻辑删除：@TableLogic 会将 removeById 转换为 UPDATE SET deleted=1
+        // 注意：不能用 updateById + setDeleted(1)，因为 @TableLogic 会从 SET 子句中排除 deleted 字段
+        removeById(id);
     }
 
     @Override
@@ -264,10 +261,17 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
             );
         }
 
-        queryWrapper.orderByDesc("created_time");
-        queryWrapper.last("LIMIT " + size + " OFFSET " + ((page - 1) * size));
+        // 边界校验防止负数 OFFSET
+        int safePage = Math.max(1, page);
+        int safeSize = Math.max(1, Math.min(size, 100));
 
-        return list(queryWrapper);
+        queryWrapper.orderByDesc("created_time");
+
+        // 使用 MyBatis-Plus Page 对象而非字符串拼接，防止 SQL 注入
+        Page<Text> pageParam = new Page<>(safePage, safeSize);
+        IPage<Text> pageResult = page(pageParam, queryWrapper);
+
+        return pageResult.getRecords();
     }
 
     @Override

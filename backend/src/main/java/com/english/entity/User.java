@@ -9,31 +9,23 @@ public class User {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("username")
     private String username;
 
-    @TableField("password")
     private String password;
 
-    @TableField("email")
     private String email;
 
-    @TableField("role")
     private String role;
 
-    @TableField("nickname")
     private String nickname;
 
     @TableField("real_name")
     private String realName;
 
-    @TableField("avatar")
     private String avatar;
 
-    @TableField("status")
     private String status;
 
-    @TableField("deleted")
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)

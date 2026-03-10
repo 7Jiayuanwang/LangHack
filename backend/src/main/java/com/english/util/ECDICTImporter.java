@@ -53,7 +53,7 @@ public class ECDICTImporter {
             importer.run();
         } catch (Exception e) {
             System.err.println("导入失败: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("详细错误: " + e.getClass().getName());
             System.exit(1);
         }
     }

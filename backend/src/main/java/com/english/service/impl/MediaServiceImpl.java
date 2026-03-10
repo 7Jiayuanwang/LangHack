@@ -124,6 +124,10 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
     @Transactional
     @CacheEvict(value = "media", allEntries = true)
     public void deleteMedia(Long id) {
+        Media existing = getMediaById(id);
+        if (existing == null) {
+            throw new BusinessException("媒体文件不存在或已被删除");
+        }
         Media media = new Media();
         media.setId(id);
         media.setDeleted(1);

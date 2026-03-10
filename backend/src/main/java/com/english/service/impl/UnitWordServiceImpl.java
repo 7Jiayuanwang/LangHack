@@ -73,7 +73,7 @@ public class UnitWordServiceImpl extends ServiceImpl<UnitWordMapper, UnitWord> i
                .orderByAsc("id");
 
         List<UnitWord> unitWords = list(wrapper);
-        if (unitWords.isEmpty()) {
+        if (unitWords == null || unitWords.isEmpty()) {
             return new ArrayList<>();
         }
 
@@ -121,6 +121,9 @@ public class UnitWordServiceImpl extends ServiceImpl<UnitWordMapper, UnitWord> i
                .orderByAsc("id");
 
         List<UnitWord> unitWords = list(wrapper);
+        if (unitWords == null) {
+            unitWords = new ArrayList<>();
+        }
         List<Map<String, Object>> result = new ArrayList<>();
 
         for (UnitWord unitWord : unitWords) {
@@ -146,7 +149,7 @@ public class UnitWordServiceImpl extends ServiceImpl<UnitWordMapper, UnitWord> i
         QueryWrapper<UnitWord> existWrapper = new QueryWrapper<>();
         existWrapper.eq("unit_id", unitId).in("word_id", wordIds);
         List<UnitWord> existing = list(existWrapper);
-        Set<Long> existingWordIds = existing.stream()
+        Set<Long> existingWordIds = (existing != null ? existing : Collections.<UnitWord>emptyList()).stream()
                 .map(UnitWord::getWordId)
                 .collect(Collectors.toSet());
 

@@ -732,6 +732,12 @@ const loadAssignmentRecords = async (assignmentId) => {
 
 const studyText = (text) => {
   try {
+    // 验证必要数据存在
+    if (!text || !text.id || !currentAssignment.value?.id) {
+      ElMessage.error('无法获取必要信息，请重新打开任务详情')
+      return
+    }
+
     ElMessage.info(`正在跳转到课文学习：${text.title}`)
 
     // 跳转到课文学习页面
@@ -753,6 +759,12 @@ const studyText = (text) => {
 
 const studyWord = async (word) => {
   try {
+    // 验证数据完整性
+    if (!word || !word.id || !currentAssignment.value?.id) {
+      ElMessage.error('无法获取必要信息，请重新打开任务详情')
+      return
+    }
+
     // 设置当前单词数据
     currentWord.value = { ...word }
 
@@ -779,6 +791,12 @@ const studyWord = async (word) => {
 
 const markWordAsCompleted = async (word) => {
   try {
+    // 验证数据完整性
+    if (!word || !word.id || !currentAssignment.value?.id) {
+      ElMessage.error('无法获取必要信息，请重新打开任务详情')
+      return
+    }
+
     const currentAssignmentData = currentAssignment.value
 
     // 记录单词学习完成
@@ -812,8 +830,10 @@ const markWordAsCompleted = async (word) => {
     })
 
     if (progressResponse.data) {
-      const completionRate = Math.round(progressResponse.data.completionRate || 0)
-      
+      // completionRate 从后端返回的是 0-1 比率，需要转换为 0-100 百分比
+      const rawRate = progressResponse.data.completionRate || 0
+      const completionRate = Math.round(rawRate <= 1 ? rawRate * 100 : rawRate)
+
       // 更新当前任务的进度
       currentAssignment.value.progress = completionRate
       currentAssignment.value.completed = completionRate >= 100
@@ -1031,13 +1051,20 @@ onActivated(() => {
 })
 
 // 生命周期
+const pendingTimers = []
+const safeTimeout = (fn, delay) => {
+  const id = setTimeout(fn, delay)
+  pendingTimers.push(id)
+  return id
+}
+
 onMounted(() => {
   loadAssignments()
-  
+
   // 检查是否有任务ID参数（从仪表板跳转过来）
   const assignmentId = route.query.id
   if (assignmentId) {
-    setTimeout(async () => {
+    safeTimeout(async () => {
       // 等待任务列表加载完成
       if (assignments.value.length > 0) {
         const assignment = assignments.value.find(a => a.id == assignmentId)
@@ -1068,6 +1095,10 @@ onMounted(() => {
 
 // 清理事件监听
 onUnmounted(() => {
+  // 清理所有pending timers
+  pendingTimers.forEach(id => clearTimeout(id))
+  pendingTimers.length = 0
+
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', handleResize)
     window.removeEventListener('assignment-refresh', handleAssignmentRefresh)

@@ -79,8 +79,9 @@ public class MediaController {
     @GetMapping("/{mediaId}")
     public Result<Media> getMediaDetail(@PathVariable Long mediaId) {
         try {
+            // getMediaById already checks for deleted=0, so just check if media is null
             Media media = mediaService.getMediaById(mediaId);
-            if (media == null || (media.getDeleted() != null && media.getDeleted() == 1)) {
+            if (media == null) {
                 return Result.error("媒体不存在");
             }
             return Result.success(media);
@@ -94,8 +95,9 @@ public class MediaController {
     @GetMapping("/{mediaId}/download")
     public ResponseEntity<byte[]> downloadMedia(@PathVariable Long mediaId) {
         try {
+            // getMediaById already checks for deleted=0
             Media media = mediaService.getMediaById(mediaId);
-            if (media == null || (media.getDeleted() != null && media.getDeleted() == 1)) {
+            if (media == null) {
                 logger.warn("Media not found or deleted: {}", mediaId);
                 return ResponseEntity.notFound().build();
             }

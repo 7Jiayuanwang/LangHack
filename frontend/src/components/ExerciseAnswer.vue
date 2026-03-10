@@ -218,6 +218,7 @@ const submitAnswer = async () => {
 
   submitting.value = true
   stopTimer()
+  attemptCount.value++
 
   const answerData = {
     exerciseId: props.exercise.id,
@@ -275,13 +276,6 @@ const startTimer = () => {
 const stopTimer = () => {
   ensureTimerCleared()
 }
-
-// Lifecycle
-watch(() => userAnswer.value, () => {
-  if (userAnswer.value && !props.answered) {
-    attemptCount.value++
-  }
-})
 
 // Start timer when component mounts
 if (!props.answered) {

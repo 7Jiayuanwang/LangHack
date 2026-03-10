@@ -14,25 +14,13 @@
         <result property="weight" column="weight"/>
         <result property="idealStudyTimeMinutes" column="ideal_study_time_minutes"/>
         <result property="createdTime" column="created_time"/>
+        <result property="deleted" column="deleted"/>
 
-        <!-- 关联班级信息 -->
-        <association property="className" javaType="java.lang.String">
-            <result column="class_name"/>
-        </association>
-
-        <!-- 关联单元信息 -->
-        <association property="unitName" javaType="java.lang.String">
-            <result column="unit_name"/>
-        </association>
-
-        <!-- 关联创建者信息 -->
-        <association property="creatorName" javaType="java.lang.String">
-            <result column="creator_name"/>
-        </association>
-
-        <association property="creatorNickname" javaType="java.lang.String">
-            <result column="creator_nickname"/>
-        </association>
+        <!-- 关联字段：使用 result 而非 association（String 类型不需要 association） -->
+        <result property="className" column="class_name"/>
+        <result property="unitName" column="unit_name"/>
+        <result property="creatorName" column="creator_name"/>
+        <result property="creatorNickname" column="creator_nickname"/>
     </resultMap>
 
     <!-- 分页查询任务列表（包含关联的班级、单元、创建者信息） -->
@@ -48,6 +36,7 @@
             a.weight,
             a.ideal_study_time_minutes,
             a.created_time,
+            a.deleted,
             c.name as class_name,
             u.name as unit_name,
             creator.real_name as creator_name,
@@ -66,9 +55,6 @@
         <if test="keyword != null and keyword != ''">
             AND (a.title LIKE CONCAT('%', #{keyword}, '%') OR a.description LIKE CONCAT('%', #{keyword}, '%'))
         </if>
-        <if test="status != null and status != ''">
-            AND a.status = #{status}
-        </if>
         ORDER BY a.created_time DESC
     </select>
 
@@ -85,6 +71,7 @@
             a.weight,
             a.ideal_study_time_minutes,
             a.created_time,
+            a.deleted,
             c.name as class_name,
             u.name as unit_name,
             creator.real_name as creator_name,

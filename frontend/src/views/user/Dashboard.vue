@@ -195,13 +195,17 @@ const recommendedTexts = ref([])
 
 const loadDashboardData = async () => {
   // 用 allSettled 保证单个请求失败不影响其他数据加载
-  const [coursesResult, uploadsResult] = await Promise.allSettled([
+  const [coursesResult, uploadsResult, vocabResult] = await Promise.allSettled([
     request({
       url: '/api/student/learning/courses',
       method: 'get'
     }),
     request({
       url: '/api/user/texts/my-uploads',
+      method: 'get'
+    }),
+    request({
+      url: '/api/student/learning/vocabulary/stats',
       method: 'get'
     })
   ])
@@ -220,6 +224,11 @@ const loadDashboardData = async () => {
     stats.myUploads = uploadsList.length
     // 获取最近3个上传
     recentUploads.value = uploadsList.slice(0, 3)
+  }
+
+  if (vocabResult.status === 'fulfilled' && vocabResult.value?.code === 200) {
+    const vocabData = vocabResult.value.data
+    stats.learnedWords = vocabData?.totalWords || vocabData?.total || 0
   }
 }
 
@@ -279,7 +288,7 @@ const studyText = (text) => {
     path: '/user/text-learning',
     query: {
       textId: text.id,
-      unitId: text.unitId || ''
+      unitId: text?.unitId || ''
     }
   })
 }

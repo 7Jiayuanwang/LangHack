@@ -101,7 +101,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, reactive, onUnmounted } from 'vue'
+import { ref, onMounted, nextTick, reactive, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Reading, Monitor, Top, ChatLineSquare } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -117,6 +117,7 @@ const inputMessage = ref('长难句解析')
 const loading = ref(false)
 const chatContainer = ref(null)
 const threadId = ref('')
+let abortController = null
 
 const candidateQuestions = reactive([
   { label: '结合文章内容解释本段意思', sub: 'Explain meaning in context' },
@@ -126,7 +127,7 @@ const candidateQuestions = reactive([
 onMounted(() => {
   selectedText.value = route.query.text || ''
   articleTitle.value = route.query.articleTitle || ''
-  
+
   if (!selectedText.value) {
     ElMessage.warning('未检测到选中文本')
   }
@@ -148,8 +149,10 @@ const sendMessage = async () => {
   try {
     const tutorApiUrl = import.meta.env.VITE_TUTOR_API_BASE_URL || '/tutor'
     const token = localStorage.getItem('token')
+    abortController = new AbortController()
     const response = await fetch(tutorApiUrl, {
       method: 'POST',
+      signal: abortController.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -176,10 +179,15 @@ const sendMessage = async () => {
     }
 
     if (data.response) {
-      const htmlResponse = DOMPurify.sanitize(marked(data.response))
+      const htmlResponse = DOMPurify.sanitize(marked(data.response || ''))
       messages.value.push({
         role: 'assistant',
         content: htmlResponse
+      })
+    } else {
+      messages.value.push({
+        role: 'assistant',
+        content: '抱歉，未收到有效响应。'
       })
     }
 
@@ -188,10 +196,13 @@ const sendMessage = async () => {
       threadId.value = data.thread_id
     }
   } catch (error) {
-    console.error('AI API error:', error)
-    messages.value.push({ role: 'assistant', content: '抱歉，AI服务暂时不可用。请稍后再试。' })
+    if (error.name !== 'AbortError') {
+      console.error('AI API error:', error)
+      messages.value.push({ role: 'assistant', content: '抱歉，AI服务暂时不可用。请稍后再试。' })
+    }
   } finally {
     loading.value = false
+    abortController = null
     scrollToBottom()
   }
 }
@@ -205,9 +216,16 @@ const scrollToBottom = () => {
   })
 }
 
-onUnmounted(() => {
-  // 清理任何正在进行的请求或计时器
-  // 当组件卸载时不再发送消息
+onBeforeUnmount(() => {
+  // 中止任何进行中的请求
+  if (abortController) {
+    try {
+      abortController.abort()
+    } catch (e) {
+      console.error('Abort error:', e)
+    }
+    abortController = null
+  }
   loading.value = false
 })
 </script>

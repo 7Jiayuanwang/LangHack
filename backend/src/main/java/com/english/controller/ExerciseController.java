@@ -69,6 +69,13 @@ public class ExerciseController {
                 return Result.error("textId不能为空");
             }
             Long textId = Long.valueOf(textIdObj.toString());
+
+            // 验证课文存在且未删除
+            com.english.entity.Text targetText = textService.getTextById(textId);
+            if (targetText == null || targetText.getDeleted() == 1) {
+                return Result.error("课文不存在或已被删除");
+            }
+
             Object exercisesObj = requestData.get("exercises");
             if (!(exercisesObj instanceof List)) {
                 return Result.error("exercises必须是列表");
@@ -316,6 +323,24 @@ public class ExerciseController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> updateExercise(@PathVariable Long exerciseId, @RequestBody Map<String, Object> requestData) {
         try {
+            // 验证教师权限：非ADMIN教师只能修改自己创建的习题
+            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication.getName();
+            com.english.entity.User currentUser = userService.getUserByUsername(username);
+            if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
+
+            Map<String, Object> existingExercise = textExerciseService.getExerciseDetail(exerciseId);
+            if (existingExercise == null) {
+                return Result.error("习题不存在");
+            }
+            if (!"ADMIN".equals(currentUser.getRole())) {
+                Object createdByObj = existingExercise.get("createdBy");
+                Long createdBy = createdByObj != null ? Long.valueOf(createdByObj.toString()) : null;
+                if (createdBy == null || !createdBy.equals(currentUser.getId())) {
+                    return Result.error("无权修改其他教师创建的习题");
+                }
+            }
+
             TextExercise exercise = new TextExercise();
             exercise.setId(exerciseId);
             Object questionObj3 = requestData.get("question");
@@ -370,6 +395,24 @@ public class ExerciseController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> deleteExercise(@PathVariable Long exerciseId) {
         try {
+            // 验证教师权限：非ADMIN教师只能删除自己创建的习题
+            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication.getName();
+            com.english.entity.User currentUser = userService.getUserByUsername(username);
+            if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
+
+            Map<String, Object> existingExercise = textExerciseService.getExerciseDetail(exerciseId);
+            if (existingExercise == null) {
+                return Result.error("习题不存在");
+            }
+            if (!"ADMIN".equals(currentUser.getRole())) {
+                Object createdByObj = existingExercise.get("createdBy");
+                Long createdBy = createdByObj != null ? Long.valueOf(createdByObj.toString()) : null;
+                if (createdBy == null || !createdBy.equals(currentUser.getId())) {
+                    return Result.error("无权删除其他教师创建的习题");
+                }
+            }
+
             boolean success = textExerciseService.deleteExercise(exerciseId);
 
             if (success) {
@@ -394,6 +437,24 @@ public class ExerciseController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> deleteAllExercisesByTextId(@PathVariable Long textId) {
         try {
+            // 验证教师权限：非ADMIN教师只能删除自己创建的课文习题
+            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication.getName();
+            com.english.entity.User currentUser = userService.getUserByUsername(username);
+            if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
+
+            if (!"ADMIN".equals(currentUser.getRole())) {
+                // 检查该课文的习题是否由当前教师创建
+                List<Map<String, Object>> exercises = textExerciseService.getExercisesWithOptions(textId);
+                if (exercises != null && !exercises.isEmpty()) {
+                    Object createdByObj = exercises.get(0).get("createdBy");
+                    Long createdBy = createdByObj != null ? Long.valueOf(createdByObj.toString()) : null;
+                    if (createdBy == null || !createdBy.equals(currentUser.getId())) {
+                        return Result.error("无权删除其他教师创建的课文习题");
+                    }
+                }
+            }
+
             boolean success = textExerciseService.deleteAllExercisesByTextId(textId);
 
             if (success) {

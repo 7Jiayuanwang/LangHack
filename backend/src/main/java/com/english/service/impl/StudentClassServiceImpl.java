@@ -106,12 +106,20 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
 
     @Override
     public List<StudentClass> getStudentsByClassId(Long classId) {
-        return baseMapper.selectStudentsByClassId(classId);
+        if (classId == null) {
+            throw new IllegalArgumentException("classId 不能为空");
+        }
+        List<StudentClass> result = baseMapper.selectStudentsByClassId(classId);
+        return result != null ? result : new java.util.ArrayList<>();
     }
 
     @Override
     public List<StudentClass> getClassesByStudentId(Long studentId) {
-        return baseMapper.selectClassesByStudentId(studentId);
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+        List<StudentClass> result = baseMapper.selectClassesByStudentId(studentId);
+        return result != null ? result : new java.util.ArrayList<>();
     }
 
     @Override

@@ -9,13 +9,10 @@ public class Word {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("word")
     private String word;
 
-    @TableField("pronunciation")
     private String pronunciation;
 
-    @TableField("definition")
     private String definition;
 
     @TableField("example_sentence")
@@ -27,13 +24,10 @@ public class Word {
     @TableField("part_of_speech")
     private String partOfSpeech;
 
-    @TableField("difficulty")
     private String difficulty;
 
-    @TableField("synonyms")
     private String synonyms;
 
-    @TableField("antonyms")
     private String antonyms;
 
     @TableField("wordnet_id")
@@ -42,7 +36,6 @@ public class Word {
     @TableField("multiple_definitions")
     private String multipleDefinitions;
 
-    @TableField("source")
     private String source;
 
     @TableField("deleted")

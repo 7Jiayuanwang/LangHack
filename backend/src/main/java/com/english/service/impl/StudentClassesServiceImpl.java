@@ -69,18 +69,30 @@ public class StudentClassesServiceImpl implements StudentClassesService {
         QueryWrapper<StudentClass> studentClassWrapper = new QueryWrapper<>();
         studentClassWrapper.eq("student_id", studentId);
         List<StudentClass> studentClasses = studentClassMapper.selectList(studentClassWrapper);
-        if (studentClasses == null) studentClasses = Collections.emptyList();
+        if (studentClasses == null || studentClasses.isEmpty()) {
+            return Collections.emptyList();
+        }
 
         for (StudentClass studentClass : studentClasses) {
             // 查询班级信息
             Class classInfo = classMapper.selectById(studentClass.getClassId());
             if (classInfo == null) continue;
 
-            // 查询课程信息
-            Course course = courseMapper.selectById(classInfo.getCourseId());
+            // 查询课程信息 - 过滤已删除课程
+            Course course = null;
+            if (classInfo.getCourseId() != null) {
+                QueryWrapper<Course> courseWrapper = new QueryWrapper<>();
+                courseWrapper.eq("id", classInfo.getCourseId()).eq("deleted", 0);
+                course = courseMapper.selectOne(courseWrapper);
+            }
 
-            // 查询教师信息
-            User teacher = userMapper.selectById(classInfo.getTeacherId());
+            // 查询教师信息 - 过滤已删除用户
+            User teacher = null;
+            if (classInfo.getTeacherId() != null) {
+                QueryWrapper<User> teacherWrapper = new QueryWrapper<>();
+                teacherWrapper.eq("id", classInfo.getTeacherId()).eq("deleted", 0);
+                teacher = userMapper.selectOne(teacherWrapper);
+            }
 
             Map<String, Object> classMap = new HashMap<>();
             classMap.put("id", studentClass.getId());
@@ -134,15 +146,22 @@ public class StudentClassesServiceImpl implements StudentClassesService {
         QueryWrapper<StudentClass> studentClassWrapper = new QueryWrapper<>();
         studentClassWrapper.eq("student_id", studentId);
         List<StudentClass> studentClasses = studentClassMapper.selectList(studentClassWrapper);
-        if (studentClasses == null) studentClasses = Collections.emptyList();
+        if (studentClasses == null || studentClasses.isEmpty()) {
+            return Collections.emptyList();
+        }
 
         for (StudentClass studentClass : studentClasses) {
             // 查询班级信息
             Class classInfo = classMapper.selectById(studentClass.getClassId());
             if (classInfo == null) continue;
 
-            // 查询课程信息
-            Course course = courseMapper.selectById(classInfo.getCourseId());
+            // 查询课程信息 - 过滤已删除课程
+            Course course = null;
+            if (classInfo.getCourseId() != null) {
+                QueryWrapper<Course> courseWrapper = new QueryWrapper<>();
+                courseWrapper.eq("id", classInfo.getCourseId()).eq("deleted", 0);
+                course = courseMapper.selectOne(courseWrapper);
+            }
             if (course == null) continue;
 
             Long courseId = course.getId();
@@ -359,7 +378,8 @@ public class StudentClassesServiceImpl implements StudentClassesService {
 
         // 2. 统计课文学习记录（TEXT_VIEW 类型，通过 text_id 关联）
         QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-        textWrapper.in("unit_id", unitIds);
+        textWrapper.in("unit_id", unitIds)
+                   .eq("deleted", 0);
         List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
         if (texts == null) texts = Collections.emptyList();
 
@@ -407,7 +427,8 @@ public class StudentClassesServiceImpl implements StudentClassesService {
 
             // 获取单元下的所有课文
             QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-            textWrapper.eq("unit_id", unit.getId());
+            textWrapper.eq("unit_id", unit.getId())
+                       .eq("deleted", 0);
             List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
             if (texts == null) texts = Collections.emptyList();
 
@@ -583,7 +604,8 @@ public class StudentClassesServiceImpl implements StudentClassesService {
 
         // 2. 统计课文学习记录（TEXT_VIEW 类型，通过 text_id 关联）
         QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-        textWrapper.in("unit_id", unitIds);
+        textWrapper.in("unit_id", unitIds)
+                   .eq("deleted", 0);
         List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
         if (texts == null) texts = Collections.emptyList();
 

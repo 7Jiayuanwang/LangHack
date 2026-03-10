@@ -615,13 +615,24 @@ const generateMCQOptions = () => {
   const distractors = vocabulary.value
     .filter(w => (w.wordId || w.id) !== (currentWord.wordId || currentWord.id) && w.definition)
     .map(w => w.definition)
-  
-  // 随机抽取3个干扰项
-  const shuffledDistractors = distractors.sort(() => 0.5 - Math.random()).slice(0, 3)
-  
-  // 合并正确答案并再次打乱
+
+  // 使用 Fisher-Yates 算法随机抽取3个干扰项（避免 Math.random() 排序缺陷）
+  const shuffledDistractors = []
+  const availableDistractors = [...distractors]
+  for (let i = 0; i < Math.min(3, availableDistractors.length); i++) {
+    const idx = Math.floor(Math.random() * availableDistractors.length)
+    shuffledDistractors.push(availableDistractors[idx])
+    availableDistractors.splice(idx, 1)
+  }
+
+  // 合并正确答案并使用 Fisher-Yates 算法打乱顺序
   const options = [currentWord.definition, ...shuffledDistractors]
-  mcqOptions.value = options.sort(() => 0.5 - Math.random())
+  const shuffled = [...options]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  mcqOptions.value = shuffled
 }
 
 // 处理多选题选择
@@ -794,8 +805,13 @@ const playAudio = (word) => {
     currentAudio.onended = () => {
       currentAudio = null
     }
+    currentAudio.onerror = () => {
+      currentAudio = null
+      ElMessage.error('音频加载失败')
+    }
     currentAudio.play().catch(error => {
       console.error('播放音频失败:', error)
+      currentAudio = null
       ElMessage.error('播放音频失败')
     })
   }
@@ -878,6 +894,8 @@ onBeforeUnmount(() => {
 
   if (currentAudio) {
     currentAudio.pause()
+    currentAudio.onended = null
+    currentAudio.onerror = null
     currentAudio = null
   }
 })

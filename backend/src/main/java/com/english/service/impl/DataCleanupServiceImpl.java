@@ -99,6 +99,11 @@ public class DataCleanupServiceImpl {
         QueryWrapper<StudentClass> scWrapper = new QueryWrapper<>();
         List<StudentClass> studentClasses = studentClassMapper.selectList(scWrapper);
 
+        if (studentClasses == null || studentClasses.isEmpty()) {
+            logger.info("没有学生班级关联记录");
+            return;
+        }
+
         logger.info("发现 {} 条学生班级关联记录", studentClasses.size());
 
         // 先收集要删除的 ID，再批量删除（避免迭代中逐条删除+无事务问题）
@@ -138,6 +143,11 @@ public class DataCleanupServiceImpl {
         teacherWrapper.eq("deleted", 0);
         List<User> teachers = userMapper.selectList(teacherWrapper);
 
+        if (teachers == null || teachers.isEmpty()) {
+            logger.info("没有教师账户");
+            return;
+        }
+
         logger.info("检查 {} 个教师账户", teachers.size());
 
         for (User teacher : teachers) {
@@ -145,7 +155,8 @@ public class DataCleanupServiceImpl {
             classWrapper.eq("teacher_id", teacher.getId());
             List<Class> teacherClasses = classMapper.selectList(classWrapper);
 
-            logger.info("教师 {} 创建了 {} 个班级", teacher.getUsername(), teacherClasses.size());
+            int classCount = (teacherClasses != null) ? teacherClasses.size() : 0;
+            logger.info("教师 {} 创建了 {} 个班级", teacher.getUsername(), classCount);
 
             // 这里不删除教师创建的班级，因为这是正常的
             // 但是会报告每个教师的班级数量
@@ -157,9 +168,14 @@ public class DataCleanupServiceImpl {
         logger.info("检查学生默认班级状态...");
 
         QueryWrapper<User> studentWrapper = new QueryWrapper<>();
-        studentWrapper.eq("role", "STUDENT");
+        studentWrapper.in("role", java.util.Arrays.asList("STUDENT", "USER"));
         studentWrapper.eq("deleted", 0);
         List<User> students = userMapper.selectList(studentWrapper);
+
+        if (students == null || students.isEmpty()) {
+            logger.info("没有学生账户");
+            return;
+        }
 
         logger.info("检查 {} 个学生账户", students.size());
 
@@ -168,7 +184,8 @@ public class DataCleanupServiceImpl {
             scWrapper.eq("student_id", student.getId());
             List<StudentClass> studentClasses = studentClassMapper.selectList(scWrapper);
 
-            logger.info("学生 {} 加入了 {} 个班级", student.getUsername(), studentClasses.size());
+            int classCount = (studentClasses != null) ? studentClasses.size() : 0;
+            logger.info("学生 {} 加入了 {} 个班级", student.getUsername(), classCount);
 
             // 学生加入班级是正常的，不删除
             // 但是这里会显示每个学生的班级数量，方便调试
@@ -193,7 +210,7 @@ public class DataCleanupServiceImpl {
         Long teacherCount = userMapper.selectCount(teacherWrapper);
 
         QueryWrapper<User> studentWrapper = new QueryWrapper<>();
-        studentWrapper.eq("role", "STUDENT");
+        studentWrapper.in("role", java.util.Arrays.asList("STUDENT", "USER"));
         studentWrapper.eq("deleted", 0);
         Long studentCount = userMapper.selectCount(studentWrapper);
 
@@ -213,13 +230,17 @@ public class DataCleanupServiceImpl {
         // 详细的学生班级信息
         logger.info("\n=== 学生班级关联详情 ===");
         List<StudentClass> allStudentClasses = studentClassMapper.selectList(null);
-        for (StudentClass sc : allStudentClasses) {
-            User student = userMapper.selectById(sc.getStudentId());
-            Class classInfo = classMapper.selectById(sc.getClassId());
-            logger.info("学生: {} -> 班级: {} (加入时间: {})",
-                             (student != null ? student.getUsername() : "未知"),
-                             (classInfo != null ? classInfo.getName() : "未知"),
-                             sc.getJoinTime());
+        if (allStudentClasses != null && !allStudentClasses.isEmpty()) {
+            for (StudentClass sc : allStudentClasses) {
+                User student = userMapper.selectById(sc.getStudentId());
+                Class classInfo = classMapper.selectById(sc.getClassId());
+                logger.info("学生: {} -> 班级: {} (加入时间: {})",
+                                 (student != null ? student.getUsername() : "未知"),
+                                 (classInfo != null ? classInfo.getName() : "未知"),
+                                 sc.getJoinTime());
+            }
+        } else {
+            logger.info("没有学生班级关联记录");
         }
         logger.info("====================");
     }

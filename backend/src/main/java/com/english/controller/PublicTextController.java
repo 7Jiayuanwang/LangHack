@@ -172,8 +172,8 @@ public class PublicTextController {
     @GetMapping("/{textId}")
     public Result<TextVersionsDTO> getTextDetail(@PathVariable Long textId) {
         try {
-            Text text = textService.getById(textId);
-            if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
+            Text text = textService.getTextById(textId);
+            if (text == null) {
                 return Result.error("课文不存在");
             }
 
@@ -199,13 +199,16 @@ public class PublicTextController {
             // 触发异步版本生成（如果缺失）
             articleVersionService.checkAndGenerateVersions(textId);
 
+            // 刷新查看次数（原子操作已执行）
+            text = textService.getTextById(textId);
+
             // 构建版本DTO
             TextVersionsDTO dto = new TextVersionsDTO();
             dto.setId(text.getId());
             dto.setTitle(text.getTitle());
             dto.setDifficulty(text.getDifficulty());
             dto.setAudioUrl(text.getAudioUrl());
-            dto.setViewCount((text.getViewCount() != null ? text.getViewCount() : 0) + 1);
+            dto.setViewCount(text.getViewCount() != null ? text.getViewCount() : 0);
             dto.setLikeCount(text.getLikeCount());
             dto.setContentType(text.getContentType());
             dto.setMarkdownContent(text.getMarkdownContent());

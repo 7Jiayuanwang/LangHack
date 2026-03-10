@@ -44,16 +44,17 @@ export function getTextDetail(params) {
   }
 
   // 如果传入的是对象，使用查询参数
-  const { textId, assignmentId } = params
-  let url = `/api/student/learning/texts/${textId}`
+  const { textId, assignmentId } = params || {}
 
-  if (assignmentId) {
-    url += `?assignmentId=${assignmentId}`
+  // 防御：textId 必须存在
+  if (!textId) {
+    return Promise.reject(new Error('textId 不能为空'))
   }
 
   return request({
-    url,
-    method: 'get'
+    url: `/api/student/learning/texts/${textId}`,
+    method: 'get',
+    params: assignmentId ? { assignmentId } : {}
   })
 }
 
@@ -94,6 +95,10 @@ export function getVocabularyList(params) {
       response = { data: { records: [], total: 0 } }
     }
     return response
+  }).catch(error => {
+    // 错误时返回空数据，防止页面崩溃
+    console.error('getVocabularyList error:', error)
+    return { data: { records: [], total: 0 } }
   })
 }
 
@@ -296,10 +301,15 @@ export function getVocabulary(params) {
 
 // 检查单词是否在生词本中
 export function checkVocabularyStatus(word) {
+  // 输入验证
+  if (!word || typeof word !== 'string' || word.trim().length === 0) {
+    return Promise.reject(new Error('单词不能为空'))
+  }
+
   return request({
     url: '/api/student/learning/vocabulary/check',
     method: 'get',
-    params: { word }
+    params: { word: word.trim() }
   })
 }
 
@@ -469,18 +479,35 @@ export default studentApi
 
 // 获取单词详细信息（WordNet增强版）
 export function getWordNetInfo(word) {
+  // 输入验证
+  if (!word || typeof word !== 'string' || word.trim().length === 0) {
+    return Promise.reject(new Error('单词不能为空'))
+  }
+  if (word.length > 100) {
+    return Promise.reject(new Error('单词长度不能超过 100'))
+  }
+
   return request({
-    url: `/api/wordnet/word/${word}`,
+    url: `/api/wordnet/word/${encodeURIComponent(word.trim())}`,
     method: 'get'
   })
 }
 
 // 获取文本中的可点击单词
 export function getClickableWordsFromText(text) {
+  // 输入验证
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    return Promise.reject(new Error('文本不能为空'))
+  }
+  if (text.length > 50000) {
+    return Promise.reject(new Error('文本长度不能超过 50000'))
+  }
+
   return request({
     url: '/api/wordnet/text/words',
     method: 'post',
-    data: { text }
+    data: { text },
+    timeout: 30000  // 文本处理可能较慢，延长超时时间
   })
 }
 

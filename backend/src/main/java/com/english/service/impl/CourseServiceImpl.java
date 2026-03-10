@@ -9,12 +9,17 @@ import com.english.entity.Unit;
 import com.english.exception.BusinessException;
 import com.english.mapper.CourseMapper;
 import com.english.mapper.UnitMapper;
+import com.english.mapper.StudentClassMapper;
+import com.english.mapper.ClassMapper;
 import com.english.service.CourseService;
+import com.english.service.ClassService;
 import com.english.service.UnitService;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -24,12 +29,20 @@ import java.util.Map;
 @Service
 public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> implements CourseService {
 
+    private static final Logger logger = LoggerFactory.getLogger(CourseServiceImpl.class);
+
     private final UnitMapper unitMapper;
     private final UnitService unitService;
+    private final ClassService classService;
+    private final StudentClassMapper studentClassMapper;
+    private final ClassMapper classMapper;
 
-    public CourseServiceImpl(UnitMapper unitMapper, UnitService unitService) {
+    public CourseServiceImpl(UnitMapper unitMapper, UnitService unitService, ClassService classService, StudentClassMapper studentClassMapper, ClassMapper classMapper) {
         this.unitMapper = unitMapper;
         this.unitService = unitService;
+        this.classService = classService;
+        this.studentClassMapper = studentClassMapper;
+        this.classMapper = classMapper;
     }
 
     @Override
@@ -82,6 +95,9 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
     @Transactional
     @CacheEvict(value = "courses", allEntries = true)
     public void createCourse(Course course) {
+        if (course.getName() == null || course.getName().trim().isEmpty()) {
+            throw new BusinessException("课程名称不能为空");
+        }
         if (course.getStatus() == null) {
             course.setStatus("ACTIVE");
         }
@@ -95,6 +111,9 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
     @Transactional
     @CacheEvict(value = "courses", allEntries = true)
     public void updateCourse(Course course) {
+        if (course.getName() == null || course.getName().trim().isEmpty()) {
+            throw new BusinessException("课程名称不能为空");
+        }
         course.setUpdatedAt(LocalDateTime.now());
         updateById(course);
     }
@@ -109,19 +128,35 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
             throw new BusinessException("课程不存在");
         }
 
-        // 2. 查询该课程下所有单元
+        // 2. 查询该课程下所有班级
+        List<com.english.entity.Class> classes = classService.getClassesByCourseId(id);
+
+        // 3. 删除所有班级的学生关联（级联清理）
+        if (classes != null && !classes.isEmpty()) {
+            for (com.english.entity.Class classInfo : classes) {
+                // 先删除班级下的所有学生关联
+                QueryWrapper<com.english.entity.StudentClass> studentWrapper = new QueryWrapper<>();
+                studentWrapper.eq("class_id", classInfo.getId());
+                studentClassMapper.delete(studentWrapper);
+
+                // 然后删除班级本身
+                classMapper.deleteById(classInfo.getId());
+            }
+        }
+
+        // 4. 查询该课程下所有单元并级联删除
         QueryWrapper<Unit> unitQuery = new QueryWrapper<>();
         unitQuery.eq("course_id", id);
         List<Unit> units = unitMapper.selectList(unitQuery);
 
-        // 3. 对每个单元调用 unitService.deleteUnit() 执行级联删除
+        // 5. 对每个单元调用 unitService.deleteUnit() 执行级联删除
         if (units != null && !units.isEmpty()) {
             for (Unit unit : units) {
                 unitService.deleteUnit(unit.getId());
             }
         }
 
-        // 4. 软删除课程本身
+        // 6. 软删除课程本身
         Course courseUpdate = new Course();
         courseUpdate.setId(id);
         courseUpdate.setDeleted(1);

@@ -227,7 +227,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public List<User> getStudents() {
         QueryWrapper<User> wrapper = new QueryWrapper<>();
-        wrapper.eq("role", "STUDENT");
+        wrapper.in("role", java.util.Arrays.asList("STUDENT", "USER"));
         wrapper.eq("status", "ACTIVE");
         wrapper.eq("deleted", 0);
         wrapper.orderByDesc("created_time");
@@ -288,7 +288,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @Transactional
+    @CacheEvict(value = "stats", allEntries = true)
     public void updateUserStatus(Long id, String status) {
+        User existingUser = getUserById(id);
+        if (existingUser == null) {
+            throw new BusinessException("用户不存在");
+        }
         User user = new User();
         user.setId(id);
         user.setStatus(status);
@@ -297,7 +303,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @Transactional
+    @CacheEvict(value = "stats", allEntries = true)
     public void resetPassword(Long id, String newPassword) {
+        User existingUser = getUserById(id);
+        if (existingUser == null) {
+            throw new BusinessException("用户不存在");
+        }
         User user = new User();
         user.setId(id);
         user.setPassword(passwordEncoder.encode(newPassword));

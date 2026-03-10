@@ -251,6 +251,12 @@ const routes = [
         meta: { title: '用户首页', roles: ['USER'] }
       }
     ]
+  },
+  // 404 兜底路由
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    redirect: '/'
   }
 ]
 
@@ -262,6 +268,23 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
+
+  // 验证路由参数（防止注入攻击）
+  if (to.params.id && !/^\d+$/.test(to.params.id)) {
+    console.error('Invalid ID parameter:', to.params.id)
+    next('/')
+    return
+  }
+  if (to.params.unitId && !/^\d+$/.test(to.params.unitId)) {
+    console.error('Invalid unitId parameter:', to.params.unitId)
+    next('/')
+    return
+  }
+  if (to.params.courseId && !/^\d+$/.test(to.params.courseId)) {
+    console.error('Invalid courseId parameter:', to.params.courseId)
+    next('/')
+    return
+  }
 
   // 从 store 读取状态作为真实数据源，而非 localStorage
   const token = userStore.token
@@ -286,7 +309,12 @@ router.beforeEach((to, from, next) => {
 
   // 需要登录的页面
   if (!token) {
-    next('/login')
+    // 防止无限重定向循环
+    if (to.path !== '/login') {
+      next('/login')
+    } else {
+      next()
+    }
   } else {
     // 检查角色权限，防止 meta.roles 为 undefined 导致的 TypeError
     const requiredRoles = to.meta.roles
@@ -299,7 +327,14 @@ router.beforeEach((to, from, next) => {
         'USER': '/user'
       }
       console.warn(`权限不足: 尝试访问 ${to.path}，当前角色 ${userRole}，需要角色 ${requiredRoles}`)
-      next(roleRoutes[userRole] || '/login')
+
+      // 防止无限重定向循环 - 如果目标路由就是用户主页，直接放行
+      const targetRoute = roleRoutes[userRole]
+      if (targetRoute && to.path.startsWith(targetRoute)) {
+        next()
+      } else {
+        next(targetRoute || '/login')
+      }
     } else {
       next()
     }

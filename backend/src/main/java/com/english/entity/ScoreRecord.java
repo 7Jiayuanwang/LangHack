@@ -17,46 +17,55 @@ public class ScoreRecord {
     /**
      * 学生ID
      */
+    @TableField("student_id")
     private Long studentId;
 
     /**
      * 任务ID（可选，如果是任务相关的分数）
      */
+    @TableField("assignment_id")
     private Long assignmentId;
 
     /**
      * 课程ID（可选，如果是课程相关的分数）
      */
+    @TableField("course_id")
     private Long courseId;
 
     /**
      * 单元ID（可选，如果是单元相关的分数）
      */
+    @TableField("unit_id")
     private Long unitId;
 
     /**
      * 分数类型：ASSIGNMENT-任务分数, COURSE-课程分数, UNIT-单元分数, EXAM-考试分数
      */
+    @TableField("score_type")
     private String scoreType;
 
     /**
      * 分数值（0-100）
      */
+    @TableField("score")
     private Integer score;
 
     /**
      * 满分
      */
+    @TableField("full_score")
     private Integer fullScore;
 
     /**
      * 得分详情（JSON格式，存储详细得分项）
      */
+    @TableField("score_details")
     private String scoreDetails;
 
     /**
      * 备注
      */
+    @TableField("remark")
     private String remark;
 
     /**

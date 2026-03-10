@@ -99,6 +99,9 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
                 exerciseMap.put("question", exercise.getQuestion());
                 exerciseMap.put("exerciseType", exercise.getExerciseType());
                 exerciseMap.put("orderNum", exercise.getOrderNum());
+                exerciseMap.put("createdBy", exercise.getCreatedBy());
+                exerciseMap.put("createdTime", exercise.getCreatedTime());
+                exerciseMap.put("textId", exercise.getTextId());
 
                 // 获取习题的选项
                 List<ExerciseOption> options = exerciseOptionMapper.getOptionsByExerciseId(exercise.getId());
@@ -180,6 +183,9 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
             result.put("question", exercise.getQuestion());
             result.put("exerciseType", exercise.getExerciseType());
             result.put("orderNum", exercise.getOrderNum());
+            result.put("createdBy", exercise.getCreatedBy());
+            result.put("createdTime", exercise.getCreatedTime());
+            result.put("textId", exercise.getTextId());
 
             // 获取选项
             List<ExerciseOption> options = exerciseOptionMapper.getOptionsByExerciseId(exerciseId);
@@ -195,13 +201,30 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
     @Override
     public boolean checkAnswer(Long exerciseId, String studentAnswer) {
         try {
-            ExerciseOption correctOption = exerciseOptionMapper.getCorrectOption(exerciseId);
-            if (correctOption == null) {
+            if (studentAnswer == null) {
                 return false;
             }
 
-            return correctOption.getOptionKey() != null &&
-                    correctOption.getOptionKey().equalsIgnoreCase(studentAnswer);
+            // 对学生答案进行标准化处理：去除前后空白并转小写
+            String normalizedAnswer = studentAnswer.trim().toLowerCase();
+
+            // 获取该习题的所有选项，检查是否有正确选项与之匹配
+            // 注意：可能有多个正确答案（如多选题）
+            List<ExerciseOption> options = exerciseOptionMapper.getOptionsByExerciseId(exerciseId);
+            if (options == null || options.isEmpty()) {
+                return false;
+            }
+
+            // 检查学生答案是否与任何一个正确选项匹配
+            for (ExerciseOption option : options) {
+                if (Boolean.TRUE.equals(option.getIsCorrect()) &&
+                    option.getOptionKey() != null &&
+                    option.getOptionKey().trim().toLowerCase().equals(normalizedAnswer)) {
+                    return true;
+                }
+            }
+
+            return false;
         } catch (Exception e) {
             logger.error("检查答案失败", e);
             throw new BusinessException("检查答案失败，请稍后重试");

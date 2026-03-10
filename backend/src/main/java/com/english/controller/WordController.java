@@ -81,7 +81,7 @@ public class WordController {
             if (count <= 0) {
                 count = 10;
             }
-            count = Math.min(count, 50);
+            count = Math.min(count, 100);
 
             List<Word> words = wordService.getRandomWords(count);
             return Result.success(words);
@@ -109,6 +109,11 @@ public class WordController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> addWord(@RequestBody Word word) {
         try {
+            // 检查单词字段非空
+            if (word == null || word.getWord() == null || word.getWord().trim().isEmpty()) {
+                return Result.error("单词不能为空");
+            }
+
             // 检查单词是否已存在
             if (wordService.getWordByWord(word.getWord()) != null) {
                 return Result.error("单词已存在");

@@ -125,6 +125,15 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> createClass(@RequestBody Class classInfo, Authentication authentication) {
         try {
+            if (classInfo == null || classInfo.getName() == null || classInfo.getName().trim().isEmpty()) {
+                return Result.error("班级名称不能为空");
+            }
+            if (classInfo.getName().length() > 100) {
+                classInfo.setName(classInfo.getName().substring(0, 100));
+            }
+            if (classInfo.getCourseId() == null) {
+                return Result.error("课程ID不能为空");
+            }
             // 教师只能创建自己管理的班级
             if ("ROLE_TEACHER".equals(getCurrentRole(authentication))) {
                 Long teacherId = getCurrentUserId(authentication);
@@ -149,6 +158,12 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> updateClass(@PathVariable Long id, @RequestBody Class classInfo, Authentication authentication) {
         try {
+            if (classInfo == null || classInfo.getName() == null || classInfo.getName().trim().isEmpty()) {
+                return Result.error("班级名称不能为空");
+            }
+            if (classInfo.getName().length() > 100) {
+                classInfo.setName(classInfo.getName().substring(0, 100));
+            }
             classInfo.setId(id);
 
             // 非管理员只能更新自己管理的班级
@@ -383,12 +398,22 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> addStudentToClass(@PathVariable Long classId, @RequestBody Map<String, Long> params, Authentication authentication) {
         try {
-            Long teacherId = getCurrentUserId(authentication);
             Long studentId = params.get("studentId");
             if (studentId == null) {
                 return Result.error("学生ID不能为空");
             }
-            studentClassService.addStudentToClass(teacherId, classId, studentId);
+
+            // 教师权限校验：教师只能为自己管理的班级添加学生
+            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
+                Long teacherId = getCurrentUserId(authentication);
+                if (!classService.validateTeacherPermission(teacherId, classId)) {
+                    return Result.error("没有权限管理此班级");
+                }
+                studentClassService.addStudentToClass(teacherId, classId, studentId);
+            } else {
+                // 管理员直接添加学生
+                studentClassService.joinClass(studentId, classId);
+            }
             return Result.success("学生添加成功");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
@@ -406,9 +431,17 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> removeStudentFromClass(@PathVariable Long classId, @PathVariable Long studentId, Authentication authentication) {
         try {
-            Long teacherId = getCurrentUserId(authentication);
-
-            studentClassService.removeStudentFromClass(teacherId, classId, studentId);
+            // 教师权限校验：教师只能为自己管理的班级移除学生
+            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
+                Long teacherId = getCurrentUserId(authentication);
+                if (!classService.validateTeacherPermission(teacherId, classId)) {
+                    return Result.error("没有权限管理此班级");
+                }
+                studentClassService.removeStudentFromClass(teacherId, classId, studentId);
+            } else {
+                // 管理员直接移除学生
+                studentClassService.leaveClass(studentId, classId);
+            }
             return Result.success("学生移除成功");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
@@ -431,6 +464,9 @@ public class ClassController {
             if (studentIds == null || studentIds.isEmpty()) {
                 return Result.error("学生ID列表不能为空");
             }
+            if (studentIds.size() > 1000) {
+                return Result.error("批量添加学生数量不能超过1000");
+            }
 
             // 教师权限校验：教师只能为自己管理的班级添加学生
             if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
@@ -441,6 +477,8 @@ public class ClassController {
 
             studentClassService.batchAddStudentsToClass(classId, studentIds);
             return Result.success("批量添加学生成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("操作失败", e);
 

@@ -13,14 +13,14 @@
 
         <!-- 关联课程信息 -->
         <association property="course" javaType="com.english.entity.Course">
-            <id property="id" column="course_id"/>
+            <id property="id" column="course_id_assoc"/>
             <result property="name" column="course_name"/>
             <result property="description" column="course_description"/>
         </association>
 
         <!-- 关联教师信息 -->
         <association property="teacher" javaType="com.english.entity.User">
-            <id property="id" column="teacher_id"/>
+            <id property="id" column="teacher_id_assoc"/>
             <result property="username" column="teacher_username"/>
             <result property="nickname" column="teacher_nickname"/>
             <result property="realName" column="teacher_real_name"/>
@@ -37,8 +37,10 @@
             c.teacher_id,
             c.description,
             c.created_time,
+            co.id as course_id_assoc,
             co.name as course_name,
             co.description as course_description,
+            u.id as teacher_id_assoc,
             u.username as teacher_username,
             u.nickname as teacher_nickname,
             u.real_name as teacher_real_name,
@@ -68,8 +70,10 @@
             c.teacher_id,
             c.description,
             c.created_time,
+            co.id as course_id_assoc,
             co.name as course_name,
             co.description as course_description,
+            u.id as teacher_id_assoc,
             u.username as teacher_username,
             u.nickname as teacher_nickname,
             u.real_name as teacher_real_name,
@@ -119,8 +123,10 @@
             c.description,
             c.created_time,
             sc.join_time as join_time,
+            co.id as course_id_assoc,
             co.name as course_name,
             co.description as course_description,
+            u.id as teacher_id_assoc,
             u.username as teacher_username,
             u.nickname as teacher_nickname,
             u.real_name as teacher_real_name,

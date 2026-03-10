@@ -258,8 +258,32 @@ const formRules = {
   ]
 }
 
-// 学生数量缓存
+// 学生数量缓存（使用 reactive Map 保证响应式）
 const studentCountCache = ref(new Map())
+
+// 批量加载班级学生数量
+const batchLoadStudentCounts = async (classIds) => {
+  for (const classId of classIds) {
+    if (studentCountCache.value.has(classId)) continue
+    try {
+      const resp = await fetch(`/api/classes/${classId}/students`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      })
+      if (resp.ok) {
+        const d = await resp.json()
+        if (d.code === 200) {
+          const newMap = new Map(studentCountCache.value)
+          newMap.set(classId, Array.isArray(d.data) ? d.data.length : 0)
+          studentCountCache.value = newMap
+        }
+      }
+    } catch (error) {
+      console.error('获取学生数量失败:', error)
+    }
+  }
+}
 
 // 加载班级列表
 const loadClasses = async () => {
@@ -285,8 +309,11 @@ const loadClasses = async () => {
       if (data.code === 200) {
         classes.value = data.data?.records || []
         pagination.total = data.data?.total || 0
+        // 班级列表加载完后，批量获取学生数量
+        const classIds = classes.value.map(c => c.id)
+        batchLoadStudentCounts(classIds)
       } else {
-        ElMessage.error(data.message || '加载班级列表失败')
+        ElMessage.error('加载班级列表失败')
       }
     } else {
       ElMessage.error('加载班级列表失败')
@@ -383,28 +410,11 @@ const loadClassStudents = async (classId) => {
   }
 }
 
-// 获取学生数量
+// 获取学生数量（纯读缓存，不再在渲染函数中发起HTTP请求）
 const getStudentCount = (classId) => {
   if (studentCountCache.value.has(classId)) {
     return studentCountCache.value.get(classId)
   }
-
-  // 异步获取学生数量
-  fetch(`/api/classes/${classId}/students`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-    }
-  })
-  .then(response => response.json())
-  .then(data => {
-    if (data.code === 200) {
-      studentCountCache.value.set(classId, Array.isArray(data.data) ? data.data.length : 0)
-    }
-  })
-  .catch(error => {
-    console.error('获取学生数量失败:', error)
-  })
-
   return '-'
 }
 
@@ -439,7 +449,7 @@ const submitForm = async () => {
 
         loadClasses()
       } else {
-        ElMessage.error(data.message || '操作失败')
+        ElMessage.error('操作失败，请稍后重试')
       }
     } else {
       ElMessage.error('操作失败')
@@ -482,7 +492,7 @@ const deleteClass = async (row) => {
 
         loadClasses()
       } else {
-        ElMessage.error(data.message || '删除失败')
+        ElMessage.error('删除失败，请稍后重试')
       }
     } else {
       ElMessage.error('删除失败')
@@ -525,7 +535,7 @@ const removeStudent = async (row) => {
 
         loadClassStudents(currentClass.value.id)
       } else {
-        ElMessage.error(data.message || '移除失败')
+        ElMessage.error('移除失败，请稍后重试')
       }
     } else {
       ElMessage.error('移除失败')

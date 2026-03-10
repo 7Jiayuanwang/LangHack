@@ -111,13 +111,13 @@ public class TencentTranslateService {
             return result != null ? result : "";
 
         } catch (TencentCloudSDKException e) {
-            logger.error("腾讯云翻译API错误 - 错误码: {}", e.getErrorCode(), e);
+            logger.error("腾讯云翻译API错误 - 错误码: {}", e.getErrorCode());
 
-            // 根据错误类型返回更友好的提示
-            String msg = e.getMessage();
-            if (msg != null && msg.contains("not authorized")) {
+            // 根据错误类型返回更友好的提示，避免泄露详细的 Exception message
+            String errorCode = e.getErrorCode();
+            if (errorCode != null && errorCode.contains("Unauthorized")) {
                 throw new BusinessException("翻译服务权限不足，请检查腾讯云API密钥是否有机器翻译权限");
-            } else if (msg != null && msg.contains("InvalidCredential")) {
+            } else if (errorCode != null && errorCode.contains("InvalidCredential")) {
                 throw new BusinessException("翻译服务密钥无效，请检查配置");
             } else {
                 throw new BusinessException("翻译失败，请稍后重试");
@@ -129,7 +129,7 @@ public class TencentTranslateService {
 
     private String translateFallback(String text, String source, String target, Exception e) {
         logger.warn("Tencent translate circuit breaker triggered: {}", e.getMessage());
-        return "[翻译服务暂时不可用]";
+        throw new BusinessException("翻译服务暂时不可用，请稍后重试");
     }
 
     /**

@@ -16,11 +16,13 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Set;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private static final Set<String> VALID_ROLES = Set.of("ADMIN", "TEACHER", "STUDENT", "USER");
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -34,9 +36,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String username = null;
         String jwtToken = null;
 
-        // 检查 Authorization header：必须是 "Bearer " 开头，且总长度 > 7
+        // 检查 Authorization header：必须是 "Bearer " 开头，且总长度 > 7 (至少要有1个token字符)
         if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ") && requestTokenHeader.length() > 7) {
             jwtToken = requestTokenHeader.substring(7);
+            // 检查token是否为空
+            if (jwtToken == null || jwtToken.trim().isEmpty()) {
+                jwtToken = null;
+            }
             try {
                 username = jwtUtil.getUsernameFromToken(jwtToken);
             } catch (Exception e) {
@@ -48,17 +54,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 String role = jwtUtil.getRoleFromToken(jwtToken);
 
-                if (role != null && !role.trim().isEmpty() && jwtUtil.validateToken(jwtToken, username)) {
+                if (role != null && !role.trim().isEmpty() && VALID_ROLES.contains(role) && jwtUtil.validateToken(jwtToken, username)) {
                     UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
                             username,
                             null,
                             Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
                         );
+                    authToken.setDetails(username); // 保存用户名用于后续审计
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                } else {
+                    logger.warn("Invalid JWT role: {}", role);
                 }
             } catch (Exception e) {
-                logger.warn("JWT Token validation failed");
+                logger.warn("JWT Token validation failed: {}", e.getMessage());
             }
         }
 

@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/api/translate")
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class TranslateController {
 
     @Autowired
@@ -111,7 +112,7 @@ public class TranslateController {
             String result = translateService.translateAuto(request.getText());
             return Result.success(result);
         } catch (Exception e) {
-            log.error("translateAuto failed", e);
+            log.debug("translateAuto failed", e);
             return Result.error("翻译服务暂时不可用，请稍后重试");
         }
     }
@@ -137,7 +138,7 @@ public class TranslateController {
             String result = translateService.translateEnToCn(request.getText());
             return Result.success(result);
         } catch (Exception e) {
-            log.error("translateEnToCn failed", e);
+            log.debug("translateEnToCn failed", e);
             return Result.error("翻译服务暂时不可用，请稍后重试");
         }
     }
@@ -163,7 +164,7 @@ public class TranslateController {
             String result = translateService.translateCnToEn(request.getText());
             return Result.success(result);
         } catch (Exception e) {
-            log.error("translateCnToEn failed", e);
+            log.debug("translateCnToEn failed", e);
             return Result.error("翻译服务暂时不可用，请稍后重试");
         }
     }
@@ -181,6 +182,13 @@ public class TranslateController {
         if (request.getText().length() > 2000) {
             return Result.error("翻译文本不能超过2000字");
         }
+        // 验证源语言和目标语言
+        if (request.getSource() == null || request.getSource().trim().isEmpty()) {
+            return Result.error("源语言不能为空");
+        }
+        if (request.getTarget() == null || request.getTarget().trim().isEmpty()) {
+            return Result.error("目标语言不能为空");
+        }
         String userId = resolveUserId(authentication, httpRequest);
         if (isRateLimited(userId)) {
             return Result.error("翻译请求过于频繁，请1分钟后重试（每分钟限50次）");
@@ -193,7 +201,7 @@ public class TranslateController {
             );
             return Result.success(result);
         } catch (Exception e) {
-            log.error("translateCustom failed", e);
+            log.debug("translateCustom failed", e);
             return Result.error("翻译服务暂时不可用，请稍后重试");
         }
     }
@@ -213,10 +221,20 @@ public class TranslateController {
         if (request.getTexts().size() > 200) {
             return Result.error("批量翻译每次最多200条");
         }
-        
+
+        // 验证每条文本长度
+        for (String text : request.getTexts()) {
+            if (text != null && text.length() > 2000) {
+                return Result.error("单条翻译文本不能超过2000字");
+            }
+        }
+
         String userId = resolveUserId(authentication, httpRequest);
-        if (isRateLimited(userId)) {
-            return Result.error("请求过于频繁，请稍后重试");
+        // 批量翻译按实际条数计入限流（每条算一次）
+        for (int i = 0; i < request.getTexts().size(); i++) {
+            if (isRateLimited(userId)) {
+                return Result.error("请求过于频繁，请稍后重试");
+            }
         }
 
         String direction = request.getDirection() == null ? "en-to-zh" : request.getDirection();

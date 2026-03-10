@@ -309,10 +309,10 @@ const loadDashboard = async () => {
         const randomText = response.data[0]
         dashboardData.learningRecommendation = {
           type: 'text',
-          title: randomText.title,
-          content: (randomText.content || '').substring(0, 100) + '...',
-          id: randomText.id,
-          unitId: randomText.unitId
+          title: randomText?.title || '未知课文',
+          content: (randomText?.content || '').substring(0, 100) + '...',
+          id: randomText?.id,
+          unitId: randomText?.unitId
         }
       }
     } catch (error) {

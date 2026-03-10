@@ -74,7 +74,7 @@ spring:
       expiration: 86400000 # 24小时
 
   flyway:
-    enabled: false  # 开启 Flyway
+    enabled: false  # Flyway 禁用（手动管理数据库迁移）
     baseline-on-migrate: false
     locations: classpath:db/migration
     group: true

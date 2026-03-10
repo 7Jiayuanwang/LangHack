@@ -89,7 +89,7 @@ public class WordFormatTest implements CommandLineRunner {
             testFieldConsistency();
         } catch (Exception e) {
             System.err.println("✗ 字段格式一致性测试执行出错: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("错误类型: " + e.getClass().getName());
         }
 
         System.out.println("\n=== 词汇格式统一测试完成 ===");

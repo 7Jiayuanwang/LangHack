@@ -50,6 +50,25 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
             throw new BusinessException("分数记录不能为空");
         }
 
+        // 验证学生ID
+        if (scoreRecord.getStudentId() == null) {
+            throw new BusinessException("学生ID不能为空");
+        }
+
+        // 验证分数有效性：分数必须在0-100之间
+        Integer score = scoreRecord.getScore();
+        if (score == null) {
+            throw new BusinessException("分数不能为空");
+        }
+        if (score < 0 || score > 100) {
+            throw new BusinessException("分数必须在0-100之间");
+        }
+
+        // 验证分数类型
+        if (scoreRecord.getScoreType() == null || scoreRecord.getScoreType().trim().isEmpty()) {
+            throw new BusinessException("分数类型不能为空");
+        }
+
         if (scoreRecord.getCreatedTime() == null) {
             scoreRecord.setCreatedTime(LocalDateTime.now());
         }
@@ -220,6 +239,16 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
 
     @Override
     public Map<String, Object> getScoreStatistics(Long courseId, Long unitId, Long assignmentId) {
+        // 防止无参数全表扫描 DoS
+        if (courseId == null && unitId == null && assignmentId == null) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("averageScore", 0.0);
+            result.put("maxScore", 0);
+            result.put("minScore", 0);
+            result.put("totalCount", 0);
+            return result;
+        }
+
         QueryWrapper<ScoreRecord> wrapper = new QueryWrapper<>();
 
         if (courseId != null) {
@@ -323,6 +352,7 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
             // 总分数 = 基础分数 + 时长分数
             int score = (int) Math.round(baseScore + timeScore);
             score = Math.min(score, 100); // 确保不超过100分
+            score = Math.max(score, 0);  // 确保不低于0分
             
             // 构建得分详情 JSON
             String scoreDetailsJson = null;

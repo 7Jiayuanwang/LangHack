@@ -19,6 +19,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.web.header.writers.StaticHeadersWriter;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 
 import java.util.Arrays;
 import java.util.List;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
+@EnableGlobalMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
@@ -62,8 +64,6 @@ public class SecurityConfig {
                 // 允许访问的接口 - 无需认证
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/public/**").permitAll()
-                .antMatchers("/api/articles/**").permitAll() // 允许公开访问 articles API
-                .antMatchers("/audio/**").permitAll() // 允许公开访问音频文件
                 .antMatchers("/api/wordnet/**").permitAll() // 允许公开访问单词查询接口
                 .antMatchers(HttpMethod.GET, "/api/media/**").permitAll() // 媒体文件仅 GET 公开
                 .antMatchers("/").permitAll()
@@ -96,12 +96,20 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         // 从配置读取允许的来源，本地开发默认允许 localhost，生产环境通过环境变量 APP_CORS_ALLOWED_ORIGINS 指定
-        List<String> origins = Arrays.asList(allowedOriginsConfig.split(","));
-        // 清理每个来源的空格
-        origins = origins.stream().map(String::trim).collect(Collectors.toList());
+        List<String> origins = Arrays.stream(allowedOriginsConfig.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty()) // 过滤掉空字符串
+                .collect(Collectors.toList());
+
+        if (origins.isEmpty()) {
+            // fallback 到默认值，防止 CORS 配置完全无法加载
+            origins = Arrays.asList("http://localhost:3000", "http://localhost:5173");
+        }
+
         configuration.setAllowedOrigins(origins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "Accept", "X-Requested-With"));
+        configuration.setMaxAge(3600L); // preflight 缓存 1 小时，减少浏览器 OPTIONS 请求
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

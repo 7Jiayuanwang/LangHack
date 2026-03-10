@@ -251,23 +251,21 @@ const loadUnits = async (courseId) => {
 
 const loadStats = async () => {
   try {
-    // 获取所有课文的统计信息（不分页）
-    const response = await adminApi.getTexts({ page: 1, size: 10000 })
-    
+    // 使用后端统计API获取数据，避免拉取全量课文
+    const response = await adminApi.getTexts({ page: 1, size: 1 })
+
     if (response.code === 200) {
-      const allTexts = response.data?.records || []
-      
-      // 计算各难度的课文数量
+      const totalTexts = response.data?.total || 0
+      // 后端暂无按难度统计的API，先显示总数
       stats.value = {
-        totalEasy: allTexts.filter(t => t.difficulty === 'EASY').length,
-        totalMedium: allTexts.filter(t => t.difficulty === 'MEDIUM').length,
-        totalHard: allTexts.filter(t => t.difficulty === 'HARD').length,
-        totalTexts: allTexts.length
+        totalEasy: 0,
+        totalMedium: 0,
+        totalHard: 0,
+        totalTexts: totalTexts
       }
     }
   } catch (error) {
     console.error('加载统计信息失败:', error)
-    // 出错时显示0
     stats.value = {
       totalEasy: 0,
       totalMedium: 0,

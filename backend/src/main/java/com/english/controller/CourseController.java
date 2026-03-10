@@ -2,6 +2,7 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.entity.Course;
+import com.english.exception.BusinessException;
 import com.english.service.CourseService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,8 +86,16 @@ public class CourseController {
     @PreAuthorize("hasRole('ADMIN')")
     public Result<String> createCourse(@RequestBody Course course) {
         try {
+            if (course == null || course.getName() == null || course.getName().trim().isEmpty()) {
+                return Result.error("课程名称不能为空");
+            }
+            if (course.getName().length() > 100) {
+                course.setName(course.getName().substring(0, 100));
+            }
             courseService.createCourse(course);
             return Result.success("课程创建成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             log.error("创建课程失败", e);
             return Result.error("创建课程失败，请稍后重试");
@@ -97,9 +106,17 @@ public class CourseController {
     @PreAuthorize("hasRole('ADMIN')")
     public Result<String> updateCourse(@PathVariable Long id, @RequestBody Course course) {
         try {
+            if (course == null || course.getName() == null || course.getName().trim().isEmpty()) {
+                return Result.error("课程名称不能为空");
+            }
+            if (course.getName().length() > 100) {
+                course.setName(course.getName().substring(0, 100));
+            }
             course.setId(id);
             courseService.updateCourse(course);
             return Result.success("课程更新成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             log.error("更新课程失败", e);
             return Result.error("更新课程失败，请稍后重试");
@@ -112,6 +129,8 @@ public class CourseController {
         try {
             courseService.deleteCourse(id);
             return Result.success("课程删除成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             log.error("删除课程失败", e);
             return Result.error("删除课程失败，请稍后重试");

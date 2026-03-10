@@ -792,7 +792,11 @@ public class StudentLearningController {
             UnitWord randomUnitWord = unitWords.get(random.nextInt(unitWords.size()));
             Word word = wordMapper.selectById(randomUnitWord.getWordId());
 
-            if (word == null || (word.getDeleted() != null && word.getDeleted() == 1)) {
+            if (word == null) {
+                return new HashMap<>(recommendation);
+            }
+            // 过滤已删除的单词（Word 无 @TableLogic，需手动检查）
+            if (word.getDeleted() != null && word.getDeleted() == 1) {
                 return new HashMap<>(recommendation);
             }
 

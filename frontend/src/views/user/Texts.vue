@@ -14,7 +14,7 @@
             v-model="selectedCourse"
             placeholder="选择课程"
             clearable
-            @change="loadTexts"
+            @change="handleCourseChange"
           >
             <el-option
               v-for="course in courses"
@@ -127,7 +127,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Reading } from '@element-plus/icons-vue'
@@ -186,14 +186,31 @@ const loadUnits = async (courseId) => {
 const loadTexts = async () => {
   loading.value = true
   try {
-    // 暂时显示空列表，因为没有直接的课文列表API
-    // 需要通过课程和单元来获取课文
-    texts.value = []
-    total.value = 0
-    ElMessage.info('请通过课程页面来学习课文')
+    const params = {
+      page: currentPage.value,
+      size: pageSize.value
+    }
+    if (selectedDifficulty.value) params.difficulty = selectedDifficulty.value
+    if (searchKeyword.value) params.keyword = searchKeyword.value
+
+    const response = await request({
+      url: '/api/public/texts/random',
+      method: 'get',
+      params: { limit: pageSize.value }
+    })
+
+    if (response.code === 200) {
+      texts.value = Array.isArray(response.data) ? response.data : []
+      total.value = texts.value.length
+    } else {
+      texts.value = []
+      total.value = 0
+    }
   } catch (error) {
     ElMessage.error('获取课文列表失败')
     console.error(error)
+    texts.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
@@ -243,11 +260,6 @@ const handleCourseChange = (courseId) => {
 onMounted(() => {
   loadCourses()
   loadTexts()
-})
-
-// 监听课程选择变化，加载对应的单元
-watch(selectedCourse, (courseId) => {
-  handleCourseChange(courseId)
 })
 </script>
 

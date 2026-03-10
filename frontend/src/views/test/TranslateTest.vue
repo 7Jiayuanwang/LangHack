@@ -77,17 +77,24 @@ const translateButtonPosition = reactive({ x: 0, y: 0 })
 
 const handleTextSelection = (event) => {
   const selection = window.getSelection()
-  const text = selection.toString().trim()
+  const text = selection?.toString().trim()
 
   if (text && text.includes(' ')) {
     selectedText.value = text
     showTranslateButton.value = true
 
+    // Guard against empty selection
+    if (selection.rangeCount === 0) {
+      showTranslateButton.value = false
+      return
+    }
+
     const range = selection.getRangeAt(0)
     const rect = range.getBoundingClientRect()
 
-    translateButtonPosition.x = rect.left + rect.width / 2 - 40
-    translateButtonPosition.y = rect.bottom + 5
+    // Add window scroll offset for correct positioning
+    translateButtonPosition.x = rect.left + window.scrollX + rect.width / 2 - 40
+    translateButtonPosition.y = rect.bottom + window.scrollY + 5
 
   } else {
     showTranslateButton.value = false
@@ -103,11 +110,20 @@ const translateSelectedText = async () => {
   translatedText.value = ''
 
   try {
+    // 安全读取 token，防止 localStorage 访问异常
+    let token = ''
+    try {
+      token = localStorage.getItem('token') || ''
+    } catch (e) {
+      console.warn('无法访问 localStorage:', e)
+    }
+
     const response = await fetch('/api/translate/auto', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        // 仅当 token 存在时才添加 Authorization 头
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       },
       body: JSON.stringify({
         text: selectedText.value
@@ -117,17 +133,18 @@ const translateSelectedText = async () => {
     if (response.ok) {
       const result = await response.json()
       if (result.code === 200) {
-        translatedText.value = result.data
+        translatedText.value = result.data || '(无翻译结果)'
       } else {
         ElMessage.error(result.message || '翻译失败')
         translatedText.value = '翻译失败：' + (result.message || '请稍后重试')
       }
     } else {
-      throw new Error('网络请求失败')
+      const errorText = await response.text().catch(() => '未知错误')
+      throw new Error(`网络请求失败: ${response.status} ${errorText}`)
     }
   } catch (error) {
     console.error('翻译失败:', error)
-    ElMessage.error('翻译失败')
+    ElMessage.error('翻译失败: ' + (error.message || '未知错误'))
     translatedText.value = '翻译服务暂时不可用'
   } finally {
     translating.value = false

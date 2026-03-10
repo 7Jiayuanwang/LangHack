@@ -91,6 +91,7 @@
       v-model="dialogVisible"
       :title="isEdit ? '编辑课程' : '添加课程'"
       width="min(600px, 90%)"
+      @close="resetCourseForm"
     >
       <el-form
         ref="courseFormRef"

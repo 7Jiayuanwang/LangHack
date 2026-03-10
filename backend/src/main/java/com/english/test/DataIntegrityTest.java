@@ -50,7 +50,7 @@ public class DataIntegrityTest {
 
         } catch (Exception e) {
             System.err.println("❌ 测试失败: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("错误类型: " + e.getClass().getName());
         }
     }
 }

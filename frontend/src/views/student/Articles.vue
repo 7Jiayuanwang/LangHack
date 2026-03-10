@@ -162,7 +162,7 @@ const categoryImages = {
     'https://images.unsplash.com/photo-1528181304800-259b08848526?auto=format&fit=crop&q=80&w=800'
   ],
   default: [
-    'https://images.unsplash.com/photo-145632450443-8f39c73713b4?auto=format&fit=crop&q=80&w=800',
+    'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f5?auto=format&fit=crop&q=80&w=800',
     'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&q=80&w=800'
   ]
 }
@@ -212,11 +212,12 @@ const loadArticles = async () => {
     if (data.code === 200) {
       let fetched = (Array.isArray(data.data) ? data.data : []).map(text => {
         const cat = getRandomCategory()
+        const contentLength = typeof text.content === 'string' ? text.content.length : 0
         return {
           ...text,
           category: cat,
           coverUrl: getRandomImage(cat),
-          readingTime: Math.max(1, Math.ceil((text.content?.length || 0) / 800))
+          readingTime: Math.max(1, Math.ceil(contentLength / 800))
         }
       })
 
@@ -243,6 +244,10 @@ const loadArticles = async () => {
 }
 
 const readArticle = (article) => {
+  if (!article?.id) {
+    ElMessage.error('文章ID不存在')
+    return
+  }
   router.push({
     path: '/student/text-learning',
     query: {

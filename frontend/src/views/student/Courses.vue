@@ -251,7 +251,7 @@
     <!-- 单元内容学习对话框 -->
     <el-dialog
       v-model="contentDialogVisible"
-      :title="currentUnit.name + ' - 内容学习'"
+      :title="(currentUnit?.name || '单元') + ' - 内容学习'"
       width="min(1000px, 96vw)"
       top="3vh"
       :close-on-click-modal="false"
@@ -282,7 +282,7 @@
           <el-tab-pane label="单词学习" name="words">
             <div class="word-learning-control">
               <div class="learning-header">
-                <h3>单词学习 - {{ currentUnit.name }}</h3>
+                <h3>单词学习 - {{ currentUnit?.name || '单元' }}</h3>
                 <div class="learning-actions">
                   <el-button type="primary" @click="startWordLearning" :disabled="unitWords.length === 0">
                     开始学习
@@ -422,7 +422,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch, onActivated } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, onBeforeUnmount, watch, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -492,6 +492,14 @@ const reviewSummary = reactive({
   unknownWords: 0
 })
 
+// setTimeout 清理追踪
+const pendingTimers = []
+const safeTimeout = (fn, delay) => {
+  const id = setTimeout(fn, delay)
+  pendingTimers.push(id)
+  return id
+}
+
 // 加载课程列表
 const loadCourses = async () => {
   loading.value = true
@@ -499,7 +507,19 @@ const loadCourses = async () => {
     const response = await getStudentCourses()
     if (response?.code === 200 && response?.data) {
       // 后端返回的是 { courses: [...] } 结构
-      courses.value = Array.isArray(response.data?.courses) ? response.data.courses : []
+      let courseList = Array.isArray(response.data?.courses) ? response.data.courses : []
+
+      // 前端搜索过滤
+      if (searchKeyword.value) {
+        const keyword = searchKeyword.value.toLowerCase()
+        courseList = courseList.filter(course =>
+          course.courseName?.toLowerCase().includes(keyword) ||
+          course.className?.toLowerCase().includes(keyword) ||
+          course.teacherName?.toLowerCase().includes(keyword)
+        )
+      }
+
+      courses.value = courseList
     }
   } catch (error) {
     console.error('加载课程失败:', error)
@@ -994,6 +1014,10 @@ if (typeof window !== 'undefined') {
 }
 
 onUnmounted(() => {
+  // 清理所有pending timers
+  pendingTimers.forEach(id => clearTimeout(id))
+  pendingTimers.length = 0
+
   if (typeof window !== 'undefined') {
     window.removeEventListener('course-refresh', handleCourseRefresh)
   }
@@ -1023,7 +1047,7 @@ onMounted(() => {
   const courseId = route.query.courseId
   if (courseId) {
     // 找到对应课程并打开
-    setTimeout(() => {
+    const timerId = safeTimeout(() => {
       if (Array.isArray(courses.value)) {
         const course = courses.value.find(c => c.courseId == courseId)
         if (course) {

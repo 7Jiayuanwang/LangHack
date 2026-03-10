@@ -80,6 +80,9 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     @Autowired
     private StudentExerciseAnswerMapper studentExerciseAnswerMapper;
 
+    @Autowired
+    private ScoreRecordService scoreRecordService;
+
     // 在类定义的开头添加这些常量
     private static final int MIN_TEXT_READ_TIME_SECONDS = 600; // 10分钟
     private static final double COMPLETION_THRESHOLD = 80.0; // 完成阈值80%
@@ -394,8 +397,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             int readTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(), assignmentId);
             boolean isRead = readTime > 0; // 有阅读时间就算读过
 
-            final int MIN_READ_TIME_SECONDS = 600; // 10分钟
-            boolean readingCompleted = readTime >= MIN_READ_TIME_SECONDS;
+            boolean readingCompleted = readTime >= MIN_TEXT_READ_TIME_SECONDS;
             boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
 
             boolean completed;
@@ -474,6 +476,16 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     @Override
     @Transactional
     public void completeAssignment(Long assignmentId, Long studentId, Map<String, Object> completionData) {
+        // 检查是否已提交（防止重复提交）
+        QueryWrapper<LearningRecord> checkWrapper = new QueryWrapper<>();
+        checkWrapper.eq("student_id", studentId)
+                .eq("assignment_id", assignmentId)
+                .eq("record_type", "COMPLETE");
+        long existingCount = learningRecordMapper.selectCount(checkWrapper);
+        if (existingCount > 0) {
+            throw new BusinessException("任务已提交，请勿重复提交");
+        }
+
         // 记录任务完成的学习记录
         LearningRecord record = new LearningRecord();
         record.setStudentId(studentId);
@@ -491,6 +503,9 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         record.setCreatedTime(LocalDateTime.now());
 
         learningRecordMapper.insert(record);
+
+        // 触发分数计算
+        scoreRecordService.updateAssignmentScore(assignmentId, studentId);
     }
 
     @Override
@@ -500,7 +515,10 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         progress.put("studentId", studentId);
 
         // 实现具体的进度计算逻辑
-        progress.put("completionRate", calculateAssignmentProgress(assignmentId, studentId));
+        // calculateAssignmentProgress 返回 0-100 百分比
+        double progressPercent = calculateAssignmentProgress(assignmentId, studentId);
+        // completionRate 输出为 0-1 比率，供 ScoreRecordService 分数计算使用
+        progress.put("completionRate", progressPercent / 100.0);
         progress.put("wordsLearned", calculateWordsLearnedInAssignment(assignmentId, studentId));
         progress.put("textsRead", calculateTextsReadInAssignment(assignmentId, studentId));
         progress.put("studyTime", calculateStudyTimeInAssignment(assignmentId, studentId));
@@ -571,14 +589,13 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
             } else {
                 // 单元任务：基于阅读时间和习题完成情况计算进度（与课文任务相同）
-                final int MIN_READ_TIME_SECONDS = 600; // 10分钟
                 int completedTexts = 0;
 
                 for (com.english.entity.Text text : texts) {
                     // 检查阅读时间
                     int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
                             assignmentId);
-                    boolean readingCompleted = textReadTime >= MIN_READ_TIME_SECONDS;
+                    boolean readingCompleted = textReadTime >= MIN_TEXT_READ_TIME_SECONDS;
 
                     // 检查习题完成情况
                     boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
@@ -628,12 +645,10 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         logger.debug("任务进度计算 - 任务类型: {}, 单词进度: {}%, 课文进度: {}%, 综合进度: {}%",
                 getAssignmentType(assignment), wordProgress, textProgress, overallProgress);
 
+        // 返回 0-100 的百分比值
         return overallProgress;
     }
 
-    /**
-     * 检查任务是否完成
-     */
     /**
      * 检查任务是否完成
      */
@@ -912,6 +927,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     private int calculateTotalTextsInUnit(Long unitId) {
         QueryWrapper<com.english.entity.Text> wrapper = new QueryWrapper<>();
         wrapper.eq("unit_id", unitId);
+        wrapper.eq("deleted", 0);
         return Math.toIntExact(textMapper.selectCount(wrapper));
     }
 

@@ -18,4 +18,10 @@ app.use(createPinia())
 app.use(router)
 app.use(ElementPlus)
 
+// 全局错误处理器
+app.config.errorHandler = (err, instance, info) => {
+  console.error('Global error:', err, info)
+  // 防止错误导致整个应用崩溃
+}
+
 app.mount('#app')

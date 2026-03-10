@@ -536,17 +536,29 @@ let currentAudio = null
 
 // 播放音频
 const playAudio = (word) => {
-  if (word.audioUrl) {
-    if (currentAudio) {
-      currentAudio.pause()
-      currentAudio.src = ''
-      currentAudio = null
-    }
+  if (!word || !word.audioUrl) {
+    ElMessage.warning('暂无音频可播放')
+    return
+  }
+
+  // 停止播放当前音频
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio.src = ''
+    currentAudio = null
+  }
+
+  try {
     currentAudio = new Audio(word.audioUrl)
     currentAudio.play().catch(error => {
       console.error('播放音频失败:', error)
       ElMessage.error('播放音频失败')
+      currentAudio = null
     })
+  } catch (error) {
+    console.error('创建音频播放器失败:', error)
+    ElMessage.error('播放音频失败')
+    currentAudio = null
   }
 }
 

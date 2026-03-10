@@ -38,41 +38,48 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
     @Override
     @Transactional
     public Map<String, Object> submitAnswer(StudentExerciseAnswer studentAnswer) {
+        // 参数验证
+        if (studentAnswer == null) {
+            throw new IllegalArgumentException("答案对象不能为空");
+        }
+        if (studentAnswer.getStudentId() == null) {
+            throw new IllegalArgumentException("学生ID不能为空");
+        }
+        if (studentAnswer.getExerciseId() == null) {
+            throw new IllegalArgumentException("习题ID不能为空");
+        }
+        if (studentAnswer.getAnswerContent() == null || studentAnswer.getAnswerContent().trim().isEmpty()) {
+            throw new IllegalArgumentException("答案内容不能为空");
+        }
+
         Map<String, Object> result = new HashMap<>();
 
-        try {
-            // 检查答案是否正确
-            boolean isCorrect = textExerciseService.checkAnswer(studentAnswer.getExerciseId(), studentAnswer.getAnswerContent());
-            studentAnswer.setIsCorrect(isCorrect);
+        // 检查答案是否正确
+        boolean isCorrect = textExerciseService.checkAnswer(studentAnswer.getExerciseId(), studentAnswer.getAnswerContent());
+        studentAnswer.setIsCorrect(isCorrect);
 
-            // 检查是否已经存在答案记录
-            StudentExerciseAnswer existingAnswer = studentExerciseAnswerMapper.getAnswer(
-                studentAnswer.getStudentId(),
-                studentAnswer.getExerciseId(),
-                studentAnswer.getAssignmentId()
-            );
+        // 检查是否已经存在答案记录
+        StudentExerciseAnswer existingAnswer = studentExerciseAnswerMapper.getAnswer(
+            studentAnswer.getStudentId(),
+            studentAnswer.getExerciseId(),
+            studentAnswer.getAssignmentId()
+        );
 
-            if (existingAnswer != null) {
-                // 更新现有答案
-                studentAnswer.setId(existingAnswer.getId());
-                int updateResult = studentExerciseAnswerMapper.updateById(studentAnswer);
-                result.put("success", updateResult > 0);
-            } else {
-                // 插入新答案
-                int insertResult = studentExerciseAnswerMapper.insert(studentAnswer);
-                result.put("success", insertResult > 0);
-            }
-
-            result.put("isCorrect", isCorrect);
-            result.put("message", isCorrect ? "回答正确！" : "回答错误，请继续努力！");
-
-            return result;
-        } catch (Exception e) {
-            logger.error("提交答案失败", e);
-            result.put("success", false);
-            result.put("message", "提交答案失败");
-            return result;
+        if (existingAnswer != null) {
+            // 更新现有答案
+            studentAnswer.setId(existingAnswer.getId());
+            int updateResult = studentExerciseAnswerMapper.updateById(studentAnswer);
+            result.put("success", updateResult > 0);
+        } else {
+            // 插入新答案
+            int insertResult = studentExerciseAnswerMapper.insert(studentAnswer);
+            result.put("success", insertResult > 0);
         }
+
+        result.put("isCorrect", isCorrect);
+        result.put("message", isCorrect ? "回答正确！" : "回答错误，请继续努力！");
+
+        return result;
     }
 
     @Override

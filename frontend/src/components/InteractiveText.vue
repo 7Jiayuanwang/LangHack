@@ -194,6 +194,12 @@ const vocabularyStatusCache = reactive(new Map())
 // 追踪活跃的拖动事件处理器，防止内存泄漏
 let activeDragHandlers = null
 
+// 追踪同义词点击的延迟计时器，防止内存泄漏
+let synonymClickTimers = []
+
+// 追踪 handleDialogClose 的 setTimeout timer
+let dialogCloseTimer = null
+
 
 // 监听文本变化，更新段落和单词
 watch(() => props.text, (newText) => {
@@ -472,7 +478,7 @@ const checkVocabularyStatus = async (word) => {
     const result = await request({
       url: `/api/student/learning/vocabulary/check`,
       method: 'get',
-      params: { word: encodeURIComponent(word) }
+      params: { word: word }
     })
 
     if (result.code === 200) {
@@ -558,7 +564,6 @@ const handleSynonymClick = async (synonym) => {
   showWordDialog.value = false
 
   // 延迟一下再打开新弹窗，确保动画效果
-  // 使用 onBeforeUnmount 清理这个计时器
   const timer = setTimeout(() => {
     selectedWord.value = {
       text: synonym,
@@ -570,7 +575,7 @@ const handleSynonymClick = async (synonym) => {
   }, 300)
 
   // 将 timer ID 保存以便清理
-  if (!synonymClickTimers) {
+  if (!Array.isArray(synonymClickTimers)) {
     synonymClickTimers = []
   }
   synonymClickTimers.push(timer)
@@ -592,7 +597,11 @@ const getPosText = (pos) => {
 // 处理弹窗关闭
 const handleDialogClose = () => {
   showWordDialog.value = false
-  setTimeout(() => {
+  // 清理旧的 timer
+  if (dialogCloseTimer) {
+    clearTimeout(dialogCloseTimer)
+  }
+  dialogCloseTimer = setTimeout(() => {
     // 重置被点击单词的 isClicked 状态，恢复正常样式
     if (selectedWord.value) {
       selectedWord.value.isClicked = false
@@ -600,6 +609,7 @@ const handleDialogClose = () => {
     selectedWord.value = null
     selectedWordInfo.value = null
     errorMessage.value = ''
+    dialogCloseTimer = null
   }, 300)
 }
 
@@ -611,7 +621,6 @@ onMounted(() => {
 })
 
 // 清理事件监听器防止内存泄漏
-let synonymClickTimers = null
 onBeforeUnmount(() => {
   // 保证所有拖动相关事件监听器被清理
   if (activeDragHandlers) {
@@ -623,9 +632,15 @@ onBeforeUnmount(() => {
   }
 
   // 清理同义词点击的延迟计时器
-  if (synonymClickTimers && Array.isArray(synonymClickTimers)) {
+  if (Array.isArray(synonymClickTimers)) {
     synonymClickTimers.forEach(timerId => clearTimeout(timerId))
-    synonymClickTimers = null
+    synonymClickTimers = []
+  }
+
+  // 清理弹窗关闭的延迟计时器
+  if (dialogCloseTimer) {
+    clearTimeout(dialogCloseTimer)
+    dialogCloseTimer = null
   }
 
   // 确保不处于拖动状态

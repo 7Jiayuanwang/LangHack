@@ -65,9 +65,11 @@ public class ScoreRecordController {
             }
 
             // 管理员可以记录任何学生的分数
-            
+
             scoreRecordService.recordScore(scoreRecord);
             return Result.success("分数记录成功");
+        } catch (com.english.exception.BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("记录分数失败", e);
 

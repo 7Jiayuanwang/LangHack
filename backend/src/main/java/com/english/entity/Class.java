@@ -9,7 +9,6 @@ public class Class {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("name")
     private String name;
 
     @TableField("course_id")
@@ -18,7 +17,6 @@ public class Class {
     @TableField("teacher_id")
     private Long teacherId;
 
-    @TableField("description")
     private String description;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)

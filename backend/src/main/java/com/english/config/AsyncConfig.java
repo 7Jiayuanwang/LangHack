@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Async task configuration for article version generation
@@ -26,6 +27,9 @@ public class AsyncConfig {
 
     /**
      * Thread pool executor for version generation tasks
+     *
+     * 拒绝策略: CallerRunsPolicy - 队列满时，由调用线程执行任务，避免任务丢弃
+     * 这样可以自然地实现背压(backpressure)，防止内存溢出
      */
     @Bean(name = "versionGeneratorExecutor")
     public Executor versionGeneratorExecutor() {
@@ -36,6 +40,8 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("version-gen-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
+        // 设置拒绝策略：队列满时由调用线程执行，避免任务丢弃
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return executor;
     }

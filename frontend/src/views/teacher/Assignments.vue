@@ -381,8 +381,9 @@ const assignmentRules = {
         }
         const deadline = new Date(value)
         const now = new Date()
-        // 截止时间不能早于当前时间
-        if (deadline <= now) {
+        // 编辑模式下，如果截止时间未改变，允许保留原值（即使已过期）
+        // 新建模式或修改了截止时间时，必须晚于当前时间
+        if (deadline <= now && !isEdit.value) {
           callback(new Error('截止时间必须晚于当前时间'))
         } else {
           callback()
@@ -631,6 +632,11 @@ const editAssignment = async (assignment) => {
   // 加载对应班级的单元列表
   if (assignment.classId) {
     await loadUnitsForClass(assignment.classId)
+  }
+
+  // 如果是 TEXTS 或 WORDS 类型，加载单元内容以便编辑
+  if (assignment.unitId && (assignment.assignmentType === 'TEXTS' || assignment.assignmentType === 'WORDS')) {
+    await loadUnitContent(assignment.unitId)
   }
 }
 

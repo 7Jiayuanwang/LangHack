@@ -823,8 +823,6 @@ const translateSelectedText = async () => {
     translating.value = false
   }
 }
-  }
-}
 
 const handleWordClick = (wordData) => {
   // 单词点击事件已在InteractiveText组件中处理

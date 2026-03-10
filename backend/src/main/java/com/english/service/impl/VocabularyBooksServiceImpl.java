@@ -66,10 +66,13 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
 
     @Override
     public List<Map<String, Object>> getRecentWords(Long studentId, int limit) {
+        // 边界校验防止负数或过大值
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+
         QueryWrapper<VocabularyBook> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId)
                 .orderByDesc("added_time")
-                .last("LIMIT " + limit);
+                .last("LIMIT " + safeLimit);
 
         List<VocabularyBook> vocabularyBooks = vocabularyBookMapper.selectList(wrapper);
         if (vocabularyBooks == null || vocabularyBooks.isEmpty()) {
@@ -332,8 +335,10 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
                         try {
                             String timeStr = nrtObj.toString().replace("Z", "").replace("[UTC]", "");
                             vocabularyBook.setNextReviewTime(LocalDateTime.parse(timeStr));
-                        } catch (Exception e) {
+                        } catch (java.time.format.DateTimeParseException e) {
                             logger.warn("Invalid nextReviewTime format: {}, skipping", nrtObj);
+                        } catch (Exception e) {
+                            logger.warn("Error parsing nextReviewTime: {}, skipping", nrtObj, e);
                         }
                     }
                 }
@@ -473,6 +478,11 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
             return;
         }
 
+        // 限制批量大小，防止 DoS
+        if (studyResults.size() > 200) {
+            throw new com.english.exception.BusinessException("单次提交学习结果不能超过200条");
+        }
+
         for (Map<String, Object> result : studyResults) {
             Object wordIdObj = result.get("wordId");
             if (wordIdObj == null) {
@@ -485,7 +495,7 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
                 logger.warn("Invalid wordId format: {}, skipping", wordIdObj);
                 continue;
             }
-            String outcome = (String) result.get("outcome"); // KNOWN, UNCERTAIN, UNKNOWN
+            String outcome = result.get("outcome") != null ? result.get("outcome").toString() : null; // KNOWN, UNCERTAIN, UNKNOWN
 
             // 检查是否已在生词本中
             QueryWrapper<VocabularyBook> wrapper = new QueryWrapper<>();

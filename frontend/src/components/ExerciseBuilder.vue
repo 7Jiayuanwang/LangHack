@@ -144,10 +144,11 @@ const exercises = ref([])
 
 // Initialize exercises from props
 const initializeExercises = () => {
-  if (props.modelValue && props.modelValue.length > 0) {
+  if (Array.isArray(props.modelValue) && props.modelValue.length > 0) {
     hasExercises.value = true
     exercises.value = JSON.parse(JSON.stringify(props.modelValue))
   } else {
+    hasExercises.value = false
     exercises.value = []
   }
 }
@@ -247,6 +248,7 @@ const removeOption = (exerciseIndex, optionIndex) => {
   })
 
   // 如果删除的是正确答案，清除正确答案
+  // 使用可选链和空值合并，防止 correctAnswer 为 undefined 时 .find 报错
   if (exercise.correctAnswer && !exercise.options.find(opt => opt.optionKey === exercise.correctAnswer)) {
     exercise.correctAnswer = null
   }

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Word;
+import com.english.exception.BusinessException;
 import com.english.mapper.WordMapper;
 import com.english.service.WordService;
 import org.springframework.stereotype.Service;
@@ -84,13 +85,14 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
     @Override
     @Transactional
     public boolean createWord(Word word) {
+        if (word == null || word.getWord() == null || word.getWord().trim().isEmpty()) {
+            throw new BusinessException("单词不能为空");
+        }
         if (word.getDifficulty() == null) {
             word.setDifficulty("MEDIUM");
         }
         // 统一转换为小写存储
-        if (word.getWord() != null) {
-            word.setWord(word.getWord().toLowerCase().trim());
-        }
+        word.setWord(word.getWord().toLowerCase().trim());
         word.setCreatedAt(LocalDateTime.now());
         word.setUpdatedAt(LocalDateTime.now());
         word.setDeleted(0);
@@ -100,6 +102,9 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
     @Override
     @Transactional
     public boolean updateWord(Word word) {
+        if (word == null || word.getId() == null) {
+            throw new BusinessException("单词ID不能为空");
+        }
         word.setUpdatedAt(LocalDateTime.now());
         return updateById(word);
     }
@@ -107,11 +112,9 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
     @Override
     @Transactional
     public boolean deleteWord(Long id) {
-        Word word = new Word();
-        word.setId(id);
-        word.setDeleted(1);
-        word.setUpdatedAt(LocalDateTime.now());
-        return updateById(word);
+        // @TableLogic 会将 removeById 转换为 UPDATE SET deleted=1
+        // 注意：不能用 updateById + setDeleted(1)，因为 @TableLogic 会从 SET 子句中排除 deleted 字段
+        return removeById(id);
     }
 
     @Override

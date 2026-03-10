@@ -2,10 +2,10 @@
   <div class="interactive-text-page">
     <div class="page-header">
       <el-breadcrumb separator="/">
-        <el-breadcrumb-item :to="{ path: '/student/dashboard' }">仪表板</el-breadcrumb-item>
-        <el-breadcrumb-item :to="{ path: '/student/courses' }">我的课程</el-breadcrumb-item>
-        <el-breadcrumb-item :to="{ path: `/student/courses/${courseId}/units` }">{{ courseName }}</el-breadcrumb-item>
-        <el-breadcrumb-item :to="{ path: `/student/units/${unitId}/content` }">{{ unitName }}</el-breadcrumb-item>
+        <el-breadcrumb-item :to="{ path: '/user/dashboard' }">仪表板</el-breadcrumb-item>
+        <el-breadcrumb-item :to="{ path: '/user/courses' }">我的课程</el-breadcrumb-item>
+        <el-breadcrumb-item :to="{ path: `/user/courses/${courseId}/units` }">{{ courseName }}</el-breadcrumb-item>
+        <el-breadcrumb-item :to="{ path: `/user/units/${unitId}/content` }">{{ unitName }}</el-breadcrumb-item>
         <el-breadcrumb-item>{{ textTitle }}</el-breadcrumb-item>
       </el-breadcrumb>
 
@@ -219,18 +219,18 @@ const loadTextDetail = async () => {
     const response = await studentApi.getTextDetail(params)
     if (response.code === 200) {
       const data = response.data
-      textTitle.value = data.title
-      textContent.value = data.content
-      difficulty.value = data.difficulty || 'MEDIUM'
-      courseId.value = data.courseId
-      unitId.value = data.unitId
-      courseName.value = data.courseName || '未知课程'
-      unitName.value = data.unitName || '未知单元'
+      textTitle.value = data?.title || '未知课文'
+      textContent.value = data?.content || ''
+      difficulty.value = data?.difficulty || 'MEDIUM'
+      courseId.value = data?.courseId || null
+      unitId.value = data?.unitId || null
+      courseName.value = data?.courseName || '未知课程'
+      unitName.value = data?.unitName || '未知单元'
 
       // 从后端获取学习进度和时长
-      learningProgress.value = data.learningProgress || 0
-      learnedWordsCount.value = data.learnedWordsCount || 0
-      isCompleted.value = data.isCompleted || false
+      learningProgress.value = data?.learningProgress || 0
+      learnedWordsCount.value = data?.learnedWordsCount || 0
+      isCompleted.value = data?.isCompleted || false
 
       // 如果是从任务页面跳转来的，显示任务信息
       if (fromSource.value === 'assignment' && assignmentId.value) {
@@ -238,7 +238,7 @@ const loadTextDetail = async () => {
       }
 
       // 恢复已学习时长（转换为秒）
-      if (data.readTime && data.readTime > 0) {
+      if (data?.readTime && data.readTime > 0) {
         studyTime.value = data.readTime
         accumulatedTime = data.readTime // 将已学习时长作为累计时间
       } else {
@@ -260,7 +260,7 @@ const loadTextDetail = async () => {
       // 生成学习建议
       generateLearningSuggestions()
     } else {
-      ElMessage.error(response.message || '获取课文详情失败')
+      ElMessage.error('获取课文详情失败')
     }
   } catch (error) {
     console.error('加载课文详情失败:', error)
@@ -390,7 +390,7 @@ const markAsCompleted = async () => {
       type: 'warning'
     })
 
-    const response = await studentApi.markTextCompleted(textId.value, assignmentId.value)
+    const response = await studentApi.markTextAsCompleted(textId.value, assignmentId.value)
     if (response.code === 200) {
       isCompleted.value = true
       learningProgress.value = 100
@@ -418,7 +418,7 @@ const markAsCompleted = async () => {
         ElMessage.success('课文已标记为完成')
       }
     } else {
-      ElMessage.error(response.message || '标记完成失败')
+      ElMessage.error('标记完成失败')
     }
   } catch (error) {
     if (error !== 'cancel') {

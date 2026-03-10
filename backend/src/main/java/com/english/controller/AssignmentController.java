@@ -185,8 +185,16 @@ public class AssignmentController {
                     || requestBody.get("title") == null || requestBody.get("assignmentType") == null) {
                 return Result.error("必填字段不能为空：classId、unitId、title、assignmentType");
             }
-            Long classId = Long.valueOf(requestBody.get("classId").toString());
-            Long unitId = Long.valueOf(requestBody.get("unitId").toString());
+
+            Long classId, unitId;
+            try {
+                classId = Long.valueOf(requestBody.get("classId").toString());
+                unitId = Long.valueOf(requestBody.get("unitId").toString());
+            } catch (NumberFormatException e) {
+                logger.error("ID格式错误", e);
+                return Result.error("classId或unitId格式错误，必须为数字");
+            }
+
             String title = requestBody.get("title").toString();
             String description = requestBody.get("description") != null ? requestBody.get("description").toString() : "";
             String assignmentType = requestBody.get("assignmentType").toString();
@@ -196,17 +204,27 @@ public class AssignmentController {
             assignment.setClassId(classId);
             assignment.setUnitId(unitId);
             assignment.setTitle(title);
-            
+
             // 设置任务权重
             if (requestBody.get("weight") != null) {
-                assignment.setWeight(Double.valueOf(requestBody.get("weight").toString()));
+                try {
+                    assignment.setWeight(Double.valueOf(requestBody.get("weight").toString()));
+                } catch (NumberFormatException e) {
+                    logger.error("权重格式错误", e);
+                    return Result.error("权重格式错误，必须为数字");
+                }
             } else {
                 assignment.setWeight(1.0); // 默认权重为1.0
             }
-            
+
             // 设置理想学习时长
             if (requestBody.get("idealStudyTimeMinutes") != null) {
-                assignment.setIdealStudyTimeMinutes(Integer.valueOf(requestBody.get("idealStudyTimeMinutes").toString()));
+                try {
+                    assignment.setIdealStudyTimeMinutes(Integer.valueOf(requestBody.get("idealStudyTimeMinutes").toString()));
+                } catch (NumberFormatException e) {
+                    logger.error("学习时长格式错误", e);
+                    return Result.error("学习时长格式错误，必须为整数");
+                }
             } else {
                 assignment.setIdealStudyTimeMinutes(60); // 默认60分钟
             }
@@ -220,8 +238,8 @@ public class AssignmentController {
                     java.time.LocalDateTime deadline = java.time.LocalDateTime.parse(deadlineStr, formatter);
                     assignment.setDeadline(deadline);
                 } catch (Exception e) {
-                    logger.warn("解析截止时间失败: {}, 错误: {}", requestBody.get("deadline"), e.getMessage());
-                    // 如果解析失败，不设置deadline（允许为空）
+                    logger.error("解析截止时间失败: {}", requestBody.get("deadline"), e);
+                    return Result.error("截止时间格式错误，请使用正确的日期时间格式（yyyy-MM-dd HH:mm:ss）");
                 }
             }
 
@@ -482,5 +500,12 @@ public class AssignmentController {
             throw new com.english.exception.BusinessException("认证信息缺失");
         }
         return authentication.getAuthorities().iterator().next().getAuthority();
+    }
+
+    /**
+     * 获取单个学生ID（学生端使用）
+     */
+    private Long getCurrentStudentId(Authentication authentication) {
+        return getCurrentUserId(authentication);
     }
 }

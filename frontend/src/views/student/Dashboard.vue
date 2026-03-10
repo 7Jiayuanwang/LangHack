@@ -329,7 +329,7 @@ const loadDashboardData = async () => {
 const loadLearningStats = async () => {
   try {
     const response = await getTodayLearningStats()
-    if (response.code === 200 && response.data) {
+    if (response?.code === 200 && response?.data) {
       Object.assign(learningStats, response.data)
     }
   } catch (error) {
@@ -349,8 +349,20 @@ const startAssignment = (assignment) => {
 
 // 处理推荐内容点击
 const handleRecommendationClick = (recommendation) => {
+  if (!recommendation) return
   // 跳转到课程学习页面，定位到对应课程
-  router.push(`/student/courses?courseId=${recommendation.courseId}&focus=${recommendation.type}&id=${recommendation.id}&unitId=${recommendation.unitId}`)
+  const query = {
+    courseId: recommendation.courseId,
+    focus: recommendation.type,
+    id: recommendation.id
+  }
+  if (recommendation.unitId) {
+    query.unitId = recommendation.unitId
+  }
+  router.push({
+    path: '/student/courses',
+    query
+  })
 }
 
 // 时间格式化

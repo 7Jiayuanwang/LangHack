@@ -134,10 +134,17 @@ public class OpenRouterServiceImpl implements OpenRouterService {
      * @return Generated content
      */
     private String callDeepSeek(String prompt) {
+        int maxRetries = config.getMaxRetries() != null && config.getMaxRetries() > 0
+                ? config.getMaxRetries() : 1;
+        String apiKey = config.getApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new BusinessException("AI 服务未配置，请联系管理员");
+        }
+
         int retries = 0;
         Exception lastException = null;
 
-        while (retries < config.getMaxRetries()) {
+        while (retries < maxRetries) {
             try {
                 // Build request body
                 Map<String, Object> requestBody = new HashMap<>();
@@ -151,13 +158,13 @@ public class OpenRouterServiceImpl implements OpenRouterService {
                 // Build headers (不在日志中输出 Authorization header)
                 HttpHeaders headers = new HttpHeaders();
                 headers.setContentType(MediaType.APPLICATION_JSON);
-                headers.set("Authorization", "Bearer " + config.getApiKey());
+                headers.set("Authorization", "Bearer " + apiKey);
                 // 注意：Authorization 不会在下面的日志中输出
 
                 // Create request entity
                 HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
 
-                log.info("Calling OpenRouter DeepSeek API (attempt {}/{})", retries + 1, config.getMaxRetries());
+                log.info("Calling OpenRouter DeepSeek API (attempt {}/{})", retries + 1, maxRetries);
 
                 // Make API call
                 ResponseEntity<String> response = restTemplate.exchange(
@@ -190,13 +197,16 @@ public class OpenRouterServiceImpl implements OpenRouterService {
                 log.error("API call failed with status: {}", response.getStatusCode());
                 throw new BusinessException("AI 服务暂时不可用，请稍后重试");
 
+            } catch (BusinessException e) {
+                // 业务异常不应重试，直接抛出
+                throw e;
             } catch (Exception e) {
                 lastException = e;
                 retries++;
-                log.error("OpenRouter API call failed (attempt {}/{}): {}", retries, config.getMaxRetries(),
+                log.error("OpenRouter API call failed (attempt {}/{}): {}", retries, maxRetries,
                     sanitizeErrorMessage(e), e);
 
-                if (retries < config.getMaxRetries()) {
+                if (retries < maxRetries) {
                     try {
                         // Exponential backoff: 2^retry * 1000ms，最多 30 秒
                         long waitTime = Math.min((long) Math.pow(2, retries) * 1000, 30000);

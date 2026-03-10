@@ -31,9 +31,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<?> handleValidation(MethodArgumentNotValidException e) {
-        String msg = e.getBindingResult().getFieldErrors().stream()
-                .map(FieldError::getDefaultMessage)
-                .collect(Collectors.joining("; "));
+        String msg = e.getBindingResult() != null && e.getBindingResult().getFieldErrors() != null
+                ? e.getBindingResult().getFieldErrors().stream()
+                    .map(FieldError::getDefaultMessage)
+                    .collect(Collectors.joining("; "))
+                : "参数格式错误";
         log.warn("Validation failed: {}", msg);
         return Result.error(400, "参数校验失败: " + msg);
     }
@@ -55,7 +57,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<?> handleIllegalArgument(IllegalArgumentException e) {
         log.warn("Illegal argument: {}", e.getMessage());
-        return Result.error(400, e.getMessage() != null ? e.getMessage() : "参数非法");
+        return Result.error(400, "参数非法");
     }
 
     /**
@@ -77,10 +79,10 @@ public class GlobalExceptionHandler {
         String msg = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : "";
         if (msg.contains("Duplicate entry")) {
             log.warn("唯一约束冲突: {}", msg);
-            return Result.error("操作冲突，请稍后重试");
+            return Result.error(400, "操作冲突，请稍后重试");
         }
         log.error("数据完整性违反", e);
-        return Result.error("数据操作失败");
+        return Result.error(400, "数据操作失败");
     }
 
     /**

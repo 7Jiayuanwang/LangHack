@@ -47,9 +47,8 @@ public class StudentExerciseController {
      * 提交习题答案
      */
     @PostMapping("/submit")
-    public Result<Map<String, Object>> submitAnswer(@RequestBody Map<String, Object> requestData) {
+    public Result<Map<String, Object>> submitAnswer(@RequestBody Map<String, Object> requestData, Authentication authentication) {
         try {
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
             String username = authentication.getName();
             com.english.entity.User currentUser = userService.getUserByUsername(username);
             if (currentUser == null) throw new BusinessException("用户不存在");
@@ -84,6 +83,9 @@ public class StudentExerciseController {
                 return Result.error("用时参数格式错误");
             }
             answer.setTimeSpentSeconds(timeSpentSeconds);
+
+            // 设置答题时间（现在由 Service 层处理，但这里也可以验证）
+            // 如果前端没有提供，Service 层会自动设置当前时间
 
             Long assignmentId = null;
             if (requestData.get("assignmentId") != null) {
@@ -121,9 +123,9 @@ public class StudentExerciseController {
     @GetMapping("/text/{textId}")
     public Result<List<StudentExerciseAnswer>> getStudentAnswersByText(
             @PathVariable Long textId,
-            @RequestParam(required = false) Long assignmentId) {
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
         try {
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
             String username = authentication.getName();
             com.english.entity.User currentUser = userService.getUserByUsername(username);
             if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
@@ -150,9 +152,8 @@ public class StudentExerciseController {
      * 获取学生的任务答题记录
      */
     @GetMapping("/assignment/{assignmentId}")
-    public Result<List<StudentExerciseAnswer>> getStudentAnswersByAssignment(@PathVariable Long assignmentId) {
+    public Result<List<StudentExerciseAnswer>> getStudentAnswersByAssignment(@PathVariable Long assignmentId, Authentication authentication) {
         try {
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
             String username = authentication.getName();
             com.english.entity.User currentUser = userService.getUserByUsername(username);
             if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
@@ -178,9 +179,8 @@ public class StudentExerciseController {
      * 获取学生的任务答题统计
      */
     @GetMapping("/assignment/{assignmentId}/stats")
-    public Result<Map<String, Object>> getStudentAnswerStats(@PathVariable Long assignmentId) {
+    public Result<Map<String, Object>> getStudentAnswerStats(@PathVariable Long assignmentId, Authentication authentication) {
         try {
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
             String username = authentication.getName();
             com.english.entity.User currentUser = userService.getUserByUsername(username);
             if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
@@ -207,9 +207,9 @@ public class StudentExerciseController {
     @GetMapping("/text/{textId}/completed")
     public Result<Map<String, Object>> checkTextExerciseCompletion(
             @PathVariable Long textId,
-            @RequestParam(required = false) Long assignmentId) {
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
         try {
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
             String username = authentication.getName();
             com.english.entity.User currentUser = userService.getUserByUsername(username);
             if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");

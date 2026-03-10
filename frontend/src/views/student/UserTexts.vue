@@ -235,10 +235,10 @@
     <!-- 课文详情对话框 -->
     <el-dialog
       v-model="showDetailDialog"
-      :title="currentText.title"
+      :title="currentText?.title || '课文详情'"
       width="min(800px, 96vw)"
     >
-      <div class="text-detail">
+      <div class="text-detail" v-if="currentText">
         <div class="detail-header">
           <div class="detail-meta">
             <el-tag :type="getDifficultyType(currentText.difficulty)">
@@ -436,8 +436,12 @@ const handleEdit = async () => {
 }
 
 const deleteText = (text) => {
+  if (!text?.id) {
+    ElMessage.error('课文ID不存在')
+    return
+  }
   ElMessageBox.confirm(
-    `确定要删除《${text.title}》吗？`,
+    `确定要删除《${text.title || '该课文'}》吗？`,
     '确认删除',
     {
       confirmButtonText: '确定',
@@ -461,6 +465,8 @@ const deleteText = (text) => {
       ElMessage.error('删除失败，请重试')
       console.error(error)
     }
+  }).catch(() => {
+    // User cancelled
   })
 }
 
@@ -470,6 +476,10 @@ const viewText = (text) => {
 }
 
 const likeText = async (text) => {
+  if (!text?.id) {
+    ElMessage.error('课文ID不存在')
+    return
+  }
   likeLoading.value = true
   try {
     const response = await request({
@@ -481,7 +491,9 @@ const likeText = async (text) => {
       ElMessage.success('点赞成功')
       // 更新点赞数
       text.likeCount = (text.likeCount || 0) + 1
-      currentText.value.likeCount = (currentText.value.likeCount || 0) + 1
+      if (currentText.value?.id === text.id) {
+        currentText.value.likeCount = (currentText.value.likeCount || 0) + 1
+      }
     } else {
       ElMessage.error('点赞失败')
     }
@@ -494,7 +506,10 @@ const likeText = async (text) => {
 }
 
 const studyText = (text) => {
-  // 跳转到课文学习页面
+  if (!text?.id) {
+    ElMessage.error('课文ID不存在')
+    return
+  }
   router.push({
     path: '/student/text-learning',
     query: {

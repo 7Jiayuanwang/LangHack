@@ -613,12 +613,29 @@ const getPosText = (pos) => {
 let currentAudio = null
 
 const playAudio = (audioUrl) => {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null }
-  currentAudio = new Audio(audioUrl)
-  currentAudio.play().catch(error => {
-    ElMessage.error('音频播放失败')
-    console.error(error)
-  })
+  if (!audioUrl) {
+    ElMessage.warning('暂无音频可播放')
+    return
+  }
+
+  // 停止播放当前音频
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio = null
+  }
+
+  try {
+    currentAudio = new Audio(audioUrl)
+    currentAudio.play().catch(error => {
+      ElMessage.error('音频播放失败')
+      console.error('音频播放错误:', error)
+      currentAudio = null
+    })
+  } catch (error) {
+    ElMessage.error('创建音频播放器失败')
+    console.error('创建音频错误:', error)
+    currentAudio = null
+  }
 }
 
 // 重置单词弹窗
@@ -670,6 +687,7 @@ const handleVersionChange = (versionKey) => {
 let activeDragHandlers = null
 let synonymClickTimers = null
 onUnmounted(() => {
+  // 清理拖动事件监听
   if (activeDragHandlers) {
     document.removeEventListener('mousemove', activeDragHandlers.move)
     document.removeEventListener('mouseup', activeDragHandlers.end)
@@ -684,13 +702,20 @@ onUnmounted(() => {
     synonymClickTimers = null
   }
 
+  // 清理文本点击处理器
   const container = document.querySelector('.text-content')
   if (container && textContentClickHandler) {
     container.removeEventListener('click', textContentClickHandler)
   }
 
+  // 清理窗口大小变化监听
   window.removeEventListener('resize', handleResize)
-  if (currentAudio) { currentAudio.pause(); currentAudio = null }
+
+  // 清理音频对象
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio = null
+  }
 })
 </script>
 

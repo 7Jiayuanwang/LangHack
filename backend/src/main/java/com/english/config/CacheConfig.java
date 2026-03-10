@@ -27,6 +27,7 @@ public class CacheConfig {
     public CacheManager cacheManager(RedisConnectionFactory factory) {
         ObjectMapper om = new ObjectMapper();
         om.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+        // 严格的类型验证器：只允许明确列出的类型，防止反序列化攻击
         BasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("com.english.")
                 .allowIfSubType("java.util.HashMap")
@@ -41,6 +42,7 @@ public class CacheConfig {
                 .allowIfSubType("java.time.")
                 .allowIfSubType("com.baomidou.mybatisplus.core.metadata.IPage")
                 .build();
+        // 使用 NON_FINAL 而非 NON_CONCRETE_AND_ARRAYS：更安全，只序列化非final字段
         om.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL);
         GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(om);
 

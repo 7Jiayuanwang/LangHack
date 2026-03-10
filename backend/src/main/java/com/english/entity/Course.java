@@ -9,10 +9,8 @@ public class Course {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("name")
     private String name;
 
-    @TableField("description")
     private String description;
 
     @TableField("cover_image")
@@ -21,10 +19,8 @@ public class Course {
     @TableField("created_by")
     private Long createdBy;
 
-    @TableField("status")
     private String status;
 
-    @TableField("deleted")
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)

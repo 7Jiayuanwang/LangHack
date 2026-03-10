@@ -494,7 +494,9 @@ const deleteAssignment = async (assignment) => {
         const data = await response.json()
         if (data.code === 200) {
           ElMessage.success('删除成功')
-          await loadCourseAssignments(currentCourse.value.id)
+          if (currentCourse.value?.id) {
+            await loadCourseAssignments(currentCourse.value.id)
+          }
         } else {
           ElMessage.error(data.message || '删除失败')
         }

@@ -99,7 +99,7 @@
     </el-card>
 
     <!-- 添加/编辑单元对话框 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑单元' : '添加单元'" width="min(500px, 90%)">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑单元' : '添加单元'" width="min(500px, 90%)" @close="resetUnitForm">
       <el-form ref="unitFormRef" :model="unitForm" :rules="unitRules" label-width="80px">
         <el-form-item label="单元名称" prop="name">
           <el-input v-model="unitForm.name" placeholder="请输入单元名称" />

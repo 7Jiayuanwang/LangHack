@@ -13,37 +13,26 @@ public class ECDICTWord {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("word")
     private String word;
 
-    @TableField("phonetic")
     private String phonetic;
 
-    @TableField("definition")
     private String definition;
 
-    @TableField("translation")
     private String translation;
 
-    @TableField("pos")
     private String pos;
 
-    @TableField("collins")
     private String collins;
 
-    @TableField("oxford")
     private String oxford;
 
-    @TableField("tag")
     private String tag;
 
-    @TableField("bnc")
     private String bnc;
 
-    @TableField("frq")
     private String frq;
 
-    @TableField("exchange")
     private String exchange;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)

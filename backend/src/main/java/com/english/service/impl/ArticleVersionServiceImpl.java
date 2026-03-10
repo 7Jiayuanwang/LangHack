@@ -196,6 +196,7 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             if (!results.isEmpty()) {
                 UpdateWrapper<Text> updateWrapper = new UpdateWrapper<>();
                 updateWrapper.eq("id", textId);
+                updateWrapper.eq("deleted", 0); // 只更新未删除的课文
                 results.forEach(updateWrapper::set);
 
                 int updated = textMapper.update(null, updateWrapper);
@@ -379,6 +380,7 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             if (!results.isEmpty()) {
                 UpdateWrapper<Text> updateWrapper = new UpdateWrapper<>();
                 updateWrapper.eq("id", textId);
+                updateWrapper.eq("deleted", 0); // 只更新未删除的课文
                 results.forEach(updateWrapper::set);
 
                 int updated = textMapper.update(null, updateWrapper);

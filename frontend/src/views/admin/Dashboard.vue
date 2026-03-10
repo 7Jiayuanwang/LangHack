@@ -108,6 +108,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { User, Reading, School, Document } from '@element-plus/icons-vue'
 
 const stats = reactive({
   totalUsers: 0,
@@ -151,8 +152,8 @@ const loadDashboardData = async () => {
 
     if (response.ok) {
       const data = await response.json()
-      if (data.code === 200) {
-        const result = data.data || {}
+      if (data.code === 200 && data.data) {
+        const result = data.data
 
         // 更新统计数据
         stats.totalUsers = result.totalUsers || 0

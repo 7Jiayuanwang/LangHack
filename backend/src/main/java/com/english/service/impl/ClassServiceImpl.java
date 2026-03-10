@@ -81,9 +81,11 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
                             courseMap.put("name", course.getName());
                             courseMap.put("description", course.getDescription());
                             classMap.put("course", courseMap);
+                        } else {
+                            logger.warn("课程 {} 不存在或已删除", classInfo.getCourseId());
                         }
                     } catch (Exception e) {
-                        logger.warn("获取课程信息失败: {}", e.getMessage(), e);
+                        logger.warn("获取课程信息失败", e);
                     }
                 }
             }
@@ -141,6 +143,17 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     @Override
     @Transactional
     public void createClass(Class classInfo) {
+        // 验证班级名称
+        if (classInfo.getName() == null || classInfo.getName().trim().isEmpty()) {
+            throw new BusinessException("班级名称不能为空");
+        }
+        if (classInfo.getCourseId() == null) {
+            throw new BusinessException("课程ID不能为空");
+        }
+        if (classInfo.getTeacherId() == null) {
+            throw new BusinessException("教师ID不能为空");
+        }
+
         // 验证课程是否存在
         Course course = courseService.getCourseById(classInfo.getCourseId());
         if (course == null) {
@@ -165,6 +178,11 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     @Override
     @Transactional
     public void updateClass(Class classInfo) {
+        // 验证班级名称
+        if (classInfo.getName() == null || classInfo.getName().trim().isEmpty()) {
+            throw new BusinessException("班级名称不能为空");
+        }
+
         Class existingClass = getClassById(classInfo.getId());
         if (existingClass == null) {
             throw new BusinessException("班级不存在");

@@ -207,8 +207,8 @@ const loadAvailableClasses = async () => {
       size: '100'
     })
 
-    if (searchKeyword.value) {
-      params.append('keyword', searchKeyword.value)
+    if (searchKeyword.value && searchKeyword.value.trim()) {
+      params.append('keyword', searchKeyword.value.trim())
     }
 
     const response = await fetch(`/api/classes/search?${params.toString()}`, {

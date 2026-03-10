@@ -56,8 +56,15 @@ public class SecurityExceptionHandler implements AuthenticationEntryPoint, Acces
         response.setStatus(httpStatus);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
+        // 防止 XSS：禁止浏览器 MIME 嗅探
+        response.setHeader("X-Content-Type-Options", "nosniff");
 
         Result<?> result = Result.error(httpStatus, message);
-        response.getWriter().write(objectMapper.writeValueAsString(result));
+        try {
+            response.getWriter().write(objectMapper.writeValueAsString(result));
+        } catch (IOException e) {
+            // 如果 JSON 序列化或写入失败，至少返回文本响应而不是崩溃
+            response.getWriter().write("{\"code\":" + httpStatus + ",\"message\":\"" + message + "\"}");
+        }
     }
 }

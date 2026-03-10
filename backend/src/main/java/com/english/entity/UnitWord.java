@@ -20,11 +20,13 @@ public class UnitWord {
     /**
      * 单元ID
      */
+    @TableField("unit_id")
     private Long unitId;
 
     /**
      * 单词ID
      */
+    @TableField("word_id")
     private Long wordId;
 
     /**

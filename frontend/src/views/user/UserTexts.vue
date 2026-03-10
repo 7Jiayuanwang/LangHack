@@ -463,6 +463,10 @@ const viewText = (text) => {
 
 const studyText = (text) => {
   // 跳转到课文学习页面
+  if (!text?.id) {
+    ElMessage.error('文本信息不完整')
+    return
+  }
   router.push({
     path: '/user/text-learning',
     query: {

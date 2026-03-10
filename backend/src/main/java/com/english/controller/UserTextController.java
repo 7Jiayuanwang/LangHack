@@ -128,8 +128,8 @@ public class UserTextController {
                 return Result.error("用户不存在");
             }
 
-            Text text = textService.getById(textId);
-            if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
+            Text text = textService.getTextById(textId);
+            if (text == null) {
                 return Result.error("课文不存在");
             }
 
@@ -142,6 +142,9 @@ public class UserTextController {
 
             // 原子递增查看次数
             textService.incrementViewCount(textId);
+
+            // 刷新获取最新的查看次数
+            text = textService.getTextById(textId);
 
             return Result.success(text);
         } catch (Exception e) {
@@ -163,7 +166,7 @@ public class UserTextController {
                 return Result.error("用户不存在");
             }
 
-            Text text = textService.getById(textId);
+            Text text = textService.getTextById(textId);
             if (text == null) {
                 return Result.error("课文不存在");
             }
@@ -203,7 +206,7 @@ public class UserTextController {
                 return Result.error("用户不存在");
             }
 
-            Text text = textService.getById(textId);
+            Text text = textService.getTextById(textId);
             if (text == null) {
                 return Result.error("课文不存在");
             }
@@ -254,7 +257,7 @@ public class UserTextController {
     @PostMapping("/{textId}/like")
     public Result<String> likeText(@PathVariable Long textId) {
         try {
-            Text text = textService.getById(textId);
+            Text text = textService.getTextById(textId);
             if (text == null) {
                 return Result.error("课文不存在");
             }

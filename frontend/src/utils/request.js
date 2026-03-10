@@ -13,9 +13,14 @@ let isLoggingOut = false
 const handleLogout = () => {
   if (isLoggingOut) return
   isLoggingOut = true
-  const userStore = useUserStore()
-  userStore.logout()
-  window.location.reload()
+  try {
+    const userStore = useUserStore()
+    userStore.logout()
+    window.location.reload()
+  } catch (e) {
+    console.error('Logout failed:', e)
+    isLoggingOut = false
+  }
 }
 
 // 请求拦截器

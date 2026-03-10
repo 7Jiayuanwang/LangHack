@@ -139,6 +139,7 @@ public class AdminController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
+            logger.error("创建用户失败", e);
             return Result.error("创建用户失败，请稍后重试");
         }
     }
@@ -155,9 +156,10 @@ public class AdminController {
                 throw new BusinessException("用户不存在");
             }
 
-            // 保持原密码，除非明确提供新密码
+            // 如果没有提供新密码，置为null让Service层保留原密码
+            // 不要把已编码的密码拷贝进来，否则Service层会二次编码导致用户无法登录
             if (user.getPassword() == null || user.getPassword().isEmpty()) {
-                user.setPassword(existingUser.getPassword());
+                user.setPassword(null);
             }
 
             userService.updateUser(user);
@@ -175,7 +177,10 @@ public class AdminController {
     public Result<String> deleteUser(@PathVariable Long id) {
         try {
             User targetUser = userService.getUserById(id);
-            if (targetUser != null && "admin".equals(targetUser.getUsername())) {
+            if (targetUser == null) {
+                return Result.error("用户不存在");
+            }
+            if ("admin".equals(targetUser.getUsername())) {
                 return Result.error("不能删除默认管理员账户");
             }
 
@@ -192,7 +197,7 @@ public class AdminController {
     @GetMapping("/users/roles")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<List<String>> getUserRoles() {
-        List<String> roles = List.of("STUDENT", "TEACHER", "ADMIN");
+        List<String> roles = List.of("STUDENT", "TEACHER", "ADMIN", "USER");
         return Result.success(roles);
     }
 
@@ -376,10 +381,19 @@ public class AdminController {
 
             Unit unit = new Unit();
             unit.setCourseId(courseId);
-            unit.setName(unitData.get("name").toString());
+            Object nameObj = unitData.get("name");
+            if (nameObj == null) {
+                return Result.error("name 为必填字段");
+            }
+            unit.setName(nameObj.toString());
             unit.setDescription(unitData.get("description") != null ? unitData.get("description").toString() : "");
             Object orderNumObj = unitData.get("orderNum");
-            unit.setOrderNum(orderNumObj != null ? Integer.parseInt(orderNumObj.toString()) : 0);
+            try {
+                unit.setOrderNum(orderNumObj != null ? Integer.parseInt(orderNumObj.toString()) : 0);
+            } catch (NumberFormatException e) {
+                logger.warn("orderNum 格式错误，使用默认值 0");
+                unit.setOrderNum(0);
+            }
 
             unitService.createUnit(unit);
             return Result.success("单元创建成功");
@@ -415,10 +429,19 @@ public class AdminController {
             Unit unit = new Unit();
             unit.setId(id);
             unit.setCourseId(courseId);
-            unit.setName(unitData.get("name").toString());
+            Object nameObj = unitData.get("name");
+            if (nameObj == null) {
+                return Result.error("name 为必填字段");
+            }
+            unit.setName(nameObj.toString());
             unit.setDescription(unitData.get("description") != null ? unitData.get("description").toString() : "");
             Object orderNumObj = unitData.get("orderNum");
-            unit.setOrderNum(orderNumObj != null ? Integer.parseInt(orderNumObj.toString()) : 0);
+            try {
+                unit.setOrderNum(orderNumObj != null ? Integer.parseInt(orderNumObj.toString()) : 0);
+            } catch (NumberFormatException e) {
+                logger.warn("orderNum 格式错误，使用默认值 0");
+                unit.setOrderNum(0);
+            }
 
             unitService.updateUnit(unit);
             return Result.success("单元更新成功");
@@ -498,9 +521,14 @@ public class AdminController {
             }
             // 创建Word对象并保存
             Word word = new Word();
-            word.setWord(wordData.get("word").toString());
+            Object wordObj = wordData.get("word");
+            Object defObj = wordData.get("definition");
+            if (wordObj == null || defObj == null) {
+                return Result.error("word 和 definition 为必填字段");
+            }
+            word.setWord(wordObj.toString());
             word.setPronunciation(wordData.get("pronunciation") != null ? wordData.get("pronunciation").toString() : "");
-            word.setDefinition(wordData.get("definition").toString());
+            word.setDefinition(defObj.toString());
             word.setExampleSentence(wordData.get("exampleSentence") != null ? wordData.get("exampleSentence").toString() : "");
             word.setPartOfSpeech(wordData.get("partOfSpeech") != null ? wordData.get("partOfSpeech").toString() : "noun");
             word.setDifficulty(wordData.get("difficulty") != null ? wordData.get("difficulty").toString() : "EASY");
@@ -537,9 +565,14 @@ public class AdminController {
             // 更新单词信息
             Word word = new Word();
             word.setId(id);
-            word.setWord(wordData.get("word").toString());
+            Object wordObj = wordData.get("word");
+            Object defObj = wordData.get("definition");
+            if (wordObj == null || defObj == null) {
+                return Result.error("word 和 definition 为必填字段");
+            }
+            word.setWord(wordObj.toString());
             word.setPronunciation(wordData.get("pronunciation") != null ? wordData.get("pronunciation").toString() : "");
-            word.setDefinition(wordData.get("definition").toString());
+            word.setDefinition(defObj.toString());
             word.setExampleSentence(wordData.get("exampleSentence") != null ? wordData.get("exampleSentence").toString() : "");
             word.setPartOfSpeech(wordData.get("partOfSpeech") != null ? wordData.get("partOfSpeech").toString() : "noun");
             word.setDifficulty(wordData.get("difficulty") != null ? wordData.get("difficulty").toString() : "EASY");
@@ -663,24 +696,24 @@ public class AdminController {
     @PreAuthorize("hasRole('ADMIN')")
     @org.springframework.transaction.annotation.Transactional
     public Result<Map<String, Object>> createText(@RequestBody Map<String, Object> textData) {
-        // 获取当前用户ID（在 try 前面，避免事务中的 NPE）
-        Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null) {
-            return Result.error("用户未认证");
-        }
-        String username = authentication.getName();
-        com.english.entity.User creator = userService.getUserByUsername(username);
-        if (creator == null) {
-            return Result.error("用户不存在");
-        }
-        Long createdBy = creator.getId();
-
         try {
+            // 获取当前用户ID
+            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null) {
+                return Result.error("用户未认证");
+            }
+            String username = authentication.getName();
+            com.english.entity.User creator = userService.getUserByUsername(username);
+            if (creator == null) {
+                return Result.error("用户不存在");
+            }
+            Long createdBy = creator.getId();
             Text text = new Text();
-            if (textData.get("title") == null) {
+            Object titleObj = textData.get("title");
+            if (titleObj == null) {
                 return Result.error("title 为必填字段");
             }
-            text.setTitle(textData.get("title").toString());
+            text.setTitle(titleObj.toString());
             // 从前端获取unitId
             if (textData.get("unitId") != null) {
                 try {
@@ -704,6 +737,7 @@ public class AdminController {
             }
 
             // 创建课文
+            text.setUploadedBy(createdBy);
             textService.createText(text);
 
             // 根据内容类型生成不同版本
@@ -725,6 +759,7 @@ public class AdminController {
                 if (!(exercisesObj instanceof List)) {
                     return Result.error("exercises 字段必须是数组类型");
                 }
+                @SuppressWarnings("unchecked")
                 List<Map<String, Object>> exercisesData = (List<Map<String, Object>>) exercisesObj;
 
                 if (!exercisesData.isEmpty()) {
@@ -806,10 +841,12 @@ public class AdminController {
 
             return Result.success(result);
         } catch (BusinessException e) {
+            logger.error("创建课文失败: {}", e.getMessage());
             return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("创建课文失败", e);
-            throw e;  // 让 @Transactional 自动回滚，而不是手动 setRollbackOnly()
+            // 让 @Transactional 自动回滚异常，不需要手动处理
+            throw new BusinessException("创建课文失败，请稍后重试");
         }
     }
     @PutMapping("/texts/{id}")
@@ -825,10 +862,11 @@ public class AdminController {
                     return Result.error("unitId 必须为有效的数字");
                 }
             }
-            if (textData.get("title") == null) {
+            Object titleObj = textData.get("title");
+            if (titleObj == null) {
                 return Result.error("title 为必填字段");
             }
-            text.setTitle(textData.get("title").toString());
+            text.setTitle(titleObj.toString());
             text.setContent(textData.get("content") != null ? textData.get("content").toString() : "");
             text.setMarkdownContent(textData.get("markdownContent") != null ? textData.get("markdownContent").toString() : "");
             text.setContentType(textData.get("contentType") != null ? textData.get("contentType").toString() : "TEXT");

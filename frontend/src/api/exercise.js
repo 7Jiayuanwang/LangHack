@@ -15,10 +15,16 @@ export const createExercise = (data) => {
 
 // 批量创建习题
 export const batchCreateExercises = (data) => {
+  // 输入验证
+  if (!data || !Array.isArray(data.exercises) || data.exercises.length === 0) {
+    return Promise.reject(new Error('习题列表不能为空'))
+  }
+
   return request({
     url: '/api/exercises/batch',
     method: 'post',
-    data
+    data,
+    timeout: 30000  // 批量操作延长超时时间
   })
 }
 
@@ -73,6 +79,14 @@ export const deleteAllExercisesByTextId = (textId) => {
 
 // 学生提交答案
 export const submitAnswer = (data) => {
+  // 输入验证
+  if (!data || typeof data !== 'object') {
+    return Promise.reject(new Error('提交数据不能为空'))
+  }
+  if (!data.exerciseId) {
+    return Promise.reject(new Error('习题ID不能为空'))
+  }
+
   return request({
     url: '/api/student/exercises/submit',
     method: 'post',

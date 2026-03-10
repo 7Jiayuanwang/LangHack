@@ -128,14 +128,7 @@ const router = useRouter()
 const route = useRoute()
 
 // 从路由参数获取信息
-const props = defineProps({
-  unitId: {
-    type: [String, Number],
-    required: true
-  }
-})
-
-const unitId = ref(Number(props.unitId))
+const unitId = ref(0)
 const unitName = ref(route.query.unitName || '')
 const courseId = ref(route.query.courseId ? Number(route.query.courseId) : null)
 const courseName = ref(route.query.courseName || '')
@@ -331,6 +324,12 @@ const formatTime = (time) => {
 
 // 生命周期
 onMounted(() => {
+  // 从路由参数中获取unitId
+  const routeUnitId = route.params.unitId || route.query.unitId
+  if (routeUnitId) {
+    unitId.value = Number(routeUnitId)
+  }
+
   // 检查是否有有效的unitId
   if (!unitId.value) {
     ElMessage.warning('无效的单元ID，请从单元管理页面重新进入')

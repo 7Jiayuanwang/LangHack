@@ -21,7 +21,7 @@ import java.util.Map;
 @RequestMapping("/api/student/assignments")
 public class StudentAssignmentController {
 
-    private static final Logger log = LoggerFactory.getLogger(StudentAssignmentController.class);
+    private static final Logger logger = LoggerFactory.getLogger(StudentAssignmentController.class);
 
     @Autowired
     private AssignmentService assignmentsService;
@@ -75,10 +75,10 @@ public class StudentAssignmentController {
 
             return Result.success(result);
         } catch (com.english.exception.BusinessException e) {
-            log.error("获取任务列表失败", e);
+            logger.error("获取任务列表失败", e);
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取任务列表失败", e);
+            logger.error("获取任务列表失败", e);
             return Result.error("获取任务列表失败，请稍后重试");
         }
     }
@@ -104,10 +104,10 @@ public class StudentAssignmentController {
 
             return Result.success(detail);
         } catch (com.english.exception.BusinessException e) {
-            log.error("获取任务详情失败", e);
+            logger.error("获取任务详情失败", e);
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取任务详情失败", e);
+            logger.error("获取任务详情失败", e);
             return Result.error("获取任务详情失败，请稍后重试");
         }
     }
@@ -133,10 +133,10 @@ public class StudentAssignmentController {
 
             return Result.success(startInfo);
         } catch (com.english.exception.BusinessException e) {
-            log.error("开始任务失败", e);
+            logger.error("开始任务失败", e);
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("开始任务失败", e);
+            logger.error("开始任务失败", e);
             return Result.error("开始任务失败，请稍后重试");
         }
     }
@@ -162,10 +162,10 @@ public class StudentAssignmentController {
 
             return Result.success(content);
         } catch (com.english.exception.BusinessException e) {
-            log.error("获取任务内容失败", e);
+            logger.error("获取任务内容失败", e);
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取任务内容失败", e);
+            logger.error("获取任务内容失败", e);
             return Result.error("获取任务内容失败，请稍后重试");
         }
     }
@@ -203,7 +203,7 @@ public class StudentAssignmentController {
         } catch (com.english.exception.BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("提交任务失败", e);
+            logger.error("提交任务失败", e);
             return Result.error("提交任务失败，请稍后重试");
         }
     }
@@ -232,10 +232,10 @@ public class StudentAssignmentController {
 
             return Result.success(progress);
         } catch (com.english.exception.BusinessException e) {
-            log.error("获取任务进度失败", e);
+            logger.error("获取任务进度失败", e);
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取任务进度失败", e);
+            logger.error("获取任务进度失败", e);
             return Result.error("获取任务进度失败，请稍后重试");
         }
     }
@@ -268,10 +268,10 @@ public class StudentAssignmentController {
 
             return Result.success(records);
         } catch (com.english.exception.BusinessException e) {
-            log.error("获取学习记录失败", e);
+            logger.error("获取学习记录失败", e);
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取学习记录失败", e);
+            logger.error("获取学习记录失败", e);
             return Result.error("获取学习记录失败，请稍后重试");
         }
     }

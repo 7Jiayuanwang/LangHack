@@ -15,10 +15,8 @@ public class Assignment {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("title")
     private String title;
 
-    @TableField("description")
     private String description;
 
     @TableField("class_id")
@@ -30,10 +28,8 @@ public class Assignment {
     @TableField("created_by")
     private Long createdBy;
 
-    @TableField("deadline")
     private LocalDateTime deadline;
 
-    @TableField("weight")
     private Double weight; // 任务权重，默认1.00
 
     @TableField("ideal_study_time_minutes")
@@ -42,7 +38,6 @@ public class Assignment {
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
-    @TableField("deleted")
     private Integer deleted;
 
     // 关联字段（不映射到数据库）

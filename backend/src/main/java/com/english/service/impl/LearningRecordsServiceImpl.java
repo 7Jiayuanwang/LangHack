@@ -51,11 +51,18 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public int getTodayStudyTime(Long studentId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId)
                 .ge("created_time", LocalDateTime.of(LocalDate.now(), LocalTime.MIN));
 
         List<LearningRecord> records = learningRecordMapper.selectList(wrapper);
+        if (records == null) {
+            records = new ArrayList<>();
+        }
 
         // 计算今日总学习时长（秒），然后转换为分钟
         // 过滤异常值：单次学习时长超过2小时（7200秒）的记录视为异常，不计算在内
@@ -94,11 +101,21 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public List<Map<String, Object>> getUnitsWithLearningStats(Long studentId, Long courseId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+        if (courseId == null) {
+            throw new IllegalArgumentException("courseId 不能为空");
+        }
+
         // 查询课程下的所有单元
         QueryWrapper<Unit> unitWrapper = new QueryWrapper<>();
         unitWrapper.eq("course_id", courseId);
         unitWrapper.orderByAsc("order_num");
         List<Unit> units = unitMapper.selectList(unitWrapper);
+        if (units == null) {
+            units = new ArrayList<>();
+        }
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Unit unit : units) {
@@ -123,6 +140,13 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getUnitContentWithLearningStates(Long studentId, Long unitId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+        if (unitId == null) {
+            throw new IllegalArgumentException("unitId 不能为空");
+        }
+
         Map<String, Object> content = new HashMap<>();
         content.put("unitId", unitId);
 
@@ -216,6 +240,13 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getTextDetailWithAnnotation(Long studentId, Long textId, Long assignmentId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+        if (textId == null) {
+            throw new IllegalArgumentException("textId 不能为空");
+        }
+
         Map<String, Object> detail = new HashMap<>();
 
         // 查询课文详情
@@ -317,7 +348,11 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             }
 
             // 获取课文中的单词并进行标注
-            String annotatedContent = annotateTextWithVocabulary(studentId, text.getContent());
+            String content = text.getContent();
+            if (content == null) {
+                content = "";
+            }
+            String annotatedContent = annotateTextWithVocabulary(studentId, content);
             detail.put("annotatedContent", annotatedContent);
 
             // 检查学习状态
@@ -508,6 +543,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getTodayLearningStats(Long studentId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId)
                 .ge("created_time", LocalDateTime.of(LocalDate.now(), LocalTime.MIN));
@@ -570,6 +609,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getLearningOverview(Long studentId, Map<String, Object> params) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+
         Map<String, Object> overview = new HashMap<>();
 
         // 基本统计
@@ -606,12 +649,19 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getLearningRecordsWithPagination(Map<String, Object> params) {
+        if (params == null) {
+            throw new IllegalArgumentException("参数不能为空");
+        }
         Long studentId = params.get("studentId") != null ? Long.valueOf(params.get("studentId").toString()) : null;
         if (studentId == null) {
             throw new IllegalArgumentException("studentId 不能为空");
         }
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
+
+        // 参数边界校验
+        page = Math.max(1, page);
+        size = Math.max(1, Math.min(size, 100));
 
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId)
@@ -658,6 +708,13 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getCourseLearningStats(Long studentId, Long courseId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+        if (courseId == null) {
+            throw new IllegalArgumentException("courseId 不能为空");
+        }
+
         Map<String, Object> stats = new HashMap<>();
 
         // 查询课程下的所有单元
@@ -687,11 +744,23 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             }
         }
 
-        List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).collect(Collectors.toList());
+        List<Long> wordIds = unitWords.stream()
+                .map(UnitWord::getWordId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
 
         // 统计数据
         stats.put("totalUnits", units.size());
-        stats.put("totalWords", wordIds.size());
+
+        // 计算总单词数：需要过滤已删除的单词
+        int totalWords = 0;
+        if (!wordIds.isEmpty()) {
+            QueryWrapper<Word> wordWrapper = new QueryWrapper<>();
+            wordWrapper.in("id", wordIds)
+                    .eq("deleted", 0);
+            totalWords = Math.toIntExact(wordMapper.selectCount(wordWrapper));
+        }
+        stats.put("totalWords", totalWords);
 
         // 学生已掌握的单词
         int learnedWords = 0;
@@ -705,7 +774,6 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         stats.put("learnedWords", learnedWords);
 
         // 学习进度
-        int totalWords = wordIds.size();
         stats.put("progress", totalWords > 0 ? (double) learnedWords / totalWords * 100 : 0.0);
 
         // 学习时间
@@ -730,6 +798,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getAllCoursesLearningStats(Long studentId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+
         Map<String, Object> stats = new HashMap<>();
 
         // 查询学生的学习记录
@@ -766,6 +838,13 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getStudyTimeStats(Long studentId, Map<String, Object> params) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+        if (params == null) {
+            params = new HashMap<>();
+        }
+
         String period = (String) params.get("period");
         String granularity = (String) params.get("granularity"); // daily, weekly, monthly
 
@@ -809,6 +888,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> generateProgressReport(Long studentId, String type) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+
         Map<String, Object> report = new HashMap<>();
 
         // 基本学习统计
@@ -822,7 +905,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
                 .last("LIMIT 10");
 
         List<LearningRecord> recentRecords = learningRecordMapper.selectList(wrapper);
-        report.put("recentRecords", recentRecords);
+        report.put("recentRecords", recentRecords != null ? recentRecords : new ArrayList<>());
 
         report.put("reportType", type);
         report.put("generatedAt", LocalDateTime.now());
@@ -832,6 +915,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getAchievementStats(Long studentId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+
         Map<String, Object> achievements = new HashMap<>();
 
         // 连续学习天数（简化实现）
@@ -841,7 +928,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId);
         long totalRecords = learningRecordMapper.selectCount(wrapper);
-        achievements.put("totalWordsLearned", (int) totalRecords);
+        achievements.put("totalWordsLearned", (int) Math.min(totalRecords, Integer.MAX_VALUE));
 
         // 总学习时间（小时）
         QueryWrapper<LearningRecord> timeWrapper = new QueryWrapper<>();
@@ -849,7 +936,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
                 .select("COALESCE(SUM(duration_seconds), 0) as total_time");
 
         List<Map<String, Object>> timeResults = learningRecordMapper.selectMaps(timeWrapper);
-        if (!timeResults.isEmpty()) {
+        if (timeResults != null && !timeResults.isEmpty()) {
             Map<String, Object> timeResult = timeResults.get(0);
             Number totalTime = (Number) timeResult.get("total_time");
             achievements.put("totalStudyHours", totalTime != null ? (int) Math.min(totalTime.longValue() / 3600, Integer.MAX_VALUE) : 0);
@@ -862,17 +949,28 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Map<String, Object> getLearningRanking(Long studentId, String type, Long targetId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+
         Map<String, Object> ranking = new HashMap<>();
         // 简化实现，返回模拟排名数据
         ranking.put("studentRank", 5);
         ranking.put("totalStudents", 20);
         ranking.put("percentile", 75.0);
-        ranking.put("type", type);
+        ranking.put("type", type != null ? type : "global");
         return ranking;
     }
 
     @Override
     public Map<String, Object> exportLearningData(Long studentId, Map<String, Object> params) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("studentId 不能为空");
+        }
+        if (params == null) {
+            params = new HashMap<>();
+        }
+
         Map<String, Object> exportResult = new HashMap<>();
 
         // 获取学习记录
@@ -882,14 +980,22 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
         exportResult.put("studentId", studentId);
         exportResult.put("exportTime", LocalDateTime.now());
-        exportResult.put("totalRecords", records.get("total"));
-        exportResult.put("data", records.get("records"));
+        exportResult.put("totalRecords", records != null ? records.get("total") : 0);
+        exportResult.put("data", records != null ? records.get("records") : new ArrayList<>());
 
         return exportResult;
     }
 
     @Override
     public Map<String, Object> getAssignmentLearningRecords(Long assignmentId, Long studentId, int page, int size) {
+        if (assignmentId == null || studentId == null) {
+            throw new IllegalArgumentException("assignmentId 和 studentId 不能为空");
+        }
+
+        // 参数边界校验
+        page = Math.max(1, page);
+        size = Math.max(1, Math.min(size, 100));
+
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId)
                 .eq("assignment_id", assignmentId)
@@ -904,7 +1010,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             Map<String, Object> recordMap = new HashMap<>();
             recordMap.put("id", record.getId());
             recordMap.put("actionType", record.getRecordType());
-            recordMap.put("duration", record.getDurationSeconds() != null ? record.getDurationSeconds() / 60 : 0); // 转换为分钟
+            recordMap.put("duration", record.getDurationSeconds() != null ? (record.getDurationSeconds() + 59) / 60 : 0); // 向上取整转换为分钟
             recordMap.put("createdAt", record.getCreatedTime());
             recordMap.put("correctCount", record.getCorrectCount());
             recordMap.put("totalCount", record.getTotalCount());
@@ -1012,18 +1118,32 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             return 0;
         }
 
-        List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).collect(Collectors.toList());
+        List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).filter(Objects::nonNull).collect(Collectors.toList());
 
         if (wordIds.isEmpty()) {
             return 0;
         }
 
+        // 需要同时过滤：1) 学生的生词本中有该单词，且 2) 单词未删除
         QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
         vocabWrapper.eq("student_id", studentId)
                 .in("word_id", wordIds)
                 .ne("mastery_level", "NEW");
 
-        return Math.toIntExact(vocabularyBookMapper.selectCount(vocabWrapper));
+        // 获取生词本中的单词ID
+        List<Long> vocabWordIds = vocabularyBookMapper.selectList(vocabWrapper).stream()
+                .map(VocabularyBook::getWordId)
+                .collect(Collectors.toList());
+
+        if (vocabWordIds.isEmpty()) {
+            return 0;
+        }
+
+        // 最后过滤未删除的单词
+        QueryWrapper<Word> wordWrapper = new QueryWrapper<>();
+        wordWrapper.in("id", vocabWordIds)
+                .eq("deleted", 0);
+        return Math.toIntExact(wordMapper.selectCount(wordWrapper));
     }
 
     /**
@@ -1130,9 +1250,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
         int readCount = 0;
         for (com.english.entity.Text text : texts) {
-            // 检查课文是否已阅读（学习时长达到10分钟即600秒）
+            // 检查课文是否已阅读（学习时长达到10分钟）
+            // getTextReadTime 返回的是分钟数
             int readTime = getTextReadTime(studentId, text.getId(), null);
-            if (readTime >= 600) { // 10分钟 = 600秒
+            if (readTime >= 10) { // 10分钟
                 readCount++;
             }
         }
@@ -1144,9 +1265,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
      * 检查课文阅读状态
      */
     private boolean checkTextReadStatus(Long studentId, Long textId) {
-        // 检查课文是否已阅读（学习时长达到10分钟即600秒）
-        int readTime = getTextReadTime(studentId, textId, null);
-        return readTime >= 600; // 10分钟 = 600秒
+        // 检查课文是否已阅读（学习时长达到10分钟）
+        // getTextReadTime 返回的是分钟数
+        int readTimeMinutes = getTextReadTime(studentId, textId, null);
+        return readTimeMinutes >= 10; // 10分钟
     }
 
     /**

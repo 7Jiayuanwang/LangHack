@@ -12,10 +12,8 @@ public class Text {
     @TableField("unit_id")
     private Long unitId;
 
-    @TableField("title")
     private String title;
 
-    @TableField("content")
     private String content;
 
     @TableField("cet4_content")
@@ -30,7 +28,6 @@ public class Text {
     @TableField("audio_url")
     private String audioUrl;
 
-    @TableField("difficulty")
     private String difficulty;
 
     @TableField("order_num")
@@ -39,7 +36,6 @@ public class Text {
     @TableField("uploaded_by")
     private Long uploadedBy;
 
-    @TableField("tags")
     private String tags;
 
     @TableField("view_count")
@@ -51,7 +47,6 @@ public class Text {
     @TableField("is_public")
     private Integer isPublic;
 
-    @TableField("status")
     private String status;
 
     @TableField("chinese_parallel_content")

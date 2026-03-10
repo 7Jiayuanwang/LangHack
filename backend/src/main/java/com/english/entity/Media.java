@@ -27,13 +27,10 @@ public class Media {
     @TableField("mime_type")
     private String mimeType;
 
-    @TableField("width")
     private Integer width;
 
-    @TableField("height")
     private Integer height;
 
-    @TableField("duration")
     private Integer duration;
 
     @TableField("thumbnail_path")
@@ -45,13 +42,10 @@ public class Media {
     @TableField("text_id")
     private Long textId;
 
-    @TableField("description")
     private String description;
 
-    @TableField("status")
     private String status;
 
-    @TableField("deleted")
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)

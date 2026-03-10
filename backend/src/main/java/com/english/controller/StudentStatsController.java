@@ -21,7 +21,7 @@ import java.util.Map;
 @RequestMapping("/api/student/stats")
 public class StudentStatsController {
 
-    private static final Logger log = LoggerFactory.getLogger(StudentStatsController.class);
+    private static final Logger logger = LoggerFactory.getLogger(StudentStatsController.class);
 
     @Autowired
     private LearningRecordsService learningRecordsService;
@@ -50,7 +50,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取今日统计失败", e);
+            logger.error("获取今日统计失败", e);
             return Result.error("获取今日统计失败，请稍后重试");
         }
     }
@@ -80,7 +80,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取学习统计失败", e);
+            logger.error("获取学习统计失败", e);
             return Result.error("获取学习统计失败，请稍后重试");
         }
     }
@@ -121,7 +121,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取学习记录失败", e);
+            logger.error("获取学习记录失败", e);
             return Result.error("获取学习记录失败，请稍后重试");
         }
     }
@@ -146,7 +146,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取单词统计失败", e);
+            logger.error("获取单词统计失败", e);
             return Result.error("获取单词统计失败，请稍后重试");
         }
     }
@@ -177,7 +177,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取课程统计失败", e);
+            logger.error("获取课程统计失败", e);
             return Result.error("获取课程统计失败，请稍后重试");
         }
     }
@@ -205,7 +205,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取学习时长统计失败", e);
+            logger.error("获取学习时长统计失败", e);
             return Result.error("获取学习时长统计失败，请稍后重试");
         }
     }
@@ -228,7 +228,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("生成进度报告失败", e);
+            logger.error("生成进度报告失败", e);
             return Result.error("生成进度报告失败，请稍后重试");
         }
     }
@@ -248,7 +248,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取成就统计失败", e);
+            logger.error("获取成就统计失败", e);
             return Result.error("获取成就统计失败，请稍后重试");
         }
     }
@@ -272,7 +272,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("获取学习排名失败", e);
+            logger.error("获取学习排名失败", e);
             return Result.error("获取学习排名失败，请稍后重试");
         }
     }
@@ -302,7 +302,7 @@ public class StudentStatsController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("导出学习数据失败", e);
+            logger.error("导出学习数据失败", e);
             return Result.error("导出学习数据失败，请稍后重试");
         }
     }

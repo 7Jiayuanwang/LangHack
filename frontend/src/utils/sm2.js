@@ -9,11 +9,27 @@
  * @returns {Object} New state { repetition, interval, easinessFactor, nextReviewTime }
  */
 export function calculateSM2(quality, previousState = {}) {
+    // 输入验证: quality 必须在 0-5 范围内
+    if (typeof quality !== 'number' || quality < 0 || quality > 5 || !Number.isFinite(quality)) {
+        throw new Error('Quality must be a finite number between 0 and 5')
+    }
+
     let {
         repetition = 0,
         interval = 0,
         easinessFactor = 2.5
     } = previousState;
+
+    // 验证 previousState 数值有效性
+    if (typeof repetition !== 'number' || repetition < 0 || !Number.isFinite(repetition)) {
+        repetition = 0
+    }
+    if (typeof interval !== 'number' || interval < 0 || !Number.isFinite(interval)) {
+        interval = 0
+    }
+    if (typeof easinessFactor !== 'number' || easinessFactor < 1.3 || easinessFactor > 5.0 || !Number.isFinite(easinessFactor)) {
+        easinessFactor = 2.5
+    }
 
     // 1. Update Easiness Factor (EF)
     // EF = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))

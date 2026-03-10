@@ -327,12 +327,18 @@ const startSync = () => {
 const pauseSync = () => {
   syncPaused.value = true
   syncPauseAt = syncElapsed.value
-  clearInterval(syncInterval)
+  if (syncInterval) {
+    clearInterval(syncInterval)
+    syncInterval = null
+  }
 }
 
 const resumeSync = () => {
   syncPaused.value = false
-  clearInterval(syncInterval)
+  if (syncInterval) {
+    clearInterval(syncInterval)
+    syncInterval = null
+  }
   const resumeAt = Date.now() - syncPauseAt * 1000
   syncInterval = setInterval(() => {
     syncElapsed.value = (Date.now() - resumeAt) / 1000
@@ -344,7 +350,10 @@ const stopSync = () => {
   syncActive.value  = false
   syncPaused.value  = false
   syncElapsed.value = 0
-  clearInterval(syncInterval)
+  if (syncInterval) {
+    clearInterval(syncInterval)
+    syncInterval = null
+  }
   currentSubtitleSource.value = ''
   currentSubtitleTarget.value = ''
 }
@@ -424,7 +433,12 @@ const startTabCapture = async () => {
     if (!audioTracks.length) { ElMessage.warning('未捕获到音频，请在弹窗中勾选"分享标签页音频"'); return }
     captureStream = new MediaStream(audioTracks)
     captureActive.value = true
-    audioTracks[0].addEventListener('ended', stopTabCapture)
+    const endHandler = () => stopTabCapture()
+    audioTracks[0].addEventListener('ended', endHandler)
+    // 保存事件处理器以便清理
+    if (!captureStream._endHandler) {
+      captureStream._endHandler = endHandler
+    }
     runRecordingCycle()
   } catch (e) {
     if (e.name !== 'NotAllowedError') {
@@ -438,7 +452,9 @@ const stopTabCapture = () => {
   captureActive.value = false
   if (captureRecorder?.state === 'recording') captureRecorder.stop()
   captureStream?.getTracks().forEach(t => {
-    t.removeEventListener('ended', stopTabCapture)
+    if (captureStream._endHandler) {
+      t.removeEventListener('ended', captureStream._endHandler)
+    }
     t.stop()
   })
   captureStream = null
@@ -500,6 +516,10 @@ const loadVideo = () => {
 onUnmounted(() => {
   stopTabCapture()
   stopSync()
+  if (syncInterval) {
+    clearInterval(syncInterval)
+    syncInterval = null
+  }
 })
 </script>
 

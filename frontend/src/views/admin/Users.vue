@@ -19,6 +19,7 @@
               <el-option label="管理员" value="ADMIN" />
               <el-option label="教师" value="TEACHER" />
               <el-option label="学生" value="STUDENT" />
+              <el-option label="普通用户" value="USER" />
             </el-select>
           </el-form-item>
           <el-form-item label="关键词">
@@ -101,6 +102,7 @@
       v-model="dialogVisible"
       :title="isEdit ? '编辑用户' : '添加用户'"
       width="min(500px, 90%)"
+      @close="resetUserForm"
     >
       <el-form
         ref="userFormRef"
@@ -128,6 +130,7 @@
             <el-option label="管理员" value="ADMIN" />
             <el-option label="教师" value="TEACHER" />
             <el-option label="学生" value="STUDENT" />
+            <el-option label="普通用户" value="USER" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -283,8 +286,20 @@ const userRules = {
     { min: 3, max: 20, message: '用户名长度在 3 到 20 个字符', trigger: 'blur' }
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码长度不能少于 6 个字符', trigger: 'blur' }
+    {
+      required: true,
+      message: '请输入密码',
+      trigger: 'blur',
+      validator: (rule, value, callback) => {
+        if (!isEdit.value && !value) {
+          callback(new Error('请输入密码'))
+        } else if (value && value.length < 6) {
+          callback(new Error('密码长度不能少于 6 个字符'))
+        } else {
+          callback()
+        }
+      }
+    }
   ],
   realName: [
     { required: true, message: '请输入真实姓名', trigger: 'blur' }
@@ -407,7 +422,8 @@ const getRoleType = (role) => {
   const types = {
     'ADMIN': 'danger',
     'TEACHER': 'warning',
-    'STUDENT': 'success'
+    'STUDENT': 'success',
+    'USER': 'info'
   }
   return types[role] || ''
 }
@@ -416,7 +432,8 @@ const getRoleText = (role) => {
   const texts = {
     'ADMIN': '管理员',
     'TEACHER': '教师',
-    'STUDENT': '学生'
+    'STUDENT': '学生',
+    'USER': '普通用户'
   }
   return texts[role] || role
 }
