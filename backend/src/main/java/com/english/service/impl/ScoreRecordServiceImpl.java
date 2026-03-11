@@ -14,6 +14,7 @@ import com.english.entity.User;
 import com.english.mapper.UserMapper;
 import com.english.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.apache.poi.ss.usermodel.*;
@@ -32,6 +33,7 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
     private static final Logger logger = LoggerFactory.getLogger(ScoreRecordServiceImpl.class);
 
     @Autowired
+    @Lazy
     private AssignmentService assignmentService;
     
     @Autowired

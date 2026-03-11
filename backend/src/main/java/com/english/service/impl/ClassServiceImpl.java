@@ -14,6 +14,7 @@ import com.english.service.ClassService;
 import com.english.service.CourseService;
 import com.english.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     private static final Logger logger = LoggerFactory.getLogger(ClassServiceImpl.class);
 
     @Autowired
+    @Lazy
     private CourseService courseService;
 
     @Autowired

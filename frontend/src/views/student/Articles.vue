@@ -75,9 +75,9 @@
             <!-- Image Header -->
             <div class="article-cover">
               <div class="cover-gradient"></div>
-              <div 
-                class="cover-image" 
-                :style="{ backgroundImage: `url(${article.coverUrl})` }"
+              <div
+                class="cover-image"
+                :style="{ background: article.coverGradient }"
               ></div>
               <div class="category-badge">
                 <el-icon :size="14"><component :is="getCategoryIcon(article.category)" /></el-icon>
@@ -139,32 +139,22 @@ const categories = [
   { label: '文化', value: 'culture', icon: 'Compass' }
 ]
 
-// High-quality placeholder images for different categories
-const categoryImages = {
-  technology: [
-    'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800'
-  ],
-  business: [
-    'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1664575602554-2087b04935a5?auto=format&fit=crop&q=80&w=800'
-  ],
-  education: [
-    'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&q=80&w=800'
-  ],
-  lifestyle: [
-    'https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1499750310107-5fef28a66643?auto=format&fit=crop&q=80&w=800'
-  ],
-  culture: [
-    'https://images.unsplash.com/photo-1518998053401-878c735d454c?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1528181304800-259b08848526?auto=format&fit=crop&q=80&w=800'
-  ],
-  default: [
-    'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f5?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&q=80&w=800'
-  ]
+// Cover gradient palettes (no external images)
+const coverGradients = [
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
+  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
+  'linear-gradient(135deg, #f5576c 0%, #ff9a9e 100%)',
+  'linear-gradient(135deg, #13547a 0%, #80d0c7 100%)'
+]
+
+const getRandomGradient = () => {
+  return coverGradients[Math.floor(Math.random() * coverGradients.length)]
 }
 
 const selectCategory = (val) => {
@@ -176,11 +166,6 @@ const toggleSearch = () => {
   ElMessage.info('搜索功能即将上线')
 }
 
-const getRandomImage = (category) => {
-  const imgs = categoryImages[category] || categoryImages.default
-  return imgs[Math.floor(Math.random() * imgs.length)]
-}
-
 const getRandomCategory = () => {
   const cats = categories.filter(c => c.value !== '')
   return cats[Math.floor(Math.random() * cats.length)].value
@@ -190,11 +175,8 @@ const loadArticles = async () => {
   loading.value = true
   try {
     const params = { count: 10 }
-    // Note: since our backend /random endpoint doesn't support category filtering directly,
-    // we fetch random ones and assign categories on the frontend for demo purposes.
-    // In a real scenario, you'd pass the category filter to the API.
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/random?${new URLSearchParams(params)}`)
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`)
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -216,18 +198,15 @@ const loadArticles = async () => {
         return {
           ...text,
           category: cat,
-          coverUrl: getRandomImage(cat),
+          coverGradient: getRandomGradient(),
           readingTime: Math.max(1, Math.ceil(contentLength / 800))
         }
       })
 
-      // Client-side filter simulation if a category is selected
       if (selectedCategory.value) {
-        // Force them all to have the selected category so it looks like it worked
         fetched = fetched.map(item => ({
           ...item,
-          category: selectedCategory.value,
-          coverUrl: getRandomImage(selectedCategory.value)
+          category: selectedCategory.value
         }))
       }
 
@@ -248,6 +227,8 @@ const readArticle = (article) => {
     ElMessage.error('文章ID不存在')
     return
   }
+  // Fire-and-forget: 标记文章为已读
+  fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST' }).catch(() => {})
   router.push({
     path: '/student/text-learning',
     query: {

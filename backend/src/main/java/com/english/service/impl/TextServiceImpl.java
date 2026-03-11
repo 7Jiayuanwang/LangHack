@@ -117,7 +117,7 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (text.getTitle() != null) {
             updateWrapper.set("title", text.getTitle());
         }
-        updateWrapper.set("updated_at", LocalDateTime.now());
+        updateWrapper.set("updated_time", LocalDateTime.now());
 
         // 如果有其他字段也需要更新
         if (text.getContent() != null) {
@@ -143,6 +143,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         }
         if (text.getOrderNum() != null) {
             updateWrapper.set("order_num", text.getOrderNum());
+        }
+        if (text.getIsFeatured() != null) {
+            updateWrapper.set("is_featured", text.getIsFeatured());
         }
 
         update(updateWrapper);

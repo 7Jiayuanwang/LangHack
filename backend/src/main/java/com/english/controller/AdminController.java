@@ -652,6 +652,39 @@ public class AdminController {
     // ========== 课文管理相关 ==========
 
     /**
+     * 获取课文统计数据
+     */
+    @GetMapping("/texts/stats")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> getTextStats() {
+        try {
+            Map<String, Object> stats = new HashMap<>();
+
+            long totalTexts = textService.lambdaQuery()
+                    .eq(Text::getDeleted, 0).count();
+            long totalEasy = textService.lambdaQuery()
+                    .eq(Text::getDeleted, 0).eq(Text::getDifficulty, "EASY").count();
+            long totalMedium = textService.lambdaQuery()
+                    .eq(Text::getDeleted, 0).eq(Text::getDifficulty, "MEDIUM").count();
+            long totalHard = textService.lambdaQuery()
+                    .eq(Text::getDeleted, 0).eq(Text::getDifficulty, "HARD").count();
+            long totalFeatured = textService.lambdaQuery()
+                    .eq(Text::getDeleted, 0).eq(Text::getIsFeatured, 1).count();
+
+            stats.put("totalTexts", totalTexts);
+            stats.put("totalEasy", totalEasy);
+            stats.put("totalMedium", totalMedium);
+            stats.put("totalHard", totalHard);
+            stats.put("totalFeatured", totalFeatured);
+
+            return Result.success(stats);
+        } catch (Exception e) {
+            logger.error("获取课文统计失败", e);
+            return Result.error("获取统计数据失败");
+        }
+    }
+
+    /**
      * 获取课文列表
      */
     @GetMapping("/texts")
@@ -906,6 +939,27 @@ public class AdminController {
             logger.error("更新课文失败", e);
 
             return Result.error("更新课文失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 切换课文推荐状态
+     */
+    @PutMapping("/texts/{id}/featured")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> toggleFeatured(@PathVariable Long id) {
+        try {
+            Text text = textService.getTextById(id);
+            if (text == null) {
+                return Result.error("课文不存在");
+            }
+            int newValue = (text.getIsFeatured() != null && text.getIsFeatured() == 1) ? 0 : 1;
+            text.setIsFeatured(newValue);
+            textService.updateText(text);
+            return Result.success(newValue == 1 ? "已设为推荐" : "已取消推荐");
+        } catch (Exception e) {
+            logger.error("切换推荐状态失败", e);
+            return Result.error("操作失败，请稍后重试");
         }
     }
 

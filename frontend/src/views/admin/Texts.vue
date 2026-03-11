@@ -61,6 +61,10 @@
         <div class="stat-label">困难课文</div>
       </div>
       <div class="stat-card">
+        <div class="stat-value">{{ stats.totalFeatured || 0 }}</div>
+        <div class="stat-label">推荐课文</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-value">{{ stats.totalTexts || 0 }}</div>
         <div class="stat-label">总课文数</div>
       </div>
@@ -89,6 +93,15 @@
             <el-tag :type="getDifficultyType(row.difficulty)">
               {{ getDifficultyText(row.difficulty) }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="isFeatured" label="推荐" width="80" align="center">
+          <template #default="{ row }">
+            <el-switch
+              :model-value="row.isFeatured === 1"
+              @change="toggleFeatured(row)"
+              :loading="row._featuredLoading"
+            />
           </template>
         </el-table-column>
         <el-table-column prop="audioUrl" label="音频" width="120">
@@ -251,27 +264,13 @@ const loadUnits = async (courseId) => {
 
 const loadStats = async () => {
   try {
-    // 使用后端统计API获取数据，避免拉取全量课文
-    const response = await adminApi.getTexts({ page: 1, size: 1 })
-
+    const response = await adminApi.getTextStats()
     if (response.code === 200) {
-      const totalTexts = response.data?.total || 0
-      // 后端暂无按难度统计的API，先显示总数
-      stats.value = {
-        totalEasy: 0,
-        totalMedium: 0,
-        totalHard: 0,
-        totalTexts: totalTexts
-      }
+      stats.value = response.data || {}
     }
   } catch (error) {
     console.error('加载统计信息失败:', error)
-    stats.value = {
-      totalEasy: 0,
-      totalMedium: 0,
-      totalHard: 0,
-      totalTexts: 0
-    }
+    stats.value = {}
   }
 }
 
@@ -324,6 +323,24 @@ const handleSizeChange = (size) => {
 const handleCurrentChange = (page) => {
   pagination.current = page
   loadTexts()
+}
+
+const toggleFeatured = async (row) => {
+  row._featuredLoading = true
+  try {
+    const response = await adminApi.toggleTextFeatured(row.id)
+    if (response.code === 200) {
+      row.isFeatured = row.isFeatured === 1 ? 0 : 1
+      ElMessage.success(response.data || '操作成功')
+      loadStats()
+    } else {
+      ElMessage.error(response.message || '操作失败')
+    }
+  } catch (error) {
+    ElMessage.error('操作失败')
+  } finally {
+    row._featuredLoading = false
+  }
 }
 
 const showAddDialog = () => {

@@ -71,6 +71,9 @@ public class Text {
     @TableField("content_type")
     private String contentType; // TEXT, MARKDOWN
 
+    @TableField("is_featured")
+    private Integer isFeatured;
+
     @TableField("deleted")
     @TableLogic(value = "0", delval = "1")
     private Integer deleted;
@@ -294,5 +297,13 @@ public class Text {
 
     public void setContentType(String contentType) {
         this.contentType = contentType;
+    }
+
+    public Integer getIsFeatured() {
+        return isFeatured;
+    }
+
+    public void setIsFeatured(Integer isFeatured) {
+        this.isFeatured = isFeatured;
     }
 }

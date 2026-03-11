@@ -3,18 +3,26 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.dto.TextVersionsDTO;
 import com.english.entity.Text;
+import com.english.entity.UserTextRead;
+import com.english.entity.User;
+import com.english.mapper.UserTextReadMapper;
 import com.english.service.ArticleVersionService;
 import com.english.service.TextService;
+import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Collections;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 /**
  * 公开课文控制器
@@ -31,6 +39,116 @@ public class PublicTextController {
 
     @Autowired
     private ArticleVersionService articleVersionService;
+
+    @Autowired
+    private UserTextReadMapper userTextReadMapper;
+
+    @Autowired
+    private UserService userService;
+
+    /**
+     * 获取首页推荐文章
+     * 已登录用户：排除已读文章，未读不足6篇时重置已读记录
+     * 未登录用户：随机展示所有推荐文章
+     */
+    @GetMapping("/featured")
+    public Result<List<Text>> getFeaturedTexts(
+            @RequestParam(defaultValue = "12") int count,
+            @RequestParam(required = false) String difficulty) {
+        try {
+            count = Math.min(Math.max(count, 1), 50);
+
+            List<Text> featuredTexts = textService.lambdaQuery()
+                    .eq(Text::getDeleted, 0)
+                    .eq(Text::getIsFeatured, 1)
+                    .orderByDesc(Text::getCreatedAt)
+                    .list();
+
+            if (difficulty != null && !difficulty.trim().isEmpty()) {
+                featuredTexts = featuredTexts.stream()
+                        .filter(text -> difficulty.equals(text.getDifficulty()))
+                        .collect(Collectors.toList());
+            }
+
+            Long userId = getCurrentUserId();
+
+            if (userId != null) {
+                List<Long> readTextIds = userTextReadMapper.selectReadTextIds(userId);
+
+                List<Text> unreadTexts = featuredTexts.stream()
+                        .filter(t -> !readTextIds.contains(t.getId()))
+                        .collect(Collectors.toList());
+
+                if (unreadTexts.size() < 6 && !featuredTexts.isEmpty()) {
+                    userTextReadMapper.deleteByUserId(userId);
+                    unreadTexts = new ArrayList<>(featuredTexts);
+                }
+
+                featuredTexts = unreadTexts;
+            }
+
+            List<Text> result;
+            if (featuredTexts.size() <= count) {
+                result = new ArrayList<>(featuredTexts);
+                Collections.shuffle(result);
+            } else {
+                List<Text> shuffled = new ArrayList<>(featuredTexts);
+                Collections.shuffle(shuffled);
+                result = shuffled.subList(0, count);
+            }
+
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("获取推荐文章失败", e);
+            return Result.error("获取推荐文章失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 标记文章为已读
+     */
+    @PostMapping("/{textId}/read")
+    public Result<Void> markTextAsRead(@PathVariable Long textId) {
+        try {
+            Long userId = getCurrentUserId();
+            if (userId == null) {
+                return Result.success(null);
+            }
+
+            UserTextRead existing = userTextReadMapper.selectOne(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<UserTextRead>()
+                            .eq(UserTextRead::getUserId, userId)
+                            .eq(UserTextRead::getTextId, textId));
+            if (existing == null) {
+                UserTextRead record = new UserTextRead();
+                record.setUserId(userId);
+                record.setTextId(textId);
+                record.setReadAt(LocalDateTime.now());
+                userTextReadMapper.insert(record);
+            }
+
+            return Result.success(null);
+        } catch (Exception e) {
+            log.error("标记已读失败, textId={}", textId, e);
+            return Result.error("标记已读失败");
+        }
+    }
+
+    /**
+     * 尝试从 SecurityContext 获取当前登录用户ID
+     */
+    private Long getCurrentUserId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
+                return null;
+            }
+            User user = userService.getUserByUsername(auth.getName());
+            return user != null ? user.getId() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     /**
      * 获取随机课文列表

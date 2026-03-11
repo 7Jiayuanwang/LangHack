@@ -121,6 +121,13 @@ export function getTexts(params) {
   })
 }
 
+export function getTextStats() {
+  return request({
+    url: '/api/admin/texts/stats',
+    method: 'get'
+  })
+}
+
 export function createText(data) {
   return request({
     url: '/api/admin/texts',
@@ -141,6 +148,13 @@ export function deleteText(id) {
   return request({
     url: `/api/admin/texts/${id}`,
     method: 'delete'
+  })
+}
+
+export function toggleTextFeatured(id) {
+  return request({
+    url: `/api/admin/texts/${id}/featured`,
+    method: 'put'
   })
 }
 

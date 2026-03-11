@@ -4,8 +4,13 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CachingConfigurerSupport;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -21,7 +26,34 @@ import java.util.Map;
 
 @Configuration
 @EnableCaching
-public class CacheConfig {
+public class CacheConfig extends CachingConfigurerSupport {
+
+    private static final Logger log = LoggerFactory.getLogger(CacheConfig.class);
+
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new CacheErrorHandler() {
+            @Override
+            public void handleCacheGetError(RuntimeException e, Cache cache, Object key) {
+                log.warn("Redis缓存读取失败, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
+            }
+
+            @Override
+            public void handleCachePutError(RuntimeException e, Cache cache, Object key, Object value) {
+                log.warn("Redis缓存写入失败, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
+            }
+
+            @Override
+            public void handleCacheEvictError(RuntimeException e, Cache cache, Object key) {
+                log.warn("Redis缓存清除失败, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
+            }
+
+            @Override
+            public void handleCacheClearError(RuntimeException e, Cache cache) {
+                log.warn("Redis缓存清空失败, cache={}: {}", cache.getName(), e.getMessage());
+            }
+        };
+    }
 
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory factory) {
