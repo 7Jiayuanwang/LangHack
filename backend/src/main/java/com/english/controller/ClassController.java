@@ -76,9 +76,10 @@ public class ClassController {
 
             Map<String, Object> result = classService.getClassesByPage(params);
             return Result.success(result);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("操作失败", e);
-
             return Result.error("操作失败，请稍后重试");
         }
     }
@@ -90,6 +91,9 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'USER', 'STUDENT')")
     public Result<Class> getClassById(@PathVariable Long id, Authentication authentication) {
         try {
+            if (authentication == null || authentication.getName() == null) {
+                return Result.error("用户未认证");
+            }
             User currentUser = userService.getUserByUsername(authentication.getName());
             if (currentUser == null) {
                 return Result.error("用户不存在");
@@ -300,7 +304,7 @@ public class ClassController {
      */
     @GetMapping("/search")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
-    public Result<List<Class>> searchClasses(@RequestParam String keyword) {
+    public Result<List<Class>> searchClasses(@RequestParam String keyword, Authentication authentication) {
         try {
             // 验证关键词长度
             if (keyword == null || keyword.trim().isEmpty()) {
@@ -310,7 +314,19 @@ public class ClassController {
                 keyword = keyword.substring(0, 100);
             }
 
-            List<Class> classes = classService.searchClasses(keyword);
+            // FIX: 添加权限过滤 - 学生只能搜索自己所在的班级
+            String userRole = getCurrentRole(authentication);
+            List<Class> classes;
+            
+            // 学生和普通用户只能搜索自己所在的班级
+            if (!"ROLE_ADMIN".equals(userRole) && !"ROLE_TEACHER".equals(userRole)) {
+                Long studentId = getCurrentUserId(authentication);
+                classes = classService.searchClassesForStudent(studentId, keyword);
+            } else {
+                // 管理员和教师可以搜索所有班级
+                classes = classService.searchClasses(keyword);
+            }
+            
             return Result.success(classes);
         } catch (Exception e) {
             logger.error("操作失败", e);
@@ -326,6 +342,9 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<String> joinClass(@RequestBody Map<String, Long> params, Authentication authentication) {
         try {
+            if (params == null) {
+                return Result.error("请求参数不能为空");
+            }
             Long studentId = getCurrentUserId(authentication);
             Long classId = params.get("classId");
             if (classId == null) {
@@ -334,11 +353,9 @@ public class ClassController {
             studentClassService.joinClass(studentId, classId);
             return Result.success("成功加入班级");
         } catch (BusinessException e) {
-            logger.error("操作失败", e);
             return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("操作失败", e);
-
             return Result.error("操作失败，请稍后重试");
         }
     }
@@ -350,6 +367,9 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<String> leaveClass(@RequestBody Map<String, Long> params, Authentication authentication) {
         try {
+            if (params == null) {
+                return Result.error("请求参数不能为空");
+            }
             Long studentId = getCurrentUserId(authentication);
             Long classId = params.get("classId");
             if (classId == null) {
@@ -358,11 +378,9 @@ public class ClassController {
             studentClassService.leaveClass(studentId, classId);
             return Result.success("成功退出班级");
         } catch (BusinessException e) {
-            logger.error("操作失败", e);
             return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("操作失败", e);
-
             return Result.error("操作失败，请稍后重试");
         }
     }
@@ -398,6 +416,9 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> addStudentToClass(@PathVariable Long classId, @RequestBody Map<String, Long> params, Authentication authentication) {
         try {
+            if (params == null) {
+                return Result.error("请求参数不能为空");
+            }
             Long studentId = params.get("studentId");
             if (studentId == null) {
                 return Result.error("学生ID不能为空");
@@ -409,7 +430,7 @@ public class ClassController {
                 if (!classService.validateTeacherPermission(teacherId, classId)) {
                     return Result.error("没有权限管理此班级");
                 }
-                studentClassService.addStudentToClass(teacherId, classId, studentId);
+                studentClassService.joinClass(studentId, classId);
             } else {
                 // 管理员直接添加学生
                 studentClassService.joinClass(studentId, classId);
@@ -437,7 +458,7 @@ public class ClassController {
                 if (!classService.validateTeacherPermission(teacherId, classId)) {
                     return Result.error("没有权限管理此班级");
                 }
-                studentClassService.removeStudentFromClass(teacherId, classId, studentId);
+                studentClassService.leaveClass(studentId, classId);
             } else {
                 // 管理员直接移除学生
                 studentClassService.leaveClass(studentId, classId);
@@ -459,6 +480,9 @@ public class ClassController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> batchAddStudentsToClass(@PathVariable Long classId, @RequestBody Map<String, List<Long>> params, Authentication authentication) {
         try {
+            if (params == null) {
+                return Result.error("请求参数不能为空");
+            }
             Long teacherId = getCurrentUserId(authentication);
             List<Long> studentIds = params.get("studentIds");
             if (studentIds == null || studentIds.isEmpty()) {

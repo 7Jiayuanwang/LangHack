@@ -311,6 +311,8 @@ import { ref, reactive, onMounted, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+import request from '@/utils/request'
+
 const router = useRouter()
 
 const loading = ref(false)
@@ -362,16 +364,40 @@ const isIndeterminate = computed(() => {
 
 // 加载生词本列表（模拟数据，普通用户端没有真实数据）
 const loadVocabulary = async () => {
+  currentPage.value = 1
   loading.value = true
   try {
-    // 普通用户端使用模拟数据
-    const mockData = {
-      records: [],
-      total: 0
+    // 调用真实 API
+    const params = {
+      page: currentPage.value,
+      size: pageSize.value
+    }
+    
+    if (searchWord.value) {
+      params.searchWord = searchWord.value
+    }
+    if (filterForm.masteryLevel) {
+      params.masteryLevel = filterForm.masteryLevel
+    }
+    if (filterForm.difficulty) {
+      params.difficulty = filterForm.difficulty
+    }
+    if (filterForm.sortBy) {
+      params.sortBy = filterForm.sortBy
     }
 
-    vocabulary.value = mockData.records || []
-    total.value = mockData.total || 0
+    const response = await request({
+      url: '/api/student/vocabulary',
+      method: 'get',
+      params
+    })
+
+    if (response?.code === 200) {
+      vocabulary.value = response?.data?.records || []
+      total.value = response?.data?.total || 0
+    } else {
+      ElMessage.error(response?.message || '加载生词本失败')
+    }
 
     // 更新统计信息
     updateStats()
@@ -533,6 +559,7 @@ const startWordTest = () => {
 }
 
 let currentAudio = null
+let audioAbortController = null
 
 // 播放音频
 const playAudio = (word) => {
@@ -549,12 +576,23 @@ const playAudio = (word) => {
   }
 
   try {
+    // 中止之前的 abort controller
+    if (audioAbortController) {
+      audioAbortController.abort()
+    }
+    audioAbortController = new AbortController()
+
     currentAudio = new Audio(word.audioUrl)
-    currentAudio.play().catch(error => {
-      console.error('播放音频失败:', error)
-      ElMessage.error('播放音频失败')
-      currentAudio = null
-    })
+    const playPromise = currentAudio.play()
+    if (playPromise !== undefined) {
+      playPromise.catch(error => {
+        if (error.name !== 'AbortError') {
+          console.error('播放音频失败:', error)
+          ElMessage.error('播放音频失败')
+        }
+        currentAudio = null
+      })
+    }
   } catch (error) {
     console.error('创建音频播放器失败:', error)
     ElMessage.error('播放音频失败')
@@ -625,8 +663,14 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  // 中止音频加载
+  if (audioAbortController) {
+    audioAbortController.abort()
+  }
+  // 停止音频播放
   if (currentAudio) {
     currentAudio.pause()
+    currentAudio.currentTime = 0
     currentAudio.src = ''
     currentAudio = null
   }

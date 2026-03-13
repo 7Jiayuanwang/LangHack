@@ -305,18 +305,24 @@ const loadDashboard = async () => {
         params: { count: 1 }
       })
 
-      if (response.code === 200 && Array.isArray(response.data) && response.data.length > 0) {
-        const randomText = response.data[0]
-        dashboardData.learningRecommendation = {
-          type: 'text',
-          title: randomText?.title || '未知课文',
-          content: (randomText?.content || '').substring(0, 100) + '...',
-          id: randomText?.id,
-          unitId: randomText?.unitId
+      if (response?.code === 200 && response.data) {
+        const dataList = Array.isArray(response.data) 
+          ? response.data 
+          : (Array.isArray(response.data?.records) ? response.data.records : [])
+        
+        if (dataList.length > 0 && dataList[0]) {
+          const randomText = dataList[0]
+          dashboardData.learningRecommendation = {
+            type: 'text',
+            title: randomText?.title || '未知课文',
+            content: (randomText?.content || '').substring(0, 100) + '...',
+            id: randomText?.id,
+            unitId: randomText?.unitId
+          }
         }
       }
     } catch (error) {
-      // ignore, use defaults
+      console.error('加载推荐内容失败:', error)
     }
 
   } catch (error) {

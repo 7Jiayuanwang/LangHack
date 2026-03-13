@@ -201,6 +201,7 @@ public class StudentAssignmentController {
 
             return Result.success("任务提交成功");
         } catch (com.english.exception.BusinessException e) {
+            logger.error("提交任务失败: {}", e.getMessage());
             return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("提交任务失败", e);
@@ -276,20 +277,6 @@ public class StudentAssignmentController {
         }
     }
 
-    /**
-     * 检查学生是否可以访问任务
-     */
-    private boolean canAccessAssignment(Long studentId, Long assignmentId) {
-        try {
-            // 获取学生加入的班级ID列表
-            java.util.List<Long> studentClassIds = studentClassesService.getClassIdsByStudentId(studentId);
-
-            // 检查任务是否属于学生加入的班级
-            return assignmentsService.isAssignmentInClasses(assignmentId, studentClassIds);
-        } catch (Exception e) {
-            return false;
-        }
-    }
 
     /**
      * 获取当前学生ID
@@ -301,5 +288,32 @@ public class StudentAssignmentController {
             throw new com.english.exception.BusinessException("用户不存在");
         }
         return user.getId();
+    }
+
+    /**
+     * 检查学生是否可以访问任务
+     * IDOR防护: 验证任务是否属于学生所在的班级
+     */
+    private boolean canAccessAssignment(Long studentId, Long assignmentId) {
+        try {
+            // 验证参数
+            if (studentId == null || studentId <= 0 || assignmentId == null || assignmentId <= 0) {
+                return false;
+            }
+
+            // 获取学生加入的班级ID列表
+            java.util.List<Long> studentClassIds = studentClassesService.getClassIdsByStudentId(studentId);
+
+            // 检查任务是否属于学生加入的班级
+            return assignmentsService.isAssignmentInClasses(assignmentId, studentClassIds);
+        } catch (com.english.exception.BusinessException e) {
+            // 业务异常：用户不存在、班级不存在等，安全地拒绝访问
+            logger.debug("权限检查业务异常: {}", e.getMessage());
+            return false;
+        } catch (Exception e) {
+            // 系统异常：数据库错误等，记录日志并拒绝访问
+            logger.error("权限检查异常，assignmentId={}, studentId={}", assignmentId, studentId, e);
+            return false;
+        }
     }
 }

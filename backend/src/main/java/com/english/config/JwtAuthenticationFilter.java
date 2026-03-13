@@ -54,7 +54,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 String role = jwtUtil.getRoleFromToken(jwtToken);
 
-                if (role != null && !role.trim().isEmpty() && VALID_ROLES.contains(role) && jwtUtil.validateToken(jwtToken, username)) {
+                if (role == null || role.trim().isEmpty()) {
+                    logger.warn("JWT token missing or invalid role claim for user: {}", username);
+                } else if (!VALID_ROLES.contains(role)) {
+                    logger.warn("JWT token contains invalid role [{}] for user: {}", role, username);
+                } else if (!jwtUtil.validateToken(jwtToken, username)) {
+                    logger.warn("JWT token validation failed for user: {}", username);
+                } else {
                     UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
                             username,
@@ -63,8 +69,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         );
                     authToken.setDetails(username); // 保存用户名用于后续审计
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                } else {
-                    logger.warn("Invalid JWT role: {}", role);
                 }
             } catch (Exception e) {
                 logger.warn("JWT Token validation failed: {}", e.getMessage());

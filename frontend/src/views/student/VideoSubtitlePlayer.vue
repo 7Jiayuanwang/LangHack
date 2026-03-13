@@ -420,6 +420,7 @@ const clearTranslate = () => { translateInput.value = ''; translateResult.value 
 const captureActive = ref(false)
 let captureStream   = null
 let captureRecorder = null
+let captureEventHandlers = new Map()  // FIX: 规范追踪事件处理器
 
 const startTabCapture = async () => {
   if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -436,9 +437,8 @@ const startTabCapture = async () => {
     const endHandler = () => stopTabCapture()
     audioTracks[0].addEventListener('ended', endHandler)
     // 保存事件处理器以便清理
-    if (!captureStream._endHandler) {
-      captureStream._endHandler = endHandler
-    }
+    // FIX: 规范地用 Map 追踪事件处理器，避免污染对象属性
+    captureEventHandlers.set('endHandler', { track: audioTracks[0], handler: endHandler })
     runRecordingCycle()
   } catch (e) {
     if (e.name !== 'NotAllowedError') {
@@ -451,12 +451,13 @@ const startTabCapture = async () => {
 const stopTabCapture = () => {
   captureActive.value = false
   if (captureRecorder?.state === 'recording') captureRecorder.stop()
-  captureStream?.getTracks().forEach(t => {
-    if (captureStream._endHandler) {
-      t.removeEventListener('ended', captureStream._endHandler)
-    }
-    t.stop()
-  })
+  // 使用 captureEventHandlers Map 正确移除事件监听器
+  const endEntry = captureEventHandlers.get('endHandler')
+  if (endEntry) {
+    endEntry.track.removeEventListener('ended', endEntry.handler)
+    captureEventHandlers.delete('endHandler')
+  }
+  captureStream?.getTracks().forEach(t => t.stop())
   captureStream = null
   captureRecorder = null
   currentSubtitleSource.value = ''
@@ -514,11 +515,40 @@ const loadVideo = () => {
 }
 
 onUnmounted(() => {
+  // FIX: 完整的资源清理
   stopTabCapture()
   stopSync()
+  // 清理定时器
   if (syncInterval) {
     clearInterval(syncInterval)
     syncInterval = null
+  }
+  // 清理所有事件监听器
+  captureEventHandlers.forEach(({ track, handler }) => {
+    try {
+      track.removeEventListener('ended', handler)
+    } catch (e) {
+      console.error('Cleanup event listener error:', e)
+    }
+  })
+  captureEventHandlers.clear()
+  // 确保所有媒体流关闭
+  if (captureStream) {
+    captureStream.getTracks().forEach(t => {
+      try {
+        t.stop()
+      } catch (e) {
+        console.error('Cleanup track error:', e)
+      }
+    })
+    captureStream = null
+  }
+  // 确保所有录制器停止
+  if (captureRecorder) {
+    if (captureRecorder.state === 'recording') {
+      captureRecorder.stop()
+    }
+    captureRecorder = null
   }
 })
 </script>

@@ -81,6 +81,13 @@ export function getCourses(params) {
   })
 }
 
+export function getCourseById(id) {
+  return request({
+    url: `/api/courses/${id}`,
+    method: 'get'
+  })
+}
+
 export function createCourse(data) {
   return request({
     url: '/api/courses',

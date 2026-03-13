@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -24,7 +25,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/user/texts")
-@PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+@PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
 public class UserTextController {
 
     private static final Logger log = LoggerFactory.getLogger(UserTextController.class);
@@ -39,6 +40,7 @@ public class UserTextController {
      * 用户上传课文
      */
     @PostMapping("/upload")
+    @Transactional
     public Result<Map<String, Object>> uploadText(@RequestBody Map<String, Object> textData) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -140,11 +142,8 @@ public class UserTextController {
                 return Result.error("没有权限查看此课文");
             }
 
-            // 原子递增查看次数
+            // 原子递增查看次数（SQL UPDATE 已保证一致性）
             textService.incrementViewCount(textId);
-
-            // 刷新获取最新的查看次数
-            text = textService.getTextById(textId);
 
             return Result.success(text);
         } catch (Exception e) {
@@ -157,6 +156,7 @@ public class UserTextController {
      * 更新用户上传的课文
      */
     @PutMapping("/{textId}")
+    @Transactional
     public Result<String> updateText(@PathVariable Long textId, @RequestBody Map<String, Object> textData) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -180,6 +180,12 @@ public class UserTextController {
             Object contentVal = textData.get("content");
             Object difficultyVal = textData.get("difficulty");
             Object tagsVal = textData.get("tags");
+            if (textData.containsKey("title") && (titleVal == null || titleVal.toString().trim().isEmpty())) {
+                return Result.error("课文标题不能为空");
+            }
+            if (textData.containsKey("content") && (contentVal == null || contentVal.toString().trim().isEmpty())) {
+                return Result.error("课文内容不能为空");
+            }
             text.setTitle(textData.containsKey("title") && titleVal != null ? titleVal.toString() : (text.getTitle() != null ? text.getTitle() : ""));
             text.setContent(textData.containsKey("content") && contentVal != null ? contentVal.toString() : (text.getContent() != null ? text.getContent() : ""));
             text.setDifficulty(textData.containsKey("difficulty") && difficultyVal != null ? difficultyVal.toString() : (text.getDifficulty() != null ? text.getDifficulty() : "MEDIUM"));
@@ -197,6 +203,7 @@ public class UserTextController {
      * 删除用户上传的课文
      */
     @DeleteMapping("/{textId}")
+    @Transactional
     public Result<String> deleteText(@PathVariable Long textId) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -255,6 +262,8 @@ public class UserTextController {
      * 点赞课文
      */
     @PostMapping("/{textId}/like")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @Transactional
     public Result<String> likeText(@PathVariable Long textId) {
         try {
             Text text = textService.getTextById(textId);

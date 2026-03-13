@@ -307,7 +307,7 @@ const loadClasses = async () => {
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        classes.value = data.data?.records || []
+        classes.value = Array.isArray(data.data?.records) ? data.data.records : []
         pagination.total = data.data?.total || 0
         // 班级列表加载完后，批量获取学生数量
         const classIds = classes.value.map(c => c.id)
@@ -338,7 +338,7 @@ const loadCourses = async () => {
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        courses.value = data.data?.records || []
+        courses.value = Array.isArray(data.data?.records) ? data.data.records : []
       }
     }
   } catch (error) {
@@ -358,7 +358,7 @@ const loadTeachers = async () => {
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        teachers.value = data.data?.records || []
+        teachers.value = Array.isArray(data.data?.records) ? data.data.records : []
       }
     }
   } catch (error) {
@@ -443,10 +443,10 @@ const submitForm = async () => {
       if (data.code === 200) {
         ElMessage.success(isEdit.value ? '班级更新成功' : '班级创建成功')
         dialogVisible.value = false
-
         // 清理学生数量缓存
         studentCountCache.value.clear()
-
+        // 删除班级后重置分页到第1页，防止页码超出范围
+        pagination.current = 1
         loadClasses()
       } else {
         ElMessage.error('操作失败，请稍后重试')
@@ -490,6 +490,8 @@ const deleteClass = async (row) => {
         // 清理学生数量缓存
         studentCountCache.value.clear()
 
+        // 删除班级后重置分页到第1页，防止页码超出范围
+        pagination.current = 1
         loadClasses()
       } else {
         ElMessage.error('删除失败，请稍后重试')

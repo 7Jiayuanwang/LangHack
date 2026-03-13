@@ -36,6 +36,7 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
     private UserService userService;
 
     @Override
+    @Transactional(readOnly = true)
     public Map<String, Object> getStudentClassesByPage(Map<String, Object> params) {
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
@@ -57,6 +58,7 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
     }
 
     @Override
+    @Transactional(readOnly = true)
     public StudentClass getStudentClassById(Long id) {
         return getById(id);
     }
@@ -105,6 +107,7 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<StudentClass> getStudentsByClassId(Long classId) {
         if (classId == null) {
             throw new IllegalArgumentException("classId 不能为空");
@@ -114,6 +117,7 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<StudentClass> getClassesByStudentId(Long studentId) {
         if (studentId == null) {
             throw new IllegalArgumentException("studentId 不能为空");
@@ -123,6 +127,7 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
     }
 
     @Override
+    @Transactional(readOnly = true)
     public boolean isStudentInClass(Long studentId, Long classId) {
         Integer count = baseMapper.checkStudentInClass(studentId, classId);
         return count != null && count > 0;
@@ -169,11 +174,13 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Long getStudentCountByClassId(Long classId) {
         return baseMapper.selectStudentCountByClassId(classId);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Long getClassCountByStudentId(Long studentId) {
         return baseMapper.selectClassCountByStudentId(studentId);
     }

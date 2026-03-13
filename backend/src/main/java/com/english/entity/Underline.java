@@ -24,7 +24,10 @@ public class Underline {
     @TableField("end_index")
     private Integer endIndex;
 
-    @TableField(value = "created_time", fill = FieldFill.INSERT)
+    @TableField("serialized_range")
+    private String serializedRange;
+
+    @TableField(value = "created_at", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
     public Long getId() {
@@ -59,17 +62,6 @@ public class Underline {
         this.selectedText = selectedText;
     }
 
-    @TableField("serialized_range")
-    private String serializedRange;
-
-    public String getSerializedRange() {
-        return serializedRange;
-    }
-
-    public void setSerializedRange(String serializedRange) {
-        this.serializedRange = serializedRange;
-    }
-
     public Integer getStartIndex() {
         return startIndex;
     }
@@ -84,6 +76,14 @@ public class Underline {
 
     public void setEndIndex(Integer endIndex) {
         this.endIndex = endIndex;
+    }
+
+    public String getSerializedRange() {
+        return serializedRange;
+    }
+
+    public void setSerializedRange(String serializedRange) {
+        this.serializedRange = serializedRange;
     }
 
     public LocalDateTime getCreatedTime() {

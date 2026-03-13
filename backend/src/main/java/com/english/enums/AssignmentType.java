@@ -24,7 +24,17 @@ public enum AssignmentType {
         return description;
     }
 
+    /**
+     * 将代码字符串转换为枚举值
+     * @param code 任务类型代码
+     * @return 对应的枚举值
+     * @throws IllegalArgumentException 如果代码为null或未知
+     */
     public static AssignmentType fromCode(String code) {
+        // 输入验证 - 防止null引用导致的NullPointerException
+        if (code == null || code.isEmpty()) {
+            throw new IllegalArgumentException("Assignment type code cannot be null or empty");
+        }
         for (AssignmentType type : values()) {
             if (type.code.equals(code)) {
                 return type;

@@ -252,6 +252,13 @@ const routes = [
       }
     ]
   },
+  // 仅在开发环境注册测试路由 - 防止生产环境暴露测试页面
+  ...(import.meta.env.DEV ? [{
+    path: '/test/translate',
+    name: 'TranslateTest',
+    component: () => import('@/views/test/TranslateTest.vue'),
+    meta: { title: '翻译功能测试', public: true }
+  }] : []),
   // 404 兜底路由
   {
     path: '/:pathMatch(.*)*',

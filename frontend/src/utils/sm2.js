@@ -31,7 +31,31 @@ export function calculateSM2(quality, previousState = {}) {
         easinessFactor = 2.5
     }
 
-    // 1. Update Easiness Factor (EF)
+    // CRITICAL FIX: Save the OLD EF value before updating it
+    // SM-2 specification requires interval calculation to use the OLD EF value
+    // The original implementation updated EF first, then used the NEW EF to calculate interval
+    // This caused intervals to be systematically shorter than the standard algorithm
+    const previousEF = easinessFactor;
+
+    // 1. Update Repetition and Interval (using OLD EF value)
+    if (quality >= 3) {
+        // Success
+        if (repetition === 0) {
+            interval = 1;
+        } else if (repetition === 1) {
+            interval = 6;
+        } else {
+            // FIXED: Use previousEF (old value), not the newly calculated easinessFactor
+            interval = Math.round(interval * previousEF);
+        }
+        repetition++;
+    } else {
+        // Failure
+        repetition = 0;
+        interval = 1;
+    }
+
+    // 2. Update Easiness Factor (EF) - AFTER interval calculation
     // EF = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
     easinessFactor = easinessFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
 
@@ -41,23 +65,6 @@ export function calculateSM2(quality, previousState = {}) {
     }
     if (easinessFactor > 5.0) {
         easinessFactor = 5.0;
-    }
-
-    // 2. Update Repetition and Interval
-    if (quality >= 3) {
-        // Success
-        if (repetition === 0) {
-            interval = 1;
-        } else if (repetition === 1) {
-            interval = 6;
-        } else {
-            interval = Math.round(interval * easinessFactor);
-        }
-        repetition++;
-    } else {
-        // Failure
-        repetition = 0;
-        interval = 1;
     }
 
     // 3. Calculate Next Review Time

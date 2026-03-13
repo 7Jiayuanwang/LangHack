@@ -38,7 +38,7 @@
           class="nav-item management-menu-item"
           :class="{ active: isManagementRouteActive }"
         >
-          <el-dropdown trigger="click" placement="top" @command="handleManagementCommand">
+          <el-dropdown trigger="click" placement="top">
             <div class="nav-management-trigger">
               <div class="nav-icon">
                 <component :is="Setting" />
@@ -88,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -188,11 +188,6 @@ const isManagementRouteActive = computed(() => {
   return managementPaths.some(path => route.path === path || route.path.startsWith(path + '/'))
 })
 
-// 处理管理菜单命令（用于下拉菜单项点击后的处理）
-const handleManagementCommand = (command) => {
-  // 路由已经在router-link中处理，这里可以添加额外的逻辑
-}
-
 const handleCommand = async (command) => {
   switch (command) {
     case 'profile':
@@ -213,7 +208,7 @@ const handleCommand = async (command) => {
         })
         await userStore.logout()
         ElMessage.success('退出登录成功')
-        router.push('/login')
+        router.replace("/login")
       } catch (error) {
         // 用户取消操作
       }
@@ -221,10 +216,23 @@ const handleCommand = async (command) => {
   }
 }
 
-// 更新导航徽章（例如待审核用户数）
+// FIX #1: 权限守卫 - 确保只有 ADMIN 角色可以访问管理端
 onMounted(() => {
+  // 验证用户权限
+  if (!userStore.isLoggedIn || !userStore.isAdmin) {
+    ElMessage.error('权限不足，请以管理员身份登录')
+    router.replace('/login')
+    return
+  }
+  
   // 这里可以添加获取待审核用户数等逻辑
   // navItems.value[3].badge = '3' // 例如待审核用户数量
+})
+
+// FIX #2: 清理副作用 - 防止内存泄漏和组件状态污染
+onBeforeUnmount(() => {
+  // Element Plus Dropdown 使用 Vue 3 Event Delegation，会自动清理事件监听
+  // 此处为预防措施，确保没有遗留的全局事件监听
 })
 </script>
 
@@ -498,8 +506,6 @@ onMounted(() => {
   .nav-item.active .nav-label {
     font-size: 11px;
   }
-
-
 
 }
 

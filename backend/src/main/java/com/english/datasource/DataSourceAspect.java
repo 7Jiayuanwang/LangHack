@@ -29,6 +29,8 @@ public class DataSourceAspect {
         try {
             return joinPoint.proceed();
         } finally {
+            // CRITICAL: ThreadLocal必须在finally块中恢复或清理，防止内存泄漏
+            // 即使proceed()抛出异常也必须执行
             if (previous == null) {
                 DynamicDataSourceContext.clear();
             } else {
@@ -51,6 +53,7 @@ public class DataSourceAspect {
             tx = targetClass.getAnnotation(Transactional.class);
             return tx != null && tx.readOnly();
         } catch (Exception e) {
+            log.warn("Failed to determine readOnly status, defaulting to false", e);
             return false;
         }
     }

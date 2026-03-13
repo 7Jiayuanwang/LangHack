@@ -22,7 +22,7 @@ public class ExerciseOption {
     private String optionKey;
 
     @TableField("is_correct")
-    private Boolean isCorrect;
+    private Integer isCorrect;
 
     @TableField("order_num")
     private Integer orderNum;
@@ -33,7 +33,7 @@ public class ExerciseOption {
     // 构造函数
     public ExerciseOption() {}
 
-    public ExerciseOption(Long exerciseId, String optionContent, String optionKey, Boolean isCorrect, Integer orderNum) {
+    public ExerciseOption(Long exerciseId, String optionContent, String optionKey, Integer isCorrect, Integer orderNum) {
         this.exerciseId = exerciseId;
         this.optionContent = optionContent;
         this.optionKey = optionKey;
@@ -74,11 +74,11 @@ public class ExerciseOption {
         this.optionKey = optionKey;
     }
 
-    public Boolean getIsCorrect() {
+    public Integer getIsCorrect() {
         return isCorrect;
     }
 
-    public void setIsCorrect(Boolean isCorrect) {
+    public void setIsCorrect(Integer isCorrect) {
         this.isCorrect = isCorrect;
     }
 

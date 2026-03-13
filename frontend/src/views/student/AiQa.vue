@@ -178,8 +178,10 @@ const sendMessage = async () => {
       return
     }
 
-    if (data.response) {
-      const htmlResponse = DOMPurify.sanitize(marked(data.response || ''))
+    // FIX: 验证响应数据 + 完整的 XSS 防护
+    if (data?.response && typeof data.response === 'string') {
+      // 先用 marked 转换 markdown，再用 DOMPurify 清理恶意标签
+      const htmlResponse = DOMPurify.sanitize(marked(data.response))
       messages.value.push({
         role: 'assistant',
         content: htmlResponse
@@ -192,17 +194,26 @@ const sendMessage = async () => {
     }
 
     // Update thread_id for next turns
-    if (data.thread_id) {
+    if (data?.thread_id) {
       threadId.value = data.thread_id
     }
   } catch (error) {
-    if (error.name !== 'AbortError') {
+    if (error?.name !== 'AbortError') {
       console.error('AI API error:', error)
       messages.value.push({ role: 'assistant', content: '抱歉，AI服务暂时不可用。请稍后再试。' })
     }
   } finally {
     loading.value = false
-    abortController = null
+    // FIX: 正确处理 abortController 清理
+    try {
+      if (abortController) {
+        abortController.abort()
+      }
+    } catch (e) {
+      console.error('Abort cleanup error:', e)
+    } finally {
+      abortController = null
+    }
     scrollToBottom()
   }
 }

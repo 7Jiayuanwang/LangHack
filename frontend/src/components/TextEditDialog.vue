@@ -159,7 +159,16 @@ const formData = reactive({
 })
 
 const rules = {
-  title: [{ required: true, message: '请输入课文标题', trigger: 'blur' }]
+  title: [
+    { required: true, message: '请输入课文标题', trigger: 'blur' },
+    { min: 1, max: 200, message: '标题长度应在1-200字符之间', trigger: 'blur' }
+  ],
+  difficulty: [
+    { required: true, message: '请选择难度', trigger: 'change' }
+  ],
+  contentType: [
+    { required: true, message: '请选择内容格式', trigger: 'change' }
+  ]
 }
 
 // 监听visible变化
@@ -205,21 +214,32 @@ watch(() => visible.value, (newVal) => {
 })
 
 // 加载课程列表
+// FIX #1: 完整的响应对象null检查和response.data结构验证
 const loadCourses = async () => {
   try {
     const response = await getCourses({ page: 1, size: 100 })
-    
-    if (response.code === 200) {
+
+    // 验证响应对象有效性
+    if (!response || typeof response !== 'object') {
+      console.warn('getCourses 返回无效响应')
+      courses.value = []
+      return
+    }
+
+    if (response && response.code === 200) {
       if (Array.isArray(response.data)) {
         courses.value = response.data
-      } else if (response.data && response.data.records) {
-        courses.value = response.data.records || []
+      } else if (response.data && typeof response.data === 'object' && response.data.records) {
+        courses.value = Array.isArray(response.data.records) ? response.data.records : []
       } else {
         courses.value = []
       }
+    } else {
+      courses.value = []
     }
   } catch (error) {
     console.error('加载课程列表失败:', error)
+    courses.value = []
   }
 }
 
@@ -234,14 +254,27 @@ const handleCourseChange = async (courseId) => {
 }
 
 // 根据课程ID加载单元
+// FIX #2: 添加 response.data 的null检查和完整的对象验证
 const loadUnitsByCourse = async (courseId) => {
   try {
     const response = await getUnitsByCourseId(courseId)
-    if (response.code === 200) {
-      units.value = response.data || []
+    
+    // 验证响应对象有效性
+    if (!response || typeof response !== 'object') {
+      console.warn('getUnitsByCourseId 返回无效响应')
+      units.value = []
+      return
+    }
+
+    // 仅在响应成功且 response.data 存在时才处理
+    if (response && response.code === 200 && response.data) {
+      units.value = Array.isArray(response.data) ? response.data : []
+    } else {
+      units.value = []
     }
   } catch (error) {
     console.error('加载单元列表失败:', error)
+    units.value = []
   }
 }
 
@@ -253,11 +286,11 @@ const handleSubmit = async () => {
     if (!valid) return
 
     // 验证内容不为空
-    if (formData.contentType === 'TEXT' && !formData.content) {
+    if (formData.contentType === 'TEXT' && (!formData.content || !formData.content.trim())) {
       ElMessage.error('请输入课文内容')
       return
     }
-    if (formData.contentType === 'MARKDOWN' && !markdownContent.value) {
+    if (formData.contentType === 'MARKDOWN' && (!markdownContent.value || !markdownContent.value.trim())) {
       ElMessage.error('请输入Markdown内容')
       return
     }

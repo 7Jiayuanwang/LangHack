@@ -22,6 +22,10 @@ public class Class {
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
+    @TableField("deleted")
+    @TableLogic(value = "0", delval = "1")
+    private Integer deleted;
+
     // 关联对象 - 用于查询时展示课程和教师信息
     @TableField(exist = false)
     private Course course;
@@ -80,6 +84,14 @@ public class Class {
 
     public void setCreatedTime(LocalDateTime createdTime) {
         this.createdTime = createdTime;
+    }
+
+    public Integer getDeleted() {
+        return deleted;
+    }
+
+    public void setDeleted(Integer deleted) {
+        this.deleted = deleted;
     }
 
     public Course getCourse() {

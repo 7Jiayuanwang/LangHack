@@ -9,7 +9,8 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -18,6 +19,9 @@ import javax.annotation.PostConstruct;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 
 /**
  * OpenRouter DeepSeek API service implementation
@@ -34,15 +38,33 @@ public class OpenRouterServiceImpl implements OpenRouterService {
 
     @PostConstruct
     public void init() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(config.getTimeout());
-        factory.setReadTimeout(config.getTimeout());
-        restTemplate = new RestTemplate(factory);
+        try {
+            PoolingHttpClientConnectionManager connManager = new PoolingHttpClientConnectionManager();
+            connManager.setMaxTotal(50);
+            connManager.setDefaultMaxPerRoute(10);
+
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(
+                    HttpClientBuilder.create()
+                            .setConnectionManager(connManager)
+                            .build());
+            factory.setConnectTimeout(config.getTimeout());
+            factory.setReadTimeout(config.getTimeout());
+            factory.setConnectionRequestTimeout(config.getTimeout());
+            restTemplate = new RestTemplate(factory);
+        } catch (Exception e) {
+            log.warn("Failed to initialize HTTP client with connection pooling, falling back to default: {}",
+                    e.getMessage());
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
+            factory.setConnectTimeout(config.getTimeout());
+            factory.setReadTimeout(config.getTimeout());
+            restTemplate = new RestTemplate(factory);
+        }
     }
 
     @Override
     @CircuitBreaker(name = "openrouter", fallbackMethod = "generateCET4VersionFallback")
     public String generateCET4Version(String originalContent) {
+        validateInput(originalContent, "原文内容");
         String prompt = String.format(
                 "Please rewrite the following English article to match CET-4 (College English Test Band 4) difficulty level. "
                         +
@@ -62,6 +84,7 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     @Override
     @CircuitBreaker(name = "openrouter", fallbackMethod = "generateCET6VersionFallback")
     public String generateCET6Version(String originalContent) {
+        validateInput(originalContent, "原文内容");
         String prompt = String.format(
                 "Please rewrite the following English article to match CET-6 (College English Test Band 6) difficulty level. "
                         +
@@ -81,6 +104,7 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     @Override
     @CircuitBreaker(name = "openrouter", fallbackMethod = "generateAcademicVersionFallback")
     public String generateAcademicVersion(String originalContent) {
+        validateInput(originalContent, "原文内容");
         String prompt = String.format(
                 "Please rewrite the following English article in an academic style. " +
                         "Use formal language, advanced vocabulary, complex sentence structures, and academic tone. " +
@@ -99,6 +123,7 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     @Override
     @CircuitBreaker(name = "openrouter", fallbackMethod = "generateChineseParallelVersionFallback")
     public String generateChineseParallelVersion(String originalContent) {
+        validateInput(originalContent, "原文内容");
         String prompt = String.format(
                 "Please create a Chinese-English parallel text version of the following English article. " +
                         "For each paragraph, provide the English text followed by its Chinese translation. " +
@@ -113,6 +138,18 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     private String generateChineseParallelVersionFallback(String originalContent, Exception e) {
         log.warn("OpenRouter circuit breaker triggered for generateChineseParallelVersion: {}", e.getMessage());
         throw new BusinessException("AI 服务暂时不可用，请稍后重试");
+    }
+
+    /**
+     * Input validation for content
+     */
+    private void validateInput(String content, String fieldName) {
+        if (content == null || content.isBlank()) {
+            throw new BusinessException(fieldName + "不能为空");
+        }
+        if (content.length() > 100000) {
+            throw new BusinessException(fieldName + "过长，最多10万字符");
+        }
     }
 
     /**
@@ -179,7 +216,8 @@ public class OpenRouterServiceImpl implements OpenRouterService {
                     JsonNode choices = root.get("choices");
 
                     if (choices != null && choices.isArray() && choices.size() > 0) {
-                        JsonNode message_node = choices.get(0).get("message");
+                        JsonNode firstChoice = choices.get(0);
+                        JsonNode message_node = firstChoice != null ? firstChoice.get("message") : null;
                         if (message_node != null) {
                             JsonNode content = message_node.get("content");
                             if (content != null && !content.isNull() && content.isTextual()) {
@@ -229,6 +267,7 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     @Override
     @CircuitBreaker(name = "openrouter", fallbackMethod = "generateCET4VersionMarkdownFallback")
     public String generateCET4VersionMarkdown(String originalMarkdownContent) {
+        validateInput(originalMarkdownContent, "Markdown内容");
         String prompt = String.format(
                 "Please rewrite the following Markdown article to match CET-4 (College English Test Band 4) difficulty level. " +
                         "CRITICAL REQUIREMENTS - DO NOT MODIFY THESE:\n" +
@@ -254,6 +293,7 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     @Override
     @CircuitBreaker(name = "openrouter", fallbackMethod = "generateCET6VersionMarkdownFallback")
     public String generateCET6VersionMarkdown(String originalMarkdownContent) {
+        validateInput(originalMarkdownContent, "Markdown内容");
         String prompt = String.format(
                 "Please rewrite the following Markdown article to match CET-6 (College English Test Band 6) difficulty level. " +
                         "CRITICAL REQUIREMENTS - DO NOT MODIFY THESE:\n" +
@@ -279,6 +319,7 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     @Override
     @CircuitBreaker(name = "openrouter", fallbackMethod = "generateAcademicVersionMarkdownFallback")
     public String generateAcademicVersionMarkdown(String originalMarkdownContent) {
+        validateInput(originalMarkdownContent, "Markdown内容");
         String prompt = String.format(
                 "Please rewrite the following Markdown article in an academic style. " +
                         "CRITICAL REQUIREMENTS - DO NOT MODIFY THESE:\n" +
@@ -304,6 +345,7 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     @Override
     @CircuitBreaker(name = "openrouter", fallbackMethod = "generateChineseParallelVersionMarkdownFallback")
     public String generateChineseParallelVersionMarkdown(String originalMarkdownContent) {
+        validateInput(originalMarkdownContent, "Markdown内容");
         String prompt = String.format(
                 "Please create a Chinese-English parallel text version of the following Markdown article. " +
                         "CRITICAL REQUIREMENTS - DO NOT MODIFY THESE:\n" +

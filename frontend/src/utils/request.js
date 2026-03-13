@@ -19,6 +19,10 @@ const handleLogout = () => {
     window.location.reload()
   } catch (e) {
     console.error('Logout failed:', e)
+  } finally {
+    // 确保状态标志在任何情况下都被重置
+    // 注: window.location.reload() 会刷新页面，导致此行可能不执行
+    // 但为了健壮性，仍需添加 finally 块
     isLoggingOut = false
   }
 }
@@ -69,17 +73,21 @@ request.interceptors.response.use(
     }
 
     if (res.code !== 200) {
+      // 401: 未授权，token过期等（只处理一次，由 handleLogout 统一管理）
+      if (res.code === 401) {
+        handleLogout()
+        return Promise.reject(new Error('未授权，请重新登录'))
+      }
+
+      // 非 401 的业务错误：仅展示预定义的错误信息，防止后端敏感信息泄露
+      const errorMessage = getBusinessErrorMessage(res.code, res.message)
       ElMessage({
-        message: res.message || 'Error',
+        message: errorMessage,
         type: 'error',
         duration: 5 * 1000
       })
 
-      // 401: 未授权，token过期等（只处理一次，由 handleLogout 统一管理）
-      if (res.code === 401) {
-        handleLogout()
-      }
-      return Promise.reject(new Error(res.message || 'Error'))
+      return Promise.reject(new Error(errorMessage))
     } else {
       return res
     }
@@ -129,5 +137,31 @@ request.interceptors.response.use(
     return Promise.reject(errorResponse)
   }
 )
+
+
+/**
+ * 获取业务错误信息
+ * 仅返回预定义的错误消息，防止后端敏感信息（如堆栈、SQL等）泄露到前端
+ * @param {number} code 业务错误码
+ * @param {string} backendMessage 后端原始错误信息（仅用于日志）
+ * @returns {string} 前端显示的错误信息
+ */
+function getBusinessErrorMessage(code, backendMessage) {
+  // 记录原始错误信息到控制台（用于开发调试）
+  if (backendMessage) {
+    console.debug('[Business Error]', { code, message: backendMessage })
+  }
+
+  // 仅返回预定义的通用错误信息
+  const errorMap = {
+    400: '请求参数错误',
+    403: '拒绝访问',
+    404: '请求地址不存在',
+    409: '请求冲突',
+    500: '服务器错误，请稍后重试'
+  }
+
+  return errorMap[code] || '操作失败，请稍后重试'
+}
 
 export default request

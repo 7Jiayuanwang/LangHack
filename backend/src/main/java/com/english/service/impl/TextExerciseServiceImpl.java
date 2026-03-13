@@ -84,6 +84,11 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
     @Override
     public List<Map<String, Object>> getExercisesWithOptions(Long textId) {
         try {
+            // 参数验证
+            if (textId == null || textId <= 0) {
+                throw new BusinessException("课文ID不合法");
+            }
+
             // 获取课文的所有习题
             List<TextExercise> exercises = textExerciseMapper.getExercisesByTextId(textId);
 
@@ -103,14 +108,17 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
                 exerciseMap.put("createdTime", exercise.getCreatedTime());
                 exerciseMap.put("textId", exercise.getTextId());
 
-                // 获取习题的选项
+                // 获取习题的选项 - 防守：options可能为null，改为空列表
                 List<ExerciseOption> options = exerciseOptionMapper.getOptionsByExerciseId(exercise.getId());
-                exerciseMap.put("options", options);
+                exerciseMap.put("options", options != null ? options : new ArrayList<>());
 
                 result.add(exerciseMap);
             }
 
             return result;
+        } catch (BusinessException e) {
+            logger.error("获取课文习题失败", e);
+            throw e;
         } catch (Exception e) {
             logger.error("获取课文习题失败", e);
             throw new BusinessException("获取习题失败，请稍后重试");
@@ -161,6 +169,10 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
         }
 
         for (TextExercise exercise : exercises) {
+            // NPE防守：exercise或ID可能为null
+            if (exercise == null || exercise.getId() == null) {
+                continue;
+            }
             // 先删除选项
             exerciseOptionMapper.deleteOptionsByExerciseId(exercise.getId());
             // 再删除习题
@@ -173,6 +185,11 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
     @Override
     public Map<String, Object> getExerciseDetail(Long exerciseId) {
         try {
+            // 参数验证
+            if (exerciseId == null || exerciseId <= 0) {
+                throw new BusinessException("习题ID不合法");
+            }
+
             TextExercise exercise = textExerciseMapper.selectById(exerciseId);
             if (exercise == null) {
                 return null;
@@ -187,11 +204,14 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
             result.put("createdTime", exercise.getCreatedTime());
             result.put("textId", exercise.getTextId());
 
-            // 获取选项
+            // 获取选项 - 防守：options可能为null，改为空列表
             List<ExerciseOption> options = exerciseOptionMapper.getOptionsByExerciseId(exerciseId);
-            result.put("options", options);
+            result.put("options", options != null ? options : new ArrayList<>());
 
             return result;
+        } catch (BusinessException e) {
+            logger.error("获取习题详情失败", e);
+            throw e;
         } catch (Exception e) {
             logger.error("获取习题详情失败", e);
             throw new BusinessException("获取习题详情失败，请稍后重试");
@@ -201,6 +221,10 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
     @Override
     public boolean checkAnswer(Long exerciseId, String studentAnswer) {
         try {
+            if (exerciseId == null || exerciseId <= 0) {
+                return false;
+            }
+
             if (studentAnswer == null) {
                 return false;
             }
@@ -217,7 +241,7 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
 
             // 检查学生答案是否与任何一个正确选项匹配
             for (ExerciseOption option : options) {
-                if (Boolean.TRUE.equals(option.getIsCorrect()) &&
+                if (Integer.valueOf(1).equals(option.getIsCorrect()) &&
                     option.getOptionKey() != null &&
                     option.getOptionKey().trim().toLowerCase().equals(normalizedAnswer)) {
                     return true;

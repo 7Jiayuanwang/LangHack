@@ -197,7 +197,9 @@ const loadCourses = async () => {
       method: 'get'
     })
     if (response.code === 200) {
-      courses.value = Array.isArray(response.data?.records) ? response.data.records : (Array.isArray(response.data) ? response.data : [])
+      courses.value = Array.isArray(response.data?.records)
+        ? response.data.records
+        : (Array.isArray(response.data) ? response.data : [])
     }
   } catch (error) {
     ElMessage.error('加载课程列表失败')
@@ -224,7 +226,7 @@ const loadUnits = async () => {
     })
 
     if (response.code === 200) {
-      units.value = response.data?.records || []
+      units.value = Array.isArray(response.data?.records) ? response.data.records : []
       pagination.total = response.data?.total || 0
     }
   } catch (error) {
@@ -244,6 +246,7 @@ const showAddDialog = () => {
 
 const editUnit = (unit) => {
   isEdit.value = true
+  unitFormRef.value?.clearValidate()
   dialogVisible.value = true
   Object.assign(unitForm, {
     id: unit.id,

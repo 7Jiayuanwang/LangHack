@@ -86,7 +86,7 @@ public class StudentStatsController {
     }
 
     /**
-     * 获取详细学习记录
+     * 获取学习记录
      */
     @GetMapping("/records")
     @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
@@ -118,6 +118,9 @@ public class StudentStatsController {
             Map<String, Object> records = learningRecordsService.getLearningRecordsWithPagination(params);
 
             return Result.success(records);
+        } catch (IllegalArgumentException e) {
+            logger.warn("学习记录参数错误", e);
+            return Result.error("请求参数无效，请检查后重试");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {

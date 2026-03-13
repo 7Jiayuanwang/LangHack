@@ -857,18 +857,25 @@ const playAudio = (word) => {
     currentAudio.onended = () => {
       currentAudio = null
     }
+    currentAudio.onerror = () => {
+      console.error('音频加载或播放出错')
+      currentAudio = null
+    }
     currentAudio.play().catch(error => {
       console.error('播放音频失败:', error)
+      currentAudio = null
       ElMessage.error('播放音频失败')
     })
   }
 }
-
 // 获取课程进度
 const getCourseProgress = (course) => {
   // 优先使用后端返回的progress字段
   if (course.progress !== undefined && course.progress !== null) {
-    return Math.round(course.progress)
+    // 后端返回 0.0-1.0 范围，转换为 0-100 百分比
+    const progress = course.progress
+    const percentage = progress <= 1 ? progress * 100 : progress
+    return Math.round(percentage)
   }
   // 如果没有progress字段，使用learnedUnits计算
   if (!course.totalUnits) return 0

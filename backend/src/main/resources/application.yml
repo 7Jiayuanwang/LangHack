@@ -24,6 +24,9 @@ spring:
 
   datasource:
     master:
+      # CRITICAL: DB credentials MUST be provided via environment variables in production
+      # Local dev: DB_URL, DB_USERNAME, DB_PASSWORD (with safe defaults)
+      # Production: MUST be set via environment variables, no defaults
       jdbc-url: ${DB_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
       username: ${DB_USERNAME:root}
       password: ${DB_PASSWORD:root}
@@ -36,8 +39,10 @@ spring:
         max-lifetime: 1800000
         auto-commit: true
         leak-detection-threshold: 60000
+        # Connection pool security: enforce SSL in production
+        ssl-mode: ${DB_SSL_MODE:}
     slave:
-      # 未配置从库时，默认回退到主库（单机部署两者指向同一实例）
+      # Fallback to master when slave not configured (single-instance deployment)
       jdbc-url: ${DB_SLAVE_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
       username: ${DB_SLAVE_USERNAME:${DB_USERNAME:root}}
       password: ${DB_SLAVE_PASSWORD:${DB_PASSWORD:root}}
@@ -70,21 +75,26 @@ spring:
 
   security:
     jwt:
-      secret: ${JWT_SECRET:your_dummy_jwt_secret_for_local_development_at_least_32_chars_long}
+      # CRITICAL: JWT_SECRET MUST be provided via environment variable
+      # - Minimum 32 characters (256-bit for HS256)
+      # - Must be a cryptographically secure random value
+      # - Never hardcode in source code or configuration files
+      # - Production deployment: Generate with: openssl rand -base64 32
+      secret: ${JWT_SECRET}
       expiration: 86400000 # 24小时
 
   flyway:
-    enabled: false  # Flyway 禁用（手动管理数据库迁移）
+    enabled: false  # Flyway disabled (manual database migration management)
     baseline-on-migrate: false
     locations: classpath:db/migration
     group: true
-    out-of-order: true # 允许乱序执行迁移文件，方便插入 Java 迁移
-    validate-on-migrate: false # 禁用校验，解决手动修复历史记录导致的 Checksum 不匹配问题
+    out-of-order: true # Allow out-of-order migration file execution for Java migrations
+    validate-on-migrate: false # Disable validation to resolve Checksum mismatch from manual fixes
 
 media:
   upload:
-    max-image-size: 10485760   # 10 MB，单位：字节
-    max-video-size: 104857600  # 100 MB，单位：字节
+    max-image-size: 10485760   # 10 MB (bytes)
+    max-video-size: 104857600  # 100 MB (bytes)
 
 mybatis-plus:
   configuration:
@@ -98,24 +108,41 @@ mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
 
 openrouter:
-  api-key: ${OPENROUTER_API_KEY:dummy_key}
+  # CRITICAL: API credentials MUST be provided via environment variable in production
+  # - OPENROUTER_API_KEY must be set before application startup
+  # - Rate limiting should be enforced at API level
+  # - Monitor API usage for abuse patterns
+  api-key: ${OPENROUTER_API_KEY}
   api-url: https://openrouter.ai/api/v1/chat/completions
   model: tngtech/deepseek-r1t2-chimera:free
   timeout: 60000
   max-retries: 3
 
-# 腾讯翻译配置
+
+# Tencent Cloud API Configuration
 tencent:
   translate:
+    # CRITICAL: Credentials MUST be provided via environment variables
+    # - TENCENT_SECRET_ID: Tencent Cloud secret ID
+    # - TENCENT_SECRET_KEY: Tencent Cloud secret key
+    # - Leave empty for local development if translation service not used
     secret-id: ${TENCENT_SECRET_ID:}
     secret-key: ${TENCENT_SECRET_KEY:}
-    region: ap-guangzhou  # 地域，默认广州
+    region: ap-guangzhou  # Region: Guangzhou by default
+  asr:
+    # CRITICAL: Credentials MUST be provided via environment variables
+    # - TENCENT_ASR_SECRET_ID: Tencent Cloud secret ID for ASR
+    # - TENCENT_ASR_SECRET_KEY: Tencent Cloud secret key for ASR
+    # - Leave empty for local development if ASR service not used
+    secret-id: ${TENCENT_ASR_SECRET_ID:}
+    secret-key: ${TENCENT_ASR_SECRET_KEY:}
+    region: ${TENCENT_ASR_REGION:ap-guangzhou}  # Region: Guangzhou by default
 
 async:
   version-generator:
-    core-pool-size: 4
-    max-pool-size: 12
-    queue-capacity: 50
+    core-pool-size: 8
+    max-pool-size: 32
+    queue-capacity: 200
 
 resilience4j:
   circuitbreaker:

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +40,7 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
                 .or()
                 .like("definition", keyword)
                 .or()
-                .like("example", keyword)
+                .like("example_sentence", keyword)
             );
         }
 
@@ -93,8 +94,8 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
         }
         // 统一转换为小写存储
         word.setWord(word.getWord().toLowerCase().trim());
-        word.setCreatedAt(LocalDateTime.now());
-        word.setUpdatedAt(LocalDateTime.now());
+        word.setCreatedTime(LocalDateTime.now());
+        word.setUpdatedTime(LocalDateTime.now());
         word.setDeleted(0);
         return save(word);
     }
@@ -105,7 +106,7 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
         if (word == null || word.getId() == null) {
             throw new BusinessException("单词ID不能为空");
         }
-        word.setUpdatedAt(LocalDateTime.now());
+        word.setUpdatedTime(LocalDateTime.now());
         return updateById(word);
     }
 
@@ -145,7 +146,7 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
         Long total = count(countWrapper);
 
         if (total == null || total == 0) {
-            return new java.util.ArrayList<>();
+            return new ArrayList<>();
         }
 
         // 如果可用单词数少于请求数，直接返回所有单词
@@ -155,14 +156,17 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
             return list(queryWrapper);
         }
 
-        // 随机选择 offset (避免 ORDER BY RAND() 的全表扫描性能问题)
-        int offset = (int) (Math.random() * (total - safeCount));
-
+        // SQL 注入防护修复：使用 MyBatis Plus Page 对象实现分页，避免字符串拼接
+        // 计算随机页码（页码从 1 开始）
+        long maxPage = (total - 1) / safeCount + 1;
+        int randomPage = (int) (Math.random() * maxPage) + 1;
+        
+        Page<Word> pageParam = new Page<>(randomPage, safeCount);
         QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("deleted", 0);
-        queryWrapper.last("LIMIT " + offset + ", " + safeCount);
-
-        return list(queryWrapper);
+        
+        IPage<Word> pageResult = page(pageParam, queryWrapper);
+        return pageResult.getRecords();
     }
 
     @Override
@@ -174,7 +178,7 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
                 .or()
                 .like("definition", keyword)
                 .or()
-                .like("example", keyword)
+                .like("example_sentence", keyword)
             );
         }
         queryWrapper.eq("deleted", 0);

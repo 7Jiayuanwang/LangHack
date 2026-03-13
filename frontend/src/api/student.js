@@ -37,6 +37,10 @@ export function getUnitContent(unitId) {
 export function getTextDetail(params) {
   // 如果传入的是数字，保持原有逻辑
   if (typeof params === 'number') {
+    // BUG FIX: 添加textId范围检查
+    if (params <= 0) {
+      return Promise.reject(new Error('textId 必须大于0'))
+    }
     return request({
       url: `/api/student/learning/texts/${params}`,
       method: 'get'
@@ -46,11 +50,17 @@ export function getTextDetail(params) {
   // 如果传入的是对象，使用查询参数
   const { textId, assignmentId } = params || {}
 
-  // 防御：textId 必须存在
-  if (!textId) {
-    return Promise.reject(new Error('textId 不能为空'))
+  // 防御：textId 必须存在且为有效值
+  if (!textId || (typeof textId !== 'number' && typeof textId !== 'string')) {
+    return Promise.reject(new Error('textId 不能为空或类型错误'))
   }
 
+  
+  // BUG FIX: textId范围检查
+  const textIdNum = typeof textId === 'string' ? parseInt(textId, 10) : textId
+  if (isNaN(textIdNum) || textIdNum <= 0) {
+    return Promise.reject(new Error('textId 必须是有效的正整数'))
+  }
   return request({
     url: `/api/student/learning/texts/${textId}`,
     method: 'get',
@@ -68,6 +78,9 @@ export function getWordDetail(wordId) {
 
 // 添加单词到生词本
 export function addToVocabulary(data) {
+  if (!data || typeof data !== 'object') {
+    return Promise.reject(new Error('数据不能为空'))
+  }
   return request({
     url: '/api/student/learning/vocabulary/add',
     method: 'post',
@@ -82,6 +95,11 @@ export function getVocabularyList(params) {
     method: 'get',
     params
   }).then(response => {
+    // 防御：null 响应检查在前
+    if (!response) {
+      return { data: { records: [], total: 0 } }
+    }
+
     // 防御：确保响应中 data 字段是数组或具有 records 属性
     if (response && typeof response === 'object' && response.data) {
       if (Array.isArray(response.data)) {
@@ -296,6 +314,23 @@ export function getVocabulary(params) {
     url: '/api/student/learning/vocabulary',
     method: 'get',
     params
+  }).then(response => {
+    // 防御：确保响应中 data 字段是数组或具有 records 属性（与 getVocabularyList 保持一致）
+    if (response && typeof response === 'object' && response.data) {
+      if (Array.isArray(response.data)) {
+        response.data = { records: response.data, total: response.data.length }
+      } else if (!response.data.records) {
+        response.data.records = []
+      }
+    } else if (response && typeof response === 'object') {
+      response = { ...response, data: { records: [], total: 0 } }
+    } else {
+      response = { data: { records: [], total: 0 } }
+    }
+    return response
+  }).catch(error => {
+    console.error('getVocabulary error:', error)
+    return { data: { records: [], total: 0 } }
   })
 }
 
@@ -483,12 +518,15 @@ export function getWordNetInfo(word) {
   if (!word || typeof word !== 'string' || word.trim().length === 0) {
     return Promise.reject(new Error('单词不能为空'))
   }
-  if (word.length > 100) {
+
+  // BUG FIX: 对trim后的值进行长度检查
+  const trimmedWord = word.trim()
+  if (trimmedWord.length > 100) {
     return Promise.reject(new Error('单词长度不能超过 100'))
   }
 
   return request({
-    url: `/api/wordnet/word/${encodeURIComponent(word.trim())}`,
+    url: `/api/wordnet/word/${encodeURIComponent(trimmedWord)}`,
     method: 'get'
   })
 }

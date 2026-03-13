@@ -48,6 +48,12 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             if (originalFileName == null || originalFileName.isEmpty()) {
                 originalFileName = "upload_" + System.currentTimeMillis();
             }
+            // Strip path separators to prevent path traversal in stored filename
+            originalFileName = new java.io.File(originalFileName).getName()
+                    .replaceAll("[/\\\\]", "_");
+            if (originalFileName.isEmpty()) {
+                originalFileName = "upload_" + System.currentTimeMillis();
+            }
             String mimeType = file.getContentType();
 
             // 验证文件大小（在读取文件内容之前，防止大文件 OOM）
@@ -115,9 +121,9 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
 
     @Override
     public Media getMediaById(Long id) {
-        QueryWrapper<Media> wrapper = new QueryWrapper<>();
-        wrapper.eq("id", id).eq("deleted", 0);
-        return getOne(wrapper);
+        // 注意：@TableLogic 已在 Media 实体定义，MyBatis Plus 会自动过滤已删除的记录
+        // 所以这里不需要手动添加 eq("deleted", 0) 条件
+        return getById(id);
     }
 
     @Override
@@ -128,10 +134,7 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
         if (existing == null) {
             throw new BusinessException("媒体文件不存在或已被删除");
         }
-        Media media = new Media();
-        media.setId(id);
-        media.setDeleted(1);
-        media.setUpdatedAt(LocalDateTime.now());
-        updateById(media);
+        // 使用 removeById() 让 @TableLogic 自动处理软删除（更新 deleted=1）
+        removeById(id);
     }
 }

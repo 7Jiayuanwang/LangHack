@@ -155,7 +155,7 @@ const loadCourses = async () => {
       method: 'get'
     })
 
-    if (response.code === 200) {
+    if (response?.code === 200 && response.data) {
       courses.value = Array.isArray(response.data) ? response.data : []
     }
   } catch (error) {
@@ -175,7 +175,7 @@ const loadUnits = async (courseId) => {
       method: 'get'
     })
 
-    if (response.code === 200) {
+    if (response?.code === 200 && response.data) {
       units.value = Array.isArray(response.data) ? response.data : []
     }
   } catch (error) {
@@ -191,17 +191,29 @@ const loadTexts = async () => {
       size: pageSize.value
     }
     if (selectedDifficulty.value) params.difficulty = selectedDifficulty.value
+    if (selectedCourse.value) params.courseId = selectedCourse.value
+    if (selectedUnit.value) params.unitId = selectedUnit.value
     if (searchKeyword.value) params.keyword = searchKeyword.value
 
     const response = await request({
-      url: '/api/public/texts/random',
+      url: '/api/public/texts',
       method: 'get',
-      params: { limit: pageSize.value }
+      params: params
     })
 
-    if (response.code === 200) {
-      texts.value = Array.isArray(response.data) ? response.data : []
-      total.value = texts.value.length
+    if (response?.code === 200 && response.data) {
+      let textList = []
+      if (Array.isArray(response.data)) {
+        textList = response.data
+        total.value = textList.length
+      } else if (Array.isArray(response.data?.records)) {
+        textList = response.data.records
+        total.value = response.data?.total || textList.length
+      } else {
+        textList = []
+        total.value = 0
+      }
+      texts.value = textList
     } else {
       texts.value = []
       total.value = 0
@@ -253,6 +265,7 @@ const getDifficultyText = (difficulty) => {
 // 监听课程选择变化，加载对应的单元
 const handleCourseChange = (courseId) => {
   selectedUnit.value = ''
+  currentPage.value = 1
   loadUnits(courseId)
   loadTexts()
 }

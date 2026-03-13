@@ -292,7 +292,7 @@ public class ECDICTService {
                 .replace("\u00B4", "'"); // 特殊撇号
 
         // 清理特殊标记（如[法]、[计]等）
-        field = field.replaceAll("\\[a-zA-Z+\\]", "");
+        field = field.replaceAll("\\[[a-zA-Z\\+]+\\]", "");
 
         // 清理多余的空白字符（包括制表符等）
         field = field.replaceAll("\\s+", " ").trim();
@@ -561,7 +561,7 @@ public class ECDICTService {
                     (wordObj.getDefinition() != null && wordObj.getDefinition().contains(keyword))) {
 
                 // 避免重复
-                boolean exists = results.stream().anyMatch(r -> r.get("word").equals(wordObj.getWord()));
+                boolean exists = results.stream().anyMatch(r -> wordObj.getWord() != null && wordObj.getWord().equals(r.get("word")));
                 if (!exists) {
                     Map<String, Object> result = convertECDICTToMap(wordObj);
                     result.put("matchType", "partial");
@@ -603,7 +603,7 @@ public class ECDICTService {
         Map<String, List<String>> result = new HashMap<>();
 
         // 处理包含词性前缀的定义（如 "n. xxx v. yyy"）
-        if (definition.matches(".*[nvar]\\..*")) {
+        if (definition != null && definition.matches(".*[nvar]\\..*")) {
             String[] parts = definition.split("(?=[nvar]\\.\\s)");
             for (String part : parts) {
                 part = part.trim();
@@ -617,7 +617,7 @@ public class ECDICTService {
                             k -> new ArrayList<>()).add(part);
                 }
             }
-        } else {
+        } else if (definition != null) {
             // 单一定义
             result.computeIfAbsent(primaryPos != null ? primaryPos : "unknown",
                     k -> new ArrayList<>()).add(definition);
@@ -630,7 +630,7 @@ public class ECDICTService {
      * 提取相关的翻译
      */
     private String extractRelevantTranslation(String translation, String pos) {
-        if (translation.isEmpty()) {
+        if (translation == null || translation.isEmpty()) {
             return "";
         }
 

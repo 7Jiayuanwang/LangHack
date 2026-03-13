@@ -191,7 +191,7 @@ const loadArticles = async () => {
       return
     }
 
-    if (data.code === 200) {
+    if (data?.code === 200) {
       let fetched = (Array.isArray(data.data) ? data.data : []).map(text => {
         const cat = getRandomCategory()
         const contentLength = typeof text.content === 'string' ? text.content.length : 0
@@ -204,10 +204,7 @@ const loadArticles = async () => {
       })
 
       if (selectedCategory.value) {
-        fetched = fetched.map(item => ({
-          ...item,
-          category: selectedCategory.value
-        }))
+        fetched = fetched.filter(item => item.category === selectedCategory.value)
       }
 
       articles.value = fetched

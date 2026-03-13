@@ -2,6 +2,7 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.entity.User;
+import com.english.exception.BusinessException;
 import com.english.service.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,8 +49,13 @@ public class StudentWordController {
         try {
             Long studentId = getCurrentStudentId(authentication);
 
+            // 参数校验
+            if (wordId == null || wordId <= 0) {
+                return Result.error("单词ID无效");
+            }
+
             Map<String, Object> detail = vocabularyBooksService.getWordDetailWithLearningState(studentId, wordId);
-            if (detail == null) {
+            if (detail == null || detail.isEmpty()) {
                 return Result.error("单词不存在");
             }
 
@@ -57,6 +63,8 @@ public class StudentWordController {
             learningRecordsService.recordWordView(studentId, wordId);
 
             return Result.success(detail);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("获取单词详情失败", e);
 
@@ -78,7 +86,16 @@ public class StudentWordController {
             if (wordIdObj == null) {
                 return Result.error("wordId不能为空");
             }
-            Long wordId = Long.valueOf(wordIdObj.toString());
+            Long wordId;
+            try {
+                wordId = Long.valueOf(wordIdObj.toString());
+            } catch (NumberFormatException e) {
+                return Result.error("wordId格式无效");
+            }
+
+            if (wordId <= 0) {
+                return Result.error("wordId必须大于0");
+            }
 
             // 检查是否已存在
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
@@ -96,6 +113,8 @@ public class StudentWordController {
             learningRecordsService.recordVocabularyAdd(studentId, wordId);
 
             return Result.success("已添加到生词本");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("添加生词失败", e);
 
@@ -124,6 +143,10 @@ public class StudentWordController {
                 return Result.error("单词不能为空");
             }
 
+            if (word.length() > 100) {
+                return Result.error("单词长度不能超过100个字符");
+            }
+
             // 第一步：查询或创建单词（自动创建功能）
             Map<String, Object> wordResult = wordNetService.getOrCreateWord(word);
 
@@ -136,7 +159,16 @@ public class StudentWordController {
             if (wordIdObj == null) {
                 return Result.error("单词ID缺失，无法添加到生词本");
             }
-            Long wordId = Long.valueOf(wordIdObj.toString());
+            Long wordId;
+            try {
+                wordId = Long.valueOf(wordIdObj.toString());
+            } catch (NumberFormatException e) {
+                return Result.error("单词ID格式无效");
+            }
+
+            if (wordId <= 0) {
+                return Result.error("单词ID无效");
+            }
 
             // 第二步：检查是否已在生词本中
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
@@ -162,6 +194,8 @@ public class StudentWordController {
 
             return Result.success(wordResult);
 
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("添加生词失败", e);
 
@@ -181,11 +215,15 @@ public class StudentWordController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false) String difficulty,
-            @RequestParam(required = false) String courseId,
+            @RequestParam(required = false) Long courseId,
             Authentication authentication) {
 
         try {
             Long studentId = getCurrentStudentId(authentication);
+
+            // 分页参数边界校验
+            page = Math.max(1, page);
+            size = Math.max(1, Math.min(size, 100));
 
             Map<String, Object> params = new HashMap<>();
             params.put("studentId", studentId);
@@ -200,6 +238,8 @@ public class StudentWordController {
             Map<String, Object> result = vocabularyBooksService.getVocabularyWithPagination(params);
 
             return Result.success(result);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("获取生词本失败", e);
 
@@ -219,6 +259,12 @@ public class StudentWordController {
 
         try {
             Long studentId = getCurrentStudentId(authentication);
+
+            // 参数校验
+            if (wordId == null || wordId <= 0) {
+                return Result.error("单词ID无效");
+            }
+
             Object masteryLevelObj = request.get("masteryLevel");
             if (masteryLevelObj == null) {
                 return Result.error("掌握程度不能为空");
@@ -241,6 +287,8 @@ public class StudentWordController {
             }
 
             return Result.success("掌握程度已更新");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("更新掌握程度失败", e);
 
@@ -263,11 +311,23 @@ public class StudentWordController {
             if (unitIdObj == null) {
                 return Result.error("unitId不能为空");
             }
-            Long unitId = Long.valueOf(unitIdObj.toString());
+
+            Long unitId;
+            try {
+                unitId = Long.valueOf(unitIdObj.toString());
+            } catch (NumberFormatException e) {
+                return Result.error("unitId格式无效");
+            }
+
+            if (unitId <= 0) {
+                return Result.error("unitId必须大于0");
+            }
 
             Map<String, Object> session = vocabularyBooksService.createStudySession(studentId, unitId);
 
             return Result.success(session);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("创建学习会话失败", e);
 
@@ -287,9 +347,15 @@ public class StudentWordController {
         try {
             Long studentId = getCurrentStudentId(authentication);
 
+            if (request == null) {
+                return Result.error("请求体不能为空");
+            }
+
             vocabularyBooksService.processStudyResults(studentId, request);
 
             return Result.success("学习结果已记录");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("提交学习结果失败", e);
 
@@ -312,6 +378,8 @@ public class StudentWordController {
             Map<String, Object> stats = vocabularyBooksService.getWordStudyStats(studentId, period);
 
             return Result.success(stats);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("获取学习统计失败", e);
 
@@ -330,12 +398,18 @@ public class StudentWordController {
 
         try {
             Long studentId = getCurrentStudentId(authentication);
-            String operation = (String) request.get("operation");
-            Object wordIdsObj = request.get("wordIds");
-
-            if (operation == null || operation.isEmpty()) {
+            // 参数校验：operation
+            Object operationObj = request.get("operation");
+            if (operationObj == null) {
                 return Result.error("请指定操作类型");
             }
+            String operation = operationObj.toString().trim();
+            if (operation.isEmpty()) {
+                return Result.error("请指定操作类型");
+            }
+
+            // 参数校验：wordIds
+            Object wordIdsObj = request.get("wordIds");
 
             if (wordIdsObj == null) {
                 return Result.error("请选择要操作的单词");
@@ -347,8 +421,25 @@ public class StudentWordController {
 
             @SuppressWarnings("unchecked")
             java.util.List<Long> wordIds = ((java.util.List<?>) wordIdsObj).stream()
-                    .map(id -> Long.valueOf(id.toString()))
+                    .map(id -> {
+                        try {
+                            return Long.valueOf(id.toString());
+                        } catch (NumberFormatException e) {
+                            logger.warn("Invalid wordId in batch: {}", id);
+                            return null;
+                        }
+                    })
+                    .filter(java.util.Objects::nonNull)
                     .collect(java.util.stream.Collectors.toList());
+
+            if (wordIds.isEmpty()) {
+                return Result.error("没有有效的单词ID");
+            }
+
+            // 限制批量大小，防止 DoS
+            if (wordIds.size() > 200) {
+                return Result.error("批量操作的单词数量不能超过200");
+            }
 
             switch (operation) {
                 case "delete":
@@ -363,6 +454,8 @@ public class StudentWordController {
                 default:
                     return Result.error("不支持的操作类型");
             }
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("批量操作失败", e);
 
@@ -377,7 +470,7 @@ public class StudentWordController {
         String username = authentication.getName();
         User user = userService.getUserByUsername(username);
         if (user == null) {
-            throw new com.english.exception.BusinessException("用户不存在");
+            throw new BusinessException("用户不存在");
         }
         return user.getId();
     }

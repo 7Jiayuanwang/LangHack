@@ -127,12 +127,21 @@ public class UnitController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> createUnit(@RequestBody Unit unit, Authentication authentication) {
         try {
+            // 验证单元名称不能为空
+            if (unit == null || unit.getName() == null || unit.getName().trim().isEmpty()) {
+                throw new BusinessException("单元名称不能为空");
+            }
+
             // 获取用户角色
             User currentUser = userService.getUserByUsername(authentication.getName());
             if (currentUser == null) {
                 throw new BusinessException("用户不存在");
             }
             String userRole = currentUser.getRole();
+            // 检查用户ID是否为null（防御性编程）
+            if (currentUser.getId() == null) {
+                throw new BusinessException("用户ID无效");
+            }
 
             // 教师需验证课程所有权
             if ("TEACHER".equals(userRole)) {
@@ -141,7 +150,7 @@ public class UnitController {
                     throw new BusinessException("课程ID不能为空");
                 }
                 List<Class> classes = classService.getClassesByCourseId(courseId);
-                boolean hasPermission = classes.stream()
+                boolean hasPermission = classes != null && classes.stream()
                         .anyMatch(c -> currentUser.getId().equals(c.getTeacherId()));
                 if (!hasPermission) {
                     throw new BusinessException("没有权限操作此课程的单元");
@@ -177,18 +186,27 @@ public class UnitController {
                 throw new BusinessException("用户不存在");
             }
             String userRole = currentUser.getRole();
+            // 检查用户ID是否为null（防御性编程）
+            if (currentUser.getId() == null) {
+                throw new BusinessException("用户ID无效");
+            }
 
             // 教师需验证课程所有权
             if ("TEACHER".equals(userRole)) {
                 Long courseId = existingUnit.getCourseId();
+                if (courseId == null) {
+                    throw new BusinessException("课程ID不能为空");
+                }
                 List<Class> classes = classService.getClassesByCourseId(courseId);
-                boolean hasPermission = classes.stream()
+                boolean hasPermission = classes != null && classes.stream()
                         .anyMatch(c -> currentUser.getId().equals(c.getTeacherId()));
                 if (!hasPermission) {
                     throw new BusinessException("没有权限操作此课程的单元");
                 }
             }
 
+            // 禁止修改courseId，保留原课程归属
+            unit.setCourseId(existingUnit.getCourseId());
             unit.setId(id);
             unitService.updateUnit(unit);
             return Result.success("单元更新成功");
@@ -218,13 +236,20 @@ public class UnitController {
             if (currentUser == null) {
                 throw new BusinessException("用户不存在");
             }
+            // 检查用户ID是否为null（防御性编程）
+            if (currentUser.getId() == null) {
+                throw new BusinessException("用户ID无效");
+            }
             String userRole = currentUser.getRole();
 
             // 教师需验证课程所有权
             if ("TEACHER".equals(userRole)) {
                 Long courseId = unit.getCourseId();
+                if (courseId == null) {
+                    throw new BusinessException("课程ID不能为空");
+                }
                 List<Class> classes = classService.getClassesByCourseId(courseId);
-                boolean hasPermission = classes.stream()
+                boolean hasPermission = classes != null && classes.stream()
                         .anyMatch(c -> currentUser.getId().equals(c.getTeacherId()));
                 if (!hasPermission) {
                     throw new BusinessException("没有权限操作此课程的单元");

@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDateTime;
 
 /**
  * 学生习题服务实现类
@@ -40,16 +41,16 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
     public Map<String, Object> submitAnswer(StudentExerciseAnswer studentAnswer) {
         // 参数验证
         if (studentAnswer == null) {
-            throw new IllegalArgumentException("答案对象不能为空");
+            throw new com.english.exception.BusinessException("答案对象不能为空");
         }
         if (studentAnswer.getStudentId() == null) {
-            throw new IllegalArgumentException("学生ID不能为空");
+            throw new com.english.exception.BusinessException("学生ID不能为空");
         }
         if (studentAnswer.getExerciseId() == null) {
-            throw new IllegalArgumentException("习题ID不能为空");
+            throw new com.english.exception.BusinessException("习题ID不能为空");
         }
         if (studentAnswer.getAnswerContent() == null || studentAnswer.getAnswerContent().trim().isEmpty()) {
-            throw new IllegalArgumentException("答案内容不能为空");
+            throw new com.english.exception.BusinessException("答案内容不能为空");
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -58,6 +59,10 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
         boolean isCorrect = textExerciseService.checkAnswer(studentAnswer.getExerciseId(), studentAnswer.getAnswerContent());
         studentAnswer.setIsCorrect(isCorrect);
 
+        // BUG FIX #1: 设置答题时间（如未提供）
+        if (studentAnswer.getAnswerTime() == null) {
+            studentAnswer.setAnswerTime(LocalDateTime.now());
+        }
         // 检查是否已经存在答案记录
         StudentExerciseAnswer existingAnswer = studentExerciseAnswerMapper.getAnswer(
             studentAnswer.getStudentId(),
@@ -68,6 +73,8 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
         if (existingAnswer != null) {
             // 更新现有答案
             studentAnswer.setId(existingAnswer.getId());
+            // BUG FIX #6: 更新时重新设置答题时间，以反映最后答题时间
+            studentAnswer.setAnswerTime(LocalDateTime.now());
             int updateResult = studentExerciseAnswerMapper.updateById(studentAnswer);
             result.put("success", updateResult > 0);
         } else {
@@ -83,6 +90,7 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<StudentExerciseAnswer> getStudentAnswersByText(Long studentId, Long textId, Long assignmentId) {
         try {
             return studentExerciseAnswerMapper.getAnswersByTextId(studentId, textId, assignmentId);
@@ -93,6 +101,7 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<StudentExerciseAnswer> getStudentAnswersByAssignment(Long studentId, Long assignmentId) {
         try {
             return studentExerciseAnswerMapper.getAnswersByAssignmentId(assignmentId, studentId);
@@ -103,6 +112,7 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Map<String, Object> getStudentAnswerStats(Long studentId, Long assignmentId) {
         try {
             Map<String, Object> stats = studentExerciseAnswerMapper.getAnswerStats(assignmentId, studentId);
@@ -118,7 +128,8 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
 
             int total = stats.get("total") instanceof Number ? ((Number) stats.get("total")).intValue() : 0;
             int correct = stats.get("correct") instanceof Number ? ((Number) stats.get("correct")).intValue() : 0;
-            int incorrect = stats.get("incorrect") instanceof Number ? ((Number) stats.get("incorrect")).intValue() : 0;
+            // BUG FIX #2: incorrect 应该是 total - correct（包括 NULL 值），而非 SQL 返回的 FALSE 数量
+            int incorrect = total - correct;
 
             Map<String, Object> result = new HashMap<>();
             result.put("totalAnswers", total);
@@ -145,6 +156,7 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
     }
 
     @Override
+    @Transactional(readOnly = true)
     public boolean hasCompletedTextExercises(Long studentId, Long textId, Long assignmentId) {
         try {
             // 获取课文的习题总数
@@ -167,12 +179,14 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Map<String, Object> getTextExerciseProgress(Long studentId, Long textId, Long assignmentId) {
+        Map<String, Object> result = new HashMap<>();
+
         try {
             // 获取课文的习题总数
             int totalExercises = textExerciseService.getExerciseCount(textId);
 
-            Map<String, Object> result = new HashMap<>();
             result.put("totalExercises", totalExercises);
 
             if (totalExercises == 0) {
@@ -216,11 +230,11 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
             return result;
         } catch (Exception e) {
             logger.error("获取课文习题进度失败", e);
-            Map<String, Object> result = new HashMap<>();
+            // 异常情况下返回未完成状态，而非完成状态
             result.put("totalExercises", 0);
             result.put("completedExercises", 0);
             result.put("progress", 0);
-            result.put("isCompleted", true);
+            result.put("isCompleted", false);
             result.put("accuracy", 0.0);
             return result;
         }

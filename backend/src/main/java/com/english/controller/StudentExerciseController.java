@@ -2,12 +2,14 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.entity.StudentExerciseAnswer;
+import com.english.entity.TextExercise;
 import com.english.entity.User;
 import com.english.entity.Assignment;
 import com.english.exception.BusinessException;
 import com.english.service.AssignmentService;
 import com.english.service.StudentClassesService;
 import com.english.service.StudentExerciseService;
+import com.english.service.TextExerciseService;
 import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +45,9 @@ public class StudentExerciseController {
     @Autowired
     private StudentClassesService studentClassesService;
 
+    @Autowired
+    private TextExerciseService textExerciseService;
+
     /**
      * 提交习题答案
      */
@@ -68,7 +73,15 @@ public class StudentExerciseController {
                 return Result.error("答案内容过长，不能超过50000字符");
             }
 
-            answer.setExerciseId(Long.valueOf(exerciseIdObj.toString()));
+            Long exerciseId = Long.valueOf(exerciseIdObj.toString());
+
+            // BUG FIX #1: 验证习题存在
+            TextExercise exercise = textExerciseService.getById(exerciseId);
+            if (exercise == null) {
+                throw new BusinessException("习题不存在");
+            }
+
+            answer.setExerciseId(exerciseId);
             answer.setStudentId(studentId);
             answer.setAnswerContent(answerContent);
 
@@ -104,6 +117,13 @@ public class StudentExerciseController {
                 }
                 if (assignment.getDeadline() != null && LocalDateTime.now().isAfter(assignment.getDeadline())) {
                     throw new BusinessException("任务已截止，无法再提交答案");
+                }
+
+                // BUG FIX #2: 验证习题属于任务对应的文本
+                java.util.List<Long> assignmentTextIds = assignment.getTextIds();
+                if (exercise.getTextId() == null || assignmentTextIds == null || assignmentTextIds.isEmpty()
+                        || !assignmentTextIds.contains(exercise.getTextId())) {
+                    throw new BusinessException("习题不属于此任务");
                 }
             }
 

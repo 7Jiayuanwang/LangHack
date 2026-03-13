@@ -3,37 +3,46 @@ package db.migration;
 import com.english.util.ECDICTImporter;
 import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
-import java.sql.Connection;
 
 /**
- * Flyway Java 迁移类：V4__ImportECDICTData
- * 负责在 Flyway 启动时自动触发 ECDICT 词典数据的导入。
+ * Flyway Java Migration: V4__ImportECDICTData
+ * Responsible for automatically triggering ECDICT dictionary data import when Flyway starts.
  * 
- * 为什么使用 Java 迁移：
- * 1. ECDICT 数据量巨大（几百万行），使用 SQL 脚本会导致 Flyway 运行极慢。
- * 2. Java 可以利用 JDBC 批量插入（Batch Insert），性能提升数百倍。
- * 3. 可以动态查找本地文件路径。
+ * Why use Java migration:
+ * 1. ECDICT dataset is huge (millions of rows), using SQL scripts would make Flyway run extremely slow
+ * 2. Java can leverage JDBC batch insertion (Batch Insert), improving performance hundreds of times
+ * 3. Can dynamically locate local file paths
  */
 public class V4__ImportECDICTData extends BaseJavaMigration {
 
+    private static final String DEFAULT_DB_URL = "jdbc:mysql://localhost:3306/english_learning?" +
+            "useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true";
+
     @Override
     public void migrate(Context context) throws Exception {
-        Connection connection = context.getConnection();
+        System.out.println("Flyway: Detected ECDICT import task...");
         
-        System.out.println("Flyway: 检测到 ECDICT 导入任务...");
-        
-        // 实例化导入工具并运行
-        String dbUrl = System.getenv().getOrDefault("DB_URL",
-                "jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true");
+        // Read database credentials from environment variables
+        // CRITICAL: DB_PASSWORD must be explicitly set - no hardcoded default for security reasons
+        String dbUrl = System.getenv().getOrDefault("DB_URL", DEFAULT_DB_URL);
         String dbUser = System.getenv().getOrDefault("DB_USER", "root");
-        String dbPassword = System.getenv().getOrDefault("DB_PASSWORD", "");
+        String dbPassword = System.getenv("DB_PASSWORD");
+        
+        // Validate that password is explicitly provided for security
+        if (dbPassword == null || dbPassword.isEmpty()) {
+            System.err.println("WARNING: DB_PASSWORD environment variable not set, ECDICT import skipped");
+            System.out.println("Flyway: ECDICT import task completed (skipped due to missing credentials).");
+            return;
+        }
+        
+        // Instantiate import tool and run
         ECDICTImporter importer = new ECDICTImporter(dbUrl, dbUser, dbPassword);
         
-        // 我们重用了现有的逻辑，它会自动检查表中是否有数据
-        // 注意：由于 Flyway 已经提供了 Connection，我们理想情况下应该重构 Importer 以接收该连接
-        // 但为了最小化改动，我们让 Importer 使用自己的连接管理
+        // NOTE: The tool creates its own connection management for now
+        // TODO: Refactor ECDICTImporter to accept the Connection provided by Flyway context
+        // to avoid duplicate connections and ensure proper transaction boundaries
         importer.run();
         
-        System.out.println("Flyway: ECDICT 导入流程执行完毕。");
+        System.out.println("Flyway: ECDICT import task execution completed.");
     }
 }

@@ -20,6 +20,7 @@ import java.util.Arrays;
  * 学生班级服务实现类
  */
 @Service
+@Transactional(readOnly = true)
 public class StudentClassesServiceImpl implements StudentClassesService {
 
     private static final Logger logger = LoggerFactory.getLogger(StudentClassesServiceImpl.class);
@@ -299,6 +300,7 @@ public class StudentClassesServiceImpl implements StudentClassesService {
         QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
         unitWordWrapper.in("unit_id", unitIds);
         List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
+        if (unitWords == null) unitWords = Collections.emptyList();
 
         List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).collect(Collectors.toList());
         if (wordIds.isEmpty()) {
@@ -461,8 +463,8 @@ public class StudentClassesServiceImpl implements StudentClassesService {
                     List<TextLearningRecord> textRecords = textLearningRecordMapper.selectList(textRecordWrapper);
                     if (textRecords == null) textRecords = Collections.emptyList();
 
-                    int totalReadTime = textRecords.stream()
-                        .mapToInt(r -> r.getDurationSeconds() != null ? r.getDurationSeconds() : 0)
+                    long totalReadTime = textRecords.stream()
+                        .mapToLong(r -> r.getDurationSeconds() != null ? r.getDurationSeconds() : 0)
                         .sum();
                     if (totalReadTime >= 600) { // 10分钟 = 600秒
                         readTexts++;

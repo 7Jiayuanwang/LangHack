@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 @Service
 public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements TextService {
@@ -95,7 +96,7 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
     @CacheEvict(value = {"texts", "publicTexts"}, allEntries = true)
     public void updateText(Text text) {
         if (text == null || text.getId() == null) {
-            throw new IllegalArgumentException("课文对象及ID不能为空");
+            throw new BusinessException("课文对象及ID不能为空");
         }
 
         // 先检查记录是否存在且未删除
@@ -232,6 +233,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
     // 新增用户课文相关方法实现
     @Override
     public List<Text> getTextsByUploader(Long uploaderId) {
+        if (uploaderId == null) {
+            return new ArrayList<>();
+        }
         QueryWrapper<Text> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("uploaded_by", uploaderId);
         queryWrapper.eq("deleted", 0);
@@ -264,14 +268,11 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
             );
         }
 
-        // 边界校验防止负数 OFFSET
-        int safePage = Math.max(1, page);
-        int safeSize = Math.max(1, Math.min(size, 100));
 
         queryWrapper.orderByDesc("created_time");
 
         // 使用 MyBatis-Plus Page 对象而非字符串拼接，防止 SQL 注入
-        Page<Text> pageParam = new Page<>(safePage, safeSize);
+        Page<Text> pageParam = new Page<>(page, size);
         IPage<Text> pageResult = page(pageParam, queryWrapper);
 
         return pageResult.getRecords();

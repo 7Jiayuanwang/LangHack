@@ -41,6 +41,11 @@ public class JwtUtil {
             throw new IllegalStateException("JWT Secret 长度不能少于 32 个字符");
         }
 
+        // 验证过期时间配置
+        if (expiration == null || expiration <= 0) {
+            throw new IllegalStateException("JWT expiration must be configured and greater than 0");
+        }
+
         // 生产环境额外安全检查
         if ("prod".equals(activeProfile)) {
             if (DEFAULT_SECRET.equals(secret)) {
@@ -48,8 +53,8 @@ public class JwtUtil {
                     "生产环境检测到默认 JWT Secret，请通过环境变量 JWT_SECRET 设置强密钥后再启动！");
             }
             // 检查密钥强度：不能是纯数字、纯字母或重复字符
-            if (secret.matches("^\\d+$") || secret.matches("^[a-zA-Z]+$") ||
-                secret.matches("(.)\\1{10,}")) {
+            if (secret.matches("^\d+$") || secret.matches("^[a-zA-Z]+$") ||
+                secret.matches("(.)\1{10,}")) {
                 throw new IllegalStateException(
                     "生产环境 JWT Secret 强度不足，请使用包含字母、数字、特殊字符的强密钥");
             }
@@ -69,11 +74,21 @@ public class JwtUtil {
     }
 
     private String createToken(Map<String, Object> claims, String subject) {
+        long expirationMillis = expiration; // expiration validated in init()
+        
+        // 防止时间溢出：检查时间加法是否会超过Long范围
+        long now = System.currentTimeMillis();
+        if (expirationMillis > Long.MAX_VALUE - now) {
+            // 时间溢出时使用最大可能值
+            expirationMillis = Long.MAX_VALUE - now;
+            logger.warn("JWT expiration milliseconds too large, capped to Long.MAX_VALUE");
+        }
+        
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(subject)
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .setIssuedAt(new Date(now))
+                .setExpiration(new Date(now + expirationMillis))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }

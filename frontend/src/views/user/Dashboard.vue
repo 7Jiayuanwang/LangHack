@@ -240,12 +240,23 @@ const loadRecommendedTexts = async () => {
       params: { count: 3 }
     })
 
-    if (response.code === 200) {
+    if (response?.code === 200 && response.data) {
       const data = response.data
-      recommendedTexts.value = Array.isArray(data) ? data : (Array.isArray(data?.records) ? data.records : [])
+      let textList = []
+      
+      if (Array.isArray(data)) {
+        textList = data
+      } else if (data?.records && Array.isArray(data.records)) {
+        textList = data.records
+      }
+      
+      recommendedTexts.value = textList.filter(t => t && t.id)
+    } else {
+      recommendedTexts.value = []
     }
   } catch (error) {
     console.error('加载推荐课文失败:', error)
+    recommendedTexts.value = []
   }
 }
 
@@ -313,7 +324,14 @@ const getDifficultyText = (difficulty) => {
 
 const formatDate = (dateString) => {
   if (!dateString) return ''
-  return new Date(dateString).toLocaleDateString()
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return ''
+    return date.toLocaleDateString()
+  } catch (error) {
+    console.error('日期格式化错误:', error)
+    return ''
+  }
 }
 
 onMounted(() => {

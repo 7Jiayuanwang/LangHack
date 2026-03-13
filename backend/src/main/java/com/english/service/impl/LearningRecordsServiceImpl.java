@@ -83,6 +83,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         long minutes = totalSeconds / 60;
 
         // 添加合理性检查：单日学习时长超过12小时（720分钟）视为异常
+        // 若超过上限，按最大合理值 720 分钟返回，避免异常数据污染前端显示
         if (minutes > 720) {
             logger.warn("检测到异常学习时长: 学生ID={}, 今日学习时长={}分钟(约{}小时), 记录数={}, 可能存在问题",
                     studentId, minutes, minutes / 60.0, records.size());
@@ -91,6 +92,8 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
                     .map(r -> String.format("ID=%d, 类型=%s, 时长=%d秒",
                             r.getId(), r.getRecordType(), r.getDurationSeconds() != null ? r.getDurationSeconds() : 0))
                     .collect(java.util.stream.Collectors.joining(", ")));
+            // 异常数据: 返回上限值，而非异常值，防止前端显示错误数据
+            minutes = 720;
         }
 
         logger.debug("计算今日学习时长: 学生ID={}, 记录数={}, 总秒数={}, 总分钟数={}",
@@ -517,9 +520,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             record.setEndTime(now);
             record.setIsCompleted(1);
 
-            // 计算时长（秒）
+            // 计算时长（秒），防止 long→int 溢出
             long duration = java.time.Duration.between(record.getStartTime(), now).getSeconds();
-            record.setDurationSeconds((int) duration);
+            record.setDurationSeconds((int) Math.min(duration, Integer.MAX_VALUE));
             record.setUpdatedTime(now);
 
             textLearningRecordMapper.updateById(record);
@@ -1049,11 +1052,11 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         if (records.isEmpty())
             return 0.0;
 
-        int correct = records.stream()
-                .mapToInt(r -> r.getCorrectCount() != null ? r.getCorrectCount() : 0)
+        long correct = records.stream()
+                .mapToLong(r -> r.getCorrectCount() != null ? r.getCorrectCount() : 0)
                 .sum();
-        int total = records.stream()
-                .mapToInt(r -> r.getTotalCount() != null ? r.getTotalCount() : 0)
+        long total = records.stream()
+                .mapToLong(r -> r.getTotalCount() != null ? r.getTotalCount() : 0)
                 .sum();
 
         return total > 0 ? (double) correct / total * 100 : 0.0;
@@ -1198,8 +1201,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             }
         }
 
-        // 使用 Math.ceil 防止整数截断，返回不小于实际分钟数的整数
-        return (int) Math.ceil(totalSeconds / 60.0);
+        // 使用标准整除转换为分钟（与其他方法保持一致）
+        // 防止整数溢出
+        return (int) Math.min(totalSeconds / 60, Integer.MAX_VALUE);
     }
 
     /**

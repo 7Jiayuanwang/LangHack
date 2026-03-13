@@ -202,9 +202,21 @@ const loadArticles = async () => {
 
     const data = await response.json()
 
+    // 防御null response
+    if (!data || typeof data !== 'object') {
+      ElMessage.error('获取文章失败')
+      return
+    }
+
     if (data.code === 200) {
-      articles.value = (Array.isArray(data.data) ? data.data : []).map(text => {
-        const contentLength = typeof text.content === 'string' ? text.content.length : 0
+      // 安全处理API响应：支持直接数组和分页格式
+      const dataArray = Array.isArray(data.data) ? data.data : (Array.isArray(data.data?.records) ? data.data.records : [])
+      if (!Array.isArray(dataArray)) {
+        ElMessage.error('文章数据格式错误')
+        return
+      }
+      articles.value = dataArray.map(text => {
+        const contentLength = typeof text?.content === 'string' ? text.content.length : 0
         return {
           ...text,
           coverGradient: getRandomGradient(),
@@ -212,7 +224,7 @@ const loadArticles = async () => {
         }
       })
     } else {
-      ElMessage.error(data.message || '获取文章失败')
+      ElMessage.error(data?.message || '获取文章失败')
     }
   } catch (error) {
     ElMessage.error('获取文章失败')
@@ -227,7 +239,16 @@ const readArticle = (article) => {
     ElMessage.warning('文章数据异常，无法打开')
     return
   }
-  fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST' }).catch(() => {})
+  // 记录阅读，但不阻塞导航，同时正确处理错误
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+  fetch(`${baseUrl}/api/public/texts/${article.id}/read`, { method: 'POST' })
+    .then(response => {
+      // 仅检查网络错误，不处理HTTP错误状态（后端已返回成功）
+      if (!response.ok) {
+        console.warn(`标记已读API返回 ${response.status}`)
+      }
+    })
+    .catch(error => console.error('记录文章阅读失败:', error))
   router.push({
     path: `/article/${article.id}`,
     query: { from: 'articles' }

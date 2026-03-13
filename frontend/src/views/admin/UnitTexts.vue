@@ -240,7 +240,8 @@ const loadTexts = async () => {
     })
 
     if (response.code === 200) {
-      let allTexts = Array.isArray(response.data) ? response.data : (response.data?.records || [])
+      // FIX: 增强响应数据防御
+      let allTexts = Array.isArray(response.data) ? response.data : ((response.data?.records && Array.isArray(response.data.records)) ? response.data.records : [])
 
       // 前端过滤（如果有搜索条件）
       if (searchForm.keyword) {
@@ -258,7 +259,7 @@ const loadTexts = async () => {
       pagination.total = allTexts.length
 
       // 如果当前页超出范围，重置到第一页
-      const maxPage = Math.ceil(pagination.total / pagination.size) || 1
+      const maxPage = (pagination.total > 0) ? Math.ceil(pagination.total / pagination.size) : 1
       if (pagination.current > maxPage) {
         pagination.current = 1
       }
@@ -269,7 +270,7 @@ const loadTexts = async () => {
       texts.value = allTexts.slice(start, end)
     }
   } catch (error) {
-    console.error('加载课文列表失败:', error)
+    console.error('Load texts error:', error)
     ElMessage.error('加载课文列表失败')
   } finally {
     loading.value = false
@@ -297,13 +298,16 @@ const searchAvailableTexts = async (query) => {
     if (response.code === 200) {
       // 过滤掉已经在单元中的课文和已分配给其他单元的课文
       const existingTextIds = texts.value.map(t => t.id)
-      availableTexts.value = (response.data?.records || []).filter(text =>
+      // FIX: 确保records是数组
+      const records = (response.data?.records && Array.isArray(response.data.records)) ? response.data.records : (Array.isArray(response.data) ? response.data : [])
+      availableTexts.value = records.filter(text =>
         !existingTextIds.includes(text.id) &&
         (text.unitId === 0 || text.unitId === null || text.unitId === undefined)
       )
     }
   } catch (error) {
     ElMessage.error('搜索课文失败')
+    console.error('Search texts error:', error)
   } finally {
     searchingTexts.value = false
   }

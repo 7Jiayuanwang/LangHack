@@ -121,30 +121,30 @@
     >
       <div class="word-content" v-if="selectedWordInfo">
         <div class="word-header">
-          <h2 class="word-title">{{ selectedWordInfo.word || '未知单词' }}</h2>
-          <div class="pronunciation" v-if="selectedWordInfo.phonetic">
-            {{ selectedWordInfo.phonetic }}
+          <h2 class="word-title">{{ selectedWordInfo?.word || '未知单词' }}</h2>
+          <div class="pronunciation" v-if="selectedWordInfo?.phonetic">
+            {{ selectedWordInfo?.phonetic }}
           </div>
         </div>
 
         <div class="word-body">
           <!-- 主要释义：优先显示中文翻译，其次英文定义 -->
-          <div class="main-meaning" v-if="selectedWordInfo.translation || selectedWordInfo.definition">
+          <div class="main-meaning" v-if="selectedWordInfo?.translation || selectedWordInfo?.definition">
             <div class="meaning-content">
-              {{ selectedWordInfo.translation || selectedWordInfo.definition }}
+              {{ selectedWordInfo?.translation || selectedWordInfo?.definition }}
             </div>
           </div>
 
           <!-- 词性标签 -->
-          <div class="pos-info" v-if="selectedWordInfo.pos">
-            <el-tag size="small" type="info">{{ getPosText(selectedWordInfo.pos) }}</el-tag>
+          <div class="pos-info" v-if="selectedWordInfo?.pos">
+            <el-tag size="small" type="info">{{ getPosText(selectedWordInfo?.pos) }}</el-tag>
           </div>
 
           <!-- 同义词 -->
-          <div class="synonyms-section" v-if="selectedWordInfo.synonyms && selectedWordInfo.synonyms.length > 0">
+          <div class="synonyms-section" v-if="selectedWordInfo?.synonyms && selectedWordInfo?.synonyms.length > 0">
             <div class="synonyms">
               <span
-                v-for="synonym in selectedWordInfo.synonyms.slice(0, 6)"
+                v-for="synonym in selectedWordInfo?.synonyms.slice(0, 6)"
                 :key="synonym"
                 class="synonym-tag"
                 @click="handleSynonymClick(synonym)"
@@ -238,6 +238,11 @@ const handleResize = () => {
   windowWidth.value = window.innerWidth
 }
 
+// 声明全局事件处理器变量，避免内存泄漏
+let activeDragHandlers = { move: null, end: null }
+let textContentClickHandler = null
+let synonymClickTimers = []
+
 
 // 处理文本选择
 // 浮动按钮拖动（支持触摸）
@@ -314,7 +319,7 @@ const handleFloatingBtnClick = (event) => {
   
   // 获取当前选中的文本
   const selection = window.getSelection()
-  const text = selection.toString().trim()
+  const text = selection?.toString()?.trim() || ''
   
   if (text && text.length > 0) {
     // 如果已经选中了文本，直接翻译
@@ -349,8 +354,8 @@ const translateSelectedText = async () => {
 
     if (response.ok) {
       const result = await response.json()
-      if (result.code === 200) {
-        translatedText.value = result.data
+      if (result?.code === 200) {
+        translatedText.value = result?.data
         ElMessage.success('翻译成功')
       } else {
         ElMessage.error('翻译失败，请稍后重试')
@@ -387,19 +392,19 @@ const loadTextDetail = async () => {
         ElMessage.error('课文数据为空')
         return
       }
-      textTitle.value = data.title || ''
-      difficulty.value = data.difficulty || ''
+      textTitle.value = data?.title || ''
+      difficulty.value = data?.difficulty || ''
       viewCount.value = data.viewCount ?? 0
       wordCount.value = data.wordCount || 0
       
       // 根据内容类型处理内容
-      if (data.contentType === 'MARKDOWN' && data.markdownContent) {
+      if (data.contentType === 'MARKDOWN' && data?.markdownContent) {
         // Markdown 格式，直接渲染 Markdown，不需要处理可点击单词
-        textContent.value = DOMPurify.sanitize(marked(data.markdownContent))
+        textContent.value = DOMPurify.sanitize(marked(data?.markdownContent))
       } else {
         // 纯文本格式
         // 保存所有版本
-        versions.value = data.versions || {}
+        versions.value = data?.versions || {}
         
         // 设置默认显示原文版本
         if (versions.value.original) {
@@ -409,7 +414,7 @@ const loadTextDetail = async () => {
           const firstVersion = Object.keys(versions.value)[0]
           if (firstVersion) {
             selectedVersion.value = firstVersion
-            textContent.value = versions.value[firstVersion]
+            textContent.value = versions.value?.[firstVersion]
           }
         }
         
@@ -459,7 +464,7 @@ const processTextContent = () => {
       // 所有长度大于1的英文单词都可点击
       if (cleanWord && cleanWord.length > 1) {
         processedContent.push(
-          `<span class="clickable-word" data-word="${encodeURIComponent(cleanWord)}">${wordText}</span>`
+          `<span class="clickable-word" data-word="${encodeURIComponent(cleanWord)}">${escapeHtml(wordText)}</span>`
         )
       } else {
         processedContent.push(escapeHtml(wordText))
@@ -486,6 +491,8 @@ const processedContent = computed(() => {
 
 // 处理单词点击 - 使用类似学生端的API
 const handleWordClick = async (wordText) => {
+  if (!wordText) return
+  
   const cleanWord = wordText.toLowerCase()
   selectedWord.value = { word: cleanWord, cleanWord: cleanWord }
 
@@ -505,8 +512,8 @@ const handleWordClick = async (wordText) => {
 
     if (response.ok) {
       const result = await response.json()
-      if (result.code === 200) {
-        selectedWordInfo.value = result.data
+      if (result?.code === 200) {
+        selectedWordInfo.value = result?.data
       } else {
         // 创建基本的单词信息作为备用
         selectedWordInfo.value = {
@@ -546,8 +553,8 @@ const handleWordClick = async (wordText) => {
 
 // 事件委托：处理文本区域内的单词点击，替代 window.handleWordClick 全局函数
 const handleTextClick = (event) => {
-  const target = event.target
-  if (target && target.classList.contains('clickable-word')) {
+  const target = event?.target
+  if (target && target.classList?.contains('clickable-word')) {
     const word = decodeURIComponent(target.getAttribute('data-word') || '')
     if (word) handleWordClick(word)
   }
@@ -555,7 +562,6 @@ const handleTextClick = (event) => {
 
 // 为全局访问创建handleWordClick函数，确保在window上正确绑定
 // 事件委托处理单词点击，避免 window 全局污染
-let textContentClickHandler = null
 onMounted(() => {
   // 用事件委托代替 window.handleWordClick，避免全局命名空间污染和潜在 XSS
   const container = document.querySelector('.text-content')
@@ -567,7 +573,6 @@ onMounted(() => {
     container.addEventListener('click', textContentClickHandler)
   }
 
-
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
 
@@ -577,6 +582,8 @@ onMounted(() => {
 
 // 处理同义词点击
 const handleSynonymClick = async (synonym) => {
+  if (!synonym) return
+  
   // 关闭当前弹窗
   showWordDialog.value = false
 
@@ -678,34 +685,37 @@ const goBack = () => {
 // 处理版本切换
 const handleVersionChange = (versionKey) => {
   selectedVersion.value = versionKey
-  textContent.value = versions.value[versionKey] || ''
+  textContent.value = versions.value?.[versionKey] || ''
   // 重新处理内容
   processTextContent()
 }
 
 // 清理事件监听
-let activeDragHandlers = null
-let synonymClickTimers = null
 onUnmounted(() => {
   // 清理拖动事件监听
-  if (activeDragHandlers) {
+  if (activeDragHandlers?.move && activeDragHandlers?.end) {
     document.removeEventListener('mousemove', activeDragHandlers.move)
     document.removeEventListener('mouseup', activeDragHandlers.end)
     document.removeEventListener('touchmove', activeDragHandlers.move)
     document.removeEventListener('touchend', activeDragHandlers.end)
-    activeDragHandlers = null
+    activeDragHandlers = { move: null, end: null }
   }
 
   // 清理同义词点击的延迟计时器
-  if (synonymClickTimers && Array.isArray(synonymClickTimers)) {
-    synonymClickTimers.forEach(timerId => clearTimeout(timerId))
-    synonymClickTimers = null
+  if (Array.isArray(synonymClickTimers) && synonymClickTimers.length > 0) {
+    synonymClickTimers.forEach(timerId => {
+      if (timerId !== null && timerId !== undefined) {
+        clearTimeout(timerId)
+      }
+    })
+    synonymClickTimers = []
   }
 
   // 清理文本点击处理器
   const container = document.querySelector('.text-content')
   if (container && textContentClickHandler) {
     container.removeEventListener('click', textContentClickHandler)
+    textContentClickHandler = null
   }
 
   // 清理窗口大小变化监听
@@ -714,6 +724,8 @@ onUnmounted(() => {
   // 清理音频对象
   if (currentAudio) {
     currentAudio.pause()
+    currentAudio.onended = null
+    currentAudio.onerror = null
     currentAudio = null
   }
 })

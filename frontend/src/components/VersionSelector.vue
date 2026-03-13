@@ -1,14 +1,18 @@
 <template>
   <div class="version-selector">
-    <div class="version-tabs">
+    <div v-if="availableVersions.length > 0" class="version-tabs">
       <button
         v-for="version in availableVersions"
         :key="version.key"
         :class="['version-tab', { active: selectedVersion === version.key }]"
-        @click="$emit('version-change', version.key)"
+        @click="emit('version-change', version.key)"
       >
         {{ version.label }}
       </button>
+    </div>
+    <!-- 空状态处理：所有版本都不可用 -->
+    <div v-else class="version-empty">
+      <p>暂无其他版本</p>
     </div>
   </div>
 </template>
@@ -21,18 +25,25 @@ const props = defineProps({
     type: Object,
     required: true,
     validator: (value) => {
-      return value !== null && typeof value === 'object'
+      // 必须是对象且不是数组
+      return value !== null && typeof value === 'object' && !Array.isArray(value)
     }
   },
   selectedVersion: {
     type: String,
     default: 'original'
+  },
+  // 可选：传入自定义版本标签映射
+  versionLabelsMap: {
+    type: Object,
+    default: null
   }
 })
 
-defineEmits(['version-change'])
+const emit = defineEmits(['version-change'])
 
-const versionLabels = {
+// 默认版本标签
+const defaultVersionLabels = {
   original: '原文',
   cet4: 'CET-4',
   cet6: 'CET-6',
@@ -40,13 +51,31 @@ const versionLabels = {
   chinese_parallel: '中英对照'
 }
 
+// 合并自定义和默认标签
+const versionLabels = computed(() => ({
+  ...defaultVersionLabels,
+  ...(props.versionLabelsMap || {})
+}))
+
+// 计算可用版本列表，确保selectedVersion有效
 const availableVersions = computed(() => {
-  return Object.keys(props.versions || {})
+  if (!props.versions || typeof props.versions !== 'object' || Array.isArray(props.versions)) {
+    return []
+  }
+  
+  const versions = Object.keys(props.versions)
     .filter(key => props.versions[key])
     .map(key => ({
       key,
-      label: versionLabels[key] || key
+      label: versionLabels.value[key] || key
     }))
+  
+  return versions
+})
+
+// 验证selectedVersion是否在可用版本中
+const isSelectedVersionValid = computed(() => {
+  return availableVersions.value.some(v => v.key === props.selectedVersion)
 })
 </script>
 
@@ -95,6 +124,13 @@ const availableVersions = computed(() => {
 .version-tab.active:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.version-empty {
+  padding: 12px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
 }
 
 @media (max-width: 768px) {

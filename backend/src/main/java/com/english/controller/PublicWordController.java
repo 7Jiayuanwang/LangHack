@@ -37,9 +37,9 @@ public class PublicWordController {
             @RequestParam(defaultValue = "100") int size,
             @RequestParam(required = false) String keyword) {
         try {
-            // 限制最大获取数量，确保页码合法
+            // 限制最大获取数量，确保页码和每页数量合法
             page = Math.max(1, page);
-            size = Math.min(size, 100);
+            size = Math.max(1, Math.min(size, 100)); // 添加最小值校验，防止负数
 
             Page<Word> pageParam = new Page<>(page, size);
             QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
@@ -48,7 +48,7 @@ public class PublicWordController {
                 if (keyword.length() > 100) {
                     return Result.error("搜索关键词过长");
                 }
-                queryWrapper.like("word", keyword);
+                queryWrapper.like("word", escapeLikeWildcard(keyword));
             }
 
             queryWrapper.eq("deleted", 0);
@@ -84,7 +84,7 @@ public class PublicWordController {
         try {
             QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("deleted", 0)
-                        .like("word", word)
+                        .like("word", escapeLikeWildcard(word))
                         .orderByAsc("word")
                         .last("LIMIT 50"); // 限制搜索结果数量
 
@@ -113,5 +113,16 @@ public class PublicWordController {
             log.error("获取单词详情失败, wordId={}", wordId, e);
             return Result.error("获取单词详情失败，请稍后重试");
         }
+    }
+
+    /**
+     * 转义 SQL LIKE 特殊字符，防止通配符注入
+     * LIKE 中 % 和 _ 是特殊字符，未转义会导致意外的模式匹配
+     */
+    private String escapeLikeWildcard(String input) {
+        if (input == null) return null;
+        return input.replace("\\", "\\\\")  // 转义反斜杠
+                    .replace("%", "\\%")    // 转义百分号
+                    .replace("_", "\\_");   // 转义下划线
     }
 }

@@ -235,7 +235,8 @@ const loadCourses = async () => {
       size: 100 // 获取所有课程
     })
     if (response.code === 200) {
-      courses.value = Array.isArray(response.data?.records) ? response.data.records : (Array.isArray(response.data) ? response.data : [])
+      // FIX: 增强响应数据防御
+      courses.value = ((response.data?.records && Array.isArray(response.data.records)) ? response.data.records : (Array.isArray(response.data) ? response.data : []))
     }
   } catch (error) {
     ElMessage.error('加载课程列表失败')
@@ -251,7 +252,7 @@ const loadUnits = async (courseId) => {
   try {
     const response = await adminApi.getUnitsByCourseId(courseId)
     if (response.code === 200) {
-      units.value = response.data || []
+      units.value = (response.data && Array.isArray(response.data)) ? response.data : []
     } else {
       units.value = []
       ElMessage.error(response.message || '加载单元列表失败')
@@ -266,10 +267,10 @@ const loadStats = async () => {
   try {
     const response = await adminApi.getTextStats()
     if (response.code === 200) {
-      stats.value = response.data || {}
+      stats.value = (response.data && typeof response.data === 'object') ? response.data : {}
     }
   } catch (error) {
-    console.error('加载统计信息失败:', error)
+    console.error('Load stats error:', error)
     stats.value = {}
   }
 }
@@ -292,8 +293,9 @@ const loadTexts = async () => {
     const response = await adminApi.getTexts(params)
 
     if (response.code === 200) {
-      texts.value = response.data?.records || []
-      pagination.total = response.data?.total || 0
+      // FIX: 增强响应数据防御
+      texts.value = ((response.data?.records && Array.isArray(response.data.records)) ? response.data.records : [])
+      pagination.total = (typeof response.data?.total === 'number') ? response.data.total : 0
     }
   } catch (error) {
     ElMessage.error('加载课文列表失败')
@@ -393,6 +395,7 @@ const deleteText = (text) => {
 let currentAudio = null
 
 const playAudio = (audioUrl) => {
+  if (!audioUrl) return
   if (currentAudio) { currentAudio.pause(); currentAudio = null }
   currentAudio = new Audio(audioUrl)
   currentAudio.play().catch(error => {

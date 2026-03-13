@@ -46,6 +46,12 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        // Require HTTPS in production (except localhost for development)
+        String profile = System.getProperty("spring.profiles.active", "dev");
+        if ("prod".equalsIgnoreCase(profile)) {
+            http.requiresChannel().anyRequest().requiresSecure();
+        }
+
         http
                 .headers()
                     .frameOptions().deny()
@@ -57,7 +63,7 @@ public class SecurityConfig {
                 .and()
                 .cors().configurationSource(corsConfigurationSource())
                 .and()
-                .csrf().disable()
+                .csrf().disable() // CSRF disabled: JWT-based stateless API (not vulnerable to CSRF)
                 .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 .and()
                 .authorizeRequests()
@@ -113,7 +119,18 @@ public class SecurityConfig {
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+        // Only apply CORS to public and user-facing paths, not admin/sensitive endpoints
+        source.registerCorsConfiguration("/api/auth/**", configuration);
+        source.registerCorsConfiguration("/api/public/**", configuration);
+        source.registerCorsConfiguration("/api/wordnet/**", configuration);
+        source.registerCorsConfiguration("/api/student/**", configuration);
+        source.registerCorsConfiguration("/api/user/**", configuration);
+        source.registerCorsConfiguration("/api/teacher/**", configuration);
+        source.registerCorsConfiguration("/api/media/**", configuration);
+        source.registerCorsConfiguration("/api/translate/**", configuration);
+        source.registerCorsConfiguration("/api/asr/**", configuration);
+        source.registerCorsConfiguration("/api/bilibili/**", configuration);
+        // Note: /api/admin/** explicitly excluded from CORS allowlist
         return source;
     }
 }

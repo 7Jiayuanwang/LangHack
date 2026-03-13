@@ -14,7 +14,7 @@
     >
       <el-radio-group
         v-model="userAnswer"
-        :disabled="answered"
+        :disabled="isAnswered"
         @change="handleAnswerChange"
       >
         <div
@@ -28,7 +28,7 @@
               <span class="option-label">{{ option.optionKey }}.</span>
               <span class="option-text">{{ option.optionContent }}</span>
               <el-tag
-                v-if="answered && option.isCorrect"
+                v-if="isAnswered && option.isCorrect"
                 type="success"
                 size="small"
                 class="correct-tag"
@@ -51,13 +51,13 @@
         type="textarea"
         :rows="3"
         placeholder="请输入你的答案"
-        :disabled="answered"
+        :disabled="isAnswered"
         @blur="handleAnswerChange"
       />
     </div>
 
     <!-- 答题状态和反馈 -->
-    <div v-if="answered" class="answer-feedback">
+    <div v-if="isAnswered" class="answer-feedback">
       <div class="feedback-header">
         <el-alert
           :title="isCorrect ? '回答正确！' : '回答错误'"
@@ -79,7 +79,7 @@
     </div>
 
     <!-- 提交按钮 -->
-    <div v-if="!answered" class="answer-actions">
+    <div v-if="!isAnswered" class="answer-actions">
       <el-button
         type="primary"
         :loading="submitting"
@@ -93,7 +93,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 
@@ -101,7 +101,8 @@ import request from '@/utils/request'
 const props = defineProps({
   exercise: {
     type: Object,
-    required: true
+    required: true,
+    validator: (value) => value && typeof value === "object" && "id" in value && "question" in value
   },
   initialAnswer: {
     type: String,
@@ -116,7 +117,7 @@ const props = defineProps({
     default: false
   },
   assignmentId: {
-    type: Number,
+    type: [Number, null],
     default: null
   }
 })
@@ -127,6 +128,7 @@ const emit = defineEmits(['answer-submit', 'answer-change'])
 // Reactive data
 const userAnswer = ref(props.initialAnswer || '')
 const isCorrect = ref(props.correct || false)
+const isAnswered = ref(props.answered || false)
 const submitting = ref(false)
 const timeSpent = ref(0)
 const attemptCount = ref(0)
@@ -145,7 +147,7 @@ const ensureTimerCleared = () => {
 
 // Computed properties
 const canSubmit = computed(() => {
-  if (props.exercise.exerciseType === 'FILL_BLANK' || props.exercise.exerciseType === 'SHORT_ANSWER') {
+  if (props.exercise?.exerciseType === 'FILL_BLANK' || props.exercise?.exerciseType === 'SHORT_ANSWER') {
     return userAnswer.value != null && userAnswer.value.trim().length > 0
   } else {
     // 选择题：必须选了一个非空选项
@@ -156,17 +158,18 @@ const canSubmit = computed(() => {
 // Watch for prop changes
 watch(() => props.initialAnswer, (newValue) => {
   userAnswer.value = newValue || ''
-})
+}, { immediate: true })
 
 watch(() => props.answered, (newValue) => {
+  isAnswered.value = newValue
   if (newValue) {
     stopTimer()
   }
-})
+}, { immediate: true })
 
 watch(() => props.correct, (newValue) => {
   isCorrect.value = newValue || false
-})
+}, { immediate: true })
 
 // Methods
 const getExerciseTypeText = (type) => {
@@ -190,7 +193,7 @@ const getDifficultyType = (type) => {
 }
 
 const getOptionClass = (option) => {
-  if (!props.answered) return ''
+  if (!isAnswered.value) return ''
 
   const classes = ['option-item']
 
@@ -205,7 +208,7 @@ const getOptionClass = (option) => {
 
 const handleAnswerChange = () => {
   emit('answer-change', {
-    exerciseId: props.exercise.id,
+    exerciseId: props.exercise?.id,
     answer: userAnswer.value
   })
 }
@@ -216,6 +219,11 @@ const submitAnswer = async () => {
     return
   }
 
+  if (!props.exercise?.id) {
+    ElMessage.error('题目信息不完整')
+    return
+  }
+
   submitting.value = true
   stopTimer()
   attemptCount.value++
@@ -223,8 +231,11 @@ const submitAnswer = async () => {
   const answerData = {
     exerciseId: props.exercise.id,
     answerContent: userAnswer.value,
-    timeSpentSeconds: timeSpent.value,
-    assignmentId: props.assignmentId
+    timeSpentSeconds: timeSpent.value
+  }
+
+  if (props.assignmentId !== null && props.assignmentId !== undefined) {
+    answerData.assignmentId = props.assignmentId
   }
 
   try {
@@ -234,22 +245,25 @@ const submitAnswer = async () => {
       data: answerData
     })
 
-    if (result.code === 200) {
-      isCorrect.value = result.data?.isCorrect || false
-      ElMessage.success(result.data?.message || '提交成功')
+    if (result?.code === 200) {
+      const responseData = result.data || {}
+      isCorrect.value = Boolean(responseData.isCorrect)
+      isAnswered.value = true
+      ElMessage.success(responseData.message || '提交成功')
 
       emit('answer-submit', {
         exerciseId: props.exercise.id,
         answer: userAnswer.value,
         isCorrect: isCorrect.value,
         timeSpent: timeSpent.value,
-        ...result.data
+        attemptCount: attemptCount.value
       })
     } else {
-      ElMessage.error(result.message || '提交失败')
+      ElMessage.error(result?.message || '提交失败')
     }
   } catch (error) {
-    console.error('提交答案失败:', error)
+    const errorMsg = error?.response?.data?.message || error?.message || '提交失败'
+    console.error('提交答案失败:', errorMsg)
     ElMessage.error('提交失败，请重试')
   } finally {
     submitting.value = false
@@ -277,10 +291,12 @@ const stopTimer = () => {
   ensureTimerCleared()
 }
 
-// Start timer when component mounts
-if (!props.answered) {
-  startTimer()
-}
+// Start timer when component mounts (moved from module level)
+onMounted(() => {
+  if (!isAnswered.value) {
+    startTimer()
+  }
+})
 
 // Cleanup
 onBeforeUnmount(() => {

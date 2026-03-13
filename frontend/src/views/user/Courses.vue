@@ -68,10 +68,17 @@ const loadCourses = async () => {
       method: 'get'
     })
 
-    if (response.code === 200) {
-      // 普通用户无权访问 /api/admin/** 接口，直接使用课程列表，统计数据以默认值填充
-      const data = response.data
-      courses.value = (Array.isArray(data) ? data : (Array.isArray(data?.records) ? data.records : [])).map(course => ({
+    if (response?.code === 200 && response.data) {
+      // 提取课程列表：支持直接数组或分页对象中的records字段
+      let courseList = []
+      if (Array.isArray(response.data)) {
+        courseList = response.data
+      } else if (Array.isArray(response.data?.records)) {
+        courseList = response.data.records
+      }
+
+      // 标准化课程数据结构
+      courses.value = courseList.map(course => ({
         ...course,
         id: course?.id,
         name: course?.name || course?.courseName || '未知课程',
@@ -80,7 +87,7 @@ const loadCourses = async () => {
         wordCount: course?.wordCount || 0
       }))
     } else {
-      ElMessage.error('获取课程列表失败')
+      ElMessage.error(response?.message || '获取课程列表失败')
     }
   } catch (error) {
     ElMessage.error('获取课程列表失败')
@@ -98,7 +105,7 @@ const enterCourse = async (course) => {
       method: 'get'
     })
 
-    if (response.code === 200 && Array.isArray(response.data) && response.data.length > 0) {
+    if (response?.code === 200 && Array.isArray(response.data) && response.data.length > 0) {
       // 如果有单元，跳转到单元列表页面
       router.push({
         path: '/user/units',

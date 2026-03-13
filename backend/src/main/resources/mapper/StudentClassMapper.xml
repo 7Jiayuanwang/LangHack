@@ -43,7 +43,7 @@
             c.created_time as class_created_time
         FROM student_classes sc
         LEFT JOIN users u ON sc.student_id = u.id AND u.deleted = 0
-        LEFT JOIN classes c ON sc.class_id = c.id
+        LEFT JOIN classes c ON sc.class_id = c.id AND c.deleted = 0
         WHERE 1=1
         <if test="classId != null">
             AND sc.class_id = #{classId}
@@ -76,7 +76,7 @@
             c.created_time as class_created_time
         FROM student_classes sc
         LEFT JOIN users u ON sc.student_id = u.id AND u.deleted = 0
-        LEFT JOIN classes c ON sc.class_id = c.id
+        LEFT JOIN classes c ON sc.class_id = c.id AND c.deleted = 0
         WHERE sc.class_id = #{classId}
         ORDER BY sc.join_time ASC
     </select>
@@ -97,7 +97,7 @@
             c.created_time as class_created_time
         FROM student_classes sc
         LEFT JOIN users u ON sc.student_id = u.id AND u.deleted = 0
-        LEFT JOIN classes c ON sc.class_id = c.id
+        LEFT JOIN classes c ON sc.class_id = c.id AND c.deleted = 0
         WHERE sc.student_id = #{studentId}
         ORDER BY sc.join_time DESC
     </select>

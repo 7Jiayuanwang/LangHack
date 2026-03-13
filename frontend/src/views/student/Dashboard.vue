@@ -272,7 +272,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted } from "vue"
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
@@ -330,10 +330,26 @@ const loadLearningStats = async () => {
   try {
     const response = await getTodayLearningStats()
     if (response?.code === 200 && response?.data) {
-      Object.assign(learningStats, response.data)
+      // 防御性编程：验证数据结构
+      const stats = response.data
+      if (typeof stats === 'object' && stats !== null) {
+        Object.assign(learningStats, {
+          wordsLearned: stats.wordsLearned ?? 0,
+          reviewCount: stats.reviewCount ?? 0,
+          studyTime: stats.studyTime ?? 0,
+          accuracy: stats.accuracy ?? 0
+        })
+      }
     }
   } catch (error) {
     console.error('加载学习统计失败:', error)
+    // 异常时重置为默认值，防止显示脏数据
+    Object.assign(learningStats, {
+      wordsLearned: 0,
+      reviewCount: 0,
+      studyTime: 0,
+      accuracy: 0
+    })
   }
 }
 
@@ -421,7 +437,9 @@ const getCourseProgress = (course) => {
   if (course.progress !== undefined && course.progress !== null) {
     const progress = typeof course.progress === 'number' ? course.progress : parseFloat(course.progress)
     if (!isNaN(progress)) {
-      return Math.round(progress)
+      // 后端返回 0.0-1.0 范围，转换为 0-100 百分比
+      const percentage = progress <= 1 ? progress * 100 : progress
+      return Math.round(percentage)
     }
   }
   // 如果没有progress字段，使用learnedUnits计算

@@ -19,20 +19,29 @@
         id, text_id, question, exercise_type, order_num, created_by, created_time, updated_time
     </sql>
 
-    <!-- 根据课文ID获取习题列表 -->
+    <!-- 根据课文ID获取习题列表（校验课文未删除） -->
     <select id="getExercisesByTextId" resultMap="BaseResultMap">
         SELECT
-        <include refid="Base_Column_List"/>
-        FROM text_exercises
-        WHERE text_id = #{textId}
-        ORDER BY order_num ASC, created_time ASC
+            te.id,
+            te.text_id,
+            te.question,
+            te.exercise_type,
+            te.order_num,
+            te.created_by,
+            te.created_time,
+            te.updated_time
+        FROM text_exercises te
+        INNER JOIN texts t ON te.text_id = t.id AND t.deleted = 0
+        WHERE te.text_id = #{textId}
+        ORDER BY te.order_num ASC, te.created_time ASC
     </select>
 
-    <!-- 获取课文习题数量 -->
+    <!-- 获取课文习题数量（校验课文未删除） -->
     <select id="countExercisesByTextId" resultType="int">
         SELECT COUNT(*)
-        FROM text_exercises
-        WHERE text_id = #{textId}
+        FROM text_exercises te
+        INNER JOIN texts t ON te.text_id = t.id AND t.deleted = 0
+        WHERE te.text_id = #{textId}
     </select>
 
     <!-- 删除课文的所有习题 -->

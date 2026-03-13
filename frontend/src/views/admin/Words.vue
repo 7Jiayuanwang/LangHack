@@ -315,7 +315,7 @@ const loadWords = async () => {
     })
 
     if (response.code === 200) {
-      words.value = response.data?.records || []
+      words.value = Array.isArray(response.data?.records) ? response.data.records : []
       pagination.total = response.data?.total || 0
     }
   } catch (error) {
@@ -350,11 +350,13 @@ const handleCurrentChange = (page) => {
 
 const showAddDialog = () => {
   isEdit.value = false
+  resetForm()
   dialogVisible.value = true
 }
 
 const editWord = (word) => {
   isEdit.value = true
+  formRef.value?.clearValidate()
   Object.assign(wordForm, {
     ...word,
     pronunciation: word.pronunciation || '',
@@ -432,8 +434,8 @@ const handleSubmit = async () => {
       ElMessage.error(response.message || '操作失败')
     }
   } catch (error) {
-    if (error.constructor.name !== 'Error') {
-      // 表单验证错误
+    if (error.constructor.name === 'Error' && !error.message) {
+      // 表单验证错误（Element Plus validate() rejection）
       return
     }
     ElMessage.error('操作失败')
@@ -444,6 +446,7 @@ const handleSubmit = async () => {
 
 const resetForm = () => {
   Object.assign(wordForm, {
+    id: undefined,
     word: '',
     pronunciation: '',
     definition: '',

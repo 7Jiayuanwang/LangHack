@@ -296,7 +296,7 @@ const showDetailDialog = ref(false)
 const searchKeyword = ref('')
 const selectedDifficulty = ref('')
 const myTexts = ref([])
-const currentText = ref({})
+const currentText = ref(null)
 
 // 表单数据
 const uploadFormRef = ref()
@@ -341,7 +341,7 @@ const loadMyUploads = async () => {
     })
 
     if (response.code === 200) {
-      myTexts.value = response.data || []
+      myTexts.value = (response.data && Array.isArray(response.data)) ? response.data : []
     }
   } catch (error) {
     ElMessage.error('获取上传内容失败')
@@ -549,7 +549,9 @@ const formatDate = (dateString) => {
 }
 
 const formatContent = (content) => {
-  return DOMPurify.sanitize(marked((content || '').replace(/\n/g, '<br>')))
+  if (!content || typeof content !== 'string') return ''
+  // FIX: 先清理标签再转换换行符，避免 <br> 标签注入
+  return DOMPurify.sanitize(marked(content))
 }
 
 // 生命周期

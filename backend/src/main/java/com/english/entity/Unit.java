@@ -23,7 +23,7 @@ public class Unit {
     private LocalDateTime createdTime;
 
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
+    private LocalDateTime updatedTime;
 
     // Getters and Setters
     public Long getId() {
@@ -74,11 +74,11 @@ public class Unit {
         this.createdTime = createdTime;
     }
 
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
+    public LocalDateTime getUpdatedTime() {
+        return updatedTime;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public void setUpdatedTime(LocalDateTime updatedTime) {
+        this.updatedTime = updatedTime;
     }
 }

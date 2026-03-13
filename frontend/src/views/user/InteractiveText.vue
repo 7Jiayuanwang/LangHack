@@ -164,6 +164,7 @@ const learningSuggestions = ref([])
 
 // 学习计时器
 let studyTimer = null
+let completionTimeoutId = null
 let studyStartTime = null
 let accumulatedTime = 0 // 累计学习时间（秒）
 const REQUIRED_STUDY_TIME = 10 * 60 * 1000 // 10分钟，毫秒
@@ -317,6 +318,11 @@ const pauseReading = async () => {
   }
 
   stopStudyTimer()
+  // 清理任务完成提示的延迟
+  if (completionTimeoutId !== null) {
+    clearTimeout(completionTimeoutId)
+    completionTimeoutId = null
+  }
 
   // 保存当前学习时长
   await saveLearningRecord()
@@ -402,7 +408,7 @@ const markAsCompleted = async () => {
 
         // 如果任务完成率>=100%，询问是否返回任务列表
         if (completionRate >= 100 && fromSource.value === 'assignment') {
-          setTimeout(() => {
+          completionTimeoutId = setTimeout(() => {
             ElMessageBox.confirm('恭喜！任务已完成，是否返回任务列表？', '任务完成', {
               confirmButtonText: '返回任务',
               cancelButtonText: '继续学习',
@@ -505,6 +511,11 @@ onBeforeUnmount(() => {
     saveLearningRecord()
   }
   stopStudyTimer()
+  // 清理任务完成提示的延迟
+  if (completionTimeoutId !== null) {
+    clearTimeout(completionTimeoutId)
+    completionTimeoutId = null
+  }
 })
 
 // 处理页面可见性变化（切换标签页时自动暂停）

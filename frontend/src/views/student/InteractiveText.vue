@@ -399,6 +399,11 @@ const isSelectingMode = ref(false)
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
 const handleWindowResize = () => { windowWidth.value = window.innerWidth }
 let autoStartTimerId = null
+let textContentWatchTimerId = null
+let floatingBtnResetTimerId = null
+let imageDragMoveListener = null
+let imageDragEndListener = null
+
 const translateDialogWidth = computed(() => {
   if (windowWidth.value < 768) return '230px'
   return '400px'
@@ -785,6 +790,10 @@ const handleFloatingBtnClick = (event) => {
   
   // 获取当前选中的文本
   const selection = window.getSelection()
+  if (!selection) {
+    ElMessage.warning('请先选择要翻译的文本')
+    return
+  }
   const text = selection.toString().trim()
   
   if (text && text.length > 0) {
@@ -821,7 +830,7 @@ const translateSelectedText = async () => {
     if (response.ok) {
       const result = await response.json()
       if (result.code === 200) {
-        translatedText.value = result.data
+        translatedText.value = typeof result.data === 'string' ? result.data : '翻译失败'
         ElMessage.success('翻译成功')
       } else {
         ElMessage.error('翻译失败，请稍后重试')
@@ -1149,7 +1158,8 @@ let currentAudio = null
 const playWordAudio = () => {
   if (selectedWordInfo.value) {
     const audioUrl = selectedWordInfo.value.audioUrl || selectedWordInfo.value.audio
-    if (audioUrl) {
+    // 检查audioUrl非空且为字符串类型
+    if (audioUrl && typeof audioUrl === 'string' && audioUrl.trim()) {
       if (currentAudio) {
         currentAudio.pause()
         currentAudio = null
@@ -1363,6 +1373,13 @@ onBeforeUnmount(() => {
     floatingBtnDragHandlers = null
   }
 
+  // 清理图片预览缩放拖拽事件监听（如果组件在拖拽图片时卸载）
+  if (isDragging.value) {
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', endDrag);
+    isDragging.value = false;
+  }
+
   // 清理定时器
   if (autoStartTimerId) {
     clearTimeout(autoStartTimerId)
@@ -1406,6 +1423,8 @@ onBeforeUnmount(() => {
   // 清理音频资源
   if (currentAudio) {
     currentAudio.pause()
+    currentAudio.onended = null
+    currentAudio.onerror = null
     currentAudio = null
   }
 })
@@ -1437,7 +1456,7 @@ const handleSelectionChange = () => {
   if (isTranslateBtnDragging.value) return
 
   const selection = window.getSelection()
-  if (!selection.rangeCount || selection.isCollapsed) {
+  if (!selection || !selection.rangeCount || selection.isCollapsed) {
     // Delay hiding to allow menu click events to fire first
     setTimeout(() => {
       const sel = window.getSelection()
@@ -1575,7 +1594,7 @@ const handleAiQa = () => {
   let context = ''
   try {
     const selection = window.getSelection()
-    if (selection.rangeCount > 0) {
+    if (selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0)
       const container = range.commonAncestorContainer
       const fullText = container.textContent || ''

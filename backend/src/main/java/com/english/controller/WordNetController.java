@@ -65,6 +65,10 @@ public class WordNetController {
             if (keyword == null || keyword.trim().isEmpty() || keyword.length() > 100) {
                 return Result.error("关键词不能为空且不超过100字符");
             }
+            // FIX: 在参数接收层添加 limit 的边界检查，防止负数
+            if (limit <= 0) {
+                limit = 10;
+            }
             int safeLim = Math.max(1, Math.min(limit, 100));
             List<Map<String, Object>> results = wordNetService.searchWords(keyword, safeLim);
             return Result.success(results);
@@ -124,6 +128,10 @@ public class WordNetController {
     @PostMapping("/text/words")
     public Result<List<Map<String, Object>>> getClickableWords(@RequestBody Map<String, String> request) {
         try {
+            // FIX: 添加请求体 null 检查，防止 NPE
+            if (request == null) {
+                return Result.error("请求体不能为空");
+            }
             String text = request.get("text");
             if (text == null || text.trim().isEmpty()) {
                 return Result.error("文本内容不能为空");
@@ -149,6 +157,10 @@ public class WordNetController {
     @PostMapping("/words/batch")
     public Result<Map<String, Object>> getBatchWordInfo(@RequestBody Map<String, Object> request) {
         try {
+            // FIX: 添加请求体 null 检查，防止 NPE
+            if (request == null) {
+                return Result.error("请求体不能为空");
+            }
             Object wordsObj = request.get("words");
             if (!(wordsObj instanceof List)) {
                 return Result.error("单词列表格式错误");

@@ -70,7 +70,7 @@
               <div class="options-header">
                 <span>选项设置</span>
                 <el-button
-                  v-if="exercise.exerciseType === 'MULTIPLE_CHOICE'"
+                  v-if="exercise.exerciseType === 'MULTIPLE_CHOICE' && exercise.options.length < 26"
                   type="primary"
                   size="small"
                   @click="addOption(index)"
@@ -92,7 +92,7 @@
                       :placeholder="`选项 ${String.fromCharCode(65 + optionIndex)}`"
                     />
                     <el-radio
-                      v-model="exercise.correctAnswer"
+                      :model-value="exercise.correctAnswer"
                       :label="option.optionKey"
                       @change="setCorrectAnswer(index, option.optionKey)"
                     >
@@ -109,6 +109,22 @@
                   />
                 </div>
               </div>
+            </div>
+            <!-- 填空题和简答题的参考答案输入框 -->
+            <div
+              v-if="exercise.exerciseType === 'FILL_BLANK' || exercise.exerciseType === 'SHORT_ANSWER'"
+              class="answer-section"
+            >
+              <el-form-item label="参考答案" required>
+                <el-input
+                  v-model="exercise.correctAnswer"
+                  :type="exercise.exerciseType === 'SHORT_ANSWER' ? 'textarea' : 'text'"
+                  :rows="exercise.exerciseType === 'SHORT_ANSWER' ? 3 : 1"
+                  :placeholder="exercise.exerciseType === 'SHORT_ANSWER' ? '请输入参考答案' : '请输入填空答案'"
+                  :maxlength="exercise.exerciseType === 'SHORT_ANSWER' ? 1000 : 500"
+                  show-word-limit
+                />
+              </el-form-item>
             </div>
           </div>
         </div>
@@ -208,6 +224,7 @@ const removeExercise = (index) => {
 
 const handleTypeChange = (index) => {
   const exercise = exercises.value[index]
+  if (!exercise) return
   exercise.options = []
   exercise.correctAnswer = null
 
@@ -228,6 +245,10 @@ const handleTypeChange = (index) => {
 
 const addOption = (exerciseIndex) => {
   const exercise = exercises.value[exerciseIndex]
+  if (!exercise || !exercise.options) return
+  
+  // 防止超过26个选项（Z字符）
+  if (exercise.options.length >= 26) return
   const nextKey = String.fromCharCode(65 + exercise.options.length)
   exercise.options.push({
     optionContent: '',
@@ -239,6 +260,7 @@ const addOption = (exerciseIndex) => {
 
 const removeOption = (exerciseIndex, optionIndex) => {
   const exercise = exercises.value[exerciseIndex]
+  if (!exercise || !exercise.options) return
   exercise.options.splice(optionIndex, 1)
 
   // 重新设置选项标识
@@ -249,13 +271,16 @@ const removeOption = (exerciseIndex, optionIndex) => {
 
   // 如果删除的是正确答案，清除正确答案
   // 使用可选链和空值合并，防止 correctAnswer 为 undefined 时 .find 报错
-  if (exercise.correctAnswer && !exercise.options.find(opt => opt.optionKey === exercise.correctAnswer)) {
+  if (exercise.correctAnswer && !exercise.options.find(opt => opt && opt.optionKey === exercise.correctAnswer)) {
     exercise.correctAnswer = null
   }
 }
 
 const setCorrectAnswer = (exerciseIndex, optionKey) => {
   const exercise = exercises.value[exerciseIndex]
+  if (!exercise || !exercise.options) return
+  // BUG FIX: 同时更新 correctAnswer 字段和 isCorrect 标志
+  exercise.correctAnswer = optionKey
   exercise.options.forEach(option => {
     option.isCorrect = option.optionKey === optionKey
   })
@@ -271,22 +296,22 @@ const validateExercises = () => {
 
   if (hasExercises.value) {
     exercises.value.forEach((exercise, index) => {
-      if (!exercise.question || !exercise.question.trim()) {
+      if (!exercise || !exercise.question || !exercise.question.trim()) {
         errors.push(`习题${index + 1}：题目内容不能为空`)
       }
 
       if ((exercise.exerciseType === 'FILL_BLANK' || exercise.exerciseType === 'SHORT_ANSWER') &&
-          !exercise.correctAnswer?.trim()) {
+          (!exercise.correctAnswer || !exercise.correctAnswer.trim())) {
         errors.push(`习题${index + 1}：参考答案不能为空`)
       }
 
       if ((exercise.exerciseType === 'MULTIPLE_CHOICE' || exercise.exerciseType === 'TRUE_FALSE') &&
-          (exercise.options || []).some(opt => !opt.optionContent?.trim())) {
+          (exercise.options || []).some(opt => !opt || !opt.optionContent?.trim())) {
         errors.push(`习题${index + 1}：选项内容不能为空`)
       }
 
       if ((exercise.exerciseType === 'MULTIPLE_CHOICE' || exercise.exerciseType === 'TRUE_FALSE') &&
-          !(exercise.options || []).some(opt => opt.isCorrect)) {
+          !(exercise.options || []).some(opt => opt && opt.isCorrect)) {
         errors.push(`习题${index + 1}：必须设置一个正确答案`)
       }
     })

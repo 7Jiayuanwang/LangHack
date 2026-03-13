@@ -30,6 +30,7 @@ public class Assignment {
 
     private LocalDateTime deadline;
 
+    @TableField("weight")
     private Double weight; // 任务权重，默认1.00
 
     @TableField("ideal_study_time_minutes")
@@ -38,6 +39,8 @@ public class Assignment {
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
+    @TableField("deleted")
+    @TableLogic(value = "0", delval = "1")
     private Integer deleted;
 
     // 关联字段（不映射到数据库）

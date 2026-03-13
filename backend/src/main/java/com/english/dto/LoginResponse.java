@@ -1,19 +1,22 @@
 package com.english.dto;
 
-import com.english.entity.User;
-
+/**
+ * 登录响应DTO
+ * 使用UserDTO而不是User实体，以隐藏敏感字段（如password）
+ */
 public class LoginResponse {
     private String token;
-    private User user;
+    private UserDTO user;
     private Long expiresIn;
 
-    public LoginResponse(String token, User user, Long expiresIn) {
+    public LoginResponse() {}
+
+    public LoginResponse(String token, UserDTO user, Long expiresIn) {
         this.token = token;
         this.user = user;
         this.expiresIn = expiresIn;
     }
 
-    // Getters and Setters
     public String getToken() {
         return token;
     }
@@ -22,11 +25,11 @@ public class LoginResponse {
         this.token = token;
     }
 
-    public User getUser() {
+    public UserDTO getUser() {
         return user;
     }
 
-    public void setUser(User user) {
+    public void setUser(UserDTO user) {
         this.user = user;
     }
 

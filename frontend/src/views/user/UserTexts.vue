@@ -175,6 +175,7 @@
       v-model="showEditDialog"
       title="编辑课文"
       width="600px"
+      @close="resetEditForm"
     >
       <el-form
         ref="editFormRef"
@@ -234,10 +235,10 @@
     <!-- 课文详情对话框 -->
     <el-dialog
       v-model="showDetailDialog"
-      :title="currentText.title"
+      :title="currentText?.title || '课文详情'"
       width="800px"
     >
-      <div class="text-detail">
+      <div class="text-detail" v-if="currentText">
         <div class="detail-header">
           <div class="detail-meta">
             <el-tag :type="getDifficultyType(currentText.difficulty)">
@@ -332,8 +333,15 @@ const loadMyUploads = async () => {
       method: 'get'
     })
 
-    if (response && response.code === 200) {
-      myTexts.value = response.data || []
+    if (response?.code === 200) {
+      const data = response?.data
+      if (Array.isArray(data)) {
+        myTexts.value = data
+      } else if (Array.isArray(data?.records)) {
+        myTexts.value = data.records
+      } else {
+        myTexts.value = []
+      }
     }
   } catch (error) {
     console.error('获取上传内容错误:', error)
@@ -383,6 +391,19 @@ const resetUploadForm = () => {
   })
   if (uploadFormRef.value) {
     uploadFormRef.value.clearValidate()
+  }
+}
+
+const resetEditForm = () => {
+  Object.assign(editForm, {
+    id: null,
+    title: '',
+    content: '',
+    difficulty: 'MEDIUM',
+    tags: ''
+  })
+  if (editFormRef.value) {
+    editFormRef.value.clearValidate()
   }
 }
 

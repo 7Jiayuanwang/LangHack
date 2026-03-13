@@ -47,18 +47,24 @@ public class TencentTranslateService {
             logger.warn("腾讯翻译 secretId/secretKey 未配置，TmtClient 将不会初始化");
             return;
         }
-        Credential cred = new Credential(secretId, secretKey);
+        
+        try {
+            Credential cred = new Credential(secretId, secretKey);
 
-        HttpProfile httpProfile = new HttpProfile();
-        httpProfile.setEndpoint("tmt.tencentcloudapi.com");
-        httpProfile.setConnTimeout(10); // 连接超时：10 秒
-        httpProfile.setReadTimeout(10); // 读取超时：10 秒
+            HttpProfile httpProfile = new HttpProfile();
+            httpProfile.setEndpoint("tmt.tencentcloudapi.com");
+            httpProfile.setConnTimeout(10); // 连接超时：10 秒
+            httpProfile.setReadTimeout(10); // 读取超时：10 秒
 
-        ClientProfile clientProfile = new ClientProfile();
-        clientProfile.setHttpProfile(httpProfile);
+            ClientProfile clientProfile = new ClientProfile();
+            clientProfile.setHttpProfile(httpProfile);
 
-        this.tmtClient = new TmtClient(cred, region, clientProfile);
-        logger.info("TmtClient 单例初始化完成，region={}", region);
+            this.tmtClient = new TmtClient(cred, region, clientProfile);
+            logger.info("TmtClient 单例初始化完成，region={}", region);
+        } catch (Exception e) {
+            logger.error("TmtClient 初始化失败: {}", e.getMessage());
+            // 不抛出异常，让 translate() 方法处理
+        }
     }
 
     /**
@@ -96,6 +102,14 @@ public class TencentTranslateService {
         try {
             logger.debug("开始翻译 - 源语言: {}, 目标语言: {}, 文本长度: {}", source, target, text.length());
 
+            // 验证必要参数
+            if (source == null || source.isEmpty()) {
+                source = "auto";
+            }
+            if (target == null || target.isEmpty()) {
+                target = "zh";
+            }
+
             // 实例化请求对象
             TextTranslateRequest req = new TextTranslateRequest();
             req.setSourceText(text);
@@ -106,11 +120,23 @@ public class TencentTranslateService {
             // 使用单例 TmtClient 发起请求
             TextTranslateResponse resp = tmtClient.TextTranslate(req);
 
+            // FIX: 防御性检查响应对象和结果字段，防止NPE
+            if (resp == null) {
+                logger.error("翻译 API 返回空响应对象");
+                throw new BusinessException("翻译失败，请稍后重试");
+            }
+
             String result = resp.getTargetText();
-            logger.debug("翻译成功，结果长度: {}", result != null ? result.length() : 0);
-            return result != null ? result : "";
+            if (result == null) {
+                logger.error("翻译 API 返回空的 TargetText");
+                throw new BusinessException("翻译失败，请稍后重试");
+            }
+            
+            logger.debug("翻译成功，结果长度: {}", result.length());
+            return result;
 
         } catch (TencentCloudSDKException e) {
+            // 不在日志中暴露完整错误堆栈，只记录错误码
             logger.error("腾讯云翻译API错误 - 错误码: {}", e.getErrorCode());
 
             // 根据错误类型返回更友好的提示，避免泄露详细的 Exception message
@@ -119,9 +145,15 @@ public class TencentTranslateService {
                 throw new BusinessException("翻译服务权限不足，请检查腾讯云API密钥是否有机器翻译权限");
             } else if (errorCode != null && errorCode.contains("InvalidCredential")) {
                 throw new BusinessException("翻译服务密钥无效，请检查配置");
+            } else if (errorCode != null && (errorCode.contains("Timeout") || errorCode.contains("RequestTimeout"))) {
+                throw new BusinessException("翻译请求超时，请稍后重试");
             } else {
                 throw new BusinessException("翻译失败，请稍后重试");
             }
+        } catch (Exception e) {
+            // FIX: 捕获其他异常（如网络错误、超时等）
+            logger.error("翻译出错: {}", e.getMessage());
+            throw new BusinessException("翻译失败，请稍后重试");
         } finally {
             semaphore.release();
         }
@@ -154,7 +186,7 @@ public class TencentTranslateService {
             return "";
         }
         // 简单判断：如果包含中文字符，则翻译成英文，否则翻译成中文
-        if (text.matches(".*[\\u4e00-\\u9fa5]+.*")) {
+        if (text.matches(".*[\u4e00-\u9fa5]+.*")) {
             return translate(text, "zh", "en");
         } else {
             return translate(text, "en", "zh");

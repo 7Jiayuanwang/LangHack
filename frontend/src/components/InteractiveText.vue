@@ -230,6 +230,11 @@ const processText = async (text) => {
 
     while ((match = wordRegex.exec(paragraph)) !== null) {
       const wordText = match[0]
+      
+      // FIX #1: 增强字符串验证，防止特殊字符导致问题
+      if (!wordText || typeof wordText !== 'string' || wordText.trim().length === 0) {
+        continue
+      }
       const cleanWord = wordText.toLowerCase().replaceAll("'", "")
 
       // 添加单词前的非单词文本
@@ -391,11 +396,11 @@ const translateSelectedText = async () => {
       data: { text: selectedText.value }
     })
 
-    if (result.code === 200) {
+    if (result && typeof result === 'object' && result.code === 200) {
       translatedText.value = result.data || '翻译结果为空'
       ElMessage.success('翻译成功')
     } else {
-      ElMessage.error(result.message || '翻译失败')
+      ElMessage.error((result && result.message) || '翻译失败')
       translatedText.value = '翻译失败：请稍后重试'
     }
   } catch (error) {
@@ -409,7 +414,7 @@ const translateSelectedText = async () => {
 
 // 处理单词点击
 const handleWordClick = async (word) => {
-  if (!word.clickable) {
+  if (!word || !word.clickable) {
     return
   }
 
@@ -429,8 +434,8 @@ const handleWordClick = async (word) => {
       method: 'get'
     })
 
-    if (result.code === 200) {
-      selectedWordInfo.value = result.data
+    if (result && typeof result === 'object' && result.code === 200) {
+      selectedWordInfo.value = result.data || {}
       // console.log('Selected word info:', selectedWordInfo.value)
 
       // 检查是否已在生词本中
@@ -481,7 +486,7 @@ const checkVocabularyStatus = async (word) => {
       params: { word: word }
     })
 
-    if (result.code === 200) {
+    if (result && typeof result === 'object' && result.code === 200) {
       isInVocabulary.value = !!result.data
       vocabularyStatusCache.set(word, isInVocabulary.value)
     }
@@ -574,10 +579,8 @@ const handleSynonymClick = async (synonym) => {
     handleWordClick(selectedWord.value)
   }, 300)
 
-  // 将 timer ID 保存以便清理
-  if (!Array.isArray(synonymClickTimers)) {
-    synonymClickTimers = []
-  }
+  // FIX #5: 移除冗余的 Array.isArray 检查
+  // synonymClickTimers 在第 198 行已初始化为 []，无需重复检查
   synonymClickTimers.push(timer)
 }
 

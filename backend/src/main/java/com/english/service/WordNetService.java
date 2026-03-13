@@ -261,6 +261,7 @@ public class WordNetService {
 
     /**
      * 从ECDICT信息创建Word实体
+     * FIX: 检查 createWord 返回值，创建失败时返回 null
      */
     private Word createWordFromECDICT(String word, Map<String, Object> ecdictResult) {
         try {

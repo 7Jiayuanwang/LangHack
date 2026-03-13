@@ -35,7 +35,7 @@
         
         <!-- 用户菜单 - 移到底部导航栏最右侧 -->
         <div class="nav-item user-menu-item">
-          <el-dropdown @command="handleCommand" placement="top-end">
+          <el-dropdown @command="handleCommand" placement="top-end" @visible-change="handleDropdownVisible">
             <div class="nav-user-avatar">
               <div class="nav-icon">
                 <img :src="userAvatar" :alt="userStore.userInfo?.realName || '教师'" class="avatar-img" />
@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -111,10 +111,30 @@ const pageTitle = computed(() => {
   return route.meta?.title || routeMap[route.path] || '教师端'
 })
 
+// 默认头像常量
+const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+
 // 用户头像
 const userAvatar = computed(() => {
-  return userStore.userInfo?.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+  return userStore.userInfo?.avatar || DEFAULT_AVATAR
 })
+
+// 处理键盘事件
+const handleKeyDown = (event) => {
+  if (event.key === 'Escape') {
+    // 可能需要关闭 dropdown，但 el-dropdown 会自动处理
+    event.preventDefault()
+  }
+}
+
+// 下拉菜单显示/隐藏处理
+const handleDropdownVisible = (visible) => {
+  if (visible) {
+    document.addEventListener('keydown', handleKeyDown)
+  } else {
+    document.removeEventListener('keydown', handleKeyDown)
+  }
+}
 
 const handleCommand = async (command) => {
   switch (command) {
@@ -131,20 +151,49 @@ const handleCommand = async (command) => {
           cancelButtonText: '取消',
           type: 'warning'
         })
-        await userStore.logout()
+        // logout 调用必须等待完成
+        try {
+          await userStore.logout()
+        } catch (logoutError) {
+          console.error('Logout API failed:', logoutError)
+          ElMessage.error('退出登录失败，请稍后重试')
+          return
+        }
         ElMessage.success('退出登录成功')
-        router.push('/login')
+        // 导航到登录页
+        await router.push('/login')
       } catch (error) {
-        // 用户取消操作
+        // 区分用户取消操作 vs 其他错误
+        if (error?.message === 'Cancel') {
+          // 用户点击了取消按钮
+          return
+        }
+        // 其他错误（如网络问题等）
+        console.error('Logout process failed:', error)
+        ElMessage.error('操作失败，请稍后重试')
       }
       break
   }
 }
 
-// 更新导航徽章（例如待处理任务数）
+// 组件挂载：验证教师角色权限
 onMounted(() => {
+  // CRITICAL FIX: 验证用户是否有 TEACHER 角色
+  if (!userStore.isTeacher) {
+    console.warn('Unauthorized access: Non-teacher user attempted to access teacher layout')
+    ElMessage.error('您没有权限访问此区域')
+    router.push('/login')
+    return
+  }
+  
   // 这里可以添加获取待处理任务数的逻辑
-  // navItems.value[2].badge = '5' // 例如待处理任务数量
+  // 示例：loadPendingTasksCount()
+  // navItems.value[2].badge = pendingCount.toString()
+})
+
+// 组件卸载：清理事件监听器
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyDown)
 })
 </script>
 
@@ -401,6 +450,41 @@ onMounted(() => {
   }
 }
 
+
+/* 平板设备适配（iPad 等） */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .mobile-header {
+    padding: 0 20px;
+    height: 64px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .content-container {
+    padding: 20px;
+  }
+
+  .nav-item {
+    padding: 10px 16px;
+    min-width: 48px;
+  }
+
+  .nav-icon {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 6px;
+  }
+
+  .nav-label {
+    font-size: 12px;
+  }
+
+  .nav-item.active .nav-label {
+    font-size: 13px;
+  }
+}
 /* 横屏适配 */
 @media (max-height: 600px) and (orientation: landscape) {
   .mobile-header {

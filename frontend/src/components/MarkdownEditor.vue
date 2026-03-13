@@ -84,7 +84,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -108,7 +108,7 @@ const imageInput = ref(null)
 const videoInput = ref(null)
 
 // 追踪上传相关的 setTimeout timers，防止内存泄漏
-let uploadTimers = []
+let uploadTimer = null
 
 // 监听props变化
 watch(() => props.modelValue, (newVal) => {
@@ -122,8 +122,8 @@ const renderedMarkdown = computed(() => {
     const html = marked(content.value)
     // DOMPurify 配置：允许必要的 Markdown 标签和属性
     const config = {
-      ALLOWED_TAGS: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'strong', 'em', 'code', 'pre', 'blockquote', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
-      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'width', 'height', 'target'],
+      ALLOWED_TAGS: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'strong', 'em', 'code', 'pre', 'blockquote', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'video', 'source'],
+      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'width', 'height', 'target', 'controls', 'type'],
       KEEP_CONTENT: true
     }
     return DOMPurify.sanitize(html, config)
@@ -143,9 +143,9 @@ const handleInput = () => {
 }
 
 // 插入Markdown语法
-const insertMarkdown = (syntax) => {
+const insertMarkdown = async (syntax) => {
   const textarea = document.querySelector('.markdown-textarea')
-  if (!textarea) return
+  if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return
 
   const start = textarea.selectionStart
   const end = textarea.selectionEnd
@@ -161,17 +161,20 @@ const insertMarkdown = (syntax) => {
 
   emit('update:modelValue', content.value)
 
-  // 使用 onMounted 或其他生命周期来管理计时器，避免在 setup 中创建计时器
-  // 此处直接 focus，不依赖 setTimeout
-  textarea.focus()
-  textarea.selectionStart = start + syntax.length
-  textarea.selectionEnd = start + syntax.length + 2
+  // 等待 DOM 更新后重新获取 textarea 引用并设置光标位置
+  await nextTick()
+  const updatedTextarea = document.querySelector('.markdown-textarea')
+  if (updatedTextarea && updatedTextarea instanceof HTMLTextAreaElement) {
+    updatedTextarea.focus()
+    updatedTextarea.selectionStart = start + syntax.length
+    updatedTextarea.selectionEnd = start + syntax.length + 2
+  }
 }
 
 // 插入链接
-const insertLink = () => {
+const insertLink = async () => {
   const textarea = document.querySelector('.markdown-textarea')
-  if (!textarea) return
+  if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return
 
   const start = textarea.selectionStart
   const beforeText = content.value.substring(0, start)
@@ -179,12 +182,21 @@ const insertLink = () => {
 
   content.value = beforeText + '[链接文本](https://example.com)' + afterText
   emit('update:modelValue', content.value)
+
+  // 等待 DOM 更新后重新获取 textarea 引用并设置光标位置
+  await nextTick()
+  const updatedTextarea = document.querySelector('.markdown-textarea')
+  if (updatedTextarea && updatedTextarea instanceof HTMLTextAreaElement) {
+    updatedTextarea.focus()
+    updatedTextarea.selectionStart = start + 1  // 选中 '[' 后
+    updatedTextarea.selectionEnd = start + 5    // 选中 '链接文本'
+  }
 }
 
 // 插入代码
-const insertCode = () => {
+const insertCode = async () => {
   const textarea = document.querySelector('.markdown-textarea')
-  if (!textarea) return
+  if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return
 
   const start = textarea.selectionStart
   const beforeText = content.value.substring(0, start)
@@ -192,12 +204,21 @@ const insertCode = () => {
 
   content.value = beforeText + '```\n代码\n```\n' + afterText
   emit('update:modelValue', content.value)
+
+  // 等待 DOM 更新后重新获取 textarea 引用并设置光标位置
+  await nextTick()
+  const updatedTextarea = document.querySelector('.markdown-textarea')
+  if (updatedTextarea && updatedTextarea instanceof HTMLTextAreaElement) {
+    updatedTextarea.focus()
+    updatedTextarea.selectionStart = start + 4  // 代码块开始后
+    updatedTextarea.selectionEnd = start + 6    // 代码文字位置
+  }
 }
 
 // 插入表格
-const insertTable = () => {
+const insertTable = async () => {
   const textarea = document.querySelector('.markdown-textarea')
-  if (!textarea) return
+  if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return
 
   const start = textarea.selectionStart
   const beforeText = content.value.substring(0, start)
@@ -206,6 +227,14 @@ const insertTable = () => {
   const table = '| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| 内容 | 内容 | 内容 |\n'
   content.value = beforeText + table + afterText
   emit('update:modelValue', content.value)
+
+  // 等待 DOM 更新后重新获取 textarea 引用并设置光标位置
+  await nextTick()
+  const updatedTextarea = document.querySelector('.markdown-textarea')
+  if (updatedTextarea && updatedTextarea instanceof HTMLTextAreaElement) {
+    updatedTextarea.focus()
+    updatedTextarea.selectionStart = start  // 表格起始位置
+  }
 }
 
 // 显示图片上传
@@ -257,7 +286,7 @@ const uploadMediaFile = async (file, mediaType) => {
 
     const response = await uploadMedia(file, mediaType)
 
-    if (response.code === 200) {
+    if (response && response.code === 200 && response.data) {
       uploadProgress.value = 100
       uploadStatus.value = '上传成功'
 
@@ -265,12 +294,13 @@ const uploadMediaFile = async (file, mediaType) => {
       const fileName = response.data?.fileName
       if (!mediaId || !fileName) {
         ElMessage.error('上传返回数据异常')
+        uploadDialogVisible.value = false
         return
       }
 
       // 插入Markdown语法
       const textarea = document.querySelector('.markdown-textarea')
-      if (textarea) {
+      if (textarea && textarea instanceof HTMLTextAreaElement) {
         const start = textarea.selectionStart
         const beforeText = content.value.substring(0, start)
         const afterText = content.value.substring(start)
@@ -287,13 +317,17 @@ const uploadMediaFile = async (file, mediaType) => {
       }
 
       // 1秒后关闭上传对话框
-      const timer = setTimeout(() => {
+      // 清理前一个计时器
+      if (uploadTimer) {
+        clearTimeout(uploadTimer)
+      }
+      // 设置新计时器
+      uploadTimer = setTimeout(() => {
         uploadDialogVisible.value = false
         ElMessage.success('上传成功')
       }, 1000)
-      uploadTimers.push(timer)
     } else {
-      ElMessage.error(response.message || '上传失败')
+      ElMessage.error((response?.message) || '上传失败')
       uploadDialogVisible.value = false
     }
   } catch (error) {
@@ -317,8 +351,10 @@ const clearContent = () => {
 
 // 清理 setTimeout timers 防止内存泄漏
 onBeforeUnmount(() => {
-  uploadTimers.forEach(timerId => clearTimeout(timerId))
-  uploadTimers = []
+  if (uploadTimer) {
+    clearTimeout(uploadTimer)
+    uploadTimer = null
+  }
 })
 </script>
 

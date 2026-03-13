@@ -21,6 +21,8 @@ public class Course {
 
     private String status;
 
+    @TableField("deleted")
+    @TableLogic(value = "0", delval = "1")
     private Integer deleted;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)

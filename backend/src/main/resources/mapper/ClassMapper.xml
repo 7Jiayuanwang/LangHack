@@ -48,7 +48,7 @@
         FROM classes c
         LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
         LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
-        WHERE 1=1
+        WHERE c.deleted = 0
         <if test="courseId != null">
             AND c.course_id = #{courseId}
         </if>
@@ -81,7 +81,7 @@
         FROM classes c
         LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
         LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
-        WHERE c.id = #{id}
+        WHERE c.id = #{id} AND c.deleted = 0
     </select>
 
     <!-- 根据教师ID查询班级列表 -->
@@ -94,7 +94,7 @@
             c.description,
             c.created_time
         FROM classes c
-        WHERE c.teacher_id = #{teacherId}
+        WHERE c.teacher_id = #{teacherId} AND c.deleted = 0
         ORDER BY c.created_time DESC
     </select>
 
@@ -109,7 +109,7 @@
             c.created_time
         FROM classes c
         INNER JOIN student_classes sc ON c.id = sc.class_id
-        WHERE sc.student_id = #{studentId}
+        WHERE sc.student_id = #{studentId} AND c.deleted = 0
         ORDER BY sc.join_time DESC
     </select>
 
@@ -135,13 +135,13 @@
         INNER JOIN student_classes sc ON c.id = sc.class_id
         LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
         LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
-        WHERE sc.student_id = #{studentId}
+        WHERE sc.student_id = #{studentId} AND c.deleted = 0
         ORDER BY sc.join_time DESC
     </select>
 
     <!-- 查询班级统计信息 -->
     <select id="selectClassCount" resultType="java.lang.Long">
-        SELECT COUNT(*) FROM classes
+        SELECT COUNT(*) FROM classes WHERE deleted = 0
     </select>
 
 </mapper>

@@ -398,7 +398,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, onActivated, onUnmounted, computed } from 'vue'
+import { ref, reactive, onMounted, watch, onActivated, onUnmounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {Check, Clock, Loading, Microphone, Warning, OfficeBuilding, Notebook} from '@element-plus/icons-vue'
@@ -413,9 +413,8 @@ const handleResize = () => {
   windowWidth.value = window.innerWidth
 }
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', handleResize)
-}
+let resizeListener = null
+let assignmentRefreshListener = null
 
 const router = useRouter()
 const route = useRoute()
@@ -619,7 +618,7 @@ const viewAssignmentDetail = async (assignment) => {
     })
 
     if (response && response.code === 200) {
-      const detailData = response.data
+      const detailData = response.data && typeof response.data === 'object' ? response.data : {}
 
       // 合并基础信息和详情信息
       currentAssignment.value = {
@@ -694,9 +693,9 @@ const loadAssignmentContent = async (assignmentId) => {
     if (response && response.code === 200) {
       const contentData = response.data || {}
 
-      // 更新任务内容
-      currentAssignment.value.texts = contentData.texts || []
-      currentAssignment.value.words = contentData.words || []
+      // 更新任务内容 - 安全的数组处理
+      currentAssignment.value.texts = Array.isArray(contentData.texts) ? contentData.texts : []
+      currentAssignment.value.words = Array.isArray(contentData.words) ? contentData.words : []
       currentAssignment.value.assignmentType = contentData.assignmentType || currentAssignment.value.assignmentType
 
       // 同时加载学习记录
@@ -722,7 +721,7 @@ const loadAssignmentRecords = async (assignmentId) => {
 
     if (response && response.code === 200) {
       const recordsData = response.data || {}
-      currentAssignment.value.records = recordsData.records || []
+      currentAssignment.value.records = Array.isArray(recordsData.records) ? recordsData.records : []
     }
   } catch (error) {
     console.error('加载学习记录失败:', error)
@@ -832,7 +831,7 @@ const markWordAsCompleted = async (word) => {
     if (progressResponse.data) {
       // completionRate 从后端返回的是 0-1 比率，需要转换为 0-100 百分比
       const rawRate = progressResponse.data.completionRate || 0
-      const completionRate = Math.round(rawRate <= 1 ? rawRate * 100 : rawRate)
+      const completionRate = Math.round(rawRate < 1 ? rawRate * 100 : rawRate)
 
       // 更新当前任务的进度
       currentAssignment.value.progress = completionRate
@@ -1030,9 +1029,6 @@ const handleAssignmentRefresh = () => {
     loadAssignments()
   }
 }
-if (typeof window !== 'undefined') {
-  window.addEventListener('assignment-refresh', handleAssignmentRefresh)
-}
 
 // 组件激活时刷新（用于keep-alive场景）
 onActivated(() => {
@@ -1059,6 +1055,14 @@ const safeTimeout = (fn, delay) => {
 }
 
 onMounted(() => {
+  // 初始化事件监听器
+  if (typeof window !== 'undefined') {
+    resizeListener = handleResize
+    assignmentRefreshListener = handleAssignmentRefresh
+    window.addEventListener('resize', resizeListener)
+    window.addEventListener('assignment-refresh', assignmentRefreshListener)
+  }
+
   loadAssignments()
 
   // 检查是否有任务ID参数（从仪表板跳转过来）
@@ -1100,8 +1104,12 @@ onUnmounted(() => {
   pendingTimers.length = 0
 
   if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', handleResize)
-    window.removeEventListener('assignment-refresh', handleAssignmentRefresh)
+    if (resizeListener) {
+      window.removeEventListener('resize', resizeListener)
+    }
+    if (assignmentRefreshListener) {
+      window.removeEventListener('assignment-refresh', assignmentRefreshListener)
+    }
   }
 })
 </script>

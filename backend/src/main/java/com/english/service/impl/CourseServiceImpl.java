@@ -128,7 +128,7 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
             throw new BusinessException("课程不存在");
         }
 
-        // 2. 查询该课程下所有班级
+        // 2. 查询该课程下所有班级（Class有@TableLogic，list()自动过滤deleted=0）
         List<com.english.entity.Class> classes = classService.getClassesByCourseId(id);
 
         // 3. 删除所有班级的学生关联（级联清理）
@@ -137,10 +137,12 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
                 // 先删除班级下的所有学生关联
                 QueryWrapper<com.english.entity.StudentClass> studentWrapper = new QueryWrapper<>();
                 studentWrapper.eq("class_id", classInfo.getId());
-                studentClassMapper.delete(studentWrapper);
+                int deletedStudentCount = studentClassMapper.delete(studentWrapper);
+                logger.debug("删除班级 {} 下的学生关联: {} 条", classInfo.getId(), deletedStudentCount);
 
-                // 然后删除班级本身
-                classMapper.deleteById(classInfo.getId());
+                // 然后物理删除班级本身（Class无deleted字段，物理删除是唯一选项）
+                int deletedClassCount = classMapper.deleteById(classInfo.getId());
+                logger.debug("删除班级: {} (ID: {})", classInfo.getName(), classInfo.getId());
             }
         }
 
@@ -157,11 +159,10 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
         }
 
         // 6. 软删除课程本身
-        Course courseUpdate = new Course();
-        courseUpdate.setId(id);
-        courseUpdate.setDeleted(1);
-        courseUpdate.setUpdatedAt(LocalDateTime.now());
-        updateById(courseUpdate);
+        // removeById 配合 @TableLogic 会生成 UPDATE SET deleted=1 WHERE id=? AND deleted=0
+        // 不能使用 setDeleted(1)+updateById()，因为 @TableLogic 会从 SET 子句中排除 deleted 字段
+        removeById(id);
+        logger.info("课程软删除完成: courseId={}, courseName={}", id, course.getName());
     }
 
     @Override

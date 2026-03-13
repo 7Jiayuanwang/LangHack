@@ -186,13 +186,13 @@ const courseRules = {
 const loadCourses = async () => {
   try {
     const params = {
-      current: pagination.current,
+      page: pagination.current,
       size: pagination.size,
       ...searchForm
     }
     const response = await getCourses(params)
-    courses.value = response.data?.records || []
-    pagination.total = response.data?.total || 0
+    courses.value = Array.isArray(response?.data?.records) ? response.data.records : []
+    pagination.total = response?.data?.total || 0
   } catch (error) {
     ElMessage.error('加载课程列表失败')
   }
@@ -213,6 +213,7 @@ const showAddDialog = () => {
 
 const editCourse = (course) => {
   isEdit.value = true
+  courseFormRef.value?.clearValidate()
   dialogVisible.value = true
   Object.assign(courseForm, {
     id: course.id,

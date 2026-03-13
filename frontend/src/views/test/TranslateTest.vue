@@ -28,13 +28,6 @@
       </div>
     </el-card>
 
-    <el-card style="margin-top: 20px;">
-      <h3>调试信息</h3>
-      <div>showTranslateButton: {{ showTranslateButton }}</div>
-      <div>selectedText: {{ selectedText }}</div>
-      <div>translateButtonPosition: {{ translateButtonPosition }}</div>
-    </el-card>
-
     <!-- 翻译结果弹窗 -->
     <el-dialog
       v-model="showTranslateDialog"
@@ -75,6 +68,10 @@ const translatedText = ref('')
 const translating = ref(false)
 const translateButtonPosition = reactive({ x: 0, y: 0 })
 
+// 配置常量
+const MAX_TRANSLATE_LENGTH = 500
+const TRANSLATE_TIMEOUT = 30000 // 30秒超时
+
 const handleTextSelection = (event) => {
   const selection = window.getSelection()
   const text = selection?.toString().trim()
@@ -104,10 +101,20 @@ const handleTextSelection = (event) => {
 const translateSelectedText = async () => {
   if (!selectedText.value) return
 
+  // 验证文本长度 - 防止过长请求
+  if (selectedText.value.length > MAX_TRANSLATE_LENGTH) {
+    ElMessage.error(`翻译文本过长，最多 ${MAX_TRANSLATE_LENGTH} 字符`)
+    return
+  }
+
   showTranslateButton.value = false
   showTranslateDialog.value = true
   translating.value = true
   translatedText.value = ''
+
+  // 创建超时控制器
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT)
 
   try {
     // 安全读取 token，防止 localStorage 访问异常
@@ -127,7 +134,8 @@ const translateSelectedText = async () => {
       },
       body: JSON.stringify({
         text: selectedText.value
-      })
+      }),
+      signal: controller.signal
     })
 
     if (response.ok) {
@@ -143,10 +151,17 @@ const translateSelectedText = async () => {
       throw new Error(`网络请求失败: ${response.status} ${errorText}`)
     }
   } catch (error) {
-    console.error('翻译失败:', error)
-    ElMessage.error('翻译失败: ' + (error.message || '未知错误'))
-    translatedText.value = '翻译服务暂时不可用'
+    if (error.name === 'AbortError') {
+      console.error('翻译请求超时 (30秒)')
+      ElMessage.error('翻译请求超时，请重试')
+      translatedText.value = '翻译服务响应超时'
+    } else {
+      console.error('翻译失败:', error)
+      ElMessage.error('翻译失败: ' + (error.message || '未知错误'))
+      translatedText.value = '翻译服务暂时不可用'
+    }
   } finally {
+    clearTimeout(timeoutId)
     translating.value = false
   }
 }

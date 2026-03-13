@@ -29,6 +29,9 @@ public class LearningRecord {
     @TableField("word_id")
     private Long wordId;
 
+    /**
+     * 课文ID
+     */
     @TableField("text_id")
     private Long textId;
 
@@ -162,6 +165,7 @@ public class LearningRecord {
                 "id=" + id +
                 ", studentId=" + studentId +
                 ", wordId=" + wordId +
+                ", textId=" + textId +
                 ", assignmentId=" + assignmentId +
                 ", recordType='" + recordType + '\'' +
                 ", durationSeconds=" + durationSeconds +

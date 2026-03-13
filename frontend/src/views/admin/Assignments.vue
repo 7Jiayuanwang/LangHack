@@ -411,7 +411,7 @@ const loadAssignments = async () => {
       const data = await response.json()
 
       if (data.code === 200) {
-        let assignmentsData = Array.isArray(data.data?.records) ? data.data.records : (Array.isArray(data.data) ? data.data : [])
+        let assignmentsData = (data.data?.records || (Array.isArray(data.data) ? data.data : []))
 
         if (assignmentsData.length === 0) {
           assignments.value = []
@@ -476,7 +476,7 @@ const loadClasses = async () => {
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        classes.value = data.data?.records || []
+        classes.value = Array.isArray(data.data?.records) ? data.data.records : (Array.isArray(data.data) ? data.data : [])
       } else {
         ElMessage.error(data.message || '加载班级列表失败')
       }
@@ -501,7 +501,7 @@ const loadUnits = async () => {
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        units.value = data.data?.records || []
+        units.value = Array.isArray(data.data?.records) ? data.data.records : (Array.isArray(data.data) ? data.data : [])
       } else {
         ElMessage.error(data.message || '加载单元列表失败')
       }
@@ -564,8 +564,11 @@ const editAssignment = async (assignment) => {
     title: assignment.title,
     classId: assignment.classId,
     unitId: assignment.unitId,
+    assignmentType: assignment.assignmentType || 'UNIT',
+    textIds: Array.isArray(assignment.textIds) ? [...assignment.textIds] : [],
+    wordIds: Array.isArray(assignment.wordIds) ? [...assignment.wordIds] : [],
     description: assignment.description,
-    deadline: new Date(assignment.deadline)
+    deadline: assignment.deadline ? new Date(assignment.deadline) : null
   })
 
   if (assignment.classId) {
@@ -802,6 +805,7 @@ const viewProgress = async (assignment) => {
 
 const getCompletionType = (completed, total) => {
   if (!total || total === 0) return 'info'
+  if (completed == null) return 'info'
   const rate = (completed / total) * 100
   if (rate >= 80) return 'success'
   if (rate >= 50) return 'warning'

@@ -34,7 +34,7 @@
 
       <!-- 用户列表 -->
       <div class="table-wrapper">
-      <el-table :data="users" stripe>
+      <el-table v-loading="loading" :data="users" stripe>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="username" label="用户名" />
         <el-table-column prop="realName" label="真实姓名" />
@@ -247,6 +247,7 @@ const users = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const saving = ref(false)
+const loading = ref(false)
 const userFormRef = ref()
 
 // 批量导入相关
@@ -314,6 +315,7 @@ const userRules = {
 
 // 方法
 const loadUsers = async () => {
+  loading.value = true
   try {
     const params = {
       page: pagination.current,
@@ -322,10 +324,12 @@ const loadUsers = async () => {
       keyword: searchForm.keyword || undefined
     }
     const response = await getUsers(params)
-    users.value = response.data?.records || []
+    users.value = Array.isArray(response.data?.records) ? response.data.records : []
     pagination.total = response.data?.total || 0
   } catch (error) {
     ElMessage.error('加载用户列表失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -344,6 +348,7 @@ const showAddDialog = () => {
 
 const editUser = (user) => {
   isEdit.value = true
+  userFormRef.value?.clearValidate()
   dialogVisible.value = true
   Object.assign(userForm, {
     id: user.id,
@@ -412,7 +417,7 @@ const deleteUser = async (user) => {
     ElMessage.success('用户删除成功')
     loadUsers()
   } catch (error) {
-    if (error !== 'cancel') {
+    if (error !== 'cancel' && error?.action !== 'cancel') {
       ElMessage.error('删除失败，请稍后重试')
     }
   }

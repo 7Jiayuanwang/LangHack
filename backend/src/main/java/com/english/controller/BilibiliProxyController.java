@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 
 /**
  * B 站 API 代理，解决浏览器直连 api.bilibili.com 的 CORS/DNS 问题。
+ * 仅允许已认证用户访问，防止代理被滥用。
  *
  * 端点：
  *   GET /api/bilibili/view?bvid=BVxxx           → 视频信息（含 cid）
@@ -23,6 +24,7 @@ import java.util.regex.Pattern;
  */
 @RestController
 @RequestMapping("/api/bilibili")
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class BilibiliProxyController {
 
     private static final Pattern BVID_PATTERN = Pattern.compile("^BV[a-zA-Z0-9]{10}$");
@@ -128,7 +130,7 @@ public class BilibiliProxyController {
      */
     @GetMapping("/subtitle-file")
     public ResponseEntity<String> subtitleFile(@RequestParam String url) {
-        if (url == null || url.contains("..") ||
+        if (url == null || url.isBlank() ||
             !SUBTITLE_URL_PATTERN.matcher(url).matches()) {
             return ResponseEntity.badRequest()
                 .contentType(MediaType.APPLICATION_JSON)

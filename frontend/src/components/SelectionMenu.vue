@@ -47,14 +47,19 @@ const menuStyle = computed(() => {
   const MENU_HALF_WIDTH = 110 // 菜单宽度的一半（估算值），用于边界钳制
   const SAFE_MARGIN = 8
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 375
+
+  // 确保 position 对象合法
+  const x = props.position?.x ?? 0
+  const y = props.position?.y ?? 0
+
   // 钳制 x 坐标，使菜单不超出左右边界
   const clampedX = Math.min(
-    Math.max(props.position.x, MENU_HALF_WIDTH + SAFE_MARGIN),
+    Math.max(x, MENU_HALF_WIDTH + SAFE_MARGIN),
     viewportWidth - MENU_HALF_WIDTH - SAFE_MARGIN
   )
   return {
     left: clampedX + 'px',
-    top: props.position.y + 'px'
+    top: y + 'px'
   }
 })
 </script>

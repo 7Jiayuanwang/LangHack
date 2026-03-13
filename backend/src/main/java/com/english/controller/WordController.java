@@ -59,7 +59,10 @@ public class WordController {
     public Result<Word> searchWord(@RequestParam String word) {
         try {
             // 关键词长度限制
-            if (word != null && word.length() > 100) {
+            if (word == null || word.trim().isEmpty()) {
+                return Result.error("单词不能为空");
+            }
+            if (word.length() > 100) {
                 word = word.substring(0, 100);
             }
 
@@ -134,6 +137,17 @@ public class WordController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> updateWord(@PathVariable Long id, @RequestBody Word word) {
         try {
+            // 验证请求体和ID不能为空
+            if (word == null) {
+                return Result.error("请求体不能为空");
+            }
+            if (id == null || id <= 0) {
+                return Result.error("单词ID不能为空");
+            }
+            // FIX: 验证关键字段，防止更新为null或空白
+            if (word.getWord() == null || word.getWord().trim().isEmpty()) {
+                return Result.error("单词不能为空");
+            }
             word.setId(id);
             boolean success = wordService.updateWord(word);
             if (success) {
@@ -150,6 +164,9 @@ public class WordController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> deleteWord(@PathVariable Long id) {
         try {
+            if (id == null || id <= 0) {
+                return Result.error("单词ID无效");
+            }
             boolean success = wordService.deleteWord(id);
             if (success) {
                 return Result.success("单词删除成功");

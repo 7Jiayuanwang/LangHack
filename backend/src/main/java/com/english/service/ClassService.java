@@ -75,4 +75,9 @@ public interface ClassService {
      * 创建班级（用于批量导入，无需验证课程和教师）
      */
     void createClassForImport(Class classInfo);
+
+    /**
+     * 学生搜索自己加入的班级
+     */
+    List<Class> searchClassesForStudent(Long studentId, String keyword);
 }

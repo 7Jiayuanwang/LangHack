@@ -5,6 +5,43 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { onErrorCaptured } from 'vue'
+
+const router = useRouter()
+
+// 全局错误捕获 - 捕获组件中未处理的异常
+onErrorCaptured((error, instance, info) => {
+  console.error('捕获到组件错误:', {
+    message: error.message,
+    stack: error.stack,
+    componentInfo: info,
+    componentName: instance?.$options.name || '未知组件'
+  })
+
+  // 显示通用错误提示
+  ElMessage.error('发生错误，请刷新页面后重试')
+
+  // 返回 false 阻止错误继续传播，避免白屏
+  return false
+})
+
+// 路由错误处理
+router.onError((error) => {
+  console.error('路由错误:', error)
+  
+  // 处理特定的路由错误
+  if (error.name === 'NavigationDuplicated') {
+    // 重复导航，忽略
+    return
+  }
+  
+  // 其他路由错误
+  if (error.message) {
+    ElMessage.error('页面导航异常: ' + error.message)
+  }
+})
 </script>
 
 <style>

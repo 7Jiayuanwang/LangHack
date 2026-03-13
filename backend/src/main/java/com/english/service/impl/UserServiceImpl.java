@@ -39,7 +39,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public Map<String, Object> login(LoginRequest loginRequest) {
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("username", loginRequest.getUsername());
-        queryWrapper.eq("deleted", 0);
         User user = getOne(queryWrapper);
 
         if (user == null) {
@@ -144,8 +143,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         // 密码加密
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setCreatedTime(LocalDateTime.now());
+        user.setUpdatedTime(LocalDateTime.now());
         user.setDeleted(0);
         user.setStatus("ACTIVE");
 
@@ -168,7 +167,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             user.setPassword(existingUser.getPassword());
         }
 
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
     }
 
@@ -176,11 +175,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Transactional
     @CacheEvict(value = "stats", allEntries = true)
     public void deleteUser(Long id) {
-        User user = new User();
-        user.setId(id);
-        user.setDeleted(1);
-        user.setUpdatedAt(LocalDateTime.now());
-        updateById(user);
+        // removeById 配合 @TableLogic 会生成 UPDATE SET deleted=1 WHERE id=? AND deleted=0
+        // 不能使用 setDeleted(1)+updateById()，因为 @TableLogic 会从 SET 子句中排除 deleted 字段
+        removeById(id);
     }
 
     @Override
@@ -199,8 +196,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             admin.setEmail("admin@english.com");
             admin.setRole("ADMIN");
             admin.setStatus("ACTIVE");
-            admin.setCreatedAt(LocalDateTime.now());
-            admin.setUpdatedAt(LocalDateTime.now());
+            admin.setCreatedTime(LocalDateTime.now());
+            admin.setUpdatedTime(LocalDateTime.now());
             admin.setDeleted(0);
 
             save(admin);
@@ -298,7 +295,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = new User();
         user.setId(id);
         user.setStatus(status);
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
     }
 
@@ -313,7 +310,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = new User();
         user.setId(id);
         user.setPassword(passwordEncoder.encode(newPassword));
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
     }
 }

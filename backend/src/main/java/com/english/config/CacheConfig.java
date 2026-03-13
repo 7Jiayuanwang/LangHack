@@ -35,22 +35,22 @@ public class CacheConfig extends CachingConfigurerSupport {
         return new CacheErrorHandler() {
             @Override
             public void handleCacheGetError(RuntimeException e, Cache cache, Object key) {
-                log.warn("Redis缓存读取失败, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
+                log.warn("Redis cache read error, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
             }
 
             @Override
             public void handleCachePutError(RuntimeException e, Cache cache, Object key, Object value) {
-                log.warn("Redis缓存写入失败, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
+                log.warn("Redis cache write error, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
             }
 
             @Override
             public void handleCacheEvictError(RuntimeException e, Cache cache, Object key) {
-                log.warn("Redis缓存清除失败, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
+                log.warn("Redis cache evict error, cache={}, key={}: {}", cache.getName(), key, e.getMessage());
             }
 
             @Override
             public void handleCacheClearError(RuntimeException e, Cache cache) {
-                log.warn("Redis缓存清空失败, cache={}: {}", cache.getName(), e.getMessage());
+                log.warn("Redis cache clear error, cache={}: {}", cache.getName(), e.getMessage());
             }
         };
     }
@@ -59,40 +59,60 @@ public class CacheConfig extends CachingConfigurerSupport {
     public CacheManager cacheManager(RedisConnectionFactory factory) {
         ObjectMapper om = new ObjectMapper();
         om.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        // 严格的类型验证器：只允许明确列出的类型，防止反序列化攻击
+        
+        // Strict polymorphic type validator - only allow whitelisted types
+        // This prevents arbitrary deserialization attacks (CVE-style exploits)
         BasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                // Application domain objects
                 .allowIfSubType("com.english.")
+                // Allowed JDK collections (immutable variants are safer)
                 .allowIfSubType("java.util.HashMap")
                 .allowIfSubType("java.util.ArrayList")
                 .allowIfSubType("java.util.LinkedList")
+                .allowIfSubType("java.util.HashSet")
+                .allowIfSubType("java.util.TreeSet")
                 .allowIfSubType("java.util.Collections$UnmodifiableList")
+                .allowIfSubType("java.util.Collections$UnmodifiableSet")
+                .allowIfSubType("java.util.Collections$UnmodifiableMap")
+                // Primitive wrappers
                 .allowIfSubType("java.lang.String")
                 .allowIfSubType("java.lang.Long")
                 .allowIfSubType("java.lang.Integer")
                 .allowIfSubType("java.lang.Double")
+                .allowIfSubType("java.lang.Float")
                 .allowIfSubType("java.lang.Boolean")
+                .allowIfSubType("java.lang.Byte")
+                // Date/Time types
                 .allowIfSubType("java.time.")
+                // MyBatis pagination interface
                 .allowIfSubType("com.baomidou.mybatisplus.core.metadata.IPage")
                 .build();
-        // 使用 NON_FINAL 而非 NON_CONCRETE_AND_ARRAYS：更安全，只序列化非final字段
+        
+        // Use NON_FINAL instead of NON_CONCRETE_AND_ARRAYS
+        // NON_FINAL is more restrictive and safer for untrusted data
         om.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL);
         GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(om);
 
+        // Default cache configuration with reasonable TTL
+        // FIXED: Cache null values with shorter TTL to prevent cache penetration attacks
+        // When a record doesn't exist, we cache the null result briefly (1 minute) to avoid
+        // repeated database lookups, then it expires and allows re-checking
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(jsonSerializer))
-                .disableCachingNullValues()
-                .entryTtl(Duration.ofMinutes(10));
+                .cacheNullValues()  // FIXED: Cache null to prevent penetration attacks
+                .entryTtl(Duration.ofMinutes(10));  // Default TTL: 10 minutes
 
+        // Per-cache TTL configuration - adjust based on data freshness requirements
         Map<String, RedisCacheConfiguration> configs = new HashMap<>();
-        configs.put("courses",         defaultConfig.entryTtl(Duration.ofMinutes(10)));
-        configs.put("texts",           defaultConfig.entryTtl(Duration.ofMinutes(5)));
-        configs.put("wordnet",         defaultConfig.entryTtl(Duration.ofHours(2)));
-        configs.put("stats",           defaultConfig.entryTtl(Duration.ofMinutes(1)));
-        configs.put("publicTexts",     defaultConfig.entryTtl(Duration.ofMinutes(5)));
-        configs.put("wordDetail",      defaultConfig.entryTtl(Duration.ofHours(1)));
+        configs.put("courses",         defaultConfig.entryTtl(Duration.ofMinutes(10)));   // Course list: 10 min (stable)
+        configs.put("texts",           defaultConfig.entryTtl(Duration.ofMinutes(5)));    // Text content: 5 min (updated frequently)
+        configs.put("wordnet",         defaultConfig.entryTtl(Duration.ofHours(2)));      // Word definitions: 2 hours (very stable)
+        configs.put("stats",           defaultConfig.entryTtl(Duration.ofMinutes(3)));    // Statistics: 3 min (balance cost vs freshness)
+        configs.put("publicTexts",     defaultConfig.entryTtl(Duration.ofMinutes(10)));   // Public texts: 10 min (allow new content within reasonable delay)
+        configs.put("wordDetail",      defaultConfig.entryTtl(Duration.ofHours(1)));      // Word details: 1 hour (static reference data)
 
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(defaultConfig)

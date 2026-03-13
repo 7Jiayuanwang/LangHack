@@ -49,7 +49,7 @@
     </nav>
 
     <!-- 用户下拉菜单 - 从底部弹出 -->
-    <div class="user-menu-simple" v-if="showUserMenu" @click.self="closeUserMenu">
+    <div class="user-menu-simple" v-if="showUserMenu" @click.self="closeUserMenu" @keydown.escape="closeUserMenu">
       <div class="simple-menu">
         <div class="simple-menu-header">
           <div class="simple-avatar">
@@ -92,6 +92,13 @@ const route = useRoute()
 const userStore = useUserStore()
 const showUserMenu = ref(false)
 const screenWidth = ref(window.innerWidth)
+
+// 处理键盘事件关闭菜单
+const handleKeyDown = (event) => {
+  if (event.key === 'Escape' && showUserMenu.value) {
+    closeUserMenu()
+  }
+}
 
 // 导航项配置 - 时尚设计
 const navigationItems = ref([
@@ -168,12 +175,26 @@ const roleDisplayName = computed(() => {
 
 // 用户头像
 const userAvatar = computed(() => {
-  return userStore.userInfo?.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+  const avatar = userStore.userInfo?.avatar
+  // 多层防御：检查 avatar 是否有效，如果不存在、为空或非字符串，使用默认头像
+  if (avatar && typeof avatar === 'string' && avatar.trim().length > 0) {
+    return avatar
+  }
+  return 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 })
 
-// 检查路由是否激活
+// 检查路由是否激活（支持动态路由参数）
 const isActiveRoute = (path) => {
-  return route.path === path || route.path.startsWith(path + '/')
+  const currentPath = route.path
+  // 完整匹配 或 当前路由是该路径的子路由
+  if (currentPath === path || currentPath.startsWith(path + '/')) {
+    return true
+  }
+  // 处理 /student/courses?courseId=xxx 这样的带查询参数的情况
+  if (path === '/student/courses' && currentPath === '/student/courses') {
+    return true
+  }
+  return false
 }
 
 // 切换用户菜单
@@ -221,10 +242,12 @@ const handleResize = () => {
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeyDown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeyDown)
 })
 </script>
 

@@ -18,7 +18,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/asr")
-@PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER')")
+@PreAuthorize("isAuthenticated()")
 public class AsrController {
 
     private static final Logger log = LoggerFactory.getLogger(AsrController.class);
@@ -107,15 +107,14 @@ public class AsrController {
             return Result.error("语音识别请求过于频繁，请1分钟后重试（每分钟限10次）");
         }
 
+        String format = request.getFormat() == null ? "webm" : request.getFormat();
+        String lang = request.getLang() == null ? "zh" : request.getLang();
+        
         try {
-            String format = request.getFormat() == null ? "webm" : request.getFormat();
-            String lang = request.getLang() == null ? "zh" : request.getLang();
-
             String result = asrService.recognize(request.getAudioData(), format, lang);
             return Result.success(result);
         } catch (Exception e) {
-            log.debug("ASR recognition failed, format={}, lang={}",
-                request.getFormat(), request.getLang(), e);
+            log.debug("ASR recognition failed, format={}, lang={}", format, lang, e);
             return Result.error("语音识别失败，请稍后重试");
         }
     }

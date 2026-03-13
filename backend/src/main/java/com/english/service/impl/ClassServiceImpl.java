@@ -43,7 +43,7 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     private StudentClassMapper studentClassMapper;
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public Map<String, Object> getClassesByPage(Map<String, Object> params) {
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
@@ -87,7 +87,7 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
                             logger.warn("课程 {} 不存在或已删除", classInfo.getCourseId());
                         }
                     } catch (Exception e) {
-                        logger.warn("获取课程信息失败", e);
+                        logger.warn("获取课程信息失败: {}", e.getMessage());
                     }
                 }
             }
@@ -138,6 +138,7 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Class getClassById(Long id) {
         return baseMapper.selectClassWithDetails(id);
     }
@@ -238,17 +239,20 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Class> getClassesByTeacherId(Long teacherId) {
         return baseMapper.selectClassesByTeacherId(teacherId);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Class> getClassesByStudentId(Long studentId) {
         // 使用新的查询方法，包含关联信息和加入时间
         return baseMapper.selectClassesByStudentIdWithJoinTime(studentId);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Class> getClassesByCourseId(Long courseId) {
         QueryWrapper<Class> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("course_id", courseId);
@@ -256,12 +260,14 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Class> searchClasses(String keyword) {
         return baseMapper.selectClassesWithDetails(
                 new Page<>(1, 100), null, null, keyword).getRecords();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Map<String, Object> getClassStats() {
         Map<String, Object> stats = new HashMap<>();
 
@@ -275,6 +281,7 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     }
 
     @Override
+    @Transactional(readOnly = true)
     public boolean checkClassNameExists(String name, Long excludeId) {
         if (name == null || name.trim().isEmpty()) {
             return false;
@@ -288,6 +295,7 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     }
 
     @Override
+    @Transactional(readOnly = true)
     public boolean validateTeacherPermission(Long teacherId, Long classId) {
         if (teacherId == null || classId == null) {
             return false;
@@ -314,11 +322,29 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Class getClassByName(String name) {
         QueryWrapper<Class> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("name", name);
         queryWrapper.last("LIMIT 1");
         return getOne(queryWrapper);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Class> searchClassesForStudent(Long studentId, String keyword) {
+        List<Class> studentClasses = getClassesByStudentId(studentId);
+        if (studentClasses == null || studentClasses.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return studentClasses;
+        }
+        String kw = keyword.trim().toLowerCase();
+        return studentClasses.stream()
+                .filter(c -> (c.getName() != null && c.getName().toLowerCase().contains(kw))
+                        || (c.getDescription() != null && c.getDescription().toLowerCase().contains(kw)))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     @Override

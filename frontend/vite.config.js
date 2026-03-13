@@ -4,6 +4,9 @@ import { resolve } from 'path'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  
+  // 检测是否为移动端构建 (可通过环境变量 VITE_MOBILE_BUILD 控制)
+  const isMobileBuild = env.VITE_MOBILE_BUILD === 'true' || process.env.MOBILE_BUILD === 'true'
 
   return {
     plugins: [vue()],
@@ -85,7 +88,9 @@ export default defineConfig(({ mode }) => {
     // 环境变量配置
     define: {
       // 定义全局常量
-      __APP_VERSION__: JSON.stringify(process.env.npm_package_version)
+      __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+      // 定义移动端构建标志，供 environment.js 的 getBuildType() 使用
+      __IS_MOBILE_BUILD__: isMobileBuild
     },
 
     // CSS 配置优化

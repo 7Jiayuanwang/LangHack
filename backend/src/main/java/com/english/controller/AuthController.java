@@ -16,12 +16,18 @@ import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+    
+    // RFC 5322 简化版邮箱正则：更严格的验证
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+        "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+    );
 
     @Autowired
     private UserService userService;
@@ -51,7 +57,7 @@ public class AuthController {
         if (username.length() < 3 || username.length() > 50) {
             return Result.error("用户名长度须在 3~50 个字符之间");
         }
-        if (!username.matches("^[a-zA-Z0-9_\\-\\.@]+$")) {
+        if (!username.matches("^[a-zA-Z0-9_\\-.@]+$")) {
             return Result.error("用户名只能包含字母、数字及 _ - . @ 符号");
         }
         if (user.getPassword() == null || user.getPassword().length() < 6) {
@@ -60,6 +66,16 @@ public class AuthController {
         if (user.getPassword().length() > 100) {
             return Result.error("密码长度不能超过 100 位");
         }
+
+        // 邮箱格式校验（如果提供）
+        if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+            String email = user.getEmail().trim();
+            if (email.length() > 100 || !EMAIL_PATTERN.matcher(email).matches()) {
+                return Result.error("邮箱格式无效或长度超过100字符");
+            }
+            user.setEmail(email);
+        }
+
         try {
             // 强制设置角色为普通用户（必须在createUser前设置，让Service层处理TOCTOU）
             user.setRole("USER");
@@ -90,7 +106,8 @@ public class AuthController {
     public Result<User> getUserInfo() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication == null || authentication.getName() == null) {
+            if (authentication == null || !authentication.isAuthenticated()
+                    || "anonymousUser".equals(authentication.getName())) {
                 return Result.error("未授权访问");
             }
             String username = authentication.getName();
@@ -115,6 +132,13 @@ public class AuthController {
             @RequestParam String keyword,
             @RequestParam(required = false) String role) {
         try {
+            // Input validation: keyword required and must be reasonable length
+            if (keyword == null || keyword.trim().isEmpty()) {
+                return Result.error("搜索关键词不能为空");
+            }
+            if (keyword.length() > 100) {
+                return Result.error("搜索关键词长度不能超过100个字符");
+            }
             List<User> users = userService.searchUsers(keyword, role);
             // 不返回密码信息
             if (users != null) {

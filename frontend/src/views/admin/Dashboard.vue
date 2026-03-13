@@ -117,8 +117,9 @@ const stats = reactive({
   totalWords: 0
 })
 
+// 用户分布统计（初始为0，等待API返回）
 const userStats = reactive({
-  admin: 1,
+  admin: 0,
   teacher: 0,
   student: 0
 })
@@ -143,7 +144,6 @@ const recentActivities = ref([
 
 const loadDashboardData = async () => {
   try {
-    // 调用管理员统计API
     const response = await fetch('/api/admin/stats', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`

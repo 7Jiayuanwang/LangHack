@@ -62,14 +62,15 @@ public class WordConverter {
 
         // 设置时间戳
         LocalDateTime now = LocalDateTime.now();
-        word.setCreatedAt(now);
-        word.setUpdatedAt(now);
+        word.setCreatedTime(now);
+        word.setUpdatedTime(now);
 
         return word;
     }
 
     /**
-     * 将Word实体对象转换为Map格式
+     * 将Word实体对象转换为Map格式 (仅返回前端需要的字段，隐藏敏感内部字段)
+     * 隐藏字段: deleted (逻辑删除标记), createdAt, updatedAt (时间戳)
      * @param word Word实体对象
      * @return Map格式的词汇数据
      */
@@ -80,6 +81,7 @@ public class WordConverter {
 
         Map<String, Object> result = new HashMap<>();
 
+        // 仅返回前端需要的字段，不暴露内部实现细节
         result.put("id", word.getId());
         result.put("word", word.getWord() != null ? word.getWord() : "");
         result.put("pronunciation", word.getPronunciation() != null ? word.getPronunciation() : "");
@@ -93,6 +95,8 @@ public class WordConverter {
         result.put("wordnetId", word.getWordnetId() != null ? word.getWordnetId() : "");
         result.put("multipleDefinitions", word.getMultipleDefinitions() != null ? word.getMultipleDefinitions() : "[]");
         result.put("source", word.getSource() != null ? word.getSource() : "manual");
+
+        // 隐藏敏感字段：不返回 deleted (允许前端绕过逻辑删除), createdAt, updatedAt (时间戳)
 
         return result;
     }

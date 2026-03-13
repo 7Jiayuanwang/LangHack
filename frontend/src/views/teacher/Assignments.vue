@@ -444,11 +444,11 @@ const loadAssignments = async () => {
     params.append('page', '1')
     params.append('size', '100')
 
-    const response = await fetch(`/api/assignments?${params.toString()}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch(`/api/assignments?${params.toString()}`, { headers })
 
     if (response.ok) {
       try {
@@ -503,11 +503,11 @@ const loadAssignments = async () => {
 
 const loadClasses = async () => {
   try {
-    const response = await fetch('/api/classes?size=100', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch('/api/classes?size=100', { headers })
 
     if (response.ok) {
       try {
@@ -534,11 +534,11 @@ const loadClasses = async () => {
 
 const loadUnits = async () => {
   try {
-    const response = await fetch('/api/units?size=100', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch('/api/units?size=100', { headers })
 
     if (response.ok) {
       try {
@@ -572,11 +572,11 @@ const loadUnitsForClass = async (classId) => {
       return
     }
 
-    const response = await fetch(`/api/units?courseId=${classItem.courseId}&size=100`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch(`/api/units?courseId=${classItem.courseId}&size=100`, { headers })
 
     if (response.ok) {
       try {
@@ -663,11 +663,11 @@ const loadUnitContent = async (unitId) => {
 
   loadingUnitContent.value = true
   try {
-    const response = await fetch(`/api/assignments/unit/${unitId}/content`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch(`/api/assignments/unit/${unitId}/content`, { headers })
 
     if (response.ok) {
       try {
@@ -725,6 +725,11 @@ const saveAssignment = async () => {
     if (valid) {
       saving.value = true
       try {
+        // 修复：提取token和fetchHeaders到try块开始处，避免在if-else分支中重复声明
+        const token = localStorage.getItem('token')
+        const fetchHeaders = { 'Content-Type': 'application/json' }
+        if (token) fetchHeaders['Authorization'] = `Bearer ${token}`
+
         // 根据任务类型选择不同的接口
         if (assignmentForm.assignmentType === 'UNIT') {
           // 兼容原有的单元任务接口
@@ -733,10 +738,7 @@ const saveAssignment = async () => {
 
           const response = await fetch(url, {
             method,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-            },
+            headers: fetchHeaders,
             body: JSON.stringify({
               id: assignmentForm.id,
               title: assignmentForm.title,
@@ -772,10 +774,7 @@ const saveAssignment = async () => {
 
           const response = await fetch(url, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-            },
+            headers: fetchHeaders,
             body: JSON.stringify({
               title: assignmentForm.title,
               classId: assignmentForm.classId,
@@ -822,11 +821,11 @@ const viewProgress = async (assignment) => {
   try {
     currentAssignment.value = assignment
 
-    const response = await fetch(`/api/assignments/${assignment.id}/progress`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch(`/api/assignments/${assignment.id}/progress`, { headers })
 
     if (response.ok) {
       try {
@@ -868,11 +867,13 @@ const deleteAssignment = async (assignment) => {
       type: 'warning'
     })
 
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
     const response = await fetch(`/api/assignments/${assignment.id}`, {
       method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
+      headers
     })
 
     if (response.ok) {
@@ -957,11 +958,11 @@ const getCompletedCountForAssignment = async (assignmentId) => {
       }
     }
 
-    const response = await fetch(`/api/assignments/${assignmentId}/progress`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch(`/api/assignments/${assignmentId}/progress`, { headers })
 
     if (response.ok) {
       try {

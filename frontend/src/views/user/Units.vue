@@ -79,7 +79,7 @@ const loadUnits = async () => {
       method: 'get'
     })
 
-    if (response.code === 200 && response.data) {
+    if (response?.code === 200 && response.data) {
       units.value = Array.isArray(response.data) ? response.data : []
 
       // 为每个单元获取统计信息（使用公开API，不依赖admin权限）
@@ -88,9 +88,11 @@ const loadUnits = async () => {
           const contentResponse = await request({
             url: `/api/student/learning/units/${unit.id}/content`,
             method: 'get'
-          }).catch(() => ({ data: { texts: [], words: [] } }))
+          }).catch(() => ({ 
+            data: { texts: [], words: [] } 
+          }))
 
-          const data = contentResponse.data || {}
+          const data = contentResponse?.data || {}
           unit.textCount = Array.isArray(data.texts) ? data.texts.length : 0
           unit.wordCount = Array.isArray(data.words) ? data.words.length : 0
         } catch (error) {
@@ -100,7 +102,7 @@ const loadUnits = async () => {
         }
       }
     } else {
-      ElMessage.error(response.message || '获取单元列表失败')
+      ElMessage.error(response?.message || '获取单元列表失败')
     }
   } catch (error) {
     console.error('获取单元列表失败:', error)
@@ -116,7 +118,7 @@ const enterUnit = (unit) => {
     return
   }
   router.push({
-    path: '/user/courses',
+    path: '/user/texts',
     query: {
       unitId: unit.id,
       courseId: route.query.courseId

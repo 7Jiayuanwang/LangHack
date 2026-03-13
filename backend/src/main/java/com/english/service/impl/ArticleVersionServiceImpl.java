@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -182,29 +183,26 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             }
 
             // Wait for all parallel tasks to complete (max 300 seconds)
-            try {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get(300, TimeUnit.SECONDS);
-            } catch (TimeoutException e) {
-                log.error("Version generation timed out for article {}", textId);
-                futures.forEach(f -> f.cancel(true));
-            } catch (Exception e) {
-                log.error("Error waiting for version generation for article {}", textId, e);
-                futures.forEach(f -> f.cancel(true));
+            if (!futures.isEmpty()) {
+                try {
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                            .get(300, TimeUnit.SECONDS);
+                } catch (TimeoutException e) {
+                    log.error("Version generation timed out for article {}", textId);
+                    futures.forEach(f -> f.cancel(true));
+                } catch (InterruptedException e) {
+                    log.error("Version generation interrupted for article {}", textId, e);
+                    futures.forEach(f -> f.cancel(true));
+                    Thread.currentThread().interrupt();
+                } catch (Exception e) {
+                    log.error("Error waiting for version generation for article {}", textId, e);
+                    futures.forEach(f -> f.cancel(true));
+                }
             }
 
-            // Build UpdateWrapper in main thread from collected results (thread-safe)
+            // Save results in transactional context
             if (!results.isEmpty()) {
-                UpdateWrapper<Text> updateWrapper = new UpdateWrapper<>();
-                updateWrapper.eq("id", textId);
-                updateWrapper.eq("deleted", 0); // 只更新未删除的课文
-                results.forEach(updateWrapper::set);
-
-                int updated = textMapper.update(null, updateWrapper);
-                if (updated > 0) {
-                    log.info("Successfully saved {} generated versions for article {}", results.size(), textId);
-                } else {
-                    log.warn("No versions were saved for article {}", textId);
-                }
+                saveVersionResults(textId, results);
             } else {
                 log.warn("No versions were generated for article {}", textId);
             }
@@ -237,6 +235,13 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             return;
         }
 
+        // Defensive null check for markdownContent
+        String markdownContent = text.getMarkdownContent();
+        if (markdownContent == null || markdownContent.isBlank()) {
+            log.warn("Text {} has null/empty markdown content, skipping markdown version generation", textId);
+            return;
+        }
+
         // Check which Markdown versions are missing
         boolean needsCET4 = isNullOrEmpty(text.getCet4MarkdownContent());
         boolean needsCET6 = isNullOrEmpty(text.getCet6MarkdownContent());
@@ -245,11 +250,6 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
         // If any version is missing, trigger async generation via self-proxy
         if (needsCET4 || needsCET6 || needsAcademic || needsChineseParallel) {
-            String markdownContent = text.getMarkdownContent();
-            if (markdownContent == null || markdownContent.isBlank()) {
-                log.warn("Text {} has null/empty markdown content, skipping markdown version generation", textId);
-                return;
-            }
             log.info("Markdown article {} is missing versions. Triggering async generation...", textId);
             // Use self-injection to ensure @Async annotation is properly processed by Spring proxy
             self.generateMarkdownVersionsAsync(textId, markdownContent, needsCET4, needsCET6, needsAcademic, needsChineseParallel);
@@ -371,6 +371,10 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             } catch (TimeoutException e) {
                 log.error("Markdown version generation timed out for article {}", textId);
                 futures.forEach(f -> f.cancel(true));
+            } catch (InterruptedException e) {
+                log.error("Markdown version generation interrupted for article {}", textId, e);
+                futures.forEach(f -> f.cancel(true));
+                Thread.currentThread().interrupt();
             } catch (Exception e) {
                 log.error("Error waiting for Markdown version generation for article {}", textId, e);
                 futures.forEach(f -> f.cancel(true));
@@ -395,6 +399,46 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
         } catch (Exception e) {
             log.error("Error during async Markdown version generation for article {}", textId, e);
+        }
+    }
+
+    /**
+     * Save version generation results with proper transaction management
+     * CRITICAL: This method is @Transactional to ensure DB consistency.
+     * It's called from async context, so it gets its own transaction.
+     */
+    @Transactional
+    public void saveVersionResults(Long textId, Map<String, String> results) {
+        UpdateWrapper<Text> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", textId);
+        updateWrapper.eq("deleted", 0); // 只更新未删除的课文
+        results.forEach(updateWrapper::set);
+
+        int updated = textMapper.update(null, updateWrapper);
+        if (updated > 0) {
+            log.info("Successfully saved {} generated versions for article {}", results.size(), textId);
+        } else {
+            log.warn("No versions were saved for article {} (text not found or deleted)", textId);
+        }
+    }
+
+    /**
+     * Save Markdown version generation results with proper transaction management
+     * CRITICAL: This method is @Transactional to ensure DB consistency.
+     * It's called from async context, so it gets its own transaction.
+     */
+    @Transactional
+    public void saveMarkdownVersionResults(Long textId, Map<String, String> results) {
+        UpdateWrapper<Text> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", textId);
+        updateWrapper.eq("deleted", 0); // 只更新未删除的课文
+        results.forEach(updateWrapper::set);
+
+        int updated = textMapper.update(null, updateWrapper);
+        if (updated > 0) {
+            log.info("Successfully saved {} generated Markdown versions for article {}", results.size(), textId);
+        } else {
+            log.warn("No Markdown versions were saved for article {} (text not found or deleted)", textId);
         }
     }
 }

@@ -2,6 +2,7 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.entity.ScoreRecord;
+import com.english.entity.Class;
 import com.english.service.ScoreRecordService;
 import com.english.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 public class ScoreRecordController {
 
     private static final Logger logger = LoggerFactory.getLogger(ScoreRecordController.class);
+    private static final String ROLE_TEACHER = "ROLE_TEACHER";
+    private static final String ROLE_ADMIN = "ROLE_ADMIN";
 
     @Autowired
     private ScoreRecordService scoreRecordService;
@@ -36,6 +39,9 @@ public class ScoreRecordController {
     @Autowired
     private com.english.service.StudentClassesService studentClassService;
 
+    @Autowired
+    private com.english.service.UnitService unitService;
+
     /**
      * 记录分数（教师/管理员）
      */
@@ -46,21 +52,37 @@ public class ScoreRecordController {
             String userRole = getCurrentRole(authentication);
 
             // 教师只能为自己班级的学生记录分数
-            if ("ROLE_TEACHER".equals(userRole)) {
+            if (ROLE_TEACHER.equals(userRole)) {
                 Long teacherId = getCurrentUserId(authentication);
 
-                // 如果有关联的任务，验证教师是否有权限
-                if (scoreRecord.getAssignmentId() != null) {
-                    var assignment = assignmentService.getById(scoreRecord.getAssignmentId());
-                    if (assignment != null && assignment.getClassId() != null) {
-                        var classInfo = classService.getClassById(assignment.getClassId());
-                        if (classInfo == null || !teacherId.equals(classInfo.getTeacherId())) {
-                            return Result.error("没有权限为该学生记录分数");
-                        }
-                    }
-                } else {
-                    // 没有关联任务时，教师必须通过班级关系验证
+                // 教师必须关联一个任务，并且任务必须属于该教师管理的班级
+                if (scoreRecord.getAssignmentId() == null) {
                     return Result.error("教师记录分数必须关联一个任务");
+                }
+
+                var assignment = assignmentService.getById(scoreRecord.getAssignmentId());
+                if (assignment == null) {
+                    return Result.error("任务不存在");
+                }
+
+                if (assignment.getClassId() == null) {
+                    return Result.error("任务无关联班级");
+                }
+
+                var classInfo = classService.getClassById(assignment.getClassId());
+                if (classInfo == null || !teacherId.equals(classInfo.getTeacherId())) {
+                    return Result.error("没有权限为该学生记录分数");
+                }
+
+                // 验证学生是否属于该班级
+                Long studentId = scoreRecord.getStudentId();
+                if (studentId == null) {
+                    return Result.error("学生ID不能为空");
+                }
+                
+                List<Long> studentClassIds = studentClassService.getClassIdsByStudentId(studentId);
+                if (studentClassIds == null || !studentClassIds.contains(assignment.getClassId())) {
+                    return Result.error("学生不属于该班级，无法记录分数");
                 }
             }
 
@@ -93,7 +115,7 @@ public class ScoreRecordController {
             String userRole = getCurrentRole(authentication);
 
             // 教师需要验证学生是否属于自己的班级
-            if ("ROLE_TEACHER".equals(userRole)) {
+            if (ROLE_TEACHER.equals(userRole)) {
                 Long teacherId = getCurrentUserId(authentication);
 
                 // 获取学生所属班级
@@ -144,6 +166,8 @@ public class ScoreRecordController {
             List<Map<String, Object>> scores = scoreRecordService.getStudentScores(
                     studentId, scoreType, courseId, unitId, assignmentId);
             return Result.success(scores);
+        } catch (com.english.exception.BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("获取分数记录失败", e);
 
@@ -165,7 +189,7 @@ public class ScoreRecordController {
             String userRole = getCurrentRole(authentication);
 
             // 教师需要验证学生是否属于自己的班级
-            if ("ROLE_TEACHER".equals(userRole)) {
+            if (ROLE_TEACHER.equals(userRole)) {
                 Long teacherId = getCurrentUserId(authentication);
 
                 // 获取学生所属班级
@@ -192,6 +216,8 @@ public class ScoreRecordController {
 
             Map<String, Object> stats = scoreRecordService.getStudentAverageScore(studentId, scoreType, courseId);
             return Result.success(stats);
+        } catch (com.english.exception.BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("获取平均分数失败", e);
 
@@ -214,7 +240,7 @@ public class ScoreRecordController {
             String userRole = authorities.isEmpty() ? "" : authorities.iterator().next().getAuthority();
 
             // 教师只能查看自己班级相关的分数统计
-            if ("ROLE_TEACHER".equals(userRole)) {
+            if (ROLE_TEACHER.equals(userRole)) {
                 Long teacherId = getCurrentUserId(authentication);
 
                 // 如果指定了任务，验证教师是否有权限
@@ -227,13 +253,60 @@ public class ScoreRecordController {
                     if (classInfo == null || !teacherId.equals(classInfo.getTeacherId())) {
                         return Result.error("没有权限查看该任务的统计信息");
                     }
+                } else if (courseId != null) {
+                    // 如果只指定了课程，需要验证教师是否有该课程的班级权限
+                    List<Class> teacherClasses = classService.getClassesByTeacherId(teacherId);
+                    boolean hasCourseAccess = false;
+                    if (teacherClasses != null) {
+                        for (Class cls : teacherClasses) {
+                            if (cls != null && courseId.equals(cls.getCourseId())) {
+                                hasCourseAccess = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!hasCourseAccess) {
+                        return Result.error("没有权限查看该课程的统计信息");
+                    }
+                } else if (unitId != null) {
+                    // 如果只指定了单元，验证教师是否有该单元所在课程的班级权限
+                    // 首先获取单元对应的课程
+                    com.english.entity.Unit unit = null;
+                    try {
+                        unit = unitService.getUnitById(unitId);
+                    } catch (Exception e) {
+                        logger.debug("无法获取单元信息", e);
+                    }
+                    
+                    if (unit == null || unit.getCourseId() == null) {
+                        return Result.error("单元不存在或无法关联课程");
+                    }
+
+                    // 检查教师是否有该课程的班级权限
+                    List<Class> teacherClasses = classService.getClassesByTeacherId(teacherId);
+                    boolean hasUnitAccess = false;
+                    if (teacherClasses != null) {
+                        for (Class cls : teacherClasses) {
+                            if (cls != null && unit.getCourseId().equals(cls.getCourseId())) {
+                                hasUnitAccess = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!hasUnitAccess) {
+                        return Result.error("没有权限查看该单元的统计信息");
+                    }
+                } else {
+                    // 既没有任务也没有课程也没有单元，拒绝（防止全表扫描）
+                    return Result.error("必须指定任务、课程或单元");
                 }
-                // 如果指定了课程，暂时允许（统计是只读的），但更严格的设计应该验证班级
             }
             // 管理员可以查看全局统计
 
             Map<String, Object> stats = scoreRecordService.getScoreStatistics(courseId, unitId, assignmentId);
             return Result.success(stats);
+        } catch (com.english.exception.BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("获取分数统计失败", e);
 
@@ -251,8 +324,21 @@ public class ScoreRecordController {
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
+            // 验证学生属于该任务对应的班级
+            var assignment = assignmentService.getById(assignmentId);
+            if (assignment == null) {
+                return Result.error("任务不存在");
+            }
+            if (assignment.getClassId() != null) {
+                List<Long> studentClassIds = studentClassService.getClassIdsByStudentId(studentId);
+                if (studentClassIds == null || !studentClassIds.contains(assignment.getClassId())) {
+                    return Result.error("您不属于该任务的班级");
+                }
+            }
             scoreRecordService.updateAssignmentScore(assignmentId, studentId);
             return Result.success("分数更新成功");
+        } catch (com.english.exception.BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("更新分数失败", e);
 
@@ -272,7 +358,7 @@ public class ScoreRecordController {
             String userRole = getCurrentRole(authentication);
 
             // 教师只能导出自己管理的班级成绩
-            if ("ROLE_TEACHER".equals(userRole)) {
+            if (ROLE_TEACHER.equals(userRole)) {
                 Long teacherId = getCurrentUserId(authentication);
                 var classInfo = classService.getClassById(classId);
                 if (classInfo == null || !teacherId.equals(classInfo.getTeacherId())) {
@@ -280,26 +366,29 @@ public class ScoreRecordController {
                         .body("没有权限导出该班级的成绩");
                 }
             }
-            
+
             // 获取班级所有学生的成绩数据
             List<Map<String, Object>> exportData = scoreRecordService.exportClassScores(classId);
-            
+
             // 生成Excel文件
             byte[] excelBytes = scoreRecordService.generateClassScoresExcel(exportData, classId);
-            
+
             // 获取班级名称
             var classInfo = classService.getClassById(classId);
             String className = classInfo != null ? classInfo.getName() : "班级";
             String fileName = className + "_成绩_" + java.time.LocalDate.now() + ".xlsx";
-            
+
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("attachment", 
+            headers.setContentDispositionFormData("attachment",
                 new String(fileName.getBytes("UTF-8"), "ISO-8859-1"));
-            
+
             return org.springframework.http.ResponseEntity.ok()
                 .headers(headers)
                 .body(excelBytes);
+        } catch (com.english.exception.BusinessException e) {
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.BAD_REQUEST)
+                .body(e.getMessage());
         } catch (Exception e) {
             logger.error("导出成绩失败", e);
             return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR)
@@ -326,4 +415,3 @@ public class ScoreRecordController {
         return authentication.getAuthorities().iterator().next().getAuthority();
     }
 }
-

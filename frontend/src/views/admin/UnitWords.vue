@@ -71,8 +71,8 @@
           :total="pagination.total"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadWords"
-          @current-change="loadWords"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
         />
       </div>
     </el-card>
@@ -113,7 +113,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -124,6 +124,7 @@ const availableWords = ref([])
 const addDialogVisible = ref(false)
 const searching = ref(false)
 const adding = ref(false)
+const loading = ref(false)
 const router = useRouter()
 const route = useRoute()
 
@@ -160,9 +161,10 @@ const loadWords = async () => {
     return
   }
 
+  loading.value = true
   try {
     const params = {
-      current: pagination.current,
+      page: pagination.current,
       size: pagination.size,
       unitId: unitId.value,
       ...searchForm
@@ -182,6 +184,9 @@ const loadWords = async () => {
     }
   } catch (error) {
     ElMessage.error('加载单词列表失败')
+    console.error('Load words error:', error)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -199,6 +204,17 @@ const resetSearch = () => {
   searchForm.keyword = ''
   searchForm.difficulty = ''
   pagination.current = 1
+  loadWords()
+}
+
+const handleSizeChange = (size) => {
+  pagination.size = size
+  pagination.current = 1
+  loadWords()
+}
+
+const handleCurrentChange = (page) => {
+  pagination.current = page
   loadWords()
 }
 

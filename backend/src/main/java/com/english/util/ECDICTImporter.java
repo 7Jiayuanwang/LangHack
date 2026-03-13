@@ -188,7 +188,7 @@ public class ECDICTImporter {
         }
     }
 
-    private int insertBatch(PreparedStatement pstmt, List<ECDICTWord> words) {
+    private int insertBatch(PreparedStatement pstmt, List<ECDICTWord> words) throws Exception {
         int successCount = 0;
         for (ECDICTWord word : words) {
             try {
@@ -204,16 +204,27 @@ public class ECDICTImporter {
                 pstmt.setString(10, word.getFrq());
                 pstmt.setString(11, word.getExchange());
 
-                pstmt.executeUpdate();
+                pstmt.addBatch();
                 successCount++;
             } catch (Exception e) {
                 // 忽略重复键等错误
-                if (!e.getMessage().contains("Duplicate entry")) {
-                    System.err.println("插入失败: " + word.getWord() + " - " + e.getMessage());
+                String errorMsg = e.getMessage();
+                if (errorMsg == null || !errorMsg.contains("Duplicate entry")) {
+                    System.err.println("插入失败: " + word.getWord() + " - " + errorMsg);
                 }
             }
         }
-        return successCount;
+
+        // 执行批处理
+        try {
+            int[] results = pstmt.executeBatch();
+            pstmt.clearBatch();
+            return successCount;
+        } catch (Exception e) {
+            System.err.println("批量执行失败: " + e.getMessage());
+            pstmt.clearBatch();
+            throw e;
+        }
     }
 
     private ECDICTWord parseECDICTLine(String line) {
@@ -295,6 +306,8 @@ public class ECDICTImporter {
 
         // 限制字段长度，避免超出数据库字段限制
         if (field.length() > 1000) {
+            // 重点修复：记录截断信息，避免数据无声截断
+            System.out.println("警告: 字段已截断（原长度: " + field.length() + "）- " + field.substring(0, Math.min(50, field.length())) + "...");
             field = field.substring(0, 1000);
         }
 

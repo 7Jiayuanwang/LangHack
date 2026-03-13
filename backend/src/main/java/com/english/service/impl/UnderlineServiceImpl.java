@@ -32,14 +32,33 @@ public class UnderlineServiceImpl implements UnderlineService {
     @Transactional
     public void createUnderline(Long userId, Long textId, String selectedText, Integer startIndex, Integer endIndex,
             String serializedRange) {
+        // 参数非空校验
         if (userId == null || textId == null) {
-            throw new IllegalArgumentException("userId 和 textId 不能为空");
+            throw new BusinessException("用户ID和课文ID不能为空");
+        }
+
+        // 验证选中文本不为空
+        if (selectedText == null || selectedText.trim().isEmpty()) {
+            throw new BusinessException("选中文本不能为空");
+        }
+
+        // 验证索引范围合法性
+        if (startIndex == null || endIndex == null) {
+            throw new BusinessException("开始和结束位置不能为空");
+        }
+        if (startIndex < 0 || endIndex < 0 || startIndex >= endIndex) {
+            throw new BusinessException("选中范围不合法");
         }
 
         // 校验文本存在且未被删除
         Text text = textService.getTextById(textId);
         if (text == null) {
             throw new BusinessException("课文不存在或已删除");
+        }
+
+        // 验证索引不超出文本长度
+        if (text.getContent() == null || endIndex > text.getContent().length()) {
+            throw new BusinessException("选中范围超出文本长度");
         }
 
         Underline underline = new Underline();
@@ -55,7 +74,7 @@ public class UnderlineServiceImpl implements UnderlineService {
     @Override
     public List<Underline> getUnderlinesByTextId(Long textId) {
         if (textId == null) {
-            throw new IllegalArgumentException("textId 不能为空");
+            throw new BusinessException("课文ID不能为空");
         }
         QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("text_id", textId);
@@ -65,7 +84,7 @@ public class UnderlineServiceImpl implements UnderlineService {
     @Override
     public List<Underline> getUnderlinesByTextIdAndUserId(Long textId, Long userId) {
         if (textId == null || userId == null) {
-            throw new IllegalArgumentException("textId 和 userId 不能为空");
+            throw new BusinessException("课文ID和用户ID不能为空");
         }
         QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("text_id", textId).eq("user_id", userId);
@@ -76,7 +95,7 @@ public class UnderlineServiceImpl implements UnderlineService {
     @Transactional
     public void deleteUnderlinesByTextId(Long textId) {
         if (textId == null) {
-            throw new IllegalArgumentException("textId 不能为空");
+            throw new BusinessException("课文ID不能为空");
         }
         QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("text_id", textId);
@@ -98,16 +117,16 @@ public class UnderlineServiceImpl implements UnderlineService {
     @Transactional
     public boolean deleteUnderline(Long underlineId, Long userId) {
         if (underlineId == null || userId == null) {
-            return false;
+            throw new BusinessException("划线ID和用户ID不能为空");
         }
 
-        // 先验证该 underline 确实属于该用户
+        // IDOR防护：验证该划线属于该用户
         QueryWrapper<Underline> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("id", underlineId).eq("user_id", userId);
         Underline underline = underlineMapper.selectOne(queryWrapper);
 
         if (underline == null) {
-            return false;  // 不存在或无权限
+            throw new BusinessException("划线不存在或无权限删除");
         }
 
         // 删除

@@ -73,7 +73,17 @@ public class PublicTextController {
             Long userId = getCurrentUserId();
 
             if (userId != null) {
-                List<Long> readTextIds = userTextReadMapper.selectReadTextIds(userId);
+                // Defensive check: mapper call may fail due to user deletion or database issues
+                List<Long> readTextIds;
+                try {
+                    readTextIds = userTextReadMapper.selectReadTextIds(userId);
+                    if (readTextIds == null) {
+                        readTextIds = new ArrayList<>();
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to retrieve user read texts, userId={}", userId, e);
+                    readTextIds = new ArrayList<>();
+                }
 
                 List<Text> unreadTexts = featuredTexts.stream()
                         .filter(t -> !readTextIds.contains(t.getId()))
@@ -162,53 +172,56 @@ public class PublicTextController {
             // 限制最大获取数量
             count = Math.min(Math.max(count, 1), 50);
 
-            List<Text> allTexts;
+            // 先统计符合条件的总数，再随机选取，避免加载全部数据到内存
+            // 构建查询条件
+            com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Text> countWrapper = new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
+            countWrapper.eq("deleted", 0);
 
-            // 根据是否包含用户内容来决定查询策略
-            if ("false".equals(includeUserContent)) {
-                // 只获取系统内容，不需要公开和审核状态限制
-                allTexts = textService.lambdaQuery()
-                        .eq(Text::getDeleted, 0)
-                        .isNull(Text::getUploadedBy) // 只获取系统内容
-                        .orderByDesc(Text::getCreatedAt)
-                        .list();
-            } else {
-                // 获取所有课文（系统内容 + 公开的用户内容）
-                List<Text> systemTexts = textService.lambdaQuery()
-                        .eq(Text::getDeleted, 0)
-                        .isNull(Text::getUploadedBy) // 系统内容
-                        .orderByDesc(Text::getCreatedAt)
-                        .list();
-
-                List<Text> userPublicTexts = textService.lambdaQuery()
-                        .eq(Text::getDeleted, 0)
-                        .isNotNull(Text::getUploadedBy) // 用户内容
-                        .eq(Text::getIsPublic, 1) // 公开
-                        .eq(Text::getStatus, "APPROVED") // 审核通过
-                        .orderByDesc(Text::getCreatedAt)
-                        .list();
-
-                // 合并系统内容和公开用户内容
-                allTexts = new java.util.ArrayList<>();
-                allTexts.addAll(systemTexts);
-                allTexts.addAll(userPublicTexts);
-            }
-
-            // 根据难度过滤
             if (difficulty != null && !difficulty.trim().isEmpty()) {
-                allTexts = allTexts.stream()
-                        .filter(text -> difficulty.equals(text.getDifficulty()))
-                        .toList();
+                countWrapper.eq("difficulty", difficulty);
             }
 
-            // 随机选取指定数量的课文
-            List<Text> randomTexts;
-            if (allTexts.size() <= count) {
-                randomTexts = allTexts;
+            if ("false".equals(includeUserContent)) {
+                countWrapper.isNull("uploaded_by");
             } else {
-                List<Text> shuffled = new ArrayList<>(allTexts);
-                Collections.shuffle(shuffled);
-                randomTexts = shuffled.subList(0, count);
+                // 系统内容 OR (用户内容 + 公开 + 审核通过)
+                countWrapper.and(w -> w
+                    .isNull("uploaded_by")
+                    .or(sub -> sub
+                        .isNotNull("uploaded_by")
+                        .eq("is_public", 1)
+                        .eq("status", "APPROVED")
+                    )
+                );
+            }
+
+            long total = textService.count(countWrapper);
+
+            if (total == 0) {
+                return Result.success(new ArrayList<>());
+            }
+
+            // 使用分页 + 随机偏移代替加载全部数据
+            List<Text> randomTexts;
+            if (total <= count) {
+                // 总数不超过请求数量，直接返回全部
+                randomTexts = textService.list(countWrapper);
+                if (randomTexts == null) {
+                    randomTexts = new ArrayList<>();
+                }
+            } else {
+                // 随机选取：计算随机页码，避免分页边界问题
+                // 使用随机偏移计算页码，而非直接计算页码，防止边界溢出
+                long maxOffset = total - count;
+                long randomOffset = (long) (Math.random() * (maxOffset + 1)); // +1 保证范围内
+                int randomPage = (int) (randomOffset / count) + 1;
+
+                com.baomidou.mybatisplus.extension.plugins.pagination.Page<Text> page =
+                    new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(randomPage, count);
+                List<Text> pageResult = textService.page(page, countWrapper).getRecords();
+                randomTexts = new ArrayList<>(pageResult != null ? pageResult : new ArrayList<>());
+                // 打乱顺序增加随机性
+                Collections.shuffle(randomTexts);
             }
 
             return Result.success(randomTexts);

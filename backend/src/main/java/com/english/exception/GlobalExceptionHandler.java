@@ -20,6 +20,12 @@ import java.util.stream.Collectors;
  * 注意: Spring Security 过滤器链（Filter 层）抛出的 AccessDeniedException /
  * AuthenticationException 不会到达此处；它们由 SecurityConfig 中注册的
  * SecurityExceptionHandler bean 处理。
+ *
+ * 异常处理优先级（按顺序）：
+ * 1. 具体异常（MethodArgumentNotValidException, DuplicateKeyException 等）
+ * 2. BusinessException — 业务异常，message 可安全展示给前端 (400)
+ * 3. RuntimeException — 运行时异常，隐藏详情，返回通用消息 (500)
+ * 4. Exception — 兜底异常处理 (500)
  */
 @Slf4j
 @RestControllerAdvice
@@ -37,7 +43,8 @@ public class GlobalExceptionHandler {
                     .collect(Collectors.joining("; "))
                 : "参数格式错误";
         log.warn("Validation failed: {}", msg);
-        return Result.error(400, "参数校验失败: " + msg);
+        // 只在日志中记录详细信息，不返回给前端（防止用户输入泄漏）
+        return Result.error(400, "参数校验失败，请检查请求参数");
     }
 
     /**
@@ -86,7 +93,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 类型转换异常（通常来自 Map 强制转换或反序列化）
+     */
+    @ExceptionHandler(ClassCastException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleClassCast(ClassCastException e) {
+        log.warn("Type casting error: {}", e.getMessage());
+        return Result.error(400, "请求数据格式不匹配，请检查字段类型");
+    }
+
+    /**
      * 业务逻辑异常 — message 可安全展示给前端
+     * IMPORTANT: 必须在 RuntimeException 之前处理，确保 BusinessException 优先匹配
+     * （因为 BusinessException extends RuntimeException）
      */
     @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)

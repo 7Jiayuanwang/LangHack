@@ -153,6 +153,7 @@ public class DataCleanupServiceImpl {
         for (User teacher : teachers) {
             QueryWrapper<Class> classWrapper = new QueryWrapper<>();
             classWrapper.eq("teacher_id", teacher.getId());
+            classWrapper.eq("deleted", 0);
             List<Class> teacherClasses = classMapper.selectList(classWrapper);
 
             int classCount = (teacherClasses != null) ? teacherClasses.size() : 0;
@@ -195,6 +196,7 @@ public class DataCleanupServiceImpl {
     /**
      * 获取数据统计信息，用于调试
      */
+    @Transactional(readOnly = true)
     public void printDataStatistics() {
         logger.info("\n=== 数据统计信息 ===");
 
@@ -215,7 +217,9 @@ public class DataCleanupServiceImpl {
         Long studentCount = userMapper.selectCount(studentWrapper);
 
         // 班级统计
-        Long classCount = classMapper.selectCount(null);
+        QueryWrapper<Class> classCountWrapper = new QueryWrapper<>();
+        classCountWrapper.eq("deleted", 0);
+        Long classCount = classMapper.selectCount(classCountWrapper);
 
         // 学生班级关联统计
         QueryWrapper<StudentClass> scWrapper = new QueryWrapper<>();

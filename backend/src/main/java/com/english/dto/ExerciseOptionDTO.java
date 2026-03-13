@@ -1,10 +1,13 @@
 package com.english.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 
 /**
  * 习题选项数据传输对象
+ * 注意：isCorrect字段由于安全考虑，在某些场景下会被@JsonIgnore忽略
+ * 但DTO本身不添加该注解，因为在后端内部处理、管理员查看时需要保留
  */
 public class ExerciseOptionDTO {
     private Long id;

@@ -219,6 +219,8 @@ const currentCourse = ref(null)
 const courseStats = ref(new Map())
 const classStats = ref(new Map())
 
+const unitCountCache = ref(new Map())
+
 // 单元和任务管理
 const unitsAssignmentsVisible = ref(false)
 const unitsTab = ref('units')
@@ -235,15 +237,23 @@ const stats = reactive({
   totalAssignments: 0
 })
 
+// 公共方法：获取认证头
+const getAuthHeaders = () => {
+  const headers = {}
+  const token = localStorage.getItem('token')
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
 // 方法
 const loadCourses = async () => {
   try {
     // 首先尝试加载活跃课程
-    let response = await fetch('/api/courses/active', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const headers = getAuthHeaders()
+
+    let response = await fetch('/api/courses/active', { headers })
 
     if (response.ok) {
       try {
@@ -276,11 +286,9 @@ const loadCourses = async () => {
 
 const loadAllCourses = async () => {
   try {
-    const response = await fetch('/api/courses?size=100', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const headers = getAuthHeaders()
+
+    const response = await fetch('/api/courses?size=100', { headers })
 
     if (response.ok) {
       try {
@@ -315,11 +323,9 @@ const loadAllCourses = async () => {
 
 const loadClasses = async () => {
   try {
-    const response = await fetch('/api/classes?size=100', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const headers = getAuthHeaders()
+
+    const response = await fetch('/api/classes?size=100', { headers })
 
     if (response.ok) {
       try {
@@ -350,11 +356,9 @@ const loadClasses = async () => {
 const loadStats = async () => {
   try {
     // 加载任务统计
-    const response = await fetch('/api/assignments/teacher/stats', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const headers = getAuthHeaders()
+
+    const response = await fetch('/api/assignments/teacher/stats', { headers })
 
     if (response.ok) {
       try {
@@ -392,16 +396,15 @@ const viewUnitsAndAssignments = async (course) => {
 const loadCourseUnits = async (courseId) => {
   unitsLoading.value = true
   try {
-    const response = await fetch(`/api/units/course/${courseId}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const headers = getAuthHeaders()
+
+    const response = await fetch(`/api/units/course/${courseId}`, { headers })
     if (response.ok) {
       try {
         const data = await response.json()
         if (data.code === 200) {
           courseUnits.value = Array.isArray(data.data) ? data.data : []
+          unitCountCache.value.set(courseId, courseUnits.value.length)
         }
       } catch (parseError) {
         console.error('单元列表解析失败:', parseError)
@@ -423,16 +426,20 @@ const loadCourseAssignments = async (courseId) => {
     const allAssignments = []
 
     for (const cls of courseClasses) {
-      const response = await fetch(`/api/assignments?classId=${cls.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-        }
-      })
+      const headers = getAuthHeaders()
+
+      const response = await fetch(`/api/assignments?classId=${cls.id}`, { headers })
       if (response.ok) {
         try {
           const data = await response.json()
           if (data.code === 200) {
-            const assignments = Array.isArray(data.data?.records) ? data.data.records : Array.isArray(data.data) ? data.data : []
+            // 兼容分页响应 {records:[]} 和直接数组两种格式
+            let assignments = []
+            if (data.data?.records) {
+              assignments = Array.isArray(data.data.records) ? data.data.records : []
+            } else if (Array.isArray(data.data)) {
+              assignments = data.data
+            }
             allAssignments.push(...assignments.map(a => ({
               ...a,
               className: cls.name
@@ -482,11 +489,11 @@ const deleteAssignment = async (assignment) => {
       type: 'warning'
     })
 
+    const headers = getAuthHeaders()
+
     const response = await fetch(`/api/assignments/${assignment.id}`, {
       method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
+      headers
     })
 
     if (response.ok) {
@@ -547,7 +554,11 @@ const getStudentCountByCourse = (courseId) => {
 
 const getUnitCountByCourse = (courseId) => {
   if (!courseId) return 0
-  // 单元数量需调用 API 获取，此处返回 0 待数据加载后更新
+  // 优先从缓存获取，避免重复计算
+  if (unitCountCache.value.has(courseId)) {
+    return unitCountCache.value.get(courseId)
+  }
+  // 缓存未命中，返回 0（将在 loadCourseUnits 时更新）
   return 0
 }
 

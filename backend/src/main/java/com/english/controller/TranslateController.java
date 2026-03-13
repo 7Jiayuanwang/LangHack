@@ -224,7 +224,10 @@ public class TranslateController {
 
         // 验证每条文本长度
         for (String text : request.getTexts()) {
-            if (text != null && text.length() > 2000) {
+            if (text == null || text.isEmpty()) {
+                return Result.error("文本条目不能为空");
+            }
+            if (text.length() > 2000) {
                 return Result.error("单条翻译文本不能超过2000字");
             }
         }
@@ -243,11 +246,10 @@ public class TranslateController {
 
         List<String> texts = request.getTexts();
         List<String> results = new ArrayList<>(texts.size());
-        for (int i = 0; i < texts.size(); i++) results.add("");
 
         int start = 0;
         int maxCharPerRequest = 1500;
-        
+
         while (start < texts.size()) {
             int end = start;
             int charCount = 0;
@@ -259,29 +261,41 @@ public class TranslateController {
                 end++;
             }
             List<String> chunk = texts.subList(start, end);
-            String joined = chunk.stream().collect(Collectors.joining("\n"));
+            // BUGFIX: 确保 chunk 中没有 null 元素，否则会导致 NPE
+            String joined = chunk.stream()
+                    .map(t -> t != null ? t : "")
+                    .collect(Collectors.joining("
+"));
+            
             try {
                 String translated = translateService.translate(joined, src, tgt);
-                String[] lines = translated.split("\n", -1);
-                
+                String[] lines = translated.split("
+", -1);
+
                 // 如果返回行数一致，则一一对应
                 if (lines.length == chunk.size()) {
                     for (int i = 0; i < chunk.size(); i++) {
-                        results.set(start + i, lines[i].trim());
+                        results.add(lines[i].trim());
                     }
                 } else {
                     // 如果不一致，兜底采用逐条翻译（虽然慢但保准）
                     for (int i = 0; i < chunk.size(); i++) {
+                        // BUGFIX: null check before translate
+                        String text = chunk.get(i);
+                        if (text == null) {
+                            results.add("");
+                            continue;
+                        }
                         try {
-                            results.set(start + i, translateService.translate(chunk.get(i), src, tgt));
+                            results.add(translateService.translate(text, src, tgt));
                         } catch (Exception e) {
-                            results.set(start + i, "");
+                            results.add("");
                         }
                     }
                 }
             } catch (Exception e) {
                 // 彻底失败时该批次置空
-                for (int i = start; i < end; i++) results.set(i, "");
+                for (int i = start; i < end; i++) results.add("");
             }
             start = end;
         }

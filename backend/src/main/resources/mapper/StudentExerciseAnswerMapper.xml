@@ -33,12 +33,21 @@
         LIMIT 1
     </select>
 
-    <!-- 根据学生ID获取课文的所有答题记录 -->
+    <!-- 根据学生ID获取课文的所有答题记录（校验课文未删除） -->
     <select id="getAnswersByTextId" resultMap="BaseResultMap">
         SELECT
-        sea.*
+            sea.id,
+            sea.exercise_id,
+            sea.student_id,
+            sea.assignment_id,
+            sea.answer_content,
+            sea.is_correct,
+            sea.answer_time,
+            sea.time_spent_seconds,
+            sea.created_time
         FROM student_exercise_answers sea
         INNER JOIN text_exercises te ON sea.exercise_id = te.id
+        INNER JOIN texts t ON te.text_id = t.id AND t.deleted = 0
         WHERE sea.student_id = #{studentId}
         AND te.text_id = #{textId}
         <if test="assignmentId != null">
@@ -57,12 +66,11 @@
         ORDER BY answer_time ASC
     </select>
 
-    <!-- 统计学生在任务中的答题情况 -->
+    <!-- 统计学生在任务中的答题情况：BUG FIX #7: 移除不必要的 incorrect 计算，由 Java 端负责 -->
     <select id="getAnswerStats" resultType="java.util.Map">
         SELECT
             COUNT(*) as total,
-            SUM(CASE WHEN is_correct = TRUE THEN 1 ELSE 0 END) as correct,
-            SUM(CASE WHEN is_correct = FALSE THEN 1 ELSE 0 END) as incorrect
+            SUM(CASE WHEN is_correct = TRUE THEN 1 ELSE 0 END) as correct
         FROM student_exercise_answers
         WHERE assignment_id = #{assignmentId}
         AND student_id = #{studentId}

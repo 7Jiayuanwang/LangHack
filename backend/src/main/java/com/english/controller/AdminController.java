@@ -126,6 +126,9 @@ public class AdminController {
             if (user.getPassword() == null || user.getPassword().length() < 6) {
                 return Result.error("密码长度不能少于 6 位");
             }
+            if (user.getPassword().length() > 100) {
+                return Result.error("密码长度不能超过 100 位");
+            }
             if (userService.getUserByUsername(user.getUsername()) != null) {
                 return Result.error("用户名已存在");
             }
@@ -160,6 +163,10 @@ public class AdminController {
             // 不要把已编码的密码拷贝进来，否则Service层会二次编码导致用户无法登录
             if (user.getPassword() == null || user.getPassword().isEmpty()) {
                 user.setPassword(null);
+            } else if (user.getPassword().length() < 6) {
+                return Result.error("密码长度不能少于 6 位");
+            } else if (user.getPassword().length() > 100) {
+                return Result.error("密码长度不能超过 100 位");
             }
 
             userService.updateUser(user);
@@ -375,10 +382,10 @@ public class AdminController {
             } catch (NumberFormatException e) {
                 return Result.error("courseId 必须为有效的数字");
             }
-            if (courseService.getCourseById(courseId) == null) {
-                throw new BusinessException("课程不存在");
+            com.english.entity.Course course = courseService.getCourseById(courseId);
+            if (course == null || course.getDeleted() == 1) {
+                throw new BusinessException("课程不存在或已被删除");
             }
-
             Unit unit = new Unit();
             unit.setCourseId(courseId);
             Object nameObj = unitData.get("name");
@@ -425,6 +432,10 @@ public class AdminController {
                 courseId = Long.valueOf(courseIdObj.toString());
             } catch (NumberFormatException e) {
                 return Result.error("courseId 必须为有效的数字");
+            }
+            com.english.entity.Course courseCheckUpdate = courseService.getCourseById(courseId);
+            if (courseCheckUpdate == null || courseCheckUpdate.getDeleted() == 1) {
+                throw new BusinessException("课程不存在或已被删除");
             }
             Unit unit = new Unit();
             unit.setId(id);
@@ -539,6 +550,8 @@ public class AdminController {
                 return Result.error("单词创建失败");
             }
             return Result.success("单词创建成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("创建单词失败", e);
 
@@ -580,6 +593,8 @@ public class AdminController {
 
             wordService.updateWord(word);
             return Result.success("单词更新成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("更新单词失败", e);
 
@@ -839,12 +854,12 @@ public class AdminController {
                                 option.setOptionKey(optionKeyObj.toString());
                                 Object isCorrectObj = optionData.get("isCorrect");
                                 // 安全处理 isCorrect：前端可能发 1/0/"true"/"false" 等格式
-                                boolean isCorrect = false;
+                                int isCorrectVal = 0;
                                 if (isCorrectObj != null) {
                                     String isCorrectStr = isCorrectObj.toString().trim().toLowerCase();
-                                    isCorrect = "1".equals(isCorrectStr) || "true".equals(isCorrectStr);
+                                    isCorrectVal = ("1".equals(isCorrectStr) || "true".equals(isCorrectStr)) ? 1 : 0;
                                 }
-                                option.setIsCorrect(isCorrect);
+                                option.setIsCorrect(isCorrectVal);
                                 Object optionOrderObj = optionData.get("orderNum");
                                 try {
                                     option.setOrderNum(optionOrderObj != null ? Integer.parseInt(optionOrderObj.toString()) : 0);
@@ -878,8 +893,7 @@ public class AdminController {
             return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("创建课文失败", e);
-            // 让 @Transactional 自动回滚异常，不需要手动处理
-            throw new BusinessException("创建课文失败，请稍后重试");
+            return Result.error("创建课文失败，请稍后重试");
         }
     }
     @PutMapping("/texts/{id}")
@@ -950,7 +964,7 @@ public class AdminController {
     public Result<String> toggleFeatured(@PathVariable Long id) {
         try {
             Text text = textService.getTextById(id);
-            if (text == null) {
+            if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
                 return Result.error("课文不存在");
             }
             int newValue = (text.getIsFeatured() != null && text.getIsFeatured() == 1) ? 0 : 1;
@@ -1074,6 +1088,7 @@ public class AdminController {
 
             // 获取课文习题
             List<Map<String, Object>> exercises = textExerciseService.getExercisesWithOptions(textId);
+            if (exercises == null) exercises = new ArrayList<>();
             result.put("exercises", exercises);
             result.put("exerciseCount", exercises.size());
 
@@ -1282,6 +1297,11 @@ public class AdminController {
 
                                 // 创建后重新查询以获取ID
                                 classInfo = classService.getClassByName(className.trim());
+                                if (classInfo == null) {
+                                    errors.add("第" + (i + 1) + "行: 创建班级后无法查询");
+                                    classJoinFailedCount++;
+                                    continue;
+                                }
 
                                 classCreatedCount++;
                                 if (!createdClassNames.contains(className.trim())) {

@@ -63,9 +63,8 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
      */
     private Assignment getActiveAssignment(Long id) {
         if (id == null) return null;
-        QueryWrapper<Assignment> wrapper = new QueryWrapper<>();
-        wrapper.eq("id", id).eq("deleted", 0);
-        return getOne(wrapper);
+        // @TableLogic 注解已在 getById() 时自动过滤 deleted=0，无需手动添加
+        return getById(id);
     }
 
     @Autowired
@@ -947,6 +946,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     /**
      * 记录课文学习时间（统一的记录方法）
      */
+    @Transactional
     public void recordTextLearningTime(Long studentId, Long assignmentId, Long textId, Integer durationSeconds) {
         if (studentId == null || textId == null || durationSeconds == null || durationSeconds <= 0) {
             return;
@@ -1070,16 +1070,14 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         List<Long> textIds = assignment.getTextIds();
 
         if (textIds != null && !textIds.isEmpty()) {
-            // 课文任务：返回指定的课文
+            // 课文任务：返回指定的课文（过滤已软删除的）
             QueryWrapper<com.english.entity.Text> wrapper = new QueryWrapper<>();
-            wrapper.in("id", textIds);
-            wrapper.eq("deleted", 0);
+            wrapper.in("id", textIds).eq("deleted", 0);
             return textMapper.selectList(wrapper);
-        } else if (assignment.isUnitTask() || !assignment.isTextsTask()) {
-            // 单元任务或其他任务：返回整个单元的课文
+        } else if ((assignment.isUnitTask() || !assignment.isTextsTask()) && assignment.getUnitId() != null) {
+            // 单元任务或其他任务：返回整个单元的课文（过滤已软删除的）
             QueryWrapper<com.english.entity.Text> wrapper = new QueryWrapper<>();
-            wrapper.eq("unit_id", assignment.getUnitId());
-            wrapper.eq("deleted", 0);
+            wrapper.eq("unit_id", assignment.getUnitId()).eq("deleted", 0);
             return textMapper.selectList(wrapper);
         }
 
@@ -1093,12 +1091,14 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         List<Long> wordIds = assignment.getWordIds();
 
         if (wordIds != null && !wordIds.isEmpty()) {
-            // 单词任务：返回指定的单词
+            // 单词任务：返回指定的单词（过滤已软删除的）
             QueryWrapper<Word> wrapper = new QueryWrapper<>();
-            wrapper.in("id", wordIds);
-            wrapper.eq("deleted", 0);
-            return wordMapper.selectList(wrapper);
-        } else if (assignment.isUnitTask() || !assignment.isWordsTask()) {
+            wrapper.in("id", wordIds).eq("deleted", 0);
+            List<Word> words = wordMapper.selectList(wrapper);
+            // selectList 走 @TableLogic，但 in() 不走，需手动过滤
+            return words.stream().filter(w -> w.getDeleted() == null || w.getDeleted() == 0)
+                    .collect(Collectors.toList());
+        } else if ((assignment.isUnitTask() || !assignment.isWordsTask()) && assignment.getUnitId() != null) {
             // 单元任务或其他任务：返回整个单元的单词
             QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
             unitWordWrapper.eq("unit_id", assignment.getUnitId());
@@ -1114,9 +1114,10 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
             if (!allWordIds.isEmpty()) {
                 QueryWrapper<Word> wrapper = new QueryWrapper<>();
-                wrapper.in("id", allWordIds);
-                wrapper.eq("deleted", 0);
-                return wordMapper.selectList(wrapper);
+                wrapper.in("id", allWordIds).eq("deleted", 0);
+                List<Word> words = wordMapper.selectList(wrapper);
+                return words.stream().filter(w -> w.getDeleted() == null || w.getDeleted() == 0)
+                        .collect(Collectors.toList());
             }
         }
 

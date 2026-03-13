@@ -135,12 +135,13 @@ const recentAssignments = ref([])
 
 const loadDashboardData = async () => {
   try {
+    // 构建认证头
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
     // 加载统计数据
-    const statsResponse = await fetch('/api/assignments/teacher/stats', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const statsResponse = await fetch('/api/assignments/teacher/stats', { headers })
 
     if (statsResponse.ok) {
       try {
@@ -158,11 +159,7 @@ const loadDashboardData = async () => {
     }
 
     // 加载班级列表
-    const classesResponse = await fetch('/api/assignments/teacher/classes', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const classesResponse = await fetch('/api/assignments/teacher/classes', { headers })
 
     if (classesResponse.ok) {
       try {
@@ -178,11 +175,7 @@ const loadDashboardData = async () => {
     }
 
     // 加载最近任务
-    const assignmentsResponse = await fetch('/api/assignments/teacher/recent?limit=5', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+    const assignmentsResponse = await fetch('/api/assignments/teacher/recent?limit=5', { headers })
 
     if (assignmentsResponse.ok) {
       try {

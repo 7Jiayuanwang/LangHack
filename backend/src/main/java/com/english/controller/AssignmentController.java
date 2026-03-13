@@ -320,6 +320,13 @@ public class AssignmentController {
                 }
                 // 教师不能修改任务的负责人
                 assignment.setCreatedBy(teacherId);
+                // 教师修改classId时需验证对目标班级的权限
+                if (assignment.getClassId() != null) {
+                    var classInfo = classService.getClassById(assignment.getClassId());
+                    if (classInfo == null || !teacherId.equals(classInfo.getTeacherId())) {
+                        return Result.error("没有权限将任务分配到该班级");
+                    }
+                }
             }
 
             assignmentService.updateAssignment(assignment);
@@ -370,6 +377,8 @@ public class AssignmentController {
             Long teacherId = getCurrentUserId(authentication);
             Map<String, Object> stats = assignmentService.getTeacherStats(teacherId);
             return Result.success(stats);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("操作失败", e);
 
@@ -387,6 +396,8 @@ public class AssignmentController {
             Long teacherId = getCurrentUserId(authentication);
             List<Map<String, Object>> classes = assignmentService.getTeacherClassesWithStats(teacherId);
             return Result.success(classes);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("操作失败", e);
 
@@ -403,9 +414,12 @@ public class AssignmentController {
             @RequestParam(defaultValue = "5") int limit,
             Authentication authentication) {
         try {
+            limit = Math.max(1, Math.min(limit, 50));
             Long teacherId = getCurrentUserId(authentication);
             List<Map<String, Object>> assignments = assignmentService.getRecentAssignmentsWithStats(teacherId, limit);
             return Result.success(assignments);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("获取最近任务失败", e);
 
@@ -456,12 +470,18 @@ public class AssignmentController {
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
             textWrapper.eq("unit_id", unitId).eq("deleted", 0).orderByAsc("order_num");
             List<Text> texts = textMapper.selectList(textWrapper);
+            if (texts == null) {
+                texts = new ArrayList<>();
+            }
 
             // 获取单元单词
             com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<UnitWord> unitWordWrapper =
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
             unitWordWrapper.eq("unit_id", unitId);
             List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
+            if (unitWords == null) {
+                unitWords = new ArrayList<>();
+            }
 
             List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).collect(Collectors.toList());
             List<Word> words = new ArrayList<>();
@@ -470,7 +490,10 @@ public class AssignmentController {
                     new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
                 wordWrapper.in("id", wordIds);
                 wordWrapper.eq("deleted", 0);
-                words = wordMapper.selectList(wordWrapper);
+                List<Word> queryResult = wordMapper.selectList(wordWrapper);
+                if (queryResult != null) {
+                    words = queryResult;
+                }
             }
 
             content.put("texts", texts);

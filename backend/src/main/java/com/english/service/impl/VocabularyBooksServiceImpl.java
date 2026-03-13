@@ -2,6 +2,7 @@ package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.english.entity.UnitWord;
 import com.english.entity.VocabularyBook;
 import com.english.entity.Word;
@@ -69,12 +70,13 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
         // 边界校验防止负数或过大值
         int safeLimit = Math.max(1, Math.min(limit, 100));
 
+        Page<VocabularyBook> pageParam = new Page<>(1, safeLimit);
         QueryWrapper<VocabularyBook> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId)
-                .orderByDesc("added_time")
-                .last("LIMIT " + safeLimit);
+                .orderByDesc("added_time");
 
-        List<VocabularyBook> vocabularyBooks = vocabularyBookMapper.selectList(wrapper);
+        IPage<VocabularyBook> pageResult = vocabularyBookMapper.selectPage(pageParam, wrapper);
+        List<VocabularyBook> vocabularyBooks = pageResult.getRecords();
         if (vocabularyBooks == null || vocabularyBooks.isEmpty()) {
             return Collections.emptyList();
         }
@@ -583,6 +585,9 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
     public void batchUpdateMasteryLevel(Long studentId, List<Long> wordIds, String masteryLevel) {
         // 防止空集合导致的SQL语法错误
         if (wordIds == null || wordIds.isEmpty()) {
+            return;
+        }
+        if (studentId == null) {
             return;
         }
 

@@ -31,6 +31,8 @@ import java.util.*;
 public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, ScoreRecord> implements ScoreRecordService {
 
     private static final Logger logger = LoggerFactory.getLogger(ScoreRecordServiceImpl.class);
+    private static final com.fasterxml.jackson.databind.ObjectMapper OBJECT_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
 
     @Autowired
     @Lazy
@@ -85,11 +87,12 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
             logger.debug("分数记录已存在 (studentId={}, assignmentId={}), 改为更新模式",
                     scoreRecord.getStudentId(), scoreRecord.getAssignmentId());
 
-            // 尝试更新
+            // 构建更新条件
             QueryWrapper<ScoreRecord> updateWrapper = new QueryWrapper<>();
             updateWrapper.eq("student_id", scoreRecord.getStudentId());
             if (scoreRecord.getAssignmentId() != null) {
                 updateWrapper.eq("assignment_id", scoreRecord.getAssignmentId());
+                updateWrapper.eq("score_type", scoreRecord.getScoreType());
             } else {
                 updateWrapper.eq("course_id", scoreRecord.getCourseId());
                 updateWrapper.eq("unit_id", scoreRecord.getUnitId());
@@ -100,9 +103,14 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
             int updateCount = baseMapper.update(scoreRecord, updateWrapper);
 
             if (updateCount == 0) {
-                // 若更新失败，再次尝试插入
+                // 若更新失败（记录被删除），再次尝试插入
                 try {
                     save(scoreRecord);
+                } catch (DuplicateKeyException retryException) {
+                    // 仍然冲突，说明已被其他线程插入 - 最后再更新一次
+                    logger.debug("分数记录再次冲突，最终更新一次 (studentId={}, assignmentId={})",
+                            scoreRecord.getStudentId(), scoreRecord.getAssignmentId());
+                    baseMapper.update(scoreRecord, updateWrapper);
                 } catch (Exception retryException) {
                     logger.error("分数记录保存失败 (studentId={}, assignmentId={})",
                             scoreRecord.getStudentId(), scoreRecord.getAssignmentId(), retryException);
@@ -208,7 +216,14 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
                 assignmentWrapper.eq("id", record.getAssignmentId());
                 assignmentWrapper.eq("deleted", 0);
                 Assignment assignment = assignmentService.getOne(assignmentWrapper);
-                double weight = (assignment != null && assignment.getWeight() != null)
+
+                if (assignment == null) {
+                    // 任务不存在或已删除，跳过该记录
+                    logger.warn("计算平均分时：任务不存在 (assignmentId={})", record.getAssignmentId());
+                    continue;
+                }
+
+                double weight = (assignment.getWeight() != null && assignment.getWeight() > 0)
                     ? assignment.getWeight() : 1.0;
                 // 所有记录都计入，包括分数为0的（因为0分也是有效分数）
                 int score = record.getScore() != null ? record.getScore() : 0;
@@ -275,7 +290,8 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
 
         int maxScore = records.stream().mapToInt(r -> r.getScore() != null ? r.getScore() : 0).max().orElse(0);
         int minScore = records.stream().mapToInt(r -> r.getScore() != null ? r.getScore() : 0).min().orElse(0);
-        double averageScore = records.stream().mapToInt(r -> r.getScore() != null ? r.getScore() : 0).average().orElse(0.0);
+        long totalScoreSum = records.stream().mapToLong(r -> r.getScore() != null ? r.getScore() : 0).sum();
+        double averageScore = totalScoreSum / (double) records.size();
 
         Map<String, Object> result = new HashMap<>();
         result.put("averageScore", Math.round(averageScore * 100.0) / 100.0);
@@ -299,13 +315,24 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
     @Transactional
     public void updateAssignmentScore(Long assignmentId, Long studentId) {
         try {
+            // 先获取任务信息（防止NPE）
+            QueryWrapper<Assignment> assignmentWrapper = new QueryWrapper<>();
+            assignmentWrapper.eq("id", assignmentId);
+            assignmentWrapper.eq("deleted", 0);
+            Assignment assignment = assignmentService.getOne(assignmentWrapper);
+
+            if (assignment == null) {
+                logger.warn("更新任务分数失败：任务不存在或已删除 (assignmentId={})", assignmentId);
+                return;
+            }
+
             // 获取任务进度
             Map<String, Object> progress = assignmentService.getAssignmentProgress(assignmentId, studentId);
             if (progress == null) {
                 logger.warn("更新任务分数失败：无法获取任务进度 (assignmentId={}, studentId={})", assignmentId, studentId);
                 return;
             }
-            
+
             double completionRate = 0.0;
             Object completionRateObj = progress.get("completionRate");
             if (completionRateObj instanceof Number) {
@@ -317,7 +344,7 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
                     logger.warn("无法解析完成率: {}", completionRateObj);
                 }
             }
-            
+
             // 获取学习时长（分钟）
             int studyTime = 0;
             Object studyTimeObj = progress.get("studyTime");
@@ -330,27 +357,24 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
                     logger.warn("无法解析学习时长: {}", studyTimeObj);
                 }
             }
-            
+
             logger.debug("更新任务分数：assignmentId={}, studentId={}, completionRate={}, studyTime={}",
                              assignmentId, studentId, completionRate, studyTime);
-            
+
             // 获取任务的理想学习时长（如果未设置，默认60分钟）
-            QueryWrapper<Assignment> assignmentWrapper = new QueryWrapper<>();
-            assignmentWrapper.eq("id", assignmentId);
-            assignmentWrapper.eq("deleted", 0);
-            Assignment assignment = assignmentService.getOne(assignmentWrapper);
-            int idealStudyTime = assignment != null && assignment.getIdealStudyTimeMinutes() != null
+            int idealStudyTime = assignment.getIdealStudyTimeMinutes() != null
                 ? assignment.getIdealStudyTimeMinutes() : 60;
             
             // 计算分数：综合考虑完成率和学习时长
             // 基础分数：完成率 * 60（最高60分）
-            double baseScore = completionRate * 60.0;
-            
+            double baseScore = Math.min(completionRate * 60.0, 60.0);
+
             // 学习时长加分：根据学习时长给予额外分数（最高40分）
             // 使用教师设置的理想学习时长，超过理想时长按理想时长计算
             int normalizedStudyTime = Math.min(studyTime, idealStudyTime);
-            double timeScore = idealStudyTime > 0 ? (normalizedStudyTime / (double) idealStudyTime) * 40.0 : 0.0;
-            
+            double timeScore = (idealStudyTime > 0 ? (normalizedStudyTime / (double) idealStudyTime) * 40.0 : 0.0);
+            timeScore = Math.min(timeScore, 40.0);
+
             // 总分数 = 基础分数 + 时长分数
             int score = (int) Math.round(baseScore + timeScore);
             score = Math.min(score, 100); // 确保不超过100分
@@ -365,7 +389,7 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
                 details.put("baseScore", baseScore);
                 details.put("timeScore", timeScore);
                 details.put("progress", progress);
-                scoreDetailsJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(details);
+                scoreDetailsJson = OBJECT_MAPPER.writeValueAsString(details);
             } catch (Exception e) {
                 // 忽略JSON序列化错误
             }
@@ -394,19 +418,17 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
 
                 // 获取任务信息以填充课程和单元ID
                 try {
-                    if (assignment != null) {
-                        if (assignment.getUnitId() != null) {
-                            newRecord.setUnitId(assignment.getUnitId());
-                        }
-                        if (assignment.getClassId() != null) {
-                            var classInfo = classService.getClassById(assignment.getClassId());
-                            if (classInfo != null && classInfo.getCourseId() != null) {
-                                newRecord.setCourseId(classInfo.getCourseId());
-                            }
+                    if (assignment.getUnitId() != null) {
+                        newRecord.setUnitId(assignment.getUnitId());
+                    }
+                    if (assignment.getClassId() != null) {
+                        Class classInfo = classService.getClassById(assignment.getClassId());
+                        if (classInfo != null && classInfo.getCourseId() != null) {
+                            newRecord.setCourseId(classInfo.getCourseId());
                         }
                     }
                 } catch (Exception e) {
-                    // 忽略错误，继续保存
+                    logger.debug("获取课程信息失败，继续保存分数记录 (assignmentId={}, studentId={})", assignmentId, studentId);
                 }
 
                 try {
@@ -428,8 +450,12 @@ public class ScoreRecordServiceImpl extends ServiceImpl<ScoreRecordMapper, Score
                             save(newRecord);
                         } catch (Exception retryException) {
                             logger.error("分数记录并发处理失败 (assignmentId={}, studentId={})", assignmentId, studentId, retryException);
+                            throw new BusinessException("保存分数记录失败，请稍后重试");
                         }
                     }
+                } catch (Exception e) {
+                    logger.error("保存分数记录失败 (assignmentId={}, studentId={})", assignmentId, studentId, e);
+                    throw new BusinessException("保存分数记录失败，请稍后重试");
                 }
             }
         } catch (Exception e) {

@@ -3,6 +3,7 @@ package com.english.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.english.entity.LearningRecord;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
 /**
@@ -27,5 +28,8 @@ public interface LearningRecordMapper extends BaseMapper<LearningRecord> {
             "<if test='assignmentId == null'>AND (assignment_id IS NULL OR assignment_id = 0)</if>" +
             " ORDER BY created_time DESC LIMIT 1" +
             "</script>")
-    int incrementTextViewDuration(Long studentId, Long textId, Long assignmentId, Integer additionalSeconds);
+    int incrementTextViewDuration(@Param("studentId") Long studentId,
+                                  @Param("textId") Long textId,
+                                  @Param("assignmentId") Long assignmentId,
+                                  @Param("additionalSeconds") Integer additionalSeconds);
 }

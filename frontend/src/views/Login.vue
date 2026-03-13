@@ -77,6 +77,7 @@
                     v-model="loginForm.password"
                     :type="showPassword ? 'text' : 'password'"
                     placeholder="密码"
+                    autocomplete="current-password"
                     class="trend-input"
                     required
                   />

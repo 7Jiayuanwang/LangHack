@@ -135,7 +135,11 @@ const handleCommand = async (command) => {
         ElMessage.success('退出登录成功')
         router.push('/login')
       } catch (error) {
-        // 用户取消操作
+        // 区分用户取消 vs 真实错误
+        if (error.message && error.message !== 'cancel') {
+          console.error('登出失败:', error)
+          ElMessage.error('退出登录失败，请稍后重试')
+        }
       }
       break
   }

@@ -76,6 +76,13 @@ public class ExerciseController {
                 return Result.error("课文不存在或已被删除");
             }
 
+            // 非管理员教师只能为自己创建的课文添加习题
+            if (!"ADMIN".equals(creator.getRole())) {
+                if (targetText.getUploadedBy() == null || !targetText.getUploadedBy().equals(createdBy)) {
+                    return Result.error("无权为其他教师创建的课文添加习题");
+                }
+            }
+
             Object exercisesObj = requestData.get("exercises");
             if (!(exercisesObj instanceof List)) {
                 return Result.error("exercises必须是列表");
@@ -162,7 +169,7 @@ public class ExerciseController {
                             String isCorrectStr = isCorrectObj.toString().trim().toLowerCase();
                             isCorrect = "1".equals(isCorrectStr) || "true".equals(isCorrectStr);
                         }
-                        option.setIsCorrect(isCorrect);
+                        option.setIsCorrect(isCorrect ? 1 : 0);
                         Object optionOrderObj = optionData.get("orderNum");
 
                         // 校验选项序号
@@ -235,6 +242,13 @@ public class ExerciseController {
                 return Result.error("课文不存在或已被删除");
             }
 
+            // 非管理员教师只能为自己创建的课文添加习题
+            if (!"ADMIN".equals(creator.getRole())) {
+                if (text.getUploadedBy() == null || !text.getUploadedBy().equals(createdBy)) {
+                    return Result.error("无权为其他教师创建的课文添加习题");
+                }
+            }
+
             // 校验题目长度
             String question = questionObj2.toString();
             if (question.length() > 5000) {
@@ -276,12 +290,25 @@ public class ExerciseController {
 
     /**
      * 获取课文的所有习题
+     * 注意：学生/普通用户获取时会隐藏正确答案标记，防止作弊
      */
     @GetMapping("/text/{textId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
     public Result<List<Map<String, Object>>> getExercisesByTextId(@PathVariable Long textId) {
         try {
+            // FIX #5: 验证课文存在性，防止访问不存在的课文的习题
+            com.english.entity.Text text = textService.getTextById(textId);
+            if (text == null || Integer.valueOf(1).equals(text.getDeleted())) {
+                return Result.error("课文不存在或已被删除");
+            }
+
             List<Map<String, Object>> exercises = textExerciseService.getExercisesWithOptions(textId);
+
+            // 学生/普通用户：隐藏正确答案标记，防止通过 API 响应作弊
+            if (!isTeacherOrAdmin()) {
+                stripCorrectAnswers(exercises);
+            }
+
             return Result.success(exercises);
         } catch (com.english.exception.BusinessException e) {
             logger.error("获取课文习题失败", e);
@@ -295,6 +322,7 @@ public class ExerciseController {
 
     /**
      * 获取习题详情
+     * 注意：学生/普通用户获取时会隐藏正确答案标记
      */
     @GetMapping("/{exerciseId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
@@ -302,6 +330,10 @@ public class ExerciseController {
         try {
             Map<String, Object> exercise = textExerciseService.getExerciseDetail(exerciseId);
             if (exercise != null) {
+                // 学生/普通用户：隐藏正确答案标记
+                if (!isTeacherOrAdmin()) {
+                    stripCorrectAnswersFromExercise(exercise);
+                }
                 return Result.success(exercise);
             } else {
                 return Result.error("习题不存在");
@@ -334,8 +366,8 @@ public class ExerciseController {
                 return Result.error("习题不存在");
             }
             if (!"ADMIN".equals(currentUser.getRole())) {
-                Object createdByObj = existingExercise.get("createdBy");
-                Long createdBy = createdByObj != null ? Long.valueOf(createdByObj.toString()) : null;
+                // FIX #4: 安全的类型转换
+                Long createdBy = parseLongField(existingExercise.get("createdBy"));
                 if (createdBy == null || !createdBy.equals(currentUser.getId())) {
                     return Result.error("无权修改其他教师创建的习题");
                 }
@@ -406,8 +438,8 @@ public class ExerciseController {
                 return Result.error("习题不存在");
             }
             if (!"ADMIN".equals(currentUser.getRole())) {
-                Object createdByObj = existingExercise.get("createdBy");
-                Long createdBy = createdByObj != null ? Long.valueOf(createdByObj.toString()) : null;
+                // FIX #4: 安全的类型转换
+                Long createdBy = parseLongField(existingExercise.get("createdBy"));
                 if (createdBy == null || !createdBy.equals(currentUser.getId())) {
                     return Result.error("无权删除其他教师创建的习题");
                 }
@@ -444,14 +476,14 @@ public class ExerciseController {
             if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
 
             if (!"ADMIN".equals(currentUser.getRole())) {
-                // 检查该课文的习题是否由当前教师创建
-                List<Map<String, Object>> exercises = textExerciseService.getExercisesWithOptions(textId);
-                if (exercises != null && !exercises.isEmpty()) {
-                    Object createdByObj = exercises.get(0).get("createdBy");
-                    Long createdBy = createdByObj != null ? Long.valueOf(createdByObj.toString()) : null;
-                    if (createdBy == null || !createdBy.equals(currentUser.getId())) {
-                        return Result.error("无权删除其他教师创建的课文习题");
-                    }
+                // FIX #3: 改进权限检查逻辑，验证课文本身的权限而非习题
+                com.english.entity.Text text = textService.getTextById(textId);
+                if (text == null) {
+                    return Result.error("课文不存在");
+                }
+                Long textCreatedBy = text.getUploadedBy();
+                if (textCreatedBy == null || !textCreatedBy.equals(currentUser.getId())) {
+                    return Result.error("无权删除其他教师创建的课文习题");
                 }
             }
 
@@ -491,6 +523,89 @@ public class ExerciseController {
             logger.error("获取习题数量失败", e);
 
             return Result.error("获取习题数量失败，请稍后重试");
+        }
+    }
+
+/**
+     * 安全地从 Object 转换为 Long，处理多种可能的类型
+     */
+    private Long parseLongField(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Long) return (Long) obj;
+        if (obj instanceof Number) return ((Number) obj).longValue();
+        if (obj instanceof String) {
+            try {
+                return Long.parseLong((String) obj);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        try {
+            return Long.valueOf(obj.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 判断当前用户是否为教师或管理员
+     */
+    private boolean isTeacherOrAdmin() {
+        Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) return false;
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_TEACHER".equals(a.getAuthority()));
+    }
+
+    /**
+     * 从习题列表中移除正确答案标记（防止学生作弊）
+     */
+    @SuppressWarnings("unchecked")
+    private void stripCorrectAnswers(List<Map<String, Object>> exercises) {
+        if (exercises == null) return;
+        // FIX #2: 添加类型检查，防止 ClassCastException
+        for (Object item : exercises) {
+            if (item instanceof Map) {
+                stripCorrectAnswersFromExercise((Map<String, Object>) item);
+            }
+        }
+    }
+
+    /**
+     * 从单个习题中移除正确答案标记
+     */
+    @SuppressWarnings("unchecked")
+    private void stripCorrectAnswersFromExercise(Map<String, Object> exercise) {
+        if (exercise == null) return;
+        
+        // FIX #1: 移除 exercise 本身可能包含的 isCorrect 字段
+        exercise.remove("isCorrect");
+        
+        // 移除选项列表中的 isCorrect 字段
+        Object optionsObj = exercise.get("options");
+        if (optionsObj instanceof List) {
+            List<?> options = (List<?>) optionsObj;
+            if (options != null) {
+                // 构建不含答案的新列表，避免JSON序列化时包含null值
+                List<Map<String, Object>> sanitizedOptions = new java.util.ArrayList<>();
+                for (Object opt : options) {
+                    Map<String, Object> optionMap = new HashMap<>();
+                    if (opt instanceof com.english.entity.ExerciseOption) {
+                        com.english.entity.ExerciseOption exOpt = (com.english.entity.ExerciseOption) opt;
+                        optionMap.put("id", exOpt.getId());
+                        optionMap.put("exerciseId", exOpt.getExerciseId());
+                        optionMap.put("optionKey", exOpt.getOptionKey());
+                        optionMap.put("optionContent", exOpt.getOptionContent());
+                        optionMap.put("orderNum", exOpt.getOrderNum());
+                        // 意图地跳过isCorrect字段
+                    } else if (opt instanceof Map) {
+                        optionMap.putAll((Map<String, Object>) opt);
+                        optionMap.remove("isCorrect");
+                    }
+                    sanitizedOptions.add(optionMap);
+                }
+                exercise.put("options", sanitizedOptions);
+            }
         }
     }
 }

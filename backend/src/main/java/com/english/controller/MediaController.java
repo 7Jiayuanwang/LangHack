@@ -112,7 +112,7 @@ public class MediaController {
             // Sanitize filename to prevent HTTP header injection and path traversal
             String rawFileName = media.getFileName() != null ? media.getFileName() : "media_" + mediaId;
             // 移除所有可能导致 HTTP header 注入的字符：CR、LF、引号、反斜杠、分号等
-            String safeFileName = rawFileName.replaceAll("[\\r\\n\"\\\\;]", "_");
+            String safeFileName = rawFileName.replaceAll("[\r\n\"\\\\;]", "_");
             // 额外防御：移除路径分隔符
             safeFileName = safeFileName.replaceAll("[/\\\\]", "_");
 
@@ -153,6 +153,8 @@ public class MediaController {
             }
             mediaService.deleteMedia(mediaId);
             return Result.success("删除成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             logger.error("删除失败", e);
 

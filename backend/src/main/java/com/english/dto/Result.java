@@ -1,5 +1,8 @@
 package com.english.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class Result<T> {
     private Integer code;
     private String message;

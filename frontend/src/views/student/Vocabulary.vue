@@ -216,7 +216,7 @@
     </el-dialog>
 
     <!-- 复习对话框 -->
-    <el-dialog v-model="reviewDialogVisible" title="生词复习" width="min(800px, 96vw)" :close-on-click-modal="false">
+    <el-dialog v-model="reviewDialogVisible" title="生词复习" width="min(800px, 96vw)" :close-on-click-modal="false" @close="onReviewDialogClose">
       <div class="review-session" v-if="reviewWords.length > 0">
         <div class="review-progress">
           <span>进度：{{ currentReviewIndex + 1 }} / {{ reviewWords.length }}</span>
@@ -758,6 +758,16 @@ const submitReview = async (quality) => {
 }
 
 
+// 关闭复习对话框时清理挂起的 timeout，防止 submitReview 在过期状态下触发
+const onReviewDialogClose = () => {
+  if (answerTimeoutId) {
+    clearTimeout(answerTimeoutId)
+    answerTimeoutId = null
+  }
+  isAnswering.value = false
+  selectedOption.value = null
+}
+
 // 排序处理
 const handleSort = (command) => {
   if (command === 'word-test') {
@@ -793,34 +803,48 @@ const startWordTest = () => {
 
 // 播放音频
 let currentAudio = null
+let audioPlayingId = null  // 追踪当前正在播放的音频，防止竞态条件
+
 const playAudio = (word) => {
   if (word?.audioUrl) {
+    // 生成唯一ID用于追踪此次播放请求
+    const playingId = Symbol()
+    audioPlayingId = playingId
+    
     if (currentAudio) {
       currentAudio.pause()
       currentAudio.onended = null
       currentAudio.onerror = null
       currentAudio = null
     }
+    
     currentAudio = new Audio(word.audioUrl)
     currentAudio.onended = () => {
-      currentAudio = null
+      // 仅在这是当前播放请求时才清理
+      if (audioPlayingId === playingId) {
+        currentAudio = null
+        audioPlayingId = null
+      }
     }
     currentAudio.onerror = () => {
-      currentAudio = null
+      if (audioPlayingId === playingId) {
+        currentAudio = null
+        audioPlayingId = null
+      }
       ElMessage.error('音频加载失败')
     }
     currentAudio.play().catch(error => {
       console.error('播放音频失败:', error)
-      currentAudio = null
+      if (audioPlayingId === playingId) {
+        currentAudio = null
+        audioPlayingId = null
+      }
       ElMessage.error('播放音频失败')
     })
   }
 }
 
 // 计算属性
-const currentReviewWord = computed(() => {
-  return reviewWords.value[currentReviewIndex.value] || { word: '', definition: '', pronunciation: '', exampleSentence: '' }
-})
 
 const reviewProgress = computed(() => {
   if (reviewWords.value.length === 0) return 100

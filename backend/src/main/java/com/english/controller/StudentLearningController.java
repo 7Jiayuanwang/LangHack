@@ -266,10 +266,35 @@ public class StudentLearningController {
             if (textIdObj == null) {
                 return Result.error("textId不能为空");
             }
-            Long textId = Long.valueOf(textIdObj.toString());
-            Long assignmentId = params.get("assignmentId") != null ? Long.valueOf(params.get("assignmentId").toString())
-                    : null;
-            Integer duration = params.get("duration") != null ? Integer.valueOf(params.get("duration").toString()) : 15;
+            Long textId;
+            try {
+                textId = Long.valueOf(textIdObj.toString());
+            } catch (NumberFormatException e) {
+                return Result.error("textId格式错误");
+            }
+            if (textId <= 0) {
+                return Result.error("textId无效");
+            }
+            
+            // 参数转换：assignmentId
+            Long assignmentId = null;
+            if (params.get("assignmentId") != null) {
+                try {
+                    assignmentId = Long.valueOf(params.get("assignmentId").toString());
+                } catch (NumberFormatException e) {
+                    return Result.error("assignmentId格式错误");
+                }
+            }
+            
+            // 参数转换：duration
+            Integer duration = 15;
+            if (params.get("duration") != null) {
+                try {
+                    duration = Integer.valueOf(params.get("duration").toString());
+                } catch (NumberFormatException e) {
+                    return Result.error("duration格式错误");
+                }
+            }
             // 学习时长校验：不允许负数，上限3小时，防止客户端伪造数据
             if (duration < 0) return Result.error("学习时长不能为负数");
             if (duration > 10800) return Result.error("学习时长超过合理范围");
@@ -320,11 +345,15 @@ public class StudentLearningController {
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
+            if (recordId == null || recordId <= 0) {
+                return Result.error("recordId无效");
+            }
             TextLearningRecord record = textLearningRecordMapper.selectById(recordId);
             if (record == null) {
                 return Result.error("阅读记录不存在");
             }
-            if (!studentId.equals(record.getStudentId())) {
+            // IDOR防护：确保学生只能操作自己的记录
+            if (record.getStudentId() == null || !studentId.equals(record.getStudentId())) {
                 return Result.error("无权操作此记录");
             }
             logger.info("完成阅读课文调用: recordId={}, studentId={}", recordId, studentId);
@@ -375,7 +404,8 @@ public class StudentLearningController {
                 // 标记已有记录为完成
                 record.setEndTime(now);
                 record.setIsCompleted(1);
-                long duration = java.time.Duration.between(record.getStartTime(), now).getSeconds();
+                long duration = record.getStartTime() != null
+                        ? java.time.Duration.between(record.getStartTime(), now).getSeconds() : 0;
                 record.setDurationSeconds((int) Math.min(duration, Integer.MAX_VALUE));
                 record.setUpdatedTime(now);
                 textLearningRecordMapper.updateById(record);
@@ -416,16 +446,66 @@ public class StudentLearningController {
     public Result<String> recordLearning(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
-            String type = (String) params.get("type");
-            Long wordId = params.get("wordId") != null ? Long.valueOf(params.get("wordId").toString()) : null;
-            Integer duration = params.get("duration") != null ? Integer.valueOf(params.get("duration").toString())
-                    : null;
+            Object typeObj = params.get("type");
+            if (typeObj == null) {
+                return Result.error("type不能为空");
+            }
+            String type = typeObj.toString().trim();
+
+            // 参数验证：type
+            if (type.isEmpty()) {
+                return Result.error("type不能为空");
+            }
+            
+            // 参数转换：wordId
+            Long wordId = null;
+            if (params.get("wordId") != null) {
+                try {
+                    wordId = Long.valueOf(params.get("wordId").toString());
+                    if (wordId <= 0) {
+                        return Result.error("wordId必须大于0");
+                    }
+                } catch (NumberFormatException e) {
+                    return Result.error("wordId格式错误");
+                }
+            }
+            
+            // 参数转换：duration
+            Integer duration = null;
+            if (params.get("duration") != null) {
+                try {
+                    duration = Integer.valueOf(params.get("duration").toString());
+                } catch (NumberFormatException e) {
+                    return Result.error("duration格式错误");
+                }
+            }
+            
             // 学习时长校验：不允许负数，上限3小时，防止客户端伪造数据
             if (duration != null && duration < 0) return Result.error("学习时长不能为负数");
             if (duration != null && duration > 10800) return Result.error("学习时长超过合理范围");
-            Long textId = params.get("textId") != null ? Long.valueOf(params.get("textId").toString()) : null;
-            Long assignmentId = params.get("assignmentId") != null ? Long.valueOf(params.get("assignmentId").toString())
-                    : null;
+            
+            // 参数转换：textId
+            Long textId = null;
+            if (params.get("textId") != null) {
+                try {
+                    textId = Long.valueOf(params.get("textId").toString());
+                    if (textId <= 0) {
+                        return Result.error("textId必须大于0");
+                    }
+                } catch (NumberFormatException e) {
+                    return Result.error("textId格式错误");
+                }
+            }
+            
+            // 参数转换：assignmentId
+            Long assignmentId = null;
+            if (params.get("assignmentId") != null) {
+                try {
+                    assignmentId = Long.valueOf(params.get("assignmentId").toString());
+                } catch (NumberFormatException e) {
+                    return Result.error("assignmentId格式错误");
+                }
+            }
 
             learningRecordsService.recordLearning(studentId, type, wordId, duration, textId, assignmentId);
 
@@ -454,10 +534,35 @@ public class StudentLearningController {
             if (wordIdObj0 == null) {
                 return Result.error("wordId不能为空");
             }
-            Long wordId = Long.valueOf(wordIdObj0.toString());
-            Long assignmentId = params.get("assignmentId") != null ? Long.valueOf(params.get("assignmentId").toString())
-                    : null;
-            Integer duration = params.get("duration") != null ? Integer.valueOf(params.get("duration").toString()) : 15;
+            Long wordId;
+            try {
+                wordId = Long.valueOf(wordIdObj0.toString());
+            } catch (NumberFormatException e) {
+                return Result.error("wordId格式错误");
+            }
+            if (wordId <= 0) {
+                return Result.error("wordId无效");
+            }
+            
+            // 参数转换：assignmentId
+            Long assignmentId = null;
+            if (params.get("assignmentId") != null) {
+                try {
+                    assignmentId = Long.valueOf(params.get("assignmentId").toString());
+                } catch (NumberFormatException e) {
+                    return Result.error("assignmentId格式错误");
+                }
+            }
+            
+            // 参数转换：duration
+            Integer duration = 15;
+            if (params.get("duration") != null) {
+                try {
+                    duration = Integer.valueOf(params.get("duration").toString());
+                } catch (NumberFormatException e) {
+                    return Result.error("duration格式错误");
+                }
+            }
             // 学习时长校验：不允许负数，上限3小时，防止客户端伪造数据
             if (duration < 0) return Result.error("学习时长不能为负数");
             if (duration > 10800) return Result.error("学习时长超过合理范围");
@@ -486,7 +591,15 @@ public class StudentLearningController {
             if (wordIdObj1 == null) {
                 return Result.error("wordId不能为空");
             }
-            Long wordId = Long.valueOf(wordIdObj1.toString());
+            Long wordId;
+            try {
+                wordId = Long.valueOf(wordIdObj1.toString());
+            } catch (NumberFormatException e) {
+                return Result.error("wordId格式错误");
+            }
+            if (wordId <= 0) {
+                return Result.error("wordId无效");
+            }
 
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
                 // 如果已存在，更新掌握程度为学习中
@@ -735,7 +848,14 @@ public class StudentLearningController {
             if (courseIdObj == null) {
                 return new HashMap<>(); // 课程数据不完整，返回空 map 而非 null
             }
-            Long courseId = Long.valueOf(courseIdObj.toString());
+            
+            Long courseId;
+            try {
+                courseId = Long.valueOf(courseIdObj.toString());
+            } catch (NumberFormatException e) {
+                logger.warn("courseId格式错误: {}", courseIdObj);
+                return new HashMap<>();
+            }
 
             // 随机选择推荐类型：单词或课文
             boolean recommendWord = random.nextBoolean();
@@ -958,8 +1078,23 @@ public class StudentLearningController {
             if (wordObj == null) {
                 return Result.error("word不能为空");
             }
-            String word = wordObj.toString().toLowerCase();
-            Long unitId = params.get("unitId") != null ? Long.valueOf(params.get("unitId").toString()) : null;
+            String word = wordObj.toString().toLowerCase().trim();
+            if (word.isEmpty()) {
+                return Result.error("word不能为空");
+            }
+            if (word.length() > 100) {
+                return Result.error("单词长度不能超过100字符");
+            }
+            
+            // 参数转换：unitId
+            Long unitId = null;
+            if (params.get("unitId") != null) {
+                try {
+                    unitId = Long.valueOf(params.get("unitId").toString());
+                } catch (NumberFormatException e) {
+                    return Result.error("unitId格式错误");
+                }
+            }
 
             // 查询单词是否存在
             QueryWrapper<Word> wordWrapper = new QueryWrapper<>();
