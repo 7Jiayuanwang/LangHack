@@ -144,6 +144,17 @@ async:
     max-pool-size: 32
     queue-capacity: 200
 
+backup:
+  enabled: ${BACKUP_ENABLED:true}
+  dir: ${BACKUP_DIR:./backups}
+  cron: ${BACKUP_CRON:0 0 2 * * ?}
+  retention-days: ${BACKUP_RETENTION_DAYS:30}
+  max-count: ${BACKUP_MAX_COUNT:50}
+  mysqldump-path: ${MYSQLDUMP_PATH:mysqldump}
+  incremental:
+    enabled: ${BACKUP_INCREMENTAL_ENABLED:false}
+    full-backup-interval-days: ${BACKUP_FULL_INTERVAL_DAYS:7}
+
 resilience4j:
   circuitbreaker:
     instances:

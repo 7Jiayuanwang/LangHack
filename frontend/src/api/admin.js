@@ -211,3 +211,80 @@ export function getClasses(params) {
     params
   })
 }
+
+// ========== 数据备份管理相关 ==========
+
+export function getBackupList(params) {
+  return request({
+    url: '/api/admin/backup/list',
+    method: 'get',
+    params
+  })
+}
+
+export function createBackupApi(mode = 'FULL') {
+  return request({
+    url: '/api/admin/backup/create',
+    method: 'post',
+    params: { mode }
+  })
+}
+
+export function getBackupDetail(id) {
+  return request({
+    url: `/api/admin/backup/${id}`,
+    method: 'get'
+  })
+}
+
+export function downloadBackupApi(id) {
+  return request({
+    url: `/api/admin/backup/${id}/download`,
+    method: 'get',
+    responseType: 'blob'
+  })
+}
+
+export function deleteBackupApi(id) {
+  return request({
+    url: `/api/admin/backup/${id}`,
+    method: 'delete'
+  })
+}
+
+export function restoreBackupApi(id, data) {
+  return request({
+    url: `/api/admin/backup/${id}/restore`,
+    method: 'post',
+    data
+  })
+}
+
+export function getBackupStats() {
+  return request({
+    url: '/api/admin/backup/stats',
+    method: 'get'
+  })
+}
+
+export function getBackupConfig() {
+  return request({
+    url: '/api/admin/backup/config',
+    method: 'get'
+  })
+}
+
+export function triggerBackupCleanup() {
+  return request({
+    url: '/api/admin/backup/cleanup',
+    method: 'post'
+  })
+}
+
+export function getBackupOperationLogs(params) {
+  return request({
+    url: '/api/admin/backup/logs',
+    method: 'get',
+    params
+  })
+}

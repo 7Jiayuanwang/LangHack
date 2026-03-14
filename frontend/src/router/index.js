@@ -92,6 +92,12 @@ const routes = [
         name: 'AdminAssignments',
         component: () => import('@/views/admin/Assignments.vue'),
         meta: { title: '作业管理', roles: ['ADMIN'] }
+      },
+      {
+        path: 'backups',
+        name: 'AdminBackups',
+        component: () => import('@/views/admin/Backups.vue'),
+        meta: { title: '数据备份', roles: ['ADMIN'] }
       }
     ]
   },

@@ -130,7 +130,7 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/api/translate/**", configuration);
         source.registerCorsConfiguration("/api/asr/**", configuration);
         source.registerCorsConfiguration("/api/bilibili/**", configuration);
-        // Note: /api/admin/** explicitly excluded from CORS allowlist
+        source.registerCorsConfiguration("/api/admin/**", configuration);
         return source;
     }
 }
