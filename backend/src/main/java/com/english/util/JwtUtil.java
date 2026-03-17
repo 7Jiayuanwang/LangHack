@@ -53,8 +53,8 @@ public class JwtUtil {
                     "生产环境检测到默认 JWT Secret，请通过环境变量 JWT_SECRET 设置强密钥后再启动！");
             }
             // 检查密钥强度：不能是纯数字、纯字母或重复字符
-            if (secret.matches("^\d+$") || secret.matches("^[a-zA-Z]+$") ||
-                secret.matches("(.)\1{10,}")) {
+            if (secret.matches("^\\d+$") || secret.matches("^[a-zA-Z]+$") ||
+                secret.matches("(.)\\1{10,}")) {
                 throw new IllegalStateException(
                     "生产环境 JWT Secret 强度不足，请使用包含字母、数字、特殊字符的强密钥");
             }

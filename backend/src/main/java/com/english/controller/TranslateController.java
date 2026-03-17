@@ -264,13 +264,11 @@ public class TranslateController {
             // BUGFIX: 确保 chunk 中没有 null 元素，否则会导致 NPE
             String joined = chunk.stream()
                     .map(t -> t != null ? t : "")
-                    .collect(Collectors.joining("
-"));
+                    .collect(Collectors.joining("\n"));
             
             try {
                 String translated = translateService.translate(joined, src, tgt);
-                String[] lines = translated.split("
-", -1);
+                String[] lines = translated.split("\n", -1);
 
                 // 如果返回行数一致，则一一对应
                 if (lines.length == chunk.size()) {

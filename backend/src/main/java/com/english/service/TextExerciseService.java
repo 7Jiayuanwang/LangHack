@@ -1,5 +1,6 @@
 package com.english.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.english.entity.TextExercise;
 import com.english.entity.ExerciseOption;
 
@@ -9,7 +10,7 @@ import java.util.Map;
 /**
  * 课文习题服务接口
  */
-public interface TextExerciseService {
+public interface TextExerciseService extends IService<TextExercise> {
 
     /**
      * 创建课文习题

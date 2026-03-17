@@ -59,6 +59,8 @@ services:
       - "80:80"
       # Expose 443 if you add SSL certificates later
       # - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - backend
     networks:

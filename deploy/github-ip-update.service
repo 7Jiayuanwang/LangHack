@@ -1,0 +1,13 @@
+[Unit]
+Description=Update GitHub Webhook IP whitelist
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/deploy/LangHack/scripts/update-github-ips.sh
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=github-ip-update

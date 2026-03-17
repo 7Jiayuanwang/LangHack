@@ -85,8 +85,9 @@ public class PublicTextController {
                     readTextIds = new ArrayList<>();
                 }
 
+                final List<Long> finalReadTextIds = readTextIds;
                 List<Text> unreadTexts = featuredTexts.stream()
-                        .filter(t -> !readTextIds.contains(t.getId()))
+                        .filter(t -> !finalReadTextIds.contains(t.getId()))
                         .collect(Collectors.toList());
 
                 if (unreadTexts.size() < 6 && !featuredTexts.isEmpty()) {

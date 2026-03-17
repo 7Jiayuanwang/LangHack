@@ -3,6 +3,7 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.ScoreRecord;
 import com.english.entity.Class;
+import com.english.exception.BusinessException;
 import com.english.service.ScoreRecordService;
 import com.english.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -102,8 +102,7 @@ public class CacheConfig extends CachingConfigurerSupport {
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(jsonSerializer))
-                .cacheNullValues()  // FIXED: Cache null to prevent penetration attacks
-                .entryTtl(Duration.ofMinutes(10));  // Default TTL: 10 minutes
+                .entryTtl(Duration.ofMinutes(10));  // Default TTL: 10 minutes, null values cached by default
 
         // Per-cache TTL configuration - adjust based on data freshness requirements
         Map<String, RedisCacheConfiguration> configs = new HashMap<>();

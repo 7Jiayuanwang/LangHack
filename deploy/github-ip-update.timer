@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily GitHub Webhook IP whitelist update
+
+[Timer]
+# 每天凌晨 3 点执行
+OnCalendar=*-*-* 03:00:00
+# 如果错过了（比如机器关机），开机后立即补执行
+Persistent=true
+# 随机延迟 0-30 分钟，避免大量服务器同时请求 GitHub API
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,29 @@
+[Unit]
+Description=LangHack GitHub Webhook Listener
+Documentation=https://github.com/your-repo/LangHack
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/home/deploy/LangHack
+EnvironmentFile=/home/deploy/LangHack/deploy/webhook.env
+ExecStart=/usr/bin/python3 /home/deploy/LangHack/scripts/webhook-listener.py
+Restart=always
+RestartSec=5
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/deploy/LangHack /var/log
+PrivateTmp=true
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=langhack-webhook
+
+[Install]
+WantedBy=multi-user.target
