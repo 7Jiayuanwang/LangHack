@@ -458,15 +458,274 @@ class TextExerciseServiceTest {
         return exercise;
     }
 
-    private ExerciseOption buildOption(Long id, Long exerciseId, String content, String key,
-                                       int isCorrect, int orderNum) {
-        ExerciseOption option = new ExerciseOption();
-        option.setId(id);
-        option.setExerciseId(exerciseId);
-        option.setOptionContent(content);
-        option.setOptionKey(key);
-        option.setIsCorrect(isCorrect);
-        option.setOrderNum(orderNum);
-        return option;
+    // ==================== batchCreateExercises - complete flow ====================
+
+    @Test
+    @DisplayName("batchCreateExercises - should insert exercises and their options successfully")
+    void batchCreateExercises_withOptions_success() {
+        // Arrange: 2 exercises with options
+        TextExercise ex1 = buildExercise(null, 100L, "Q1", "CHOICE", 1);
+        TextExercise ex2 = buildExercise(null, 100L, "Q2", "FILL", 2);
+
+        List<TextExercise> exercises = Arrays.asList(ex1, ex2);
+
+        ExerciseOption opt1 = buildOption(null, null, "Option A", "A", 1, 1);
+        ExerciseOption opt2 = buildOption(null, null, "Option B", "B", 0, 2);
+        ExerciseOption opt3 = buildOption(null, null, "Fill blank", "_", 1, 1);
+
+        List<List<ExerciseOption>> options = Arrays.asList(
+                Arrays.asList(opt1, opt2),
+                Arrays.asList(opt3)
+        );
+
+        // Mock insert returns - simulate ID generation
+        when(textExerciseMapper.insert(any(TextExercise.class)))
+                .thenAnswer(invocation -> {
+                    TextExercise e = invocation.getArgument(0);
+                    if (e.getId() == null) e.setId((long)(Math.random() * 1000)); // Simulate ID generation
+                    return 1;
+                });
+        when(exerciseOptionMapper.insert(any(ExerciseOption.class))).thenReturn(1);
+
+        // Act
+        boolean result = textExerciseService.batchCreateExercises(exercises, options);
+
+        // Assert
+        assertTrue(result);
+        verify(textExerciseMapper, times(2)).insert(any(TextExercise.class));
+        verify(exerciseOptionMapper, times(3)).insert(any(ExerciseOption.class));
+    }
+
+    @Test
+    @DisplayName("batchCreateExercises - should throw exception if exercise insert fails")
+    void batchCreateExercises_exerciseInsertFails_throwsException() {
+        // Arrange
+        TextExercise ex = buildExercise(null, 100L, "Q1", "CHOICE", 1);
+        ExerciseOption opt = buildOption(null, null, "Option A", "A", 1, 1);
+
+        when(textExerciseMapper.insert(any(TextExercise.class))).thenReturn(0);
+
+        // Act & Assert
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> textExerciseService.batchCreateExercises(
+                        Collections.singletonList(ex),
+                        Collections.singletonList(Collections.singletonList(opt))
+                ));
+        assertEquals("插入习题失败", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("batchCreateExercises - should throw exception if exercise ID not returned")
+    void batchCreateExercises_idNotReturned_throwsException() {
+        // Arrange
+        TextExercise ex = buildExercise(null, 100L, "Q1", "CHOICE", 1);
+        // Mock insert to NOT set the ID (simulating missing @TableId configuration)
+        when(textExerciseMapper.insert(any(TextExercise.class)))
+                .thenAnswer(invocation -> 1); // Return success but don't set ID
+
+        // Act & Assert
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> textExerciseService.batchCreateExercises(
+                        Collections.singletonList(ex),
+                        Collections.singletonList(Collections.emptyList())
+                ));
+        assertEquals("习题主键未回填，请检查实体 @TableId 配置", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("batchCreateExercises - should throw exception if option insert fails")
+    void batchCreateExercises_optionInsertFails_throwsException() {
+        // Arrange
+        TextExercise ex = buildExercise(null, 100L, "Q1", "CHOICE", 1);
+        ExerciseOption opt = buildOption(null, null, "Option A", "A", 1, 1);
+
+        when(textExerciseMapper.insert(any(TextExercise.class)))
+                .thenAnswer(invocation -> {
+                    TextExercise e = invocation.getArgument(0);
+                    e.setId(1L);
+                    return 1;
+                });
+        when(exerciseOptionMapper.insert(any(ExerciseOption.class))).thenReturn(0);
+
+        // Act & Assert
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> textExerciseService.batchCreateExercises(
+                        Collections.singletonList(ex),
+                        Collections.singletonList(Collections.singletonList(opt))
+                ));
+        assertEquals("插入选项失败", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("batchCreateExercises - should skip null option list")
+    void batchCreateExercises_nullOptionList_skipsInsert() {
+        // Arrange
+        TextExercise ex = buildExercise(null, 100L, "Q1", "CHOICE", 1);
+
+        when(textExerciseMapper.insert(any(TextExercise.class)))
+                .thenAnswer(invocation -> {
+                    TextExercise e = invocation.getArgument(0);
+                    e.setId(1L);
+                    return 1;
+                });
+
+        // Act
+        boolean result = textExerciseService.batchCreateExercises(
+                Collections.singletonList(ex),
+                Collections.singletonList(null) // null options list
+        );
+
+        // Assert
+        assertTrue(result);
+        verify(textExerciseMapper, times(1)).insert(any(TextExercise.class));
+        verify(exerciseOptionMapper, never()).insert(any(ExerciseOption.class));
+    }
+
+    // ==================== deleteAllExercisesByTextId - boundary tests ====================
+
+    @Test
+    @DisplayName("deleteAllExercisesByTextId - should handle empty exercise list gracefully")
+    void deleteAllExercisesByTextId_emptyExercises_returnsTrue() {
+        // Arrange
+        Long textId = 100L;
+        when(textExerciseMapper.getExercisesByTextId(textId)).thenReturn(Collections.emptyList());
+
+        // Act
+        boolean result = textExerciseService.deleteAllExercisesByTextId(textId);
+
+        // Assert
+        assertTrue(result);
+        verify(exerciseOptionMapper, never()).deleteOptionsByExerciseId(anyLong());
+        verify(textExerciseMapper, never()).deleteById(anyLong());
+    }
+
+    @Test
+    @DisplayName("deleteAllExercisesByTextId - should skip null exercises in list")
+    void deleteAllExercisesByTextId_nullExerciseInList_skips() {
+        // Arrange
+        Long textId = 100L;
+        TextExercise ex1 = buildExercise(1L, textId, "Q1", "CHOICE", 1);
+        TextExercise nullEx = null;
+        TextExercise ex2 = buildExercise(2L, textId, "Q2", "FILL", 2);
+
+        when(textExerciseMapper.getExercisesByTextId(textId))
+                .thenReturn(Arrays.asList(ex1, nullEx, ex2));
+        when(textExerciseMapper.deleteById(anyLong())).thenReturn(1);
+
+        // Act
+        boolean result = textExerciseService.deleteAllExercisesByTextId(textId);
+
+        // Assert: should only delete ex1 and ex2, not the null
+        assertTrue(result);
+        verify(exerciseOptionMapper).deleteOptionsByExerciseId(1L);
+        verify(exerciseOptionMapper).deleteOptionsByExerciseId(2L);
+        verify(textExerciseMapper).deleteById(1L);
+        verify(textExerciseMapper).deleteById(2L);
+    }
+
+    @Test
+    @DisplayName("deleteAllExercisesByTextId - should skip exercise with null ID")
+    void deleteAllExercisesByTextId_exerciseNullId_skips() {
+        // Arrange
+        Long textId = 100L;
+        TextExercise ex1 = buildExercise(1L, textId, "Q1", "CHOICE", 1);
+        TextExercise exNullId = new TextExercise();
+        exNullId.setId(null);
+        exNullId.setTextId(textId);
+
+        when(textExerciseMapper.getExercisesByTextId(textId))
+                .thenReturn(Arrays.asList(ex1, exNullId));
+        when(textExerciseMapper.deleteById(anyLong())).thenReturn(1);
+
+        // Act
+        boolean result = textExerciseService.deleteAllExercisesByTextId(textId);
+
+        // Assert: should only delete ex1
+        assertTrue(result);
+        verify(exerciseOptionMapper).deleteOptionsByExerciseId(1L);
+        verify(textExerciseMapper).deleteById(1L);
+    }
+
+    // ==================== checkAnswer - type-specific tests (CHOICE/FILL/JUDGE/SHORT) ====================
+
+    @Test
+    @DisplayName("checkAnswer - CHOICE type with single correct answer")
+    void checkAnswer_choiceType_singleCorrectOption() {
+        Long exerciseId = 1L;
+
+        ExerciseOption opt1 = buildOption(10L, exerciseId, "Option A", "A", 0, 1);
+        ExerciseOption opt2 = buildOption(11L, exerciseId, "Option B (Correct)", "B", 1, 2);
+        ExerciseOption opt3 = buildOption(12L, exerciseId, "Option C", "C", 0, 3);
+
+        when(exerciseOptionMapper.getOptionsByExerciseId(exerciseId))
+                .thenReturn(Arrays.asList(opt1, opt2, opt3));
+
+        // Correct answer
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "B"));
+
+        // Wrong answers
+        assertFalse(textExerciseService.checkAnswer(exerciseId, "A"));
+        assertFalse(textExerciseService.checkAnswer(exerciseId, "C"));
+    }
+
+    @Test
+    @DisplayName("checkAnswer - FILL type with blank answer")
+    void checkAnswer_fillType_correctBlankAnswer() {
+        Long exerciseId = 2L;
+
+        ExerciseOption correct = buildOption(20L, exerciseId, "important", "_", 1, 1);
+        when(exerciseOptionMapper.getOptionsByExerciseId(exerciseId))
+                .thenReturn(Collections.singletonList(correct));
+
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "important"));
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "IMPORTANT")); // case insensitive
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "  important  ")); // with spaces
+    }
+
+    @Test
+    @DisplayName("checkAnswer - JUDGE type (True/False)")
+    void checkAnswer_judgeType_trueOption() {
+        Long exerciseId = 3L;
+
+        ExerciseOption trueOpt = buildOption(30L, exerciseId, "True", "T", 1, 1);
+        ExerciseOption falseOpt = buildOption(31L, exerciseId, "False", "F", 0, 2);
+
+        when(exerciseOptionMapper.getOptionsByExerciseId(exerciseId))
+                .thenReturn(Arrays.asList(trueOpt, falseOpt));
+
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "T"));
+        assertFalse(textExerciseService.checkAnswer(exerciseId, "F"));
+    }
+
+    @Test
+    @DisplayName("checkAnswer - SHORT answer type with exact match")
+    void checkAnswer_shortAnswerType_exactMatch() {
+        Long exerciseId = 4L;
+
+        ExerciseOption correct = buildOption(40L, exerciseId, "The capital of France is Paris", "Paris", 1, 1);
+        when(exerciseOptionMapper.getOptionsByExerciseId(exerciseId))
+                .thenReturn(Collections.singletonList(correct));
+
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "Paris"));
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "paris")); // case insensitive
+        assertFalse(textExerciseService.checkAnswer(exerciseId, "London"));
+    }
+
+    @Test
+    @DisplayName("checkAnswer - multiple correct options (multi-select)")
+    void checkAnswer_multipleCorrectOptions() {
+        Long exerciseId = 5L;
+
+        ExerciseOption opt1 = buildOption(50L, exerciseId, "Correct 1", "A", 1, 1);
+        ExerciseOption opt2 = buildOption(51L, exerciseId, "Wrong", "B", 0, 2);
+        ExerciseOption opt3 = buildOption(52L, exerciseId, "Correct 2", "C", 1, 3);
+
+        when(exerciseOptionMapper.getOptionsByExerciseId(exerciseId))
+                .thenReturn(Arrays.asList(opt1, opt2, opt3));
+
+        // Both correct answers should match
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "A"));
+        assertTrue(textExerciseService.checkAnswer(exerciseId, "C"));
+        assertFalse(textExerciseService.checkAnswer(exerciseId, "B"));
     }
 }

@@ -569,4 +569,145 @@ class AssignmentServiceTest {
         assertNotNull(result);
         assertTrue(result.isEmpty());
     }
+
+    // ==================== createAssignment with content types ====================
+
+    @Test
+    void createAssignment_unitContentType_success() {
+        // Arrange: createAssignment with "unit" description (JSON-like format)
+        Assignment unitAssignment = new Assignment();
+        unitAssignment.setTitle("Unit Assignment");
+        unitAssignment.setUnitId(20L);
+        unitAssignment.setClassId(10L);
+        unitAssignment.setDescription("unit"); // Simple unit type
+
+        when(assignmentMapper.insert(any(Assignment.class))).thenReturn(1);
+
+        // Act
+        assignmentService.createAssignment(unitAssignment);
+
+        // Assert
+        verify(assignmentMapper).insert(any(Assignment.class));
+    }
+
+    @Test
+    void createAssignment_textsContentType_success() {
+        // Arrange: createAssignment with texts content type
+        Assignment textsAssignment = new Assignment();
+        textsAssignment.setTitle("Texts Assignment");
+        textsAssignment.setUnitId(20L);
+        textsAssignment.setClassId(10L);
+        textsAssignment.setDescription("texts"); // Texts type
+
+        when(assignmentMapper.insert(any(Assignment.class))).thenReturn(1);
+
+        // Act
+        assignmentService.createAssignment(textsAssignment);
+
+        // Assert
+        verify(assignmentMapper).insert(any(Assignment.class));
+    }
+
+    @Test
+    void createAssignment_wordsContentType_success() {
+        // Arrange: createAssignment with words content type
+        Assignment wordsAssignment = new Assignment();
+        wordsAssignment.setTitle("Words Assignment");
+        wordsAssignment.setUnitId(20L);
+        wordsAssignment.setClassId(10L);
+        wordsAssignment.setDescription("words"); // Words type
+
+        when(assignmentMapper.insert(any(Assignment.class))).thenReturn(1);
+
+        // Act
+        assignmentService.createAssignment(wordsAssignment);
+
+        // Assert
+        verify(assignmentMapper).insert(any(Assignment.class));
+    }
+
+    // ==================== getAssignmentTexts/Words with null unitId ====================
+
+    @Test
+    void getAssignmentTexts_nullUnitId_returnsEmptyList() {
+        // Arrange: assignment with null unitId
+        when(assignmentMapper.selectById(1L)).thenReturn(testAssignment);
+        testAssignment.setUnitId(null); // Set null unitId
+        when(textMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        // Act
+        List<Map<String, Object>> result = assignmentService.getAssignmentTexts(1L);
+
+        // Assert
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void getAssignmentWords_nullUnitId_returnsEmptyList() {
+        // Arrange: assignment with null unitId
+        when(assignmentMapper.selectById(1L)).thenReturn(testAssignment);
+        testAssignment.setUnitId(null); // Set null unitId
+        when(unitWordMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        // Act
+        List<Map<String, Object>> result = assignmentService.getAssignmentWords(1L);
+
+        // Assert
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    // ==================== calculateIdealStudyTime boundary ====================
+
+    @Test
+    void calculateIdealStudyTime_zeroMinutes_returnsZero() {
+        // Arrange: assignment with 0 ideal study time
+        testAssignment.setIdealStudyTimeMinutes(0);
+        when(assignmentMapper.selectById(1L)).thenReturn(testAssignment);
+
+        // Act
+        int result = assignmentService.calculateIdealStudyTime(1L);
+
+        // Assert
+        assertEquals(0, result);
+    }
+
+    @Test
+    void calculateIdealStudyTime_nullValue_defaultsTo60() {
+        // Arrange: assignment with null ideal study time
+        testAssignment.setIdealStudyTimeMinutes(null);
+        when(assignmentMapper.selectById(1L)).thenReturn(testAssignment);
+
+        // Act
+        int result = assignmentService.calculateIdealStudyTime(1L);
+
+        // Assert
+        assertEquals(60, result); // Default
+    }
+
+    @Test
+    void calculateIdealStudyTime_largeValue_returnsValue() {
+        // Arrange: assignment with large ideal study time
+        testAssignment.setIdealStudyTimeMinutes(300);
+        when(assignmentMapper.selectById(1L)).thenReturn(testAssignment);
+
+        // Act
+        int result = assignmentService.calculateIdealStudyTime(1L);
+
+        // Assert
+        assertEquals(300, result);
+    }
+
+    @Test
+    void calculateIdealStudyTime_assignmentNotFound_returnsDefault() {
+        // Arrange: assignment not found
+        when(assignmentMapper.selectById(999L)).thenReturn(null);
+
+        // Act
+        int result = assignmentService.calculateIdealStudyTime(999L);
+
+        // Assert
+        assertEquals(60, result); // Default
+    }
 }
