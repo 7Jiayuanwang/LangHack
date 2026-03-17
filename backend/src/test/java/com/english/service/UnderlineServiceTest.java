@@ -1,4 +1,5 @@
 package com.english.service;
+import com.english.test.TestUtils;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.english.entity.Text;
@@ -46,6 +47,7 @@ class UnderlineServiceTest {
         Text mockText = new Text();
         mockText.setId(textId);
         mockText.setDeleted(0);
+        mockText.setContent("This is an example text used for testing underline creation.");
         when(textService.getTextById(textId)).thenReturn(mockText);
 
         underlineService.createUnderline(userId, textId, selectedText, startIndex, endIndex, "serialized-range");

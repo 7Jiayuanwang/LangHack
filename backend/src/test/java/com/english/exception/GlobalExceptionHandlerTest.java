@@ -47,7 +47,7 @@ public class GlobalExceptionHandlerTest {
         Result<?> result = handler.handleIllegalArgument(new IllegalArgumentException("参数非法: userId 不能为空"));
 
         assertEquals(400, result.getCode(), "IllegalArgumentException 应返回 400");
-        assertEquals("参数非法: userId 不能为空", result.getMessage());
+        assertEquals("参数非法", result.getMessage());
     }
 
     @Test
@@ -90,8 +90,7 @@ public class GlobalExceptionHandlerTest {
         Result<?> result = handler.handleValidation(ex);
 
         assertEquals(400, result.getCode(), "参数校验失败应返回 400");
-        assertTrue(result.getMessage().contains("邮箱格式不正确"),
-                "错误消息应包含字段错误详情");
+        assertEquals("参数校验失败，请检查请求参数", result.getMessage());
     }
 
     @Test

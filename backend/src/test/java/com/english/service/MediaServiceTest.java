@@ -1,23 +1,22 @@
 package com.english.service;
+import com.english.test.TestUtils;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.english.entity.Media;
 import com.english.exception.BusinessException;
 import com.english.mapper.MediaMapper;
 import com.english.service.impl.MediaServiceImpl;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-
-import com.english.exception.BusinessException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -29,6 +28,11 @@ import static org.mockito.Mockito.*;
  */
 public class MediaServiceTest {
 
+    @BeforeAll
+    static void initTableInfo() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Media.class);
+    }
+
     @Mock
     private MediaMapper mediaMapper;
 
@@ -38,6 +42,7 @@ public class MediaServiceTest {
     @BeforeEach
     public void setUp() throws Exception {
         MockitoAnnotations.openMocks(this);
+        TestUtils.injectBaseMapper(mediaService, mediaMapper);
         // 使用反射设置私有字段（@Value 注入的字段）
         java.lang.reflect.Field maxImageSizeField = MediaServiceImpl.class.getDeclaredField("maxImageSize");
         maxImageSizeField.setAccessible(true);
@@ -255,8 +260,9 @@ public class MediaServiceTest {
         media.setMediaType("IMAGE");
         media.setDeleted(0);
 
-        // 模拟查询
-        when(mediaMapper.selectOne(any(QueryWrapper.class))).thenReturn(media);
+        // getMediaById calls getById(id) which uses baseMapper.selectById(id)
+        // @TableLogic on the entity makes selectById automatically filter deleted=1
+        when(mediaMapper.selectById(mediaId)).thenReturn(media);
 
         // 执行查询
         Media result = mediaService.getMediaById(mediaId);
@@ -267,27 +273,27 @@ public class MediaServiceTest {
         assertEquals("test.jpg", result.getFileName());
         assertEquals("IMAGE", result.getMediaType());
 
-        verify(mediaMapper, times(1)).selectOne(any(QueryWrapper.class));
+        verify(mediaMapper, times(1)).selectById(mediaId);
     }
 
     /**
      * 测试: 获取已删除的媒体
-     * 期望: 返回 null（deleted=1 被过滤）
+     * 期望: 返回 null（@TableLogic 使 selectById 自动过滤 deleted=1 记录）
      */
     @Test
     public void testGetMediaById_deletedMedia_returnsNull() {
         // 准备测试数据
         Long mediaId = 1L;
 
-        // 模拟查询结果为空（已被删除）
-        when(mediaMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+        // getById -> selectById; @TableLogic filters deleted=1, so returns null
+        when(mediaMapper.selectById(mediaId)).thenReturn(null);
 
         // 执行查询
         Media result = mediaService.getMediaById(mediaId);
 
         // 验证结果
         assertNull(result);
-        verify(mediaMapper, times(1)).selectOne(any(QueryWrapper.class));
+        verify(mediaMapper, times(1)).selectById(mediaId);
     }
 
     /**
@@ -298,66 +304,82 @@ public class MediaServiceTest {
     public void testGetMediaById_nonExistentMedia_returnsNull() {
         Long mediaId = 999L;
 
-        when(mediaMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+        when(mediaMapper.selectById(mediaId)).thenReturn(null);
 
         Media result = mediaService.getMediaById(mediaId);
 
         assertNull(result);
-        verify(mediaMapper, times(1)).selectOne(any(QueryWrapper.class));
+        verify(mediaMapper, times(1)).selectById(mediaId);
     }
 
     // ==================== 删除媒体测试 ====================
 
     /**
      * 测试: 删除媒体设置 deleted 标志
-     * 期望: deleted 字段被设置为 1，时间戳更新
+     * 期望: deleteMedia 先通过 getMediaById 验证存在性，再调用 removeById 进行软删除
      */
     @Test
     public void testDeleteMedia_setsDeletedFlag() {
         // 准备测试数据
         Long mediaId = 1L;
+        Media existing = new Media();
+        existing.setId(mediaId);
+        existing.setFileName("test.jpg");
+        existing.setDeleted(0);
 
-        when(mediaMapper.updateById(any(Media.class))).thenReturn(1);
+        // getMediaById -> getById -> selectById must return the record
+        when(mediaMapper.selectById(mediaId)).thenReturn(existing);
+        // removeById -> deleteById(entity) (Media has @TableLogic + fill=INSERT_UPDATE)
+        when(mediaMapper.deleteById(any(Media.class))).thenReturn(1);
 
         // 执行删除
         mediaService.deleteMedia(mediaId);
 
-        // 验证更新被调用，且 deleted 被设置为 1
-        verify(mediaMapper, times(1)).updateById(argThat(media ->
-            media.getId().equals(mediaId) &&
-            media.getDeleted() == 1 &&
-            media.getUpdatedAt() != null
-        ));
+        // 验证 selectById 和 deleteById 被调用
+        verify(mediaMapper, times(1)).selectById(mediaId);
+        verify(mediaMapper, times(1)).deleteById(any(Media.class));
     }
 
     /**
      * 测试: 多次删除同一媒体
-     * 期望: 每次删除都调用 updateById
+     * 期望: 第一次成功，第二次抛出 BusinessException（因为 @TableLogic 过滤后找不到）
      */
     @Test
     public void testDeleteMedia_multipleDeletes() {
         Long mediaId = 1L;
-        when(mediaMapper.updateById(any(Media.class))).thenReturn(1);
+        Media existing = new Media();
+        existing.setId(mediaId);
+        existing.setFileName("test.jpg");
+        existing.setDeleted(0);
 
-        mediaService.deleteMedia(mediaId);
+        // First call: record exists; second call: record already soft-deleted (filtered by @TableLogic)
+        when(mediaMapper.selectById(mediaId)).thenReturn(existing).thenReturn(null);
+        when(mediaMapper.deleteById(any(Media.class))).thenReturn(1);
+
+        // First delete succeeds
         mediaService.deleteMedia(mediaId);
 
-        verify(mediaMapper, times(2)).updateById(any(Media.class));
+        // Second delete throws because getMediaById returns null (already soft-deleted)
+        assertThrows(BusinessException.class, () -> mediaService.deleteMedia(mediaId));
+
+        verify(mediaMapper, times(2)).selectById(mediaId);
+        verify(mediaMapper, times(1)).deleteById(any(Media.class));
     }
 
     /**
      * 测试: 删除不存在的媒体
-     * 期望: updateById 仍被调用，但返回 0
+     * 期望: 抛出 BusinessException（getMediaById 返回 null）
      */
     @Test
     public void testDeleteMedia_nonExistentMedia() {
         Long mediaId = 999L;
-        when(mediaMapper.updateById(any(Media.class))).thenReturn(0);
+        when(mediaMapper.selectById(mediaId)).thenReturn(null);
 
-        // 执行删除（不应抛异常）
-        mediaService.deleteMedia(mediaId);
+        // deleteMedia calls getMediaById which throws when record is null
+        assertThrows(BusinessException.class, () -> mediaService.deleteMedia(mediaId));
 
-        verify(mediaMapper, times(1)).updateById(any(Media.class));
+        verify(mediaMapper, times(1)).selectById(mediaId);
+        verify(mediaMapper, never()).deleteById(anyLong());
     }
 
     // ==================== 边界和异常测试 ====================

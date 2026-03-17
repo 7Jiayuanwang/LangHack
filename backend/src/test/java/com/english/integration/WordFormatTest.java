@@ -4,6 +4,7 @@ import com.english.entity.Word;
 import com.english.service.ECDICTService;
 import com.english.service.WordNetService;
 import com.english.utils.WordConverter;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest
 @ActiveProfiles("dev")
+@Disabled("Requires database connection - run locally only")
 public class WordFormatTest {
 
     @Autowired

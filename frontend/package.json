@@ -17,7 +17,8 @@
     "mobile:android": "npm run build && cap sync && cap open android",
     "mobile:build": "npm run build && cap sync",
     "build:mobile": "vite build",
-    "deploy:mobile": "npm run build && npx cap sync && npx cap open android"
+    "deploy:mobile": "npm run build && npx cap sync && npx cap open android",
+    "test": "vitest run"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.1.0",

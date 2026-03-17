@@ -1,4 +1,5 @@
 package com.english.controller;
+import com.english.test.TestUtils;
 
 import com.english.entity.Underline;
 import com.english.entity.User;
@@ -41,7 +42,7 @@ class UnderlineControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        mockMvc = MockMvcBuilders.standaloneSetup(underlineController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(underlineController).addFilters(TestUtils.authenticationFilter()).build();
 
         // Set up SecurityContext for the controller
         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(

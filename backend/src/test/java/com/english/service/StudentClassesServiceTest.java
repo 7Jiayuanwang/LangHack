@@ -1,4 +1,5 @@
 package com.english.service;
+import com.english.test.TestUtils;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.english.entity.*;
@@ -255,7 +256,8 @@ public class StudentClassesServiceTest {
 
         when(studentClassMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(studentClass));
         when(classMapper.selectById(1L)).thenReturn(classInfo);
-        when(courseMapper.selectById(100L)).thenReturn(course);
+        // Service uses selectOne with QueryWrapper (eq("id", courseId).eq("deleted", 0)) instead of selectById
+        when(courseMapper.selectOne(any(QueryWrapper.class))).thenReturn(course);
         when(unitMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
         when(learningRecordMapper.selectList(any(QueryWrapper.class))).thenReturn(null);
         when(textMapper.selectList(any(QueryWrapper.class))).thenReturn(null);
@@ -295,8 +297,10 @@ public class StudentClassesServiceTest {
 
         when(studentClassMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(studentClass));
         when(classMapper.selectById(classId)).thenReturn(classInfo);
-        when(courseMapper.selectById(courseId)).thenReturn(course);
-        when(userMapper.selectById(teacherId)).thenReturn(teacher);
+        // Service uses selectOne with QueryWrapper (eq("id", courseId).eq("deleted", 0)) instead of selectById
+        when(courseMapper.selectOne(any(QueryWrapper.class))).thenReturn(course);
+        // Service uses selectOne with QueryWrapper (eq("id", teacherId).eq("deleted", 0)) instead of selectById
+        when(userMapper.selectOne(any(QueryWrapper.class))).thenReturn(teacher);
         when(unitMapper.selectList(any(QueryWrapper.class))).thenReturn(new ArrayList<>());
         when(unitWordMapper.selectList(any(QueryWrapper.class))).thenReturn(new ArrayList<>());
         when(vocabularyBookMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
