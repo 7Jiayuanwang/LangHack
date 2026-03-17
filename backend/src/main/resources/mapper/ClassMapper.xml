@@ -98,21 +98,6 @@
         ORDER BY c.created_time DESC
     </select>
 
-    <!-- 根据学生ID查询班级列表 -->
-    <select id="selectClassesByStudentId" resultType="com.english.entity.Class">
-        SELECT
-            c.id,
-            c.name,
-            c.course_id,
-            c.teacher_id,
-            c.description,
-            c.created_time
-        FROM classes c
-        INNER JOIN student_classes sc ON c.id = sc.class_id
-        WHERE sc.student_id = #{studentId} AND c.deleted = 0
-        ORDER BY sc.join_time DESC
-    </select>
-
     <!-- 根据学生ID查询班级列表（包含加入时间和关联信息） -->
     <select id="selectClassesByStudentIdWithJoinTime" resultMap="ClassWithDetailsMap">
         SELECT

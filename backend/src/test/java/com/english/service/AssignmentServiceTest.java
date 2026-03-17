@@ -379,7 +379,7 @@ class AssignmentServiceTest {
         mockPage.setTotal(1);
 
         when(assignmentMapper.selectAssignmentsWithDetails(
-                any(Page.class), eq(100L), isNull(), isNull(), isNull()))
+                any(Page.class), eq(100L), isNull(), isNull()))
                 .thenReturn(mockPage);
 
         // Act
@@ -402,7 +402,7 @@ class AssignmentServiceTest {
         mockPage.setTotal(0);
 
         when(assignmentMapper.selectAssignmentsWithDetails(
-                any(Page.class), isNull(), isNull(), isNull(), isNull()))
+                any(Page.class), isNull(), isNull(), isNull()))
                 .thenReturn(mockPage);
 
         // Act

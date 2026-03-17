@@ -110,7 +110,7 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
     @Transactional(readOnly = true)
     public List<StudentClass> getStudentsByClassId(Long classId) {
         if (classId == null) {
-            throw new IllegalArgumentException("classId 不能为空");
+            throw new BusinessException("classId 不能为空");
         }
         List<StudentClass> result = baseMapper.selectStudentsByClassId(classId);
         return result != null ? result : new java.util.ArrayList<>();
@@ -120,7 +120,7 @@ public class StudentClassServiceImpl extends ServiceImpl<StudentClassMapper, Stu
     @Transactional(readOnly = true)
     public List<StudentClass> getClassesByStudentId(Long studentId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
         List<StudentClass> result = baseMapper.selectClassesByStudentId(studentId);
         return result != null ? result : new java.util.ArrayList<>();

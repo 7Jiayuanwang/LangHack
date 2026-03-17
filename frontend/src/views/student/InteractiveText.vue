@@ -401,6 +401,10 @@ const handleWindowResize = () => { windowWidth.value = window.innerWidth }
 let autoStartTimerId = null
 let textContentWatchTimerId = null
 let floatingBtnResetTimerId = null
+let imagePreviewCleanupTimerId = null
+let versionSwitchTimerId = null
+let selectionMenuHideTimerId = null
+let fetchUnderlineTimerId = null
 let imageDragMoveListener = null
 let imageDragEndListener = null
 
@@ -1216,20 +1220,24 @@ const handleAddToVocabulary = async () => {
 // 关闭图片预览
 const closeImagePreview = () => {
   showImagePreview.value = false
-  setTimeout(() => {
+  if (imagePreviewCleanupTimerId) clearTimeout(imagePreviewCleanupTimerId)
+  imagePreviewCleanupTimerId = setTimeout(() => {
     previewImageSrc.value = ''
     previewImageAlt.value = ''
     imageLoading.value = false
     imageError.value = false
     resetImageTransform()
+    imagePreviewCleanupTimerId = null
   }, 300)
 }
 
 // 监听内容变化重新应用划线
 import { watch } from 'vue'
 watch(textContent, () => {
-   setTimeout(() => {
+  if (textContentWatchTimerId) clearTimeout(textContentWatchTimerId)
+  textContentWatchTimerId = setTimeout(() => {
     applySharedUnderlines()
+    textContentWatchTimerId = null
   }, 500)
 })
 
@@ -1297,8 +1305,10 @@ const switchVersion = (version) => {
   }
   
   // 切换版本后重新加载划线
-  setTimeout(() => {
+  if (versionSwitchTimerId) clearTimeout(versionSwitchTimerId)
+  versionSwitchTimerId = setTimeout(() => {
     applySharedUnderlines()
+    versionSwitchTimerId = null
   }, 300)
 
   ElMessage.info(`已切换到${getVersionLabel(version)}版本`)
@@ -1385,6 +1395,26 @@ onBeforeUnmount(() => {
     clearTimeout(autoStartTimerId)
     autoStartTimerId = null
   }
+  if (textContentWatchTimerId) {
+    clearTimeout(textContentWatchTimerId)
+    textContentWatchTimerId = null
+  }
+  if (imagePreviewCleanupTimerId) {
+    clearTimeout(imagePreviewCleanupTimerId)
+    imagePreviewCleanupTimerId = null
+  }
+  if (versionSwitchTimerId) {
+    clearTimeout(versionSwitchTimerId)
+    versionSwitchTimerId = null
+  }
+  if (selectionMenuHideTimerId) {
+    clearTimeout(selectionMenuHideTimerId)
+    selectionMenuHideTimerId = null
+  }
+  if (fetchUnderlineTimerId) {
+    clearTimeout(fetchUnderlineTimerId)
+    fetchUnderlineTimerId = null
+  }
 
   // 退出全屏模式
   document.body.classList.remove('fullscreen-reading')
@@ -1458,11 +1488,13 @@ const handleSelectionChange = () => {
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || selection.isCollapsed) {
     // Delay hiding to allow menu click events to fire first
-    setTimeout(() => {
+    if (selectionMenuHideTimerId) clearTimeout(selectionMenuHideTimerId)
+    selectionMenuHideTimerId = setTimeout(() => {
       const sel = window.getSelection()
       if (!sel || !sel.rangeCount || sel.isCollapsed) {
         showSelectionMenu.value = false
       }
+      selectionMenuHideTimerId = null
     }, 200)
     return
   }
@@ -1635,8 +1667,10 @@ const fetchSharedUnderlines = async () => {
       sharedUnderlines.value = res.data
 
       // 在下一次 DOM 更新后应用划线
-      setTimeout(() => {
+      if (fetchUnderlineTimerId) clearTimeout(fetchUnderlineTimerId)
+      fetchUnderlineTimerId = setTimeout(() => {
         applySharedUnderlines()
+        fetchUnderlineTimerId = null
       }, 500)
     }
   } catch(e) {

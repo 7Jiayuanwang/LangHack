@@ -480,10 +480,6 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
                         : wordId != null ? ", 单词ID=" + wordId : assignmentId != null ? ", 任务ID=" + assignmentId : "");
     }
 
-    // 在类定义的开头添加这些常量
-    private static final int MIN_TEXT_READ_TIME_SECONDS = 600; // 10分钟
-    private static final double COMPLETION_THRESHOLD = 80.0; // 完成阈值80%
-
     @Override
     @Transactional
     public void recordVocabularyAdd(Long studentId, Long wordId) {

@@ -246,7 +246,7 @@ class StudentClassServiceTest {
     @Test
     void getStudentsByClassId_nullClassId_throwsIllegalArgument() {
         // Act & Assert
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> studentClassService.getStudentsByClassId(null));
     }
 
@@ -283,7 +283,7 @@ class StudentClassServiceTest {
     @Test
     void getClassesByStudentId_nullStudentId_throwsIllegalArgument() {
         // Act & Assert
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> studentClassService.getClassesByStudentId(null));
     }
 

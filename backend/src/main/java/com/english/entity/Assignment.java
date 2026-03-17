@@ -43,6 +43,9 @@ public class Assignment {
     @TableLogic(value = "0", delval = "1")
     private Integer deleted;
 
+    @TableField("status")
+    private String status;
+
     // 关联字段（不映射到数据库）
     @TableField(exist = false)
     private String className;
@@ -150,6 +153,14 @@ public class Assignment {
 
     public void setDeleted(Integer deleted) {
         this.deleted = deleted;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
 

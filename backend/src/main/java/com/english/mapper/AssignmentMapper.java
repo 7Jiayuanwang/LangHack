@@ -18,7 +18,6 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
     IPage<Assignment> selectAssignmentsWithDetails(Page<Assignment> page,
                                                    @Param("teacherId") Long teacherId,
                                                    @Param("classId") Long classId,
-                                                   @Param("status") String status,
                                                    @Param("keyword") String keyword);
 
     /**
