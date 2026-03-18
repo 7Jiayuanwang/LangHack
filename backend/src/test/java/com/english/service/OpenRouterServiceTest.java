@@ -440,7 +440,7 @@ class OpenRouterServiceTest {
     }
 
     @Test
-    void generateCET4Version_json ParseError_throwsBusinessException() {
+    void generateCET4Version_jsonParseError_throwsBusinessException() {
         // Arrange
         setupConfigForSuccess();
         String invalidJson = "{invalid json}";

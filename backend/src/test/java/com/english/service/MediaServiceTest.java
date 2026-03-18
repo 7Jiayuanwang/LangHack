@@ -752,3 +752,4 @@ public class MediaServiceTest {
 
         verify(mediaMapper, never()).insert(any(Media.class));
     }
+}
