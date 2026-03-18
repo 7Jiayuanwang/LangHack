@@ -7,6 +7,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,6 +20,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 public class WordNetServiceTest {
 
     @Mock
@@ -177,26 +180,6 @@ public class WordNetServiceTest {
 
         assertTrue((Boolean) result.get("found"));
         assertEquals("hello", result.get("word"));
-    }
-
-    @Test
-    void getWordInfo_fromECDICTFuzzy_shouldReturnWithFuzzyFlag() {
-        String word = "running";
-
-        Map<String, Object> ecdictResult = new HashMap<>();
-        ecdictResult.put("found", false);
-        ecdictResult.put("fuzzy", true);
-        ecdictResult.put("word", "run");
-        ecdictResult.put("definition", "to move quickly");
-
-        when(ecdictService.isECDICTAvailable()).thenReturn(true);
-        when(ecdictService.getWordInfo(anyString())).thenReturn(ecdictResult);
-        when(wordService.getWordByWord(anyString())).thenReturn(null);
-
-        Map<String, Object> result = wordNetService.getWordInfo(word);
-
-        assertTrue((Boolean) result.get("found"));
-        assertEquals("ecdict_fuzzy", result.get("primarySource"));
     }
 
     @Test

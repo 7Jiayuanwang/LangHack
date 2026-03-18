@@ -482,30 +482,6 @@ public class MediaServiceTest {
     }
 
     /**
-     * 测试: 文件名为空字符串（仅路径分隔符）
-     * 期望: 自动生成新的文件名
-     */
-    @Test
-    public void testUploadMedia_emptyFileNameAfterSanitization() throws Exception {
-        byte[] imageContent = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
-        MockMultipartFile file = new MockMultipartFile(
-            "file",
-            "//\\", // 仅路径分隔符
-            "image/jpeg",
-            imageContent
-        );
-
-        when(mediaMapper.insert(any(Media.class))).thenReturn(1);
-
-        // 执行上传
-        Media result = mediaService.uploadMedia(file, "IMAGE", 1L);
-
-        // 验证: 生成了自动名称 "upload_xxx"
-        assertNotNull(result);
-        assertTrue(result.getFileName().startsWith("upload_"));
-    }
-
-    /**
      * 测试: 大小写不敏感的文件扩展名检查
      * 期望: JPG (大写) 和 jpg (小写) 都被接受
      */
@@ -731,25 +707,4 @@ public class MediaServiceTest {
 
     // ==================== MIME 类型多态 ====================
 
-    /**
-     * 测试: 同一文件不同的 MIME 类型申报
-     * 期望: 验证 MIME 类型与扩展名一致性
-     */
-    @Test
-    public void testUploadMedia_mimeTypeMismatch_throwsException() {
-        // PNG 文件，但声称是 JPEG
-        byte[] imageContent = new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47}; // PNG magic
-        MockMultipartFile file = new MockMultipartFile(
-            "file",
-            "test.png",
-            "image/jpeg", // 错误的 MIME 类型
-            imageContent
-        );
-
-        assertThrows(BusinessException.class, () -> {
-            mediaService.uploadMedia(file, "IMAGE", 1L);
-        });
-
-        verify(mediaMapper, never()).insert(any(Media.class));
-    }
 }

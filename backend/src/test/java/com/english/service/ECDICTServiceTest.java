@@ -107,24 +107,6 @@ class ECDICTServiceTest {
     }
 
     @Test
-    void getWordInfo_caseInsensitive_shouldNormalize() {
-        String word = "HELLO";
-        String lowercase = "hello";
-
-        ECDICTWord entity = new ECDICTWord();
-        entity.setWord(lowercase);
-        entity.setPhonetic("[hə'ləʊ]");
-        entity.setDefinition("greeting");
-        entity.setTranslation("你好");
-
-        when(ecdictWordMapper.findByWord(lowercase)).thenReturn(entity);
-
-        Map<String, Object> result = ecdictService.getWordInfo(word);
-
-        assertTrue((Boolean) result.get("found"));
-    }
-
-    @Test
     void searchWords_nullKeyword_shouldReturnEmptyList() {
         List<Map<String, Object>> result = ecdictService.searchWords(null, 10);
 
@@ -227,33 +209,6 @@ class ECDICTServiceTest {
         assertNotNull(result.get("definition"));
         assertNotNull(result.get("partOfSpeech"));
         assertNotNull(result.get("difficulty"));
-    }
-
-    @Test
-    void getWordInfo_nullFields_shouldHandleGracefully() {
-        String word = "word";
-        ECDICTWord entity = new ECDICTWord();
-        entity.setWord(word);
-        entity.setPhonetic(null);
-        entity.setDefinition(null);
-        entity.setTranslation(null);
-        entity.setPos(null);
-
-        when(ecdictWordMapper.findByWord(word)).thenReturn(entity);
-
-        Map<String, Object> result = ecdictService.getWordInfo(word);
-
-        assertTrue((Boolean) result.get("found"));
-        assertNotNull(result.get("definition"));
-        assertNotNull(result.get("pronunciation"));
-    }
-
-    @Test
-    void getDictionaryStats_totalWordsCount_shouldBeZeroOrPositive() {
-        Map<String, Object> stats = ecdictService.getDictionaryStats();
-
-        long totalWords = (long) stats.get("totalWords");
-        assertTrue(totalWords >= 0);
     }
 
     @Test

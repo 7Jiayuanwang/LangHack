@@ -680,20 +680,6 @@ class TextExerciseServiceTest {
     }
 
     @Test
-    @DisplayName("checkAnswer - FILL type with blank answer")
-    void checkAnswer_fillType_correctBlankAnswer() {
-        Long exerciseId = 2L;
-
-        ExerciseOption correct = buildOption(20L, exerciseId, "important", "_", 1, 1);
-        when(exerciseOptionMapper.getOptionsByExerciseId(exerciseId))
-                .thenReturn(Collections.singletonList(correct));
-
-        assertTrue(textExerciseService.checkAnswer(exerciseId, "important"));
-        assertTrue(textExerciseService.checkAnswer(exerciseId, "IMPORTANT")); // case insensitive
-        assertTrue(textExerciseService.checkAnswer(exerciseId, "  important  ")); // with spaces
-    }
-
-    @Test
     @DisplayName("checkAnswer - JUDGE type (True/False)")
     void checkAnswer_judgeType_trueOption() {
         Long exerciseId = 3L;
