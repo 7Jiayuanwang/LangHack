@@ -458,6 +458,17 @@ class TextExerciseServiceTest {
         return exercise;
     }
 
+    private ExerciseOption buildOption(Long id, Long exerciseId, String content, String key, int isCorrect, int orderNum) {
+        ExerciseOption option = new ExerciseOption();
+        option.setId(id);
+        option.setExerciseId(exerciseId);
+        option.setOptionContent(content);
+        option.setOptionKey(key);
+        option.setIsCorrect(isCorrect);
+        option.setOrderNum(orderNum);
+        return option;
+    }
+
     // ==================== batchCreateExercises - complete flow ====================
 
     @Test

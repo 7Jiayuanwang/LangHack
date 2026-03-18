@@ -545,7 +545,7 @@ class OpenRouterServiceTest {
     // ==================== Null input validation ====================
 
     @Test
-    void generateCET4Version_nullInput_throwsBusinessException() {
+    void generateCET4Version_nullInput_throwsBusinessException_validation() {
         // Act & Assert
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> openRouterService.generateCET4Version(null));
