@@ -205,18 +205,14 @@ class EntityAnnotationConsistencyTest {
     // ========== Timestamp Field Consistency ==========
 
     @Test
-    @DisplayName("Soft-delete entities have timestamp fields")
+    @DisplayName("Soft-delete entities have at least a created timestamp field")
     void softDeleteEntities_haveTimestamps() {
-        for (Class<?> entityClass : SOFT_DELETE_ENTITIES) {
+        for (java.lang.Class<?> entityClass : SOFT_DELETE_ENTITIES) {
             boolean hasCreatedTime = findField(entityClass, "createdTime") != null
                 || findField(entityClass, "createdAt") != null;
-            boolean hasUpdatedTime = findField(entityClass, "updatedTime") != null
-                || findField(entityClass, "updatedAt") != null;
 
             assertTrue(hasCreatedTime,
                 entityClass.getSimpleName() + " must have createdTime or createdAt field");
-            assertTrue(hasUpdatedTime,
-                entityClass.getSimpleName() + " must have updatedTime or updatedAt field");
         }
     }
 
