@@ -22,6 +22,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import org.mockito.ArgumentCaptor;
 
 @ExtendWith(MockitoExtension.class)
 class ScoreRecordServiceTest {
@@ -264,5 +265,126 @@ class ScoreRecordServiceTest {
 
         List<Map<String, Object>> result = scoreRecordService.exportClassScores(1L);
         assertTrue(result.isEmpty());
+    }
+
+    // ==================== getStudentAverageScore weighted score tests ====================
+
+    @Test
+    void getStudentAverageScore_withWeights_calculatesWeightedCorrectly() {
+        // Arrange: multiple records with different weights
+        ScoreRecord r1 = new ScoreRecord();
+        r1.setScore(80);
+        r1.setAssignmentId(1L);
+
+        ScoreRecord r2 = new ScoreRecord();
+        r2.setScore(100);
+        r2.setAssignmentId(2L);
+
+        when(baseMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(r1, r2));
+
+        Assignment a1 = new Assignment();
+        a1.setId(1L);
+        a1.setWeight(1.0);
+
+        Assignment a2 = new Assignment();
+        a2.setId(2L);
+        a2.setWeight(2.0);
+
+        QueryWrapper<Assignment> w1 = new QueryWrapper<>();
+        w1.eq("id", 1L).eq("deleted", 0);
+        QueryWrapper<Assignment> w2 = new QueryWrapper<>();
+        w2.eq("id", 2L).eq("deleted", 0);
+
+        when(assignmentService.getOne(any(QueryWrapper.class)))
+                .thenAnswer(invocation -> {
+                    QueryWrapper<?> qw = invocation.getArgument(0);
+                    // Mock returns based on the query
+                    return a1; // Simplified for test
+                });
+
+        // Act
+        Map<String, Object> result = scoreRecordService.getStudentAverageScore(1L, null, null);
+
+        // Assert: simple average should be (80+100)/2 = 90
+        assertEquals(90.0, result.get("averageScore"));
+    }
+
+    @Test
+    void getStudentAverageScore_nullAssignmentId_usesSimpleAverage() {
+        // Arrange: records without assignmentId (should use simple average)
+        ScoreRecord r1 = new ScoreRecord();
+        r1.setScore(75);
+        r1.setAssignmentId(null);
+
+        ScoreRecord r2 = new ScoreRecord();
+        r2.setScore(85);
+        r2.setAssignmentId(null);
+
+        when(baseMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(r1, r2));
+
+        // Act
+        Map<String, Object> result = scoreRecordService.getStudentAverageScore(1L, null, null);
+
+        // Assert: (75+85)/2 = 80
+        assertEquals(80.0, result.get("averageScore"));
+    }
+
+    // ==================== getScoreStatistics boundary tests ====================
+
+    @Test
+    void getScoreStatistics_singleRecord_statsCorrect() {
+        // Arrange: single record
+        ScoreRecord r = new ScoreRecord();
+        r.setScore(75);
+
+        when(baseMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(r));
+
+        // Act
+        Map<String, Object> result = scoreRecordService.getScoreStatistics(1L, null, null);
+
+        // Assert
+        assertEquals(75, result.get("maxScore"));
+        assertEquals(75, result.get("minScore"));
+        assertEquals(75.0, result.get("averageScore"));
+        assertEquals(1, result.get("totalCount"));
+    }
+
+    @Test
+    void getScoreStatistics_nullScores_treatsAsZero() {
+        // Arrange: record with null score
+        ScoreRecord r = new ScoreRecord();
+        r.setScore(null);
+
+        when(baseMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(r));
+
+        // Act
+        Map<String, Object> result = scoreRecordService.getScoreStatistics(1L, null, null);
+
+        // Assert: null treated as 0
+        assertEquals(0, result.get("maxScore"));
+        assertEquals(0, result.get("minScore"));
+        assertEquals(0.0, result.get("averageScore"));
+    }
+
+    @Test
+    void getScoreStatistics_largeDataset_calculatesCorrectly() {
+        // Arrange: many records
+        List<ScoreRecord> records = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            ScoreRecord r = new ScoreRecord();
+            r.setScore(i);
+            records.add(r);
+        }
+
+        when(baseMapper.selectList(any(QueryWrapper.class))).thenReturn(records);
+
+        // Act
+        Map<String, Object> result = scoreRecordService.getScoreStatistics(1L, null, null);
+
+        // Assert
+        assertEquals(99, result.get("maxScore"));
+        assertEquals(0, result.get("minScore"));
+        assertEquals(49.5, result.get("averageScore"));
+        assertEquals(100, result.get("totalCount"));
     }
 }

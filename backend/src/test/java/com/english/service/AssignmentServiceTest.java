@@ -569,4 +569,61 @@ class AssignmentServiceTest {
         assertNotNull(result);
         assertTrue(result.isEmpty());
     }
+
+    // ==================== createAssignment with content types ====================
+
+    @Test
+    void createAssignment_unitContentType_success() {
+        // Arrange: createAssignment with "unit" description (JSON-like format)
+        Assignment unitAssignment = new Assignment();
+        unitAssignment.setTitle("Unit Assignment");
+        unitAssignment.setUnitId(20L);
+        unitAssignment.setClassId(10L);
+        unitAssignment.setDescription("unit"); // Simple unit type
+
+        when(assignmentMapper.insert(any(Assignment.class))).thenReturn(1);
+
+        // Act
+        assignmentService.createAssignment(unitAssignment);
+
+        // Assert
+        verify(assignmentMapper).insert(any(Assignment.class));
+    }
+
+    @Test
+    void createAssignment_textsContentType_success() {
+        // Arrange: createAssignment with texts content type
+        Assignment textsAssignment = new Assignment();
+        textsAssignment.setTitle("Texts Assignment");
+        textsAssignment.setUnitId(20L);
+        textsAssignment.setClassId(10L);
+        textsAssignment.setDescription("texts"); // Texts type
+
+        when(assignmentMapper.insert(any(Assignment.class))).thenReturn(1);
+
+        // Act
+        assignmentService.createAssignment(textsAssignment);
+
+        // Assert
+        verify(assignmentMapper).insert(any(Assignment.class));
+    }
+
+    @Test
+    void createAssignment_wordsContentType_success() {
+        // Arrange: createAssignment with words content type
+        Assignment wordsAssignment = new Assignment();
+        wordsAssignment.setTitle("Words Assignment");
+        wordsAssignment.setUnitId(20L);
+        wordsAssignment.setClassId(10L);
+        wordsAssignment.setDescription("words"); // Words type
+
+        when(assignmentMapper.insert(any(Assignment.class))).thenReturn(1);
+
+        // Act
+        assignmentService.createAssignment(wordsAssignment);
+
+        // Assert
+        verify(assignmentMapper).insert(any(Assignment.class));
+    }
+
 }

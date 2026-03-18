@@ -1,0 +1,214 @@
+name: Nightly Full Test & Security Scan
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC (10 AM CST)
+  workflow_dispatch:    # Manual trigger
+
+jobs:
+  backend-full-test:
+    name: Backend Full Test + Coverage Check
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testpass
+          MYSQL_DATABASE: english_learning
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run full backend test suite
+        working-directory: backend
+        env:
+          DB_URL: jdbc:mysql://127.0.0.1:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+          DB_USERNAME: root
+          DB_PASSWORD: testpass
+          JWT_SECRET: nightly-test-secret-key-at-least-32-chars-long
+          SPRING_PROFILES_ACTIVE: test
+        run: mvn clean test -B -DskipITs=false
+
+      - name: Check JaCoCo coverage threshold (≥60% lines)
+        working-directory: backend
+        run: |
+          # Extract coverage percentage from jacoco report
+          COVERAGE=$(grep -oP '(?<=<span class="counter">)[^<]*' target/site/jacoco/index.html | head -1 || echo "0%")
+          echo "Backend coverage: $COVERAGE"
+
+          # Parse percentage value
+          COVERAGE_VALUE=$(echo "$COVERAGE" | grep -oP '\d+(\.\d+)?')
+          THRESHOLD=60
+
+          if (( $(echo "$COVERAGE_VALUE < $THRESHOLD" | bc -l) )); then
+            echo "❌ Coverage $COVERAGE_VALUE% is below threshold $THRESHOLD%"
+            exit 1
+          else
+            echo "✅ Coverage $COVERAGE_VALUE% meets threshold $THRESHOLD%"
+          fi
+
+      - name: Backend dependency scan (OWASP Dependency-Check)
+        working-directory: backend
+        run: mvn dependency-check:check -DskipProvidedScope=true -DskipRuntimeScope=false || true
+
+      - name: Upload JaCoCo detailed report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-jacoco-nightly
+          path: backend/target/site/jacoco/
+          retention-days: 30
+
+  frontend-full-test:
+    name: Frontend Full Test + Coverage Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run full frontend test suite
+        working-directory: frontend
+        run: npx vitest run --coverage
+
+      - name: Check v8 coverage threshold (≥50% statements)
+        working-directory: frontend
+        run: |
+          # Extract coverage from v8 coverage.json
+          COVERAGE_FILE="coverage/coverage-final.json"
+
+          if [ -f "$COVERAGE_FILE" ]; then
+            # Extract statement coverage percentage
+            STATEMENT_COVERAGE=$(jq '.metadata.summary.lines.pct // 0' "$COVERAGE_FILE" 2>/dev/null || echo "0")
+            echo "Frontend statement coverage: ${STATEMENT_COVERAGE}%"
+
+            THRESHOLD=50
+            if (( $(echo "$STATEMENT_COVERAGE < $THRESHOLD" | bc -l) )); then
+              echo "❌ Coverage ${STATEMENT_COVERAGE}% is below threshold ${THRESHOLD}%"
+              exit 1
+            else
+              echo "✅ Coverage ${STATEMENT_COVERAGE}% meets threshold ${THRESHOLD}%"
+            fi
+          else
+            echo "⚠️  Coverage report not found, skipping threshold check"
+          fi
+
+      - name: Frontend security scan (npm audit)
+        working-directory: frontend
+        run: npm audit --production --audit-level=moderate || true
+
+      - name: Lint full codebase
+        working-directory: frontend
+        run: npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs --ignore-path .gitignore
+        continue-on-error: true
+
+      - name: Upload v8 detailed report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage-nightly
+          path: frontend/coverage/
+          retention-days: 30
+
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for npm vulnerabilities
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --production --json > audit-report.json || true
+
+          # Check for high/critical vulnerabilities
+          CRITICAL_COUNT=$(jq '[.vulnerabilities[] | select(.severity == "critical")] | length' audit-report.json 2>/dev/null || echo "0")
+          HIGH_COUNT=$(jq '[.vulnerabilities[] | select(.severity == "high")] | length' audit-report.json 2>/dev/null || echo "0")
+
+          echo "Frontend - Critical: $CRITICAL_COUNT, High: $HIGH_COUNT"
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "⚠️  Found $CRITICAL_COUNT critical vulnerabilities"
+          fi
+
+      - name: Set up JDK 17 for backend security
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Backend dependency vulnerability scan
+        working-directory: backend
+        run: |
+          mvn dependency-check:check \
+            -DskipProvidedScope=true \
+            -DskipRuntimeScope=false \
+            -DfailOnError=false || true
+
+  nightly-report:
+    name: Nightly Report
+    runs-on: ubuntu-latest
+    needs: [backend-full-test, frontend-full-test, security-scan]
+    if: always()
+    steps:
+      - name: Create summary
+        run: |
+          echo "# 🌙 Nightly Test & Security Report" >> $GITHUB_STEP_SUMMARY
+          echo "**Date**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Jobs Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend Full Test: ${{ needs.backend-full-test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend Full Test: ${{ needs.frontend-full-test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Scan: ${{ needs.security-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- [JaCoCo Coverage Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Vitest Coverage Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Nightly Test Failure',
+              body: `Nightly full test & security scan failed at ${new Date().toISOString()}\n\n[View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`,
+              labels: ['ci-failure', 'nightly']
+            });

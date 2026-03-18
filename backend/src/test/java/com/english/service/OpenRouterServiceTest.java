@@ -409,6 +409,263 @@ class OpenRouterServiceTest {
         assertEquals("Processed content", result);
     }
 
+    // ==================== API timeout and error handling ====================
+
+    @Test
+    void generateCET4Version_timeout_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("Connection timed out"));
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_httpClientError_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new org.springframework.web.client.HttpClientErrorException(HttpStatus.BAD_REQUEST, "Bad request"));
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_jsonParseError_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        String invalidJson = "{invalid json}";
+        ResponseEntity<String> response = new ResponseEntity<>(invalidJson, HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    // ==================== Null and empty response handling ====================
+
+    @Test
+    void generateCET4Version_nullResponse_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(null);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_nullResponseBody_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        ResponseEntity<String> response = new ResponseEntity<>(null, HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_emptyResponseBody_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        ResponseEntity<String> response = new ResponseEntity<>("", HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_emptyChoicesArray_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        String responseBody = "{\"id\":\"test\",\"choices\":[]}";
+        ResponseEntity<String> response = new ResponseEntity<>(responseBody, HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_nullChoices_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        String responseBody = "{\"id\":\"test\",\"choices\":null}";
+        ResponseEntity<String> response = new ResponseEntity<>(responseBody, HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_emptyContentString_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        String responseBody = "{\"choices\":[{\"message\":{\"content\":\"\"}}]}";
+        ResponseEntity<String> response = new ResponseEntity<>(responseBody, HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert: empty string content is still valid, should return empty string
+        String result = openRouterService.generateCET4Version("Some content");
+        assertEquals("", result);
+    }
+
+    // ==================== Null input validation ====================
+
+    @Test
+    void generateCET4Version_nullInput_throwsBusinessException_validation() {
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version(null));
+        assertEquals("原文内容不能为空", ex.getMessage());
+    }
+
+    @Test
+    void generateCET6Version_emptyInput_throwsBusinessException() {
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET6Version(""));
+        assertEquals("原文内容不能为空", ex.getMessage());
+    }
+
+    @Test
+    void generateAcademicVersion_blankInput_throwsBusinessException() {
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateAcademicVersion("\n\t  "));
+        assertEquals("原文内容不能为空", ex.getMessage());
+    }
+
+    @Test
+    void generateChineseParallelVersion_overMaxLength_throwsBusinessException() {
+        // Arrange: content exceeding max length
+        String tooLongContent = "a".repeat(100001);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateChineseParallelVersion(tooLongContent));
+        assertEquals("原文内容过长，最多10万字符", ex.getMessage());
+    }
+
+    // ==================== Markdown version null input validation ====================
+
+    @Test
+    void generateCET6VersionMarkdown_nullInput_throwsBusinessException() {
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET6VersionMarkdown(null));
+        assertEquals("Markdown内容不能为空", ex.getMessage());
+    }
+
+    @Test
+    void generateAcademicVersionMarkdown_blankInput_throwsBusinessException() {
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateAcademicVersionMarkdown("   "));
+        assertEquals("Markdown内容不能为空", ex.getMessage());
+    }
+
+    @Test
+    void generateChineseParallelVersionMarkdown_overMaxLength_throwsBusinessException() {
+        // Arrange
+        String tooLongContent = "a".repeat(100001);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateChineseParallelVersionMarkdown(tooLongContent));
+        assertEquals("Markdown内容过长，最多10万字符", ex.getMessage());
+    }
+
+    // ==================== HTTP status code handling ====================
+
+    @Test
+    void generateCET4Version_forbiddenStatus_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        ResponseEntity<String> response = new ResponseEntity<>("Forbidden", HttpStatus.FORBIDDEN);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_unauthorized_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        ResponseEntity<String> response = new ResponseEntity<>("Unauthorized", HttpStatus.UNAUTHORIZED);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_notFound_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        ResponseEntity<String> response = new ResponseEntity<>("Not Found", HttpStatus.NOT_FOUND);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
+    @Test
+    void generateCET4Version_serviceUnavailable_throwsBusinessException() {
+        // Arrange
+        setupConfigForSuccess();
+        ResponseEntity<String> response = new ResponseEntity<>("Service Unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(response);
+
+        // Act & Assert
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> openRouterService.generateCET4Version("Some content"));
+        assertEquals("AI 服务暂时不可用，请稍后重试", ex.getMessage());
+    }
+
     // ==================== Helper methods ====================
 
     private void setupConfigForSuccess() {
