@@ -122,9 +122,9 @@ class AuthControllerEnhancedTest {
     void register_success() throws Exception {
         doNothing().when(userService).createUser(any(User.class));
 
-        User newUser = new User();
-        newUser.setUsername("newuser");
-        newUser.setPassword("password123");
+        Map<String, Object> newUser = new HashMap<>();
+        newUser.put("username", "newuser");
+        newUser.put("password", "password123");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -137,9 +137,9 @@ class AuthControllerEnhancedTest {
     @Test
     @DisplayName("POST /api/auth/register - empty username")
     void register_emptyUsername() throws Exception {
-        User newUser = new User();
-        newUser.setUsername("");
-        newUser.setPassword("password123");
+        Map<String, Object> newUser = new HashMap<>();
+        newUser.put("username", "");
+        newUser.put("password", "password123");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -152,9 +152,9 @@ class AuthControllerEnhancedTest {
     @Test
     @DisplayName("POST /api/auth/register - username too short")
     void register_usernameTooShort() throws Exception {
-        User newUser = new User();
-        newUser.setUsername("ab");
-        newUser.setPassword("password123");
+        Map<String, Object> newUser = new HashMap<>();
+        newUser.put("username", "ab");
+        newUser.put("password", "password123");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -167,9 +167,9 @@ class AuthControllerEnhancedTest {
     @Test
     @DisplayName("POST /api/auth/register - invalid username characters")
     void register_invalidUsernameChars() throws Exception {
-        User newUser = new User();
-        newUser.setUsername("user name!");
-        newUser.setPassword("password123");
+        Map<String, Object> newUser = new HashMap<>();
+        newUser.put("username", "user name!");
+        newUser.put("password", "password123");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -182,9 +182,9 @@ class AuthControllerEnhancedTest {
     @Test
     @DisplayName("POST /api/auth/register - short password")
     void register_shortPassword() throws Exception {
-        User newUser = new User();
-        newUser.setUsername("validuser");
-        newUser.setPassword("12345");
+        Map<String, Object> newUser = new HashMap<>();
+        newUser.put("username", "validuser");
+        newUser.put("password", "12345");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -197,10 +197,10 @@ class AuthControllerEnhancedTest {
     @Test
     @DisplayName("POST /api/auth/register - invalid email")
     void register_invalidEmail() throws Exception {
-        User newUser = new User();
-        newUser.setUsername("validuser");
-        newUser.setPassword("password123");
-        newUser.setEmail("not-an-email");
+        Map<String, Object> newUser = new HashMap<>();
+        newUser.put("username", "validuser");
+        newUser.put("password", "password123");
+        newUser.put("email", "not-an-email");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -215,9 +215,9 @@ class AuthControllerEnhancedTest {
     void register_duplicateUsername() throws Exception {
         doThrow(new BusinessException("用户名已存在")).when(userService).createUser(any(User.class));
 
-        User newUser = new User();
-        newUser.setUsername("existinguser");
-        newUser.setPassword("password123");
+        Map<String, Object> newUser = new HashMap<>();
+        newUser.put("username", "existinguser");
+        newUser.put("password", "password123");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
