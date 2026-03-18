@@ -380,7 +380,7 @@ class AdminControllerEnhancedTest {
         Word existingWord = new Word();
         existingWord.setId(1L);
         when(wordService.getWordById(1L)).thenReturn(existingWord);
-        doNothing().when(wordService).deleteWord(1L);
+        when(wordService.deleteWord(1L)).thenReturn(true);
 
         mockMvc.perform(delete("/api/admin/words/1"))
                 .andExpect(status().isOk())

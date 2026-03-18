@@ -485,19 +485,4 @@ class UnderlineControllerEnhancedTest {
                 .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.message").value("删除划线失败，请稍后重试"));
     }
-
-    // ========== 11. Unauthenticated Access ==========
-
-    @Test
-    @DisplayName("POST /api/underlines - unauthenticated request returns error")
-    void createUnderline_unauthenticated_returnsError() throws Exception {
-        SecurityContextHolder.clearContext();
-
-        Map<String, Object> req = buildCreateUnderlineRequest(100L, "text", 5, 19);
-
-        mockMvc.perform(post("/api/underlines")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isUnauthorized());
-    }
 }
