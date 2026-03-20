@@ -1,3 +1,8 @@
+app:
+  cors:
+    allowed-origins: http://localhost:3000,http://localhost:5173,http://192.168.203.143:3000
+
+
 server:
   port: 8080
   servlet:
@@ -29,7 +34,7 @@ spring:
       # Production: MUST be set via environment variables, no defaults
       jdbc-url: ${DB_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
       username: ${DB_USERNAME:root}
-      password: ${DB_PASSWORD:root}
+      password: ${DB_PASSWORD:123}
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
         maximum-pool-size: 20
@@ -45,7 +50,7 @@ spring:
       # Fallback to master when slave not configured (single-instance deployment)
       jdbc-url: ${DB_SLAVE_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
       username: ${DB_SLAVE_USERNAME:${DB_USERNAME:root}}
-      password: ${DB_SLAVE_PASSWORD:${DB_PASSWORD:root}}
+      password: ${DB_SLAVE_PASSWORD:${DB_PASSWORD:123}}
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
         maximum-pool-size: 50
@@ -80,7 +85,7 @@ spring:
       # - Must be a cryptographically secure random value
       # - Never hardcode in source code or configuration files
       # - Production deployment: Generate with: openssl rand -base64 32
-      secret: ${JWT_SECRET}
+      secret: ${JWT_SECRET:your_dummy_jwt_secret_for_local_development_at_least_32_chars_long}
       expiration: 86400000 # 24小时
 
   flyway:
@@ -107,13 +112,29 @@ mybatis-plus:
       logic-not-delete-value: 0
   mapper-locations: classpath:mapper/*.xml
 
+hiagent:
+  #此处禁止删除
+  # AI calling mode:
+  # - native: Use HiAgent native two-step API (CreateConversation + ChatQueryV2)
+  # - openai: Use original OpenAI-compatible API flow (Not recommended for HiAgent)
+  mode: native
+  
+  # HiAgent Native API Settings
+  # URL: https://agent.imau.edu.cn:32300/api/proxy/api/v1
+  api-key: d6uds516rdh495eqgveg
+  api-url: https://agent.imau.edu.cn:32300/api/proxy/api/v1
+  app-id: d5q4isp6rdh6j8crcu5g
+  user-id: LangHack_System
+  
+  timeout: 60000
+  max-retries: 3
+
 openrouter:
-  # CRITICAL: API credentials MUST be provided via environment variable in production
-  # - OPENROUTER_API_KEY must be set before application startup
-  # - Rate limiting should be enforced at API level
-  # - Monitor API usage for abuse patterns
-  api-key: ${OPENROUTER_API_KEY}
+  # OpenAI-compatible API flow
+  mode: openai
   api-url: https://openrouter.ai/api/v1/chat/completions
+  # Use the user's OpenRouter key if they have one, or fallback to the deepseek equivalent if applicable
+  api-key: d6tq0316rdh495eqgi10
   model: tngtech/deepseek-r1t2-chimera:free
   timeout: 60000
   max-retries: 3

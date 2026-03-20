@@ -97,6 +97,7 @@ export default defineConfig(({ mode }) => {
     css: {
       preprocessorOptions: {
         scss: {
+          api: 'modern-compiler',
           // variables.scss 文件不存在，移除此引用以避免构建错误
         }
       }

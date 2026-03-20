@@ -9,13 +9,12 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
-import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
-
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +23,7 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 
 /**
- * OpenRouter DeepSeek API service implementation
+ * OpenRouter AI service implementation
  */
 @Slf4j
 @Service
@@ -62,310 +61,128 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     }
 
     @Override
-    @CircuitBreaker(name = "openrouter", fallbackMethod = "generateCET4VersionFallback")
+    @CircuitBreaker(name = "openrouter", fallbackMethod = "fallback")
     public String generateCET4Version(String originalContent) {
-        validateInput(originalContent, "原文内容");
-        String prompt = String.format(
-                "Please rewrite the following English article to match CET-4 (College English Test Band 4) difficulty level. "
-                        +
-                        "Use simpler vocabulary and sentence structures suitable for intermediate English learners. " +
-                        "Keep the same meaning and main ideas, but make it easier to understand. " +
-                        "Return ONLY the rewritten article text, without any explanations or meta-commentary.\n\n" +
-                        "Original article:\n%s",
-                originalContent);
-        return callDeepSeek(prompt);
-    }
-
-    private String generateCET4VersionFallback(String originalContent, Exception e) {
-        log.warn("OpenRouter circuit breaker triggered for generateCET4Version: {}", e.getMessage());
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
+        String prompt = "Please rewrite the following English article to match CET-4 difficulty level. " +
+                "Only return the rewritten text.\n\n" + originalContent;
+        return callOpenAI(prompt);
     }
 
     @Override
-    @CircuitBreaker(name = "openrouter", fallbackMethod = "generateCET6VersionFallback")
+    @CircuitBreaker(name = "openrouter", fallbackMethod = "fallback")
     public String generateCET6Version(String originalContent) {
-        validateInput(originalContent, "原文内容");
-        String prompt = String.format(
-                "Please rewrite the following English article to match CET-6 (College English Test Band 6) difficulty level. "
-                        +
-                        "Use vocabulary and sentence structures suitable for upper-intermediate English learners. " +
-                        "Keep the same meaning and main ideas, but adjust the complexity to CET-6 level. " +
-                        "Return ONLY the rewritten article text, without any explanations or meta-commentary.\n\n" +
-                        "Original article:\n%s",
-                originalContent);
-        return callDeepSeek(prompt);
-    }
-
-    private String generateCET6VersionFallback(String originalContent, Exception e) {
-        log.warn("OpenRouter circuit breaker triggered for generateCET6Version: {}", e.getMessage());
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
+        String prompt = "Please rewrite the following English article to match CET-6 difficulty level. " +
+                "Only return the rewritten text.\n\n" + originalContent;
+        return callOpenAI(prompt);
     }
 
     @Override
-    @CircuitBreaker(name = "openrouter", fallbackMethod = "generateAcademicVersionFallback")
+    @CircuitBreaker(name = "openrouter", fallbackMethod = "fallback")
     public String generateAcademicVersion(String originalContent) {
-        validateInput(originalContent, "原文内容");
-        String prompt = String.format(
-                "Please rewrite the following English article in an academic style. " +
-                        "Use formal language, advanced vocabulary, complex sentence structures, and academic tone. " +
-                        "Include appropriate academic expressions and maintain scholarly rigor. " +
-                        "Return ONLY the rewritten article text, without any explanations or meta-commentary.\n\n" +
-                        "Original article:\n%s",
-                originalContent);
-        return callDeepSeek(prompt);
-    }
-
-    private String generateAcademicVersionFallback(String originalContent, Exception e) {
-        log.warn("OpenRouter circuit breaker triggered for generateAcademicVersion: {}", e.getMessage());
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
+        String prompt = "Please rewrite the following English article in an academic style. " +
+                "Only return the rewritten text.\n\n" + originalContent;
+        return callOpenAI(prompt);
     }
 
     @Override
-    @CircuitBreaker(name = "openrouter", fallbackMethod = "generateChineseParallelVersionFallback")
+    @CircuitBreaker(name = "openrouter", fallbackMethod = "fallback")
     public String generateChineseParallelVersion(String originalContent) {
-        validateInput(originalContent, "原文内容");
-        String prompt = String.format(
-                "Please create a Chinese-English parallel text version of the following English article. " +
-                        "For each paragraph, provide the English text followed by its Chinese translation. " +
-                        "Format: English paragraph, then Chinese paragraph, alternating throughout. " +
-                        "Use clear paragraph breaks to separate English and Chinese sections. " +
-                        "Return ONLY the parallel text, without any explanations or meta-commentary.\n\n" +
-                        "Original article:\n%s",
-                originalContent);
-        return callDeepSeek(prompt);
+        String prompt = "Please create a Chinese-English parallel text version of the following English article. " +
+                "Format: English paragraph, then Chinese paragraph. Only return the parallel text.\n\n" + originalContent;
+        return callOpenAI(prompt);
     }
 
-    private String generateChineseParallelVersionFallback(String originalContent, Exception e) {
-        log.warn("OpenRouter circuit breaker triggered for generateChineseParallelVersion: {}", e.getMessage());
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
+    // Markdown support
+
+    @Override
+    @CircuitBreaker(name = "openrouter", fallbackMethod = "fallback")
+    public String generateCET4VersionMarkdown(String originalMarkdownContent) {
+        String prompt = "Please rewrite the following Markdown article to match CET-4 difficulty level. " +
+                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n" + originalMarkdownContent;
+        return callOpenAI(prompt);
+    }
+
+    @Override
+    @CircuitBreaker(name = "openrouter", fallbackMethod = "fallback")
+    public String generateCET6VersionMarkdown(String originalMarkdownContent) {
+        String prompt = "Please rewrite the following Markdown article to match CET-6 difficulty level. " +
+                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n" + originalMarkdownContent;
+        return callOpenAI(prompt);
+    }
+
+    @Override
+    @CircuitBreaker(name = "openrouter", fallbackMethod = "fallback")
+    public String generateAcademicVersionMarkdown(String originalMarkdownContent) {
+        String prompt = "Please rewrite the following Markdown article in an academic style. " +
+                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n" + originalMarkdownContent;
+        return callOpenAI(prompt);
+    }
+
+    @Override
+    @CircuitBreaker(name = "openrouter", fallbackMethod = "fallback")
+    public String generateChineseParallelVersionMarkdown(String originalMarkdownContent) {
+        String prompt = "Please create a Chinese-English parallel text version of the following Markdown article. " +
+                "Format: English paragraph, then Chinese paragraph. PRESERVE ALL Markdown formatting. Only return the parallel Markdown.\n\n" + originalMarkdownContent;
+        return callOpenAI(prompt);
     }
 
     /**
-     * Input validation for content
+     * Fallback method for circuit breaker
      */
-    private void validateInput(String content, String fieldName) {
-        if (content == null || content.isBlank()) {
-            throw new BusinessException(fieldName + "不能为空");
-        }
-        if (content.length() > 100000) {
-            throw new BusinessException(fieldName + "过长，最多10万字符");
-        }
+    public String fallback(String content, Exception e) {
+        log.error("OpenRouter service failure: {}", e.getMessage(), e);
+        throw new BusinessException("备用 AI 服务暂时不可用，请稍后重试");
     }
 
     /**
-     * 脱敏异常消息，防止敏感信息泄漏
+     * OpenAI compatible interface call
      */
-    private String sanitizeErrorMessage(Exception e) {
-        String msg = e.getMessage();
-        if (msg == null) return "API call failed";
-        // 移除可能的敏感信息（API Key、Authorization、Request ID 等）
-        return msg.replaceAll("(?i)(Bearer|Authorization|X-Api-Key|api[_-]?key).*", "[REDACTED]")
-                  .replaceAll("\"api_key\".*?\"[^\"]*\"", "\"api_key\":\"[REDACTED]\"")
-                  .replaceAll("(?i)request[_-]?id[:\\s=]*[\\w\\-]+", "request_id=[REDACTED]");
-    }
+    private String callOpenAI(String prompt) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(config.getApiKey());
+            
+            // OpenRouter specific headers
+            headers.set("HTTP-Referer", "http://localhost:8080"); 
+            headers.set("X-Title", "English Learning Platform");
 
-    /**
-     * Core method to call OpenRouter DeepSeek API
-     *
-     * @param prompt The prompt to send to DeepSeek
-     * @return Generated content
-     */
-    private String callDeepSeek(String prompt) {
-        int maxRetries = config.getMaxRetries() != null && config.getMaxRetries() > 0
-                ? config.getMaxRetries() : 1;
-        String apiKey = config.getApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new BusinessException("AI 服务未配置，请联系管理员");
-        }
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+            message.put("content", prompt);
 
-        int retries = 0;
-        Exception lastException = null;
+            List<Map<String, Object>> messages = new ArrayList<>();
+            messages.add(message);
 
-        while (retries < maxRetries) {
-            try {
-                // Build request body
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("model", config.getModel());
+            Map<String, Object> body = new HashMap<>();
+            body.put("model", config.getModel());
+            body.put("messages", messages);
 
-                Map<String, String> message = new HashMap<>();
-                message.put("role", "user");
-                message.put("content", prompt);
-                requestBody.put("messages", List.of(message));
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+            
+            log.info("Calling OpenRouter API for prompt generation (Model: {})", config.getModel());
 
-                // Build headers (不在日志中输出 Authorization header)
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                headers.set("Authorization", "Bearer " + apiKey);
-                // 注意：Authorization 不会在下面的日志中输出
+            ResponseEntity<String> response = restTemplate.exchange(
+                    config.getApiUrl(),
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            );
 
-                // Create request entity
-                HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
-
-                log.info("Calling OpenRouter DeepSeek API (attempt {}/{})", retries + 1, maxRetries);
-
-                // Make API call
-                ResponseEntity<String> response = restTemplate.exchange(
-                        config.getApiUrl(),
-                        HttpMethod.POST,
-                        requestEntity,
-                        String.class);
-
-                // Parse response
-                if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                    JsonNode root = objectMapper.readTree(response.getBody());
-                    JsonNode choices = root.get("choices");
-
-                    if (choices != null && choices.isArray() && choices.size() > 0) {
-                        JsonNode firstChoice = choices.get(0);
-                        JsonNode message_node = firstChoice != null ? firstChoice.get("message") : null;
-                        if (message_node != null) {
-                            JsonNode content = message_node.get("content");
-                            if (content != null && !content.isNull() && content.isTextual()) {
-                                String generatedContent = content.asText();
-                                log.info("Successfully generated content ({} characters)", generatedContent.length());
-                                return generatedContent;
-                            }
-                        }
-                    }
-
-                    log.error("Unexpected response structure from OpenRouter API");
-                    throw new BusinessException("AI 服务暂时不可用，请稍后重试");
-                }
-
-                log.error("API call failed with status: {}", response.getStatusCode());
-                throw new BusinessException("AI 服务暂时不可用，请稍后重试");
-
-            } catch (BusinessException e) {
-                // 业务异常不应重试，直接抛出
-                throw e;
-            } catch (Exception e) {
-                lastException = e;
-                retries++;
-                log.error("OpenRouter API call failed (attempt {}/{}): {}", retries, maxRetries,
-                    sanitizeErrorMessage(e), e);
-
-                if (retries < maxRetries) {
-                    try {
-                        // Exponential backoff: 2^retry * 1000ms，最多 30 秒
-                        long waitTime = Math.min((long) Math.pow(2, retries) * 1000, 30000);
-                        log.info("Waiting {}ms before retry...", waitTime);
-                        Thread.sleep(waitTime);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                JsonNode choices = root.path("choices");
+                if (choices.isArray() && choices.size() > 0) {
+                    JsonNode msgNode = choices.get(0).path("message");
+                    if (msgNode.has("content")) {
+                        return msgNode.get("content").asText().trim();
                     }
                 }
             }
+            throw new BusinessException("OpenRouter API returned invalid format or empty response");
+        } catch (Exception e) {
+            log.error("Failed to call OpenRouter API: {}", e.getMessage());
+            throw new BusinessException("备用 AI 服务调用失败: " + e.getMessage());
         }
-
-        log.error("All retry attempts exhausted for OpenRouter API call");
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
-    }
-
-    // ========== Markdown支持的方法实现 ==========
-
-    @Override
-    @CircuitBreaker(name = "openrouter", fallbackMethod = "generateCET4VersionMarkdownFallback")
-    public String generateCET4VersionMarkdown(String originalMarkdownContent) {
-        validateInput(originalMarkdownContent, "Markdown内容");
-        String prompt = String.format(
-                "Please rewrite the following Markdown article to match CET-4 (College English Test Band 4) difficulty level. " +
-                        "CRITICAL REQUIREMENTS - DO NOT MODIFY THESE:\n" +
-                        "1. PRESERVE ALL image references EXACTLY: ![alt text](/api/media/X/download) - DO NOT change the /api/media/X/download URLs\n" +
-                        "2. PRESERVE ALL video references EXACTLY - DO NOT change any media URLs or paths\n" +
-                        "3. PRESERVE ALL LaTeX math formulas EXACTLY: $formula$ and $$formula$$ - DO NOT modify mathematical expressions\n" +
-                        "4. PRESERVE ALL Markdown formatting: headers (#), lists (-), links, etc.\n" +
-                        "REWRITING REQUIREMENTS:\n" +
-                        "5. Use simpler vocabulary and sentence structures suitable for intermediate English learners\n" +
-                        "6. Keep the same meaning and main ideas, but make it easier to understand\n" +
-                        "7. Only rewrite the text content, keep all syntax, formulas, and media references intact\n" +
-                        "8. Return ONLY the rewritten Markdown, without any explanations\n\n" +
-                        "Original Markdown article:\n%s",
-                originalMarkdownContent);
-        return callDeepSeek(prompt);
-    }
-
-    private String generateCET4VersionMarkdownFallback(String originalMarkdownContent, Exception e) {
-        log.warn("OpenRouter circuit breaker triggered for generateCET4VersionMarkdown: {}", e.getMessage());
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
-    }
-
-    @Override
-    @CircuitBreaker(name = "openrouter", fallbackMethod = "generateCET6VersionMarkdownFallback")
-    public String generateCET6VersionMarkdown(String originalMarkdownContent) {
-        validateInput(originalMarkdownContent, "Markdown内容");
-        String prompt = String.format(
-                "Please rewrite the following Markdown article to match CET-6 (College English Test Band 6) difficulty level. " +
-                        "CRITICAL REQUIREMENTS - DO NOT MODIFY THESE:\n" +
-                        "1. PRESERVE ALL image references EXACTLY: ![alt text](/api/media/X/download) - DO NOT change the /api/media/X/download URLs\n" +
-                        "2. PRESERVE ALL video references EXACTLY - DO NOT change any media URLs or paths\n" +
-                        "3. PRESERVE ALL LaTeX math formulas EXACTLY: $formula$ and $$formula$$ - DO NOT modify mathematical expressions\n" +
-                        "4. PRESERVE ALL Markdown formatting: headers (#), lists (-), links, etc.\n" +
-                        "REWRITING REQUIREMENTS:\n" +
-                        "5. Use vocabulary and sentence structures suitable for upper-intermediate English learners\n" +
-                        "6. Keep the same meaning and main ideas, but adjust the complexity to CET-6 level\n" +
-                        "7. Only rewrite the text content, keep all syntax, formulas, and media references intact\n" +
-                        "8. Return ONLY the rewritten Markdown, without any explanations\n\n" +
-                        "Original Markdown article:\n%s",
-                originalMarkdownContent);
-        return callDeepSeek(prompt);
-    }
-
-    private String generateCET6VersionMarkdownFallback(String originalMarkdownContent, Exception e) {
-        log.warn("OpenRouter circuit breaker triggered for generateCET6VersionMarkdown: {}", e.getMessage());
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
-    }
-
-    @Override
-    @CircuitBreaker(name = "openrouter", fallbackMethod = "generateAcademicVersionMarkdownFallback")
-    public String generateAcademicVersionMarkdown(String originalMarkdownContent) {
-        validateInput(originalMarkdownContent, "Markdown内容");
-        String prompt = String.format(
-                "Please rewrite the following Markdown article in an academic style. " +
-                        "CRITICAL REQUIREMENTS - DO NOT MODIFY THESE:\n" +
-                        "1. PRESERVE ALL image references EXACTLY: ![alt text](/api/media/X/download) - DO NOT change the /api/media/X/download URLs\n" +
-                        "2. PRESERVE ALL video references EXACTLY - DO NOT change any media URLs or paths\n" +
-                        "3. PRESERVE ALL LaTeX math formulas EXACTLY: $formula$ and $$formula$$ - DO NOT modify mathematical expressions\n" +
-                        "4. PRESERVE ALL Markdown formatting: headers (#), lists (-), links, etc.\n" +
-                        "REWRITING REQUIREMENTS:\n" +
-                        "5. Use formal language, advanced vocabulary, complex sentence structures, and academic tone\n" +
-                        "6. Include appropriate academic expressions and maintain scholarly rigor\n" +
-                        "7. Only rewrite the text content, keep all syntax, formulas, and media references intact\n" +
-                        "8. Return ONLY the rewritten Markdown, without any explanations\n\n" +
-                        "Original Markdown article:\n%s",
-                originalMarkdownContent);
-        return callDeepSeek(prompt);
-    }
-
-    private String generateAcademicVersionMarkdownFallback(String originalMarkdownContent, Exception e) {
-        log.warn("OpenRouter circuit breaker triggered for generateAcademicVersionMarkdown: {}", e.getMessage());
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
-    }
-
-    @Override
-    @CircuitBreaker(name = "openrouter", fallbackMethod = "generateChineseParallelVersionMarkdownFallback")
-    public String generateChineseParallelVersionMarkdown(String originalMarkdownContent) {
-        validateInput(originalMarkdownContent, "Markdown内容");
-        String prompt = String.format(
-                "Please create a Chinese-English parallel text version of the following Markdown article. " +
-                        "CRITICAL REQUIREMENTS - DO NOT MODIFY THESE:\n" +
-                        "1. PRESERVE ALL image references EXACTLY: ![alt text](/api/media/X/download) - DO NOT change the /api/media/X/download URLs\n" +
-                        "2. PRESERVE ALL video references EXACTLY - DO NOT change any media URLs or paths\n" +
-                        "3. PRESERVE ALL LaTeX math formulas EXACTLY: $formula$ and $$formula$$ - DO NOT modify mathematical expressions\n" +
-                        "4. PRESERVE ALL Markdown formatting: headers (#), lists (-), links, etc.\n" +
-                        "TRANSLATION REQUIREMENTS:\n" +
-                        "5. For each paragraph, provide the English text followed by its Chinese translation\n" +
-                        "6. Format: English paragraph, then Chinese paragraph, alternating throughout\n" +
-                        "7. Translate only the text content, keep all syntax, formulas, and media references intact\n" +
-                        "8. Use clear paragraph breaks to separate English and Chinese sections\n" +
-                        "9. Return ONLY the parallel Markdown text, without any explanations\n\n" +
-                        "Original Markdown article:\n%s",
-                originalMarkdownContent);
-        return callDeepSeek(prompt);
-    }
-
-    private String generateChineseParallelVersionMarkdownFallback(String originalMarkdownContent, Exception e) {
-        log.warn("OpenRouter circuit breaker triggered for generateChineseParallelVersionMarkdown: {}", e.getMessage());
-        throw new BusinessException("AI 服务暂时不可用，请稍后重试");
     }
 }

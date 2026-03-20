@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.english.entity.Text;
 import com.english.mapper.TextMapper;
 import com.english.service.ArticleVersionService;
+import com.english.service.HiAgentService;
 import com.english.service.OpenRouterService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
     @Autowired
     private TextMapper textMapper;
+
+    @Autowired
+    private HiAgentService hiAgentService;
 
     @Autowired
     private OpenRouterService openRouterService;
@@ -95,7 +99,12 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     log.info("Generating CET-4 version for article {}", textId);
                     try {
-                        return openRouterService.generateCET4Version(originalContent);
+                        try {
+                            return hiAgentService.generateCET4Version(originalContent);
+                        } catch (Exception ex) {
+                            log.warn("HiAgent failed to generate CET-4 version for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
+                            return openRouterService.generateCET4Version(originalContent);
+                        }
                     } catch (Exception e) {
                         log.error("Failed to generate CET-4 version for article {}", textId, e);
                         return null;
@@ -118,7 +127,12 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     log.info("Generating CET-6 version for article {}", textId);
                     try {
-                        return openRouterService.generateCET6Version(originalContent);
+                        try {
+                            return hiAgentService.generateCET6Version(originalContent);
+                        } catch (Exception ex) {
+                            log.warn("HiAgent failed to generate CET-6 version for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
+                            return openRouterService.generateCET6Version(originalContent);
+                        }
                     } catch (Exception e) {
                         log.error("Failed to generate CET-6 version for article {}", textId, e);
                         return null;
@@ -141,7 +155,12 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     log.info("Generating Academic version for article {}", textId);
                     try {
-                        return openRouterService.generateAcademicVersion(originalContent);
+                        try {
+                            return hiAgentService.generateAcademicVersion(originalContent);
+                        } catch (Exception ex) {
+                            log.warn("HiAgent failed to generate Academic version for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
+                            return openRouterService.generateAcademicVersion(originalContent);
+                        }
                     } catch (Exception e) {
                         log.error("Failed to generate Academic version for article {}", textId, e);
                         return null;
@@ -164,7 +183,12 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     log.info("Generating Chinese Parallel version for article {}", textId);
                     try {
-                        return openRouterService.generateChineseParallelVersion(originalContent);
+                        try {
+                            return hiAgentService.generateChineseParallelVersion(originalContent);
+                        } catch (Exception ex) {
+                            log.warn("HiAgent failed to generate Chinese Parallel version for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
+                            return openRouterService.generateChineseParallelVersion(originalContent);
+                        }
                     } catch (Exception e) {
                         log.error("Failed to generate Chinese Parallel version for article {}", textId, e);
                         return null;
@@ -278,7 +302,12 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     log.info("Generating CET-4 Markdown version for article {}", textId);
                     try {
-                        return openRouterService.generateCET4VersionMarkdown(originalMarkdownContent);
+                        try {
+                            return hiAgentService.generateCET4VersionMarkdown(originalMarkdownContent);
+                        } catch (Exception ex) {
+                            log.warn("HiAgent failed to generate CET-4 Markdown for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
+                            return openRouterService.generateCET4VersionMarkdown(originalMarkdownContent);
+                        }
                     } catch (Exception e) {
                         log.error("Failed to generate CET-4 Markdown version for article {}", textId, e);
                         return null;
@@ -301,7 +330,12 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     log.info("Generating CET-6 Markdown version for article {}", textId);
                     try {
-                        return openRouterService.generateCET6VersionMarkdown(originalMarkdownContent);
+                        try {
+                            return hiAgentService.generateCET6VersionMarkdown(originalMarkdownContent);
+                        } catch (Exception ex) {
+                            log.warn("HiAgent failed to generate CET-6 Markdown for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
+                            return openRouterService.generateCET6VersionMarkdown(originalMarkdownContent);
+                        }
                     } catch (Exception e) {
                         log.error("Failed to generate CET-6 Markdown version for article {}", textId, e);
                         return null;
@@ -324,7 +358,12 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     log.info("Generating Academic Markdown version for article {}", textId);
                     try {
-                        return openRouterService.generateAcademicVersionMarkdown(originalMarkdownContent);
+                        try {
+                            return hiAgentService.generateAcademicVersionMarkdown(originalMarkdownContent);
+                        } catch (Exception ex) {
+                            log.warn("HiAgent failed to generate Academic Markdown for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
+                            return openRouterService.generateAcademicVersionMarkdown(originalMarkdownContent);
+                        }
                     } catch (Exception e) {
                         log.error("Failed to generate Academic Markdown version for article {}", textId, e);
                         return null;
@@ -347,7 +386,12 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     log.info("Generating Chinese Parallel Markdown version for article {}", textId);
                     try {
-                        return openRouterService.generateChineseParallelVersionMarkdown(originalMarkdownContent);
+                        try {
+                            return hiAgentService.generateChineseParallelVersionMarkdown(originalMarkdownContent);
+                        } catch (Exception ex) {
+                            log.warn("HiAgent failed to generate Chinese Parallel Markdown for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
+                            return openRouterService.generateChineseParallelVersionMarkdown(originalMarkdownContent);
+                        }
                     } catch (Exception e) {
                         log.error("Failed to generate Chinese Parallel Markdown version for article {}", textId, e);
                         return null;

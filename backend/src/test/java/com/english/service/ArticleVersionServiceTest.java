@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.english.entity.Text;
 import com.english.mapper.TextMapper;
 import com.english.service.impl.ArticleVersionServiceImpl;
+import com.english.service.HiAgentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,9 @@ class ArticleVersionServiceTest {
 
     @Mock
     private TextMapper textMapper;
+
+    @Mock
+    private HiAgentService hiAgentService;
 
     @Mock
     private OpenRouterService openRouterService;
