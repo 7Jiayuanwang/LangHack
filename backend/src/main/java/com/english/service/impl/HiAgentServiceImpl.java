@@ -14,9 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 
@@ -32,29 +34,59 @@ public class HiAgentServiceImpl implements HiAgentService {
 
     private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private CloseableHttpClient httpClient;
+    private PoolingHttpClientConnectionManager connManager;
 
     @PostConstruct
     public void init() {
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            log.warn("HiAgent API key not configured. Set HIAGENT_API_KEY environment variable. Service will be unavailable.");
+        }
+        if (config.getApiUrl() == null || config.getApiUrl().isBlank()) {
+            log.warn("HiAgent API URL not configured. Set HIAGENT_API_URL environment variable.");
+        }
+
+        int timeoutMs = config.getTimeout() != null ? config.getTimeout() : 60000;
+
         try {
-            PoolingHttpClientConnectionManager connManager = new PoolingHttpClientConnectionManager();
+            connManager = new PoolingHttpClientConnectionManager();
             connManager.setMaxTotal(50);
             connManager.setDefaultMaxPerRoute(10);
 
-            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(
-                    HttpClientBuilder.create()
-                            .setConnectionManager(connManager)
-                            .build());
-            factory.setConnectTimeout(config.getTimeout());
-            factory.setReadTimeout(config.getTimeout());
-            factory.setConnectionRequestTimeout(config.getTimeout());
+            httpClient = HttpClientBuilder.create()
+                    .setConnectionManager(connManager)
+                    .build();
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+            factory.setConnectTimeout(timeoutMs);
+            factory.setReadTimeout(timeoutMs);
+            factory.setConnectionRequestTimeout(timeoutMs);
             restTemplate = new RestTemplate(factory);
         } catch (Exception e) {
             log.warn("Failed to initialize HTTP client with connection pooling, falling back to default: {}",
                     e.getMessage());
             HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
-            factory.setConnectTimeout(config.getTimeout());
-            factory.setReadTimeout(config.getTimeout());
+            factory.setConnectTimeout(timeoutMs);
+            factory.setReadTimeout(timeoutMs);
+            factory.setConnectionRequestTimeout(timeoutMs);
             restTemplate = new RestTemplate(factory);
+        }
+    }
+
+    @PreDestroy
+    public void destroy() {
+        if (httpClient != null) {
+            try {
+                httpClient.close();
+            } catch (Exception e) {
+                log.warn("Error closing HTTP client: {}", e.getMessage());
+            }
+        }
+        if (connManager != null) {
+            try {
+                connManager.close();
+            } catch (Exception e) {
+                log.warn("Error closing connection manager: {}", e.getMessage());
+            }
         }
     }
 
@@ -125,10 +157,18 @@ public class HiAgentServiceImpl implements HiAgentService {
     }
 
     /**
-     * Fallback method for circuit breaker
+     * Fallback method for circuit breaker.
+     * Transparently re-throws BusinessException; wraps other exceptions.
      */
     public String fallback(String content, Exception e) {
-        log.error("HiAgent service failure: {}", e.getMessage(), e);
+        if (e instanceof BusinessException) {
+            throw (BusinessException) e;
+        }
+        if (e instanceof io.github.resilience4j.circuitbreaker.CallNotPermittedException) {
+            log.warn("HiAgent circuit breaker is OPEN, rejecting request");
+        } else {
+            log.error("HiAgent service failure: {}", e.getMessage(), e);
+        }
         throw new BusinessException("AI 服务暂时不可用，请稍后重试");
     }
 
@@ -136,91 +176,109 @@ public class HiAgentServiceImpl implements HiAgentService {
      * Internal implementation for HiAgent call (Two-step process per PDF)
      */
     private String callHiAgentInternal(String prompt) {
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            throw new BusinessException("AI 服务未配置 API Key");
+        }
         try {
             // Step 1: Create Conversation
             String conversationId = createConversation();
-            
+
             // Step 2: Chat Query
             return chatQuery(conversationId, prompt);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("HiAgent call failed: {}", e.getMessage(), e);
-            throw new BusinessException("AI 服务调用失败: " + e.getMessage());
+            throw new BusinessException("AI 服务调用失败，请稍后重试");
         }
     }
 
     private String createConversation() throws Exception {
         String url = config.getApiUrl() + "/create_conversation";
-        
+
         HttpHeaders headers = createBaseHeaders();
-        
+
         Map<String, Object> body = new HashMap<>();
         body.put("UserID", config.getUserId());
         body.put("Inputs", new HashMap<String, String>()); // Optional but recommended
-        
+
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-        log.info("Creating HiAgent conversation at {}", url);
-        
+        log.debug("Creating HiAgent conversation at {}", url);
+
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
-        
+
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
             throw new BusinessException("无法创建 AI 会话: " + response.getStatusCode());
         }
-        
+
         JsonNode root = objectMapper.readTree(response.getBody());
         JsonNode conversation = root.get("Conversation");
         if (conversation == null || conversation.get("AppConversationID") == null) {
-            log.error("Invalid response from create_conversation: {}", response.getBody());
+            String bodyPreview = truncateForLog(response.getBody());
+            log.error("Invalid response from create_conversation: {}", bodyPreview);
             throw new BusinessException("AI 会话创建失败：返回数据格式不正确");
         }
-        
-        return conversation.get("AppConversationID").asText();
+
+        String conversationId = conversation.get("AppConversationID").asText();
+        if (conversationId == null || conversationId.isBlank() || "null".equals(conversationId)) {
+            throw new BusinessException("AI 会话创建失败：会话ID为空");
+        }
+
+        return conversationId;
     }
 
     private String chatQuery(String conversationId, String prompt) throws Exception {
         String url = config.getApiUrl() + "/chat_query_v2";
-        
+
         HttpHeaders headers = createBaseHeaders();
-        
+
         Map<String, Object> body = new HashMap<>();
         body.put("AppConversationID", conversationId);
         body.put("Query", prompt);
         body.put("UserID", config.getUserId());
         body.put("ResponseMode", "blocking"); // Blocking mode returns result directly
-        
+
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-        log.info("Sending HiAgent query for conversation {}", conversationId);
-        
+        log.debug("Sending HiAgent query for conversation {}", conversationId);
+
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
-        
+
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
             throw new BusinessException("AI 服务响应失败: " + response.getStatusCode());
         }
-        
+
         JsonNode root = objectMapper.readTree(response.getBody());
-        
+
         // Blocking mode response structure should contain "answer" according to PDF example
         if (root.has("answer")) {
             return root.get("answer").asText();
         } else if (root.has("Answer")) {
             return root.get("Answer").asText();
         }
-        
-        log.error("Unexpected HiAgent response structure: {}", response.getBody());
+
+        String bodyPreview = truncateForLog(response.getBody());
+        log.error("Unexpected HiAgent response structure: {}", bodyPreview);
         throw new BusinessException("AI 服务返回结果解析失败");
     }
 
     private HttpHeaders createBaseHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        
-        // CRITICAL: Documentation specifies header name as 'Apikey' (Case sensitive or documented as such)
+
+        // Documentation specifies header name as 'Apikey'
         headers.set("Apikey", config.getApiKey());
-        
-        // CRITICAL: Include AppID to resolve Gateway error "未获取到AppID"
-        // Trying common header names for AppID in such gateways
+
+        // Include AppID to resolve Gateway error
         headers.set("Appid", config.getAppId());
-        headers.set("X-App-Id", config.getAppId());
-        
+
         return headers;
+    }
+
+    /**
+     * Truncate response body for safe logging (avoid leaking sensitive data)
+     */
+    private String truncateForLog(String body) {
+        if (body == null) return "null";
+        return body.length() > 200 ? body.substring(0, 200) + "...(truncated)" : body;
     }
 }

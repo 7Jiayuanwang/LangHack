@@ -1,6 +1,6 @@
 app:
   cors:
-    allowed-origins: http://localhost:3000,http://localhost:5173,http://192.168.203.143:3000
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
 
 server:
@@ -114,30 +114,21 @@ mybatis-plus:
 
 hiagent:
   #此处禁止删除
-  # AI calling mode:
-  # - native: Use HiAgent native two-step API (CreateConversation + ChatQueryV2)
-  # - openai: Use original OpenAI-compatible API flow (Not recommended for HiAgent)
-  mode: native
-  
-  # HiAgent Native API Settings
-  # URL: https://agent.imau.edu.cn:32300/api/proxy/api/v1
-  api-key: d6uds516rdh495eqgveg
-  api-url: https://agent.imau.edu.cn:32300/api/proxy/api/v1
-  app-id: d5q4isp6rdh6j8crcu5g
-  user-id: LangHack_System
-  
+  # HiAgent Native API Settings (two-step: CreateConversation + ChatQueryV2)
+  # CRITICAL: Must be provided via environment variable (no real key in defaults)
+  api-key: ${HIAGENT_API_KEY:}
+  api-url: ${HIAGENT_API_URL:https://agent.imau.edu.cn:32300/api/proxy/api/v1}
+  app-id: ${HIAGENT_APP_ID:}
+  user-id: ${HIAGENT_USER_ID:LangHack_System}
   timeout: 60000
-  max-retries: 3
 
 openrouter:
-  # OpenAI-compatible API flow
-  mode: openai
-  api-url: https://openrouter.ai/api/v1/chat/completions
-  # Use the user's OpenRouter key if they have one, or fallback to the deepseek equivalent if applicable
-  api-key: d6tq0316rdh495eqgi10
-  model: tngtech/deepseek-r1t2-chimera:free
+  # OpenAI-compatible API flow (fallback AI provider)
+  api-url: ${OPENROUTER_API_URL:https://openrouter.ai/api/v1/chat/completions}
+  # CRITICAL: Must be provided via environment variable (no real key in defaults)
+  api-key: ${OPENROUTER_API_KEY:}
+  model: ${OPENROUTER_MODEL:tngtech/deepseek-r1t2-chimera:free}
   timeout: 60000
-  max-retries: 3
 
 
 # Tencent Cloud API Configuration
@@ -179,11 +170,20 @@ backup:
 resilience4j:
   circuitbreaker:
     instances:
+      hiagent:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        ignore-exceptions:
+          - com.english.exception.BusinessException
       openrouter:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
         sliding-window-size: 10
         minimum-number-of-calls: 5
+        ignore-exceptions:
+          - com.english.exception.BusinessException
       tencent-translate:
         failure-rate-threshold: 60
         wait-duration-in-open-state: 20s

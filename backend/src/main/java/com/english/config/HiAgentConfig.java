@@ -33,17 +33,7 @@ public class HiAgentConfig {
     private String userId;
 
     /**
-     * Calling mode: native (HiAgent) or openai (Standard)
-     */
-    private String mode;
-
-    /**
      * Request timeout in milliseconds
      */
     private Integer timeout = 60000;
-
-    /**
-     * Maximum retry attempts
-     */
-    private Integer maxRetries = 3;
 }

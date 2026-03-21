@@ -1,0 +1,298 @@
+package com.english.service;
+
+import com.english.config.HiAgentConfig;
+import com.english.exception.BusinessException;
+import com.english.service.impl.HiAgentServiceImpl;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestTemplate;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * Unit tests for HiAgentServiceImpl.
+ *
+ * Tests the two-step HiAgent API flow (CreateConversation → ChatQueryV2),
+ * fallback behavior, API key validation, and response parsing.
+ */
+@ExtendWith(MockitoExtension.class)
+class HiAgentServiceTest {
+
+    @InjectMocks
+    private HiAgentServiceImpl hiAgentService;
+
+    @Mock
+    private HiAgentConfig config;
+
+    @Mock
+    private RestTemplate restTemplate;
+
+    @BeforeEach
+    void setUp() {
+        // Inject mock RestTemplate (bypasses @PostConstruct init)
+        ReflectionTestUtils.setField(hiAgentService, "restTemplate", restTemplate);
+    }
+
+    // ==================== API Key Validation ====================
+
+    @Test
+    void generateCET4Version_noApiKey_throwsBusinessException() {
+        when(config.getApiKey()).thenReturn(null);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> hiAgentService.generateCET4Version("test content"));
+        assertTrue(ex.getMessage().contains("API Key"));
+    }
+
+    @Test
+    void generateCET4Version_blankApiKey_throwsBusinessException() {
+        when(config.getApiKey()).thenReturn("   ");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> hiAgentService.generateCET4Version("test content"));
+        assertTrue(ex.getMessage().contains("API Key"));
+    }
+
+    // ==================== Full Flow Success ====================
+
+    @Test
+    void generateCET4Version_success_returnsChatAnswer() {
+        // Arrange
+        when(config.getApiKey()).thenReturn("test-key");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getAppId()).thenReturn("test-app");
+        when(config.getUserId()).thenReturn("test-user");
+
+        // Step 1: createConversation returns valid response
+        String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-123\"}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(createResponse, HttpStatus.OK));
+
+        // Step 2: chatQuery returns answer
+        String chatResponse = "{\"answer\":\"Rewritten CET-4 content\"}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/chat_query_v2"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(chatResponse, HttpStatus.OK));
+
+        // Act
+        String result = hiAgentService.generateCET4Version("original content");
+
+        // Assert
+        assertEquals("Rewritten CET-4 content", result);
+        verify(restTemplate, times(2)).exchange(anyString(), eq(HttpMethod.POST),
+                any(HttpEntity.class), eq(String.class));
+    }
+
+    @Test
+    void generateCET6Version_success_answerCapitalKey() {
+        // Arrange - test "Answer" (capital A) response key
+        when(config.getApiKey()).thenReturn("test-key");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getAppId()).thenReturn("test-app");
+        when(config.getUserId()).thenReturn("test-user");
+
+        String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-456\"}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(createResponse, HttpStatus.OK));
+
+        String chatResponse = "{\"Answer\":\"CET-6 rewritten text\"}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/chat_query_v2"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(chatResponse, HttpStatus.OK));
+
+        // Act
+        String result = hiAgentService.generateCET6Version("original content");
+
+        // Assert
+        assertEquals("CET-6 rewritten text", result);
+    }
+
+    // ==================== CreateConversation Failures ====================
+
+    @Test
+    void generateAcademicVersion_createConversationFails_throwsBusinessException() {
+        when(config.getApiKey()).thenReturn("test-key");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getAppId()).thenReturn("test-app");
+        when(config.getUserId()).thenReturn("test-user");
+
+        // createConversation returns non-OK status
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR));
+
+        assertThrows(BusinessException.class,
+                () -> hiAgentService.generateAcademicVersion("test content"));
+    }
+
+    @Test
+    void generateAcademicVersion_missingConversationId_throwsBusinessException() {
+        when(config.getApiKey()).thenReturn("test-key");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getAppId()).thenReturn("test-app");
+        when(config.getUserId()).thenReturn("test-user");
+
+        // Response missing Conversation.AppConversationID
+        String badResponse = "{\"Conversation\":{}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(badResponse, HttpStatus.OK));
+
+        assertThrows(BusinessException.class,
+                () -> hiAgentService.generateAcademicVersion("test content"));
+    }
+
+    @Test
+    void generateAcademicVersion_nullConversationId_throwsBusinessException() {
+        when(config.getApiKey()).thenReturn("test-key");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getAppId()).thenReturn("test-app");
+        when(config.getUserId()).thenReturn("test-user");
+
+        // AppConversationID is "null" string
+        String badResponse = "{\"Conversation\":{\"AppConversationID\":null}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(badResponse, HttpStatus.OK));
+
+        assertThrows(BusinessException.class,
+                () -> hiAgentService.generateAcademicVersion("test content"));
+    }
+
+    // ==================== ChatQuery Failures ====================
+
+    @Test
+    void generateChineseParallelVersion_chatQueryNoAnswer_throwsBusinessException() {
+        when(config.getApiKey()).thenReturn("test-key");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getAppId()).thenReturn("test-app");
+        when(config.getUserId()).thenReturn("test-user");
+
+        // Step 1 succeeds
+        String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-789\"}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(createResponse, HttpStatus.OK));
+
+        // Step 2: response has neither "answer" nor "Answer"
+        String chatResponse = "{\"status\":\"ok\",\"data\":{}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/chat_query_v2"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(chatResponse, HttpStatus.OK));
+
+        assertThrows(BusinessException.class,
+                () -> hiAgentService.generateChineseParallelVersion("test content"));
+    }
+
+    @Test
+    void generateChineseParallelVersion_chatQueryFailsHttp_throwsBusinessException() {
+        when(config.getApiKey()).thenReturn("test-key");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getAppId()).thenReturn("test-app");
+        when(config.getUserId()).thenReturn("test-user");
+
+        // Step 1 succeeds
+        String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-789\"}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(createResponse, HttpStatus.OK));
+
+        // Step 2 returns 500
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/chat_query_v2"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR));
+
+        assertThrows(BusinessException.class,
+                () -> hiAgentService.generateChineseParallelVersion("test content"));
+    }
+
+    // ==================== Fallback ====================
+
+    @Test
+    void fallback_businessException_rethrown() {
+        BusinessException original = new BusinessException("业务异常");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> hiAgentService.fallback("content", original));
+        assertSame(original, ex);
+    }
+
+    @Test
+    void fallback_callNotPermitted_throwsBusinessException() {
+        io.github.resilience4j.circuitbreaker.CallNotPermittedException cnpe =
+                mock(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> hiAgentService.fallback("content", cnpe));
+        assertTrue(ex.getMessage().contains("暂时不可用"));
+    }
+
+    @Test
+    void fallback_genericException_wrapsInBusinessException() {
+        RuntimeException original = new RuntimeException("connection timeout");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> hiAgentService.fallback("content", original));
+        assertTrue(ex.getMessage().contains("暂时不可用"));
+    }
+
+    // ==================== Markdown versions ====================
+
+    @Test
+    void generateCET4VersionMarkdown_success() {
+        when(config.getApiKey()).thenReturn("test-key");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getAppId()).thenReturn("test-app");
+        when(config.getUserId()).thenReturn("test-user");
+
+        String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-md\"}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(createResponse, HttpStatus.OK));
+
+        String chatResponse = "{\"answer\":\"# CET-4 Markdown\"}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/chat_query_v2"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(chatResponse, HttpStatus.OK));
+
+        String result = hiAgentService.generateCET4VersionMarkdown("# Original");
+        assertEquals("# CET-4 Markdown", result);
+    }
+
+    // ==================== Destroy ====================
+
+    @Test
+    void destroy_nullClients_noException() {
+        // When httpClient and connManager are null (not initialized), destroy should not throw
+        ReflectionTestUtils.setField(hiAgentService, "httpClient", null);
+        ReflectionTestUtils.setField(hiAgentService, "connManager", null);
+
+        assertDoesNotThrow(() -> hiAgentService.destroy());
+    }
+}

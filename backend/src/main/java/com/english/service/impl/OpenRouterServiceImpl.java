@@ -14,11 +14,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 
@@ -34,29 +36,56 @@ public class OpenRouterServiceImpl implements OpenRouterService {
 
     private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private CloseableHttpClient httpClient;
+    private PoolingHttpClientConnectionManager connManager;
 
     @PostConstruct
     public void init() {
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            log.warn("OpenRouter API key not configured. Set OPENROUTER_API_KEY environment variable. Service will be unavailable.");
+        }
+
+        int timeoutMs = config.getTimeout() != null ? config.getTimeout() : 60000;
+
         try {
-            PoolingHttpClientConnectionManager connManager = new PoolingHttpClientConnectionManager();
+            connManager = new PoolingHttpClientConnectionManager();
             connManager.setMaxTotal(50);
             connManager.setDefaultMaxPerRoute(10);
 
-            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(
-                    HttpClientBuilder.create()
-                            .setConnectionManager(connManager)
-                            .build());
-            factory.setConnectTimeout(config.getTimeout());
-            factory.setReadTimeout(config.getTimeout());
-            factory.setConnectionRequestTimeout(config.getTimeout());
+            httpClient = HttpClientBuilder.create()
+                    .setConnectionManager(connManager)
+                    .build();
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+            factory.setConnectTimeout(timeoutMs);
+            factory.setReadTimeout(timeoutMs);
+            factory.setConnectionRequestTimeout(timeoutMs);
             restTemplate = new RestTemplate(factory);
         } catch (Exception e) {
             log.warn("Failed to initialize HTTP client with connection pooling, falling back to default: {}",
                     e.getMessage());
             HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
-            factory.setConnectTimeout(config.getTimeout());
-            factory.setReadTimeout(config.getTimeout());
+            factory.setConnectTimeout(timeoutMs);
+            factory.setReadTimeout(timeoutMs);
+            factory.setConnectionRequestTimeout(timeoutMs);
             restTemplate = new RestTemplate(factory);
+        }
+    }
+
+    @PreDestroy
+    public void destroy() {
+        if (httpClient != null) {
+            try {
+                httpClient.close();
+            } catch (Exception e) {
+                log.warn("Error closing HTTP client: {}", e.getMessage());
+            }
+        }
+        if (connManager != null) {
+            try {
+                connManager.close();
+            } catch (Exception e) {
+                log.warn("Error closing connection manager: {}", e.getMessage());
+            }
         }
     }
 
@@ -127,10 +156,18 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     }
 
     /**
-     * Fallback method for circuit breaker
+     * Fallback method for circuit breaker.
+     * Transparently re-throws BusinessException; wraps other exceptions.
      */
     public String fallback(String content, Exception e) {
-        log.error("OpenRouter service failure: {}", e.getMessage(), e);
+        if (e instanceof BusinessException) {
+            throw (BusinessException) e;
+        }
+        if (e instanceof io.github.resilience4j.circuitbreaker.CallNotPermittedException) {
+            log.warn("OpenRouter circuit breaker is OPEN, rejecting request");
+        } else {
+            log.error("OpenRouter service failure: {}", e.getMessage(), e);
+        }
         throw new BusinessException("备用 AI 服务暂时不可用，请稍后重试");
     }
 
@@ -138,13 +175,16 @@ public class OpenRouterServiceImpl implements OpenRouterService {
      * OpenAI compatible interface call
      */
     private String callOpenAI(String prompt) {
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            throw new BusinessException("备用 AI 服务未配置 API Key");
+        }
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(config.getApiKey());
-            
+
             // OpenRouter specific headers
-            headers.set("HTTP-Referer", "http://localhost:8080"); 
+            headers.set("HTTP-Referer", "http://localhost:8080");
             headers.set("X-Title", "English Learning Platform");
 
             Map<String, Object> message = new HashMap<>();
@@ -159,7 +199,7 @@ public class OpenRouterServiceImpl implements OpenRouterService {
             body.put("messages", messages);
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-            
+
             log.info("Calling OpenRouter API for prompt generation (Model: {})", config.getModel());
 
             ResponseEntity<String> response = restTemplate.exchange(
@@ -179,10 +219,12 @@ public class OpenRouterServiceImpl implements OpenRouterService {
                     }
                 }
             }
-            throw new BusinessException("OpenRouter API returned invalid format or empty response");
+            throw new BusinessException("备用 AI 服务返回格式无效或响应为空");
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("Failed to call OpenRouter API: {}", e.getMessage());
-            throw new BusinessException("备用 AI 服务调用失败: " + e.getMessage());
+            log.error("Failed to call OpenRouter API: {}", e.getMessage(), e);
+            throw new BusinessException("备用 AI 服务调用失败，请稍后重试");
         }
     }
 }
