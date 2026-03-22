@@ -74,7 +74,7 @@ public class MonitoringController {
     public SseEmitter streamRealTimeMetrics(@RequestParam String token) {
         // Manual token validation for SSE endpoint
         try {
-            String username = jwtUtil.extractUsername(token);
+            String username = jwtUtil.getUsernameFromToken(token);
             if (username == null || !jwtUtil.validateToken(token, username)) {
                 SseEmitter emitter = new SseEmitter(0L);
                 emitter.completeWithError(new SecurityException("Invalid token"));

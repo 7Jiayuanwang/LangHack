@@ -104,11 +104,11 @@ public class TencentTranslateService {
             throw new BusinessException("翻译请求被中断，请重试");
         }
 
+        long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+        String user = AiCallMetricsService.getCurrentUser();
+
         try {
             logger.debug("开始翻译 - 源语言: {}, 目标语言: {}, 文本长度: {}", source, target, text.length());
-
-            long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
-            String user = AiCallMetricsService.getCurrentUser();
 
             // 验证必要参数
             if (source == null || source.isEmpty()) {

@@ -88,10 +88,10 @@ public class TencentAsrService {
             lang = "zh";
         }
 
-        try {
-            long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
-            String user = AiCallMetricsService.getCurrentUser();
+        long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+        String user = AiCallMetricsService.getCurrentUser();
 
+        try {
             SentenceRecognitionRequest req = new SentenceRecognitionRequest();
             req.setSourceType(1L);    // 1: 数据包传输
             req.setVoiceFormat(format);
