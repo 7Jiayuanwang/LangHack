@@ -290,6 +290,25 @@ public class ClassController {
                 }
             }
 
+            // 教师只能查看自己管理的班级中的学生
+            if ("ROLE_TEACHER".equals(authority)) {
+                Long teacherId = getCurrentUserId(authentication);
+                List<Class> teacherClasses = classService.getClassesByTeacherId(teacherId);
+                List<Class> studentClasses = classService.getClassesByStudentId(studentId);
+                if (studentClasses != null && teacherClasses != null) {
+                    // 过滤：只返回教师管理的班级中该学生的班级
+                    java.util.Set<Long> teacherClassIds = teacherClasses.stream()
+                            .map(Class::getId).collect(java.util.stream.Collectors.toSet());
+                    studentClasses = studentClasses.stream()
+                            .filter(c -> teacherClassIds.contains(c.getId()))
+                            .collect(java.util.stream.Collectors.toList());
+                    if (studentClasses.isEmpty()) {
+                        return Result.error("该学生不在您管理的班级中");
+                    }
+                    return Result.success(studentClasses);
+                }
+            }
+
             List<Class> classes = classService.getClassesByStudentId(studentId);
             return Result.success(classes);
         } catch (Exception e) {

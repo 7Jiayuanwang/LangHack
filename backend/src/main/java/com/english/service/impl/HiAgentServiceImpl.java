@@ -32,6 +32,9 @@ public class HiAgentServiceImpl implements HiAgentService {
     @Autowired
     private HiAgentConfig config;
 
+    @Autowired(required = false)
+    private AiCallMetricsService aiCallMetricsService;
+
     private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private CloseableHttpClient httpClient;
@@ -179,18 +182,43 @@ public class HiAgentServiceImpl implements HiAgentService {
         if (config.getApiKey() == null || config.getApiKey().isBlank()) {
             throw new BusinessException("AI 服务未配置 API Key");
         }
+
+        long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+        String user = AiCallMetricsService.getCurrentUser();
+        // Extract method name from prompt prefix for logging
+        String methodName = extractMethodName(prompt);
+
         try {
             // Step 1: Create Conversation
             String conversationId = createConversation();
 
             // Step 2: Chat Query
-            return chatQuery(conversationId, prompt);
+            String result = chatQuery(conversationId, prompt);
+
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordSuccess("HIAGENT", methodName, startTime, user);
+            }
+            return result;
         } catch (BusinessException e) {
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("HIAGENT", methodName, startTime, e.getMessage(), user);
+            }
             throw e;
         } catch (Exception e) {
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("HIAGENT", methodName, startTime, e.getMessage(), user);
+            }
             log.error("HiAgent call failed: {}", e.getMessage(), e);
             throw new BusinessException("AI 服务调用失败，请稍后重试");
         }
+    }
+
+    private String extractMethodName(String prompt) {
+        if (prompt.contains("CET-4")) return "generateCET4Version";
+        if (prompt.contains("CET-6")) return "generateCET6Version";
+        if (prompt.contains("academic")) return "generateAcademicVersion";
+        if (prompt.contains("Chinese-English")) return "generateChineseParallelVersion";
+        return "unknown";
     }
 
     private String createConversation() throws Exception {

@@ -784,46 +784,28 @@ public class AdminController {
                 text.setIsPublic(1);
             }
 
-            // 创建课文
-            text.setUploadedBy(createdBy);
-            textService.createText(text);
+            // 先校验习题数据（在持久化课文之前），避免课文已入库但习题校验失败
+            List<com.english.entity.TextExercise> preValidatedExercises = new ArrayList<>();
+            List<List<com.english.entity.ExerciseOption>> preValidatedOptions = new ArrayList<>();
+            boolean hasExercises = false;
 
-            // 根据内容类型生成不同版本
-            if ("MARKDOWN".equals(text.getContentType())) {
-                // 异步生成Markdown版本
-                articleVersionService.checkAndGenerateMarkdownVersions(text.getId());
-            } else {
-                // 异步生成普通文本版本
-                articleVersionService.checkAndGenerateVersions(text.getId());
-            }
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("textId", text.getId());
-            result.put("message", "课文创建成功");
-
-            // 检查是否需要创建习题
             if (textData.containsKey("exercises")) {
-                Object exercisesObj = textData.get("exercises");
-                if (!(exercisesObj instanceof List)) {
+                Object exercisesPreObj = textData.get("exercises");
+                if (!(exercisesPreObj instanceof List)) {
                     return Result.error("exercises 字段必须是数组类型");
                 }
                 @SuppressWarnings("unchecked")
-                List<Map<String, Object>> exercisesData = (List<Map<String, Object>>) exercisesObj;
+                List<Map<String, Object>> exercisesPreData = (List<Map<String, Object>>) exercisesPreObj;
 
-                if (!exercisesData.isEmpty()) {
-                    // 准备习题数据
-                    List<com.english.entity.TextExercise> exercises = new ArrayList<>();
-                    List<List<com.english.entity.ExerciseOption>> allOptions = new ArrayList<>();
-
-                    for (Map<String, Object> exerciseData : exercisesData) {
-                        // 创建习题
+                if (!exercisesPreData.isEmpty()) {
+                    hasExercises = true;
+                    for (Map<String, Object> exerciseData : exercisesPreData) {
                         com.english.entity.TextExercise exercise = new com.english.entity.TextExercise();
-                        exercise.setTextId(text.getId());
                         Object questionObj = exerciseData.get("question");
                         Object exerciseTypeObj = exerciseData.get("exerciseType");
                         Object orderNumObj = exerciseData.get("orderNum");
                         if (questionObj == null || exerciseTypeObj == null || orderNumObj == null) {
-                            continue; // 跳过缺少必要字段的习题
+                            continue;
                         }
                         exercise.setQuestion(questionObj.toString());
                         exercise.setExerciseType(exerciseTypeObj.toString());
@@ -834,26 +816,22 @@ public class AdminController {
                             exercise.setOrderNum(0);
                         }
                         exercise.setCreatedBy(createdBy);
+                        preValidatedExercises.add(exercise);
 
-                        exercises.add(exercise);
-
-                        // 处理选项
                         Object optionsObj = exerciseData.get("options");
                         List<Map<String, Object>> optionsData = (optionsObj instanceof List) ? (List<Map<String, Object>>) optionsObj : null;
                         List<com.english.entity.ExerciseOption> options = new ArrayList<>();
-
                         if (optionsData != null && !optionsData.isEmpty()) {
                             for (Map<String, Object> optionData : optionsData) {
                                 com.english.entity.ExerciseOption option = new com.english.entity.ExerciseOption();
                                 Object optionContentObj = optionData.get("optionContent");
                                 Object optionKeyObj = optionData.get("optionKey");
                                 if (optionContentObj == null || optionKeyObj == null) {
-                                    continue; // 跳过缺少必要字段的选项
+                                    continue;
                                 }
                                 option.setOptionContent(optionContentObj.toString());
                                 option.setOptionKey(optionKeyObj.toString());
                                 Object isCorrectObj = optionData.get("isCorrect");
-                                // 安全处理 isCorrect：前端可能发 1/0/"true"/"false" 等格式
                                 int isCorrectVal = 0;
                                 if (isCorrectObj != null) {
                                     String isCorrectStr = isCorrectObj.toString().trim().toLowerCase();
@@ -867,23 +845,40 @@ public class AdminController {
                                     logger.warn("选项 orderNum 格式错误，使用默认值 0");
                                     option.setOrderNum(0);
                                 }
-
                                 options.add(option);
                             }
                         }
-
-                        allOptions.add(options);
+                        preValidatedOptions.add(options);
                     }
+                }
+            }
 
-                    // 批量创建习题
-                    boolean exerciseSuccess = textExerciseService.batchCreateExercises(exercises, allOptions);
+            // 所有校验通过后，创建课文
+            text.setUploadedBy(createdBy);
+            textService.createText(text);
 
-                    if (exerciseSuccess) {
-                        result.put("exerciseCount", exercises.size());
-                        result.put("message", "课文和习题创建成功");
-                    } else {
-                        result.put("message", "课文创建成功，但习题创建失败");
-                    }
+            // 根据内容类型生成不同版本
+            if ("MARKDOWN".equals(text.getContentType())) {
+                articleVersionService.checkAndGenerateMarkdownVersions(text.getId());
+            } else {
+                articleVersionService.checkAndGenerateVersions(text.getId());
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("textId", text.getId());
+            result.put("message", "课文创建成功");
+
+            // 使用已预先校验的习题数据创建习题
+            if (hasExercises && !preValidatedExercises.isEmpty()) {
+                for (com.english.entity.TextExercise ex : preValidatedExercises) {
+                    ex.setTextId(text.getId());
+                }
+                boolean exerciseSuccess = textExerciseService.batchCreateExercises(preValidatedExercises, preValidatedOptions);
+                if (exerciseSuccess) {
+                    result.put("exerciseCount", preValidatedExercises.size());
+                    result.put("message", "课文和习题创建成功");
+                } else {
+                    result.put("message", "课文创建成功，但习题创建失败");
                 }
             }
 

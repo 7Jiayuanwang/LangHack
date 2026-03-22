@@ -19,7 +19,7 @@ export function register(data) {
 export function logout() {
   return request({
     url: '/api/auth/logout',
-    method: 'get'
+    method: 'post'
   })
 }
 

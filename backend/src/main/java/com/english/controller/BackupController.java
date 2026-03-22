@@ -2,11 +2,14 @@ package com.english.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.english.dto.Result;
+import com.english.entity.BackupConfig;
 import com.english.entity.BackupOperationLog;
 import com.english.entity.BackupRecord;
 import com.english.exception.BusinessException;
+import com.english.service.BackupConfigService;
 import com.english.service.BackupOperationLogService;
 import com.english.service.BackupService;
+import com.english.config.DynamicBackupScheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +39,12 @@ public class BackupController {
 
     @Autowired
     private BackupOperationLogService operationLogService;
+
+    @Autowired
+    private BackupConfigService backupConfigService;
+
+    @Autowired
+    private DynamicBackupScheduler dynamicBackupScheduler;
 
     @GetMapping("/list")
     public Result<?> getBackupList(
@@ -212,6 +221,33 @@ public class BackupController {
         } catch (Exception e) {
             logger.error("获取备份配置失败", e);
             return Result.error("获取备份配置失败，请稍后重试");
+        }
+    }
+
+    @PutMapping("/config")
+    public Result<?> updateBackupConfig(@RequestBody BackupConfig config,
+                                         Authentication authentication,
+                                         HttpServletRequest request) {
+        String username = authentication.getName();
+        String ip = getClientIp(request);
+        try {
+            BackupConfig updated = backupConfigService.updateConfig(config, username);
+            dynamicBackupScheduler.reschedule();
+            operationLogService.log(username, "CONFIG_UPDATE", null,
+                    null, "更新备份配置: cron=" + updated.getBackupCron()
+                            + ", retention=" + updated.getRetentionDays() + "d"
+                            + ", incremental=" + updated.getIncrementalEnabled(),
+                    "SUCCESS", ip);
+            return Result.success("备份配置已更新", updated);
+        } catch (BusinessException e) {
+            operationLogService.log(username, "CONFIG_UPDATE", null,
+                    null, "更新备份配置失败: " + e.getMessage(), "FAILED", ip);
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("更新备份配置失败", e);
+            operationLogService.log(username, "CONFIG_UPDATE", null,
+                    null, "更新备份配置失败: 系统内部错误", "FAILED", ip);
+            return Result.error("更新备份配置失败，请稍后重试");
         }
     }
 

@@ -3,10 +3,14 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.TextExercise;
 import com.english.entity.ExerciseOption;
+import com.english.entity.Unit;
 import com.english.exception.BusinessException;
 import com.english.service.TextExerciseService;
 import com.english.service.UserService;
 import com.english.service.TextService;
+import com.english.service.StudentClassesService;
+import com.english.service.ClassService;
+import com.english.service.UnitService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +40,15 @@ public class ExerciseController {
 
     @Autowired
     private TextService textService;
+
+    @Autowired
+    private StudentClassesService studentClassesService;
+
+    @Autowired
+    private ClassService classService;
+
+    @Autowired
+    private UnitService unitService;
 
     /**
      * 批量创建课文习题
@@ -303,6 +316,9 @@ public class ExerciseController {
                 return Result.error("课文不存在或已被删除");
             }
 
+            // 校验访问权限：ADMIN放行，TEACHER校验uploadedBy，STUDENT校验课程归属
+            assertCanAccessExercise(text);
+
             List<Map<String, Object>> exercises = textExerciseService.getExercisesWithOptions(textId);
 
             // 学生/普通用户：隐藏正确答案标记，防止通过 API 响应作弊
@@ -331,6 +347,18 @@ public class ExerciseController {
         try {
             Map<String, Object> exercise = textExerciseService.getExerciseDetail(exerciseId);
             if (exercise != null) {
+                // 校验习题对应课文的访问权限
+                Object textIdObj = exercise.get("textId");
+                if (textIdObj != null) {
+                    Long textId = parseLongField(textIdObj);
+                    if (textId != null) {
+                        com.english.entity.Text text = textService.getTextById(textId);
+                        if (text != null) {
+                            assertCanAccessExercise(text);
+                        }
+                    }
+                }
+
                 // 学生/普通用户：隐藏正确答案标记
                 if (!isTeacherOrAdmin()) {
                     stripCorrectAnswersFromExercise(exercise);
@@ -524,6 +552,61 @@ public class ExerciseController {
             logger.error("获取习题数量失败", e);
 
             return Result.error("获取习题数量失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 校验当前用户是否有权访问课文关联的习题
+     * ADMIN: 放行
+     * TEACHER: 校验课文 uploadedBy 是否为自己
+     * STUDENT/USER: 校验课文所属课程是否在学生加入的班级中
+     */
+    private void assertCanAccessExercise(com.english.entity.Text text) {
+        Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            throw new BusinessException("未认证");
+        }
+
+        // ADMIN 放行
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (isAdmin) return;
+
+        boolean isTeacher = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_TEACHER".equals(a.getAuthority()));
+
+        if (isTeacher) {
+            // 教师只能访问自己创建的课文的习题
+            com.english.entity.User currentUser = userService.getUserByUsername(authentication.getName());
+            if (currentUser == null) throw new BusinessException("用户不存在");
+            if (text.getUploadedBy() != null && !text.getUploadedBy().equals(currentUser.getId())) {
+                throw new BusinessException("无权访问其他教师创建的课文习题");
+            }
+        } else {
+            // 学生/普通用户：校验课文所属课程是否在学生加入的班级中
+            com.english.entity.User currentUser = userService.getUserByUsername(authentication.getName());
+            if (currentUser == null) throw new BusinessException("用户不存在");
+            Long studentId = currentUser.getId();
+
+            if (text.getUnitId() != null) {
+                Unit unit = unitService.getUnitById(text.getUnitId());
+                if (unit != null && unit.getCourseId() != null) {
+                    List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+                    boolean hasAccess = false;
+                    if (classIds != null) {
+                        for (Long classId : classIds) {
+                            com.english.entity.Class classInfo = classService.getClassById(classId);
+                            if (classInfo != null && unit.getCourseId().equals(classInfo.getCourseId())) {
+                                hasAccess = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!hasAccess) {
+                        throw new BusinessException("无权访问该课文的习题");
+                    }
+                }
+            }
         }
     }
 

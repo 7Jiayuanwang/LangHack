@@ -525,7 +525,22 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
             vb.setLastReviewed(LocalDateTime.now());
 
             if (vb.getId() == null) {
-                vocabularyBookMapper.insert(vb);
+                try {
+                    vocabularyBookMapper.insert(vb);
+                } catch (org.springframework.dao.DuplicateKeyException e) {
+                    // 并发竞态：另一个线程已插入，回退为更新
+                    logger.info("生词本并发竞态：student={}, word={}, 回退为更新", studentId, wordId);
+                    QueryWrapper<VocabularyBook> retryWrapper = new QueryWrapper<>();
+                    retryWrapper.eq("student_id", studentId)
+                            .eq("word_id", wordId);
+                    VocabularyBook existing = vocabularyBookMapper.selectOne(retryWrapper);
+                    if (existing != null) {
+                        existing.setMasteryLevel(vb.getMasteryLevel());
+                        existing.setReviewCount((existing.getReviewCount() != null ? existing.getReviewCount() : 0) + 1);
+                        existing.setLastReviewed(vb.getLastReviewed());
+                        vocabularyBookMapper.updateById(existing);
+                    }
+                }
             } else {
                 vocabularyBookMapper.updateById(vb);
             }

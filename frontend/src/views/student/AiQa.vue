@@ -107,6 +107,7 @@ import { ArrowLeft, ArrowRight, Reading, Monitor, Top, ChatLineSquare } from '@e
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { getAuthHeader } from '@/utils/auth'
 
 const route = useRoute()
 
@@ -148,14 +149,14 @@ const sendMessage = async () => {
 
   try {
     const tutorApiUrl = import.meta.env.VITE_TUTOR_API_BASE_URL || '/tutor'
-    const token = localStorage.getItem('token')
+    const authHeaderValue = getAuthHeader()
     abortController = new AbortController()
     const response = await fetch(tutorApiUrl, {
       method: 'POST',
       signal: abortController.signal,
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {})
       },
       body: JSON.stringify({
         user_question: userMsg,

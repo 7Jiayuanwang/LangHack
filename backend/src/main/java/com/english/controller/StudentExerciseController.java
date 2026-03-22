@@ -11,6 +11,9 @@ import com.english.service.StudentClassesService;
 import com.english.service.StudentExerciseService;
 import com.english.service.TextExerciseService;
 import com.english.service.UserService;
+import com.english.service.ClassService;
+import com.english.service.TextService;
+import com.english.service.UnitService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +50,15 @@ public class StudentExerciseController {
 
     @Autowired
     private TextExerciseService textExerciseService;
+
+    @Autowired
+    private ClassService classService;
+
+    @Autowired
+    private TextService textService;
+
+    @Autowired
+    private UnitService unitService;
 
     /**
      * 提交习题答案
@@ -124,6 +136,11 @@ public class StudentExerciseController {
                 if (exercise.getTextId() == null || assignmentTextIds == null || assignmentTextIds.isEmpty()
                         || !assignmentTextIds.contains(exercise.getTextId())) {
                     throw new BusinessException("习题不属于此任务");
+                }
+            } else {
+                // 无 assignmentId 时，校验学生是否有权访问习题对应的课文
+                if (exercise.getTextId() != null) {
+                    assertStudentCanAccessText(studentId, exercise.getTextId());
                 }
             }
 
@@ -256,6 +273,35 @@ public class StudentExerciseController {
             return assignmentsService.isAssignmentInClasses(assignmentId, studentClassIds);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * 校验学生是否有权访问指定课文（通过班级->课程->单元->课文的归属链）
+     */
+    private void assertStudentCanAccessText(Long studentId, Long textId) {
+        com.english.entity.Text text = textService.getTextById(textId);
+        if (text == null) {
+            throw new BusinessException("课文不存在");
+        }
+        if (text.getUnitId() != null) {
+            com.english.entity.Unit unit = unitService.getUnitById(text.getUnitId());
+            if (unit != null && unit.getCourseId() != null) {
+                List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+                boolean hasAccess = false;
+                if (classIds != null) {
+                    for (Long classId : classIds) {
+                        com.english.entity.Class classInfo = classService.getClassById(classId);
+                        if (classInfo != null && unit.getCourseId().equals(classInfo.getCourseId())) {
+                            hasAccess = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasAccess) {
+                    throw new BusinessException("无权访问该课文的习题");
+                }
+            }
         }
     }
 }

@@ -939,7 +939,7 @@ watch(() => route.path, (newPath, oldPath) => {
       loadCourses()
       // 如果打开了课程对话框，刷新单元数据
       if (unitDialogVisible.value && currentCourse.value.courseId) {
-        setTimeout(() => {
+        safeTimeout(() => {
           loadUnits(currentCourse.value.courseId).then(() => {
             loadVocabulary()
             loadCourseStats()
@@ -966,7 +966,7 @@ watch(() => route.path, (newPath, oldPath) => {
     if (route.query.courseId) {
       const courseId = Number(route.query.courseId)
       // 等待课程列表加载完成
-      setTimeout(() => {
+      safeTimeout(() => {
         const course = courses.value.find(c => c.courseId === courseId)
         if (course) {
           enterCourse(course)
@@ -994,7 +994,7 @@ watch(() => route.query, (newQuery) => {
         const courseId = Number(newQuery.courseId)
         const course = courses.value.find(c => c.courseId === courseId)
         if (course && !unitDialogVisible.value) {
-          setTimeout(() => {
+          safeTimeout(() => {
             enterCourse(course)
           }, 300)
         }

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { login, logout } from '@/api/auth'
+import { isValidToken, getToken, setToken, removeToken, clearAuthStorage } from '@/utils/auth'
 
 // 验证 userInfo 结构的有效性
 function validateUserInfo(userInfo) {
@@ -51,14 +52,7 @@ function validateRole(role) {
 
 export const useUserStore = defineStore('user', {
   state: () => ({
-    token: (() => {
-      try {
-        return localStorage.getItem('token') || ''
-      } catch (e) {
-        console.error('Failed to load token from localStorage:', e)
-        return ''
-      }
-    })(),
+    token: getToken(),
     userInfo: loadUserInfoFromStorage(),
     userRole: (() => {
       try {
@@ -72,7 +66,7 @@ export const useUserStore = defineStore('user', {
   }),
 
   getters: {
-    isLoggedIn: (state) => !!state.token,
+    isLoggedIn: (state) => isValidToken(state.token),
     isAdmin: (state) => state.userRole === 'ADMIN',
     isTeacher: (state) => state.userRole === 'TEACHER',
     isStudent: (state) => state.userRole === 'STUDENT',
@@ -87,6 +81,12 @@ export const useUserStore = defineStore('user', {
 
         if (!token || !user) {
           return Promise.reject(new Error('登录响应数据异常'))
+        }
+
+        // 验证 token 不是 "undefined"/"null"/空字符串
+        if (!isValidToken(token)) {
+          console.error('Server returned invalid token:', typeof token, token)
+          return Promise.reject(new Error('登录响应 Token 异常'))
         }
 
         // 验证角色值有效性
@@ -109,7 +109,9 @@ export const useUserStore = defineStore('user', {
 
         // 尝试持久化到 localStorage，失败时回滚
         try {
-          localStorage.setItem('token', token)
+          if (!setToken(token)) {
+            throw new Error('Token validation failed during persist')
+          }
           localStorage.setItem('userInfo', JSON.stringify(user))
           localStorage.setItem('userRole', validatedRole)
         } catch (storageError) {
@@ -128,53 +130,20 @@ export const useUserStore = defineStore('user', {
     },
 
     async logout() {
-      let logoutApiError = null
-      
-      try {
-        await logout()
-      } catch (error) {
-        console.error('Logout API error:', error)
-        logoutApiError = error
-      }
-
-      // 清理本地状态（API 失败时仍继续清理）
+      // 先清理本地状态，确保即使 API 调用失败或延迟，Token 也不会残留
       this.token = ''
       this.userInfo = {}
       this.userRole = ''
 
-      // 清理 localStorage
-      const storageErrors = []
+      // 清理 localStorage（集中清理所有认证相关 key）
+      clearAuthStorage()
+
+      // 再调用后端 logout API（失败不影响本地已清理的状态）
       try {
-        localStorage.removeItem('token')
-      } catch (e) {
-        console.warn('Failed to remove token from localStorage:', e)
-        storageErrors.push(e)
+        await logout()
+      } catch (error) {
+        console.error('Logout API error (local state already cleared):', error)
       }
-
-      try {
-        localStorage.removeItem('userInfo')
-      } catch (e) {
-        console.warn('Failed to remove userInfo from localStorage:', e)
-        storageErrors.push(e)
-      }
-
-      try {
-        localStorage.removeItem('userRole')
-      } catch (e) {
-        console.warn('Failed to remove userRole from localStorage:', e)
-        storageErrors.push(e)
-      }
-
-      // 返回 promise：优先返回 logout API 错误，但本地状态已清理
-      if (logoutApiError) {
-        return Promise.reject(logoutApiError)
-      }
-      
-      if (storageErrors.length > 0) {
-        return Promise.reject(new Error('登出时清理存储失败'))
-      }
-
-      return Promise.resolve()
     },
 
     updateUserInfo(userInfo) {

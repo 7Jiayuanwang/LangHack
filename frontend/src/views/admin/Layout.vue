@@ -100,7 +100,8 @@ import {
   Document,
   EditPen,
   Setting,
-  FolderOpened
+  FolderOpened,
+  DataLine
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -166,6 +167,12 @@ const moreItems = ref([
     label: '数据备份',
     icon: FolderOpened,
     badge: null
+  },
+  {
+    path: '/admin/monitoring',
+    label: '系统监控',
+    icon: DataLine,
+    badge: null
   }
 ])
 
@@ -180,7 +187,8 @@ const pageTitle = computed(() => {
     '/admin/words': '单词管理',
     '/admin/texts': '课文管理',
     '/admin/assignments': '作业管理',
-    '/admin/backups': '数据备份'
+    '/admin/backups': '数据备份',
+    '/admin/monitoring': '系统监控'
   }
   return route.meta?.title || routeMap[route.path] || '管理员端'
 })
@@ -192,7 +200,7 @@ const userAvatar = computed(() => {
 
 // 判断管理相关路由是否激活
 const isManagementRouteActive = computed(() => {
-  const managementPaths = ['/admin/units', '/admin/words', '/admin/texts', '/admin/assignments', '/admin/backups']
+  const managementPaths = ['/admin/units', '/admin/words', '/admin/texts', '/admin/assignments', '/admin/backups', '/admin/monitoring']
   return managementPaths.some(path => route.path === path || route.path.startsWith(path + '/'))
 })
 

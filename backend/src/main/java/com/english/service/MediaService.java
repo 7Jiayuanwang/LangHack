@@ -5,7 +5,7 @@ import com.english.entity.Media;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface MediaService extends IService<Media> {
-    Media uploadMedia(MultipartFile file, String mediaType, Long uploadedBy) throws Exception;
+    Media uploadMedia(MultipartFile file, String mediaType, Long uploadedBy);
 
     /**
      * 根据ID获取未删除的媒体

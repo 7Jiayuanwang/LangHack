@@ -3,6 +3,7 @@ package com.english.config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -10,20 +11,24 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-/**
- * Web MVC 配置
- * 配置静态资源映射
- * 
- * 安全说明：
- * - 目录白名单在环境变量 AUDIO_RESOURCE_PATH 中配置，确保只允许访问指定目录
- * - 禁止从系统临时目录或其他不受控制的位置服务文件
- * - 所有路径进行规范化和验证，防止 .. / 路径遍历
- * - 验证目录可读性，防止配置指向无法访问的位置
- */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private static final Logger log = LoggerFactory.getLogger(WebMvcConfig.class);
+
+    private final AccessLogInterceptor accessLogInterceptor;
+
+    public WebMvcConfig(AccessLogInterceptor accessLogInterceptor) {
+        this.accessLogInterceptor = accessLogInterceptor;
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(accessLogInterceptor)
+                .addPathPatterns("/api/**")
+                .excludePathPatterns("/api/admin/monitoring/realtime/stream",
+                                     "/audio/**", "/favicon.ico");
+    }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {

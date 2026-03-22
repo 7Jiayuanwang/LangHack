@@ -101,6 +101,7 @@ class UserServiceTest {
             when(baseMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUser);
             when(passwordEncoder.matches("rawPassword123", "$2a$10$encodedPassword")).thenReturn(true);
             when(jwtUtil.generateToken("testuser", "USER")).thenReturn("jwt-access-token");
+            when(jwtUtil.getExpiration()).thenReturn(2592000000L);
 
             // Act
             Map<String, Object> result = userService.login(loginRequest);
@@ -109,7 +110,7 @@ class UserServiceTest {
             assertNotNull(result);
             assertEquals("jwt-access-token", result.get("token"));
             assertEquals(testUser, result.get("user"));
-            assertEquals(86400000L, result.get("expiresIn"));
+            assertEquals(2592000000L, result.get("expiresIn"));
             // login() does NOT return refreshToken
             assertNull(result.get("refreshToken"));
             // password should be cleared before returning

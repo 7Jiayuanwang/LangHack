@@ -13,6 +13,7 @@ import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
 import com.english.service.UnderlineService;
+import com.english.mapper.TextExerciseMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -25,6 +26,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
 
     @Autowired
     private UnderlineService underlineService;
+
+    @Autowired
+    private TextExerciseMapper textExerciseMapper;
 
     @Override
     public Map<String, Object> getTextsByPage(Map<String, Object> params) {
@@ -164,6 +168,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
 
         // 级联删除该课文的所有划线记录（数据清理）
         underlineService.deleteUnderlinesByTextId(id);
+
+        // 级联删除该课文的所有习题（TextExercise 无 @TableLogic，物理删除）
+        textExerciseMapper.deleteExercisesByTextId(id);
 
         // 逻辑删除：@TableLogic 会将 removeById 转换为 UPDATE SET deleted=1
         // 注意：不能用 updateById + setDeleted(1)，因为 @TableLogic 会从 SET 子句中排除 deleted 字段

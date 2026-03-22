@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.*;
 import com.english.mapper.*;
 import com.english.service.LearningRecordsService;
+import com.english.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,7 +53,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public int getTodayStudyTime(Long studentId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
 
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
@@ -105,10 +106,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public List<Map<String, Object>> getUnitsWithLearningStats(Long studentId, Long courseId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
         if (courseId == null) {
-            throw new IllegalArgumentException("courseId 不能为空");
+            throw new BusinessException("courseId 不能为空");
         }
 
         // 查询课程下的所有单元
@@ -144,10 +145,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getUnitContentWithLearningStates(Long studentId, Long unitId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
         if (unitId == null) {
-            throw new IllegalArgumentException("unitId 不能为空");
+            throw new BusinessException("unitId 不能为空");
         }
 
         Map<String, Object> content = new HashMap<>();
@@ -244,10 +245,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getTextDetailWithAnnotation(Long studentId, Long textId, Long assignmentId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
         if (textId == null) {
-            throw new IllegalArgumentException("textId 不能为空");
+            throw new BusinessException("textId 不能为空");
         }
 
         Map<String, Object> detail = new HashMap<>();
@@ -518,10 +519,18 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
             // 计算时长（秒），防止 long→int 溢出
             long duration = java.time.Duration.between(record.getStartTime(), now).getSeconds();
-            record.setDurationSeconds((int) Math.min(duration, Integer.MAX_VALUE));
+            int durationSeconds = (int) Math.min(duration, Integer.MAX_VALUE);
+            record.setDurationSeconds(durationSeconds);
             record.setUpdatedTime(now);
 
             textLearningRecordMapper.updateById(record);
+
+            // 同步写入/累加 learning_records 中的 TEXT_VIEW 记录，
+            // 以确保任务进度判断可以正确读取到阅读数据
+            if (record.getTextId() != null && record.getStudentId() != null && durationSeconds > 0) {
+                recordTextView(record.getStudentId(), record.getTextId(),
+                        record.getAssignmentId(), durationSeconds);
+            }
         }
     }
 
@@ -543,7 +552,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getTodayLearningStats(Long studentId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
 
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
@@ -609,7 +618,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getLearningOverview(Long studentId, Map<String, Object> params) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
 
         Map<String, Object> overview = new HashMap<>();
@@ -649,11 +658,11 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getLearningRecordsWithPagination(Map<String, Object> params) {
         if (params == null) {
-            throw new IllegalArgumentException("参数不能为空");
+            throw new BusinessException("参数不能为空");
         }
         Long studentId = params.get("studentId") != null ? Long.valueOf(params.get("studentId").toString()) : null;
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
@@ -708,10 +717,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getCourseLearningStats(Long studentId, Long courseId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
         if (courseId == null) {
-            throw new IllegalArgumentException("courseId 不能为空");
+            throw new BusinessException("courseId 不能为空");
         }
 
         Map<String, Object> stats = new HashMap<>();
@@ -751,29 +760,38 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         // 统计数据
         stats.put("totalUnits", units.size());
 
-        // 计算总单词数：需要过滤已删除的单词
+        // 计算总单词数：需要过滤已删除的单词，并获取有效 wordId 集合
         int totalWords = 0;
+        Set<Long> validWordIds = new HashSet<>();
         if (!wordIds.isEmpty()) {
             QueryWrapper<Word> wordWrapper = new QueryWrapper<>();
             wordWrapper.in("id", wordIds)
-                    .eq("deleted", 0);
-            totalWords = Math.toIntExact(wordMapper.selectCount(wordWrapper));
+                    .eq("deleted", 0)
+                    .select("id");
+            List<Word> validWords = wordMapper.selectList(wordWrapper);
+            if (validWords != null) {
+                for (Word w : validWords) {
+                    validWordIds.add(w.getId());
+                }
+            }
+            totalWords = validWordIds.size();
         }
         stats.put("totalWords", totalWords);
 
-        // 学生已掌握的单词
+        // 学生已掌握的单词（只统计有效未删除的单词）
         int learnedWords = 0;
-        if (!wordIds.isEmpty()) {
+        if (!validWordIds.isEmpty()) {
             QueryWrapper<VocabularyBook> vocabWrapper = new QueryWrapper<>();
             vocabWrapper.eq("student_id", studentId)
-                    .in("word_id", wordIds)
+                    .in("word_id", validWordIds)
                     .ne("mastery_level", "NEW");
             learnedWords = Math.toIntExact(vocabularyBookMapper.selectCount(vocabWrapper));
         }
-        stats.put("learnedWords", learnedWords);
+        stats.put("learnedWords", Math.min(learnedWords, totalWords));
 
-        // 学习进度
-        stats.put("progress", totalWords > 0 ? (double) learnedWords / totalWords * 100 : 0.0);
+        // 学习进度，clamp 到 [0, 100]
+        double progress = totalWords > 0 ? (double) Math.min(learnedWords, totalWords) / totalWords * 100 : 0.0;
+        stats.put("progress", Math.max(0.0, Math.min(progress, 100.0)));
 
         // 学习时间
         int studyTime = 0;
@@ -798,7 +816,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getAllCoursesLearningStats(Long studentId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
 
         Map<String, Object> stats = new HashMap<>();
@@ -838,7 +856,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getStudyTimeStats(Long studentId, Map<String, Object> params) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
         if (params == null) {
             params = new HashMap<>();
@@ -888,7 +906,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> generateProgressReport(Long studentId, String type) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
 
         Map<String, Object> report = new HashMap<>();
@@ -915,7 +933,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getAchievementStats(Long studentId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
 
         Map<String, Object> achievements = new HashMap<>();
@@ -949,7 +967,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getLearningRanking(Long studentId, String type, Long targetId) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
 
         Map<String, Object> ranking = new HashMap<>();
@@ -964,7 +982,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> exportLearningData(Long studentId, Map<String, Object> params) {
         if (studentId == null) {
-            throw new IllegalArgumentException("studentId 不能为空");
+            throw new BusinessException("studentId 不能为空");
         }
         if (params == null) {
             params = new HashMap<>();
@@ -988,7 +1006,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public Map<String, Object> getAssignmentLearningRecords(Long assignmentId, Long studentId, int page, int size) {
         if (assignmentId == null || studentId == null) {
-            throw new IllegalArgumentException("assignmentId 和 studentId 不能为空");
+            throw new BusinessException("assignmentId 和 studentId 不能为空");
         }
 
         // 参数边界校验

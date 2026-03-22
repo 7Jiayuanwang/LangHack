@@ -4,6 +4,7 @@ import com.english.dto.LoginRequest;
 import com.english.dto.Result;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
+import com.english.service.TokenBlacklistService;
 import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +34,9 @@ public class AuthController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private TokenBlacklistService tokenBlacklistService;
+
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest) {
         try {
@@ -49,6 +54,10 @@ public class AuthController {
 
     @PostMapping("/register")
     public Result<String> register(@RequestBody User user) {
+        // 空请求体判空
+        if (user == null) {
+            return Result.error("请求参数不能为空");
+        }
         // 输入校验
         if (user.getUsername() == null || user.getUsername().trim().isEmpty()) {
             return Result.error("用户名不能为空");
@@ -151,9 +160,19 @@ public class AuthController {
         }
     }
 
-    @GetMapping("/logout")
-    public Result<String> logout() {
-        // JWT是无状态的，客户端删除token即可
+    @PostMapping("/logout")
+    public Result<String> logout(HttpServletRequest request) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ") && authHeader.length() > 7) {
+                String token = authHeader.substring(7);
+                tokenBlacklistService.blacklistToken(token);
+                log.info("User logged out, token blacklisted");
+            }
+        } catch (Exception e) {
+            // 即使黑名单操作失败，仍然返回登出成功（前端会清理本地 token）
+            log.error("Failed to blacklist token during logout", e);
+        }
         return Result.success("退出登录成功");
     }
 }

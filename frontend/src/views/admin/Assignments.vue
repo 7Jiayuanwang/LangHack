@@ -301,6 +301,7 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { View, MoreFilled, Edit, Delete } from '@element-plus/icons-vue'
+import { getAuthHeader, getToken } from '@/utils/auth'
 
 // 响应式数据
 const loading = ref(false)
@@ -403,7 +404,7 @@ const loadAssignments = async () => {
 
     const response = await fetch(`/api/assignments?${params.toString()}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -469,7 +470,7 @@ const loadClasses = async () => {
   try {
     const response = await fetch('/api/classes?size=100', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -494,7 +495,7 @@ const loadUnits = async () => {
   try {
     const response = await fetch('/api/units?size=100', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -525,7 +526,7 @@ const loadUnitsForClass = async (classId) => {
 
     const response = await fetch(`/api/units?courseId=${classItem.courseId}&size=100`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -598,7 +599,7 @@ const loadUnitContent = async (unitId) => {
   try {
     const response = await fetch(`/api/assignments/unit/${unitId}/content`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -665,7 +666,7 @@ const saveAssignment = async () => {
             method,
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+              'Authorization': getAuthHeader() || ''
             },
             body: JSON.stringify({
               id: assignmentForm.id,
@@ -695,7 +696,7 @@ const saveAssignment = async () => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+              'Authorization': getAuthHeader() || ''
             },
             body: JSON.stringify({
               title: assignmentForm.title,
@@ -743,7 +744,7 @@ const deleteAssignment = async (assignment) => {
     const response = await fetch(`/api/assignments/${assignment.id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -772,7 +773,7 @@ const viewProgress = async (assignment) => {
 
     const response = await fetch(`/api/assignments/${assignment.id}/progress`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -875,7 +876,7 @@ const getCompletedCountForAssignment = async (assignmentId) => {
 
     const response = await fetch(`/api/assignments/${assignmentId}/progress`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 

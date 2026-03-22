@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
+import { getAuthHeader } from '@/utils/auth'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
@@ -10,20 +11,19 @@ const request = axios.create({
 // 防止并发 401 多次触发 logout
 let isLoggingOut = false
 
-const handleLogout = () => {
+const handleLogout = async () => {
   if (isLoggingOut) return
   isLoggingOut = true
   try {
     const userStore = useUserStore()
-    userStore.logout()
-    window.location.reload()
+    // 先清理本地状态（store.logout 内部会先清本地再调 API）
+    await userStore.logout()
   } catch (e) {
     console.error('Logout failed:', e)
   } finally {
-    // 确保状态标志在任何情况下都被重置
-    // 注: window.location.reload() 会刷新页面，导致此行可能不执行
-    // 但为了健壮性，仍需添加 finally 块
     isLoggingOut = false
+    // 本地状态已清理完毕，再跳转到登录页（replace 避免后退回到需认证的页面）
+    window.location.replace('/login')
   }
 }
 
@@ -31,21 +31,9 @@ const handleLogout = () => {
 request.interceptors.request.use(
   config => {
     try {
-      const userStore = useUserStore()
-      let token = userStore.token || ''
-
-      // 类型检查与 trim
-      if (typeof token === 'string') {
-        token = token.trim()
-      }
-
-      // 严格检查 token 有效性，防止发送 "Bearer undefined" 或 "Bearer null"
-      if (token && token !== 'undefined' && token !== 'null') {
-        // 清理 token 中可能已有的 Bearer 前缀，防止重复
-        const cleanToken = token.replace(/^Bearer\s+/i, '')
-        if (cleanToken && cleanToken !== 'undefined' && cleanToken !== 'null') {
-          config.headers['Authorization'] = `Bearer ${cleanToken}`
-        }
+      const authHeader = getAuthHeader()
+      if (authHeader) {
+        config.headers['Authorization'] = authHeader
       }
     } catch (e) {
       console.error('Token processing error:', e)
@@ -100,7 +88,21 @@ request.interceptors.response.use(
     if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
       message = '请求超时，请检查网络连接后重试'
     } else if (!error.response && error.request) {
-      message = '网络连接失败，请检查网络后重试'
+      // No response + request exists = network error or CORS block.
+      // CORS blocks appear as network errors because the browser hides the response entirely.
+      // 无响应 + 请求已发出 = 网络错误或 CORS 拦截（浏览器完全隐藏被 CORS 拦截的响应）。
+      const url = error.config?.url || ''
+      const isCrossOrigin = error.config?.baseURL && !error.config.baseURL.startsWith(window.location.origin)
+      if (isCrossOrigin || error.message === 'Network Error') {
+        message = '网络请求被拒绝，可能是跨域(CORS)配置问题，请联系管理员检查后端 CORS 白名单'
+        console.error(
+          '[CORS Hint] Request to', url, 'failed with Network Error.',
+          'Current origin:', window.location.origin,
+          '— Ensure this origin is in the backend CORS config (application-prod.yml or APP_CORS_ALLOWED_ORIGINS env var).'
+        )
+      } else {
+        message = '网络连接失败，请检查网络后重试'
+      }
     }
     if (error.response) {
       switch (error.response.status) {

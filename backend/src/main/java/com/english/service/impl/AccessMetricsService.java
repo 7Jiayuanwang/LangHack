@@ -1,0 +1,152 @@
+package com.english.service.impl;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+
+@Service
+public class AccessMetricsService {
+
+    private static final Logger logger = LoggerFactory.getLogger(AccessMetricsService.class);
+    private static final DateTimeFormatter DATE_KEY = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+    private final StringRedisTemplate redisTemplate;
+    private final SystemMetricsService systemMetricsService;
+    private final CopyOnWriteArrayList<SseEmitter> emitters = new CopyOnWriteArrayList<>();
+    private final AtomicLong concurrentRequests = new AtomicLong(0);
+    private final AtomicLong peakConcurrentToday = new AtomicLong(0);
+    private volatile String lastPeakDate = LocalDate.now().format(DATE_KEY);
+
+    public AccessMetricsService(StringRedisTemplate redisTemplate,
+                                 SystemMetricsService systemMetricsService) {
+        this.redisTemplate = redisTemplate;
+        this.systemMetricsService = systemMetricsService;
+    }
+
+    public void recordRequestStart(String username) {
+        try {
+            String dateKey = LocalDate.now().format(DATE_KEY);
+
+            // Reset peak if new day
+            if (!dateKey.equals(lastPeakDate)) {
+                peakConcurrentToday.set(0);
+                lastPeakDate = dateKey;
+            }
+
+            // Increment today's request count
+            String countKey = "access:today:count:" + dateKey;
+            redisTemplate.opsForValue().increment(countKey);
+            redisTemplate.expire(countKey, 2, TimeUnit.DAYS);
+
+            // Track unique users
+            if (username != null) {
+                String usersKey = "access:today:users:" + dateKey;
+                redisTemplate.opsForSet().add(usersKey, username);
+                redisTemplate.expire(usersKey, 2, TimeUnit.DAYS);
+
+                // Track active users (5-minute window)
+                String activeKey = "access:active:users";
+                redisTemplate.opsForZSet().add(activeKey, username, System.currentTimeMillis());
+                redisTemplate.expire(activeKey, 10, TimeUnit.MINUTES);
+            }
+
+            // Update concurrent count and peak
+            long current = concurrentRequests.incrementAndGet();
+            peakConcurrentToday.updateAndGet(prev -> Math.max(prev, current));
+        } catch (Exception e) {
+            logger.debug("Failed to record request start metrics", e);
+        }
+    }
+
+    public void recordRequestEnd() {
+        concurrentRequests.decrementAndGet();
+    }
+
+    public Map<String, Object> getRealTimeMetrics() {
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        try {
+            String dateKey = LocalDate.now().format(DATE_KEY);
+
+            // Today's request count
+            String countStr = redisTemplate.opsForValue().get("access:today:count:" + dateKey);
+            metrics.put("todayRequests", countStr != null ? Long.parseLong(countStr) : 0L);
+
+            // Today's unique users
+            Long uniqueUsers = redisTemplate.opsForSet().size("access:today:users:" + dateKey);
+            metrics.put("todayUniqueUsers", uniqueUsers != null ? uniqueUsers : 0L);
+
+            // Active users (last 5 minutes)
+            long fiveMinAgo = System.currentTimeMillis() - 5 * 60 * 1000;
+            // Clean expired entries
+            redisTemplate.opsForZSet().removeRangeByScore("access:active:users", 0, fiveMinAgo);
+            Long activeUsers = redisTemplate.opsForZSet().zCard("access:active:users");
+            metrics.put("activeUsers", activeUsers != null ? activeUsers : 0L);
+
+            // Concurrent requests
+            metrics.put("concurrentRequests", concurrentRequests.get());
+            metrics.put("peakConcurrentToday", peakConcurrentToday.get());
+
+        } catch (Exception e) {
+            logger.debug("Failed to get realtime metrics", e);
+            metrics.put("todayRequests", 0L);
+            metrics.put("todayUniqueUsers", 0L);
+            metrics.put("activeUsers", 0L);
+            metrics.put("concurrentRequests", 0L);
+            metrics.put("peakConcurrentToday", 0L);
+        }
+        return metrics;
+    }
+
+    public SseEmitter registerEmitter() {
+        SseEmitter emitter = new SseEmitter(5 * 60 * 1000L); // 5 minutes timeout
+        emitters.add(emitter);
+
+        emitter.onCompletion(() -> emitters.remove(emitter));
+        emitter.onTimeout(() -> emitters.remove(emitter));
+        emitter.onError(e -> emitters.remove(emitter));
+
+        // Send initial data immediately
+        try {
+            Map<String, Object> initialData = new LinkedHashMap<>();
+            initialData.put("realtime", getRealTimeMetrics());
+            initialData.put("system", systemMetricsService.getSystemMetrics());
+            emitter.send(SseEmitter.event().data(initialData));
+        } catch (Exception e) {
+            logger.debug("Failed to send initial SSE data", e);
+        }
+
+        return emitter;
+    }
+
+    @Scheduled(fixedRate = 3000)
+    public void pushMetrics() {
+        if (emitters.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("realtime", getRealTimeMetrics());
+        data.put("system", systemMetricsService.getSystemMetrics());
+        data.put("timestamp", System.currentTimeMillis());
+
+        List<SseEmitter> deadEmitters = new ArrayList<>();
+        for (SseEmitter emitter : emitters) {
+            try {
+                emitter.send(SseEmitter.event().data(data));
+            } catch (Exception e) {
+                deadEmitters.add(emitter);
+            }
+        }
+        emitters.removeAll(deadEmitters);
+    }
+}

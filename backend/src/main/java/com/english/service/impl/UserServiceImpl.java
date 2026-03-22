@@ -62,7 +62,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
         result.put("user", user);
-        result.put("expiresIn", 86400000L); // 24小时
+        result.put("expiresIn", jwtUtil.getExpiration()); // 与 JWT 配置保持一致
 
         return result;
     }

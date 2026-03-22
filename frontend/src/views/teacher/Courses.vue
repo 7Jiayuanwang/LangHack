@@ -208,6 +208,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getAuthHeader } from '@/utils/auth'
 
 const router = useRouter()
 
@@ -240,9 +241,9 @@ const stats = reactive({
 // 公共方法：获取认证头
 const getAuthHeaders = () => {
   const headers = {}
-  const token = localStorage.getItem('token')
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
+  const auth = getAuthHeader()
+  if (auth) {
+    headers['Authorization'] = auth
   }
   return headers
 }

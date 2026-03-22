@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/store/user'
+import { isValidToken } from '@/utils/auth'
 
 const routes = [
   {
@@ -98,6 +99,12 @@ const routes = [
         name: 'AdminBackups',
         component: () => import('@/views/admin/Backups.vue'),
         meta: { title: '数据备份', roles: ['ADMIN'] }
+      },
+      {
+        path: 'monitoring',
+        name: 'AdminMonitoring',
+        component: () => import('@/views/admin/Monitoring.vue'),
+        meta: { title: '系统监控', roles: ['ADMIN'] }
       }
     ]
   },
@@ -279,6 +286,9 @@ const router = createRouter({
 })
 
 // 路由守卫
+// 注意: 此守卫仅用于 UX 优化（避免用户看到无权限页面再被拒绝），
+// 真实权限控制由后端 JWT + @PreAuthorize 实现。本地 userRole 可被篡改，
+// 但不会造成安全风险，因为后端会独立验证每个请求的 Token 和角色。
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
 
@@ -301,11 +311,12 @@ router.beforeEach((to, from, next) => {
 
   // 从 store 读取状态作为真实数据源，而非 localStorage
   const token = userStore.token
+  const hasValidToken = isValidToken(token)
   const userRole = userStore.userRole
 
   // 公开页面，无需登录即可访问
   if (to.meta.public) {
-    if (token && to.path === '/login') {
+    if (hasValidToken && to.path === '/login') {
       // 已登录用户访问登录页，重定向到对应主页
       const roleRoutes = {
         'ADMIN': '/admin',
@@ -321,7 +332,7 @@ router.beforeEach((to, from, next) => {
   }
 
   // 需要登录的页面
-  if (!token) {
+  if (!hasValidToken) {
     // 防止无限重定向循环
     if (to.path !== '/login') {
       next('/login')

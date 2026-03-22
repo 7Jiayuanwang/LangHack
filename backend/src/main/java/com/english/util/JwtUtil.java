@@ -138,6 +138,23 @@ public class JwtUtil {
         }
     }
 
+    /**
+     * 获取 token 剩余有效时间（毫秒）。
+     * 如果 token 已过期或无法解析，返回 0。
+     */
+    public long getTokenRemainingTimeMillis(String token) {
+        Date expiration = getExpirationDateFromToken(token);
+        if (expiration == null) {
+            return 0;
+        }
+        long remaining = expiration.getTime() - System.currentTimeMillis();
+        return Math.max(remaining, 0);
+    }
+
+    public Long getExpiration() {
+        return expiration;
+    }
+
     private boolean isTokenExpired(String token) {
         final Date exp = getExpirationDateFromToken(token);
         if (exp == null) return true;

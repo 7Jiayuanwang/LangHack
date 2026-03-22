@@ -34,6 +34,9 @@ public class OpenRouterServiceImpl implements OpenRouterService {
     @Autowired
     private OpenRouterConfig config;
 
+    @Autowired(required = false)
+    private AiCallMetricsService aiCallMetricsService;
+
     private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private CloseableHttpClient httpClient;
@@ -178,6 +181,11 @@ public class OpenRouterServiceImpl implements OpenRouterService {
         if (config.getApiKey() == null || config.getApiKey().isBlank()) {
             throw new BusinessException("备用 AI 服务未配置 API Key");
         }
+
+        long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+        String user = AiCallMetricsService.getCurrentUser();
+        String methodName = extractMethodName(prompt);
+
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -215,16 +223,36 @@ public class OpenRouterServiceImpl implements OpenRouterService {
                 if (choices.isArray() && choices.size() > 0) {
                     JsonNode msgNode = choices.get(0).path("message");
                     if (msgNode.has("content")) {
-                        return msgNode.get("content").asText().trim();
+                        String result = msgNode.get("content").asText().trim();
+                        if (aiCallMetricsService != null) {
+                            aiCallMetricsService.recordSuccess("OPENROUTER", methodName,
+                                    config.getModel(), startTime, user);
+                        }
+                        return result;
                     }
                 }
+            }
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("OPENROUTER", methodName, startTime,
+                        "Invalid response format", user);
             }
             throw new BusinessException("备用 AI 服务返回格式无效或响应为空");
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("OPENROUTER", methodName, startTime, e.getMessage(), user);
+            }
             log.error("Failed to call OpenRouter API: {}", e.getMessage(), e);
             throw new BusinessException("备用 AI 服务调用失败，请稍后重试");
         }
+    }
+
+    private String extractMethodName(String prompt) {
+        if (prompt.contains("CET-4")) return "generateCET4Version";
+        if (prompt.contains("CET-6")) return "generateCET6Version";
+        if (prompt.contains("academic")) return "generateAcademicVersion";
+        if (prompt.contains("Chinese-English")) return "generateChineseParallelVersion";
+        return "unknown";
     }
 }

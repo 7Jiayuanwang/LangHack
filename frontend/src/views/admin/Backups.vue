@@ -25,6 +25,10 @@
           <el-icon><Document /></el-icon>
           操作日志
         </el-button>
+        <el-button type="success" @click="openConfigDrawer">
+          <el-icon><Setting /></el-icon>
+          配置
+        </el-button>
       </div>
     </div>
 
@@ -283,13 +287,57 @@
         />
       </div>
     </el-drawer>
+
+    <!-- 备份配置抽屉 -->
+    <el-drawer
+      v-model="configDrawerVisible"
+      title="备份配置"
+      size="400px"
+    >
+      <el-form :model="configForm" label-position="top">
+        <el-form-item label="自动备份">
+          <el-switch v-model="configForm.autoBackupEnabled" />
+        </el-form-item>
+
+        <el-form-item label="备份时间">
+          <div style="display: flex; gap: 10px;">
+            <el-select v-model="configForm.backupHour" placeholder="小时" style="width: 50%;">
+              <el-option v-for="h in 24" :key="h-1" :label="(h-1) + '时'" :value="h-1" />
+            </el-select>
+            <el-select v-model="configForm.backupMinute" placeholder="分钟" style="width: 50%;">
+              <el-option v-for="m in [0, 15, 30, 45]" :key="m" :label="m + '分'" :value="m" />
+            </el-select>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="增量备份">
+          <el-switch v-model="configForm.incrementalEnabled" />
+        </el-form-item>
+
+        <el-form-item v-if="configForm.incrementalEnabled" label="全量备份间隔(天)">
+          <el-input-number v-model="configForm.fullBackupIntervalDays" :min="1" :max="30" />
+        </el-form-item>
+
+        <el-form-item label="保留天数">
+          <el-input-number v-model="configForm.retentionDays" :min="1" :max="365" />
+        </el-form-item>
+
+        <el-form-item label="最大备份数">
+          <el-input-number v-model="configForm.maxCount" :min="1" :max="200" />
+        </el-form-item>
+
+        <el-form-item>
+          <el-button type="primary" :loading="savingConfig" @click="handleSaveConfig">保存配置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Refresh, Delete, RefreshLeft, Document } from '@element-plus/icons-vue'
+import { Upload, Refresh, Delete, RefreshLeft, Document, Setting } from '@element-plus/icons-vue'
 import {
   getBackupList,
   createBackupApi,
@@ -297,6 +345,8 @@ import {
   deleteBackupApi,
   restoreBackupApi,
   getBackupStats as fetchBackupStats,
+  getBackupConfig,
+  updateBackupConfig,
   triggerBackupCleanup,
   getBackupOperationLogs
 } from '@/api/admin'
@@ -313,6 +363,19 @@ const restoreDialogVisible = ref(false)
 const restoreRecord = ref(null)
 const confirmDbName = ref('')
 let pollTimer = null
+
+// Config drawer state
+const configDrawerVisible = ref(false)
+const savingConfig = ref(false)
+const configForm = reactive({
+  autoBackupEnabled: true,
+  backupHour: 2,
+  backupMinute: 0,
+  incrementalEnabled: false,
+  fullBackupIntervalDays: 7,
+  retentionDays: 30,
+  maxCount: 50
+})
 
 const pagination = reactive({
   current: 1,
@@ -660,6 +723,44 @@ const getLogTypeTag = (type) => {
     BACKUP_INTERRUPTED: 'danger'
   }
   return map[type] || 'info'
+}
+
+// Config drawer
+const openConfigDrawer = async () => {
+  try {
+    const response = await getBackupConfig()
+    if (response.code === 200 && response.data) {
+      const d = response.data
+      configForm.autoBackupEnabled = Boolean(d.autoBackupEnabled ?? d.enabled)
+      configForm.backupHour = d.backupHour ?? 2
+      configForm.backupMinute = d.backupMinute ?? 0
+      configForm.incrementalEnabled = Boolean(d.incrementalEnabled)
+      configForm.fullBackupIntervalDays = d.fullBackupIntervalDays ?? 7
+      configForm.retentionDays = d.retentionDays ?? 30
+      configForm.maxCount = d.maxCount ?? 50
+    }
+  } catch {
+    ElMessage.error('加载配置失败')
+  }
+  configDrawerVisible.value = true
+}
+
+const handleSaveConfig = async () => {
+  savingConfig.value = true
+  try {
+    const response = await updateBackupConfig(configForm)
+    if (response.code === 200) {
+      ElMessage.success('备份配置已保存')
+      configDrawerVisible.value = false
+      loadStats()
+    } else {
+      ElMessage.error(response.message || '保存配置失败')
+    }
+  } catch {
+    ElMessage.error('保存配置失败')
+  } finally {
+    savingConfig.value = false
+  }
 }
 
 // Init

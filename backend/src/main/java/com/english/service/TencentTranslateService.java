@@ -9,10 +9,12 @@ import com.tencentcloudapi.tmt.v20180321.TmtClient;
 import com.tencentcloudapi.tmt.v20180321.models.TextTranslateRequest;
 import com.tencentcloudapi.tmt.v20180321.models.TextTranslateResponse;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.english.service.impl.AiCallMetricsService;
 import javax.annotation.PostConstruct;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -33,6 +35,9 @@ public class TencentTranslateService {
 
     /** 单例 TmtClient，在 @PostConstruct 阶段初始化，复用于所有翻译请求 */
     private TmtClient tmtClient;
+
+    @Autowired(required = false)
+    private AiCallMetricsService aiCallMetricsService;
 
     /** 并发信号量：最多允许 10 个请求同时访问腾讯云翻译 API */
     private final Semaphore semaphore = new Semaphore(10);
@@ -102,6 +107,9 @@ public class TencentTranslateService {
         try {
             logger.debug("开始翻译 - 源语言: {}, 目标语言: {}, 文本长度: {}", source, target, text.length());
 
+            long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+            String user = AiCallMetricsService.getCurrentUser();
+
             // 验证必要参数
             if (source == null || source.isEmpty()) {
                 source = "auto";
@@ -133,11 +141,18 @@ public class TencentTranslateService {
             }
             
             logger.debug("翻译成功，结果长度: {}", result.length());
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordSuccess("TENCENT_TRANSLATE", "translate", startTime, user);
+            }
             return result;
 
         } catch (TencentCloudSDKException e) {
             // 不在日志中暴露完整错误堆栈，只记录错误码
             logger.error("腾讯云翻译API错误 - 错误码: {}", e.getErrorCode());
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("TENCENT_TRANSLATE", "translate", startTime,
+                        e.getErrorCode(), user);
+            }
 
             // 根据错误类型返回更友好的提示，避免泄露详细的 Exception message
             String errorCode = e.getErrorCode();
@@ -153,6 +168,10 @@ public class TencentTranslateService {
         } catch (Exception e) {
             // FIX: 捕获其他异常（如网络错误、超时等）
             logger.error("翻译出错: {}", e.getMessage());
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("TENCENT_TRANSLATE", "translate", startTime,
+                        e.getMessage(), user);
+            }
             throw new BusinessException("翻译失败，请稍后重试");
         } finally {
             semaphore.release();
