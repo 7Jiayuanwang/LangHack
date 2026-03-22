@@ -72,10 +72,7 @@ public class ExerciseController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<Map<String, Object>> batchCreateExercises(@RequestBody Map<String, Object> requestData) {
         try {
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            String username = authentication.getName();
-            com.english.entity.User creator = userService.getUserByUsername(username);
-            if (creator == null) throw new com.english.exception.BusinessException("用户不存在");
+            com.english.entity.User creator = getCurrentUser();
             Long createdBy = creator.getId();
 
             Object textIdObj = requestData.get("textId");
@@ -234,10 +231,7 @@ public class ExerciseController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> createExercise(@RequestBody Map<String, Object> requestData) {
         try {
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            String username = authentication.getName();
-            com.english.entity.User creator = userService.getUserByUsername(username);
-            if (creator == null) throw new com.english.exception.BusinessException("用户不存在");
+            com.english.entity.User creator = getCurrentUser();
             Long createdBy = creator.getId();
 
             TextExercise exercise = new TextExercise();
@@ -385,10 +379,7 @@ public class ExerciseController {
     public Result<String> updateExercise(@PathVariable Long exerciseId, @RequestBody Map<String, Object> requestData) {
         try {
             // 验证教师权限：非ADMIN教师只能修改自己创建的习题
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            String username = authentication.getName();
-            com.english.entity.User currentUser = userService.getUserByUsername(username);
-            if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
+            com.english.entity.User currentUser = getCurrentUser();
 
             Map<String, Object> existingExercise = textExerciseService.getExerciseDetail(exerciseId);
             if (existingExercise == null) {
@@ -457,10 +448,7 @@ public class ExerciseController {
     public Result<String> deleteExercise(@PathVariable Long exerciseId) {
         try {
             // 验证教师权限：非ADMIN教师只能删除自己创建的习题
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            String username = authentication.getName();
-            com.english.entity.User currentUser = userService.getUserByUsername(username);
-            if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
+            com.english.entity.User currentUser = getCurrentUser();
 
             Map<String, Object> existingExercise = textExerciseService.getExerciseDetail(exerciseId);
             if (existingExercise == null) {
@@ -499,10 +487,7 @@ public class ExerciseController {
     public Result<String> deleteAllExercisesByTextId(@PathVariable Long textId) {
         try {
             // 验证教师权限：非ADMIN教师只能删除自己创建的课文习题
-            Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            String username = authentication.getName();
-            com.english.entity.User currentUser = userService.getUserByUsername(username);
-            if (currentUser == null) throw new com.english.exception.BusinessException("用户不存在");
+            com.english.entity.User currentUser = getCurrentUser();
 
             if (!"ADMIN".equals(currentUser.getRole())) {
                 // FIX #3: 改进权限检查逻辑，验证课文本身的权限而非习题
@@ -608,6 +593,22 @@ public class ExerciseController {
                 }
             }
         }
+    }
+
+    /**
+     * 获取当前认证用户，统一 null 检查
+     */
+    private com.english.entity.User getCurrentUser() {
+        Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getName())) {
+            throw new BusinessException("未认证");
+        }
+        String username = authentication.getName();
+        com.english.entity.User user = userService.getUserByUsername(username);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        return user;
     }
 
 /**

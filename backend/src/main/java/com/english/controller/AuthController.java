@@ -1,23 +1,30 @@
 package com.english.controller;
 
+import com.english.dto.ElevateRequest;
 import com.english.dto.LoginRequest;
 import com.english.dto.Result;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.service.TokenBlacklistService;
 import com.english.service.UserService;
+import com.english.service.impl.ElevationService;
+import com.english.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 @RestController
@@ -36,6 +43,17 @@ public class AuthController {
 
     @Autowired
     private TokenBlacklistService tokenBlacklistService;
+
+    @Autowired
+    private ElevationService elevationService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    private static final Set<String> ELEVATION_ALLOWED = Set.of("ADMIN", "OPS");
 
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest) {
@@ -87,6 +105,7 @@ public class AuthController {
 
         try {
             // 强制设置角色为普通用户（必须在createUser前设置，让Service层处理TOCTOU）
+            // OPS 角色只能由管理员在后台创建，不允许通过注册接口创建
             user.setRole("USER");
             user.setUsername(username);
 
@@ -160,14 +179,110 @@ public class AuthController {
         }
     }
 
+    /**
+     * 二次鉴权提权
+     * ADMIN 可提权到 OPS，OPS 可提权到 ADMIN。需要重新输入密码。
+     */
+    @PostMapping("/elevate")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<Map<String, Object>> elevate(@Valid @RequestBody ElevateRequest request) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return Result.error("未认证");
+            }
+
+            String username = authentication.getName();
+            User user = userService.getUserByUsername(username);
+            if (user == null) {
+                return Result.error("用户不存在");
+            }
+
+            // 暴力破解保护：检查提权尝试次数
+            if (!elevationService.checkRateLimit(username)) {
+                log.warn("Elevation rate limit exceeded for user {}", username);
+                return Result.error("提权尝试次数过多，请 15 分钟后重试");
+            }
+
+            String currentRole = user.getRole();
+            String targetRole = request.getTargetRole();
+
+            // 验证当前角色是否允许提权
+            if (!ELEVATION_ALLOWED.contains(currentRole)) {
+                return Result.error("当前角色不支持提权");
+            }
+
+            // 验证目标角色有效性
+            if (!ELEVATION_ALLOWED.contains(targetRole)) {
+                return Result.error("无效的目标角色");
+            }
+
+            // 不允许提权到自己的角色
+            if (currentRole.equals(targetRole)) {
+                return Result.error("已拥有该角色权限");
+            }
+
+            // 验证密码
+            if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                log.warn("Elevation failed: wrong password for user {}", username);
+                return Result.error("密码验证失败");
+            }
+
+            // 写入提权状态到 Redis（按 username 存储，供 JwtFilter 读取）
+            elevationService.elevate(username, targetRole);
+            // 提权成功后清除失败计数
+            elevationService.clearRateLimit(username);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("elevatedRole", targetRole);
+            result.put("expiresAt", Instant.now().plusSeconds(7200).toString());
+
+            log.info("User {} ({}) elevated to {}", username, currentRole, targetRole);
+            return Result.success("提权成功", result);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            log.error("提权失败", e);
+            return Result.error("提权失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 撤销提权
+     */
+    @PostMapping("/revoke-elevation")
+    @PreAuthorize("isAuthenticated()")
+    public Result<String> revokeElevation() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return Result.error("未认证");
+            }
+            elevationService.revoke(authentication.getName());
+            return Result.success("已撤销提权");
+        } catch (Exception e) {
+            log.error("撤销提权失败", e);
+            return Result.error("撤销提权失败");
+        }
+    }
+
     @PostMapping("/logout")
     public Result<String> logout(HttpServletRequest request) {
         try {
             String authHeader = request.getHeader("Authorization");
             if (authHeader != null && authHeader.startsWith("Bearer ") && authHeader.length() > 7) {
                 String token = authHeader.substring(7);
+                // 同时撤销提权状态
+                try {
+                    String username = jwtUtil.getUsernameFromToken(token);
+                    if (username != null) {
+                        elevationService.revoke(username);
+                    }
+                } catch (Exception ex) {
+                    log.warn("Failed to revoke elevation during logout: {}", ex.getMessage());
+                }
                 tokenBlacklistService.blacklistToken(token);
-                log.info("User logged out, token blacklisted");
+                log.info("User logged out, token blacklisted, elevation revoked");
             }
         } catch (Exception e) {
             // 即使黑名单操作失败，仍然返回登出成功（前端会清理本地 token）

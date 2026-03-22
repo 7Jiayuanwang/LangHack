@@ -17,6 +17,7 @@
           <el-form-item label="角色">
             <el-select v-model="searchForm.role" placeholder="请选择" clearable>
               <el-option label="管理员" value="ADMIN" />
+              <el-option label="运维" value="OPS" />
               <el-option label="教师" value="TEACHER" />
               <el-option label="学生" value="STUDENT" />
               <el-option label="普通用户" value="USER" />
@@ -128,6 +129,7 @@
         <el-form-item label="角色" prop="role">
           <el-select v-model="userForm.role" style="width: 100%">
             <el-option label="管理员" value="ADMIN" />
+            <el-option label="运维" value="OPS" />
             <el-option label="教师" value="TEACHER" />
             <el-option label="学生" value="STUDENT" />
             <el-option label="普通用户" value="USER" />
@@ -426,6 +428,7 @@ const deleteUser = async (user) => {
 const getRoleType = (role) => {
   const types = {
     'ADMIN': 'danger',
+    'OPS': 'warning',
     'TEACHER': 'warning',
     'STUDENT': 'success',
     'USER': 'info'
@@ -436,6 +439,7 @@ const getRoleType = (role) => {
 const getRoleText = (role) => {
   const texts = {
     'ADMIN': '管理员',
+    'OPS': '运维',
     'TEACHER': '教师',
     'STUDENT': '学生',
     'USER': '普通用户'

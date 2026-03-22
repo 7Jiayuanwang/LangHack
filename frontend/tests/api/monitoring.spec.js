@@ -18,14 +18,14 @@ describe('Monitoring API', () => {
   })
 
   describe('getRealTimeMetrics', () => {
-    it('calls GET /api/admin/monitoring/realtime', async () => {
+    it('calls GET /api/ops/monitoring/realtime', async () => {
       const mockResponse = { code: 200, data: { activeUsers: 5 } }
       mockRequest.mockResolvedValue(mockResponse)
 
       const result = await getRealTimeMetrics()
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/realtime',
+        url: '/api/ops/monitoring/realtime',
         method: 'get'
       })
       expect(result).toEqual(mockResponse)
@@ -39,14 +39,14 @@ describe('Monitoring API', () => {
   })
 
   describe('getSystemMetrics', () => {
-    it('calls GET /api/admin/monitoring/system', async () => {
+    it('calls GET /api/ops/monitoring/system', async () => {
       const mockResponse = { code: 200, data: { uptimeMs: 3600000 } }
       mockRequest.mockResolvedValue(mockResponse)
 
       const result = await getSystemMetrics()
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/system',
+        url: '/api/ops/monitoring/system',
         method: 'get'
       })
       expect(result).toEqual(mockResponse)
@@ -60,14 +60,14 @@ describe('Monitoring API', () => {
   })
 
   describe('getHourlyStats', () => {
-    it('calls GET /api/admin/monitoring/hourly with params { hours: 24 }', async () => {
+    it('calls GET /api/ops/monitoring/hourly with params { hours: 24 }', async () => {
       const mockResponse = { code: 200, data: [] }
       mockRequest.mockResolvedValue(mockResponse)
 
       const result = await getHourlyStats(24)
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/hourly',
+        url: '/api/ops/monitoring/hourly',
         method: 'get',
         params: { hours: 24 }
       })
@@ -80,7 +80,7 @@ describe('Monitoring API', () => {
       await getHourlyStats()
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/hourly',
+        url: '/api/ops/monitoring/hourly',
         method: 'get',
         params: { hours: 24 }
       })
@@ -94,14 +94,14 @@ describe('Monitoring API', () => {
   })
 
   describe('getDailyStats', () => {
-    it('calls GET /api/admin/monitoring/daily with params { days: 30 }', async () => {
+    it('calls GET /api/ops/monitoring/daily with params { days: 30 }', async () => {
       const mockResponse = { code: 200, data: [] }
       mockRequest.mockResolvedValue(mockResponse)
 
       const result = await getDailyStats(30)
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/daily',
+        url: '/api/ops/monitoring/daily',
         method: 'get',
         params: { days: 30 }
       })
@@ -114,7 +114,7 @@ describe('Monitoring API', () => {
       await getDailyStats()
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/daily',
+        url: '/api/ops/monitoring/daily',
         method: 'get',
         params: { days: 30 }
       })
@@ -128,14 +128,14 @@ describe('Monitoring API', () => {
   })
 
   describe('getTopPages', () => {
-    it('calls GET /api/admin/monitoring/top-pages with empty params when no date', async () => {
+    it('calls GET /api/ops/monitoring/top-pages with empty params when no date', async () => {
       const mockResponse = { code: 200, data: [{ uri: '/api/texts', count: 100 }] }
       mockRequest.mockResolvedValue(mockResponse)
 
       const result = await getTopPages()
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/top-pages',
+        url: '/api/ops/monitoring/top-pages',
         method: 'get',
         params: {}
       })
@@ -149,7 +149,7 @@ describe('Monitoring API', () => {
       const result = await getTopPages('2026-03-22')
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/top-pages',
+        url: '/api/ops/monitoring/top-pages',
         method: 'get',
         params: { date: '2026-03-22' }
       })
@@ -164,14 +164,14 @@ describe('Monitoring API', () => {
   })
 
   describe('getAiCallsRealtime', () => {
-    it('calls GET /api/admin/monitoring/ai-calls/realtime', async () => {
+    it('calls GET /api/ops/monitoring/ai-calls/realtime', async () => {
       const mockResponse = { code: 200, data: { HIAGENT: { totalCalls: 10 } } }
       mockRequest.mockResolvedValue(mockResponse)
 
       const result = await getAiCallsRealtime()
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/ai-calls/realtime',
+        url: '/api/ops/monitoring/ai-calls/realtime',
         method: 'get'
       })
       expect(result).toEqual(mockResponse)
@@ -185,14 +185,14 @@ describe('Monitoring API', () => {
   })
 
   describe('getAiCallsDaily', () => {
-    it('calls GET /api/admin/monitoring/ai-calls/daily with params { days: 30 }', async () => {
+    it('calls GET /api/ops/monitoring/ai-calls/daily with params { days: 30 }', async () => {
       const mockResponse = { code: 200, data: [] }
       mockRequest.mockResolvedValue(mockResponse)
 
       const result = await getAiCallsDaily(30)
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/ai-calls/daily',
+        url: '/api/ops/monitoring/ai-calls/daily',
         method: 'get',
         params: { days: 30 }
       })
@@ -205,7 +205,7 @@ describe('Monitoring API', () => {
       await getAiCallsDaily()
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/ai-calls/daily',
+        url: '/api/ops/monitoring/ai-calls/daily',
         method: 'get',
         params: { days: 30 }
       })
@@ -219,14 +219,14 @@ describe('Monitoring API', () => {
   })
 
   describe('getAiCallsRecent', () => {
-    it('calls GET /api/admin/monitoring/ai-calls/recent with params { limit: 50 }', async () => {
+    it('calls GET /api/ops/monitoring/ai-calls/recent with params { limit: 50 }', async () => {
       const mockResponse = { code: 200, data: [{ serviceName: 'HIAGENT', success: true }] }
       mockRequest.mockResolvedValue(mockResponse)
 
       const result = await getAiCallsRecent(50)
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/ai-calls/recent',
+        url: '/api/ops/monitoring/ai-calls/recent',
         method: 'get',
         params: { limit: 50 }
       })
@@ -239,7 +239,7 @@ describe('Monitoring API', () => {
       await getAiCallsRecent()
 
       expect(mockRequest).toHaveBeenCalledWith({
-        url: '/api/admin/monitoring/ai-calls/recent',
+        url: '/api/ops/monitoring/ai-calls/recent',
         method: 'get',
         params: { limit: 50 }
       })

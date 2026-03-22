@@ -9,6 +9,7 @@ import com.english.entity.AiCallStatsDaily;
 import com.english.mapper.*;
 import com.english.service.impl.AccessMetricsService;
 import com.english.service.impl.AiCallMetricsService;
+import com.english.service.impl.ElevationService;
 import com.english.service.impl.SystemMetricsService;
 import com.english.util.JwtUtil;
 import org.slf4j.Logger;
@@ -25,8 +26,8 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/admin/monitoring")
-@PreAuthorize("hasRole('ADMIN')")
+@RequestMapping("/api/ops/monitoring")
+@PreAuthorize("hasAnyRole('OPS', 'ADMIN')")
 public class MonitoringController {
 
     private static final Logger logger = LoggerFactory.getLogger(MonitoringController.class);
@@ -55,6 +56,9 @@ public class MonitoringController {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private ElevationService elevationService;
+
     @GetMapping("/realtime")
     public Result<?> getRealTimeMetrics() {
         try {
@@ -72,12 +76,25 @@ public class MonitoringController {
      */
     @GetMapping("/realtime/stream")
     public SseEmitter streamRealTimeMetrics(@RequestParam String token) {
-        // Manual token validation for SSE endpoint
+        // Manual token validation for SSE endpoint (EventSource doesn't support custom headers)
         try {
             String username = jwtUtil.getUsernameFromToken(token);
             if (username == null || !jwtUtil.validateToken(token, username)) {
                 SseEmitter emitter = new SseEmitter(0L);
                 emitter.completeWithError(new SecurityException("Invalid token"));
+                return emitter;
+            }
+            // 验证角色：仅 OPS 和 ADMIN 可访问实时监控流（含提权状态检查）
+            String role = jwtUtil.getRoleFromToken(token);
+            boolean hasAccess = "ADMIN".equals(role) || "OPS".equals(role);
+            if (!hasAccess) {
+                // 检查 Redis 中的提权状态
+                String elevatedRole = elevationService.getElevatedRole(username);
+                hasAccess = "ADMIN".equals(elevatedRole) || "OPS".equals(elevatedRole);
+            }
+            if (!hasAccess) {
+                SseEmitter emitter = new SseEmitter(0L);
+                emitter.completeWithError(new SecurityException("Insufficient privileges"));
                 return emitter;
             }
         } catch (Exception e) {

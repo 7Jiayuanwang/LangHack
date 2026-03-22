@@ -333,7 +333,7 @@ class SecurityExceptionHandlerTest {
         @Test
         @DisplayName("commence with various request URIs should work")
         void commence_withVariousUris_shouldWork() throws IOException {
-            String[] uris = {"/api/test", "/api/student/words", "/", "/api/admin/backup"};
+            String[] uris = {"/api/test", "/api/student/words", "/", "/api/ops/backup"};
             for (String uri : uris) {
                 MockHttpServletResponse resp = new MockHttpServletResponse();
                 request.setRequestURI(uri);

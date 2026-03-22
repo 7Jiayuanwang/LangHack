@@ -11,7 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -40,7 +39,6 @@ public class UserTextController {
      * 用户上传课文
      */
     @PostMapping("/upload")
-    @Transactional
     public Result<Map<String, Object>> uploadText(@RequestBody Map<String, Object> textData) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -156,7 +154,6 @@ public class UserTextController {
      * 更新用户上传的课文
      */
     @PutMapping("/{textId}")
-    @Transactional
     public Result<String> updateText(@PathVariable Long textId, @RequestBody Map<String, Object> textData) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -203,7 +200,6 @@ public class UserTextController {
      * 删除用户上传的课文
      */
     @DeleteMapping("/{textId}")
-    @Transactional
     public Result<String> deleteText(@PathVariable Long textId) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -263,7 +259,6 @@ public class UserTextController {
      */
     @PostMapping("/{textId}/like")
     @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
-    @Transactional
     public Result<String> likeText(@PathVariable Long textId) {
         try {
             Text text = textService.getTextById(textId);

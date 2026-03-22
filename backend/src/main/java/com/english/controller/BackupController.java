@@ -28,8 +28,8 @@ import java.nio.file.Path;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/admin/backup")
-@PreAuthorize("hasRole('ADMIN')")
+@RequestMapping("/api/ops/backup")
+@PreAuthorize("hasAnyRole('OPS', 'ADMIN')")
 public class BackupController {
 
     private static final Logger logger = LoggerFactory.getLogger(BackupController.class);

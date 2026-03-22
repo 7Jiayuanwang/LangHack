@@ -267,7 +267,7 @@ const connectSSE = () => {
   if (!token) return
 
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-  eventSource = new EventSource(`${baseUrl}/api/admin/monitoring/realtime/stream?token=${token}`)
+  eventSource = new EventSource(`${baseUrl}/api/ops/monitoring/realtime/stream?token=${token}`)
 
   eventSource.onmessage = (event) => {
     try {

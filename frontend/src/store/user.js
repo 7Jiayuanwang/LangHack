@@ -43,7 +43,7 @@ function loadUserInfoFromStorage() {
 
 // 验证角色值的有效性
 function validateRole(role) {
-  const validRoles = ['ADMIN', 'TEACHER', 'STUDENT', 'USER']
+  const validRoles = ['ADMIN', 'TEACHER', 'STUDENT', 'USER', 'OPS']
   if (!role || typeof role !== 'string') {
     return ''
   }
@@ -62,6 +62,20 @@ export const useUserStore = defineStore('user', {
         console.error('Failed to load userRole from localStorage:', e)
         return ''
       }
+    })(),
+    elevatedRole: (() => {
+      try {
+        return sessionStorage.getItem('elevatedRole') || null
+      } catch (e) {
+        return null
+      }
+    })(),
+    elevationExpiresAt: (() => {
+      try {
+        return sessionStorage.getItem('elevationExpiresAt') || null
+      } catch (e) {
+        return null
+      }
     })()
   }),
 
@@ -70,7 +84,22 @@ export const useUserStore = defineStore('user', {
     isAdmin: (state) => state.userRole === 'ADMIN',
     isTeacher: (state) => state.userRole === 'TEACHER',
     isStudent: (state) => state.userRole === 'STUDENT',
-    isUser: (state) => state.userRole === 'USER'
+    isUser: (state) => state.userRole === 'USER',
+    isOps: (state) => state.userRole === 'OPS',
+    hasOpsAccess: (state) => {
+      if (state.userRole === 'OPS') return true
+      if (state.elevatedRole === 'OPS' && state.elevationExpiresAt) {
+        return new Date(state.elevationExpiresAt) > new Date()
+      }
+      return false
+    },
+    hasAdminAccess: (state) => {
+      if (state.userRole === 'ADMIN') return true
+      if (state.elevatedRole === 'ADMIN' && state.elevationExpiresAt) {
+        return new Date(state.elevationExpiresAt) > new Date()
+      }
+      return false
+    }
   },
 
   actions: {
@@ -134,9 +163,19 @@ export const useUserStore = defineStore('user', {
       this.token = ''
       this.userInfo = {}
       this.userRole = ''
+      this.elevatedRole = null
+      this.elevationExpiresAt = null
 
       // 清理 localStorage（集中清理所有认证相关 key）
       clearAuthStorage()
+
+      // 清理 sessionStorage 中的提权状态
+      try {
+        sessionStorage.removeItem('elevatedRole')
+        sessionStorage.removeItem('elevationExpiresAt')
+      } catch (e) {
+        console.warn('Failed to clear elevation from sessionStorage:', e)
+      }
 
       // 再调用后端 logout API（失败不影响本地已清理的状态）
       try {
@@ -187,6 +226,47 @@ export const useUserStore = defineStore('user', {
       }
 
       return Promise.resolve(this.userInfo)
+    },
+
+    setElevation(elevatedRole, expiresAt) {
+      this.elevatedRole = elevatedRole
+      this.elevationExpiresAt = expiresAt
+      try {
+        sessionStorage.setItem('elevatedRole', elevatedRole)
+        sessionStorage.setItem('elevationExpiresAt', expiresAt)
+      } catch (e) {
+        console.error('Failed to persist elevation state:', e)
+      }
+      // 启动过期定时器，确保 getter 在提权过期后自动刷新
+      this._startElevationTimer()
+    },
+
+    _startElevationTimer() {
+      if (this._elevationTimer) {
+        clearInterval(this._elevationTimer)
+        this._elevationTimer = null
+      }
+      if (!this.elevationExpiresAt) return
+      this._elevationTimer = setInterval(() => {
+        if (this.elevationExpiresAt && new Date(this.elevationExpiresAt) <= new Date()) {
+          this.clearElevation()
+        }
+      }, 60000) // 每分钟检查一次
+    },
+
+    clearElevation() {
+      this.elevatedRole = null
+      this.elevationExpiresAt = null
+      if (this._elevationTimer) {
+        clearInterval(this._elevationTimer)
+        this._elevationTimer = null
+      }
+      try {
+        sessionStorage.removeItem('elevatedRole')
+        sessionStorage.removeItem('elevationExpiresAt')
+      } catch (e) {
+        console.error('Failed to clear elevation state:', e)
+      }
     }
   }
 })

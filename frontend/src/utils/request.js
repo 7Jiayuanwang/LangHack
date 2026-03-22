@@ -116,9 +116,17 @@ request.interceptors.response.use(
         case 404:
           message = '请求地址不存在'
           break
-        case 500:
-          message = '服务器内部错误'
+        case 500: {
+          // 运维人员：显示后端返回的详细错误信息
+          const userStore = useUserStore()
+          const detail = error.response?.data?.detail
+          if (userStore.hasOpsAccess && detail) {
+            message = `服务器错误: ${detail}`
+          } else {
+            message = '服务器内部错误'
+          }
           break
+        }
         default:
           message = '请求失败，请稍后重试'
       }

@@ -18,7 +18,6 @@ import com.english.service.TextService;
 import com.english.service.UnitWordService;
 import com.english.service.TextExerciseService;
 import com.english.service.ArticleVersionService;
-import com.english.service.impl.DataCleanupServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -59,9 +58,6 @@ public class AdminController {
 
     @Autowired
     private com.english.service.StudentClassService studentClassService;
-
-    @Autowired
-    private DataCleanupServiceImpl dataCleanupService;
 
     @Autowired
     private UnitService unitService;
@@ -245,38 +241,7 @@ public class AdminController {
         }
     }
 
-    /**
-     * 清理不一致的数据
-     */
-    @PostMapping("/cleanup-data")
-    @PreAuthorize("hasRole('ADMIN')")
-    public Result<String> cleanupData() {
-        try {
-            // 手动触发数据清理
-            dataCleanupService.cleanupInconsistentData();
-            return Result.success("数据清理完成，请查看控制台输出获取详细信息");
-        } catch (Exception e) {
-            logger.error("数据清理失败", e);
-
-            return Result.error("数据清理失败，请稍后重试");
-        }
-    }
-
-    /**
-     * 打印详细数据统计信息
-     */
-    @GetMapping("/data-stats")
-    @PreAuthorize("hasRole('ADMIN')")
-    public Result<String> printDataStatistics() {
-        try {
-            dataCleanupService.printDataStatistics();
-            return Result.success("数据统计信息已打印到控制台");
-        } catch (Exception e) {
-            logger.error("获取数据统计失败", e);
-
-            return Result.error("获取数据统计失败，请稍后重试");
-        }
-    }
+    // ========== 数据清理功能已迁移至 OpsController (/api/ops/cleanup-data, /api/ops/data-stats) ==========
 
     // ========== 课程管理相关 ==========
 

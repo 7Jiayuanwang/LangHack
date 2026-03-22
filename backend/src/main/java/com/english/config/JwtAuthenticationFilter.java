@@ -3,6 +3,7 @@ package com.english.config;
 import com.english.entity.User;
 import com.english.service.TokenBlacklistService;
 import com.english.service.UserService;
+import com.english.service.impl.ElevationService;
 import com.english.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +21,8 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -28,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
-    private static final Set<String> VALID_ROLES = Set.of("ADMIN", "TEACHER", "STUDENT", "USER");
+    private static final Set<String> VALID_ROLES = Set.of("ADMIN", "TEACHER", "STUDENT", "USER", "OPS");
 
     /**
      * Redis 缓存前缀和 TTL：缓存用户活跃状态，避免每次请求查库。
@@ -50,6 +52,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private ElevationService elevationService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -105,11 +110,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     } else if (!isUserActive(username, role)) {
                         logger.warn("User '{}' is deleted/disabled or role changed, rejecting token", username);
                     } else {
+                        // 构建权限列表：基础角色 + 可能的提权角色
+                        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                        authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+
+                        // 检查 Redis 中是否有有效的提权状态
+                        try {
+                            String elevatedRole = elevationService.getElevatedRole(username);
+                            if (elevatedRole != null && !elevatedRole.equals(role)
+                                    && VALID_ROLES.contains(elevatedRole)) {
+                                authorities.add(new SimpleGrantedAuthority("ROLE_" + elevatedRole));
+                                logger.debug("User {} has elevation to {}", username, elevatedRole);
+                            }
+                        } catch (Exception ex) {
+                            // Redis 不可用时忽略提权检查，仅使用基础角色
+                            logger.debug("Elevation check failed, using base role only");
+                        }
+
                         UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
                                 username,
                                 null,
-                                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
+                                authorities
                             );
                         authToken.setDetails(username); // 保存用户名用于后续审计
                         SecurityContextHolder.getContext().setAuthentication(authToken);

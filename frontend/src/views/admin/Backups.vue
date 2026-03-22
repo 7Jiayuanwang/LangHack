@@ -288,56 +288,212 @@
       </div>
     </el-drawer>
 
-    <!-- 备份配置抽屉 -->
+    <!-- 备份策略配置抽屉 -->
     <el-drawer
       v-model="configDrawerVisible"
-      title="备份配置"
-      size="400px"
+      title="备份策略配置"
+      size="560px"
+      :close-on-click-modal="false"
     >
-      <el-form :model="configForm" label-position="top">
-        <el-form-item label="自动备份">
-          <el-switch v-model="configForm.autoBackupEnabled" />
-        </el-form-item>
-
-        <el-form-item label="备份时间">
-          <div style="display: flex; gap: 10px;">
-            <el-select v-model="configForm.backupHour" placeholder="小时" style="width: 50%;">
-              <el-option v-for="h in 24" :key="h-1" :label="(h-1) + '时'" :value="h-1" />
-            </el-select>
-            <el-select v-model="configForm.backupMinute" placeholder="分钟" style="width: 50%;">
-              <el-option v-for="m in [0, 15, 30, 45]" :key="m" :label="m + '分'" :value="m" />
-            </el-select>
+      <div class="config-panel">
+        <!-- 自动备份总开关 -->
+        <div class="config-card">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon auto-icon">
+                <el-icon :size="20"><Timer /></el-icon>
+              </div>
+              <div class="card-title-group">
+                <h4>自动备份</h4>
+                <p class="card-desc">启用后系统将按设定时间自动执行备份任务</p>
+              </div>
+            </div>
+            <el-switch v-model="configForm.autoBackupEnabled" />
           </div>
-        </el-form-item>
+        </div>
 
-        <el-form-item label="增量备份">
-          <el-switch v-model="configForm.incrementalEnabled" />
-        </el-form-item>
+        <!-- 备份时间设置 -->
+        <div class="config-card" v-if="configForm.autoBackupEnabled">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon time-icon">
+                <el-icon :size="20"><Clock /></el-icon>
+              </div>
+              <div class="card-title-group">
+                <h4>执行时间</h4>
+                <p class="card-desc">建议选择凌晨业务低峰时段</p>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="time-picker-row">
+              <div class="time-picker-item">
+                <label>小时</label>
+                <el-select v-model="configForm.backupHour" style="width: 100%">
+                  <el-option v-for="h in 24" :key="h-1" :label="String(h-1).padStart(2, '0') + ' 时'" :value="h-1" />
+                </el-select>
+              </div>
+              <span class="time-separator">:</span>
+              <div class="time-picker-item">
+                <label>分钟</label>
+                <el-select v-model="configForm.backupMinute" style="width: 100%">
+                  <el-option v-for="m in [0, 15, 30, 45]" :key="m" :label="String(m).padStart(2, '0') + ' 分'" :value="m" />
+                </el-select>
+              </div>
+            </div>
+            <div class="time-preview">
+              <el-icon><InfoFilled /></el-icon>
+              每天 {{ String(configForm.backupHour).padStart(2, '0') }}:{{ String(configForm.backupMinute).padStart(2, '0') }} 自动执行备份
+            </div>
+          </div>
+        </div>
 
-        <el-form-item v-if="configForm.incrementalEnabled" label="全量备份间隔(天)">
-          <el-input-number v-model="configForm.fullBackupIntervalDays" :min="1" :max="30" />
-        </el-form-item>
+        <!-- 全量备份配置 -->
+        <div class="config-card" v-if="configForm.autoBackupEnabled">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon full-icon">
+                <el-icon :size="20"><FolderOpened /></el-icon>
+              </div>
+              <div class="card-title-group">
+                <h4>全量备份</h4>
+                <p class="card-desc">完整备份数据库所有数据，恢复时无需依赖其他备份</p>
+              </div>
+            </div>
+            <el-tag type="success" size="small" effect="light">始终启用</el-tag>
+          </div>
+          <div class="card-body">
+            <div class="info-banner success">
+              <el-icon><InfoFilled /></el-icon>
+              <span v-if="!configForm.incrementalEnabled">
+                当前模式：<strong>每天</strong>执行一次全量备份
+              </span>
+              <span v-else>
+                当前模式：每 <strong>{{ configForm.fullBackupIntervalDays }}</strong> 天执行一次全量备份，其余时间执行增量备份
+              </span>
+            </div>
+          </div>
+        </div>
 
-        <el-form-item label="保留天数">
-          <el-input-number v-model="configForm.retentionDays" :min="1" :max="365" />
-        </el-form-item>
+        <!-- 增量备份配置 -->
+        <div class="config-card" v-if="configForm.autoBackupEnabled">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon incr-icon">
+                <el-icon :size="20"><CopyDocument /></el-icon>
+              </div>
+              <div class="card-title-group">
+                <h4>增量备份</h4>
+                <p class="card-desc">仅备份自上次以来变化的数据，节省存储空间和执行时间</p>
+              </div>
+            </div>
+            <el-switch v-model="configForm.incrementalEnabled" />
+          </div>
+          <div class="card-body" v-if="configForm.incrementalEnabled">
+            <div class="interval-setting">
+              <div class="interval-header">
+                <label class="interval-label">全量备份周期</label>
+                <span class="interval-value">{{ configForm.fullBackupIntervalDays }} 天</span>
+              </div>
+              <p class="interval-desc">设置多少天执行一次全量备份，中间自动执行增量备份</p>
+              <el-slider
+                v-model="configForm.fullBackupIntervalDays"
+                :min="1"
+                :max="30"
+                :marks="{ 1: '1', 7: '7', 14: '14', 30: '30' }"
+                :step="1"
+                style="padding: 0 8px;"
+              />
+            </div>
 
-        <el-form-item label="最大备份数">
-          <el-input-number v-model="configForm.maxCount" :min="1" :max="200" />
-        </el-form-item>
+            <!-- 备份周期预览 -->
+            <div class="schedule-preview">
+              <h5>
+                <el-icon><InfoFilled /></el-icon>
+                未来 7 天备份计划预览
+              </h5>
+              <div class="preview-days">
+                <div
+                  v-for="(day, index) in schedulePreview"
+                  :key="index"
+                  class="preview-day"
+                  :class="{ 'is-full': day.isFull, 'is-incremental': !day.isFull }"
+                >
+                  <div class="day-label">{{ day.label }}</div>
+                  <div class="day-dot"></div>
+                  <div class="day-type">{{ day.isFull ? '全量' : '增量' }}</div>
+                </div>
+              </div>
+              <div class="preview-legend">
+                <span class="legend-item"><span class="legend-dot full-dot"></span> 全量备份</span>
+                <span class="legend-item"><span class="legend-dot incr-dot"></span> 增量备份</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-        <el-form-item>
-          <el-button type="primary" :loading="savingConfig" @click="handleSaveConfig">保存配置</el-button>
-        </el-form-item>
-      </el-form>
+        <!-- 存储策略 -->
+        <div class="config-card">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-icon storage-icon">
+                <el-icon :size="20"><Coin /></el-icon>
+              </div>
+              <div class="card-title-group">
+                <h4>存储策略</h4>
+                <p class="card-desc">超出限制的旧备份将在清理时自动删除</p>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="storage-items">
+              <div class="storage-item">
+                <div class="storage-label">
+                  <span class="label-main">保留天数</span>
+                  <span class="label-hint">超过此天数的备份将标记为过期</span>
+                </div>
+                <el-input-number
+                  v-model="configForm.retentionDays"
+                  :min="1"
+                  :max="365"
+                  :step="1"
+                  controls-position="right"
+                />
+              </div>
+              <div class="storage-item">
+                <div class="storage-label">
+                  <span class="label-main">最大备份数</span>
+                  <span class="label-hint">超出数量时最早的备份将被优先清理</span>
+                </div>
+                <el-input-number
+                  v-model="configForm.maxCount"
+                  :min="1"
+                  :max="200"
+                  :step="5"
+                  controls-position="right"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 保存按钮 -->
+        <div class="config-actions">
+          <el-button @click="configDrawerVisible = false">取消</el-button>
+          <el-button type="primary" :loading="savingConfig" @click="handleSaveConfig">
+            <el-icon><Check /></el-icon>
+            保存配置
+          </el-button>
+        </div>
+      </div>
     </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Refresh, Delete, RefreshLeft, Document, Setting } from '@element-plus/icons-vue'
+import { Upload, Refresh, Delete, RefreshLeft, Document, Setting, Timer, Clock, FolderOpened, CopyDocument, Coin, InfoFilled, Check } from '@element-plus/icons-vue'
 import {
   getBackupList,
   createBackupApi,
@@ -349,7 +505,7 @@ import {
   updateBackupConfig,
   triggerBackupCleanup,
   getBackupOperationLogs
-} from '@/api/admin'
+} from '@/api/ops'
 
 // State
 const backups = ref([])
@@ -381,6 +537,24 @@ const pagination = reactive({
   current: 1,
   size: 10,
   total: 0
+})
+
+// 备份计划预览（未来7天）
+const schedulePreview = computed(() => {
+  const days = []
+  const interval = configForm.fullBackupIntervalDays || 7
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六']
+  const now = new Date()
+
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(now)
+    date.setDate(date.getDate() + i)
+    days.push({
+      label: i === 0 ? '今天' : `周${weekdays[date.getDay()]}`,
+      isFull: i % interval === 0
+    })
+  }
+  return days
 })
 
 // Load data
@@ -890,5 +1064,364 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+/* 备份策略配置面板 */
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.config-card {
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-light, #ebeef5);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+.config-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  gap: 12px;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.auto-icon {
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+  color: #0284c7;
+}
+
+.time-icon {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #d97706;
+}
+
+.full-icon {
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  color: #16a34a;
+}
+
+.incr-icon {
+  background: linear-gradient(135deg, #fce7f3, #fbcfe8);
+  color: #db2777;
+}
+
+.storage-icon {
+  background: linear-gradient(135deg, #f3e8ff, #e9d5ff);
+  color: #9333ea;
+}
+
+.card-title-group {
+  min-width: 0;
+}
+
+.card-title-group h4 {
+  margin: 0 0 2px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #303133);
+  line-height: 1.4;
+}
+
+.card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary, #909399);
+  line-height: 1.4;
+}
+
+.card-body {
+  padding: 0 20px 16px;
+}
+
+/* 时间选择器 */
+.time-picker-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.time-picker-item {
+  flex: 1;
+}
+
+.time-picker-item label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary, #606266);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.time-separator {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-tertiary, #909399);
+  padding-bottom: 4px;
+}
+
+.time-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #0369a1;
+}
+
+/* 信息横幅 */
+.info-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.info-banner.success {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+/* 增量备份间隔设置 */
+.interval-setting {
+  margin-bottom: 20px;
+}
+
+.interval-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.interval-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #303133);
+}
+
+.interval-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #db2777;
+  background: #fce7f3;
+  padding: 2px 10px;
+  border-radius: 12px;
+}
+
+.interval-desc {
+  font-size: 12px;
+  color: var(--text-tertiary, #909399);
+  margin: 0 0 16px 0;
+  line-height: 1.4;
+}
+
+/* 备份计划预览 */
+.schedule-preview {
+  background: var(--bg-secondary, #f8fafc);
+  border: 1px solid var(--border-light, #e2e8f0);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.schedule-preview h5 {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #606266);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.preview-days {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.preview-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding: 8px 2px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.preview-day .day-label {
+  font-size: 11px;
+  color: var(--text-tertiary, #909399);
+  font-weight: 500;
+}
+
+.preview-day .day-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.preview-day.is-full .day-dot {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.4);
+}
+
+.preview-day.is-incremental .day-dot {
+  background: linear-gradient(135deg, #f472b6, #db2777);
+  box-shadow: 0 2px 6px rgba(219, 39, 119, 0.3);
+}
+
+.preview-day .day-type {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.preview-day.is-full .day-type {
+  color: #16a34a;
+}
+
+.preview-day.is-incremental .day-type {
+  color: #db2777;
+}
+
+.preview-legend {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary, #909399);
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-dot.full-dot {
+  background: #22c55e;
+}
+
+.legend-dot.incr-dot {
+  background: #db2777;
+}
+
+/* 存储策略 */
+.storage-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.storage-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.storage-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.label-main {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #303133);
+}
+
+.label-hint {
+  font-size: 12px;
+  color: var(--text-tertiary, #909399);
+}
+
+/* 配置保存按钮 */
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light, #ebeef5);
+}
+
+/* 动画 */
+.config-fade-enter-active,
+.config-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.config-fade-enter-from,
+.config-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+@media (max-width: 600px) {
+  .time-picker-row {
+    flex-direction: column;
+  }
+
+  .time-separator {
+    display: none;
+  }
+
+  .preview-days {
+    gap: 2px;
+  }
+
+  .preview-day .day-label {
+    font-size: 10px;
+  }
+
+  .storage-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

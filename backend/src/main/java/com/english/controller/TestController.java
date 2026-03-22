@@ -22,10 +22,4 @@ public class TestController {
         // 简化响应，仅返回最小信息用于LB健康检查
         return Collections.singletonMap("status", "ok");
     }
-
-    @GetMapping("/api/health")
-    @PreAuthorize("permitAll()")
-    public Map<String, Object> health() {
-        return Map.of("status", "UP", "timestamp", System.currentTimeMillis());
-    }
 }

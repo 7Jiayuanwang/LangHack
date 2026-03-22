@@ -99,9 +99,7 @@ import {
   User,
   Document,
   EditPen,
-  Setting,
-  FolderOpened,
-  DataLine
+  Setting
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -161,18 +159,6 @@ const moreItems = ref([
     label: '作业管理',
     icon: Document,
     badge: null
-  },
-  {
-    path: '/admin/backups',
-    label: '数据备份',
-    icon: FolderOpened,
-    badge: null
-  },
-  {
-    path: '/admin/monitoring',
-    label: '系统监控',
-    icon: DataLine,
-    badge: null
   }
 ])
 
@@ -186,9 +172,7 @@ const pageTitle = computed(() => {
     '/admin/units': '单元管理',
     '/admin/words': '单词管理',
     '/admin/texts': '课文管理',
-    '/admin/assignments': '作业管理',
-    '/admin/backups': '数据备份',
-    '/admin/monitoring': '系统监控'
+    '/admin/assignments': '作业管理'
   }
   return route.meta?.title || routeMap[route.path] || '管理员端'
 })
@@ -200,7 +184,7 @@ const userAvatar = computed(() => {
 
 // 判断管理相关路由是否激活
 const isManagementRouteActive = computed(() => {
-  const managementPaths = ['/admin/units', '/admin/words', '/admin/texts', '/admin/assignments', '/admin/backups', '/admin/monitoring']
+  const managementPaths = ['/admin/units', '/admin/words', '/admin/texts', '/admin/assignments']
   return managementPaths.some(path => route.path === path || route.path.startsWith(path + '/'))
 })
 
@@ -232,10 +216,10 @@ const handleCommand = async (command) => {
   }
 }
 
-// FIX #1: 权限守卫 - 确保只有 ADMIN 角色可以访问管理端
+// FIX #1: 权限守卫 - 确保只有 ADMIN 角色（或提权到 ADMIN）可以访问管理端
 onMounted(() => {
   // 验证用户权限
-  if (!userStore.isLoggedIn || !userStore.isAdmin) {
+  if (!userStore.isLoggedIn || !userStore.hasAdminAccess) {
     ElMessage.error('权限不足，请以管理员身份登录')
     router.replace('/login')
     return

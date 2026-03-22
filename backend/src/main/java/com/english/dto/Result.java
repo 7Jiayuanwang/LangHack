@@ -7,6 +7,7 @@ public class Result<T> {
     private Integer code;
     private String message;
     private T data;
+    private String detail;    // 仅运维人员可见的错误详情
 
     public static <T> Result<T> success() {
         Result<T> result = new Result<>();
@@ -68,5 +69,18 @@ public class Result<T> {
 
     public void setData(T data) {
         this.data = data;
+    }
+
+    /**
+     * 仅 OPS 角色可见的错误详情分类码。
+     * 由 GlobalExceptionHandler.isOpsUser() 控制设置。
+     * 受 @JsonInclude(NON_NULL) 保护，为 null 时不序列化。
+     */
+    public String getDetail() {
+        return detail;
+    }
+
+    public void setDetail(String detail) {
+        this.detail = detail;
     }
 }

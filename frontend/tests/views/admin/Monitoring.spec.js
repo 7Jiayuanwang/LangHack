@@ -329,7 +329,7 @@ describe('Monitoring.vue', () => {
       mockGetToken.mockReturnValue('my-token')
       mountComponent()
       expect(MockEventSource.instances.length).toBe(1)
-      expect(MockEventSource.instances[0].url).toContain('/api/admin/monitoring/realtime/stream')
+      expect(MockEventSource.instances[0].url).toContain('/api/ops/monitoring/realtime/stream')
       expect(MockEventSource.instances[0].url).toContain('token=my-token')
     })
 

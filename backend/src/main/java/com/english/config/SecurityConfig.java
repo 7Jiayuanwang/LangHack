@@ -142,6 +142,8 @@ public class SecurityConfig {
                 .antMatchers("/api/health").permitAll()
                 // 管理员权限
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
+                // 运维权限
+                .antMatchers("/api/ops/**").hasAnyRole("OPS", "ADMIN")
                 // 教师权限
                 .antMatchers("/api/teacher/**").hasAnyRole("TEACHER", "ADMIN")
                 // 学生权限

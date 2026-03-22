@@ -2,7 +2,10 @@ package com.english.exception;
 
 import com.english.dto.Result;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -12,6 +15,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 
+import java.net.ConnectException;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -118,12 +123,17 @@ public class GlobalExceptionHandler {
     /**
      * 其他运行时异常
      * 不对外暴露异常细节，仅记录日志。
+     * OPS 角色用户可看到错误分类摘要。
      */
     @ExceptionHandler(RuntimeException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<?> handleRuntimeException(RuntimeException e) {
         log.error("Runtime exception: {}", e.getMessage(), e);
-        return Result.error("服务异常，请稍后重试");
+        Result<?> result = Result.error("服务异常，请稍后重试");
+        if (isOpsUser()) {
+            result.setDetail(classifyError(e));
+        }
+        return result;
     }
 
     /**
@@ -133,6 +143,46 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<?> handleException(Exception e) {
         log.error("Unexpected exception: {}", e.getMessage(), e);
-        return Result.error("系统错误，请联系管理员");
+        Result<?> result = Result.error("系统错误，请联系管理员");
+        if (isOpsUser()) {
+            result.setDetail(classifyError(e));
+        }
+        return result;
+    }
+
+    /**
+     * 检查当前用户是否具有 OPS 角色
+     */
+    private boolean isOpsUser() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) {
+                return false;
+            }
+            return auth.getAuthorities().stream()
+                    .anyMatch(a -> "ROLE_OPS".equals(a.getAuthority()));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 错误分类：为 OPS 用户提供简洁的错误分类码（不暴露内部类名/方法名/行号）
+     * 详细信息已通过 log.error() 记录到日志系统，OPS 人员应通过日志系统查看
+     */
+    private String classifyError(Exception e) {
+        if (e instanceof DataAccessException) {
+            return "DB_ERROR";
+        }
+        if (e instanceof ConnectException) {
+            return "CONN_ERROR";
+        }
+        if (e instanceof TimeoutException) {
+            return "TIMEOUT";
+        }
+        if (e instanceof NullPointerException) {
+            return "NPE";
+        }
+        return "INTERNAL_ERROR";
     }
 }

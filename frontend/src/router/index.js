@@ -93,18 +93,33 @@ const routes = [
         name: 'AdminAssignments',
         component: () => import('@/views/admin/Assignments.vue'),
         meta: { title: '作业管理', roles: ['ADMIN'] }
+      }
+    ]
+  },
+  {
+    path: '/ops',
+    name: 'Ops',
+    component: () => import('@/views/ops/Layout.vue'),
+    redirect: '/ops/monitoring',
+    meta: { title: '运维面板', roles: ['OPS', 'ADMIN'] },
+    children: [
+      {
+        path: 'monitoring',
+        name: 'OpsMonitoring',
+        component: () => import('@/views/admin/Monitoring.vue'),
+        meta: { title: '系统监控', roles: ['OPS', 'ADMIN'] }
       },
       {
         path: 'backups',
-        name: 'AdminBackups',
+        name: 'OpsBackups',
         component: () => import('@/views/admin/Backups.vue'),
-        meta: { title: '数据备份', roles: ['ADMIN'] }
+        meta: { title: '数据备份', roles: ['OPS', 'ADMIN'] }
       },
       {
-        path: 'monitoring',
-        name: 'AdminMonitoring',
-        component: () => import('@/views/admin/Monitoring.vue'),
-        meta: { title: '系统监控', roles: ['ADMIN'] }
+        path: 'users',
+        name: 'OpsUsers',
+        component: () => import('@/views/admin/Users.vue'),
+        meta: { title: '用户管理', roles: ['ADMIN'] }
       }
     ]
   },
@@ -320,6 +335,7 @@ router.beforeEach((to, from, next) => {
       // 已登录用户访问登录页，重定向到对应主页
       const roleRoutes = {
         'ADMIN': '/admin',
+        'OPS': '/ops',
         'TEACHER': '/teacher',
         'STUDENT': '/student',
         'USER': '/user'
@@ -343,9 +359,19 @@ router.beforeEach((to, from, next) => {
     // 检查角色权限，防止 meta.roles 为 undefined 导致的 TypeError
     const requiredRoles = to.meta.roles
     if (requiredRoles && Array.isArray(requiredRoles) && !requiredRoles.includes(userRole)) {
+      // 检查提权状态：ADMIN 可通过提权访问 OPS 路由，OPS 可通过提权访问 ADMIN 路由
+      const elevatedRole = userStore.elevatedRole
+      const expiresAt = userStore.elevationExpiresAt
+      const isElevationValid = elevatedRole && expiresAt && new Date(expiresAt) > new Date()
+      if (isElevationValid && requiredRoles.includes(elevatedRole)) {
+        next()
+        return
+      }
+
       // 无权限访问，跳转到对应主页
       const roleRoutes = {
         'ADMIN': '/admin',
+        'OPS': '/ops',
         'TEACHER': '/teacher',
         'STUDENT': '/student',
         'USER': '/user'

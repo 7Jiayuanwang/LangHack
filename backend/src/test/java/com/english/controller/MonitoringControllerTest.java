@@ -78,10 +78,10 @@ class MonitoringControllerTest {
         TestHelper.clearSecurityContext();
     }
 
-    // ========== GET /api/admin/monitoring/realtime ==========
+    // ========== GET /api/ops/monitoring/realtime ==========
 
     @Nested
-    @DisplayName("GET /api/admin/monitoring/realtime")
+    @DisplayName("GET /api/ops/monitoring/realtime")
     class RealtimeTests {
 
         @Test
@@ -96,7 +96,7 @@ class MonitoringControllerTest {
             when(accessMetricsService.getRealTimeMetrics()).thenReturn(metrics);
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/realtime"))
+            mockMvc.perform(get("/api/ops/monitoring/realtime"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
                     .andExpect(jsonPath("$.data.activeUsers").value(15))
@@ -114,17 +114,17 @@ class MonitoringControllerTest {
                     .thenThrow(new RuntimeException("Redis connection failed"));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/realtime"))
+            mockMvc.perform(get("/api/ops/monitoring/realtime"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
                     .andExpect(jsonPath("$.message").value("获取实时指标失败"));
         }
     }
 
-    // ========== GET /api/admin/monitoring/system ==========
+    // ========== GET /api/ops/monitoring/system ==========
 
     @Nested
-    @DisplayName("GET /api/admin/monitoring/system")
+    @DisplayName("GET /api/ops/monitoring/system")
     class SystemMetricsTests {
 
         @Test
@@ -139,7 +139,7 @@ class MonitoringControllerTest {
             when(systemMetricsService.getSystemMetrics()).thenReturn(metrics);
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/system"))
+            mockMvc.perform(get("/api/ops/monitoring/system"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
                     .andExpect(jsonPath("$.data.heapUsed").value(256_000_000))
@@ -157,17 +157,17 @@ class MonitoringControllerTest {
                     .thenThrow(new RuntimeException("JMX error"));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/system"))
+            mockMvc.perform(get("/api/ops/monitoring/system"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
                     .andExpect(jsonPath("$.message").value("获取系统指标失败"));
         }
     }
 
-    // ========== GET /api/admin/monitoring/hourly ==========
+    // ========== GET /api/ops/monitoring/hourly ==========
 
     @Nested
-    @DisplayName("GET /api/admin/monitoring/hourly")
+    @DisplayName("GET /api/ops/monitoring/hourly")
     class HourlyStatsTests {
 
         @Test
@@ -189,7 +189,7 @@ class MonitoringControllerTest {
             when(hourlyMapper.selectList(any())).thenReturn(Arrays.asList(stat1, stat2));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/hourly")
+            mockMvc.perform(get("/api/ops/monitoring/hourly")
                             .param("hours", "24"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
@@ -208,7 +208,7 @@ class MonitoringControllerTest {
             when(hourlyMapper.selectList(any())).thenReturn(Collections.emptyList());
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/hourly"))
+            mockMvc.perform(get("/api/ops/monitoring/hourly"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
                     .andExpect(jsonPath("$.data").isArray());
@@ -224,7 +224,7 @@ class MonitoringControllerTest {
                     .thenThrow(new RuntimeException("DB error"));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/hourly")
+            mockMvc.perform(get("/api/ops/monitoring/hourly")
                             .param("hours", "24"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
@@ -232,10 +232,10 @@ class MonitoringControllerTest {
         }
     }
 
-    // ========== GET /api/admin/monitoring/daily ==========
+    // ========== GET /api/ops/monitoring/daily ==========
 
     @Nested
-    @DisplayName("GET /api/admin/monitoring/daily")
+    @DisplayName("GET /api/ops/monitoring/daily")
     class DailyStatsTests {
 
         @Test
@@ -257,7 +257,7 @@ class MonitoringControllerTest {
             when(dailyMapper.selectList(any())).thenReturn(Arrays.asList(stat1, stat2));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/daily")
+            mockMvc.perform(get("/api/ops/monitoring/daily")
                             .param("days", "30"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
@@ -277,7 +277,7 @@ class MonitoringControllerTest {
                     .thenThrow(new RuntimeException("DB error"));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/daily")
+            mockMvc.perform(get("/api/ops/monitoring/daily")
                             .param("days", "30"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
@@ -285,10 +285,10 @@ class MonitoringControllerTest {
         }
     }
 
-    // ========== GET /api/admin/monitoring/top-pages ==========
+    // ========== GET /api/ops/monitoring/top-pages ==========
 
     @Nested
-    @DisplayName("GET /api/admin/monitoring/top-pages")
+    @DisplayName("GET /api/ops/monitoring/top-pages")
     class TopPagesTests {
 
         @Test
@@ -303,7 +303,7 @@ class MonitoringControllerTest {
             when(dailyMapper.selectOne(any())).thenReturn(daily);
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/top-pages"))
+            mockMvc.perform(get("/api/ops/monitoring/top-pages"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
                     .andExpect(jsonPath("$.data").isNotEmpty());
@@ -318,7 +318,7 @@ class MonitoringControllerTest {
             when(dailyMapper.selectOne(any())).thenReturn(null);
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/top-pages"))
+            mockMvc.perform(get("/api/ops/monitoring/top-pages"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
                     .andExpect(jsonPath("$.data").value("[]"));
@@ -332,17 +332,17 @@ class MonitoringControllerTest {
                     .thenThrow(new RuntimeException("DB error"));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/top-pages"))
+            mockMvc.perform(get("/api/ops/monitoring/top-pages"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
                     .andExpect(jsonPath("$.message").value("获取热门页面失败"));
         }
     }
 
-    // ========== GET /api/admin/monitoring/ai-calls/realtime ==========
+    // ========== GET /api/ops/monitoring/ai-calls/realtime ==========
 
     @Nested
-    @DisplayName("GET /api/admin/monitoring/ai-calls/realtime")
+    @DisplayName("GET /api/ops/monitoring/ai-calls/realtime")
     class AiCallsRealtimeTests {
 
         @Test
@@ -369,7 +369,7 @@ class MonitoringControllerTest {
             when(aiCallMetricsService.getTodayStats()).thenReturn(stats);
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/ai-calls/realtime"))
+            mockMvc.perform(get("/api/ops/monitoring/ai-calls/realtime"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
                     .andExpect(jsonPath("$.data.HIAGENT.totalCalls").value(100))
@@ -388,17 +388,17 @@ class MonitoringControllerTest {
                     .thenThrow(new RuntimeException("Redis connection failed"));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/ai-calls/realtime"))
+            mockMvc.perform(get("/api/ops/monitoring/ai-calls/realtime"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
                     .andExpect(jsonPath("$.message").value("获取AI调用实时统计失败"));
         }
     }
 
-    // ========== GET /api/admin/monitoring/ai-calls/daily ==========
+    // ========== GET /api/ops/monitoring/ai-calls/daily ==========
 
     @Nested
-    @DisplayName("GET /api/admin/monitoring/ai-calls/daily")
+    @DisplayName("GET /api/ops/monitoring/ai-calls/daily")
     class AiCallsDailyTests {
 
         @Test
@@ -424,7 +424,7 @@ class MonitoringControllerTest {
             when(aiCallStatsDailyMapper.selectList(any())).thenReturn(Arrays.asList(stat1, stat2));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/ai-calls/daily")
+            mockMvc.perform(get("/api/ops/monitoring/ai-calls/daily")
                             .param("days", "30"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
@@ -444,7 +444,7 @@ class MonitoringControllerTest {
             when(aiCallStatsDailyMapper.selectList(any())).thenReturn(Collections.emptyList());
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/ai-calls/daily"))
+            mockMvc.perform(get("/api/ops/monitoring/ai-calls/daily"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
                     .andExpect(jsonPath("$.data").isArray())
@@ -461,7 +461,7 @@ class MonitoringControllerTest {
                     .thenThrow(new RuntimeException("DB error"));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/ai-calls/daily")
+            mockMvc.perform(get("/api/ops/monitoring/ai-calls/daily")
                             .param("days", "30"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
@@ -469,10 +469,10 @@ class MonitoringControllerTest {
         }
     }
 
-    // ========== GET /api/admin/monitoring/ai-calls/recent ==========
+    // ========== GET /api/ops/monitoring/ai-calls/recent ==========
 
     @Nested
-    @DisplayName("GET /api/admin/monitoring/ai-calls/recent")
+    @DisplayName("GET /api/ops/monitoring/ai-calls/recent")
     class AiCallsRecentTests {
 
         @Test
@@ -501,7 +501,7 @@ class MonitoringControllerTest {
             when(aiCallLogMapper.selectList(any())).thenReturn(Arrays.asList(log1, log2));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/ai-calls/recent")
+            mockMvc.perform(get("/api/ops/monitoring/ai-calls/recent")
                             .param("limit", "50"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
@@ -523,7 +523,7 @@ class MonitoringControllerTest {
             when(aiCallLogMapper.selectList(any())).thenReturn(Collections.emptyList());
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/ai-calls/recent"))
+            mockMvc.perform(get("/api/ops/monitoring/ai-calls/recent"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
                     .andExpect(jsonPath("$.data").isArray());
@@ -539,7 +539,7 @@ class MonitoringControllerTest {
                     .thenThrow(new RuntimeException("DB error"));
 
             // Act & Assert
-            mockMvc.perform(get("/api/admin/monitoring/ai-calls/recent")
+            mockMvc.perform(get("/api/ops/monitoring/ai-calls/recent")
                             .param("limit", "50"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
