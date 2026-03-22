@@ -117,7 +117,6 @@ const messages = ref([])
 const inputMessage = ref('长难句解析')
 const loading = ref(false)
 const chatContainer = ref(null)
-const threadId = ref('')
 let abortController = null
 
 const candidateQuestions = reactive([
@@ -151,7 +150,7 @@ const sendMessage = async () => {
     const tutorApiUrl = import.meta.env.VITE_TUTOR_API_BASE_URL || '/tutor'
     const authHeaderValue = getAuthHeader()
     abortController = new AbortController()
-    const response = await fetch(tutorApiUrl, {
+    const response = await fetch('/api/student/ai-qa/chat', {
       method: 'POST',
       signal: abortController.signal,
       headers: {
@@ -159,10 +158,9 @@ const sendMessage = async () => {
         ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {})
       },
       body: JSON.stringify({
-        user_question: userMsg,
-        article_text: route.query.context || '',
-        selected_text: selectedText.value,
-        thread_id: threadId.value
+        userQuestion: userMsg,
+        selectedText: selectedText.value,
+        articleContext: route.query.context || ''
       })
     })
 
@@ -179,10 +177,8 @@ const sendMessage = async () => {
       return
     }
 
-    // FIX: 验证响应数据 + 完整的 XSS 防护
-    if (data?.response && typeof data.response === 'string') {
-      // 先用 marked 转换 markdown，再用 DOMPurify 清理恶意标签
-      const htmlResponse = DOMPurify.sanitize(marked(data.response))
+    if (data?.code === 200 && data?.data?.response && typeof data.data.response === 'string') {
+      const htmlResponse = DOMPurify.sanitize(marked(data.data.response))
       messages.value.push({
         role: 'assistant',
         content: htmlResponse
@@ -190,13 +186,8 @@ const sendMessage = async () => {
     } else {
       messages.value.push({
         role: 'assistant',
-        content: '抱歉，未收到有效响应。'
+        content: data?.message || '抱歉，未收到有效响应。'
       })
-    }
-
-    // Update thread_id for next turns
-    if (data?.thread_id) {
-      threadId.value = data.thread_id
     }
   } catch (error) {
     if (error?.name !== 'AbortError') {
@@ -205,7 +196,6 @@ const sendMessage = async () => {
     }
   } finally {
     loading.value = false
-    // FIX: 正确处理 abortController 清理
     try {
       if (abortController) {
         abortController.abort()
