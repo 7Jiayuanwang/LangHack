@@ -40,11 +40,10 @@ describe('Request Utility', () => {
   })
 
   it('request interceptor adds Bearer token when available', async () => {
-    const { useUserStore } = await import('@/store/user')
     const { default: request } = await import('@/utils/request')
 
-    const store = useUserStore()
-    store.token = 'test-jwt-token'
+    // getAuthHeader() reads from localStorage, not from Pinia store
+    localStorage.setItem('token', 'test-jwt-token')
 
     const handler = request.interceptors.request.handlers[0]
     const config = { headers: {} }
@@ -53,11 +52,9 @@ describe('Request Utility', () => {
   })
 
   it('request interceptor skips Authorization when no token', async () => {
-    const { useUserStore } = await import('@/store/user')
     const { default: request } = await import('@/utils/request')
 
-    const store = useUserStore()
-    store.token = ''
+    localStorage.removeItem('token')
 
     const handler = request.interceptors.request.handlers[0]
     const config = { headers: {} }

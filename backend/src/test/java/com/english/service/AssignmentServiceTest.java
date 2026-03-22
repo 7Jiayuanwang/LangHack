@@ -1,13 +1,17 @@
 package com.english.service;
 import com.english.test.TestUtils;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.*;
 import com.english.exception.BusinessException;
 import com.english.mapper.*;
 import com.english.service.impl.AssignmentServiceImpl;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +49,11 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class AssignmentServiceTest {
+
+    @BeforeAll
+    static void initTableInfo() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Assignment.class);
+    }
 
     @InjectMocks
     private AssignmentServiceImpl assignmentService;
@@ -198,23 +207,18 @@ class AssignmentServiceTest {
 
     @Test
     void deleteAssignment_usesSoftDeleteWithUpdateWrapper() {
-        // Arrange: deleteAssignment() uses update(null, UpdateWrapper) to set deleted=1
-        // This is NOT removeById/deleteById -- it's a manual soft delete via UpdateWrapper
-        // because @TableLogic makes updateById ignore the deleted field in SET clause.
-        //
-        // The actual call is:
-        //   update(null, new UpdateWrapper<Assignment>().eq("id", id).set("deleted", 1));
-        //
-        // ServiceImpl.update(entity, wrapper) delegates to baseMapper.update(entity, wrapper)
-        when(assignmentMapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(1);
+        // Arrange: deleteAssignment() now uses removeById(id) which with @TableLogic
+        // converts to UPDATE SET deleted=1 WHERE id=? AND deleted=0
+        // ServiceImpl.removeById(id) delegates to baseMapper.deleteById(id)
+        when(assignmentMapper.deleteById(1L)).thenReturn(1);
 
         // Act
         assignmentService.deleteAssignment(1L);
 
-        // Assert: verify update() was called with null entity and an UpdateWrapper
-        verify(assignmentMapper).update(isNull(), any(UpdateWrapper.class));
-        // Verify deleteById was NOT called
-        verify(assignmentMapper, never()).deleteById(anyLong());
+        // Assert: verify removeById was used (which calls deleteById under the hood)
+        verify(assignmentMapper).deleteById(1L);
+        // Verify manual update was NOT called
+        verify(assignmentMapper, never()).update(any(), any(UpdateWrapper.class));
     }
 
     // ==================== validateTeacherPermission tests ====================

@@ -160,11 +160,29 @@ describe('Request Error Handling Integration', () => {
       )
     })
 
-    it('handles network disconnection', async () => {
+    it('handles network disconnection (Network Error triggers CORS hint)', async () => {
       const error = {
         message: 'Network Error',
         request: {}
-        // no response — network failure
+        // no response — network failure; "Network Error" triggers CORS hint path
+      }
+
+      await expect(responseHandler.rejected(error)).rejects.toBeDefined()
+
+      expect(ElMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: '网络请求被拒绝，可能是跨域(CORS)配置问题，请联系管理员检查后端 CORS 白名单',
+          type: 'error'
+        })
+      )
+    })
+
+    it('handles non-Network-Error disconnection with generic message', async () => {
+      const error = {
+        message: 'Failed to fetch',
+        request: {},
+        config: { baseURL: window.location.origin, url: '/api/test' }
+        // no response, but message is not 'Network Error' and same-origin
       }
 
       await expect(responseHandler.rejected(error)).rejects.toBeDefined()
@@ -222,6 +240,74 @@ describe('Request Error Handling Integration', () => {
       )
     })
 
+    it('handles 500 with detail for OPS user', async () => {
+      const { useUserStore } = await import('@/store/user')
+      const store = useUserStore()
+      store.userRole = 'OPS'
+
+      const error = {
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: { detail: 'NullPointerException at UserService.java:42' }
+        }
+      }
+
+      await expect(responseHandler.rejected(error)).rejects.toBeDefined()
+
+      expect(ElMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: '服务器错误: NullPointerException at UserService.java:42'
+        })
+      )
+    })
+
+    it('handles 500 with detail for elevated OPS user', async () => {
+      const { useUserStore } = await import('@/store/user')
+      const store = useUserStore()
+      store.userRole = 'ADMIN'
+      store.elevatedRole = 'OPS'
+      store.elevationExpiresAt = new Date(Date.now() + 3600000).toISOString() // 1h from now
+
+      const error = {
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: { detail: 'DB connection refused' }
+        }
+      }
+
+      await expect(responseHandler.rejected(error)).rejects.toBeDefined()
+
+      expect(ElMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: '服务器错误: DB connection refused'
+        })
+      )
+    })
+
+    it('handles 500 without detail for non-OPS user', async () => {
+      const { useUserStore } = await import('@/store/user')
+      const store = useUserStore()
+      store.userRole = 'STUDENT'
+
+      const error = {
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: { detail: 'Internal stack trace info' }
+        }
+      }
+
+      await expect(responseHandler.rejected(error)).rejects.toBeDefined()
+
+      expect(ElMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: '服务器内部错误'
+        })
+      )
+    })
+
     it('handles unknown HTTP status with generic message', async () => {
       const error = {
         message: 'Request failed',
@@ -255,9 +341,8 @@ describe('Request Error Handling Integration', () => {
 
   describe('Request interceptor - token handling', () => {
     it('adds Bearer token from store', async () => {
-      const { useUserStore } = await import('@/store/user')
-      const store = useUserStore()
-      store.token = 'valid-jwt-token'
+      // getAuthHeader() reads from localStorage, so we must persist there too
+      localStorage.setItem('token', 'valid-jwt-token')
 
       const requestHandler = request.interceptors.request.handlers[0]
       const config = { headers: {} }
@@ -267,9 +352,7 @@ describe('Request Error Handling Integration', () => {
     })
 
     it('skips Authorization for empty token', async () => {
-      const { useUserStore } = await import('@/store/user')
-      const store = useUserStore()
-      store.token = ''
+      localStorage.removeItem('token')
 
       const requestHandler = request.interceptors.request.handlers[0]
       const config = { headers: {} }
@@ -279,9 +362,7 @@ describe('Request Error Handling Integration', () => {
     })
 
     it('strips duplicate Bearer prefix', async () => {
-      const { useUserStore } = await import('@/store/user')
-      const store = useUserStore()
-      store.token = 'Bearer already-prefixed-token'
+      localStorage.setItem('token', 'Bearer already-prefixed-token')
 
       const requestHandler = request.interceptors.request.handlers[0]
       const config = { headers: {} }
@@ -293,28 +374,23 @@ describe('Request Error Handling Integration', () => {
     })
 
     it('skips "undefined" and "null" string tokens', async () => {
-      const { useUserStore } = await import('@/store/user')
-      const store = useUserStore()
-
       const requestHandler = request.interceptors.request.handlers[0]
 
       // Test "undefined" string
-      store.token = 'undefined'
+      localStorage.setItem('token', 'undefined')
       let config = { headers: {} }
       let result = requestHandler.fulfilled(config)
       expect(result.headers['Authorization']).toBeUndefined()
 
       // Test "null" string
-      store.token = 'null'
+      localStorage.setItem('token', 'null')
       config = { headers: {} }
       result = requestHandler.fulfilled(config)
       expect(result.headers['Authorization']).toBeUndefined()
     })
 
     it('trims whitespace from token', async () => {
-      const { useUserStore } = await import('@/store/user')
-      const store = useUserStore()
-      store.token = '  jwt-token-with-spaces  '
+      localStorage.setItem('token', '  jwt-token-with-spaces  ')
 
       const requestHandler = request.interceptors.request.handlers[0]
       const config = { headers: {} }

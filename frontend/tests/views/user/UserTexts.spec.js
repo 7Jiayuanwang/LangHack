@@ -264,11 +264,17 @@ describe('UserTexts.vue', () => {
     expect(wrapper.vm.formatDate('')).toBe('')
   })
 
-  it('formatContent sanitizes and formats HTML', () => {
+  it('formatContent sanitizes and formats HTML via marked + DOMPurify', async () => {
+    const DOMPurify = (await import('dompurify')).default
     const wrapper = createWrapper()
     const content = 'Line 1\nLine 2'
     const formatted = wrapper.vm.formatContent(content)
-    expect(formatted).toContain('<br>')
+    // marked renders plain text lines as a <p> block (single newline is a soft break in markdown)
+    expect(formatted).toContain('<p>')
+    expect(formatted).toContain('Line 1')
+    expect(formatted).toContain('Line 2')
+    // Verify DOMPurify.sanitize was called (XSS protection)
+    expect(DOMPurify.sanitize).toHaveBeenCalled()
   })
 
   it('formatContent handles null content', () => {

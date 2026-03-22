@@ -101,6 +101,9 @@ class BackupServiceTest {
         setField(backupService, "dbUsername", "testuser");
         setField(backupService, "dbPassword", "testpass");
 
+        // backupConfigService.getConfig() throws so getEffectiveConfig() falls back to @Value defaults
+        lenient().when(backupConfigService.getConfig()).thenThrow(new RuntimeException("DB not available in test"));
+
         // Reset the static backupInProgress lock
         Field lockField = BackupServiceImpl.class.getDeclaredField("backupInProgress");
         lockField.setAccessible(true);
@@ -496,11 +499,14 @@ class BackupServiceTest {
         Map<String, Object> config = backupService.getBackupConfig();
 
         assertNotNull(config);
+        // getEffectiveConfig() falls back to @Value defaults set in setUp
         assertEquals(true, config.get("enabled"));
+        assertEquals(true, config.get("autoBackupEnabled"));
         assertEquals(30, config.get("retentionDays"));
         assertEquals(50, config.get("maxCount"));
         assertEquals(false, config.get("incrementalEnabled"));
         assertEquals(7, config.get("fullBackupIntervalDays"));
+        assertNotNull(config.get("backupCron"));
     }
 
     @Test

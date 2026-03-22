@@ -73,6 +73,7 @@ class HiAgentServiceTest {
         when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
         when(config.getAppId()).thenReturn("test-app");
         when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
 
         // Step 1: createConversation returns valid response
         String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-123\"}}";
@@ -104,6 +105,7 @@ class HiAgentServiceTest {
         when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
         when(config.getAppId()).thenReturn("test-app");
         when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
 
         String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-456\"}}";
         when(restTemplate.exchange(
@@ -132,6 +134,7 @@ class HiAgentServiceTest {
         when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
         when(config.getAppId()).thenReturn("test-app");
         when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
 
         // createConversation returns non-OK status
         when(restTemplate.exchange(
@@ -149,6 +152,7 @@ class HiAgentServiceTest {
         when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
         when(config.getAppId()).thenReturn("test-app");
         when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
 
         // Response missing Conversation.AppConversationID
         String badResponse = "{\"Conversation\":{}}";
@@ -167,6 +171,7 @@ class HiAgentServiceTest {
         when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
         when(config.getAppId()).thenReturn("test-app");
         when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
 
         // AppConversationID is "null" string
         String badResponse = "{\"Conversation\":{\"AppConversationID\":null}}";
@@ -187,6 +192,7 @@ class HiAgentServiceTest {
         when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
         when(config.getAppId()).thenReturn("test-app");
         when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
 
         // Step 1 succeeds
         String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-789\"}}";
@@ -212,6 +218,7 @@ class HiAgentServiceTest {
         when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
         when(config.getAppId()).thenReturn("test-app");
         when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
 
         // Step 1 succeeds
         String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-789\"}}";
@@ -268,6 +275,7 @@ class HiAgentServiceTest {
         when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
         when(config.getAppId()).thenReturn("test-app");
         when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
 
         String createResponse = "{\"Conversation\":{\"AppConversationID\":\"conv-md\"}}";
         when(restTemplate.exchange(

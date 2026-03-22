@@ -9,6 +9,7 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import com.english.entity.Text;
 import com.english.exception.BusinessException;
 import com.english.mapper.TextMapper;
+import com.english.mapper.TextExerciseMapper;
 import com.english.service.impl.TextServiceImpl;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +56,9 @@ class TextServiceTest {
 
     @Mock
     private UnderlineService underlineService;
+
+    @Mock
+    private TextExerciseMapper textExerciseMapper;
 
     private Text testText;
 
@@ -207,9 +211,11 @@ class TextServiceTest {
     @Test
     void deleteText_success_deletesUnderlinesAndRemovesById() {
         // Arrange: deleteText calls getTextById (selectOne), then
-        // underlineService.deleteUnderlinesByTextId(id), then removeById(id) -> deleteById
+        // underlineService.deleteUnderlinesByTextId(id),
+        // textExerciseMapper.deleteExercisesByTextId(id), then removeById(id)
         when(baseMapper.selectOne(any(QueryWrapper.class))).thenReturn(testText);
         doNothing().when(underlineService).deleteUnderlinesByTextId(1L);
+        when(textExerciseMapper.deleteExercisesByTextId(1L)).thenReturn(0);
         // Text entity has @TableLogic + fill=INSERT_UPDATE, so removeById(id)
         // internally calls deleteById(Text entity), not deleteById(Serializable id)
         when(baseMapper.deleteById(any(Text.class))).thenReturn(1);
@@ -217,9 +223,10 @@ class TextServiceTest {
         // Act
         textService.deleteText(1L);
 
-        // Assert: verify underline cascade deletion happened before removeById
-        InOrder inOrder = inOrder(underlineService, baseMapper);
+        // Assert: verify cascade deletions happened before removeById
+        InOrder inOrder = inOrder(underlineService, textExerciseMapper, baseMapper);
         inOrder.verify(underlineService).deleteUnderlinesByTextId(1L);
+        inOrder.verify(textExerciseMapper).deleteExercisesByTextId(1L);
         inOrder.verify(baseMapper).deleteById(any(Text.class));
     }
 

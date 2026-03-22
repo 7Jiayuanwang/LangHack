@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -85,7 +86,7 @@ public class HealthController {
 
     private String checkRedis() {
         try {
-            String result = stringRedisTemplate.execute(connection -> {
+            String result = stringRedisTemplate.execute((RedisCallback<String>) connection -> {
                 connection.ping();
                 return "OK";
             });

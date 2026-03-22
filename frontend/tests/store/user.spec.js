@@ -14,8 +14,9 @@ describe('User Store', () => {
   let store
 
   beforeEach(() => {
-    // Clear localStorage before each test
+    // Clear localStorage and sessionStorage before each test
     localStorage.clear()
+    sessionStorage.clear()
     // Create a fresh pinia instance
     setActivePinia(createPinia())
     store = useUserStore()
@@ -181,8 +182,8 @@ describe('User Store', () => {
 
       logoutApi.mockRejectedValue(new Error('Network error'))
 
-      // The store re-throws the API error, but still clears state
-      await expect(store.logout()).rejects.toThrow('Network error')
+      // The store catches the API error internally and does NOT re-throw
+      await store.logout()
 
       // State should still be cleared
       expect(store.token).toBe('')
@@ -199,6 +200,104 @@ describe('User Store', () => {
 
       expect(store.userInfo).toEqual(newInfo)
       expect(JSON.parse(localStorage.getItem('userInfo'))).toEqual(newInfo)
+    })
+  })
+
+  describe('OPS role and elevation', () => {
+    it('isOps getter should return true for OPS role', () => {
+      store.userRole = 'OPS'
+      expect(store.isOps).toBe(true)
+
+      store.userRole = 'ADMIN'
+      expect(store.isOps).toBe(false)
+    })
+
+    it('hasOpsAccess should return true for native OPS role', () => {
+      store.userRole = 'OPS'
+      expect(store.hasOpsAccess).toBe(true)
+    })
+
+    it('hasOpsAccess should return true for elevated OPS with valid expiration', () => {
+      store.userRole = 'ADMIN'
+      store.elevatedRole = 'OPS'
+      store.elevationExpiresAt = new Date(Date.now() + 3600000).toISOString()
+      expect(store.hasOpsAccess).toBe(true)
+    })
+
+    it('hasOpsAccess should return false for elevated OPS with expired expiration', () => {
+      store.userRole = 'ADMIN'
+      store.elevatedRole = 'OPS'
+      store.elevationExpiresAt = new Date(Date.now() - 1000).toISOString()
+      expect(store.hasOpsAccess).toBe(false)
+    })
+
+    it('hasOpsAccess should return false for non-OPS user without elevation', () => {
+      store.userRole = 'STUDENT'
+      expect(store.hasOpsAccess).toBe(false)
+    })
+
+    it('hasAdminAccess should return true for native ADMIN role', () => {
+      store.userRole = 'ADMIN'
+      expect(store.hasAdminAccess).toBe(true)
+    })
+
+    it('hasAdminAccess should return true for elevated ADMIN with valid expiration', () => {
+      store.userRole = 'TEACHER'
+      store.elevatedRole = 'ADMIN'
+      store.elevationExpiresAt = new Date(Date.now() + 3600000).toISOString()
+      expect(store.hasAdminAccess).toBe(true)
+    })
+
+    it('hasAdminAccess should return false for elevated ADMIN with expired expiration', () => {
+      store.userRole = 'TEACHER'
+      store.elevatedRole = 'ADMIN'
+      store.elevationExpiresAt = new Date(Date.now() - 1000).toISOString()
+      expect(store.hasAdminAccess).toBe(false)
+    })
+
+    it('setElevation should set elevation state and persist to sessionStorage', () => {
+      const expiresAt = new Date(Date.now() + 3600000).toISOString()
+      store.setElevation('OPS', expiresAt)
+
+      expect(store.elevatedRole).toBe('OPS')
+      expect(store.elevationExpiresAt).toBe(expiresAt)
+      expect(sessionStorage.getItem('elevatedRole')).toBe('OPS')
+      expect(sessionStorage.getItem('elevationExpiresAt')).toBe(expiresAt)
+    })
+
+    it('clearElevation should clear elevation state and sessionStorage', () => {
+      const expiresAt = new Date(Date.now() + 3600000).toISOString()
+      store.setElevation('OPS', expiresAt)
+
+      store.clearElevation()
+
+      expect(store.elevatedRole).toBeNull()
+      expect(store.elevationExpiresAt).toBeNull()
+      expect(sessionStorage.getItem('elevatedRole')).toBeNull()
+      expect(sessionStorage.getItem('elevationExpiresAt')).toBeNull()
+    })
+
+    it('logout should clear elevation state', async () => {
+      store.token = 'some-token'
+      store.userRole = 'ADMIN'
+      store.elevatedRole = 'OPS'
+      store.elevationExpiresAt = new Date(Date.now() + 3600000).toISOString()
+      sessionStorage.setItem('elevatedRole', 'OPS')
+
+      logoutApi.mockResolvedValue({})
+      await store.logout()
+
+      expect(store.elevatedRole).toBeNull()
+      expect(store.elevationExpiresAt).toBeNull()
+      expect(sessionStorage.getItem('elevatedRole')).toBeNull()
+      expect(sessionStorage.getItem('elevationExpiresAt')).toBeNull()
+    })
+
+    it('OPS should be a valid role in validateRole', () => {
+      localStorage.setItem('userRole', 'OPS')
+      setActivePinia(createPinia())
+      const freshStore = useUserStore()
+      expect(freshStore.userRole).toBe('OPS')
     })
   })
 
