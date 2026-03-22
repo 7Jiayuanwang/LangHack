@@ -1,6 +1,6 @@
 <template>
   <div class="ai-qa-page">
-    <!-- Glassmorphic Sticky Header -->
+    <!-- Fixed Header -->
     <header class="qa-header">
       <div class="qa-header-inner">
         <button class="qa-back-btn" @click="$router.back()">
@@ -14,11 +14,9 @@
       </div>
     </header>
 
-    <!-- Scrollable Chat Area -->
-    <main class="qa-chat-area" ref="chatContainer" id="chat-container">
-
-      <!-- Selected Context Card -->
-      <div class="context-card" v-if="selectedText">
+    <!-- Fixed Context Card (below header) -->
+    <div class="qa-context-bar" v-if="selectedText">
+      <div class="context-card">
         <div class="context-accent"></div>
         <div class="context-body">
           <div class="context-label">
@@ -32,21 +30,13 @@
           </p>
         </div>
       </div>
+    </div>
 
-      <!-- Candidate Question Pills -->
-      <div class="quick-actions" v-if="messages.length === 0">
-        <button 
-          v-for="(q, i) in candidateQuestions" 
-          :key="i" 
-          class="action-pill"
-          @click="fillQuestion(q)"
-        >
-          <div class="action-text">
-            <span class="action-title">{{ q.label }}</span>
-            <span class="action-sub">{{ q.sub }}</span>
-          </div>
-          <el-icon class="action-arrow"><ArrowRight /></el-icon>
-        </button>
+    <!-- Scrollable Chat Messages Only -->
+    <main class="qa-chat-area" ref="chatContainer" id="chat-container">
+      <!-- Empty state hint -->
+      <div class="empty-hint" v-if="messages.length === 0">
+        <p>点击下方快捷提问或输入你的问题</p>
       </div>
 
       <!-- Chat Messages -->
@@ -57,7 +47,7 @@
           </div>
           <div class="msg-bubble" :class="msg.role === 'user' ? 'user-bubble' : 'ai-bubble'">
             <div v-if="msg.role === 'user'">{{ msg.content }}</div>
-          <div v-else v-html="msg.content"></div>
+            <div v-else v-html="msg.content"></div>
           </div>
         </div>
       </template>
@@ -74,22 +64,35 @@
           <span class="loading-text">思考中...</span>
         </div>
       </div>
-
-      <div class="scroll-spacer"></div>
     </main>
 
-    <!-- Sticky Bottom Input -->
-    <div class="qa-input-area">
+    <!-- Fixed Bottom: Quick Actions + Input -->
+    <div class="qa-bottom-bar">
+      <!-- Candidate Question Pills (always visible) -->
+      <div class="quick-actions">
+        <button
+          v-for="(q, i) in candidateQuestions"
+          :key="i"
+          class="action-pill"
+          @click="fillQuestion(q)"
+          :disabled="loading"
+        >
+          <span class="action-title">{{ q.label }}</span>
+          <el-icon class="action-arrow"><ArrowRight /></el-icon>
+        </button>
+      </div>
+
+      <!-- Input -->
       <div class="qa-input-wrap">
-        <input 
-          v-model="inputMessage" 
+        <input
+          v-model="inputMessage"
           class="qa-input"
           placeholder="输入你的问题..."
           @keyup.enter="sendMessage"
           :disabled="loading"
         />
-        <button 
-          class="qa-send-btn" 
+        <button
+          class="qa-send-btn"
           @click="sendMessage"
           :disabled="loading || !inputMessage.trim()"
         >
@@ -219,7 +222,6 @@ const scrollToBottom = () => {
 }
 
 onBeforeUnmount(() => {
-  // 中止任何进行中的请求
   if (abortController) {
     try {
       abortController.abort()
@@ -234,40 +236,30 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* ============================================
-   AI Q&A Page — Mobile-First Premium Design
+   AI Q&A Page — Fixed Layout
+   Header + Context: fixed top
+   Quick Actions + Input: fixed bottom
+   Only chat messages scroll
    ============================================ */
-
-:root {
-  --qa-primary: #197fe6;
-  --qa-bg: #f6f7f8;
-  --qa-text: #1e293b;
-  --qa-muted: #64748b;
-  --qa-glass: rgba(255, 255, 255, 0.85);
-}
 
 .ai-qa-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
-  background: var(--qa-bg);
+  height: 100%;
+  background: #f6f7f8;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: var(--qa-text);
-  max-width: 480px;
-  margin: 0 auto;
-  position: relative;
+  color: #1e293b;
   overflow: hidden;
 }
 
-/* --- Header --- */
+/* --- Fixed Header --- */
 .qa-header {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: var(--qa-glass);
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  z-index: 50;
 }
 
 .qa-header-inner {
@@ -284,13 +276,13 @@ onBeforeUnmount(() => {
   gap: 4px;
   background: none;
   border: none;
-  color: var(--qa-muted);
+  color: #64748b;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: color 0.2s;
 }
-.qa-back-btn:hover { color: var(--qa-primary); }
+.qa-back-btn:hover { color: #197fe6; }
 
 .qa-title {
   position: absolute;
@@ -298,7 +290,7 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   font-size: 17px;
   font-weight: 700;
-  color: var(--qa-text);
+  color: #1e293b;
 }
 
 .qa-avatar {
@@ -309,43 +301,37 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--qa-primary);
+  color: #197fe6;
   border: 1px solid white;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
-/* --- Chat Area --- */
-.qa-chat-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 16px 180px; /* Extra bottom padding for input + nav */
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+/* --- Fixed Context Bar (below header) --- */
+.qa-context-bar {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: #f6f7f8;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.4);
 }
-.qa-chat-area::-webkit-scrollbar { display: none; }
 
-.scroll-spacer { height: 20px; }
-
-/* --- Context Card --- */
 .context-card {
   display: flex;
-  background: var(--qa-glass);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
-  border-radius: 16px;
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-  margin-bottom: 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
   border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .context-accent {
-  width: 5px;
-  background: linear-gradient(180deg, var(--qa-primary), #3b82f6);
+  width: 4px;
+  background: linear-gradient(180deg, #197fe6, #3b82f6);
   flex-shrink: 0;
 }
 
 .context-body {
-  padding: 14px 16px;
+  padding: 10px 14px;
   flex: 1;
   min-width: 0;
 }
@@ -354,22 +340,22 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--qa-primary);
+  color: #197fe6;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .context-text {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.5;
   color: #475569;
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -378,19 +364,32 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
-  color: var(--qa-muted);
+  font-size: 11px;
+  color: #64748b;
   margin: 0;
 }
 
-/* --- Messages --- */
-.msg-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
+/* --- Scrollable Chat Area (middle) --- */
+.qa-chat-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.qa-chat-area::-webkit-scrollbar { display: none; }
 
+.empty-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #94a3b8;
+  font-size: 14px;
+}
+.empty-hint p { margin: 0; }
+
+/* --- Messages --- */
 .msg-row {
   display: flex;
   align-items: flex-end;
@@ -406,7 +405,7 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--qa-primary), #3b82f6);
+  background: linear-gradient(135deg, #197fe6, #3b82f6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -427,90 +426,17 @@ onBeforeUnmount(() => {
 
 .ai-bubble {
   background: white;
-  color: var(--qa-text);
+  color: #1e293b;
   border: 1px solid #f1f5f9;
   border-bottom-left-radius: 4px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.03);
 }
 
 .user-bubble {
-  background: linear-gradient(135deg, var(--qa-primary), #3b82f6);
+  background: linear-gradient(135deg, #197fe6, #3b82f6);
   color: white;
   border-bottom-right-radius: 4px;
   box-shadow: 0 2px 10px rgba(25, 127, 230, 0.25);
-}
-
-/* --- Quick Action Pills --- */
-.quick-actions {
-  position: fixed;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 140px); /* Above the input bar + nav */
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px);
-  max-width: 448px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 41;
-}
-
-.action-pill {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 12px 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
-  text-align: left;
-  width: 100%;
-}
-
-.action-pill:hover {
-  background: #f8fafc;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-  border-color: rgba(25, 127, 230, 0.3);
-}
-
-.action-pill:active {
-  transform: scale(0.98);
-}
-
-.action-emoji {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-
-.action-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.action-title {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--qa-text);
-}
-
-.action-sub {
-  display: block;
-  font-size: 11px;
-  color: var(--qa-muted);
-  margin-top: 2px;
-}
-
-.action-arrow {
-  color: #cbd5e1;
-  transition: color 0.2s;
-  flex-shrink: 0;
-}
-
-.action-pill:hover .action-arrow {
-  color: var(--qa-primary);
 }
 
 /* --- Loading Bubble --- */
@@ -543,21 +469,67 @@ onBeforeUnmount(() => {
 
 .loading-text {
   font-size: 14px;
-  color: var(--qa-muted);
+  color: #64748b;
 }
 
-/* --- Sticky Input --- */
-.qa-input-area {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 12px 16px;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 70px); /* Account for bottom nav */
-  background: linear-gradient(to top, var(--qa-bg) 80%, transparent);
+/* --- Fixed Bottom Bar --- */
+.qa-bottom-bar {
+  flex-shrink: 0;
+  padding: 10px 16px 12px;
+  background: #f6f7f8;
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
   z-index: 40;
 }
 
+/* --- Quick Action Pills --- */
+.quick-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.action-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+}
+
+.action-pill:hover {
+  background: #f8fafc;
+  border-color: rgba(25, 127, 230, 0.3);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.action-pill:active { transform: scale(0.97); }
+.action-pill:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+.action-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-arrow {
+  color: #cbd5e1;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.action-pill:hover .action-arrow { color: #197fe6; }
+
+/* --- Input --- */
 .qa-input-wrap {
   display: flex;
   align-items: center;
@@ -581,14 +553,12 @@ onBeforeUnmount(() => {
   outline: none;
   background: transparent;
   font-size: 16px;
-  color: var(--qa-text);
+  color: #1e293b;
   height: 40px;
   font-family: inherit;
 }
 
-.qa-input::placeholder {
-  color: #94a3b8;
-}
+.qa-input::placeholder { color: #94a3b8; }
 
 .qa-send-btn {
   width: 44px;
@@ -604,22 +574,17 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   transition: opacity 0.2s, transform 0.15s;
   box-shadow: 0 4px 14px rgba(25, 127, 230, 0.45);
-  font-size: 22px;
 }
 
 .qa-send-btn:hover { opacity: 0.9; transform: scale(1.05); }
 .qa-send-btn:active { transform: scale(0.93); }
 .qa-send-btn:disabled { opacity: 0.35; cursor: default; transform: none; }
 
-/* --- Desktop: Widen the chat container --- */
+/* --- Desktop --- */
 @media (min-width: 768px) {
   .ai-qa-page {
     max-width: 640px;
-    box-shadow: 0 0 40px rgba(0,0,0,0.08);
-    border-radius: 24px;
-    margin: 20px auto;
-    height: calc(100vh - 40px);
-    height: calc(100dvh - 40px);
+    margin: 0 auto;
   }
 }
 </style>
