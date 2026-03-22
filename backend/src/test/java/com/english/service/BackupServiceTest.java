@@ -7,6 +7,7 @@ import com.english.entity.BackupRecord;
 import com.english.exception.BusinessException;
 import com.english.mapper.BackupRecordMapper;
 import com.english.service.impl.BackupServiceImpl;
+import com.english.service.BackupConfigService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,12 +64,15 @@ class BackupServiceTest {
     @Mock
     private BackupOperationLogService operationLogService;
 
+    @Mock
+    private BackupConfigService backupConfigService;
+
     private BackupServiceImpl backupService;
     private Path testBackupDir;
 
     @BeforeEach
     void setUp() throws Exception {
-        backupService = new BackupServiceImpl(executor, masterDataSource, operationLogService);
+        backupService = new BackupServiceImpl(executor, masterDataSource, operationLogService, backupConfigService);
 
         // Inject the baseMapper required by ServiceImpl
         Field mapperField = findField(backupService.getClass(), "baseMapper");

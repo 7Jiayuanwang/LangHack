@@ -201,7 +201,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     }
 
     @Override
-    @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
+    @CircuitBreaker(name = "hiagent-qa", fallbackMethod = "fallback")
     public String chatQA(String userQuestion, String selectedText, String articleContext) {
         String prompt = "你是一位专业的英语学习辅导老师。学生正在阅读一篇英语文章，并选中了一段文本。"
                 + "请根据选中的文本和文章上下文，用中文回答学生的问题。"

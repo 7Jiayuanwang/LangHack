@@ -76,8 +76,8 @@ class DynamicBackupSchedulerTest {
             config.setAutoBackupEnabled(true);
             config.setBackupCron("0 30 3 * * ?");
             when(backupConfigService.getConfig()).thenReturn(config);
-            when(taskScheduler.schedule(any(Runnable.class), any(CronTrigger.class)))
-                    .thenReturn(scheduledFuture);
+            doReturn(scheduledFuture).when(taskScheduler)
+                    .schedule(any(Runnable.class), any(CronTrigger.class));
 
             // Act
             scheduler.reschedule();
@@ -96,8 +96,8 @@ class DynamicBackupSchedulerTest {
             config.setAutoBackupEnabled(true);
             config.setBackupCron(null);
             when(backupConfigService.getConfig()).thenReturn(config);
-            when(taskScheduler.schedule(any(Runnable.class), any(CronTrigger.class)))
-                    .thenReturn(scheduledFuture);
+            doReturn(scheduledFuture).when(taskScheduler)
+                    .schedule(any(Runnable.class), any(CronTrigger.class));
 
             // Act
             scheduler.reschedule();
@@ -116,8 +116,8 @@ class DynamicBackupSchedulerTest {
             config.setAutoBackupEnabled(true);
             config.setBackupCron("");
             when(backupConfigService.getConfig()).thenReturn(config);
-            when(taskScheduler.schedule(any(Runnable.class), any(CronTrigger.class)))
-                    .thenReturn(scheduledFuture);
+            doReturn(scheduledFuture).when(taskScheduler)
+                    .schedule(any(Runnable.class), any(CronTrigger.class));
 
             // Act
             scheduler.reschedule();
@@ -176,8 +176,8 @@ class DynamicBackupSchedulerTest {
 
             @SuppressWarnings("unchecked")
             ScheduledFuture<?> newFuture = mock(ScheduledFuture.class);
-            when(taskScheduler.schedule(any(Runnable.class), any(CronTrigger.class)))
-                    .thenReturn(newFuture);
+            doReturn(newFuture).when(taskScheduler)
+                    .schedule(any(Runnable.class), any(CronTrigger.class));
 
             // Act
             scheduler.reschedule();
@@ -229,8 +229,8 @@ class DynamicBackupSchedulerTest {
             config.setAutoBackupEnabled(true);
             config.setBackupCron("0 15 1 * * ?");
             when(backupConfigService.getConfig()).thenReturn(config);
-            when(taskScheduler.schedule(any(Runnable.class), any(CronTrigger.class)))
-                    .thenReturn(scheduledFuture);
+            doReturn(scheduledFuture).when(taskScheduler)
+                    .schedule(any(Runnable.class), any(CronTrigger.class));
 
             // Act
             scheduler.reschedule();
@@ -249,8 +249,8 @@ class DynamicBackupSchedulerTest {
             when(backupConfigService.getConfig()).thenReturn(config);
 
             ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
-            when(taskScheduler.schedule(runnableCaptor.capture(), any(CronTrigger.class)))
-                    .thenReturn(scheduledFuture);
+            doReturn(scheduledFuture).when(taskScheduler)
+                    .schedule(runnableCaptor.capture(), any(CronTrigger.class));
 
             // Act
             scheduler.reschedule();
@@ -272,8 +272,8 @@ class DynamicBackupSchedulerTest {
             when(backupConfigService.getConfig()).thenReturn(config);
 
             ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
-            when(taskScheduler.schedule(runnableCaptor.capture(), any(CronTrigger.class)))
-                    .thenReturn(scheduledFuture);
+            doReturn(scheduledFuture).when(taskScheduler)
+                    .schedule(runnableCaptor.capture(), any(CronTrigger.class));
 
             doThrow(new RuntimeException("Backup failed")).when(backupService).executeScheduledBackup();
 
@@ -299,8 +299,8 @@ class DynamicBackupSchedulerTest {
             config.setAutoBackupEnabled(true);
             config.setBackupCron("0 0 2 * * ?");
             when(backupConfigService.getConfig()).thenReturn(config);
-            when(taskScheduler.schedule(any(Runnable.class), any(CronTrigger.class)))
-                    .thenReturn(scheduledFuture);
+            doReturn(scheduledFuture).when(taskScheduler)
+                    .schedule(any(Runnable.class), any(CronTrigger.class));
 
             // Act
             scheduler.init();

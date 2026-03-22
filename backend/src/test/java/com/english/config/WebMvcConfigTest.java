@@ -28,10 +28,11 @@ import static org.mockito.Mockito.*;
 class WebMvcConfigTest {
 
     private WebMvcConfig config;
+    private final AccessLogInterceptor mockInterceptor = mock(AccessLogInterceptor.class);
 
     @BeforeEach
     void setUp() {
-        config = new WebMvcConfig();
+        config = new WebMvcConfig(mockInterceptor);
     }
 
     // ==================== Interface Implementation ====================
@@ -272,6 +273,7 @@ class WebMvcConfigTest {
         private final String audioResourcePath;
 
         TestableWebMvcConfig(String audioResourcePath) {
+            super(mock(AccessLogInterceptor.class));
             this.audioResourcePath = audioResourcePath;
         }
 
