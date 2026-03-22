@@ -5,23 +5,105 @@
 #
 # 用法:
 #   chmod +x scripts/auto-update.sh
-#   # 手动执行
+#   # 手动执行（默认 master 分支）
 #   ./scripts/auto-update.sh
+#   # 指定分支
+#   ./scripts/auto-update.sh -b main
+#   ./scripts/auto-update.sh --branch feature/monitoring
+#   # 交互式选择分支
+#   ./scripts/auto-update.sh -i
 #   # 或加入 crontab（每 5 分钟检查一次）
 #   crontab -e
-#   */5 * * * * /path/to/LangHack/scripts/auto-update.sh >> /var/log/langhack-update.log 2>&1
+#   */5 * * * * /path/to/LangHack/scripts/auto-update.sh -b master >> /var/log/langhack-update.log 2>&1
 # ==============================================================================
 set -euo pipefail
 
 # ── 配置 ──────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRANCH="${DEPLOY_BRANCH:-master}"                    # 要跟踪的分支
+BRANCH="${DEPLOY_BRANCH:-master}"                    # 要跟踪的分支（默认）
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}" # 使用根目录的 docker-compose
 LOG_FILE="${LOG_FILE:-/var/log/langhack-update.log}"
 LOCK_FILE="/tmp/langhack-update.lock"
+INTERACTIVE=false
 # 企业微信/钉钉/飞书 Webhook（可选，留空则不通知）
 WEBHOOK_URL="${WEBHOOK_URL:-}"
 # ─────────────────────────────────────────────────────
+
+# ── 参数解析 ──────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -b|--branch)
+            BRANCH="$2"
+            shift 2
+            ;;
+        -i|--interactive)
+            INTERACTIVE=true
+            shift
+            ;;
+        -h|--help)
+            echo "用法: $0 [选项]"
+            echo ""
+            echo "选项:"
+            echo "  -b, --branch <分支名>   指定要跟踪的分支 (默认: master)"
+            echo "  -i, --interactive       交互式选择分支"
+            echo "  -h, --help              显示帮助信息"
+            echo ""
+            echo "环境变量:"
+            echo "  DEPLOY_BRANCH           默认跟踪分支 (优先级低于 -b)"
+            echo "  COMPOSE_FILE            docker-compose 文件路径"
+            echo "  WEBHOOK_URL             通知 Webhook URL"
+            echo ""
+            echo "示例:"
+            echo "  $0                      跟踪 master 分支"
+            echo "  $0 -b main              跟踪 main 分支"
+            echo "  $0 -i                   交互式选择分支"
+            echo "  DEPLOY_BRANCH=dev $0    跟踪 dev 分支"
+            exit 0
+            ;;
+        *)
+            echo "[ERROR] 未知参数: $1 (运行 $0 --help 查看帮助)"
+            exit 1
+            ;;
+    esac
+done
+
+# ── 交互式分支选择 ────────────────────────────────────
+if [ "$INTERACTIVE" = true ]; then
+    cd "$PROJECT_ROOT"
+    echo "[INFO] 正在获取远程分支列表..."
+    git fetch --all --quiet 2>/dev/null || echo "[WARN] 无法连接远程仓库"
+
+    mapfile -t BRANCHES_LIST < <(git branch -r --no-color 2>/dev/null \
+        | grep -v 'HEAD' \
+        | sed 's|origin/||;s|^[[:space:]]*||' \
+        | sort -u)
+
+    CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+    if [ ${#BRANCHES_LIST[@]} -eq 0 ]; then
+        echo "[WARN] 未获取到分支列表，使用默认: $BRANCH"
+    else
+        echo ""
+        echo "可用分支:"
+        for i in "${!BRANCHES_LIST[@]}"; do
+            branch="${BRANCHES_LIST[$i]}"
+            marker=""
+            [ "$branch" = "$CURRENT" ] && marker=" ← 当前"
+            printf "  %2d) %s%s\n" $((i + 1)) "$branch" "$marker"
+        done
+        echo ""
+        while true; do
+            read -rp "请选择分支编号 [1-${#BRANCHES_LIST[@]}]: " choice
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#BRANCHES_LIST[@]} ]; then
+                BRANCH="${BRANCHES_LIST[$((choice - 1))]}"
+                break
+            else
+                echo "[ERROR] 无效选择"
+            fi
+        done
+    fi
+    echo "[INFO] 已选择分支: $BRANCH"
+fi
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -56,6 +138,17 @@ trap cleanup EXIT
 
 # ── 进入项目目录 ──────────────────────────────────────
 cd "$PROJECT_ROOT"
+
+# ── 确保在目标分支上 ──────────────────────────────────
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
+    log "INFO: 切换分支 $CURRENT_BRANCH → $BRANCH"
+    git checkout "$BRANCH" --quiet 2>/dev/null || {
+        log "ERROR: 切换到分支 $BRANCH 失败"
+        notify "自动更新失败: 无法切换到分支 $BRANCH"
+        exit 1
+    }
+fi
 
 # ── 检查 Git 远程更新 ────────────────────────────────
 log "INFO: 检查远程仓库更新 (branch: $BRANCH)..."
