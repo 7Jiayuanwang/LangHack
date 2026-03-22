@@ -15,7 +15,5 @@ public class OpenRouterConfig {
     private String apiKey;
     private String apiUrl;
     private String model;
-    private String mode;
     private Integer timeout = 60000;
-    private Integer maxRetries = 3;
 }

@@ -1,6 +1,38 @@
 app:
   cors:
-    allowed-origins: http://localhost:3000,http://localhost:5173,http://192.168.203.143:3000
+    # ────────────────────────────────────────────────────────────────────
+    # CORS Allowed Origins / CORS 允许的来源
+    # ────────────────────────────────────────────────────────────────────
+    # IMPORTANT: For production deployment, you MUST set the environment variable
+    # APP_CORS_ALLOWED_ORIGINS to your actual frontend URL(s).
+    # 重要：生产环境部署时，必须通过环境变量 APP_CORS_ALLOWED_ORIGINS 设置实际的前端地址。
+    #
+    # If not set, only localhost is allowed (suitable for local development only).
+    # 未设置时仅允许 localhost（仅适用于本地开发）。
+    #
+    # Examples / 示例:
+    #   Single origin / 单个域名:
+    #     export APP_CORS_ALLOWED_ORIGINS=https://your-frontend.example.com
+    #   Multiple origins / 多个域名 (comma-separated / 逗号分隔):
+    #     export APP_CORS_ALLOWED_ORIGINS=https://www.example.com,https://admin.example.com
+    #   With port / 带端口:
+    #     export APP_CORS_ALLOWED_ORIGINS=http://192.168.1.100:3000,http://192.168.1.100:5173
+    # ────────────────────────────────────────────────────────────────────
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+
+    # ────────────────────────────────────────────────────────────────────
+    # CORS Allowed Origin Patterns / CORS 允许的来源模式（通配符）
+    # ────────────────────────────────────────────────────────────────────
+    # Optional: Use wildcard patterns for subdomain matching.
+    # 可选：使用通配符模式匹配子域名。
+    #
+    # Examples / 示例:
+    #   export APP_CORS_ALLOWED_ORIGIN_PATTERNS=https://*.example.com
+    #   export APP_CORS_ALLOWED_ORIGIN_PATTERNS=https://*.example.com,https://*.staging.example.com
+    #
+    # Leave empty if not needed / 不需要时留空。
+    # ────────────────────────────────────────────────────────────────────
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:}
 
 
 server:
@@ -29,12 +61,12 @@ spring:
 
   datasource:
     master:
-      # CRITICAL: DB credentials MUST be provided via environment variables in production
-      # Local dev: DB_URL, DB_USERNAME, DB_PASSWORD (with safe defaults)
+      # CRITICAL: DB credentials MUST be provided via environment variables
+      # Local dev: set DB_URL, DB_USERNAME, DB_PASSWORD in your environment or .env file
       # Production: MUST be set via environment variables, no defaults
       jdbc-url: ${DB_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
-      username: ${DB_USERNAME:root}
-      password: ${DB_PASSWORD:123}
+      username: ${DB_USERNAME}
+      password: ${DB_PASSWORD}
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
         maximum-pool-size: 20
@@ -49,8 +81,8 @@ spring:
     slave:
       # Fallback to master when slave not configured (single-instance deployment)
       jdbc-url: ${DB_SLAVE_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
-      username: ${DB_SLAVE_USERNAME:${DB_USERNAME:root}}
-      password: ${DB_SLAVE_PASSWORD:${DB_PASSWORD:123}}
+      username: ${DB_SLAVE_USERNAME:${DB_USERNAME}}
+      password: ${DB_SLAVE_PASSWORD:${DB_PASSWORD}}
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
         maximum-pool-size: 50
@@ -86,7 +118,7 @@ spring:
       # - Never hardcode in source code or configuration files
       # - Production deployment: Generate with: openssl rand -base64 32
       secret: ${JWT_SECRET:your_dummy_jwt_secret_for_local_development_at_least_32_chars_long}
-      expiration: 86400000 # 24小时
+      expiration: 2592000000 # 30天 (30 * 24 * 60 * 60 * 1000)
 
   flyway:
     enabled: false  # Flyway disabled (manual database migration management)
@@ -114,30 +146,21 @@ mybatis-plus:
 
 hiagent:
   #此处禁止删除
-  # AI calling mode:
-  # - native: Use HiAgent native two-step API (CreateConversation + ChatQueryV2)
-  # - openai: Use original OpenAI-compatible API flow (Not recommended for HiAgent)
-  mode: native
-  
-  # HiAgent Native API Settings
-  # URL: https://agent.imau.edu.cn:32300/api/proxy/api/v1
-  api-key: d6uds516rdh495eqgveg
-  api-url: https://agent.imau.edu.cn:32300/api/proxy/api/v1
-  app-id: d5q4isp6rdh6j8crcu5g
-  user-id: LangHack_System
-  
+  # HiAgent Native API Settings (two-step: CreateConversation + ChatQueryV2)
+  # CRITICAL: Must be provided via environment variable (no real key in defaults)
+  api-key: ${HIAGENT_API_KEY:}
+  api-url: ${HIAGENT_API_URL:https://agent.imau.edu.cn:32300/api/proxy/api/v1}
+  app-id: ${HIAGENT_APP_ID:}
+  user-id: ${HIAGENT_USER_ID:LangHack_System}
   timeout: 60000
-  max-retries: 3
 
 openrouter:
-  # OpenAI-compatible API flow
-  mode: openai
-  api-url: https://openrouter.ai/api/v1/chat/completions
-  # Use the user's OpenRouter key if they have one, or fallback to the deepseek equivalent if applicable
-  api-key: d6tq0316rdh495eqgi10
-  model: tngtech/deepseek-r1t2-chimera:free
+  # OpenAI-compatible API flow (fallback AI provider)
+  api-url: ${OPENROUTER_API_URL:https://openrouter.ai/api/v1/chat/completions}
+  # CRITICAL: Must be provided via environment variable (no real key in defaults)
+  api-key: ${OPENROUTER_API_KEY:}
+  model: ${OPENROUTER_MODEL:tngtech/deepseek-r1t2-chimera:free}
   timeout: 60000
-  max-retries: 3
 
 
 # Tencent Cloud API Configuration
@@ -179,11 +202,20 @@ backup:
 resilience4j:
   circuitbreaker:
     instances:
+      hiagent:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        ignore-exceptions:
+          - com.english.exception.BusinessException
       openrouter:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
         sliding-window-size: 10
         minimum-number-of-calls: 5
+        ignore-exceptions:
+          - com.english.exception.BusinessException
       tencent-translate:
         failure-rate-threshold: 60
         wait-duration-in-open-state: 20s

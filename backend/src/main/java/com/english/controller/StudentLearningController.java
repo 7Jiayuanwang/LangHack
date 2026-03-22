@@ -79,6 +79,12 @@ public class StudentLearningController {
     @Autowired
     private ArticleVersionService articleVersionService;
 
+    @Autowired
+    private ClassService classService;
+
+    @Autowired
+    private UnitService unitService;
+
     /**
      * 获取学生仪表板数据
      */
@@ -186,6 +192,9 @@ public class StudentLearningController {
         try {
             Long studentId = getCurrentStudentId(authentication);
 
+            // 校验学生是否有权访问该课程
+            assertStudentCanAccessCourse(studentId, courseId);
+
             Map<String, Object> result = new HashMap<>();
             // 查询课程下的所有单元
             result.put("units", learningRecordsService.getUnitsWithLearningStats(studentId, courseId));
@@ -211,6 +220,15 @@ public class StudentLearningController {
         try {
             Long studentId = getCurrentStudentId(authentication);
 
+            // 校验单元所属课程是否可被学生访问
+            Unit unit = unitService.getUnitById(unitId);
+            if (unit == null) {
+                return Result.error("单元不存在");
+            }
+            if (unit.getCourseId() != null) {
+                assertStudentCanAccessCourse(studentId, unit.getCourseId());
+            }
+
             Map<String, Object> content = learningRecordsService.getUnitContentWithLearningStates(studentId, unitId);
 
             return Result.success(content);
@@ -234,6 +252,9 @@ public class StudentLearningController {
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
+
+            // 校验学生是否有权访问该课文
+            assertStudentCanRecord(studentId, textId, null, assignmentId);
 
             // 触发异步版本生成（如果缺失）
             articleVersionService.checkAndGenerateVersions(textId);
@@ -285,7 +306,10 @@ public class StudentLearningController {
                     return Result.error("assignmentId格式错误");
                 }
             }
-            
+
+            // 校验学生是否有权记录该课文的学习
+            assertStudentCanRecord(studentId, textId, null, assignmentId);
+
             // 参数转换：duration
             Integer duration = 15;
             if (params.get("duration") != null) {
@@ -322,6 +346,10 @@ public class StudentLearningController {
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
+
+            // 校验学生是否有权访问该课文
+            assertStudentCanRecord(studentId, textId, null, assignmentId);
+
             logger.info("开始阅读课文调用: studentId={}, textId={}, assignmentId={}", studentId, textId, assignmentId);
             Long recordId = learningRecordsService.startReadingSession(studentId, textId, assignmentId);
             logger.info("阅读会话创建成功: recordId={}", recordId);
@@ -379,6 +407,10 @@ public class StudentLearningController {
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
+
+            // 校验学生是否有权访问该课文
+            assertStudentCanRecord(studentId, textId, null, assignmentId);
+
             logger.info("标记课文完成调用: studentId={}, textId={}, assignmentId={}", studentId, textId, assignmentId);
 
             // 验证课文是否存在
@@ -507,6 +539,9 @@ public class StudentLearningController {
                 }
             }
 
+            // 校验学生是否有权记录该学习活动
+            assertStudentCanRecord(studentId, textId, wordId, assignmentId);
+
             learningRecordsService.recordLearning(studentId, type, wordId, duration, textId, assignmentId);
 
             logger.debug("记录学习活动: 学生={}, 类型={}, 时长={}秒{}",
@@ -553,7 +588,10 @@ public class StudentLearningController {
                     return Result.error("assignmentId格式错误");
                 }
             }
-            
+
+            // 校验学生是否有权记录该单词的学习
+            assertStudentCanRecord(studentId, null, wordId, assignmentId);
+
             // 参数转换：duration
             Integer duration = 15;
             if (params.get("duration") != null) {
@@ -630,6 +668,57 @@ public class StudentLearningController {
             throw new BusinessException("用户不存在");
         }
         return user.getId();
+    }
+
+    /**
+     * 校验学生是否有权访问指定课程
+     * 逻辑：学生所在班级 -> 班级关联的课程 -> 是否包含目标courseId
+     */
+    private void assertStudentCanAccessCourse(Long studentId, Long courseId) {
+        List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+        if (classIds == null || classIds.isEmpty()) {
+            throw new BusinessException("您未加入任何班级，无法访问该课程");
+        }
+        boolean hasAccess = false;
+        for (Long classId : classIds) {
+            com.english.entity.Class classInfo = classService.getClassById(classId);
+            if (classInfo != null && courseId.equals(classInfo.getCourseId())) {
+                hasAccess = true;
+                break;
+            }
+        }
+        if (!hasAccess) {
+            throw new BusinessException("无权访问该课程");
+        }
+    }
+
+    /**
+     * 校验学生是否有权记录学习（校验 textId/wordId/assignmentId 归属）
+     */
+    private void assertStudentCanRecord(Long studentId, Long textId, Long wordId, Long assignmentId) {
+        // 如果有 assignmentId，校验学生是否有权访问该任务
+        if (assignmentId != null) {
+            List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+            if (classIds == null || classIds.isEmpty()
+                    || !assignmentService.isAssignmentInClasses(assignmentId, classIds)) {
+                throw new BusinessException("无权访问该任务");
+            }
+        }
+
+        // 如果有 textId，校验课文属于学生可访问的课程
+        if (textId != null) {
+            Text text = textMapper.selectById(textId);
+            if (text == null) {
+                throw new BusinessException("课文不存在");
+            }
+            // 如果课文关联了单元，校验单元所属课程
+            if (text.getUnitId() != null) {
+                Unit unit = unitService.getUnitById(text.getUnitId());
+                if (unit != null && unit.getCourseId() != null) {
+                    assertStudentCanAccessCourse(studentId, unit.getCourseId());
+                }
+            }
+        }
     }
 
     /**

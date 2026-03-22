@@ -16,6 +16,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -44,7 +46,7 @@ public class DataCleanupServiceImpl {
     @Autowired
     private Environment environment;
 
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void autoCleanupInconsistentData() {
         // 只在明确设置了 dev profile 时才运行数据清理，默认不执行
         String[] activeProfiles = environment.getActiveProfiles();

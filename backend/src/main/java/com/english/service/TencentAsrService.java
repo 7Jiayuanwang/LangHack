@@ -10,8 +10,10 @@ import com.tencentcloudapi.common.profile.ClientProfile;
 import com.tencentcloudapi.common.profile.HttpProfile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import com.english.service.impl.AiCallMetricsService;
 
 import javax.annotation.PostConstruct;
 
@@ -31,6 +33,9 @@ public class TencentAsrService {
     private String region;
 
     private AsrClient asrClient;
+
+    @Autowired(required = false)
+    private AiCallMetricsService aiCallMetricsService;
 
     @PostConstruct
     public void init() {
@@ -83,6 +88,9 @@ public class TencentAsrService {
             lang = "zh";
         }
 
+        long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+        String user = AiCallMetricsService.getCurrentUser();
+
         try {
             SentenceRecognitionRequest req = new SentenceRecognitionRequest();
             req.setSourceType(1L);    // 1: 数据包传输
@@ -105,11 +113,18 @@ public class TencentAsrService {
             }
 
             String result = resp.getResult();
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordSuccess("TENCENT_ASR", "recognize", startTime, user);
+            }
             return result != null ? result : "";
 
         } catch (TencentCloudSDKException e) {
             // 不在日志中暴露错误详情，只记录错误码
             logger.error("ASR 识别失败 - 错误码: {}", e.getErrorCode());
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("TENCENT_ASR", "recognize", startTime,
+                        e.getErrorCode(), user);
+            }
             
             // 根据错误类型返回更友好的提示
             String errorCode = e.getErrorCode();
@@ -123,6 +138,10 @@ public class TencentAsrService {
         } catch (Exception e) {
             // FIX: 捕获其他异常（如超时、网络错误等）
             logger.error("ASR 识别出错: {}", e.getMessage());
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("TENCENT_ASR", "recognize", startTime,
+                        e.getMessage(), user);
+            }
             throw new BusinessException("ASR 识别失败，请稍后重试");
         }
     }

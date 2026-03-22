@@ -34,4 +34,9 @@ public interface HiAgentService {
     String generateAcademicVersionMarkdown(String originalMarkdownContent);
 
     String generateChineseParallelVersionMarkdown(String originalMarkdownContent);
+
+    /**
+     * AI Q&A: answer a user question about highlighted text in an article
+     */
+    String chatQA(String userQuestion, String selectedText, String articleContext);
 }

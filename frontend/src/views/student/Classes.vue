@@ -146,6 +146,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getAuthHeader } from '@/utils/auth'
 
 // 数据状态
 const loading = ref(false)
@@ -177,7 +178,7 @@ const loadClasses = async () => {
   try {
     const response = await fetch('/api/classes/student/me', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -213,7 +214,7 @@ const loadAvailableClasses = async () => {
 
     const response = await fetch(`/api/classes/search?${params.toString()}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -260,7 +261,7 @@ const submitJoinForm = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       },
       body: JSON.stringify({
         classId: joinForm.classId
@@ -298,7 +299,7 @@ const quickJoinClass = async (classInfo) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       },
       body: JSON.stringify({
         classId: classInfo.id
@@ -340,7 +341,7 @@ const leaveClass = async (classInfo) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       },
       body: JSON.stringify({
         classId: classInfo.id

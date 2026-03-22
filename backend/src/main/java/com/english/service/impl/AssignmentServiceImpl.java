@@ -138,10 +138,8 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     @Override
     @Transactional
     public void deleteAssignment(Long id) {
-        // 软删除：设置 deleted=1（与 Course/Text/Media 保持一致）
-        update(null, new UpdateWrapper<Assignment>()
-                .eq("id", id)
-                .set("deleted", 1));
+        // 软删除：@TableLogic 会将 removeById 转换为 UPDATE SET deleted=1
+        removeById(id);
     }
 
     @Override
@@ -505,7 +503,11 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                 completionData.get("totalItems") != null ? ((Number) completionData.get("totalItems")).intValue() : 1);
         record.setCreatedTime(LocalDateTime.now());
 
-        learningRecordMapper.insert(record);
+        try {
+            learningRecordMapper.insert(record);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            throw new BusinessException("任务已提交，请勿重复提交");
+        }
 
         // 触发分数计算
         scoreRecordService.updateAssignmentScore(assignmentId, studentId);
@@ -648,8 +650,8 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         logger.debug("任务进度计算 - 任务类型: {}, 单词进度: {}%, 课文进度: {}%, 综合进度: {}%",
                 getAssignmentType(assignment), wordProgress, textProgress, overallProgress);
 
-        // 返回 0-100 的百分比值
-        return overallProgress;
+        // 返回 0-100 的百分比值，兜底确保不超过 100%
+        return Math.min(overallProgress, 100.0);
     }
 
     /**
@@ -761,6 +763,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
     /**
      * 计算在任务中学习的单词数量
+     * 基于任务实际关联的词集（而非整个单元），避免进度超过 100%
      */
     private int calculateWordsLearnedInAssignment(Long assignmentId, Long studentId) {
         Assignment assignment = getActiveAssignment(assignmentId);
@@ -768,16 +771,13 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             return 0;
         }
 
-        // 获取任务关联单元的单词
-        QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
-        unitWordWrapper.eq("unit_id", assignment.getUnitId());
-        List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
-
-        if (unitWords == null || unitWords.isEmpty()) {
+        // 使用 getAssignmentWords 获取任务的有效词集（已过滤软删除）
+        List<Word> assignmentWords = getAssignmentWords(assignment);
+        if (assignmentWords == null || assignmentWords.isEmpty()) {
             return 0;
         }
 
-        List<Long> wordIds = unitWords.stream().map(UnitWord::getWordId).collect(Collectors.toList());
+        List<Long> wordIds = assignmentWords.stream().map(Word::getId).collect(Collectors.toList());
 
         // 通过学习记录查询学生已学习的单词
         // 查询该任务中的所有单词学习记录（包括浏览和完成）
@@ -790,9 +790,11 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
         List<LearningRecord> learningRecords = learningRecordMapper.selectList(recordWrapper);
 
-        // 获取有学习记录的单词ID集合
+        // 获取有学习记录的单词ID集合，收敛到任务词集范围
+        Set<Long> assignmentWordIdSet = new HashSet<>(wordIds);
         Set<Long> learnedWordIds = (learningRecords != null ? learningRecords : Collections.<LearningRecord>emptyList()).stream()
                 .map(LearningRecord::getWordId)
+                .filter(assignmentWordIdSet::contains)
                 .collect(Collectors.toSet());
 
         logger.debug("任务单词学习统计 - 学生={}, 任务={}, 总单词={}, 学习记录数={}, 已学习单词={}",
@@ -805,10 +807,13 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                     .in("word_id", wordIds)
                     .ne("mastery_level", "NEW");
 
-            return Math.toIntExact(vocabularyBookMapper.selectCount(vocabWrapper));
+            long vocabCount = vocabularyBookMapper.selectCount(vocabWrapper);
+            // 确保不超过任务总词数
+            return (int) Math.min(vocabCount, wordIds.size());
         }
 
-        return learnedWordIds.size();
+        // 确保不超过任务总词数
+        return Math.min(learnedWordIds.size(), wordIds.size());
     }
 
     /**
@@ -1012,8 +1017,8 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             studentProgress.put("textsRead", calculateTextsReadInAssignment(assignmentId, studentId));
             studentProgress.put("studyTime", calculateStudyTimeInAssignment(assignmentId, studentId));
 
-            // 检查是否完成（基于80%进度标准）
-            boolean isCompleted = progress >= 80.0;
+            // 检查是否完成（复用统一的完成判定方法）
+            boolean isCompleted = isAssignmentCompleted(assignmentId, studentId);
             studentProgress.put("completed", isCompleted);
 
             // 完成时间

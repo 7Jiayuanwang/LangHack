@@ -63,7 +63,7 @@ describe('Auth API', () => {
   })
 
   describe('logout', () => {
-    it('calls GET /api/auth/logout', async () => {
+    it('calls POST /api/auth/logout', async () => {
       const mockResponse = { code: 200, message: 'Logged out' }
       mockRequest.mockResolvedValue(mockResponse)
 
@@ -71,7 +71,7 @@ describe('Auth API', () => {
 
       expect(mockRequest).toHaveBeenCalledWith({
         url: '/api/auth/logout',
-        method: 'get'
+        method: 'post'
       })
       expect(result).toEqual(mockResponse)
     })

@@ -274,6 +274,14 @@ export function getBackupConfig() {
   })
 }
 
+export function updateBackupConfig(data) {
+  return request({
+    url: '/api/admin/backup/config',
+    method: 'put',
+    data
+  })
+}
+
 export function triggerBackupCleanup() {
   return request({
     url: '/api/admin/backup/cleanup',

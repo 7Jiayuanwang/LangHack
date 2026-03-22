@@ -162,6 +162,7 @@
 <script setup>
 import { ref, computed, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getAuthHeader } from '@/utils/auth'
 
 // ─── 基础状态 ──────────────────────────────────────────────
 const videoUrl    = ref('')
@@ -288,7 +289,7 @@ const fetchSubtitles = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       },
       body: JSON.stringify({ texts, direction: translateDirection.value })
     })
@@ -385,7 +386,7 @@ const callTranslateApi = async (text) => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      'Authorization': getAuthHeader() || ''
     },
     body: JSON.stringify({ text })
   })
@@ -490,7 +491,7 @@ const processAudioChunk = (blob) => {
       const asrLang = translateDirection.value === 'en-to-zh' ? 'en' : 'zh'
       const res  = await fetch('/api/asr/recognize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': getAuthHeader() || '' },
         body: JSON.stringify({ audioData: base64, format: 'webm', lang: asrLang })
       })
       if (!res.ok) return

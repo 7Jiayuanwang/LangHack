@@ -847,7 +847,7 @@ const markWordAsCompleted = async (word) => {
 
       // 如果任务完成，询问是否返回
       if (completionRate >= 100) {
-        setTimeout(() => {
+        safeTimeout(() => {
           ElMessage({
             message: '恭喜！任务已全部完成',
             type: 'success',
@@ -1003,7 +1003,7 @@ watch(() => route.path, (newPath) => {
     // 检查是否有任务ID参数，如果有则打开详情
     const assignmentId = route.query.id
     if (assignmentId) {
-      setTimeout(async () => {
+      safeTimeout(async () => {
         const assignment = assignments.value.find(a => a.id == assignmentId)
         if (assignment) {
           await viewAssignmentDetail(assignment)
@@ -1037,7 +1037,7 @@ onActivated(() => {
   // 检查是否有任务ID参数
   const assignmentId = route.query.id
   if (assignmentId) {
-    setTimeout(async () => {
+    safeTimeout(async () => {
       const assignment = assignments.value.find(a => a.id == assignmentId)
       if (assignment) {
         await viewAssignmentDetail(assignment)

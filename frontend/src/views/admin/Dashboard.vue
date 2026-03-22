@@ -109,6 +109,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { User, Reading, School, Document } from '@element-plus/icons-vue'
+import { getAuthHeader } from '@/utils/auth'
 
 const stats = reactive({
   totalUsers: 0,
@@ -146,7 +147,7 @@ const loadDashboardData = async () => {
   try {
     const response = await fetch('/api/admin/stats', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 

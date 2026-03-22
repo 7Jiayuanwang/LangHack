@@ -33,9 +33,14 @@ public class HiAgentConfig {
     private String userId;
 
     /**
-     * Calling mode: native (HiAgent) or openai (Standard)
+     * Q&A App API key (for article highlight AI Q&A)
      */
-    private String mode;
+    private String qaApiKey;
+
+    /**
+     * Q&A App ID (for article highlight AI Q&A)
+     */
+    private String qaAppId;
 
     /**
      * Request timeout in milliseconds
@@ -43,7 +48,7 @@ public class HiAgentConfig {
     private Integer timeout = 60000;
 
     /**
-     * Maximum retry attempts
+     * Max retries for API calls
      */
-    private Integer maxRetries = 3;
+    private int maxRetries = 3;
 }

@@ -182,6 +182,7 @@ backend/src/main/resources/application-prod.yml
 frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
+frontend/build_output.txt
 
 # Database backups and exports (使用 Git LFS 管理)
 # database/*.sql 已通过 .gitattributes 配置为使用 Git LFS

@@ -77,14 +77,26 @@ public class MediaController {
     }
 
     @GetMapping("/{mediaId}")
-    public Result<Media> getMediaDetail(@PathVariable Long mediaId) {
+    public Result<Map<String, Object>> getMediaDetail(@PathVariable Long mediaId) {
         try {
             // getMediaById already checks for deleted=0, so just check if media is null
             Media media = mediaService.getMediaById(mediaId);
             if (media == null) {
                 return Result.error("媒体不存在");
             }
-            return Result.success(media);
+            // 返回安全 DTO Map，不暴露 fileContent/filePath/uploadedBy 等内部字段
+            Map<String, Object> dto = new HashMap<>();
+            dto.put("id", media.getId());
+            dto.put("fileName", media.getFileName());
+            dto.put("mediaType", media.getMediaType());
+            dto.put("fileSize", media.getFileSize());
+            dto.put("mimeType", media.getMimeType());
+            dto.put("textId", media.getTextId());
+            dto.put("description", media.getDescription());
+            dto.put("width", media.getWidth());
+            dto.put("height", media.getHeight());
+            dto.put("duration", media.getDuration());
+            return Result.success(dto);
         } catch (Exception e) {
             logger.error("获取失败", e);
 

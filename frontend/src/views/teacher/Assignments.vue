@@ -293,6 +293,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getAuthHeader } from '@/utils/auth'
 
 // 响应式数据
 const loading = ref(false)
@@ -444,9 +445,9 @@ const loadAssignments = async () => {
     params.append('page', '1')
     params.append('size', '100')
 
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/assignments?${params.toString()}`, { headers })
 
@@ -503,9 +504,9 @@ const loadAssignments = async () => {
 
 const loadClasses = async () => {
   try {
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch('/api/classes?size=100', { headers })
 
@@ -534,9 +535,9 @@ const loadClasses = async () => {
 
 const loadUnits = async () => {
   try {
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch('/api/units?size=100', { headers })
 
@@ -572,9 +573,9 @@ const loadUnitsForClass = async (classId) => {
       return
     }
 
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/units?courseId=${classItem.courseId}&size=100`, { headers })
 
@@ -663,9 +664,9 @@ const loadUnitContent = async (unitId) => {
 
   loadingUnitContent.value = true
   try {
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/assignments/unit/${unitId}/content`, { headers })
 
@@ -726,9 +727,9 @@ const saveAssignment = async () => {
       saving.value = true
       try {
         // 修复：提取token和fetchHeaders到try块开始处，避免在if-else分支中重复声明
-        const token = localStorage.getItem('token')
         const fetchHeaders = { 'Content-Type': 'application/json' }
-        if (token) fetchHeaders['Authorization'] = `Bearer ${token}`
+        const authHeader = getAuthHeader()
+        if (authHeader) fetchHeaders['Authorization'] = authHeader
 
         // 根据任务类型选择不同的接口
         if (assignmentForm.assignmentType === 'UNIT') {
@@ -821,9 +822,9 @@ const viewProgress = async (assignment) => {
   try {
     currentAssignment.value = assignment
 
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/assignments/${assignment.id}/progress`, { headers })
 
@@ -867,9 +868,9 @@ const deleteAssignment = async (assignment) => {
       type: 'warning'
     })
 
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/assignments/${assignment.id}`, {
       method: 'DELETE',
@@ -958,9 +959,9 @@ const getCompletedCountForAssignment = async (assignmentId) => {
       }
     }
 
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/assignments/${assignmentId}/progress`, { headers })
 

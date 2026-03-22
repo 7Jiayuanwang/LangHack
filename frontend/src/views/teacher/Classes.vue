@@ -204,6 +204,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { User, Download, MoreFilled, Edit, Delete, Plus } from '@element-plus/icons-vue'
+import { getAuthHeader } from '@/utils/auth'
 
 // 响应式数据
 const classes = ref([])
@@ -252,9 +253,9 @@ const classRules = {
 // 方法
 const loadClasses = async () => {
   try {
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch('/api/classes?size=100', { headers })
 
@@ -283,9 +284,9 @@ const loadClasses = async () => {
 
 const loadCourses = async () => {
   try {
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch('/api/courses?size=100', { headers })
 
@@ -340,9 +341,9 @@ const saveClass = async () => {
         const url = isEdit.value ? `/api/classes/${classForm.id}` : '/api/classes'
         const method = isEdit.value ? 'PUT' : 'POST'
 
-        const token = localStorage.getItem('token')
         const fetchHeaders = { 'Content-Type': 'application/json' }
-        if (token) fetchHeaders['Authorization'] = `Bearer ${token}`
+        const authHeader = getAuthHeader()
+        if (authHeader) fetchHeaders['Authorization'] = authHeader
 
         const response = await fetch(url, {
           method,
@@ -386,9 +387,9 @@ const saveClass = async () => {
 const viewStudents = async (classItem) => {
   try {
     currentClassId.value = classItem.id
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/classes/${classItem.id}/students`, { headers })
 
@@ -422,9 +423,9 @@ const deleteClass = async (classItem) => {
       type: 'warning'
     })
 
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/classes/${classItem.id}`, {
       method: 'DELETE',
@@ -461,9 +462,9 @@ const exportClassScores = async (classItem) => {
   try {
     ElMessage.info('正在导出成绩，请稍候...')
     
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/scores/class/${classItem.id}/export`, { headers })
     
@@ -513,9 +514,9 @@ const removeStudent = async (student) => {
       return
     }
 
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/classes/${classId}/students/${studentId}`, {
       method: 'DELETE',
@@ -566,9 +567,9 @@ const searchStudents = async (query) => {
   searching.value = true
 
   try {
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/auth/search?keyword=${encodeURIComponent(query)}`, { headers })
 
@@ -627,9 +628,9 @@ const addStudentToClass = async () => {
 
   adding.value = true
   try {
-    const token = localStorage.getItem('token')
     const fetchHeaders = { 'Content-Type': 'application/json' }
-    if (token) fetchHeaders['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) fetchHeaders['Authorization'] = authHeader
 
     const response = await fetch(`/api/classes/${currentClassId.value}/students`, {
       method: 'POST',
@@ -680,9 +681,9 @@ const getStudentCount = (classId) => {
 // 异步加载单个班级的学生数量
 const loadStudentCount = async (classId) => {
   try {
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     const response = await fetch(`/api/classes/${classId}/students`, { headers })
 

@@ -1,5 +1,7 @@
 package com.english.service;
 
+import java.util.Map;
+
 /**
  * Service for managing article versions
  */
@@ -34,4 +36,14 @@ public interface ArticleVersionService {
     void generateMarkdownVersionsAsync(Long textId, String originalMarkdownContent,
             boolean needsCET4, boolean needsCET6,
             boolean needsAcademic, boolean needsChineseParallel);
+
+    /**
+     * Save plain text version results (must be called via proxy for @Transactional)
+     */
+    void saveVersionResults(Long textId, Map<String, String> results);
+
+    /**
+     * Save Markdown version results (must be called via proxy for @Transactional)
+     */
+    void saveMarkdownVersionResults(Long textId, Map<String, String> results);
 }

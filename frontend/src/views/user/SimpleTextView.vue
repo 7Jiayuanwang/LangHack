@@ -189,6 +189,7 @@ import request from '@/utils/request'
 import VersionSelector from '@/components/VersionSelector.vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { getAuthHeader } from '@/utils/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -240,7 +241,6 @@ const handleResize = () => {
 
 // 声明全局事件处理器变量，避免内存泄漏
 let activeDragHandlers = { move: null, end: null }
-let textContentClickHandler = null
 let synonymClickTimers = []
 
 
@@ -340,12 +340,12 @@ const translateSelectedText = async () => {
   translatedText.value = ''
 
   try {
-    const token = localStorage.getItem('token')
+    const authHeaderValue = getAuthHeader()
     const response = await fetch('/api/translate/auto', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {})
       },
       body: JSON.stringify({
         text: selectedTextForTranslate.value
@@ -502,10 +502,10 @@ const handleWordClick = async (wordText) => {
 
   try {
     // 使用WordNet API获取单词详细信息，需要带上认证token
-    const token = localStorage.getItem('token')
+    const authHeaderValue = getAuthHeader()
     const response = await fetch(`/api/wordnet/word/${cleanWord}`, {
       headers: {
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {}),
         'Content-Type': 'application/json'
       }
     })
@@ -563,16 +563,6 @@ const handleTextClick = (event) => {
 // 为全局访问创建handleWordClick函数，确保在window上正确绑定
 // 事件委托处理单词点击，避免 window 全局污染
 onMounted(() => {
-  // 用事件委托代替 window.handleWordClick，避免全局命名空间污染和潜在 XSS
-  const container = document.querySelector('.text-content')
-  if (container) {
-    textContentClickHandler = (e) => {
-      const word = e.target?.dataset?.word
-      if (word) handleWordClick(decodeURIComponent(word))
-    }
-    container.addEventListener('click', textContentClickHandler)
-  }
-
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
 
@@ -709,13 +699,6 @@ onUnmounted(() => {
       }
     })
     synonymClickTimers = []
-  }
-
-  // 清理文本点击处理器
-  const container = document.querySelector('.text-content')
-  if (container && textContentClickHandler) {
-    container.removeEventListener('click', textContentClickHandler)
-    textContentClickHandler = null
   }
 
   // 清理窗口大小变化监听

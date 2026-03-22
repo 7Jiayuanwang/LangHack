@@ -72,7 +72,60 @@ bash scripts/setup-replication.sh   # 或手动执行第 4 节命令
 
 ---
 
-## 3. 环境变量说明
+## 3. 配置方式（三选一）
+
+项目支持三种配置方式，按需选择：
+
+### 方式一：Spring Profile 配置文件（推荐非 Docker 部署）
+
+```bash
+# 1. 复制配置模板
+cd backend/src/main/resources
+cp application-prod.yml.example application-prod.yml
+
+# 2. 编辑配置文件，填写实际值
+nano application-prod.yml
+
+# 3. 启动时指定 profile
+java -jar app.jar --spring.profiles.active=prod
+```
+
+> `application-prod.yml` 已加入 `.gitignore`，不会被提交到版本控制。
+
+### 方式二：环境变量文件（推荐 Docker 部署）
+
+```bash
+# Docker Compose 部署
+cp docker/.env.example docker/.env
+nano docker/.env
+docker compose up -d
+
+# 或直接 JAR 部署（使用 backend/.env.example 作为参考）
+cp backend/.env.example backend/.env
+# 加载 .env 后启动：
+export $(grep -v '^#' backend/.env | xargs) && java -jar app.jar
+```
+
+### 方式三：命令行参数（临时覆盖）
+
+```bash
+java -jar app.jar \
+  --app.cors.allowed-origins=https://your-domain.com \
+  --spring.security.jwt.secret=your_jwt_secret \
+  --spring.datasource.master.password=your_db_password
+```
+
+### 配置优先级
+
+```
+命令行参数 > application-prod.yml > 环境变量 > application.yml 默认值
+```
+
+> **关键**：无论选择哪种方式，务必配置 `CORS 允许的来源`（前端域名），否则前端会出现"拒绝访问"。
+
+---
+
+## 4. 环境变量说明
 
 配置文件路径：`docker/.env`（从 `docker/.env.example` 复制而来）
 
@@ -109,20 +162,57 @@ bash scripts/setup-replication.sh   # 或手动执行第 4 节命令
 | `REDIS_PORT` | Redis 端口 | `6379` | 是 |
 | `REDIS_PASSWORD` | Redis 认证密码 | `Redis@SecretPwd` | 是 |
 
-### 认证与 AI
+### CORS 跨域配置（⚠️ 部署必配）
+
+> **这是生产环境部署后出现"拒绝访问"的首要原因！** 如果不配置此项，前端将无法访问后端 API。
 
 | 变量名 | 说明 | 示例值 | 必填 |
 |--------|------|--------|------|
-| `JWT_SECRET` | JWT 签名密钥（至少 32 位随机串） | `openssl rand -base64 48` 生成 | 是 |
-| `OPENROUTER_API_KEY` | OpenRouter API Key（AI 问答功能） | `sk-or-xxx` | 是 |
-| `TUTOR_API_BASE_URL` | AI Tutor 服务地址 | `http://10.0.0.5:8000/api/tutor` | 是 |
+| `APP_CORS_ALLOWED_ORIGINS` | 允许的前端域名（逗号分隔） | `https://your-frontend.com` | **是** |
+| `APP_CORS_ALLOWED_ORIGIN_PATTERNS` | 通配符子域名匹配 | `https://*.example.com` | 否 |
 
-### 腾讯翻译（可选）
+配置示例：
+
+```bash
+# 单个域名
+export APP_CORS_ALLOWED_ORIGINS=https://langhack.example.com
+
+# 多个域名（逗号分隔）
+export APP_CORS_ALLOWED_ORIGINS=https://www.example.com,https://admin.example.com
+
+# IP + 端口（测试环境）
+export APP_CORS_ALLOWED_ORIGINS=http://192.168.1.100:3000,http://192.168.1.100:5173
+```
+
+> 默认值 `http://localhost:3000,http://localhost:5173` 仅用于本地开发。部署到服务器后**必须**配置为实际的前端域名。
+
+### 认证与 Token
 
 | 变量名 | 说明 | 示例值 | 必填 |
 |--------|------|--------|------|
-| `TENCENT_SECRET_ID` | 腾讯云 SecretId | `AKIDxxx` | 否 |
-| `TENCENT_SECRET_KEY` | 腾讯云 SecretKey | `xxx` | 否 |
+| `JWT_SECRET` | JWT 签名密钥（至少 32 位随机串） | `openssl rand -base64 48` 生成 | **是** |
+
+> Token 有效期为 30 天。用户退出登录时 Token 通过 Redis 黑名单机制立即失效。
+
+### AI 服务
+
+| 变量名 | 说明 | 示例值 | 必填 |
+|--------|------|--------|------|
+| `HIAGENT_API_KEY` | HiAgent API Key（主要 AI 提供商） | 联系管理员获取 | 至少配一个 |
+| `HIAGENT_API_URL` | HiAgent API 地址 | `https://agent.imau.edu.cn:32300/api/proxy/api/v1` | 否（有默认值） |
+| `HIAGENT_APP_ID` | HiAgent App ID | 联系管理员获取 | 与 API Key 配套 |
+| `OPENROUTER_API_KEY` | OpenRouter API Key（备用 AI 提供商） | `sk-or-xxx` | 至少配一个 |
+
+> HiAgent 和 OpenRouter 至少需要配置其中一个，否则 AI 问答功能不可用。
+
+### 腾讯云服务（可选）
+
+| 变量名 | 说明 | 示例值 | 必填 |
+|--------|------|--------|------|
+| `TENCENT_SECRET_ID` | 翻译服务 SecretId | `AKIDxxx` | 否 |
+| `TENCENT_SECRET_KEY` | 翻译服务 SecretKey | `xxx` | 否 |
+| `TENCENT_ASR_SECRET_ID` | 语音识别 SecretId | `AKIDxxx` | 否 |
+| `TENCENT_ASR_SECRET_KEY` | 语音识别 SecretKey | `xxx` | 否 |
 
 > 生成强随机 JWT 密钥：`openssl rand -base64 48`
 
@@ -410,6 +500,54 @@ docker port langhack-app
 curl -v http://localhost:8080/actuator/health
 ```
 
+**前端出现"拒绝访问"/ CORS 错误** ⚠️
+
+这是部署后最常见的问题。浏览器 Console 会显示类似以下错误：
+
+```
+Access to XMLHttpRequest at 'http://backend:8080/api/...' from origin 'https://your-domain.com'
+has been blocked by CORS policy
+```
+
+解决方法：
+
+```bash
+# 1. 确认前端实际的访问域名
+# 打开浏览器 F12 → Console，查看报错中的 "from origin" 值
+
+# 2. 设置 CORS 白名单
+export APP_CORS_ALLOWED_ORIGINS=https://your-frontend-domain.com
+
+# 3. 重启应用
+docker compose restart app
+
+# 4. 验证配置是否生效（查看启动日志）
+docker compose logs app | grep "CORS allowed origins"
+# 应看到: CORS allowed origins: [https://your-frontend-domain.com]
+```
+
+> 应用启动时会自动检查 CORS 配置。如果仅配置了 localhost，启动日志会打印 WARN 提示。
+
+**Token 相关问题排查**
+
+```bash
+# Token 有效期: 30 天
+# 退出登录: Token 通过 Redis 黑名单立即失效
+
+# 1. 如果用户退出后仍能访问
+#    → 检查 Redis 是否正常运行
+docker exec langhack-redis redis-cli -a "${REDIS_PASSWORD}" ping
+# 期望输出: PONG
+
+# 2. 查看黑名单 key 数量
+docker exec langhack-redis redis-cli -a "${REDIS_PASSWORD}" \
+    keys "token:blacklist:*" | wc -l
+
+# 3. 如果需要强制使所有已签发 Token 失效
+#    → 修改 JWT_SECRET 环境变量并重启应用
+#    → 所有旧 Token 都会因签名不匹配而失效
+```
+
 ---
 
-> 最后更新：2026-03-04 | 版本：v1.0
+> 最后更新：2026-03-21 | 版本：v1.1

@@ -35,9 +35,14 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
     @Override
     @Transactional
     @CacheEvict(value = "media", allEntries = true)
-    public Media uploadMedia(MultipartFile file, String mediaType, Long uploadedBy) throws Exception {
-        if (!uploadSemaphore.tryAcquire(30, TimeUnit.SECONDS)) {
-            throw new BusinessException("服务器上传队列已满，请稍后重试");
+    public Media uploadMedia(MultipartFile file, String mediaType, Long uploadedBy) {
+        try {
+            if (!uploadSemaphore.tryAcquire(30, TimeUnit.SECONDS)) {
+                throw new BusinessException("服务器上传队列已满，请稍后重试");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("上传操作被中断");
         }
         try {
             if (file.isEmpty()) {
@@ -69,7 +74,12 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             }
 
             // 读取文件内容（已通过文件大小检查）
-            byte[] fileContent = file.getBytes();
+            byte[] fileContent;
+            try {
+                fileContent = file.getBytes();
+            } catch (java.io.IOException e) {
+                throw new BusinessException("文件读取失败");
+            }
 
             // 创建Media对象
             Media media = new Media();

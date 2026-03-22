@@ -4,6 +4,7 @@ import com.english.test.TestUtils;
 import com.english.dto.LoginRequest;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
+import com.english.service.TokenBlacklistService;
 import com.english.service.UserService;
 import com.english.util.TestHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +34,9 @@ class AuthControllerTest {
 
     @Mock
     private UserService userService;
+
+    @Mock
+    private TokenBlacklistService tokenBlacklistService;
 
     @InjectMocks
     private AuthController authController;
@@ -400,15 +404,17 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message").value("未授权访问"));
     }
 
-    // ========== GET /api/auth/logout ==========
+    // ========== POST /api/auth/logout ==========
 
     @Test
-    @DisplayName("GET /api/auth/logout - always returns success")
+    @DisplayName("POST /api/auth/logout - returns success and blacklists token")
     void logout_returnsSuccess() throws Exception {
-        mockMvc.perform(get("/api/auth/logout"))
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer mock-jwt-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.message").value("操作成功"))
                 .andExpect(jsonPath("$.data").value("退出登录成功"));
+
+        verify(tokenBlacklistService).blacklistToken("mock-jwt-token");
     }
 }

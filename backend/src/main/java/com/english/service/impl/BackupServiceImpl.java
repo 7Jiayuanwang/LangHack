@@ -4,16 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.english.entity.BackupConfig;
 import com.english.entity.BackupRecord;
 import com.english.exception.BusinessException;
 import com.english.mapper.BackupRecordMapper;
+import com.english.service.BackupConfigService;
 import com.english.service.BackupOperationLogService;
 import com.english.service.BackupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -49,6 +50,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
     private final Executor executor;
     private final DataSource masterDataSource;
     private final BackupOperationLogService operationLogService;
+    private final BackupConfigService backupConfigService;
 
     @Value("${backup.enabled:true}")
     private boolean backupEnabled;
@@ -82,10 +84,12 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
 
     public BackupServiceImpl(@Qualifier("versionGeneratorExecutor") Executor executor,
                              @Qualifier("masterDataSource") DataSource masterDataSource,
-                             BackupOperationLogService operationLogService) {
+                             BackupOperationLogService operationLogService,
+                             BackupConfigService backupConfigService) {
         this.executor = executor;
         this.masterDataSource = masterDataSource;
         this.operationLogService = operationLogService;
+        this.backupConfigService = backupConfigService;
     }
 
     @PostConstruct
@@ -216,9 +220,9 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
     }
 
     @Override
-    @Scheduled(cron = "${backup.cron:0 0 2 * * ?}")
     public void executeScheduledBackup() {
-        if (!backupEnabled) {
+        BackupConfig effectiveConfig = getEffectiveConfig();
+        if (!Boolean.TRUE.equals(effectiveConfig.getAutoBackupEnabled())) {
             logger.debug("Scheduled backup skipped: backup is disabled");
             return;
         }
@@ -518,13 +522,41 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
 
     @Override
     public Map<String, Object> getBackupConfig() {
-        Map<String, Object> config = new HashMap<>();
-        config.put("enabled", backupEnabled);
-        config.put("retentionDays", retentionDays);
-        config.put("maxCount", maxCount);
-        config.put("incrementalEnabled", incrementalEnabled);
-        config.put("fullBackupIntervalDays", fullBackupIntervalDays);
-        return config;
+        BackupConfig config = getEffectiveConfig();
+        Map<String, Object> result = new HashMap<>();
+        result.put("enabled", config.getAutoBackupEnabled());
+        result.put("autoBackupEnabled", config.getAutoBackupEnabled());
+        result.put("backupCron", config.getBackupCron());
+        result.put("backupHour", config.getBackupHour());
+        result.put("backupMinute", config.getBackupMinute());
+        result.put("retentionDays", config.getRetentionDays());
+        result.put("maxCount", config.getMaxCount());
+        result.put("incrementalEnabled", config.getIncrementalEnabled());
+        result.put("fullBackupIntervalDays", config.getFullBackupIntervalDays());
+        result.put("updatedBy", config.getUpdatedBy());
+        result.put("updatedTime", config.getUpdatedTime());
+        return result;
+    }
+
+    /**
+     * Get effective backup config: DB config with fallback to @Value defaults.
+     */
+    private BackupConfig getEffectiveConfig() {
+        try {
+            return backupConfigService.getConfig();
+        } catch (Exception e) {
+            logger.warn("Failed to read backup config from DB, using @Value defaults", e);
+            BackupConfig fallback = new BackupConfig();
+            fallback.setAutoBackupEnabled(backupEnabled);
+            fallback.setBackupCron("0 0 2 * * ?");
+            fallback.setBackupHour(2);
+            fallback.setBackupMinute(0);
+            fallback.setRetentionDays(retentionDays);
+            fallback.setMaxCount(maxCount);
+            fallback.setIncrementalEnabled(incrementalEnabled);
+            fallback.setFullBackupIntervalDays(fullBackupIntervalDays);
+            return fallback;
+        }
     }
 
     @Override
@@ -535,20 +567,41 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
             return 0;
         }
 
+        BackupConfig effectiveConfig = getEffectiveConfig();
+        int effectiveRetentionDays = effectiveConfig.getRetentionDays() != null ? effectiveConfig.getRetentionDays() : retentionDays;
+        int effectiveMaxCount = effectiveConfig.getMaxCount() != null ? effectiveConfig.getMaxCount() : maxCount;
+
         int deletedCount = 0;
 
         // Protect the latest successful full backup (needed as incremental base)
         BackupRecord latestFull = getLastSuccessfulFullBackup();
         Long protectedId = latestFull != null ? latestFull.getId() : null;
 
+        // Collect all backup IDs that are referenced as base by incremental backups
+        QueryWrapper<BackupRecord> incrWrapper = new QueryWrapper<>();
+        incrWrapper.isNotNull("base_backup_id");
+        List<BackupRecord> incrementalBackups = list(incrWrapper);
+        Set<Long> referencedBaseIds = new HashSet<>();
+        if (incrementalBackups != null) {
+            for (BackupRecord incr : incrementalBackups) {
+                if (incr.getBaseBackupId() != null) {
+                    referencedBaseIds.add(incr.getBaseBackupId());
+                }
+            }
+        }
+
         // Delete by retention days
-        LocalDateTime cutoffTime = LocalDateTime.now().minusDays(retentionDays);
+        LocalDateTime cutoffTime = LocalDateTime.now().minusDays(effectiveRetentionDays);
         QueryWrapper<BackupRecord> oldWrapper = new QueryWrapper<>();
         oldWrapper.lt("created_time", cutoffTime).ne("status", "IN_PROGRESS");
         List<BackupRecord> oldBackups = list(oldWrapper);
         for (BackupRecord record : oldBackups) {
             if (protectedId != null && protectedId.equals(record.getId())) {
                 continue; // Never delete the latest full backup
+            }
+            if (referencedBaseIds.contains(record.getId())) {
+                logger.info("Skipping cleanup of backup {} (referenced as base by incremental backups)", record.getFilename());
+                continue; // Never delete a backup referenced as base by incremental backups
             }
             try {
                 deleteBackup(record.getId());
@@ -560,15 +613,19 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
 
         // Delete excess backups (keep max-count most recent)
         long totalCount = count();
-        if (totalCount > maxCount) {
+        if (totalCount > effectiveMaxCount) {
             QueryWrapper<BackupRecord> excessWrapper = new QueryWrapper<>();
             excessWrapper.ne("status", "IN_PROGRESS");
             excessWrapper.orderByDesc("created_time");
-            excessWrapper.last("LIMIT " + (totalCount - maxCount) + " OFFSET " + maxCount);
+            excessWrapper.last("LIMIT " + (totalCount - effectiveMaxCount) + " OFFSET " + effectiveMaxCount);
             List<BackupRecord> excessBackups = list(excessWrapper);
             for (BackupRecord record : excessBackups) {
                 if (protectedId != null && protectedId.equals(record.getId())) {
                     continue; // Never delete the latest full backup
+                }
+                if (referencedBaseIds.contains(record.getId())) {
+                    logger.info("Skipping cleanup of backup {} (referenced as base by incremental backups)", record.getFilename());
+                    continue; // Never delete a backup referenced as base by incremental backups
                 }
                 try {
                     deleteBackup(record.getId());
@@ -604,11 +661,11 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         record.setDatabaseSize(0L);
         record.setCreatedTime(LocalDateTime.now());
 
-        // For incremental, set base backup reference
+        // For incremental, set base backup reference (chain-based: most recent backup)
         if ("INCREMENTAL".equals(mode)) {
-            BackupRecord lastFull = getLastSuccessfulFullBackup();
-            if (lastFull != null) {
-                record.setBaseBackupId(lastFull.getId());
+            BackupRecord lastBackup = getLastSuccessfulBackup();
+            if (lastBackup != null) {
+                record.setBaseBackupId(lastBackup.getId());
             }
         }
 
@@ -623,7 +680,12 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
      * - Otherwise → INCREMENTAL
      */
     private String determineScheduledBackupMode() {
-        if (!incrementalEnabled) {
+        BackupConfig effectiveConfig = getEffectiveConfig();
+        boolean effectiveIncrementalEnabled = Boolean.TRUE.equals(effectiveConfig.getIncrementalEnabled());
+        int effectiveFullInterval = effectiveConfig.getFullBackupIntervalDays() != null
+                ? effectiveConfig.getFullBackupIntervalDays() : fullBackupIntervalDays;
+
+        if (!effectiveIncrementalEnabled) {
             return "FULL";
         }
 
@@ -633,7 +695,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         }
 
         long daysSinceLastFull = ChronoUnit.DAYS.between(lastFull.getCreatedTime(), LocalDateTime.now());
-        if (daysSinceLastFull >= fullBackupIntervalDays) {
+        if (daysSinceLastFull >= effectiveFullInterval) {
             return "FULL";
         }
 
@@ -647,6 +709,18 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         QueryWrapper<BackupRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("status", "SUCCESS")
                .eq("backup_mode", "FULL")
+               .orderByDesc("created_time")
+               .last("LIMIT 1");
+        return getOne(wrapper, false);
+    }
+
+    /**
+     * Find the most recent successful backup (FULL or INCREMENTAL).
+     * Used for chain-based incremental backups.
+     */
+    private BackupRecord getLastSuccessfulBackup() {
+        QueryWrapper<BackupRecord> wrapper = new QueryWrapper<>();
+        wrapper.eq("status", "SUCCESS")
                .orderByDesc("created_time")
                .last("LIMIT 1");
         return getOne(wrapper, false);
@@ -781,9 +855,10 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
             return;
         }
 
-        BackupRecord lastFull = getLastSuccessfulFullBackup();
+        // Chain-based incremental: base on most recent backup (FULL or INCREMENTAL)
+        BackupRecord lastBackup = getLastSuccessfulBackup();
 
-        if (lastFull == null) {
+        if (lastBackup == null) {
             // Fallback to full backup if no full backup exists
             logger.warn("No full backup found, falling back to full backup");
             record.setBackupMode("FULL");
@@ -791,7 +866,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
             return;
         }
 
-        String sinceStr = lastFull.getCreatedTime().format(SQL_DATETIME_FORMATTER);
+        String sinceStr = lastBackup.getCreatedTime().format(SQL_DATETIME_FORMATTER);
         // Defense-in-depth: validate datetime format before using in --where clause
         if (!sinceStr.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}")) {
             logger.error("Invalid sinceStr format: {}", sinceStr);
@@ -801,7 +876,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
             updateById(record);
             return;
         }
-        record.setBaseBackupId(lastFull.getId());
+        record.setBaseBackupId(lastBackup.getId());
 
         try {
             DbConnectionInfo connInfo = parseJdbcUrl();
@@ -844,11 +919,12 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
             // Write incremental backup header
             File outputFile = new File(record.getStoragePath());
             try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-                String header = "-- Incremental backup\n" +
+                String header = "-- Incremental backup (chain-based)\n" +
                         "-- Since: " + sinceStr + "\n" +
-                        "-- Base backup: " + lastFull.getFilename() + " (ID: " + lastFull.getId() + ")\n" +
+                        "-- Base backup: " + lastBackup.getFilename() + " (ID: " + lastBackup.getId() + ", Mode: " + lastBackup.getBackupMode() + ")\n" +
                         "-- Database: " + databaseName + "\n" +
-                        "-- Generated: " + LocalDateTime.now().format(SQL_DATETIME_FORMATTER) + "\n\n" +
+                        "-- Generated: " + LocalDateTime.now().format(SQL_DATETIME_FORMATTER) + "\n" +
+                        "-- Note: Restore requires full chain - first restore the latest FULL backup, then all INCREMENTALs in order\n\n" +
                         "SET FOREIGN_KEY_CHECKS = 0;\n\n";
                 fos.write(header.getBytes(StandardCharsets.UTF_8));
 

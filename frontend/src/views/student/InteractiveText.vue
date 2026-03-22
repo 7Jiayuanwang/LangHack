@@ -300,6 +300,7 @@ import InteractiveText from '@/components/InteractiveText.vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline } from '@/api/student'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { getAuthHeader } from '@/utils/auth'
 
 // 配置 DOMPurify：允许 img 标签及其属性，允许 data-word 自定义属性
 const SANITIZE_CONFIG = {
@@ -468,8 +469,19 @@ const difficultyText = computed(() => {
 
 const wordCount = computed(() => {
   if (!textContent.value) return 0
-  // 简单计算单词数量
-  return textContent.value.split(/\s+/).filter(word => word.length > 0).length
+  let text = textContent.value
+  // Markdown 模式下 textContent 含 HTML 标签，需要先用原始文本或去掉标签再计算
+  if (isMarkdown.value) {
+    // 优先使用原始版本的纯文本
+    const rawText = textVersions.value?.[currentVersion.value] || ''
+    if (rawText) {
+      text = rawText
+    } else {
+      // fallback: 去除 HTML 标签
+      text = textContent.value.replace(/<[^>]*>/g, ' ')
+    }
+  }
+  return text.split(/\s+/).filter(word => word.length > 0).length
 })
 
 const estimatedTime = computed(() => {
@@ -819,12 +831,12 @@ const translateSelectedText = async () => {
   translatedText.value = ''
 
   try {
-    const token = localStorage.getItem('token')
+    const authHeaderValue = getAuthHeader()
     const response = await fetch('/api/translate/auto', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {})
       },
       body: JSON.stringify({
         text: selectedTextForTranslate.value
@@ -1251,10 +1263,10 @@ const handleMarkdownWordClick = async (word) => {
 
   try {
     // 使用 WordNet API 获取单词详细信息
-    const token = localStorage.getItem('token')
+    const authHeaderValue = getAuthHeader()
     const response = await fetch(`/api/wordnet/word/${word.toLowerCase()}`, {
       headers: {
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {}),
         'Content-Type': 'application/json'
       }
     })
@@ -1431,7 +1443,7 @@ onBeforeUnmount(() => {
       }
     }
     // 使用 fetch keepalive 确保页面卸载时请求可靠发送
-    const token = localStorage.getItem('token') || ''
+    const keepaliveAuth = getAuthHeader()
     const payload = {
       type: 'TEXT_VIEW',
       duration: studyTime.value,
@@ -1443,7 +1455,7 @@ onBeforeUnmount(() => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        ...(keepaliveAuth ? { 'Authorization': keepaliveAuth } : {})
       },
       body: JSON.stringify(payload),
       keepalive: true

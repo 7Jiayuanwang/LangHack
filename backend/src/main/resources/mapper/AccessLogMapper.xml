@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.AccessLogMapper">
+
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO access_log (user_id, username, method, uri, query_string,
+            status_code, response_time_ms, ip_address, user_agent, created_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.userId}, #{item.username}, #{item.method}, #{item.uri}, #{item.queryString},
+             #{item.statusCode}, #{item.responseTimeMs}, #{item.ipAddress}, #{item.userAgent}, #{item.createdTime})
+        </foreach>
+    </insert>
+
+    <select id="aggregateHourly" resultType="java.util.Map">
+        SELECT
+            DATE_FORMAT(created_time, '%Y-%m-%d %H:00:00') AS stat_hour,
+            COUNT(*) AS total_requests,
+            COUNT(DISTINCT username) AS unique_users,
+            CAST(AVG(response_time_ms) AS UNSIGNED) AS avg_response_time_ms,
+            MAX(response_time_ms) AS max_response_time_ms,
+            SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS error_count
+        FROM access_log
+        WHERE created_time >= #{startTime} AND created_time &lt; #{endTime}
+        GROUP BY DATE_FORMAT(created_time, '%Y-%m-%d %H:00:00')
+        ORDER BY stat_hour
+    </select>
+
+    <select id="topPagesByDateRange" resultType="java.util.Map">
+        SELECT uri, COUNT(*) AS visit_count
+        FROM access_log
+        WHERE created_time >= #{startTime} AND created_time &lt; #{endTime}
+        GROUP BY uri
+        ORDER BY visit_count DESC
+        LIMIT #{limit}
+    </select>
+
+    <delete id="deleteOlderThan">
+        DELETE FROM access_log WHERE created_time &lt; #{beforeTime}
+    </delete>
+
+</mapper>

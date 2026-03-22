@@ -206,6 +206,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { View, MoreFilled, Edit, Delete } from '@element-plus/icons-vue'
+import { getAuthHeader } from '@/utils/auth'
 
 // 数据状态
 const loading = ref(false)
@@ -268,7 +269,7 @@ const batchLoadStudentCounts = async (classIds) => {
     try {
       const resp = await fetch(`/api/classes/${classId}/students`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+          'Authorization': getAuthHeader() || ''
         }
       })
       if (resp.ok) {
@@ -300,7 +301,7 @@ const loadClasses = async () => {
 
     const response = await fetch(`/api/classes?${params}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -331,7 +332,7 @@ const loadCourses = async () => {
   try {
     const response = await fetch('/api/courses?size=100', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -351,7 +352,7 @@ const loadTeachers = async () => {
   try {
     const response = await fetch('/api/admin/users?role=TEACHER&size=100', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -393,7 +394,7 @@ const loadClassStudents = async (classId) => {
   try {
     const response = await fetch(`/api/classes/${classId}/students`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -433,7 +434,7 @@ const submitForm = async () => {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       },
       body: JSON.stringify(form)
     })
@@ -478,7 +479,7 @@ const deleteClass = async (row) => {
     const response = await fetch(`/api/classes/${row.id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 
@@ -523,7 +524,7 @@ const removeStudent = async (row) => {
     const response = await fetch(`/api/classes/${currentClass.value.id}/students/${row.student?.id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Authorization': getAuthHeader() || ''
       }
     })
 

@@ -276,6 +276,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import DOMPurify from 'dompurify'
+import { marked } from 'marked'
 
 const router = useRouter()
 
@@ -527,7 +528,7 @@ const formatDate = (dateString) => {
 
 const formatContent = (content) => {
   if (!content || typeof content !== 'string') return ''
-  return DOMPurify.sanitize(content.replace(/\n/g, '<br>'))
+  return DOMPurify.sanitize(marked(content))
 }
 
 // 生命周期

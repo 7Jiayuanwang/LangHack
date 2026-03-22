@@ -120,6 +120,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { getAuthHeader } from '@/utils/auth'
 
 const router = useRouter()
 
@@ -136,9 +137,9 @@ const recentAssignments = ref([])
 const loadDashboardData = async () => {
   try {
     // 构建认证头
-    const token = localStorage.getItem('token')
     const headers = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
 
     // 加载统计数据
     const statsResponse = await fetch('/api/assignments/teacher/stats', { headers })

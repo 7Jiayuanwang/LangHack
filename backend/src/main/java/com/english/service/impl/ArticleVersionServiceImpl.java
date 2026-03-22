@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 
 /**
  * Article version service implementation
@@ -39,7 +40,7 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
     @Autowired
     private OpenRouterService openRouterService;
 
-    // Self-injection to enable @Async to work for internal method calls
+    // Self-injection to enable @Async and @Transactional to work for internal method calls
     @Autowired
     @Lazy
     private ArticleVersionService self;
@@ -90,143 +91,39 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
         log.info("Starting async parallel version generation for article {}", textId);
 
         try {
-            // Use ConcurrentHashMap to safely collect results from parallel tasks
             Map<String, String> results = new ConcurrentHashMap<>();
             List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-            // Submit CET-4 generation task
             if (needsCET4) {
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    log.info("Generating CET-4 version for article {}", textId);
-                    try {
-                        try {
-                            return hiAgentService.generateCET4Version(originalContent);
-                        } catch (Exception ex) {
-                            log.warn("HiAgent failed to generate CET-4 version for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
-                            return openRouterService.generateCET4Version(originalContent);
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to generate CET-4 version for article {}", textId, e);
-                        return null;
-                    }
-                }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((content, ex) -> {
-                    if (ex != null) {
-                        log.error("CET-4 generation timed out or failed for article {}", textId, ex);
-                        return null;
-                    }
-                    if (content != null) {
-                        results.put("cet4_content", content);
-                        log.info("CET-4 version generated successfully for article {}", textId);
-                    }
-                    return null;
-                }));
+                futures.add(createVersionTask("CET-4", textId, originalContent,
+                        hiAgentService::generateCET4Version,
+                        openRouterService::generateCET4Version,
+                        "cet4_content", results));
             }
-
-            // Submit CET-6 generation task
             if (needsCET6) {
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    log.info("Generating CET-6 version for article {}", textId);
-                    try {
-                        try {
-                            return hiAgentService.generateCET6Version(originalContent);
-                        } catch (Exception ex) {
-                            log.warn("HiAgent failed to generate CET-6 version for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
-                            return openRouterService.generateCET6Version(originalContent);
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to generate CET-6 version for article {}", textId, e);
-                        return null;
-                    }
-                }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((content, ex) -> {
-                    if (ex != null) {
-                        log.error("CET-6 generation timed out or failed for article {}", textId, ex);
-                        return null;
-                    }
-                    if (content != null) {
-                        results.put("cet6_content", content);
-                        log.info("CET-6 version generated successfully for article {}", textId);
-                    }
-                    return null;
-                }));
+                futures.add(createVersionTask("CET-6", textId, originalContent,
+                        hiAgentService::generateCET6Version,
+                        openRouterService::generateCET6Version,
+                        "cet6_content", results));
             }
-
-            // Submit Academic generation task
             if (needsAcademic) {
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    log.info("Generating Academic version for article {}", textId);
-                    try {
-                        try {
-                            return hiAgentService.generateAcademicVersion(originalContent);
-                        } catch (Exception ex) {
-                            log.warn("HiAgent failed to generate Academic version for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
-                            return openRouterService.generateAcademicVersion(originalContent);
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to generate Academic version for article {}", textId, e);
-                        return null;
-                    }
-                }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((content, ex) -> {
-                    if (ex != null) {
-                        log.error("Academic generation timed out or failed for article {}", textId, ex);
-                        return null;
-                    }
-                    if (content != null) {
-                        results.put("academic_content", content);
-                        log.info("Academic version generated successfully for article {}", textId);
-                    }
-                    return null;
-                }));
+                futures.add(createVersionTask("Academic", textId, originalContent,
+                        hiAgentService::generateAcademicVersion,
+                        openRouterService::generateAcademicVersion,
+                        "academic_content", results));
             }
-
-            // Submit Chinese Parallel generation task
             if (needsChineseParallel) {
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    log.info("Generating Chinese Parallel version for article {}", textId);
-                    try {
-                        try {
-                            return hiAgentService.generateChineseParallelVersion(originalContent);
-                        } catch (Exception ex) {
-                            log.warn("HiAgent failed to generate Chinese Parallel version for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
-                            return openRouterService.generateChineseParallelVersion(originalContent);
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to generate Chinese Parallel version for article {}", textId, e);
-                        return null;
-                    }
-                }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((content, ex) -> {
-                    if (ex != null) {
-                        log.error("Chinese Parallel generation timed out or failed for article {}", textId, ex);
-                        return null;
-                    }
-                    if (content != null) {
-                        results.put("chinese_parallel_content", content);
-                        log.info("Chinese Parallel version generated successfully for article {}", textId);
-                    }
-                    return null;
-                }));
+                futures.add(createVersionTask("Chinese Parallel", textId, originalContent,
+                        hiAgentService::generateChineseParallelVersion,
+                        openRouterService::generateChineseParallelVersion,
+                        "chinese_parallel_content", results));
             }
 
-            // Wait for all parallel tasks to complete (max 300 seconds)
-            if (!futures.isEmpty()) {
-                try {
-                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                            .get(300, TimeUnit.SECONDS);
-                } catch (TimeoutException e) {
-                    log.error("Version generation timed out for article {}", textId);
-                    futures.forEach(f -> f.cancel(true));
-                } catch (InterruptedException e) {
-                    log.error("Version generation interrupted for article {}", textId, e);
-                    futures.forEach(f -> f.cancel(true));
-                    Thread.currentThread().interrupt();
-                } catch (Exception e) {
-                    log.error("Error waiting for version generation for article {}", textId, e);
-                    futures.forEach(f -> f.cancel(true));
-                }
-            }
+            waitForFutures(futures, textId, "Plain text");
 
-            // Save results in transactional context
+            // Save results via proxy for @Transactional to work
             if (!results.isEmpty()) {
-                saveVersionResults(textId, results);
+                self.saveVersionResults(textId, results);
             } else {
                 log.warn("No versions were generated for article {}", textId);
             }
@@ -293,150 +190,39 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
         log.info("Starting async parallel Markdown version generation for article {}", textId);
 
         try {
-            // Use ConcurrentHashMap to safely collect results from parallel tasks
             Map<String, String> results = new ConcurrentHashMap<>();
             List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-            // Submit CET-4 Markdown generation task
             if (needsCET4) {
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    log.info("Generating CET-4 Markdown version for article {}", textId);
-                    try {
-                        try {
-                            return hiAgentService.generateCET4VersionMarkdown(originalMarkdownContent);
-                        } catch (Exception ex) {
-                            log.warn("HiAgent failed to generate CET-4 Markdown for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
-                            return openRouterService.generateCET4VersionMarkdown(originalMarkdownContent);
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to generate CET-4 Markdown version for article {}", textId, e);
-                        return null;
-                    }
-                }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((content, ex) -> {
-                    if (ex != null) {
-                        log.error("CET-4 Markdown generation timed out or failed for article {}", textId, ex);
-                        return null;
-                    }
-                    if (content != null) {
-                        results.put("cet4_markdown_content", content);
-                        log.info("CET-4 Markdown version generated successfully for article {}", textId);
-                    }
-                    return null;
-                }));
+                futures.add(createVersionTask("CET-4 Markdown", textId, originalMarkdownContent,
+                        hiAgentService::generateCET4VersionMarkdown,
+                        openRouterService::generateCET4VersionMarkdown,
+                        "cet4_markdown_content", results));
             }
-
-            // Submit CET-6 Markdown generation task
             if (needsCET6) {
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    log.info("Generating CET-6 Markdown version for article {}", textId);
-                    try {
-                        try {
-                            return hiAgentService.generateCET6VersionMarkdown(originalMarkdownContent);
-                        } catch (Exception ex) {
-                            log.warn("HiAgent failed to generate CET-6 Markdown for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
-                            return openRouterService.generateCET6VersionMarkdown(originalMarkdownContent);
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to generate CET-6 Markdown version for article {}", textId, e);
-                        return null;
-                    }
-                }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((content, ex) -> {
-                    if (ex != null) {
-                        log.error("CET-6 Markdown generation timed out or failed for article {}", textId, ex);
-                        return null;
-                    }
-                    if (content != null) {
-                        results.put("cet6_markdown_content", content);
-                        log.info("CET-6 Markdown version generated successfully for article {}", textId);
-                    }
-                    return null;
-                }));
+                futures.add(createVersionTask("CET-6 Markdown", textId, originalMarkdownContent,
+                        hiAgentService::generateCET6VersionMarkdown,
+                        openRouterService::generateCET6VersionMarkdown,
+                        "cet6_markdown_content", results));
             }
-
-            // Submit Academic Markdown generation task
             if (needsAcademic) {
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    log.info("Generating Academic Markdown version for article {}", textId);
-                    try {
-                        try {
-                            return hiAgentService.generateAcademicVersionMarkdown(originalMarkdownContent);
-                        } catch (Exception ex) {
-                            log.warn("HiAgent failed to generate Academic Markdown for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
-                            return openRouterService.generateAcademicVersionMarkdown(originalMarkdownContent);
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to generate Academic Markdown version for article {}", textId, e);
-                        return null;
-                    }
-                }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((content, ex) -> {
-                    if (ex != null) {
-                        log.error("Academic Markdown generation timed out or failed for article {}", textId, ex);
-                        return null;
-                    }
-                    if (content != null) {
-                        results.put("academic_markdown_content", content);
-                        log.info("Academic Markdown version generated successfully for article {}", textId);
-                    }
-                    return null;
-                }));
+                futures.add(createVersionTask("Academic Markdown", textId, originalMarkdownContent,
+                        hiAgentService::generateAcademicVersionMarkdown,
+                        openRouterService::generateAcademicVersionMarkdown,
+                        "academic_markdown_content", results));
             }
-
-            // Submit Chinese Parallel Markdown generation task
             if (needsChineseParallel) {
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    log.info("Generating Chinese Parallel Markdown version for article {}", textId);
-                    try {
-                        try {
-                            return hiAgentService.generateChineseParallelVersionMarkdown(originalMarkdownContent);
-                        } catch (Exception ex) {
-                            log.warn("HiAgent failed to generate Chinese Parallel Markdown for article {}, falling back to OpenRouter: {}", textId, ex.getMessage());
-                            return openRouterService.generateChineseParallelVersionMarkdown(originalMarkdownContent);
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to generate Chinese Parallel Markdown version for article {}", textId, e);
-                        return null;
-                    }
-                }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((content, ex) -> {
-                    if (ex != null) {
-                        log.error("Chinese Parallel Markdown generation timed out or failed for article {}", textId, ex);
-                        return null;
-                    }
-                    if (content != null) {
-                        results.put("chinese_parallel_markdown_content", content);
-                        log.info("Chinese Parallel Markdown version generated successfully for article {}", textId);
-                    }
-                    return null;
-                }));
+                futures.add(createVersionTask("Chinese Parallel Markdown", textId, originalMarkdownContent,
+                        hiAgentService::generateChineseParallelVersionMarkdown,
+                        openRouterService::generateChineseParallelVersionMarkdown,
+                        "chinese_parallel_markdown_content", results));
             }
 
-            // Wait for all parallel tasks to complete (max 300 seconds)
-            try {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get(300, TimeUnit.SECONDS);
-            } catch (TimeoutException e) {
-                log.error("Markdown version generation timed out for article {}", textId);
-                futures.forEach(f -> f.cancel(true));
-            } catch (InterruptedException e) {
-                log.error("Markdown version generation interrupted for article {}", textId, e);
-                futures.forEach(f -> f.cancel(true));
-                Thread.currentThread().interrupt();
-            } catch (Exception e) {
-                log.error("Error waiting for Markdown version generation for article {}", textId, e);
-                futures.forEach(f -> f.cancel(true));
-            }
+            waitForFutures(futures, textId, "Markdown");
 
-            // Build UpdateWrapper in main thread from collected results (thread-safe)
+            // Save results via proxy for @Transactional to work
             if (!results.isEmpty()) {
-                UpdateWrapper<Text> updateWrapper = new UpdateWrapper<>();
-                updateWrapper.eq("id", textId);
-                updateWrapper.eq("deleted", 0); // 只更新未删除的课文
-                results.forEach(updateWrapper::set);
-
-                int updated = textMapper.update(null, updateWrapper);
-                if (updated > 0) {
-                    log.info("Successfully saved {} generated Markdown versions for article {}", results.size(), textId);
-                } else {
-                    log.warn("No Markdown versions were saved for article {}", textId);
-                }
+                self.saveMarkdownVersionResults(textId, results);
             } else {
                 log.warn("No Markdown versions were generated for article {}", textId);
             }
@@ -447,10 +233,10 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
     }
 
     /**
-     * Save version generation results with proper transaction management
-     * CRITICAL: This method is @Transactional to ensure DB consistency.
-     * It's called from async context, so it gets its own transaction.
+     * Save version generation results with proper transaction management.
+     * CRITICAL: Called via self-proxy to ensure @Transactional works through Spring AOP.
      */
+    @Override
     @Transactional
     public void saveVersionResults(Long textId, Map<String, String> results) {
         UpdateWrapper<Text> updateWrapper = new UpdateWrapper<>();
@@ -467,10 +253,10 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
     }
 
     /**
-     * Save Markdown version generation results with proper transaction management
-     * CRITICAL: This method is @Transactional to ensure DB consistency.
-     * It's called from async context, so it gets its own transaction.
+     * Save Markdown version generation results with proper transaction management.
+     * CRITICAL: Called via self-proxy to ensure @Transactional works through Spring AOP.
      */
+    @Override
     @Transactional
     public void saveMarkdownVersionResults(Long textId, Map<String, String> results) {
         UpdateWrapper<Text> updateWrapper = new UpdateWrapper<>();
@@ -483,6 +269,67 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             log.info("Successfully saved {} generated Markdown versions for article {}", results.size(), textId);
         } else {
             log.warn("No Markdown versions were saved for article {} (text not found or deleted)", textId);
+        }
+    }
+
+    // ========== Private helpers ==========
+
+    /**
+     * Create a version generation task with HiAgent primary + OpenRouter fallback.
+     * Eliminates duplicated CompletableFuture boilerplate across 8 version types.
+     */
+    private CompletableFuture<Void> createVersionTask(
+            String versionName, Long textId, String content,
+            Function<String, String> primaryGenerator,
+            Function<String, String> fallbackGenerator,
+            String resultKey, Map<String, String> results) {
+        return CompletableFuture.supplyAsync(() -> {
+            log.info("Generating {} version for article {}", versionName, textId);
+            try {
+                try {
+                    return primaryGenerator.apply(content);
+                } catch (Exception ex) {
+                    log.warn("HiAgent failed to generate {} version for article {}, falling back to OpenRouter: {}",
+                            versionName, textId, ex.getMessage());
+                    return fallbackGenerator.apply(content);
+                }
+            } catch (Exception e) {
+                log.error("Failed to generate {} version for article {}", versionName, textId, e);
+                return null;
+            }
+        }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((result, ex) -> {
+            if (ex != null) {
+                log.error("{} generation timed out or failed for article {}", versionName, textId, ex);
+                return null;
+            }
+            if (result != null) {
+                results.put(resultKey, result);
+                log.info("{} version generated successfully for article {}", versionName, textId);
+            }
+            return null;
+        });
+    }
+
+    /**
+     * Wait for all futures to complete with a global timeout, cancelling on failure.
+     */
+    private void waitForFutures(List<CompletableFuture<Void>> futures, Long textId, String type) {
+        if (futures.isEmpty()) {
+            return;
+        }
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .get(300, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            log.error("{} version generation timed out for article {}", type, textId);
+            futures.forEach(f -> f.cancel(true));
+        } catch (InterruptedException e) {
+            log.error("{} version generation interrupted for article {}", type, textId, e);
+            futures.forEach(f -> f.cancel(true));
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log.error("Error waiting for {} version generation for article {}", type, textId, e);
+            futures.forEach(f -> f.cancel(true));
         }
     }
 }

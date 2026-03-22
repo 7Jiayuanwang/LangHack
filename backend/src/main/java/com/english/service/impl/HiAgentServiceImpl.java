@@ -14,10 +14,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.springframework.http.converter.StringHttpMessageConverter;
@@ -25,8 +27,7 @@ import org.springframework.http.converter.StringHttpMessageConverter;
 /**
  * HiAgent API service implementation strictly following PDF documentation v2.0.1
  *
- * API flow: CreateConversation → ChatQueryV2 (streaming mode)
- * Uses streaming mode so that token consumption is properly logged in HiAgent platform.
+ * API flow: CreateConversation → ChatQueryV2 (blocking mode)
  */
 @Slf4j
 @Service
@@ -35,23 +36,37 @@ public class HiAgentServiceImpl implements HiAgentService {
     @Autowired
     private HiAgentConfig config;
 
+    @Autowired(required = false)
+    private AiCallMetricsService aiCallMetricsService;
+
     private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private CloseableHttpClient httpClient;
+    private PoolingHttpClientConnectionManager connManager;
 
     @PostConstruct
     public void init() {
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            log.warn("HiAgent API key not configured. Set HIAGENT_API_KEY environment variable. Service will be unavailable.");
+        }
+        if (config.getApiUrl() == null || config.getApiUrl().isBlank()) {
+            log.warn("HiAgent API URL not configured. Set HIAGENT_API_URL environment variable.");
+        }
+
+        int timeoutMs = config.getTimeout() != null ? config.getTimeout() : 60000;
+
         try {
-            PoolingHttpClientConnectionManager connManager = new PoolingHttpClientConnectionManager();
+            connManager = new PoolingHttpClientConnectionManager();
             connManager.setMaxTotal(50);
             connManager.setDefaultMaxPerRoute(10);
 
-            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(
-                    HttpClientBuilder.create()
-                            .setConnectionManager(connManager)
-                            .build());
-            factory.setConnectTimeout(config.getTimeout());
-            factory.setReadTimeout(config.getTimeout());
-            factory.setConnectionRequestTimeout(config.getTimeout());
+            httpClient = HttpClientBuilder.create()
+                    .setConnectionManager(connManager)
+                    .build();
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+            factory.setConnectTimeout(timeoutMs);
+            factory.setReadTimeout(timeoutMs);
+            factory.setConnectionRequestTimeout(timeoutMs);
             restTemplate = new RestTemplate(factory);
             restTemplate.getMessageConverters().stream()
                     .filter(c -> c instanceof StringHttpMessageConverter)
@@ -60,12 +75,31 @@ public class HiAgentServiceImpl implements HiAgentService {
             log.warn("Failed to initialize HTTP client with connection pooling, falling back to default: {}",
                     e.getMessage());
             HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
-            factory.setConnectTimeout(config.getTimeout());
-            factory.setReadTimeout(config.getTimeout());
+            factory.setConnectTimeout(timeoutMs);
+            factory.setReadTimeout(timeoutMs);
+            factory.setConnectionRequestTimeout(timeoutMs);
             restTemplate = new RestTemplate(factory);
             restTemplate.getMessageConverters().stream()
                     .filter(c -> c instanceof StringHttpMessageConverter)
                     .forEach(c -> ((StringHttpMessageConverter) c).setDefaultCharset(StandardCharsets.UTF_8));
+        }
+    }
+
+    @PreDestroy
+    public void destroy() {
+        if (httpClient != null) {
+            try {
+                httpClient.close();
+            } catch (Exception e) {
+                log.warn("Error closing HTTP client: {}", e.getMessage());
+            }
+        }
+        if (connManager != null) {
+            try {
+                connManager.close();
+            } catch (Exception e) {
+                log.warn("Error closing connection manager: {}", e.getMessage());
+            }
         }
     }
 
@@ -136,10 +170,18 @@ public class HiAgentServiceImpl implements HiAgentService {
     }
 
     /**
-     * Fallback method for circuit breaker (single String param methods)
+     * Fallback method for circuit breaker.
+     * Transparently re-throws BusinessException; wraps other exceptions.
      */
     public String fallback(String content, Exception e) {
-        log.error("HiAgent service failure: {}", e.getMessage(), e);
+        if (e instanceof BusinessException) {
+            throw (BusinessException) e;
+        }
+        if (e instanceof io.github.resilience4j.circuitbreaker.CallNotPermittedException) {
+            log.warn("HiAgent circuit breaker is OPEN, rejecting request");
+        } else {
+            log.error("HiAgent service failure: {}", e.getMessage(), e);
+        }
         throw new BusinessException("AI 服务暂时不可用，请稍后重试");
     }
 
@@ -147,7 +189,14 @@ public class HiAgentServiceImpl implements HiAgentService {
      * Fallback method for circuit breaker (chatQA - 3 String params)
      */
     public String fallback(String userQuestion, String selectedText, String articleContext, Exception e) {
-        log.error("HiAgent Q&A service failure: {}", e.getMessage(), e);
+        if (e instanceof BusinessException) {
+            throw (BusinessException) e;
+        }
+        if (e instanceof io.github.resilience4j.circuitbreaker.CallNotPermittedException) {
+            log.warn("HiAgent circuit breaker is OPEN, rejecting Q&A request");
+        } else {
+            log.error("HiAgent Q&A service failure: {}", e.getMessage(), e);
+        }
         throw new BusinessException("AI 问答服务暂时不可用，请稍后重试");
     }
 
@@ -164,10 +213,17 @@ public class HiAgentServiceImpl implements HiAgentService {
         int maxRetries = config.getMaxRetries();
         Exception lastException = null;
 
+        long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+        String user = AiCallMetricsService.getCurrentUser();
+
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 String conversationId = createConversationWithQACredentials();
-                return chatQueryWithQACredentials(conversationId, prompt);
+                String result = chatQueryWithQACredentials(conversationId, prompt);
+                if (aiCallMetricsService != null) {
+                    aiCallMetricsService.recordSuccess("HIAGENT", "chatQA", startTime, user);
+                }
+                return result;
             } catch (Exception e) {
                 lastException = e;
                 log.warn("HiAgent Q&A call attempt {}/{} failed: {}", attempt, maxRetries, e.getMessage());
@@ -182,14 +238,26 @@ public class HiAgentServiceImpl implements HiAgentService {
             }
         }
 
+        if (aiCallMetricsService != null) {
+            aiCallMetricsService.recordFailure("HIAGENT", "chatQA", startTime,
+                    lastException != null ? lastException.getMessage() : "unknown", user);
+        }
         log.error("HiAgent Q&A call failed after {} retries", maxRetries, lastException);
         throw new BusinessException("AI 问答服务调用失败: " + (lastException != null ? lastException.getMessage() : "unknown"));
     }
 
     /**
-     * Internal implementation with retry logic (Two-step process per PDF v2.0.1)
+     * Internal implementation with retry logic + metrics monitoring (Two-step process per PDF v2.0.1)
      */
     private String callHiAgentInternal(String prompt) {
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            throw new BusinessException("AI 服务未配置 API Key");
+        }
+
+        long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+        String user = AiCallMetricsService.getCurrentUser();
+        String methodName = extractMethodName(prompt);
+
         int maxRetries = config.getMaxRetries();
         Exception lastException = null;
 
@@ -197,8 +265,13 @@ public class HiAgentServiceImpl implements HiAgentService {
             try {
                 // Step 1: Create Conversation
                 String conversationId = createConversation();
-                // Step 2: Chat Query (streaming mode)
-                return chatQuery(conversationId, prompt);
+                // Step 2: Chat Query (blocking mode)
+                String result = chatQuery(conversationId, prompt);
+
+                if (aiCallMetricsService != null) {
+                    aiCallMetricsService.recordSuccess("HIAGENT", methodName, startTime, user);
+                }
+                return result;
             } catch (Exception e) {
                 lastException = e;
                 log.warn("HiAgent call attempt {}/{} failed: {}", attempt, maxRetries, e.getMessage());
@@ -213,8 +286,20 @@ public class HiAgentServiceImpl implements HiAgentService {
             }
         }
 
+        if (aiCallMetricsService != null) {
+            aiCallMetricsService.recordFailure("HIAGENT", methodName, startTime,
+                    lastException != null ? lastException.getMessage() : "unknown", user);
+        }
         log.error("HiAgent call failed after {} retries", maxRetries, lastException);
         throw new BusinessException("AI 服务调用失败: " + (lastException != null ? lastException.getMessage() : "unknown"));
+    }
+
+    private String extractMethodName(String prompt) {
+        if (prompt.contains("CET-4")) return "generateCET4Version";
+        if (prompt.contains("CET-6")) return "generateCET6Version";
+        if (prompt.contains("academic")) return "generateAcademicVersion";
+        if (prompt.contains("Chinese-English")) return "generateChineseParallelVersion";
+        return "unknown";
     }
 
     private String createConversation() throws Exception {
@@ -224,10 +309,10 @@ public class HiAgentServiceImpl implements HiAgentService {
 
         Map<String, Object> body = new HashMap<>();
         body.put("UserID", config.getUserId());
-        body.put("Inputs", new HashMap<String, String>());
+        body.put("Inputs", new HashMap<String, String>()); // Optional but recommended
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-        log.info("Creating HiAgent conversation at {}", url);
+        log.debug("Creating HiAgent conversation at {}", url);
 
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
@@ -238,32 +323,35 @@ public class HiAgentServiceImpl implements HiAgentService {
         JsonNode root = objectMapper.readTree(response.getBody());
         JsonNode conversation = root.get("Conversation");
         if (conversation == null || conversation.get("AppConversationID") == null) {
-            log.error("Invalid response from create_conversation: {}", response.getBody());
+            String bodyPreview = truncateForLog(response.getBody());
+            log.error("Invalid response from create_conversation: {}", bodyPreview);
             throw new BusinessException("AI 会话创建失败：返回数据格式不正确");
         }
 
-        return conversation.get("AppConversationID").asText();
+        String conversationId = conversation.get("AppConversationID").asText();
+        if (conversationId == null || conversationId.isBlank() || "null".equals(conversationId)) {
+            throw new BusinessException("AI 会话创建失败：会话ID为空");
+        }
+
+        return conversationId;
     }
 
     /**
-     * ChatQueryV2 with streaming mode (recommended by PDF v2.0.1).
-     * Streaming mode ensures token consumption is logged in HiAgent platform.
-     * Response is SSE format; answer fragments from 'message' events are concatenated.
+     * ChatQueryV2 with blocking mode.
      */
     private String chatQuery(String conversationId, String prompt) throws Exception {
         String url = config.getApiUrl() + "/chat_query_v2";
 
         HttpHeaders headers = createBaseHeaders();
-        headers.set("Accept", "text/event-stream"); // Required for streaming per PDF
 
         Map<String, Object> body = new HashMap<>();
         body.put("AppConversationID", conversationId);
         body.put("Query", prompt);
         body.put("UserID", config.getUserId());
-        body.put("ResponseMode", "streaming");
+        body.put("ResponseMode", "blocking"); // Blocking mode returns result directly
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-        log.info("Sending HiAgent streaming query for conversation {}", conversationId);
+        log.debug("Sending HiAgent query for conversation {}", conversationId);
 
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
@@ -271,56 +359,26 @@ public class HiAgentServiceImpl implements HiAgentService {
             throw new BusinessException("AI 服务响应失败: " + response.getStatusCode());
         }
 
-        return parseSSEResponse(response.getBody());
-    }
+        JsonNode root = objectMapper.readTree(response.getBody());
 
-    /**
-     * Parse SSE response from ChatQueryV2 streaming mode.
-     * V2 SSE format: standard SSE, each data line is a JSON object (no nested data field).
-     * Concatenate 'answer' fragments from all 'message' events.
-     */
-    private String parseSSEResponse(String sseBody) {
-        StringBuilder answer = new StringBuilder();
-        String[] lines = sseBody.split("\n");
-
-        for (String line : lines) {
-            line = line.trim();
-            if (!line.startsWith("data:")) {
-                continue;
-            }
-            String data = line.substring(5).trim();
-            if (data.isEmpty()) {
-                continue;
-            }
-            try {
-                JsonNode node = objectMapper.readTree(data);
-                String event = node.has("event") ? node.get("event").asText() : "";
-                if ("message".equals(event) && node.has("answer")) {
-                    answer.append(node.get("answer").asText());
-                }
-            } catch (Exception e) {
-                log.debug("Skipping non-JSON SSE data: {}", data);
-            }
+        if (root.has("answer")) {
+            return root.get("answer").asText();
+        } else if (root.has("Answer")) {
+            return root.get("Answer").asText();
         }
 
-        if (answer.length() == 0) {
-            log.error("No answer found in SSE response: {}", sseBody);
-            throw new BusinessException("AI 服务返回结果为空");
-        }
-
-        return answer.toString();
+        String bodyPreview = truncateForLog(response.getBody());
+        log.error("Unexpected HiAgent response structure: {}", bodyPreview);
+        throw new BusinessException("AI 服务返回结果解析失败");
     }
 
     /**
      * Create base headers per PDF v2.0.1 documentation.
-     * Required: Apikey header.
-     * Appid/X-App-Id: not in official docs but needed to resolve gateway "未获取到AppID" error.
      */
     private HttpHeaders createBaseHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Apikey", config.getApiKey());
-        // Gateway workaround: resolve "未获取到AppID" error (not in official PDF spec)
         headers.set("Appid", config.getAppId());
         headers.set("X-App-Id", config.getAppId());
         return headers;
@@ -330,7 +388,6 @@ public class HiAgentServiceImpl implements HiAgentService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Apikey", config.getQaApiKey());
-        // Gateway workaround
         headers.set("Appid", config.getQaAppId());
         headers.set("X-App-Id", config.getQaAppId());
         return headers;
@@ -346,7 +403,7 @@ public class HiAgentServiceImpl implements HiAgentService {
         body.put("Inputs", new HashMap<String, String>());
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-        log.info("Creating HiAgent Q&A conversation at {}", url);
+        log.debug("Creating HiAgent Q&A conversation at {}", url);
 
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
@@ -357,30 +414,35 @@ public class HiAgentServiceImpl implements HiAgentService {
         JsonNode root = objectMapper.readTree(response.getBody());
         JsonNode conversation = root.get("Conversation");
         if (conversation == null || conversation.get("AppConversationID") == null) {
-            log.error("Invalid response from create_conversation (QA): {}", response.getBody());
+            String bodyPreview = truncateForLog(response.getBody());
+            log.error("Invalid response from create_conversation (QA): {}", bodyPreview);
             throw new BusinessException("AI Q&A 会话创建失败：返回数据格式不正确");
         }
 
-        return conversation.get("AppConversationID").asText();
+        String conversationId = conversation.get("AppConversationID").asText();
+        if (conversationId == null || conversationId.isBlank() || "null".equals(conversationId)) {
+            throw new BusinessException("AI Q&A 会话创建失败：会话ID为空");
+        }
+
+        return conversationId;
     }
 
     /**
-     * ChatQueryV2 with streaming mode for Q&A credentials.
+     * ChatQueryV2 with blocking mode for Q&A credentials.
      */
     private String chatQueryWithQACredentials(String conversationId, String prompt) throws Exception {
         String url = config.getApiUrl() + "/chat_query_v2";
 
         HttpHeaders headers = createQAHeaders();
-        headers.set("Accept", "text/event-stream");
 
         Map<String, Object> body = new HashMap<>();
         body.put("AppConversationID", conversationId);
         body.put("Query", prompt);
         body.put("UserID", config.getUserId());
-        body.put("ResponseMode", "streaming");
+        body.put("ResponseMode", "blocking");
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-        log.info("Sending HiAgent Q&A streaming query for conversation {}", conversationId);
+        log.debug("Sending HiAgent Q&A query for conversation {}", conversationId);
 
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
@@ -388,6 +450,24 @@ public class HiAgentServiceImpl implements HiAgentService {
             throw new BusinessException("AI Q&A 服务响应失败: " + response.getStatusCode());
         }
 
-        return parseSSEResponse(response.getBody());
+        JsonNode root = objectMapper.readTree(response.getBody());
+
+        if (root.has("answer")) {
+            return root.get("answer").asText();
+        } else if (root.has("Answer")) {
+            return root.get("Answer").asText();
+        }
+
+        String bodyPreview = truncateForLog(response.getBody());
+        log.error("Unexpected HiAgent Q&A response structure: {}", bodyPreview);
+        throw new BusinessException("AI Q&A 服务返回结果解析失败");
+    }
+
+    /**
+     * Truncate response body for safe logging (avoid leaking sensitive data)
+     */
+    private String truncateForLog(String body) {
+        if (body == null) return "null";
+        return body.length() > 200 ? body.substring(0, 200) + "...(truncated)" : body;
     }
 }

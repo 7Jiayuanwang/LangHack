@@ -6,6 +6,7 @@ import com.english.entity.Assignment;
 import com.english.entity.Text;
 import com.english.entity.User;
 import com.english.entity.Word;
+import com.english.entity.Unit;
 import com.english.entity.UnitWord;
 import com.english.exception.BusinessException;
 import com.english.service.AssignmentService;
@@ -13,6 +14,7 @@ import com.english.service.TextService;
 import com.english.service.WordService;
 import com.english.service.UserService;
 import com.english.service.ClassService;
+import com.english.service.UnitService;
 import com.english.mapper.TextMapper;
 import com.english.mapper.UnitWordMapper;
 import com.english.mapper.WordMapper;
@@ -52,6 +54,9 @@ public class AssignmentController {
     
     @Autowired
     private ClassService classService;
+
+    @Autowired
+    private UnitService unitService;
 
     /**
      * 分页查询任务列表
@@ -199,6 +204,19 @@ public class AssignmentController {
             String title = requestBody.get("title").toString();
             String description = requestBody.get("description") != null ? requestBody.get("description").toString() : "";
             String assignmentType = requestBody.get("assignmentType").toString();
+
+            // 校验 unitId 与 classId 的课程一致性
+            com.english.entity.Class classInfoForValidation = classService.getClassById(classId);
+            if (classInfoForValidation == null) {
+                return Result.error("班级不存在");
+            }
+            Unit unitInfoForValidation = unitService.getUnitById(unitId);
+            if (unitInfoForValidation == null) {
+                return Result.error("单元不存在");
+            }
+            if (classInfoForValidation.getCourseId() == null || !classInfoForValidation.getCourseId().equals(unitInfoForValidation.getCourseId())) {
+                return Result.error("单元与班级所属课程不一致");
+            }
 
             // 创建任务对象
             Assignment assignment = new Assignment();
@@ -462,8 +480,33 @@ public class AssignmentController {
      */
     @GetMapping("/unit/{unitId}/content")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    public Result<Map<String, Object>> getUnitContent(@PathVariable Long unitId) {
+    public Result<Map<String, Object>> getUnitContent(@PathVariable Long unitId, Authentication authentication) {
         try {
+            // 校验单元存在
+            Unit unitForAccess = unitService.getUnitById(unitId);
+            if (unitForAccess == null) {
+                return Result.error("单元不存在");
+            }
+
+            // 教师只能查看自己班级关联课程的单元
+            String userRole = getCurrentRole(authentication);
+            if ("ROLE_TEACHER".equals(userRole)) {
+                Long teacherId = getCurrentUserId(authentication);
+                List<com.english.entity.Class> teacherClasses = classService.getClassesByTeacherId(teacherId);
+                boolean hasAccess = false;
+                if (teacherClasses != null && unitForAccess.getCourseId() != null) {
+                    for (com.english.entity.Class cls : teacherClasses) {
+                        if (unitForAccess.getCourseId().equals(cls.getCourseId())) {
+                            hasAccess = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasAccess) {
+                    return Result.error("无权访问该单元内容");
+                }
+            }
+
             Map<String, Object> content = new HashMap<>();
 
             // 获取单元课文

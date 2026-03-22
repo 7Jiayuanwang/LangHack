@@ -4,6 +4,7 @@ import com.english.test.TestUtils;
 import com.english.dto.LoginRequest;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
+import com.english.service.TokenBlacklistService;
 import com.english.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.*;
@@ -29,6 +30,7 @@ class AuthControllerEnhancedTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock private UserService userService;
+    @Mock private TokenBlacklistService tokenBlacklistService;
 
     @InjectMocks
     private AuthController controller;
@@ -276,14 +278,17 @@ class AuthControllerEnhancedTest {
                 .andExpect(jsonPath("$.message").value("搜索关键词不能为空"));
     }
 
-    // ========== GET /api/auth/logout ==========
+    // ========== POST /api/auth/logout ==========
 
     @Test
-    @DisplayName("GET /api/auth/logout - success")
+    @DisplayName("POST /api/auth/logout - success")
     void logout_success() throws Exception {
-        mockMvc.perform(get("/api/auth/logout"))
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer mock-jwt-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").value("退出登录成功"));
+
+        verify(tokenBlacklistService).blacklistToken("mock-jwt-token");
     }
 }

@@ -60,6 +60,7 @@
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
+import { getAuthHeader } from '@/utils/auth'
 
 const showTranslateButton = ref(false)
 const showTranslateDialog = ref(false)
@@ -117,20 +118,15 @@ const translateSelectedText = async () => {
   const timeoutId = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT)
 
   try {
-    // 安全读取 token，防止 localStorage 访问异常
-    let token = ''
-    try {
-      token = localStorage.getItem('token') || ''
-    } catch (e) {
-      console.warn('无法访问 localStorage:', e)
-    }
+    // 使用集中的 auth 工具读取 token
+    const authHeaderValue = getAuthHeader()
 
     const response = await fetch('/api/translate/auto', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         // 仅当 token 存在时才添加 Authorization 头
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {})
       },
       body: JSON.stringify({
         text: selectedText.value

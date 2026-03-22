@@ -24,8 +24,8 @@
       class="text-content"
       v-if="text"
     >
-      <div class="text-paragraph" v-for="(paragraph, pIndex) in paragraphs" :key="pIndex">
-        <template v-for="(word, wIndex) in paragraph.words" :key="wIndex">
+      <div class="text-paragraph" v-for="(paragraph, pIndex) in paragraphs" :key="`p-${pIndex}-${paragraph.words.length}`">
+        <template v-for="(word, wIndex) in paragraph.words" :key="`p${pIndex}-w${wIndex}-${word.cleanWord || word.text}`">
           <span
             v-if="word.clickable"
             :class="['word', 'clickable', { 'clicked': word.isClicked }]"
