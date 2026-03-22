@@ -3,6 +3,7 @@ package com.english.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.*;
+import com.english.exception.BusinessException;
 import com.english.mapper.*;
 import com.english.service.impl.LearningRecordsServiceImpl;
 import org.junit.jupiter.api.DisplayName;
@@ -96,7 +97,7 @@ class LearningRecordsServiceTest {
 
         @Test
         void shouldThrowWhenStudentIdNull() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getTodayStudyTime(null));
         }
 
@@ -574,7 +575,7 @@ class LearningRecordsServiceTest {
 
         @Test
         void shouldThrowWhenStudentIdNull() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getTodayLearningStats(null));
         }
 
@@ -671,7 +672,7 @@ class LearningRecordsServiceTest {
 
         @Test
         void shouldThrowWhenStudentIdNull() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getLearningOverview(null, new HashMap<>()));
         }
 
@@ -702,7 +703,7 @@ class LearningRecordsServiceTest {
 
         @Test
         void shouldThrowWhenParamsNull() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getLearningRecordsWithPagination(null));
         }
 
@@ -710,7 +711,7 @@ class LearningRecordsServiceTest {
         void shouldThrowWhenStudentIdMissing() {
             Map<String, Object> params = new HashMap<>();
             params.put("page", 1);
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getLearningRecordsWithPagination(params));
         }
 
@@ -786,13 +787,13 @@ class LearningRecordsServiceTest {
 
         @Test
         void shouldThrowWhenStudentIdNull() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getUnitsWithLearningStats(null, 100L));
         }
 
         @Test
         void shouldThrowWhenCourseIdNull() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getUnitsWithLearningStats(1L, null));
         }
     }
@@ -839,13 +840,13 @@ class LearningRecordsServiceTest {
 
         @Test
         void shouldThrowWhenStudentIdNull() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getUnitContentWithLearningStates(null, 100L));
         }
 
         @Test
         void shouldThrowWhenUnitIdNull() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(BusinessException.class,
                     () -> learningRecordsService.getUnitContentWithLearningStates(1L, null));
         }
 

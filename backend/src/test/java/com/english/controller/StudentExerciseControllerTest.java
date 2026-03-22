@@ -1,10 +1,8 @@
 package com.english.controller;
 import com.english.test.TestUtils;
 
-import com.english.entity.Assignment;
-import com.english.entity.StudentExerciseAnswer;
-import com.english.entity.TextExercise;
-import com.english.entity.User;
+import com.english.entity.*;
+import com.english.entity.Class;
 import com.english.exception.BusinessException;
 import com.english.service.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -56,6 +54,15 @@ class StudentExerciseControllerTest {
     @Mock
     private TextExerciseService textExerciseService;
 
+    @Mock
+    private ClassService classService;
+
+    @Mock
+    private TextService textService;
+
+    @Mock
+    private UnitService unitService;
+
     @InjectMocks
     private StudentExerciseController controller;
 
@@ -86,6 +93,11 @@ class StudentExerciseControllerTest {
         exercise.setId(10L);
         exercise.setTextId(5L);
         when(textExerciseService.getById(10L)).thenReturn(exercise);
+
+        // Mock assertStudentCanAccessText: text exists, no unitId → access check passes
+        Text text = new Text();
+        text.setId(5L);
+        when(textService.getTextById(5L)).thenReturn(text);
 
         Map<String, Object> serviceResult = Map.of("isCorrect", true, "score", 100);
         when(studentExerciseService.submitAnswer(any(StudentExerciseAnswer.class))).thenReturn(serviceResult);

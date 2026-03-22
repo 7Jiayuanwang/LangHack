@@ -3,7 +3,9 @@ import com.english.test.TestUtils;
 
 import com.english.entity.Text;
 import com.english.entity.TextLearningRecord;
+import com.english.entity.Unit;
 import com.english.entity.User;
+import com.english.entity.Class;
 import com.english.exception.BusinessException;
 import com.english.mapper.*;
 import com.english.service.*;
@@ -83,6 +85,12 @@ class StudentLearningControllerTest {
     @Mock
     private ArticleVersionService articleVersionService;
 
+    @Mock
+    private ClassService classService;
+
+    @Mock
+    private UnitService unitService;
+
     @InjectMocks
     private StudentLearningController controller;
 
@@ -142,6 +150,13 @@ class StudentLearningControllerTest {
 
     @Test
     void getCourseUnits_success() throws Exception {
+        // Mock assertStudentCanAccessCourse: student has class in course 5
+        Class classInfo = new Class();
+        classInfo.setId(100L);
+        classInfo.setCourseId(5L);
+        when(studentClassesService.getClassIdsByStudentId(1L)).thenReturn(List.of(100L));
+        when(classService.getClassById(100L)).thenReturn(classInfo);
+
         List<Map<String, Object>> units = List.of(
                 Map.of("unitId", 1L, "unitName", "Unit 1"));
         when(learningRecordsService.getUnitsWithLearningStats(1L, 5L)).thenReturn(units);
@@ -154,6 +169,19 @@ class StudentLearningControllerTest {
 
     @Test
     void getUnitContent_success() throws Exception {
+        // Mock unitService for access check
+        Unit unit = new Unit();
+        unit.setId(10L);
+        unit.setCourseId(5L);
+        when(unitService.getUnitById(10L)).thenReturn(unit);
+
+        // Mock assertStudentCanAccessCourse
+        Class classInfo = new Class();
+        classInfo.setId(100L);
+        classInfo.setCourseId(5L);
+        when(studentClassesService.getClassIdsByStudentId(1L)).thenReturn(List.of(100L));
+        when(classService.getClassById(100L)).thenReturn(classInfo);
+
         Map<String, Object> content = Map.of("texts", List.of(), "words", List.of());
         when(learningRecordsService.getUnitContentWithLearningStates(1L, 10L)).thenReturn(content);
 
@@ -164,6 +192,11 @@ class StudentLearningControllerTest {
 
     @Test
     void getTextDetail_success() throws Exception {
+        // Mock assertStudentCanRecord: text exists, no unitId → access check passes
+        Text text = new Text();
+        text.setId(5L);
+        when(textMapper.selectById(5L)).thenReturn(text);
+
         Map<String, Object> detail = Map.of("title", "Sample Text", "content", "Hello world");
         when(learningRecordsService.getTextDetailWithAnnotation(eq(1L), eq(5L), isNull()))
                 .thenReturn(detail);
@@ -178,6 +211,11 @@ class StudentLearningControllerTest {
 
     @Test
     void recordTextView_success() throws Exception {
+        // Mock assertStudentCanRecord: text exists, no unitId → access check passes
+        Text text = new Text();
+        text.setId(5L);
+        when(textMapper.selectById(5L)).thenReturn(text);
+
         Map<String, Object> params = new HashMap<>();
         params.put("textId", 5);
         params.put("duration", 120);
@@ -207,6 +245,11 @@ class StudentLearningControllerTest {
 
     @Test
     void recordTextView_negativeDuration_returnsError() throws Exception {
+        // Mock assertStudentCanRecord: text exists (called before duration validation)
+        Text text = new Text();
+        text.setId(5L);
+        when(textMapper.selectById(5L)).thenReturn(text);
+
         Map<String, Object> params = new HashMap<>();
         params.put("textId", 5);
         params.put("duration", -10);
@@ -221,6 +264,11 @@ class StudentLearningControllerTest {
 
     @Test
     void recordTextView_excessiveDuration_returnsError() throws Exception {
+        // Mock assertStudentCanRecord: text exists (called before duration validation)
+        Text text = new Text();
+        text.setId(5L);
+        when(textMapper.selectById(5L)).thenReturn(text);
+
         Map<String, Object> params = new HashMap<>();
         params.put("textId", 5);
         params.put("duration", 99999);
@@ -235,6 +283,11 @@ class StudentLearningControllerTest {
 
     @Test
     void startReading_success() throws Exception {
+        // Mock assertStudentCanRecord: text exists, no unitId → access check passes
+        Text text = new Text();
+        text.setId(5L);
+        when(textMapper.selectById(5L)).thenReturn(text);
+
         when(learningRecordsService.startReadingSession(1L, 5L, null)).thenReturn(100L);
 
         mockMvc.perform(post("/api/student/learning/texts/5/start"))

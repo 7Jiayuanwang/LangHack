@@ -432,31 +432,5 @@ class AdminControllerEnhancedTest {
         verify(unitWordService).removeFromUnit(1L, 10L);
     }
 
-    // ========== Data Cleanup ==========
-
-    @Test
-    @DisplayName("POST /api/admin/cleanup-data - cleanup data success")
-    void cleanupData_success() throws Exception {
-        doNothing().when(dataCleanupService).cleanupInconsistentData();
-
-        mockMvc.perform(post("/api/admin/cleanup-data"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data").value("数据清理完成，请查看控制台输出获取详细信息"));
-
-        verify(dataCleanupService).cleanupInconsistentData();
-    }
-
-    @Test
-    @DisplayName("GET /api/admin/data-stats - print data statistics")
-    void printDataStatistics_success() throws Exception {
-        doNothing().when(dataCleanupService).printDataStatistics();
-
-        mockMvc.perform(get("/api/admin/data-stats"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data").value("数据统计信息已打印到控制台"));
-
-        verify(dataCleanupService).printDataStatistics();
-    }
+    // Data cleanup tests moved to OpsControllerTest (endpoints migrated to /api/ops/)
 }

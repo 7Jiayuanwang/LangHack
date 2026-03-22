@@ -120,7 +120,7 @@ public class AiCallMetricsService {
 
         List<AiCallLog> batch = new ArrayList<>();
         AiCallLog item;
-        while ((item = buffer.poll()) != null && batch.size() < BATCH_SIZE) {
+        while (batch.size() < BATCH_SIZE && (item = buffer.poll()) != null) {
             batch.add(item);
         }
 

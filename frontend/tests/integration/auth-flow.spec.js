@@ -217,9 +217,9 @@ describe('Auth Flow Integration', () => {
       })
       await store.login({ username: 'user', password: 'pass' })
 
-      // Logout with API failure
+      // Logout with API failure — store catches error internally, does not re-throw
       logoutApi.mockRejectedValue(new Error('Network error'))
-      await expect(store.logout()).rejects.toThrow('Network error')
+      await store.logout()
 
       // State should still be cleared
       expect(store.token).toBe('')

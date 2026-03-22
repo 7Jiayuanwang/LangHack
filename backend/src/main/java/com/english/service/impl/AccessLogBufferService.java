@@ -40,7 +40,7 @@ public class AccessLogBufferService {
 
         List<AccessLog> batch = new ArrayList<>();
         AccessLog item;
-        while ((item = buffer.poll()) != null && batch.size() < BATCH_SIZE) {
+        while (batch.size() < BATCH_SIZE && (item = buffer.poll()) != null) {
             batch.add(item);
         }
 
