@@ -102,6 +102,37 @@ is_placeholder() {
     [[ "$1" == *"your"* ]] || [[ "$1" == *"here"* ]] || [[ "$1" == *"change_this"* ]] || [ -z "$1" ]
 }
 
+# 检查端口是否可用（未被宿主机或 Docker 容器占用）
+check_port() {
+    local port="$1"
+    # 检查 Docker 容器端口占用
+    if docker ps --format '{{.Ports}}' 2>/dev/null | grep -q "0\.0\.0\.0:${port}->"; then
+        return 1
+    fi
+    # 检查宿主机端口占用
+    if command -v ss &>/dev/null; then
+        ss -tlnp 2>/dev/null | grep -q ":${port}[[:space:]]" && return 1
+    elif command -v netstat &>/dev/null; then
+        netstat -tln 2>/dev/null | grep -q ":${port}[[:space:]]" && return 1
+    fi
+    return 0
+}
+
+# 端口选择（自动跳过占用端口）
+ask_port() {
+    local prompt="$1" default="$2" var_name="$3"
+    local port="$default"
+    ask_value "$prompt" "$port" "$var_name"
+    eval "port=\$$var_name"
+    if ! check_port "$port"; then
+        echo "  [WARN] 端口 ${port} 已被占用，自动寻找可用端口..."
+        local suggest=$((port + 1))
+        while ! check_port "$suggest"; do suggest=$((suggest + 1)); done
+        echo "  [建议] 可用端口: ${suggest}"
+        ask_value "$prompt (换一个)" "$suggest" "$var_name"
+    fi
+}
+
 # ══════════════════════════════════════════════════════
 echo "======================================"
 echo " LangHack Docker Compose 部署向导 v2.0"
@@ -205,9 +236,9 @@ if [ "$SKIP_ENV" = false ]; then
 
     echo ""
     echo "  [ 端口映射 ]"
-    ask_value "前端端口" "$(load_env_value "PORT_FRONTEND" "80")" CFG_PORT_FE
-    ask_value "后端端口" "$(load_env_value "PORT_BACKEND" "8080")" CFG_PORT_BE
-    ask_value "MySQL 端口" "$(load_env_value "PORT_MYSQL" "3306")" CFG_PORT_DB
+    ask_port "前端端口" "$(load_env_value "PORT_FRONTEND" "80")" CFG_PORT_FE
+    ask_port "后端端口" "$(load_env_value "PORT_BACKEND" "8080")" CFG_PORT_BE
+    ask_port "MySQL 端口" "$(load_env_value "PORT_MYSQL" "3306")" CFG_PORT_DB
 
     echo ""
     echo "  [ 备份 ]"
@@ -267,12 +298,17 @@ MYSQL_REPLICATION_USER=replicator
 MYSQL_REPLICATION_PASSWORD=${CFG_DB_PASSWORD}_repl
 DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
 DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+DB_SLAVE_USERNAME=${CFG_DB_USERNAME}
+DB_SLAVE_PASSWORD=${CFG_DB_PASSWORD}
+REDIS_HOST=redis
 APP_CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:${CFG_PORT_FE}
 TUTOR_API_BASE_URL=http://localhost:8000/api/tutor
 VITE_TUTOR_API_BASE_URL=/tutor
 PORT_FRONTEND=${CFG_PORT_FE}
 PORT_BACKEND=${CFG_PORT_BE}
 PORT_MYSQL=${CFG_PORT_DB}
+PORT_MYSQL_SLAVE=$((CFG_PORT_DB + 1))
+PORT_REDIS=6379
 BACKUP_ENABLED=${CFG_BACKUP_ENABLED}
 BACKUP_DIR=${CFG_BACKUP_DIR}
 BACKUP_RETENTION_DAYS=${CFG_BACKUP_RETENTION}
@@ -285,15 +321,17 @@ ENVEOF
     echo "  [OK] 配置已写入 $ENV_FILE"
 fi
 
-# ── 验证必填项 ────────────────────────────────────────
-source "$ENV_FILE"
+# ── 验证必填项（不直接 source，避免 JDBC URL 中的 & 触发后台进程）──────────
 for var in DB_PASSWORD JWT_SECRET; do
-    val="${!var:-}"
+    val=$(load_env_value "$var" "" "$ENV_FILE")
     if is_placeholder "$val"; then
         echo "[ERROR] $var 未正确配置"
         exit 1
     fi
 done
+# 为后续步骤读取端口变量（安全读取，不 eval）
+PORT_FRONTEND=$(load_env_value "PORT_FRONTEND" "80"  "$ENV_FILE")
+PORT_BACKEND=$(load_env_value  "PORT_BACKEND"  "8080" "$ENV_FILE")
 echo "  [OK] 环境变量检查通过"
 
 # ══════════════════════════════════════════════════════
@@ -377,15 +415,32 @@ esac
 echo "[INFO] 启动服务..."
 [ -n "$SVCS" ] && docker compose up -d $SVCS || docker compose up -d
 
-# 健康等待
+# 健康等待（快速失败：发现 unhealthy 立即报告）
 echo "[INFO] 等待服务就绪..."
-timeout=120; elapsed=0
+timeout=180; elapsed=0; deploy_ok=false
 while [ $elapsed -lt $timeout ]; do
-    healthy=$(docker compose ps 2>/dev/null | grep -c "healthy" || true)
-    [ "$healthy" -ge 2 ] && break
+    ps_out=$(docker compose ps 2>/dev/null)
+    unhealthy=$(echo "$ps_out" | grep -c "unhealthy" || true)
+    healthy=$(echo   "$ps_out" | grep -c "(healthy)"  || true)
+    if [ "$unhealthy" -gt 0 ]; then
+        echo ""
+        echo "[ERROR] 有服务启动失败（unhealthy），终止等待："
+        echo "$ps_out"
+        echo ""
+        echo "─── 失败服务日志 ───"
+        docker compose ps --format '{{.Name}} {{.Status}}' 2>/dev/null \
+          | grep unhealthy | awk '{print $1}' \
+          | while read -r svc; do
+              echo ">>> $svc"
+              docker compose logs --tail=30 "$svc" 2>/dev/null
+            done
+        break
+    fi
+    [ "$healthy" -ge 4 ] && deploy_ok=true && break
     sleep 5; elapsed=$((elapsed + 5))
-    echo "  等待中... ${elapsed}s"
+    printf "  等待中... %ds (healthy: %d/5)\r" "$elapsed" "$healthy"
 done
+echo ""
 
 echo ""
 echo "======================================"
@@ -396,8 +451,8 @@ echo "[SUCCESS] 部署完成！"
 echo "  分支: $TARGET_BRANCH"
 echo "  版本: $(cd "$PROJECT_ROOT" && git rev-parse --short HEAD)"
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
-echo "  前端: http://${SERVER_IP}:${PORT_FRONTEND:-80}"
-echo "  后端: http://${SERVER_IP}:${PORT_BACKEND:-8080}"
+echo "  前端: http://${SERVER_IP}:${PORT_FRONTEND}"
+echo "  后端: http://${SERVER_IP}:${PORT_BACKEND}"
 
 # ── 设置自动更新 crontab ────────────────────────────
 if [ "${CFG_AUTO_UPDATE_ENABLED:-}" = "true" ] || [ "$(load_env_value "AUTO_UPDATE_ENABLED" "false" "$ENV_FILE")" = "true" ]; then
