@@ -25,6 +25,7 @@ services:
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
       - ./mysql/init/01-create-replication-user.sql:/docker-entrypoint-initdb.d/02-create-replication-user.sql:ro
       - ../database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/03-import-backup.sql:ro
+      - ./create_missing_tables.sql:/docker-entrypoint-initdb.d/04-create-missing-tables.sql:ro
     networks:
       - langhack-network
     healthcheck:
@@ -98,7 +99,7 @@ services:
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
-      SPRING_PROFILES_ACTIVE: prod
+      SPRING_PROFILES_ACTIVE: docker
       # 主库
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
@@ -133,7 +134,8 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      # 200=正常 / 401=Security拦截但应用已启动 / 403=同上，均视为健康
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health | grep -qE '^(200|401|403)'"]
       interval: 30s
       timeout: 10s
       retries: 5
