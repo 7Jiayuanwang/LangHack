@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.eclipse
+.classpath
+.project
+.settings/
+
+# Build outputs
+target/
+out/
+build/
+*.jar
+*.war
+*.ear
+
+# Logs
+logs/
+*.log
+log/
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
+
+# Environment
+.env
+.env.*
+*.properties.local
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Documentation
+README.md
+docs/
+*.md

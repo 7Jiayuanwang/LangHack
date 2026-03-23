@@ -16,13 +16,15 @@ services:
       MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "${PORT_MYSQL:-3306}:3306"
     volumes:
       - mysql_master_data:/var/lib/mysql
       - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
-      - ./mysql/init:/docker-entrypoint-initdb.d:ro
-      # 若有项目级初始化 SQL，可同时挂载
-      - ../database:/docker-entrypoint-initdb.d/project:ro
+      # docker-entrypoint-initdb.d 只执行直接子文件（不递归子目录）
+      # 使用 init-db.sh 脚本按顺序：创建复制用户 → 导入备份数据
+      - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
+      - ./mysql/init/01-create-replication-user.sql:/docker-entrypoint-initdb.d/02-create-replication-user.sql:ro
+      - ../database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/03-import-backup.sql:ro
     networks:
       - langhack-network
     healthcheck:
@@ -44,7 +46,7 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       TZ: Asia/Shanghai
     ports:
-      - "3307:3306"
+      - "${PORT_MYSQL_SLAVE:-3307}:3306"
     volumes:
       - mysql_slave_data:/var/lib/mysql
       - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
@@ -73,7 +75,7 @@ services:
       --appendonly yes
       --requirepass ${REDIS_PASSWORD}
     ports:
-      - "6379:6379"
+      - "${PORT_REDIS:-6379}:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -88,11 +90,11 @@ services:
   # ─────────────────────────────────────────────
   # Spring Boot 后端应用
   # ─────────────────────────────────────────────
-  app:
+  backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: langhack-app
+    container_name: langhack-backend
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
@@ -113,11 +115,13 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       TUTOR_API_BASE_URL: ${TUTOR_API_BASE_URL}
+      # CORS
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
       # 腾讯翻译（可选）
       TENCENT_SECRET_ID: ${TENCENT_SECRET_ID:-}
       TENCENT_SECRET_KEY: ${TENCENT_SECRET_KEY:-}
     ports:
-      - "8080:8080"
+      - "${PORT_BACKEND:-8080}:8080"
     volumes:
       - app_logs:/app/logs
       - app_uploads:/app/uploads
@@ -134,6 +138,28 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+  # ─────────────────────────────────────────────
+  # Vue 3 前端 (Nginx 反向代理)
+  # ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
+    container_name: langhack-frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT_FRONTEND:-80}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - langhack-network
+    depends_on:
+      backend:
+        condition: service_healthy
 
 # ─────────────────────────────────────────────
 # 网络

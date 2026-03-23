@@ -261,6 +261,15 @@ $([ -n "$CFG_OPENROUTER_KEY" ] && echo "OPENROUTER_API_KEY=${CFG_OPENROUTER_KEY}
 $([ -n "$CFG_HIAGENT_KEY" ] && echo "HIAGENT_API_KEY=${CFG_HIAGENT_KEY}" || echo "# HIAGENT_API_KEY=")
 $([ -n "$CFG_TENCENT_ID" ] && echo "TENCENT_SECRET_ID=${CFG_TENCENT_ID}" || echo "# TENCENT_SECRET_ID=")
 $([ -n "$CFG_TENCENT_KEY" ] && echo "TENCENT_SECRET_KEY=${CFG_TENCENT_KEY}" || echo "# TENCENT_SECRET_KEY=")
+MYSQL_ROOT_PASSWORD=${CFG_DB_PASSWORD}
+MYSQL_DATABASE=english_learning
+MYSQL_REPLICATION_USER=replicator
+MYSQL_REPLICATION_PASSWORD=${CFG_DB_PASSWORD}_repl
+DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+APP_CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:${CFG_PORT_FE}
+TUTOR_API_BASE_URL=http://localhost:8000/api/tutor
+VITE_TUTOR_API_BASE_URL=/tutor
 PORT_FRONTEND=${CFG_PORT_FE}
 PORT_BACKEND=${CFG_PORT_BE}
 PORT_MYSQL=${CFG_PORT_DB}
@@ -294,7 +303,7 @@ echo ""
 echo "── 步骤 3/5: 构建选项 ──"
 
 ask_choice "构建方式:" "全量重建 (--no-cache)|增量构建 (使用缓存)|仅重启 (不构建)" BUILD_MODE 2
-ask_choice "部署服务:" "全部|仅应用 (app)|仅基础设施 (mysql+redis)" SVC_MODE 1
+ask_choice "部署服务:" "全部|仅后端+前端 (backend+frontend)|仅后端 (backend)|仅前端 (frontend)|仅基础设施 (mysql+redis)" SVC_MODE 1
 
 # ══════════════════════════════════════════════════════
 # 步骤 4: 确认
@@ -309,8 +318,10 @@ case $BUILD_MODE in
 esac
 case $SVC_MODE in
     1) echo "  服务: 全部" ;;
-    2) echo "  服务: 仅应用" ;;
-    3) echo "  服务: 仅基础设施" ;;
+    2) echo "  服务: 后端+前端" ;;
+    3) echo "  服务: 仅后端" ;;
+    4) echo "  服务: 仅前端" ;;
+    5) echo "  服务: 仅基础设施" ;;
 esac
 if [ "${CFG_AUTO_UPDATE_ENABLED:-false}" = "true" ]; then
     echo "  自动更新: 已启用 (${CFG_AUTO_UPDATE_CRON}) → ${CFG_AUTO_UPDATE_BRANCH}"
@@ -343,8 +354,10 @@ cd "$DOCKER_DIR"
 # 服务列表
 case $SVC_MODE in
     1) SVCS="" ;;
-    2) SVCS="app" ;;
-    3) SVCS="mysql-master mysql-slave redis" ;;
+    2) SVCS="backend frontend" ;;
+    3) SVCS="backend" ;;
+    4) SVCS="frontend" ;;
+    5) SVCS="mysql-master mysql-slave redis" ;;
 esac
 
 # 构建
@@ -383,7 +396,8 @@ echo "[SUCCESS] 部署完成！"
 echo "  分支: $TARGET_BRANCH"
 echo "  版本: $(cd "$PROJECT_ROOT" && git rev-parse --short HEAD)"
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
-echo "  地址: http://${SERVER_IP}:${PORT_BACKEND:-8080}"
+echo "  前端: http://${SERVER_IP}:${PORT_FRONTEND:-80}"
+echo "  后端: http://${SERVER_IP}:${PORT_BACKEND:-8080}"
 
 # ── 设置自动更新 crontab ────────────────────────────
 if [ "${CFG_AUTO_UPDATE_ENABLED:-}" = "true" ] || [ "$(load_env_value "AUTO_UPDATE_ENABLED" "false" "$ENV_FILE")" = "true" ]; then
