@@ -22,16 +22,26 @@ set -euo pipefail
 # ── 配置 ──────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANCH="${DEPLOY_BRANCH:-master}"
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+# docker-compose.yml 绝对路径（优先使用环境变量覆盖）
+COMPOSE_FILE="${COMPOSE_FILE:-$PROJECT_ROOT/docker/docker-compose.yml}"
 LOG_FILE="${LOG_FILE:-/var/log/langhack-update.log}"
 LOCK_FILE="/tmp/langhack-update.lock"
 INTERACTIVE=false
 WEBHOOK_URL="${WEBHOOK_URL:-}"
 
-# 加载项目 .env（如果存在）
-if [ -f "$PROJECT_ROOT/.env" ]; then
+# .env 文件路径：优先 docker/.env（由 deploy.sh 生成），回退到项目根目录 .env
+if [ -f "$PROJECT_ROOT/docker/.env" ]; then
+    ENV_FILE="$PROJECT_ROOT/docker/.env"
+elif [ -f "$PROJECT_ROOT/.env" ]; then
+    ENV_FILE="$PROJECT_ROOT/.env"
+else
+    ENV_FILE="$PROJECT_ROOT/docker/.env"
+fi
+
+# 加载 .env（如果存在）
+if [ -f "$ENV_FILE" ]; then
     # shellcheck disable=SC1091
-    set -a; source "$PROJECT_ROOT/.env" 2>/dev/null || true; set +a
+    set -a; source "$ENV_FILE" 2>/dev/null || true; set +a
 fi
 
 # 维护模式 & 备份配置（可通过 .env 中 AUTO_UPDATE_* 覆盖）
@@ -148,9 +158,9 @@ disable_maintenance() {
 # ── .env 备份 & 验证 ─────────────────────────────────
 
 backup_env() {
-    if [ -f "$PROJECT_ROOT/.env" ]; then
+    if [ -f "$ENV_FILE" ]; then
         mkdir -p "$BACKUP_DIR"
-        cp "$PROJECT_ROOT/.env" "$BACKUP_DIR/.env.pre-update.$(date +%Y%m%d_%H%M%S)"
+        cp "$ENV_FILE" "$BACKUP_DIR/.env.pre-update.$(date +%Y%m%d_%H%M%S)"
         log "CONFIG: .env 已备份"
 
         # 清理旧备份，只保留最近 N 份
@@ -167,7 +177,7 @@ validate_config() {
     local errors=0
     for key in DB_PASSWORD JWT_SECRET; do
         local val
-        val=$(grep -E "^${key}=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d'=' -f2- || echo "")
+        val=$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
         if [ -z "$val" ] || [[ "$val" == *"change"* ]] || [[ "$val" == *"your"* ]]; then
             log "ERROR: 关键配置 $key 缺失或无效"
             errors=$((errors + 1))
@@ -177,12 +187,12 @@ validate_config() {
 }
 
 restore_env_if_missing() {
-    if [ ! -f "$PROJECT_ROOT/.env" ]; then
+    if [ ! -f "$ENV_FILE" ]; then
         log "CRITICAL: .env 在更新后消失！正在从备份恢复..."
         local latest
         latest=$(ls -1t "$BACKUP_DIR"/.env.pre-update.* 2>/dev/null | head -1 || echo "")
         if [ -n "$latest" ]; then
-            cp "$latest" "$PROJECT_ROOT/.env"
+            cp "$latest" "$ENV_FILE"
             log "CONFIG: .env 已从备份恢复 ($latest)"
         else
             log "CRITICAL: 无可用 .env 备份！需要手动运行 deploy.sh 重新配置"
@@ -211,8 +221,8 @@ pre_update_backup() {
 
     # 从 .env 获取密码
     local db_password="${DB_PASSWORD:-}"
-    if [ -z "$db_password" ] && [ -f "$PROJECT_ROOT/.env" ]; then
-        db_password=$(grep -E '^DB_PASSWORD=' "$PROJECT_ROOT/.env" | cut -d'=' -f2- || echo "")
+    if [ -z "$db_password" ] && [ -f "$ENV_FILE" ]; then
+        db_password=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- || echo "")
     fi
 
     if [ -z "$db_password" ]; then

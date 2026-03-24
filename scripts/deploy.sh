@@ -8,7 +8,7 @@
 #   ./scripts/deploy.sh --quick      # 快速模式（跳过已配置项）
 #   ./scripts/deploy.sh --help       # 帮助
 # ==============================================================================
-set -uo pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -447,6 +447,10 @@ echo "======================================"
 docker compose ps
 echo "======================================"
 echo ""
+if [ "$deploy_ok" = false ]; then
+    echo "[ERROR] 部署失败：服务未能在 ${timeout}s 内全部就绪，请检查上方日志"
+    exit 1
+fi
 echo "[SUCCESS] 部署完成！"
 echo "  分支: $TARGET_BRANCH"
 echo "  版本: $(cd "$PROJECT_ROOT" && git rev-parse --short HEAD)"
