@@ -33,6 +33,12 @@
         <div class="stat-label">峰值并发</div>
       </div>
       <div class="stat-card">
+        <div class="stat-value" :style="{ color: errorRateColor }">
+          {{ errorRate }}%
+        </div>
+        <div class="stat-label">错误率</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-value">{{ formatUptime(system.uptimeMs) }}</div>
         <div class="stat-label">运行时长</div>
       </div>
@@ -53,9 +59,20 @@
                      :color="getProgressColor(system.cpu?.processCpuLoad || 0)" />
       </div>
       <div class="health-item">
-        <span class="health-label">线程数</span>
-        <el-progress :percentage="Math.min(100, Math.round((system.threads?.count || 0) / 500 * 100))"
-                     :format="() => (system.threads?.count || 0) + ' / 峰值 ' + (system.threads?.peakCount || 0)" />
+        <span class="health-label">数据库连接池</span>
+        <el-progress :percentage="dbPoolPercent"
+                     :color="getProgressColor(dbPoolPercent)"
+                     :format="() => dbPoolActive + ' 活跃 / ' + dbPoolMax + ' 最大'" />
+        <span class="health-detail">主库 {{ system.dbPool?.master?.active || 0 }}/{{ system.dbPool?.master?.max || 0 }} 从库 {{ system.dbPool?.slave?.active || 0 }}/{{ system.dbPool?.slave?.max || 0 }}</span>
+      </div>
+      <div class="health-item">
+        <span class="health-label">
+          Redis 缓存
+          <span class="redis-dot" :class="system.redis?.connected ? 'status-green' : 'status-red'"></span>
+        </span>
+        <el-progress :percentage="system.redis?.usagePercent || 0"
+                     :color="getProgressColor(system.redis?.usagePercent || 0)" />
+        <span class="health-detail">已用 {{ formatBytes(system.redis?.usedMemory) }} / 最大 {{ formatBytes(system.redis?.maxMemory) }}</span>
       </div>
       <div class="health-item">
         <span class="health-label">磁盘使用</span>
@@ -182,8 +199,8 @@ use([
 
 // State
 const refreshing = ref(false)
-const realtime = reactive({ activeUsers: 0, todayRequests: 0, todayUniqueUsers: 0, concurrentRequests: 0, peakConcurrentToday: 0 })
-const system = reactive({ jvm: {}, cpu: {}, threads: {}, disk: {}, uptimeMs: 0 })
+const realtime = reactive({ activeUsers: 0, todayRequests: 0, todayUniqueUsers: 0, concurrentRequests: 0, peakConcurrentToday: 0, todayErrorCount: 0 })
+const system = reactive({ jvm: {}, cpu: {}, dbPool: {}, redis: {}, disk: {}, uptimeMs: 0 })
 const aiStats = ref({})
 const aiDailyData = ref([])
 const aiRecentLogs = ref([])
@@ -199,6 +216,31 @@ const serviceNames = ['HIAGENT', 'OPENROUTER', 'TENCENT_TRANSLATE', 'TENCENT_ASR
 const filteredAiLogs = computed(() => {
   if (!aiLogFilter.value) return aiRecentLogs.value
   return aiRecentLogs.value.filter(l => l.serviceName === aiLogFilter.value)
+})
+
+// DB pool computed
+const dbPoolActive = computed(() =>
+  (system.dbPool?.master?.active || 0) + (system.dbPool?.slave?.active || 0)
+)
+const dbPoolMax = computed(() =>
+  (system.dbPool?.master?.max || 0) + (system.dbPool?.slave?.max || 0)
+)
+const dbPoolPercent = computed(() => {
+  const max = dbPoolMax.value
+  return max > 0 ? Math.round(dbPoolActive.value / max * 100) : 0
+})
+
+// Error rate computed
+const errorRate = computed(() => {
+  const total = realtime.todayRequests || 0
+  const errors = realtime.todayErrorCount || 0
+  return total > 0 ? (errors / total * 100).toFixed(2) : '0.00'
+})
+const errorRateColor = computed(() => {
+  const rate = parseFloat(errorRate.value)
+  if (rate > 5) return '#F56C6C'
+  if (rate > 1) return '#E6A23C'
+  return '#67C23A'
 })
 
 // Chart options
@@ -550,6 +592,15 @@ onBeforeUnmount(() => {
 .status-green { background: #67C23A; }
 .status-yellow { background: #E6A23C; }
 .status-red { background: #F56C6C; }
+
+.redis-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+}
 
 .ai-service-name {
   font-weight: 600;

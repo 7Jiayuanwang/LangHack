@@ -849,15 +849,13 @@ const translateSelectedText = async () => {
         translatedText.value = typeof result.data === 'string' ? result.data : '翻译失败'
         ElMessage.success('翻译成功')
       } else {
-        ElMessage.error('翻译失败，请稍后重试')
-        translatedText.value = '翻译失败，请稍后重试'
+        translatedText.value = '翻译服务暂时不可用，请稍后重试'
       }
     } else {
       throw new Error('网络请求失败')
     }
   } catch (error) {
     console.error('翻译失败:', error)
-    ElMessage.error('翻译失败')
     translatedText.value = '翻译服务暂时不可用'
   } finally {
     translating.value = false
@@ -1032,9 +1030,15 @@ const goBack = () => {
   if (from === 'assignment') {
     // 从任务页面跳转来的，返回任务页面
     router.push('/student/assignments')
-  } else {
+  } else if (from === 'articles') {
+    // 从文章列表来的，返回文章推荐页
+    router.push('/articles')
+  } else if (window.history.length > 1) {
     // 其他情况，使用默认返回
     router.go(-1)
+  } else {
+    // 无历史记录时，跳转到文章列表
+    router.push('/articles')
   }
 }
 

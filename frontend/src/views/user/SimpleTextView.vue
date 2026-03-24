@@ -23,7 +23,7 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <el-breadcrumb separator="/">
-        <el-breadcrumb-item :to="{ path: '/user' }">随机课文</el-breadcrumb-item>
+        <el-breadcrumb-item :to="{ path: breadcrumbParent.path }">{{ breadcrumbParent.label }}</el-breadcrumb-item>
         <el-breadcrumb-item>{{ textTitle }}</el-breadcrumb-item>
       </el-breadcrumb>
 
@@ -136,12 +136,12 @@
           </div>
 
           <!-- 词性标签 -->
-          <div class="pos-info" v-if="selectedWordInfo?.pos">
+          <div class="pos-info" v-if="selectedWordInfo?.pos && getPosText(selectedWordInfo?.pos)">
             <el-tag size="small" type="info">{{ getPosText(selectedWordInfo?.pos) }}</el-tag>
           </div>
 
           <!-- 同义词 -->
-          <div class="synonyms-section" v-if="selectedWordInfo?.synonyms && selectedWordInfo?.synonyms.length > 0">
+          <div class="synonyms-section" v-if="Array.isArray(selectedWordInfo?.synonyms) && selectedWordInfo?.synonyms.length > 0">
             <div class="synonyms">
               <span
                 v-for="synonym in selectedWordInfo?.synonyms.slice(0, 6)"
@@ -195,6 +195,15 @@ const router = useRouter()
 const route = useRoute()
 
 const textId = ref(route.params.id || route.query.textId)
+
+// 面包屑导航：根据来源决定父级链接
+const breadcrumbParent = computed(() => {
+  if (route.query.from === 'articles') {
+    return { path: '/articles', label: '文章推荐' }
+  }
+  return { path: '/articles', label: '文章' }
+})
+
 const textTitle = ref('')
 const textContent = ref('')
 const difficulty = ref('')
@@ -358,15 +367,13 @@ const translateSelectedText = async () => {
         translatedText.value = result?.data
         ElMessage.success('翻译成功')
       } else {
-        ElMessage.error('翻译失败，请稍后重试')
-        translatedText.value = '翻译失败，请稍后重试'
+        translatedText.value = '翻译服务暂时不可用，请稍后重试'
       }
     } else {
       throw new Error('网络请求失败')
     }
   } catch (error) {
     console.error('翻译失败:', error)
-    ElMessage.error('翻译失败')
     translatedText.value = '翻译服务暂时不可用'
   } finally {
     translating.value = false
@@ -513,7 +520,26 @@ const handleWordClick = async (wordText) => {
     if (response.ok) {
       const result = await response.json()
       if (result?.code === 200) {
-        selectedWordInfo.value = result?.data
+        const data = result?.data || {}
+        // 修复：API 返回的 synonyms/antonyms 可能是 JSON 字符串而非数组
+        let synonyms = data.synonymsList || data.synonyms || []
+        if (typeof synonyms === 'string') {
+          try { synonyms = JSON.parse(synonyms) } catch { synonyms = [] }
+        }
+        if (Array.isArray(synonyms)) {
+          synonyms = synonyms.map(s => String(s).replace(/^s:/, '')).filter(s => s)
+        } else {
+          synonyms = []
+        }
+        // 过滤无效的 pos 和 phonetic
+        const pos = (data.pos && data.pos.toLowerCase() !== 'unknown') ? data.pos : (data.partOfSpeech && data.partOfSpeech.toLowerCase() !== 'unknown' ? data.partOfSpeech : '')
+        const phonetic = data.pronunciation || data.phonetic || ''
+        selectedWordInfo.value = {
+          ...data,
+          synonyms,
+          pos,
+          phonetic: phonetic && phonetic.toLowerCase() !== 'unknown' ? phonetic : '',
+        }
       } else {
         // 创建基本的单词信息作为备用
         selectedWordInfo.value = {
@@ -595,14 +621,15 @@ const handleSynonymClick = async (synonym) => {
 
 // 格式化词性显示
 const getPosText = (pos) => {
-  if (!pos) return ''
+  if (!pos || pos.toLowerCase() === 'unknown') return ''
 
   const posMap = {
     'n': '名词', 'v': '动词', 'adj': '形容词', 'adv': '副词',
     'prep': '介词', 'conj': '连词', 'pron': '代词', 'int': '感叹词'
   }
 
-  const posList = pos.toLowerCase().split(/[\s,;]+/)
+  const posList = pos.toLowerCase().split(/[\s,;]+/).filter(p => p && p !== 'unknown')
+  if (posList.length === 0) return ''
   return posList.map(p => posMap[p] || p.toUpperCase()).join(' / ')
 }
 
@@ -664,12 +691,20 @@ const getDifficultyText = (difficulty) => {
     'MEDIUM': '中等',
     'HARD': '困难'
   }
-  return texts[difficulty] || difficulty
+  return texts[difficulty] || ''
 }
 
-// 返回上一页
+// 返回上一页 — 优先跳转到来源页，避免跳回登录页
 const goBack = () => {
-  router.back()
+  const from = route.query.from
+  if (from === 'articles') {
+    router.push('/articles')
+  } else if (window.history.length > 1) {
+    router.back()
+  } else {
+    // 无历史记录时，跳转到公开文章页
+    router.push('/articles')
+  }
 }
 
 // 处理版本切换

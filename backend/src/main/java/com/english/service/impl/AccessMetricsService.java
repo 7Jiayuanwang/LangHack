@@ -72,6 +72,17 @@ public class AccessMetricsService {
         concurrentRequests.decrementAndGet();
     }
 
+    public void recordError() {
+        try {
+            String dateKey = LocalDate.now().format(DATE_KEY);
+            String errorKey = "access:today:errors:" + dateKey;
+            redisTemplate.opsForValue().increment(errorKey);
+            redisTemplate.expire(errorKey, 2, TimeUnit.DAYS);
+        } catch (Exception e) {
+            logger.debug("Failed to record error metric", e);
+        }
+    }
+
     public Map<String, Object> getRealTimeMetrics() {
         Map<String, Object> metrics = new LinkedHashMap<>();
         try {
@@ -96,6 +107,10 @@ public class AccessMetricsService {
             metrics.put("concurrentRequests", concurrentRequests.get());
             metrics.put("peakConcurrentToday", peakConcurrentToday.get());
 
+            // Today's error count (status >= 400)
+            String errorCountStr = redisTemplate.opsForValue().get("access:today:errors:" + dateKey);
+            metrics.put("todayErrorCount", errorCountStr != null ? Long.parseLong(errorCountStr) : 0L);
+
         } catch (Exception e) {
             logger.debug("Failed to get realtime metrics", e);
             metrics.put("todayRequests", 0L);
@@ -103,6 +118,7 @@ public class AccessMetricsService {
             metrics.put("activeUsers", 0L);
             metrics.put("concurrentRequests", 0L);
             metrics.put("peakConcurrentToday", 0L);
+            metrics.put("todayErrorCount", 0L);
         }
         return metrics;
     }

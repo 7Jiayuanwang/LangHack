@@ -400,12 +400,10 @@ const translateSelectedText = async () => {
       translatedText.value = result.data || '翻译结果为空'
       ElMessage.success('翻译成功')
     } else {
-      ElMessage.error((result && result.message) || '翻译失败')
-      translatedText.value = '翻译失败：请稍后重试'
+      translatedText.value = '翻译服务暂时不可用，请稍后重试'
     }
   } catch (error) {
     console.error('翻译失败:', error)
-    ElMessage.error('翻译服务暂时不可用')
     translatedText.value = '翻译服务暂时不可用'
   } finally {
     translating.value = false

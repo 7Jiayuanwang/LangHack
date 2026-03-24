@@ -76,6 +76,11 @@ public class AccessLogInterceptor implements HandlerInterceptor {
             log.setCreatedTime(LocalDateTime.now());
 
             bufferService.add(log);
+
+            // Track error count for monitoring dashboard
+            if (response.getStatus() >= 400) {
+                metricsService.recordError();
+            }
         } catch (Exception e) {
             logger.debug("Failed to log access", e);
         }

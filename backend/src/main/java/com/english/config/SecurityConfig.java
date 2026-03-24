@@ -140,7 +140,8 @@ public class SecurityConfig {
                 .antMatchers(HttpMethod.GET, "/api/media/**").permitAll() // 媒体文件仅 GET 公开
                 .antMatchers("/").permitAll()
                 .antMatchers("/api/health").permitAll()
-                // 管理员权限
+                // 管理员权限（用户管理端点同时允许 OPS 访问，须放在 /api/admin/** 之前）
+                .antMatchers("/api/admin/users/**", "/api/admin/users").hasAnyRole("ADMIN", "OPS")
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
                 // 运维权限
                 .antMatchers("/api/ops/**").hasAnyRole("OPS", "ADMIN")

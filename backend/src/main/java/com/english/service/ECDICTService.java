@@ -304,6 +304,101 @@ public class ECDICTService {
     }
 
     /**
+     * 为MCQ测验生成干扰项定义
+     * 策略：优先从相同词性中抽取，不足时从全库补充
+     *
+     * @param word  目标单词
+     * @param count 需要的干扰项数量（通常3）
+     * @return 干扰项定义列表（中文翻译）
+     */
+    public List<String> generateQuizDistractors(String word, int count) {
+        List<String> distractors = new ArrayList<>();
+
+        if (word == null || word.trim().isEmpty() || count <= 0) {
+            return distractors;
+        }
+
+        // 限制最大数量，防滥用
+        count = Math.min(count, 10);
+
+        try {
+            // 1. 查询目标单词的ECDICT记录，获取id和pos
+            Long excludeId = 0L;
+            String pos = null;
+            String correctTranslation = null;
+
+            if (ecdictWordMapper != null) {
+                ECDICTWord targetWord = ecdictWordMapper.findByWord(word.trim());
+                if (targetWord != null) {
+                    excludeId = targetWord.getId() != null ? targetWord.getId() : 0L;
+                    pos = targetWord.getPos();
+                    correctTranslation = targetWord.getTranslation();
+                }
+
+                // 2. 优先从相同词性中随机抽取
+                if (pos != null && !pos.isEmpty()) {
+                    List<ECDICTWord> posBased = ecdictWordMapper.findRandomDistractorsByPos(pos, excludeId, count);
+                    if (posBased != null) {
+                        for (ECDICTWord w : posBased) {
+                            String translation = extractShortTranslation(w.getTranslation());
+                            if (translation != null && !translation.isEmpty()
+                                    && !translation.equals(correctTranslation)
+                                    && !distractors.contains(translation)) {
+                                distractors.add(translation);
+                            }
+                        }
+                    }
+                }
+
+                // 3. 不够时从全库补充
+                if (distractors.size() < count) {
+                    int remaining = count - distractors.size();
+                    // 多取一些以防去重后不够
+                    List<ECDICTWord> general = ecdictWordMapper.findRandomDistractors(excludeId, remaining + 5);
+                    if (general != null) {
+                        for (ECDICTWord w : general) {
+                            if (distractors.size() >= count) break;
+                            String translation = extractShortTranslation(w.getTranslation());
+                            if (translation != null && !translation.isEmpty()
+                                    && !translation.equals(correctTranslation)
+                                    && !distractors.contains(translation)) {
+                                distractors.add(translation);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("生成MCQ干扰项失败: word={}", word, e);
+        }
+
+        return distractors;
+    }
+
+    /**
+     * 从翻译字段提取简短的中文翻译，用于MCQ选项
+     * 只取第一个分隔符前的内容，确保选项简洁
+     */
+    private String extractShortTranslation(String translation) {
+        if (translation == null || translation.isEmpty()) {
+            return null;
+        }
+        // 按常见分隔符切分，取第一段
+        String[] parts = translation.split("[,;；\\n]");
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty() && trimmed.length() >= 2) {
+                // 清理标记如[法]、[计]等
+                trimmed = trimmed.replaceAll("\\[.*?\\]", "").trim();
+                if (!trimmed.isEmpty()) {
+                    return trimmed;
+                }
+            }
+        }
+        return translation.trim();
+    }
+
+    /**
      * 查询单词信息
      */
     public Map<String, Object> getWordInfo(String word) {

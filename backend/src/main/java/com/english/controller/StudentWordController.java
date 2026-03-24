@@ -12,6 +12,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,6 +38,9 @@ public class StudentWordController {
 
     @Autowired
     private WordNetService wordNetService;
+
+    @Autowired
+    private ECDICTService ecdictService;
 
     /**
      * 获取单词详细信息（支持点击查词）
@@ -460,6 +464,36 @@ public class StudentWordController {
             logger.error("批量操作失败", e);
 
             return Result.error("批量操作失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 获取MCQ测验干扰项（从ECDICT词库生成）
+     */
+    @GetMapping("/quiz-options")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    public Result<List<String>> getQuizDistractors(
+            @RequestParam String word,
+            @RequestParam(defaultValue = "3") int count,
+            Authentication authentication) {
+        try {
+            getCurrentStudentId(authentication); // 验证用户身份
+
+            if (word == null || word.trim().isEmpty()) {
+                return Result.error("单词不能为空");
+            }
+            if (word.trim().length() > 100) {
+                return Result.error("单词长度不能超过100");
+            }
+            count = Math.max(1, Math.min(count, 10));
+
+            List<String> distractors = ecdictService.generateQuizDistractors(word.trim(), count);
+            return Result.success(distractors);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取MCQ干扰项失败", e);
+            return Result.error("获取干扰项失败，请稍后重试");
         }
     }
 

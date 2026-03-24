@@ -442,11 +442,11 @@ const fillDemo = (role) => {
       break
     case 'teacher':
       loginForm.username = 'teacher'
-      loginForm.password = 'teacher123'
+      loginForm.password = 'admin123'
       break
     case 'student':
       loginForm.username = 'student'
-      loginForm.password = 'student123'
+      loginForm.password = 'admin123'
       break
   }
   const roleNames = { admin: '管理员', teacher: '教师', student: '学生' }

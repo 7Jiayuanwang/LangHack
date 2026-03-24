@@ -1,22 +1,42 @@
 package com.english.service.impl;
 
+import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.HikariPoolMXBean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import javax.sql.DataSource;
 import java.io.File;
 import java.lang.management.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Properties;
 
 @Service
 public class SystemMetricsService {
 
     private static final Logger logger = LoggerFactory.getLogger(SystemMetricsService.class);
 
+    private final DataSource masterDataSource;
+    private final DataSource slaveDataSource;
+    private final StringRedisTemplate redisTemplate;
+
     @Value("${backup.dir:./backups}")
     private String backupDir;
+
+    public SystemMetricsService(
+            @Qualifier("masterDataSource") DataSource masterDataSource,
+            @Qualifier("slaveDataSource") DataSource slaveDataSource,
+            StringRedisTemplate redisTemplate) {
+        this.masterDataSource = masterDataSource;
+        this.slaveDataSource = slaveDataSource;
+        this.redisTemplate = redisTemplate;
+    }
 
     public Map<String, Object> getSystemMetrics() {
         Map<String, Object> metrics = new LinkedHashMap<>();
@@ -49,13 +69,25 @@ public class SystemMetricsService {
             cpu.put("availableProcessors", osBean.getAvailableProcessors());
             metrics.put("cpu", cpu);
 
-            // Threads
-            ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
-            Map<String, Object> threads = new LinkedHashMap<>();
-            threads.put("count", threadBean.getThreadCount());
-            threads.put("peakCount", threadBean.getPeakThreadCount());
-            threads.put("daemonCount", threadBean.getDaemonThreadCount());
-            metrics.put("threads", threads);
+            // DB Connection Pool (HikariCP master + slave)
+            try {
+                Map<String, Object> dbPool = new LinkedHashMap<>();
+                dbPool.put("master", collectPoolStats(masterDataSource));
+                dbPool.put("slave", collectPoolStats(slaveDataSource));
+                metrics.put("dbPool", dbPool);
+            } catch (Exception e) {
+                logger.debug("Failed to collect DB pool metrics", e);
+            }
+
+            // Redis
+            try {
+                metrics.put("redis", collectRedisMetrics());
+            } catch (Exception e) {
+                Map<String, Object> redis = new LinkedHashMap<>();
+                redis.put("connected", false);
+                metrics.put("redis", redis);
+                logger.debug("Failed to collect Redis metrics", e);
+            }
 
             // Disk (backup directory)
             File diskDir = new File(backupDir);
@@ -81,5 +113,65 @@ public class SystemMetricsService {
         }
 
         return metrics;
+    }
+
+    private Map<String, Object> collectPoolStats(DataSource ds) {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        if (ds instanceof HikariDataSource) {
+            HikariDataSource hikari = (HikariDataSource) ds;
+            HikariPoolMXBean pool = hikari.getHikariPoolMXBean();
+            if (pool != null) {
+                stats.put("active", pool.getActiveConnections());
+                stats.put("idle", pool.getIdleConnections());
+                stats.put("total", pool.getTotalConnections());
+                stats.put("max", hikari.getMaximumPoolSize());
+                stats.put("pending", pool.getThreadsAwaitingConnection());
+            } else {
+                // Pool not yet started
+                stats.put("active", 0);
+                stats.put("idle", 0);
+                stats.put("total", 0);
+                stats.put("max", hikari.getMaximumPoolSize());
+                stats.put("pending", 0);
+            }
+        }
+        return stats;
+    }
+
+    private Map<String, Object> collectRedisMetrics() {
+        Map<String, Object> redis = new LinkedHashMap<>();
+        RedisConnection conn = redisTemplate.getRequiredConnectionFactory().getConnection();
+        try {
+            // Memory info
+            Properties memInfo = conn.info("memory");
+            if (memInfo != null) {
+                long usedMemory = parseLongSafe(memInfo.getProperty("used_memory"));
+                long maxMemory = parseLongSafe(memInfo.getProperty("maxmemory"));
+                redis.put("usedMemory", usedMemory);
+                redis.put("maxMemory", maxMemory);
+                redis.put("usagePercent", maxMemory > 0
+                        ? Math.round((double) usedMemory / maxMemory * 100) : 0);
+            }
+
+            // Client info
+            Properties clientInfo = conn.info("clients");
+            if (clientInfo != null) {
+                redis.put("connectedClients", (int) parseLongSafe(clientInfo.getProperty("connected_clients")));
+            }
+
+            redis.put("connected", true);
+        } finally {
+            conn.close();
+        }
+        return redis;
+    }
+
+    private long parseLongSafe(String value) {
+        if (value == null || value.isEmpty()) return 0L;
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 }

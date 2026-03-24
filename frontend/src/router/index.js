@@ -119,7 +119,7 @@ const routes = [
         path: 'users',
         name: 'OpsUsers',
         component: () => import('@/views/admin/Users.vue'),
-        meta: { title: '用户管理', roles: ['ADMIN'] }
+        meta: { title: '用户管理', roles: ['OPS', 'ADMIN'] }
       }
     ]
   },

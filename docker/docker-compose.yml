@@ -20,11 +20,12 @@ services:
     volumes:
       - mysql_master_data:/var/lib/mysql
       - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
-      # docker-entrypoint-initdb.d 只执行直接子文件（不递归子目录）
-      # 使用 init-db.sh 脚本按顺序：创建复制用户 → 导入备份数据
+      # docker-entrypoint-initdb.d 按文件名顺序执行（仅首次启动）
+      # 01: 字符集配置 → 02: 复制用户 → 03: 备份导入 → 04: 合并迁移
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
       - ./mysql/init/01-create-replication-user.sql:/docker-entrypoint-initdb.d/02-create-replication-user.sql:ro
       - ../database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/03-import-backup.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
     networks:
       - langhack-network
     healthcheck:
@@ -50,6 +51,10 @@ services:
     volumes:
       - mysql_slave_data:/var/lib/mysql
       - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
+      # 从库也需要完整的初始化数据（备份 + 迁移）
+      - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
+      - ../database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/03-import-backup.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
     networks:
       - langhack-network
     depends_on:
@@ -115,6 +120,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       TUTOR_API_BASE_URL: ${TUTOR_API_BASE_URL}
+      # 备份
+      BACKUP_DIR: /app/backups
+      MYSQLDUMP_PATH: mysqldump
       # CORS
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
       # 腾讯翻译（可选）
@@ -125,6 +133,7 @@ services:
     volumes:
       - app_logs:/app/logs
       - app_uploads:/app/uploads
+      - app_backups:/app/backups
     networks:
       - langhack-network
     depends_on:
@@ -148,7 +157,7 @@ services:
       context: ../frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: /api
+        VITE_API_BASE_URL: ""
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
     container_name: langhack-frontend
     restart: unless-stopped
@@ -182,4 +191,6 @@ volumes:
   app_logs:
     driver: local
   app_uploads:
+    driver: local
+  app_backups:
     driver: local

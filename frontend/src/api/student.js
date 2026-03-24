@@ -306,6 +306,15 @@ export function submitStudyResult(data) {
   })
 }
 
+// 获取MCQ测验干扰项（从ECDICT词库生成）
+export function getQuizDistractors(word, count = 3) {
+  return request({
+    url: '/api/student/words/quiz-options',
+    method: 'get',
+    params: { word, count }
+  })
+}
+
 // ==================== 新增的生词本和WordNet相关API ====================
 
 // 获取生词本（更新版API）
@@ -490,6 +499,7 @@ const studentApi = {
   getTodayLearningStats,
   startStudySession,
   submitStudyResult,
+  getQuizDistractors,
   // 新增的API
   getVocabulary,
   checkVocabularyStatus,

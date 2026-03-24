@@ -225,14 +225,14 @@
 
         <div class="word-card-v3">
           <!-- 阶段一：认读选择 -->
-          <div class="recognition-phase" v-if="reviewPhase === PHASE.RECOGNITION">
+          <div class="recognition-phase" v-if="reviewPhase === PHASE.RECOGNITION && currentReviewWord">
             <h2 class="word">{{ currentReviewWord.word }}</h2>
             <div class="mcq-options">
-              <el-button 
-                v-for="(option, index) in mcqOptions" 
+              <el-button
+                v-for="(option, index) in mcqOptions"
                 :key="index"
                 class="mcq-option-btn"
-                :class="{ 
+                :class="{
                   'is-correct': isAnswering && option === currentReviewWord.definition,
                   'is-incorrect': isAnswering && selectedOption === option && option !== currentReviewWord.definition
                 }"
@@ -240,9 +240,9 @@
               >
                 {{ option }}
               </el-button>
-              <el-button 
-                type="info" 
-                plain 
+              <el-button
+                type="info"
+                plain
                 class="mcq-option-btn unknown-btn"
                 @click="handleUnknown"
               >
@@ -252,7 +252,7 @@
           </div>
 
           <!-- 阶段二：强化记忆 & 调整 -->
-          <div class="reinforcement-phase" v-else>
+          <div class="reinforcement-phase" v-else-if="currentReviewWord">
             <h2 class="word">{{ currentReviewWord.word }}</h2>
             <p class="pronunciation">{{ currentReviewWord.pronunciation }}</p>
             <div class="definition">{{ currentReviewWord.definition }}</div>
@@ -322,7 +322,8 @@ import {
   getWordDetail,
   updateMasteryLevel,
   addToVocabulary as addToVocabularyAPI,
-  batchOperateVocabulary
+  batchOperateVocabulary,
+  getQuizDistractors
 } from '@/api/student'
 
 const router = useRouter()
@@ -358,6 +359,7 @@ const selectedWord = ref(null)
 const reviewDialogVisible = ref(false)
 const reviewWords = ref([])
 const currentReviewIndex = ref(0)
+const currentReviewWord = computed(() => reviewWords.value[currentReviewIndex.value] || null)
 const showAnswer = ref(false)
 
 // 复习相关
@@ -589,7 +591,7 @@ const startReview = async () => {
     reviewPhase.value = PHASE.RECOGNITION
     selectedOption.value = null
     isAnswering.value = false
-    generateMCQOptions()
+    await generateMCQOptions()
 
 
     // 重置复习统计
@@ -606,17 +608,56 @@ const startReview = async () => {
   }
 }
 
-// 生成多选题选项
-const generateMCQOptions = () => {
+// 生成多选题选项（从ECDICT词库获取高质量干扰项，降级到本地生词本）
+const generateMCQOptions = async () => {
   const currentWord = reviewWords.value[currentReviewIndex.value]
   if (!currentWord) return
 
-  // 从生词本中抽取其他单词作为干扰项（排除无 definition 的单词）
+  try {
+    // 1. 从后端ECDICT获取干扰项
+    const res = await getQuizDistractors(currentWord.word, 3)
+    let distractors = (res && Array.isArray(res.data) ? res.data : [])
+      .filter(d => d && d !== currentWord.definition)
+
+    // 2. 如果后端返回不足3个，从本地生词本补充
+    if (distractors.length < 3) {
+      const localDistractors = vocabulary.value
+        .filter(w => (w.wordId || w.id) !== (currentWord.wordId || currentWord.id) && w.definition)
+        .map(w => w.definition)
+        .filter(d => !distractors.includes(d) && d !== currentWord.definition)
+      // Fisher-Yates 抽样补充
+      const available = [...localDistractors]
+      for (let i = available.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [available[i], available[j]] = [available[j], available[i]]
+      }
+      distractors = distractors.concat(available.slice(0, 3 - distractors.length))
+    }
+
+    // 3. 合并正确答案 + Fisher-Yates 打乱
+    const options = [currentWord.definition, ...distractors.slice(0, 3)]
+    const shuffled = [...options]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    }
+    mcqOptions.value = shuffled
+  } catch (error) {
+    console.warn('ECDICT干扰项获取失败，降级到本地生词本:', error)
+    // 降级：使用本地生词本逻辑
+    fallbackGenerateMCQOptions()
+  }
+}
+
+// 降级方案：从本地生词本生成MCQ选项
+const fallbackGenerateMCQOptions = () => {
+  const currentWord = reviewWords.value[currentReviewIndex.value]
+  if (!currentWord) return
+
   const distractors = vocabulary.value
     .filter(w => (w.wordId || w.id) !== (currentWord.wordId || currentWord.id) && w.definition)
     .map(w => w.definition)
 
-  // 使用 Fisher-Yates 算法随机抽取3个干扰项（避免 Math.random() 排序缺陷）
   const shuffledDistractors = []
   const availableDistractors = [...distractors]
   for (let i = 0; i < Math.min(3, availableDistractors.length); i++) {
@@ -625,7 +666,6 @@ const generateMCQOptions = () => {
     availableDistractors.splice(idx, 1)
   }
 
-  // 合并正确答案并使用 Fisher-Yates 算法打乱顺序
   const options = [currentWord.definition, ...shuffledDistractors]
   const shuffled = [...options]
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -750,7 +790,7 @@ const submitReview = async (quality) => {
 
   // 检查是否完成复习
   if (currentReviewIndex.value < reviewWords.value.length) {
-    generateMCQOptions()
+    await generateMCQOptions()
   } else {
     reviewWords.value = []
     loadVocabulary() // 刷新列表

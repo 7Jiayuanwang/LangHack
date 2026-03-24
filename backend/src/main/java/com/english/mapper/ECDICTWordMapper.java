@@ -31,4 +31,27 @@ public interface ECDICTWordMapper extends BaseMapper<ECDICTWord> {
      */
     @Select("SELECT COUNT(*) FROM ecdict_words")
     long getTotalCount();
+
+    /**
+     * 随机获取干扰项（全库）
+     * 用于MCQ测验生成干扰选项
+     */
+    @Select("SELECT id, word, definition, translation, pos FROM ecdict_words " +
+            "WHERE translation IS NOT NULL AND translation != '' " +
+            "AND id != #{excludeId} " +
+            "ORDER BY RAND() LIMIT #{count}")
+    List<ECDICTWord> findRandomDistractors(@Param("excludeId") Long excludeId,
+                                            @Param("count") int count);
+
+    /**
+     * 按词性随机获取干扰项
+     * 优先从相同词性中抽取，提高干扰项质量
+     */
+    @Select("SELECT id, word, definition, translation, pos FROM ecdict_words " +
+            "WHERE translation IS NOT NULL AND translation != '' " +
+            "AND pos = #{pos} AND id != #{excludeId} " +
+            "ORDER BY RAND() LIMIT #{count}")
+    List<ECDICTWord> findRandomDistractorsByPos(@Param("pos") String pos,
+                                                 @Param("excludeId") Long excludeId,
+                                                 @Param("count") int count);
 }

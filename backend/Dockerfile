@@ -21,16 +21,17 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# 安装 curl（docker-compose healthcheck 使用）和时区数据
-RUN apk add --no-cache curl tzdata \
+# 安装 curl（healthcheck）、tzdata（时区）、mysql-client + mariadb-connector-c（mysqldump 备份/恢复）
+# mariadb-connector-c 提供 caching_sha2_password 插件，使 MariaDB 客户端兼容 MySQL 8.0
+RUN apk add --no-cache curl tzdata mysql-client mariadb-connector-c \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone
 
 # 从构建阶段复制可执行 jar
 COPY --from=builder /app/target/*.jar app.jar
 
-# 创建日志和上传目录
-RUN mkdir -p /app/logs /app/uploads
+# 创建日志、上传和备份目录
+RUN mkdir -p /app/logs /app/uploads /app/backups
 
 # JVM 内存调优（适用于 4 核 8GB 服务器）
 # -Xms1g          : 初始堆大小 1GB，减少启动时扩容开销

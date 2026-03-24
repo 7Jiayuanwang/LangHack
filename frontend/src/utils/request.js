@@ -105,6 +105,8 @@ request.interceptors.response.use(
       }
     }
     if (error.response) {
+      const reqUrl = error.config?.url || 'unknown'
+      console.warn(`[HTTP ${error.response.status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
       switch (error.response.status) {
         case 401:
           message = '未授权，请重新登录'
@@ -112,6 +114,7 @@ request.interceptors.response.use(
           break
         case 403:
           message = '拒绝访问'
+          console.error('[403 Debug] URL:', reqUrl, 'Response:', JSON.stringify(error.response?.data))
           break
         case 404:
           message = '请求地址不存在'

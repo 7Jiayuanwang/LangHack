@@ -75,7 +75,7 @@ public class AdminController {
     private ArticleVersionService articleVersionService;
 
     @GetMapping("/users")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Object>> getUsers(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -113,7 +113,7 @@ public class AdminController {
     }
 
     @PostMapping("/users")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<String> createUser(@RequestBody User user) {
         try {
             if (user.getUsername() == null || user.getUsername().trim().isEmpty()) {
@@ -144,7 +144,7 @@ public class AdminController {
     }
 
     @PutMapping("/users/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<String> updateUser(@PathVariable Long id, @RequestBody User user) {
         try {
             user.setId(id);
@@ -176,7 +176,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/users/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<String> deleteUser(@PathVariable Long id) {
         try {
             User targetUser = userService.getUserById(id);
@@ -198,7 +198,7 @@ public class AdminController {
     }
 
     @GetMapping("/users/roles")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<List<String>> getUserRoles() {
         List<String> roles = List.of("STUDENT", "TEACHER", "ADMIN", "USER");
         return Result.success(roles);
@@ -1134,7 +1134,7 @@ public class AdminController {
      * Excel格式: 序号 | 班级 | 学号 | 姓名 | ...
      */
     @PostMapping("/users/import")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Object>> importUsers(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
             return Result.error("上传文件为空");
