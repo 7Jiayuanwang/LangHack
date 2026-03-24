@@ -120,14 +120,14 @@ describe('Monitoring.vue', () => {
       const wrapper = mountComponent()
       expect(wrapper.find('.stats-cards').exists()).toBe(true)
       const statCards = wrapper.findAll('.stat-card')
-      expect(statCards.length).toBe(6)
+      expect(statCards.length).toBe(7)
     })
 
     it('renders health bars section', () => {
       const wrapper = mountComponent()
       expect(wrapper.find('.health-bars').exists()).toBe(true)
       const healthItems = wrapper.findAll('.health-item')
-      expect(healthItems.length).toBe(4)
+      expect(healthItems.length).toBe(5)
     })
 
     it('renders AI service cards section when data is loaded', async () => {

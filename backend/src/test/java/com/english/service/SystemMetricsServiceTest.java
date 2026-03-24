@@ -6,9 +6,12 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import javax.sql.DataSource;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -17,16 +20,26 @@ import static org.junit.jupiter.api.Assertions.*;
  * Unit tests for SystemMetricsService.
  *
  * Implementation facts:
- * - getSystemMetrics() returns a LinkedHashMap with keys: jvm, cpu, threads, disk, uptimeMs
+ * - getSystemMetrics() returns a LinkedHashMap with keys: jvm, cpu, dbPool, redis, disk, uptimeMs
  * - JVM heap metrics from ManagementFactory.getMemoryMXBean()
  * - CPU metrics from ManagementFactory.getOperatingSystemMXBean() (com.sun cast)
- * - Thread metrics from ManagementFactory.getThreadMXBean()
+ * - DB connection pool metrics from HikariDataSource (master + slave)
+ * - Redis metrics from StringRedisTemplate connection info
  * - Disk metrics from File(backupDir) if directory exists
  * - Uptime from ManagementFactory.getRuntimeMXBean()
  * - All wrapped in try/catch — returns empty map on failure
  */
 @ExtendWith(MockitoExtension.class)
 class SystemMetricsServiceTest {
+
+    @Mock
+    private DataSource masterDataSource;
+
+    @Mock
+    private DataSource slaveDataSource;
+
+    @Mock
+    private StringRedisTemplate redisTemplate;
 
     @InjectMocks
     private SystemMetricsService systemMetricsService;
@@ -38,7 +51,7 @@ class SystemMetricsServiceTest {
     class GetMetricsTests {
 
         @Test
-        @DisplayName("返回包含 jvm、cpu、threads、uptimeMs 等必需键的 Map")
+        @DisplayName("返回包含 jvm、cpu、dbPool、redis、uptimeMs 等必需键的 Map")
         void getMetrics_returnsMapWithRequiredKeys() {
             // Arrange
             ReflectionTestUtils.setField(systemMetricsService, "backupDir", "./backups");
@@ -50,7 +63,8 @@ class SystemMetricsServiceTest {
             assertNotNull(metrics);
             assertTrue(metrics.containsKey("jvm"), "应包含 jvm 键");
             assertTrue(metrics.containsKey("cpu"), "应包含 cpu 键");
-            assertTrue(metrics.containsKey("threads"), "应包含 threads 键");
+            assertTrue(metrics.containsKey("dbPool"), "应包含 dbPool 键");
+            assertTrue(metrics.containsKey("redis"), "应包含 redis 键");
             assertTrue(metrics.containsKey("uptimeMs"), "应包含 uptimeMs 键");
         }
 
@@ -78,27 +92,20 @@ class SystemMetricsServiceTest {
         }
 
         @Test
-        @DisplayName("线程数大于 0")
+        @DisplayName("DB 连接池指标包含 master 和 slave")
         @SuppressWarnings("unchecked")
-        void getMetrics_threadCountGreaterThanZero() {
+        void getMetrics_dbPoolContainsMasterAndSlave() {
             // Arrange
             ReflectionTestUtils.setField(systemMetricsService, "backupDir", "./backups");
 
             // Act
             Map<String, Object> metrics = systemMetricsService.getSystemMetrics();
 
-            // Assert
-            Map<String, Object> threads = (Map<String, Object>) metrics.get("threads");
-            assertNotNull(threads, "threads 指标不应为 null");
-
-            int threadCount = (int) threads.get("count");
-            assertTrue(threadCount > 0, "线程数应 > 0, 实际值: " + threadCount);
-
-            int peakCount = (int) threads.get("peakCount");
-            assertTrue(peakCount > 0, "峰值线程数应 > 0, 实际值: " + peakCount);
-
-            int daemonCount = (int) threads.get("daemonCount");
-            assertTrue(daemonCount >= 0, "守护线程数应 >= 0, 实际值: " + daemonCount);
+            // Assert — mock DataSource 不是 HikariDataSource，所以返回空 map，但结构仍正确
+            Map<String, Object> dbPool = (Map<String, Object>) metrics.get("dbPool");
+            assertNotNull(dbPool, "dbPool 指标不应为 null");
+            assertTrue(dbPool.containsKey("master"), "应包含 master 连接池");
+            assertTrue(dbPool.containsKey("slave"), "应包含 slave 连接池");
         }
 
         @Test
