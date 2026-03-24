@@ -38,10 +38,10 @@ ask_value() {
     local input
     if [ -n "$default" ]; then
         read -rp "  ${prompt} [${default}]: " input
-        eval "$var_name=\"${input:-$default}\""
+        printf -v "$var_name" '%s' "${input:-$default}"
     else
         read -rp "  ${prompt}: " input
-        eval "$var_name=\"$input\""
+        printf -v "$var_name" '%s' "$input"
     fi
 }
 
@@ -51,10 +51,10 @@ ask_secret() {
     if [ -n "$default" ]; then
         [ ${#default} -gt 6 ] && masked="${default:0:3}***${default: -3}" || masked="***"
         read -rp "  ${prompt} [${masked}]: " input
-        eval "$var_name=\"${input:-$default}\""
+        printf -v "$var_name" '%s' "${input:-$default}"
     else
         read -rp "  ${prompt}: " input
-        eval "$var_name=\"$input\""
+        printf -v "$var_name" '%s' "$input"
     fi
 }
 
@@ -70,7 +70,7 @@ ask_choice() {
         read -rp "  选择 [${default_idx}]: " choice
         choice="${choice:-$default_idx}"
         if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#options[@]} ]; then
-            eval "$var_name=$choice"; return
+            printf -v "$var_name" '%d' "$choice"; return
         fi
         echo "  [ERROR] 请输入 1-${#options[@]}"
     done
@@ -83,8 +83,8 @@ ask_yn() {
         read -rp "  ${question} [${hint}]: " answer
         answer="${answer:-$default}"
         case "${answer,,}" in
-            y|yes) eval "$var_name=true"; return ;;
-            n|no)  eval "$var_name=false"; return ;;
+            y|yes) printf -v "$var_name" '%s' "true";  return ;;
+            n|no)  printf -v "$var_name" '%s' "false"; return ;;
         esac
     done
 }
@@ -92,7 +92,7 @@ ask_yn() {
 load_env_value() {
     local key="$1" default="$2" file="${3:-$DOCKER_DIR/.env}"
     if [ -f "$file" ]; then
-        local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d'=' -f2-)
+        local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2-)
         [ -n "$val" ] && echo "$val" && return
     fi
     echo "$default"
@@ -105,8 +105,8 @@ is_placeholder() {
 # 检查端口是否可用（未被宿主机或 Docker 容器占用）
 check_port() {
     local port="$1"
-    # 检查 Docker 容器端口占用
-    if docker ps --format '{{.Ports}}' 2>/dev/null | grep -q "0\.0\.0\.0:${port}->"; then
+    # 检查 Docker 容器端口占用（兼容 0.0.0.0 和 127.0.0.1 绑定）
+    if docker ps --format '{{.Ports}}' 2>/dev/null | grep -qE ":${port}(->|/)"; then
         return 1
     fi
     # 检查宿主机端口占用
@@ -123,7 +123,7 @@ ask_port() {
     local prompt="$1" default="$2" var_name="$3"
     local port="$default"
     ask_value "$prompt" "$port" "$var_name"
-    eval "port=\$$var_name"
+    port="${!var_name}"
     if ! check_port "$port"; then
         echo "  [WARN] 端口 ${port} 已被占用，自动寻找可用端口..."
         local suggest=$((port + 1))
@@ -149,6 +149,10 @@ echo ""
 echo "── 步骤 1/5: 选择部署分支 ──"
 
 cd "$PROJECT_ROOT"
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    echo "[ERROR] 当前目录不在 git 仓库中，无法继续"
+    exit 1
+fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 echo "  当前分支: $CURRENT_BRANCH"
 
@@ -280,44 +284,45 @@ if [ "$SKIP_ENV" = false ]; then
         CFG_AUTO_UPDATE_PRE_BACKUP="true"
     fi
 
-    # 写入 .env
+    # 写入 .env（用 printf 逐行写入，避免 heredoc 展开密码/JWT 中的特殊字符）
     mkdir -p "$DOCKER_DIR"
-    cat > "$ENV_FILE" <<ENVEOF
-# LangHack Docker 环境配置 (由部署向导生成 $(date '+%Y-%m-%d %H:%M:%S'))
-DB_USERNAME=${CFG_DB_USERNAME}
-DB_PASSWORD=${CFG_DB_PASSWORD}
-JWT_SECRET=${CFG_JWT_SECRET}
-$([ -n "$CFG_REDIS_PASSWORD" ] && echo "REDIS_PASSWORD=${CFG_REDIS_PASSWORD}" || echo "# REDIS_PASSWORD=")
-$([ -n "$CFG_OPENROUTER_KEY" ] && echo "OPENROUTER_API_KEY=${CFG_OPENROUTER_KEY}" || echo "# OPENROUTER_API_KEY=")
-$([ -n "$CFG_HIAGENT_KEY" ] && echo "HIAGENT_API_KEY=${CFG_HIAGENT_KEY}" || echo "# HIAGENT_API_KEY=")
-$([ -n "$CFG_TENCENT_ID" ] && echo "TENCENT_SECRET_ID=${CFG_TENCENT_ID}" || echo "# TENCENT_SECRET_ID=")
-$([ -n "$CFG_TENCENT_KEY" ] && echo "TENCENT_SECRET_KEY=${CFG_TENCENT_KEY}" || echo "# TENCENT_SECRET_KEY=")
-MYSQL_ROOT_PASSWORD=${CFG_DB_PASSWORD}
-MYSQL_DATABASE=english_learning
-MYSQL_REPLICATION_USER=replicator
-MYSQL_REPLICATION_PASSWORD=${CFG_DB_PASSWORD}_repl
-DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
-DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
-DB_SLAVE_USERNAME=${CFG_DB_USERNAME}
-DB_SLAVE_PASSWORD=${CFG_DB_PASSWORD}
-REDIS_HOST=redis
-APP_CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:${CFG_PORT_FE}
-TUTOR_API_BASE_URL=http://localhost:8000/api/tutor
-VITE_TUTOR_API_BASE_URL=/tutor
-PORT_FRONTEND=${CFG_PORT_FE}
-PORT_BACKEND=${CFG_PORT_BE}
-PORT_MYSQL=${CFG_PORT_DB}
-PORT_MYSQL_SLAVE=$((CFG_PORT_DB + 1))
-PORT_REDIS=6379
-BACKUP_ENABLED=${CFG_BACKUP_ENABLED}
-BACKUP_DIR=${CFG_BACKUP_DIR}
-BACKUP_RETENTION_DAYS=${CFG_BACKUP_RETENTION}
-AUTO_UPDATE_ENABLED=${CFG_AUTO_UPDATE_ENABLED}
-AUTO_UPDATE_CRON=${CFG_AUTO_UPDATE_CRON}
-AUTO_UPDATE_BRANCH=${CFG_AUTO_UPDATE_BRANCH}
-AUTO_UPDATE_MAINTENANCE=${CFG_AUTO_UPDATE_MAINTENANCE}
-AUTO_UPDATE_PRE_BACKUP=${CFG_AUTO_UPDATE_PRE_BACKUP}
-ENVEOF
+    CFG_PORT_SLAVE=$((CFG_PORT_DB + 1))
+    {
+        printf '# LangHack Docker 环境配置 (由部署向导生成 %s)\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+        printf 'DB_USERNAME=%s\n'        "$CFG_DB_USERNAME"
+        printf 'DB_PASSWORD=%s\n'        "$CFG_DB_PASSWORD"
+        printf 'JWT_SECRET=%s\n'         "$CFG_JWT_SECRET"
+        [ -n "$CFG_REDIS_PASSWORD" ]  && printf 'REDIS_PASSWORD=%s\n'      "$CFG_REDIS_PASSWORD"  || printf '# REDIS_PASSWORD=\n'
+        [ -n "$CFG_OPENROUTER_KEY" ]  && printf 'OPENROUTER_API_KEY=%s\n'  "$CFG_OPENROUTER_KEY"  || printf '# OPENROUTER_API_KEY=\n'
+        [ -n "$CFG_HIAGENT_KEY" ]     && printf 'HIAGENT_API_KEY=%s\n'     "$CFG_HIAGENT_KEY"     || printf '# HIAGENT_API_KEY=\n'
+        [ -n "$CFG_TENCENT_ID" ]      && printf 'TENCENT_SECRET_ID=%s\n'   "$CFG_TENCENT_ID"      || printf '# TENCENT_SECRET_ID=\n'
+        [ -n "$CFG_TENCENT_KEY" ]     && printf 'TENCENT_SECRET_KEY=%s\n'  "$CFG_TENCENT_KEY"     || printf '# TENCENT_SECRET_KEY=\n'
+        printf 'MYSQL_ROOT_PASSWORD=%s\n'          "$CFG_DB_PASSWORD"
+        printf 'MYSQL_DATABASE=english_learning\n'
+        printf 'MYSQL_REPLICATION_USER=replicator\n'
+        printf 'MYSQL_REPLICATION_PASSWORD=%s_repl\n' "$CFG_DB_PASSWORD"
+        printf 'DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
+        printf 'DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
+        printf 'DB_SLAVE_USERNAME=%s\n'  "$CFG_DB_USERNAME"
+        printf 'DB_SLAVE_PASSWORD=%s\n'  "$CFG_DB_PASSWORD"
+        printf 'REDIS_HOST=redis\n'
+        printf 'APP_CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:%s\n' "$CFG_PORT_FE"
+        printf 'TUTOR_API_BASE_URL=http://localhost:8000/api/tutor\n'
+        printf 'VITE_TUTOR_API_BASE_URL=/tutor\n'
+        printf 'PORT_FRONTEND=%s\n'      "$CFG_PORT_FE"
+        printf 'PORT_BACKEND=%s\n'       "$CFG_PORT_BE"
+        printf 'PORT_MYSQL=%s\n'         "$CFG_PORT_DB"
+        printf 'PORT_MYSQL_SLAVE=%s\n'   "$CFG_PORT_SLAVE"
+        printf 'PORT_REDIS=6379\n'
+        printf 'BACKUP_ENABLED=%s\n'     "$CFG_BACKUP_ENABLED"
+        printf 'BACKUP_DIR=%s\n'         "$CFG_BACKUP_DIR"
+        printf 'BACKUP_RETENTION_DAYS=%s\n' "$CFG_BACKUP_RETENTION"
+        printf 'AUTO_UPDATE_ENABLED=%s\n'     "$CFG_AUTO_UPDATE_ENABLED"
+        printf 'AUTO_UPDATE_CRON=%s\n'        "$CFG_AUTO_UPDATE_CRON"
+        printf 'AUTO_UPDATE_BRANCH=%s\n'      "$CFG_AUTO_UPDATE_BRANCH"
+        printf 'AUTO_UPDATE_MAINTENANCE=%s\n' "$CFG_AUTO_UPDATE_MAINTENANCE"
+        printf 'AUTO_UPDATE_PRE_BACKUP=%s\n'  "$CFG_AUTO_UPDATE_PRE_BACKUP"
+    } > "$ENV_FILE"
     echo "  [OK] 配置已写入 $ENV_FILE"
 fi
 
@@ -381,21 +386,25 @@ CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
     echo "[INFO] 切换分支..."
     git diff --quiet 2>/dev/null || git stash push -m "deploy-$(date +%s)" --quiet
-    git checkout "$TARGET_BRANCH" --quiet
-    git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || true
+    if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
+        echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
+        exit 1
+    fi
+    git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || \
+        echo "[WARN] 无法从远程拉取 $TARGET_BRANCH，使用本地版本"
 fi
 
 echo "[INFO] 版本: $(git rev-parse --short HEAD)"
 
 cd "$DOCKER_DIR"
 
-# 服务列表
+# 服务列表 & 预期健康服务数
 case $SVC_MODE in
-    1) SVCS="" ;;
-    2) SVCS="backend frontend" ;;
-    3) SVCS="backend" ;;
-    4) SVCS="frontend" ;;
-    5) SVCS="mysql-master mysql-slave redis" ;;
+    1) SVCS="";                              expected_healthy=5 ;;
+    2) SVCS="backend frontend";              expected_healthy=5 ;;  # 含已运行的基础设施
+    3) SVCS="backend";                       expected_healthy=4 ;;  # backend + mysql×2 + redis
+    4) SVCS="frontend";                      expected_healthy=2 ;;  # frontend + backend
+    5) SVCS="mysql-master mysql-slave redis"; expected_healthy=3 ;;
 esac
 
 # 构建
@@ -416,16 +425,22 @@ echo "[INFO] 启动服务..."
 [ -n "$SVCS" ] && docker compose up -d $SVCS || docker compose up -d
 
 # 健康等待（快速失败：发现 unhealthy 立即报告）
-echo "[INFO] 等待服务就绪..."
+echo "[INFO] 等待服务就绪 (预期 ${expected_healthy} 个 healthy)..."
 timeout=180; elapsed=0; deploy_ok=false
 while [ $elapsed -lt $timeout ]; do
-    ps_out=$(docker compose ps 2>/dev/null)
-    unhealthy=$(echo "$ps_out" | grep -c "unhealthy" || true)
-    healthy=$(echo   "$ps_out" | grep -c "(healthy)"  || true)
+    # 用 --format 获取结构化状态，避免不同 compose 版本输出格式差异
+    statuses=$(docker compose ps --format '{{.Status}}' 2>/dev/null || true)
+    if [ -z "$statuses" ]; then
+        sleep 5; elapsed=$((elapsed + 5)); continue
+    fi
+    unhealthy=$(echo "$statuses" | grep -c "unhealthy" || true)
+    healthy=$(echo   "$statuses" | grep -c "healthy"   || true)
+    # 排除 unhealthy 中被 healthy 误计的行（"unhealthy" 包含 "healthy"）
+    healthy=$((healthy - unhealthy))
     if [ "$unhealthy" -gt 0 ]; then
         echo ""
         echo "[ERROR] 有服务启动失败（unhealthy），终止等待："
-        echo "$ps_out"
+        docker compose ps
         echo ""
         echo "─── 失败服务日志 ───"
         docker compose ps --format '{{.Name}} {{.Status}}' 2>/dev/null \
@@ -436,9 +451,9 @@ while [ $elapsed -lt $timeout ]; do
             done
         break
     fi
-    [ "$healthy" -ge 5 ] && deploy_ok=true && break
+    [ "$healthy" -ge "$expected_healthy" ] && deploy_ok=true && break
     sleep 5; elapsed=$((elapsed + 5))
-    printf "  等待中... %ds (healthy: %d/5)\r" "$elapsed" "$healthy"
+    printf "  等待中... %ds (healthy: %d/%d)\r" "$elapsed" "$healthy" "$expected_healthy"
 done
 echo ""
 
@@ -466,9 +481,16 @@ if [ "${CFG_AUTO_UPDATE_ENABLED:-}" = "true" ] || [ "$(load_env_value "AUTO_UPDA
     LOG_PATH="/var/log/langhack-update.log"
     CRON_CMD="$AU_CRON $SCRIPT_PATH -b $AU_BRANCH >> $LOG_PATH 2>&1"
 
-    ( crontab -l 2>/dev/null | grep -v "auto-update.sh" || true; echo "$CRON_CMD" ) | crontab - 2>/dev/null && \
-        echo "[OK] 自动更新已配置 (crontab: $AU_CRON)" || \
+    # 原子写法：先写临时文件，再整体替换，避免管道中断导致 crontab 被清空
+    CRON_TMP=$(mktemp)
+    crontab -l 2>/dev/null | grep -v "auto-update.sh" > "$CRON_TMP" || true
+    echo "$CRON_CMD" >> "$CRON_TMP"
+    if crontab "$CRON_TMP" 2>/dev/null; then
+        echo "[OK] 自动更新已配置 (crontab: $AU_CRON)"
+    else
         echo "[WARN] crontab 设置失败，请手动添加: $CRON_CMD"
+    fi
+    rm -f "$CRON_TMP"
 fi
 
 echo ""
