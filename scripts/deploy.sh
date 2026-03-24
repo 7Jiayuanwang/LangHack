@@ -436,7 +436,7 @@ while [ $elapsed -lt $timeout ]; do
             done
         break
     fi
-    [ "$healthy" -ge 4 ] && deploy_ok=true && break
+    [ "$healthy" -ge 5 ] && deploy_ok=true && break
     sleep 5; elapsed=$((elapsed + 5))
     printf "  等待中... %ds (healthy: %d/5)\r" "$elapsed" "$healthy"
 done
