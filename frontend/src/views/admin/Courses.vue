@@ -12,7 +12,7 @@
       <div class="search-bar">
         <el-form :inline="true" :model="searchForm" class="search-form">
           <el-form-item label="状态">
-            <el-select v-model="searchForm.status" placeholder="请选择" clearable>
+            <el-select v-model="searchForm.status" placeholder="请选择" clearable style="width: 120px">
               <el-option label="启用" value="ACTIVE" />
               <el-option label="禁用" value="INACTIVE" />
             </el-select>
@@ -21,7 +21,7 @@
             <el-input v-model="searchForm.keyword" placeholder="课程名称/描述" clearable />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="loadCourses">搜索</el-button>
+            <el-button type="primary" @click="handleSearch">搜索</el-button>
             <el-button @click="resetSearch">重置</el-button>
           </el-form-item>
         </el-form>
@@ -196,6 +196,11 @@ const loadCourses = async () => {
   } catch (error) {
     ElMessage.error('加载课程列表失败')
   }
+}
+
+const handleSearch = () => {
+  pagination.current = 1
+  loadCourses()
 }
 
 const resetSearch = () => {

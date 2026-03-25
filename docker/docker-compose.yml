@@ -1,5 +1,14 @@
 name: LangHack
 
+# ─────────────────────────────────────────────
+# 全局日志配置（防止日志无限增长耗尽磁盘）
+# ─────────────────────────────────────────────
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
 
   # ─────────────────────────────────────────────
@@ -9,6 +18,7 @@ services:
     image: mysql:8.0
     container_name: langhack-mysql-master
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
@@ -48,6 +58,7 @@ services:
     image: mysql:8.0
     container_name: langhack-mysql-slave
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
@@ -86,6 +97,7 @@ services:
     image: redis:6-alpine
     container_name: langhack-redis
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
@@ -119,6 +131,7 @@ services:
       dockerfile: Dockerfile
     container_name: langhack-backend
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
@@ -152,6 +165,10 @@ services:
       # 腾讯翻译（可选）
       TENCENT_SECRET_ID: ${TENCENT_SECRET_ID:-}
       TENCENT_SECRET_KEY: ${TENCENT_SECRET_KEY:-}
+      # 腾讯 Hunyuan 模型（SiliconFlow 托管）
+      TENCENT_HUNYUAN_API_URL: ${TENCENT_HUNYUAN_API_URL}
+      TENCENT_HUNYUAN_API_KEY: ${TENCENT_HUNYUAN_API_KEY}
+      TENCENT_HUNYUAN_MODEL: ${TENCENT_HUNYUAN_MODEL}
     ports:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:
@@ -184,6 +201,7 @@ services:
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
     container_name: langhack-frontend
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:

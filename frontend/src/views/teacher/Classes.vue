@@ -11,7 +11,6 @@
       <!-- 班级列表 -->
       <div class="table-wrapper">
       <el-table :data="classes" stripe>
-        <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="班级名称" min-width="150" />
         <el-table-column label="所属课程" min-width="150">
           <template #default="scope">
@@ -132,7 +131,6 @@
       </div>
       <div class="table-wrapper">
       <el-table :data="currentClassStudents" stripe>
-        <el-table-column prop="id" label="ID" width="80" />
         <el-table-column label="用户名">
           <template #default="scope">
             {{ scope.row.student?.username || '-' }}

@@ -93,11 +93,16 @@
             </div>
           </template>
           <div class="activity-list">
+            <template v-if="recentActivities.length">
             <div v-for="activity in recentActivities" :key="activity.id" class="activity-item">
               <div class="activity-content">
                 <p>{{ activity.description }}</p>
                 <span class="activity-time">{{ activity.time }}</span>
               </div>
+            </div>
+            </template>
+            <div v-else class="empty-activity">
+              <p style="color: #999; text-align: center; padding: 20px 0;">暂无活动数据</p>
             </div>
           </div>
         </el-card>
@@ -125,23 +130,7 @@ const userStats = reactive({
   student: 0
 })
 
-const recentActivities = ref([
-  {
-    id: 1,
-    description: '新用户 "张三" 注册成功',
-    time: '2024-01-15 10:30:00'
-  },
-  {
-    id: 2,
-    description: '创建新课程 "商务英语"',
-    time: '2024-01-15 09:15:00'
-  },
-  {
-    id: 3,
-    description: '用户 "李四" 完成单元学习',
-    time: '2024-01-14 16:45:00'
-  }
-])
+const recentActivities = ref([])
 
 const loadDashboardData = async () => {
   try {

@@ -15,7 +15,7 @@
       <div class="search-bar">
         <el-form :inline="true" :model="searchForm" class="search-form">
           <el-form-item label="角色">
-            <el-select v-model="searchForm.role" placeholder="请选择" clearable>
+            <el-select v-model="searchForm.role" placeholder="请选择" clearable style="width: 140px">
               <el-option label="管理员" value="ADMIN" />
               <el-option label="运维" value="OPS" />
               <el-option label="教师" value="TEACHER" />
@@ -27,7 +27,7 @@
             <el-input v-model="searchForm.keyword" placeholder="用户名/姓名/邮箱" clearable />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="loadUsers">搜索</el-button>
+            <el-button type="primary" @click="handleSearch">搜索</el-button>
             <el-button @click="resetSearch">重置</el-button>
           </el-form-item>
         </el-form>
@@ -333,6 +333,11 @@ const loadUsers = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handleSearch = () => {
+  pagination.current = 1
+  loadUsers()
 }
 
 const resetSearch = () => {

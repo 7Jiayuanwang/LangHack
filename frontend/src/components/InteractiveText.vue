@@ -390,17 +390,25 @@ const translateSelectedText = async () => {
   translatedText.value = ''
 
   try {
-    const result = await request({
-      url: '/api/translate/auto',
+    const token = localStorage.getItem('token')
+    const response = await fetch('/api/translate/auto', {
       method: 'POST',
-      data: { text: selectedText.value }
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ text: selectedText.value })
     })
 
-    if (result && typeof result === 'object' && result.code === 200) {
-      translatedText.value = result.data || '翻译结果为空'
-      ElMessage.success('翻译成功')
+    if (response.ok) {
+      const result = await response.json()
+      if (result.code === 200) {
+        translatedText.value = result.data || '翻译结果为空'
+      } else {
+        translatedText.value = '翻译服务暂时不可用，请稍后重试'
+      }
     } else {
-      translatedText.value = '翻译服务暂时不可用，请稍后重试'
+      translatedText.value = '翻译服务暂时不可用'
     }
   } catch (error) {
     console.error('翻译失败:', error)

@@ -57,6 +57,13 @@
           </template>
         </el-dropdown>
 
+        <el-select v-model="reviewBatchSize" size="small" style="width: 100px">
+          <el-option :value="10" label="10个/组" />
+          <el-option :value="20" label="20个/组" />
+          <el-option :value="30" label="30个/组" />
+          <el-option :value="50" label="50个/组" />
+        </el-select>
+
         <el-button type="primary" round class="start-btn" @click="startReview" :disabled="vocabulary.length === 0">
           <el-icon><VideoPlay /></el-icon> 开始复习
         </el-button>
@@ -73,14 +80,14 @@
         v-for="item in vocabulary"
         :key="item.id"
         class="word-card-v2"
-        :class="{ 'card-selected': selectedWords.includes(item.id) }"
+        :class="{ 'card-selected': selectedWords.includes(item.wordId || item.id) }"
         @click="showWordDetail(item)"
       >
         <div class="card-selection" @click.stop>
           <el-checkbox
             v-model="selectedWords"
-            :label="item.id"
-            @change="val => handleItemSelect(item.id, val)"
+            :label="item.wordId || item.id"
+            @change="val => handleItemSelect(item.wordId || item.id, val)"
           ><span></span></el-checkbox>
         </div>
 
@@ -105,7 +112,8 @@
 
           <div class="card-footer">
             <div class="review-info">
-              复习 {{ item.reviewCount }} 次
+              <span>复习 {{ item.reviewCount }} 次</span>
+              <span v-if="item.nextReviewTime && isWordOverdue(item)" class="due-badge">需复习</span>
             </div>
             <div class="footer-actions">
               <el-button 
@@ -179,7 +187,7 @@
           </div>
         </div>
 
-        <div class="learning-stats" v-if="selectedWord.learningStats">
+        <div class="learning-stats" v-if="selectedWord.reviewCount !== undefined">
           <h4>学习统计</h4>
           <div class="stats-grid">
             <div class="stat-item">
@@ -219,7 +227,14 @@
     <el-dialog v-model="reviewDialogVisible" title="生词复习" width="min(800px, 96vw)" :close-on-click-modal="false" @close="onReviewDialogClose">
       <div class="review-session" v-if="reviewWords.length > 0">
         <div class="review-progress">
-          <span>进度：{{ currentReviewIndex + 1 }} / {{ reviewWords.length }}</span>
+          <div class="progress-info">
+            <span>进度：{{ currentReviewIndex + 1 }} / {{ reviewWords.length }}</span>
+            <span v-if="currentReviewWord?.nextReviewTime" class="review-schedule-hint">
+              <template v-if="isWordOverdue(currentReviewWord)">需要复习</template>
+              <template v-else>提前复习</template>
+            </span>
+            <span v-else class="review-schedule-hint">首次复习</span>
+          </div>
           <el-progress :percentage="reviewProgress" />
         </div>
 
@@ -278,22 +293,38 @@
       </div>
 
       <div class="review-complete" v-else>
-        <h3>复习完成！</h3>
+        <h3>{{ reviewFinishedAll ? '全部复习完成！' : '本组复习完成！' }}</h3>
         <div class="review-summary">
           <div class="summary-item">
-            <span>本次复习总数：</span>
-            <strong>{{ reviewSummary.totalWords }}</strong>
+            <span>本次复习：</span>
+            <strong>{{ reviewSummary.totalWords }} 个</strong>
           </div>
           <div class="summary-item">
-            <span>平均质量评分：</span>
-            <strong :class="getScoreClass(reviewSummary.averageScore)">{{ reviewSummary.averageScore.toFixed(1) }}</strong>
+            <span>正确：</span>
+            <strong class="get-score-known">{{ reviewSummary.correctCount }} 个</strong>
           </div>
           <div class="summary-item">
-            <span>已优化复习计划：</span>
-            <strong class="get-score-known">SM-2 算法已生效</strong>
+            <span>错误：</span>
+            <strong :class="reviewSummary.incorrectCount > 0 ? 'get-score-unknown' : ''">{{ reviewSummary.incorrectCount }} 个</strong>
+          </div>
+          <div class="summary-item">
+            <span>正确率：</span>
+            <strong :class="getScoreClass(reviewAccuracy)">{{ reviewAccuracy }}%</strong>
+          </div>
+          <div class="summary-item" v-if="!reviewFinishedAll">
+            <span>剩余待复习：</span>
+            <strong>{{ remainingWords }} 个</strong>
           </div>
         </div>
-        <el-button type="primary" @click="reviewDialogVisible = false">完成</el-button>
+        <div class="review-actions">
+          <el-button v-if="!reviewFinishedAll" type="primary" @click="continueNextBatch">
+            继续下一组
+          </el-button>
+          <el-button :type="reviewFinishedAll ? 'primary' : 'default'"
+                     @click="reviewDialogVisible = false">
+            {{ reviewFinishedAll ? '完成' : '休息一下' }}
+          </el-button>
+        </div>
       </div>
     </el-dialog>
   </div>
@@ -362,6 +393,12 @@ const currentReviewIndex = ref(0)
 const currentReviewWord = computed(() => reviewWords.value[currentReviewIndex.value] || null)
 const showAnswer = ref(false)
 
+// 批次复习相关
+const reviewBatchSize = ref(20)
+const allReviewableWords = ref([])
+const currentBatchStart = ref(0)
+const reviewFinishedAll = ref(false)
+
 // 复习相关
 const PHASE = {
   RECOGNITION: 'RECOGNITION',
@@ -371,13 +408,14 @@ const reviewPhase = ref(PHASE.RECOGNITION)
 const mcqOptions = ref([])
 const selectedOption = ref(null)
 const isAnswering = ref(false)
+const mcqWasWrong = ref(false)  // 记录本词 MCQ 阶段是否答错
 let answerTimeoutId = null  // 用于追踪答题延迟的 setTimeout
 
 
 const reviewSummary = reactive({
   totalWords: 0,
-  totalScore: 0,
-  averageScore: 0
+  correctCount: 0,
+  incorrectCount: 0
 })
 
 // 全选相关
@@ -585,20 +623,33 @@ const startReview = async () => {
       return
     }
 
-    reviewWords.value = reviewableWords
+    // 按 SM-2 nextReviewTime 排序：到期/逾期的词优先（艾宾浩斯遗忘曲线调度）
+    const now = new Date()
+    reviewableWords.sort((a, b) => {
+      const timeA = a.nextReviewTime ? new Date(a.nextReviewTime) : new Date(0)
+      const timeB = b.nextReviewTime ? new Date(b.nextReviewTime) : new Date(0)
+      // nextReviewTime 为 null 或更早的排前面（最需要复习的优先）
+      return timeA - timeB
+    })
+
+    allReviewableWords.value = reviewableWords
+    currentBatchStart.value = 0
+    reviewFinishedAll.value = false
+    reviewWords.value = reviewableWords.slice(0, reviewBatchSize.value)
     currentReviewIndex.value = 0
     showAnswer.value = false
     reviewPhase.value = PHASE.RECOGNITION
     selectedOption.value = null
     isAnswering.value = false
+    mcqWasWrong.value = false
     await generateMCQOptions()
 
 
     // 重置复习统计
     Object.assign(reviewSummary, {
       totalWords: reviewWords.value.length,
-      totalScore: 0,
-      averageScore: 0
+      correctCount: 0,
+      incorrectCount: 0
     })
 
     reviewDialogVisible.value = true
@@ -691,6 +742,7 @@ const handleMcqSelection = (option) => {
   answerTimeoutId = setTimeout(() => {
     if (option === currentWord.definition) {
       // 选对了
+      mcqWasWrong.value = false
       reviewPhase.value = PHASE.REINFORCEMENT
       showAnswer.value = true
       playAudio(currentWord)
@@ -726,6 +778,7 @@ const submitReview = async (quality) => {
 
   // 如果是从练习阶段提交（选错或不知道），进入强化阶段
   if (quality === 0 && reviewPhase.value === PHASE.RECOGNITION) {
+    mcqWasWrong.value = true
     reviewPhase.value = PHASE.REINFORCEMENT
     showAnswer.value = true
     playAudio(currentWord)
@@ -753,9 +806,12 @@ const submitReview = async (quality) => {
     return
   }
 
-  // 更新复习统计
-  reviewSummary.totalScore += quality
-  reviewSummary.averageScore = reviewSummary.totalScore / (currentReviewIndex.value + 1)
+  // 更新复习统计：以 MCQ 阶段的对错为准（选对=正确，选错/不知道=错误）
+  if (mcqWasWrong.value) {
+    reviewSummary.incorrectCount++
+  } else {
+    reviewSummary.correctCount++
+  }
 
   // 使用 SM-2 算法计算
   const sm2Result = calculateSM2(quality, {
@@ -772,9 +828,13 @@ const submitReview = async (quality) => {
 
   // 更新单词掌握程度
   try {
+    const newMasteryLevel = (quality < 3) ? 'LEARNING'
+      : (sm2Result.repetition >= 3) ? 'MASTERED'
+      : 'LEARNING'
+
     await updateMasteryLevel(wordId, {
       ...sm2Result,
-      masteryLevel: quality >= 3 ? 'MASTERED' : 'LEARNING',
+      masteryLevel: newMasteryLevel,
       isCorrect: quality >= 3
     })
   } catch (error) {
@@ -787,11 +847,15 @@ const submitReview = async (quality) => {
   reviewPhase.value = PHASE.RECOGNITION
   selectedOption.value = null
   isAnswering.value = false
+  mcqWasWrong.value = false
 
   // 检查是否完成复习
   if (currentReviewIndex.value < reviewWords.value.length) {
     await generateMCQOptions()
   } else {
+    const remaining = allReviewableWords.value.length - (currentBatchStart.value + reviewWords.value.length)
+    currentBatchStart.value += reviewWords.value.length
+    reviewFinishedAll.value = remaining <= 0
     reviewWords.value = []
     loadVocabulary() // 刷新列表
   }
@@ -891,6 +955,36 @@ const reviewProgress = computed(() => {
   return Math.round((currentReviewIndex.value / reviewWords.value.length) * 100)
 })
 
+const remainingWords = computed(() =>
+  Math.max(0, allReviewableWords.value.length - currentBatchStart.value)
+)
+
+const reviewAccuracy = computed(() => {
+  const total = reviewSummary.correctCount + reviewSummary.incorrectCount
+  if (total === 0) return 0
+  return Math.round((reviewSummary.correctCount / total) * 100)
+})
+
+const isWordOverdue = (word) => {
+  if (!word?.nextReviewTime) return true
+  return new Date(word.nextReviewTime) <= new Date()
+}
+
+const continueNextBatch = async () => {
+  const nextBatch = allReviewableWords.value.slice(
+    currentBatchStart.value,
+    currentBatchStart.value + reviewBatchSize.value
+  )
+  reviewWords.value = nextBatch
+  currentReviewIndex.value = 0
+  reviewPhase.value = PHASE.RECOGNITION
+  selectedOption.value = null
+  isAnswering.value = false
+  reviewFinishedAll.value = false
+  Object.assign(reviewSummary, { totalWords: nextBatch.length, correctCount: 0, incorrectCount: 0 })
+  await generateMCQOptions()
+}
+
 // 工具函数
 const getMasteryType = (level) => {
   const types = {
@@ -929,8 +1023,8 @@ const getDifficultyText = (difficulty) => {
 }
 
 const getScoreClass = (score) => {
-  if (score >= 4) return 'get-score-known'
-  if (score >= 2) return 'get-score-uncertain'
+  if (score >= 80) return 'get-score-known'
+  if (score >= 50) return 'get-score-uncertain'
   return 'get-score-unknown'
 }
 
@@ -1478,4 +1572,36 @@ onBeforeUnmount(() => {
 .get-score-known { color: #10b981; }
 .get-score-uncertain { color: #f59e0b; }
 .get-score-unknown { color: #ef4444; }
+
+/* Review schedule hints */
+.progress-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.review-schedule-hint {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.due-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #dc2626;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.review-info {
+  display: flex;
+  align-items: center;
+}
 </style>

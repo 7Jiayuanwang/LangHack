@@ -15,6 +15,26 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
 
 QUICK_MODE=false
+STASHED=false
+OLD_BRANCH=""
+OLD_COMMIT=""
+CRON_TMP=""
+
+# ── 信号处理 & 清理 ─────────────────────────────────
+deploy_cleanup() {
+    local exit_code=$?
+    if [ "$STASHED" = true ]; then
+        echo ""
+        echo "[提示] 部署前保存了本地修改，恢复命令: git stash pop"
+        echo "  查看: git stash list | head -1"
+    fi
+    if [ $exit_code -ne 0 ] && [ -n "$OLD_BRANCH" ]; then
+        echo "[提示] 原始分支: $OLD_BRANCH"
+    fi
+    # 清理可能残留的 crontab 临时文件
+    [ -n "$CRON_TMP" ] && rm -f "$CRON_TMP" 2>/dev/null || true
+}
+trap deploy_cleanup EXIT
 
 # ── 参数解析 ──────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -105,6 +125,11 @@ is_placeholder() {
 # 检查端口是否可用（未被宿主机或 Docker 容器占用）
 check_port() {
     local port="$1"
+    # 验证端口号范围
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+        echo "  [ERROR] 无效端口号: $port (有效范围 1-65535)"
+        return 1
+    fi
     # 检查 Docker 容器端口占用（兼容 0.0.0.0 和 127.0.0.1 绑定）
     if docker ps --format '{{.Ports}}' 2>/dev/null | grep -qE ":${port}(->|/)"; then
         return 1
@@ -127,8 +152,15 @@ ask_port() {
     if ! check_port "$port"; then
         echo "  [WARN] 端口 ${port} 已被占用，自动寻找可用端口..."
         local suggest=$((port + 1))
-        while ! check_port "$suggest"; do suggest=$((suggest + 1)); done
-        echo "  [建议] 可用端口: ${suggest}"
+        local max_suggest=$((port + 100))
+        [ "$max_suggest" -gt 65535 ] && max_suggest=65535
+        while ! check_port "$suggest" && [ "$suggest" -le "$max_suggest" ]; do suggest=$((suggest + 1)); done
+        if [ "$suggest" -gt "$max_suggest" ]; then
+            echo "  [ERROR] 在 ${port}-${max_suggest} 范围内未找到可用端口"
+            suggest="$port"
+        else
+            echo "  [建议] 可用端口: ${suggest}"
+        fi
         ask_value "$prompt (换一个)" "$suggest" "$var_name"
     fi
 }
@@ -141,6 +173,11 @@ echo "======================================"
 # ── 前置检查 ──────────────────────────────────────────
 command -v docker &>/dev/null || { echo "[ERROR] Docker 未安装"; exit 1; }
 docker compose version &>/dev/null || { echo "[ERROR] Docker Compose V2 未安装"; exit 1; }
+# 检查 Docker daemon 是否在运行
+if ! docker info &>/dev/null; then
+    echo "[ERROR] Docker daemon 未运行，请执行: sudo systemctl start docker"
+    exit 1
+fi
 
 # ══════════════════════════════════════════════════════
 # 步骤 1: 分支选择
@@ -239,6 +276,12 @@ if [ "$SKIP_ENV" = false ]; then
     ask_secret "SecretKey (可选)" "$(load_env_value "TENCENT_SECRET_KEY" "")" CFG_TENCENT_KEY
 
     echo ""
+    echo "  [ 腾讯 Hunyuan 模型 (SiliconFlow 托管) ]"
+    ask_value "API URL" "$(load_env_value "TENCENT_HUNYUAN_API_URL" "https://api.siliconflow.cn/v1/chat/completions")" CFG_HUNYUAN_API_URL
+    ask_secret "API Key" "$(load_env_value "TENCENT_HUNYUAN_API_KEY" "")" CFG_HUNYUAN_API_KEY
+    ask_value "模型名称" "$(load_env_value "TENCENT_HUNYUAN_MODEL" "tencent/Hunyuan-MT-7B")" CFG_HUNYUAN_MODEL
+
+    echo ""
     echo "  [ 端口映射 ]"
     ask_port "前端端口" "$(load_env_value "PORT_FRONTEND" "80")" CFG_PORT_FE
     ask_port "后端端口" "$(load_env_value "PORT_BACKEND" "8080")" CFG_PORT_BE
@@ -297,6 +340,9 @@ if [ "$SKIP_ENV" = false ]; then
         [ -n "$CFG_HIAGENT_KEY" ]     && printf 'HIAGENT_API_KEY=%s\n'     "$CFG_HIAGENT_KEY"     || printf '# HIAGENT_API_KEY=\n'
         [ -n "$CFG_TENCENT_ID" ]      && printf 'TENCENT_SECRET_ID=%s\n'   "$CFG_TENCENT_ID"      || printf '# TENCENT_SECRET_ID=\n'
         [ -n "$CFG_TENCENT_KEY" ]     && printf 'TENCENT_SECRET_KEY=%s\n'  "$CFG_TENCENT_KEY"     || printf '# TENCENT_SECRET_KEY=\n'
+        [ -n "$CFG_HUNYUAN_API_URL" ] && printf 'TENCENT_HUNYUAN_API_URL=%s\n' "$CFG_HUNYUAN_API_URL" || printf '# TENCENT_HUNYUAN_API_URL=\n'
+        [ -n "$CFG_HUNYUAN_API_KEY" ] && printf 'TENCENT_HUNYUAN_API_KEY=%s\n' "$CFG_HUNYUAN_API_KEY" || printf '# TENCENT_HUNYUAN_API_KEY=\n'
+        [ -n "$CFG_HUNYUAN_MODEL" ]   && printf 'TENCENT_HUNYUAN_MODEL=%s\n'   "$CFG_HUNYUAN_MODEL"   || printf '# TENCENT_HUNYUAN_MODEL=\n'
         printf 'MYSQL_ROOT_PASSWORD=%s\n'          "$CFG_DB_PASSWORD"
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'
@@ -323,6 +369,8 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'AUTO_UPDATE_MAINTENANCE=%s\n' "$CFG_AUTO_UPDATE_MAINTENANCE"
         printf 'AUTO_UPDATE_PRE_BACKUP=%s\n'  "$CFG_AUTO_UPDATE_PRE_BACKUP"
     } > "$ENV_FILE"
+    # 设置 .env 文件权限为 600（仅所有者可读写，保护敏感信息）
+    chmod 600 "$ENV_FILE" 2>/dev/null || true
     echo "  [OK] 配置已写入 $ENV_FILE"
 fi
 
@@ -383,9 +431,15 @@ echo "── 步骤 5/5: 执行部署 ──"
 
 # 切换分支
 CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+OLD_BRANCH="$CURRENT"
+OLD_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
 if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
     echo "[INFO] 切换分支..."
-    git diff --quiet 2>/dev/null || git stash push -m "deploy-$(date +%s)" --quiet
+    # 检查 unstaged 和 staged 变更
+    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        git stash push -m "deploy-$(date +%s)" --quiet
+        STASHED=true
+    fi
     if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
         echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
         exit 1
@@ -399,30 +453,53 @@ echo "[INFO] 版本: $(git rev-parse --short HEAD)"
 cd "$DOCKER_DIR"
 
 # 服务列表 & 预期健康服务数
+# 注意: mysql-slave 不在 backend/frontend 的 depends_on 链中，不会被自动启动
 case $SVC_MODE in
     1) SVCS="";                              expected_healthy=5 ;;
-    2) SVCS="backend frontend";              expected_healthy=5 ;;  # 含已运行的基础设施
-    3) SVCS="backend";                       expected_healthy=4 ;;  # backend + mysql×2 + redis
-    4) SVCS="frontend";                      expected_healthy=2 ;;  # frontend + backend
+    2) SVCS="backend frontend";              expected_healthy=4 ;;  # backend + frontend + mysql-master + redis
+    3) SVCS="backend";                       expected_healthy=3 ;;  # backend + mysql-master + redis
+    4) SVCS="frontend";                      expected_healthy=4 ;;  # frontend + backend + mysql-master + redis (整条依赖链)
     5) SVCS="mysql-master mysql-slave redis"; expected_healthy=3 ;;
 esac
 
 # 构建
+BUILD_ONLY=false
 case $BUILD_MODE in
     1)
         echo "[INFO] 全量构建..."
-        [ -n "$SVCS" ] && docker compose build --no-cache $SVCS || docker compose build --no-cache
+        if [ -n "$SVCS" ]; then
+            docker compose build --no-cache $SVCS
+        else
+            docker compose build --no-cache
+        fi
         ;;
     2)
         echo "[INFO] 增量构建..."
-        [ -n "$SVCS" ] && docker compose build $SVCS || docker compose build
+        if [ -n "$SVCS" ]; then
+            docker compose build $SVCS
+        else
+            docker compose build
+        fi
         ;;
-    3) echo "[INFO] 跳过构建" ;;
+    3) echo "[INFO] 跳过构建（仅重启）"; BUILD_ONLY=true ;;
 esac
 
 # 启动
-echo "[INFO] 启动服务..."
-[ -n "$SVCS" ] && docker compose up -d $SVCS || docker compose up -d
+if [ "$BUILD_ONLY" = true ]; then
+    echo "[INFO] 重启服务..."
+    if [ -n "$SVCS" ]; then
+        docker compose up -d --force-recreate $SVCS
+    else
+        docker compose up -d --force-recreate
+    fi
+else
+    echo "[INFO] 启动服务..."
+    if [ -n "$SVCS" ]; then
+        docker compose up -d $SVCS
+    else
+        docker compose up -d
+    fi
+fi
 
 # 健康等待（快速失败：发现 unhealthy 立即报告）
 echo "[INFO] 等待服务就绪 (预期 ${expected_healthy} 个 healthy)..."
@@ -443,7 +520,7 @@ while [ $elapsed -lt $timeout ]; do
         docker compose ps
         echo ""
         echo "─── 失败服务日志 ───"
-        docker compose ps --format '{{.Name}} {{.Status}}' 2>/dev/null \
+        docker compose ps --format '{{.Service}} {{.Status}}' 2>/dev/null \
           | grep unhealthy | awk '{print $1}' \
           | while read -r svc; do
               echo ">>> $svc"
@@ -463,7 +540,37 @@ docker compose ps
 echo "======================================"
 echo ""
 if [ "$deploy_ok" = false ]; then
-    echo "[ERROR] 部署失败：服务未能在 ${timeout}s 内全部就绪，请检查上方日志"
+    echo "[ERROR] 部署失败：服务未能在 ${timeout}s 内全部就绪"
+    echo ""
+    # 提供回滚选项
+    if [ -n "$OLD_COMMIT" ]; then
+        ask_yn "是否回滚到上一个版本 (${OLD_COMMIT:0:8})？" "y" DO_ROLLBACK
+        if [ "$DO_ROLLBACK" = true ]; then
+            echo "[INFO] 正在回滚到 ${OLD_COMMIT:0:8}..."
+            cd "$PROJECT_ROOT"
+            if git checkout "$OLD_COMMIT" --force --quiet 2>/dev/null; then
+                cd "$DOCKER_DIR"
+                case $BUILD_MODE in
+                    1|2)
+                        echo "[INFO] 重新构建旧版本..."
+                        if [ -n "$SVCS" ]; then
+                            docker compose build $SVCS
+                        else
+                            docker compose build
+                        fi
+                        ;;
+                esac
+                if [ -n "$SVCS" ]; then
+                    docker compose up -d $SVCS
+                else
+                    docker compose up -d
+                fi
+                echo "[INFO] 已回滚到 ${OLD_COMMIT:0:8}，请等待服务重新就绪"
+            else
+                echo "[ERROR] git 回滚失败，请手动处理: git checkout ${OLD_COMMIT:0:8}"
+            fi
+        fi
+    fi
     exit 1
 fi
 echo "[SUCCESS] 部署完成！"
@@ -482,7 +589,7 @@ if [ "${CFG_AUTO_UPDATE_ENABLED:-}" = "true" ] || [ "$(load_env_value "AUTO_UPDA
     CRON_CMD="$AU_CRON $SCRIPT_PATH -b $AU_BRANCH >> $LOG_PATH 2>&1"
 
     # 原子写法：先写临时文件，再整体替换，避免管道中断导致 crontab 被清空
-    CRON_TMP=$(mktemp)
+    CRON_TMP=$(mktemp /tmp/langhack-deploy-cron.XXXXXX)
     crontab -l 2>/dev/null | grep -v "auto-update.sh" > "$CRON_TMP" || true
     echo "$CRON_CMD" >> "$CRON_TMP"
     if crontab "$CRON_TMP" 2>/dev/null; then
@@ -495,3 +602,6 @@ fi
 
 echo ""
 echo "[重要] 请备份 .env 文件到安全位置！如更换服务器需一并迁移。"
+echo "[警告] 请勿执行 'docker compose down -v'，该命令会删除所有数据卷！"
+echo "  安全停止: docker compose down"
+echo "  安全重启: docker compose restart"

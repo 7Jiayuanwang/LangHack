@@ -117,14 +117,14 @@ const route = useRoute()
 const selectedText = ref('')
 const articleTitle = ref('')
 const messages = ref([])
-const inputMessage = ref('长难句解析')
+const inputMessage = ref('')
 const loading = ref(false)
 const chatContainer = ref(null)
 let abortController = null
 
 const candidateQuestions = reactive([
-  { label: '结合文章内容解释本段意思', sub: 'Explain meaning in context' },
-  { label: '深度解读', sub: 'Deep dive interpretation' },
+  { label: '结合文章内容解释本段意思' },
+  { label: '深度解读' },
 ])
 
 onMounted(() => {

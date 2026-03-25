@@ -37,14 +37,14 @@
             />
           </el-form-item>
           <el-form-item label="难度">
-            <el-select v-model="searchForm.difficulty" placeholder="选择难度" clearable>
+            <el-select v-model="searchForm.difficulty" placeholder="选择难度" clearable style="width: 120px">
               <el-option label="简单" value="EASY" />
               <el-option label="中等" value="MEDIUM" />
               <el-option label="困难" value="HARD" />
             </el-select>
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="loadTexts">
+            <el-button type="primary" @click="handleSearch">
               <el-icon><Search /></el-icon>
               搜索
             </el-button>
@@ -275,6 +275,11 @@ const loadTexts = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handleSearch = () => {
+  pagination.current = 1
+  loadTexts()
 }
 
 const searchAvailableTexts = async (query) => {

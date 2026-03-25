@@ -22,14 +22,14 @@
             <el-input v-model="searchForm.keyword" placeholder="单词/释义" clearable />
           </el-form-item>
           <el-form-item label="难度">
-            <el-select v-model="searchForm.difficulty" placeholder="请选择" clearable>
+            <el-select v-model="searchForm.difficulty" placeholder="请选择" clearable style="width: 120px">
               <el-option label="简单" value="EASY" />
               <el-option label="中等" value="MEDIUM" />
               <el-option label="困难" value="HARD" />
             </el-select>
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="loadWords">搜索</el-button>
+            <el-button type="primary" @click="handleSearch">搜索</el-button>
             <el-button @click="resetSearch">重置</el-button>
           </el-form-item>
         </el-form>
@@ -163,24 +163,40 @@ const loadWords = async () => {
 
   loading.value = true
   try {
-    const params = {
-      page: pagination.current,
-      size: pagination.size,
-      unitId: unitId.value,
-      ...searchForm
-    }
-
-    // 这里需要调用后端API获取单元下的单词列表
     const response = await request({
       url: `/api/admin/units/${unitId.value}/words`,
-      method: 'get',
-      params
+      method: 'get'
     })
 
     if (response.code === 200) {
-      const rawData = response.data?.records || response.data
-      words.value = Array.isArray(rawData) ? rawData : []
-      pagination.total = response.data?.total || 0
+      let allWords = Array.isArray(response.data) ? response.data : (Array.isArray(response.data?.records) ? response.data.records : [])
+
+      // 前端过滤（后端返回全量数据，不支持过滤参数）
+      if (searchForm.keyword) {
+        const kw = searchForm.keyword.toLowerCase()
+        allWords = allWords.filter(w =>
+          w.word?.toLowerCase().includes(kw) ||
+          w.definition?.toLowerCase().includes(kw)
+        )
+      }
+
+      if (searchForm.difficulty) {
+        allWords = allWords.filter(w => w.difficulty === searchForm.difficulty)
+      }
+
+      // 更新总数
+      pagination.total = allWords.length
+
+      // 如果当前页超出范围，重置到第一页
+      const maxPage = (pagination.total > 0) ? Math.ceil(pagination.total / pagination.size) : 1
+      if (pagination.current > maxPage) {
+        pagination.current = 1
+      }
+
+      // 前端分页
+      const start = (pagination.current - 1) * pagination.size
+      const end = start + pagination.size
+      words.value = allWords.slice(start, end)
     }
   } catch (error) {
     ElMessage.error('加载单词列表失败')
@@ -188,6 +204,11 @@ const loadWords = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handleSearch = () => {
+  pagination.current = 1
+  loadWords()
 }
 
 const backToUnits = () => {

@@ -139,7 +139,6 @@ const translateSelectedText = async () => {
       if (result.code === 200) {
         translatedText.value = result.data || '(无翻译结果)'
       } else {
-        ElMessage.error(result.message || '翻译失败')
         translatedText.value = '翻译失败：' + (result.message || '请稍后重试')
       }
     } else {
@@ -149,11 +148,9 @@ const translateSelectedText = async () => {
   } catch (error) {
     if (error.name === 'AbortError') {
       console.error('翻译请求超时 (30秒)')
-      ElMessage.error('翻译请求超时，请重试')
       translatedText.value = '翻译服务响应超时'
     } else {
       console.error('翻译失败:', error)
-      ElMessage.error('翻译失败: ' + (error.message || '未知错误'))
       translatedText.value = '翻译服务暂时不可用'
     }
   } finally {

@@ -33,7 +33,6 @@
       <!-- 任务列表 -->
       <div class="table-wrapper">
       <el-table v-loading="loading" :data="assignments" stripe>
-        <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="任务标题" />
         <el-table-column prop="className" label="班级名称" />
         <el-table-column prop="unitName" label="学习单元" />

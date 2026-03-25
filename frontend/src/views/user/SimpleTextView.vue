@@ -198,8 +198,9 @@ const textId = ref(route.params.id || route.query.textId)
 
 // 面包屑导航：根据来源决定父级链接
 const breadcrumbParent = computed(() => {
+  const isStudentRoute = route.path.startsWith('/student')
   if (route.query.from === 'articles') {
-    return { path: '/articles', label: '文章推荐' }
+    return { path: isStudentRoute ? '/student/articles' : '/articles', label: '文章推荐' }
   }
   return { path: '/articles', label: '文章' }
 })
@@ -698,7 +699,8 @@ const getDifficultyText = (difficulty) => {
 const goBack = () => {
   const from = route.query.from
   if (from === 'articles') {
-    router.push('/articles')
+    const isStudentRoute = route.path.startsWith('/student')
+    router.push(isStudentRoute ? '/student/articles' : '/articles')
   } else if (window.history.length > 1) {
     router.back()
   } else {

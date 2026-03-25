@@ -318,8 +318,7 @@ const registerForm = reactive({
   password: '',
   confirmPassword: '',
   email: '',
-  realName: '',
-  role: 'USER'
+  realName: ''
 })
 
 const tabIndicatorStyle = computed(() => {
@@ -413,8 +412,7 @@ const handleRegister = async () => {
         password: '',
         confirmPassword: '',
         email: '',
-        realName: '',
-        role: 'USER'
+        realName: ''
       })
     } else {
       ElMessage.error(response.message || '注册失败')

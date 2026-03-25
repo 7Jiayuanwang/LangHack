@@ -15,7 +15,7 @@
             <el-input v-model="filterForm.keyword" placeholder="请输入班级名称" clearable @keyup.enter="loadClasses" />
           </el-form-item>
           <el-form-item label="所属课程">
-            <el-select v-model="filterForm.courseId" placeholder="请选择课程" clearable @change="loadClasses">
+            <el-select v-model="filterForm.courseId" placeholder="请选择课程" clearable @change="handleSearch" style="width: 160px">
               <el-option
                 v-for="course in courses"
                 :key="course.id"
@@ -25,7 +25,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="任课教师">
-            <el-select v-model="filterForm.teacherId" placeholder="请选择教师" clearable @change="loadClasses">
+            <el-select v-model="filterForm.teacherId" placeholder="请选择教师" clearable @change="handleSearch" style="width: 160px">
               <el-option
                 v-for="teacher in teachers"
                 :key="teacher.id"
@@ -35,7 +35,7 @@
             </el-select>
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="loadClasses">查询</el-button>
+            <el-button type="primary" @click="handleSearch">查询</el-button>
             <el-button @click="resetFilter">重置</el-button>
           </el-form-item>
         </el-form>
@@ -325,6 +325,11 @@ const loadClasses = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handleSearch = () => {
+  pagination.current = 1
+  loadClasses()
 }
 
 // 加载课程列表

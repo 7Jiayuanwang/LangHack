@@ -558,11 +558,6 @@ const isTextTimeCompleted = (studyTime) => {
   return (studyTime || 0) >= MIN_TIME
 }
 
-// 估算任务总项目数（临时方案）
-const getTotalItems = (assignment) => {
-  return 25 // 临时固定值，后续从数据库获取
-}
-
 // 更新统计数据
 const updateStats = (assignmentList) => {
   stats.pendingCount = assignmentList.filter(a => a.status === 'not-started').length

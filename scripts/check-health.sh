@@ -4,12 +4,16 @@ set -euo pipefail
 
 DOCKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/docker"
 
-# 加载 .env 中的 MYSQL_ROOT_PASSWORD（如果存在）
+# 加载 .env 中的 MYSQL_ROOT_PASSWORD（安全读取，避免 JDBC URL 中 & 被 shell 解释）
 if [ -f "$DOCKER_DIR/.env" ]; then
-    # shellcheck disable=SC1091
-    set -a
-    source "$DOCKER_DIR/.env"
-    set +a
+    while IFS='=' read -r key value; do
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        key=$(echo "$key" | xargs)
+        if [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            export "$key=$value"
+        fi
+    done < "$DOCKER_DIR/.env"
 fi
 
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-root}"
@@ -29,9 +33,9 @@ check_service() {
     fi
 }
 
-# Spring Boot
+# Spring Boot（与 docker-compose.yml healthcheck 保持一致）
 check_service "Spring Boot" \
-    "curl -sf http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"
+    "curl -sf http://localhost:8080/api/health"
 
 # Redis
 check_service "Redis" \

@@ -38,10 +38,19 @@ else
     ENV_FILE="$PROJECT_ROOT/docker/.env"
 fi
 
-# 加载 .env（如果存在）
+# 加载 .env（安全读取，不使用 source 避免 JDBC URL 中 & 被 shell 解释为后台执行）
 if [ -f "$ENV_FILE" ]; then
-    # shellcheck disable=SC1091
-    set -a; source "$ENV_FILE" 2>/dev/null || true; set +a
+    while IFS='=' read -r key value; do
+        # 跳过注释和空行
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        # 去除首尾空格
+        key=$(echo "$key" | xargs)
+        # 只允许合法的变量名（防止命令注入）
+        if [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            export "$key=$value"
+        fi
+    done < "$ENV_FILE"
 fi
 
 # 维护模式 & 备份配置（可通过 .env 中 AUTO_UPDATE_* 覆盖）
@@ -126,9 +135,12 @@ log() {
 notify() {
     local message="$1"
     if [ -n "$WEBHOOK_URL" ]; then
+        # 转义 JSON 特殊字符（\, ", 换行）
+        local escaped
+        escaped=$(printf '%s' "$message" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
         curl -s -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
-            -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"[LangHack] $message\"}}" \
+            -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"[LangHack] $escaped\"}}" \
             > /dev/null 2>&1 || true
     fi
 }
@@ -231,10 +243,15 @@ pre_update_backup() {
     fi
 
     log "BACKUP: 正在备份数据库..."
-    docker compose -f "$COMPOSE_FILE" exec -T "$mysql_svc" \
+    # 使用子 shell 隔离 pipefail，避免 mysqldump 失败导致整个脚本崩溃
+    if (docker compose -f "$COMPOSE_FILE" exec -T "$mysql_svc" \
         mysqldump -u root -p"$db_password" --single-transaction \
         --routines --triggers english_learning 2>/dev/null \
-        | gzip > "$backup_file"
+        | gzip > "$backup_file"); then
+        :  # 管道成功
+    else
+        log "WARN: mysqldump 管道返回非零退出码，备份可能不完整"
+    fi
 
     if [ -s "$backup_file" ]; then
         log "BACKUP: 数据库已备份 → $backup_file ($(du -h "$backup_file" | cut -f1))"
@@ -252,7 +269,8 @@ wait_for_health() {
     log "HEALTH: 等待服务启动 (超时 ${timeout}s)..."
 
     while [ $elapsed -lt "$timeout" ]; do
-        if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+        # 使用与 docker-compose.yml healthcheck 一致的端点
+        if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
             log "HEALTH: 后端服务正常 ✓ (${elapsed}s)"
             return 0
         fi
@@ -284,10 +302,18 @@ rollback_to_old_version() {
 
     # 用旧代码重建
     log "ROLLBACK: 重建旧版本..."
-    docker compose -f "$COMPOSE_FILE" build --no-cache $services 2>&1 | tail -5
+    if ! docker compose -f "$COMPOSE_FILE" build --no-cache $services 2>&1; then
+        log "CRITICAL: 旧版本构建也失败！需要人工介入"
+        notify "紧急: 回滚构建失败，请立即检查！"
+        return 1
+    fi
 
     # 重启
-    docker compose -f "$COMPOSE_FILE" up -d $services
+    docker compose -f "$COMPOSE_FILE" up -d $services 2>&1 || {
+        log "CRITICAL: 旧版本启动失败！需要人工介入"
+        notify "紧急: 回滚启动失败，请立即检查！"
+        return 1
+    }
 
     # 等待旧版本启动
     if wait_for_health 120; then
@@ -342,7 +368,22 @@ fi
 
 # ── 检查 Git 远程更新 ────────────────────────────────
 log "INFO: 检查远程仓库更新 (branch: $BRANCH)..."
-git fetch origin "$BRANCH" --quiet
+
+# git fetch 带重试（网络断开时 set -e 会直接退出）
+fetch_ok=false
+for attempt in 1 2 3; do
+    if git fetch origin "$BRANCH" --quiet 2>/dev/null; then
+        fetch_ok=true
+        break
+    fi
+    log "WARN: git fetch 失败 (尝试 $attempt/3)，10s 后重试..."
+    sleep 10
+done
+if [ "$fetch_ok" = false ]; then
+    log "ERROR: git fetch 在 3 次尝试后仍然失败，跳过本次更新"
+    notify "自动更新失败: 无法连接远程仓库 (3 次重试均失败)"
+    exit 1
+fi
 
 LOCAL_HASH=$(git rev-parse HEAD)
 REMOTE_HASH=$(git rev-parse "origin/$BRANCH")
@@ -422,8 +463,8 @@ fi
 # ── 执行重建 ──────────────────────────────────────────
 if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
     SERVICES=""
-    [ "$REBUILD_BACKEND" = true ] && SERVICES="$SERVICES backend"
-    [ "$REBUILD_FRONTEND" = true ] && SERVICES="$SERVICES frontend"
+    [ "$REBUILD_BACKEND" = true ] && SERVICES="backend"
+    [ "$REBUILD_FRONTEND" = true ] && SERVICES="${SERVICES:+$SERVICES }frontend"
 
     # ⑨ 构建新镜像（旧容器仍在运行）
     log "INFO: 构建新镜像... (服务: $SERVICES)"

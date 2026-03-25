@@ -180,6 +180,20 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
             wrapper.eq("mastery_level", masteryLevel);
         }
 
+        // 排序：支持多种排序方式，默认按添加时间降序
+        if ("reviewCount".equals(sortBy)) {
+            wrapper.orderByDesc("review_count");
+        } else if ("word".equals(sortBy)) {
+            // 按字母排序需要在后处理中完成（word 列在另一张表）
+            wrapper.orderByDesc("added_time");
+        } else if ("nextReviewTime".equals(sortBy)) {
+            // 艾宾浩斯遗忘曲线调度：到期的词优先（NULL视为最高优先级）
+            wrapper.orderByAsc("next_review_time");
+        } else {
+            // 默认：按添加时间降序
+            wrapper.orderByDesc("added_time");
+        }
+
         // 分页查询生词本记录
         Page<VocabularyBook> pageParam = new Page<>(page, size);
         Page<VocabularyBook> result = vocabularyBookMapper.selectPage(pageParam, wrapper);

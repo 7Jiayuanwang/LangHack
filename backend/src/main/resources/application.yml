@@ -37,11 +37,13 @@ spring:
       password: ${DB_PASSWORD}
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
-        maximum-pool-size: 20
-        minimum-idle: 5
+        pool-name: master-pool
+        maximum-pool-size: 50
+        minimum-idle: 10
         connection-timeout: 30000
         idle-timeout: 600000
         max-lifetime: 1800000
+        keepalive-time: 300000
         auto-commit: true
         leak-detection-threshold: 60000
         # Connection pool security: enforce SSL in production
@@ -53,13 +55,16 @@ spring:
       password: ${DB_SLAVE_PASSWORD:${DB_PASSWORD}}
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
-        maximum-pool-size: 50
-        minimum-idle: 10
+        pool-name: slave-pool
+        maximum-pool-size: 80
+        minimum-idle: 15
         connection-timeout: 30000
         idle-timeout: 600000
         max-lifetime: 1800000
+        keepalive-time: 300000
         auto-commit: true
         read-only: true
+        leak-detection-threshold: 60000
 
   redis:
     host: ${REDIS_HOST:localhost}
@@ -68,10 +73,10 @@ spring:
     timeout: 3000
     lettuce:
       pool:
-        max-active: 16
-        max-idle: 8
-        min-idle: 2
-        max-wait: 1000
+        max-active: 32
+        max-idle: 16
+        min-idle: 4
+        max-wait: 2000
 
   cache:
     type: redis
@@ -154,6 +159,11 @@ tencent:
     secret-id: ${TENCENT_ASR_SECRET_ID:}
     secret-key: ${TENCENT_ASR_SECRET_KEY:}
     region: ${TENCENT_ASR_REGION:ap-guangzhou}  # Region: Guangzhou by default
+  hunyuan:
+    # SiliconFlow hosted Tencent Hunyuan model (OpenAI-compatible API)
+    api-url: ${TENCENT_HUNYUAN_API_URL}
+    api-key: ${TENCENT_HUNYUAN_API_KEY}
+    model: ${TENCENT_HUNYUAN_MODEL}
 
 async:
   version-generator:
