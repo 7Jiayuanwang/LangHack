@@ -273,9 +273,13 @@ class JwtUtilTest {
     @Test
     void validateToken_tamperedToken_returnsFalse() {
         String token = jwtUtil.generateToken("testuser", "USER");
-        // Tamper with the token by modifying the last character
-        String tamperedToken = token.substring(0, token.length() - 1) +
-                (token.charAt(token.length() - 1) == 'A' ? 'B' : 'A');
+        // Tamper with the token by flipping a character in the middle of the signature
+        // (changing the last char can be unreliable due to Base64url padding bits)
+        int lastDot = token.lastIndexOf('.');
+        int midSig = lastDot + (token.length() - lastDot) / 2;
+        char original = token.charAt(midSig);
+        char replacement = (original == 'A') ? 'B' : 'A';
+        String tamperedToken = token.substring(0, midSig) + replacement + token.substring(midSig + 1);
 
         // JwtUtil catches JwtException internally, so tampered tokens return false
         boolean isValid = jwtUtil.validateToken(tamperedToken, "testuser");
