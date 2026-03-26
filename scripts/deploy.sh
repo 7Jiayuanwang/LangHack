@@ -277,12 +277,6 @@ if [ "$SKIP_ENV" = false ]; then
     ask_value  "模型 (留空=运维面板配置)"   "$(load_env_value "AI_TRANSLATE_MODEL" "")"   CFG_AI_TRANSLATE_MODEL
 
     echo ""
-    echo "  [ 腾讯 Hunyuan 模型 (SiliconFlow 托管) ]"
-    ask_value "API URL" "$(load_env_value "TENCENT_HUNYUAN_API_URL" "https://api.siliconflow.cn/v1/chat/completions")" CFG_HUNYUAN_API_URL
-    ask_secret "API Key" "$(load_env_value "TENCENT_HUNYUAN_API_KEY" "")" CFG_HUNYUAN_API_KEY
-    ask_value "模型名称" "$(load_env_value "TENCENT_HUNYUAN_MODEL" "tencent/Hunyuan-MT-7B")" CFG_HUNYUAN_MODEL
-
-    echo ""
     echo "  [ 端口映射 ]"
     ask_port "前端端口" "$(load_env_value "PORT_FRONTEND" "80")" CFG_PORT_FE
     ask_port "后端端口" "$(load_env_value "PORT_BACKEND" "8080")" CFG_PORT_BE
@@ -342,9 +336,6 @@ if [ "$SKIP_ENV" = false ]; then
         [ -n "$CFG_AI_TRANSLATE_URL" ] && printf 'AI_TRANSLATE_API_URL=%s\n' "$CFG_AI_TRANSLATE_URL" || printf '# AI_TRANSLATE_API_URL=\n'
         [ -n "$CFG_AI_TRANSLATE_KEY" ] && printf 'AI_TRANSLATE_API_KEY=%s\n' "$CFG_AI_TRANSLATE_KEY" || printf '# AI_TRANSLATE_API_KEY=\n'
         [ -n "$CFG_AI_TRANSLATE_MODEL" ] && printf 'AI_TRANSLATE_MODEL=%s\n' "$CFG_AI_TRANSLATE_MODEL" || printf '# AI_TRANSLATE_MODEL=\n'
-        [ -n "$CFG_HUNYUAN_API_URL" ] && printf 'TENCENT_HUNYUAN_API_URL=%s\n' "$CFG_HUNYUAN_API_URL" || printf '# TENCENT_HUNYUAN_API_URL=\n'
-        [ -n "$CFG_HUNYUAN_API_KEY" ] && printf 'TENCENT_HUNYUAN_API_KEY=%s\n' "$CFG_HUNYUAN_API_KEY" || printf '# TENCENT_HUNYUAN_API_KEY=\n'
-        [ -n "$CFG_HUNYUAN_MODEL" ]   && printf 'TENCENT_HUNYUAN_MODEL=%s\n'   "$CFG_HUNYUAN_MODEL"   || printf '# TENCENT_HUNYUAN_MODEL=\n'
         printf 'MYSQL_ROOT_PASSWORD=%s\n'          "$CFG_DB_PASSWORD"
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'

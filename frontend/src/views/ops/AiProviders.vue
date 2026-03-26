@@ -184,6 +184,14 @@ const handleSave = async () => {
 }
 
 const handleTest = async () => {
+  // 先保存当前配置，确保 DB 中是最新值
+  try {
+    await handleSave()
+  } catch {
+    testResult.value = { success: false, error: '保存配置失败，无法测试' }
+    return
+  }
+
   testing.value = true
   testResult.value = null
   try {

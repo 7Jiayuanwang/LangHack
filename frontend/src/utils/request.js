@@ -154,18 +154,25 @@ request.interceptors.response.use(
 
 /**
  * 获取业务错误信息
- * 仅返回预定义的错误消息，防止后端敏感信息（如堆栈、SQL等）泄露到前端
+ * code 500 是 Result.error(msg) 的默认业务错误码，后端已确保消息安全
+ * （BusinessException 返回用户友好消息，Exception 返回通用提示）
+ * 其他 code 使用预定义映射，防止非预期消息泄露
  * @param {number} code 业务错误码
- * @param {string} backendMessage 后端原始错误信息（仅用于日志）
+ * @param {string} backendMessage 后端返回的错误信息
  * @returns {string} 前端显示的错误信息
  */
 function getBusinessErrorMessage(code, backendMessage) {
-  // 记录原始错误信息到控制台（用于开发调试）
   if (backendMessage) {
     console.debug('[Business Error]', { code, message: backendMessage })
   }
 
-  // 仅返回预定义的通用错误信息
+  // code 500: 业务错误（后端 Result.error(msg) 默认 code=500）
+  // 后端已确保：BusinessException 消息用户友好、Exception 消息通用
+  if (code === 500 && backendMessage) {
+    return backendMessage
+  }
+
+  // 其他 code: 使用预定义映射
   const errorMap = {
     400: '请求参数错误',
     403: '拒绝访问',
