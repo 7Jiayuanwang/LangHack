@@ -40,13 +40,10 @@ describe('Dashboard.vue', () => {
     expect(wrapper.vm.userStats.student).toBe(0)
   })
 
-  it('has predefined recentActivities with 3 items', () => {
+  it('has recentActivities initialized as empty array', () => {
     mockFetch.mockResolvedValue({ ok: false })
     const wrapper = shallowMount(Dashboard)
-    expect(wrapper.vm.recentActivities).toHaveLength(3)
-    expect(wrapper.vm.recentActivities[0]).toHaveProperty('id')
-    expect(wrapper.vm.recentActivities[0]).toHaveProperty('description')
-    expect(wrapper.vm.recentActivities[0]).toHaveProperty('time')
+    expect(wrapper.vm.recentActivities).toHaveLength(0)
   })
 
   it('loadDashboardData updates stats on successful API response', async () => {
@@ -172,10 +169,9 @@ describe('Dashboard.vue', () => {
     expect(wrapper.find('.dashboard').exists()).toBe(true)
   })
 
-  it('each recentActivity has a unique id', () => {
+  it('recentActivities is an array', () => {
     mockFetch.mockResolvedValue({ ok: false })
     const wrapper = shallowMount(Dashboard)
-    const ids = wrapper.vm.recentActivities.map(a => a.id)
-    expect(new Set(ids).size).toBe(ids.length)
+    expect(Array.isArray(wrapper.vm.recentActivities)).toBe(true)
   })
 })

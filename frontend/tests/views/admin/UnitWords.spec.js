@@ -293,6 +293,15 @@ describe('UnitWords.vue', () => {
   })
 
   it('handleCurrentChange updates current page and reloads', async () => {
+    // Need enough records so page 3 is valid (pageSize=10, need 21+)
+    const mockWords = Array.from({ length: 30 }, (_, i) => ({
+      id: i + 1, word: `word${i}`, pronunciation: '', difficulty: 'EASY'
+    }))
+    request.mockResolvedValue({
+      code: 200,
+      data: mockWords
+    })
+
     const wrapper = shallowMount(UnitWords)
 
     await wrapper.vm.handleCurrentChange(3)

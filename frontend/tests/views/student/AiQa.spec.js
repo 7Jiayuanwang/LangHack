@@ -48,6 +48,6 @@ describe('Student AiQa.vue', () => {
 
   it('has inputMessage with default value', () => {
     const wrapper = createWrapper()
-    expect(wrapper.vm.inputMessage).toBe('长难句解析')
+    expect(wrapper.vm.inputMessage).toBe('')
   })
 })

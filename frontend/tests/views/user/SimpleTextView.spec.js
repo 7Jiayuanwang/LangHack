@@ -5,7 +5,8 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ back: vi.fn() }),
   useRoute: () => ({
     params: { id: '1' },
-    query: { textId: '1' }
+    query: { textId: '1' },
+    path: '/text/1'
   })
 }))
 
