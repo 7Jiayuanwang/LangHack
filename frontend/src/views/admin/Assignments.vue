@@ -255,7 +255,7 @@
         <h4>学生完成情况</h4>
         <div class="table-wrapper">
         <el-table :data="studentProgress" stripe size="small">
-          <el-table-column prop="username" label="用户名" width="120" />
+          <el-table-column prop="username" label="学号" width="120" />
           <el-table-column prop="realName" label="真实姓名" width="120" />
           <el-table-column prop="completedAt" label="完成时间" width="180">
             <template #default="scope">

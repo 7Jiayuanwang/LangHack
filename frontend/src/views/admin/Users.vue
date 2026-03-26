@@ -24,7 +24,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="关键词">
-            <el-input v-model="searchForm.keyword" placeholder="用户名/姓名/邮箱" clearable />
+            <el-input v-model="searchForm.keyword" placeholder="账号/姓名/邮箱" clearable />
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="handleSearch">搜索</el-button>
@@ -37,7 +37,7 @@
       <div class="table-wrapper">
       <el-table v-loading="loading" :data="users" stripe>
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="username" label="用户名" />
+        <el-table-column prop="username" label="账号" />
         <el-table-column prop="realName" label="真实姓名" />
         <el-table-column prop="email" label="邮箱" />
         <el-table-column prop="role" label="角色">
@@ -111,7 +111,7 @@
         :rules="userRules"
         label-width="80px"
       >
-        <el-form-item label="用户名" prop="username">
+        <el-form-item label="账号" prop="username">
           <el-input v-model="userForm.username" :disabled="isEdit" />
         </el-form-item>
         <el-form-item label="密码" prop="password" v-if="!isEdit">
@@ -160,8 +160,8 @@
           <p>1. 支持 .xls 和 .xlsx 格式的Excel文件</p>
           <p>2. Excel格式要求: <strong>序号 | 班级 | 学号 | 姓名</strong></p>
           <p>3. 第1、2行为标题行,数据从第3行开始</p>
-          <p>4. 学号作为用户名,默认密码为 <strong>123456</strong></p>
-          <p>5. 如果用户名已存在,将更新用户信息</p>
+          <p>4. 学号作为登录账号,默认密码为 <strong>123456</strong></p>
+          <p>5. 如果账号已存在,将更新用户信息</p>
           <p>6. <strong style="color: #409EFF;">如果班级不存在，将自动创建新班级</strong></p>
           <p>7. <strong style="color: #409EFF;">用户会自动加入对应班级</strong></p>
         </div>
@@ -285,8 +285,8 @@ const userForm = reactive({
 // 表单验证规则
 const userRules = {
   username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '用户名长度在 3 到 20 个字符', trigger: 'blur' }
+    { required: true, message: '请输入账号', trigger: 'blur' },
+    { min: 3, max: 20, message: '账号长度在 3 到 20 个字符', trigger: 'blur' }
   ],
   password: [
     {

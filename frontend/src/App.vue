@@ -30,13 +30,21 @@ onErrorCaptured((error, instance, info) => {
 // 路由错误处理
 router.onError((error) => {
   console.error('路由错误:', error)
-  
+
   // 处理特定的路由错误
   if (error.name === 'NavigationDuplicated') {
     // 重复导航，忽略
     return
   }
-  
+
+  // Vite 部署后旧 chunk 不存在，自动刷新加载新资源
+  if (error.message?.includes('Failed to fetch dynamically imported module') ||
+      error.message?.includes('Importing a module script failed')) {
+    console.warn('检测到资源更新，正在刷新页面...')
+    window.location.reload()
+    return
+  }
+
   // 其他路由错误
   if (error.message) {
     ElMessage.error('页面导航异常: ' + error.message)

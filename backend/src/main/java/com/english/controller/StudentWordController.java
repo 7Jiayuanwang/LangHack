@@ -498,6 +498,37 @@ public class StudentWordController {
     }
 
     /**
+     * 获取MCQ测验完整数据（正确答案来自ECDICT词库 + 干扰项）
+     * 确保正确答案和干扰项风格一致，都来自同一词库
+     */
+    @GetMapping("/quiz-data")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    public Result<Map<String, Object>> getQuizData(
+            @RequestParam String word,
+            @RequestParam(defaultValue = "3") int count,
+            Authentication authentication) {
+        try {
+            getCurrentStudentId(authentication);
+
+            if (word == null || word.trim().isEmpty()) {
+                return Result.error("单词不能为空");
+            }
+            if (word.trim().length() > 100) {
+                return Result.error("单词长度不能超过100");
+            }
+            count = Math.max(1, Math.min(count, 10));
+
+            Map<String, Object> quizData = ecdictService.generateQuizData(word.trim(), count);
+            return Result.success(quizData);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取MCQ完整选项数据失败", e);
+            return Result.error("获取选项数据失败，请稍后重试");
+        }
+    }
+
+    /**
      * 获取当前学生ID
      */
     private Long getCurrentStudentId(Authentication authentication) {

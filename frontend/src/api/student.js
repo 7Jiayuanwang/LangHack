@@ -315,6 +315,15 @@ export function getQuizDistractors(word, count = 3) {
   })
 }
 
+// 获取MCQ完整选项数据（正确答案 + 干扰项，均来自ECDICT词库）
+export function getQuizData(word, count = 3) {
+  return request({
+    url: '/api/student/words/quiz-data',
+    method: 'get',
+    params: { word, count }
+  })
+}
+
 // ==================== 新增的生词本和WordNet相关API ====================
 
 // 获取生词本（更新版API）

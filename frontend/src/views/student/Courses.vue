@@ -699,12 +699,12 @@ const startTextLearning = (text) => {
 
 // 开始单词学习
 const startWordLearning = () => {
-  router.push(`/student/word-learning?unitId=${currentUnit.value.id}`)
+  router.push(`/student/vocabulary?unitId=${currentUnit.value.id}`)
 }
 
 // 开始单词测试
 const startWordTest = () => {
-  router.push(`/student/word-test?unitId=${currentUnit.value.id}`)
+  router.push(`/student/vocabulary?unitId=${currentUnit.value.id}`)
 }
 
 // 显示单词详情

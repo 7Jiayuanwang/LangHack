@@ -376,6 +376,58 @@ public class ECDICTService {
     }
 
     /**
+     * 为MCQ测验生成完整的选项数据：包含正确答案（来自ECDICT）和干扰项
+     * 确保正确答案和干扰项风格一致（都来自同一词库）
+     *
+     * @param word  目标单词
+     * @param count 需要的干扰项数量（通常3）
+     * @return Map包含 correctTranslation(String) 和 distractors(List<String>)
+     */
+    public Map<String, Object> generateQuizData(String word, int count) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("correctTranslation", null);
+        result.put("distractors", new ArrayList<>());
+
+        if (word == null || word.trim().isEmpty() || count <= 0) {
+            return result;
+        }
+
+        count = Math.min(count, 10);
+
+        try {
+            if (ecdictWordMapper != null) {
+                ECDICTWord targetWord = ecdictWordMapper.findByWord(word.trim());
+                if (targetWord != null && targetWord.getTranslation() != null) {
+                    String correctTranslation = extractShortTranslation(targetWord.getTranslation());
+                    result.put("correctTranslation", correctTranslation);
+                }
+            }
+            // 复用已有的干扰项生成逻辑
+            List<String> distractors = generateQuizDistractors(word, count);
+            // 确保干扰项不包含正确答案
+            String correct = (String) result.get("correctTranslation");
+            if (correct != null) {
+                distractors.removeIf(d -> d.equals(correct));
+                // 如果去重后不够，再补充
+                if (distractors.size() < count) {
+                    List<String> extra = generateQuizDistractors(word, count + 3);
+                    for (String e : extra) {
+                        if (distractors.size() >= count) break;
+                        if (!e.equals(correct) && !distractors.contains(e)) {
+                            distractors.add(e);
+                        }
+                    }
+                }
+            }
+            result.put("distractors", distractors);
+        } catch (Exception e) {
+            logger.error("生成MCQ完整选项数据失败: word={}", word, e);
+        }
+
+        return result;
+    }
+
+    /**
      * 从翻译字段提取简短的中文翻译，用于MCQ选项
      * 只取第一个分隔符前的内容，确保选项简洁
      */

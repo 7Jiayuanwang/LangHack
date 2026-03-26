@@ -1,21 +1,25 @@
 package com.english.service;
 
 import com.english.exception.BusinessException;
-import com.tencentcloudapi.common.Credential;
-import com.tencentcloudapi.common.exception.TencentCloudSDKException;
-import com.tencentcloudapi.common.profile.ClientProfile;
-import com.tencentcloudapi.common.profile.HttpProfile;
-import com.tencentcloudapi.tmt.v20180321.TmtClient;
-import com.tencentcloudapi.tmt.v20180321.models.TextTranslateRequest;
-import com.tencentcloudapi.tmt.v20180321.models.TextTranslateResponse;
+import com.english.service.impl.AiCallMetricsService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.english.service.impl.AiCallMetricsService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import java.util.*;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -24,79 +28,129 @@ public class TencentTranslateService {
 
     private static final Logger logger = LoggerFactory.getLogger(TencentTranslateService.class);
 
-    @Value("${tencent.translate.secret-id:}")
-    private String secretId;
+    @Autowired
+    private SystemConfigService systemConfigService;
 
-    @Value("${tencent.translate.secret-key:}")
-    private String secretKey;
+    @Value("${ai.translate.api-url:https://api.siliconflow.cn/v1/chat/completions}")
+    private String defaultApiUrl;
 
-    @Value("${tencent.translate.region:ap-guangzhou}")
-    private String region;
+    @Value("${ai.translate.api-key:}")
+    private String defaultApiKey;
 
-    /** 单例 TmtClient，在 @PostConstruct 阶段初始化，复用于所有翻译请求 */
-    private TmtClient tmtClient;
+    @Value("${ai.translate.model:tencent/Hunyuan-MT-7B}")
+    private String defaultModel;
+
+    @Value("${ai.translate.timeout:30000}")
+    private int defaultTimeout;
 
     @Autowired(required = false)
     private AiCallMetricsService aiCallMetricsService;
 
-    /** 并发信号量：最多允许 10 个请求同时访问腾讯云翻译 API */
+    /** Concurrency limiter: max 10 concurrent translation requests */
     private final Semaphore semaphore = new Semaphore(10);
 
-    /**
-     * Spring 完成依赖注入后初始化单例 TmtClient。
-     * 若 secretId/secretKey 未配置则跳过初始化，translate() 中的配置检查会处理此情况。
-     */
+    private RestTemplate restTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private CloseableHttpClient httpClient;
+    private PoolingHttpClientConnectionManager connManager;
+
     @PostConstruct
     public void init() {
-        if (secretId == null || secretId.isEmpty() || secretKey == null || secretKey.isEmpty()) {
-            logger.warn("腾讯翻译 secretId/secretKey 未配置，TmtClient 将不会初始化");
-            return;
-        }
-        
         try {
-            Credential cred = new Credential(secretId, secretKey);
+            connManager = new PoolingHttpClientConnectionManager();
+            connManager.setMaxTotal(50);
+            connManager.setDefaultMaxPerRoute(10);
 
-            HttpProfile httpProfile = new HttpProfile();
-            httpProfile.setEndpoint("tmt.tencentcloudapi.com");
-            httpProfile.setConnTimeout(10); // 连接超时：10 秒
-            httpProfile.setReadTimeout(10); // 读取超时：10 秒
+            httpClient = HttpClientBuilder.create()
+                    .setConnectionManager(connManager)
+                    .build();
 
-            ClientProfile clientProfile = new ClientProfile();
-            clientProfile.setHttpProfile(httpProfile);
-
-            this.tmtClient = new TmtClient(cred, region, clientProfile);
-            logger.info("TmtClient 单例初始化完成，region={}", region);
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+            factory.setConnectTimeout(defaultTimeout);
+            factory.setReadTimeout(defaultTimeout);
+            factory.setConnectionRequestTimeout(defaultTimeout);
+            restTemplate = new RestTemplate(factory);
         } catch (Exception e) {
-            logger.error("TmtClient 初始化失败: {}", e.getMessage());
-            // 不抛出异常，让 translate() 方法处理
+            logger.warn("Failed to initialize HTTP client with connection pooling, falling back to default: {}",
+                    e.getMessage());
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
+            factory.setConnectTimeout(defaultTimeout);
+            factory.setReadTimeout(defaultTimeout);
+            factory.setConnectionRequestTimeout(defaultTimeout);
+            restTemplate = new RestTemplate(factory);
+        }
+
+        logger.info("TranslateService initialized (OpenAI-compatible API mode)");
+    }
+
+    @PreDestroy
+    public void destroy() {
+        if (httpClient != null) {
+            try {
+                httpClient.close();
+            } catch (Exception e) {
+                logger.warn("Error closing HTTP client: {}", e.getMessage());
+            }
+        }
+        if (connManager != null) {
+            try {
+                connManager.close();
+            } catch (Exception e) {
+                logger.warn("Error closing connection manager: {}", e.getMessage());
+            }
         }
     }
 
     /**
-     * 翻译文本
-     * @param text 要翻译的文本
-     * @param source 源语言（en: 英语, zh: 中文, auto: 自动检测）
-     * @param target 目标语言（en: 英语, zh: 中文）
-     * @return 翻译结果
+     * Resolve config: DB system_config > application.yml env vars > code defaults
+     */
+    private Map<String, String> resolveConfig() {
+        Map<String, String> dbConfig = systemConfigService.getByGroup("ai_translate");
+
+        String apiUrl = getOrDefault(dbConfig, "api_url", defaultApiUrl);
+        String apiKey = getOrDefault(dbConfig, "api_key", defaultApiKey);
+        String model = getOrDefault(dbConfig, "model", defaultModel);
+        String enabled = getOrDefault(dbConfig, "enabled", "true");
+
+        Map<String, String> resolved = new HashMap<>();
+        resolved.put("api_url", apiUrl);
+        resolved.put("api_key", apiKey);
+        resolved.put("model", model);
+        resolved.put("enabled", enabled);
+        return resolved;
+    }
+
+    private String getOrDefault(Map<String, String> dbConfig, String key, String fallback) {
+        String value = dbConfig.get(key);
+        return (value != null && !value.isEmpty()) ? value : fallback;
+    }
+
+    /**
+     * Translate text via OpenAI-compatible Chat Completions API
      */
     @CircuitBreaker(name = "tencent-translate", fallbackMethod = "translateFallback")
     public String translate(String text, String source, String target) {
-        // 空文本直接返回
         if (text == null || text.isEmpty()) {
             return "";
         }
 
-        // 检查配置
-        if (secretId == null || secretId.isEmpty() || secretKey == null || secretKey.isEmpty()) {
-            String errorMsg = "翻译服务未配置";
-            logger.error(errorMsg);
-            throw new BusinessException(errorMsg);
+        Map<String, String> config = resolveConfig();
+
+        // Check if service is enabled
+        if (!"true".equalsIgnoreCase(config.get("enabled"))) {
+            throw new BusinessException("翻译服务已禁用");
         }
 
-        // 获取并发许可，等待最多 5 秒
+        // Check API key
+        String apiKey = config.get("api_key");
+        if (apiKey == null || apiKey.isEmpty()) {
+            throw new BusinessException("翻译服务未配置 API Key，请在运维面板配置");
+        }
+
+        // Acquire semaphore with timeout
         try {
             if (!semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
-                logger.warn("Semaphore 获取超时，当前可用许可: {}", semaphore.availablePermits());
+                logger.warn("Semaphore acquire timeout, available permits: {}", semaphore.availablePermits());
                 throw new BusinessException("翻译服务繁忙，请稍后重试");
             }
         } catch (InterruptedException e) {
@@ -108,9 +162,6 @@ public class TencentTranslateService {
         String user = AiCallMetricsService.getCurrentUser();
 
         try {
-            logger.debug("开始翻译 - 源语言: {}, 目标语言: {}, 文本长度: {}", source, target, text.length());
-
-            // 验证必要参数
             if (source == null || source.isEmpty()) {
                 source = "auto";
             }
@@ -118,56 +169,68 @@ public class TencentTranslateService {
                 target = "zh";
             }
 
-            // 实例化请求对象
-            TextTranslateRequest req = new TextTranslateRequest();
-            req.setSourceText(text);
-            req.setSource(source);
-            req.setTarget(target);
-            req.setProjectId(0L);
+            String sourceLang = mapLanguageCode(source);
+            String targetLang = mapLanguageCode(target);
 
-            // 使用单例 TmtClient 发起请求
-            TextTranslateResponse resp = tmtClient.TextTranslate(req);
+            String prompt = String.format("将以下%s翻译为%s，只返回翻译结果，不要附加任何解释:\n%s",
+                    sourceLang, targetLang, text);
 
-            // FIX: 防御性检查响应对象和结果字段，防止NPE
-            if (resp == null) {
-                logger.error("翻译 API 返回空响应对象");
-                throw new BusinessException("翻译失败，请稍后重试");
+            // Build OpenAI Chat Completions request
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(apiKey);
+
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+            message.put("content", prompt);
+
+            List<Map<String, Object>> messages = new ArrayList<>();
+            messages.add(message);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("model", config.get("model"));
+            body.put("messages", messages);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+            logger.debug("Calling translate API - source: {}, target: {}, textLength: {}, model: {}",
+                    source, target, text.length(), config.get("model"));
+
+            ResponseEntity<String> response = restTemplate.exchange(
+                    config.get("api_url"),
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            );
+
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                JsonNode choices = root.path("choices");
+                if (choices.isArray() && choices.size() > 0) {
+                    JsonNode msgNode = choices.get(0).path("message");
+                    if (msgNode.has("content")) {
+                        String result = msgNode.get("content").asText().trim();
+                        logger.debug("Translation succeeded, result length: {}", result.length());
+                        if (aiCallMetricsService != null) {
+                            aiCallMetricsService.recordSuccess("TENCENT_TRANSLATE", "translate",
+                                    config.get("model"), startTime, user);
+                        }
+                        return result;
+                    }
+                }
             }
 
-            String result = resp.getTargetText();
-            if (result == null) {
-                logger.error("翻译 API 返回空的 TargetText");
-                throw new BusinessException("翻译失败，请稍后重试");
-            }
-            
-            logger.debug("翻译成功，结果长度: {}", result.length());
-            if (aiCallMetricsService != null) {
-                aiCallMetricsService.recordSuccess("TENCENT_TRANSLATE", "translate", startTime, user);
-            }
-            return result;
-
-        } catch (TencentCloudSDKException e) {
-            // 不在日志中暴露完整错误堆栈，只记录错误码
-            logger.error("腾讯云翻译API错误 - 错误码: {}", e.getErrorCode());
+            logger.error("Translate API returned invalid response format");
             if (aiCallMetricsService != null) {
                 aiCallMetricsService.recordFailure("TENCENT_TRANSLATE", "translate", startTime,
-                        e.getErrorCode(), user);
+                        "Invalid response format", user);
             }
+            throw new BusinessException("翻译失败，请稍后重试");
 
-            // 根据错误类型返回更友好的提示，避免泄露详细的 Exception message
-            String errorCode = e.getErrorCode();
-            if (errorCode != null && errorCode.contains("Unauthorized")) {
-                throw new BusinessException("翻译服务权限不足，请检查腾讯云API密钥是否有机器翻译权限");
-            } else if (errorCode != null && errorCode.contains("InvalidCredential")) {
-                throw new BusinessException("翻译服务密钥无效，请检查配置");
-            } else if (errorCode != null && (errorCode.contains("Timeout") || errorCode.contains("RequestTimeout"))) {
-                throw new BusinessException("翻译请求超时，请稍后重试");
-            } else {
-                throw new BusinessException("翻译失败，请稍后重试");
-            }
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
-            // FIX: 捕获其他异常（如网络错误、超时等）
-            logger.error("翻译出错: {}", e.getMessage());
+            logger.error("Translation error: {}", e.getMessage());
             if (aiCallMetricsService != null) {
                 aiCallMetricsService.recordFailure("TENCENT_TRANSLATE", "translate", startTime,
                         e.getMessage(), user);
@@ -179,36 +242,52 @@ public class TencentTranslateService {
     }
 
     private String translateFallback(String text, String source, String target, Exception e) {
-        logger.warn("Tencent translate circuit breaker triggered: {}", e.getMessage());
+        logger.warn("Translate circuit breaker triggered: {}", e.getMessage());
         throw new BusinessException("翻译服务暂时不可用，请稍后重试");
     }
 
     /**
-     * 英译中
+     * Map language codes to readable Chinese names for the prompt
      */
+    private String mapLanguageCode(String code) {
+        switch (code.toLowerCase()) {
+            case "en":
+                return "英语";
+            case "zh":
+                return "中文";
+            case "auto":
+                return "原文";
+            default:
+                return code;
+        }
+    }
+
     public String translateEnToCn(String text) {
         return translate(text, "en", "zh");
     }
 
-    /**
-     * 中译英
-     */
     public String translateCnToEn(String text) {
         return translate(text, "zh", "en");
     }
 
-    /**
-     * 自动检测语言并翻译
-     */
     public String translateAuto(String text) {
         if (text == null || text.isEmpty()) {
             return "";
         }
-        // 简单判断：如果包含中文字符，则翻译成英文，否则翻译成中文
         if (text.matches(".*[\u4e00-\u9fa5]+.*")) {
             return translate(text, "zh", "en");
         } else {
             return translate(text, "en", "zh");
         }
+    }
+
+    /**
+     * Test translation connectivity (used by OPS panel)
+     */
+    public String testTranslation(String testText) {
+        if (testText == null || testText.isEmpty()) {
+            testText = "Hello, world!";
+        }
+        return translate(testText, "en", "zh");
     }
 }

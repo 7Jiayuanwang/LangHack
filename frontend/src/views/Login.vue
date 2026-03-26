@@ -53,12 +53,19 @@
           <!-- 登录表单 -->
           <div class="trend-form-container" v-show="activeTab === 'login'">
             <form @submit.prevent="handleLogin" class="trend-form">
+              <!-- 身份选择 -->
+              <div class="identity-selector">
+                <button type="button" class="identity-btn" :class="{ active: loginIdentity === 'student' }" @click="loginIdentity = 'student'">🎓 学生</button>
+                <button type="button" class="identity-btn" :class="{ active: loginIdentity === 'teacher' }" @click="loginIdentity = 'teacher'">👨‍🏫 教职工</button>
+                <button type="button" class="identity-btn" :class="{ active: loginIdentity === 'admin' }" @click="loginIdentity = 'admin'">👑 管理员</button>
+              </div>
+
               <div class="trend-field">
                 <div class="trend-input-group">
                   <input
                     v-model="loginForm.username"
                     type="text"
-                    placeholder="用户名"
+                    :placeholder="identityPlaceholder"
                     class="trend-input"
                     required
                   />
@@ -116,17 +123,9 @@
                 <h3 class="demo-title">🎯 快速体验</h3>
               </div>
               <div class="demo-buttons">
-                <div class="demo-btn" @click="fillDemo('admin')">
-                  <div class="btn-avatar admin">👑</div>
-                  <div class="btn-text">管理员</div>
-                </div>
-                <div class="demo-btn" @click="fillDemo('teacher')">
-                  <div class="btn-avatar teacher">👨‍🏫</div>
-                  <div class="btn-text">教师</div>
-                </div>
-                <div class="demo-btn" @click="fillDemo('student')">
-                  <div class="btn-avatar student">🎓</div>
-                  <div class="btn-text">学生</div>
+                <div class="demo-btn" @click="fillDemo(loginIdentity)">
+                  <div class="btn-avatar" :class="loginIdentity">{{ identityEmoji }}</div>
+                  <div class="btn-text">{{ identityDemoLabel }} 演示</div>
                 </div>
               </div>
             </div>
@@ -140,7 +139,7 @@
                   <input
                     v-model="registerForm.username"
                     type="text"
-                    placeholder="用户名 (3-20字符)"
+                    placeholder="学号 (3-20字符)"
                     class="trend-input"
                     required
                     minlength="3"
@@ -307,6 +306,16 @@ const activeTab = ref('login')
 const showPassword = ref(false)
 const showRegPassword = ref(false)
 const showRegConfirmPassword = ref(false)
+const loginIdentity = ref('student')
+
+const identityPlaceholder = computed(() => ({
+  student: '学号',
+  teacher: '职工号',
+  admin: '管理员账号'
+}[loginIdentity.value]))
+
+const identityEmoji = computed(() => ({ student: '🎓', teacher: '👨‍🏫', admin: '👑' }[loginIdentity.value]))
+const identityDemoLabel = computed(() => ({ student: '学生', teacher: '教师', admin: '管理员' }[loginIdentity.value]))
 
 const loginForm = reactive({
   username: '',
@@ -333,7 +342,7 @@ const switchTab = (tab) => {
 
 const handleLogin = async () => {
   if (!loginForm.username || !loginForm.password) {
-    ElMessage.warning('请填写用户名和密码')
+    ElMessage.warning(`请填写${identityPlaceholder.value}和密码`)
     return
   }
 
@@ -380,7 +389,7 @@ const handleRegister = async () => {
   }
 
   if (registerForm.username.length < 3 || registerForm.username.length > 20) {
-    ElMessage.warning('用户名长度应为3-20个字符')
+    ElMessage.warning('学号长度应为3-20个字符')
     return
   }
 
@@ -433,22 +442,16 @@ const handleRegister = async () => {
 }
 
 const fillDemo = (role) => {
-  switch (role) {
-    case 'admin':
-      loginForm.username = 'admin'
-      loginForm.password = 'admin123'
-      break
-    case 'teacher':
-      loginForm.username = 'teacher'
-      loginForm.password = 'admin123'
-      break
-    case 'student':
-      loginForm.username = 'student'
-      loginForm.password = 'admin123'
-      break
+  const demos = {
+    admin:   { username: 'admin',   password: 'admin123' },
+    teacher: { username: 'teacher', password: 'admin123' },
+    student: { username: 'student', password: 'admin123' }
   }
-  const roleNames = { admin: '管理员', teacher: '教师', student: '学生' }
-  ElMessage.info(`已填充${roleNames[role]}演示账号`)
+  const info = demos[role] || demos.student
+  loginForm.username = info.username
+  loginForm.password = info.password
+  const labels = { admin: '管理员', teacher: '教师', student: '学生' }
+  ElMessage.info(`已填充${labels[role]}演示账号`)
 }
 </script>
 
@@ -805,6 +808,34 @@ const fillDemo = (role) => {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* 身份选择器 */
+.identity-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.identity-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.6);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.identity-btn:hover {
+  border-color: rgba(0,102,204,0.4);
+  background: rgba(0,102,204,0.08);
+  color: rgba(255,255,255,0.8);
+}
+.identity-btn.active {
+  border-color: var(--primary-color, #0066CC);
+  background: rgba(0,102,204,0.15);
+  color: #fff;
 }
 
 /* 时尚演示区域 */

@@ -136,7 +136,7 @@
       <div class="trend-section">
         <div class="section-header">
           <h2 class="section-title">待办任务</h2>
-          <button class="trend-btn secondary" @click="$router.push('/user/assignments')">
+          <button class="trend-btn secondary" @click="$router.push('/user')">
             <span>查看全部</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9,18 15,12 9,6"/>

@@ -120,6 +120,12 @@ const routes = [
         name: 'OpsUsers',
         component: () => import('@/views/admin/Users.vue'),
         meta: { title: '用户管理', roles: ['OPS', 'ADMIN'] }
+      },
+      {
+        path: 'ai-providers',
+        name: 'OpsAiProviders',
+        component: () => import('@/views/ops/AiProviders.vue'),
+        meta: { title: 'AI 服务管理', roles: ['OPS', 'ADMIN'] }
       }
     ]
   },
@@ -226,6 +232,10 @@ const routes = [
       {
         path: 'word-test',
         redirect: '/student/vocabulary'
+      },
+      {
+        path: 'word-learning',
+        redirect: '/student/vocabulary'
       }
     ]
   },
@@ -273,10 +283,10 @@ const routes = [
         meta: { title: '单元学习', roles: ['USER'] }
       },
       {
-        path: 'home',
-        name: 'UserDashboard',
-        component: () => import('@/views/user/Home.vue'),
-        meta: { title: '用户首页', roles: ['USER'] }
+        path: 'texts',
+        name: 'UserTexts',
+        component: () => import('@/views/user/Texts.vue'),
+        meta: { title: '课文列表', roles: ['USER'] }
       }
     ]
   },

@@ -409,12 +409,12 @@ const markAsCompleted = async () => {
         // 如果任务完成率>=100%，询问是否返回任务列表
         if (completionRate >= 100 && fromSource.value === 'assignment') {
           completionTimeoutId = setTimeout(() => {
-            ElMessageBox.confirm('恭喜！任务已完成，是否返回任务列表？', '任务完成', {
-              confirmButtonText: '返回任务',
+            ElMessageBox.confirm('恭喜！任务已完成，是否返回首页？', '任务完成', {
+              confirmButtonText: '返回首页',
               cancelButtonText: '继续学习',
               type: 'success'
             }).then(() => {
-              router.push('/student/assignments')
+              router.push('/user')
             }).catch(() => {
               // 用户选择继续学习
             })
@@ -477,9 +477,9 @@ const formatRemainingTime = () => {
 const goBack = () => {
   // 检查来源，智能返回
   const from = route.query.from
-  if (from === 'assignment') {
-    // 从任务页面跳转来的，返回任务页面
-    router.push('/student/assignments')
+  if (from === 'assignment' || from === 'user-upload') {
+    // 返回用户首页
+    router.push('/user')
   } else {
     // 其他情况，使用默认返回
     router.go(-1)

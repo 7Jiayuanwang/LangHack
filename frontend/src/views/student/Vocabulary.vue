@@ -248,8 +248,8 @@
                 :key="index"
                 class="mcq-option-btn"
                 :class="{
-                  'is-correct': isAnswering && option === currentReviewWord.definition,
-                  'is-incorrect': isAnswering && selectedOption === option && option !== currentReviewWord.definition
+                  'is-correct': isAnswering && option === (currentCorrectAnswer || currentReviewWord.definition),
+                  'is-incorrect': isAnswering && selectedOption === option && option !== (currentCorrectAnswer || currentReviewWord.definition)
                 }"
                 @click="handleMcqSelection(option)"
               >
@@ -270,7 +270,7 @@
           <div class="reinforcement-phase" v-else-if="currentReviewWord">
             <h2 class="word">{{ currentReviewWord.word }}</h2>
             <p class="pronunciation">{{ currentReviewWord.pronunciation }}</p>
-            <div class="definition">{{ currentReviewWord.definition }}</div>
+            <div class="definition">{{ currentCorrectAnswer || currentReviewWord.definition }}</div>
             <div class="example" v-if="currentReviewWord.exampleSentence">
               <span class="example-label">例句：</span>
               {{ currentReviewWord.exampleSentence }}
@@ -354,7 +354,7 @@ import {
   updateMasteryLevel,
   addToVocabulary as addToVocabularyAPI,
   batchOperateVocabulary,
-  getQuizDistractors
+  getQuizData
 } from '@/api/student'
 
 const router = useRouter()
@@ -409,6 +409,7 @@ const mcqOptions = ref([])
 const selectedOption = ref(null)
 const isAnswering = ref(false)
 const mcqWasWrong = ref(false)  // 记录本词 MCQ 阶段是否答错
+const currentCorrectAnswer = ref(null)  // 当前题目的正确答案（来自ECDICT词库）
 let answerTimeoutId = null  // 用于追踪答题延迟的 setTimeout
 
 
@@ -659,23 +660,33 @@ const startReview = async () => {
   }
 }
 
-// 生成多选题选项（从ECDICT词库获取高质量干扰项，降级到本地生词本）
+// 生成多选题选项（正确答案和干扰项均来自ECDICT词库，确保风格一致）
 const generateMCQOptions = async () => {
   const currentWord = reviewWords.value[currentReviewIndex.value]
   if (!currentWord) return
 
   try {
-    // 1. 从后端ECDICT获取干扰项
-    const res = await getQuizDistractors(currentWord.word, 3)
-    let distractors = (res && Array.isArray(res.data) ? res.data : [])
-      .filter(d => d && d !== currentWord.definition)
+    // 从后端ECDICT获取正确答案和干扰项
+    const res = await getQuizData(currentWord.word, 3)
+    const quizData = res?.data || {}
+    let correctAnswer = quizData.correctTranslation
+    let distractors = (Array.isArray(quizData.distractors) ? quizData.distractors : [])
+      .filter(d => d && d !== correctAnswer)
 
-    // 2. 如果后端返回不足3个，从本地生词本补充
+    // 如果ECDICT没有该词的翻译，降级使用words表的definition
+    if (!correctAnswer) {
+      correctAnswer = currentWord.definition
+    }
+
+    // 保存当前正确答案（用于答题判定）
+    currentCorrectAnswer.value = correctAnswer
+
+    // 如果后端返回不足3个干扰项，从本地生词本补充
     if (distractors.length < 3) {
       const localDistractors = vocabulary.value
         .filter(w => (w.wordId || w.id) !== (currentWord.wordId || currentWord.id) && w.definition)
         .map(w => w.definition)
-        .filter(d => !distractors.includes(d) && d !== currentWord.definition)
+        .filter(d => !distractors.includes(d) && d !== correctAnswer)
       // Fisher-Yates 抽样补充
       const available = [...localDistractors]
       for (let i = available.length - 1; i > 0; i--) {
@@ -685,8 +696,8 @@ const generateMCQOptions = async () => {
       distractors = distractors.concat(available.slice(0, 3 - distractors.length))
     }
 
-    // 3. 合并正确答案 + Fisher-Yates 打乱
-    const options = [currentWord.definition, ...distractors.slice(0, 3)]
+    // 合并正确答案 + Fisher-Yates 打乱
+    const options = [correctAnswer, ...distractors.slice(0, 3)]
     const shuffled = [...options]
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -694,8 +705,9 @@ const generateMCQOptions = async () => {
     }
     mcqOptions.value = shuffled
   } catch (error) {
-    console.warn('ECDICT干扰项获取失败，降级到本地生词本:', error)
+    console.warn('ECDICT选项获取失败，降级到本地生词本:', error)
     // 降级：使用本地生词本逻辑
+    currentCorrectAnswer.value = currentWord.definition
     fallbackGenerateMCQOptions()
   }
 }
@@ -704,6 +716,8 @@ const generateMCQOptions = async () => {
 const fallbackGenerateMCQOptions = () => {
   const currentWord = reviewWords.value[currentReviewIndex.value]
   if (!currentWord) return
+
+  currentCorrectAnswer.value = currentWord.definition
 
   const distractors = vocabulary.value
     .filter(w => (w.wordId || w.id) !== (currentWord.wordId || currentWord.id) && w.definition)
@@ -739,8 +753,9 @@ const handleMcqSelection = (option) => {
     clearTimeout(answerTimeoutId)
   }
 
+  const correctAnswer = currentCorrectAnswer.value || currentWord.definition
   answerTimeoutId = setTimeout(() => {
-    if (option === currentWord.definition) {
+    if (option === correctAnswer) {
       // 选对了
       mcqWasWrong.value = false
       reviewPhase.value = PHASE.REINFORCEMENT
@@ -830,6 +845,7 @@ const submitReview = async (quality) => {
   try {
     const newMasteryLevel = (quality < 3) ? 'LEARNING'
       : (sm2Result.repetition >= 3) ? 'MASTERED'
+      : (sm2Result.repetition >= 1) ? 'FAMILIAR'
       : 'LEARNING'
 
     await updateMasteryLevel(wordId, {
@@ -848,6 +864,7 @@ const submitReview = async (quality) => {
   selectedOption.value = null
   isAnswering.value = false
   mcqWasWrong.value = false
+  currentCorrectAnswer.value = null
 
   // 检查是否完成复习
   if (currentReviewIndex.value < reviewWords.value.length) {
@@ -895,14 +912,14 @@ const handleItemSelect = (id, val) => {
   // Logic is handled by v-model="selectedWords"
 }
 
-// 开始单词测试
+// 开始单词测试（直接触发复习模式）
 const startWordTest = () => {
   const testWords = vocabulary.value.filter(word => word.masteryLevel !== 'MASTERED')
   if (testWords.length === 0) {
     ElMessage.info('没有需要测试的单词')
     return
   }
-  router.push('/student/word-test?from=vocabulary')
+  startReview()
 }
 
 // 播放音频

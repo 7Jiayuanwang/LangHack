@@ -131,7 +131,7 @@
       </div>
       <div class="table-wrapper">
       <el-table :data="currentClassStudents" stripe>
-        <el-table-column label="用户名">
+        <el-table-column label="学号">
           <template #default="scope">
             {{ scope.row.student?.username || '-' }}
           </template>

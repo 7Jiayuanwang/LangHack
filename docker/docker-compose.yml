@@ -25,6 +25,22 @@ services:
           memory: 2G
         reservations:
           memory: 512M
+    # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
+    # （MySQL 8.0 会忽略 world-writable 的 .cnf 文件）
+    command: >
+      --server-id=1
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --binlog-expire-logs-seconds=604800
+      --max-binlog-size=100M
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --innodb-buffer-pool-size=1G
+      --innodb-buffer-pool-instances=2
+      --innodb-log-file-size=256M
+      --innodb-flush-log-at-trx-commit=1
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -37,11 +53,13 @@ services:
       - mysql_master_data:/var/lib/mysql
       - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
       # docker-entrypoint-initdb.d 按文件名顺序执行（仅首次启动）
-      # 01: 字符集配置 → 02: 复制用户 → 03: 备份导入 → 04: 合并迁移
+      # 01: 字符集配置 → 02: 复制用户 → 03: 备份导入 → 04: 合并迁移 → 05: ECDICT词典
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
-      - ./mysql/init/01-create-replication-user.sql:/docker-entrypoint-initdb.d/02-create-replication-user.sql:ro
+      - ./mysql/init/01-create-replication-user.sh:/docker-entrypoint-initdb.d/02-create-replication-user.sh:ro
       - ../database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/03-import-backup.sql:ro
       - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/05-import-ecdict.sh:/docker-entrypoint-initdb.d/05-import-ecdict.sh:ro
+      - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
     networks:
       - langhack-network
     healthcheck:
@@ -49,7 +67,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s
 
   # ─────────────────────────────────────────────
   # MySQL 从库（只读副本）
@@ -65,30 +83,51 @@ services:
           memory: 2G
         reservations:
           memory: 512M
+    # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
+    # 注意: read-only 和 super-read-only 不能在 command 中设置，否则阻塞 init 脚本
+    # 它们在 init-replication.sh 中通过 SET GLOBAL 设置
+    command: >
+      --server-id=2
+      --relay-log=relay-bin
+      --relay-log-purge=ON
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --log-bin=mysql-slave-bin
+      --log-slave-updates=ON
+      --innodb-buffer-pool-size=1G
+      --innodb-flush-log-at-trx-commit=2
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
       TZ: Asia/Shanghai
     ports:
       - "${PORT_MYSQL_SLAVE:-3307}:3306"
     volumes:
       - mysql_slave_data:/var/lib/mysql
       - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
-      # 从库也需要完整的初始化数据（备份 + 迁移）
+      # 从库也需要完整的初始化数据（备份 + 迁移 + ECDICT）
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
       - ../database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/03-import-backup.sql:ro
       - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/05-import-ecdict.sh:/docker-entrypoint-initdb.d/05-import-ecdict.sh:ro
+      - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
+      # 复制初始化（最后执行）
+      - ./mysql/slave/init-replication.sh:/docker-entrypoint-initdb.d/06-init-replication.sh:ro
     networks:
       - langhack-network
     depends_on:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} && mysql -u root -p${MYSQL_ROOT_PASSWORD} -e \"SHOW REPLICA STATUS\\G\" | grep -q 'Replica_SQL_Running: Yes'"]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 40s
+      start_period: 90s
 
   # ─────────────────────────────────────────────
   # Redis 缓存
@@ -162,13 +201,10 @@ services:
       MYSQLDUMP_PATH: mysqldump
       # CORS
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
-      # 腾讯翻译（可选）
-      TENCENT_SECRET_ID: ${TENCENT_SECRET_ID:-}
-      TENCENT_SECRET_KEY: ${TENCENT_SECRET_KEY:-}
-      # 腾讯 Hunyuan 模型（SiliconFlow 托管）
-      TENCENT_HUNYUAN_API_URL: ${TENCENT_HUNYUAN_API_URL}
-      TENCENT_HUNYUAN_API_KEY: ${TENCENT_HUNYUAN_API_KEY}
-      TENCENT_HUNYUAN_MODEL: ${TENCENT_HUNYUAN_MODEL}
+      # AI 翻译（可选，也可在运维面板配置）
+      AI_TRANSLATE_API_URL: ${AI_TRANSLATE_API_URL:-}
+      AI_TRANSLATE_API_KEY: ${AI_TRANSLATE_API_KEY:-}
+      AI_TRANSLATE_MODEL: ${AI_TRANSLATE_MODEL:-}
     ports:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:
@@ -180,6 +216,8 @@ services:
     depends_on:
       mysql-master:
         condition: service_healthy
+      mysql-slave:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -187,7 +225,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
 
   # ─────────────────────────────────────────────
   # Vue 3 前端 (Nginx 反向代理)

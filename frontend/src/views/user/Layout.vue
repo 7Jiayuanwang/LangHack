@@ -62,7 +62,6 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Reading,
   Upload,
   Document,
   House
@@ -76,8 +75,8 @@ const userStore = useUserStore()
 const navItems = ref([
   {
     path: '/user',
-    label: '课文',
-    icon: Reading,
+    label: '首页',
+    icon: House,
     badge: null
   },
   {
@@ -91,22 +90,15 @@ const navItems = ref([
     label: '生词',
     icon: Document,
     badge: null
-  },
-  {
-    path: '/user/home',
-    label: '首页',
-    icon: House,
-    badge: null
   }
 ])
 
 // 页面标题
 const pageTitle = computed(() => {
   const routeMap = {
-    '/user': '课文浏览',
+    '/user': '首页',
     '/user/user-texts': '我的上传',
-    '/user/vocabulary': '我的生词',
-    '/user/home': '用户首页'
+    '/user/vocabulary': '我的生词'
   }
   return route.meta?.title || routeMap[route.path] || '用户端'
 })

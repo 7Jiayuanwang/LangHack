@@ -177,7 +177,7 @@
           <div class="table-wrapper">
           <el-table v-loading="studentsLoading" :data="classStudents" stripe>
             <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column label="用户名" prop="student.username" />
+            <el-table-column label="学号" prop="student.username" />
             <el-table-column label="姓名">
               <template #default="{ row }">
                 {{ row.student?.nickname || row.student?.realName || '-' }}

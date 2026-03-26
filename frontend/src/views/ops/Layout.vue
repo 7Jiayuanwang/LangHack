@@ -71,7 +71,8 @@ import ElevationDialog from '@/components/ElevationDialog.vue'
 import {
   DataLine,
   FolderOpened,
-  User
+  User,
+  Connection
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -95,6 +96,11 @@ const navItems = ref([
     path: '/ops/users',
     label: '用户',
     icon: User
+  },
+  {
+    path: '/ops/ai-providers',
+    label: 'AI',
+    icon: Connection
   }
 ])
 
@@ -102,7 +108,8 @@ const pageTitle = computed(() => {
   const routeMap = {
     '/ops/monitoring': '系统监控',
     '/ops/backups': '数据备份',
-    '/ops/users': '用户管理'
+    '/ops/users': '用户管理',
+    '/ops/ai-providers': 'AI 服务管理'
   }
   return route.meta?.title || routeMap[route.path] || '运维面板'
 })

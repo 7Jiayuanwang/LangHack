@@ -38,7 +38,7 @@ spring:
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
         pool-name: master-pool
-        maximum-pool-size: 50
+        maximum-pool-size: 60
         minimum-idle: 10
         connection-timeout: 30000
         idle-timeout: 600000
@@ -56,8 +56,8 @@ spring:
       driver-class-name: com.mysql.cj.jdbc.Driver
       hikari:
         pool-name: slave-pool
-        maximum-pool-size: 80
-        minimum-idle: 15
+        maximum-pool-size: 120
+        minimum-idle: 30
         connection-timeout: 30000
         idle-timeout: 600000
         max-lifetime: 1800000
@@ -143,14 +143,6 @@ openrouter:
 
 # Tencent Cloud API Configuration
 tencent:
-  translate:
-    # CRITICAL: Credentials MUST be provided via environment variables
-    # - TENCENT_SECRET_ID: Tencent Cloud secret ID
-    # - TENCENT_SECRET_KEY: Tencent Cloud secret key
-    # - Leave empty for local development if translation service not used
-    secret-id: ${TENCENT_SECRET_ID:}
-    secret-key: ${TENCENT_SECRET_KEY:}
-    region: ap-guangzhou  # Region: Guangzhou by default
   asr:
     # CRITICAL: Credentials MUST be provided via environment variables
     # - TENCENT_ASR_SECRET_ID: Tencent Cloud secret ID for ASR
@@ -159,11 +151,15 @@ tencent:
     secret-id: ${TENCENT_ASR_SECRET_ID:}
     secret-key: ${TENCENT_ASR_SECRET_KEY:}
     region: ${TENCENT_ASR_REGION:ap-guangzhou}  # Region: Guangzhou by default
-  hunyuan:
-    # SiliconFlow hosted Tencent Hunyuan model (OpenAI-compatible API)
-    api-url: ${TENCENT_HUNYUAN_API_URL}
-    api-key: ${TENCENT_HUNYUAN_API_KEY}
-    model: ${TENCENT_HUNYUAN_MODEL}
+
+# AI Translation (OpenAI-compatible API, default: SiliconFlow Hunyuan-MT)
+# Priority: DB system_config > these env vars > code defaults
+ai:
+  translate:
+    api-url: ${AI_TRANSLATE_API_URL:https://api.siliconflow.cn/v1/chat/completions}
+    api-key: ${AI_TRANSLATE_API_KEY:}
+    model: ${AI_TRANSLATE_MODEL:tencent/Hunyuan-MT-7B}
+    timeout: ${AI_TRANSLATE_TIMEOUT:30000}
 
 async:
   version-generator:

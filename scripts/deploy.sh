@@ -271,9 +271,10 @@ if [ "$SKIP_ENV" = false ]; then
     ask_secret "HiAgent API Key (可选)" "$(load_env_value "HIAGENT_API_KEY" "")" CFG_HIAGENT_KEY
 
     echo ""
-    echo "  [ 腾讯云 ]"
-    ask_secret "SecretId (可选)" "$(load_env_value "TENCENT_SECRET_ID" "")" CFG_TENCENT_ID
-    ask_secret "SecretKey (可选)" "$(load_env_value "TENCENT_SECRET_KEY" "")" CFG_TENCENT_KEY
+    echo "  [ AI 翻译 (可选，也可在运维面板配置) ]"
+    ask_value  "API URL (留空=运维面板配置)" "$(load_env_value "AI_TRANSLATE_API_URL" "")" CFG_AI_TRANSLATE_URL
+    ask_secret "API Key (留空=运维面板配置)" "$(load_env_value "AI_TRANSLATE_API_KEY" "")" CFG_AI_TRANSLATE_KEY
+    ask_value  "模型 (留空=运维面板配置)"   "$(load_env_value "AI_TRANSLATE_MODEL" "")"   CFG_AI_TRANSLATE_MODEL
 
     echo ""
     echo "  [ 腾讯 Hunyuan 模型 (SiliconFlow 托管) ]"
@@ -338,8 +339,9 @@ if [ "$SKIP_ENV" = false ]; then
         [ -n "$CFG_REDIS_PASSWORD" ]  && printf 'REDIS_PASSWORD=%s\n'      "$CFG_REDIS_PASSWORD"  || printf '# REDIS_PASSWORD=\n'
         [ -n "$CFG_OPENROUTER_KEY" ]  && printf 'OPENROUTER_API_KEY=%s\n'  "$CFG_OPENROUTER_KEY"  || printf '# OPENROUTER_API_KEY=\n'
         [ -n "$CFG_HIAGENT_KEY" ]     && printf 'HIAGENT_API_KEY=%s\n'     "$CFG_HIAGENT_KEY"     || printf '# HIAGENT_API_KEY=\n'
-        [ -n "$CFG_TENCENT_ID" ]      && printf 'TENCENT_SECRET_ID=%s\n'   "$CFG_TENCENT_ID"      || printf '# TENCENT_SECRET_ID=\n'
-        [ -n "$CFG_TENCENT_KEY" ]     && printf 'TENCENT_SECRET_KEY=%s\n'  "$CFG_TENCENT_KEY"     || printf '# TENCENT_SECRET_KEY=\n'
+        [ -n "$CFG_AI_TRANSLATE_URL" ] && printf 'AI_TRANSLATE_API_URL=%s\n' "$CFG_AI_TRANSLATE_URL" || printf '# AI_TRANSLATE_API_URL=\n'
+        [ -n "$CFG_AI_TRANSLATE_KEY" ] && printf 'AI_TRANSLATE_API_KEY=%s\n' "$CFG_AI_TRANSLATE_KEY" || printf '# AI_TRANSLATE_API_KEY=\n'
+        [ -n "$CFG_AI_TRANSLATE_MODEL" ] && printf 'AI_TRANSLATE_MODEL=%s\n' "$CFG_AI_TRANSLATE_MODEL" || printf '# AI_TRANSLATE_MODEL=\n'
         [ -n "$CFG_HUNYUAN_API_URL" ] && printf 'TENCENT_HUNYUAN_API_URL=%s\n' "$CFG_HUNYUAN_API_URL" || printf '# TENCENT_HUNYUAN_API_URL=\n'
         [ -n "$CFG_HUNYUAN_API_KEY" ] && printf 'TENCENT_HUNYUAN_API_KEY=%s\n' "$CFG_HUNYUAN_API_KEY" || printf '# TENCENT_HUNYUAN_API_KEY=\n'
         [ -n "$CFG_HUNYUAN_MODEL" ]   && printf 'TENCENT_HUNYUAN_MODEL=%s\n'   "$CFG_HUNYUAN_MODEL"   || printf '# TENCENT_HUNYUAN_MODEL=\n'
