@@ -1,8 +1,10 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.entity.AiProvider;
 import com.english.entity.SystemConfig;
 import com.english.exception.BusinessException;
+import com.english.service.AiProviderService;
 import com.english.service.SystemConfigService;
 import com.english.service.TencentTranslateService;
 import com.english.service.impl.DataCleanupServiceImpl;
@@ -36,6 +38,9 @@ public class OpsController {
 
     @Autowired
     private TencentTranslateService translateService;
+
+    @Autowired
+    private AiProviderService aiProviderService;
 
     /**
      * 清理不一致的数据
@@ -133,6 +138,95 @@ public class OpsController {
         } catch (Exception e) {
             logger.error("翻译测试失败", e);
             return Result.error("翻译测试失败，请稍后重试");
+        }
+    }
+
+    // ==================== AI 服务商管理 ====================
+
+    /**
+     * 获取指定服务的所有 AI 服务商（脱敏）
+     */
+    @GetMapping("/ai-providers")
+    public Result<List<AiProvider>> listAiProviders(@RequestParam(required = false) String service) {
+        List<AiProvider> list = service != null
+                ? aiProviderService.listByService(service)
+                : aiProviderService.listAll();
+        // mask api_key
+        for (AiProvider p : list) {
+            if (p.getApiKey() != null && p.getApiKey().length() > 8) {
+                p.setApiKey(p.getApiKey().substring(0, 4) + "****" + p.getApiKey().substring(p.getApiKey().length() - 4));
+            } else if (p.getApiKey() != null) {
+                p.setApiKey("****");
+            }
+        }
+        return Result.success(list);
+    }
+
+    /**
+     * 新增 AI 服务商
+     */
+    @PostMapping("/ai-providers")
+    public Result<AiProvider> createAiProvider(@RequestBody AiProvider provider, Authentication authentication) {
+        provider.setUpdatedBy(authentication.getName());
+        aiProviderService.create(provider);
+        return Result.success(provider);
+    }
+
+    /**
+     * 更新 AI 服务商（若 api_key 含 **** 则不覆盖原值）
+     */
+    @PutMapping("/ai-providers/{id}")
+    public Result<String> updateAiProvider(@PathVariable Long id,
+                                           @RequestBody AiProvider provider,
+                                           Authentication authentication) {
+        provider.setId(id);
+        provider.setUpdatedBy(authentication.getName());
+        // 若前端回传脱敏 key，保留数据库原值
+        if (provider.getApiKey() != null && provider.getApiKey().contains("****")) {
+            provider.setApiKey(null);
+        }
+        aiProviderService.update(provider);
+        return Result.success("更新成功");
+    }
+
+    /**
+     * 删除 AI 服务商
+     */
+    @DeleteMapping("/ai-providers/{id}")
+    public Result<String> deleteAiProvider(@PathVariable Long id) {
+        aiProviderService.delete(id);
+        return Result.success("删除成功");
+    }
+
+    /**
+     * 启用 / 禁用 AI 服务商
+     */
+    @PatchMapping("/ai-providers/{id}/enabled")
+    public Result<String> toggleAiProvider(@PathVariable Long id,
+                                           @RequestBody Map<String, Integer> body,
+                                           Authentication authentication) {
+        aiProviderService.setEnabled(id, body.get("enabled"), authentication.getName());
+        return Result.success("操作成功");
+    }
+
+    /**
+     * 测试指定服务商连通性
+     */
+    @PostMapping("/ai-providers/{id}/test")
+    public Result<Map<String, Object>> testAiProvider(@PathVariable Long id,
+                                                      @RequestBody(required = false) Map<String, String> body) {
+        try {
+            String testText = (body != null && body.get("text") != null) ? body.get("text") : "Hello, world!";
+            Map<String, Object> data = aiProviderService.test(id, testText);
+            return Result.success(data);
+        } catch (BusinessException e) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", false);
+            data.put("error", e.getMessage());
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("AI服务商连通性测试失败 id={}", id, e);
+            return Result.error("测试失败，请稍后重试");
         }
     }
 }

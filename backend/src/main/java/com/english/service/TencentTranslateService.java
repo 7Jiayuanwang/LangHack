@@ -1,5 +1,6 @@
 package com.english.service;
 
+import com.english.entity.AiProvider;
 import com.english.exception.BusinessException;
 import com.english.service.impl.AiCallMetricsService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -30,6 +31,9 @@ public class TencentTranslateService {
 
     @Autowired
     private SystemConfigService systemConfigService;
+
+    @Autowired(required = false)
+    private AiProviderService aiProviderService;
 
     @Value("${ai.translate.api-url:https://api.siliconflow.cn/v1/chat/completions}")
     private String defaultApiUrl;
@@ -102,11 +106,24 @@ public class TencentTranslateService {
     }
 
     /**
-     * Resolve config: DB system_config > application.yml env vars > code defaults
+     * Resolve config: ai_provider table (weighted round-robin) > system_config > application.yml
      */
     private Map<String, String> resolveConfig() {
+        // 1. 优先从多服务商表加权轮询
+        if (aiProviderService != null) {
+            AiProvider provider = aiProviderService.pick("translate");
+            if (provider != null) {
+                Map<String, String> resolved = new HashMap<>();
+                resolved.put("api_url", provider.getApiUrl() != null ? provider.getApiUrl() : defaultApiUrl);
+                resolved.put("api_key", provider.getApiKey());
+                resolved.put("model", provider.getModel() != null ? provider.getModel() : defaultModel);
+                resolved.put("enabled", "true");
+                resolved.put("provider_name", provider.getName());
+                return resolved;
+            }
+        }
+        // 2. 回退：system_config 表 > application.yml 默认值
         Map<String, String> dbConfig = systemConfigService.getByGroup("ai_translate");
-
         String apiUrl = getOrDefault(dbConfig, "api_url", defaultApiUrl);
         String apiKey = getOrDefault(dbConfig, "api_key", defaultApiKey);
         String model = getOrDefault(dbConfig, "model", defaultModel);

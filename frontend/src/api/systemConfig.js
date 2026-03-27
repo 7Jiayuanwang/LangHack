@@ -23,3 +23,32 @@ export function testTranslate(text) {
     data: { text }
   })
 }
+
+// AI 服务商管理
+export function listAiProviders(service) {
+  return request({
+    url: '/api/ops/ai-providers',
+    method: 'get',
+    params: service ? { service } : {}
+  })
+}
+
+export function createAiProvider(data) {
+  return request({ url: '/api/ops/ai-providers', method: 'post', data })
+}
+
+export function updateAiProvider(id, data) {
+  return request({ url: `/api/ops/ai-providers/${id}`, method: 'put', data })
+}
+
+export function deleteAiProvider(id) {
+  return request({ url: `/api/ops/ai-providers/${id}`, method: 'delete' })
+}
+
+export function toggleAiProvider(id, enabled) {
+  return request({ url: `/api/ops/ai-providers/${id}/enabled`, method: 'patch', data: { enabled } })
+}
+
+export function testAiProvider(id, text) {
+  return request({ url: `/api/ops/ai-providers/${id}/test`, method: 'post', data: { text } })
+}
