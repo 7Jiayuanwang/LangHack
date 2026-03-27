@@ -30,4 +30,7 @@ public interface AiProviderService {
 
     /** 测试指定服务商连通性，返回 {success, input, output, latencyMs, error} */
     Map<String, Object> test(Long id, String testText);
+
+    /** 从环境变量将 AI 密钥种子化到 ai_provider 表（已存在则跳过） */
+    void seedFromEnv();
 }

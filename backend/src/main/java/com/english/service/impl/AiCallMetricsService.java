@@ -25,18 +25,40 @@ public class AiCallMetricsService {
     private static final int BATCH_SIZE = 200;
     private static final DateTimeFormatter DATE_KEY = DateTimeFormatter.ofPattern("yyyyMMdd");
 
-    private static final List<String> ALL_SERVICES = Arrays.asList(
+    private static final List<String> FALLBACK_SERVICES = Arrays.asList(
             "HIAGENT", "OPENROUTER", "TENCENT_TRANSLATE", "TENCENT_ASR", "BILIBILI"
     );
 
     private final ConcurrentLinkedQueue<AiCallLog> buffer = new ConcurrentLinkedQueue<>();
     private final AiCallLogMapper aiCallLogMapper;
     private final StringRedisTemplate redisTemplate;
+    private final com.english.mapper.AiProviderMapper aiProviderMapper;
 
     public AiCallMetricsService(AiCallLogMapper aiCallLogMapper,
-                                 StringRedisTemplate redisTemplate) {
+                                 StringRedisTemplate redisTemplate,
+                                 com.english.mapper.AiProviderMapper aiProviderMapper) {
         this.aiCallLogMapper = aiCallLogMapper;
         this.redisTemplate = redisTemplate;
+        this.aiProviderMapper = aiProviderMapper;
+    }
+
+    private List<String> getActiveServiceNames() {
+        try {
+            List<String> names = aiProviderMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<com.english.entity.AiProvider>()
+                    .eq("enabled", true)
+                    .select("name")
+            ).stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+            if (names.isEmpty()) return FALLBACK_SERVICES;
+            // also include built-in non-provider services
+            List<String> all = new java.util.ArrayList<>(names);
+            for (String s : Arrays.asList("TENCENT_TRANSLATE", "TENCENT_ASR", "BILIBILI")) {
+                if (!all.contains(s)) all.add(s);
+            }
+            return all;
+        } catch (Exception e) {
+            return FALLBACK_SERVICES;
+        }
     }
 
     public long startTimer() {
@@ -138,7 +160,7 @@ public class AiCallMetricsService {
         Map<String, Object> result = new LinkedHashMap<>();
         String dateKey = LocalDate.now().format(DATE_KEY);
 
-        for (String service : ALL_SERVICES) {
+        for (String service : getActiveServiceNames()) {
             Map<String, Object> serviceStats = new LinkedHashMap<>();
             try {
                 String countStr = redisTemplate.opsForValue().get("ai:today:" + service + ":count:" + dateKey);

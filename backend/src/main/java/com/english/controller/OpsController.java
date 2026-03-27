@@ -210,6 +210,15 @@ public class OpsController {
     }
 
     /**
+     * 手动触发：将环境变量中的 AI 密钥种子化到 ai_provider 表（已存在则跳过）
+     */
+    @PostMapping("/ai-providers/seed-from-env")
+    public Result<String> seedAiProvidersFromEnv() {
+        aiProviderService.seedFromEnv();
+        return Result.success("种子化完成");
+    }
+
+    /**
      * 测试指定服务商连通性
      */
     @PostMapping("/ai-providers/{id}/test")

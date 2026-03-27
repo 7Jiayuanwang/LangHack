@@ -10,10 +10,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,10 +28,70 @@ public class AiProviderServiceImpl implements AiProviderService {
     @Autowired
     private AiProviderMapper mapper;
 
+    @Autowired
+    private Environment env;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** per-service round-robin counter */
     private final Map<String, AtomicInteger> counters = new HashMap<>();
+
+    /**
+     * 若数据库中 translate 服务无任何记录，尝试从环境变量读取初始服务商并插入。
+     * 这样部署脚本只需写入 .env，无需手动操作运维面板也能快速启动翻译功能。
+     */
+    @PostConstruct
+    public void seedFromEnv() {
+        try {
+            long count = mapper.selectCount(
+                new LambdaQueryWrapper<AiProvider>().eq(AiProvider::getService, "translate"));
+            if (count > 0) return;
+
+            // 主翻译服务商（通用 OpenAI 兼容）
+            String apiUrl = env.getProperty("AI_TRANSLATE_API_URL", "").trim();
+            String apiKey = env.getProperty("AI_TRANSLATE_API_KEY", "").trim();
+            String model  = env.getProperty("AI_TRANSLATE_MODEL", "gpt-3.5-turbo").trim();
+            if (!apiUrl.isEmpty() && !apiKey.isEmpty()) {
+                insertSeedProvider("translate", "默认服务商 (env)", apiUrl, apiKey, model, 3, "由部署脚本环境变量自动创建");
+            }
+
+            // OpenRouter（可选）
+            String orKey = env.getProperty("OPENROUTER_API_KEY", "").trim();
+            if (!orKey.isEmpty()) {
+                insertSeedProvider("translate", "OpenRouter",
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    orKey, "openai/gpt-3.5-turbo", 2, "由部署脚本 OPENROUTER_API_KEY 自动创建");
+            }
+
+            // HiAgent（可选）
+            String haKey = env.getProperty("HIAGENT_API_KEY", "").trim();
+            if (!haKey.isEmpty()) {
+                insertSeedProvider("translate", "HiAgent",
+                    "https://api.hiagent.cn/v1/chat/completions",
+                    haKey, "gpt-3.5-turbo", 2, "由部署脚本 HIAGENT_API_KEY 自动创建");
+            }
+        } catch (Exception e) {
+            log.warn("[AiProvider] 种子初始化失败（可忽略）: {}", e.getMessage());
+        }
+    }
+
+    private void insertSeedProvider(String service, String name, String apiUrl,
+                                     String apiKey, String model, int weight, String remark) {
+        AiProvider p = new AiProvider();
+        p.setService(service);
+        p.setName(name);
+        p.setApiUrl(apiUrl);
+        p.setApiKey(apiKey);
+        p.setModel(model);
+        p.setWeight(weight);
+        p.setEnabled(1);
+        p.setTimeoutMs(30000);
+        p.setRemark(remark);
+        p.setCreatedTime(LocalDateTime.now());
+        p.setUpdatedTime(LocalDateTime.now());
+        mapper.insert(p);
+        log.info("[AiProvider] 已从环境变量自动插入服务商: {} ({})", name, apiUrl);
+    }
 
     // ------------------------------------------------------------------ query
 

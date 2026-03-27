@@ -266,15 +266,23 @@ if [ "$SKIP_ENV" = false ]; then
     ask_value "Redis 密码 (可留空)" "$(load_env_value "REDIS_PASSWORD" "")" CFG_REDIS_PASSWORD
 
     echo ""
-    echo "  [ AI 服务 ]"
-    ask_secret "OpenRouter API Key" "$(load_env_value "OPENROUTER_API_KEY" "")" CFG_OPENROUTER_KEY
-    ask_secret "HiAgent API Key (可选)" "$(load_env_value "HIAGENT_API_KEY" "")" CFG_HIAGENT_KEY
-
-    echo ""
-    echo "  [ AI 翻译 (可选，也可在运维面板配置) ]"
-    ask_value  "API URL (留空=运维面板配置)" "$(load_env_value "AI_TRANSLATE_API_URL" "")" CFG_AI_TRANSLATE_URL
-    ask_secret "API Key (留空=运维面板配置)" "$(load_env_value "AI_TRANSLATE_API_KEY" "")" CFG_AI_TRANSLATE_KEY
-    ask_value  "模型 (留空=运维面板配置)"   "$(load_env_value "AI_TRANSLATE_MODEL" "")"   CFG_AI_TRANSLATE_MODEL
+    echo "  [ AI 服务商 (可选，也可部署后在运维面板 → AI服务管理中配置多个服务商并设置负载均衡) ]"
+    echo "  提示: 支持 OpenAI/OpenRouter/HiAgent 等兼容 OpenAI 格式的服务商"
+    ask_secret "初始翻译服务 API Key (留空=稍后在面板配置)" "$(load_env_value "AI_TRANSLATE_API_KEY" "")" CFG_AI_TRANSLATE_KEY
+    CFG_AI_TRANSLATE_URL=""
+    CFG_AI_TRANSLATE_MODEL=""
+    if [ -n "$CFG_AI_TRANSLATE_KEY" ]; then
+        ask_value  "API URL" "$(load_env_value "AI_TRANSLATE_API_URL" "https://api.openai.com/v1/chat/completions")" CFG_AI_TRANSLATE_URL
+        ask_value  "模型"    "$(load_env_value "AI_TRANSLATE_MODEL" "gpt-3.5-turbo")" CFG_AI_TRANSLATE_MODEL
+    fi
+    if [ -n "$CFG_AI_TRANSLATE_KEY" ]; then
+        echo "  (可选) 配置更多服务商以启用负载均衡:"
+        ask_secret "OpenRouter API Key (留空跳过)" "$(load_env_value "OPENROUTER_API_KEY" "")" CFG_OPENROUTER_KEY
+        ask_secret "HiAgent API Key (留空跳过)"   "$(load_env_value "HIAGENT_API_KEY" "")"    CFG_HIAGENT_KEY
+    else
+        CFG_OPENROUTER_KEY=""
+        CFG_HIAGENT_KEY=""
+    fi
 
     echo ""
     echo "  [ 端口映射 ]"
@@ -343,11 +351,11 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'DB_PASSWORD=%s\n'        "$CFG_DB_PASSWORD"
         printf 'JWT_SECRET=%s\n'         "$CFG_JWT_SECRET"
         [ -n "$CFG_REDIS_PASSWORD" ]  && printf 'REDIS_PASSWORD=%s\n'      "$CFG_REDIS_PASSWORD"  || printf '# REDIS_PASSWORD=\n'
-        [ -n "$CFG_OPENROUTER_KEY" ]  && printf 'OPENROUTER_API_KEY=%s\n'  "$CFG_OPENROUTER_KEY"  || printf '# OPENROUTER_API_KEY=\n'
-        [ -n "$CFG_HIAGENT_KEY" ]     && printf 'HIAGENT_API_KEY=%s\n'     "$CFG_HIAGENT_KEY"     || printf '# HIAGENT_API_KEY=\n'
         [ -n "$CFG_AI_TRANSLATE_URL" ] && printf 'AI_TRANSLATE_API_URL=%s\n' "$CFG_AI_TRANSLATE_URL" || printf '# AI_TRANSLATE_API_URL=\n'
         [ -n "$CFG_AI_TRANSLATE_KEY" ] && printf 'AI_TRANSLATE_API_KEY=%s\n' "$CFG_AI_TRANSLATE_KEY" || printf '# AI_TRANSLATE_API_KEY=\n'
         [ -n "$CFG_AI_TRANSLATE_MODEL" ] && printf 'AI_TRANSLATE_MODEL=%s\n' "$CFG_AI_TRANSLATE_MODEL" || printf '# AI_TRANSLATE_MODEL=\n'
+        [ -n "$CFG_OPENROUTER_KEY" ] && printf 'OPENROUTER_API_KEY=%s\n' "$CFG_OPENROUTER_KEY" || printf '# OPENROUTER_API_KEY=\n'
+        [ -n "$CFG_HIAGENT_KEY" ]    && printf 'HIAGENT_API_KEY=%s\n'    "$CFG_HIAGENT_KEY"    || printf '# HIAGENT_API_KEY=\n'
         printf 'MYSQL_ROOT_PASSWORD=%s\n'          "$CFG_DB_PASSWORD"
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'
@@ -583,8 +591,13 @@ echo "[SUCCESS] 部署完成！"
 echo "  分支: $TARGET_BRANCH"
 echo "  版本: $(cd "$PROJECT_ROOT" && git rev-parse --short HEAD)"
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
-echo "  前端: http://${SERVER_IP}:${PORT_FRONTEND}"
-echo "  后端: http://${SERVER_IP}:${PORT_BACKEND}"
+echo "  前端:        http://${SERVER_IP}:${PORT_FRONTEND}"
+echo "  后端:        http://${SERVER_IP}:${PORT_BACKEND}"
+echo "  AI服务管理:  http://${SERVER_IP}:${PORT_FRONTEND}/#/ops/ai-providers"
+
+# ── AI 密钥种子化：应用启动时 @PostConstruct 自动完成，无需外部触发 ──
+echo "[INFO] AI 服务商密钥将在后端启动时自动从环境变量种子化到数据库"
+echo "       如需手动管理，请访问: http://${SERVER_IP}:${PORT_FRONTEND}/#/ops/ai-providers"
 
 # ── 设置自动更新 crontab ────────────────────────────
 if [ "${CFG_AUTO_UPDATE_ENABLED:-$(load_env_value "AUTO_UPDATE_ENABLED" "false" "$ENV_FILE")}" = "true" ]; then

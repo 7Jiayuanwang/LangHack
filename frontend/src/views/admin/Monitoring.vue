@@ -211,7 +211,7 @@ const dailyData = ref([])
 const topPages = ref([])
 let eventSource = null
 
-const serviceNames = ['HIAGENT', 'OPENROUTER', 'TENCENT_TRANSLATE', 'TENCENT_ASR', 'BILIBILI']
+const serviceNames = computed(() => Object.keys(aiStats.value))
 
 const filteredAiLogs = computed(() => {
   if (!aiLogFilter.value) return aiRecentLogs.value
@@ -285,7 +285,9 @@ const aiCallsChartOption = computed(() => {
     serviceData[row.serviceName][row.statDate] = row.totalCalls || 0
   }
   const dates = [...dateSet].sort()
-  const colors = { HIAGENT: '#409EFF', OPENROUTER: '#67C23A', TENCENT_TRANSLATE: '#E6A23C', TENCENT_ASR: '#F56C6C', BILIBILI: '#909399' }
+  const palette = ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399', '#9B59B6', '#1ABC9C', '#E67E22']
+  const allSvcs = [...new Set(aiDailyData.value.map(r => r.serviceName))]
+  const colors = Object.fromEntries(allSvcs.map((s, i) => [s, palette[i % palette.length]]))
   const series = Object.keys(serviceData).map(svc => ({
     name: formatServiceName(svc),
     type: 'bar',
