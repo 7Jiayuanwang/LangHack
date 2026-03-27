@@ -519,9 +519,7 @@ while [ $elapsed -lt $timeout ]; do
         sleep 5; elapsed=$((elapsed + 5)); continue
     fi
     unhealthy=$(echo "$statuses" | grep -c "unhealthy" || true)
-    healthy=$(echo   "$statuses" | grep -c "healthy"   || true)
-    # 排除 unhealthy 中被 healthy 误计的行（"unhealthy" 包含 "healthy"）
-    healthy=$((healthy - unhealthy))
+    healthy=$(echo   "$statuses" | grep -v "unhealthy" | grep -c "healthy" || true)
     if [ "$unhealthy" -gt 0 ]; then
         echo ""
         echo "[ERROR] 有服务启动失败（unhealthy），终止等待："
@@ -589,7 +587,7 @@ echo "  前端: http://${SERVER_IP}:${PORT_FRONTEND}"
 echo "  后端: http://${SERVER_IP}:${PORT_BACKEND}"
 
 # ── 设置自动更新 crontab ────────────────────────────
-if [ "${CFG_AUTO_UPDATE_ENABLED:-}" = "true" ] || [ "$(load_env_value "AUTO_UPDATE_ENABLED" "false" "$ENV_FILE")" = "true" ]; then
+if [ "${CFG_AUTO_UPDATE_ENABLED:-$(load_env_value "AUTO_UPDATE_ENABLED" "false" "$ENV_FILE")}" = "true" ]; then
     AU_CRON="${CFG_AUTO_UPDATE_CRON:-$(load_env_value "AUTO_UPDATE_CRON" "0 * * * *" "$ENV_FILE")}"
     AU_BRANCH="${CFG_AUTO_UPDATE_BRANCH:-$(load_env_value "AUTO_UPDATE_BRANCH" "$TARGET_BRANCH" "$ENV_FILE")}"
     SCRIPT_PATH="$PROJECT_ROOT/scripts/auto-update.sh"

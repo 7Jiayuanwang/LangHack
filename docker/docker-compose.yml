@@ -84,8 +84,8 @@ services:
         reservations:
           memory: 512M
     # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
-    # 注意: read-only 和 super-read-only 不能在 command 中设置，否则阻塞 init 脚本
-    # 它们在 init-replication.sh 中通过 SET GLOBAL 设置
+    # 注意: super-read-only 不能在 my.cnf 或 command 中设置，否则阻塞 init 脚本
+    # (ERROR 1290) — 在 init-replication.sh 末尾通过 SET GLOBAL 动态启用
     command: >
       --server-id=2
       --relay-log=relay-bin
