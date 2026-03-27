@@ -283,6 +283,18 @@ if [ "$SKIP_ENV" = false ]; then
     ask_port "MySQL 端口" "$(load_env_value "PORT_MYSQL" "3306")" CFG_PORT_DB
 
     echo ""
+    echo "  [ CORS 跨域 ]"
+    DEF_CORS=$(load_env_value "APP_CORS_ALLOWED_ORIGINS" "")
+    SERVER_IP_HINT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+    CORS_DEFAULT="http://localhost,http://localhost:${CFG_PORT_FE}"
+    [ -n "$SERVER_IP_HINT" ] && CORS_DEFAULT="${CORS_DEFAULT},http://${SERVER_IP_HINT}:${CFG_PORT_FE}"
+    [ -n "$DEF_CORS" ] && CORS_DEFAULT="$DEF_CORS"
+    echo "  允许前端访问后端的域名列表（逗号分隔）"
+    echo "  本地开发: http://localhost:5173"
+    echo "  生产环境: https://your-domain.com"
+    ask_value "CORS 允许来源" "$CORS_DEFAULT" CFG_CORS_ORIGINS
+
+    echo ""
     echo "  [ 备份 ]"
     ask_yn "启用自动备份？" "y" CFG_BACKUP_YN
     CFG_BACKUP_ENABLED="false"
@@ -345,7 +357,7 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'DB_SLAVE_USERNAME=%s\n'  "$CFG_DB_USERNAME"
         printf 'DB_SLAVE_PASSWORD=%s\n'  "$CFG_DB_PASSWORD"
         printf 'REDIS_HOST=redis\n'
-        printf 'APP_CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:%s\n' "$CFG_PORT_FE"
+        printf 'APP_CORS_ALLOWED_ORIGINS=%s\n' "$CFG_CORS_ORIGINS"
         printf 'TUTOR_API_BASE_URL=http://localhost:8000/api/tutor\n'
         printf 'VITE_TUTOR_API_BASE_URL=/tutor\n'
         printf 'PORT_FRONTEND=%s\n'      "$CFG_PORT_FE"
@@ -407,6 +419,9 @@ case $SVC_MODE in
     4) echo "  服务: 仅前端" ;;
     5) echo "  服务: 仅基础设施" ;;
 esac
+if [ -n "${CFG_CORS_ORIGINS:-}" ]; then
+    echo "  CORS: $CFG_CORS_ORIGINS"
+fi
 if [ "${CFG_AUTO_UPDATE_ENABLED:-false}" = "true" ]; then
     echo "  自动更新: 已启用 (${CFG_AUTO_UPDATE_CRON}) → ${CFG_AUTO_UPDATE_BRANCH}"
 else
