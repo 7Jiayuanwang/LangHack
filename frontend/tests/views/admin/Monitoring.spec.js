@@ -95,6 +95,7 @@ describe('Monitoring.vue', () => {
       wrapper.unmount()
       wrapper = null
     }
+    vi.useRealTimers()
     delete global.EventSource
   })
 
@@ -150,6 +151,27 @@ describe('Monitoring.vue', () => {
       expect(wrapper.find('.ai-service-cards').exists()).toBe(true)
       const aiCards = wrapper.findAll('.ai-card')
       expect(aiCards.length).toBe(2)
+    })
+  })
+
+  describe('top pages normalization', () => {
+    it('normalizes legacy path fields into uri rows', async () => {
+      mockMonitoringApi.getTopPages.mockResolvedValue({
+        code: 200,
+        data: [
+          { path: '/courses', visit_count: 12 },
+          { uri: '/texts', count: 8 }
+        ]
+      })
+
+      const wrapper = mountComponent()
+      await new Promise(resolve => setTimeout(resolve, 0))
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.topPages).toEqual([
+        { path: '/courses', visit_count: 12, uri: '/courses', count: 12 },
+        { uri: '/texts', count: 8 }
+      ])
     })
   })
 
@@ -355,6 +377,24 @@ describe('Monitoring.vue', () => {
       wrapper.unmount()
 
       expect(es._closed).toBe(true)
+    })
+
+    it('does not reconnect after component unmounts', async () => {
+      vi.useFakeTimers()
+      mockGetToken.mockReturnValue('test-token')
+      mountComponent()
+
+      const es = MockEventSource.instances[0]
+      expect(es).toBeDefined()
+
+      es.onerror?.()
+      wrapper.unmount()
+      wrapper = null
+
+      vi.advanceTimersByTime(5000)
+      await Promise.resolve()
+
+      expect(MockEventSource.instances.length).toBe(1)
     })
   })
 

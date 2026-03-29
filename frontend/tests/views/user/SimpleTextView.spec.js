@@ -176,7 +176,6 @@ describe('SimpleTextView.vue', () => {
 
   it('handleResize updates windowWidth', () => {
     const wrapper = createWrapper()
-    const initialWidth = wrapper.vm.windowWidth
     wrapper.vm.handleResize()
     expect(wrapper.vm.windowWidth).toBeDefined()
   })
@@ -259,11 +258,6 @@ describe('SimpleTextView.vue', () => {
   it('loadingWord ref is initialized to false', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.loadingWord).toBe(false)
-  })
-
-  it('words ref is initialized as empty array', () => {
-    const wrapper = createWrapper()
-    expect(Array.isArray(wrapper.vm.words)).toBe(true)
   })
 
   it('versions ref is initialized as empty object', () => {

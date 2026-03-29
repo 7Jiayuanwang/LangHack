@@ -167,10 +167,23 @@ public class StudentClassesServiceImpl implements StudentClassesService {
 
             Long courseId = course.getId();
             if (!courseMap.containsKey(courseId)) {
+                User teacher = null;
+                if (classInfo.getTeacherId() != null) {
+                    QueryWrapper<User> teacherWrapper = new QueryWrapper<>();
+                    teacherWrapper.eq("id", classInfo.getTeacherId()).eq("deleted", 0);
+                    teacher = userMapper.selectOne(teacherWrapper);
+                }
+
                 Map<String, Object> courseData = new HashMap<>();
+                courseData.put("id", courseId);
                 courseData.put("courseId", courseId);
+                courseData.put("name", course.getName());
                 courseData.put("courseName", course.getName());
+                courseData.put("description", course.getDescription());
                 courseData.put("courseDescription", course.getDescription());
+                courseData.put("className", classInfo.getName());
+                courseData.put("teacherName", teacher != null ? teacher.getRealName() : "未知教师");
+                courseData.put("joinTime", studentClass.getJoinTime());
                 courseData.put("classes", new ArrayList<>());
                 int totalUnits = calculateTotalUnits(courseId);
                 int learnedUnits = calculateLearnedUnits(studentId, courseId);

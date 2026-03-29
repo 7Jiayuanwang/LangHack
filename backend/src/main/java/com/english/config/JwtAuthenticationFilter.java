@@ -31,6 +31,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private static final Set<String> VALID_ROLES = Set.of("ADMIN", "TEACHER", "STUDENT", "USER", "OPS");
+    private static final Set<String> QUERY_TOKEN_ALLOWED_PATHS = Set.of(
+            "/api/ops/monitoring/realtime/stream",
+            "/api/ops/update/trigger"
+    );
 
     /**
      * Redis 缓存前缀和 TTL：缓存用户活跃状态，避免每次请求查库。
@@ -80,7 +84,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         // SSE fallback: support token via query parameter for EventSource endpoints
-        if (jwtToken == null) {
+        if (jwtToken == null && isAllowedQueryTokenRequest(request)) {
             String tokenParam = request.getParameter("token");
             if (tokenParam != null && !tokenParam.trim().isEmpty()) {
                 jwtToken = tokenParam.trim();
@@ -143,6 +147,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isAllowedQueryTokenRequest(HttpServletRequest request) {
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+
+        String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
+        String requestUri = request.getRequestURI();
+        String path = requestUri != null && requestUri.startsWith(contextPath)
+                ? requestUri.substring(contextPath.length())
+                : requestUri;
+
+        return path != null && QUERY_TOKEN_ALLOWED_PATHS.contains(path);
     }
 
     /**

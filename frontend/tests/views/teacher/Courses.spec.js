@@ -129,7 +129,6 @@ describe('teacher/Courses.vue', () => {
 
   it('viewUnitsAndAssignments method is defined and callable', () => {
     const wrapper = shallowMount(Courses)
-    const course = { id: 1, name: 'Test Course' }
 
     expect(wrapper.vm.viewUnitsAndAssignments).toBeDefined()
     expect(typeof wrapper.vm.viewUnitsAndAssignments).toBe('function')
@@ -218,4 +217,3 @@ describe('teacher/Courses.vue', () => {
     expect(wrapper.vm.currentCourse).toEqual(course)
   })
 })
-

@@ -921,13 +921,19 @@ public class AdminController {
      */
     @PutMapping("/texts/{id}/featured")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<String> toggleFeatured(@PathVariable Long id) {
+    public Result<String> toggleFeatured(@PathVariable Long id,
+                                         @RequestParam(required = false) Integer featured) {
         try {
             Text text = textService.getTextById(id);
             if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
                 return Result.error("课文不存在");
             }
-            int newValue = (text.getIsFeatured() != null && text.getIsFeatured() == 1) ? 0 : 1;
+            int newValue;
+            if (featured != null) {
+                newValue = featured == 1 ? 1 : 0;
+            } else {
+                newValue = (text.getIsFeatured() != null && text.getIsFeatured() == 1) ? 0 : 1;
+            }
             text.setIsFeatured(newValue);
             textService.updateText(text);
             return Result.success(newValue == 1 ? "已设为推荐" : "已取消推荐");

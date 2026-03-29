@@ -65,6 +65,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -b|--branch) BRANCH="$2"; shift 2 ;;
         -i|--interactive) INTERACTIVE=true; shift ;;
+        --backup-before-update) PRE_BACKUP=true; shift ;;
+        --no-backup) PRE_BACKUP=false; shift ;;
         -h|--help)
             echo "用法: $0 [选项]"
             echo ""

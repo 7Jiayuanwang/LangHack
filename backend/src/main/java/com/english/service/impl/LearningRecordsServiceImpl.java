@@ -50,6 +50,15 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Autowired
     private VocabularyBookMapper vocabularyBookMapper;
 
+    @Autowired
+    private StudentClassMapper studentClassMapper;
+
+    @Autowired
+    private ClassMapper classMapper;
+
+    @Autowired
+    private UserMapper userMapper;
+
     @Override
     public int getTodayStudyTime(Long studentId) {
         if (studentId == null) {
@@ -733,6 +742,12 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             units = new ArrayList<>();
         }
 
+        stats.put("totalUnits", 0);
+        stats.put("totalWords", 0);
+        stats.put("learnedWords", 0);
+        stats.put("progress", 0.0);
+        stats.put("studyTime", 0);
+
         if (units.isEmpty()) {
             return stats;
         }
@@ -794,21 +809,8 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         stats.put("progress", Math.max(0.0, Math.min(progress, 100.0)));
 
         // 学习时间
-        int studyTime = 0;
-        if (!wordIds.isEmpty()) {
-            QueryWrapper<LearningRecord> recordWrapper = new QueryWrapper<>();
-            recordWrapper.eq("student_id", studentId)
-                    .in("word_id", wordIds)
-                    .select("COALESCE(SUM(duration_seconds), 0) as total_time");
-
-            List<Map<String, Object>> timeResults = learningRecordMapper.selectMaps(recordWrapper);
-            if (timeResults != null && !timeResults.isEmpty()) {
-                Map<String, Object> timeResult = timeResults.get(0);
-                Number totalTime = (Number) timeResult.get("total_time");
-                studyTime = totalTime != null ? (int) Math.min(totalTime.longValue() / 60, Integer.MAX_VALUE) : 0;
-            }
-        }
-        stats.put("studyTime", studyTime);
+        long studySeconds = calculateCourseStudySeconds(studentId, courseId);
+        stats.put("studyTime", (int) Math.min(studySeconds / 60, Integer.MAX_VALUE));
 
         return stats;
     }
@@ -1167,6 +1169,71 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
      * 计算学生在单元中的学习时间（分钟）
      * 包含单词学习时间和课文阅读时间
      */
+    private long calculateCourseStudySeconds(Long studentId, Long courseId) {
+        QueryWrapper<Unit> unitWrapper = new QueryWrapper<>();
+        unitWrapper.eq("course_id", courseId).select("id");
+        List<Unit> units = unitMapper.selectList(unitWrapper);
+        if (units == null || units.isEmpty()) {
+            return 0L;
+        }
+
+        List<Long> unitIds = units.stream()
+                .map(Unit::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (unitIds.isEmpty()) {
+            return 0L;
+        }
+
+        long totalSeconds = 0L;
+
+        QueryWrapper<UnitWord> unitWordWrapper = new QueryWrapper<>();
+        unitWordWrapper.in("unit_id", unitIds).select("word_id");
+        List<UnitWord> unitWords = unitWordMapper.selectList(unitWordWrapper);
+        if (unitWords != null && !unitWords.isEmpty()) {
+            List<Long> wordIds = unitWords.stream()
+                    .map(UnitWord::getWordId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (!wordIds.isEmpty()) {
+                QueryWrapper<LearningRecord> wordRecordWrapper = new QueryWrapper<>();
+                wordRecordWrapper.eq("student_id", studentId).in("word_id", wordIds);
+                List<LearningRecord> wordRecords = learningRecordMapper.selectList(wordRecordWrapper);
+                if (wordRecords != null && !wordRecords.isEmpty()) {
+                    totalSeconds += wordRecords.stream()
+                            .mapToLong(record -> record.getDurationSeconds() != null ? record.getDurationSeconds() : 0)
+                            .sum();
+                }
+            }
+        }
+
+        QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
+        textWrapper.in("unit_id", unitIds).eq("deleted", 0).select("id");
+        List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
+        if (texts != null && !texts.isEmpty()) {
+            List<Long> textIds = texts.stream()
+                    .map(com.english.entity.Text::getId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (!textIds.isEmpty()) {
+                QueryWrapper<LearningRecord> textRecordWrapper = new QueryWrapper<>();
+                textRecordWrapper.eq("student_id", studentId)
+                        .eq("record_type", "TEXT_VIEW")
+                        .in("text_id", textIds);
+                List<LearningRecord> textRecords = learningRecordMapper.selectList(textRecordWrapper);
+                if (textRecords != null && !textRecords.isEmpty()) {
+                    totalSeconds += textRecords.stream()
+                            .mapToLong(record -> record.getDurationSeconds() != null ? record.getDurationSeconds() : 0)
+                            .sum();
+                }
+            }
+        }
+
+        return totalSeconds;
+    }
+
     private int calculateStudyTimeInUnit(Long studentId, Long unitId) {
         long totalSeconds = 0;
 

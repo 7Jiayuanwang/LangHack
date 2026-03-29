@@ -147,12 +147,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
-const route = useRoute()
-
 const loading = ref(true)
 const articles = ref([])
 const selectedDifficulty = ref('')

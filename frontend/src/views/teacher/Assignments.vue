@@ -563,6 +563,8 @@ const loadUnits = async () => {
   return Promise.resolve()
 }
 
+void loadUnits
+
 const loadUnitsForClass = async (classId) => {
   try {
     // 根据班级ID获取对应的课程ID
@@ -1017,7 +1019,7 @@ const batchGetCompletionCounts = async (assignmentsData) => {
           } else {
             // 重试前等待（注意：此 setTimeout 会自动在 Promise resolve 后清理）
             await new Promise(resolve => {
-              const timeoutId = setTimeout(resolve, 500 * retries)
+                setTimeout(resolve, 500 * retries)
               // 如果需要主动清理，可以在组件卸载时调用
             })
           }
@@ -1028,7 +1030,7 @@ const batchGetCompletionCounts = async (assignmentsData) => {
     // 在批次之间添加小延迟，避免服务器压力
     if (i + BATCH_SIZE < assignmentsData.length) {
       await new Promise(resolve => {
-        const timeoutId = setTimeout(resolve, 100)
+        setTimeout(resolve, 100)
         // 如果需要主动清理，可以在组件卸载时调用
       })
     }

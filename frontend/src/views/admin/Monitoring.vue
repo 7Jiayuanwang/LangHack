@@ -187,6 +187,7 @@ import {
   GridComponent, DataZoomComponent
 } from 'echarts/components'
 import { getToken } from '@/utils/auth'
+import { environment } from '@/utils/environment'
 import {
   getRealTimeMetrics, getSystemMetrics, getHourlyStats, getDailyStats,
   getTopPages, getAiCallsRealtime, getAiCallsDaily, getAiCallsRecent
@@ -210,6 +211,7 @@ const hourlyData = ref([])
 const dailyData = ref([])
 const topPages = ref([])
 let eventSource = null
+let reconnectTimer = null
 
 const serviceNames = computed(() => Object.keys(aiStats.value))
 
@@ -217,6 +219,28 @@ const filteredAiLogs = computed(() => {
   if (!aiLogFilter.value) return aiRecentLogs.value
   return aiRecentLogs.value.filter(l => l.serviceName === aiLogFilter.value)
 })
+
+const normalizeTopPageRows = (rows) => {
+  if (!Array.isArray(rows)) return []
+
+  return rows
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null
+
+      const uri = row.uri || row.path || ''
+      const countValue = row.count ?? row.visitCount ?? row.visit_count ?? 0
+      const count = Number.isFinite(Number(countValue)) ? Number(countValue) : 0
+
+      if (!uri) return null
+
+      return {
+        ...row,
+        uri,
+        count
+      }
+    })
+    .filter(Boolean)
+}
 
 // DB pool computed
 const dbPoolActive = computed(() =>
@@ -310,8 +334,8 @@ const connectSSE = () => {
   const token = getToken()
   if (!token) return
 
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-  eventSource = new EventSource(`${baseUrl}/api/ops/monitoring/realtime/stream?token=${token}`)
+  const streamUrl = environment.resolveApiUrl('/api/ops/monitoring/realtime/stream')
+  eventSource = new EventSource(`${streamUrl}?token=${encodeURIComponent(token)}`)
 
   eventSource.onmessage = (event) => {
     try {
@@ -332,9 +356,13 @@ const connectSSE = () => {
       eventSource.close()
       eventSource = null
     }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+    }
     // Reconnect after 5 seconds
-    setTimeout(() => {
+    reconnectTimer = setTimeout(() => {
       if (!eventSource) connectSSE()
+      reconnectTimer = null
     }, 5000)
   }
 }
@@ -358,9 +386,13 @@ const loadTopPages = async () => {
     if (res.code === 200) {
       const data = res.data
       if (typeof data === 'string') {
-        try { topPages.value = JSON.parse(data) } catch { topPages.value = [] }
+        try {
+          topPages.value = normalizeTopPageRows(JSON.parse(data))
+        } catch {
+          topPages.value = []
+        }
       } else {
-        topPages.value = Array.isArray(data) ? data : []
+        topPages.value = normalizeTopPageRows(data)
       }
     }
   } catch { topPages.value = [] }
@@ -394,14 +426,12 @@ const refreshAll = async () => {
       loadChartData(), loadTopPages(), loadAiStats(),
       loadAiDailyData(), loadAiCallsRecent()
     ])
-    // Also fetch current metrics if no SSE
-    if (!eventSource) {
-      try {
-        const [rtRes, sysRes] = await Promise.all([getRealTimeMetrics(), getSystemMetrics()])
-        if (rtRes.code === 200) Object.assign(realtime, rtRes.data)
-        if (sysRes.code === 200) Object.assign(system, sysRes.data)
-      } catch { /* ignore */ }
-    }
+    // Always fetch a snapshot to avoid empty cards before the first SSE message arrives.
+    try {
+      const [rtRes, sysRes] = await Promise.all([getRealTimeMetrics(), getSystemMetrics()])
+      if (rtRes.code === 200) Object.assign(realtime, rtRes.data)
+      if (sysRes.code === 200) Object.assign(system, sysRes.data)
+    } catch { /* ignore */ }
   } catch {
     ElMessage.error('刷新失败')
   } finally {
@@ -434,6 +464,18 @@ const formatUptime = (ms) => {
 
 const formatTimeLabel = (val) => {
   if (!val) return ''
+  if (Array.isArray(val)) {
+    if (val.length >= 5) {
+      const hour = String(val[3] ?? 0).padStart(2, '0')
+      const minute = String(val[4] ?? 0).padStart(2, '0')
+      return `${hour}:${minute}`
+    }
+    if (val.length >= 3) {
+      const month = String(val[1] ?? 0).padStart(2, '0')
+      const day = String(val[2] ?? 0).padStart(2, '0')
+      return `${month}-${day}`
+    }
+  }
   if (typeof val === 'string' && val.length >= 13) return val.substring(11, 16)
   if (typeof val === 'string' && val.length === 10) return val.substring(5)
   return String(val)
@@ -467,6 +509,10 @@ onBeforeUnmount(() => {
   if (eventSource) {
     eventSource.close()
     eventSource = null
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
   }
 })
 </script>

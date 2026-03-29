@@ -301,7 +301,7 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { View, MoreFilled, Edit, Delete } from '@element-plus/icons-vue'
-import { getAuthHeader, getToken } from '@/utils/auth'
+import { getAuthHeader } from '@/utils/auth'
 
 // 响应式数据
 const loading = ref(false)
@@ -1153,4 +1153,3 @@ onMounted(async () => {
   }
 }
 </style>
-

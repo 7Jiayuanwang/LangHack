@@ -27,6 +27,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(accessLogInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/api/ops/monitoring/realtime/stream",
+                                     "/api/ops/update/trigger",
                                      "/audio/**", "/favicon.ico");
     }
 

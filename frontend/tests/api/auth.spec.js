@@ -75,6 +75,21 @@ describe('Auth API', () => {
       })
       expect(result).toEqual(mockResponse)
     })
+
+    it('sends Authorization header when logout token is provided explicitly', async () => {
+      const mockResponse = { code: 200, message: 'Logged out' }
+      mockRequest.mockResolvedValue(mockResponse)
+
+      await logout('stale-jwt-token')
+
+      expect(mockRequest).toHaveBeenCalledWith({
+        url: '/api/auth/logout',
+        method: 'post',
+        headers: {
+          Authorization: 'Bearer stale-jwt-token'
+        }
+      })
+    })
   })
 
   describe('getUserInfo', () => {

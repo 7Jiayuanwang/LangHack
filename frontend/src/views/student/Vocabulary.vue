@@ -332,7 +332,6 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Collection, 
@@ -352,12 +351,9 @@ import {
   getVocabularyList,
   getWordDetail,
   updateMasteryLevel,
-  addToVocabulary as addToVocabularyAPI,
   batchOperateVocabulary,
   getQuizData
 } from '@/api/student'
-
-const router = useRouter()
 
 const loading = ref(false)
 const searchWord = ref('')
@@ -420,12 +416,6 @@ const reviewSummary = reactive({
 })
 
 // 全选相关
-const selectAll = ref(false)
-const isIndeterminate = computed(() => {
-  const selectedCount = selectedWords.value.length
-  const totalCount = vocabulary.value.length
-  return selectedCount > 0 && selectedCount < totalCount
-})
 
 // 加载生词本列表
 const loadVocabulary = async () => {
@@ -609,9 +599,6 @@ const batchDelete = async () => {
 }
 
 // 全选处理
-const handleSelectAll = (checked) => {
-  selectedWords.value = checked ? vocabulary.value.map(item => item.wordId || item.id) : []
-}
 
 // 开始复习
 const startReview = async () => {
@@ -625,7 +612,6 @@ const startReview = async () => {
     }
 
     // 按 SM-2 nextReviewTime 排序：到期/逾期的词优先（艾宾浩斯遗忘曲线调度）
-    const now = new Date()
     reviewableWords.sort((a, b) => {
       const timeA = a.nextReviewTime ? new Date(a.nextReviewTime) : new Date(0)
       const timeB = b.nextReviewTime ? new Date(b.nextReviewTime) : new Date(0)
@@ -908,7 +894,7 @@ const getSortLabel = (sortBy) => {
   return labels[sortBy] || '排序'
 }
 
-const handleItemSelect = (id, val) => {
+const handleItemSelect = () => {
   // Logic is handled by v-model="selectedWords"
 }
 

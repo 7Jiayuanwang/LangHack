@@ -191,6 +191,8 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
 
+void VideoPlay
+
 const router = useRouter()
 const route = useRoute()
 
@@ -218,7 +220,6 @@ const showWordDialog = ref(false)
 const selectedWord = ref(null)
 const selectedWordInfo = ref(null)
 const loadingWord = ref(false)
-const words = ref([])
 
 // 翻译相关
 const showTranslateDialog = ref(false)
@@ -321,7 +322,7 @@ const startDrag = (event) => {
 }
 
 // 处理浮动按钮点击
-const handleFloatingBtnClick = (event) => {
+const handleFloatingBtnClick = () => {
   // 如果刚拖动过，不触发点击
   if (isDragging.value) {
     return
@@ -662,6 +663,8 @@ const playAudio = (audioUrl) => {
     currentAudio = null
   }
 }
+
+void playAudio
 
 // 重置单词弹窗
 const resetWordDialog = () => {

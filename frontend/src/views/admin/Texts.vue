@@ -98,8 +98,8 @@
         <el-table-column prop="isFeatured" label="推荐" width="80" align="center">
           <template #default="{ row }">
             <el-switch
-              :model-value="row.isFeatured === 1"
-              @change="toggleFeatured(row)"
+              :model-value="isTextFeatured(row)"
+              @change="toggleFeatured(row, $event)"
               :loading="row._featuredLoading"
             />
           </template>
@@ -198,15 +198,13 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, RefreshLeft, Refresh, Edit, Delete, VideoPlay } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshLeft, Refresh, VideoPlay } from '@element-plus/icons-vue'
 import * as adminApi from '@/api/admin'
 import TextEditDialog from '@/components/TextEditDialog.vue'
 
 // 响应式数据
 const texts = ref([])
 const stats = ref({})
-const courses = ref([])
-const units = ref([])
 const loading = ref(false)
 const viewDialogVisible = ref(false)
 const currentText = ref({})
@@ -236,30 +234,10 @@ const loadCourses = async () => {
     })
     if (response.code === 200) {
       // FIX: 增强响应数据防御
-      courses.value = ((response.data?.records && Array.isArray(response.data.records)) ? response.data.records : (Array.isArray(response.data) ? response.data : []))
+      return Array.isArray(response.data?.records) ? response.data.records : (Array.isArray(response.data) ? response.data : [])
     }
   } catch (error) {
     ElMessage.error('加载课程列表失败')
-  }
-}
-
-const loadUnits = async (courseId) => {
-  if (!courseId) {
-    units.value = []
-    return
-  }
-
-  try {
-    const response = await adminApi.getUnitsByCourseId(courseId)
-    if (response.code === 200) {
-      units.value = (response.data && Array.isArray(response.data)) ? response.data : []
-    } else {
-      units.value = []
-      ElMessage.error(response.message || '加载单元列表失败')
-    }
-  } catch (error) {
-    units.value = []
-    ElMessage.error('加载单元列表失败')
   }
 }
 
@@ -327,19 +305,28 @@ const handleCurrentChange = (page) => {
   loadTexts()
 }
 
-const toggleFeatured = async (row) => {
+const normalizeFeaturedValue = (value) => {
+  if (value === true || value === 1 || value === '1') return 1
+  if (typeof value === 'string' && value.trim().toLowerCase() === 'true') return 1
+  return 0
+}
+
+const isTextFeatured = (row) => normalizeFeaturedValue(row?.isFeatured) === 1
+
+const toggleFeatured = async (row, nextValue) => {
+  const targetFeatured = nextValue === true || nextValue === 1 ? 1 : 0
   row._featuredLoading = true
   try {
-    const response = await adminApi.toggleTextFeatured(row.id)
+    const response = await adminApi.toggleTextFeatured(row.id, targetFeatured)
     if (response.code === 200) {
-      row.isFeatured = row.isFeatured === 1 ? 0 : 1
+      row.isFeatured = targetFeatured
       ElMessage.success(response.data || '操作成功')
       loadStats()
     } else {
-      ElMessage.error(response.message || '操作失败')
+      ElMessage.error(response.message || 'Operation failed')
     }
   } catch (error) {
-    ElMessage.error('操作失败')
+    ElMessage.error('Operation failed')
   } finally {
     row._featuredLoading = false
   }
@@ -352,12 +339,12 @@ const showAddDialog = () => {
 }
 
 const viewText = (text) => {
-  currentText.value = { ...text }
+  currentText.value = { ...text, isFeatured: normalizeFeaturedValue(text?.isFeatured) }
   viewDialogVisible.value = true
 }
 
 const editText = (text) => {
-  selectedText.value = { ...text }
+  selectedText.value = { ...text, isFeatured: normalizeFeaturedValue(text?.isFeatured) }
   selectedUnitId.value = text.unitId
   editDialogVisible.value = true
 }

@@ -205,6 +205,8 @@ services:
       AI_TRANSLATE_API_URL: ${AI_TRANSLATE_API_URL:-}
       AI_TRANSLATE_API_KEY: ${AI_TRANSLATE_API_KEY:-}
       AI_TRANSLATE_MODEL: ${AI_TRANSLATE_MODEL:-}
+      APP_UPDATE_SUPPORTED: "false"
+      APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
     ports:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:

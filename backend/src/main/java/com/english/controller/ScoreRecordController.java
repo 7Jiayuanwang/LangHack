@@ -9,6 +9,7 @@ import com.english.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -237,8 +238,7 @@ public class ScoreRecordController {
             @RequestParam(required = false) Long assignmentId,
             Authentication authentication) {
         try {
-            var authorities = authentication.getAuthorities();
-            String userRole = authorities.isEmpty() ? "" : authorities.iterator().next().getAuthority();
+            String userRole = getCurrentRole(authentication);
 
             // 教师只能查看自己班级相关的分数统计
             if (ROLE_TEACHER.equals(userRole)) {
@@ -413,6 +413,37 @@ public class ScoreRecordController {
         if (authentication == null || authentication.getAuthorities().isEmpty()) {
             return "";
         }
+        boolean hasAdmin = false;
+        boolean hasOps = false;
+        boolean hasTeacher = false;
+        boolean hasStudent = false;
+        boolean hasUser = false;
+        for (GrantedAuthority authority : authentication.getAuthorities()) {
+            switch (authority.getAuthority()) {
+                case "ROLE_ADMIN":
+                    hasAdmin = true;
+                    break;
+                case "ROLE_OPS":
+                    hasOps = true;
+                    break;
+                case "ROLE_TEACHER":
+                    hasTeacher = true;
+                    break;
+                case "ROLE_STUDENT":
+                    hasStudent = true;
+                    break;
+                case "ROLE_USER":
+                    hasUser = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (hasAdmin) return "ROLE_ADMIN";
+        if (hasOps) return "ROLE_OPS";
+        if (hasTeacher) return "ROLE_TEACHER";
+        if (hasStudent) return "ROLE_STUDENT";
+        if (hasUser) return "ROLE_USER";
         return authentication.getAuthorities().iterator().next().getAuthority();
     }
 }

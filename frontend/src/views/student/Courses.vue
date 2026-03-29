@@ -422,20 +422,17 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, onBeforeUnmount, watch, onActivated } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   getStudentCourses,
   getCourseUnits,
   getUnitContent,
-  getTextDetail,
   getWordDetail,
   addToVocabulary as addToVocabularyAPI,
   getVocabularyList,
-  updateMasteryLevel,
-  startStudySession,
-  submitStudyResult
+  updateMasteryLevel
 } from '@/api/student'
 
 const router = useRouter()
@@ -1054,7 +1051,7 @@ onMounted(() => {
   const courseId = route.query.courseId
   if (courseId) {
     // 找到对应课程并打开
-    const timerId = safeTimeout(() => {
+    safeTimeout(() => {
       if (Array.isArray(courses.value)) {
         const course = courses.value.find(c => c.courseId == courseId)
         if (course) {

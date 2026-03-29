@@ -275,7 +275,6 @@
 import { ref, reactive, onMounted } from "vue"
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
 import {
   getStudentDashboard,
   getTodayLearningStats
@@ -391,18 +390,6 @@ const formatTime = (time) => {
     hour: '2-digit',
     minute: '2-digit'
   })
-}
-
-// 获取紧急程度类型 (Element Plus)
-const getUrgencyType = (deadline) => {
-  if (!deadline) return 'info'
-  const now = new Date()
-  const deadlineDate = new Date(deadline)
-  const diffHours = (deadlineDate - now) / (1000 * 60 * 60)
-
-  if (diffHours < 24) return 'danger'
-  if (diffHours < 72) return 'warning'
-  return 'success'
 }
 
 // 获取紧急程度样式类

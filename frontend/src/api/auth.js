@@ -16,11 +16,23 @@ export function register(data) {
   })
 }
 
-export function logout() {
-  return request({
+export function logout(token) {
+  const normalizedToken = typeof token === 'string'
+    ? token.replace(/^Bearer\s+/i, '').trim()
+    : ''
+
+  const config = {
     url: '/api/auth/logout',
     method: 'post'
-  })
+  }
+
+  if (normalizedToken) {
+    config.headers = {
+      Authorization: `Bearer ${normalizedToken}`
+    }
+  }
+
+  return request(config)
 }
 
 export function getUserInfo() {

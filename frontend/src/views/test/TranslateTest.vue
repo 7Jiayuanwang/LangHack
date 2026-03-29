@@ -73,7 +73,7 @@ const translateButtonPosition = reactive({ x: 0, y: 0 })
 const MAX_TRANSLATE_LENGTH = 500
 const TRANSLATE_TIMEOUT = 30000 // 30秒超时
 
-const handleTextSelection = (event) => {
+const handleTextSelection = () => {
   const selection = window.getSelection()
   const text = selection?.toString().trim()
 

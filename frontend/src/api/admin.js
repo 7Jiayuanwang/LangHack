@@ -158,10 +158,11 @@ export function deleteText(id) {
   })
 }
 
-export function toggleTextFeatured(id) {
+export function toggleTextFeatured(id, featured) {
   return request({
     url: `/api/admin/texts/${id}/featured`,
-    method: 'put'
+    method: 'put',
+    params: featured === undefined ? undefined : { featured }
   })
 }
 

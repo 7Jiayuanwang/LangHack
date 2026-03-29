@@ -15,6 +15,7 @@
         <result property="idealStudyTimeMinutes" column="ideal_study_time_minutes"/>
         <result property="createdTime" column="created_time"/>
         <result property="deleted" column="deleted"/>
+        <result property="status" column="status"/>
 
         <!-- 关联字段：使用 result 而非 association（String 类型不需要 association） -->
         <result property="className" column="class_name"/>
@@ -90,7 +91,7 @@
         SELECT
             COUNT(DISTINCT c.id) as total_classes,
             COUNT(DISTINCT sc.student_id) as total_students,
-            COUNT(a.id) as total_assignments,
+            COUNT(DISTINCT a.id) as total_assignments,
             0 as completed_tasks
         FROM classes c
         LEFT JOIN assignments a ON c.id = a.class_id AND a.deleted = 0
@@ -105,7 +106,7 @@
             c.name as name,
             c.description,
             co.name as courseName,
-            c.created_time
+            c.created_time as createdTime
         FROM classes c
         LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
         WHERE c.teacher_id = #{teacherId} AND c.deleted = 0
