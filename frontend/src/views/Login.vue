@@ -16,7 +16,7 @@
       </div>
 
       <!-- 时尚内容 -->
-      
+
       <div class="trend-content">
         <!-- 时尚品牌 -->
         <div class="trend-brand">
@@ -26,7 +26,7 @@
               <div class="logo-text">EngLish</div>
             </div>
           </div>
-            <p class="trend-subtitle">Trend · Learn · Share · Grow</p>
+          <p class="trend-subtitle">Trend · Learn · Share · Grow</p>
         </div>
 
         <!-- 时尚登录卡片 -->
@@ -55,9 +55,30 @@
             <form @submit.prevent="handleLogin" class="trend-form">
               <!-- 身份选择 -->
               <div class="identity-selector">
-                <button type="button" class="identity-btn" :class="{ active: loginIdentity === 'student' }" @click="loginIdentity = 'student'">🎓 学生</button>
-                <button type="button" class="identity-btn" :class="{ active: loginIdentity === 'teacher' }" @click="loginIdentity = 'teacher'">👨‍🏫 教职工</button>
-                <button type="button" class="identity-btn" :class="{ active: loginIdentity === 'admin' }" @click="loginIdentity = 'admin'">👑 管理员</button>
+                <button
+                  type="button"
+                  class="identity-btn"
+                  :class="{ active: loginIdentity === 'student' }"
+                  @click="loginIdentity = 'student'"
+                >
+                  🎓 学生
+                </button>
+                <button
+                  type="button"
+                  class="identity-btn"
+                  :class="{ active: loginIdentity === 'teacher' }"
+                  @click="loginIdentity = 'teacher'"
+                >
+                  👨‍🏫 教职工
+                </button>
+                <button
+                  type="button"
+                  class="identity-btn"
+                  :class="{ active: loginIdentity === 'admin' }"
+                  @click="loginIdentity = 'admin'"
+                >
+                  👑 管理员
+                </button>
               </div>
 
               <div class="trend-field">
@@ -70,9 +91,16 @@
                     required
                   />
                   <div class="input-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                      <circle cx="12" cy="7" r="4"/>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
                     </svg>
                   </div>
                 </div>
@@ -89,29 +117,69 @@
                     required
                   />
                   <div class="input-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
                   </div>
-                  <button type="button" class="password-toggle" @click="showPassword = !showPassword">
-                    <svg v-if="showPassword" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    @click="showPassword = !showPassword"
+                  >
+                    <svg
+                      v-if="showPassword"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
                     </svg>
-                    <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    <svg
+                      v-else
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      />
+                      <line x1="1" y1="1" x2="23" y2="23" />
                     </svg>
                   </button>
                 </div>
               </div>
 
-              <button type="submit" class="trend-button" :disabled="loginLoading">
+              <button
+                type="submit"
+                class="trend-button"
+                :disabled="loginLoading"
+              >
                 <span v-if="!loginLoading">立即登录</span>
                 <div v-else class="loading-spinner">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    stroke-width="2"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                   </svg>
                 </div>
               </button>
@@ -124,7 +192,9 @@
               </div>
               <div class="demo-buttons">
                 <div class="demo-btn" @click="fillDemo(loginIdentity)">
-                  <div class="btn-avatar" :class="loginIdentity">{{ identityEmoji }}</div>
+                  <div class="btn-avatar" :class="loginIdentity">
+                    {{ identityEmoji }}
+                  </div>
                   <div class="btn-text">{{ identityDemoLabel }} 演示</div>
                 </div>
               </div>
@@ -146,9 +216,16 @@
                     maxlength="20"
                   />
                   <div class="input-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                      <circle cx="12" cy="7" r="4"/>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
                     </svg>
                   </div>
                 </div>
@@ -165,19 +242,48 @@
                     minlength="6"
                   />
                   <div class="input-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
                   </div>
-                  <button type="button" class="password-toggle" @click="showRegPassword = !showRegPassword">
-                    <svg v-if="showRegPassword" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    @click="showRegPassword = !showRegPassword"
+                  >
+                    <svg
+                      v-if="showRegPassword"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
                     </svg>
-                    <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    <svg
+                      v-else
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      />
+                      <line x1="1" y1="1" x2="23" y2="23" />
                     </svg>
                   </button>
                 </div>
@@ -193,19 +299,48 @@
                     required
                   />
                   <div class="input-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
                   </div>
-                  <button type="button" class="password-toggle" @click="showRegConfirmPassword = !showRegConfirmPassword">
-                    <svg v-if="showRegConfirmPassword" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    @click="showRegConfirmPassword = !showRegConfirmPassword"
+                  >
+                    <svg
+                      v-if="showRegConfirmPassword"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
                     </svg>
-                    <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    <svg
+                      v-else
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      />
+                      <line x1="1" y1="1" x2="23" y2="23" />
                     </svg>
                   </button>
                 </div>
@@ -223,9 +358,16 @@
                     maxlength="50"
                   />
                   <div class="input-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                      <circle cx="12" cy="7" r="4"/>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
                     </svg>
                   </div>
                 </div>
@@ -240,19 +382,39 @@
                     class="trend-input"
                   />
                   <div class="input-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                      <polyline points="22,6 12,13 2,6"/>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+                      />
+                      <polyline points="22,6 12,13 2,6" />
                     </svg>
                   </div>
                 </div>
               </div>
 
-              <button type="submit" class="trend-button" :disabled="registerLoading">
+              <button
+                type="submit"
+                class="trend-button"
+                :disabled="registerLoading"
+              >
                 <span v-if="!registerLoading">立即注册</span>
                 <div v-else class="loading-spinner">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    stroke-width="2"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                   </svg>
                 </div>
               </button>
@@ -291,168 +453,187 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { useUserStore } from '@/store/user'
-import request from '@/utils/request'
+import { ref, reactive, computed } from "vue";
+import { useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
+import { useUserStore } from "@/store/user";
+import request from "@/utils/request";
 
-const router = useRouter()
-const userStore = useUserStore()
+const router = useRouter();
+const userStore = useUserStore();
 
-const loginLoading = ref(false)
-const registerLoading = ref(false)
-const activeTab = ref('login')
-const showPassword = ref(false)
-const showRegPassword = ref(false)
-const showRegConfirmPassword = ref(false)
-const loginIdentity = ref('student')
+const loginLoading = ref(false);
+const registerLoading = ref(false);
+const activeTab = ref("login");
+const showPassword = ref(false);
+const showRegPassword = ref(false);
+const showRegConfirmPassword = ref(false);
+const loginIdentity = ref("student");
 
-const identityPlaceholder = computed(() => ({
-  student: '学号',
-  teacher: '职工号',
-  admin: '管理员账号'
-}[loginIdentity.value]))
+const identityPlaceholder = computed(
+  () =>
+    ({
+      student: "学号",
+      teacher: "职工号",
+      admin: "管理员账号",
+    })[loginIdentity.value],
+);
 
-const identityEmoji = computed(() => ({ student: '🎓', teacher: '👨‍🏫', admin: '👑' }[loginIdentity.value]))
-const identityDemoLabel = computed(() => ({ student: '学生', teacher: '教师', admin: '管理员' }[loginIdentity.value]))
+const identityEmoji = computed(
+  () => ({ student: "🎓", teacher: "👨‍🏫", admin: "👑" })[loginIdentity.value],
+);
+const identityDemoLabel = computed(
+  () =>
+    ({ student: "学生", teacher: "教师", admin: "管理员" })[
+      loginIdentity.value
+    ],
+);
 
 const loginForm = reactive({
-  username: '',
-  password: ''
-})
+  username: "",
+  password: "",
+});
 
 const registerForm = reactive({
-  username: '',
-  password: '',
-  confirmPassword: '',
-  email: '',
-  realName: ''
-})
+  username: "",
+  password: "",
+  confirmPassword: "",
+  email: "",
+  realName: "",
+});
 
 const tabIndicatorStyle = computed(() => {
   return {
-    transform: activeTab.value === 'login' ? 'translateX(0)' : 'translateX(100%)'
-  }
-})
+    transform:
+      activeTab.value === "login" ? "translateX(0)" : "translateX(100%)",
+  };
+});
 
 const switchTab = (tab) => {
-  activeTab.value = tab
-}
+  activeTab.value = tab;
+};
 
 const handleLogin = async () => {
   if (!loginForm.username || !loginForm.password) {
-    ElMessage.warning(`请填写${identityPlaceholder.value}和密码`)
-    return
+    ElMessage.warning(`请填写${identityPlaceholder.value}和密码`);
+    return;
   }
 
-  loginLoading.value = true
+  loginLoading.value = true;
   try {
-    await userStore.login(loginForm)
-    ElMessage.success('登录成功')
+    await userStore.login(loginForm);
+    ElMessage.success("登录成功");
 
     switch (userStore.userRole) {
-      case 'ADMIN':
-        router.push('/admin')
-        break
-      case 'TEACHER':
-        router.push('/teacher')
-        break
-      case 'STUDENT':
-        router.push('/student')
-        break
-      case 'USER':
-        router.push('/user')
-        break
+      case "ADMIN":
+        router.push("/admin");
+        break;
+      case "OPS":
+        router.push("/ops");
+        break;
+      case "TEACHER":
+        router.push("/teacher");
+        break;
+      case "STUDENT":
+        router.push("/student");
+        break;
+      case "USER":
+        router.push("/user");
+        break;
       default:
-        router.push('/')
+        router.push("/");
     }
   } catch (error) {
-    let errorMsg = '登录失败，请重试'
-    if (typeof error === 'string') {
-      errorMsg = error
+    let errorMsg = "登录失败，请重试";
+    if (typeof error === "string") {
+      errorMsg = error;
     } else if (error?.message) {
-      errorMsg = error.message
+      errorMsg = error.message;
     } else if (error?.data?.message) {
-      errorMsg = error.data.message
+      errorMsg = error.data.message;
     }
-    ElMessage.error(errorMsg)
+    ElMessage.error(errorMsg);
   } finally {
-    loginLoading.value = false
+    loginLoading.value = false;
   }
-}
+};
 
 const handleRegister = async () => {
-  if (!registerForm.username || !registerForm.password || !registerForm.confirmPassword || !registerForm.realName) {
-    ElMessage.warning('请填写必填字段')
-    return
+  if (
+    !registerForm.username ||
+    !registerForm.password ||
+    !registerForm.confirmPassword ||
+    !registerForm.realName
+  ) {
+    ElMessage.warning("请填写必填字段");
+    return;
   }
 
   if (registerForm.username.length < 3 || registerForm.username.length > 20) {
-    ElMessage.warning('学号长度应为3-20个字符')
-    return
+    ElMessage.warning("学号长度应为3-20个字符");
+    return;
   }
 
   if (registerForm.password.length < 6) {
-    ElMessage.warning('密码长度不能少于6个字符')
-    return
+    ElMessage.warning("密码长度不能少于6个字符");
+    return;
   }
 
   if (registerForm.password !== registerForm.confirmPassword) {
-    ElMessage.warning('两次输入的密码不一致')
-    return
+    ElMessage.warning("两次输入的密码不一致");
+    return;
   }
 
-  registerLoading.value = true
+  registerLoading.value = true;
   try {
     const response = await request({
-      url: '/api/auth/register',
-      method: 'post',
-      data: registerForm
-    })
+      url: "/api/auth/register",
+      method: "post",
+      data: registerForm,
+    });
 
     if (response.code === 200) {
-      ElMessage.success('注册成功！请登录')
-      activeTab.value = 'login'
-      loginForm.username = registerForm.username
-      loginForm.password = registerForm.password
+      ElMessage.success("注册成功！请登录");
+      activeTab.value = "login";
+      loginForm.username = registerForm.username;
+      loginForm.password = registerForm.password;
       Object.assign(registerForm, {
-        username: '',
-        password: '',
-        confirmPassword: '',
-        email: '',
-        realName: ''
-      })
+        username: "",
+        password: "",
+        confirmPassword: "",
+        email: "",
+        realName: "",
+      });
     } else {
-      ElMessage.error(response.message || '注册失败')
+      ElMessage.error(response.message || "注册失败");
     }
   } catch (error) {
-    let errorMsg = '注册失败，请重试'
-    if (typeof error === 'string') {
-      errorMsg = error
+    let errorMsg = "注册失败，请重试";
+    if (typeof error === "string") {
+      errorMsg = error;
     } else if (error?.message) {
-      errorMsg = error.message
+      errorMsg = error.message;
     } else if (error?.data?.message) {
-      errorMsg = error.data.message
+      errorMsg = error.data.message;
     }
-    ElMessage.error(errorMsg)
+    ElMessage.error(errorMsg);
   } finally {
-    registerLoading.value = false
+    registerLoading.value = false;
   }
-}
+};
 
 const fillDemo = (role) => {
   const demos = {
-    admin:   { username: 'admin',   password: 'admin123' },
-    teacher: { username: 'teacher', password: 'admin123' },
-    student: { username: 'student', password: 'admin123' }
-  }
-  const info = demos[role] || demos.student
-  loginForm.username = info.username
-  loginForm.password = info.password
-  const labels = { admin: '管理员', teacher: '教师', student: '学生' }
-  ElMessage.info(`已填充${labels[role]}演示账号`)
-}
+    admin: { username: "admin", password: "admin123" },
+    teacher: { username: "teacher", password: "admin123" },
+    student: { username: "student", password: "admin123" },
+  };
+  const info = demos[role] || demos.student;
+  loginForm.username = info.username;
+  loginForm.password = info.password;
+  const labels = { admin: "管理员", teacher: "教师", student: "学生" };
+  ElMessage.info(`已填充${labels[role]}演示账号`);
+};
 </script>
 
 <style scoped>
@@ -461,7 +642,9 @@ const fillDemo = (role) => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
   position: relative;
   overflow: hidden;
 }
@@ -504,7 +687,11 @@ const fillDemo = (role) => {
 .bg-shape {
   position: absolute;
   border-radius: 50%;
-  background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+  background: linear-gradient(
+    45deg,
+    var(--primary-color),
+    var(--secondary-color)
+  );
   opacity: 0.1;
   animation: float 15s ease-in-out infinite;
 }
@@ -542,10 +729,19 @@ const fillDemo = (role) => {
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  25% { transform: translateY(-20px) rotate(90deg); }
-  50% { transform: translateY(0px) rotate(180deg); }
-  75% { transform: translateY(20px) rotate(270deg); }
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-20px) rotate(90deg);
+  }
+  50% {
+    transform: translateY(0px) rotate(180deg);
+  }
+  75% {
+    transform: translateY(20px) rotate(270deg);
+  }
 }
 
 /* 时尚容器 */
@@ -602,9 +798,19 @@ const fillDemo = (role) => {
 }
 
 @keyframes bounce {
-  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-5px); }
-  60% { transform: translateY(-3px); }
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-5px);
+  }
+  60% {
+    transform: translateY(-3px);
+  }
 }
 
 .logo-text {
@@ -806,8 +1012,12 @@ const fillDemo = (role) => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 身份选择器 */
@@ -819,22 +1029,22 @@ const fillDemo = (role) => {
 .identity-btn {
   flex: 1;
   padding: 8px 4px;
-  border: 1.5px solid rgba(255,255,255,0.2);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
-  background: rgba(255,255,255,0.05);
-  color: rgba(255,255,255,0.6);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.3s;
 }
 .identity-btn:hover {
-  border-color: rgba(0,102,204,0.4);
-  background: rgba(0,102,204,0.08);
-  color: rgba(255,255,255,0.8);
+  border-color: rgba(0, 102, 204, 0.4);
+  background: rgba(0, 102, 204, 0.08);
+  color: rgba(255, 255, 255, 0.8);
 }
 .identity-btn.active {
-  border-color: var(--primary-color, #0066CC);
-  background: rgba(0,102,204,0.15);
+  border-color: var(--primary-color, #0066cc);
+  background: rgba(0, 102, 204, 0.15);
   color: #fff;
 }
 
@@ -865,8 +1075,13 @@ const fillDemo = (role) => {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .demo-buttons {
@@ -911,18 +1126,26 @@ const fillDemo = (role) => {
   color: white;
   font-weight: 600;
   position: relative;
-  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  background: linear-gradient(
+    135deg,
+    var(--primary-color),
+    var(--secondary-color)
+  );
 }
 
 .btn-avatar::before {
-  content: '';
+  content: "";
   position: absolute;
   top: -2px;
   left: -2px;
   right: -2px;
   bottom: -2px;
   border-radius: 50%;
-  background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+  background: linear-gradient(
+    45deg,
+    var(--primary-color),
+    var(--secondary-color)
+  );
   z-index: -1;
 }
 
@@ -979,14 +1202,18 @@ const fillDemo = (role) => {
 }
 
 .demo-avatar::before {
-  content: '';
+  content: "";
   position: absolute;
   top: -2px;
   left: -2px;
   right: -2px;
   bottom: -2px;
   border-radius: 50%;
-  background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+  background: linear-gradient(
+    45deg,
+    var(--primary-color),
+    var(--secondary-color)
+  );
   z-index: -1;
 }
 
@@ -1022,7 +1249,7 @@ const fillDemo = (role) => {
 .demo-credentials {
   font-size: 11px;
   color: var(--text-quaternary);
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   background: var(--bg-tertiary);
   padding: 2px 6px;
   border-radius: 4px;
@@ -1054,8 +1281,13 @@ const fillDemo = (role) => {
 }
 
 @keyframes sparkle {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.2); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
 }
 
 .benefit-list {

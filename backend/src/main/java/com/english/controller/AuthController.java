@@ -274,12 +274,20 @@ public class AuthController {
                 String token = authHeader.substring(7);
                 // 同时撤销提权状态
                 try {
-                    String username = jwtUtil.getUsernameFromToken(token);
+                    String username = null;
+                    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+                    if (authentication != null && authentication.isAuthenticated()
+                            && !"anonymousUser".equals(authentication.getName())) {
+                        username = authentication.getName();
+                    }
+                    if (username == null && jwtUtil != null) {
+                        username = jwtUtil.getUsernameFromToken(token);
+                    }
                     if (username != null) {
                         elevationService.revoke(username);
                     }
                 } catch (Exception ex) {
-                    log.warn("Failed to revoke elevation during logout: {}", ex.getMessage());
+                    log.warn("Failed to resolve logout username or revoke elevation: {}", ex.getMessage());
                 }
                 tokenBlacklistService.blacklistToken(token);
                 log.info("User logged out, token blacklisted, elevation revoked");

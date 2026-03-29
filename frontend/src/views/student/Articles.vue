@@ -119,8 +119,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { 
   Search, Bell, DocumentRemove, Timer, 
-  TrendCharts, Compass, Monitor, Connection, 
-  Reading, Coffee, School, Medal
+  TrendCharts, Connection, Reading, Medal
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -248,7 +247,7 @@ const getCategoryText = (val) => {
 
 const getCategoryIcon = (val) => {
   const cat = categories.find(c => c.value === val)
-  return cat ? cat.icon : 'Reading'
+  return cat ? cat.icon : Reading
 }
 
 const getDifficultyText = (diff) => {
@@ -257,8 +256,8 @@ const getDifficultyText = (diff) => {
 }
 
 const getDifficultyIcon = (diff) => {
-  const map = { 'EASY': 'Medal', 'MEDIUM': 'Connection', 'HARD': 'TrendCharts' }
-  return map[diff] || 'Medal'
+  const map = { 'EASY': Medal, 'MEDIUM': Connection, 'HARD': TrendCharts }
+  return map[diff] || Medal
 }
 
 onMounted(() => {

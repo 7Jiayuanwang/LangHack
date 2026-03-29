@@ -43,27 +43,31 @@ describe('Student Dashboard.vue', () => {
     expect(result).toBeTruthy()
   })
 
-  it('getUrgencyType returns danger for deadline less than 24h away', () => {
+  it('getUrgencyClass returns overdue for past deadline', () => {
     const wrapper = createWrapper()
     const pastDate = new Date(Date.now() - 86400000).toISOString()
-    expect(wrapper.vm.getUrgencyType(pastDate)).toBe('danger')
+    expect(wrapper.vm.getUrgencyClass(pastDate)).toBe('overdue')
+    expect(wrapper.vm.getUrgencyText(pastDate)).toBe('已逾期')
   })
 
-  it('getUrgencyType returns warning for deadline 24-72h away', () => {
+  it('getUrgencyClass returns soon for deadline 24-72h away', () => {
     const wrapper = createWrapper()
     const soonDate = new Date(Date.now() + 48 * 3600000).toISOString()
-    expect(wrapper.vm.getUrgencyType(soonDate)).toBe('warning')
+    expect(wrapper.vm.getUrgencyClass(soonDate)).toBe('soon')
+    expect(wrapper.vm.getUrgencyText(soonDate)).toBe('尽快')
   })
 
-  it('getUrgencyType returns success for deadline more than 72h away', () => {
+  it('getUrgencyClass returns normal for deadline more than 72h away', () => {
     const wrapper = createWrapper()
     const farDate = new Date(Date.now() + 7 * 86400000).toISOString()
-    expect(wrapper.vm.getUrgencyType(farDate)).toBe('success')
+    expect(wrapper.vm.getUrgencyClass(farDate)).toBe('normal')
+    expect(wrapper.vm.getUrgencyText(farDate)).toBe('正常')
   })
 
-  it('getUrgencyType returns info for null deadline', () => {
+  it('urgency helpers handle null deadline', () => {
     const wrapper = createWrapper()
-    expect(wrapper.vm.getUrgencyType(null)).toBe('info')
+    expect(wrapper.vm.getUrgencyClass(null)).toBe('normal')
+    expect(wrapper.vm.getUrgencyText(null)).toBe('无截止时间')
   })
 
   it('getCourseProgress handles number progress 0-1 range', () => {

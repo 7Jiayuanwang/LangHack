@@ -8,7 +8,7 @@
         <result column="exercise_id" property="exerciseId" jdbcType="BIGINT"/>
         <result column="option_content" property="optionContent" jdbcType="VARCHAR"/>
         <result column="option_key" property="optionKey" jdbcType="VARCHAR"/>
-        <result column="is_correct" property="isCorrect" jdbcType="BOOLEAN"/>
+        <result column="is_correct" property="isCorrect" jdbcType="TINYINT"/>
         <result column="order_num" property="orderNum" jdbcType="INTEGER"/>
         <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
     </resultMap>
@@ -32,7 +32,7 @@
         SELECT
         <include refid="Base_Column_List"/>
         FROM exercise_options
-        WHERE exercise_id = #{exerciseId} AND is_correct = TRUE
+        WHERE exercise_id = #{exerciseId} AND is_correct = 1
         LIMIT 1
     </select>
 

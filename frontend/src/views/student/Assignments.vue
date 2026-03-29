@@ -398,7 +398,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, onActivated, onUnmounted, onBeforeUnmount, computed } from 'vue'
+import { ref, reactive, onMounted, watch, onActivated, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {Check, Clock, Loading, Microphone, Warning, OfficeBuilding, Notebook} from '@element-plus/icons-vue'
@@ -534,6 +534,7 @@ const calculateAssignmentStatus = (progress, deadline) => {
 
 // 格式化学习时间显示
 const formatTextTime = (text, assignmentType) => {
+  void calculateAssignmentStatus
   if (assignmentType === 'TEXTS') {
     // 课文任务：显示阅读时间，判断是否达到要求
     const time = text.studyTime || 0

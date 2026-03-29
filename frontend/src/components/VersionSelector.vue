@@ -73,10 +73,6 @@ const availableVersions = computed(() => {
   return versions
 })
 
-// 验证selectedVersion是否在可用版本中
-const isSelectedVersionValid = computed(() => {
-  return availableVersions.value.some(v => v.key === props.selectedVersion)
-})
 </script>
 
 <style scoped>

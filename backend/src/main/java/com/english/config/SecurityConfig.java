@@ -136,6 +136,7 @@ public class SecurityConfig {
                 // 允许访问的接口 - 无需认证
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/public/**").permitAll()
+                .antMatchers(HttpMethod.POST, "/api/errors/report").permitAll()
                 .antMatchers("/api/wordnet/**").permitAll() // 允许公开访问单词查询接口
                 .antMatchers(HttpMethod.GET, "/api/media/**").permitAll() // 媒体文件仅 GET 公开
                 .antMatchers("/").permitAll()
@@ -203,7 +204,7 @@ public class SecurityConfig {
             }
         }
 
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "Accept", "X-Requested-With"));
         configuration.setMaxAge(3600L); // Preflight cache 1h / preflight 缓存 1 小时
         configuration.setAllowCredentials(false);

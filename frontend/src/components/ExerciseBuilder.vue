@@ -140,7 +140,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
 
 // Props

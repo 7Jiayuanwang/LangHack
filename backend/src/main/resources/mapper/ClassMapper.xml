@@ -10,6 +10,7 @@
         <result property="teacherId" column="teacher_id"/>
         <result property="description" column="description"/>
         <result property="createdTime" column="created_time"/>
+        <result property="joinTime" column="join_time"/>
 
         <!-- 关联课程信息 -->
         <association property="course" javaType="com.english.entity.Course">

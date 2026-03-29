@@ -198,15 +198,13 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, RefreshLeft, Refresh, Edit, Delete, VideoPlay } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshLeft, Refresh, VideoPlay } from '@element-plus/icons-vue'
 import * as adminApi from '@/api/admin'
 import TextEditDialog from '@/components/TextEditDialog.vue'
 
 // 响应式数据
 const texts = ref([])
 const stats = ref({})
-const courses = ref([])
-const units = ref([])
 const loading = ref(false)
 const viewDialogVisible = ref(false)
 const currentText = ref({})
@@ -236,30 +234,10 @@ const loadCourses = async () => {
     })
     if (response.code === 200) {
       // FIX: 增强响应数据防御
-      courses.value = ((response.data?.records && Array.isArray(response.data.records)) ? response.data.records : (Array.isArray(response.data) ? response.data : []))
+      return Array.isArray(response.data?.records) ? response.data.records : (Array.isArray(response.data) ? response.data : [])
     }
   } catch (error) {
     ElMessage.error('加载课程列表失败')
-  }
-}
-
-const loadUnits = async (courseId) => {
-  if (!courseId) {
-    units.value = []
-    return
-  }
-
-  try {
-    const response = await adminApi.getUnitsByCourseId(courseId)
-    if (response.code === 200) {
-      units.value = (response.data && Array.isArray(response.data)) ? response.data : []
-    } else {
-      units.value = []
-      ElMessage.error(response.message || '加载单元列表失败')
-    }
-  } catch (error) {
-    units.value = []
-    ElMessage.error('加载单元列表失败')
   }
 }
 

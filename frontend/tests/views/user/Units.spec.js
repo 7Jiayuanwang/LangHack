@@ -135,7 +135,6 @@ describe('Units.vue', () => {
   })
 
   it('unit can have optional description', () => {
-    const wrapper = createWrapper()
     const unitWithDesc = { id: 1, name: 'Unit', description: 'Desc' }
     const unitNoDesc = { id: 2, name: 'Unit' }
 
@@ -144,19 +143,16 @@ describe('Units.vue', () => {
   })
 
   it('unit textCount is initialized to 0', () => {
-    const wrapper = createWrapper()
     const unit = { id: 1, name: 'Unit', textCount: 0 }
     expect(unit.textCount).toBe(0)
   })
 
   it('unit wordCount is initialized to 0', () => {
-    const wrapper = createWrapper()
     const unit = { id: 1, name: 'Unit', wordCount: 0 }
     expect(unit.wordCount).toBe(0)
   })
 
   it('unit order is optional', () => {
-    const wrapper = createWrapper()
     const unitWithOrder = { id: 1, name: 'Unit', order: 1 }
     const unitNoOrder = { id: 2, name: 'Unit' }
 

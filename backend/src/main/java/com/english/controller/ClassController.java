@@ -13,11 +13,22 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/classes")
@@ -34,9 +45,6 @@ public class ClassController {
     @Autowired
     private UserService userService;
 
-    /**
-     * 分页查询班级列表
-     */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<Map<String, Object>> getClasses(
@@ -47,11 +55,8 @@ public class ClassController {
             @RequestParam(required = false) Long teacherId,
             Authentication authentication) {
         try {
-            // 分页参数边界校验
             page = Math.max(1, page);
             size = Math.max(1, Math.min(size, 100));
-
-            // 关键词长度限制
             if (keyword != null && keyword.length() > 100) {
                 keyword = keyword.substring(0, 100);
             }
@@ -62,69 +67,46 @@ public class ClassController {
             params.put("keyword", keyword);
             params.put("courseId", courseId);
 
-            // 获取当前用户角色
             String userRole = getCurrentRole(authentication);
-
-            // 教师只能查看自己管理的班级
             if ("ROLE_TEACHER".equals(userRole)) {
-                Long currentTeacherId = getCurrentUserId(authentication);
-                params.put("teacherId", currentTeacherId);
+                params.put("teacherId", getCurrentUserId(authentication));
             } else {
-                // 管理员可以指定教师ID或不指定
                 params.put("teacherId", teacherId);
             }
 
-            Map<String, Object> result = classService.getClassesByPage(params);
-            return Result.success(result);
+            return Result.success(classService.getClassesByPage(params));
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-            return Result.error("操作失败，请稍后重试");
+            logger.error("获取班级列表失败", e);
+            return Result.error("获取班级列表失败，请稍后重试");
         }
     }
 
-    /**
-     * 根据ID获取班级详情
-     */
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'USER', 'STUDENT')")
     public Result<Class> getClassById(@PathVariable Long id, Authentication authentication) {
         try {
-            if (authentication == null || authentication.getName() == null) {
-                return Result.error("用户未认证");
-            }
-            User currentUser = userService.getUserByUsername(authentication.getName());
-            if (currentUser == null) {
-                return Result.error("用户不存在");
-            }
-
+            User currentUser = requireCurrentUser(authentication);
             Class classInfo = classService.getClassById(id);
             if (classInfo == null) {
                 return Result.error("班级不存在");
             }
 
-            String userRole = currentUser.getRole();
-            Long userId = currentUser.getId();
-
-            // 白名单模式：ADMIN 和 TEACHER 无限制，其他角色必须是班级学生
-            if (!"ADMIN".equals(userRole) && !"TEACHER".equals(userRole)) {
-                if (!studentClassService.isStudentInClass(userId, id)) {
-                    return Result.error("没有权限查看此班级");
-                }
+            if (!Set.of("ADMIN", "TEACHER").contains(currentUser.getRole())
+                    && !studentClassService.isStudentInClass(currentUser.getId(), id)) {
+                return Result.error("没有权限查看此班级");
             }
 
             return Result.success(classInfo);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("获取班级详情失败", e);
+            return Result.error("获取班级详情失败，请稍后重试");
         }
     }
 
-    /**
-     * 创建班级
-     */
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> createClass(@RequestBody Class classInfo, Authentication authentication) {
@@ -138,10 +120,9 @@ public class ClassController {
             if (classInfo.getCourseId() == null) {
                 return Result.error("课程ID不能为空");
             }
-            // 教师只能创建自己管理的班级
+
             if ("ROLE_TEACHER".equals(getCurrentRole(authentication))) {
-                Long teacherId = getCurrentUserId(authentication);
-                classInfo.setTeacherId(teacherId);
+                classInfo.setTeacherId(getCurrentUserId(authentication));
             }
 
             classService.createClass(classInfo);
@@ -149,15 +130,11 @@ public class ClassController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("创建班级失败", e);
+            return Result.error("创建班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 更新班级
-     */
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> updateClass(@PathVariable Long id, @RequestBody Class classInfo, Authentication authentication) {
@@ -170,13 +147,11 @@ public class ClassController {
             }
             classInfo.setId(id);
 
-            // 非管理员只能更新自己管理的班级
             if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
                 Long teacherId = getCurrentUserId(authentication);
                 if (!classService.validateTeacherPermission(teacherId, id)) {
                     return Result.error("没有权限修改此班级");
                 }
-                // 教师不能修改班级的负责人
                 classInfo.setTeacherId(teacherId);
             }
 
@@ -185,20 +160,15 @@ public class ClassController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("更新班级失败", e);
+            return Result.error("更新班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 删除班级
-     */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> deleteClass(@PathVariable Long id, Authentication authentication) {
         try {
-            // 非管理员只能删除自己管理的班级
             if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
                 Long teacherId = getCurrentUserId(authentication);
                 if (!classService.validateTeacherPermission(teacherId, id)) {
@@ -211,336 +181,270 @@ public class ClassController {
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("删除班级失败", e);
+            return Result.error("删除班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 获取班级统计信息
-     */
     @GetMapping("/stats")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Map<String, Object>> getClassStats() {
         try {
-            Map<String, Object> stats = classService.getClassStats();
-            return Result.success(stats);
+            return Result.success(classService.getClassStats());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("获取班级统计失败", e);
+            return Result.error("获取班级统计失败，请稍后重试");
         }
     }
 
-    /**
-     * 根据教师ID获取班级列表
-     */
     @GetMapping("/teacher/{teacherId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<List<Class>> getClassesByTeacherId(@PathVariable Long teacherId, Authentication authentication) {
         try {
-            // 非管理员只能查看自己的班级
-            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
-                Long currentTeacherId = getCurrentUserId(authentication);
-                if (!currentTeacherId.equals(teacherId)) {
-                    return Result.error("没有权限查看其他教师的班级");
-                }
+            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))
+                    && !getCurrentUserId(authentication).equals(teacherId)) {
+                return Result.error("没有权限查看其他教师的班级");
             }
-
-            List<Class> classes = classService.getClassesByTeacherId(teacherId);
-            return Result.success(classes);
+            return Result.success(classService.getClassesByTeacherId(teacherId));
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("获取教师班级失败", e);
+            return Result.error("获取教师班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 当前学生获取自己的班级列表
-     */
     @GetMapping("/student/me")
     @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<List<Class>> getMyClasses(Authentication authentication) {
         try {
             Long studentId = getCurrentUserId(authentication);
-            List<Class> classes = classService.getClassesByStudentId(studentId);
-            return Result.success(classes);
+            return Result.success(classService.getClassesByStudentId(studentId));
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("获取我的班级失败", e);
+            return Result.error("获取我的班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 根据学生ID获取班级列表
-     */
     @GetMapping("/student/{studentId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
     public Result<List<Class>> getClassesByStudentId(@PathVariable Long studentId, Authentication authentication) {
         try {
-            // 学生和普通用户只能查看自己的班级
-            String authority = getCurrentRole(authentication);
-            if (!"ROLE_ADMIN".equals(authority) && !"ROLE_TEACHER".equals(authority)) {
-                Long currentStudentId = getCurrentUserId(authentication);
-                if (!currentStudentId.equals(studentId)) {
-                    return Result.error("没有权限查看其他学生的班级");
+            String role = getCurrentRole(authentication);
+            Long currentUserId = getCurrentUserId(authentication);
+
+            if (!"ROLE_ADMIN".equals(role) && !"ROLE_TEACHER".equals(role) && !currentUserId.equals(studentId)) {
+                return Result.error("没有权限查看其他学生的班级");
+            }
+
+            List<Class> studentClasses = classService.getClassesByStudentId(studentId);
+            if ("ROLE_TEACHER".equals(role)) {
+                Set<Long> teacherClassIds = classService.getClassesByTeacherId(currentUserId).stream()
+                        .map(Class::getId)
+                        .collect(Collectors.toSet());
+                studentClasses = studentClasses.stream()
+                        .filter(cls -> teacherClassIds.contains(cls.getId()))
+                        .collect(Collectors.toList());
+                if (studentClasses.isEmpty()) {
+                    return Result.error("该学生不在您管理的班级中");
                 }
             }
 
-            // 教师只能查看自己管理的班级中的学生
-            if ("ROLE_TEACHER".equals(authority)) {
-                Long teacherId = getCurrentUserId(authentication);
-                List<Class> teacherClasses = classService.getClassesByTeacherId(teacherId);
-                List<Class> studentClasses = classService.getClassesByStudentId(studentId);
-                if (studentClasses != null && teacherClasses != null) {
-                    // 过滤：只返回教师管理的班级中该学生的班级
-                    java.util.Set<Long> teacherClassIds = teacherClasses.stream()
-                            .map(Class::getId).collect(java.util.stream.Collectors.toSet());
-                    studentClasses = studentClasses.stream()
-                            .filter(c -> teacherClassIds.contains(c.getId()))
-                            .collect(java.util.stream.Collectors.toList());
-                    if (studentClasses.isEmpty()) {
-                        return Result.error("该学生不在您管理的班级中");
-                    }
-                    return Result.success(studentClasses);
-                }
-            }
-
-            List<Class> classes = classService.getClassesByStudentId(studentId);
-            return Result.success(classes);
+            return Result.success(studentClasses);
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("获取学生班级失败", e);
+            return Result.error("获取学生班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 搜索班级
-     */
     @GetMapping("/search")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
-    public Result<List<Class>> searchClasses(@RequestParam String keyword, Authentication authentication) {
+    public Result<List<Class>> searchClasses(@RequestParam(required = false) String keyword, Authentication authentication) {
         try {
-            // 验证关键词长度
             if (keyword == null || keyword.trim().isEmpty()) {
-                return Result.error("搜索关键词不能为空");
+                keyword = null;
             }
-            if (keyword.length() > 100) {
+            if (keyword != null && keyword.length() > 100) {
                 keyword = keyword.substring(0, 100);
             }
 
-            // FIX: 添加权限过滤 - 学生只能搜索自己所在的班级
-            String userRole = getCurrentRole(authentication);
-            List<Class> classes;
-            
-            // 学生和普通用户只能搜索自己所在的班级
-            if (!"ROLE_ADMIN".equals(userRole) && !"ROLE_TEACHER".equals(userRole)) {
-                Long studentId = getCurrentUserId(authentication);
-                classes = classService.searchClassesForStudent(studentId, keyword);
-            } else {
-                // 管理员和教师可以搜索所有班级
-                classes = classService.searchClasses(keyword);
-            }
-            
-            return Result.success(classes);
+            return Result.success(classService.searchClasses(keyword));
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("搜索班级失败", e);
+            return Result.error("搜索班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 学生加入班级
-     */
     @PostMapping("/join")
     @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<String> joinClass(@RequestBody Map<String, Long> params, Authentication authentication) {
         try {
-            if (params == null) {
-                return Result.error("请求参数不能为空");
-            }
-            Long studentId = getCurrentUserId(authentication);
-            Long classId = params.get("classId");
-            if (classId == null) {
+            if (params == null || params.get("classId") == null) {
                 return Result.error("班级ID不能为空");
             }
-            studentClassService.joinClass(studentId, classId);
+            studentClassService.joinClass(getCurrentUserId(authentication), params.get("classId"));
             return Result.success("成功加入班级");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-            return Result.error("操作失败，请稍后重试");
+            logger.error("加入班级失败", e);
+            return Result.error("加入班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 学生退出班级
-     */
     @PostMapping("/leave")
     @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<String> leaveClass(@RequestBody Map<String, Long> params, Authentication authentication) {
         try {
-            if (params == null) {
-                return Result.error("请求参数不能为空");
-            }
-            Long studentId = getCurrentUserId(authentication);
-            Long classId = params.get("classId");
-            if (classId == null) {
+            if (params == null || params.get("classId") == null) {
                 return Result.error("班级ID不能为空");
             }
-            studentClassService.leaveClass(studentId, classId);
+            studentClassService.leaveClass(getCurrentUserId(authentication), params.get("classId"));
             return Result.success("成功退出班级");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-            return Result.error("操作失败，请稍后重试");
+            logger.error("退出班级失败", e);
+            return Result.error("退出班级失败，请稍后重试");
         }
     }
 
-    /**
-     * 获取班级学生列表
-     */
     @GetMapping("/{classId}/students")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<List<StudentClass>> getStudentsByClassId(@PathVariable Long classId, Authentication authentication) {
         try {
-            // 非管理员只能查看自己管理班级的学生
-            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
-                Long teacherId = getCurrentUserId(authentication);
-                if (!classService.validateTeacherPermission(teacherId, classId)) {
-                    return Result.error("没有权限查看此班级的学生");
-                }
+            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))
+                    && !classService.validateTeacherPermission(getCurrentUserId(authentication), classId)) {
+                return Result.error("没有权限查看此班级的学生");
             }
-
-            List<StudentClass> students = studentClassService.getStudentsByClassId(classId);
-            return Result.success(students);
+            return Result.success(studentClassService.getStudentsByClassId(classId));
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("获取班级学生失败", e);
+            return Result.error("获取班级学生失败，请稍后重试");
         }
     }
 
-    /**
-     * 教师添加学生到班级
-     */
     @PostMapping("/{classId}/students")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    public Result<String> addStudentToClass(@PathVariable Long classId, @RequestBody Map<String, Long> params, Authentication authentication) {
+    public Result<String> addStudentToClass(@PathVariable Long classId,
+                                            @RequestBody Map<String, Long> params,
+                                            Authentication authentication) {
         try {
-            if (params == null) {
-                return Result.error("请求参数不能为空");
-            }
-            Long studentId = params.get("studentId");
+            Long studentId = params != null ? params.get("studentId") : null;
             if (studentId == null) {
                 return Result.error("学生ID不能为空");
             }
-
-            // 教师权限校验：教师只能为自己管理的班级添加学生
-            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
-                Long teacherId = getCurrentUserId(authentication);
-                if (!classService.validateTeacherPermission(teacherId, classId)) {
-                    return Result.error("没有权限管理此班级");
-                }
-                studentClassService.joinClass(studentId, classId);
-            } else {
-                // 管理员直接添加学生
-                studentClassService.joinClass(studentId, classId);
+            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))
+                    && !classService.validateTeacherPermission(getCurrentUserId(authentication), classId)) {
+                return Result.error("没有权限管理此班级");
             }
+            studentClassService.joinClass(studentId, classId);
             return Result.success("学生添加成功");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("添加学生失败", e);
+            return Result.error("添加学生失败，请稍后重试");
         }
     }
 
-    /**
-     * 教师移除学生出班级
-     */
     @DeleteMapping("/{classId}/students/{studentId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    public Result<String> removeStudentFromClass(@PathVariable Long classId, @PathVariable Long studentId, Authentication authentication) {
+    public Result<String> removeStudentFromClass(@PathVariable Long classId,
+                                                 @PathVariable Long studentId,
+                                                 Authentication authentication) {
         try {
-            // 教师权限校验：教师只能为自己管理的班级移除学生
-            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
-                Long teacherId = getCurrentUserId(authentication);
-                if (!classService.validateTeacherPermission(teacherId, classId)) {
-                    return Result.error("没有权限管理此班级");
-                }
-                studentClassService.leaveClass(studentId, classId);
-            } else {
-                // 管理员直接移除学生
-                studentClassService.leaveClass(studentId, classId);
+            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))
+                    && !classService.validateTeacherPermission(getCurrentUserId(authentication), classId)) {
+                return Result.error("没有权限管理此班级");
             }
+            studentClassService.leaveClass(studentId, classId);
             return Result.success("学生移除成功");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("移除学生失败", e);
+            return Result.error("移除学生失败，请稍后重试");
         }
     }
 
-    /**
-     * 批量添加学生到班级
-     */
     @PostMapping("/{classId}/students/batch")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    public Result<String> batchAddStudentsToClass(@PathVariable Long classId, @RequestBody Map<String, List<Long>> params, Authentication authentication) {
+    public Result<String> batchAddStudentsToClass(@PathVariable Long classId,
+                                                  @RequestBody Map<String, List<Long>> params,
+                                                  Authentication authentication) {
         try {
-            if (params == null) {
-                return Result.error("请求参数不能为空");
-            }
-            Long teacherId = getCurrentUserId(authentication);
-            List<Long> studentIds = params.get("studentIds");
+            List<Long> studentIds = params != null ? params.get("studentIds") : null;
             if (studentIds == null || studentIds.isEmpty()) {
                 return Result.error("学生ID列表不能为空");
             }
             if (studentIds.size() > 1000) {
                 return Result.error("批量添加学生数量不能超过1000");
             }
-
-            // 教师权限校验：教师只能为自己管理的班级添加学生
-            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))) {
-                if (!classService.validateTeacherPermission(teacherId, classId)) {
-                    return Result.error("没有权限管理此班级");
-                }
+            if (!"ROLE_ADMIN".equals(getCurrentRole(authentication))
+                    && !classService.validateTeacherPermission(getCurrentUserId(authentication), classId)) {
+                return Result.error("没有权限管理此班级");
             }
-
             studentClassService.batchAddStudentsToClass(classId, studentIds);
             return Result.success("批量添加学生成功");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            logger.error("操作失败", e);
-
-            return Result.error("操作失败，请稍后重试");
+            logger.error("批量添加学生失败", e);
+            return Result.error("批量添加学生失败，请稍后重试");
         }
     }
 
-    private Long getCurrentUserId(Authentication authentication) {
+    private User requireCurrentUser(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new BusinessException("用户未认证");
+        }
         User user = userService.getUserByUsername(authentication.getName());
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
-        return user.getId();
+        return user;
+    }
+
+    private Long getCurrentUserId(Authentication authentication) {
+        return requireCurrentUser(authentication).getId();
     }
 
     private String getCurrentRole(Authentication authentication) {
         if (authentication == null || authentication.getAuthorities().isEmpty()) {
             return null;
         }
+
+        boolean hasAdmin = false;
+        boolean hasOps = false;
+        boolean hasTeacher = false;
+        boolean hasStudent = false;
+        boolean hasUser = false;
+        for (GrantedAuthority authority : authentication.getAuthorities()) {
+            switch (authority.getAuthority()) {
+                case "ROLE_ADMIN":
+                    hasAdmin = true;
+                    break;
+                case "ROLE_OPS":
+                    hasOps = true;
+                    break;
+                case "ROLE_TEACHER":
+                    hasTeacher = true;
+                    break;
+                case "ROLE_STUDENT":
+                    hasStudent = true;
+                    break;
+                case "ROLE_USER":
+                    hasUser = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (hasAdmin) return "ROLE_ADMIN";
+        if (hasOps) return "ROLE_OPS";
+        if (hasTeacher) return "ROLE_TEACHER";
+        if (hasStudent) return "ROLE_STUDENT";
+        if (hasUser) return "ROLE_USER";
         return authentication.getAuthorities().iterator().next().getAuthority();
     }
 }

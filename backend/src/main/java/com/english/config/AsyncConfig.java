@@ -86,4 +86,15 @@ public class AsyncConfig {
         scheduler.initialize();
         return scheduler;
     }
+
+    @Bean(name = "updateTaskScheduler")
+    public TaskScheduler updateTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("update-sched-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(30);
+        scheduler.initialize();
+        return scheduler;
+    }
 }

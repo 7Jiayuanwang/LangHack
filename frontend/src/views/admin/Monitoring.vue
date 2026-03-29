@@ -187,6 +187,7 @@ import {
   GridComponent, DataZoomComponent
 } from 'echarts/components'
 import { getToken } from '@/utils/auth'
+import { environment } from '@/utils/environment'
 import {
   getRealTimeMetrics, getSystemMetrics, getHourlyStats, getDailyStats,
   getTopPages, getAiCallsRealtime, getAiCallsDaily, getAiCallsRecent
@@ -210,6 +211,7 @@ const hourlyData = ref([])
 const dailyData = ref([])
 const topPages = ref([])
 let eventSource = null
+let reconnectTimer = null
 
 const serviceNames = computed(() => Object.keys(aiStats.value))
 
@@ -310,8 +312,8 @@ const connectSSE = () => {
   const token = getToken()
   if (!token) return
 
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-  eventSource = new EventSource(`${baseUrl}/api/ops/monitoring/realtime/stream?token=${token}`)
+  const streamUrl = environment.resolveApiUrl('/api/ops/monitoring/realtime/stream')
+  eventSource = new EventSource(`${streamUrl}?token=${encodeURIComponent(token)}`)
 
   eventSource.onmessage = (event) => {
     try {
@@ -332,9 +334,13 @@ const connectSSE = () => {
       eventSource.close()
       eventSource = null
     }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+    }
     // Reconnect after 5 seconds
-    setTimeout(() => {
+    reconnectTimer = setTimeout(() => {
       if (!eventSource) connectSSE()
+      reconnectTimer = null
     }, 5000)
   }
 }
@@ -467,6 +473,10 @@ onBeforeUnmount(() => {
   if (eventSource) {
     eventSource.close()
     eventSource = null
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
   }
 })
 </script>

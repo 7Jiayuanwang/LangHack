@@ -31,7 +31,7 @@ describe('UnitTexts.vue', () => {
     })
 
     // Mock Audio globally for audio playback tests - must be a proper constructor
-    global.Audio = vi.fn(function(url) {
+    global.Audio = vi.fn(function() {
       this.play = vi.fn().mockResolvedValue(undefined)
       this.pause = vi.fn()
     })
@@ -271,7 +271,7 @@ describe('UnitTexts.vue', () => {
     const wrapper = shallowMount(UnitTexts)
     // unitId should already be set from route params in onMounted
 
-    const result = wrapper.vm.removeText({ id: 1, title: 'Test' })
+    wrapper.vm.removeText({ id: 1, title: 'Test' })
     // Wait a bit for the async .then() to execute
     await new Promise(resolve => setTimeout(resolve, 10))
 

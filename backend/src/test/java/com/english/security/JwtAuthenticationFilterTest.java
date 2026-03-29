@@ -391,6 +391,44 @@ class JwtAuthenticationFilterTest {
         verify(jwtUtil, never()).getRoleFromToken(anyString());
     }
 
+    @Test
+    @DisplayName("Query token is accepted for approved SSE endpoints only")
+    void queryTokenAllowedSsePathAuthenticates() throws Exception {
+        String token = "query.token.allowed";
+        request.setMethod("GET");
+        request.setRequestURI("/api/ops/update/trigger");
+        request.setParameter("token", token);
+
+        when(jwtUtil.getUsernameFromToken(token)).thenReturn("ops_user");
+        when(tokenBlacklistService.isBlacklisted(token)).thenReturn(false);
+        when(jwtUtil.getRoleFromToken(token)).thenReturn("OPS");
+        when(jwtUtil.validateToken(token, "ops_user")).thenReturn(true);
+
+        User user = new User();
+        user.setRole("OPS");
+        when(userService.getUserByUsername("ops_user")).thenReturn(user);
+
+        invokeDoFilterInternal();
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        assertNotNull(auth, "Approved SSE endpoints should accept query token auth");
+        assertEquals("ops_user", auth.getPrincipal());
+    }
+
+    @Test
+    @DisplayName("Query token is ignored for non-SSE endpoints")
+    void queryTokenIgnoredOutsideApprovedSsePaths() throws Exception {
+        request.setMethod("GET");
+        request.setRequestURI("/api/auth/userinfo");
+        request.setParameter("token", "query.token.blocked");
+
+        invokeDoFilterInternal();
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        assertNull(auth, "Non-SSE endpoints must not authenticate from query tokens");
+        verifyNoInteractions(jwtUtil, tokenBlacklistService, userService, elevationService);
+    }
+
     // ========== Elevation Tests ==========
 
     @Test

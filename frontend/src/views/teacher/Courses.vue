@@ -217,8 +217,6 @@ const courses = ref([])
 const classes = ref([])
 const courseDetailVisible = ref(false)
 const currentCourse = ref(null)
-const courseStats = ref(new Map())
-const classStats = ref(new Map())
 
 const unitCountCache = ref(new Map())
 

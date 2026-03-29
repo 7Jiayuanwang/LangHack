@@ -1,151 +1,139 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-
-/**
- * The environment.js utility does not exist in the current codebase.
- * These tests cover common environment detection patterns that would
- * typically be found in such a utility module.
- *
- * Since the actual file is missing, we test a set of environment
- * detection functions inline to serve as a reference implementation
- * and to validate the testing patterns.
- */
-
-// Inline utility functions that would live in environment.js
-function isMobile() {
-  if (typeof navigator === 'undefined') return false
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
-    .test(navigator.userAgent)
-}
-
-function isCapacitor() {
-  return typeof window !== 'undefined' && !!window.Capacitor
-}
-
-function isDevelopment() {
-  try {
-    return import.meta.env?.MODE === 'development'
-  } catch {
-    return false
-  }
-}
-
-function getApiBaseUrl() {
-  try {
-    return import.meta.env?.VITE_API_BASE_URL || ''
-  } catch {
-    return ''
-  }
-}
-
-function getPlatform() {
-  if (isCapacitor()) return 'capacitor'
-  if (isMobile()) return 'mobile-web'
-  return 'desktop-web'
-}
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { environment } from '@/utils/environment'
 
 describe('Environment Utilities', () => {
-  const originalNavigator = navigator
-  const originalWindow = window
-
   afterEach(() => {
     vi.restoreAllMocks()
-    // Clean up Capacitor mock if set
     if (window.Capacitor) {
       delete window.Capacitor
     }
   })
 
   describe('isMobile', () => {
-    it('should return true for iPhone user agent', () => {
+    it('returns true for iPhone user agent', () => {
       vi.stubGlobal('navigator', {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)'
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)',
       })
 
-      expect(isMobile()).toBe(true)
+      expect(environment.isMobile()).toBe(true)
     })
 
-    it('should return true for Android user agent', () => {
+    it('returns true for Android user agent', () => {
       vi.stubGlobal('navigator', {
-        userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 5)'
+        userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 5)',
       })
 
-      expect(isMobile()).toBe(true)
+      expect(environment.isMobile()).toBe(true)
     })
 
-    it('should return false for desktop user agent', () => {
+    it('returns false for desktop user agent', () => {
       vi.stubGlobal('navigator', {
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       })
 
-      expect(isMobile()).toBe(false)
-    })
-
-    it('should return false for iPad user agent (iPad not in regex)', () => {
-      vi.stubGlobal('navigator', {
-        userAgent: 'Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X)'
-      })
-
-      // iPad IS in the regex, so this should return true
-      expect(isMobile()).toBe(true)
+      expect(environment.isMobile()).toBe(false)
     })
   })
 
   describe('isCapacitor', () => {
-    it('should return true when window.Capacitor exists', () => {
+    it('returns true when window.Capacitor exists', () => {
       window.Capacitor = { isNativePlatform: () => true }
 
-      expect(isCapacitor()).toBe(true)
+      expect(environment.isCapacitor()).toBe(true)
     })
 
-    it('should return false when window.Capacitor is not defined', () => {
+    it('returns false when window.Capacitor is not defined', () => {
       delete window.Capacitor
 
-      expect(isCapacitor()).toBe(false)
+      expect(environment.isCapacitor()).toBe(false)
     })
   })
 
-  describe('getPlatform', () => {
-    it('should return "capacitor" when Capacitor is available', () => {
-      window.Capacitor = { isNativePlatform: () => true }
-      vi.stubGlobal('navigator', {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)'
-      })
-
-      expect(getPlatform()).toBe('capacitor')
+  describe('normalizeBaseUrl', () => {
+    it('trims whitespace and trailing slash', () => {
+      expect(environment.normalizeBaseUrl(' https://api.example.com/ ')).toBe(
+        'https://api.example.com',
+      )
     })
 
-    it('should return "mobile-web" for mobile browser without Capacitor', () => {
-      delete window.Capacitor
-      vi.stubGlobal('navigator', {
-        userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 5)'
-      })
-
-      expect(getPlatform()).toBe('mobile-web')
-    })
-
-    it('should return "desktop-web" for desktop browser', () => {
-      delete window.Capacitor
-      vi.stubGlobal('navigator', {
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      })
-
-      expect(getPlatform()).toBe('desktop-web')
+    it('returns empty string for invalid input', () => {
+      expect(environment.normalizeBaseUrl(null)).toBe('')
+      expect(environment.normalizeBaseUrl('   ')).toBe('')
     })
   })
 
-  describe('getApiBaseUrl', () => {
-    it('should return VITE_API_BASE_URL from import.meta.env', () => {
-      // import.meta.env is set by Vite; in test environment it reads from vitest config
-      // By default it returns '' (the fallback)
-      const result = getApiBaseUrl()
-      expect(typeof result).toBe('string')
+  describe('resolveApiUrl', () => {
+    it('keeps relative API path when no base is configured', () => {
+      expect(environment.resolveApiUrl('/api/auth/login', '')).toBe('/api/auth/login')
     })
 
-    it('should return empty string as fallback when env var is not set', () => {
-      // When VITE_API_BASE_URL is not defined, the fallback is ''
-      // This matches the behavior in request.js: import.meta.env.VITE_API_BASE_URL || ''
-      const result = getApiBaseUrl()
-      expect(result).toBe('')
+    it('prepends configured base for relative API path', () => {
+      expect(
+        environment.resolveApiUrl('/api/auth/login', 'https://api.example.com'),
+      ).toBe('https://api.example.com/api/auth/login')
+    })
+
+    it('avoids duplicating /api when configured base already ends with /api', () => {
+      expect(
+        environment.resolveApiUrl('/api/auth/login', 'https://api.example.com/api'),
+      ).toBe('https://api.example.com/api/auth/login')
+    })
+
+    it('rewrites same-origin absolute API URL to configured API origin', () => {
+      expect(
+        environment.resolveApiUrl(
+          'http://localhost:3000/api/student/assignments',
+          'https://api.example.com',
+        ),
+      ).toBe('https://api.example.com/api/student/assignments')
+    })
+
+    it('keeps non-API URL unchanged', () => {
+      expect(
+        environment.resolveApiUrl(
+          'https://cdn.example.com/assets/logo.png',
+          'https://api.example.com',
+        ),
+      ).toBe('https://cdn.example.com/assets/logo.png')
+    })
+
+    it('keeps third-party API URL unchanged', () => {
+      expect(
+        environment.resolveApiUrl(
+          'https://thirdparty.example.com/api/student/assignments',
+          'https://api.example.com',
+        ),
+      ).toBe('https://thirdparty.example.com/api/student/assignments')
+    })
+  })
+
+  describe('isApiRequestUrl', () => {
+    it('recognizes relative API path', () => {
+      expect(environment.isApiRequestUrl('/api/auth/login', '')).toBe(true)
+    })
+
+    it('recognizes configured absolute API URL', () => {
+      expect(
+        environment.isApiRequestUrl(
+          'https://api.example.com/api/auth/login',
+          'https://api.example.com',
+        ),
+      ).toBe(true)
+    })
+
+    it('rejects non-API URL', () => {
+      expect(
+        environment.isApiRequestUrl('https://cdn.example.com/assets/logo.png', ''),
+      ).toBe(false)
+    })
+
+    it('rejects unrelated third-party API URL', () => {
+      expect(
+        environment.isApiRequestUrl(
+          'https://thirdparty.example.com/api/auth/login',
+          'https://api.example.com',
+        ),
+      ).toBe(false)
     })
   })
 })

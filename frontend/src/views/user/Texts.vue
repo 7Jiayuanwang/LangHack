@@ -1,12 +1,10 @@
 <template>
   <div class="user-texts">
-    <!-- 页面头部 -->
     <div class="page-header">
       <h2>课文学习</h2>
       <p>选择课文开始学习</p>
     </div>
 
-    <!-- 筛选器 -->
     <el-card class="filter-card">
       <el-row :gutter="20">
         <el-col :span="6">
@@ -66,7 +64,6 @@
       </el-row>
     </el-card>
 
-    <!-- 课文列表 -->
     <div v-if="loading" class="loading-container">
       <el-skeleton :rows="3" animated />
     </div>
@@ -88,7 +85,9 @@
             <el-tag :type="getDifficultyType(text.difficulty)" size="small">
               {{ getDifficultyText(text.difficulty) }}
             </el-tag>
-            <span v-if="text.unitName" class="unit-tag">第{{ text.orderNum }}单元</span>
+            <span v-if="text.unitName" class="unit-tag"
+              >第{{ text.orderNum }}单元</span
+            >
           </div>
         </div>
 
@@ -111,7 +110,6 @@
       </el-card>
     </div>
 
-    <!-- 分页 -->
     <div v-if="total > 0" class="pagination-container">
       <el-pagination
         v-model:current-page="currentPage"
@@ -127,153 +125,193 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Search, Reading } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { ref, onMounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
+import { Search, Reading } from "@element-plus/icons-vue";
+import request from "@/utils/request";
 
-const router = useRouter()
+const router = useRouter();
+const route = useRoute();
 
-const loading = ref(false)
-const courses = ref([])
-const units = ref([])
-const texts = ref([])
-const total = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(12)
+const loading = ref(false);
+const courses = ref([]);
+const units = ref([]);
+const texts = ref([]);
+const total = ref(0);
+const currentPage = ref(1);
+const pageSize = ref(12);
 
-const selectedCourse = ref('')
-const selectedUnit = ref('')
-const selectedDifficulty = ref('')
-const searchKeyword = ref('')
+const selectedCourse = ref("");
+const selectedUnit = ref("");
+const selectedDifficulty = ref("");
+const searchKeyword = ref("");
+
+const normalizeCourses = (payload) => {
+  let courseList = [];
+  if (Array.isArray(payload?.courses)) {
+    courseList = payload.courses;
+  } else if (Array.isArray(payload)) {
+    courseList = payload;
+  } else if (Array.isArray(payload?.records)) {
+    courseList = payload.records;
+  }
+
+  return courseList.map((course) => ({
+    ...course,
+    id: course?.id || course?.courseId,
+    name: course?.name || course?.courseName || "未知课程",
+    description: course?.description || course?.courseDescription || "暂无描述",
+  }));
+};
+
+const normalizeUnits = (payload) => {
+  if (Array.isArray(payload?.units)) {
+    return payload.units;
+  }
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  return [];
+};
 
 const loadCourses = async () => {
   try {
     const response = await request({
-      url: '/api/student/courses',
-      method: 'get'
-    })
+      url: "/api/student/learning/courses",
+      method: "get",
+    });
 
     if (response?.code === 200 && response.data) {
-      courses.value = Array.isArray(response.data) ? response.data : []
+      courses.value = normalizeCourses(response.data);
     }
   } catch (error) {
-    console.error('获取课程列表失败:', error)
+    console.error("获取课程列表失败:", error);
   }
-}
+};
 
 const loadUnits = async (courseId) => {
   if (!courseId) {
-    units.value = []
-    return
+    units.value = [];
+    return;
   }
 
   try {
     const response = await request({
-      url: `/api/student/courses/${courseId}/units`,
-      method: 'get'
-    })
+      url: `/api/student/learning/courses/${courseId}/units`,
+      method: "get",
+    });
 
     if (response?.code === 200 && response.data) {
-      units.value = Array.isArray(response.data) ? response.data : []
+      units.value = normalizeUnits(response.data);
+    } else {
+      units.value = [];
     }
   } catch (error) {
-    console.error('获取单元列表失败:', error)
+    console.error("获取单元列表失败:", error);
+    units.value = [];
   }
-}
+};
 
 const loadTexts = async () => {
-  loading.value = true
+  loading.value = true;
   try {
     const params = {
       page: currentPage.value,
-      size: pageSize.value
-    }
-    if (selectedDifficulty.value) params.difficulty = selectedDifficulty.value
-    if (selectedCourse.value) params.courseId = selectedCourse.value
-    if (selectedUnit.value) params.unitId = selectedUnit.value
-    if (searchKeyword.value) params.keyword = searchKeyword.value
+      size: pageSize.value,
+    };
+    if (selectedDifficulty.value) params.difficulty = selectedDifficulty.value;
+    if (selectedCourse.value) params.courseId = selectedCourse.value;
+    if (selectedUnit.value) params.unitId = selectedUnit.value;
+    if (searchKeyword.value) params.keyword = searchKeyword.value;
 
     const response = await request({
-      url: '/api/public/texts',
-      method: 'get',
-      params: params
-    })
+      url: "/api/public/texts",
+      method: "get",
+      params,
+    });
 
     if (response?.code === 200 && response.data) {
-      let textList = []
       if (Array.isArray(response.data)) {
-        textList = response.data
-        total.value = textList.length
+        texts.value = response.data;
+        total.value = response.data.length;
       } else if (Array.isArray(response.data?.records)) {
-        textList = response.data.records
-        total.value = response.data?.total || textList.length
+        texts.value = response.data.records;
+        total.value = response.data?.total || texts.value.length;
       } else {
-        textList = []
-        total.value = 0
+        texts.value = [];
+        total.value = 0;
       }
-      texts.value = textList
     } else {
-      texts.value = []
-      total.value = 0
+      texts.value = [];
+      total.value = 0;
     }
   } catch (error) {
-    ElMessage.error('获取课文列表失败')
-    console.error(error)
-    texts.value = []
-    total.value = 0
+    ElMessage.error("获取课文列表失败");
+    console.error(error);
+    texts.value = [];
+    total.value = 0;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const studyText = (text) => {
   router.push({
-    path: '/user/text-learning',
+    path: "/user/text-learning",
     query: {
       textId: text.id,
       unitId: text.unitId,
-      courseId: text.courseId
-    }
-  })
-}
+      courseId: text.courseId,
+    },
+  });
+};
 
 const getContentPreview = (content) => {
-  if (!content) return ''
-  return content.length > 80 ? content.substring(0, 80) + '...' : content
-}
+  if (!content) return "";
+  return content.length > 80 ? content.substring(0, 80) + "..." : content;
+};
 
 const getDifficultyType = (difficulty) => {
   const types = {
-    'EASY': 'success',
-    'MEDIUM': 'warning',
-    'HARD': 'danger'
-  }
-  return types[difficulty] || 'info'
-}
+    EASY: "success",
+    MEDIUM: "warning",
+    HARD: "danger",
+  };
+  return types[difficulty] || "info";
+};
 
 const getDifficultyText = (difficulty) => {
   const difficultyMap = {
-    'EASY': '简单',
-    'MEDIUM': '中等',
-    'HARD': '困难'
+    EASY: "简单",
+    MEDIUM: "中等",
+    HARD: "困难",
+  };
+  return difficultyMap[difficulty] || difficulty;
+};
+
+const handleCourseChange = async (courseId) => {
+  selectedUnit.value = "";
+  currentPage.value = 1;
+  await loadUnits(courseId);
+  await loadTexts();
+};
+
+onMounted(async () => {
+  await loadCourses();
+
+  const courseId = Number(route.query.courseId);
+  const unitId = Number(route.query.unitId);
+  if (courseId) {
+    selectedCourse.value = courseId;
+    await loadUnits(courseId);
   }
-  return difficultyMap[difficulty] || difficulty
-}
+  if (unitId) {
+    selectedUnit.value = unitId;
+  }
 
-// 监听课程选择变化，加载对应的单元
-const handleCourseChange = (courseId) => {
-  selectedUnit.value = ''
-  currentPage.value = 1
-  loadUnits(courseId)
-  loadTexts()
-}
-
-onMounted(() => {
-  loadCourses()
-  loadTexts()
-})
+  await loadTexts();
+});
 </script>
 
 <style scoped>
@@ -394,7 +432,6 @@ onMounted(() => {
   margin-top: 30px;
 }
 
-/* 响应式设计 */
 @media (max-width: 768px) {
   .texts-grid {
     grid-template-columns: 1fr;

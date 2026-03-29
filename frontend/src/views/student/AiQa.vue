@@ -150,7 +150,6 @@ const sendMessage = async () => {
   scrollToBottom()
 
   try {
-    const tutorApiUrl = import.meta.env.VITE_TUTOR_API_BASE_URL || '/tutor'
     const authHeaderValue = getAuthHeader()
     abortController = new AbortController()
     const response = await fetch('/api/student/ai-qa/chat', {

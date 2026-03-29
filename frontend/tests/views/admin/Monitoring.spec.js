@@ -95,6 +95,7 @@ describe('Monitoring.vue', () => {
       wrapper.unmount()
       wrapper = null
     }
+    vi.useRealTimers()
     delete global.EventSource
   })
 
@@ -355,6 +356,24 @@ describe('Monitoring.vue', () => {
       wrapper.unmount()
 
       expect(es._closed).toBe(true)
+    })
+
+    it('does not reconnect after component unmounts', async () => {
+      vi.useFakeTimers()
+      mockGetToken.mockReturnValue('test-token')
+      mountComponent()
+
+      const es = MockEventSource.instances[0]
+      expect(es).toBeDefined()
+
+      es.onerror?.()
+      wrapper.unmount()
+      wrapper = null
+
+      vi.advanceTimersByTime(5000)
+      await Promise.resolve()
+
+      expect(MockEventSource.instances.length).toBe(1)
     })
   })
 

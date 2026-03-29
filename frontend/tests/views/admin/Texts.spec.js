@@ -46,7 +46,7 @@ describe('Texts.vue', () => {
     adminApi.getUnitsByCourseId.mockResolvedValue({ code: 200, data: [] })
 
     // Mock Audio globally for audio playback tests - must be a proper constructor
-    global.Audio = vi.fn(function(url) {
+    global.Audio = vi.fn(function() {
       this.play = vi.fn().mockResolvedValue(undefined)
       this.pause = vi.fn()
     })
@@ -55,16 +55,6 @@ describe('Texts.vue', () => {
   it('initializes with empty texts array', () => {
     const wrapper = shallowMount(Texts)
     expect(wrapper.vm.texts).toEqual([])
-  })
-
-  it('initializes with empty courses array', () => {
-    const wrapper = shallowMount(Texts)
-    expect(wrapper.vm.courses).toEqual([])
-  })
-
-  it('initializes with empty units array', () => {
-    const wrapper = shallowMount(Texts)
-    expect(wrapper.vm.units).toEqual([])
   })
 
   it('initializes with loading false', () => {
@@ -127,7 +117,7 @@ describe('Texts.vue', () => {
     expect(wrapper.vm.loading).toBe(false)
   })
 
-  it('loadCourses fetches and populates courses list', async () => {
+  it('loadCourses can be called safely', async () => {
     const mockCourses = [
       { id: 1, name: 'Course A' },
       { id: 2, name: 'Course B' }
@@ -140,7 +130,7 @@ describe('Texts.vue', () => {
     const wrapper = shallowMount(Texts)
     await wrapper.vm.loadCourses()
 
-    expect(wrapper.vm.courses.length).toBeGreaterThanOrEqual(0)
+    expect(adminApi.getCourses).toHaveBeenCalled()
   })
 
   it('loadStats fetches and updates stats', async () => {
@@ -258,7 +248,7 @@ describe('Texts.vue', () => {
     adminApi.deleteText.mockResolvedValue({ code: 200 })
 
     const wrapper = shallowMount(Texts)
-    const result = wrapper.vm.deleteText({ id: 1, title: 'Test' })
+    wrapper.vm.deleteText({ id: 1, title: 'Test' })
     // Wait a bit for the async .then() to execute
     await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -362,7 +352,7 @@ describe('Texts.vue', () => {
   })
 
   it('calls loadCourses, loadStats, and loadTexts on mount', () => {
-    const wrapper = shallowMount(Texts)
+    shallowMount(Texts)
 
     expect(adminApi.getCourses).toHaveBeenCalled()
     expect(adminApi.getTextStats).toHaveBeenCalled()

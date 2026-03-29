@@ -151,7 +151,7 @@ describe('MarkdownEditor.vue', () => {
         props: { modelValue: '**bold text**' }
       })
       // Access the computed to trigger it
-      const rendered = wrapper.vm.renderedMarkdown
+      wrapper.vm.renderedMarkdown
 
       expect(mockMarked).toHaveBeenCalledWith('**bold text**')
       expect(mockSanitize).toHaveBeenCalled()

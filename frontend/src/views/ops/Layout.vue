@@ -24,7 +24,11 @@
           :key="item.path"
           :to="item.path"
           class="nav-item"
-          :class="{ active: $route.path === item.path || $route.path.startsWith(item.path + '/') }"
+          :class="{
+            active:
+              $route.path === item.path ||
+              $route.path.startsWith(item.path + '/'),
+          }"
         >
           <div class="nav-icon">
             <component :is="item.icon" />
@@ -37,15 +41,29 @@
           <el-dropdown @command="handleCommand" placement="top-end">
             <div class="nav-user-avatar">
               <div class="nav-icon">
-                <img :src="userAvatar" :alt="userStore.userInfo?.realName || '运维'" class="avatar-img" />
+                <img
+                  :src="userAvatar"
+                  :alt="userStore.userInfo?.realName || '运维'"
+                  class="avatar-img"
+                />
               </div>
               <span class="nav-label">我的</span>
             </div>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="elevate" v-if="userStore.userRole === 'OPS'">切换到管理端</el-dropdown-item>
-                <el-dropdown-item command="elevate" v-if="userStore.userRole === 'ADMIN'">返回管理端</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+                <el-dropdown-item
+                  command="elevate"
+                  v-if="userStore.userRole === 'OPS'"
+                  >切换到管理端</el-dropdown-item
+                >
+                <el-dropdown-item
+                  command="elevate"
+                  v-if="userStore.userRole === 'ADMIN'"
+                  >返回管理端</el-dropdown-item
+                >
+                <el-dropdown-item command="logout" divided
+                  >退出登录</el-dropdown-item
+                >
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -63,100 +81,110 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useUserStore } from '@/store/user'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import ElevationDialog from '@/components/ElevationDialog.vue'
+import { ref, computed, onMounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import { useUserStore } from "@/store/user";
+import { ElMessage, ElMessageBox } from "element-plus";
+import ElevationDialog from "@/components/ElevationDialog.vue";
 import {
   DataLine,
   FolderOpened,
   User,
-  Connection
-} from '@element-plus/icons-vue'
+  Connection,
+  Refresh,
+} from "@element-plus/icons-vue";
 
-const router = useRouter()
-const route = useRoute()
-const userStore = useUserStore()
-const showElevationDialog = ref(false)
-const elevationTarget = ref('ADMIN')
+const router = useRouter();
+const route = useRoute();
+const userStore = useUserStore();
+const showElevationDialog = ref(false);
+const elevationTarget = ref("ADMIN");
 
 const navItems = ref([
   {
-    path: '/ops/monitoring',
-    label: '监控',
-    icon: DataLine
+    path: "/ops/monitoring",
+    label: "监控",
+    icon: DataLine,
   },
   {
-    path: '/ops/backups',
-    label: '备份',
-    icon: FolderOpened
+    path: "/ops/backups",
+    label: "备份",
+    icon: FolderOpened,
   },
   {
-    path: '/ops/users',
-    label: '用户',
-    icon: User
+    path: "/ops/users",
+    label: "用户",
+    icon: User,
   },
   {
-    path: '/ops/ai-providers',
-    label: 'AI',
-    icon: Connection
-  }
-])
+    path: "/ops/ai-providers",
+    label: "AI",
+    icon: Connection,
+  },
+  {
+    path: "/ops/update",
+    label: "更新",
+    icon: Refresh,
+  },
+]);
 
 const pageTitle = computed(() => {
   const routeMap = {
-    '/ops/monitoring': '系统监控',
-    '/ops/backups': '数据备份',
-    '/ops/users': '用户管理',
-    '/ops/ai-providers': 'AI 服务管理'
-  }
-  return route.meta?.title || routeMap[route.path] || '运维面板'
-})
+    "/ops/monitoring": "系统监控",
+    "/ops/backups": "数据备份",
+    "/ops/users": "用户管理",
+    "/ops/ai-providers": "AI 服务管理",
+    "/ops/update": "系统更新",
+  };
+  return route.meta?.title || routeMap[route.path] || "运维面板";
+});
 
 const userAvatar = computed(() => {
-  return userStore.userInfo?.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
-})
+  return (
+    userStore.userInfo?.avatar ||
+    "https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png"
+  );
+});
 
 const handleCommand = async (command) => {
   switch (command) {
-    case 'elevate':
-      if (userStore.userRole === 'ADMIN') {
-        router.push('/admin')
+    case "elevate":
+      if (userStore.userRole === "ADMIN") {
+        router.push("/admin");
       } else {
         // OPS 用户需要提权才能进入管理端
-        elevationTarget.value = 'ADMIN'
-        showElevationDialog.value = true
+        elevationTarget.value = "ADMIN";
+        showElevationDialog.value = true;
       }
-      break
-    case 'logout':
+      break;
+    case "logout":
       try {
-        await ElMessageBox.confirm('确认退出登录？', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        })
-        await userStore.logout()
-        ElMessage.success('退出登录成功')
-        router.replace('/login')
+        await ElMessageBox.confirm("确认退出登录？", "提示", {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          type: "warning",
+        });
+        await userStore.logout();
+        ElMessage.success("退出登录成功");
+        router.replace("/login");
       } catch (error) {
         // 用户取消操作
       }
-      break
+      break;
   }
-}
+};
 
 const onElevationSuccess = () => {
-  router.push('/admin')
-}
+  router.push("/admin");
+};
 
 // 权限守卫 - 确保只有 OPS 角色（或提权到 OPS）可以访问运维面板
 onMounted(() => {
   if (!userStore.isLoggedIn || !userStore.hasOpsAccess) {
-    ElMessage.error('权限不足，请以运维人员身份登录')
-    router.replace('/login')
+    ElMessage.error("权限不足，请以运维人员身份登录");
+    router.replace("/login");
   }
-})
+});
 </script>
 
 <style scoped>
@@ -215,7 +243,11 @@ onMounted(() => {
 }
 
 .mobile-nav {
-  background: linear-gradient(to top, var(--surface-color) 0%, rgba(255, 255, 255, 0.98) 100%);
+  background: linear-gradient(
+    to top,
+    var(--surface-color) 0%,
+    rgba(255, 255, 255, 0.98) 100%
+  );
   border-top: 1px solid var(--border-light);
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
   position: relative;
@@ -257,7 +289,11 @@ onMounted(() => {
 
 .nav-item.active {
   color: #f97316;
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.08) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(249, 115, 22, 0.15) 0%,
+    rgba(249, 115, 22, 0.08) 100%
+  );
   box-shadow: 0 2px 8px rgba(249, 115, 22, 0.2);
 }
 
@@ -297,14 +333,17 @@ onMounted(() => {
   border: 2px solid #f97316;
 }
 
-.nav-item, .user-menu-item {
+.nav-item,
+.user-menu-item {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 .fade-enter-from {

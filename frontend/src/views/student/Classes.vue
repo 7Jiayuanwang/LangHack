@@ -4,7 +4,10 @@
       <template #header>
         <div class="card-header">
           <span>我的班级</span>
-          <el-button type="primary" @click="showJoinDialog">加入班级</el-button>
+          <div class="header-actions">
+            <el-button @click="showAvailableClasses">可加入班级</el-button>
+            <el-button type="primary" @click="showJoinDialog">加入班级</el-button>
+          </div>
         </div>
       </template>
 
@@ -15,15 +18,25 @@
           <el-table-column prop="name" label="班级名称" min-width="150" />
           <el-table-column label="所属课程" min-width="150">
             <template #default="{ row }">
-              {{ row.course?.name || '-' }}
+              {{ row.course?.name || "-" }}
             </template>
           </el-table-column>
           <el-table-column label="任课教师" min-width="120">
             <template #default="{ row }">
-              {{ row.teacher?.nickname || row.teacher?.realName || row.teacher?.username || '-' }}
+              {{
+                row.teacher?.nickname ||
+                row.teacher?.realName ||
+                row.teacher?.username ||
+                "-"
+              }}
             </template>
           </el-table-column>
-          <el-table-column prop="description" label="班级描述" min-width="200" show-overflow-tooltip />
+          <el-table-column
+            prop="description"
+            label="班级描述"
+            min-width="200"
+            show-overflow-tooltip
+          />
           <el-table-column prop="joinTime" label="加入时间" width="180">
             <template #default="{ row }">
               {{ formatDateTime(row.joinTime) }}
@@ -36,7 +49,9 @@
           </el-table-column>
           <el-table-column label="操作" width="120" fixed="right">
             <template #default="{ row }">
-              <el-button type="danger" size="small" @click="leaveClass(row)">退出班级</el-button>
+              <el-button type="danger" size="small" @click="leaveClass(row)"
+                >退出班级</el-button
+              >
             </template>
           </el-table-column>
         </el-table>
@@ -55,7 +70,12 @@
       width="min(500px, 92vw)"
       @close="resetJoinForm"
     >
-      <el-form ref="joinFormRef" :model="joinForm" :rules="joinFormRules" label-width="100px">
+      <el-form
+        ref="joinFormRef"
+        :model="joinForm"
+        :rules="joinFormRules"
+        label-width="100px"
+      >
         <el-form-item label="班级ID" prop="classId">
           <el-input-number
             v-model="joinForm.classId"
@@ -107,15 +127,25 @@
           <el-table-column prop="name" label="班级名称" min-width="150" />
           <el-table-column label="所属课程" min-width="150">
             <template #default="{ row }">
-              {{ row.course?.name || '-' }}
+              {{ row.course?.name || "-" }}
             </template>
           </el-table-column>
           <el-table-column label="任课教师" min-width="120">
             <template #default="{ row }">
-              {{ row.teacher?.nickname || row.teacher?.realName || row.teacher?.username || '-' }}
+              {{
+                row.teacher?.nickname ||
+                row.teacher?.realName ||
+                row.teacher?.username ||
+                "-"
+              }}
             </template>
           </el-table-column>
-          <el-table-column prop="description" label="班级描述" min-width="200" show-overflow-tooltip />
+          <el-table-column
+            prop="description"
+            label="班级描述"
+            min-width="200"
+            show-overflow-tooltip
+          />
           <el-table-column prop="createdTime" label="创建时间" width="180">
             <template #default="{ row }">
               {{ formatDateTime(row.createdTime) }}
@@ -129,276 +159,279 @@
                 @click="quickJoinClass(row)"
                 :disabled="isJoinedClass(row.id)"
               >
-                {{ isJoinedClass(row.id) ? '已加入' : '加入' }}
+                {{ isJoinedClass(row.id) ? "已加入" : "加入" }}
               </el-button>
             </template>
           </el-table-column>
         </el-table>
       </div>
 
-      <el-empty v-if="availableClasses.length === 0" description="暂无可加入的班级">
-        <el-button type="primary" @click="showJoinDialog">输入班级ID加入</el-button>
+      <el-empty
+        v-if="availableClasses.length === 0"
+        description="暂无可加入的班级"
+      >
+        <el-button type="primary" @click="showJoinDialog"
+          >输入班级ID加入</el-button
+        >
       </el-empty>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { getAuthHeader } from '@/utils/auth'
+import { ref, reactive, onMounted } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { getAuthHeader } from "@/utils/auth";
 
 // 数据状态
-const loading = ref(false)
-const classes = ref([])
-const availableClasses = ref([])
-const availableLoading = ref(false)
-const joinDialogVisible = ref(false)
-const availableClassesVisible = ref(false)
-const joining = ref(false)
-const searchKeyword = ref('')
+const loading = ref(false);
+const classes = ref([]);
+const availableClasses = ref([]);
+const availableLoading = ref(false);
+const joinDialogVisible = ref(false);
+const availableClassesVisible = ref(false);
+const joining = ref(false);
+const searchKeyword = ref("");
 
 // 表单
 const joinForm = reactive({
-  classId: null
-})
+  classId: null,
+});
 
-const joinFormRef = ref(null)
+const joinFormRef = ref(null);
 
 // 表单验证规则
 const joinFormRules = {
-  classId: [
-    { required: true, message: '请输入班级ID', trigger: 'blur' }
-  ]
-}
+  classId: [{ required: true, message: "请输入班级ID", trigger: "blur" }],
+};
 
 // 加载学生班级列表
 const loadClasses = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await fetch('/api/classes/student/me', {
+    const response = await fetch("/api/classes/student/me", {
       headers: {
-        'Authorization': getAuthHeader() || ''
-      }
-    })
+        Authorization: getAuthHeader() || "",
+      },
+    });
 
     if (response.ok) {
-      const data = await response.json()
+      const data = await response.json();
       if (data.code === 200) {
-        classes.value = Array.isArray(data.data) ? data.data : []
+        classes.value = Array.isArray(data.data) ? data.data : [];
       } else {
-        ElMessage.error(data.message || '加载班级列表失败')
+        ElMessage.error(data.message || "加载班级列表失败");
       }
     } else {
-      ElMessage.error('加载班级列表失败')
+      ElMessage.error("加载班级列表失败");
     }
   } catch (error) {
-    console.error('加载班级列表失败:', error)
-    ElMessage.error('加载班级列表失败')
+    console.error("加载班级列表失败:", error);
+    ElMessage.error("加载班级列表失败");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 加载可加入的班级列表
 const loadAvailableClasses = async () => {
-  availableLoading.value = true
+  availableLoading.value = true;
   try {
     const params = new URLSearchParams({
-      size: '100'
-    })
-
-    if (searchKeyword.value && searchKeyword.value.trim()) {
-      params.append('keyword', searchKeyword.value.trim())
-    }
+      size: "100",
+      keyword: searchKeyword.value?.trim() || "",
+    });
 
     const response = await fetch(`/api/classes/search?${params.toString()}`, {
       headers: {
-        'Authorization': getAuthHeader() || ''
-      }
-    })
+        Authorization: getAuthHeader() || "",
+      },
+    });
 
     if (response.ok) {
-      const data = await response.json()
+      const data = await response.json();
       if (data.code === 200) {
         // 过滤掉已加入的班级
-        const joinedClassIds = classes.value.map(c => c.id)
-        availableClasses.value = (Array.isArray(data.data) ? data.data : []).filter(cls => !joinedClassIds.includes(cls.id))
+        const joinedClassIds = classes.value.map((c) => c.id);
+        availableClasses.value = (
+          Array.isArray(data.data) ? data.data : []
+        ).filter((cls) => !joinedClassIds.includes(cls.id));
       } else {
-        ElMessage.error(data.message || '加载班级列表失败')
+        ElMessage.error(data.message || "加载班级列表失败");
       }
     } else {
-      ElMessage.error('加载班级列表失败')
+      ElMessage.error("加载班级列表失败");
     }
   } catch (error) {
-    console.error('加载班级列表失败:', error)
-    ElMessage.error('加载班级列表失败')
+    console.error("加载班级列表失败:", error);
+    ElMessage.error("加载班级列表失败");
   } finally {
-    availableLoading.value = false
+    availableLoading.value = false;
   }
-}
+};
 
 // 显示加入班级对话框
 const showJoinDialog = () => {
-  joinDialogVisible.value = true
-}
+  joinDialogVisible.value = true;
+};
 
 // 显示可加入班级列表
 const showAvailableClasses = () => {
-  availableClassesVisible.value = true
-  loadAvailableClasses()
-}
+  availableClassesVisible.value = true;
+  loadAvailableClasses();
+};
 
 // 提交加入班级表单
 const submitJoinForm = async () => {
-  if (!joinFormRef.value) return
+  if (!joinFormRef.value) return;
 
   try {
-    await joinFormRef.value.validate()
-    joining.value = true
+    await joinFormRef.value.validate();
+    joining.value = true;
 
-    const response = await fetch('/api/classes/join', {
-      method: 'POST',
+    const response = await fetch("/api/classes/join", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': getAuthHeader() || ''
+        "Content-Type": "application/json",
+        Authorization: getAuthHeader() || "",
       },
       body: JSON.stringify({
-        classId: joinForm.classId
-      })
-    })
+        classId: joinForm.classId,
+      }),
+    });
 
     if (response.ok) {
-      const data = await response.json()
+      const data = await response.json();
       if (data.code === 200) {
-        ElMessage.success('成功加入班级')
-        joinDialogVisible.value = false
-        loadClasses()
+        ElMessage.success("成功加入班级");
+        joinDialogVisible.value = false;
+        loadClasses();
       } else {
-        ElMessage.error(data.message || '加入班级失败')
+        ElMessage.error(data.message || "加入班级失败");
       }
     } else {
-      ElMessage.error('加入班级失败')
+      ElMessage.error("加入班级失败");
     }
   } catch (error) {
-    console.error('加入班级失败:', error)
-    ElMessage.error('加入班级失败')
+    console.error("加入班级失败:", error);
+    ElMessage.error("加入班级失败");
   } finally {
-    joining.value = false
+    joining.value = false;
   }
-}
+};
 
 // 快速加入班级
 const quickJoinClass = async (classInfo) => {
   if (isJoinedClass(classInfo.id)) {
-    return
+    return;
   }
 
   try {
-    const response = await fetch('/api/classes/join', {
-      method: 'POST',
+    const response = await fetch("/api/classes/join", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': getAuthHeader() || ''
+        "Content-Type": "application/json",
+        Authorization: getAuthHeader() || "",
       },
       body: JSON.stringify({
-        classId: classInfo.id
-      })
-    })
+        classId: classInfo.id,
+      }),
+    });
 
     if (response.ok) {
-      const data = await response.json()
+      const data = await response.json();
       if (data.code === 200) {
-        ElMessage.success('成功加入班级')
-        loadClasses()
-        loadAvailableClasses()
+        ElMessage.success("成功加入班级");
+        loadClasses();
+        loadAvailableClasses();
       } else {
-        ElMessage.error(data.message || '加入班级失败')
+        ElMessage.error(data.message || "加入班级失败");
       }
     } else {
-      ElMessage.error('加入班级失败')
+      ElMessage.error("加入班级失败");
     }
   } catch (error) {
-    console.error('加入班级失败:', error)
-    ElMessage.error('加入班级失败')
+    console.error("加入班级失败:", error);
+    ElMessage.error("加入班级失败");
   }
-}
+};
 
 // 退出班级
 const leaveClass = async (classInfo) => {
   try {
     await ElMessageBox.confirm(
       `确定要退出班级"${classInfo.name}"吗？退出后需要重新申请加入。`,
-      '退出确认',
+      "退出确认",
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
 
-    const response = await fetch('/api/classes/leave', {
-      method: 'POST',
+    const response = await fetch("/api/classes/leave", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': getAuthHeader() || ''
+        "Content-Type": "application/json",
+        Authorization: getAuthHeader() || "",
       },
       body: JSON.stringify({
-        classId: classInfo.id
-      })
-    })
+        classId: classInfo.id,
+      }),
+    });
 
     if (response.ok) {
-      const data = await response.json()
+      const data = await response.json();
       if (data.code === 200) {
-        ElMessage.success('已退出班级')
-        loadClasses()
+        ElMessage.success("已退出班级");
+        loadClasses();
       } else {
-        ElMessage.error(data.message || '退出班级失败')
+        ElMessage.error(data.message || "退出班级失败");
       }
     } else {
-      ElMessage.error('退出班级失败')
+      ElMessage.error("退出班级失败");
     }
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('退出班级失败:', error)
-      ElMessage.error('退出班级失败')
+    if (error !== "cancel") {
+      console.error("退出班级失败:", error);
+      ElMessage.error("退出班级失败");
     }
   }
-}
+};
 
 // 检查是否已加入班级
 const isJoinedClass = (classId) => {
-  return classes.value.some(c => c.id === classId)
-}
+  return classes.value.some((c) => c.id === classId);
+};
 
 // 重置加入表单
 const resetJoinForm = () => {
   Object.assign(joinForm, {
-    classId: null
-  })
+    classId: null,
+  });
   if (joinFormRef.value) {
-    joinFormRef.value.resetFields()
+    joinFormRef.value.resetFields();
   }
-}
+};
 
 // 格式化日期时间
 const formatDateTime = (dateTime) => {
-  if (!dateTime) return '-'
-  return new Date(dateTime).toLocaleString('zh-CN')
-}
+  if (!dateTime) return "-";
+  return new Date(dateTime).toLocaleString("zh-CN");
+};
 
 // 初始化
 onMounted(() => {
-  loadClasses()
-})
+  loadClasses();
+});
 </script>
 
 <style scoped>
 .student-classes {
   padding: 20px;
   background-color: var(--bg-secondary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
   min-height: calc(100vh - 120px);
 }
 
@@ -415,6 +448,12 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .table-scroll-wrapper {

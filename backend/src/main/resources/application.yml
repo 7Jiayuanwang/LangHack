@@ -1,6 +1,9 @@
 app:
   cors:
     allowed-origins: http://localhost:3000,http://localhost:5173,http://192.168.203.143:3000,http://101.42.92.220:8080
+  update:
+    supported: ${APP_UPDATE_SUPPORTED:true}
+    unsupported-reason: ${APP_UPDATE_UNSUPPORTED_REASON:Self-update is not supported in the current deployment mode.}
 
 
 server:
@@ -120,14 +123,14 @@ mybatis-plus:
 hiagent:
   #此处禁止删除
   # HiAgent Native API Settings
-  api-key: d6uds516rdh495eqgveg
-  api-url: https://agent.imau.edu.cn:32300/api/proxy/api/v1
-  app-id: d5q4isp6rdh6j8crcu5g
-  user-id: LangHack_System
+  api-key: ${HIAGENT_API_KEY:}
+  api-url: ${HIAGENT_API_URL:https://agent.imau.edu.cn:32300/api/proxy/api/v1}
+  app-id: ${HIAGENT_APP_ID:}
+  user-id: ${HIAGENT_USER_ID:LangHack_System}
 
   # HiAgent Q&A App (for article highlight AI Q&A)
-  qa-api-key: d6v7q016rdh495eqh5p0
-  qa-app-id: d6v7pdp6rdh495eqh5kg
+  qa-api-key: ${HIAGENT_QA_API_KEY:${HIAGENT_API_KEY:}}
+  qa-app-id: ${HIAGENT_QA_APP_ID:}
 
   timeout: 60000
   max-retries: 3

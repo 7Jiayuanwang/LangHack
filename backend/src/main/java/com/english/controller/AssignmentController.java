@@ -21,6 +21,7 @@ import com.english.mapper.WordMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -566,6 +567,27 @@ public class AssignmentController {
         if (authentication == null || authentication.getAuthorities().isEmpty()) {
             throw new com.english.exception.BusinessException("认证信息缺失");
         }
+        boolean hasAdmin = false;
+        boolean hasOps = false;
+        boolean hasTeacher = false;
+        for (GrantedAuthority authority : authentication.getAuthorities()) {
+            switch (authority.getAuthority()) {
+                case "ROLE_ADMIN":
+                    hasAdmin = true;
+                    break;
+                case "ROLE_OPS":
+                    hasOps = true;
+                    break;
+                case "ROLE_TEACHER":
+                    hasTeacher = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (hasAdmin) return "ROLE_ADMIN";
+        if (hasOps) return "ROLE_OPS";
+        if (hasTeacher) return "ROLE_TEACHER";
         return authentication.getAuthorities().iterator().next().getAuthority();
     }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 
 import SelectionMenu from '@/components/SelectionMenu.vue'

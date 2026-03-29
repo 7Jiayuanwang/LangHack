@@ -6,6 +6,7 @@ import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.service.TokenBlacklistService;
 import com.english.service.UserService;
+import com.english.service.impl.ElevationService;
 import com.english.util.TestHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.*;
@@ -37,6 +38,9 @@ class AuthControllerTest {
 
     @Mock
     private TokenBlacklistService tokenBlacklistService;
+
+    @Mock
+    private ElevationService elevationService;
 
     @InjectMocks
     private AuthController authController;
@@ -409,6 +413,8 @@ class AuthControllerTest {
     @Test
     @DisplayName("POST /api/auth/logout - returns success and blacklists token")
     void logout_returnsSuccess() throws Exception {
+        TestHelper.createMockAuthentication("testuser", "USER");
+
         mockMvc.perform(post("/api/auth/logout")
                         .header("Authorization", "Bearer mock-jwt-token"))
                 .andExpect(status().isOk())
@@ -416,5 +422,6 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data").value("退出登录成功"));
 
         verify(tokenBlacklistService).blacklistToken("mock-jwt-token");
+        verify(elevationService).revoke("testuser");
     }
 }

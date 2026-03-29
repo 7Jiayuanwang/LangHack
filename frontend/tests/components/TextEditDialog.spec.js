@@ -13,7 +13,7 @@ vi.mock('element-plus', () => ({
 }))
 
 import TextEditDialog from '@/components/TextEditDialog.vue'
-import { createText, updateText, getCourses, getUnitsByCourseId } from '@/api/admin'
+import { createText, updateText, getCourses } from '@/api/admin'
 
 describe('TextEditDialog.vue', () => {
   let wrapper

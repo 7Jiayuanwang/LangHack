@@ -158,7 +158,7 @@ describe('Dashboard.vue', () => {
 
   it('calls loadDashboardData on mount', () => {
     mockFetch.mockResolvedValue({ ok: false })
-    const wrapper = shallowMount(Dashboard)
+    shallowMount(Dashboard)
     // fetch should have been called during mount
     expect(mockFetch).toHaveBeenCalled()
   })
