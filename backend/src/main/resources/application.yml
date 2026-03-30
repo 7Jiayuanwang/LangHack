@@ -155,13 +155,13 @@ tencent:
     secret-key: ${TENCENT_ASR_SECRET_KEY:}
     region: ${TENCENT_ASR_REGION:ap-guangzhou}  # Region: Guangzhou by default
 
-# AI Translation (OpenAI-compatible API, default: SiliconFlow Hunyuan-MT)
+# AI Translation (OpenAI-compatible API, default: SiliconFlow Qwen2.5-7B)
 # Priority: DB system_config > these env vars > code defaults
 ai:
   translate:
     api-url: ${AI_TRANSLATE_API_URL:https://api.siliconflow.cn/v1/chat/completions}
     api-key: ${AI_TRANSLATE_API_KEY:}
-    model: ${AI_TRANSLATE_MODEL:tencent/Hunyuan-MT-7B}
+    model: ${AI_TRANSLATE_MODEL:Qwen/Qwen2.5-7B-Instruct}
     timeout: ${AI_TRANSLATE_TIMEOUT:30000}
 
 async:

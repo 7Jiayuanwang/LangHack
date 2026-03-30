@@ -196,6 +196,12 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       TUTOR_API_BASE_URL: ${TUTOR_API_BASE_URL}
+      # HiAgent (文章版本生成 + AI问答)
+      HIAGENT_API_KEY: ${HIAGENT_API_KEY:-}
+      HIAGENT_APP_ID: ${HIAGENT_APP_ID:-}
+      HIAGENT_API_URL: ${HIAGENT_API_URL:-https://agent.imau.edu.cn:32300/api/proxy/api/v1}
+      HIAGENT_QA_API_KEY: ${HIAGENT_QA_API_KEY:-}
+      HIAGENT_QA_APP_ID: ${HIAGENT_QA_APP_ID:-}
       # 备份
       BACKUP_DIR: /app/backups
       MYSQLDUMP_PATH: mysqldump

@@ -41,7 +41,7 @@ public class TencentTranslateService {
     @Value("${ai.translate.api-key:}")
     private String defaultApiKey;
 
-    @Value("${ai.translate.model:tencent/Hunyuan-MT-7B}")
+    @Value("${ai.translate.model:Qwen/Qwen2.5-7B-Instruct}")
     private String defaultModel;
 
     @Value("${ai.translate.timeout:30000}")
@@ -114,7 +114,8 @@ public class TencentTranslateService {
             AiProvider provider = aiProviderService.pick("translate");
             if (provider != null) {
                 Map<String, String> resolved = new HashMap<>();
-                resolved.put("api_url", provider.getApiUrl() != null ? provider.getApiUrl() : defaultApiUrl);
+                String rawUrl = provider.getApiUrl() != null ? provider.getApiUrl() : defaultApiUrl;
+                resolved.put("api_url", normalizeApiUrl(rawUrl));
                 resolved.put("api_key", provider.getApiKey());
                 resolved.put("model", provider.getModel() != null ? provider.getModel() : defaultModel);
                 resolved.put("enabled", "true");
@@ -130,11 +131,25 @@ public class TencentTranslateService {
         String enabled = getOrDefault(dbConfig, "enabled", "true");
 
         Map<String, String> resolved = new HashMap<>();
-        resolved.put("api_url", apiUrl);
+        resolved.put("api_url", normalizeApiUrl(apiUrl));
         resolved.put("api_key", apiKey);
         resolved.put("model", model);
         resolved.put("enabled", enabled);
         return resolved;
+    }
+
+    /**
+     * Ensure the URL points to the chat completions endpoint.
+     * Accepts both bare base URLs (e.g. https://api.siliconflow.cn)
+     * and full endpoint URLs.
+     */
+    private String normalizeApiUrl(String url) {
+        if (url == null || url.isEmpty()) return defaultApiUrl;
+        String trimmed = url.stripTrailing();
+        if (trimmed.contains("/chat/completions")) return trimmed;
+        // Remove trailing slash before appending
+        if (trimmed.endsWith("/")) trimmed = trimmed.substring(0, trimmed.length() - 1);
+        return trimmed + "/v1/chat/completions";
     }
 
     private String getOrDefault(Map<String, String> dbConfig, String key, String fallback) {
