@@ -212,16 +212,30 @@ public class AiProviderServiceImpl implements AiProviderService {
         body.put("model", p.getModel());
         body.put("messages", Collections.singletonList(msg));
 
+        String rawUrl = p.getApiUrl() != null ? p.getApiUrl().stripTrailing() : "";
+        if (!rawUrl.contains("/chat/completions")) {
+            if (rawUrl.endsWith("/")) rawUrl = rawUrl.substring(0, rawUrl.length() - 1);
+            rawUrl = rawUrl + "/v1/chat/completions";
+        }
+        String testUrl = rawUrl;
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("input", input);
         long start = System.currentTimeMillis();
         try {
             ResponseEntity<String> resp = rt.exchange(
-                p.getApiUrl(), HttpMethod.POST,
+                testUrl, HttpMethod.POST,
                 new HttpEntity<>(body, headers), String.class);
             long latency = System.currentTimeMillis() - start;
             if (resp.getStatusCode() == HttpStatus.OK && resp.getBody() != null) {
-                JsonNode root = objectMapper.readTree(resp.getBody());
+                String body2 = resp.getBody().stripLeading();
+                if (body2.startsWith("<")) {
+                    result.put("success", false);
+                    result.put("error", "接口 URL 配置有误：服务端返回了 HTML 页面而非 JSON，请检查 API URL 是否为正确的聊天补全端点（如 .../v1/chat/completions）");
+                    result.put("latencyMs", latency);
+                    return result;
+                }
+                JsonNode root = objectMapper.readTree(body2);
                 String output = root.path("choices").get(0).path("message").path("content").asText("").trim();
                 result.put("success", true);
                 result.put("output", output);
