@@ -187,6 +187,14 @@ export function getUpdateStatus() {
     method: "get",
   });
 }
+
+export function getDeployHistory(limit = 50) {
+  return request({
+    url: "/api/ops/update/deploy-history",
+    method: "get",
+    params: { limit },
+  });
+}
 // triggerUpdate 用原生 EventSource，不走 axios
 
 // ========== 提权 ==========

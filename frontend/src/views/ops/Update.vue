@@ -94,14 +94,36 @@
         </div>
       </div>
     </el-card>
+
+    <el-card class="history-card">
+      <template #header>
+        <div class="log-header">
+          <span>部署历史</span>
+          <el-button size="small" :icon="Refresh" @click="loadHistory">刷新</el-button>
+        </div>
+      </template>
+      <el-table :data="deployHistory" size="small" style="width: 100%">
+        <el-table-column prop="time" label="时间" width="180" />
+        <el-table-column prop="event" label="类型" width="100">
+          <template #default="{ row }">
+            <el-tag :type="eventTagType(row.event)" size="small">{{ row.event }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="commit" label="Commit" width="90" />
+        <el-table-column prop="desc" label="描述" show-overflow-tooltip />
+      </el-table>
+      <div v-if="deployHistory.length === 0" style="color:#909399;font-size:13px;padding:12px 0">
+        暂无部署记录
+      </div>
+    </el-card>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, VideoPlay } from "@element-plus/icons-vue";
-import { getUpdateConfig, getUpdateStatus, saveUpdateConfig } from "@/api/ops";
+import { Delete, Refresh, VideoPlay } from "@element-plus/icons-vue";
+import { getDeployHistory, getUpdateConfig, getUpdateStatus, saveUpdateConfig } from "@/api/ops";
 import { useUserStore } from "@/store/user";
 import { environment } from "@/utils/environment";
 
@@ -123,6 +145,8 @@ const unsupportedReason = ref("");
 
 let pollTimer = null;
 let eventSource = null;
+
+const deployHistory = ref([]);
 
 const statusTagType = computed(
   () =>
@@ -283,9 +307,25 @@ function clearLogs() {
   logs.value = [];
 }
 
+async function loadHistory() {
+  try {
+    const response = await getDeployHistory(50);
+    if (response?.data) {
+      deployHistory.value = response.data;
+    }
+  } catch {
+    // Ignore transient failures.
+  }
+}
+
+function eventTagType(event) {
+  return { SUCCESS: 'success', ROLLBACK: 'warning', ERROR: 'danger', SKIP: 'info' }[event] || 'info';
+}
+
 onMounted(() => {
   loadConfig();
   loadStatus();
+  loadHistory();
   pollTimer = setInterval(loadStatus, 5000);
 });
 
