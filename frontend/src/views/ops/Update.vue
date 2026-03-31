@@ -319,7 +319,7 @@ async function loadHistory() {
 }
 
 function eventTagType(event) {
-  return { SUCCESS: 'success', ROLLBACK: 'warning', ERROR: 'danger', SKIP: 'info' }[event] || 'info';
+  return { SUCCESS: 'success', ROLLBACK: 'warning', ERROR: 'danger', SKIP: 'info', WARN: 'warning' }[event] || 'info';
 }
 
 onMounted(() => {

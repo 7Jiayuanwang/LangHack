@@ -313,6 +313,134 @@ wait_for_health() {
     return 1
 }
 
+# ── AI 服务商配置完整性检查 ──────────────────────────────
+# 检查 ai_provider 表中是否存在 api_key 被脱敏覆盖或 model 为空的记录
+# 这类问题不影响服务启动，但会导致翻译等功能静默失败，故只告警不回滚
+
+verify_ai_providers() {
+    local db_password="${DB_PASSWORD:-}"
+    if [ -z "$db_password" ] && [ -f "$ENV_FILE" ]; then
+        db_password=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- || echo "")
+    fi
+    if [ -z "$db_password" ]; then
+        log "WARN: 未找到数据库密码，跳过 AI 服务商配置检查"
+        return 0
+    fi
+
+    local mysql_container
+    mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.master|mysql-master' | head -1 || echo "")
+    if [ -z "$mysql_container" ]; then
+        mysql_container=$(docker ps --format '{{.Names}}' | grep mysql | head -1 || echo "")
+    fi
+    if [ -z "$mysql_container" ]; then
+        log "WARN: 未找到 MySQL 容器，跳过 AI 服务商配置检查"
+        return 0
+    fi
+
+    log "AI_PROVIDER: 检查服务商配置完整性..."
+
+    # 检查 api_key 含 **** 的记录（脱敏值被写回数据库）
+    local masked_count
+    masked_count=$(docker exec "$mysql_container" \
+        mysql -uroot -p"$db_password" english_learning \
+        -sN -e "SELECT COUNT(*) FROM ai_provider WHERE api_key LIKE '%****%' AND enabled=1;" \
+        2>/dev/null || echo "0")
+    masked_count=$(echo "$masked_count" | tr -d '[:space:]')
+
+    if [ "${masked_count:-0}" -gt 0 ]; then
+        log "WARN: 发现 ${masked_count} 条 AI 服务商记录的 api_key 含脱敏占位符 (****)"
+        log "WARN: 这些服务商将无法正常调用，请在运维面板重新填写真实 API Key"
+        notify "部署警告: ${masked_count} 条 AI 服务商 api_key 疑似被脱敏值覆盖，翻译等功能可能失败"
+        ops_log "WARN" "$(git rev-parse --short HEAD)" "AI 服务商 api_key 含脱敏值，需人工修复"
+    fi
+
+    # 检查 model 为空的启用记录
+    local empty_model_count
+    empty_model_count=$(docker exec "$mysql_container" \
+        mysql -uroot -p"$db_password" english_learning \
+        -sN -e "SELECT COUNT(*) FROM ai_provider WHERE (model IS NULL OR model='') AND enabled=1;" \
+        2>/dev/null || echo "0")
+    empty_model_count=$(echo "$empty_model_count" | tr -d '[:space:]')
+
+    if [ "${empty_model_count:-0}" -gt 0 ]; then
+        log "WARN: 发现 ${empty_model_count} 条 AI 服务商记录的 model 字段为空"
+        log "WARN: 调用这些服务商时将触发 API 400 错误，请在运维面板补全 model 名称"
+        notify "部署警告: ${empty_model_count} 条 AI 服务商 model 字段为空，翻译等功能可能失败"
+        ops_log "WARN" "$(git rev-parse --short HEAD)" "AI 服务商 model 字段为空，需人工修复"
+    fi
+
+    if [ "${masked_count:-0}" -eq 0 ] && [ "${empty_model_count:-0}" -eq 0 ]; then
+        log "AI_PROVIDER: 配置检查通过 ✓"
+    fi
+}
+
+# ── Flyway 迁移验证 ───────────────────────────────────
+# 对比代码中最高迁移版本号 vs 数据库中已成功执行的最高版本号
+# 不一致说明迁移未执行（通常是镜像未重建），返回非零触发回滚
+
+verify_flyway_migrations() {
+    log "FLYWAY: 验证数据库迁移状态..."
+
+    # 从 .env 获取数据库密码
+    local db_password="${DB_PASSWORD:-}"
+    if [ -z "$db_password" ] && [ -f "$ENV_FILE" ]; then
+        db_password=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- || echo "")
+    fi
+    if [ -z "$db_password" ]; then
+        log "WARN: 未找到数据库密码，跳过 Flyway 验证"
+        return 0
+    fi
+
+    # 找到 mysql-master 容器名
+    local mysql_container
+    mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.master|mysql-master' | head -1 || echo "")
+    if [ -z "$mysql_container" ]; then
+        # 回退：找任意 mysql 容器
+        mysql_container=$(docker ps --format '{{.Names}}' | grep mysql | head -1 || echo "")
+    fi
+    if [ -z "$mysql_container" ]; then
+        log "WARN: 未找到 MySQL 容器，跳过 Flyway 验证"
+        return 0
+    fi
+
+    # 代码中最高迁移版本号（从文件名提取，如 V11__xxx.sql → 11）
+    local migration_dir="$PROJECT_ROOT/backend/src/main/resources/db/migration"
+    if [ ! -d "$migration_dir" ]; then
+        log "WARN: 迁移目录不存在 ($migration_dir)，跳过验证"
+        return 0
+    fi
+    local code_max_version
+    code_max_version=$(ls "$migration_dir"/V*.sql 2>/dev/null \
+        | sed 's|.*/V\([0-9]*\)__.*|\1|' \
+        | sort -n | tail -1 || echo "0")
+
+    if [ "$code_max_version" = "0" ]; then
+        log "WARN: 未找到迁移脚本，跳过验证"
+        return 0
+    fi
+
+    # 数据库中已成功执行的最高版本号
+    local db_max_version
+    db_max_version=$(docker exec "$mysql_container" \
+        mysql -uroot -p"$db_password" english_learning \
+        -sN -e "SELECT COALESCE(MAX(CAST(version AS UNSIGNED)), 0) FROM flyway_schema_history WHERE success = 1;" \
+        2>/dev/null || echo "0")
+    db_max_version=$(echo "$db_max_version" | tr -d '[:space:]')
+
+    log "FLYWAY: 代码最高版本=V${code_max_version}，数据库已执行=V${db_max_version}"
+
+    if [ "$db_max_version" -lt "$code_max_version" ]; then
+        log "ERROR: Flyway 迁移不完整！代码需要 V${code_max_version}，数据库仅执行到 V${db_max_version}"
+        log "ERROR: 可能原因：后端镜像未重新构建，Flyway 未感知到新迁移脚本"
+        notify "部署警告: Flyway 迁移未完整执行 (代码 V${code_max_version} vs 数据库 V${db_max_version})，已触发回滚"
+        ops_log "ERROR" "$(git rev-parse --short HEAD)" "Flyway 迁移不完整: 代码 V${code_max_version} vs DB V${db_max_version}"
+        return 1
+    fi
+
+    log "FLYWAY: 迁移验证通过 ✓ (V${db_max_version})"
+    return 0
+}
+
 # ── 回滚 ─────────────────────────────────────────────
 
 rollback_to_old_version() {
@@ -548,6 +676,15 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
     log "INFO: 启动新容器..."
     docker compose -f "$COMPOSE_FILE" up -d $SERVICES
 
+    # ⑩.5 Flyway 迁移验证：确认所有迁移脚本均已成功执行
+    if [ "$REBUILD_BACKEND" = true ]; then
+        verify_flyway_migrations || {
+            log "ERROR: Flyway 迁移验证失败，启动自动回滚..."
+            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+            exit 1
+        }
+    fi
+
     # ⑪ 健康检查
     if wait_for_health $HEALTH_CHECK_TIMEOUT; then
         # ⑫ 成功！关闭维护模式并更新部署记录
@@ -555,6 +692,9 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
 
         NEW_COMMIT=$(git rev-parse HEAD)
         echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+
+        # ⑫.5 数据完整性告警检查（不触发回滚，仅告警）
+        verify_ai_providers
 
         log "SUCCESS: 服务已更新并重启"
         log "  更新服务: $SERVICES"

@@ -116,6 +116,8 @@ public class AiProviderServiceImpl implements AiProviderService {
         if (provider.getWeight() == null) provider.setWeight(1);
         if (provider.getEnabled() == null) provider.setEnabled(1);
         if (provider.getTimeoutMs() == null) provider.setTimeoutMs(30000);
+        if (provider.getModel() == null || provider.getModel().isEmpty())
+            throw new BusinessException("模型名称不能为空");
         provider.setCreatedTime(LocalDateTime.now());
         provider.setUpdatedTime(LocalDateTime.now());
         mapper.insert(provider);

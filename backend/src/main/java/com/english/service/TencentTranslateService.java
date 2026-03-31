@@ -117,7 +117,8 @@ public class TencentTranslateService {
                 String rawUrl = provider.getApiUrl() != null ? provider.getApiUrl() : defaultApiUrl;
                 resolved.put("api_url", normalizeApiUrl(rawUrl));
                 resolved.put("api_key", provider.getApiKey());
-                resolved.put("model", provider.getModel() != null ? provider.getModel() : defaultModel);
+                String model = provider.getModel();
+                resolved.put("model", (model != null && !model.isEmpty()) ? model : defaultModel);
                 resolved.put("enabled", "true");
                 resolved.put("provider_name", provider.getName());
                 return resolved;
