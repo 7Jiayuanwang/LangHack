@@ -72,6 +72,10 @@
             <span class="meta-label">API Key</span>
             <span class="meta-value meta-key">{{ p.apiKey }}</span>
           </div>
+          <div v-if="p.appId" class="meta-row">
+            <span class="meta-label">App ID</span>
+            <span class="meta-value meta-key">{{ p.appId }}</span>
+          </div>
           <div class="meta-row">
             <span class="meta-label">权重</span>
             <span class="meta-value">
@@ -143,6 +147,10 @@
             </template>
           </el-input>
         </el-form-item>
+        <el-form-item label="App ID">
+          <el-input v-model="form.appId" placeholder="HiAgent 等服务商必填，其他可留空" />
+          <div class="field-hint">HiAgent Q&A 功能必须填写，其他服务商可留空</div>
+        </el-form-item>
         <el-form-item label="模型">
           <el-input v-model="form.model" placeholder="如：tencent/Hunyuan-MT-7B" />
         </el-form-item>
@@ -204,6 +212,7 @@ const form = ref({
   service: 'translate',
   apiUrl: '',
   apiKey: '',
+  appId: '',
   model: '',
   weight: 10,
   timeoutMs: 30000,
@@ -251,6 +260,7 @@ const openCreateDialog = () => {
     service: activeService.value,
     apiUrl: '',
     apiKey: '',
+    appId: '',
     model: '',
     weight: 10,
     timeoutMs: 30000,
@@ -268,6 +278,7 @@ const openEditDialog = (p) => {
     service: p.service,
     apiUrl: p.apiUrl,
     apiKey: '',
+    appId: p.appId || '',
     model: p.model || '',
     weight: p.weight ?? 10,
     timeoutMs: p.timeoutMs ?? 30000,
@@ -285,6 +296,7 @@ const handleSave = async () => {
       name:      form.value.name,
       service:   form.value.service,
       apiUrl:    form.value.apiUrl,
+      appId:     form.value.appId || null,
       model:     form.value.model,
       weight:    form.value.weight,
       timeoutMs: form.value.timeoutMs,

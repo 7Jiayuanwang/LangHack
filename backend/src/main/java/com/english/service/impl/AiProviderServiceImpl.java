@@ -52,7 +52,7 @@ public class AiProviderServiceImpl implements AiProviderService {
             String apiKey = env.getProperty("AI_TRANSLATE_API_KEY", "").trim();
             String model  = env.getProperty("AI_TRANSLATE_MODEL", "gpt-3.5-turbo").trim();
             if (!apiUrl.isEmpty() && !apiKey.isEmpty()) {
-                insertSeedProvider("translate", "默认服务商 (env)", apiUrl, apiKey, model, 3, "由部署脚本环境变量自动创建");
+                insertSeedProvider("translate", "默认服务商 (env)", apiUrl, apiKey, null, model, 3, "由部署脚本环境变量自动创建");
             }
 
             // OpenRouter（可选）
@@ -60,28 +60,24 @@ public class AiProviderServiceImpl implements AiProviderService {
             if (!orKey.isEmpty()) {
                 insertSeedProvider("translate", "OpenRouter",
                     "https://openrouter.ai/api/v1/chat/completions",
-                    orKey, "openai/gpt-3.5-turbo", 2, "由部署脚本 OPENROUTER_API_KEY 自动创建");
+                    orKey, null, "openai/gpt-3.5-turbo", 2, "由部署脚本 OPENROUTER_API_KEY 自动创建");
             }
 
-            // HiAgent（可选）
-            String haKey = env.getProperty("HIAGENT_API_KEY", "").trim();
-            if (!haKey.isEmpty()) {
-                insertSeedProvider("translate", "HiAgent",
-                    "https://api.hiagent.cn/v1/chat/completions",
-                    haKey, "gpt-3.5-turbo", 2, "由部署脚本 HIAGENT_API_KEY 自动创建");
-            }
+            // HiAgent 走专有协议（非 OpenAI 兼容），不加入 ai_provider 负载均衡池
+            // 其配置通过 HIAGENT_API_KEY / HIAGENT_APP_ID / HIAGENT_QA_APP_ID 环境变量直接注入 HiAgentConfig
         } catch (Exception e) {
             log.warn("[AiProvider] 种子初始化失败（可忽略）: {}", e.getMessage());
         }
     }
 
     private void insertSeedProvider(String service, String name, String apiUrl,
-                                     String apiKey, String model, int weight, String remark) {
+                                     String apiKey, String appId, String model, int weight, String remark) {
         AiProvider p = new AiProvider();
         p.setService(service);
         p.setName(name);
         p.setApiUrl(apiUrl);
         p.setApiKey(apiKey);
+        p.setAppId(appId);
         p.setModel(model);
         p.setWeight(weight);
         p.setEnabled(1);

@@ -23,13 +23,13 @@
       <div class="filter-bar">
         <div class="filter-scroll">
           <button
-            v-for="diff in difficulties"
-            :key="diff.value"
+            v-for="cat in categories"
+            :key="cat.value"
             class="filter-pill"
-            :class="{ 'active': selectedDifficulty === diff.value }"
-            @click="selectDifficulty(diff.value)"
+            :class="{ 'active': selectedCategory === cat.value }"
+            @click="selectCategory(cat.value)"
           >
-            {{ diff.label }}
+            {{ cat.label }}
           </button>
         </div>
       </div>
@@ -83,9 +83,6 @@
                 class="cover-image"
                 :style="{ background: article.coverGradient }"
               ></div>
-              <div class="difficulty-badge-cover" :class="article.difficulty">
-                {{ getDifficultyText(article.difficulty) }}
-              </div>
             </div>
 
             <!-- Content Area -->
@@ -96,9 +93,8 @@
 
             <!-- Footer Area -->
             <div class="article-footer">
-              <div class="difficulty-pill" :class="article.difficulty">
-                <span class="difficulty-dot"></span>
-                <span>{{ getDifficultyLabel(article.difficulty) }}</span>
+              <div class="category-pill">
+                <span>{{ getCategoryText(article.category) }}</span>
               </div>
               <div class="reading-time">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -153,13 +149,15 @@ import { ElMessage } from 'element-plus'
 const router = useRouter()
 const loading = ref(true)
 const articles = ref([])
-const selectedDifficulty = ref('')
+const selectedCategory = ref('')
 
-const difficulties = [
+const categories = [
   { label: '全部', value: '' },
-  { label: '简单', value: 'EASY' },
-  { label: '中等', value: 'MEDIUM' },
-  { label: '困难', value: 'HARD' }
+  { label: '科技', value: 'technology' },
+  { label: '商务', value: 'business' },
+  { label: '教育', value: 'education' },
+  { label: '生活', value: 'lifestyle' },
+  { label: '文化', value: 'culture' }
 ]
 
 const coverGradients = [
@@ -179,18 +177,20 @@ const getRandomGradient = () => {
   return coverGradients[Math.floor(Math.random() * coverGradients.length)]
 }
 
-const selectDifficulty = (val) => {
-  selectedDifficulty.value = val
+const selectCategory = (val) => {
+  selectedCategory.value = val
   loadArticles()
+}
+
+const getRandomCategory = () => {
+  const cats = categories.filter(c => c.value !== '')
+  return cats[Math.floor(Math.random() * cats.length)].value
 }
 
 const loadArticles = async () => {
   loading.value = true
   try {
     const params = { count: 12 }
-    if (selectedDifficulty.value) {
-      params.difficulty = selectedDifficulty.value
-    }
 
     const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`)
 
@@ -213,14 +213,21 @@ const loadArticles = async () => {
         ElMessage.error('文章数据格式错误')
         return
       }
-      articles.value = dataArray.map(text => {
+      let fetched = dataArray.map(text => {
         const contentLength = typeof text?.content === 'string' ? text.content.length : 0
         return {
           ...text,
+          category: getRandomCategory(),
           coverGradient: getRandomGradient(),
           readingTime: Math.max(1, Math.ceil(contentLength / 800))
         }
       })
+
+      if (selectedCategory.value) {
+        fetched = fetched.filter(item => item.category === selectedCategory.value)
+      }
+
+      articles.value = fetched
     } else {
       ElMessage.error(data?.message || '获取文章失败')
     }
@@ -258,14 +265,9 @@ const getSnippet = (content) => {
   return content.replace(/[\n\r]+/g, ' ').substring(0, 120) + (content.length > 120 ? '...' : '')
 }
 
-const getDifficultyText = (diff) => {
-  const map = { 'EASY': 'EASY', 'MEDIUM': 'INT', 'HARD': 'HARD' }
-  return map[diff] || diff
-}
-
-const getDifficultyLabel = (diff) => {
-  const map = { 'EASY': '简单', 'MEDIUM': '中等', 'HARD': '困难' }
-  return map[diff] || diff
+const getCategoryText = (val) => {
+  const cat = categories.find(c => c.value === val)
+  return cat ? cat.label : '综合'
 }
 
 const handleLogin = () => {
@@ -539,27 +541,16 @@ onMounted(() => {
   justify-content: space-between;
 }
 
-.difficulty-pill {
+.category-pill {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.difficulty-pill.EASY { background: rgba(16, 185, 129, 0.1); color: #047857; }
-.difficulty-pill.MEDIUM { background: rgba(245, 158, 11, 0.1); color: #b45309; }
-.difficulty-pill.HARD { background: rgba(239, 68, 68, 0.1); color: #b91c1c; }
-
-.difficulty-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(19, 127, 236, 0.1);
+  color: #137fec;
 }
 
 .reading-time {

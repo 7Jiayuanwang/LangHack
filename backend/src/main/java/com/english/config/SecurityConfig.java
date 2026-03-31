@@ -152,8 +152,8 @@ public class SecurityConfig {
                 .antMatchers("/api/student/**").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN")
                 // 普通用户权限
                 .antMatchers("/api/user/**").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN")
-                // 付费第三方 API（翻译、ASR、Bilibili代理）— 必须登录，防止恶意消耗配额
-                .antMatchers("/api/translate/**").authenticated()
+                // 翻译 API — 已有 IP 限流保护，允许未登录用户使用
+                .antMatchers("/api/translate/**").permitAll()
                 .antMatchers("/api/asr/**").authenticated()
                 .antMatchers("/api/bilibili/**").authenticated()
                 // 其他请求需要认证

@@ -282,10 +282,20 @@ if [ "$SKIP_ENV" = false ]; then
     if [ -n "$CFG_AI_TRANSLATE_KEY" ]; then
         echo "  (可选) 配置更多服务商以启用负载均衡:"
         ask_secret "OpenRouter API Key (留空跳过)" "$(load_env_value "OPENROUTER_API_KEY" "")" CFG_OPENROUTER_KEY
+        echo "  HiAgent 用于文章改写和 AI 问答（专有协议，Key 共享，App ID 可分开）"
         ask_secret "HiAgent API Key (留空跳过)"   "$(load_env_value "HIAGENT_API_KEY" "")"    CFG_HIAGENT_KEY
+        if [ -n "$CFG_HIAGENT_KEY" ]; then
+            ask_value  "HiAgent 文章改写 App ID" "$(load_env_value "HIAGENT_APP_ID" "")"    CFG_HIAGENT_APP_ID
+            ask_value  "HiAgent AI问答 App ID (留空则与文章改写共用)" "$(load_env_value "HIAGENT_QA_APP_ID" "${CFG_HIAGENT_APP_ID}")" CFG_HIAGENT_QA_APP_ID
+        else
+            CFG_HIAGENT_APP_ID=""
+            CFG_HIAGENT_QA_APP_ID=""
+        fi
     else
         CFG_OPENROUTER_KEY=""
         CFG_HIAGENT_KEY=""
+        CFG_HIAGENT_APP_ID=""
+        CFG_HIAGENT_QA_APP_ID=""
     fi
 
     echo ""
@@ -360,6 +370,8 @@ if [ "$SKIP_ENV" = false ]; then
         [ -n "$CFG_AI_TRANSLATE_MODEL" ] && printf 'AI_TRANSLATE_MODEL=%s\n' "$CFG_AI_TRANSLATE_MODEL" || printf '# AI_TRANSLATE_MODEL=\n'
         [ -n "$CFG_OPENROUTER_KEY" ] && printf 'OPENROUTER_API_KEY=%s\n' "$CFG_OPENROUTER_KEY" || printf '# OPENROUTER_API_KEY=\n'
         [ -n "$CFG_HIAGENT_KEY" ]    && printf 'HIAGENT_API_KEY=%s\n'    "$CFG_HIAGENT_KEY"    || printf '# HIAGENT_API_KEY=\n'
+        [ -n "$CFG_HIAGENT_APP_ID" ] && printf 'HIAGENT_APP_ID=%s\n'    "$CFG_HIAGENT_APP_ID" || printf '# HIAGENT_APP_ID=\n'
+        [ -n "$CFG_HIAGENT_QA_APP_ID" ] && printf 'HIAGENT_QA_APP_ID=%s\n' "$CFG_HIAGENT_QA_APP_ID" || printf '# HIAGENT_QA_APP_ID=\n'
         printf 'MYSQL_ROOT_PASSWORD=%s\n'          "$CFG_DB_PASSWORD"
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'

@@ -19,6 +19,9 @@ public class AiProvider {
     @TableField("api_key")
     private String apiKey;
 
+    @TableField("app_id")
+    private String appId;
+
     private String model;
 
     private Integer weight;
@@ -53,6 +56,9 @@ public class AiProvider {
 
     public String getApiKey() { return apiKey; }
     public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+
+    public String getAppId() { return appId; }
+    public void setAppId(String appId) { this.appId = appId; }
 
     public String getModel() { return model; }
     public void setModel(String model) { this.model = model; }

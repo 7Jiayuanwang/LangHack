@@ -204,7 +204,9 @@ public class TencentTranslateService {
             String sourceLang = mapLanguageCode(source);
             String targetLang = mapLanguageCode(target);
 
-            String prompt = String.format("将以下%s翻译为%s，只返回翻译结果，不要附加任何解释:\n%s",
+            String prompt = String.format(
+                    "将以下%s翻译为%s，只返回翻译结果，不要附加任何解释。" +
+                    "不要使用 LaTeX 数学标记（如 \\(...\\) 或 $$...$$），用普通文本表示数学公式（如 2^t 写作 2的t次方）:\n%s",
                     sourceLang, targetLang, text);
 
             // Build OpenAI Chat Completions request
