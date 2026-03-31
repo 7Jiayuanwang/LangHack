@@ -1,6 +1,7 @@
 package com.english.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 
@@ -53,6 +54,7 @@ public class ExerciseOptionDTO {
         this.optionKey = optionKey;
     }
 
+    @JsonProperty("isCorrect")
     public Boolean getIsCorrect() {
         return isCorrect;
     }
