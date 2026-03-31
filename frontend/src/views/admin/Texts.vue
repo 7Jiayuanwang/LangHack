@@ -117,6 +117,7 @@
               style="width: 90px"
               :disabled="row._priorityLoading"
               @change="(val) => updatePriority(row, val)"
+              @blur="() => updatePriority(row, row.featuredPriority)"
             />
             <span v-else class="priority-na">—</span>
           </template>
@@ -350,7 +351,15 @@ const toggleFeatured = async (row, nextValue) => {
 }
 
 const updatePriority = async (row, val) => {
-  const priority = val == null ? 0 : val
+  // val 可能来自 @change（数字）或 @blur（通过 row.featuredPriority 传入的数字）
+  // 统一转为数字，防止非数字类型混入
+  const rawVal = (val !== null && val !== undefined && typeof val === 'number') ? val : row.featuredPriority
+  const priority = (rawVal == null || isNaN(rawVal)) ? 0 : Math.max(0, Math.min(100, rawVal))
+
+  // 防止 @change 和 @blur 在点击加减按钮时双重触发
+  if (row._lastSavedPriority === priority) return
+  row._lastSavedPriority = priority
+
   row._priorityLoading = true
   try {
     const response = await adminApi.setTextFeaturedPriority(row.id, priority)
