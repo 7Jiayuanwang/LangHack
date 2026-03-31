@@ -137,10 +137,10 @@
             <version>5.2.3</version>
         </dependency>
 
-        <!-- Tencent Cloud SDK for Translation (完整包) -->
+        <!-- Tencent Cloud SDK - ASR 子模块（仅语音识别，避免引入 44MB 全量包） -->
         <dependency>
             <groupId>com.tencentcloudapi</groupId>
-            <artifactId>tencentcloud-sdk-java</artifactId>
+            <artifactId>tencentcloud-sdk-java-asr</artifactId>
             <version>3.1.916</version>
         </dependency>
 
