@@ -141,7 +141,7 @@
         <dependency>
             <groupId>com.tencentcloudapi</groupId>
             <artifactId>tencentcloud-sdk-java-asr</artifactId>
-            <version>3.1.916</version>
+            <version>3.1.1417</version>
         </dependency>
 
         <!-- Spring Boot DevTools for automatic restart -->
