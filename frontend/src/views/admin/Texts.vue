@@ -108,14 +108,14 @@
           <template #default="{ row }">
             <el-input-number
               v-if="isTextFeatured(row)"
-              :model-value="row.featuredPriority || 0"
+              v-model="row.featuredPriority"
               :min="0"
               :max="100"
               :step="1"
               size="small"
               controls-position="right"
               style="width: 90px"
-              :loading="row._priorityLoading"
+              :disabled="row._priorityLoading"
               @change="(val) => updatePriority(row, val)"
             />
             <span v-else class="priority-na">—</span>
