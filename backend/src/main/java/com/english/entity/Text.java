@@ -1,6 +1,7 @@
 package com.english.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 
 @TableName("texts")
@@ -307,6 +308,7 @@ public class Text {
         this.contentType = contentType;
     }
 
+    @JsonProperty("isFeatured")
     public Integer getIsFeatured() {
         return isFeatured;
     }
