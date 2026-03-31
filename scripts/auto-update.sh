@@ -175,21 +175,27 @@ notify() {
 enable_maintenance() {
     [ "$MAINTENANCE_MODE" != "true" ] && return 0
     log "MAINTENANCE: 开启维护模式..."
-    # 尝试在 frontend 或 app 容器中创建标记文件
-    docker compose -f "$COMPOSE_FILE" exec -T frontend \
-        touch /usr/share/nginx/html/maintenance.flag 2>/dev/null || \
-    docker compose -f "$COMPOSE_FILE" exec -T app \
-        touch /usr/share/nginx/html/maintenance.flag 2>/dev/null || \
-    log "WARN: 无法开启维护模式（frontend 容器可能未运行）"
+    # MSYS_NO_PATHCONV=1 防止 Git Bash 将容器内绝对路径转换为 Windows 路径
+    local container
+    container=$(docker compose -f "$COMPOSE_FILE" ps -q frontend 2>/dev/null || \
+                docker compose -f "$COMPOSE_FILE" ps -q app 2>/dev/null || true)
+    if [ -n "$container" ]; then
+        MSYS_NO_PATHCONV=1 docker exec "$container" touch /usr/share/nginx/html/maintenance.flag 2>/dev/null || \
+            log "WARN: 无法开启维护模式（写入标记文件失败）"
+    else
+        log "WARN: 无法开启维护模式（frontend 容器可能未运行）"
+    fi
 }
 
 disable_maintenance() {
     [ "$MAINTENANCE_MODE" != "true" ] && return 0
     log "MAINTENANCE: 关闭维护模式..."
-    docker compose -f "$COMPOSE_FILE" exec -T frontend \
-        rm -f /usr/share/nginx/html/maintenance.flag 2>/dev/null || \
-    docker compose -f "$COMPOSE_FILE" exec -T app \
-        rm -f /usr/share/nginx/html/maintenance.flag 2>/dev/null || true
+    local container
+    container=$(docker compose -f "$COMPOSE_FILE" ps -q frontend 2>/dev/null || \
+                docker compose -f "$COMPOSE_FILE" ps -q app 2>/dev/null || true)
+    if [ -n "$container" ]; then
+        MSYS_NO_PATHCONV=1 docker exec "$container" rm -f /usr/share/nginx/html/maintenance.flag 2>/dev/null || true
+    fi
 }
 
 # ── .env 备份 & 验证 ─────────────────────────────────
@@ -463,7 +469,8 @@ git log --oneline "$DEPLOYED_HASH".."$REMOTE_HASH" | head -20
 log "────────────────────"
 
 # ① 记录当前版本（用于回滚）
-OLD_COMMIT="$LOCAL_HASH"
+PRE_PULL_COMMIT="$LOCAL_HASH"   # 保存 pull 前的 HEAD，用于 git checkout 回滚
+OLD_COMMIT="$DEPLOYED_HASH"     # 用已部署 commit 作为 diff 基准，检测本次变更范围
 
 # ② 开启维护模式
 enable_maintenance
@@ -529,11 +536,11 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
         log "ERROR: 构建失败，回退代码"
         notify "自动更新失败: Docker 构建失败，正在回退代码..."
         # 构建失败 → 旧容器未受影响，只需 revert git
-        git checkout "$OLD_COMMIT" --force --quiet 2>/dev/null || true
+        git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
         # 部署记录文件不更新，保持指向上次成功部署的 commit
         disable_maintenance
-        notify "已回退到 ${OLD_COMMIT:0:8}，旧服务继续运行"
-        ops_log "ERROR" "${OLD_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
+        notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
+        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
         exit 1
     fi
 
@@ -559,7 +566,7 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
     else
         # 健康检查失败 → 自动回滚
         log "ERROR: 新版本健康检查失败，启动自动回滚..."
-        rollback_to_old_version "$OLD_COMMIT" "$SERVICES"
+        rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
         # disable_maintenance 在 rollback 内部或 trap cleanup 中处理
         exit 1
     fi
