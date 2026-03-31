@@ -79,6 +79,9 @@ public class Text {
     @TableField("is_featured")
     private Integer isFeatured;
 
+    @TableField("featured_priority")
+    private Integer featuredPriority;
+
     @TableField("deleted")
     @TableLogic(value = "0", delval = "1")
     private Integer deleted;
@@ -310,5 +313,13 @@ public class Text {
 
     public void setIsFeatured(Integer isFeatured) {
         this.isFeatured = isFeatured;
+    }
+
+    public Integer getFeaturedPriority() {
+        return featuredPriority;
+    }
+
+    public void setFeaturedPriority(Integer featuredPriority) {
+        this.featuredPriority = featuredPriority;
     }
 }

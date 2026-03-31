@@ -944,6 +944,28 @@ public class AdminController {
     }
 
     /**
+     * 设置课文推荐优先级
+     */
+    @PutMapping("/texts/{id}/featured-priority")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> setFeaturedPriority(@PathVariable Long id,
+                                              @RequestParam Integer priority) {
+        try {
+            Text text = textService.getTextById(id);
+            if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
+                return Result.error("课文不存在");
+            }
+            int safeValue = Math.max(0, Math.min(100, priority));
+            text.setFeaturedPriority(safeValue);
+            textService.updateText(text);
+            return Result.success("优先级已更新为 " + safeValue);
+        } catch (Exception e) {
+            logger.error("设置推荐优先级失败", e);
+            return Result.error("操作失败，请稍后重试");
+        }
+    }
+
+    /**
      * 删除课文
      */
     @DeleteMapping("/texts/{id}")

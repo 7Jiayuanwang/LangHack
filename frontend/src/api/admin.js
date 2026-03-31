@@ -166,6 +166,14 @@ export function toggleTextFeatured(id, featured) {
   })
 }
 
+export function setTextFeaturedPriority(id, priority) {
+  return request({
+    url: `/api/admin/texts/${id}/featured-priority`,
+    method: 'put',
+    params: { priority }
+  })
+}
+
 export function getTextDetail(textId) {
   return request({
     url: `/api/admin/texts/${textId}`,

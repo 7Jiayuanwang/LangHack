@@ -104,6 +104,23 @@
             />
           </template>
         </el-table-column>
+        <el-table-column label="优先级" width="110" align="center">
+          <template #default="{ row }">
+            <el-input-number
+              v-if="isTextFeatured(row)"
+              :model-value="row.featuredPriority || 0"
+              :min="0"
+              :max="100"
+              :step="1"
+              size="small"
+              controls-position="right"
+              style="width: 90px"
+              :loading="row._priorityLoading"
+              @change="(val) => updatePriority(row, val)"
+            />
+            <span v-else class="priority-na">—</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="audioUrl" label="音频" width="120">
           <template #default="{ row }">
             <el-button
@@ -329,6 +346,24 @@ const toggleFeatured = async (row, nextValue) => {
     ElMessage.error('Operation failed')
   } finally {
     row._featuredLoading = false
+  }
+}
+
+const updatePriority = async (row, val) => {
+  const priority = val == null ? 0 : val
+  row._priorityLoading = true
+  try {
+    const response = await adminApi.setTextFeaturedPriority(row.id, priority)
+    if (response.code === 200) {
+      row.featuredPriority = priority
+      ElMessage.success('优先级已更新')
+    } else {
+      ElMessage.error(response.message || '更新失败')
+    }
+  } catch (error) {
+    ElMessage.error('更新失败')
+  } finally {
+    row._priorityLoading = false
   }
 }
 
@@ -626,5 +661,9 @@ onMounted(() => {
 .section-title {
   font-weight: bold;
   color: #333;
+}
+.priority-na {
+  color: #c0c4cc;
+  font-size: 16px;
 }
 </style>
