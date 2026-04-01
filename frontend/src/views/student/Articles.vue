@@ -8,6 +8,10 @@
         <p class="header-subtitle">Daily Picks</p>
       </div>
       <div class="header-actions">
+        <span v-if="!filterVisible" class="current-filter-label">{{ currentCategoryLabel }}</span>
+        <button class="icon-btn" @click="toggleFilter" :title="filterVisible ? '收起筛选' : '展开筛选'">
+          <el-icon><component :is="filterVisible ? ArrowUp : ArrowDown" /></el-icon>
+        </button>
         <button class="icon-btn" @click="toggleSearch">
           <el-icon><Search /></el-icon>
         </button>
@@ -21,7 +25,8 @@
     <!-- Main Content Area -->
     <main class="page-main">
       <!-- Filter Pills -->
-      <div class="filter-bar">
+      <transition name="filter-collapse">
+        <div v-show="filterVisible" class="filter-bar">
         <div class="filter-scroll">
           <button 
             v-for="cat in categories" 
@@ -34,6 +39,7 @@
           </button>
         </div>
       </div>
+      </transition>
 
       <!-- Articles Feed -->
       <div class="articles-feed">
@@ -114,12 +120,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { 
-  Search, Bell, DocumentRemove, Timer, 
-  TrendCharts, Connection, Reading, Medal
+import {
+  Search, Bell, DocumentRemove, Timer,
+  TrendCharts, Connection, Reading, Medal,
+  ArrowUp, ArrowDown
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -127,6 +134,12 @@ const router = useRouter()
 const loading = ref(true)
 const articles = ref([])
 const selectedCategory = ref('')
+const filterVisible = ref(true)
+
+// 筛选栏开关
+const toggleFilter = () => {
+  filterVisible.value = !filterVisible.value
+}
 
 // Predefined categories based on design
 const categories = [
@@ -137,6 +150,12 @@ const categories = [
   { label: '生活', value: 'lifestyle', icon: 'Coffee' },
   { label: '文化', value: 'culture', icon: 'Compass' }
 ]
+
+// 当前选中分类的显示名称（折叠时在 header 中显示）
+const currentCategoryLabel = computed(() => {
+  const cat = categories.find(c => c.value === selectedCategory.value)
+  return cat ? cat.label : '全部'
+})
 
 // Cover gradient palettes (no external images)
 const coverGradients = [
@@ -298,8 +317,7 @@ onMounted(() => {
     border-radius: 24px;
     margin-top: 20px;
     margin-bottom: 20px;
-    height: calc(100vh - 40px);
-    overflow-y: auto;
+    /* 移除嵌套滚动：让外层 Layout 的 content-wrapper 统一处理滚动 */
   }
 }
 
@@ -345,7 +363,19 @@ onMounted(() => {
 
 .header-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+/* 折叠时显示的当前分类标签 */
+.current-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-primary);
+  background: rgba(19, 127, 236, 0.1);
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .icon-btn {
@@ -652,5 +682,21 @@ onMounted(() => {
 
 .bottom-spacer {
   height: 80px; /* Space for a potential bottom tab bar */
+}
+
+/* --- Filter Collapse Transition --- */
+.filter-collapse-enter-active,
+.filter-collapse-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+  max-height: 60px;
+}
+
+.filter-collapse-enter-from,
+.filter-collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 </style>
