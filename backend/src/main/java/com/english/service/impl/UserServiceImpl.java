@@ -86,6 +86,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @UseMaster
     public Map<String, Object> getUsersByPage(Map<String, Object> params) {
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;

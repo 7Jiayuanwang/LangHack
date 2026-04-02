@@ -5,6 +5,7 @@ import com.english.entity.AiProvider;
 import com.english.exception.BusinessException;
 import com.english.mapper.AiProviderMapper;
 import com.english.service.AiProviderService;
+import com.english.datasource.UseMaster;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -92,6 +93,7 @@ public class AiProviderServiceImpl implements AiProviderService {
     // ------------------------------------------------------------------ query
 
     @Override
+    @UseMaster
     public List<AiProvider> listAll() {
         return mapper.selectList(
             new LambdaQueryWrapper<AiProvider>()
@@ -101,6 +103,7 @@ public class AiProviderServiceImpl implements AiProviderService {
     }
 
     @Override
+    @UseMaster
     public List<AiProvider> listByService(String service) {
         return mapper.selectList(
             new LambdaQueryWrapper<AiProvider>()

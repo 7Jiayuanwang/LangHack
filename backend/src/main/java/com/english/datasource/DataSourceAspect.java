@@ -45,6 +45,17 @@ public class DataSourceAspect {
             return joinPoint.proceed();
         }
 
+        // Admin/OPS interceptor forces master for all operations
+        if (DynamicDataSourceContext.isForceMaster()) {
+            DynamicDataSourceContext.setDataSourceType(DataSourceType.MASTER);
+            log.debug("Force-master routing for method {}", joinPoint.getSignature().getName());
+            try {
+                return joinPoint.proceed();
+            } finally {
+                DynamicDataSourceContext.clear();
+            }
+        }
+
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
         Class<?> targetClass = resolveTargetClass(joinPoint, method);
@@ -67,6 +78,10 @@ public class DataSourceAspect {
     }
 
     private DataSourceType resolveTransactionalType(ProceedingJoinPoint joinPoint) {
+        // Admin/OPS interceptor forces master for all operations
+        if (DynamicDataSourceContext.isForceMaster()) {
+            return DataSourceType.MASTER;
+        }
         try {
             MethodSignature signature = (MethodSignature) joinPoint.getSignature();
             Method method = signature.getMethod();

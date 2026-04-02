@@ -17,9 +17,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private static final Logger log = LoggerFactory.getLogger(WebMvcConfig.class);
 
     private final AccessLogInterceptor accessLogInterceptor;
+    private final AdminMasterInterceptor adminMasterInterceptor;
 
-    public WebMvcConfig(AccessLogInterceptor accessLogInterceptor) {
+    public WebMvcConfig(AccessLogInterceptor accessLogInterceptor,
+                        AdminMasterInterceptor adminMasterInterceptor) {
         this.accessLogInterceptor = accessLogInterceptor;
+        this.adminMasterInterceptor = adminMasterInterceptor;
     }
 
     @Override
@@ -29,6 +32,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .excludePathPatterns("/api/ops/monitoring/realtime/stream",
                                      "/api/ops/update/trigger",
                                      "/audio/**", "/favicon.ico");
+
+        // Force master datasource for admin/ops paths to avoid read-after-write inconsistency
+        registry.addInterceptor(adminMasterInterceptor)
+                .addPathPatterns("/api/admin/**", "/api/ops/**");
     }
 
     @Override

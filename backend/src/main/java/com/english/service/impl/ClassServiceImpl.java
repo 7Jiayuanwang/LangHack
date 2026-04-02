@@ -8,6 +8,7 @@ import com.english.entity.Class;
 import com.english.entity.Course;
 import com.english.entity.User;
 import com.english.entity.StudentClass;
+import com.english.datasource.UseMaster;
 import com.english.mapper.ClassMapper;
 import com.english.mapper.StudentClassMapper;
 import com.english.service.ClassService;
@@ -322,6 +323,7 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
     }
 
     @Override
+    @UseMaster
     @Transactional(readOnly = true)
     public Class getClassByName(String name) {
         QueryWrapper<Class> queryWrapper = new QueryWrapper<>();
