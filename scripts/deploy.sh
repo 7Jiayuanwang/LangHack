@@ -609,24 +609,30 @@ ask_yn "开始部署？" "y" GO
 echo ""
 echo "── 步骤 5/5: 执行部署 ──"
 
-# 切换分支
+# 切换分支 & 拉取最新代码
 CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 OLD_BRANCH="$CURRENT"
 OLD_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+
+# 检查 unstaged 和 staged 变更
+if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+    echo "[INFO] 保存本地未提交的修改..."
+    git stash push -m "deploy-$(date +%s)" --quiet
+    STASHED=true
+fi
+
 if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
-    echo "[INFO] 切换分支..."
-    # 检查 unstaged 和 staged 变更
-    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-        git stash push -m "deploy-$(date +%s)" --quiet
-        STASHED=true
-    fi
+    echo "[INFO] 切换分支 $CURRENT → $TARGET_BRANCH..."
     if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
         echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
         exit 1
     fi
-    git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || \
-        echo "[WARN] 无法从远程拉取 $TARGET_BRANCH，使用本地版本"
 fi
+
+# 始终拉取远程最新代码（无论是否切换分支）
+echo "[INFO] 拉取远程最新代码..."
+git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || \
+    echo "[WARN] 无法从远程拉取 $TARGET_BRANCH，使用本地版本"
 
 echo "[INFO] 版本: $(git rev-parse --short HEAD)"
 
