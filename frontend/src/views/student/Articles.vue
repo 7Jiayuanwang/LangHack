@@ -305,7 +305,7 @@ onMounted(() => {
   background-color: var(--app-bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--app-text);
-  max-width: 600px;
+  max-width: 1200px;
   margin: 0 auto;
   position: relative;
 }

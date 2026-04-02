@@ -1963,7 +1963,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 /* Reader Container */
 .reader-container {
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 60px 24px;
 }
