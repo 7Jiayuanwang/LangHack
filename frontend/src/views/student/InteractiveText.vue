@@ -1861,6 +1861,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-glass);
   transition: transform 0.3s ease;
+  contain: paint;
 }
 
 .header-hidden {
@@ -1966,6 +1967,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   max-width: 1200px;
   margin: 0 auto;
   padding: 60px 24px;
+  position: relative;
 }
 
 .article-header {
