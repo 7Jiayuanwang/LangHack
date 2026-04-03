@@ -14,8 +14,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install all dependencies (including devDependencies for vite build)
+RUN npm ci --include=dev
 
 # Copy source code
 COPY . .
