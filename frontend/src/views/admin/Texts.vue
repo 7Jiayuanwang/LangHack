@@ -186,6 +186,9 @@
     >
       <div class="text-detail">
         <h3>{{ currentText.title }}</h3>
+        <div v-if="currentText.coverUrl" class="text-cover-preview">
+          <img :src="currentText.coverUrl" alt="封面图预览" />
+        </div>
         <div class="text-meta">
           <el-tag :type="getDifficultyType(currentText.difficulty)">
             {{ getDifficultyText(currentText.difficulty) }}
@@ -601,7 +604,21 @@ onMounted(() => {
 
 .create-time {
   font-size: 13px;
-  color: #909399;
+  color: #94a3b8;
+}
+
+.text-cover-preview {
+  width: 100%;
+  max-height: 200px;
+  overflow: hidden;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.text-cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .text-content {

@@ -83,7 +83,11 @@
               <div class="cover-gradient"></div>
               <div
                 class="cover-image"
-                :style="{ background: article.coverGradient }"
+                :style="{
+                  background: article.coverUrl ? `url(${article.coverUrl})` : article.coverGradient,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }"
               ></div>
               <div class="category-badge">
                 <el-icon :size="14"><component :is="getCategoryIcon(article.category)" /></el-icon>

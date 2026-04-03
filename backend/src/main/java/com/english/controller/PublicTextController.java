@@ -352,6 +352,7 @@ public class PublicTextController {
             dto.setTitle(text.getTitle());
             dto.setDifficulty(text.getDifficulty());
             dto.setAudioUrl(text.getAudioUrl());
+            dto.setCoverUrl(text.getCoverUrl());
             dto.setViewCount(text.getViewCount() != null ? text.getViewCount() : 0);
             dto.setLikeCount(text.getLikeCount());
             dto.setContentType(text.getContentType());
