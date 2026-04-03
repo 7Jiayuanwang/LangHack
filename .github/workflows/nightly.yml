@@ -24,12 +24,12 @@ jobs:
           --health-retries=5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -48,19 +48,22 @@ jobs:
       - name: Check JaCoCo coverage threshold (≥60% lines)
         working-directory: backend
         run: |
-          # Extract coverage percentage from jacoco report
-          COVERAGE=$(grep -oP '(?<=<span class="counter">)[^<]*' target/site/jacoco/index.html | head -1 || echo "0%")
-          echo "Backend coverage: $COVERAGE"
+          # Parse line coverage from JaCoCo CSV (columns: LINE_MISSED=8, LINE_COVERED=9)
+          CSV_FILE="target/site/jacoco/jacoco.csv"
 
-          # Parse percentage value
-          COVERAGE_VALUE=$(echo "$COVERAGE" | grep -oP '\d+(\.\d+)?')
-          THRESHOLD=60
+          if [ -f "$CSV_FILE" ]; then
+            COVERAGE_VALUE=$(awk -F',' 'NR>1{missed+=$8; covered+=$9} END{total=missed+covered; printf "%.1f", (total>0 ? covered/total*100 : 0)}' "$CSV_FILE")
+            echo "Backend line coverage: ${COVERAGE_VALUE}%"
 
-          if (( $(echo "$COVERAGE_VALUE < $THRESHOLD" | bc -l) )); then
-            echo "❌ Coverage $COVERAGE_VALUE% is below threshold $THRESHOLD%"
-            exit 1
+            THRESHOLD=60
+            if (( $(echo "$COVERAGE_VALUE < $THRESHOLD" | bc -l) )); then
+              echo "❌ Coverage ${COVERAGE_VALUE}% is below threshold ${THRESHOLD}%"
+              exit 1
+            else
+              echo "✅ Coverage ${COVERAGE_VALUE}% meets threshold ${THRESHOLD}%"
+            fi
           else
-            echo "✅ Coverage $COVERAGE_VALUE% meets threshold $THRESHOLD%"
+            echo "⚠️  JaCoCo report not found, skipping threshold check"
           fi
 
       - name: Backend dependency scan (OWASP Dependency-Check)
@@ -68,7 +71,7 @@ jobs:
         run: mvn dependency-check:check -DskipProvidedScope=true -DskipRuntimeScope=false || true
 
       - name: Upload JaCoCo detailed report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: backend-jacoco-nightly
@@ -79,12 +82,12 @@ jobs:
     name: Frontend Full Test + Coverage Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -101,12 +104,11 @@ jobs:
       - name: Check v8 coverage threshold (≥50% statements)
         working-directory: frontend
         run: |
-          # Extract coverage from v8 coverage.json
-          COVERAGE_FILE="coverage/coverage-final.json"
+          # v8 coverage generates json-summary with .total.statements.pct
+          SUMMARY_FILE="coverage/coverage-summary.json"
 
-          if [ -f "$COVERAGE_FILE" ]; then
-            # Extract statement coverage percentage
-            STATEMENT_COVERAGE=$(jq '.metadata.summary.lines.pct // 0' "$COVERAGE_FILE" 2>/dev/null || echo "0")
+          if [ -f "$SUMMARY_FILE" ]; then
+            STATEMENT_COVERAGE=$(jq '.total.statements.pct // 0' "$SUMMARY_FILE" 2>/dev/null || echo "0")
             echo "Frontend statement coverage: ${STATEMENT_COVERAGE}%"
 
             THRESHOLD=50
@@ -117,7 +119,7 @@ jobs:
               echo "✅ Coverage ${STATEMENT_COVERAGE}% meets threshold ${THRESHOLD}%"
             fi
           else
-            echo "⚠️  Coverage report not found, skipping threshold check"
+            echo "⚠️  Coverage summary not found, skipping threshold check"
           fi
 
       - name: Frontend security scan (npm audit)
@@ -130,7 +132,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload v8 detailed report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: frontend-coverage-nightly
@@ -141,12 +143,12 @@ jobs:
     name: Security Vulnerability Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -166,7 +168,7 @@ jobs:
           fi
 
       - name: Set up JDK 17 for backend security
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -202,7 +204,7 @@ jobs:
 
       - name: Notify on failure
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             github.rest.issues.create({
