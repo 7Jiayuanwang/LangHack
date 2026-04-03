@@ -92,6 +92,7 @@ import {
   User,
   Connection,
   Refresh,
+  Switch,
 } from "@element-plus/icons-vue";
 
 const router = useRouter();
@@ -122,6 +123,11 @@ const navItems = ref([
     icon: Connection,
   },
   {
+    path: "/ops/feature-toggles",
+    label: "开关",
+    icon: Switch,
+  },
+  {
     path: "/ops/update",
     label: "更新",
     icon: Refresh,
@@ -134,6 +140,7 @@ const pageTitle = computed(() => {
     "/ops/backups": "数据备份",
     "/ops/users": "用户管理",
     "/ops/ai-providers": "AI 服务管理",
+    "/ops/feature-toggles": "功能开关",
     "/ops/update": "系统更新",
   };
   return route.meta?.title || routeMap[route.path] || "运维面板";

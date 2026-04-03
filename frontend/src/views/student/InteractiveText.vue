@@ -297,7 +297,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay } from '@element-plus/icons-vue'
 import InteractiveText from '@/components/InteractiveText.vue'
-import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline } from '@/api/student'
+import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
@@ -520,6 +520,11 @@ const loadTextDetail = async () => {
       courseName.value = data.courseName || '未知课程'
       unitName.value = data.unitName || '未知单元'
 
+      // 检查收藏状态
+      checkArticleFavorite(textId.value).then(res => {
+        if (res?.code === 200) isFavorite.value = !!res.data?.isFavorite
+      }).catch(() => {})
+
       // 从后端获取学习进度和时长
       learningProgress.value = data.learningProgress || 0
       learnedWordsCount.value = data.learnedWordsCount || 0
@@ -579,15 +584,15 @@ const loadTextDetail = async () => {
         }
       }
 
-      // 如果是从任务页面跳转来的，显示任务信息
+      // 如果是从任务页面跳转来的，显示任务信息（延迟显示，避免阻塞内容交互）
       if (fromSource.value === 'assignment' && assignmentId.value) {
-        ElMessage.info('正在完成任务中的课文学习')
+        setTimeout(() => ElMessage.info('正在完成任务中的课文学习'), 500)
       }
 
-      // 显示可用版本提示
+      // 显示可用版本提示（延迟显示，避免页面初始化时 ElMessage 叠加层干扰文本选中）
       if (availableVersions.value.length > 1) {
         const versionNames = availableVersions.value.map(v => getVersionLabel(v)).join('、')
-        ElMessage.success(`本课文有多个学习版本：${versionNames}，可点击切换`)
+        setTimeout(() => ElMessage.success(`本课文有多个学习版本：${versionNames}，可点击切换`), 800)
       }
 
       // 恢复已学习时长（转换为秒）
@@ -935,12 +940,15 @@ const markAsCompleted = async () => {
 
 const addToFavorite = async () => {
   try {
-    // 这里需要实现收藏课文的API
-    isFavorite.value = !isFavorite.value
-    ElMessage.success(isFavorite.value ? '已添加到收藏' : '已取消收藏')
+    if (!textId.value) return
+    const response = await toggleArticleFavorite(textId.value)
+    if (response.code === 200) {
+      isFavorite.value = response.data.isFavorite
+      ElMessage.success(response.data.message || (isFavorite.value ? '已添加到收藏' : '已取消收藏'))
+    }
   } catch (error) {
     console.error('收藏课文失败:', error)
-    ElMessage.error('收藏课文失败')
+    ElMessage.error('收藏操作失败')
   }
 }
 
@@ -1859,13 +1867,14 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .glass-header {
   position: sticky;
   top: 0;
-  z-index: 1000;
+  z-index: 100;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-glass);
   transition: transform 0.3s ease;
-  contain: paint;
+  /* 移除 contain: paint — 该属性创建新的 stacking context，
+     与 ElMessage(z-index:2031) 交互时可能导致下方内容区域无法接收 pointer events */
 }
 
 .header-hidden {
@@ -2056,6 +2065,11 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   font-size: 18px;
   line-height: 1.8;
   color: var(--text-main);
+  /* 确保文章内容区域始终可选中文本，不受上层 z-index/stacking context 干扰 */
+  user-select: text;
+  -webkit-user-select: text;
+  position: relative;
+  z-index: 1;
 }
 
 .article-body :deep(.interactive-text),

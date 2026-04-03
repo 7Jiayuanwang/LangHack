@@ -8,6 +8,7 @@ import com.english.entity.Unit;
 import com.english.entity.Word;
 import com.english.entity.Text;
 import com.english.entity.UnitWord;
+import com.english.entity.ArticleFavorite;
 import com.english.mapper.ClassMapper;
 import com.english.mapper.UnitMapper;
 import com.english.mapper.UnitWordMapper;
@@ -15,6 +16,7 @@ import com.english.mapper.WordMapper;
 import com.english.mapper.TextMapper;
 import com.english.entity.TextLearningRecord;
 import com.english.mapper.TextLearningRecordMapper;
+import com.english.mapper.ArticleFavoriteMapper;
 import com.english.exception.BusinessException;
 import com.english.service.*;
 import org.slf4j.Logger;
@@ -84,6 +86,9 @@ public class StudentLearningController {
 
     @Autowired
     private UnitService unitService;
+
+    @Autowired
+    private ArticleFavoriteMapper articleFavoriteMapper;
 
     /**
      * 获取学生仪表板数据
@@ -1192,16 +1197,30 @@ public class StudentLearningController {
             Word wordEntity = wordMapper.selectOne(wordWrapper);
 
             if (wordEntity == null) {
-                // 如果数据库中没有该单词，尝试从WordNet获取并保存（使用getOrCreateWord确保持久化）
+                // 如果数据库中没有该单词，尝试从WordNet/ECDICT获取并自动创建
                 Map<String, Object> wordNetInfo = wordNetService.getOrCreateWord(word);
                 if (Boolean.TRUE.equals(wordNetInfo.get("found"))) {
-                    // WordNet查询成功后，单词已自动保存到数据库
-                    wordWrapper = new QueryWrapper<>();
-                    wordWrapper.eq("word", word);
-                    wordEntity = wordMapper.selectOne(wordWrapper);
+                    // 优先使用 getOrCreateWord 返回的 wordId（避免重复查询和 deleted 过滤遗漏）
+                    Object wordIdObj = wordNetInfo.get("wordId");
+                    if (wordIdObj != null) {
+                        try {
+                            Long createdWordId = Long.valueOf(wordIdObj.toString());
+                            wordEntity = wordMapper.selectById(createdWordId);
+                        } catch (NumberFormatException e) {
+                            logger.warn("getOrCreateWord 返回的 wordId 格式无效: {}", wordIdObj);
+                        }
+                    }
+                    // 兜底：如果 wordId 不可用，按 word + deleted=0 重新查询
+                    if (wordEntity == null) {
+                        wordWrapper = new QueryWrapper<>();
+                        wordWrapper.eq("word", word);
+                        wordWrapper.eq("deleted", 0);
+                        wordEntity = wordMapper.selectOne(wordWrapper);
+                    }
                 }
 
                 if (wordEntity == null) {
+                    logger.warn("单词 [{}] 无法在数据库中找到或创建", word);
                     return Result.error("单词不存在，无法添加到生词本");
                 }
             }
@@ -1350,6 +1369,202 @@ public class StudentLearningController {
             logger.error("标记单词完成失败", e);
 
             return Result.error("标记单词完成失败，请稍后重试");
+        }
+    }
+
+    // ==================== 文章收藏 ====================
+
+    /**
+     * 收藏/取消收藏文章（toggle）
+     */
+    @PostMapping("/favorites/{textId}")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> toggleFavorite(@PathVariable Long textId, Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            if (textId == null || textId <= 0) {
+                return Result.error("文章ID无效");
+            }
+
+            QueryWrapper<ArticleFavorite> wrapper = new QueryWrapper<>();
+            wrapper.eq("student_id", studentId).eq("text_id", textId);
+            ArticleFavorite existing = articleFavoriteMapper.selectOne(wrapper);
+
+            Map<String, Object> result = new HashMap<>();
+            if (existing != null) {
+                articleFavoriteMapper.deleteById(existing.getId());
+                result.put("isFavorite", false);
+                result.put("message", "已取消收藏");
+            } else {
+                ArticleFavorite fav = new ArticleFavorite();
+                fav.setStudentId(studentId);
+                fav.setTextId(textId);
+                fav.setCreatedTime(LocalDateTime.now());
+                articleFavoriteMapper.insert(fav);
+                result.put("isFavorite", true);
+                result.put("message", "已添加到收藏");
+            }
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("收藏操作失败", e);
+            return Result.error("收藏操作失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 检查文章是否已收藏
+     */
+    @GetMapping("/favorites/{textId}/check")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> checkFavorite(@PathVariable Long textId, Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            QueryWrapper<ArticleFavorite> wrapper = new QueryWrapper<>();
+            wrapper.eq("student_id", studentId).eq("text_id", textId);
+            Map<String, Object> result = new HashMap<>();
+            result.put("isFavorite", articleFavoriteMapper.selectCount(wrapper) > 0);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("检查收藏状态失败", e);
+            return Result.error("检查收藏状态失败");
+        }
+    }
+
+    /**
+     * 获取收藏文章列表
+     */
+    @GetMapping("/favorites")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> getFavoriteArticles(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            page = Math.max(1, page);
+            size = Math.max(1, Math.min(size, 50));
+
+            QueryWrapper<ArticleFavorite> wrapper = new QueryWrapper<>();
+            wrapper.eq("student_id", studentId).orderByDesc("created_time");
+
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<ArticleFavorite> pageParam =
+                    new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<ArticleFavorite> favPage =
+                    articleFavoriteMapper.selectPage(pageParam, wrapper);
+
+            List<Map<String, Object>> records = new ArrayList<>();
+            for (ArticleFavorite fav : favPage.getRecords()) {
+                Text text = textMapper.selectById(fav.getTextId());
+                if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) continue;
+
+                Map<String, Object> item = new HashMap<>();
+                item.put("id", fav.getId());
+                item.put("textId", text.getId());
+                item.put("title", text.getTitle());
+                item.put("difficulty", text.getDifficulty());
+                item.put("contentType", text.getContentType());
+                item.put("favoritedAt", fav.getCreatedTime());
+                // 计算阅读时长
+                String snippet = text.getContent();
+                if (snippet != null && snippet.length() > 120) {
+                    snippet = snippet.substring(0, 120) + "...";
+                }
+                item.put("snippet", snippet);
+                item.put("wordCount", text.getContent() != null ? text.getContent().split("\\s+").length : 0);
+                records.add(item);
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", records);
+            result.put("total", favPage.getTotal());
+            result.put("current", favPage.getCurrent());
+            result.put("pages", favPage.getPages());
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取收藏列表失败", e);
+            return Result.error("获取收藏列表失败，请稍后重试");
+        }
+    }
+
+    // ==================== 阅读记录统计 ====================
+
+    /**
+     * 获取阅读记录列表（含时长统计）
+     */
+    @GetMapping("/reading-history")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> getReadingHistory(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            Authentication authentication) {
+        try {
+            Long studentId = getCurrentStudentId(authentication);
+            page = Math.max(1, page);
+            size = Math.max(1, Math.min(size, 50));
+
+            QueryWrapper<TextLearningRecord> wrapper = new QueryWrapper<>();
+            wrapper.eq("student_id", studentId).orderByDesc("start_time");
+
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<TextLearningRecord> pageParam =
+                    new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<TextLearningRecord> recordPage =
+                    textLearningRecordMapper.selectPage(pageParam, wrapper);
+
+            // 去重：同一篇文章只取最新一条记录，并累计时长
+            Map<Long, Map<String, Object>> textRecordMap = new LinkedHashMap<>();
+            for (TextLearningRecord record : recordPage.getRecords()) {
+                Long textId = record.getTextId();
+                Map<String, Object> existing = textRecordMap.get(textId);
+                if (existing == null) {
+                    Text text = textMapper.selectById(textId);
+                    if (text == null) continue;
+
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("textId", textId);
+                    item.put("title", text.getTitle());
+                    item.put("difficulty", text.getDifficulty());
+                    item.put("totalDuration", record.getDurationSeconds() != null ? record.getDurationSeconds() : 0);
+                    item.put("isCompleted", record.getIsCompleted() != null && record.getIsCompleted() == 1);
+                    item.put("lastReadAt", record.getStartTime());
+                    item.put("readCount", 1);
+                    textRecordMap.put(textId, item);
+                } else {
+                    int prevDuration = (int) existing.getOrDefault("totalDuration", 0);
+                    existing.put("totalDuration", prevDuration + (record.getDurationSeconds() != null ? record.getDurationSeconds() : 0));
+                    existing.put("readCount", (int) existing.getOrDefault("readCount", 0) + 1);
+                    if (record.getIsCompleted() != null && record.getIsCompleted() == 1) {
+                        existing.put("isCompleted", true);
+                    }
+                }
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", new ArrayList<>(textRecordMap.values()));
+            result.put("total", recordPage.getTotal());
+
+            // 阅读统计概览
+            QueryWrapper<TextLearningRecord> statsWrapper = new QueryWrapper<>();
+            statsWrapper.eq("student_id", studentId);
+            long totalRecords = textLearningRecordMapper.selectCount(statsWrapper);
+
+            statsWrapper = new QueryWrapper<>();
+            statsWrapper.eq("student_id", studentId).eq("is_completed", 1);
+            long completedCount = textLearningRecordMapper.selectCount(statsWrapper);
+
+            QueryWrapper<ArticleFavorite> favWrapper = new QueryWrapper<>();
+            favWrapper.eq("student_id", studentId);
+            long favoriteCount = articleFavoriteMapper.selectCount(favWrapper);
+
+            Map<String, Object> overview = new HashMap<>();
+            overview.put("totalArticlesRead", totalRecords);
+            overview.put("completedArticles", completedCount);
+            overview.put("favoriteCount", favoriteCount);
+            result.put("overview", overview);
+
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取阅读记录失败", e);
+            return Result.error("获取阅读记录失败，请稍后重试");
         }
     }
 

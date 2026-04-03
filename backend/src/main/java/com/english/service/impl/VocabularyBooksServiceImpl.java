@@ -12,6 +12,7 @@ import com.english.mapper.WordMapper;
 import com.english.mapper.UnitMapper;
 import com.english.mapper.UnitWordMapper;
 import com.english.service.VocabularyBooksService;
+import com.english.datasource.UseMaster;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -150,6 +151,7 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
     }
 
     @Override
+    @UseMaster  // 强制读主库：避免生词本写入后立即查询时因主从延迟导致数据不同步
     public Map<String, Object> getVocabularyWithPagination(Map<String, Object> params) {
         Long studentId = params.get("studentId") != null ? Long.valueOf(params.get("studentId").toString()) : null;
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;

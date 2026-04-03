@@ -52,3 +52,11 @@ export function toggleAiProvider(id, enabled) {
 export function testAiProvider(id, text) {
   return request({ url: `/api/ops/ai-providers/${id}/test`, method: 'post', data: { text } })
 }
+
+// 功能开关（公开接口，无需鉴权）
+export function getFeatureToggles() {
+  return request({
+    url: '/api/public/feature-toggles',
+    method: 'get'
+  })
+}

@@ -677,6 +677,9 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   overflow-x: auto; /* 防止超长单词/行溢出容器 */
   word-break: break-word; /* 英语长单词自动换行 */
+  /* 确保文本始终可选中 */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .text-paragraph {

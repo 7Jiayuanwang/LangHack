@@ -455,6 +455,42 @@ export function completeReading(recordId) {
   })
 }
 
+// ==================== 文章收藏相关API ====================
+
+// 收藏/取消收藏文章
+export function toggleArticleFavorite(textId) {
+  return request({
+    url: `/api/student/learning/favorites/${textId}`,
+    method: 'post'
+  })
+}
+
+// 检查文章是否已收藏
+export function checkArticleFavorite(textId) {
+  return request({
+    url: `/api/student/learning/favorites/${textId}/check`,
+    method: 'get'
+  })
+}
+
+// 获取收藏文章列表
+export function getFavoriteArticles(params) {
+  return request({
+    url: '/api/student/learning/favorites',
+    method: 'get',
+    params
+  })
+}
+
+// 获取阅读记录列表
+export function getReadingHistory(params) {
+  return request({
+    url: '/api/student/learning/reading-history',
+    method: 'get',
+    params
+  })
+}
+
 // 默认导出所有API方法
 export function createUnderline(data) {
   return request({
@@ -524,7 +560,12 @@ const studentApi = {
   completeReading,
   createUnderline,
   getUnderlines,
-  deleteUnderline
+  deleteUnderline,
+  // 收藏和阅读记录
+  toggleArticleFavorite,
+  checkArticleFavorite,
+  getFavoriteArticles,
+  getReadingHistory
 }
 
 export default studentApi
