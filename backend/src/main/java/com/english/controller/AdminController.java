@@ -740,6 +740,7 @@ public class AdminController {
             text.setContentType(textData.get("contentType") != null ? textData.get("contentType").toString() : "TEXT");
             text.setDifficulty(textData.get("difficulty") != null ? textData.get("difficulty").toString() : "EASY");
             text.setAudioUrl(textData.get("audioUrl") != null ? textData.get("audioUrl").toString() : "");
+            text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
             Object isPublicObj = textData.get("isPublic");
             try {
@@ -879,6 +880,7 @@ public class AdminController {
             text.setContentType(textData.get("contentType") != null ? textData.get("contentType").toString() : "TEXT");
             text.setDifficulty(textData.get("difficulty") != null ? textData.get("difficulty").toString() : "EASY");
             text.setAudioUrl(textData.get("audioUrl") != null ? textData.get("audioUrl").toString() : "");
+            text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
             Object isPublicObj = textData.get("isPublic");
             try {

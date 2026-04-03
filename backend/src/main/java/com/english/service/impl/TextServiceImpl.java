@@ -142,6 +142,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (text.getAudioUrl() != null) {
             updateWrapper.set("audio_url", text.getAudioUrl());
         }
+        if (text.getCoverUrl() != null) {
+            updateWrapper.set("cover_url", text.getCoverUrl());
+        }
         if (text.getTags() != null) {
             updateWrapper.set("tags", text.getTags());
         }

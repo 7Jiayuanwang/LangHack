@@ -31,6 +31,9 @@ public class Text {
     @TableField("audio_url")
     private String audioUrl;
 
+    @TableField("cover_url")
+    private String coverUrl;
+
     @TableField("difficulty")
     private String difficulty;
 
@@ -323,5 +326,13 @@ public class Text {
 
     public void setFeaturedPriority(Integer featuredPriority) {
         this.featuredPriority = featuredPriority;
+    }
+
+    public String getCoverUrl() {
+        return coverUrl;
+    }
+
+    public void setCoverUrl(String coverUrl) {
+        this.coverUrl = coverUrl;
     }
 }
