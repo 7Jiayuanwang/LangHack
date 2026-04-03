@@ -1063,6 +1063,10 @@ const addClickableWordsToHtml = (sanitizedHtml) => {
 
 // 处理 Markdown 内容的点击事件（事件委托）
 const handleMarkdownClick = (event) => {
+  // 用户正在拖选文本时不处理单词点击
+  const selection = window.getSelection()
+  if (selection && !selection.isCollapsed) return
+
   const target = event.target
   
   // 检查点击的是否是图片

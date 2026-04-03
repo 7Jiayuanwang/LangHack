@@ -424,6 +424,10 @@ const handleWordClick = async (word) => {
     return
   }
 
+  // 用户正在拖选文本时不弹词义弹窗
+  const selection = window.getSelection()
+  if (selection && !selection.isCollapsed) return
+
   // 标记单词为已点击
   word.isClicked = true
   selectedWord.value = word
