@@ -124,6 +124,11 @@
                  style="width: 160px; margin-left: 12px;" @change="loadAiCallsRecent">
         <el-option v-for="s in serviceNames" :key="s" :label="formatServiceName(s)" :value="s" />
       </el-select>
+      <el-select v-model="aiLogStatusFilter" placeholder="全部状态" clearable size="small"
+                 style="width: 120px; margin-left: 8px;">
+        <el-option label="仅失败" :value="false" />
+        <el-option label="仅成功" :value="true" />
+      </el-select>
     </div>
     <el-table :data="filteredAiLogs" size="small" stripe border max-height="350" style="margin-bottom: 16px;">
       <el-table-column prop="createdTime" label="时间" width="160" />
@@ -171,11 +176,45 @@
       <el-table-column prop="uri" label="URI" show-overflow-tooltip />
       <el-table-column prop="count" label="访问次数" width="120" />
     </el-table>
+
+    <!-- 区域6: 后端应用日志 -->
+    <div class="section-title" style="margin-top: 16px;">
+      后端日志
+      <div class="log-toolbar">
+        <div class="log-level-badges">
+          <el-badge :value="appLogLevelCounts.ERROR || 0" :type="appLogLevelCounts.ERROR > 0 ? 'danger' : 'info'" :hidden="!appLogLevelCounts.ERROR">
+            <el-button size="small" :type="appLogLevelFilter === 'ERROR' ? 'danger' : ''"
+                       @click="appLogLevelFilter = appLogLevelFilter === 'ERROR' ? '' : 'ERROR'">ERROR</el-button>
+          </el-badge>
+          <el-badge :value="appLogLevelCounts.WARN || 0" :type="appLogLevelCounts.WARN > 0 ? 'warning' : 'info'" :hidden="!appLogLevelCounts.WARN">
+            <el-button size="small" :type="appLogLevelFilter === 'WARN' ? 'warning' : ''"
+                       @click="appLogLevelFilter = appLogLevelFilter === 'WARN' ? '' : 'WARN'">WARN</el-button>
+          </el-badge>
+          <el-button size="small" :type="appLogLevelFilter === 'INFO' ? 'primary' : ''"
+                     @click="appLogLevelFilter = appLogLevelFilter === 'INFO' ? '' : 'INFO'">INFO</el-button>
+        </div>
+        <el-input v-model="appLogKeyword" placeholder="搜索关键词" clearable size="small"
+                  style="width: 200px;" @keyup.enter="loadAppLogs" @clear="loadAppLogs" />
+        <el-button size="small" @click="loadAppLogs" :loading="appLogsLoading">
+          <el-icon><Refresh /></el-icon>
+        </el-button>
+      </div>
+    </div>
+    <div class="app-log-container" v-loading="appLogsLoading">
+      <div v-if="appLogEntries.length === 0" class="log-empty">暂无日志</div>
+      <div v-for="(entry, idx) in appLogEntries" :key="idx" class="log-entry" :class="'log-' + (entry.level || '').toLowerCase()">
+        <span class="log-time">{{ entry.timestamp }}</span>
+        <span class="log-level-tag" :class="'level-' + (entry.level || '').toLowerCase()">{{ entry.level }}</span>
+        <span class="log-logger">{{ entry.logger }}</span>
+        <span class="log-msg">{{ entry.message }}</span>
+        <div v-if="entry.exception" class="log-exception">{{ entry.exception }}</div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
@@ -190,7 +229,8 @@ import { getToken } from '@/utils/auth'
 import { environment } from '@/utils/environment'
 import {
   getRealTimeMetrics, getSystemMetrics, getHourlyStats, getDailyStats,
-  getTopPages, getAiCallsRealtime, getAiCallsDaily, getAiCallsRecent
+  getTopPages, getAiCallsRealtime, getAiCallsDaily, getAiCallsRecent,
+  getApplicationLogs
 } from '@/api/monitoring'
 
 use([
@@ -206,18 +246,30 @@ const aiStats = ref({})
 const aiDailyData = ref([])
 const aiRecentLogs = ref([])
 const aiLogFilter = ref('')
+const aiLogStatusFilter = ref('')
 const chartTimeRange = ref('24h')
 const hourlyData = ref([])
 const dailyData = ref([])
 const topPages = ref([])
+const appLogEntries = ref([])
+const appLogLevelCounts = ref({})
+const appLogLevelFilter = ref('')
+const appLogKeyword = ref('')
+const appLogsLoading = ref(false)
 let eventSource = null
 let reconnectTimer = null
 
 const serviceNames = computed(() => Object.keys(aiStats.value))
 
 const filteredAiLogs = computed(() => {
-  if (!aiLogFilter.value) return aiRecentLogs.value
-  return aiRecentLogs.value.filter(l => l.serviceName === aiLogFilter.value)
+  let logs = aiRecentLogs.value
+  if (aiLogFilter.value) {
+    logs = logs.filter(l => l.serviceName === aiLogFilter.value)
+  }
+  if (aiLogStatusFilter.value !== '' && aiLogStatusFilter.value !== null) {
+    logs = logs.filter(l => l.success === aiLogStatusFilter.value)
+  }
+  return logs
 })
 
 const normalizeTopPageRows = (rows) => {
@@ -419,12 +471,30 @@ const loadAiCallsRecent = async () => {
   } catch { /* ignore */ }
 }
 
+const loadAppLogs = async () => {
+  appLogsLoading.value = true
+  try {
+    const params = { limit: 500 }
+    if (appLogLevelFilter.value) params.level = appLogLevelFilter.value
+    if (appLogKeyword.value) params.keyword = appLogKeyword.value
+    const res = await getApplicationLogs(params)
+    if (res.code === 200 && res.data) {
+      appLogEntries.value = res.data.entries || []
+      appLogLevelCounts.value = res.data.levelCounts || {}
+    }
+  } catch { /* ignore */ }
+  finally { appLogsLoading.value = false }
+}
+
+// 切换日志级别过滤时重新加载
+watch(appLogLevelFilter, () => loadAppLogs())
+
 const refreshAll = async () => {
   refreshing.value = true
   try {
     await Promise.all([
       loadChartData(), loadTopPages(), loadAiStats(),
-      loadAiDailyData(), loadAiCallsRecent()
+      loadAiDailyData(), loadAiCallsRecent(), loadAppLogs()
     ])
     // Always fetch a snapshot to avoid empty cards before the first SSE message arrives.
     try {
@@ -706,5 +776,103 @@ onBeforeUnmount(() => {
   .ai-service-cards {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* 后端日志区域 */
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.log-level-badges {
+  display: flex;
+  gap: 6px;
+}
+
+.app-log-container {
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.log-empty {
+  color: #909399;
+  text-align: center;
+  padding: 24px;
+}
+
+.log-entry {
+  padding: 2px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-entry:hover {
+  white-space: normal;
+  word-break: break-all;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.log-entry.log-error {
+  color: #F56C6C;
+}
+
+.log-entry.log-warn {
+  color: #E6A23C;
+}
+
+.log-entry.log-info {
+  color: #d4d4d4;
+}
+
+.log-time {
+  color: #6A9955;
+  margin-right: 8px;
+}
+
+.log-level-tag {
+  display: inline-block;
+  width: 44px;
+  text-align: center;
+  font-weight: 600;
+  margin-right: 8px;
+  font-size: 11px;
+}
+
+.level-error {
+  color: #F56C6C;
+}
+
+.level-warn {
+  color: #E6A23C;
+}
+
+.level-info {
+  color: #569CD6;
+}
+
+.log-logger {
+  color: #9CDCFE;
+  margin-right: 8px;
+}
+
+.log-msg {
+  color: #d4d4d4;
+}
+
+.log-exception {
+  color: #F56C6C;
+  padding-left: 120px;
+  font-style: italic;
 }
 </style>

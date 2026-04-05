@@ -7,5 +7,6 @@ export {
   getTopPages,
   getAiCallsRealtime,
   getAiCallsDaily,
-  getAiCallsRecent
+  getAiCallsRecent,
+  getApplicationLogs
 } from './ops'

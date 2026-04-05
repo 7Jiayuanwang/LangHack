@@ -148,6 +148,14 @@ export function getAiCallsRecent(limit = 50) {
   });
 }
 
+export function getApplicationLogs(params = {}) {
+  return request({
+    url: "/api/ops/monitoring/app-logs",
+    method: "get",
+    params,
+  });
+}
+
 // ========== 数据运维 ==========
 
 export function cleanupData() {

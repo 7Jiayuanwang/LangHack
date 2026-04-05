@@ -12,6 +12,7 @@ import com.english.mapper.*;
 import com.english.service.impl.AccessMetricsService;
 import com.english.service.impl.AiCallMetricsService;
 import com.english.service.impl.ElevationService;
+import com.english.service.impl.InMemoryLogService;
 import com.english.service.impl.SystemMetricsService;
 import com.english.util.JwtUtil;
 import org.slf4j.Logger;
@@ -67,6 +68,9 @@ public class MonitoringController {
 
     @Autowired
     private ElevationService elevationService;
+
+    @Autowired
+    private InMemoryLogService inMemoryLogService;
 
     @GetMapping("/realtime")
     public Result<?> getRealTimeMetrics() {
@@ -314,6 +318,24 @@ public class MonitoringController {
         } catch (Exception e) {
             logger.error("获取AI调用记录失败", e);
             return Result.error("获取AI调用记录失败");
+        }
+    }
+
+    // ========== Backend Application Logs ==========
+
+    @GetMapping("/app-logs")
+    public Result<?> getApplicationLogs(
+            @RequestParam(defaultValue = "200") int limit,
+            @RequestParam(required = false) String level,
+            @RequestParam(required = false) String keyword) {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("entries", inMemoryLogService.getRecentLogs(limit, level, keyword));
+            data.put("levelCounts", inMemoryLogService.getLevelCounts());
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("获取应用日志失败", e);
+            return Result.error("获取应用日志失败");
         }
     }
 }

@@ -4,6 +4,8 @@ import com.english.entity.*;
 import com.english.mapper.*;
 import com.english.service.impl.AccessMetricsService;
 import com.english.service.impl.AiCallMetricsService;
+import com.english.service.impl.ElevationService;
+import com.english.service.impl.InMemoryLogService;
 import com.english.service.impl.SystemMetricsService;
 import com.english.test.TestUtils;
 import com.english.util.JwtUtil;
@@ -60,6 +62,12 @@ class MonitoringControllerTest {
 
     @Mock
     private JwtUtil jwtUtil;
+
+    @Mock
+    private ElevationService elevationService;
+
+    @Mock
+    private InMemoryLogService inMemoryLogService;
 
     @InjectMocks
     private MonitoringController monitoringController;
