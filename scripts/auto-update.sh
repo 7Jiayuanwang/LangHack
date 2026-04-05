@@ -374,70 +374,58 @@ verify_ai_providers() {
     fi
 }
 
-# ── Flyway 迁移验证 ───────────────────────────────────
-# 对比代码中最高迁移版本号 vs 数据库中已成功执行的最高版本号
-# 不一致说明迁移未执行（通常是镜像未重建），返回非零触发回滚
+# ── 数据库 Schema 验证 ───────────────────────────────
+# 验证本项目关键表是否存在（替代 Flyway 校验）
+# 背景：项目 Flyway 已禁用（application.yml: flyway.enabled=false），
+#       迁移通过 docker-entrypoint-initdb.d + deploy.sh 幂等 SQL 管理。
+#       不能依赖 flyway_schema_history 表（不存在）做回滚判断。
 
 verify_flyway_migrations() {
-    log "FLYWAY: 验证数据库迁移状态..."
+    log "SCHEMA: 验证关键表是否存在..."
 
-    # 从 .env 获取数据库密码
     local db_password="${DB_PASSWORD:-}"
     if [ -z "$db_password" ] && [ -f "$ENV_FILE" ]; then
         db_password=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- || echo "")
     fi
     if [ -z "$db_password" ]; then
-        log "WARN: 未找到数据库密码，跳过 Flyway 验证"
+        log "WARN: 未找到数据库密码，跳过 Schema 验证"
         return 0
     fi
 
-    # 找到 mysql-master 容器名
     local mysql_container
     mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.master|mysql-master' | head -1 || echo "")
     if [ -z "$mysql_container" ]; then
-        # 回退：找任意 mysql 容器
         mysql_container=$(docker ps --format '{{.Names}}' | grep mysql | head -1 || echo "")
     fi
     if [ -z "$mysql_container" ]; then
-        log "WARN: 未找到 MySQL 容器，跳过 Flyway 验证"
+        log "WARN: 未找到 MySQL 容器，跳过 Schema 验证"
         return 0
     fi
 
-    # 代码中最高迁移版本号（从文件名提取，如 V11__xxx.sql → 11）
-    local migration_dir="$PROJECT_ROOT/backend/src/main/resources/db/migration"
-    if [ ! -d "$migration_dir" ]; then
-        log "WARN: 迁移目录不存在 ($migration_dir)，跳过验证"
-        return 0
-    fi
-    local code_max_version
-    code_max_version=$(ls "$migration_dir"/V*.sql 2>/dev/null \
-        | sed 's|.*/V\([0-9]*\)__.*|\1|' \
-        | sort -n | tail -1 || echo "0")
+    # 检查核心业务表是否存在（跨越多个迁移版本的关键标志）
+    # V1: users  V6: system_config  V12: article_favorites
+    local missing_tables=""
+    for tbl in users system_config article_favorites; do
+        local exists
+        exists=$(docker exec "$mysql_container" \
+            mysql -uroot -p"$db_password" english_learning \
+            -sN -e "SELECT COUNT(*) FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='${tbl}';" \
+            2>/dev/null | tr -d '[:space:]' || echo "0")
+        if [ "${exists:-0}" = "0" ]; then
+            missing_tables="${missing_tables} ${tbl}"
+        fi
+    done
 
-    if [ "$code_max_version" = "0" ]; then
-        log "WARN: 未找到迁移脚本，跳过验证"
-        return 0
-    fi
-
-    # 数据库中已成功执行的最高版本号
-    local db_max_version
-    db_max_version=$(docker exec "$mysql_container" \
-        mysql -uroot -p"$db_password" english_learning \
-        -sN -e "SELECT COALESCE(MAX(CAST(version AS UNSIGNED)), 0) FROM flyway_schema_history WHERE success = 1;" \
-        2>/dev/null || echo "0")
-    db_max_version=$(echo "$db_max_version" | tr -d '[:space:]')
-
-    log "FLYWAY: 代码最高版本=V${code_max_version}，数据库已执行=V${db_max_version}"
-
-    if [ "$db_max_version" -lt "$code_max_version" ]; then
-        log "ERROR: Flyway 迁移不完整！代码需要 V${code_max_version}，数据库仅执行到 V${db_max_version}"
-        log "ERROR: 可能原因：后端镜像未重新构建，Flyway 未感知到新迁移脚本"
-        notify "部署警告: Flyway 迁移未完整执行 (代码 V${code_max_version} vs 数据库 V${db_max_version})，已触发回滚"
-        ops_log "ERROR" "$(git rev-parse --short HEAD)" "Flyway 迁移不完整: 代码 V${code_max_version} vs DB V${db_max_version}"
+    if [ -n "$missing_tables" ]; then
+        log "ERROR: 数据库缺少关键表:${missing_tables}"
+        log "ERROR: 请检查 deploy.sh 或 docker-entrypoint-initdb.d 迁移是否成功执行"
+        notify "部署警告: 数据库缺少关键表:${missing_tables}，已触发回滚"
+        ops_log "ERROR" "$(git rev-parse --short HEAD)" "Schema 缺少关键表:${missing_tables}"
         return 1
     fi
 
-    log "FLYWAY: 迁移验证通过 ✓ (V${db_max_version})"
+    log "SCHEMA: 核心表验证通过 ✓ (users / system_config / article_favorites)"
     return 0
 }
 

@@ -53,16 +53,16 @@ version_compare() {
     return 1
 }
 
-# 检查 JDK 11+
-echo -n "检查 JDK 11+ ... "
+# 检查 JDK 17+（项目编译和运行均要求 Java 17）
+echo -n "检查 JDK 17+ ... "
 if command -v java &> /dev/null; then
     JAVA_VERSION=$(java -version 2>&1 | head -n 1 | awk -F '"' '{print $2}')
     JAVA_MAJOR=$(echo "$JAVA_VERSION" | grep -oE '^[0-9]+')
-    
-    if [ -n "$JAVA_MAJOR" ] && [ "$JAVA_MAJOR" -ge 11 ]; then
+
+    if [ -n "$JAVA_MAJOR" ] && [ "$JAVA_MAJOR" -ge 17 ]; then
         echo -e "${GREEN}✓ 通过${NC} (版本: $JAVA_VERSION)"
     else
-        echo -e "${RED}✗ 失败${NC} (当前版本: $JAVA_VERSION, 需要: JDK 11+)"
+        echo -e "${RED}✗ 失败${NC} (当前版本: $JAVA_VERSION, 需要: JDK 17+)"
         ALL_PASSED=false
     fi
 else

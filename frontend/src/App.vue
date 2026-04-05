@@ -6,23 +6,19 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { onErrorCaptured } from 'vue'
 
 const router = useRouter()
 
-// 全局错误捕获 - 捕获组件中未处理的异常
+// 全局错误捕获 - 仅记录日志，不向用户弹出通用提示
+// 各业务组件应自行处理错误并展示合适的反馈
 onErrorCaptured((error, instance, info) => {
   console.error('捕获到组件错误:', {
     message: error.message,
     stack: error.stack,
     componentInfo: info,
-    componentName: instance?.$options.name || '未知组件'
+    componentName: instance?.$options?.name || '未知组件'
   })
-
-  // 显示通用错误提示
-  ElMessage.error('发生错误，请刷新页面后重试')
-
   // 返回 false 阻止错误继续传播，避免白屏
   return false
 })
@@ -31,24 +27,21 @@ onErrorCaptured((error, instance, info) => {
 router.onError((error) => {
   console.error('路由错误:', error)
 
-  // 处理特定的路由错误
-  if (error.name === 'NavigationDuplicated') {
-    // 重复导航，忽略
-    return
-  }
+  // 重复导航，忽略
+  if (error.name === 'NavigationDuplicated') return
 
-  // Vite 部署后旧 chunk 不存在，自动刷新加载新资源
-  if (error.message?.includes('Failed to fetch dynamically imported module') ||
-      error.message?.includes('Importing a module script failed')) {
+  // Vite 部署后旧 chunk / CSS 资源不存在，自动刷新加载新资源
+  // 涵盖：Failed to fetch dynamically imported module / Unable to preload CSS
+  if (
+    error.message?.includes('Failed to fetch dynamically imported module') ||
+    error.message?.includes('Importing a module script failed') ||
+    error.message?.includes('Unable to preload CSS') ||
+    error.message?.includes('dynamically imported module')
+  ) {
     console.warn('检测到资源更新，正在刷新页面...')
     window.location.reload()
-    return
   }
-
-  // 其他路由错误
-  if (error.message) {
-    ElMessage.error('页面导航异常: ' + error.message)
-  }
+  // 其他路由错误仅记录日志，不弹出提示（避免移动端被错误弹窗阻塞）
 })
 </script>
 
@@ -140,7 +133,8 @@ html, body {
 #app {
   height: 100vh;
   width: 100vw;
-  overflow: hidden;
+  /* 不设 overflow:hidden，避免阻断公开页（/articles 等）的原生滚动
+     各布局组件自行管理内部滚动区域 */
   background: var(--bg-secondary);
 }
 
