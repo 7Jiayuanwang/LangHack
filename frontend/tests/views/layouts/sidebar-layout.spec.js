@@ -76,13 +76,13 @@ describe('SidebarLayout — 权限守卫', () => {
 
   it('[ADMIN] 未登录时应重定向到 /login', () => {
     mockUserStore({ token: "" })
-    shallowMount(AdminLayout, mountOptions())
+    shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     expect(mockRouterReplace).toHaveBeenCalledWith('/login')
   })
 
   it('[ADMIN] 非管理员角色应重定向到 /login', () => {
     mockUserStore({ userRole: "STUDENT" })
-    shallowMount(AdminLayout, mountOptions())
+    shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     expect(mockRouterReplace).toHaveBeenCalledWith('/login')
   })
 
@@ -94,13 +94,13 @@ describe('SidebarLayout — 权限守卫', () => {
 
   it('[OPS] 未登录时应重定向到 /login', () => {
     mockUserStore({ token: "", userRole: "OPS" })
-    shallowMount(OpsLayout, mountOptions())
+    shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'ops' } })
     expect(mockRouterReplace).toHaveBeenCalledWith('/login')
   })
 
   it('[ADMIN] 合法管理员不触发重定向', () => {
     mockUserStore({ userRole: "ADMIN" })
-    shallowMount(AdminLayout, mountOptions())
+    shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     expect(mockRouterReplace).not.toHaveBeenCalled()
     expect(mockRouterPush).not.toHaveBeenCalled()
   })
@@ -117,7 +117,7 @@ describe('SidebarLayout — 导航项（各角色不同）', () => {
 
   it('[ADMIN] navItems 包含 dashboard、courses、classes、users', () => {
     mockUserStore({ userRole: "ADMIN" })
-    const wrapper = shallowMount(AdminLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     const paths = wrapper.vm.navItems.map(i => i.path)
     expect(paths).toContain('/admin/dashboard')
     expect(paths).toContain('/admin/courses')
@@ -127,7 +127,7 @@ describe('SidebarLayout — 导航项（各角色不同）', () => {
 
   it('[ADMIN] moreItems / managementItems 包含 units、words、texts、assignments', () => {
     mockUserStore({ userRole: "ADMIN" })
-    const wrapper = shallowMount(AdminLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     const extra = wrapper.vm.moreItems ?? wrapper.vm.managementItems ?? []
     const paths  = extra.map(i => i.path)
     expect(paths).toContain('/admin/units')
@@ -155,7 +155,7 @@ describe('SidebarLayout — 导航项（各角色不同）', () => {
 
   it('[OPS] navItems 包含 monitoring、backups、users', () => {
     mockUserStore({ userRole: "OPS" })
-    const wrapper = shallowMount(OpsLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'ops' } })
     const paths = wrapper.vm.navItems.map(i => i.path)
     expect(paths.some(p => p.includes('monitoring'))).toBe(true)
     expect(paths.some(p => p.includes('backups'))).toBe(true)
@@ -177,7 +177,7 @@ describe('SidebarLayout — 用户下拉菜单项', () => {
 
   it('[ADMIN] userMenuItems 包含 system（系统设置）', () => {
     mockUserStore({ userRole: "ADMIN" })
-    const wrapper = shallowMount(AdminLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     const commands = (wrapper.vm.userMenuItems ?? []).map(i => i.command)
     expect(commands).toContain('system')
   })
@@ -191,20 +191,20 @@ describe('SidebarLayout — 用户下拉菜单项', () => {
 
   it('[OPS] userMenuItems 包含 elevate（权限提升）', () => {
     mockUserStore({ userRole: "OPS" })
-    const wrapper = shallowMount(OpsLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'ops' } })
     const commands = (wrapper.vm.userMenuItems ?? []).map(i => i.command)
     expect(commands).toContain('elevate')
   })
 
   it('[ALL] 每个布局的用户菜单都含 logout', () => {
     for (const [Layout, overrides, layoutProps] of [
-      [AdminLayout,  { userRole: "ADMIN" },   undefined],
+      [MobileLayout, { userRole: "ADMIN" },   { role: 'admin' }],
       [MobileLayout, { userRole: "TEACHER" }, { role: 'teacher' }],
-      [OpsLayout,    { userRole: "OPS" },     undefined],
+      [MobileLayout, { userRole: "OPS" },     { role: 'ops' }],
     ]) {
       setActivePinia(createPinia())
       mockUserStore({ isLoggedIn: true, ...overrides })
-      const wrapper  = shallowMount(Layout, layoutProps ? { ...mountOptions(), props: layoutProps } : mountOptions())
+      const wrapper  = shallowMount(Layout, { ...mountOptions(), props: layoutProps })
       const commands = (wrapper.vm.userMenuItems ?? []).map(i => i.command)
       expect(commands).toContain('logout')
     }
@@ -222,7 +222,7 @@ describe('SidebarLayout — 退出登录', () => {
 
   it('[ADMIN] handleCommand("logout") 调用 store.logout', async () => {
     const store = mockUserStore({ userRole: "ADMIN" })
-    const wrapper = shallowMount(AdminLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     await wrapper.vm.handleCommand('logout')
     expect(store.logout).toHaveBeenCalled()
   })
@@ -236,7 +236,7 @@ describe('SidebarLayout — 退出登录', () => {
 
   it('[OPS] handleCommand("logout") 调用 store.logout', async () => {
     const store = mockUserStore({ userRole: "OPS" })
-    const wrapper = shallowMount(OpsLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'ops' } })
     await wrapper.vm.handleCommand('logout')
     expect(store.logout).toHaveBeenCalled()
   })
@@ -253,7 +253,7 @@ describe('SidebarLayout — 页面标题', () => {
   it('[ADMIN] pageTitle 使用 route.meta.title', () => {
     mockRoute.meta = { title: '课程管理' }
     mockUserStore({ userRole: "ADMIN" })
-    const wrapper = shallowMount(AdminLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     expect(wrapper.vm.pageTitle).toBe('课程管理')
   })
 
@@ -267,7 +267,7 @@ describe('SidebarLayout — 页面标题', () => {
   it('[OPS] pageTitle 使用 route.meta.title', () => {
     mockRoute.meta = { title: '系统监控' }
     mockUserStore({ userRole: "OPS" })
-    const wrapper = shallowMount(OpsLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'ops' } })
     expect(wrapper.vm.pageTitle).toBe('系统监控')
   })
 })
@@ -283,7 +283,7 @@ describe('SidebarLayout — OPS 专属：权限提升对话框', () => {
 
   it('[OPS] handleCommand("elevate") 打开提升对话框', async () => {
     mockUserStore({ userRole: "OPS" })
-    const wrapper = shallowMount(OpsLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'ops' } })
     await wrapper.vm.handleCommand('elevate')
     const dialogOpen = wrapper.vm.showElevationDialog ?? wrapper.vm.elevationTarget
     expect(dialogOpen).toBeTruthy()
@@ -291,15 +291,18 @@ describe('SidebarLayout — OPS 专属：权限提升对话框', () => {
 
   it('[OPS] onElevationSuccess() 跳转 /admin', async () => {
     mockUserStore({ userRole: "OPS" })
-    const wrapper = shallowMount(OpsLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'ops' } })
     await wrapper.vm.onElevationSuccess()
     expect(mockRouterPush).toHaveBeenCalledWith('/admin')
   })
 
-  it('[ADMIN] 不存在 onElevationSuccess 方法', () => {
+  it('[ADMIN] role=admin 时 showElevationDialog 不被触发', async () => {
+    // 合并后 onElevationSuccess 在共享组件中始终存在，
+    // 但 role=admin 的模板中没有 ElevationDialog 和 elevate 菜单项，
+    // 因此 showElevationDialog 始终为 false
     mockUserStore({ userRole: "ADMIN" })
-    const wrapper = shallowMount(AdminLayout, mountOptions())
-    expect(wrapper.vm.onElevationSuccess).toBeUndefined()
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
+    expect(wrapper.vm.showElevationDialog).toBe(false)
   })
 })
 
@@ -342,7 +345,7 @@ describe('SidebarLayout — 头像 fallback', () => {
 
   it('[ADMIN] avatar 为空时 userAvatar computed 返回非空字符串', () => {
     mockUserStore({ isLoggedIn: true, hasAdminAccess: true, userInfo: { username: 'admin', avatar: '' } })
-    const wrapper = shallowMount(AdminLayout, mountOptions())
+    const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'admin' } })
     expect(wrapper.vm.userAvatar).toBeTruthy()
   })
 

@@ -1,6 +1,7 @@
 <template>
   <div
     class="mobile-layout"
+    :class="`role-${role}`"
     :style="{
       '--nav-accent':        theme.accent,
       '--nav-accent-bg':     theme.accentBg,
@@ -40,6 +41,37 @@
           <div class="nav-badge" v-if="item.badge">{{ item.badge }}</div>
         </router-link>
 
+        <!-- admin 专属：二级"管理"下拉菜单 -->
+        <div
+          v-if="role === 'admin'"
+          class="nav-item management-menu-item"
+          :class="{ active: isManagementRouteActive }"
+        >
+          <el-dropdown trigger="click" placement="top">
+            <div class="nav-management-trigger">
+              <div class="nav-icon">
+                <component :is="Setting" />
+              </div>
+              <span class="nav-label">管理</span>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <router-link
+                  v-for="item in moreItems"
+                  :key="item.path"
+                  :to="item.path"
+                  class="dropdown-link"
+                >
+                  <el-dropdown-item>
+                    <component :is="item.icon" style="margin-right: 8px; width: 16px; height: 16px;" />
+                    <span>{{ item.label }}</span>
+                  </el-dropdown-item>
+                </router-link>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+
         <!-- 用户菜单 -->
         <div class="nav-item user-menu-item">
           <el-dropdown
@@ -59,50 +91,77 @@
             </div>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="profile">个人资料</el-dropdown-item>
-                <el-dropdown-item command="settings">设置</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+                <!-- ops 专属：切换到管理端 -->
+                <template v-if="role === 'ops'">
+                  <el-dropdown-item command="elevate" v-if="userStore.userRole === 'OPS'">
+                    切换到管理端
+                  </el-dropdown-item>
+                  <el-dropdown-item command="elevate" v-if="userStore.userRole === 'ADMIN'">
+                    返回管理端
+                  </el-dropdown-item>
+                  <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+                </template>
+                <!-- 其他角色通用菜单 -->
+                <template v-else>
+                  <el-dropdown-item command="profile">个人资料</el-dropdown-item>
+                  <el-dropdown-item command="settings">设置</el-dropdown-item>
+                  <!-- admin 专属：系统设置 -->
+                  <el-dropdown-item v-if="role === 'admin'" command="system">系统设置</el-dropdown-item>
+                  <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+                </template>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
         </div>
       </div>
     </nav>
+
+    <!-- ops 专属：提权对话框 -->
+    <ElevationDialog
+      v-if="role === 'ops'"
+      v-model="showElevationDialog"
+      :target-role="elevationTarget"
+      @success="onElevationSuccess"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DataBoard, School, Edit, Reading, Upload, Document, House } from '@element-plus/icons-vue'
+import ElevationDialog from '@/components/ElevationDialog.vue'
+import {
+  DataBoard, School, Edit, Reading,
+  Upload, Document, House,
+  User, EditPen, Setting,
+  DataLine, FolderOpened, Connection, Refresh, Switch,
+} from '@element-plus/icons-vue'
 
 const props = defineProps({
   role: {
     type: String,
     required: true,
-    validator: (v) => ['teacher', 'user'].includes(v),
+    validator: (v) => ['teacher', 'user', 'ops', 'admin'].includes(v),
   },
 })
 
-const router = useRouter()
-const route  = useRoute()
+const router    = useRouter()
+const route     = useRoute()
 const userStore = useUserStore()
+
+// ops 专属状态
+const showElevationDialog = ref(false)
+const elevationTarget     = ref('ADMIN')
 
 // ── 主题（accent 颜色）────────────────────────────────────────────────────────
 
 const THEME = {
-  teacher: {
-    accent:       'var(--secondary-color)',
-    accentBg:     'rgba(78, 205, 196, 0.1)',
-    accentShadow: 'rgba(78, 205, 196, 0.3)',
-  },
-  user: {
-    accent:       'var(--info-color)',
-    accentBg:     'rgba(0, 122, 255, 0.1)',
-    accentShadow: 'rgba(0, 122, 255, 0.3)',
-  },
+  teacher: { accent: 'var(--secondary-color)', accentBg: 'rgba(78, 205, 196, 0.1)',  accentShadow: 'rgba(78, 205, 196, 0.3)'  },
+  user:    { accent: 'var(--info-color)',       accentBg: 'rgba(0, 122, 255, 0.1)',   accentShadow: 'rgba(0, 122, 255, 0.3)'   },
+  ops:     { accent: '#f97316',                 accentBg: 'rgba(249, 115, 22, 0.1)',  accentShadow: 'rgba(249, 115, 22, 0.3)'  },
+  admin:   { accent: 'var(--accent-color)',     accentBg: 'rgba(69, 183, 209, 0.1)',  accentShadow: 'rgba(69, 183, 209, 0.3)'  },
 }
 
 const theme = computed(() => THEME[props.role])
@@ -117,13 +176,46 @@ const NAV_ITEMS = {
     { path: '/teacher/courses',     label: '课程', icon: Reading,   badge: null },
   ],
   user: [
-    { path: '/user',              label: '首页', icon: House,    badge: null },
-    { path: '/user/user-texts',   label: '我的', icon: Upload,   badge: null },
-    { path: '/user/vocabulary',   label: '生词', icon: Document, badge: null },
+    { path: '/user',            label: '首页', icon: House,    badge: null },
+    { path: '/user/user-texts', label: '我的', icon: Upload,   badge: null },
+    { path: '/user/vocabulary', label: '生词', icon: Document, badge: null },
+  ],
+  ops: [
+    { path: '/ops/monitoring',      label: '监控', icon: DataLine    },
+    { path: '/ops/backups',         label: '备份', icon: FolderOpened },
+    { path: '/ops/users',           label: '用户', icon: User        },
+    { path: '/ops/ai-providers',    label: 'AI',   icon: Connection  },
+    { path: '/ops/feature-toggles', label: '开关', icon: Switch      },
+    { path: '/ops/update',          label: '更新', icon: Refresh     },
+  ],
+  admin: [
+    { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null },
+    { path: '/admin/courses',   label: '课程', icon: Reading,   badge: null },
+    { path: '/admin/classes',   label: '班级', icon: School,    badge: null },
+    { path: '/admin/users',     label: '用户', icon: User,      badge: null },
   ],
 }
 
 const navItems = computed(() => NAV_ITEMS[props.role] || [])
+
+// admin 专属：二级管理菜单
+const MORE_ITEMS = {
+  admin: [
+    { path: '/admin/units',       label: '单元管理', icon: Reading  },
+    { path: '/admin/words',       label: '单词管理', icon: EditPen  },
+    { path: '/admin/texts',       label: '课文管理', icon: Document },
+    { path: '/admin/assignments', label: '作业管理', icon: Document },
+  ],
+}
+
+const moreItems = computed(() => MORE_ITEMS[props.role] || [])
+
+const isManagementRouteActive = computed(() => {
+  if (props.role !== 'admin') return false
+  return MORE_ITEMS.admin.some(
+    (item) => route.path === item.path || route.path.startsWith(item.path + '/'),
+  )
+})
 
 // ── 页面标题 ──────────────────────────────────────────────────────────────────
 
@@ -135,13 +227,31 @@ const ROUTE_MAP = {
     '/teacher/courses':     '课程浏览',
   },
   user: {
-    '/user':             '首页',
-    '/user/user-texts':  '我的上传',
-    '/user/vocabulary':  '我的生词',
+    '/user':            '首页',
+    '/user/user-texts': '我的上传',
+    '/user/vocabulary': '我的生词',
+  },
+  ops: {
+    '/ops/monitoring':      '系统监控',
+    '/ops/backups':         '数据备份',
+    '/ops/users':           '用户管理',
+    '/ops/ai-providers':    'AI 服务管理',
+    '/ops/feature-toggles': '功能开关',
+    '/ops/update':          '系统更新',
+  },
+  admin: {
+    '/admin/dashboard':   '管理概览',
+    '/admin/courses':     '课程管理',
+    '/admin/classes':     '班级管理',
+    '/admin/users':       '用户管理',
+    '/admin/units':       '单元管理',
+    '/admin/words':       '单词管理',
+    '/admin/texts':       '课文管理',
+    '/admin/assignments': '作业管理',
   },
 }
 
-const DEFAULT_TITLE = { teacher: '教师端', user: '用户端' }
+const DEFAULT_TITLE = { teacher: '教师端', user: '用户端', ops: '运维面板', admin: '管理员端' }
 
 const pageTitle = computed(
   () => route.meta?.title || ROUTE_MAP[props.role]?.[route.path] || DEFAULT_TITLE[props.role],
@@ -153,7 +263,7 @@ const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e
 
 const userAvatar = computed(() => userStore.userInfo?.avatar || DEFAULT_AVATAR)
 
-// ── 键盘支持（Escape 关闭下拉，el-dropdown 挂载期间） ─────────────────────────
+// ── 键盘支持（Escape 关闭下拉时防止浏览器默认行为） ──────────────────────────
 
 const handleKeyDown = (event) => {
   if (event.key === 'Escape') event.preventDefault()
@@ -177,6 +287,17 @@ const handleCommand = async (command) => {
     case 'settings':
       ElMessage.info('设置功能开发中')
       break
+    case 'system':  // admin 专属
+      ElMessage.info('系统设置功能开发中')
+      break
+    case 'elevate':  // ops 专属
+      if (userStore.userRole === 'ADMIN') {
+        router.push('/admin')
+      } else {
+        elevationTarget.value = 'ADMIN'
+        showElevationDialog.value = true
+      }
+      break
     case 'logout':
       try {
         await ElMessageBox.confirm('确认退出登录？', '提示', {
@@ -192,7 +313,12 @@ const handleCommand = async (command) => {
           return
         }
         ElMessage.success('退出登录成功')
-        await router.push('/login')
+        // ops/admin 用 replace 不留历史；teacher/user 用 push
+        if (['ops', 'admin'].includes(props.role)) {
+          router.replace('/login')
+        } else {
+          await router.push('/login')
+        }
       } catch (error) {
         if (error?.message === 'Cancel') return
         console.error('Logout process failed:', error)
@@ -202,6 +328,11 @@ const handleCommand = async (command) => {
   }
 }
 
+// ops 专属：提权成功后跳转
+const onElevationSuccess = () => {
+  router.push('/admin')
+}
+
 // ── 生命周期 ──────────────────────────────────────────────────────────────────
 
 onMounted(() => {
@@ -209,6 +340,14 @@ onMounted(() => {
     console.warn('Unauthorized: non-teacher user attempted to access teacher layout')
     ElMessage.error('您没有权限访问此区域')
     router.push('/login')
+  }
+  if (props.role === 'ops' && (!userStore.isLoggedIn || !userStore.hasOpsAccess)) {
+    ElMessage.error('权限不足，请以运维人员身份登录')
+    router.replace('/login')
+  }
+  if (props.role === 'admin' && (!userStore.isLoggedIn || !userStore.hasAdminAccess)) {
+    ElMessage.error('权限不足，请以管理员身份登录')
+    router.replace('/login')
   }
 })
 
@@ -241,9 +380,7 @@ onUnmounted(() => {
   box-shadow: var(--shadow-light);
 }
 
-.header-left {
-  flex: 1;
-}
+.header-left { flex: 1; }
 
 .page-title {
   font-size: 18px;
@@ -253,6 +390,18 @@ onUnmounted(() => {
   background: var(--gradient-secondary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ops/admin 各自的标题渐变色 */
+.role-ops .page-title {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.role-admin .page-title {
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
   background-clip: text;
 }
 
@@ -282,11 +431,24 @@ onUnmounted(() => {
   padding-bottom: max(8px, env(safe-area-inset-bottom));
 }
 
+/* ops 导航栏特殊样式（毛玻璃效果）*/
+.role-ops .mobile-nav {
+  background: linear-gradient(to top, var(--surface-color) 0%, rgba(255, 255, 255, 0.98) 100%);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(10px);
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
 .nav-container {
   display: flex;
   justify-content: space-around;
   align-items: center;
   padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+}
+
+.role-ops .nav-container {
+  padding: 10px 8px max(10px, env(safe-area-inset-bottom));
+  gap: 4px;
 }
 
 .nav-item {
@@ -304,14 +466,35 @@ onUnmounted(() => {
   margin: 0 4px;
 }
 
+/* ops 导航项特殊样式 */
+.role-ops .nav-item {
+  padding: 6px 10px;
+  min-width: 50px;
+  max-width: 80px;
+  border-radius: 10px;
+  margin: 0 2px;
+  flex: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .nav-item:hover {
   color: var(--text-secondary);
   background-color: var(--bg-tertiary);
 }
 
+.role-ops .nav-item:hover {
+  color: var(--nav-accent);
+  background-color: var(--nav-accent-bg);
+  transform: translateY(-2px);
+}
+
 .nav-item.active {
   color: var(--nav-accent);
   background: linear-gradient(135deg, var(--nav-accent-bg) 0%, transparent 100%);
+}
+
+.role-ops .nav-item.active {
+  box-shadow: 0 2px 8px var(--nav-accent-shadow);
 }
 
 .nav-icon {
@@ -324,9 +507,9 @@ onUnmounted(() => {
   transition: transform 0.3s ease;
 }
 
-.nav-item.active .nav-icon {
-  transform: scale(1.1);
-}
+.role-ops .nav-icon { width: 26px; height: 26px; margin-bottom: 3px; }
+
+.nav-item.active .nav-icon { transform: scale(1.1); }
 
 .nav-label {
   font-size: 11px;
@@ -336,10 +519,9 @@ onUnmounted(() => {
   transition: font-size 0.3s ease;
 }
 
-.nav-item.active .nav-label {
-  font-size: 12px;
-  font-weight: 600;
-}
+.role-ops .nav-label { line-height: 1.3; white-space: nowrap; }
+
+.nav-item.active .nav-label { font-size: 12px; font-weight: 600; }
 
 .nav-badge {
   position: absolute;
@@ -364,12 +546,12 @@ onUnmounted(() => {
   100% { box-shadow: 0 2px 4px var(--nav-accent-shadow); }
 }
 
-/* 用户菜单项 */
-.user-menu-item {
-  cursor: pointer;
-}
+/* 用户菜单 & 头像 */
+.user-menu-item,
+.management-menu-item { cursor: pointer; }
 
-.nav-user-avatar {
+.nav-user-avatar,
+.nav-management-trigger {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -390,9 +572,22 @@ onUnmounted(() => {
   box-shadow: 0 0 0 2px var(--nav-accent-shadow);
 }
 
+.role-admin .user-menu-item:hover .avatar-img {
+  transform: scale(1.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* admin 管理菜单下拉 router-link */
+.dropdown-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
 /* 触摸体验 */
 .nav-item,
-.user-menu-item {
+.user-menu-item,
+.management-menu-item {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
@@ -424,41 +619,41 @@ onUnmounted(() => {
 
 /* 响应式 */
 @media (max-width: 480px) {
-  .mobile-header    { padding: 0 12px; height: 52px; }
-  .page-title       { font-size: 16px; }
+  .mobile-header     { padding: 0 12px; height: 52px; }
+  .page-title        { font-size: 16px; }
   .content-container { padding: 12px; }
-  .nav-item         { padding: 6px 8px; min-width: 40px; margin: 0 2px; }
-  .nav-icon         { width: 22px; height: 22px; margin-bottom: 3px; }
-  .nav-label        { font-size: 10px; }
+  .nav-item          { padding: 6px 8px; min-width: 40px; margin: 0 2px; }
+  .nav-icon          { width: 22px; height: 22px; margin-bottom: 3px; }
+  .nav-label         { font-size: 10px; }
   .nav-item.active .nav-label { font-size: 11px; }
 }
 
 @media (max-width: 360px) {
-  .mobile-header    { padding: 0 8px; height: 48px; }
-  .page-title       { font-size: 15px; }
+  .mobile-header     { padding: 0 8px; height: 48px; }
+  .page-title        { font-size: 15px; }
   .content-container { padding: 8px; }
-  .nav-item         { padding: 4px 6px; margin: 0 1px; }
-  .nav-icon         { width: 20px; height: 20px; margin-bottom: 2px; }
-  .nav-label        { font-size: 9px; }
+  .nav-item          { padding: 4px 6px; margin: 0 1px; }
+  .nav-icon          { width: 20px; height: 20px; margin-bottom: 2px; }
+  .nav-label         { font-size: 9px; }
   .nav-item.active .nav-label { font-size: 10px; }
 }
 
 @media (min-width: 768px) and (max-width: 1024px) {
-  .mobile-header    { padding: 0 20px; height: 64px; }
-  .page-title       { font-size: 20px; }
+  .mobile-header     { padding: 0 20px; height: 64px; }
+  .page-title        { font-size: 20px; }
   .content-container { padding: 20px; }
-  .nav-item         { padding: 10px 16px; min-width: 48px; }
-  .nav-icon         { width: 28px; height: 28px; margin-bottom: 6px; }
-  .nav-label        { font-size: 12px; }
+  .nav-item          { padding: 10px 16px; min-width: 48px; }
+  .nav-icon          { width: 28px; height: 28px; margin-bottom: 6px; }
+  .nav-label         { font-size: 12px; }
   .nav-item.active .nav-label { font-size: 13px; }
 }
 
 @media (max-height: 600px) and (orientation: landscape) {
-  .mobile-header    { height: 44px; }
-  .page-title       { font-size: 16px; }
-  .nav-container    { padding: 4px 0; }
-  .nav-item         { padding: 4px 8px; }
-  .nav-icon         { width: 20px; height: 20px; margin-bottom: 2px; }
-  .nav-label        { font-size: 9px; }
+  .mobile-header  { height: 44px; }
+  .page-title     { font-size: 16px; }
+  .nav-container  { padding: 4px 0; }
+  .nav-item       { padding: 4px 8px; }
+  .nav-icon       { width: 20px; height: 20px; margin-bottom: 2px; }
+  .nav-label      { font-size: 9px; }
 }
 </style>
