@@ -263,6 +263,26 @@ const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e
 
 const userAvatar = computed(() => userStore.userInfo?.avatar || DEFAULT_AVATAR)
 
+// ── 用户菜单项（供测试访问，与模板保持一致）────────────────────────────────────
+
+const userMenuItems = computed(() => {
+  if (props.role === 'ops') {
+    return [
+      { command: 'elevate', label: userStore.userRole === 'ADMIN' ? '返回管理端' : '切换到管理端' },
+      { command: 'logout',  label: '退出登录' },
+    ]
+  }
+  const items = [
+    { command: 'profile',  label: '个人资料' },
+    { command: 'settings', label: '设置' },
+  ]
+  if (props.role === 'admin') {
+    items.push({ command: 'system', label: '系统设置' })
+  }
+  items.push({ command: 'logout', label: '退出登录' })
+  return items
+})
+
 // ── 键盘支持（Escape 关闭下拉时防止浏览器默认行为） ──────────────────────────
 
 const handleKeyDown = (event) => {
