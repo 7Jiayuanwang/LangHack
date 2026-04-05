@@ -60,13 +60,13 @@
           </div>
         </template>
 
-        <!-- Empty State -->
+        <!-- Empty / Error State -->
         <div v-else-if="articles.length === 0" class="empty-state">
           <div class="empty-icon-wrap">
             <el-icon :size="48"><DocumentRemove /></el-icon>
           </div>
-          <h3 class="empty-title">暂无文章内容</h3>
-          <p class="empty-desc">换个分类试试，或者稍后再来看看</p>
+          <h3 class="empty-title">{{ loadError ? '加载失败' : '暂无文章内容' }}</h3>
+          <p class="empty-desc">{{ loadError ? '网络异常，请检查连接后重试' : '换个分类试试，或者稍后再来看看' }}</p>
           <button class="refresh-btn" @click="loadArticles">重新加载</button>
         </div>
 
@@ -139,6 +139,7 @@ const loading = ref(true)
 const articles = ref([])
 const selectedCategory = ref('')
 const filterVisible = ref(true)
+const loadError = ref(false)
 
 // 筛选栏开关
 const toggleFilter = () => {
@@ -195,6 +196,7 @@ const getRandomCategory = () => {
 
 const loadArticles = async () => {
   loading.value = true
+  loadError.value = false
   try {
     const params = { count: 10 }
 
@@ -209,7 +211,7 @@ const loadArticles = async () => {
       data = await response.json()
     } catch (parseError) {
       console.error('JSON parse error:', parseError)
-      ElMessage.error('获取文章失败')
+      loadError.value = true
       return
     }
 
@@ -231,11 +233,11 @@ const loadArticles = async () => {
 
       articles.value = fetched
     } else {
-      ElMessage.error('获取文章失败')
+      loadError.value = true
     }
   } catch (error) {
-    ElMessage.error('获取文章失败')
-    console.error(error)
+    console.error('加载文章失败:', error)
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -243,7 +245,7 @@ const loadArticles = async () => {
 
 const readArticle = (article) => {
   if (!article?.id) {
-    ElMessage.error('文章ID不存在')
+    console.warn('readArticle: 文章ID不存在', article)
     return
   }
   // Fire-and-forget: 标记文章为已读

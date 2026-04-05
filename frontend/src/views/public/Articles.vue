@@ -53,7 +53,7 @@
           </div>
         </template>
 
-        <!-- Empty State -->
+        <!-- Empty / Error State -->
         <div v-else-if="articles.length === 0" class="empty-state">
           <div class="empty-icon-wrap">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -63,8 +63,8 @@
               <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
           </div>
-          <h3 class="empty-title">暂无文章内容</h3>
-          <p class="empty-desc">换个分类试试，或者稍后再来看看</p>
+          <h3 class="empty-title">{{ loadError ? '加载失败' : '暂无文章内容' }}</h3>
+          <p class="empty-desc">{{ loadError ? '网络异常，请检查连接后重试' : '换个分类试试，或者稍后再来看看' }}</p>
           <button class="refresh-btn" @click="loadArticles">重新加载</button>
         </div>
 
@@ -148,12 +148,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const loading = ref(true)
 const articles = ref([])
 const selectedCategory = ref('')
+const loadError = ref(false)
 
 const categories = [
   { label: '全部', value: '' },
@@ -193,6 +193,7 @@ const getRandomCategory = () => {
 
 const loadArticles = async () => {
   loading.value = true
+  loadError.value = false
   try {
     const params = { count: 12 }
 
@@ -204,19 +205,13 @@ const loadArticles = async () => {
 
     const data = await response.json()
 
-    // 防御null response
     if (!data || typeof data !== 'object') {
-      ElMessage.error('获取文章失败')
+      loadError.value = true
       return
     }
 
     if (data.code === 200) {
-      // 安全处理API响应：支持直接数组和分页格式
       const dataArray = Array.isArray(data.data) ? data.data : (Array.isArray(data.data?.records) ? data.data.records : [])
-      if (!Array.isArray(dataArray)) {
-        ElMessage.error('文章数据格式错误')
-        return
-      }
       let fetched = dataArray.map(text => {
         const contentLength = typeof text?.content === 'string' ? text.content.length : 0
         return {
@@ -233,11 +228,11 @@ const loadArticles = async () => {
 
       articles.value = fetched
     } else {
-      ElMessage.error(data?.message || '获取文章失败')
+      loadError.value = true
     }
   } catch (error) {
-    ElMessage.error('获取文章失败')
-    console.error(error)
+    console.error('加载文章失败:', error)
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -642,7 +637,7 @@ onMounted(() => {
 }
 
 .bottom-spacer {
-  height: 80px;
+  height: calc(80px + env(safe-area-inset-bottom, 0px));
 }
 
 /* --- Bottom Nav --- */
