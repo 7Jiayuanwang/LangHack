@@ -113,8 +113,10 @@ LangHack/
 | 角色 | 用户名 | 密码 |
 |---|---|---|
 | 管理员 | `admin` | `admin123` |
+| 运维 | `ops` | `ops123` |
 | 教师 | `teacher` | `teacher123` |
 | 学生 | `2023122066164` | `123456` |
+| 普通用户 | `user` | `user123` |
 
 ---
 
@@ -141,7 +143,7 @@ LangHack/
 | `TROUBLESHOOTING.md` | 常见问题与故障排除 |
 | `DATABASE_SYNC_GUIDE.md` | 数据库同步与迁移指南 |
 | `OPTIMIZATION_DOCUMENTATION.md` | 性能优化文档 |
-| `spec.md` | 功能开发规格说明 |
+| `spec.md` | 功能规格说明（已实现功能清单） |
 
 ---
 
@@ -153,6 +155,12 @@ LangHack/
 
 **代码规范**：后端遵循 Google Java Style，前端使用 `<script setup>` + Scoped SCSS。
 **数据库变更**：必须通过 Flyway 迁移脚本 (`backend/src/main/resources/db/migration/`)。
+
+**前端测试**：
+```bash
+cd frontend && npx vitest run          # 运行所有测试
+cd frontend && npx vitest              # 监听模式
+```
 
 ---
 
