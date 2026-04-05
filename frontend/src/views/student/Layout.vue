@@ -85,7 +85,10 @@ import {
   House,
   Edit,
   Document,
-  ChatLineRound
+  ChatLineRound,
+  MessageBox,
+  Notebook,
+  VideoPlay
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -109,8 +112,10 @@ const allNavigationItems = [
   { path: '/student/assignments', label: '任务', icon: markRaw(Edit), badge: null, toggleKey: 'page_assignments' },
   { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, toggleKey: 'page_articles' },
   { path: '/student/vocabulary', label: '单词', icon: markRaw(Document), badge: null, toggleKey: 'page_vocabulary' },
-  { path: '/student/my-study', label: '学习', icon: markRaw(Reading), badge: null, toggleKey: null },  // 学习页始终显示
-  { path: '/student/ai-video', label: '视频', icon: markRaw(Reading), badge: null, toggleKey: 'page_ai_video' }
+  { path: '/student/my-study', label: '学习', icon: markRaw(Reading), badge: null, toggleKey: 'page_my_study' },
+  { path: '/student/ai-video', label: '视频', icon: markRaw(VideoPlay), badge: null, toggleKey: 'page_ai_video' },
+  { path: '/student/ai-qa', label: 'AI问答', icon: markRaw(MessageBox), badge: null, toggleKey: 'page_ai_qa' },
+  { path: '/student/user-texts', label: '我的创作', icon: markRaw(Notebook), badge: null, toggleKey: 'page_user_texts' }
 ]
 
 // 根据功能开关过滤导航项
@@ -132,6 +137,7 @@ const pageTitle = computed(() => {
     '/student/articles': '',
     '/student/vocabulary': '单词本',
     '/student/ai-video': 'AI 视频字幕',
+    '/student/ai-qa': 'AI 问答',
     '/student/user-texts': '我的创作',
     '/student/my-study': '我的学习'
   }

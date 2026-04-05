@@ -523,17 +523,19 @@ log "INFO: 检查远程仓库更新 (branch: $BRANCH)..."
 
 # git fetch 带重试（网络断开时 set -e 会直接退出）
 fetch_ok=false
-for attempt in 1 2 3; do
-    if git fetch origin "$BRANCH" --quiet 2>/dev/null; then
-        fetch_ok=true
-        break
+MAX_FETCH_ATTEMPTS=3
+for attempt in $(seq 1 $MAX_FETCH_ATTEMPTS); do
+    fetch_err=$(git fetch origin "$BRANCH" --quiet 2>&1) && { fetch_ok=true; break; }
+    if [ "$attempt" -lt "$MAX_FETCH_ATTEMPTS" ]; then
+        log "WARN: git fetch 失败 (尝试 $attempt/$MAX_FETCH_ATTEMPTS)，10s 后重试... 错误: $fetch_err"
+        sleep 10
+    else
+        log "WARN: git fetch 失败 (尝试 $attempt/$MAX_FETCH_ATTEMPTS)，错误: $fetch_err"
     fi
-    log "WARN: git fetch 失败 (尝试 $attempt/3)，10s 后重试..."
-    sleep 10
 done
 if [ "$fetch_ok" = false ]; then
-    log "ERROR: git fetch 在 3 次尝试后仍然失败，跳过本次更新"
-    notify "自动更新失败: 无法连接远程仓库 (3 次重试均失败)"
+    log "ERROR: git fetch 在 $MAX_FETCH_ATTEMPTS 次尝试后仍然失败，跳过本次更新"
+    notify "自动更新失败: 无法连接远程仓库 ($MAX_FETCH_ATTEMPTS 次重试均失败)"
     exit 1
 fi
 

@@ -13,7 +13,7 @@
               <el-option label="已过期" value="expired" />
             </el-select>
             <el-button type="primary" @click="showStats = !showStats">
-              <el-icon><Loading /></el-icon>
+              <el-icon><Histogram /></el-icon>
               进度
             </el-button>
           </div>
@@ -401,7 +401,7 @@
 import { ref, reactive, onMounted, watch, onActivated, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import {Check, Clock, Loading, Microphone, Warning, OfficeBuilding, Notebook} from '@element-plus/icons-vue'
+import {Check, Clock, Histogram, Loading, Microphone, Warning, OfficeBuilding, Notebook} from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 // 响应式窗口宽度
