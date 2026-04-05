@@ -582,7 +582,7 @@ onBeforeUnmount(() => {
 /* --- Desktop --- */
 @media (min-width: 768px) {
   .ai-qa-page {
-    max-width: 640px;
+    max-width: 1200px;
     margin: 0 auto;
   }
 }

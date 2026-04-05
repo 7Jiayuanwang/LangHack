@@ -78,6 +78,7 @@ import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getFeatureToggles } from '@/api/systemConfig'
 import {
   DataBoard,
   Reading,
@@ -92,6 +93,7 @@ const route = useRoute()
 const userStore = useUserStore()
 const showUserMenu = ref(false)
 const screenWidth = ref(window.innerWidth)
+const featureToggles = ref({})
 
 // 处理键盘事件关闭菜单
 const handleKeyDown = (event) => {
@@ -100,52 +102,25 @@ const handleKeyDown = (event) => {
   }
 }
 
-// 导航项配置 - 时尚设计
-const navigationItems = ref([
-  {
-    path: '/student/dashboard',
-    label: '发现',
-    icon: markRaw(DataBoard),
-    badge: null
-  },
-  // 暂时隐藏课程菜单
-  // {
-  //   path: '/student/courses',
-  //   label: '课程',
-  //   icon: markRaw(Reading),
-  //   badge: null
-  // },
-  {
-    path: '/student/classes',
-    label: '社区',
-    icon: markRaw(House),
-    badge: null
-  },
-  {
-    path: '/student/assignments',
-    label: '任务',
-    icon: markRaw(Edit),
-    badge: null
-  },
-  {
-    path: '/student/articles',
-    label: '文章',
-    icon: markRaw(ChatLineRound),
-    badge: null
-  },
-  {
-    path: '/student/vocabulary',
-    label: '单词',
-    icon: markRaw(Document),
-    badge: null
-  },
-  {
-    path: '/student/ai-video',
-    label: '视频',
-    icon: markRaw(Reading),
-    badge: null
-  }
-])
+// 所有导航项配置（含 toggleKey 用于功能开关过滤）
+const allNavigationItems = [
+  { path: '/student/dashboard', label: '发现', icon: markRaw(DataBoard), badge: null, toggleKey: 'page_dashboard' },
+  { path: '/student/classes', label: '社区', icon: markRaw(House), badge: null, toggleKey: 'page_classes' },
+  { path: '/student/assignments', label: '任务', icon: markRaw(Edit), badge: null, toggleKey: 'page_assignments' },
+  { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, toggleKey: 'page_articles' },
+  { path: '/student/vocabulary', label: '单词', icon: markRaw(Document), badge: null, toggleKey: 'page_vocabulary' },
+  { path: '/student/my-study', label: '学习', icon: markRaw(Reading), badge: null, toggleKey: null },  // 学习页始终显示
+  { path: '/student/ai-video', label: '视频', icon: markRaw(Reading), badge: null, toggleKey: 'page_ai_video' }
+]
+
+// 根据功能开关过滤导航项
+const navigationItems = computed(() => {
+  return allNavigationItems.filter(item => {
+    if (!item.toggleKey) return true  // 无 toggleKey 的项始终显示
+    const val = featureToggles.value[item.toggleKey]
+    return val === undefined || val === 'true'  // 未配置或 true 时显示
+  })
+})
 
 // 页面标题
 const pageTitle = computed(() => {
@@ -157,7 +132,8 @@ const pageTitle = computed(() => {
     '/student/articles': '',
     '/student/vocabulary': '单词本',
     '/student/ai-video': 'AI 视频字幕',
-    '/student/user-texts': '我的创作'
+    '/student/user-texts': '我的创作',
+    '/student/my-study': '我的学习'
   }
   return routeMap[route.path] || route.meta?.title || '英语学习'
 })
@@ -243,6 +219,12 @@ const handleResize = () => {
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   window.addEventListener('keydown', handleKeyDown)
+  // 加载功能开关配置
+  getFeatureToggles().then(res => {
+    if (res?.code === 200 && res?.data) {
+      featureToggles.value = res.data
+    }
+  }).catch(() => {})
 })
 
 onUnmounted(() => {

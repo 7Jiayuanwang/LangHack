@@ -25,40 +25,26 @@ public class AiCallMetricsService {
     private static final int BATCH_SIZE = 200;
     private static final DateTimeFormatter DATE_KEY = DateTimeFormatter.ofPattern("yyyyMMdd");
 
-    private static final List<String> FALLBACK_SERVICES = Arrays.asList(
+    private static final List<String> KNOWN_SERVICES = Arrays.asList(
             "HIAGENT", "OPENROUTER", "TENCENT_TRANSLATE", "TENCENT_ASR", "BILIBILI"
     );
 
     private final ConcurrentLinkedQueue<AiCallLog> buffer = new ConcurrentLinkedQueue<>();
     private final AiCallLogMapper aiCallLogMapper;
     private final StringRedisTemplate redisTemplate;
-    private final com.english.mapper.AiProviderMapper aiProviderMapper;
 
     public AiCallMetricsService(AiCallLogMapper aiCallLogMapper,
-                                 StringRedisTemplate redisTemplate,
-                                 com.english.mapper.AiProviderMapper aiProviderMapper) {
+                                 StringRedisTemplate redisTemplate) {
         this.aiCallLogMapper = aiCallLogMapper;
         this.redisTemplate = redisTemplate;
-        this.aiProviderMapper = aiProviderMapper;
     }
 
+    /**
+     * Return the list of known service name constants used in recordCall().
+     * These MUST match the serviceName parameters passed to recordSuccess/recordFailure.
+     */
     private List<String> getActiveServiceNames() {
-        try {
-            List<String> names = aiProviderMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<com.english.entity.AiProvider>()
-                    .eq("enabled", true)
-                    .select("name")
-            ).stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
-            if (names.isEmpty()) return FALLBACK_SERVICES;
-            // also include built-in non-provider services
-            List<String> all = new java.util.ArrayList<>(names);
-            for (String s : Arrays.asList("TENCENT_TRANSLATE", "TENCENT_ASR", "BILIBILI")) {
-                if (!all.contains(s)) all.add(s);
-            }
-            return all;
-        } catch (Exception e) {
-            return FALLBACK_SERVICES;
-        }
+        return KNOWN_SERVICES;
     }
 
     public long startTimer() {

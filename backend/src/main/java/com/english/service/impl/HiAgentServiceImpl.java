@@ -2,6 +2,7 @@ package com.english.service.impl;
 
 import com.english.config.HiAgentConfig;
 import com.english.exception.BusinessException;
+import com.english.service.AiProviderService;
 import com.english.service.HiAgentService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,6 +17,9 @@ import org.springframework.web.client.RestTemplate;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -35,6 +39,9 @@ public class HiAgentServiceImpl implements HiAgentService {
 
     @Autowired
     private HiAgentConfig config;
+
+    @Autowired(required = false)
+    private AiProviderService aiProviderService;
 
     @Autowired(required = false)
     private AiCallMetricsService aiCallMetricsService;
@@ -373,7 +380,17 @@ public class HiAgentServiceImpl implements HiAgentService {
     }
 
     /**
+     * Returns current UTC time in ISO 8601 basic format required by HiAgent IAM signature.
+     * Format: yyyyMMdd'T'HHmmss'Z'  e.g. 20260331T123456Z
+     */
+    private String currentXDate() {
+        return ZonedDateTime.now(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
+    }
+
+    /**
      * Create base headers per PDF v2.0.1 documentation.
+     * X-Date is required by the IAM signature verification layer.
      */
     private HttpHeaders createBaseHeaders() {
         HttpHeaders headers = new HttpHeaders();
@@ -381,15 +398,32 @@ public class HiAgentServiceImpl implements HiAgentService {
         headers.set("Apikey", config.getApiKey());
         headers.set("Appid", config.getAppId());
         headers.set("X-App-Id", config.getAppId());
+        headers.set("X-Date", currentXDate());
         return headers;
     }
 
     private HttpHeaders createQAHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Apikey", config.getQaApiKey());
-        headers.set("Appid", config.getQaAppId());
-        headers.set("X-App-Id", config.getQaAppId());
+        String qaApiKey = config.getQaApiKey();
+        String qaAppId  = config.getQaAppId();
+
+        // Fallback: if qaApiKey is blank, use the main API key
+        if (qaApiKey == null || qaApiKey.isBlank()) {
+            qaApiKey = config.getApiKey();
+            log.debug("HiAgent QA API key not set, falling back to main API key");
+        }
+
+        // Fallback: if qaAppId is blank, use the main App ID
+        if (qaAppId == null || qaAppId.isBlank()) {
+            qaAppId = config.getAppId();
+            log.debug("HiAgent QA App ID not set, falling back to main App ID");
+        }
+
+        headers.set("Apikey", qaApiKey);
+        headers.set("Appid", qaAppId);
+        headers.set("X-App-Id", qaAppId);
+        headers.set("X-Date", currentXDate());
         return headers;
     }
 

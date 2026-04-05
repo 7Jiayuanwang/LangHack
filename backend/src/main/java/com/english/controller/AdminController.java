@@ -740,6 +740,7 @@ public class AdminController {
             text.setContentType(textData.get("contentType") != null ? textData.get("contentType").toString() : "TEXT");
             text.setDifficulty(textData.get("difficulty") != null ? textData.get("difficulty").toString() : "EASY");
             text.setAudioUrl(textData.get("audioUrl") != null ? textData.get("audioUrl").toString() : "");
+            text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
             Object isPublicObj = textData.get("isPublic");
             try {
@@ -879,6 +880,7 @@ public class AdminController {
             text.setContentType(textData.get("contentType") != null ? textData.get("contentType").toString() : "TEXT");
             text.setDifficulty(textData.get("difficulty") != null ? textData.get("difficulty").toString() : "EASY");
             text.setAudioUrl(textData.get("audioUrl") != null ? textData.get("audioUrl").toString() : "");
+            text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
             Object isPublicObj = textData.get("isPublic");
             try {
@@ -921,18 +923,46 @@ public class AdminController {
      */
     @PutMapping("/texts/{id}/featured")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<String> toggleFeatured(@PathVariable Long id) {
+    public Result<String> toggleFeatured(@PathVariable Long id,
+                                         @RequestParam(required = false) Integer featured) {
         try {
             Text text = textService.getTextById(id);
             if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
                 return Result.error("课文不存在");
             }
-            int newValue = (text.getIsFeatured() != null && text.getIsFeatured() == 1) ? 0 : 1;
+            int newValue;
+            if (featured != null) {
+                newValue = featured == 1 ? 1 : 0;
+            } else {
+                newValue = (text.getIsFeatured() != null && text.getIsFeatured() == 1) ? 0 : 1;
+            }
             text.setIsFeatured(newValue);
             textService.updateText(text);
             return Result.success(newValue == 1 ? "已设为推荐" : "已取消推荐");
         } catch (Exception e) {
             logger.error("切换推荐状态失败", e);
+            return Result.error("操作失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 设置课文推荐优先级
+     */
+    @PutMapping("/texts/{id}/featured-priority")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> setFeaturedPriority(@PathVariable Long id,
+                                              @RequestParam Integer priority) {
+        try {
+            Text text = textService.getTextById(id);
+            if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
+                return Result.error("课文不存在");
+            }
+            int safeValue = Math.max(0, Math.min(100, priority));
+            text.setFeaturedPriority(safeValue);
+            textService.updateText(text);
+            return Result.success("优先级已更新为 " + safeValue);
+        } catch (Exception e) {
+            logger.error("设置推荐优先级失败", e);
             return Result.error("操作失败，请稍后重试");
         }
     }

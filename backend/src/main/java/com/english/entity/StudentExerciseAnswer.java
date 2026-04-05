@@ -1,6 +1,7 @@
 package com.english.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 
 /**
@@ -89,6 +90,7 @@ public class StudentExerciseAnswer {
         this.answerContent = answerContent;
     }
 
+    @JsonProperty("isCorrect")
     public Boolean getIsCorrect() {
         return isCorrect;
     }

@@ -61,6 +61,7 @@ public class PublicTextController {
             List<Text> featuredTexts = textService.lambdaQuery()
                     .eq(Text::getDeleted, 0)
                     .eq(Text::getIsFeatured, 1)
+                    .orderByDesc(Text::getFeaturedPriority)
                     .orderByDesc(Text::getCreatedAt)
                     .list();
 
@@ -98,14 +99,25 @@ public class PublicTextController {
                 featuredTexts = unreadTexts;
             }
 
-            List<Text> result;
-            if (featuredTexts.size() <= count) {
-                result = new ArrayList<>(featuredTexts);
-                Collections.shuffle(result);
+            // 有优先级(>0)的文章按优先级降序排在前面，priority=0 的文章随机填充剩余位置
+            List<Text> prioritized = featuredTexts.stream()
+                    .filter(t -> t.getFeaturedPriority() != null && t.getFeaturedPriority() > 0)
+                    .sorted((a, b) -> Integer.compare(
+                            b.getFeaturedPriority() != null ? b.getFeaturedPriority() : 0,
+                            a.getFeaturedPriority() != null ? a.getFeaturedPriority() : 0))
+                    .collect(Collectors.toList());
+            List<Text> randomPool = new ArrayList<>(featuredTexts.stream()
+                    .filter(t -> t.getFeaturedPriority() == null || t.getFeaturedPriority() == 0)
+                    .collect(Collectors.toList()));
+            Collections.shuffle(randomPool);
+
+            List<Text> result = new ArrayList<>();
+            if (prioritized.size() >= count) {
+                result = prioritized.subList(0, count);
             } else {
-                List<Text> shuffled = new ArrayList<>(featuredTexts);
-                Collections.shuffle(shuffled);
-                result = shuffled.subList(0, count);
+                result.addAll(prioritized);
+                int remaining = count - prioritized.size();
+                result.addAll(randomPool.subList(0, Math.min(remaining, randomPool.size())));
             }
 
             return Result.success(result);
@@ -340,6 +352,7 @@ public class PublicTextController {
             dto.setTitle(text.getTitle());
             dto.setDifficulty(text.getDifficulty());
             dto.setAudioUrl(text.getAudioUrl());
+            dto.setCoverUrl(text.getCoverUrl());
             dto.setViewCount(text.getViewCount() != null ? text.getViewCount() : 0);
             dto.setLikeCount(text.getLikeCount());
             dto.setContentType(text.getContentType());

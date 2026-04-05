@@ -7,16 +7,25 @@ import com.english.exception.BusinessException;
 import com.english.service.UpdateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -28,6 +37,10 @@ public class UpdateController {
 
     private final UpdateService updateService;
     private final DynamicUpdateScheduler dynamicUpdateScheduler;
+
+    /** 部署历史日志文件路径（与 auto-update.sh 中 OPS_LOG_FILE 对应） */
+    @Value("${deploy.history.log:${user.home}/LangHack/logs/deploy-history.log}")
+    private String deployHistoryLogPath;
 
     @GetMapping("/config")
     public Result<UpdateConfig> getConfig() {
@@ -99,6 +112,40 @@ public class UpdateController {
         } catch (Exception e) {
             log.error("Failed to get update status", e);
             return Result.error("Failed to get update status. Please try again later.");
+        }
+    }
+
+    /**
+     * 获取部署历史记录（读取 auto-update.sh 写入的结构化日志）
+     * 日志格式：时间戳|事件类型|commit|描述
+     */
+    @GetMapping("/deploy-history")
+    public Result<List<Map<String, String>>> getDeployHistory(
+            @RequestParam(defaultValue = "50") int limit) {
+        try {
+            Path logPath = Paths.get(deployHistoryLogPath);
+            if (!Files.exists(logPath)) {
+                return Result.success(Collections.emptyList());
+            }
+            List<String> lines = Files.readAllLines(logPath);
+            int size = lines.size();
+            int from = Math.max(0, size - Math.min(limit, 200));
+            List<Map<String, String>> records = new ArrayList<>();
+            for (int i = size - 1; i >= from; i--) {
+                String line = lines.get(i).trim();
+                if (line.isEmpty()) continue;
+                String[] parts = line.split("\\|", 4);
+                Map<String, String> record = new HashMap<>();
+                record.put("time",   parts.length > 0 ? parts[0] : "");
+                record.put("event",  parts.length > 1 ? parts[1] : "");
+                record.put("commit", parts.length > 2 ? parts[2] : "");
+                record.put("desc",   parts.length > 3 ? parts[3] : "");
+                records.add(record);
+            }
+            return Result.success(records);
+        } catch (IOException e) {
+            log.error("Failed to read deploy history log", e);
+            return Result.error("读取部署历史失败");
         }
     }
 }

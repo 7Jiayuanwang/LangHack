@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.english.dto.Result;
+import com.english.service.SystemConfigService;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +39,24 @@ public class HealthController {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
+
+    /**
+     * 功能开关公开接口 — 前端根据此接口控制导航菜单的可见性
+     * 无需鉴权，仅返回 feature_toggle 分组的 key-value 映射
+     */
+    @GetMapping("/api/public/feature-toggles")
+    public Result<java.util.Map<String, String>> getFeatureToggles() {
+        try {
+            java.util.Map<String, String> toggles = systemConfigService.getByGroup("feature_toggle");
+            return Result.success(toggles != null ? toggles : new java.util.HashMap<>());
+        } catch (Exception e) {
+            logger.warn("获取功能开关失败: {}", e.getMessage());
+            return Result.success(new java.util.HashMap<>());
+        }
+    }
 
     @GetMapping("/api/health")
     public ResponseEntity<Map<String, Object>> health(

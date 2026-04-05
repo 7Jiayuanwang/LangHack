@@ -4,6 +4,8 @@ import com.english.entity.*;
 import com.english.mapper.*;
 import com.english.service.impl.AccessMetricsService;
 import com.english.service.impl.AiCallMetricsService;
+import com.english.service.impl.ElevationService;
+import com.english.service.impl.InMemoryLogService;
 import com.english.service.impl.SystemMetricsService;
 import com.english.test.TestUtils;
 import com.english.util.JwtUtil;
@@ -28,7 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("MonitoringController 单元测试")
+@DisplayName("test")
 class MonitoringControllerTest {
 
     private MockMvc mockMvc;
@@ -50,6 +52,9 @@ class MonitoringControllerTest {
     private AccessStatsDailyMapper dailyMapper;
 
     @Mock
+    private AccessLogMapper accessLogMapper;
+
+    @Mock
     private AiCallLogMapper aiCallLogMapper;
 
     @Mock
@@ -57,6 +62,12 @@ class MonitoringControllerTest {
 
     @Mock
     private JwtUtil jwtUtil;
+
+    @Mock
+    private ElevationService elevationService;
+
+    @Mock
+    private InMemoryLogService inMemoryLogService;
 
     @InjectMocks
     private MonitoringController monitoringController;
@@ -85,7 +96,7 @@ class MonitoringControllerTest {
     class RealtimeTests {
 
         @Test
-        @DisplayName("返回200及实时指标数据")
+        @DisplayName("test")
         void getRealTimeMetrics_returnsMetrics() throws Exception {
             // Arrange
             Map<String, Object> metrics = new LinkedHashMap<>();
@@ -107,7 +118,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("服务异常时返回错误信息")
+        @DisplayName("test")
         void getRealTimeMetrics_serviceException_returnsError() throws Exception {
             // Arrange
             when(accessMetricsService.getRealTimeMetrics())
@@ -128,7 +139,7 @@ class MonitoringControllerTest {
     class SystemMetricsTests {
 
         @Test
-        @DisplayName("返回200及系统指标数据")
+        @DisplayName("test")
         void getSystemMetrics_returnsMetrics() throws Exception {
             // Arrange
             Map<String, Object> metrics = new LinkedHashMap<>();
@@ -150,7 +161,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("服务异常时返回错误信息")
+        @DisplayName("test")
         void getSystemMetrics_serviceException_returnsError() throws Exception {
             // Arrange
             when(systemMetricsService.getSystemMetrics())
@@ -171,7 +182,7 @@ class MonitoringControllerTest {
     class HourlyStatsTests {
 
         @Test
-        @DisplayName("返回200及小时统计列表")
+        @DisplayName("test")
         void getHourlyStats_returnsList() throws Exception {
             // Arrange
             AccessStatsHourly stat1 = new AccessStatsHourly();
@@ -202,7 +213,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("默认参数 hours=24 — 无参数时使用默认值")
+        @DisplayName("test")
         void getHourlyStats_defaultHours() throws Exception {
             // Arrange
             when(hourlyMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -217,7 +228,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("Mapper异常时返回错误信息")
+        @DisplayName("test")
         void getHourlyStats_mapperException_returnsError() throws Exception {
             // Arrange
             when(hourlyMapper.selectList(any()))
@@ -239,7 +250,7 @@ class MonitoringControllerTest {
     class DailyStatsTests {
 
         @Test
-        @DisplayName("返回200及日统计列表")
+        @DisplayName("test")
         void getDailyStats_returnsList() throws Exception {
             // Arrange
             AccessStatsDaily stat1 = new AccessStatsDaily();
@@ -270,7 +281,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("Mapper异常时返回错误信息")
+        @DisplayName("test")
         void getDailyStats_mapperException_returnsError() throws Exception {
             // Arrange
             when(dailyMapper.selectList(any()))
@@ -292,47 +303,75 @@ class MonitoringControllerTest {
     class TopPagesTests {
 
         @Test
-        @DisplayName("返回200及热门页面数据")
-        void getTopPages_returnsTopPagesData() throws Exception {
+        @DisplayName("Returns live top pages for today")
+        void getTopPages_returnsLiveTopPagesData() throws Exception {
+            // Arrange
+            Map<String, Object> topPage = new HashMap<>();
+            topPage.put("uri", "/courses");
+            topPage.put("visit_count", 500);
+
+            when(accessLogMapper.topPagesByDateRange(any(), any(), eq(20)))
+                    .thenReturn(Collections.singletonList(topPage));
+
+            // Act & Assert
+            mockMvc.perform(get("/api/ops/monitoring/top-pages"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(200))
+                    .andExpect(jsonPath("$.data").isArray())
+                    .andExpect(jsonPath("$.data[0].uri").value("/courses"))
+                    .andExpect(jsonPath("$.data[0].count").value(500));
+
+            verify(accessLogMapper).topPagesByDateRange(any(), any(), eq(20));
+        }
+
+        @Test
+        @DisplayName("Normalizes stored historical top pages JSON")
+        void getTopPages_noData_returnsEmptyArray() throws Exception {
             // Arrange
             AccessStatsDaily daily = new AccessStatsDaily();
             daily.setId(1L);
             daily.setStatDate(LocalDate.of(2026, 3, 21));
-            daily.setTopPages("[{\"path\":\"/courses\",\"count\":500},{\"path\":\"/texts\",\"count\":300}]");
+            daily.setTopPages("[{\"path\":\"/courses\",\"count\":500},{\"uri\":\"/texts\",\"visit_count\":300}]");
 
             when(dailyMapper.selectOne(any())).thenReturn(daily);
 
             // Act & Assert
-            mockMvc.perform(get("/api/ops/monitoring/top-pages"))
+            mockMvc.perform(get("/api/ops/monitoring/top-pages")
+                            .param("date", "2026-03-21"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
-                    .andExpect(jsonPath("$.data").isNotEmpty());
-
-            verify(dailyMapper).selectOne(any());
+                    .andExpect(jsonPath("$.data").isArray())
+                    .andExpect(jsonPath("$.data[0].uri").value("/courses"))
+                    .andExpect(jsonPath("$.data[0].count").value(500))
+                    .andExpect(jsonPath("$.data[1].uri").value("/texts"))
+                    .andExpect(jsonPath("$.data[1].count").value(300));
         }
 
         @Test
-        @DisplayName("无数据时返回空JSON数组字符串")
-        void getTopPages_noData_returnsEmptyArray() throws Exception {
+        @DisplayName("Returns empty array when no historical data exists")
+        void getTopPages_noHistoricalData_returnsEmptyArray() throws Exception {
             // Arrange
             when(dailyMapper.selectOne(any())).thenReturn(null);
 
             // Act & Assert
-            mockMvc.perform(get("/api/ops/monitoring/top-pages"))
+            mockMvc.perform(get("/api/ops/monitoring/top-pages")
+                            .param("date", "2026-03-21"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
-                    .andExpect(jsonPath("$.data").value("[]"));
+                    .andExpect(jsonPath("$.data").isArray())
+                    .andExpect(jsonPath("$.data.length()").value(0));
         }
 
         @Test
-        @DisplayName("异常时返回错误信息")
+        @DisplayName("test")
         void getTopPages_exception_returnsError() throws Exception {
             // Arrange
             when(dailyMapper.selectOne(any()))
                     .thenThrow(new RuntimeException("DB error"));
 
-            // Act & Assert
-            mockMvc.perform(get("/api/ops/monitoring/top-pages"))
+            // Act & Assert — use a past date so the dailyMapper path is taken
+            mockMvc.perform(get("/api/ops/monitoring/top-pages")
+                            .param("date", "2026-03-21"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
                     .andExpect(jsonPath("$.message").value("获取热门页面失败"));
@@ -346,7 +385,7 @@ class MonitoringControllerTest {
     class AiCallsRealtimeTests {
 
         @Test
-        @DisplayName("返回200及AI调用实时统计")
+        @DisplayName("test")
         void getAiCallsRealtime_returnsStats() throws Exception {
             // Arrange
             Map<String, Object> stats = new LinkedHashMap<>();
@@ -381,7 +420,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("服务异常时返回错误信息")
+        @DisplayName("test")
         void getAiCallsRealtime_serviceException_returnsError() throws Exception {
             // Arrange
             when(aiCallMetricsService.getTodayStats())
@@ -402,7 +441,7 @@ class MonitoringControllerTest {
     class AiCallsDailyTests {
 
         @Test
-        @DisplayName("返回200及AI调用日统计列表")
+        @DisplayName("test")
         void getAiCallsDaily_returnsList() throws Exception {
             // Arrange
             AiCallStatsDaily stat1 = new AiCallStatsDaily();
@@ -438,7 +477,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("默认参数 days=30 — 无参数时使用默认值")
+        @DisplayName("test")
         void getAiCallsDaily_defaultDays() throws Exception {
             // Arrange
             when(aiCallStatsDailyMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -454,7 +493,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("Mapper异常时返回错误信息")
+        @DisplayName("test")
         void getAiCallsDaily_mapperException_returnsError() throws Exception {
             // Arrange
             when(aiCallStatsDailyMapper.selectList(any()))
@@ -476,7 +515,7 @@ class MonitoringControllerTest {
     class AiCallsRecentTests {
 
         @Test
-        @DisplayName("返回200及最近AI调用日志列表")
+        @DisplayName("test")
         void getAiCallsRecent_returnsLogs() throws Exception {
             // Arrange
             AiCallLog log1 = new AiCallLog();
@@ -517,7 +556,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("默认参数 limit=50 — 无参数时使用默认值")
+        @DisplayName("test")
         void getAiCallsRecent_defaultLimit() throws Exception {
             // Arrange
             when(aiCallLogMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -532,7 +571,7 @@ class MonitoringControllerTest {
         }
 
         @Test
-        @DisplayName("Mapper异常时返回错误信息")
+        @DisplayName("test")
         void getAiCallsRecent_mapperException_returnsError() throws Exception {
             // Arrange
             when(aiCallLogMapper.selectList(any()))

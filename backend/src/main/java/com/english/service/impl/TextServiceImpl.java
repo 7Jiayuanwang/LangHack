@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
+import com.english.datasource.UseMaster;
 import com.english.service.UnderlineService;
 import com.english.mapper.TextExerciseMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,7 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
     private TextExerciseMapper textExerciseMapper;
 
     @Override
+    @UseMaster
     public Map<String, Object> getTextsByPage(Map<String, Object> params) {
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
@@ -140,6 +142,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (text.getAudioUrl() != null) {
             updateWrapper.set("audio_url", text.getAudioUrl());
         }
+        if (text.getCoverUrl() != null) {
+            updateWrapper.set("cover_url", text.getCoverUrl());
+        }
         if (text.getTags() != null) {
             updateWrapper.set("tags", text.getTags());
         }
@@ -151,6 +156,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         }
         if (text.getIsFeatured() != null) {
             updateWrapper.set("is_featured", text.getIsFeatured());
+        }
+        if (text.getFeaturedPriority() != null) {
+            updateWrapper.set("featured_priority", text.getFeaturedPriority());
         }
 
         update(updateWrapper);

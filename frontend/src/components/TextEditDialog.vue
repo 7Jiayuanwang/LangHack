@@ -18,6 +18,44 @@
         <el-input v-model="formData.title" placeholder="请输入课文标题" />
       </el-form-item>
 
+      <!-- 封面图（优先展示） -->
+      <el-form-item label="封面图" prop="coverUrl">
+        <div class="cover-section">
+          <el-upload
+            class="cover-uploader"
+            :class="{ 'has-cover': formData.coverUrl }"
+            action="/api/media/upload?mediaType=IMAGE"
+            :headers="uploadHeaders"
+            :show-file-list="false"
+            :on-success="handleCoverSuccess"
+            :before-upload="beforeCoverUpload"
+            :on-error="handleCoverError"
+            drag
+          >
+            <div v-if="formData.coverUrl" class="cover-preview-wrap">
+              <img :src="formData.coverUrl" class="cover-preview" />
+              <div class="cover-overlay">
+                <el-icon :size="20"><Upload /></el-icon>
+                <span>点击更换</span>
+              </div>
+            </div>
+            <div v-else class="cover-placeholder">
+              <el-icon class="upload-icon" :size="32"><Picture /></el-icon>
+              <div class="upload-text">点击或拖拽上传封面图</div>
+              <div class="upload-hint">支持 JPG / PNG / GIF / WebP，不超过 10MB</div>
+            </div>
+          </el-upload>
+          <div v-if="formData.coverUrl" class="cover-actions">
+            <el-button type="primary" link @click="previewCover" size="small">
+              <el-icon><ZoomIn /></el-icon> 预览大图
+            </el-button>
+            <el-button type="danger" link @click="removeCover" size="small">
+              <el-icon><Delete /></el-icon> 删除封面
+            </el-button>
+          </div>
+        </div>
+      </el-form-item>
+
       <!-- 课程和单元选择（仅在没有传入unitId时显示） -->
       <el-form-item label="所属课程" v-if="!props.unitId">
         <el-select 
@@ -104,11 +142,27 @@
       </el-button>
     </template>
   </el-dialog>
+
+  <!-- 封面大图预览 -->
+  <el-dialog
+    v-model="coverPreviewVisible"
+    title="封面预览"
+    width="auto"
+    :modal-append-to-body="true"
+    :append-to-body="true"
+    class="cover-preview-dialog"
+  >
+    <div class="preview-image-wrap">
+      <img :src="formData.coverUrl" alt="封面预览" class="preview-full-image" />
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Plus, Upload, Picture, ZoomIn, Delete } from '@element-plus/icons-vue'
+import { getAuthHeader } from '@/utils/auth'
 import MarkdownEditor from './MarkdownEditor.vue'
 import { createText, updateText, getCourses, getUnitsByCourseId } from '@/api/admin'
 
@@ -153,6 +207,7 @@ const formData = reactive({
   difficulty: 'MEDIUM',
   tags: '',
   audioUrl: '',
+  coverUrl: '',
   isPublic: 1,
   courseId: null,
   unitId: props.unitId
@@ -184,6 +239,7 @@ watch(() => visible.value, (newVal) => {
     formData.difficulty = props.textData.difficulty || 'MEDIUM'
     formData.tags = props.textData.tags || ''
     formData.audioUrl = props.textData.audioUrl || ''
+    formData.coverUrl = props.textData.coverUrl || ''
     formData.isPublic = props.textData.isPublic != null ? props.textData.isPublic : 1
     formData.courseId = props.textData.courseId || null
     formData.unitId = props.textData.unitId || props.unitId
@@ -202,6 +258,7 @@ watch(() => visible.value, (newVal) => {
     formData.difficulty = 'MEDIUM'
     formData.tags = ''
     formData.audioUrl = ''
+    formData.coverUrl = ''
     formData.isPublic = 1
     formData.courseId = null
     formData.unitId = props.unitId
@@ -278,6 +335,53 @@ const loadUnitsByCourse = async (courseId) => {
   }
 }
 
+// 上传相关
+const uploadHeaders = computed(() => {
+  const headers = {}
+  const auth = getAuthHeader()
+  if (auth) {
+    headers['Authorization'] = auth
+  }
+  return headers
+})
+
+const beforeCoverUpload = (rawFile) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  if (!allowedTypes.includes(rawFile.type)) {
+    ElMessage.error('仅支持 JPG/PNG/GIF/WebP 格式的图片')
+    return false
+  }
+  if (rawFile.size / 1024 / 1024 > 10) {
+    ElMessage.error('图片大小不能超过 10MB')
+    return false
+  }
+  return true
+}
+
+const handleCoverSuccess = (response) => {
+  if (response.code === 200) {
+    const mediaId = response.data.mediaId
+    formData.coverUrl = `/api/media/${mediaId}/download`
+    ElMessage.success('封面上传成功')
+  } else {
+    ElMessage.error(response.message || '上传失败')
+  }
+}
+
+const handleCoverError = (err) => {
+  console.error('Upload error:', err)
+  ElMessage.error('文件上传失败，请检查网络或登录状态')
+}
+
+const removeCover = () => {
+  formData.coverUrl = ''
+}
+
+const coverPreviewVisible = ref(false)
+const previewCover = () => {
+  coverPreviewVisible.value = true
+}
+
 // 提交表单
 const handleSubmit = async () => {
   if (!formRef.value) return
@@ -305,6 +409,7 @@ const handleSubmit = async () => {
         difficulty: formData.difficulty,
         tags: formData.tags,
         audioUrl: formData.audioUrl,
+        coverUrl: formData.coverUrl,
         isPublic: formData.isPublic,
         unitId: formData.unitId
       }
@@ -352,5 +457,132 @@ onMounted(() => {
 
 :deep(.markdown-editor) {
   height: 400px;
+}
+
+/* ── 封面上传区域 ── */
+.cover-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.cover-uploader {
+  width: 100%;
+  max-width: 420px;
+}
+
+:deep(.cover-uploader .el-upload-dragger) {
+  width: 100%;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed #dcdfe6;
+  border-radius: 12px;
+  background: #fafbfc;
+  transition: all 0.3s ease;
+  padding: 0;
+  overflow: hidden;
+}
+
+:deep(.cover-uploader .el-upload-dragger:hover) {
+  border-color: var(--el-color-primary);
+  background: #f0f5ff;
+}
+
+:deep(.cover-uploader.has-cover .el-upload-dragger) {
+  border: none;
+  padding: 0;
+  min-height: auto;
+}
+
+/* 占位符（未上传时） */
+.cover-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  color: #8c939d;
+}
+
+.upload-icon {
+  color: #c0c4cc;
+  transition: color 0.3s;
+}
+
+:deep(.cover-uploader .el-upload-dragger:hover) .upload-icon {
+  color: var(--el-color-primary);
+}
+
+.upload-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #606266;
+}
+
+.upload-hint {
+  font-size: 12px;
+  color: #a8abb2;
+}
+
+/* 已上传预览 */
+.cover-preview-wrap {
+  position: relative;
+  width: 100%;
+  line-height: 0;
+}
+
+.cover-preview {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  display: block;
+  border-radius: 10px;
+}
+
+.cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 10px;
+}
+
+.cover-preview-wrap:hover .cover-overlay {
+  opacity: 1;
+}
+
+/* 操作按钮行 */
+.cover-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* 大图预览弹窗 */
+.preview-image-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.preview-full-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 </style>

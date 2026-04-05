@@ -6,10 +6,13 @@ import com.english.entity.AccessStatsDaily;
 import com.english.entity.AccessStatsHourly;
 import com.english.entity.AiCallLog;
 import com.english.entity.AiCallStatsDaily;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.mapper.*;
 import com.english.service.impl.AccessMetricsService;
 import com.english.service.impl.AiCallMetricsService;
 import com.english.service.impl.ElevationService;
+import com.english.service.impl.InMemoryLogService;
 import com.english.service.impl.SystemMetricsService;
 import com.english.util.JwtUtil;
 import org.slf4j.Logger;
@@ -21,6 +24,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +37,7 @@ import java.util.Map;
 public class MonitoringController {
 
     private static final Logger logger = LoggerFactory.getLogger(MonitoringController.class);
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @Autowired
     private AccessMetricsService accessMetricsService;
@@ -48,6 +55,9 @@ public class MonitoringController {
     private AccessStatsDailyMapper dailyMapper;
 
     @Autowired
+    private AccessLogMapper accessLogMapper;
+
+    @Autowired
     private AiCallLogMapper aiCallLogMapper;
 
     @Autowired
@@ -58,6 +68,9 @@ public class MonitoringController {
 
     @Autowired
     private ElevationService elevationService;
+
+    @Autowired
+    private InMemoryLogService inMemoryLogService;
 
     @GetMapping("/realtime")
     public Result<?> getRealTimeMetrics() {
@@ -154,20 +167,112 @@ public class MonitoringController {
     @GetMapping("/top-pages")
     public Result<?> getTopPages(@RequestParam(required = false) String date) {
         try {
-            LocalDate targetDate = date != null ? LocalDate.parse(date) : LocalDate.now().minusDays(1);
+            LocalDate targetDate = date != null ? LocalDate.parse(date) : LocalDate.now();
+
+            if (targetDate.equals(LocalDate.now())) {
+                LocalDateTime startTime = targetDate.atStartOfDay();
+                LocalDateTime endTime = LocalDateTime.now().plusSeconds(1);
+                List<Map<String, Object>> liveTopPages = accessLogMapper.topPagesByDateRange(startTime, endTime, 20);
+                return Result.success(normalizeTopPages(liveTopPages));
+            }
 
             QueryWrapper<AccessStatsDaily> wrapper = new QueryWrapper<>();
             wrapper.eq("stat_date", targetDate);
             AccessStatsDaily daily = dailyMapper.selectOne(wrapper);
 
             if (daily != null && daily.getTopPages() != null) {
-                return Result.success(daily.getTopPages());
+                return Result.success(parseStoredTopPages(daily.getTopPages()));
             }
-            return Result.success("[]");
+            return Result.success(Collections.emptyList());
         } catch (Exception e) {
             logger.error("获取热门页面失败", e);
             return Result.error("获取热门页面失败");
         }
+    }
+
+    private List<Map<String, Object>> parseStoredTopPages(String topPagesJson) {
+        if (topPagesJson == null || topPagesJson.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        try {
+            List<Map<String, Object>> rawPages = objectMapper.readValue(
+                    topPagesJson,
+                    new TypeReference<List<Map<String, Object>>>() {}
+            );
+            return normalizeTopPages(rawPages);
+        } catch (Exception e) {
+            logger.warn("Failed to parse stored top pages JSON", e);
+            return Collections.emptyList();
+        }
+    }
+
+    private List<Map<String, Object>> normalizeTopPages(List<Map<String, Object>> topPages) {
+        if (topPages == null || topPages.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Map<String, Object>> normalized = new ArrayList<>();
+        for (Map<String, Object> page : topPages) {
+            if (page == null || page.isEmpty()) {
+                continue;
+            }
+
+            String uri = firstNonBlank(page.get("uri"), page.get("path"));
+            if (uri == null) {
+                continue;
+            }
+
+            Map<String, Object> item = new HashMap<>();
+            item.put("uri", uri);
+            item.put("count", toLong(page.get("count"), page.get("visitCount"), page.get("visit_count")));
+            normalized.add(item);
+        }
+
+        return normalized;
+    }
+
+    private String firstNonBlank(Object... values) {
+        if (values == null) {
+            return null;
+        }
+
+        for (Object value : values) {
+            if (value == null) {
+                continue;
+            }
+
+            String text = value.toString().trim();
+            if (!text.isEmpty() && !"null".equalsIgnoreCase(text)) {
+                return text;
+            }
+        }
+
+        return null;
+    }
+
+    private long toLong(Object... values) {
+        if (values == null) {
+            return 0L;
+        }
+
+        for (Object value : values) {
+            if (value == null) {
+                continue;
+            }
+
+            if (value instanceof Number) {
+                return ((Number) value).longValue();
+            }
+
+            try {
+                return Long.parseLong(value.toString().trim());
+            } catch (NumberFormatException ignored) {
+                // Try next candidate.
+            }
+        }
+
+        return 0L;
     }
 
     // ========== AI Call Monitoring ==========
@@ -213,6 +318,24 @@ public class MonitoringController {
         } catch (Exception e) {
             logger.error("获取AI调用记录失败", e);
             return Result.error("获取AI调用记录失败");
+        }
+    }
+
+    // ========== Backend Application Logs ==========
+
+    @GetMapping("/app-logs")
+    public Result<?> getApplicationLogs(
+            @RequestParam(defaultValue = "200") int limit,
+            @RequestParam(required = false) String level,
+            @RequestParam(required = false) String keyword) {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("entries", inMemoryLogService.getRecentLogs(limit, level, keyword));
+            data.put("levelCounts", inMemoryLogService.getLevelCounts());
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("获取应用日志失败", e);
+            return Result.error("获取应用日志失败");
         }
     }
 }

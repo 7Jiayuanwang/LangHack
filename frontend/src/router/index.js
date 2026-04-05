@@ -133,6 +133,12 @@ const routes = [
         component: () => import("@/views/ops/Update.vue"),
         meta: { title: "系统更新", roles: ["OPS", "ADMIN"] },
       },
+      {
+        path: "feature-toggles",
+        name: "OpsFeatureToggles",
+        component: () => import("@/views/ops/FeatureToggles.vue"),
+        meta: { title: "功能开关", roles: ["OPS", "ADMIN"] },
+      },
     ],
   },
   {
@@ -234,6 +240,12 @@ const routes = [
         name: "StudentArticles",
         component: () => import("@/views/student/Articles.vue"),
         meta: { roles: ["STUDENT", "USER"] },
+      },
+      {
+        path: "my-study",
+        name: "StudentMyStudy",
+        component: () => import("@/views/student/MyStudy.vue"),
+        meta: { title: "我的学习", roles: ["STUDENT", "USER"] },
       },
       {
         path: "word-test",

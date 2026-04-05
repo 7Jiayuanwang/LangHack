@@ -80,11 +80,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public User getUserByUsername(String username) {
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("username", username);
-        queryWrapper.eq("deleted", 0);
+        // 兼容 deleted=0 和 deleted IS NULL（防止直接插入的用户 deleted 字段为 NULL）
+        queryWrapper.and(w -> w.eq("deleted", 0).or().isNull("deleted"));
         return getOne(queryWrapper);
     }
 
     @Override
+    @UseMaster
     public Map<String, Object> getUsersByPage(Map<String, Object> params) {
         int page = params.get("page") != null ? ((Number) params.get("page")).intValue() : 1;
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;

@@ -5,6 +5,7 @@ import com.english.entity.AiProvider;
 import com.english.exception.BusinessException;
 import com.english.mapper.AiProviderMapper;
 import com.english.service.AiProviderService;
+import com.english.datasource.UseMaster;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -52,7 +53,7 @@ public class AiProviderServiceImpl implements AiProviderService {
             String apiKey = env.getProperty("AI_TRANSLATE_API_KEY", "").trim();
             String model  = env.getProperty("AI_TRANSLATE_MODEL", "gpt-3.5-turbo").trim();
             if (!apiUrl.isEmpty() && !apiKey.isEmpty()) {
-                insertSeedProvider("translate", "默认服务商 (env)", apiUrl, apiKey, model, 3, "由部署脚本环境变量自动创建");
+                insertSeedProvider("translate", "默认服务商 (env)", apiUrl, apiKey, null, model, 3, "由部署脚本环境变量自动创建");
             }
 
             // OpenRouter（可选）
@@ -60,28 +61,24 @@ public class AiProviderServiceImpl implements AiProviderService {
             if (!orKey.isEmpty()) {
                 insertSeedProvider("translate", "OpenRouter",
                     "https://openrouter.ai/api/v1/chat/completions",
-                    orKey, "openai/gpt-3.5-turbo", 2, "由部署脚本 OPENROUTER_API_KEY 自动创建");
+                    orKey, null, "openai/gpt-3.5-turbo", 2, "由部署脚本 OPENROUTER_API_KEY 自动创建");
             }
 
-            // HiAgent（可选）
-            String haKey = env.getProperty("HIAGENT_API_KEY", "").trim();
-            if (!haKey.isEmpty()) {
-                insertSeedProvider("translate", "HiAgent",
-                    "https://api.hiagent.cn/v1/chat/completions",
-                    haKey, "gpt-3.5-turbo", 2, "由部署脚本 HIAGENT_API_KEY 自动创建");
-            }
+            // HiAgent 走专有协议（非 OpenAI 兼容），不加入 ai_provider 负载均衡池
+            // 其配置通过 HIAGENT_API_KEY / HIAGENT_APP_ID / HIAGENT_QA_APP_ID 环境变量直接注入 HiAgentConfig
         } catch (Exception e) {
             log.warn("[AiProvider] 种子初始化失败（可忽略）: {}", e.getMessage());
         }
     }
 
     private void insertSeedProvider(String service, String name, String apiUrl,
-                                     String apiKey, String model, int weight, String remark) {
+                                     String apiKey, String appId, String model, int weight, String remark) {
         AiProvider p = new AiProvider();
         p.setService(service);
         p.setName(name);
         p.setApiUrl(apiUrl);
         p.setApiKey(apiKey);
+        p.setAppId(appId);
         p.setModel(model);
         p.setWeight(weight);
         p.setEnabled(1);
@@ -96,6 +93,7 @@ public class AiProviderServiceImpl implements AiProviderService {
     // ------------------------------------------------------------------ query
 
     @Override
+    @UseMaster
     public List<AiProvider> listAll() {
         return mapper.selectList(
             new LambdaQueryWrapper<AiProvider>()
@@ -105,6 +103,7 @@ public class AiProviderServiceImpl implements AiProviderService {
     }
 
     @Override
+    @UseMaster
     public List<AiProvider> listByService(String service) {
         return mapper.selectList(
             new LambdaQueryWrapper<AiProvider>()
@@ -120,6 +119,8 @@ public class AiProviderServiceImpl implements AiProviderService {
         if (provider.getWeight() == null) provider.setWeight(1);
         if (provider.getEnabled() == null) provider.setEnabled(1);
         if (provider.getTimeoutMs() == null) provider.setTimeoutMs(30000);
+        if (provider.getModel() == null || provider.getModel().isEmpty())
+            throw new BusinessException("模型名称不能为空");
         provider.setCreatedTime(LocalDateTime.now());
         provider.setUpdatedTime(LocalDateTime.now());
         mapper.insert(provider);
@@ -212,16 +213,30 @@ public class AiProviderServiceImpl implements AiProviderService {
         body.put("model", p.getModel());
         body.put("messages", Collections.singletonList(msg));
 
+        String rawUrl = p.getApiUrl() != null ? p.getApiUrl().stripTrailing() : "";
+        if (!rawUrl.contains("/chat/completions")) {
+            if (rawUrl.endsWith("/")) rawUrl = rawUrl.substring(0, rawUrl.length() - 1);
+            rawUrl = rawUrl + "/v1/chat/completions";
+        }
+        String testUrl = rawUrl;
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("input", input);
         long start = System.currentTimeMillis();
         try {
             ResponseEntity<String> resp = rt.exchange(
-                p.getApiUrl(), HttpMethod.POST,
+                testUrl, HttpMethod.POST,
                 new HttpEntity<>(body, headers), String.class);
             long latency = System.currentTimeMillis() - start;
             if (resp.getStatusCode() == HttpStatus.OK && resp.getBody() != null) {
-                JsonNode root = objectMapper.readTree(resp.getBody());
+                String body2 = resp.getBody().stripLeading();
+                if (body2.startsWith("<")) {
+                    result.put("success", false);
+                    result.put("error", "接口 URL 配置有误：服务端返回了 HTML 页面而非 JSON，请检查 API URL 是否为正确的聊天补全端点（如 .../v1/chat/completions）");
+                    result.put("latencyMs", latency);
+                    return result;
+                }
+                JsonNode root = objectMapper.readTree(body2);
                 String output = root.path("choices").get(0).path("message").path("content").asText("").trim();
                 result.put("success", true);
                 result.put("output", output);

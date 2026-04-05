@@ -514,8 +514,10 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         BackupRecord lastBackup = getOne(lastWrapper, false);
         stats.put("lastBackupTime", lastBackup != null ? lastBackup.getCreatedTime() : null);
 
-        stats.put("backupEnabled", backupEnabled);
-        stats.put("incrementalEnabled", incrementalEnabled);
+        // Read from effective DB config (not @Value defaults) so frontend stays in sync after config changes
+        BackupConfig effectiveConfig = getEffectiveConfig();
+        stats.put("backupEnabled", Boolean.TRUE.equals(effectiveConfig.getAutoBackupEnabled()));
+        stats.put("incrementalEnabled", Boolean.TRUE.equals(effectiveConfig.getIncrementalEnabled()));
 
         return stats;
     }

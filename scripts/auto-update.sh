@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# LangHack 自动更新脚本 (v2.0)
+# LangHack 自动更新脚本 (v2.1)
 # 定时从 GitHub 拉取最新代码，检测变更后自动重新构建并部署
 #
 # v2.0 新增:
@@ -8,6 +8,12 @@
 #   - 数据库备份: 更新前自动 mysqldump
 #   - .env 保护: 备份 + 验证关键配置
 #   - 自动回滚: 构建失败 → revert git / 健康检查失败 → 旧版本重建
+#
+# v2.1 新增:
+#   - 部署记录文件: 以实际成功部署的 commit 为基准判断是否需要更新
+#     (避免构建失败后误判已更新、回滚后死循环触发等问题)
+#   - 回滚暂停机制: 回滚成功后暂停自动更新，防止同一有问题 commit 循环拉取
+#   - 运维日志增强: 更新/回滚结果写入结构化日志，方便运维端查阅
 #
 # 用法:
 #   chmod +x scripts/auto-update.sh
@@ -28,6 +34,13 @@ LOG_FILE="${LOG_FILE:-/var/log/langhack-update.log}"
 LOCK_FILE="/tmp/langhack-update.lock"
 INTERACTIVE=false
 WEBHOOK_URL="${WEBHOOK_URL:-}"
+
+# 部署记录文件：记录上次成功部署的 commit hash
+# 用于替代 git HEAD 作为「已部署版本」的基准
+DEPLOY_RECORD_FILE="${DEPLOY_RECORD_FILE:-$PROJECT_ROOT/.last-deployed-commit}"
+
+# 运维结构化日志：供运维端页面查阅
+OPS_LOG_FILE="${OPS_LOG_FILE:-$PROJECT_ROOT/logs/deploy-history.log}"
 
 # .env 文件路径：优先 docker/.env（由 deploy.sh 生成），回退到项目根目录 .env
 if [ -f "$PROJECT_ROOT/docker/.env" ]; then
@@ -59,6 +72,16 @@ PRE_BACKUP="${AUTO_UPDATE_PRE_BACKUP:-true}"
 BACKUP_DIR="${BACKUP_DIR:-$PROJECT_ROOT/backups}"
 HEALTH_CHECK_TIMEOUT=120
 ENV_BACKUP_KEEP=10
+
+# ── 运维结构化日志函数 ────────────────────────────────
+# 写入 deploy-history.log，格式：时间戳|事件类型|commit|描述
+ops_log() {
+    local event="$1"   # SUCCESS / ROLLBACK / SKIP / ERROR
+    local commit="$2"
+    local desc="$3"
+    mkdir -p "$(dirname "$OPS_LOG_FILE")"
+    echo "$(date '+%Y-%m-%d %H:%M:%S')|${event}|${commit}|${desc}" >> "$OPS_LOG_FILE"
+}
 
 # ── 参数解析 ──────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -152,21 +175,27 @@ notify() {
 enable_maintenance() {
     [ "$MAINTENANCE_MODE" != "true" ] && return 0
     log "MAINTENANCE: 开启维护模式..."
-    # 尝试在 frontend 或 app 容器中创建标记文件
-    docker compose -f "$COMPOSE_FILE" exec -T frontend \
-        touch /usr/share/nginx/html/maintenance.flag 2>/dev/null || \
-    docker compose -f "$COMPOSE_FILE" exec -T app \
-        touch /usr/share/nginx/html/maintenance.flag 2>/dev/null || \
-    log "WARN: 无法开启维护模式（frontend 容器可能未运行）"
+    # MSYS_NO_PATHCONV=1 防止 Git Bash 将容器内绝对路径转换为 Windows 路径
+    local container
+    container=$(docker compose -f "$COMPOSE_FILE" ps -q frontend 2>/dev/null || \
+                docker compose -f "$COMPOSE_FILE" ps -q app 2>/dev/null || true)
+    if [ -n "$container" ]; then
+        MSYS_NO_PATHCONV=1 docker exec "$container" touch /usr/share/nginx/html/maintenance.flag 2>/dev/null || \
+            log "WARN: 无法开启维护模式（写入标记文件失败）"
+    else
+        log "WARN: 无法开启维护模式（frontend 容器可能未运行）"
+    fi
 }
 
 disable_maintenance() {
     [ "$MAINTENANCE_MODE" != "true" ] && return 0
     log "MAINTENANCE: 关闭维护模式..."
-    docker compose -f "$COMPOSE_FILE" exec -T frontend \
-        rm -f /usr/share/nginx/html/maintenance.flag 2>/dev/null || \
-    docker compose -f "$COMPOSE_FILE" exec -T app \
-        rm -f /usr/share/nginx/html/maintenance.flag 2>/dev/null || true
+    local container
+    container=$(docker compose -f "$COMPOSE_FILE" ps -q frontend 2>/dev/null || \
+                docker compose -f "$COMPOSE_FILE" ps -q app 2>/dev/null || true)
+    if [ -n "$container" ]; then
+        MSYS_NO_PATHCONV=1 docker exec "$container" rm -f /usr/share/nginx/html/maintenance.flag 2>/dev/null || true
+    fi
 }
 
 # ── .env 备份 & 验证 ─────────────────────────────────
@@ -284,6 +313,134 @@ wait_for_health() {
     return 1
 }
 
+# ── AI 服务商配置完整性检查 ──────────────────────────────
+# 检查 ai_provider 表中是否存在 api_key 被脱敏覆盖或 model 为空的记录
+# 这类问题不影响服务启动，但会导致翻译等功能静默失败，故只告警不回滚
+
+verify_ai_providers() {
+    local db_password="${DB_PASSWORD:-}"
+    if [ -z "$db_password" ] && [ -f "$ENV_FILE" ]; then
+        db_password=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- || echo "")
+    fi
+    if [ -z "$db_password" ]; then
+        log "WARN: 未找到数据库密码，跳过 AI 服务商配置检查"
+        return 0
+    fi
+
+    local mysql_container
+    mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.master|mysql-master' | head -1 || echo "")
+    if [ -z "$mysql_container" ]; then
+        mysql_container=$(docker ps --format '{{.Names}}' | grep mysql | head -1 || echo "")
+    fi
+    if [ -z "$mysql_container" ]; then
+        log "WARN: 未找到 MySQL 容器，跳过 AI 服务商配置检查"
+        return 0
+    fi
+
+    log "AI_PROVIDER: 检查服务商配置完整性..."
+
+    # 检查 api_key 含 **** 的记录（脱敏值被写回数据库）
+    local masked_count
+    masked_count=$(docker exec "$mysql_container" \
+        mysql -uroot -p"$db_password" english_learning \
+        -sN -e "SELECT COUNT(*) FROM ai_provider WHERE api_key LIKE '%****%' AND enabled=1;" \
+        2>/dev/null || echo "0")
+    masked_count=$(echo "$masked_count" | tr -d '[:space:]')
+
+    if [ "${masked_count:-0}" -gt 0 ]; then
+        log "WARN: 发现 ${masked_count} 条 AI 服务商记录的 api_key 含脱敏占位符 (****)"
+        log "WARN: 这些服务商将无法正常调用，请在运维面板重新填写真实 API Key"
+        notify "部署警告: ${masked_count} 条 AI 服务商 api_key 疑似被脱敏值覆盖，翻译等功能可能失败"
+        ops_log "WARN" "$(git rev-parse --short HEAD)" "AI 服务商 api_key 含脱敏值，需人工修复"
+    fi
+
+    # 检查 model 为空的启用记录
+    local empty_model_count
+    empty_model_count=$(docker exec "$mysql_container" \
+        mysql -uroot -p"$db_password" english_learning \
+        -sN -e "SELECT COUNT(*) FROM ai_provider WHERE (model IS NULL OR model='') AND enabled=1;" \
+        2>/dev/null || echo "0")
+    empty_model_count=$(echo "$empty_model_count" | tr -d '[:space:]')
+
+    if [ "${empty_model_count:-0}" -gt 0 ]; then
+        log "WARN: 发现 ${empty_model_count} 条 AI 服务商记录的 model 字段为空"
+        log "WARN: 调用这些服务商时将触发 API 400 错误，请在运维面板补全 model 名称"
+        notify "部署警告: ${empty_model_count} 条 AI 服务商 model 字段为空，翻译等功能可能失败"
+        ops_log "WARN" "$(git rev-parse --short HEAD)" "AI 服务商 model 字段为空，需人工修复"
+    fi
+
+    if [ "${masked_count:-0}" -eq 0 ] && [ "${empty_model_count:-0}" -eq 0 ]; then
+        log "AI_PROVIDER: 配置检查通过 ✓"
+    fi
+}
+
+# ── Flyway 迁移验证 ───────────────────────────────────
+# 对比代码中最高迁移版本号 vs 数据库中已成功执行的最高版本号
+# 不一致说明迁移未执行（通常是镜像未重建），返回非零触发回滚
+
+verify_flyway_migrations() {
+    log "FLYWAY: 验证数据库迁移状态..."
+
+    # 从 .env 获取数据库密码
+    local db_password="${DB_PASSWORD:-}"
+    if [ -z "$db_password" ] && [ -f "$ENV_FILE" ]; then
+        db_password=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- || echo "")
+    fi
+    if [ -z "$db_password" ]; then
+        log "WARN: 未找到数据库密码，跳过 Flyway 验证"
+        return 0
+    fi
+
+    # 找到 mysql-master 容器名
+    local mysql_container
+    mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.master|mysql-master' | head -1 || echo "")
+    if [ -z "$mysql_container" ]; then
+        # 回退：找任意 mysql 容器
+        mysql_container=$(docker ps --format '{{.Names}}' | grep mysql | head -1 || echo "")
+    fi
+    if [ -z "$mysql_container" ]; then
+        log "WARN: 未找到 MySQL 容器，跳过 Flyway 验证"
+        return 0
+    fi
+
+    # 代码中最高迁移版本号（从文件名提取，如 V11__xxx.sql → 11）
+    local migration_dir="$PROJECT_ROOT/backend/src/main/resources/db/migration"
+    if [ ! -d "$migration_dir" ]; then
+        log "WARN: 迁移目录不存在 ($migration_dir)，跳过验证"
+        return 0
+    fi
+    local code_max_version
+    code_max_version=$(ls "$migration_dir"/V*.sql 2>/dev/null \
+        | sed 's|.*/V\([0-9]*\)__.*|\1|' \
+        | sort -n | tail -1 || echo "0")
+
+    if [ "$code_max_version" = "0" ]; then
+        log "WARN: 未找到迁移脚本，跳过验证"
+        return 0
+    fi
+
+    # 数据库中已成功执行的最高版本号
+    local db_max_version
+    db_max_version=$(docker exec "$mysql_container" \
+        mysql -uroot -p"$db_password" english_learning \
+        -sN -e "SELECT COALESCE(MAX(CAST(version AS UNSIGNED)), 0) FROM flyway_schema_history WHERE success = 1;" \
+        2>/dev/null || echo "0")
+    db_max_version=$(echo "$db_max_version" | tr -d '[:space:]')
+
+    log "FLYWAY: 代码最高版本=V${code_max_version}，数据库已执行=V${db_max_version}"
+
+    if [ "$db_max_version" -lt "$code_max_version" ]; then
+        log "ERROR: Flyway 迁移不完整！代码需要 V${code_max_version}，数据库仅执行到 V${db_max_version}"
+        log "ERROR: 可能原因：后端镜像未重新构建，Flyway 未感知到新迁移脚本"
+        notify "部署警告: Flyway 迁移未完整执行 (代码 V${code_max_version} vs 数据库 V${db_max_version})，已触发回滚"
+        ops_log "ERROR" "$(git rev-parse --short HEAD)" "Flyway 迁移不完整: 代码 V${code_max_version} vs DB V${db_max_version}"
+        return 1
+    fi
+
+    log "FLYWAY: 迁移验证通过 ✓ (V${db_max_version})"
+    return 0
+}
+
 # ── 回滚 ─────────────────────────────────────────────
 
 rollback_to_old_version() {
@@ -321,10 +478,15 @@ rollback_to_old_version() {
     if wait_for_health 120; then
         log "ROLLBACK: 旧版本恢复成功 ✓"
         notify "回滚成功: 已恢复到 ${old_commit:0:8}"
+        # 写入回滚暂停标记，防止下次 cron 再次拉取同一有问题的 commit
+        echo "ROLLBACK:${old_commit}" > "$DEPLOY_RECORD_FILE"
+        ops_log "ROLLBACK" "${old_commit:0:8}" "健康检查失败，已回滚并暂停自动更新。恢复请执行: rm '$DEPLOY_RECORD_FILE'"
+        disable_maintenance
         return 0
     else
         log "CRITICAL: 回滚后健康检查仍失败！需要人工介入"
         notify "紧急: 回滚后服务仍不可用，请立即检查！"
+        ops_log "ERROR" "${old_commit:0:8}" "CRITICAL: 回滚后健康检查仍失败，需要人工介入"
         return 1
     fi
 }
@@ -390,8 +552,35 @@ fi
 LOCAL_HASH=$(git rev-parse HEAD)
 REMOTE_HASH=$(git rev-parse "origin/$BRANCH")
 
-if [ "$LOCAL_HASH" = "$REMOTE_HASH" ]; then
-    log "INFO: 已是最新，无需更新 (commit: ${LOCAL_HASH:0:8})"
+# 读取上次成功部署的 commit（部署记录文件）
+# 若文件不存在，则回退到 git HEAD 作为初始基准
+if [ -f "$DEPLOY_RECORD_FILE" ]; then
+    DEPLOYED_HASH=$(cat "$DEPLOY_RECORD_FILE" | tr -d '[:space:]')
+    # 若记录文件内容是 ROLLBACK: 前缀，说明上次是回滚状态
+    if [[ "$DEPLOYED_HASH" == ROLLBACK:* ]]; then
+        ROLLED_BACK_TO="${DEPLOYED_HASH#ROLLBACK:}"
+        REMOTE_HASH_CHECK=$(git rev-parse "origin/$BRANCH")
+        if [ "$REMOTE_HASH_CHECK" = "$ROLLED_BACK_TO" ]; then
+            # 上游没有新提交，远程仍是失败的那个 commit，继续暂停
+            log "SKIP: 检测到回滚暂停标记 (回滚至 ${ROLLED_BACK_TO:0:8})，远程无新提交，跳过"
+            log "      如需强制恢复自动更新，请手动执行: rm '$DEPLOY_RECORD_FILE'"
+            ops_log "SKIP" "${ROLLED_BACK_TO:0:8}" "回滚暂停中（远程无新提交），跳过自动更新"
+            exit 0
+        else
+            # 上游已有新提交，自动解除暂停，尝试更新
+            log "INFO: 检测到上游有新提交 (${REMOTE_HASH_CHECK:0:8})，自动解除回滚暂停，尝试更新"
+            DEPLOYED_HASH="$ROLLED_BACK_TO"
+        fi
+    fi
+else
+    # 首次运行：以当前 git HEAD 初始化部署记录
+    DEPLOYED_HASH="$LOCAL_HASH"
+    echo "$DEPLOYED_HASH" > "$DEPLOY_RECORD_FILE"
+    log "INFO: 初始化部署记录文件 (commit: ${DEPLOYED_HASH:0:8})"
+fi
+
+if [ "$DEPLOYED_HASH" = "$REMOTE_HASH" ]; then
+    log "INFO: 已是最新部署版本，无需更新 (commit: ${DEPLOYED_HASH:0:8})"
     exit 0
 fi
 
@@ -399,16 +588,17 @@ fi
 # 检测到更新，开始完整更新流程
 # ══════════════════════════════════════════════════════
 log "UPDATE: 检测到新提交！"
-log "  本地: ${LOCAL_HASH:0:8}"
-log "  远程: ${REMOTE_HASH:0:8}"
+log "  已部署: ${DEPLOYED_HASH:0:8}"
+log "  远程:   ${REMOTE_HASH:0:8}"
 
 # 显示新增的提交记录
 log "──── 新提交列表 ────"
-git log --oneline "$LOCAL_HASH".."$REMOTE_HASH" | head -20
+git log --oneline "$DEPLOYED_HASH".."$REMOTE_HASH" | head -20
 log "────────────────────"
 
 # ① 记录当前版本（用于回滚）
-OLD_COMMIT="$LOCAL_HASH"
+PRE_PULL_COMMIT="$LOCAL_HASH"   # 保存 pull 前的 HEAD，用于 git checkout 回滚
+OLD_COMMIT="$DEPLOYED_HASH"     # 用已部署 commit 作为 diff 基准，检测本次变更范围
 
 # ② 开启维护模式
 enable_maintenance
@@ -474,9 +664,11 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
         log "ERROR: 构建失败，回退代码"
         notify "自动更新失败: Docker 构建失败，正在回退代码..."
         # 构建失败 → 旧容器未受影响，只需 revert git
-        git checkout "$OLD_COMMIT" --force --quiet 2>/dev/null || true
+        git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+        # 部署记录文件不更新，保持指向上次成功部署的 commit
         disable_maintenance
-        notify "已回退到 ${OLD_COMMIT:0:8}，旧服务继续运行"
+        notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
+        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
         exit 1
     fi
 
@@ -484,27 +676,46 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
     log "INFO: 启动新容器..."
     docker compose -f "$COMPOSE_FILE" up -d $SERVICES
 
+    # ⑩.5 Flyway 迁移验证：确认所有迁移脚本均已成功执行
+    if [ "$REBUILD_BACKEND" = true ]; then
+        verify_flyway_migrations || {
+            log "ERROR: Flyway 迁移验证失败，启动自动回滚..."
+            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+            exit 1
+        }
+    fi
+
     # ⑪ 健康检查
     if wait_for_health $HEALTH_CHECK_TIMEOUT; then
-        # ⑫ 成功！关闭维护模式
+        # ⑫ 成功！关闭维护模式并更新部署记录
         disable_maintenance
+
+        NEW_COMMIT=$(git rev-parse HEAD)
+        echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+
+        # ⑫.5 数据完整性告警检查（不触发回滚，仅告警）
+        verify_ai_providers
 
         log "SUCCESS: 服务已更新并重启"
         log "  更新服务: $SERVICES"
         log "  当前版本: $(git rev-parse --short HEAD)"
         log "  提交信息: $(git log -1 --format='%s')"
+        ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "$(git log -1 --format='%s') [服务: $SERVICES]"
 
         notify "自动更新成功\n版本: $(git rev-parse --short HEAD)\n提交: $(git log -1 --format='%s')\n服务: $SERVICES"
     else
         # 健康检查失败 → 自动回滚
         log "ERROR: 新版本健康检查失败，启动自动回滚..."
-        rollback_to_old_version "$OLD_COMMIT" "$SERVICES"
+        rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
         # disable_maintenance 在 rollback 内部或 trap cleanup 中处理
         exit 1
     fi
 else
     log "INFO: 变更不涉及前后端代码（可能是文档/脚本），跳过重建"
-    # 无需重建，直接关闭维护模式
+    # 无需重建，更新部署记录到最新 commit，直接关闭维护模式
+    NEW_COMMIT=$(git rev-parse HEAD)
+    echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+    ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "仅文档/脚本变更，跳过重建"
     disable_maintenance
 fi
 

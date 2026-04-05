@@ -4,6 +4,7 @@ import com.english.test.TestUtils;
 import com.english.entity.Unit;
 import com.english.entity.User;
 import com.english.entity.Word;
+import com.english.entity.Text;
 import com.english.exception.BusinessException;
 import com.english.service.*;
 import com.english.service.impl.DataCleanupServiceImpl;
@@ -498,6 +499,37 @@ class AdminControllerTest {
                 .andExpect(jsonPath("$.data").value("单词从单元移除成功"));
 
         verify(unitWordService).removeFromUnit(1L, 10L);
+    }
+
+    @Test
+    void toggleFeatured_withExplicitState_setsRequestedValue() throws Exception {
+        Text text = new Text();
+        text.setId(5L);
+        text.setIsFeatured(0);
+        when(textService.getTextById(5L)).thenReturn(text);
+
+        mockMvc.perform(put("/api/admin/texts/5/featured")
+                        .param("featured", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(textService).updateText(argThat(updated ->
+                updated != null && Objects.equals(updated.getId(), 5L) && Objects.equals(updated.getIsFeatured(), 1)));
+    }
+
+    @Test
+    void toggleFeatured_withoutParam_keepsLegacyToggleBehavior() throws Exception {
+        Text text = new Text();
+        text.setId(6L);
+        text.setIsFeatured(1);
+        when(textService.getTextById(6L)).thenReturn(text);
+
+        mockMvc.perform(put("/api/admin/texts/6/featured"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(textService).updateText(argThat(updated ->
+                updated != null && Objects.equals(updated.getId(), 6L) && Objects.equals(updated.getIsFeatured(), 0)));
     }
 
     // Data cleanup tests moved to OpsControllerTest (endpoints migrated to /api/ops/)

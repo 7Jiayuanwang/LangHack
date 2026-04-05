@@ -58,9 +58,11 @@ ask_value() {
     local input
     if [ -n "$default" ]; then
         read -rp "  ${prompt} [${default}]: " input
-        printf -v "$var_name" '%s' "${input:-$default}"
+        input=$(echo "${input:-$default}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        printf -v "$var_name" '%s' "$input"
     else
         read -rp "  ${prompt}: " input
+        input=$(echo "$input" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
         printf -v "$var_name" '%s' "$input"
     fi
 }
@@ -71,9 +73,11 @@ ask_secret() {
     if [ -n "$default" ]; then
         [ ${#default} -gt 6 ] && masked="${default:0:3}***${default: -3}" || masked="***"
         read -rp "  ${prompt} [${masked}]: " input
-        printf -v "$var_name" '%s' "${input:-$default}"
+        input=$(echo "${input:-$default}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        printf -v "$var_name" '%s' "$input"
     else
         read -rp "  ${prompt}: " input
+        input=$(echo "$input" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
         printf -v "$var_name" '%s' "$input"
     fi
 }
@@ -112,7 +116,7 @@ ask_yn() {
 load_env_value() {
     local key="$1" default="$2" file="${3:-$DOCKER_DIR/.env}"
     if [ -f "$file" ]; then
-        local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2-)
+        local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2- | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/[\[\]]\+[0-9~]*//g')
         [ -n "$val" ] && echo "$val" && return
     fi
     echo "$default"
@@ -278,10 +282,20 @@ if [ "$SKIP_ENV" = false ]; then
     if [ -n "$CFG_AI_TRANSLATE_KEY" ]; then
         echo "  (可选) 配置更多服务商以启用负载均衡:"
         ask_secret "OpenRouter API Key (留空跳过)" "$(load_env_value "OPENROUTER_API_KEY" "")" CFG_OPENROUTER_KEY
+        echo "  HiAgent 用于文章改写和 AI 问答（专有协议，Key 共享，App ID 可分开）"
         ask_secret "HiAgent API Key (留空跳过)"   "$(load_env_value "HIAGENT_API_KEY" "")"    CFG_HIAGENT_KEY
+        if [ -n "$CFG_HIAGENT_KEY" ]; then
+            ask_value  "HiAgent 文章改写 App ID" "$(load_env_value "HIAGENT_APP_ID" "")"    CFG_HIAGENT_APP_ID
+            ask_value  "HiAgent AI问答 App ID (留空则与文章改写共用)" "$(load_env_value "HIAGENT_QA_APP_ID" "${CFG_HIAGENT_APP_ID}")" CFG_HIAGENT_QA_APP_ID
+        else
+            CFG_HIAGENT_APP_ID=""
+            CFG_HIAGENT_QA_APP_ID=""
+        fi
     else
         CFG_OPENROUTER_KEY=""
         CFG_HIAGENT_KEY=""
+        CFG_HIAGENT_APP_ID=""
+        CFG_HIAGENT_QA_APP_ID=""
     fi
 
     echo ""
@@ -290,12 +304,121 @@ if [ "$SKIP_ENV" = false ]; then
     ask_port "后端端口" "$(load_env_value "PORT_BACKEND" "8080")" CFG_PORT_BE
     ask_port "MySQL 端口" "$(load_env_value "PORT_MYSQL" "3306")" CFG_PORT_DB
 
+    # 提前计算服务器 IP（HTTPS 和 CORS 配置都需要）
+    SERVER_IP_HINT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+
+    echo ""
+    echo "  [ HTTPS/SSL ]"
+    DEF_HTTPS=$(load_env_value "HTTPS_ENABLED" "false")
+    HTTPS_DEFAULT="n"; [ "$DEF_HTTPS" = "true" ] && HTTPS_DEFAULT="y"
+    ask_yn "启用 HTTPS？" "$HTTPS_DEFAULT" CFG_HTTPS_YN
+    if [ "$CFG_HTTPS_YN" = true ]; then
+        CFG_HTTPS_ENABLED="true"
+        echo ""
+        ask_choice "SSL 证书方案:" "Let's Encrypt (需公网域名+DNS)|自签名证书 (内网/测试推荐)|已有证书 (手动指定路径)" SSL_MODE 2
+
+        DEF_SSL_DOMAIN=$(load_env_value "SSL_DOMAIN" "${SERVER_IP_HINT:-localhost}")
+
+        case $SSL_MODE in
+            1)  # Let's Encrypt（需公网域名）
+                ask_value "域名 (如 example.com)" "$DEF_SSL_DOMAIN" CFG_SSL_DOMAIN
+                while [ -z "$CFG_SSL_DOMAIN" ]; do
+                    echo "  [ERROR] Let's Encrypt 必须提供有效域名"
+                    ask_value "域名" "" CFG_SSL_DOMAIN
+                done
+                CFG_SSL_CERT="/etc/letsencrypt/live/${CFG_SSL_DOMAIN}/fullchain.pem"
+                CFG_SSL_KEY="/etc/letsencrypt/live/${CFG_SSL_DOMAIN}/privkey.pem"
+                echo ""
+                echo "  [提示] 部署前请先在服务器上获取证书:"
+                echo "    sudo apt install -y certbot"
+                echo "    sudo certbot certonly --standalone -d ${CFG_SSL_DOMAIN}"
+                echo "  证书自动续期将在部署完成后自动配置 crontab"
+                ;;
+            2)  # 自签名证书（内网推荐）
+                ask_value "域名或服务器 IP" "$DEF_SSL_DOMAIN" CFG_SSL_DOMAIN
+                SSL_DIR="$DOCKER_DIR/ssl"
+                # .env 使用相对路径（相对于 docker-compose.yml 所在目录）
+                CFG_SSL_CERT="./ssl/fullchain.pem"
+                CFG_SSL_KEY="./ssl/privkey.pem"
+
+                if [ -f "$SSL_DIR/fullchain.pem" ] && [ -f "$SSL_DIR/privkey.pem" ]; then
+                    echo "  [INFO] 检测到已有自签名证书"
+                    ask_yn "重新生成？" "n" REGEN_CERT
+                else
+                    REGEN_CERT="true"
+                fi
+
+                if [ "$REGEN_CERT" = true ]; then
+                    if ! command -v openssl &>/dev/null; then
+                        echo "  [ERROR] 未安装 openssl，无法生成证书"
+                        echo "  安装: sudo apt install -y openssl"
+                        CFG_HTTPS_ENABLED="false"
+                    else
+                        echo "  [INFO] 生成自签名证书..."
+                        mkdir -p "$SSL_DIR"
+                        # 检测是 IP 地址还是主机名
+                        if [[ "$CFG_SSL_DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                            SAN="IP:${CFG_SSL_DOMAIN}"
+                        else
+                            SAN="DNS:${CFG_SSL_DOMAIN}"
+                        fi
+                        if openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+                            -keyout "$SSL_DIR/privkey.pem" \
+                            -out "$SSL_DIR/fullchain.pem" \
+                            -subj "/C=CN/ST=Local/L=Local/O=LangHack/CN=${CFG_SSL_DOMAIN}" \
+                            -addext "subjectAltName=${SAN}" \
+                            2>/dev/null; then
+                            chmod 600 "$SSL_DIR/privkey.pem"
+                            echo "  [OK] 自签名证书已生成 (有效期 10 年)"
+                            echo "  [注意] 浏览器会显示安全警告，可手动信任证书"
+                        else
+                            echo "  [ERROR] 证书生成失败"
+                            CFG_HTTPS_ENABLED="false"
+                        fi
+                    fi
+                fi
+                ;;
+            3)  # 已有证书
+                ask_value "域名或服务器 IP" "$DEF_SSL_DOMAIN" CFG_SSL_DOMAIN
+                DEF_SSL_CERT=$(load_env_value "SSL_CERT_PATH" "")
+                DEF_SSL_KEY=$(load_env_value "SSL_KEY_PATH" "")
+                ask_value "证书文件路径 (fullchain.pem)" "$DEF_SSL_CERT" CFG_SSL_CERT
+                while [ -z "$CFG_SSL_CERT" ]; do
+                    echo "  [ERROR] 证书路径不能为空"
+                    ask_value "证书文件路径" "" CFG_SSL_CERT
+                done
+                ask_value "私钥文件路径 (privkey.pem)" "$DEF_SSL_KEY" CFG_SSL_KEY
+                while [ -z "$CFG_SSL_KEY" ]; do
+                    echo "  [ERROR] 私钥路径不能为空"
+                    ask_value "私钥文件路径" "" CFG_SSL_KEY
+                done
+                [ ! -f "$CFG_SSL_CERT" ] && echo "  [WARN] 证书文件暂不存在: $CFG_SSL_CERT (请在部署前放置)"
+                [ ! -f "$CFG_SSL_KEY" ]  && echo "  [WARN] 私钥文件暂不存在: $CFG_SSL_KEY (请在部署前放置)"
+                ;;
+        esac
+
+        if [ "$CFG_HTTPS_ENABLED" = "true" ]; then
+            ask_port "HTTPS 端口" "$(load_env_value "PORT_HTTPS" "443")" CFG_PORT_HTTPS
+        fi
+    else
+        CFG_HTTPS_ENABLED="false"
+        CFG_SSL_DOMAIN=""
+        CFG_SSL_CERT=""
+        CFG_SSL_KEY=""
+        CFG_PORT_HTTPS=""
+    fi
+
     echo ""
     echo "  [ CORS 跨域 ]"
     DEF_CORS=$(load_env_value "APP_CORS_ALLOWED_ORIGINS" "")
-    SERVER_IP_HINT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
     CORS_DEFAULT="http://localhost,http://localhost:${CFG_PORT_FE}"
     [ -n "$SERVER_IP_HINT" ] && CORS_DEFAULT="${CORS_DEFAULT},http://${SERVER_IP_HINT}:${CFG_PORT_FE}"
+    # HTTPS 启用时自动添加 https:// 来源
+    if [ "$CFG_HTTPS_ENABLED" = "true" ] && [ -n "$CFG_SSL_DOMAIN" ]; then
+        HTTPS_ORIGIN="https://${CFG_SSL_DOMAIN}"
+        [ "${CFG_PORT_HTTPS:-443}" != "443" ] && HTTPS_ORIGIN="${HTTPS_ORIGIN}:${CFG_PORT_HTTPS}"
+        CORS_DEFAULT="${CORS_DEFAULT},${HTTPS_ORIGIN}"
+    fi
     [ -n "$DEF_CORS" ] && CORS_DEFAULT="$DEF_CORS"
     echo "  允许前端访问后端的域名列表（逗号分隔）"
     echo "  本地开发: http://localhost:5173"
@@ -356,6 +479,8 @@ if [ "$SKIP_ENV" = false ]; then
         [ -n "$CFG_AI_TRANSLATE_MODEL" ] && printf 'AI_TRANSLATE_MODEL=%s\n' "$CFG_AI_TRANSLATE_MODEL" || printf '# AI_TRANSLATE_MODEL=\n'
         [ -n "$CFG_OPENROUTER_KEY" ] && printf 'OPENROUTER_API_KEY=%s\n' "$CFG_OPENROUTER_KEY" || printf '# OPENROUTER_API_KEY=\n'
         [ -n "$CFG_HIAGENT_KEY" ]    && printf 'HIAGENT_API_KEY=%s\n'    "$CFG_HIAGENT_KEY"    || printf '# HIAGENT_API_KEY=\n'
+        [ -n "$CFG_HIAGENT_APP_ID" ] && printf 'HIAGENT_APP_ID=%s\n'    "$CFG_HIAGENT_APP_ID" || printf '# HIAGENT_APP_ID=\n'
+        [ -n "$CFG_HIAGENT_QA_APP_ID" ] && printf 'HIAGENT_QA_APP_ID=%s\n' "$CFG_HIAGENT_QA_APP_ID" || printf '# HIAGENT_QA_APP_ID=\n'
         printf 'MYSQL_ROOT_PASSWORD=%s\n'          "$CFG_DB_PASSWORD"
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'
@@ -381,10 +506,41 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'AUTO_UPDATE_BRANCH=%s\n'      "$CFG_AUTO_UPDATE_BRANCH"
         printf 'AUTO_UPDATE_MAINTENANCE=%s\n' "$CFG_AUTO_UPDATE_MAINTENANCE"
         printf 'AUTO_UPDATE_PRE_BACKUP=%s\n'  "$CFG_AUTO_UPDATE_PRE_BACKUP"
+        # HTTPS/SSL
+        printf 'HTTPS_ENABLED=%s\n' "$CFG_HTTPS_ENABLED"
+        if [ "$CFG_HTTPS_ENABLED" = "true" ]; then
+            printf 'PORT_HTTPS=%s\n'     "$CFG_PORT_HTTPS"
+            printf 'SSL_CERT_PATH=%s\n'  "$CFG_SSL_CERT"
+            printf 'SSL_KEY_PATH=%s\n'   "$CFG_SSL_KEY"
+            printf 'SSL_DOMAIN=%s\n'     "$CFG_SSL_DOMAIN"
+        fi
     } > "$ENV_FILE"
     # 设置 .env 文件权限为 600（仅所有者可读写，保护敏感信息）
     chmod 600 "$ENV_FILE" 2>/dev/null || true
     echo "  [OK] 配置已写入 $ENV_FILE"
+
+    # ── 生成/清理 HTTPS docker-compose override ──
+    OVERRIDE_FILE="$DOCKER_DIR/docker-compose.override.yml"
+    if [ "$CFG_HTTPS_ENABLED" = "true" ]; then
+        cat > "$OVERRIDE_FILE" << 'HTTPS_OVERRIDE'
+# HTTPS 配置 (由部署向导自动生成，请勿手动编辑)
+# 修改证书路径请编辑 .env 中的 SSL_CERT_PATH / SSL_KEY_PATH
+services:
+  frontend:
+    ports:
+      - "${PORT_HTTPS:-443}:443"
+    volumes:
+      - ${SSL_CERT_PATH}:/etc/nginx/ssl/fullchain.pem:ro
+      - ${SSL_KEY_PATH}:/etc/nginx/ssl/privkey.pem:ro
+      - ../frontend/nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro
+HTTPS_OVERRIDE
+        echo "  [OK] HTTPS docker-compose override 已生成"
+    else
+        if [ -f "$OVERRIDE_FILE" ]; then
+            rm -f "$OVERRIDE_FILE"
+            echo "  [INFO] 已移除 HTTPS override (HTTPS 未启用)"
+        fi
+    fi
 fi
 
 # ── 验证必填项（不直接 source，避免 JDBC URL 中的 & 触发后台进程）──────────
@@ -398,6 +554,9 @@ done
 # 为后续步骤读取端口变量（安全读取，不 eval）
 PORT_FRONTEND=$(load_env_value "PORT_FRONTEND" "80"  "$ENV_FILE")
 PORT_BACKEND=$(load_env_value  "PORT_BACKEND"  "8080" "$ENV_FILE")
+HTTPS_ENABLED_VAL=$(load_env_value "HTTPS_ENABLED" "false" "$ENV_FILE")
+PORT_HTTPS_VAL=$(load_env_value "PORT_HTTPS" "443" "$ENV_FILE")
+SSL_DOMAIN_VAL=$(load_env_value "SSL_DOMAIN" "" "$ENV_FILE")
 echo "  [OK] 环境变量检查通过"
 
 # ══════════════════════════════════════════════════════
@@ -430,6 +589,11 @@ esac
 if [ -n "${CFG_CORS_ORIGINS:-}" ]; then
     echo "  CORS: $CFG_CORS_ORIGINS"
 fi
+if [ "${CFG_HTTPS_ENABLED:-$HTTPS_ENABLED_VAL}" = "true" ]; then
+    echo "  HTTPS: 已启用 (${CFG_SSL_DOMAIN:-$SSL_DOMAIN_VAL}:${CFG_PORT_HTTPS:-$PORT_HTTPS_VAL})"
+else
+    echo "  HTTPS: 未启用"
+fi
 if [ "${CFG_AUTO_UPDATE_ENABLED:-false}" = "true" ]; then
     echo "  自动更新: 已启用 (${CFG_AUTO_UPDATE_CRON}) → ${CFG_AUTO_UPDATE_BRANCH}"
 else
@@ -445,24 +609,30 @@ ask_yn "开始部署？" "y" GO
 echo ""
 echo "── 步骤 5/5: 执行部署 ──"
 
-# 切换分支
+# 切换分支 & 拉取最新代码
 CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 OLD_BRANCH="$CURRENT"
 OLD_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+
+# 检查 unstaged 和 staged 变更
+if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+    echo "[INFO] 保存本地未提交的修改..."
+    git stash push -m "deploy-$(date +%s)" --quiet
+    STASHED=true
+fi
+
 if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
-    echo "[INFO] 切换分支..."
-    # 检查 unstaged 和 staged 变更
-    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-        git stash push -m "deploy-$(date +%s)" --quiet
-        STASHED=true
-    fi
+    echo "[INFO] 切换分支 $CURRENT → $TARGET_BRANCH..."
     if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
         echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
         exit 1
     fi
-    git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || \
-        echo "[WARN] 无法从远程拉取 $TARGET_BRANCH，使用本地版本"
 fi
+
+# 始终拉取远程最新代码（无论是否切换分支）
+echo "[INFO] 拉取远程最新代码..."
+git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || \
+    echo "[WARN] 无法从远程拉取 $TARGET_BRANCH，使用本地版本"
 
 echo "[INFO] 版本: $(git rev-parse --short HEAD)"
 
@@ -587,17 +757,85 @@ if [ "$deploy_ok" = false ]; then
     fi
     exit 1
 fi
+# ── 应用增量数据库迁移（幂等，已有数据库实例也安全执行）────────────────
+# initdb.d 仅在数据卷为空时执行；升级时需手动将新迁移推送到已有 DB
+echo "[INFO] 应用增量数据库迁移..."
+DB_PW_VAL=$(load_env_value "DB_PASSWORD" "" "$ENV_FILE")
+DB_USER_VAL=$(load_env_value "DB_USERNAME" "root" "$ENV_FILE")
+MASTER_CONTAINER="langhack-mysql-master"
+
+# 等待 mysql-master 容器可用（最多 30s）
+mc_wait=0
+until docker exec "$MASTER_CONTAINER" mysqladmin ping -u"$DB_USER_VAL" -p"$DB_PW_VAL" --silent 2>/dev/null; do
+    mc_wait=$((mc_wait + 2)); sleep 2
+    [ $mc_wait -ge 30 ] && echo "[WARN] mysql-master 未就绪，跳过迁移" && break
+done
+
+if [ $mc_wait -lt 30 ]; then
+    # V12: article_favorites 表 + feature_toggle 配置（幂等 SQL）
+    docker exec -i "$MASTER_CONTAINER" mysql -u"$DB_USER_VAL" -p"$DB_PW_VAL" english_learning 2>/dev/null <<'MIGRATE_V12'
+CREATE TABLE IF NOT EXISTS article_favorites (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_id BIGINT NOT NULL COMMENT '学生ID',
+    text_id BIGINT NOT NULL COMMENT '课文/文章ID',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
+    UNIQUE KEY uk_student_text (student_id, text_id),
+    INDEX idx_student_id (student_id),
+    INDEX idx_text_id (text_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章收藏表';
+
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'page_dashboard',   'true',  '学生端-发现页',               0),
+('feature_toggle', 'page_courses',     'false', '学生端-课程页（开发中）',      0),
+('feature_toggle', 'page_classes',     'true',  '学生端-班级/社区页',           0),
+('feature_toggle', 'page_assignments', 'true',  '学生端-任务页',               0),
+('feature_toggle', 'page_articles',    'true',  '学生端-文章页',               0),
+('feature_toggle', 'page_vocabulary',  'true',  '学生端-生词本页',              0),
+('feature_toggle', 'page_ai_video',    'false', '学生端-AI视频字幕页（未完善）', 0),
+('feature_toggle', 'page_ai_qa',       'true',  '学生端-AI问答页',             0),
+('feature_toggle', 'page_user_texts',  'true',  '学生端-我的上传页',            0);
+MIGRATE_V12
+    echo "[OK] 数据库迁移完成（V12: article_favorites + feature_toggle）"
+fi
+
 echo "[SUCCESS] 部署完成！"
 echo "  分支: $TARGET_BRANCH"
 echo "  版本: $(cd "$PROJECT_ROOT" && git rev-parse --short HEAD)"
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
-echo "  前端:        http://${SERVER_IP}:${PORT_FRONTEND}"
-echo "  后端:        http://${SERVER_IP}:${PORT_BACKEND}"
-echo "  AI服务管理:  http://${SERVER_IP}:${PORT_FRONTEND}/#/ops/ai-providers"
+if [ "$HTTPS_ENABLED_VAL" = "true" ]; then
+    HTTPS_PORT_SUFFIX=""; [ "$PORT_HTTPS_VAL" != "443" ] && HTTPS_PORT_SUFFIX=":${PORT_HTTPS_VAL}"
+    DISPLAY_HOST="${SSL_DOMAIN_VAL:-$SERVER_IP}"
+    echo "  前端 (HTTPS): https://${DISPLAY_HOST}${HTTPS_PORT_SUFFIX}"
+    echo "  前端 (HTTP):  http://${SERVER_IP}:${PORT_FRONTEND} (→ 自动跳转 HTTPS)"
+    echo "  后端:         http://${SERVER_IP}:${PORT_BACKEND}"
+    echo "  AI服务管理:   https://${DISPLAY_HOST}${HTTPS_PORT_SUFFIX}/#/ops/ai-providers"
+else
+    echo "  前端:        http://${SERVER_IP}:${PORT_FRONTEND}"
+    echo "  后端:        http://${SERVER_IP}:${PORT_BACKEND}"
+    echo "  AI服务管理:  http://${SERVER_IP}:${PORT_FRONTEND}/#/ops/ai-providers"
+fi
 
 # ── AI 密钥种子化：应用启动时 @PostConstruct 自动完成，无需外部触发 ──
 echo "[INFO] AI 服务商密钥将在后端启动时自动从环境变量种子化到数据库"
-echo "       如需手动管理，请访问: http://${SERVER_IP}:${PORT_FRONTEND}/#/ops/ai-providers"
+echo "       如需手动管理，请访问运维面板 → AI服务管理"
+
+# ── 设置 Let's Encrypt 证书自动续期 ────────────────────────────
+if [ "$HTTPS_ENABLED_VAL" = "true" ]; then
+    SSL_CERT_VAL=$(load_env_value "SSL_CERT_PATH" "" "$ENV_FILE")
+    if [[ "$SSL_CERT_VAL" == /etc/letsencrypt/* ]]; then
+        RENEW_CMD="30 2 * * * certbot renew --quiet --deploy-hook 'docker compose -f ${DOCKER_DIR}/docker-compose.yml restart frontend' >> /var/log/certbot-renew.log 2>&1"
+        CRON_TMP=$(mktemp /tmp/langhack-deploy-cron.XXXXXX)
+        crontab -l 2>/dev/null | grep -v "certbot renew" > "$CRON_TMP" || true
+        echo "$RENEW_CMD" >> "$CRON_TMP"
+        if crontab "$CRON_TMP" 2>/dev/null; then
+            echo "[OK] Let's Encrypt 证书自动续期已配置 (每天 2:30 检查)"
+        else
+            echo "[WARN] 证书续期 crontab 设置失败，请手动添加:"
+            echo "  $RENEW_CMD"
+        fi
+        rm -f "$CRON_TMP"
+    fi
+fi
 
 # ── 设置自动更新 crontab ────────────────────────────
 if [ "${CFG_AUTO_UPDATE_ENABLED:-$(load_env_value "AUTO_UPDATE_ENABLED" "false" "$ENV_FILE")}" = "true" ]; then
@@ -621,6 +859,9 @@ fi
 
 echo ""
 echo "[重要] 请备份 .env 文件到安全位置！如更换服务器需一并迁移。"
+if [ "$HTTPS_ENABLED_VAL" = "true" ]; then
+    echo "[重要] HTTPS 已启用。如使用自签名证书，用户首次访问需手动信任。"
+fi
 echo "[警告] 请勿执行 'docker compose down -v'，该命令会删除所有数据卷！"
 echo "  安全停止: docker compose down"
 echo "  安全重启: docker compose restart"

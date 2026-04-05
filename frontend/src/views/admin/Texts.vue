@@ -98,10 +98,28 @@
         <el-table-column prop="isFeatured" label="推荐" width="80" align="center">
           <template #default="{ row }">
             <el-switch
-              :model-value="row.isFeatured === 1"
-              @change="toggleFeatured(row)"
+              :model-value="isTextFeatured(row)"
+              @change="toggleFeatured(row, $event)"
               :loading="row._featuredLoading"
             />
+          </template>
+        </el-table-column>
+        <el-table-column label="优先级" width="110" align="center">
+          <template #default="{ row }">
+            <el-input-number
+              v-if="isTextFeatured(row)"
+              v-model="row.featuredPriority"
+              :min="0"
+              :max="100"
+              :step="1"
+              size="small"
+              controls-position="right"
+              style="width: 90px"
+              :disabled="row._priorityLoading"
+              @change="(val) => updatePriority(row, val)"
+              @blur="() => updatePriority(row, row.featuredPriority)"
+            />
+            <span v-else class="priority-na">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="audioUrl" label="音频" width="120">
@@ -168,6 +186,9 @@
     >
       <div class="text-detail">
         <h3>{{ currentText.title }}</h3>
+        <div v-if="currentText.coverUrl" class="text-cover-preview">
+          <img :src="currentText.coverUrl" alt="封面图预览" />
+        </div>
         <div class="text-meta">
           <el-tag :type="getDifficultyType(currentText.difficulty)">
             {{ getDifficultyText(currentText.difficulty) }}
@@ -305,21 +326,56 @@ const handleCurrentChange = (page) => {
   loadTexts()
 }
 
-const toggleFeatured = async (row) => {
+const normalizeFeaturedValue = (value) => {
+  if (value === true || value === 1 || value === '1') return 1
+  if (typeof value === 'string' && value.trim().toLowerCase() === 'true') return 1
+  return 0
+}
+
+const isTextFeatured = (row) => normalizeFeaturedValue(row?.isFeatured) === 1
+
+const toggleFeatured = async (row, nextValue) => {
+  const targetFeatured = nextValue === true || nextValue === 1 ? 1 : 0
   row._featuredLoading = true
   try {
-    const response = await adminApi.toggleTextFeatured(row.id)
+    const response = await adminApi.toggleTextFeatured(row.id, targetFeatured)
     if (response.code === 200) {
-      row.isFeatured = row.isFeatured === 1 ? 0 : 1
+      row.isFeatured = targetFeatured
       ElMessage.success(response.data || '操作成功')
       loadStats()
     } else {
-      ElMessage.error(response.message || '操作失败')
+      ElMessage.error(response.message || 'Operation failed')
     }
   } catch (error) {
-    ElMessage.error('操作失败')
+    ElMessage.error('Operation failed')
   } finally {
     row._featuredLoading = false
+  }
+}
+
+const updatePriority = async (row, val) => {
+  // val 可能来自 @change（数字）或 @blur（通过 row.featuredPriority 传入的数字）
+  // 统一转为数字，防止非数字类型混入
+  const rawVal = (val !== null && val !== undefined && typeof val === 'number') ? val : row.featuredPriority
+  const priority = (rawVal == null || isNaN(rawVal)) ? 0 : Math.max(0, Math.min(100, rawVal))
+
+  // 防止 @change 和 @blur 在点击加减按钮时双重触发
+  if (row._lastSavedPriority === priority) return
+  row._lastSavedPriority = priority
+
+  row._priorityLoading = true
+  try {
+    const response = await adminApi.setTextFeaturedPriority(row.id, priority)
+    if (response.code === 200) {
+      row.featuredPriority = priority
+      ElMessage.success('优先级已更新')
+    } else {
+      ElMessage.error(response.message || '更新失败')
+    }
+  } catch (error) {
+    ElMessage.error('更新失败')
+  } finally {
+    row._priorityLoading = false
   }
 }
 
@@ -330,12 +386,12 @@ const showAddDialog = () => {
 }
 
 const viewText = (text) => {
-  currentText.value = { ...text }
+  currentText.value = { ...text, isFeatured: normalizeFeaturedValue(text?.isFeatured) }
   viewDialogVisible.value = true
 }
 
 const editText = (text) => {
-  selectedText.value = { ...text }
+  selectedText.value = { ...text, isFeatured: normalizeFeaturedValue(text?.isFeatured) }
   selectedUnitId.value = text.unitId
   editDialogVisible.value = true
 }
@@ -548,7 +604,21 @@ onMounted(() => {
 
 .create-time {
   font-size: 13px;
-  color: #909399;
+  color: #94a3b8;
+}
+
+.text-cover-preview {
+  width: 100%;
+  max-height: 200px;
+  overflow: hidden;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.text-cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .text-content {
@@ -617,5 +687,9 @@ onMounted(() => {
 .section-title {
   font-weight: bold;
   color: #333;
+}
+.priority-na {
+  color: #c0c4cc;
+  font-size: 16px;
 }
 </style>

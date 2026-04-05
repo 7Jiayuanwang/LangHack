@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/api/translate")
-@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class TranslateController {
 
     @Autowired

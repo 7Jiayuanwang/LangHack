@@ -10,6 +10,7 @@ public class TextVersionsDTO {
     private String title;
     private String difficulty;
     private String audioUrl;
+    private String coverUrl;
     private Integer viewCount;
     private Integer likeCount;
     private String contentType;
@@ -108,5 +109,13 @@ public class TextVersionsDTO {
             this.versions.put(key, content);
             this.availableVersions.add(key);
         }
+    }
+
+    public String getCoverUrl() {
+        return coverUrl;
+    }
+
+    public void setCoverUrl(String coverUrl) {
+        this.coverUrl = coverUrl;
     }
 }

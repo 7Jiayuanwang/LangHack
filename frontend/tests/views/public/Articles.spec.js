@@ -47,15 +47,15 @@ describe('Articles.vue (Public Articles)', () => {
     expect(wrapper.vm.articles.length).toBe(0)
   })
 
-  it('initializes selectedDifficulty as empty string', () => {
+  it('initializes selectedCategory as empty string', () => {
     const wrapper = createWrapper()
-    expect(wrapper.vm.selectedDifficulty).toBe('')
+    expect(wrapper.vm.selectedCategory).toBe('')
   })
 
-  it('has difficulties array with all options', () => {
+  it('has categories array with all options', () => {
     const wrapper = createWrapper()
-    expect(wrapper.vm.difficulties).toBeDefined()
-    expect(wrapper.vm.difficulties.length).toBe(4)
+    expect(wrapper.vm.categories).toBeDefined()
+    expect(wrapper.vm.categories.length).toBe(6)
   })
 
   it('has coverGradients array with multiple gradients', () => {
@@ -71,13 +71,13 @@ describe('Articles.vue (Public Articles)', () => {
     expect(gradient).toContain('gradient')
   })
 
-  it('selectDifficulty updates selectedDifficulty', () => {
+  it('selectCategory updates selectedCategory', () => {
     const wrapper = createWrapper()
-    wrapper.vm.selectDifficulty('EASY')
-    expect(wrapper.vm.selectedDifficulty).toBe('EASY')
+    wrapper.vm.selectCategory('technology')
+    expect(wrapper.vm.selectedCategory).toBe('technology')
 
-    wrapper.vm.selectDifficulty('HARD')
-    expect(wrapper.vm.selectedDifficulty).toBe('HARD')
+    wrapper.vm.selectCategory('business')
+    expect(wrapper.vm.selectedCategory).toBe('business')
   })
 
   it('loadArticles method is defined and callable', () => {
@@ -132,13 +132,13 @@ describe('Articles.vue (Public Articles)', () => {
     expect(wrapper.vm.articles.length).toBe(3)
   })
 
-  it('selectedDifficulty can be cleared', () => {
+  it('selectedCategory can be cleared', () => {
     const wrapper = createWrapper()
-    wrapper.vm.selectedDifficulty = 'EASY'
-    expect(wrapper.vm.selectedDifficulty).toBe('EASY')
+    wrapper.vm.selectedCategory = 'technology'
+    expect(wrapper.vm.selectedCategory).toBe('technology')
 
-    wrapper.vm.selectedDifficulty = ''
-    expect(wrapper.vm.selectedDifficulty).toBe('')
+    wrapper.vm.selectedCategory = ''
+    expect(wrapper.vm.selectedCategory).toBe('')
   })
 
   it('articles can be mapped for display', () => {

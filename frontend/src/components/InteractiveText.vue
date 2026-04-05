@@ -424,6 +424,10 @@ const handleWordClick = async (word) => {
     return
   }
 
+  // 用户正在拖选文本时不弹词义弹窗
+  const selection = window.getSelection()
+  if (selection && !selection.isCollapsed) return
+
   // 标记单词为已点击
   word.isClicked = true
   selectedWord.value = word
@@ -673,6 +677,9 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   overflow-x: auto; /* 防止超长单词/行溢出容器 */
   word-break: break-word; /* 英语长单词自动换行 */
+  /* 确保文本始终可选中 */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .text-paragraph {

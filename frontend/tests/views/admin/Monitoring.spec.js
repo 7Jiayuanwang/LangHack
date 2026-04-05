@@ -154,6 +154,27 @@ describe('Monitoring.vue', () => {
     })
   })
 
+  describe('top pages normalization', () => {
+    it('normalizes legacy path fields into uri rows', async () => {
+      mockMonitoringApi.getTopPages.mockResolvedValue({
+        code: 200,
+        data: [
+          { path: '/courses', visit_count: 12 },
+          { uri: '/texts', count: 8 }
+        ]
+      })
+
+      const wrapper = mountComponent()
+      await new Promise(resolve => setTimeout(resolve, 0))
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.topPages).toEqual([
+        { path: '/courses', visit_count: 12, uri: '/courses', count: 12 },
+        { uri: '/texts', count: 8 }
+      ])
+    })
+  })
+
   describe('formatBytes', () => {
     it('returns "0 B" for 0', () => {
       const wrapper = mountComponent()

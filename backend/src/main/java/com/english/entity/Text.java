@@ -1,6 +1,7 @@
 package com.english.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 
 @TableName("texts")
@@ -29,6 +30,9 @@ public class Text {
 
     @TableField("audio_url")
     private String audioUrl;
+
+    @TableField("cover_url")
+    private String coverUrl;
 
     @TableField("difficulty")
     private String difficulty;
@@ -78,6 +82,9 @@ public class Text {
 
     @TableField("is_featured")
     private Integer isFeatured;
+
+    @TableField("featured_priority")
+    private Integer featuredPriority;
 
     @TableField("deleted")
     @TableLogic(value = "0", delval = "1")
@@ -304,11 +311,28 @@ public class Text {
         this.contentType = contentType;
     }
 
+    @JsonProperty("isFeatured")
     public Integer getIsFeatured() {
         return isFeatured;
     }
 
     public void setIsFeatured(Integer isFeatured) {
         this.isFeatured = isFeatured;
+    }
+
+    public Integer getFeaturedPriority() {
+        return featuredPriority;
+    }
+
+    public void setFeaturedPriority(Integer featuredPriority) {
+        this.featuredPriority = featuredPriority;
+    }
+
+    public String getCoverUrl() {
+        return coverUrl;
+    }
+
+    public void setCoverUrl(String coverUrl) {
+        this.coverUrl = coverUrl;
     }
 }

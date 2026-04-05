@@ -148,6 +148,14 @@ export function getAiCallsRecent(limit = 50) {
   });
 }
 
+export function getApplicationLogs(params = {}) {
+  return request({
+    url: "/api/ops/monitoring/app-logs",
+    method: "get",
+    params,
+  });
+}
+
 // ========== 数据运维 ==========
 
 export function cleanupData() {
@@ -185,6 +193,14 @@ export function getUpdateStatus() {
   return request({
     url: "/api/ops/update/status",
     method: "get",
+  });
+}
+
+export function getDeployHistory(limit = 50) {
+  return request({
+    url: "/api/ops/update/deploy-history",
+    method: "get",
+    params: { limit },
   });
 }
 // triggerUpdate 用原生 EventSource，不走 axios
