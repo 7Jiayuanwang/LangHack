@@ -118,7 +118,7 @@ const navigationItems = computed(() => {
   return allNavigationItems.filter(item => {
     if (!item.toggleKey) return true  // 无 toggleKey 的项始终显示
     const val = featureToggles.value[item.toggleKey]
-    return val === undefined || val === 'true'  // 未配置或 true 时显示
+    return val === undefined || val === true || val === 'true'  // 未配置或 true 时显示
   })
 })
 
@@ -312,6 +312,7 @@ onUnmounted(() => {
 
 .content-wrapper {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--bg-secondary);

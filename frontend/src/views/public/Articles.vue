@@ -294,8 +294,10 @@ onMounted(() => {
 }
 
 .articles-mobile-page {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background-color: var(--app-bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--app-text);
@@ -311,7 +313,6 @@ onMounted(() => {
     margin-top: 20px;
     margin-bottom: 20px;
     height: calc(100vh - 40px);
-    overflow-y: auto;
   }
 }
 
