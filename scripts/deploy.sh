@@ -757,6 +757,47 @@ if [ "$deploy_ok" = false ]; then
     fi
     exit 1
 fi
+# ── 应用增量数据库迁移（幂等，已有数据库实例也安全执行）────────────────
+# initdb.d 仅在数据卷为空时执行；升级时需手动将新迁移推送到已有 DB
+echo "[INFO] 应用增量数据库迁移..."
+DB_PW_VAL=$(load_env_value "DB_PASSWORD" "" "$ENV_FILE")
+DB_USER_VAL=$(load_env_value "DB_USERNAME" "root" "$ENV_FILE")
+MASTER_CONTAINER="langhack-mysql-master"
+
+# 等待 mysql-master 容器可用（最多 30s）
+mc_wait=0
+until docker exec "$MASTER_CONTAINER" mysqladmin ping -u"$DB_USER_VAL" -p"$DB_PW_VAL" --silent 2>/dev/null; do
+    mc_wait=$((mc_wait + 2)); sleep 2
+    [ $mc_wait -ge 30 ] && echo "[WARN] mysql-master 未就绪，跳过迁移" && break
+done
+
+if [ $mc_wait -lt 30 ]; then
+    # V12: article_favorites 表 + feature_toggle 配置（幂等 SQL）
+    docker exec -i "$MASTER_CONTAINER" mysql -u"$DB_USER_VAL" -p"$DB_PW_VAL" english_learning 2>/dev/null <<'MIGRATE_V12'
+CREATE TABLE IF NOT EXISTS article_favorites (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_id BIGINT NOT NULL COMMENT '学生ID',
+    text_id BIGINT NOT NULL COMMENT '课文/文章ID',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
+    UNIQUE KEY uk_student_text (student_id, text_id),
+    INDEX idx_student_id (student_id),
+    INDEX idx_text_id (text_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章收藏表';
+
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'page_dashboard',   'true',  '学生端-发现页',               0),
+('feature_toggle', 'page_courses',     'false', '学生端-课程页（开发中）',      0),
+('feature_toggle', 'page_classes',     'true',  '学生端-班级/社区页',           0),
+('feature_toggle', 'page_assignments', 'true',  '学生端-任务页',               0),
+('feature_toggle', 'page_articles',    'true',  '学生端-文章页',               0),
+('feature_toggle', 'page_vocabulary',  'true',  '学生端-生词本页',              0),
+('feature_toggle', 'page_ai_video',    'false', '学生端-AI视频字幕页（未完善）', 0),
+('feature_toggle', 'page_ai_qa',       'true',  '学生端-AI问答页',             0),
+('feature_toggle', 'page_user_texts',  'true',  '学生端-我的上传页',            0);
+MIGRATE_V12
+    echo "[OK] 数据库迁移完成（V12: article_favorites + feature_toggle）"
+fi
+
 echo "[SUCCESS] 部署完成！"
 echo "  分支: $TARGET_BRANCH"
 echo "  版本: $(cd "$PROJECT_ROOT" && git rev-parse --short HEAD)"
