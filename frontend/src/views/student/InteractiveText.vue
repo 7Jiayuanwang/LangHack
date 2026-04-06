@@ -292,7 +292,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay } from '@element-plus/icons-vue'
@@ -868,7 +868,11 @@ const translateSelectedText = async () => {
 }
 
 const handleWordClick = (wordData) => {
-  // 单词点击事件已在InteractiveText组件中处理
+  // 单词点击导致 Vue 重新渲染 span 时会抹掉 Rangy 注入的划线 wrapper。
+  // 等 DOM 更新后重新应用划线以恢复高亮。
+  nextTick(() => {
+    applySharedUnderlines()
+  })
 }
 
 const handleLearningRecord = async (recordData) => {

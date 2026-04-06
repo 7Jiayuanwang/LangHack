@@ -715,8 +715,10 @@ public class StudentLearningController {
             if (text == null) {
                 throw new BusinessException("课文不存在");
             }
-            // 如果课文关联了单元，校验单元所属课程
-            if (text.getUnitId() != null) {
+            // 推荐文章（isFeatured=1）作为公开发现内容，跳过课程注册校验
+            boolean isFeatured = text.getIsFeatured() != null && text.getIsFeatured() == 1;
+            // 如果课文关联了单元，且非推荐文章，则校验单元所属课程
+            if (!isFeatured && text.getUnitId() != null) {
                 Unit unit = unitService.getUnitById(text.getUnitId());
                 if (unit != null && unit.getCourseId() != null) {
                     assertStudentCanAccessCourse(studentId, unit.getCourseId());

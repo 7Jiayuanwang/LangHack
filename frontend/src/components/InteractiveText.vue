@@ -161,7 +161,7 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['wordAssist', 'learningRecord'])
+const emit = defineEmits(['wordAssist', 'learningRecord', 'word-click'])
 
 // Reactive data
 const paragraphs = ref([])
@@ -514,6 +514,7 @@ const handleWordAssist = (word) => {
     textId: props.textId,
     unitId: props.unitId
   })
+  emit('word-click', { word: word.cleanWord })
 
   // 单词辅助学习不记录到任务系统，只作为学习辅助功能
   // emit('learningRecord', {
