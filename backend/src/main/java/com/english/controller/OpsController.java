@@ -273,6 +273,7 @@ public class OpsController {
             item.put("id", u.getId());
             item.put("username", u.getUsername());
             item.put("nickname", u.getNickname());
+            item.put("realName", u.getRealName());
             item.put("role", u.getRole());
             result.add(item);
         }

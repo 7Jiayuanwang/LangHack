@@ -93,7 +93,11 @@
               <el-table v-else :data="tagMembers" border stripe size="small">
                 <el-table-column prop="id" label="ID" width="80" />
                 <el-table-column prop="username" label="用户名" />
-                <el-table-column prop="nickname" label="昵称" />
+                <el-table-column label="昵称">
+                  <template #default="{ row }">
+                    {{ row.nickname || row.realName || '-' }}
+                  </template>
+                </el-table-column>
                 <el-table-column label="角色" width="100">
                   <template #default="{ row }">
                     <el-tag :type="roleTagType(row.role)" size="small">{{ row.role }}</el-tag>

@@ -120,6 +120,7 @@ class OpsControllerTest {
         u.setId(1L);
         u.setUsername("alice");
         u.setNickname("Alice");
+        u.setRealName("Alice Smith");
         u.setRole("STUDENT");
 
         when(featureToggleService.getUserIdsByTag("vip")).thenReturn(List.of(1L));
@@ -130,6 +131,7 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data[0].username").value("alice"))
                 .andExpect(jsonPath("$.data[0].nickname").value("Alice"))
+                .andExpect(jsonPath("$.data[0].realName").value("Alice Smith"))
                 .andExpect(jsonPath("$.data[0].role").value("STUDENT"));
     }
 }
