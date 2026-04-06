@@ -283,12 +283,14 @@ describe('Texts.vue', () => {
 
   it('toggleFeatured handles error gracefully', async () => {
     const mockRow = { id: 1, isFeatured: 0, _featuredLoading: false }
-    adminApi.toggleTextFeatured.mockRejectedValue(new Error('Network error'))
+    adminApi.toggleTextFeatured.mockRejectedValue({ code: 500, message: 'Network error' })
 
     const wrapper = shallowMount(Texts)
     await wrapper.vm.toggleFeatured(mockRow, true)
 
-    expect(ElMessage.error).toHaveBeenCalledWith('Operation failed')
+    // 拦截器已展示错误弹窗；此处验证 UI 状态被回滚
+    expect(mockRow.isFeatured).toBe(0)
+    expect(mockRow._featuredLoading).toBe(false)
   })
 
   it('toggleFeatured uses explicit target state for non-numeric featured values', async () => {

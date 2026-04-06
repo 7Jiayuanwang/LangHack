@@ -323,7 +323,6 @@ public class VocabularyBooksServiceTest {
         when(vocabularyBookMapper.selectCount(any(QueryWrapper.class)))
             .thenReturn(10L) // total
             .thenReturn(2L)  // new
-            .thenReturn(3L)  // learning
             .thenReturn(5L)  // mastered
             .thenReturn(1L)  // today
             .thenReturn(6L); // weekly
@@ -331,9 +330,9 @@ public class VocabularyBooksServiceTest {
         Map<String, Object> result = vocabularyBooksService.getVocabularyStats(studentId);
 
         assertNotNull(result);
-        assertEquals(10L, result.get("totalVocabulary"));
+        assertEquals(10L, result.get("totalCount"));
         assertEquals(2L, result.get("newCount"));
-        assertEquals(3L, result.get("learningCount"));
+        assertEquals(3L, result.get("learningCount")); // 10 - 2 - 5 = 3
         assertEquals(5L, result.get("masteredCount"));
         assertEquals(50.0, result.get("masteryRate"));
         assertEquals(1L, result.get("todayAdded"));
@@ -347,7 +346,6 @@ public class VocabularyBooksServiceTest {
         when(vocabularyBookMapper.selectCount(any(QueryWrapper.class)))
             .thenReturn(0L) // total
             .thenReturn(0L) // new
-            .thenReturn(0L) // learning
             .thenReturn(0L) // mastered
             .thenReturn(0L) // today
             .thenReturn(0L); // weekly
@@ -564,5 +562,123 @@ public class VocabularyBooksServiceTest {
         vocabularyBooksService.removeFromVocabulary(studentId, wordId);
 
         verify(vocabularyBookMapper, times(1)).delete(any(QueryWrapper.class));
+    }
+
+    // ── 回归测试：courseId 类型转换修复（Issue: ClassCastException Long→String）────────────
+
+    /**
+     * 回归测试：Controller 以 Long 传入 courseId 时不得抛出 ClassCastException。
+     * 修复前：(String) params.get("courseId") 对 Long 类型抛出 ClassCastException。
+     * 修复后：统一用 Object.toString() 转换。
+     */
+    @Test
+    void getVocabularyWithPagination_courseIdAsLong_shouldNotThrowClassCastException() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("studentId", 1L);
+        params.put("page", 1);
+        params.put("size", 10);
+        params.put("courseId", 2L);  // Controller 传入 Long 类型
+
+        Page<VocabularyBook> emptyPage = new Page<>(1, 10);
+        emptyPage.setRecords(new ArrayList<>());
+        emptyPage.setTotal(0);
+
+        when(vocabularyBookMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(emptyPage);
+
+        // 不应抛出 ClassCastException
+        assertDoesNotThrow(() -> {
+            Map<String, Object> result = vocabularyBooksService.getVocabularyWithPagination(params);
+            assertNotNull(result);
+            assertNotNull(result.get("records"));
+        });
+    }
+
+    /**
+     * courseId 为字符串时仍可正常工作（向后兼容）。
+     */
+    @Test
+    void getVocabularyWithPagination_courseIdAsString_shouldNotThrow() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("studentId", 1L);
+        params.put("page", 1);
+        params.put("size", 10);
+        params.put("courseId", "2");  // 字符串形式
+
+        Page<VocabularyBook> emptyPage = new Page<>(1, 10);
+        emptyPage.setRecords(new ArrayList<>());
+        emptyPage.setTotal(0);
+
+        when(vocabularyBookMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(emptyPage);
+
+        assertDoesNotThrow(() -> {
+            Map<String, Object> result = vocabularyBooksService.getVocabularyWithPagination(params);
+            assertNotNull(result);
+        });
+    }
+
+    /**
+     * courseId 为 null 时返回全量生词本，不执行课程过滤。
+     */
+    @Test
+    void getVocabularyWithPagination_courseIdNull_shouldReturnAllWordsWithoutCourseFilter() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("studentId", 1L);
+        params.put("page", 1);
+        params.put("size", 10);
+        // 不设置 courseId
+
+        Page<VocabularyBook> emptyPage = new Page<>(1, 10);
+        emptyPage.setRecords(new ArrayList<>());
+        emptyPage.setTotal(0);
+
+        when(vocabularyBookMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(emptyPage);
+
+        Map<String, Object> result = vocabularyBooksService.getVocabularyWithPagination(params);
+
+        assertNotNull(result);
+        // courseId=null 不走课程过滤路径，unitWordMapper 不应被调用
+        verify(unitWordMapper, never()).selectList(any());
+    }
+
+    /**
+     * courseId 为负数时应被判定为无效，跳过课程过滤，unitWordMapper 不被调用。
+     */
+    @Test
+    void getVocabularyWithPagination_courseIdNegative_shouldSkipCourseFilter() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("studentId", 1L);
+        params.put("page", 1);
+        params.put("size", 10);
+        params.put("courseId", -1L);  // 无效 courseId
+
+        Page<VocabularyBook> emptyPage = new Page<>(1, 10);
+        emptyPage.setRecords(new ArrayList<>());
+        emptyPage.setTotal(0);
+
+        when(vocabularyBookMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(emptyPage);
+
+        assertDoesNotThrow(() -> vocabularyBooksService.getVocabularyWithPagination(params));
+        verify(unitWordMapper, never()).selectList(any());
+    }
+
+    /**
+     * courseId 为非数字字符串时应降级为不过滤，不抛出异常。
+     */
+    @Test
+    void getVocabularyWithPagination_courseIdInvalidString_shouldDegradeGracefully() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("studentId", 1L);
+        params.put("page", 1);
+        params.put("size", 10);
+        params.put("courseId", "abc");  // 非数字字符串
+
+        Page<VocabularyBook> emptyPage = new Page<>(1, 10);
+        emptyPage.setRecords(new ArrayList<>());
+        emptyPage.setTotal(0);
+
+        when(vocabularyBookMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(emptyPage);
+
+        assertDoesNotThrow(() -> vocabularyBooksService.getVocabularyWithPagination(params));
+        verify(unitWordMapper, never()).selectList(any());
     }
 }

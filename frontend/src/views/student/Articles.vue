@@ -419,7 +419,7 @@ onMounted(() => {
 /* --- Filter Bar --- */
 .filter-bar {
   position: sticky;
-  top: calc(env(safe-area-inset-top, 0px) + 60px); /* Adjust based on header height */
+  top: 60px; /* Header height only — safe-area is consumed by Layout's .status-bar */
   z-index: 40;
   background: rgba(246, 247, 248, 0.95);
   backdrop-filter: blur(8px);
@@ -687,7 +687,7 @@ onMounted(() => {
 }
 
 .bottom-spacer {
-  height: 80px; /* Space for a potential bottom tab bar */
+  height: calc(80px + env(safe-area-inset-bottom, 0px)); /* Match Layout nav + safe area */
 }
 
 /* --- Filter Collapse Transition --- */

@@ -3,8 +3,8 @@
     <!-- 状态栏占位 -->
     <div class="status-bar"></div>
 
-    <!-- 顶部导航栏 - 时尚设计 -->
-    <header class="trend-header">
+    <!-- 顶部导航栏 - 时尚设计（文章页有自带 header，此处隐藏避免重叠） -->
+    <header class="trend-header" v-show="pageTitle">
       <div class="header-container">
         <div class="header-center">
           <h1 class="page-title">{{ pageTitle }}</h1>
@@ -78,7 +78,7 @@ import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getFeatureToggles } from '@/api/systemConfig'
+import { getFeatureToggles, getPersonalFeatureToggles } from '@/api/systemConfig'
 import {
   DataBoard,
   Reading,
@@ -225,12 +225,18 @@ const handleResize = () => {
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   window.addEventListener('keydown', handleKeyDown)
-  // 加载功能开关配置
-  getFeatureToggles().then(res => {
+  // 加载功能开关配置（登录后优先使用个性化接口，失败时回退公开接口）
+  getPersonalFeatureToggles().then(res => {
     if (res?.code === 200 && res?.data) {
       featureToggles.value = res.data
     }
-  }).catch(() => {})
+  }).catch(() => {
+    getFeatureToggles().then(res => {
+      if (res?.code === 200 && res?.data) {
+        featureToggles.value = res.data
+      }
+    }).catch(() => {})
+  })
 })
 
 onUnmounted(() => {
@@ -715,9 +721,8 @@ onUnmounted(() => {
     font-size: 17px;
   }
 
-  .content-wrapper {
-    padding: 16px;
-  }
+  /* 注意：.content-wrapper 不加 padding，避免破坏子页面（如 Articles）的 sticky 布局和 full-bleed 设计
+     子页面自行管理内部 padding */
 
   .nav-wrapper {
     padding: 6px 2px 10px 2px;

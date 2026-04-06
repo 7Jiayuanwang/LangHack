@@ -175,7 +175,10 @@ html, body {
   opacity: 0;
 }
 
-.trend-header {
-  display: none;
-}
+/* student/Layout.vue 的 .trend-header 在文章页设置 pageTitle='' 时不需要显示，
+   但其他 student 页面仍需要 header。
+   改为通过 student Layout 内部的 scoped 样式控制，
+   此全局规则改为只隐藏顶层 #app 下不属于任何 Layout 的裸 .trend-header（实际不存在）。
+   注意：student/Layout.vue 的 .trend-header 受 scoped 作用域保护不受此影响，
+   此规则已无实际作用，保留仅用于兼容旧遗留标记。 */
 </style>

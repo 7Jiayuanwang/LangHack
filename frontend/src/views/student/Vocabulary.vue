@@ -349,6 +349,7 @@ import {
 import { calculateSM2 } from '@/utils/sm2'
 import {
   getVocabularyList,
+  getVocabularyStats,
   getWordDetail,
   updateMasteryLevel,
   batchOperateVocabulary,
@@ -446,12 +447,28 @@ const loadVocabulary = async () => {
   }
 }
 
-// 更新统计信息
-const updateStats = () => {
-  stats.totalWords = total.value
-  stats.newWords = vocabulary.value.filter(w => w.masteryLevel === 'NEW').length
-  stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING').length
-  stats.masteredWords = vocabulary.value.filter(w => w.masteryLevel === 'MASTERED').length
+// 更新统计信息（从后端获取全量统计，不依赖当前页数据）
+const updateStats = async () => {
+  try {
+    const res = await getVocabularyStats()
+    if (res?.code === 200 && res?.data) {
+      stats.totalWords = res.data.totalCount || 0
+      stats.newWords = res.data.newCount || 0
+      stats.learningWords = res.data.learningCount || 0
+      stats.masteredWords = res.data.masteredCount || 0
+    } else {
+      // 降级：用当前页数据统计（不准确但不崩溃）
+      stats.totalWords = total.value
+      stats.newWords = vocabulary.value.filter(w => w.masteryLevel === 'NEW').length
+      stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING').length
+      stats.masteredWords = vocabulary.value.filter(w => w.masteryLevel === 'MASTERED').length
+    }
+  } catch {
+    stats.totalWords = total.value
+    stats.newWords = vocabulary.value.filter(w => w.masteryLevel === 'NEW').length
+    stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING').length
+    stats.masteredWords = vocabulary.value.filter(w => w.masteryLevel === 'MASTERED').length
+  }
 }
 
 // 显示单词详情
@@ -827,11 +844,10 @@ const submitReview = async (quality) => {
     return
   }
 
-  // 更新单词掌握程度
+  // 更新单词掌握程度：quality < 3 → 学习中；SM-2 成功复习 ≥ 3 次 → 已掌握；其余 → 学习中
   try {
     const newMasteryLevel = (quality < 3) ? 'LEARNING'
       : (sm2Result.repetition >= 3) ? 'MASTERED'
-      : (sm2Result.repetition >= 1) ? 'FAMILIAR'
       : 'LEARNING'
 
     await updateMasteryLevel(wordId, {

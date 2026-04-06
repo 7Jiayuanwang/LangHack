@@ -163,7 +163,9 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
         String masteryLevel = (String) params.get("masteryLevel");
         String sortBy = (String) params.get("sortBy");
         String difficulty = (String) params.get("difficulty");
-        String courseId = (String) params.get("courseId");
+        // courseId 可能由 Controller 以 Long 传入，也可能以 String 传入，统一用 toString() 转换
+        Object courseIdObj = params.get("courseId");
+        String courseId = courseIdObj != null ? courseIdObj.toString() : null;
 
         // 构建查询条件
         QueryWrapper<VocabularyBook> wrapper = new QueryWrapper<>();
@@ -651,7 +653,7 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
             QueryWrapper<VocabularyBook> totalWrapper = new QueryWrapper<>();
             totalWrapper.eq("student_id", studentId);
             long totalCount = vocabularyBookMapper.selectCount(totalWrapper);
-            stats.put("totalVocabulary", totalCount);
+            stats.put("totalCount", totalCount);
 
             // 按掌握程度统计
             QueryWrapper<VocabularyBook> newWrapper = new QueryWrapper<>();
@@ -659,15 +661,14 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
             long newCount = vocabularyBookMapper.selectCount(newWrapper);
             stats.put("newCount", newCount);
 
-            QueryWrapper<VocabularyBook> learningWrapper = new QueryWrapper<>();
-            learningWrapper.eq("student_id", studentId).eq("mastery_level", "LEARNING");
-            long learningCount = vocabularyBookMapper.selectCount(learningWrapper);
-            stats.put("learningCount", learningCount);
-
             QueryWrapper<VocabularyBook> masteredWrapper = new QueryWrapper<>();
             masteredWrapper.eq("student_id", studentId).eq("mastery_level", "MASTERED");
             long masteredCount = vocabularyBookMapper.selectCount(masteredWrapper);
             stats.put("masteredCount", masteredCount);
+
+            // learningCount = 总数 - 新词 - 已掌握，涵盖所有中间状态（LEARNING/REVIEWING/FAMILIAR等）
+            long learningCount = Math.max(0, totalCount - newCount - masteredCount);
+            stats.put("learningCount", learningCount);
 
             // 计算掌握率
             if (totalCount > 0) {
@@ -695,7 +696,7 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
         } catch (Exception e) {
             logger.error("获取生词本统计失败", e);
             // 返回默认值
-            stats.put("totalVocabulary", 0);
+            stats.put("totalCount", 0);
             stats.put("newCount", 0);
             stats.put("learningCount", 0);
             stats.put("masteredCount", 0);

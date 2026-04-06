@@ -64,7 +64,7 @@ request.interceptors.response.use(
       // 401: 未授权，token过期等（只处理一次，由 handleLogout 统一管理）
       if (res.code === 401) {
         handleLogout()
-        return Promise.reject(new Error('未授权，请重新登录'))
+        return Promise.reject({ code: 401, message: '未授权，请重新登录' })
       }
 
       // 非 401 的业务错误：仅展示预定义的错误信息，防止后端敏感信息泄露
@@ -75,7 +75,7 @@ request.interceptors.response.use(
         duration: 5 * 1000
       })
 
-      return Promise.reject(new Error(errorMessage))
+      return Promise.reject({ code: res.code, message: errorMessage })
     } else {
       return res
     }

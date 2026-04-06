@@ -205,7 +205,7 @@ public class AdminController {
     }
 
     @GetMapping("/stats")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Object>> getStats() {
         try {
             Map<String, Object> stats = new HashMap<>();
@@ -363,7 +363,7 @@ public class AdminController {
             try {
                 unit.setOrderNum(orderNumObj != null ? Integer.parseInt(orderNumObj.toString()) : 0);
             } catch (NumberFormatException e) {
-                logger.warn("orderNum 格式错误，使用默认值 0");
+                logger.debug("orderNum 格式错误，使用默认值 0");
                 unit.setOrderNum(0);
             }
 
@@ -415,7 +415,7 @@ public class AdminController {
             try {
                 unit.setOrderNum(orderNumObj != null ? Integer.parseInt(orderNumObj.toString()) : 0);
             } catch (NumberFormatException e) {
-                logger.warn("orderNum 格式错误，使用默认值 0");
+                logger.debug("orderNum 格式错误，使用默认值 0");
                 unit.setOrderNum(0);
             }
 
@@ -746,7 +746,7 @@ public class AdminController {
             try {
                 text.setIsPublic(isPublicObj != null ? Integer.parseInt(isPublicObj.toString()) : 1);
             } catch (NumberFormatException e) {
-                logger.warn("isPublic 格式错误，使用默认值 1");
+                logger.debug("isPublic 格式错误，使用默认值 1");
                 text.setIsPublic(1);
             }
 
@@ -778,7 +778,7 @@ public class AdminController {
                         try {
                             exercise.setOrderNum(Integer.parseInt(orderNumObj.toString()));
                         } catch (NumberFormatException e) {
-                            logger.warn("习题 orderNum 格式错误，使用默认值 0");
+                            logger.debug("习题 orderNum 格式错误，使用默认值 0");
                             exercise.setOrderNum(0);
                         }
                         exercise.setCreatedBy(createdBy);
@@ -808,7 +808,7 @@ public class AdminController {
                                 try {
                                     option.setOrderNum(optionOrderObj != null ? Integer.parseInt(optionOrderObj.toString()) : 0);
                                 } catch (NumberFormatException e) {
-                                    logger.warn("选项 orderNum 格式错误，使用默认值 0");
+                                    logger.debug("选项 orderNum 格式错误，使用默认值 0");
                                     option.setOrderNum(0);
                                 }
                                 options.add(option);
@@ -886,14 +886,14 @@ public class AdminController {
             try {
                 text.setIsPublic(isPublicObj != null ? Integer.parseInt(isPublicObj.toString()) : 1);
             } catch (NumberFormatException e) {
-                logger.warn("isPublic 格式错误，使用默认值 1");
+                logger.debug("isPublic 格式错误，使用默认值 1");
                 text.setIsPublic(1);
             }
             Object orderNumObj = textData.get("orderNum");
             try {
                 text.setOrderNum(orderNumObj != null ? Integer.parseInt(orderNumObj.toString()) : 0);
             } catch (NumberFormatException e) {
-                logger.warn("orderNum 格式错误，使用默认值 0");
+                logger.debug("orderNum 格式错误，使用默认值 0");
                 text.setOrderNum(0);
             }
 

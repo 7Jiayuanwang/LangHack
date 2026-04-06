@@ -202,3 +202,12 @@ docker/docker-compose.override.yml
 # Excel files with sensitive data (optional, decide based on your needs)
 # *.xls
 # *.xlsx
+
+# ── 运行时备份目录（auto-update.sh / Spring Boot 备份服务产生）──
+# 备份文件留在服务器，不提交到 Git
+backups/*.sql.gz
+backups/*.sql.bz2
+backups/*.sql.zip
+backups/.env.pre-update.*
+# 允许 .gitkeep 保留目录结构
+!backups/.gitkeep

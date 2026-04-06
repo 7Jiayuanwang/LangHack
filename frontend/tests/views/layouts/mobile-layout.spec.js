@@ -42,6 +42,16 @@ vi.mock('@/api/systemConfig', () => ({
       page_ai_video:   false,  // AI 视频默认关闭
     },
   }),
+  getPersonalFeatureToggles: vi.fn().mockResolvedValue({
+    code: 200,
+    data: {
+      page_dashboard:  true,
+      page_articles:   true,
+      page_vocabulary: true,
+      page_my_study:   true,
+      page_ai_video:   false,
+    },
+  }),
 }))
 
 // ── 组件 + store import ──────────────────────────────────────────────────────
@@ -50,7 +60,7 @@ import StudentLayout from '@/views/student/Layout.vue'
 import UserLayout    from '@/views/user/Layout.vue'
 import MobileLayout  from '@/views/shared/MobileLayout.vue'
 import { useUserStore }     from '@/store/user'
-import { getFeatureToggles } from '@/api/systemConfig'
+import { getFeatureToggles, getPersonalFeatureToggles } from '@/api/systemConfig'
 
 // ── 辅助函数 ─────────────────────────────────────────────────────────────────
 
@@ -144,7 +154,7 @@ describe('MobileLayout — 学生端 Feature Toggle 过滤', () => {
   })
 
   it('[STUDENT] 所有 toggle 开启时 navItems 数量 ≥ 5', async () => {
-    getFeatureToggles.mockResolvedValueOnce({
+    getPersonalFeatureToggles.mockResolvedValueOnce({
       code: 200,
       data: {
         page_dashboard:  true,

@@ -114,7 +114,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { User, Reading, School, Document } from '@element-plus/icons-vue'
-import { getAuthHeader } from '@/utils/auth'
+import request from '@/utils/request'
 
 const stats = reactive({
   totalUsers: 0,
@@ -134,40 +134,19 @@ const recentActivities = ref([])
 
 const loadDashboardData = async () => {
   try {
-    const response = await fetch('/api/admin/stats', {
-      headers: {
-        'Authorization': getAuthHeader() || ''
-      }
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      if (data.code === 200 && data.data) {
-        const result = data.data
-
-        // 更新统计数据
-        stats.totalUsers = result.totalUsers || 0
-        stats.totalCourses = result.totalCourses || 0
-        stats.totalClasses = result.totalClasses || 0
-        stats.totalWords = result.totalWords || 0
-
-        // 更新用户统计
-        userStats.admin = result.totalAdmins || 0
-        userStats.teacher = result.totalTeachers || 0
-        userStats.student = result.totalStudents || 0
-      }
+    const res = await request({ url: '/api/admin/stats', method: 'get' })
+    if (res?.code === 200 && res?.data) {
+      const result = res.data
+      stats.totalUsers = result.totalUsers || 0
+      stats.totalCourses = result.totalCourses || 0
+      stats.totalClasses = result.totalClasses || 0
+      stats.totalWords = result.totalWords || 0
+      userStats.admin = result.totalAdmins || 0
+      userStats.teacher = result.totalTeachers || 0
+      userStats.student = result.totalStudents || 0
     }
   } catch (error) {
     console.error('加载仪表板数据失败:', error)
-    // 如果API调用失败，显示默认值
-    stats.totalUsers = 0
-    stats.totalCourses = 0
-    stats.totalClasses = 0
-    stats.totalWords = 0
-
-    userStats.admin = 0
-    userStats.teacher = 0
-    userStats.student = 0
   }
 }
 

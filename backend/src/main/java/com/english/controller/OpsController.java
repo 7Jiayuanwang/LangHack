@@ -2,11 +2,14 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.entity.AiProvider;
+import com.english.entity.FeatureOverride;
 import com.english.entity.SystemConfig;
 import com.english.exception.BusinessException;
 import com.english.service.AiProviderService;
+import com.english.service.FeatureToggleService;
 import com.english.service.SystemConfigService;
 import com.english.service.TencentTranslateService;
+import com.english.service.UserService;
 import com.english.service.impl.DataCleanupServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +45,12 @@ public class OpsController {
 
     @Autowired
     private AiProviderService aiProviderService;
+
+    @Autowired
+    private FeatureToggleService featureToggleService;
+
+    @Autowired
+    private UserService userService;
 
     /**
      * 清理不一致的数据
@@ -237,5 +247,95 @@ public class OpsController {
             logger.error("AI服务商连通性测试失败 id={}", id, e);
             return Result.error("测试失败，请稍后重试");
         }
+    }
+
+    // ==================== 个性化功能开关管理 ====================
+
+    /**
+     * 列出所有标签名称
+     */
+    @GetMapping("/user-tags")
+    public Result<List<String>> listAllTags() {
+        return Result.success(featureToggleService.listAllTagNames());
+    }
+
+    /**
+     * 查询某标签下的所有用户ID
+     */
+    @GetMapping("/user-tags/{tagName}/users")
+    public Result<List<Map<String, Object>>> getUsersByTag(@PathVariable String tagName) {
+        List<Long> ids = featureToggleService.getUserIdsByTag(tagName);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Long id : ids) {
+            com.english.entity.User u = userService.getById(id);
+            if (u == null) continue;
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", u.getId());
+            item.put("username", u.getUsername());
+            item.put("nickname", u.getNickname());
+            item.put("role", u.getRole());
+            result.add(item);
+        }
+        return Result.success(result);
+    }
+
+    /**
+     * 删除标签及其所有规则和用户关联
+     */
+    @DeleteMapping("/user-tags/{tagName}")
+    public Result<String> deleteTag(@PathVariable String tagName, Authentication authentication) {
+        featureToggleService.deleteTag(tagName, authentication.getName());
+        return Result.success("标签已删除");
+    }
+
+    /**
+     * 查询用户当前的标签列表
+     */
+    @GetMapping("/users/{userId}/tags")
+    public Result<List<String>> getUserTags(@PathVariable Long userId) {
+        return Result.success(featureToggleService.getUserTags(userId));
+    }
+
+    /**
+     * 设置用户标签（全量覆盖）
+     */
+    @PutMapping("/users/{userId}/tags")
+    public Result<String> setUserTags(@PathVariable Long userId,
+                                      @RequestBody List<String> tags,
+                                      Authentication authentication) {
+        featureToggleService.setUserTags(userId, tags, authentication.getName());
+        return Result.success("用户标签已更新");
+    }
+
+    /**
+     * 查询覆盖规则列表（可按 scope / scopeValue 过滤）
+     */
+    @GetMapping("/feature-overrides")
+    public Result<List<FeatureOverride>> listFeatureOverrides(
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) String scopeValue) {
+        return Result.success(featureToggleService.listOverrides(scope, scopeValue));
+    }
+
+    /**
+     * 新增或更新覆盖规则
+     */
+    @PutMapping("/feature-overrides")
+    public Result<String> upsertFeatureOverride(@RequestBody FeatureOverride override,
+                                                Authentication authentication) {
+        featureToggleService.upsertOverride(override, authentication.getName());
+        return Result.success("覆盖规则已保存");
+    }
+
+    /**
+     * 删除覆盖规则
+     */
+    @DeleteMapping("/feature-overrides")
+    public Result<String> deleteFeatureOverride(@RequestParam String scope,
+                                                @RequestParam String scopeValue,
+                                                @RequestParam String featureKey,
+                                                Authentication authentication) {
+        featureToggleService.deleteOverride(scope, scopeValue, featureKey, authentication.getName());
+        return Result.success("覆盖规则已删除");
     }
 }

@@ -114,7 +114,7 @@ class StudentWordControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").value("已添加到生词本"));
 
-        verify(vocabularyBooksService).addToVocabularyWithLevel(1L, 10L, "LEARNING");
+        verify(vocabularyBooksService).addToVocabularyWithLevel(1L, 10L, "NEW");
         verify(learningRecordsService).recordVocabularyAdd(1L, 10L);
     }
 
@@ -129,9 +129,9 @@ class StudentWordControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data").value("单词学习状态已更新"));
+                .andExpect(jsonPath("$.data").value("单词已在生词本中"));
 
-        verify(vocabularyBooksService).updateMasteryLevel(eq(1L), eq(10L), eq("LEARNING"), isNull());
+        verify(learningRecordsService).recordVocabularyAdd(1L, 10L);
     }
 
     @Test
@@ -164,7 +164,7 @@ class StudentWordControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.vocabularyAction").value("added"));
 
-        verify(vocabularyBooksService).addToVocabularyWithLevel(1L, 10L, "LEARNING");
+        verify(vocabularyBooksService).addToVocabularyWithLevel(1L, 10L, "NEW");
     }
 
     @Test

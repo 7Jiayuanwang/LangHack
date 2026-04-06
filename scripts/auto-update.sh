@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# LangHack 自动更新脚本 (v2.1)
+# LangHack 自动更新脚本 (v2.2)
 # 定时从 GitHub 拉取最新代码，检测变更后自动重新构建并部署
 #
 # v2.0 新增:
@@ -14,6 +14,15 @@
 #     (避免构建失败后误判已更新、回滚后死循环触发等问题)
 #   - 回滚暂停机制: 回滚成功后暂停自动更新，防止同一有问题 commit 循环拉取
 #   - 运维日志增强: 更新/回滚结果写入结构化日志，方便运维端查阅
+#
+# v2.2 修复:
+#   - 数据库迁移改为直接执行 docker/mysql/init/04-apply-all-migrations.sql
+#     (消除 heredoc 与合并 SQL 双重维护问题，deploy.sh / auto-update.sh 单一数据源)
+#   - 迁移执行改用 root 账户（DDL 需要 root 权限）
+#   - 新增版本同步校验：Flyway 文件数 vs 合并 SQL 头部列表
+#   - verify_flyway_migrations 补充 V14 新增表（user_tags / feature_override）
+#   - 迁移文件变更（04-apply-all-migrations.sql / db/migration/）时强制执行迁移
+#   - 新增从库复制延迟验证
 #
 # 用法:
 #   chmod +x scripts/auto-update.sh
@@ -172,8 +181,11 @@ notify() {
 
 # ── 维护模式 ──────────────────────────────────────────
 
+MAINTENANCE_ACTIVE=false
+
 enable_maintenance() {
     [ "$MAINTENANCE_MODE" != "true" ] && return 0
+    MAINTENANCE_ACTIVE=true
     log "MAINTENANCE: 开启维护模式..."
     # MSYS_NO_PATHCONV=1 防止 Git Bash 将容器内绝对路径转换为 Windows 路径
     local container
@@ -189,6 +201,8 @@ enable_maintenance() {
 
 disable_maintenance() {
     [ "$MAINTENANCE_MODE" != "true" ] && return 0
+    [ "$MAINTENANCE_ACTIVE" != "true" ] && return 0
+    MAINTENANCE_ACTIVE=false
     log "MAINTENANCE: 关闭维护模式..."
     local container
     container=$(docker compose -f "$COMPOSE_FILE" ps -q frontend 2>/dev/null || \
@@ -374,41 +388,143 @@ verify_ai_providers() {
     fi
 }
 
+# ── 增量 SQL 迁移 ─────────────────────────────────────
+# 直接执行 docker/mysql/init/04-apply-all-migrations.sql（与 deploy.sh 同一数据源）
+# 使用 root 账户确保 DDL 权限（CREATE TABLE / ALTER TABLE 等）
+# 全幂等（IF NOT EXISTS + INSERT IGNORE），新旧数据库均可安全重复执行
+
+run_incremental_migrations() {
+    local migration_sql="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+
+    if [ ! -f "$migration_sql" ]; then
+        log "ERROR: MIGRATE: 迁移脚本不存在: $migration_sql"
+        return 1
+    fi
+
+    # 版本同步校验：Flyway 文件数 vs 合并脚本头部列表
+    local flyway_dir="$PROJECT_ROOT/backend/src/main/resources/db/migration"
+    if [ -d "$flyway_dir" ]; then
+        local flyway_count merged_count
+        flyway_count=$(ls "$flyway_dir"/V*.sql 2>/dev/null | wc -l || echo 0)
+        merged_count=$(grep -cE '^--   V[0-9]+__' "$migration_sql" 2>/dev/null || echo 0)
+        if [ "$flyway_count" -gt "$merged_count" ]; then
+            log "WARN: MIGRATE: Flyway 有 ${flyway_count} 个迁移文件，合并脚本仅含 ${merged_count} 个版本"
+            log "WARN:          请将新迁移同步到 docker/mysql/init/04-apply-all-migrations.sql"
+            notify "部署警告: 迁移脚本版本不同步（Flyway: ${flyway_count}, 合并: ${merged_count}），请检查"
+        fi
+    fi
+
+    # 使用 root 账户（DDL 权限）
+    local db_root_pw
+    db_root_pw=$(grep -E '^MYSQL_ROOT_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
+    [ -z "$db_root_pw" ] && db_root_pw=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
+    if [ -z "$db_root_pw" ]; then
+        log "WARN: MIGRATE: 未找到数据库 root 密码，跳过增量迁移"
+        return 0
+    fi
+
+    # 找到 mysql-master 容器
+    local mysql_container
+    mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.master|mysql-master' | head -1 || echo "")
+    [ -z "$mysql_container" ] && mysql_container=$(docker ps --format '{{.Names}}' | grep mysql | head -1 || echo "")
+    if [ -z "$mysql_container" ]; then
+        log "ERROR: MIGRATE: 未找到 MySQL 容器，无法执行增量迁移"
+        return 1
+    fi
+
+    # 等待 MySQL 就绪（最多 60s）
+    log "MIGRATE: 等待 MySQL 就绪 (容器: $mysql_container)..."
+    local waited=0
+    until docker exec "$mysql_container" mysqladmin ping -uroot -p"$db_root_pw" --silent 2>/dev/null; do
+        sleep 2; waited=$((waited + 2))
+        if [ $waited -ge 60 ]; then
+            log "ERROR: MIGRATE: MySQL 在 60s 内未就绪，跳过迁移"
+            return 1
+        fi
+    done
+
+    # 提取最高版本号用于日志
+    local max_ver
+    max_ver=$(grep -oE '^--   V[0-9]+__' "$migration_sql" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
+    log "MIGRATE: 执行 04-apply-all-migrations.sql (V1~V${max_ver})..."
+
+    local migrate_output migrate_exit migrate_errors
+    migrate_output=$(docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" 2>&1 < "$migration_sql")
+    migrate_exit=$?
+    migrate_errors=$(echo "$migrate_output" \
+        | grep -v "Using a password on the command line interface can be insecure" \
+        | grep -v "^$" || true)
+
+    if [ $migrate_exit -ne 0 ]; then
+        log "ERROR: MIGRATE: 增量迁移失败，退出码: $migrate_exit"
+        [ -n "$migrate_errors" ] && log "$migrate_errors"
+        return 1
+    elif [ -n "$migrate_errors" ]; then
+        log "WARN: MIGRATE: 迁移完成但有警告:"
+        log "$migrate_errors"
+    fi
+    log "MIGRATE: 增量迁移完成 ✓ (V1~V${max_ver})"
+
+    # 验证从库复制延迟
+    local slave_container slave_lag_wait=0
+    slave_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.slave|mysql-slave' | head -1 || echo "")
+    if [ -n "$slave_container" ]; then
+        log "MIGRATE: 验证从库复制延迟..."
+        until [ $slave_lag_wait -ge 30 ]; do
+            local lag io
+            lag=$(docker exec "$slave_container" mysql -uroot -p"$db_root_pw" \
+                  -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+                  | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+            io=$(docker exec "$slave_container" mysql -uroot -p"$db_root_pw" \
+                 -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+                 | grep "Replica_IO_Running:" | awk '{print $2}' || echo "Unknown")
+            if [ "$lag" = "0" ] && [ "$io" = "Yes" ]; then
+                log "MIGRATE: 从库同步完成 ✓ (延迟: 0s)"
+                break
+            elif [ "$lag" = "NULL" ]; then
+                log "WARN: MIGRATE: 无法获取从库状态，跳过延迟检查"
+                break
+            fi
+            log "MIGRATE: 等待从库同步... (延迟: ${lag}s, IO: ${io})"
+            sleep 3; slave_lag_wait=$((slave_lag_wait + 3))
+        done
+        [ $slave_lag_wait -ge 30 ] && log "WARN: MIGRATE: 从库同步等待超时，请手动检查"
+    fi
+
+    return 0
+}
+
 # ── 数据库 Schema 验证 ───────────────────────────────
-# 验证本项目关键表是否存在（替代 Flyway 校验）
-# 背景：项目 Flyway 已禁用（application.yml: flyway.enabled=false），
-#       迁移通过 docker-entrypoint-initdb.d + deploy.sh 幂等 SQL 管理。
-#       不能依赖 flyway_schema_history 表（不存在）做回滚判断。
+# 验证本项目关键表是否存在
+# 每新增一个 Flyway 迁移版本，在此表列中补充该版本引入的标志性表
 
 verify_flyway_migrations() {
     log "SCHEMA: 验证关键表是否存在..."
 
-    local db_password="${DB_PASSWORD:-}"
-    if [ -z "$db_password" ] && [ -f "$ENV_FILE" ]; then
-        db_password=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- || echo "")
-    fi
-    if [ -z "$db_password" ]; then
+    local db_root_pw
+    db_root_pw=$(grep -E '^MYSQL_ROOT_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
+    [ -z "$db_root_pw" ] && db_root_pw=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
+    if [ -z "$db_root_pw" ]; then
         log "WARN: 未找到数据库密码，跳过 Schema 验证"
         return 0
     fi
 
     local mysql_container
     mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.master|mysql-master' | head -1 || echo "")
-    if [ -z "$mysql_container" ]; then
-        mysql_container=$(docker ps --format '{{.Names}}' | grep mysql | head -1 || echo "")
-    fi
+    [ -z "$mysql_container" ] && mysql_container=$(docker ps --format '{{.Names}}' | grep mysql | head -1 || echo "")
     if [ -z "$mysql_container" ]; then
         log "WARN: 未找到 MySQL 容器，跳过 Schema 验证"
         return 0
     fi
 
-    # 检查核心业务表是否存在（跨越多个迁移版本的关键标志）
-    # V1: users  V6: system_config  V12: article_favorites
+    # 关键标志表（每个 V 版本选一张有代表性的表）：
+    #   V1: users           V6: system_config     V12: article_favorites
+    #   V14: user_tags      V14: feature_override
     local missing_tables=""
-    for tbl in users system_config article_favorites; do
+    for tbl in users system_config article_favorites user_tags feature_override; do
         local exists
         exists=$(docker exec "$mysql_container" \
-            mysql -uroot -p"$db_password" english_learning \
+            mysql -uroot -p"$db_root_pw" english_learning \
             -sN -e "SELECT COUNT(*) FROM information_schema.TABLES
                     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='${tbl}';" \
             2>/dev/null | tr -d '[:space:]' || echo "0")
@@ -419,13 +535,12 @@ verify_flyway_migrations() {
 
     if [ -n "$missing_tables" ]; then
         log "ERROR: 数据库缺少关键表:${missing_tables}"
-        log "ERROR: 请检查 deploy.sh 或 docker-entrypoint-initdb.d 迁移是否成功执行"
         notify "部署警告: 数据库缺少关键表:${missing_tables}，已触发回滚"
-        ops_log "ERROR" "$(git rev-parse --short HEAD)" "Schema 缺少关键表:${missing_tables}"
+        ops_log "ERROR" "$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')" "Schema 缺少关键表:${missing_tables}"
         return 1
     fi
 
-    log "SCHEMA: 核心表验证通过 ✓ (users / system_config / article_favorites)"
+    log "SCHEMA: 核心表验证通过 ✓ (users / system_config / article_favorites / user_tags / feature_override)"
     return 0
 }
 
@@ -583,7 +698,7 @@ log "  远程:   ${REMOTE_HASH:0:8}"
 
 # 显示新增的提交记录
 log "──── 新提交列表 ────"
-git log --oneline "$DEPLOYED_HASH".."$REMOTE_HASH" | head -20
+git log --oneline "$DEPLOYED_HASH".."$REMOTE_HASH" | head -20 || true
 log "────────────────────"
 
 # ① 记录当前版本（用于回滚）
@@ -624,9 +739,11 @@ CHANGED_FILES=$(git diff --name-only "$OLD_COMMIT" HEAD)
 
 REBUILD_BACKEND=false
 REBUILD_FRONTEND=false
+RUN_MIGRATIONS=false   # 是否需要执行增量迁移（即使不重建后端）
 
 if echo "$CHANGED_FILES" | grep -qE '^backend/'; then
     REBUILD_BACKEND=true
+    RUN_MIGRATIONS=true
     log "INFO: 检测到后端变更"
 fi
 
@@ -639,7 +756,14 @@ fi
 if echo "$CHANGED_FILES" | grep -qE '(docker-compose|Dockerfile|\.env\.example)'; then
     REBUILD_BACKEND=true
     REBUILD_FRONTEND=true
+    RUN_MIGRATIONS=true
     log "INFO: 检测到部署配置变更，全量重建"
+fi
+
+# 迁移脚本自身变更时，即使后端代码未动也需要执行迁移
+if echo "$CHANGED_FILES" | grep -qE '(docker/mysql/init/04-apply-all-migrations\.sql|backend/src/main/resources/db/migration/)'; then
+    RUN_MIGRATIONS=true
+    log "INFO: 检测到数据库迁移脚本变更，将执行增量迁移"
 fi
 
 # ── 执行重建 ──────────────────────────────────────────
@@ -666,10 +790,19 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
     log "INFO: 启动新容器..."
     docker compose -f "$COMPOSE_FILE" up -d $SERVICES
 
-    # ⑩.5 Flyway 迁移验证：确认所有迁移脚本均已成功执行
-    if [ "$REBUILD_BACKEND" = true ]; then
+    # ⑩.5 增量 SQL 迁移（Flyway 已禁用，init/ 在卷已存在时不重新运行）
+    if [ "$RUN_MIGRATIONS" = true ]; then
+        run_incremental_migrations || {
+            log "ERROR: 增量迁移失败，启动自动回滚..."
+            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+            exit 1
+        }
+    fi
+
+    # ⑩.6 Schema 验证：确认关键表存在
+    if [ "$RUN_MIGRATIONS" = true ]; then
         verify_flyway_migrations || {
-            log "ERROR: Flyway 迁移验证失败，启动自动回滚..."
+            log "ERROR: Schema 验证失败，启动自动回滚..."
             rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
             exit 1
         }
@@ -701,7 +834,12 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
         exit 1
     fi
 else
-    log "INFO: 变更不涉及前后端代码（可能是文档/脚本），跳过重建"
+    log "INFO: 变更不涉及前后端代码（可能是文档/脚本/迁移），跳过重建"
+    # 即使不重建，也要执行迁移（如仅合并 SQL 或 Flyway 文件有更新）
+    if [ "$RUN_MIGRATIONS" = true ]; then
+        run_incremental_migrations || log "WARN: 迁移执行失败，请手动检查数据库"
+        verify_flyway_migrations   || log "WARN: Schema 验证失败，请手动检查数据库"
+    fi
     # 无需重建，更新部署记录到最新 commit，直接关闭维护模式
     NEW_COMMIT=$(git rev-parse HEAD)
     echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"

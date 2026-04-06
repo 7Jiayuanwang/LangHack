@@ -431,6 +431,106 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 8px rgba(0,0,0,0.03);
 }
 
+/* Markdown content styles inside AI bubble */
+.ai-bubble :deep(h1),
+.ai-bubble :deep(h2),
+.ai-bubble :deep(h3),
+.ai-bubble :deep(h4),
+.ai-bubble :deep(h5),
+.ai-bubble :deep(h6) {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+.ai-bubble :deep(h1) { font-size: 1.5em; }
+.ai-bubble :deep(h2) { font-size: 1.3em; }
+.ai-bubble :deep(h3) { font-size: 1.15em; }
+.ai-bubble :deep(h4) { font-size: 1em; }
+
+.ai-bubble :deep(p) {
+  margin: 8px 0;
+  line-height: 1.7;
+}
+
+.ai-bubble :deep(p:first-child) { margin-top: 0; }
+.ai-bubble :deep(p:last-child) { margin-bottom: 0; }
+
+.ai-bubble :deep(ul),
+.ai-bubble :deep(ol) {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.ai-bubble :deep(li) {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+.ai-bubble :deep(code) {
+  padding: 2px 6px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.9em;
+  color: #dc2626;
+}
+
+.ai-bubble :deep(pre) {
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: #1e293b;
+  border-radius: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ai-bubble :deep(pre code) {
+  padding: 0;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+
+.ai-bubble :deep(blockquote) {
+  margin: 12px 0;
+  padding: 8px 16px;
+  border-left: 4px solid #197fe6;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.ai-bubble :deep(table) {
+  margin: 12px 0;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+
+.ai-bubble :deep(th),
+.ai-bubble :deep(td) {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.ai-bubble :deep(th) {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.ai-bubble :deep(strong) {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ai-bubble :deep(em) {
+  font-style: italic;
+}
+
 .user-bubble {
   background: linear-gradient(135deg, #197fe6, #3b82f6);
   color: white;

@@ -217,7 +217,7 @@ public class StudentExerciseServiceImpl extends ServiceImpl<StudentExerciseAnswe
 
             result.put("completedExercises", completedExercises);
             result.put("correctAnswers", correctAnswers);
-            result.put("progress", totalExercises > 0 ? (completedExercises * 100.0 / totalExercises) : 0);
+            result.put("progress", totalExercises > 0 ? Math.round(completedExercises * 100.0 / totalExercises * 100.0) / 100.0 : 0);
             result.put("isCompleted", completedExercises >= totalExercises);
 
             if (completedExercises > 0) {

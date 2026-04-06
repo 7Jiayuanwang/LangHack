@@ -1,52 +1,78 @@
-# 数据库备份
+# database/ — 历史数据目录
 
-本目录包含数据库备份文件，使用 Git LFS 进行版本管理。
+本目录存放历史数据库备份文件，使用 **Git LFS** 进行版本管理。
 
-## 文件说明
+> **重要区分**
+> - **数据库结构**（表/索引/配置）由 `docker/mysql/init/04-apply-all-migrations.sql` 负责，全幂等
+> - **历史业务数据**（文章/单词/用户等）由本目录的 SQL 文件负责，按需导入
 
-- `database_backup_YYYYMMDD_HHMMSS.sql`: 数据库完整备份文件
+---
 
-## 使用 Git LFS
+## 自动导入（首次启动）
 
-### 首次克隆仓库
+首次 `docker compose up` 时，`03-import-backup.sh` 自动发现并导入数据：
+
+| 优先级 | 来源 |
+|--------|------|
+| 1 | 环境变量 `DB_SEED_SQL` 指定的文件 |
+| 2 | `database/` 目录下**最新**的 `.sql` 文件（按文件名排序） |
+
+文件不存在 / 为 LFS 指针 / 文件过小时自动跳过，不影响启动。
+
+---
+
+## 手动导入（已运行环境）
 
 ```bash
-# 克隆仓库
-git clone <repository-url>
-
-# 拉取 LFS 文件
-git lfs pull
+# 将备份文件导入到运行中的主库
+DB_PW=$(grep '^DB_PASSWORD=' docker/.env | cut -d= -f2-)
+docker exec -i langhack-mysql-master \
+  mysql -uroot -p"$DB_PW" english_learning \
+  < database/<your-backup>.sql
 ```
 
-### 添加新的数据库备份
+---
+
+## 导出当前数据
 
 ```bash
-# 导出数据库
-mysqldump -u root -p<password> english_learning > database/database_backup_$(date +%Y%m%d_%H%M%S).sql
+# 导出完整数据（含结构+数据）
+DB_PW=$(grep '^DB_PASSWORD=' docker/.env | cut -d= -f2-)
+docker exec langhack-mysql-master \
+  mysqldump -uroot -p"$DB_PW" --single-transaction \
+  --routines --triggers english_learning \
+  > database/export_$(date +%Y%m%d_%H%M%S).sql
 
-# 添加并提交
+# 提交到 Git LFS
 git add database/*.sql
-git commit -m "Add database backup"
+git commit -m "chore: export db $(date +%Y%m%d)"
 git push
 ```
 
-### 恢复数据库
+---
+
+## 运行时备份
+
+Spring Boot 备份服务和 `auto-update.sh` 将备份写入 `backups/` 目录（绑定挂载至容器 `/app/backups`），**该目录已在 `.gitignore` 中忽略**，不会随 `docker compose down` 或项目更新而丢失。
+
+---
+
+## Git LFS 配置
 
 ```bash
-# 从备份文件恢复
-mysql -u root -p<password> english_learning < database/database_backup_YYYYMMDD_HHMMSS.sql
+# 首次克隆后拉取 LFS 内容
+git lfs pull
+
+# 检查 LFS 状态
+git lfs ls-files
 ```
 
-## 注意事项
+`.gitattributes` 已配置所有 `database/*.sql` 使用 LFS 存储。
 
-1. 数据库备份文件较大，已通过 Git LFS 管理
-2. 确保已安装 Git LFS: `git lfs install`
-3. 首次克隆后需要运行 `git lfs pull` 获取 LFS 文件
-4. 备份文件包含敏感数据，请妥善保管
+---
 
 ## 数据库信息
 
 - 数据库名: `english_learning`
-- 字符集: UTF-8
-- 时区: GMT+8
-
+- 字符集: `utf8mb4_unicode_ci`
+- 时区: `GMT+8`

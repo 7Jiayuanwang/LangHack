@@ -60,3 +60,60 @@ export function getFeatureToggles() {
     method: 'get'
   })
 }
+
+// 个性化功能开关（学生端登录后使用）
+export function getPersonalFeatureToggles() {
+  return request({
+    url: '/api/student/feature-toggles',
+    method: 'get'
+  })
+}
+
+// ---------- 标签管理（OPS）----------
+
+export function listAllTags() {
+  return request({ url: '/api/ops/user-tags', method: 'get' })
+}
+
+export function getUsersByTag(tagName) {
+  return request({ url: `/api/ops/user-tags/${tagName}/users`, method: 'get' })
+}
+
+export function deleteTag(tagName) {
+  return request({ url: `/api/ops/user-tags/${tagName}`, method: 'delete' })
+}
+
+export function getUserTags(userId) {
+  return request({ url: `/api/ops/users/${userId}/tags`, method: 'get' })
+}
+
+export function setUserTags(userId, tags) {
+  return request({ url: `/api/ops/users/${userId}/tags`, method: 'put', data: tags })
+}
+
+// 搜索用户（OPS 用于标签分配时选人）
+export function searchUsers(params) {
+  return request({ url: '/api/admin/users', method: 'get', params })
+}
+
+// ---------- 覆盖规则管理（OPS）----------
+
+export function listFeatureOverrides(scope, scopeValue) {
+  return request({
+    url: '/api/ops/feature-overrides',
+    method: 'get',
+    params: { scope, scopeValue }
+  })
+}
+
+export function upsertFeatureOverride(override) {
+  return request({ url: '/api/ops/feature-overrides', method: 'put', data: override })
+}
+
+export function deleteFeatureOverride(scope, scopeValue, featureKey) {
+  return request({
+    url: '/api/ops/feature-overrides',
+    method: 'delete',
+    params: { scope, scopeValue, featureKey }
+  })
+}

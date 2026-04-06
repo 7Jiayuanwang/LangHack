@@ -338,16 +338,13 @@ const toggleFeatured = async (row, nextValue) => {
   const targetFeatured = nextValue === true || nextValue === 1 ? 1 : 0
   row._featuredLoading = true
   try {
-    const response = await adminApi.toggleTextFeatured(row.id, targetFeatured)
-    if (response.code === 200) {
-      row.isFeatured = targetFeatured
-      ElMessage.success(response.data || '操作成功')
-      loadStats()
-    } else {
-      ElMessage.error(response.message || 'Operation failed')
-    }
+    await adminApi.toggleTextFeatured(row.id, targetFeatured)
+    row.isFeatured = targetFeatured
+    ElMessage.success(targetFeatured === 1 ? '已设为推荐' : '已取消推荐')
+    loadStats()
   } catch (error) {
-    ElMessage.error('Operation failed')
+    // 拦截器已展示错误弹窗，此处回滚 UI 状态
+    row.isFeatured = 1 - targetFeatured
   } finally {
     row._featuredLoading = false
   }

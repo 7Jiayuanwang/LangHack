@@ -53,10 +53,14 @@ services:
       - mysql_master_data:/var/lib/mysql
       - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
       # docker-entrypoint-initdb.d 按文件名顺序执行（仅首次启动）
-      # 01: 字符集配置 → 02: 复制用户 → 03: 备份导入 → 04: 合并迁移 → 05: ECDICT词典
+      # 01: 字符集配置 → 02: 复制用户 → 03: 历史数据导入(可选) → 04: 合并迁移(V1~V14) → 05: ECDICT词典
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
       - ./mysql/init/01-create-replication-user.sh:/docker-entrypoint-initdb.d/02-create-replication-user.sh:ro
-      - ../database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/03-import-backup.sql:ro
+      - ./mysql/init/03-import-backup.sh:/docker-entrypoint-initdb.d/03-import-backup.sh:ro
+      # 历史数据 SQL 目录（优先级：backups/ 全量备份 > database/ 旧备份）
+      # 03-import-backup.sh 自动选取最新全量备份（排除 pre-update_* 增量文件）
+      - ../database:/docker-entrypoint-initdb.d/seed:ro
+      - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
       - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
       - ./mysql/init/05-import-ecdict.sh:/docker-entrypoint-initdb.d/05-import-ecdict.sh:ro
       - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
@@ -111,7 +115,9 @@ services:
       - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
       # 从库也需要完整的初始化数据（备份 + 迁移 + ECDICT）
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
-      - ../database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/03-import-backup.sql:ro
+      - ./mysql/init/03-import-backup.sh:/docker-entrypoint-initdb.d/03-import-backup.sh:ro
+      - ../database:/docker-entrypoint-initdb.d/seed:ro
+      - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
       - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
       - ./mysql/init/05-import-ecdict.sh:/docker-entrypoint-initdb.d/05-import-ecdict.sh:ro
       - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
@@ -218,7 +224,8 @@ services:
     volumes:
       - app_logs:/app/logs
       - app_uploads:/app/uploads
-      - app_backups:/app/backups
+      # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
+      - ../backups:/app/backups
     networks:
       - langhack-network
     depends_on:
@@ -290,6 +297,4 @@ volumes:
   app_logs:
     driver: local
   app_uploads:
-    driver: local
-  app_backups:
     driver: local

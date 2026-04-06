@@ -430,7 +430,7 @@ class StudentLearningControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").value("单词已添加到生词本"));
 
-        verify(vocabularyBooksService).addToVocabularyWithLevel(1L, 10L, "LEARNING");
+        verify(vocabularyBooksService).addToVocabularyWithLevel(1L, 10L, "NEW");
     }
 
     @Test

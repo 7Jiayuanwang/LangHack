@@ -98,7 +98,7 @@ class StudentWordControllerEnhancedTest {
     @DisplayName("POST /vocabulary - add new word success")
     void addToVocabulary_newWord() throws Exception {
         when(vocabularyBooksService.existsByStudentAndWord(5L, 1L)).thenReturn(false);
-        doNothing().when(vocabularyBooksService).addToVocabularyWithLevel(5L, 1L, "LEARNING");
+        doNothing().when(vocabularyBooksService).addToVocabularyWithLevel(5L, 1L, "NEW");
         doNothing().when(learningRecordsService).recordVocabularyAdd(5L, 1L);
 
         mockMvc.perform(post("/api/student/words/vocabulary")
@@ -113,7 +113,6 @@ class StudentWordControllerEnhancedTest {
     @DisplayName("POST /vocabulary - word already exists updates status")
     void addToVocabulary_alreadyExists() throws Exception {
         when(vocabularyBooksService.existsByStudentAndWord(5L, 1L)).thenReturn(true);
-        doNothing().when(vocabularyBooksService).updateMasteryLevel(eq(5L), eq(1L), eq("LEARNING"), isNull());
         doNothing().when(learningRecordsService).recordVocabularyAdd(5L, 1L);
 
         mockMvc.perform(post("/api/student/words/vocabulary")
@@ -121,7 +120,7 @@ class StudentWordControllerEnhancedTest {
                         .content(objectMapper.writeValueAsString(Map.of("wordId", 1))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data").value("单词学习状态已更新"));
+                .andExpect(jsonPath("$.data").value("单词已在生词本中"));
     }
 
     @Test
@@ -157,7 +156,7 @@ class StudentWordControllerEnhancedTest {
         wordResult.put("word", "test");
         when(wordNetService.getOrCreateWord("test")).thenReturn(wordResult);
         when(vocabularyBooksService.existsByStudentAndWord(5L, 10L)).thenReturn(false);
-        doNothing().when(vocabularyBooksService).addToVocabularyWithLevel(5L, 10L, "LEARNING");
+        doNothing().when(vocabularyBooksService).addToVocabularyWithLevel(5L, 10L, "NEW");
         doNothing().when(learningRecordsService).recordVocabularyAdd(5L, 10L);
 
         mockMvc.perform(post("/api/student/words/vocabulary/by-word")

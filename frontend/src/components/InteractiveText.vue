@@ -116,7 +116,7 @@
           >
             {{ isInVocabulary ? '已在生词本' : '添加到生词本' }}
           </el-button>
-          <el-button @click="showWordDialog = false">关闭</el-button>
+          <el-button @click="handleDialogClose">关闭</el-button>
         </div>
       </div>
 

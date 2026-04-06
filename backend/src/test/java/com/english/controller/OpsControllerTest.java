@@ -1,7 +1,13 @@
 package com.english.controller;
 
-import com.english.test.TestUtils;
+import com.english.entity.User;
+import com.english.service.AiProviderService;
+import com.english.service.FeatureToggleService;
+import com.english.service.SystemConfigService;
+import com.english.service.TencentTranslateService;
+import com.english.service.UserService;
 import com.english.service.impl.DataCleanupServiceImpl;
+import com.english.test.TestUtils;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -11,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.Collections;
+import java.util.List;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -18,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * OpsController unit tests.
- * Covers: data cleanup and data statistics endpoints migrated from AdminController.
+ * Covers: data cleanup, data statistics, and tag member lookup endpoints.
  */
 @DisplayName("OpsController Tests")
 class OpsControllerTest {
@@ -27,6 +34,16 @@ class OpsControllerTest {
 
     @Mock
     private DataCleanupServiceImpl dataCleanupService;
+    @Mock
+    private SystemConfigService systemConfigService;
+    @Mock
+    private TencentTranslateService translateService;
+    @Mock
+    private AiProviderService aiProviderService;
+    @Mock
+    private FeatureToggleService featureToggleService;
+    @Mock
+    private UserService userService;
 
     @InjectMocks
     private OpsController controller;
@@ -94,5 +111,25 @@ class OpsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.message").value("获取数据统计失败，请稍后重试"));
+    }
+
+    @Test
+    @DisplayName("GET /api/ops/user-tags/{tagName}/users - returns user details")
+    void getUsersByTag_returnsUserDetails() throws Exception {
+        User u = new User();
+        u.setId(1L);
+        u.setUsername("alice");
+        u.setNickname("Alice");
+        u.setRole("STUDENT");
+
+        when(featureToggleService.getUserIdsByTag("vip")).thenReturn(List.of(1L));
+        when(userService.getById(1L)).thenReturn(u);
+
+        mockMvc.perform(get("/api/ops/user-tags/vip/users"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].username").value("alice"))
+                .andExpect(jsonPath("$.data[0].nickname").value("Alice"))
+                .andExpect(jsonPath("$.data[0].role").value("STUDENT"));
     }
 }

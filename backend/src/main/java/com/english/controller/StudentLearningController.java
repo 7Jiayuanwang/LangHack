@@ -645,13 +645,12 @@ public class StudentLearningController {
             }
 
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
-                // 如果已存在，更新掌握程度为学习中
-                vocabularyBooksService.updateMasteryLevel(studentId, wordId, "LEARNING", null);
+                // 如果已存在，不改变掌握程度
                 return Result.success("单词已在生词本中");
             }
 
-            // 添加到生词本，并直接设置为学习中状态
-            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordId, "LEARNING");
+            // 新加入生词本，初始状态为 NEW
+            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordId, "NEW");
 
             return Result.success("单词已添加到生词本");
         } catch (BusinessException e) {
@@ -1230,8 +1229,8 @@ public class StudentLearningController {
                 return Result.success("单词已在生词本中");
             }
 
-            // 添加到生词本
-            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordEntity.getId(), "LEARNING");
+            // 添加到生词本，初始状态为 NEW
+            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordEntity.getId(), "NEW");
 
             return Result.success("单词已添加到生词本");
         } catch (BusinessException e) {

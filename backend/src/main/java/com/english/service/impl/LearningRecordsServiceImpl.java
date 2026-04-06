@@ -804,9 +804,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         }
         stats.put("learnedWords", Math.min(learnedWords, totalWords));
 
-        // 学习进度，clamp 到 [0, 100]
+        // 学习进度，clamp 到 [0, 100]，保留两位小数
         double progress = totalWords > 0 ? (double) Math.min(learnedWords, totalWords) / totalWords * 100 : 0.0;
-        stats.put("progress", Math.max(0.0, Math.min(progress, 100.0)));
+        stats.put("progress", Math.round(Math.max(0.0, Math.min(progress, 100.0)) * 100.0) / 100.0);
 
         // 学习时间
         long studySeconds = calculateCourseStudySeconds(studentId, courseId);
@@ -1308,16 +1308,16 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         // 计算课文进度（权重50%）
         double textProgress = totalTexts > 0 ? (double) readTexts / totalTexts * 100 : 0.0;
 
-        // 如果只有单词或只有课文，直接返回对应进度
+        // 如果只有单词或只有课文，直接返回对应进度（保留两位小数）
         if (totalWords == 0) {
-            return textProgress;
+            return Math.round(textProgress * 100.0) / 100.0;
         }
         if (totalTexts == 0) {
-            return wordProgress;
+            return Math.round(wordProgress * 100.0) / 100.0;
         }
 
-        // 综合进度：单词和课文各占50%
-        return (wordProgress * 0.5 + textProgress * 0.5);
+        // 综合进度：单词和课文各占50%，保留两位小数
+        return Math.round((wordProgress * 0.5 + textProgress * 0.5) * 100.0) / 100.0;
     }
 
     /**

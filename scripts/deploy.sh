@@ -634,6 +634,14 @@ echo "[INFO] 拉取远程最新代码..."
 git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || \
     echo "[WARN] 无法从远程拉取 $TARGET_BRANCH，使用本地版本"
 
+# 拉取 Git LFS 文件（database/*.sql 等大文件）
+if command -v git-lfs &>/dev/null || git lfs version &>/dev/null 2>&1; then
+    echo "[INFO] 拉取 Git LFS 文件（database/*.sql）..."
+    git lfs pull 2>/dev/null || echo "[WARN] git lfs pull 失败，若需导入历史数据请手动执行"
+else
+    echo "[WARN] git-lfs 未安装，跳过 LFS 文件拉取"
+fi
+
 echo "[INFO] 版本: $(git rev-parse --short HEAD)"
 
 cd "$DOCKER_DIR"
@@ -757,248 +765,53 @@ if [ "$deploy_ok" = false ]; then
     fi
     exit 1
 fi
-# ── 应用增量数据库迁移（幂等，已有数据库实例也安全执行）────────────────
-# initdb.d 仅在数据卷为空时执行；升级时需手动将新迁移推送到已有 DB
-echo "[INFO] 应用增量数据库迁移..."
-DB_PW_VAL=$(load_env_value "DB_PASSWORD" "" "$ENV_FILE")
-DB_USER_VAL=$(load_env_value "DB_USERNAME" "root" "$ENV_FILE")
-MASTER_CONTAINER="langhack-mysql-master"
+# ── 版本同步校验：确认 Flyway 迁移与合并脚本保持同步 ────────────────
+MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
+if [ -f "$MIGRATION_SQL" ] && [ -d "$FLYWAY_DIR" ]; then
+    flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l || echo 0)
+    # 统计合并脚本中的 V 注释块数量（头部列表格式：--   V{n}__）
+    merged_count=$(grep -cE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null || echo 0)
+    if [ "$flyway_count" -gt "$merged_count" ]; then
+        echo "[WARN] ⚠️  发现 ${flyway_count} 个 Flyway 迁移文件，但合并脚本仅包含 ${merged_count} 个版本块"
+        echo "[WARN]    请将最新迁移同步到 docker/mysql/init/04-apply-all-migrations.sql"
+        echo "[WARN]    差异文件:"
+        for f in "$FLYWAY_DIR"/V*.sql; do
+            vn=$(basename "$f" | grep -oE '^V[0-9]+' || true)
+            grep -q "^--   ${vn}__" "$MIGRATION_SQL" 2>/dev/null || echo "         [缺失] $f"
+        done
+    else
+        echo "[OK] 迁移版本同步检查通过（Flyway: ${flyway_count}, 合并脚本: ${merged_count}）"
+    fi
+fi
 
-# 等待 mysql-master 容器可用（最多 30s）
+# ── 应用增量数据库迁移（幂等，新旧数据库均可安全执行）────────────────
+# initdb.d 仅在数据卷为空时执行；此处对已有数据库实例补全所有迁移
+# 数据源：docker/mysql/init/04-apply-all-migrations.sql（V1~V14，全幂等）
+# 使用 root 执行以确保 DDL 权限（CREATE TABLE / ALTER TABLE 等）
+echo "[INFO] 应用增量数据库迁移..."
+DB_ROOT_PW=$(load_env_value "MYSQL_ROOT_PASSWORD" "" "$ENV_FILE")
+# MYSQL_ROOT_PASSWORD 与 DB_PASSWORD 通常一致；若未独立配置则回退
+[ -z "$DB_ROOT_PW" ] && DB_ROOT_PW=$(load_env_value "DB_PASSWORD" "" "$ENV_FILE")
+MASTER_CONTAINER="langhack-mysql-master"
+SLAVE_CONTAINER="langhack-mysql-slave"
+
+# 等待 mysql-master 容器可用（最多 60s）
 mc_wait=0
-until docker exec "$MASTER_CONTAINER" mysqladmin ping -u"$DB_USER_VAL" -p"$DB_PW_VAL" --silent 2>/dev/null; do
+until docker exec "$MASTER_CONTAINER" mysqladmin ping -uroot -p"$DB_ROOT_PW" --silent 2>/dev/null; do
     mc_wait=$((mc_wait + 2)); sleep 2
-    [ $mc_wait -ge 30 ] && echo "[WARN] mysql-master 未就绪，跳过迁移" && break
+    [ $mc_wait -ge 60 ] && echo "[WARN] mysql-master 未就绪，跳过迁移" && break
 done
 
-if [ $mc_wait -lt 30 ]; then
-    # 全量幂等增量迁移：补全已有数据库实例缺失的列、表和配置数据
-    # 与 docker/mysql/init/04-apply-all-migrations.sql 保持一致
-    # 使用存储过程 + information_schema 检查，安全重复执行
-    MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -u"$DB_USER_VAL" -p"$DB_PW_VAL" english_learning 2>&1 <<'MIGRATE_ALL'
-
--- ── texts 表增量列（cover_url / markdown 系列 / is_featured / featured_priority）──
-DROP PROCEDURE IF EXISTS _deploy_texts_cols;
-DELIMITER //
-CREATE PROCEDURE _deploy_texts_cols()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_content') THEN
-        ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT '中英对照版本内容';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN markdown_content LONGTEXT COMMENT 'Markdown格式的课文内容' AFTER content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='content_type') THEN
-        ALTER TABLE texts ADD COLUMN content_type ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '内容类型' AFTER markdown_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT COMMENT 'CET-4难度的Markdown版本' AFTER chinese_parallel_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN cet6_markdown_content LONGTEXT COMMENT 'CET-6难度的Markdown版本' AFTER cet4_markdown_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN academic_markdown_content LONGTEXT COMMENT '学术版的Markdown版本' AFTER cet6_markdown_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN chinese_parallel_markdown_content LONGTEXT COMMENT '中英对照的Markdown版本' AFTER academic_markdown_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_featured') THEN
-        ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT '是否推荐';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='featured_priority') THEN
-        ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT '推荐优先级';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cover_url') THEN
-        ALTER TABLE texts ADD COLUMN cover_url VARCHAR(500) DEFAULT NULL COMMENT '文章封面图 URL' AFTER audio_url;
-    END IF;
-END//
-DELIMITER ;
-CALL _deploy_texts_cols();
-DROP PROCEDURE IF EXISTS _deploy_texts_cols;
-
--- ── texts 推荐优先级复合索引 ──
-DROP PROCEDURE IF EXISTS _deploy_idx_featured;
-DELIMITER //
-CREATE PROCEDURE _deploy_idx_featured()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='texts' AND index_name='idx_texts_featured_priority') THEN
-        CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC);
-    END IF;
-END//
-DELIMITER ;
-CALL _deploy_idx_featured();
-DROP PROCEDURE IF EXISTS _deploy_idx_featured;
-
--- ── texts.unit_id 改为可空 ──
-ALTER TABLE texts MODIFY COLUMN unit_id BIGINT DEFAULT NULL COMMENT '单元ID（可为空）';
-
--- ── assignments 表增量列（weight / ideal_study_time_minutes）──
-DROP PROCEDURE IF EXISTS _deploy_assignments_cols;
-DELIMITER //
-CREATE PROCEDURE _deploy_assignments_cols()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='weight') THEN
-        ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00 COMMENT '任务权重' AFTER deadline;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='ideal_study_time_minutes') THEN
-        ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60 COMMENT '理想学习时长（分钟）' AFTER weight;
-    END IF;
-END//
-DELIMITER ;
-CALL _deploy_assignments_cols();
-DROP PROCEDURE IF EXISTS _deploy_assignments_cols;
-
--- ── learning_records 表增量列（text_id）──
-DROP PROCEDURE IF EXISTS _deploy_lr_cols;
-DELIMITER //
-CREATE PROCEDURE _deploy_lr_cols()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id') THEN
-        ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT '关联的课文ID' AFTER word_id;
-    END IF;
-END//
-DELIMITER ;
-CALL _deploy_lr_cols();
-DROP PROCEDURE IF EXISTS _deploy_lr_cols;
-
--- ── vocabulary_books SM-2 字段 ──
-DROP PROCEDURE IF EXISTS _deploy_sm2_cols;
-DELIMITER //
-CREATE PROCEDURE _deploy_sm2_cols()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT 'SM-2 重复次数';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='interval_days') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 0 COMMENT 'SM-2 间隔天数';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='easiness_factor') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT 'SM-2 简易因子';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT 'SM-2 下次复习时间';
-    END IF;
-END//
-DELIMITER ;
-CALL _deploy_sm2_cols();
-DROP PROCEDURE IF EXISTS _deploy_sm2_cols;
-
--- ── media 表增量列（file_path / thumbnail_path）──
-DROP PROCEDURE IF EXISTS _deploy_media_cols;
-DELIMITER //
-CREATE PROCEDURE _deploy_media_cols()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path') THEN
-        ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT 'stored media file path';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path') THEN
-        ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path';
-    END IF;
-END//
-DELIMITER ;
-CALL _deploy_media_cols();
-DROP PROCEDURE IF EXISTS _deploy_media_cols;
-
--- ── ai_provider.app_id 列 ──
-DROP PROCEDURE IF EXISTS _deploy_ai_provider_cols;
-DELIMITER //
-CREATE PROCEDURE _deploy_ai_provider_cols()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='ai_provider' AND column_name='app_id') THEN
-        ALTER TABLE ai_provider ADD COLUMN app_id VARCHAR(200) NULL COMMENT 'App ID' AFTER api_key;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='ai_provider' AND column_name='qa_app_id') THEN
-        ALTER TABLE ai_provider ADD COLUMN qa_app_id VARCHAR(200) NULL COMMENT 'QA App ID' AFTER app_id;
-    END IF;
-END//
-DELIMITER ;
-CALL _deploy_ai_provider_cols();
-DROP PROCEDURE IF EXISTS _deploy_ai_provider_cols;
-
--- ── users 角色枚举扩展（支持 OPS）──
-ALTER TABLE users MODIFY COLUMN role ENUM('USER','STUDENT','TEACHER','ADMIN','OPS') NOT NULL DEFAULT 'USER';
-
--- ── 新建表（全部幂等）──
-CREATE TABLE IF NOT EXISTS text_learning_records (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id BIGINT NOT NULL,
-    text_id BIGINT NOT NULL,
-    assignment_id BIGINT,
-    start_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    end_time DATETIME,
-    duration_seconds INT DEFAULT 0,
-    is_completed TINYINT(1) DEFAULT 0,
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_student_text (student_id, text_id),
-    INDEX idx_assignment (assignment_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章学习记录表';
-
-CREATE TABLE IF NOT EXISTS user_text_reads (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    text_id BIGINT NOT NULL,
-    read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_user_text (user_id, text_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户文章已读记录表';
-
-CREATE TABLE IF NOT EXISTS article_favorites (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id BIGINT NOT NULL,
-    text_id BIGINT NOT NULL,
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_student_text (student_id, text_id),
-    INDEX idx_student_id (student_id),
-    INDEX idx_text_id (text_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章收藏表';
-
-CREATE TABLE IF NOT EXISTS underlines (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    text_id BIGINT NOT NULL,
-    selected_text TEXT,
-    start_index INT,
-    end_index INT,
-    serialized_range TEXT COMMENT 'Serialized DOM range for robust highlighting',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_text_id (text_id),
-    INDEX idx_user_id (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户划线标注表';
-
-CREATE TABLE IF NOT EXISTS score_records (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id BIGINT NOT NULL,
-    assignment_id BIGINT,
-    course_id BIGINT,
-    unit_id BIGINT,
-    score_type VARCHAR(50) NOT NULL,
-    score INT NOT NULL,
-    full_score INT NOT NULL DEFAULT 100,
-    score_details TEXT,
-    remark VARCHAR(500),
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_score_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_student_assignment_type (student_id, assignment_id, score_type),
-    INDEX idx_student_id (student_id),
-    INDEX idx_assignment_id (assignment_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成绩记录表';
-
--- ── feature_toggle 配置（INSERT IGNORE 幂等）──
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('feature_toggle', 'page_dashboard',   'true',  '学生端-发现页',               0),
-('feature_toggle', 'page_courses',     'false', '学生端-课程页（开发中）',      0),
-('feature_toggle', 'page_classes',     'true',  '学生端-班级/社区页',           0),
-('feature_toggle', 'page_assignments', 'true',  '学生端-任务页',               0),
-('feature_toggle', 'page_articles',    'true',  '学生端-文章页',               0),
-('feature_toggle', 'page_vocabulary',  'true',  '学生端-生词本页',              0),
-('feature_toggle', 'page_my_study',    'true',  '学生端-我的学习页',            0),
-('feature_toggle', 'page_ai_video',    'false', '学生端-AI视频字幕页（未完善）', 0),
-('feature_toggle', 'page_ai_qa',       'true',  '学生端-AI问答页',             0),
-('feature_toggle', 'page_user_texts',  'true',  '学生端-我的上传页',            0);
-
-MIGRATE_ALL
+if [ $mc_wait -lt 60 ]; then
+    if [ ! -f "$MIGRATION_SQL" ]; then
+        echo "[ERROR] 迁移脚本不存在: $MIGRATION_SQL"
+        exit 1
+    fi
+    # 从头部列表提取最高版本号用于日志
+    max_ver=$(grep -oE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
+    echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver})"
+    MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 < "$MIGRATION_SQL")
     MIGRATE_EXIT=$?
     MIGRATE_ERRORS=$(echo "$MIGRATE_OUTPUT" | grep -v "Using a password on the command line interface can be insecure" | grep -v "^$" || true)
     if [ $MIGRATE_EXIT -ne 0 ]; then
@@ -1009,7 +822,31 @@ MIGRATE_ALL
         echo "[WARN] 迁移完成但有警告:"
         echo "$MIGRATE_ERRORS"
     fi
-    echo "[OK] 数据库增量迁移完成（全量幂等：texts列/新建表/feature_toggle）"
+    echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
+
+    # ── 验证从库复制同步延迟 ──────────────────────────────────────────
+    echo "[INFO] 验证从库复制延迟..."
+    slave_lag_wait=0
+    until [ $slave_lag_wait -ge 30 ]; do
+        LAG=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
+              -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+              | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+        IO=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
+             -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+             | grep "Replica_IO_Running:" | awk '{print $2}' || echo "Unknown")
+        if [ "$LAG" = "0" ] && [ "$IO" = "Yes" ]; then
+            echo "[OK] 从库复制同步完成（延迟: 0s）"
+            break
+        elif [ "$LAG" = "NULL" ]; then
+            echo "[WARN] 无法获取从库状态，可能从库未运行或复制未配置"
+            break
+        fi
+        echo "[INFO] 等待从库同步... (延迟: ${LAG}s, IO: ${IO})"
+        sleep 3; slave_lag_wait=$((slave_lag_wait + 3))
+    done
+    if [ $slave_lag_wait -ge 30 ]; then
+        echo "[WARN] 从库同步等待超时，当前状态可能仍有延迟，请手动检查: docker exec langhack-mysql-slave mysql -uroot -p\$DB_PASSWORD -e 'SHOW REPLICA STATUS\\G'"
+    fi
 fi
 
 echo "[SUCCESS] 部署完成！"
@@ -1076,6 +913,18 @@ echo "[重要] 请备份 .env 文件到安全位置！如更换服务器需一�
 if [ "$HTTPS_ENABLED_VAL" = "true" ]; then
     echo "[重要] HTTPS 已启用。如使用自签名证书，用户首次访问需手动信任。"
 fi
-echo "[警告] 请勿执行 'docker compose down -v'，该命令会删除所有数据卷！"
+echo "[警告] 请勿执行 'docker compose down -v'，该命令会删除 MySQL/Redis 数据卷！"
 echo "  安全停止: docker compose down"
 echo "  安全重启: docker compose restart"
+echo ""
+echo "── 历史数据导入（可选）────────────────────────────────────"
+echo "  首次部署时，03-import-backup.sh 自动从 database/ 和 backups/"
+echo "  中选取修改时间最新的备份文件导入（.sql 或 .sql.gz 均支持）。"
+echo ""
+echo "  如需向已运行的数据库手动导入数据："
+echo "     DB_PW=\$(grep '^DB_PASSWORD=' $ENV_FILE | cut -d= -f2-)"
+echo "     # 导入 .sql 文件："
+echo "     docker exec -i langhack-mysql-master mysql -uroot -p\"\$DB_PW\" english_learning < backups/<your-file>.sql"
+echo "     # 导入 .sql.gz 压缩文件："
+echo "     zcat backups/<your-file>.sql.gz | docker exec -i langhack-mysql-master mysql -uroot -p\"\$DB_PW\" english_learning"
+echo "────────────────────────────────────────────────────────────"

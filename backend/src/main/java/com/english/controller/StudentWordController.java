@@ -103,15 +103,13 @@ public class StudentWordController {
 
             // 检查是否已存在
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
-                // 如果已存在，更新掌握程度为学习中
-                vocabularyBooksService.updateMasteryLevel(studentId, wordId, "LEARNING", null);
-                // 记录学习记录
+                // 单词已在生词本中，保持现有状态不变
                 learningRecordsService.recordVocabularyAdd(studentId, wordId);
-                return Result.success("单词学习状态已更新");
+                return Result.success("单词已在生词本中");
             }
 
-            // 添加到生词本，并直接设置为学习中状态
-            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordId, "LEARNING");
+            // 添加到生词本，新词默认状态为 NEW
+            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordId, "NEW");
 
             // 记录学习记录
             learningRecordsService.recordVocabularyAdd(studentId, wordId);
@@ -176,17 +174,16 @@ public class StudentWordController {
 
             // 第二步：检查是否已在生词本中
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
-                // 如果已存在，更新掌握程度为学习中
-                vocabularyBooksService.updateMasteryLevel(studentId, wordId, "LEARNING", null);
+                // 单词已在生词本中，保持现有状态不变
                 learningRecordsService.recordVocabularyAdd(studentId, wordId);
 
-                wordResult.put("vocabularyAction", "updated");
-                wordResult.put("message", "单词学习状态已更新");
+                wordResult.put("vocabularyAction", "exists");
+                wordResult.put("message", "单词已在生词本中");
                 return Result.success(wordResult);
             }
 
-            // 第三步：添加到生词本，并设置为学习中状态
-            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordId, "LEARNING");
+            // 第三步：添加到生词本，新词默认状态为 NEW
+            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordId, "NEW");
 
             // 记录学习记录
             learningRecordsService.recordVocabularyAdd(studentId, wordId);

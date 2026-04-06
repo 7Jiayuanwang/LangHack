@@ -872,11 +872,11 @@ const getCourseProgress = (course) => {
     // 后端返回 0.0-1.0 范围，转换为 0-100 百分比
     const progress = course.progress
     const percentage = progress <= 1 ? progress * 100 : progress
-    return Math.round(percentage)
+    return Math.round(percentage * 100) / 100
   }
   // 如果没有progress字段，使用learnedUnits计算
   if (!course.totalUnits) return 0
-  return Math.round(((course.learnedUnits || 0) / course.totalUnits) * 100)
+  return Math.round(((course.learnedUnits || 0) / course.totalUnits * 100) * 100) / 100
 }
 
 // 获取进度条颜色
@@ -1044,21 +1044,17 @@ onActivated(() => {
   }
 })
 
-onMounted(() => {
-  loadCourses()
+onMounted(async () => {
+  await loadCourses()
 
-  // 检查是否有传入的课程ID
+  // 检查是否有传入的课程ID，在课程列表加载完成后查找
   const courseId = route.query.courseId
   if (courseId) {
-    // 找到对应课程并打开
-    safeTimeout(() => {
-      if (Array.isArray(courses.value)) {
-        const course = courses.value.find(c => c.courseId == courseId)
-        if (course) {
-          enterCourse(course)
-        }
-      }
-    }, 1000)
+    const parsedId = Number(courseId)
+    const course = courses.value.find(c => c.courseId === parsedId)
+    if (course) {
+      enterCourse(course)
+    }
   }
 })
 </script>
