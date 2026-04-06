@@ -205,6 +205,7 @@ docker/docker-compose.override.yml
 
 # ── 运行时备份目录（auto-update.sh / Spring Boot 备份服务产生）──
 # 备份文件留在服务器，不提交到 Git
+backups/*.sql
 backups/*.sql.gz
 backups/*.sql.bz2
 backups/*.sql.zip
