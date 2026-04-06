@@ -123,7 +123,7 @@ class OpsControllerTest {
         u.setRole("STUDENT");
 
         when(featureToggleService.getUserIdsByTag("vip")).thenReturn(List.of(1L));
-        when(userService.getById(1L)).thenReturn(u);
+        when(userService.getUserById(1L)).thenReturn(u);
 
         mockMvc.perform(get("/api/ops/user-tags/vip/users"))
                 .andExpect(status().isOk())

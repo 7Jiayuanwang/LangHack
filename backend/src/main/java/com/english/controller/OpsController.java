@@ -267,7 +267,7 @@ public class OpsController {
         List<Long> ids = featureToggleService.getUserIdsByTag(tagName);
         List<Map<String, Object>> result = new ArrayList<>();
         for (Long id : ids) {
-            com.english.entity.User u = userService.getById(id);
+            com.english.entity.User u = userService.getUserById(id);
             if (u == null) continue;
             Map<String, Object> item = new HashMap<>();
             item.put("id", u.getId());
