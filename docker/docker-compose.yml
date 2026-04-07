@@ -129,11 +129,13 @@ services:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} && mysql -u root -p${MYSQL_ROOT_PASSWORD} -e \"SHOW REPLICA STATUS\\G\" | grep -q 'Replica_SQL_Running: Yes'"]
+      # 检查 MySQL 进程存活 + 复制线程运行状态
+      # 复制未配置或线程未运行时 healthcheck 失败 → backend 无法启动 → 部署阻塞
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent 2>/dev/null && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -N -e \"SHOW REPLICA STATUS\\G\" 2>/dev/null | grep -q 'Replica_IO_Running: Yes'"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 90s
+      retries: 18
+      start_period: 120s
 
   # ─────────────────────────────────────────────
   # Redis 缓存
@@ -230,9 +232,9 @@ services:
       - langhack-network
     depends_on:
       mysql-master:
-        condition: service_healthy
+        condition: service_healthy   # 主库进程必须存活（阻塞）
       mysql-slave:
-        condition: service_healthy
+        condition: service_healthy   # 从库进程必须存活（阻塞）；复制状态由 DynamicDataSource 运行时降级处理
       redis:
         condition: service_healthy
     healthcheck:

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# LangHack 自动更新脚本 (v2.2)
+# LangHack 自动更新脚本 (v2.3)
 # 定时从 GitHub 拉取最新代码，检测变更后自动重新构建并部署
 #
 # v2.0 新增:
@@ -23,6 +23,11 @@
 #   - verify_flyway_migrations 补充 V14 新增表（user_tags / feature_override）
 #   - 迁移文件变更（04-apply-all-migrations.sql / db/migration/）时强制执行迁移
 #   - 新增从库复制延迟验证
+#
+# v2.3 修复:
+#   - run_incremental_migrations: 版本不同步从 WARN 改为 return 1（阻塞部署）
+#   - run_incremental_migrations: lag=NULL（复制未配置）从 WARN+break 改为 return 1
+#   - 不重建路径（仅文档/脚本变更）迁移失败从 WARN 改为触发自动回滚
 #
 # 用法:
 #   chmod +x scripts/auto-update.sh
@@ -311,19 +316,42 @@ pre_update_backup() {
 wait_for_health() {
     local timeout="${1:-$HEALTH_CHECK_TIMEOUT}"
     local elapsed=0
-    log "HEALTH: 等待服务启动 (超时 ${timeout}s)..."
+    log "HEALTH: 等待所有服务就绪 (超时 ${timeout}s)..."
 
     while [ $elapsed -lt "$timeout" ]; do
-        # 使用与 docker-compose.yml healthcheck 一致的端点
+        # 1. 检查是否有容器 unhealthy 或异常退出（快速失败）
+        svc_statuses=$(docker compose -f "$DOCKER_DIR/docker-compose.yml" \
+            ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
+        if [ -n "$svc_statuses" ]; then
+            failed=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
+            if [ -n "$failed" ]; then
+                log "ERROR: HEALTH: 以下服务启动失败，终止健康等待："
+                echo "$failed" | while read -r svc; do
+                    log "ERROR:   [$svc] $(echo "$svc_statuses" | awk -F'\t' -v s="$svc" '$1==s{print $2}')"
+                    log "ERROR:   [$svc] 最近日志:"
+                    docker compose -f "$DOCKER_DIR/docker-compose.yml" logs --tail=20 "$svc" 2>/dev/null \
+                        | while read -r line; do log "         $line"; done
+                done
+                return 1
+            fi
+        fi
+
+        # 2. 检查后端 HTTP 健康端点（确认应用层就绪）
         if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
-            log "HEALTH: 后端服务正常 ✓ (${elapsed}s)"
+            log "HEALTH: 所有服务正常 ✓ (${elapsed}s)"
             return 0
         fi
+
         sleep 5
         elapsed=$((elapsed + 5))
+        log "HEALTH: 等待中... ${elapsed}s"
     done
 
-    log "HEALTH: 健康检查超时 (${timeout}s)"
+    log "ERROR: HEALTH: 健康检查超时 (${timeout}s)"
+    # 超时时打印当前容器状态
+    docker compose -f "$DOCKER_DIR/docker-compose.yml" ps 2>/dev/null | while read -r line; do
+        log "         $line"
+    done
     return 1
 }
 
@@ -408,9 +436,12 @@ run_incremental_migrations() {
         flyway_count=$(ls "$flyway_dir"/V*.sql 2>/dev/null | wc -l || echo 0)
         merged_count=$(grep -cE '^--   V[0-9]+__' "$migration_sql" 2>/dev/null || echo 0)
         if [ "$flyway_count" -gt "$merged_count" ]; then
-            log "WARN: MIGRATE: Flyway 有 ${flyway_count} 个迁移文件，合并脚本仅含 ${merged_count} 个版本"
-            log "WARN:          请将新迁移同步到 docker/mysql/init/04-apply-all-migrations.sql"
-            notify "部署警告: 迁移脚本版本不同步（Flyway: ${flyway_count}, 合并: ${merged_count}），请检查"
+            log "ERROR: MIGRATE: 迁移脚本版本不同步，阻塞部署"
+            log "ERROR:   Flyway 文件数: ${flyway_count}"
+            log "ERROR:   合并脚本版本: ${merged_count}"
+            log "ERROR:   请将新迁移同步到 docker/mysql/init/04-apply-all-migrations.sql 后重新部署"
+            notify "部署阻塞: 迁移脚本版本不同步（Flyway: ${flyway_count}, 合并: ${merged_count}），请检查"
+            return 1
         fi
     fi
 
@@ -482,8 +513,9 @@ run_incremental_migrations() {
                 log "MIGRATE: 从库同步完成 ✓ (延迟: 0s)"
                 break
             elif [ "$lag" = "NULL" ]; then
-                log "WARN: MIGRATE: 无法获取从库状态，跳过延迟检查"
-                break
+                log "ERROR: MIGRATE: 从库复制未配置（SHOW REPLICA STATUS 为空），迁移后数据无法同步到从库"
+                log "ERROR:          请先运行 deploy.sh 完成主从复制初始化，再执行自动更新"
+                return 1
             fi
             log "MIGRATE: 等待从库同步... (延迟: ${lag}s, IO: ${io})"
             sleep 3; slave_lag_wait=$((slave_lag_wait + 3))
@@ -517,11 +549,16 @@ verify_flyway_migrations() {
         return 0
     fi
 
-    # 关键标志表（每个 V 版本选一张有代表性的表）：
-    #   V1: users           V6: system_config     V12: article_favorites
-    #   V14: user_tags      V14: feature_override
+    # 关键标志表（每个引入新表的 V 版本选一张有代表性的表）：
+    #   V1: score_records       V2: text_learning_records   V3: media
+    #   V4: backup_records      V5: access_log              V6: system_config
+    #   V7: ai_provider         V8: update_config           V12: article_favorites
+    #   V14: user_tags          V14: feature_override
+    # V9/V10/V11/V13 只做 ALTER，无新表，不需要单独验证
     local missing_tables=""
-    for tbl in users system_config article_favorites user_tags feature_override; do
+    for tbl in score_records text_learning_records media backup_records access_log \
+               system_config ai_provider update_config article_favorites \
+               user_tags feature_override; do
         local exists
         exists=$(docker exec "$mysql_container" \
             mysql -uroot -p"$db_root_pw" english_learning \
@@ -540,7 +577,7 @@ verify_flyway_migrations() {
         return 1
     fi
 
-    log "SCHEMA: 核心表验证通过 ✓ (users / system_config / article_favorites / user_tags / feature_override)"
+    log "SCHEMA: 核心表验证通过 ✓ (V1~V14 全部关键表存在)"
     return 0
 }
 
@@ -649,9 +686,15 @@ for attempt in $(seq 1 $MAX_FETCH_ATTEMPTS); do
     fi
 done
 if [ "$fetch_ok" = false ]; then
-    log "ERROR: git fetch 在 $MAX_FETCH_ATTEMPTS 次尝试后仍然失败，跳过本次更新"
-    notify "自动更新失败: 无法连接远程仓库 ($MAX_FETCH_ATTEMPTS 次重试均失败)"
-    exit 1
+    log "WARN: git fetch 在 $MAX_FETCH_ATTEMPTS 次尝试后仍然失败，跳过本次更新"
+    # 检测是否是 SSH 认证问题，给出修复建议
+    if echo "$fetch_err" | grep -q "Permission denied (publickey)"; then
+        log "HINT: SSH 认证失败。建议切换为 HTTPS 方式:"
+        log "      git remote set-url origin https://<token>@github.com/<user>/<repo>.git"
+        log "      或生成 SSH key: ssh-keygen -t ed25519 -C deploy && cat ~/.ssh/id_ed25519.pub"
+    fi
+    # 网络临时断开属于正常情况，exit 0 避免 cron 发送告警邮件
+    exit 0
 fi
 
 LOCAL_HASH=$(git rev-parse HEAD)
@@ -786,27 +829,29 @@ if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
         exit 1
     fi
 
-    # ⑩ 替换为新容器
-    log "INFO: 启动新容器..."
-    docker compose -f "$COMPOSE_FILE" up -d $SERVICES
-
-    # ⑩.5 增量 SQL 迁移（Flyway 已禁用，init/ 在卷已存在时不重新运行）
+    # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
     if [ "$RUN_MIGRATIONS" = true ]; then
         run_incremental_migrations || {
-            log "ERROR: 增量迁移失败，启动自动回滚..."
-            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+            log "ERROR: 增量迁移失败，回退代码（旧容器未受影响）"
+            git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+            disable_maintenance
+            notify "自动更新失败: 数据库迁移失败，已回退代码，旧服务继续运行"
+            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "迁移失败，已回退代码，部署记录未更新"
+            exit 1
+        }
+        verify_flyway_migrations || {
+            log "ERROR: Schema 验证失败，回退代码（旧容器未受影响）"
+            git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+            disable_maintenance
+            notify "自动更新失败: Schema 验证失败，已回退代码，旧服务继续运行"
+            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "Schema 验证失败，已回退代码，部署记录未更新"
             exit 1
         }
     fi
 
-    # ⑩.6 Schema 验证：确认关键表存在
-    if [ "$RUN_MIGRATIONS" = true ]; then
-        verify_flyway_migrations || {
-            log "ERROR: Schema 验证失败，启动自动回滚..."
-            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
-            exit 1
-        }
-    fi
+    # ⑩.5 替换为新容器（Schema 已就绪，后端可安全启动）
+    log "INFO: 启动新容器..."
+    docker compose -f "$COMPOSE_FILE" up -d $SERVICES
 
     # ⑪ 健康检查
     if wait_for_health $HEALTH_CHECK_TIMEOUT; then
@@ -837,8 +882,16 @@ else
     log "INFO: 变更不涉及前后端代码（可能是文档/脚本/迁移），跳过重建"
     # 即使不重建，也要执行迁移（如仅合并 SQL 或 Flyway 文件有更新）
     if [ "$RUN_MIGRATIONS" = true ]; then
-        run_incremental_migrations || log "WARN: 迁移执行失败，请手动检查数据库"
-        verify_flyway_migrations   || log "WARN: Schema 验证失败，请手动检查数据库"
+        run_incremental_migrations || {
+            log "ERROR: 迁移执行失败，启动自动回滚..."
+            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+            exit 1
+        }
+        verify_flyway_migrations || {
+            log "ERROR: Schema 验证失败，启动自动回滚..."
+            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+            exit 1
+        }
     fi
     # 无需重建，更新部署记录到最新 commit，直接关闭维护模式
     NEW_COMMIT=$(git rev-parse HEAD)
