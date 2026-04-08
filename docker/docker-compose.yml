@@ -131,7 +131,7 @@ services:
     healthcheck:
       # 检查 MySQL 进程存活 + 复制线程运行状态
       # 复制未配置或线程未运行时 healthcheck 失败 → backend 无法启动 → 部署阻塞
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent 2>/dev/null && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -N -e \"SHOW REPLICA STATUS\\G\" 2>/dev/null | grep -q 'Replica_IO_Running: Yes'"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
       interval: 10s
       timeout: 5s
       retries: 18
