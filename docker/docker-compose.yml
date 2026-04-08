@@ -71,7 +71,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 60s
+      start_period: 180s  # 增加到 3 分钟，给初始化脚本足够时间（备份导入 + ECDICT）
 
   # ─────────────────────────────────────────────
   # MySQL 从库（只读副本）
@@ -135,7 +135,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 18
-      start_period: 120s
+      start_period: 240s  # 增加到 4 分钟，等待主库初始化完成 + 从库初始化 + 复制配置
 
   # ─────────────────────────────────────────────
   # Redis 缓存
