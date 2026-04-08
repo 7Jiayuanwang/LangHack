@@ -504,10 +504,10 @@ run_incremental_migrations() {
         until [ $slave_lag_wait -ge 30 ]; do
             local lag io
             lag=$(docker exec "$slave_container" mysql -uroot -p"$db_root_pw" \
-                  -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+                  -e "SHOW REPLICA STATUS\G" 2>/dev/null \
                   | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
             io=$(docker exec "$slave_container" mysql -uroot -p"$db_root_pw" \
-                 -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+                 -e "SHOW REPLICA STATUS\G" 2>/dev/null \
                  | grep "Replica_IO_Running:" | awk '{print $2}' || echo "Unknown")
             if [ "$lag" = "0" ] && [ "$io" = "Yes" ]; then
                 log "MIGRATE: 从库同步完成 ✓ (延迟: 0s)"
