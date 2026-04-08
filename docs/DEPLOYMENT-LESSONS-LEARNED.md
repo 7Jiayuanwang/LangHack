@@ -264,3 +264,91 @@ Root cause: 健康检查命令格式错误 + 复制用户权限范围不匹配"
 - [MySQL 8.0 Replication Documentation](https://dev.mysql.com/doc/refman/8.0/en/replication.html)
 - [Docker Compose Healthcheck](https://docs.docker.com/compose/compose-file/compose-file-v3/#healthcheck)
 - [Docker Networking](https://docs.docker.com/network/)
+
+### 5. 备份导入脚本文件类型检查问题
+
+**症状**：
+- 从库日志显示：`ERROR: Can't initialize batch_readline - may be the input source is a directory or a block device.`
+- 尝试导入名为 "tmp" 的文件
+- 后续初始化脚本未执行
+
+**根因分析**：
+- 脚本使用 `ls *.sql` 会匹配到目录和非常规文件
+- `stat` 命令输出格式在某些情况下解析失败
+- 导致尝试导入目录或无效文件，初始化中断
+
+**修复方案**：
+```bash
+# 03-import-backup.sh - 添加文件类型检查
+for pattern in "*.sql" "*.sql.gz"; do
+    for file in "$dir"/$pattern; do
+        # 检查文件是否存在且为常规文件（非目录）
+        if [ -f "$file" ]; then
+            CANDIDATES="${CANDIDATES}${file}"$'\n'
+        fi
+    done
+done
+```
+
+---
+
+### 6. 从库复制初始化执行顺序问题
+
+**症状**：
+- 从库容器启动后 `SHOW REPLICA STATUS` 返回空
+- 日志中没有 `[replication]` 开头的输出
+- `06-init-replication.sh` 脚本未执行
+
+**根因分析**：
+- MySQL entrypoint 在执行完 `docker-entrypoint-initdb.d` 中的脚本后会关闭临时服务器
+- 在某些情况下，entrypoint 在执行完 `05-import-ecdict.sh` 后就提前终止
+- `06-init-replication.sh` 没有被执行
+
+**修复方案**：
+采用两阶段初始化策略：
+
+1. **initdb 阶段**（`06-create-replication-marker.sh`）：
+   ```bash
+   # 创建标记文件
+   touch /var/lib/mysql/.replication-init-pending
+   # 复制初始化脚本到持久化位置
+   cp /docker-entrypoint-initdb.d/init-replication.sh /var/lib/mysql/init-replication.sh
+   ```
+
+2. **deploy 阶段**（`deploy.sh` 已有逻辑）：
+   - 检查复制状态（第 981-1119 行）
+   - 如果复制未配置，自动执行初始化
+   - 支持 GTID 自动定位和错误恢复
+
+**优势**：
+- ✅ 避免 initdb 阶段的时序问题
+- ✅ deploy.sh 自动检测并修复复制配置
+- ✅ auto-update.sh 也会自动验证复制状态
+- ✅ 支持手动修复：`docker exec <container> bash /var/lib/mysql/init-replication.sh`
+
+---
+
+### 7. MySQL 健康检查启动等待时间不足
+
+**症状**：
+- MySQL 容器状态显示 `unhealthy`
+- 初始化脚本还在执行，但健康检查已经开始失败
+
+**根因分析**：
+- 主库 `start_period` 只有 60 秒
+- 备份导入 + ECDICT 导入可能需要更长时间
+- 健康检查在初始化完成前就开始计数失败
+
+**修复方案**：
+```yaml
+# docker-compose.yml
+mysql-master:
+  healthcheck:
+    start_period: 180s  # 增加到 3 分钟
+
+mysql-slave:
+  healthcheck:
+    start_period: 240s  # 增加到 4 分钟
+```
+
+---
