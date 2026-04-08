@@ -6,10 +6,10 @@
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Java 17, Spring Boot 2.7, MyBatis Plus, MySQL 8, Flyway, JWT |
-| 前端 | Vue 3 (Composition API), Vite, Element Plus, Axios, SCSS |
+| 后端 | Java 17, Spring Boot 2.7, MyBatis Plus, MySQL 8 (主从复制), Flyway, JWT |
+| 前端 | Vue 3 (Composition API), Vite, Element Plus, Pinia, Axios, SCSS |
 | 词典 | ECDICT (74 万词) + WordNet |
-| 部署 | Docker Compose, Nginx |
+| 部署 | Docker Compose, Nginx, Redis |
 
 ---
 
@@ -32,6 +32,11 @@ chmod +x deploy.sh && ./deploy.sh
 ```
 
 部署完成后访问 `http://<服务器IP>` 即可使用（端口 80, 由 Nginx 处理反向代理）。
+
+> 💡 **部署提示**：
+> - 部署脚本支持 MySQL 主从复制架构，自动配置读写分离
+> - 首次部署会自动初始化数据库并导入 ECDICT 词典数据
+> - 遇到问题请参考 [`docs/DEPLOYMENT-LESSONS-LEARNED.md`](docs/DEPLOYMENT-LESSONS-LEARNED.md) 排查
 
 ### 方式二：本地开发环境
 
@@ -102,7 +107,7 @@ LangHack/
 ├── docker-compose.yml    # Docker Compose 编排文件
 ├── deploy.sh             # 一键部署脚本
 ├── .env.example           # 环境变量模板 (后端密钥等)
-├── agent.md              # AI 开发助手上下文
+├── CLAUDE.md             # AI 开发助手上下文
 └── TODO.md               # 开发待办事项
 ```
 
@@ -122,13 +127,14 @@ LangHack/
 
 ## 🎯 核心功能
 
-- **多角色系统**：管理员 / 教师 / 学生 / 普通用户，各有独立入口和权限
+- **多角色系统**：管理员 / 教师 / 学生 / 普通用户 / 运维，各有独立入口和权限
 - **课程与任务管理**：课程 → 单元 → 课文层级结构，教师可发布带截止日期的任务
 - **交互式阅读**：点击任意英文单词即可查看音标、释义、同义词等，支持 Markdown 格式课文
 - **SM-2 间隔复习**：基于科学记忆算法的生词本复习系统
 - **AI 助教**：选中文本后可一键向 AI 提问，支持长难句解析、上下文解读
 - **协作标注**：学生的划线标注对同课文的所有读者可见
 - **学习数据分析**：多维度统计学习时长、词汇掌握、任务完成率
+- **读写分离架构**：MySQL 主从复制 + 自动路由，提升并发性能和数据可靠性
 
 ---
 
@@ -142,6 +148,8 @@ LangHack/
 | `ASSIGNMENT_FEATURES.md` | 任务系统功能文档 |
 | `TROUBLESHOOTING.md` | 常见问题与故障排除 |
 | `DATABASE_SYNC_GUIDE.md` | 数据库同步与迁移指南 |
+| `DEPLOYMENT.md` | 部署指南与配置说明 |
+| `DEPLOYMENT-LESSONS-LEARNED.md` | 部署问题排查案例库 |
 | `OPTIMIZATION_DOCUMENTATION.md` | 性能优化文档 |
 | `spec.md` | 功能规格说明（已实现功能清单） |
 
