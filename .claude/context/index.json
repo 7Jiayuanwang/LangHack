@@ -1,0 +1,48 @@
+{
+  "project": "LangHack",
+  "last_updated": "2026-04-03T00:00:00+08:00",
+  "current_state": {
+    "summary": "Deploy/read-write-split fixes pushed to master. Article text selection bug investigation in progress.",
+    "branch": "master",
+    "latest_commit": "005b748",
+    "ci_status": "passing",
+    "pending_issues": [
+      "Article content cannot be selected when green ElMessage notification is shown at top of InteractiveText page"
+    ],
+    "server_status": "Needs redeployment after git conflict resolution"
+  },
+  "verified_facts": [
+    "deploy.sh git-pull bug fixed (commit 57e4c4c) - pull now always executes regardless of branch",
+    "AdminMasterInterceptor forces master datasource for /api/admin/** and /api/ops/** paths",
+    "04-apply-all-migrations.sql updated with V10 (index) and V11 (app_id column)",
+    "WebMvcConfigTest updated for new 2-arg constructor (commit 005b748)",
+    "CI passing after test fix",
+    "No user-select:none or pointer-events:none found blocking text selection in InteractiveText",
+    "glass-header uses position:sticky + backdrop-filter:blur(12px) + z-index:1000",
+    "floating-translate-btn uses position:fixed + z-index:1000",
+    "SelectionMenu component only has user-select:none on .menu-item (expected)"
+  ],
+  "next_actions": [
+    "Continue investigating text selection issue - check el-tooltip overlay, backdrop-filter rendering layer, ::selection CSS, click handler interference",
+    "Redeploy on server after git conflicts resolved"
+  ],
+  "detail_index": {
+    "resolutions": [
+      {
+        "id": "res-001",
+        "problem_signature": "admin write-then-read inconsistency master-slave replication lag",
+        "file": "resolutions/res-001.ndjson"
+      },
+      {
+        "id": "res-002",
+        "problem_signature": "deploy.sh not pulling latest code same branch git pull skipped",
+        "file": "resolutions/res-002.ndjson"
+      },
+      {
+        "id": "res-003",
+        "problem_signature": "WebMvcConfigTest constructor cannot be applied AdminMasterInterceptor",
+        "file": "resolutions/res-003.ndjson"
+      }
+    ]
+  }
+}
