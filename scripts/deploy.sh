@@ -169,6 +169,72 @@ ask_port() {
     fi
 }
 
+# ── 部署验证函数 ──────────────────────────────────────
+# 检查旧容器残留（避免 docker compose down 后仍有旧容器）
+check_old_containers() {
+    local old_containers
+    old_containers=$(docker ps -a --filter "name=langhack" --format "{{.Names}}\t{{.Status}}" 2>/dev/null | grep -v "Up.*seconds" || echo "")
+
+    if [ -n "$old_containers" ]; then
+        echo ""
+        echo "  [WARN] 检测到可能的旧容器："
+        echo "$old_containers" | sed 's/^/    /'
+        echo ""
+        ask_yn "是否清理这些容器？" "y" DO_CLEANUP
+        if [ "$DO_CLEANUP" = "true" ]; then
+            echo "  [清理] 停止并删除旧容器..."
+            docker ps -a --filter "name=langhack" --format "{{.Names}}" | xargs -r docker rm -f 2>/dev/null || true
+            echo "  [OK] 清理完成"
+        fi
+    fi
+}
+
+# 验证数据库初始化（检查关键表是否存在）
+verify_database_init() {
+    local mysql_container
+    mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql-master|langhack-mysql-master' | head -1 || echo "")
+
+    if [ -z "$mysql_container" ]; then
+        echo "  [SKIP] MySQL 容器未运行，跳过数据库验证"
+        return 0
+    fi
+
+    echo "  [验证] 检查数据库初始化状态..."
+
+    local root_pw
+    root_pw=$(grep -E "^MYSQL_ROOT_PASSWORD=" "$DOCKER_DIR/.env" 2>/dev/null | cut -d'=' -f2- || echo "")
+
+    if [ -z "$root_pw" ]; then
+        echo "  [WARN] 无法读取 MYSQL_ROOT_PASSWORD，跳过验证"
+        return 0
+    fi
+
+    local table_count
+    table_count=$(docker exec "$mysql_container" \
+        mysql -uroot -p"$root_pw" english_learning \
+        -sN -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='english_learning';" \
+        2>/dev/null || echo "0")
+
+    if [ "${table_count:-0}" -lt 10 ]; then
+        echo ""
+        echo "  [ERROR] 数据库初始化不完整，检测到表数量: $table_count"
+        echo "  [提示] 可能原因："
+        echo "    1. 数据卷未完全删除，MySQL 跳过了初始化脚本"
+        echo "    2. 初始化脚本执行失败"
+        echo ""
+        echo "  [修复] 建议执行以下命令重新初始化："
+        echo "    cd $DOCKER_DIR"
+        echo "    docker compose down"
+        echo "    docker volume rm langhack_mysql_master_data langhack_mysql_slave_data"
+        echo "    docker compose up -d"
+        echo ""
+        return 1
+    fi
+
+    echo "  [OK] 数据库初始化验证通过（表数量: $table_count）"
+    return 0
+}
+
 # ══════════════════════════════════════════════════════
 echo "======================================"
 echo " LangHack Docker Compose 部署向导 v2.0"
@@ -644,6 +710,9 @@ fi
 
 echo "[INFO] 版本: $(git rev-parse --short HEAD)"
 
+# 检查旧容器残留
+check_old_containers
+
 cd "$DOCKER_DIR"
 
 # 服务列表 & 预期健康服务数
@@ -821,6 +890,13 @@ echo "======================================"
 docker compose ps
 echo "======================================"
 echo ""
+
+# 验证数据库初始化
+if ! verify_database_init; then
+    echo "[ERROR] 数据库初始化验证失败，部署终止"
+    exit 1
+fi
+
 # ── 数据库迁移与 Schema 验证 ──────────────────────────────────────────
 # 策略：版本不同步 → 阻塞；迁移失败 → 阻塞；Schema 缺表 → 阻塞
 # 数据源：docker/mysql/init/04-apply-all-migrations.sql（全幂等，V1~Vn）
@@ -902,145 +978,144 @@ if [ -n "$SCHEMA_MISSING" ]; then
 fi
 echo "[OK] Schema 验证通过（users / system_config / article_favorites / user_tags / feature_override）"
 
-    # ── 验证并修复从库复制 ────────────────────────────────────────────
-    echo "[INFO] 验证从库复制状态..."
+# ── 验证并修复从库复制 ────────────────────────────────────────────
+echo "[INFO] 验证从库复制状态..."
 
-    # 获取当前复制状态
-    get_replica_status() {
-        docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
-            -N -e "SHOW REPLICA STATUS\G" 2>/dev/null || true
-    }
+# 获取当前复制状态
+get_replica_status() {
+    docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
+        -N -e "SHOW REPLICA STATUS\G" 2>/dev/null || true
+}
 
-    REPLICA_STATUS=$(get_replica_status)
-    IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
-    SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
-    LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
-    LAST_IO_ERR=$(echo "$REPLICA_STATUS" | grep "Last_IO_Error:" | sed 's/.*Last_IO_Error: //' || echo "")
-    LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_SQL_Error: //' || echo "")
+REPLICA_STATUS=$(get_replica_status)
+IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
+SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
+LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+LAST_IO_ERR=$(echo "$REPLICA_STATUS" | grep "Last_IO_Error:" | sed 's/.*Last_IO_Error: //' || echo "")
+LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_SQL_Error: //' || echo "")
 
-    replication_ok=false
+replication_ok=false
 
-    if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
-        echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
-        replication_ok=true
+if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
+    echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
+    replication_ok=true
+else
+    # 复制未配置或线程未运行 → 尝试自动修复
+    if [ "$IO_RUNNING" = "NULL" ]; then
+        echo "[WARN] 从库复制未配置（SHOW REPLICA STATUS 为空），尝试自动初始化..."
     else
-        # 复制未配置或线程未运行 → 尝试自动修复
-        if [ "$IO_RUNNING" = "NULL" ]; then
-            echo "[WARN] 从库复制未配置（SHOW REPLICA STATUS 为空），尝试自动初始化..."
-        else
-            echo "[WARN] 从库复制线程未运行（IO: ${IO_RUNNING}, SQL: ${SQL_RUNNING}），尝试自动修复..."
-            [ -n "$LAST_IO_ERR" ] && echo "[WARN]   IO 错误: $LAST_IO_ERR"
-            [ -n "$LAST_SQL_ERR" ] && echo "[WARN]   SQL 错误: $LAST_SQL_ERR"
-        fi
-
-        echo "[INFO] 在从库容器内重新执行复制初始化脚本..."
-        REPL_USER=$(load_env_value "MYSQL_REPLICATION_USER" "replicator" "$ENV_FILE")
-        REPL_PASS=$(load_env_value "MYSQL_REPLICATION_PASSWORD" "" "$ENV_FILE")
-
-        # 获取主库 GTID
-        MASTER_GTID=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
-            -N -e "SELECT @@global.gtid_executed;" 2>/dev/null | tr -d '[:space:]' || echo "")
-
-        if [ -n "$MASTER_GTID" ] && [ "$MASTER_GTID" != "" ]; then
-            echo "[INFO] 主库 GTID: ${MASTER_GTID}"
-            REPAIR_OUTPUT=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 <<-EOSQL
-                STOP REPLICA;
-                RESET MASTER;
-                SET GLOBAL gtid_purged='${MASTER_GTID}';
-                CHANGE REPLICATION SOURCE TO
-                    SOURCE_HOST='mysql-master',
-                    SOURCE_PORT=3306,
-                    SOURCE_USER='${REPL_USER}',
-                    SOURCE_PASSWORD='${REPL_PASS}',
-                    SOURCE_AUTO_POSITION=1,
-                    GET_SOURCE_PUBLIC_KEY=1;
-                START REPLICA;
-EOSQL
-            )
-        else
-            echo "[INFO] 无法获取主库 GTID，使用 auto-position 直接配置..."
-            REPAIR_OUTPUT=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 <<-EOSQL
-                STOP REPLICA;
-                RESET MASTER;
-                CHANGE REPLICATION SOURCE TO
-                    SOURCE_HOST='mysql-master',
-                    SOURCE_PORT=3306,
-                    SOURCE_USER='${REPL_USER}',
-                    SOURCE_PASSWORD='${REPL_PASS}',
-                    SOURCE_AUTO_POSITION=1,
-                    GET_SOURCE_PUBLIC_KEY=1;
-                START REPLICA;
-EOSQL
-            )
-        fi
-
-        REPAIR_ERRORS=$(echo "$REPAIR_OUTPUT" | grep -v "Using a password" | grep -v "^$" || true)
-        [ -n "$REPAIR_ERRORS" ] && echo "[WARN] 修复输出: $REPAIR_ERRORS"
-
-        # 等待复制线程启动（最多 30s）
-        echo "[INFO] 等待复制线程启动..."
-        repair_wait=0
-        while [ $repair_wait -lt 30 ]; do
-            sleep 3; repair_wait=$((repair_wait + 3))
-            REPLICA_STATUS=$(get_replica_status)
-            IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
-            SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
-            LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
-            if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
-                echo "[OK] 从库复制修复成功（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
-                replication_ok=true
-                break
-            fi
-            echo "[INFO] 等待复制线程... (${repair_wait}s, IO: ${IO_RUNNING}, SQL: ${SQL_RUNNING})"
-        done
-
-        if [ "$replication_ok" = false ]; then
-            LAST_IO_ERR=$(echo "$REPLICA_STATUS" | grep "Last_IO_Error:" | sed 's/.*Last_IO_Error: //' || echo "")
-            LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_SQL_Error: //' || echo "")
-            echo ""
-            echo "[ERROR] ══════════════════════════════════════════════════════"
-            echo "[ERROR] 从库复制初始化失败，部署终止"
-            echo "[ERROR] IO Thread:  ${IO_RUNNING}"
-            echo "[ERROR] SQL Thread: ${SQL_RUNNING}"
-            [ -n "$LAST_IO_ERR" ]  && echo "[ERROR] IO 错误:  $LAST_IO_ERR"
-            [ -n "$LAST_SQL_ERR" ] && echo "[ERROR] SQL 错误: $LAST_SQL_ERR"
-            echo "[ERROR] ══════════════════════════════════════════════════════"
-            echo ""
-            echo "── 手动排查步骤 ──────────────────────────────────────────────"
-            echo "  # 1. 查看从库完整日志"
-            echo "  docker compose logs mysql-slave"
-            echo ""
-            echo "  # 2. 检查复制用户是否存在于主库"
-            echo "  docker exec $MASTER_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
-            echo "    -e \"SELECT user,host FROM mysql.user WHERE user='${REPL_USER}';\""
-            echo ""
-            echo "  # 3. 检查主库 binlog 是否开启"
-            echo "  docker exec $MASTER_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
-            echo "    -e \"SHOW VARIABLES LIKE 'log_bin'; SHOW VARIABLES LIKE 'gtid_mode';\""
-            echo ""
-            echo "  # 4. 手动重置并重试"
-            echo "  docker exec $SLAVE_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
-            echo "    -e \"STOP REPLICA; RESET REPLICA ALL;\""
-            echo "  docker compose restart mysql-slave"
-            echo "──────────────────────────────────────────────────────────────"
-            exit 1
-        fi
+        echo "[WARN] 从库复制线程未运行（IO: ${IO_RUNNING}, SQL: ${SQL_RUNNING}），尝试自动修复..."
+        [ -n "$LAST_IO_ERR" ] && echo "[WARN]   IO 错误: $LAST_IO_ERR"
+        [ -n "$LAST_SQL_ERR" ] && echo "[WARN]   SQL 错误: $LAST_SQL_ERR"
     fi
 
-    # 等待复制延迟归零（最多 60s）
-    if [ "$replication_ok" = true ] && [ "$LAG" != "0" ] && [ "$LAG" != "NULL" ]; then
-        echo "[INFO] 等待从库追上主库（当前延迟: ${LAG}s）..."
-        lag_wait=0
-        while [ $lag_wait -lt 60 ]; do
-            sleep 3; lag_wait=$((lag_wait + 3))
-            LAG=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
-                -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
-                | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
-            [ "$LAG" = "0" ] && echo "[OK] 从库已追上主库（延迟: 0s）" && break
-            printf "  延迟: %ss (等待 %ds)\r" "$LAG" "$lag_wait"
-        done
-        [ "$LAG" != "0" ] && echo "[WARN] 从库延迟 ${LAG}s，超过等待时间，继续部署"
+    echo "[INFO] 在从库容器内重新执行复制初始化脚本..."
+    REPL_USER=$(load_env_value "MYSQL_REPLICATION_USER" "replicator" "$ENV_FILE")
+    REPL_PASS=$(load_env_value "MYSQL_REPLICATION_PASSWORD" "" "$ENV_FILE")
+
+    # 获取主库 GTID
+    MASTER_GTID=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
+        -N -e "SELECT @@global.gtid_executed;" 2>/dev/null | tr -d '[:space:]' || echo "")
+
+    if [ -n "$MASTER_GTID" ] && [ "$MASTER_GTID" != "" ]; then
+        echo "[INFO] 主库 GTID: ${MASTER_GTID}"
+        REPAIR_OUTPUT=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 <<-EOSQL
+            STOP REPLICA;
+            RESET MASTER;
+            SET GLOBAL gtid_purged='${MASTER_GTID}';
+            CHANGE REPLICATION SOURCE TO
+                SOURCE_HOST='mysql-master',
+                SOURCE_PORT=3306,
+                SOURCE_USER='${REPL_USER}',
+                SOURCE_PASSWORD='${REPL_PASS}',
+                SOURCE_AUTO_POSITION=1,
+                GET_SOURCE_PUBLIC_KEY=1;
+            START REPLICA;
+EOSQL
+        )
+    else
+        echo "[INFO] 无法获取主库 GTID，使用 auto-position 直接配置..."
+        REPAIR_OUTPUT=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 <<-EOSQL
+            STOP REPLICA;
+            RESET MASTER;
+            CHANGE REPLICATION SOURCE TO
+                SOURCE_HOST='mysql-master',
+                SOURCE_PORT=3306,
+                SOURCE_USER='${REPL_USER}',
+                SOURCE_PASSWORD='${REPL_PASS}',
+                SOURCE_AUTO_POSITION=1,
+                GET_SOURCE_PUBLIC_KEY=1;
+            START REPLICA;
+EOSQL
+        )
     fi
+
+    REPAIR_ERRORS=$(echo "$REPAIR_OUTPUT" | grep -v "Using a password" | grep -v "^$" || true)
+    [ -n "$REPAIR_ERRORS" ] && echo "[WARN] 修复输出: $REPAIR_ERRORS"
+
+    # 等待复制线程启动（最多 30s）
+    echo "[INFO] 等待复制线程启动..."
+    repair_wait=0
+    while [ $repair_wait -lt 30 ]; do
+        sleep 3; repair_wait=$((repair_wait + 3))
+        REPLICA_STATUS=$(get_replica_status)
+        IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
+        SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
+        LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+        if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
+            echo "[OK] 从库复制修复成功（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
+            replication_ok=true
+            break
+        fi
+        echo "[INFO] 等待复制线程... (${repair_wait}s, IO: ${IO_RUNNING}, SQL: ${SQL_RUNNING})"
+    done
+
+    if [ "$replication_ok" = false ]; then
+        LAST_IO_ERR=$(echo "$REPLICA_STATUS" | grep "Last_IO_Error:" | sed 's/.*Last_IO_Error: //' || echo "")
+        LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_SQL_Error: //' || echo "")
+        echo ""
+        echo "[ERROR] ══════════════════════════════════════════════════════"
+        echo "[ERROR] 从库复制初始化失败，部署终止"
+        echo "[ERROR] IO Thread:  ${IO_RUNNING}"
+        echo "[ERROR] SQL Thread: ${SQL_RUNNING}"
+        [ -n "$LAST_IO_ERR" ]  && echo "[ERROR] IO 错误:  $LAST_IO_ERR"
+        [ -n "$LAST_SQL_ERR" ] && echo "[ERROR] SQL 错误: $LAST_SQL_ERR"
+        echo "[ERROR] ══════════════════════════════════════════════════════"
+        echo ""
+        echo "── 手动排查步骤 ──────────────────────────────────────────────"
+        echo "  # 1. 查看从库完整日志"
+        echo "  docker compose logs mysql-slave"
+        echo ""
+        echo "  # 2. 检查复制用户是否存在于主库"
+        echo "  docker exec $MASTER_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
+        echo "    -e \"SELECT user,host FROM mysql.user WHERE user='${REPL_USER}';\""
+        echo ""
+        echo "  # 3. 检查主库 binlog 是否开启"
+        echo "  docker exec $MASTER_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
+        echo "    -e \"SHOW VARIABLES LIKE 'log_bin'; SHOW VARIABLES LIKE 'gtid_mode';\""
+        echo ""
+        echo "  # 4. 手动重置并重试"
+        echo "  docker exec $SLAVE_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
+        echo "    -e \"STOP REPLICA; RESET REPLICA ALL;\""
+        echo "  docker compose restart mysql-slave"
+        echo "──────────────────────────────────────────────────────────────"
+        exit 1
+    fi
+fi
+
+# 等待复制延迟归零（最多 60s）
+if [ "$replication_ok" = true ] && [ "$LAG" != "0" ] && [ "$LAG" != "NULL" ]; then
+    echo "[INFO] 等待从库追上主库（当前延迟: ${LAG}s）..."
+    lag_wait=0
+    while [ $lag_wait -lt 60 ]; do
+        sleep 3; lag_wait=$((lag_wait + 3))
+        LAG=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
+            -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+            | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+        [ "$LAG" = "0" ] && echo "[OK] 从库已追上主库（延迟: 0s）" && break
+        printf "  延迟: %ss (等待 %ds)\r" "$LAG" "$lag_wait"
+    done
+    [ "$LAG" != "0" ] && echo "[WARN] 从库延迟 ${LAG}s，超过等待时间，继续部署"
 fi
 
 echo "[SUCCESS] 部署完成！"
