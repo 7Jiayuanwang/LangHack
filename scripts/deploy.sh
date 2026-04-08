@@ -984,7 +984,7 @@ echo "[INFO] 验证从库复制状态..."
 # 获取当前复制状态
 get_replica_status() {
     docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
-        -N -e "SHOW REPLICA STATUS\G" 2>/dev/null || true
+        -e "SHOW REPLICA STATUS\G" 2>/dev/null || true
 }
 
 REPLICA_STATUS=$(get_replica_status)
@@ -1110,7 +1110,7 @@ if [ "$replication_ok" = true ] && [ "$LAG" != "0" ] && [ "$LAG" != "NULL" ]; th
     while [ $lag_wait -lt 60 ]; do
         sleep 3; lag_wait=$((lag_wait + 3))
         LAG=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
-            -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+            -e "SHOW REPLICA STATUS\G" 2>/dev/null \
             | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
         [ "$LAG" = "0" ] && echo "[OK] 从库已追上主库（延迟: 0s）" && break
         printf "  延迟: %ss (等待 %ds)\r" "$LAG" "$lag_wait"
