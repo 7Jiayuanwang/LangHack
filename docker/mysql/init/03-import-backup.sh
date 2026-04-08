@@ -46,11 +46,15 @@ if [ -z "$SEED_FILE" ]; then
     CANDIDATES=""
     for dir in "$SEED_DIR" "$BACKUP_DIR"; do
         if [ -d "$dir" ]; then
-            # 收集 .sql 和 .sql.gz
-            found_sql=$(ls -1 "$dir"/*.sql 2>/dev/null || true)
-            found_gz=$(ls -1 "$dir"/*.sql.gz 2>/dev/null || true)
-            [ -n "$found_sql" ] && CANDIDATES="${CANDIDATES}${found_sql}"$'\n'
-            [ -n "$found_gz" ]  && CANDIDATES="${CANDIDATES}${found_gz}"$'\n'
+            # 收集 .sql 和 .sql.gz（只收集常规文件，排除目录）
+            for pattern in "*.sql" "*.sql.gz"; do
+                for file in "$dir"/$pattern; do
+                    # 检查文件是否存在且为常规文件（非目录）
+                    if [ -f "$file" ]; then
+                        CANDIDATES="${CANDIDATES}${file}"$'\n'
+                    fi
+                done
+            done
         fi
     done
 
@@ -59,7 +63,14 @@ if [ -z "$SEED_FILE" ]; then
         SEED_FILE=$(echo "$CANDIDATES" | tr -s '\n' | grep -v '^$' \
             | xargs -I{} stat -c '%Y {}' {} 2>/dev/null \
             | sort -rn | head -1 | awk '{print $2}' || true)
-        [ -n "$SEED_FILE" ] && echo "[seed] 发现最新备份文件: $SEED_FILE"
+
+        # 如果 stat 输出格式不对，回退到简单的 ls -t 排序
+        if [ -z "$SEED_FILE" ] || [ ! -f "$SEED_FILE" ]; then
+            SEED_FILE=$(echo "$CANDIDATES" | tr -s '\n' | grep -v '^$' \
+                | xargs ls -t 2>/dev/null | head -1 || true)
+        fi
+
+        [ -n "$SEED_FILE" ] && [ -f "$SEED_FILE" ] && echo "[seed] 发现最新备份文件: $(basename "$SEED_FILE")"
     fi
 fi
 
