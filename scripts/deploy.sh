@@ -58,11 +58,11 @@ ask_value() {
     local input
     if [ -n "$default" ]; then
         read -rp "  ${prompt} [${default}]: " input
-        input=$(echo "${input:-$default}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        input=$(echo "${input:-$default}" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         printf -v "$var_name" '%s' "$input"
     else
         read -rp "  ${prompt}: " input
-        input=$(echo "$input" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        input=$(echo "$input" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         printf -v "$var_name" '%s' "$input"
     fi
 }
@@ -73,11 +73,11 @@ ask_secret() {
     if [ -n "$default" ]; then
         [ ${#default} -gt 6 ] && masked="${default:0:3}***${default: -3}" || masked="***"
         read -rp "  ${prompt} [${masked}]: " input
-        input=$(echo "${input:-$default}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        input=$(echo "${input:-$default}" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         printf -v "$var_name" '%s' "$input"
     else
         read -rp "  ${prompt}: " input
-        input=$(echo "$input" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        input=$(echo "$input" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         printf -v "$var_name" '%s' "$input"
     fi
 }
@@ -116,7 +116,7 @@ ask_yn() {
 load_env_value() {
     local key="$1" default="$2" file="${3:-$DOCKER_DIR/.env}"
     if [ -f "$file" ]; then
-        local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2- | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/[\[\]]\+[0-9~]*//g')
+        local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2- | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         [ -n "$val" ] && echo "$val" && return
     fi
     echo "$default"
