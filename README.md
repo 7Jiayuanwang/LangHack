@@ -157,18 +157,91 @@ LangHack/
 
 ## 🤝 贡献指南
 
-1. Fork 项目并创建功能分支：`git checkout -b feature/your-feature`
-2. 提交更改并推送：`git push origin feature/your-feature`
-3. 创建 Pull Request
+### 分支管理策略
 
-**代码规范**：后端遵循 Google Java Style，前端使用 `<script setup>` + Scoped SCSS。
-**数据库变更**：必须通过 Flyway 迁移脚本 (`backend/src/main/resources/db/migration/`)。
+项目采用双分支工作流：
+
+- **`master`** - 生产分支，部署到生产环境，保持稳定
+- **`develop`** - 开发分支，日常开发和测试
+
+**工作流程**：
+
+```bash
+# 1. 从 develop 创建功能分支
+git checkout develop
+git pull origin develop
+git checkout -b feature/your-feature
+
+# 2. 开发并提交
+git add .
+git commit -m "feat: 添加新功能"
+
+# 3. 推送功能分支
+git push origin feature/your-feature
+
+# 4. 创建 Pull Request 到 develop 分支
+# 5. 代码审查通过后合并到 develop
+# 6. 定期将 develop 合并到 master 发布
+```
+
+**紧急修复（Hotfix）流程**：
+
+```bash
+# 1. 从 master 创建修复分支
+git checkout master
+git checkout -b hotfix/critical-bug
+
+# 2. 修复并提交
+git commit -m "fix: 修复紧急问题"
+
+# 3. 合并回 master
+git checkout master
+git merge hotfix/critical-bug
+git push origin master
+
+# 4. 同步到 develop（重要！）
+git checkout develop
+git merge master
+git push origin develop
+```
+
+**重要原则**：
+- ✅ 所有新功能从 `develop` 分支创建
+- ✅ 紧急修复从 `master` 创建，修复后**必须**同步到 `develop`
+- ✅ 使用 `git merge --no-ff` 保留完整历史
+- ❌ 避免使用 `cherry-pick`，除非明确需要选择性合并
+- ❌ 禁止直接在 `master` 或 `develop` 上开发
+
+### 代码规范
+
+**后端**：遵循 Google Java Style，使用 MyBatis Plus，所有数据库变更必须通过 Flyway 迁移脚本 (`backend/src/main/resources/db/migration/`)。
+
+**前端**：使用 Vue 3 Composition API (`<script setup>`) + Scoped SCSS，组件命名采用 PascalCase。
+
+**提交信息**：遵循 [Conventional Commits](https://www.conventionalcommits.org/)：
+```
+feat: 新功能
+fix: Bug 修复
+docs: 文档更新
+refactor: 重构
+test: 测试相关
+chore: 构建/工具链更新
+```
+
+### 测试要求
 
 **前端测试**：
 ```bash
 cd frontend && npx vitest run          # 运行所有测试
 cd frontend && npx vitest              # 监听模式
 ```
+
+**后端测试**：
+```bash
+cd backend && mvn test                 # 运行单元测试
+```
+
+提交 PR 前请确保所有测试通过。
 
 ---
 
