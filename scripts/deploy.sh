@@ -58,11 +58,11 @@ ask_value() {
     local input
     if [ -n "$default" ]; then
         read -rp "  ${prompt} [${default}]: " input
-        input=$(echo "${input:-$default}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        input=$(echo "${input:-$default}" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         printf -v "$var_name" '%s' "$input"
     else
         read -rp "  ${prompt}: " input
-        input=$(echo "$input" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        input=$(echo "$input" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         printf -v "$var_name" '%s' "$input"
     fi
 }
@@ -73,11 +73,11 @@ ask_secret() {
     if [ -n "$default" ]; then
         [ ${#default} -gt 6 ] && masked="${default:0:3}***${default: -3}" || masked="***"
         read -rp "  ${prompt} [${masked}]: " input
-        input=$(echo "${input:-$default}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        input=$(echo "${input:-$default}" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         printf -v "$var_name" '%s' "$input"
     else
         read -rp "  ${prompt}: " input
-        input=$(echo "$input" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/\[\+[0-9;~]*//g')
+        input=$(echo "$input" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         printf -v "$var_name" '%s' "$input"
     fi
 }
@@ -116,7 +116,7 @@ ask_yn() {
 load_env_value() {
     local key="$1" default="$2" file="${3:-$DOCKER_DIR/.env}"
     if [ -f "$file" ]; then
-        local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2- | sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[\x00-\x08\x0b-\x1f\x7f]//g; s/[\[\]]\+[0-9~]*//g')
+        local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2- | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         [ -n "$val" ] && echo "$val" && return
     fi
     echo "$default"
@@ -167,6 +167,72 @@ ask_port() {
         fi
         ask_value "$prompt (换一个)" "$suggest" "$var_name"
     fi
+}
+
+# ── 部署验证函数 ──────────────────────────────────────
+# 检查旧容器残留（避免 docker compose down 后仍有旧容器）
+check_old_containers() {
+    local old_containers
+    old_containers=$(docker ps -a --filter "name=langhack" --format "{{.Names}}\t{{.Status}}" 2>/dev/null | grep -v "Up.*seconds" || echo "")
+
+    if [ -n "$old_containers" ]; then
+        echo ""
+        echo "  [WARN] 检测到可能的旧容器："
+        echo "$old_containers" | sed 's/^/    /'
+        echo ""
+        ask_yn "是否清理这些容器？" "y" DO_CLEANUP
+        if [ "$DO_CLEANUP" = "true" ]; then
+            echo "  [清理] 停止并删除旧容器..."
+            docker ps -a --filter "name=langhack" --format "{{.Names}}" | xargs -r docker rm -f 2>/dev/null || true
+            echo "  [OK] 清理完成"
+        fi
+    fi
+}
+
+# 验证数据库初始化（检查关键表是否存在）
+verify_database_init() {
+    local mysql_container
+    mysql_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql-master|langhack-mysql-master' | head -1 || echo "")
+
+    if [ -z "$mysql_container" ]; then
+        echo "  [SKIP] MySQL 容器未运行，跳过数据库验证"
+        return 0
+    fi
+
+    echo "  [验证] 检查数据库初始化状态..."
+
+    local root_pw
+    root_pw=$(grep -E "^MYSQL_ROOT_PASSWORD=" "$DOCKER_DIR/.env" 2>/dev/null | cut -d'=' -f2- || echo "")
+
+    if [ -z "$root_pw" ]; then
+        echo "  [WARN] 无法读取 MYSQL_ROOT_PASSWORD，跳过验证"
+        return 0
+    fi
+
+    local table_count
+    table_count=$(docker exec "$mysql_container" \
+        mysql -uroot -p"$root_pw" english_learning \
+        -sN -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='english_learning';" \
+        2>/dev/null || echo "0")
+
+    if [ "${table_count:-0}" -lt 10 ]; then
+        echo ""
+        echo "  [ERROR] 数据库初始化不完整，检测到表数量: $table_count"
+        echo "  [提示] 可能原因："
+        echo "    1. 数据卷未完全删除，MySQL 跳过了初始化脚本"
+        echo "    2. 初始化脚本执行失败"
+        echo ""
+        echo "  [修复] 建议执行以下命令重新初始化："
+        echo "    cd $DOCKER_DIR"
+        echo "    docker compose down"
+        echo "    docker volume rm langhack_mysql_master_data langhack_mysql_slave_data"
+        echo "    docker compose up -d"
+        echo ""
+        return 1
+    fi
+
+    echo "  [OK] 数据库初始化验证通过（表数量: $table_count）"
+    return 0
 }
 
 # ══════════════════════════════════════════════════════
@@ -644,16 +710,21 @@ fi
 
 echo "[INFO] 版本: $(git rev-parse --short HEAD)"
 
+# 检查旧容器残留
+check_old_containers
+
 cd "$DOCKER_DIR"
 
 # 服务列表 & 预期健康服务数
-# 注意: mysql-slave 不在 backend/frontend 的 depends_on 链中，不会被自动启动
+# 部署策略：所有服务进程必须 healthy 才算部署成功（任意服务故障则阻塞并报错）
+# 注意：从库 healthcheck 只检查 MySQL 进程存活，不检查复制状态
+#       复制未配置时从库仍为 healthy，DynamicDataSource 在运行时检测并降级
 case $SVC_MODE in
-    1) SVCS="";                              expected_healthy=5 ;;
-    2) SVCS="backend frontend";              expected_healthy=4 ;;  # backend + frontend + mysql-master + redis
-    3) SVCS="backend";                       expected_healthy=3 ;;  # backend + mysql-master + redis
-    4) SVCS="frontend";                      expected_healthy=4 ;;  # frontend + backend + mysql-master + redis (整条依赖链)
-    5) SVCS="mysql-master mysql-slave redis"; expected_healthy=3 ;;
+    1) SVCS="";                              expected_healthy=5 ;;  # 全部 5 个服务
+    2) SVCS="backend frontend";              expected_healthy=5 ;;  # 依赖链拉起全部
+    3) SVCS="backend";                       expected_healthy=4 ;;  # backend + mysql-master + mysql-slave + redis
+    4) SVCS="frontend";                      expected_healthy=5 ;;  # 整条依赖链
+    5) SVCS="mysql-master mysql-slave redis"; expected_healthy=3 ;; # 3 个基础设施服务
 esac
 
 # 构建
@@ -695,158 +766,356 @@ else
     fi
 fi
 
-# 健康等待（快速失败：发现 unhealthy 立即报告）
+# ── 健康等待：所有服务必须 healthy，任意 unhealthy 立即失败 ──────────────
+# 诊断函数：打印失败服务的日志和排错建议
+print_failed_services() {
+    echo ""
+    echo "======================================"
+    docker compose ps
+    echo "======================================"
+    echo ""
+    echo "─── 失败服务日志（最近 50 行）───"
+    docker compose ps --format '{{.Service}} {{.Status}}' 2>/dev/null \
+      | grep -E 'unhealthy|Exit|exited' | awk '{print $1}' \
+      | while read -r svc; do
+          echo ""
+          echo ">>> [$svc] 日志:"
+          docker compose logs --tail=50 "$svc" 2>/dev/null
+          echo ""
+          echo ">>> [$svc] 排错建议:"
+          case "$svc" in
+              mysql-master|mysql-slave)
+                  echo "    - 检查 MySQL 密码是否正确: docker exec $svc mysqladmin ping -uroot -p\$DB_PASSWORD"
+                  echo "    - 检查数据卷权限: docker exec $svc ls -la /var/lib/mysql"
+                  echo "    - 查看完整日志: docker compose logs $svc"
+                  ;;
+              redis)
+                  echo "    - 检查 Redis 密码配置: docker exec $svc redis-cli ping"
+                  echo "    - 查看完整日志: docker compose logs $svc"
+                  ;;
+              backend)
+                  echo "    - 检查数据库连接: 确认 DB_URL / DB_USERNAME / DB_PASSWORD 正确"
+                  echo "    - 检查 JWT_SECRET 是否已设置"
+                  echo "    - 查看完整日志: docker compose logs backend"
+                  ;;
+              frontend)
+                  echo "    - 检查 nginx 配置: docker exec $svc nginx -t"
+                  echo "    - 查看完整日志: docker compose logs frontend"
+                  ;;
+          esac
+        done
+}
+
+# 回滚函数
+do_rollback() {
+    local old_commit="$1"
+    echo "[INFO] 正在回滚到 ${old_commit:0:8}..."
+    cd "$PROJECT_ROOT"
+    if git checkout "$old_commit" --force --quiet 2>/dev/null; then
+        cd "$DOCKER_DIR"
+        case $BUILD_MODE in
+            1|2)
+                echo "[INFO] 重新构建旧版本..."
+                if [ -n "$SVCS" ]; then
+                    docker compose build $SVCS
+                else
+                    docker compose build
+                fi
+                ;;
+        esac
+        if [ -n "$SVCS" ]; then
+            docker compose up -d $SVCS
+        else
+            docker compose up -d
+        fi
+        echo "[INFO] 已回滚到 ${old_commit:0:8}，请等待服务重新就绪"
+    else
+        echo "[ERROR] git 回滚失败，请手动处理: git checkout ${old_commit:0:8}"
+    fi
+}
+
 echo "[INFO] 等待服务就绪 (预期 ${expected_healthy} 个 healthy)..."
-timeout=180; elapsed=0; deploy_ok=false
+timeout=180; elapsed=0; deploy_ok=false; fail_reason=""
 while [ $elapsed -lt $timeout ]; do
-    # 用 --format 获取结构化状态，避免不同 compose 版本输出格式差异
-    statuses=$(docker compose ps --format '{{.Status}}' 2>/dev/null || true)
-    if [ -z "$statuses" ]; then
+    # 获取每个服务的名称和状态
+    svc_statuses=$(docker compose ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
+    if [ -z "$svc_statuses" ]; then
         sleep 5; elapsed=$((elapsed + 5)); continue
     fi
-    unhealthy=$(echo "$statuses" | grep -c "unhealthy" || true)
-    healthy=$(echo   "$statuses" | grep -v "unhealthy" | grep -c "healthy" || true)
-    if [ "$unhealthy" -gt 0 ]; then
+
+    # 快速失败：任意服务 unhealthy 或 exited 立即终止
+    failed_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
+    if [ -n "$failed_svcs" ]; then
+        fail_reason="unhealthy"
         echo ""
-        echo "[ERROR] 有服务启动失败（unhealthy），终止等待："
-        docker compose ps
-        echo ""
-        echo "─── 失败服务日志 ───"
-        docker compose ps --format '{{.Service}} {{.Status}}' 2>/dev/null \
-          | grep unhealthy | awk '{print $1}' \
-          | while read -r svc; do
-              echo ">>> $svc"
-              docker compose logs --tail=30 "$svc" 2>/dev/null
-            done
+        echo "[ERROR] 以下服务启动失败，终止部署："
+        echo "$failed_svcs" | sed 's/^/         /'
+        print_failed_services
         break
     fi
-    [ "$healthy" -ge "$expected_healthy" ] && deploy_ok=true && break
+
+    healthy=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /healthy/ && $2 !~ /unhealthy/' | wc -l | tr -d ' ')
+    if [ "$healthy" -ge "$expected_healthy" ]; then
+        deploy_ok=true
+        break
+    fi
+
     sleep 5; elapsed=$((elapsed + 5))
     printf "  等待中... %ds (healthy: %d/%d)\r" "$elapsed" "$healthy" "$expected_healthy"
 done
 echo ""
+
+if [ "$deploy_ok" = false ]; then
+    if [ "$fail_reason" != "unhealthy" ]; then
+        # 超时：打印当前状态
+        echo "[ERROR] 部署超时：服务未能在 ${timeout}s 内全部就绪"
+        print_failed_services
+    fi
+    echo ""
+    # 提供回滚选项（交互模式下询问，非交互模式自动回滚）
+    if [ -n "$OLD_COMMIT" ]; then
+        if [ -t 0 ]; then
+            ask_yn "是否回滚到上一个版本 (${OLD_COMMIT:0:8})？" "y" DO_ROLLBACK
+            [ "$DO_ROLLBACK" = true ] && do_rollback "$OLD_COMMIT"
+        else
+            echo "[INFO] 非交互模式，自动回滚到 ${OLD_COMMIT:0:8}"
+            do_rollback "$OLD_COMMIT"
+        fi
+    fi
+    exit 1
+fi
 
 echo ""
 echo "======================================"
 docker compose ps
 echo "======================================"
 echo ""
-if [ "$deploy_ok" = false ]; then
-    echo "[ERROR] 部署失败：服务未能在 ${timeout}s 内全部就绪"
-    echo ""
-    # 提供回滚选项
-    if [ -n "$OLD_COMMIT" ]; then
-        ask_yn "是否回滚到上一个版本 (${OLD_COMMIT:0:8})？" "y" DO_ROLLBACK
-        if [ "$DO_ROLLBACK" = true ]; then
-            echo "[INFO] 正在回滚到 ${OLD_COMMIT:0:8}..."
-            cd "$PROJECT_ROOT"
-            if git checkout "$OLD_COMMIT" --force --quiet 2>/dev/null; then
-                cd "$DOCKER_DIR"
-                case $BUILD_MODE in
-                    1|2)
-                        echo "[INFO] 重新构建旧版本..."
-                        if [ -n "$SVCS" ]; then
-                            docker compose build $SVCS
-                        else
-                            docker compose build
-                        fi
-                        ;;
-                esac
-                if [ -n "$SVCS" ]; then
-                    docker compose up -d $SVCS
-                else
-                    docker compose up -d
-                fi
-                echo "[INFO] 已回滚到 ${OLD_COMMIT:0:8}，请等待服务重新就绪"
-            else
-                echo "[ERROR] git 回滚失败，请手动处理: git checkout ${OLD_COMMIT:0:8}"
-            fi
-        fi
-    fi
+
+# 验证数据库初始化
+if ! verify_database_init; then
+    echo "[ERROR] 数据库初始化验证失败，部署终止"
     exit 1
 fi
-# ── 版本同步校验：确认 Flyway 迁移与合并脚本保持同步 ────────────────
-MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
-FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
-if [ -f "$MIGRATION_SQL" ] && [ -d "$FLYWAY_DIR" ]; then
-    flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l || echo 0)
-    # 统计合并脚本中的 V 注释块数量（头部列表格式：--   V{n}__）
-    merged_count=$(grep -cE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null || echo 0)
-    if [ "$flyway_count" -gt "$merged_count" ]; then
-        echo "[WARN] ⚠️  发现 ${flyway_count} 个 Flyway 迁移文件，但合并脚本仅包含 ${merged_count} 个版本块"
-        echo "[WARN]    请将最新迁移同步到 docker/mysql/init/04-apply-all-migrations.sql"
-        echo "[WARN]    差异文件:"
-        for f in "$FLYWAY_DIR"/V*.sql; do
-            vn=$(basename "$f" | grep -oE '^V[0-9]+' || true)
-            grep -q "^--   ${vn}__" "$MIGRATION_SQL" 2>/dev/null || echo "         [缺失] $f"
-        done
-    else
-        echo "[OK] 迁移版本同步检查通过（Flyway: ${flyway_count}, 合并脚本: ${merged_count}）"
-    fi
-fi
 
-# ── 应用增量数据库迁移（幂等，新旧数据库均可安全执行）────────────────
-# initdb.d 仅在数据卷为空时执行；此处对已有数据库实例补全所有迁移
-# 数据源：docker/mysql/init/04-apply-all-migrations.sql（V1~V14，全幂等）
-# 使用 root 执行以确保 DDL 权限（CREATE TABLE / ALTER TABLE 等）
+# ── 数据库迁移与 Schema 验证 ──────────────────────────────────────────
+# 策略：版本不同步 → 阻塞；迁移失败 → 阻塞；Schema 缺表 → 阻塞
+# 数据源：docker/mysql/init/04-apply-all-migrations.sql（全幂等，V1~Vn）
 echo "[INFO] 应用增量数据库迁移..."
 DB_ROOT_PW=$(load_env_value "MYSQL_ROOT_PASSWORD" "" "$ENV_FILE")
-# MYSQL_ROOT_PASSWORD 与 DB_PASSWORD 通常一致；若未独立配置则回退
 [ -z "$DB_ROOT_PW" ] && DB_ROOT_PW=$(load_env_value "DB_PASSWORD" "" "$ENV_FILE")
 MASTER_CONTAINER="langhack-mysql-master"
 SLAVE_CONTAINER="langhack-mysql-slave"
+MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
 
 # 等待 mysql-master 容器可用（最多 60s）
 mc_wait=0
 until docker exec "$MASTER_CONTAINER" mysqladmin ping -uroot -p"$DB_ROOT_PW" --silent 2>/dev/null; do
     mc_wait=$((mc_wait + 2)); sleep 2
-    [ $mc_wait -ge 60 ] && echo "[WARN] mysql-master 未就绪，跳过迁移" && break
+    if [ $mc_wait -ge 60 ]; then
+        echo "[ERROR] mysql-master 在 60s 内未就绪，无法执行数据库迁移，部署终止"
+        echo "        排查: docker compose logs mysql-master"
+        exit 1
+    fi
 done
 
-if [ $mc_wait -lt 60 ]; then
-    if [ ! -f "$MIGRATION_SQL" ]; then
-        echo "[ERROR] 迁移脚本不存在: $MIGRATION_SQL"
-        exit 1
-    fi
-    # 从头部列表提取最高版本号用于日志
-    max_ver=$(grep -oE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
-    echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver})"
-    MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 < "$MIGRATION_SQL")
-    MIGRATE_EXIT=$?
-    MIGRATE_ERRORS=$(echo "$MIGRATE_OUTPUT" | grep -v "Using a password on the command line interface can be insecure" | grep -v "^$" || true)
-    if [ $MIGRATE_EXIT -ne 0 ]; then
-        echo "[ERROR] 数据库增量迁移失败，退出码: $MIGRATE_EXIT"
-        [ -n "$MIGRATE_ERRORS" ] && echo "$MIGRATE_ERRORS"
-        exit 1
-    elif [ -n "$MIGRATE_ERRORS" ]; then
-        echo "[WARN] 迁移完成但有警告:"
-        echo "$MIGRATE_ERRORS"
-    fi
-    echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
+if [ ! -f "$MIGRATION_SQL" ]; then
+    echo "[ERROR] 迁移脚本不存在: $MIGRATION_SQL"
+    exit 1
+fi
 
-    # ── 验证从库复制同步延迟 ──────────────────────────────────────────
-    echo "[INFO] 验证从库复制延迟..."
-    slave_lag_wait=0
-    until [ $slave_lag_wait -ge 30 ]; do
-        LAG=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
-              -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
-              | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
-        IO=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
-             -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
-             | grep "Replica_IO_Running:" | awk '{print $2}' || echo "Unknown")
-        if [ "$LAG" = "0" ] && [ "$IO" = "Yes" ]; then
-            echo "[OK] 从库复制同步完成（延迟: 0s）"
-            break
-        elif [ "$LAG" = "NULL" ]; then
-            echo "[WARN] 无法获取从库状态，可能从库未运行或复制未配置"
+# 版本同步强制检查：Flyway 文件数必须与合并脚本一致，否则阻塞部署
+flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+merged_count=$(grep -cE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | tr -d ' ' || echo 0)
+if [ "$flyway_count" -gt "$merged_count" ]; then
+    echo "[ERROR] ══════════════════════════════════════════════════════"
+    echo "[ERROR] 迁移脚本版本不同步，部署终止"
+    echo "[ERROR]   Flyway 文件数: ${flyway_count}"
+    echo "[ERROR]   合并脚本版本: ${merged_count}"
+    echo "[ERROR] 缺失版本块："
+    for f in "$FLYWAY_DIR"/V*.sql; do
+        vn=$(basename "$f" | grep -oE '^V[0-9]+' || true)
+        grep -q "^--   ${vn}__" "$MIGRATION_SQL" 2>/dev/null || echo "[ERROR]   [缺失] $f"
+    done
+    echo "[ERROR] 请将新迁移同步到 docker/mysql/init/04-apply-all-migrations.sql 后重新部署"
+    echo "[ERROR] ══════════════════════════════════════════════════════"
+    exit 1
+else
+    echo "[OK] 迁移版本同步检查通过（Flyway: ${flyway_count}, 合并脚本: ${merged_count}）"
+fi
+
+# 从头部列表提取最高版本号用于日志
+max_ver=$(grep -oE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
+echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver})"
+MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 < "$MIGRATION_SQL")
+MIGRATE_EXIT=$?
+MIGRATE_ERRORS=$(echo "$MIGRATE_OUTPUT" | grep -v "Using a password on the command line interface can be insecure" | grep -v "^$" || true)
+if [ $MIGRATE_EXIT -ne 0 ]; then
+    echo "[ERROR] 数据库增量迁移失败，退出码: $MIGRATE_EXIT"
+    [ -n "$MIGRATE_ERRORS" ] && echo "$MIGRATE_ERRORS"
+    exit 1
+elif [ -n "$MIGRATE_ERRORS" ]; then
+    echo "[WARN] 迁移完成但有警告:"
+    echo "$MIGRATE_ERRORS"
+fi
+echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
+
+# Schema 验证：确认关键表存在（与 auto-update.sh 保持一致）
+echo "[INFO] 验证数据库 Schema 完整性..."
+SCHEMA_MISSING=""
+for tbl in users system_config article_favorites user_tags feature_override; do
+    exists=$(docker exec "$MASTER_CONTAINER" \
+        mysql -uroot -p"$DB_ROOT_PW" english_learning \
+        -sN -e "SELECT COUNT(*) FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='${tbl}';" \
+        2>/dev/null | tr -d '[:space:]' || echo "0")
+    [ "${exists:-0}" = "0" ] && SCHEMA_MISSING="${SCHEMA_MISSING} ${tbl}"
+done
+if [ -n "$SCHEMA_MISSING" ]; then
+    echo "[ERROR] 数据库缺少关键表:${SCHEMA_MISSING}"
+    echo "[ERROR] 迁移可能未完整执行，请检查迁移脚本后重新部署"
+    exit 1
+fi
+echo "[OK] Schema 验证通过（users / system_config / article_favorites / user_tags / feature_override）"
+
+# ── 验证并修复从库复制 ────────────────────────────────────────────
+echo "[INFO] 验证从库复制状态..."
+
+# 获取当前复制状态
+get_replica_status() {
+    docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
+        -N -e "SHOW REPLICA STATUS\G" 2>/dev/null || true
+}
+
+REPLICA_STATUS=$(get_replica_status)
+IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
+SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
+LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+LAST_IO_ERR=$(echo "$REPLICA_STATUS" | grep "Last_IO_Error:" | sed 's/.*Last_IO_Error: //' || echo "")
+LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_SQL_Error: //' || echo "")
+
+replication_ok=false
+
+if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
+    echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
+    replication_ok=true
+else
+    # 复制未配置或线程未运行 → 尝试自动修复
+    if [ "$IO_RUNNING" = "NULL" ]; then
+        echo "[WARN] 从库复制未配置（SHOW REPLICA STATUS 为空），尝试自动初始化..."
+    else
+        echo "[WARN] 从库复制线程未运行（IO: ${IO_RUNNING}, SQL: ${SQL_RUNNING}），尝试自动修复..."
+        [ -n "$LAST_IO_ERR" ] && echo "[WARN]   IO 错误: $LAST_IO_ERR"
+        [ -n "$LAST_SQL_ERR" ] && echo "[WARN]   SQL 错误: $LAST_SQL_ERR"
+    fi
+
+    echo "[INFO] 在从库容器内重新执行复制初始化脚本..."
+    REPL_USER=$(load_env_value "MYSQL_REPLICATION_USER" "replicator" "$ENV_FILE")
+    REPL_PASS=$(load_env_value "MYSQL_REPLICATION_PASSWORD" "" "$ENV_FILE")
+
+    # 获取主库 GTID
+    MASTER_GTID=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
+        -N -e "SELECT @@global.gtid_executed;" 2>/dev/null | tr -d '[:space:]' || echo "")
+
+    if [ -n "$MASTER_GTID" ] && [ "$MASTER_GTID" != "" ]; then
+        echo "[INFO] 主库 GTID: ${MASTER_GTID}"
+        REPAIR_OUTPUT=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 <<-EOSQL
+            STOP REPLICA;
+            RESET MASTER;
+            SET GLOBAL gtid_purged='${MASTER_GTID}';
+            CHANGE REPLICATION SOURCE TO
+                SOURCE_HOST='mysql-master',
+                SOURCE_PORT=3306,
+                SOURCE_USER='${REPL_USER}',
+                SOURCE_PASSWORD='${REPL_PASS}',
+                SOURCE_AUTO_POSITION=1,
+                GET_SOURCE_PUBLIC_KEY=1;
+            START REPLICA;
+EOSQL
+        )
+    else
+        echo "[INFO] 无法获取主库 GTID，使用 auto-position 直接配置..."
+        REPAIR_OUTPUT=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 <<-EOSQL
+            STOP REPLICA;
+            RESET MASTER;
+            CHANGE REPLICATION SOURCE TO
+                SOURCE_HOST='mysql-master',
+                SOURCE_PORT=3306,
+                SOURCE_USER='${REPL_USER}',
+                SOURCE_PASSWORD='${REPL_PASS}',
+                SOURCE_AUTO_POSITION=1,
+                GET_SOURCE_PUBLIC_KEY=1;
+            START REPLICA;
+EOSQL
+        )
+    fi
+
+    REPAIR_ERRORS=$(echo "$REPAIR_OUTPUT" | grep -v "Using a password" | grep -v "^$" || true)
+    [ -n "$REPAIR_ERRORS" ] && echo "[WARN] 修复输出: $REPAIR_ERRORS"
+
+    # 等待复制线程启动（最多 30s）
+    echo "[INFO] 等待复制线程启动..."
+    repair_wait=0
+    while [ $repair_wait -lt 30 ]; do
+        sleep 3; repair_wait=$((repair_wait + 3))
+        REPLICA_STATUS=$(get_replica_status)
+        IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
+        SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
+        LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+        if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
+            echo "[OK] 从库复制修复成功（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
+            replication_ok=true
             break
         fi
-        echo "[INFO] 等待从库同步... (延迟: ${LAG}s, IO: ${IO})"
-        sleep 3; slave_lag_wait=$((slave_lag_wait + 3))
+        echo "[INFO] 等待复制线程... (${repair_wait}s, IO: ${IO_RUNNING}, SQL: ${SQL_RUNNING})"
     done
-    if [ $slave_lag_wait -ge 30 ]; then
-        echo "[WARN] 从库同步等待超时，当前状态可能仍有延迟，请手动检查: docker exec langhack-mysql-slave mysql -uroot -p\$DB_PASSWORD -e 'SHOW REPLICA STATUS\\G'"
+
+    if [ "$replication_ok" = false ]; then
+        LAST_IO_ERR=$(echo "$REPLICA_STATUS" | grep "Last_IO_Error:" | sed 's/.*Last_IO_Error: //' || echo "")
+        LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_SQL_Error: //' || echo "")
+        echo ""
+        echo "[ERROR] ══════════════════════════════════════════════════════"
+        echo "[ERROR] 从库复制初始化失败，部署终止"
+        echo "[ERROR] IO Thread:  ${IO_RUNNING}"
+        echo "[ERROR] SQL Thread: ${SQL_RUNNING}"
+        [ -n "$LAST_IO_ERR" ]  && echo "[ERROR] IO 错误:  $LAST_IO_ERR"
+        [ -n "$LAST_SQL_ERR" ] && echo "[ERROR] SQL 错误: $LAST_SQL_ERR"
+        echo "[ERROR] ══════════════════════════════════════════════════════"
+        echo ""
+        echo "── 手动排查步骤 ──────────────────────────────────────────────"
+        echo "  # 1. 查看从库完整日志"
+        echo "  docker compose logs mysql-slave"
+        echo ""
+        echo "  # 2. 检查复制用户是否存在于主库"
+        echo "  docker exec $MASTER_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
+        echo "    -e \"SELECT user,host FROM mysql.user WHERE user='${REPL_USER}';\""
+        echo ""
+        echo "  # 3. 检查主库 binlog 是否开启"
+        echo "  docker exec $MASTER_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
+        echo "    -e \"SHOW VARIABLES LIKE 'log_bin'; SHOW VARIABLES LIKE 'gtid_mode';\""
+        echo ""
+        echo "  # 4. 手动重置并重试"
+        echo "  docker exec $SLAVE_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
+        echo "    -e \"STOP REPLICA; RESET REPLICA ALL;\""
+        echo "  docker compose restart mysql-slave"
+        echo "──────────────────────────────────────────────────────────────"
+        exit 1
     fi
+fi
+
+# 等待复制延迟归零（最多 60s）
+if [ "$replication_ok" = true ] && [ "$LAG" != "0" ] && [ "$LAG" != "NULL" ]; then
+    echo "[INFO] 等待从库追上主库（当前延迟: ${LAG}s）..."
+    lag_wait=0
+    while [ $lag_wait -lt 60 ]; do
+        sleep 3; lag_wait=$((lag_wait + 3))
+        LAG=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
+            -N -e "SHOW REPLICA STATUS\G" 2>/dev/null \
+            | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+        [ "$LAG" = "0" ] && echo "[OK] 从库已追上主库（延迟: 0s）" && break
+        printf "  延迟: %ss (等待 %ds)\r" "$LAG" "$lag_wait"
+    done
+    [ "$LAG" != "0" ] && echo "[WARN] 从库延迟 ${LAG}s，超过等待时间，继续部署"
 fi
 
 echo "[SUCCESS] 部署完成！"

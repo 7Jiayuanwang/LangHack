@@ -13,15 +13,16 @@ REPL_PASS="${MYSQL_REPLICATION_PASSWORD:-repl123456}"
 echo "[repl-user] 创建复制用户: ${REPL_USER}"
 
 mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<-EOSQL
-    -- 创建复制用户（限制来源为 Docker 内部网络）
-    CREATE USER IF NOT EXISTS '${REPL_USER}'@'172.%'
+    -- 创建复制用户（允许所有 Docker 内部网络）
+    -- 注意：Docker Compose 的网络 IP 段可能是 172.x 或 10.x，使用 '%' 确保兼容
+    CREATE USER IF NOT EXISTS '${REPL_USER}'@'%'
         IDENTIFIED WITH mysql_native_password
         BY '${REPL_PASS}';
 
-    GRANT REPLICATION SLAVE ON *.* TO '${REPL_USER}'@'172.%';
+    GRANT REPLICATION SLAVE ON *.* TO '${REPL_USER}'@'%';
 
-    -- 清理旧的 @'%' 用户（如存在）
-    DROP USER IF EXISTS '${REPL_USER}'@'%';
+    -- 清理旧的 @'172.%' 用户（如存在）
+    DROP USER IF EXISTS '${REPL_USER}'@'172.%';
 
     FLUSH PRIVILEGES;
 

@@ -26,8 +26,9 @@ RETRY_COUNT=0
 while ! mysqladmin ping -h mysql-master -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
-        echo "[replication] ❌ 主库连接超时（${MAX_RETRIES}次重试），跳过复制配置"
-        exit 0  # 不阻塞从库启动
+        echo "[replication] ❌ 主库连接超时（${MAX_RETRIES}次重试），复制初始化失败"
+        echo "[replication] ❌ 从库将以 unhealthy 状态运行，部署将被阻塞"
+        exit 1  # 必须失败，让 healthcheck 检测到并阻塞部署
     fi
     echo "[replication] 等待主库... (${RETRY_COUNT}/${MAX_RETRIES})"
     sleep 2
