@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.sso.mapper.SsoUserBindingMapper">
+
+    <resultMap id="BaseResultMap" type="com.english.sso.entity.SsoUserBinding">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="sso_provider" property="ssoProvider"/>
+        <result column="sso_user_id" property="ssoUserId"/>
+        <result column="sso_username" property="ssoUsername"/>
+        <result column="sso_email" property="ssoEmail"/>
+        <result column="sso_real_name" property="ssoRealName"/>
+        <result column="sso_member_of" property="ssoMemberOf"/>
+        <result column="auto_approved" property="autoApproved"/>
+        <result column="last_login_time" property="lastLoginTime"/>
+        <result column="created_time" property="createdTime"/>
+        <result column="updated_time" property="updatedTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="findByProviderAndSsoUserId" resultMap="BaseResultMap">
+        SELECT * FROM sso_user_bindings
+        WHERE sso_provider = #{provider}
+          AND sso_user_id = #{ssoUserId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="findByUserId" resultMap="BaseResultMap">
+        SELECT * FROM sso_user_bindings
+        WHERE user_id = #{userId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="findPendingApprovals" resultMap="BaseResultMap">
+        SELECT * FROM sso_user_bindings
+        WHERE auto_approved = 0
+          AND deleted = 0
+        ORDER BY created_time DESC
+    </select>
+
+    <select id="findByProvider" resultMap="BaseResultMap">
+        SELECT * FROM sso_user_bindings
+        WHERE sso_provider = #{provider}
+          AND deleted = 0
+        ORDER BY created_time DESC
+    </select>
+
+</mapper>

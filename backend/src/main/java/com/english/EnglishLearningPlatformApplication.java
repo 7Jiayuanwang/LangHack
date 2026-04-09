@@ -5,7 +5,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-@MapperScan("com.english.mapper")
+@MapperScan({"com.english.mapper", "com.english.sso.mapper"})
 public class EnglishLearningPlatformApplication {
 
     public static void main(String[] args) {

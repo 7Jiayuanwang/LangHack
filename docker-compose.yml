@@ -1,83 +1,313 @@
-version: '3.8'
+name: LangHack
+
+# ─────────────────────────────────────────────
+# 全局日志配置（防止日志无限增长耗尽磁盘）
+# ─────────────────────────────────────────────
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
 
 services:
-  mysql:
+
+  # ─────────────────────────────────────────────
+  # MySQL 主库
+  # ─────────────────────────────────────────────
+  mysql-master:
     image: mysql:8.0
-    container_name: langhack-mysql
-    restart: always
+    container_name: langhack-mysql-master
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
+    # （MySQL 8.0 会忽略 world-writable 的 .cnf 文件）
+    command: >
+      --server-id=1
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --binlog-expire-logs-seconds=604800
+      --max-binlog-size=100M
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --innodb-buffer-pool-size=1G
+      --innodb-buffer-pool-instances=2
+      --innodb-log-file-size=256M
+      --innodb-flush-log-at-trx-commit=1
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-      MYSQL_DATABASE: english_learning
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "${PORT_MYSQL:-3306}:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
-      # Initialize database with pre-packaged scripts if /var/lib/mysql is empty
-      - ./database:/docker-entrypoint-initdb.d
+      - mysql_master_data:/var/lib/mysql
+      - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
+      # docker-entrypoint-initdb.d 按文件名顺序执行（仅首次启动）
+      # 00: 基础表结构 → 01: 字符集配置 → 02: 复制用户 → 03: 历史数据导入(可选) → 04: 合并迁移(V1~V14) → 05: 增量备份 → 06: ECDICT词典
+      - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
+      - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
+      - ./mysql/init/01-create-replication-user.sh:/docker-entrypoint-initdb.d/02-create-replication-user.sh:ro
+      - ./mysql/init/03-import-backup.sh:/docker-entrypoint-initdb.d/03-import-backup.sh:ro
+      # 历史数据 SQL 目录（优先级：backups/ 全量备份 > database/ 旧备份）
+      # 03-import-backup.sh 自动选取最新全量备份（排除 pre-update_* 增量文件）
+      - ../database:/docker-entrypoint-initdb.d/seed:ro
+      - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
+      - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
+      - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
     networks:
       - langhack-network
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 180s  # 增加到 3 分钟，给初始化脚本足够时间（备份导入 + ECDICT）
 
+  # ─────────────────────────────────────────────
+  # MySQL 从库（只读副本）
+  # ─────────────────────────────────────────────
+  mysql-slave:
+    image: mysql:8.0
+    container_name: langhack-mysql-slave
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
+    # 注意: super-read-only 不能在 my.cnf 或 command 中设置，否则阻塞 init 脚本
+    # (ERROR 1290) — 在 init-replication.sh 末尾通过 SET GLOBAL 动态启用
+    command: >
+      --server-id=2
+      --relay-log=relay-bin
+      --relay-log-purge=ON
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --log-bin=mysql-slave-bin
+      --log-slave-updates=ON
+      --innodb-buffer-pool-size=1G
+      --innodb-flush-log-at-trx-commit=2
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - "${PORT_MYSQL_SLAVE:-3307}:3306"
+    volumes:
+      - mysql_slave_data:/var/lib/mysql
+      - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
+      # 从库也需要完整的初始化数据（基础表 + 备份 + 迁移 + 增量备份 + ECDICT）
+      - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
+      - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
+      - ./mysql/init/03-import-backup.sh:/docker-entrypoint-initdb.d/03-import-backup.sh:ro
+      - ../database:/docker-entrypoint-initdb.d/seed:ro
+      - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
+      - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
+      - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
+      # 复制初始化标记（在 initdb 阶段创建标记，实际初始化由 deploy.sh 执行）
+      - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/07-create-replication-marker.sh:ro
+      - ./mysql/slave/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
+    networks:
+      - langhack-network
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      # 检查 MySQL 进程存活 + 复制线程运行状态
+      # 复制未配置或线程未运行时 healthcheck 失败 → backend 无法启动 → 部署阻塞
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 240s  # 增加到 4 分钟，等待主库初始化完成 + 从库初始化 + 复制配置
+
+  # ─────────────────────────────────────────────
+  # Redis 缓存
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:6-alpine
+    container_name: langhack-redis
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 128M
+    command: >
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
+    ports:
+      - "${PORT_REDIS:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - langhack-network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a ${REDIS_PASSWORD}} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────
+  # Spring Boot 后端应用
+  # ─────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: langhack-backend
-    restart: always
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 2G
     environment:
-      - TZ=Asia/Shanghai
-      # Wait for MySQL to start
-      - DB_URL=jdbc:mysql://mysql:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
-      - DB_USERNAME=root
-      - DB_PASSWORD=${DB_PASSWORD}
-      - JWT_SECRET=${JWT_SECRET}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - TENCENT_SECRET_ID=${TENCENT_SECRET_ID}
-      - TENCENT_SECRET_KEY=${TENCENT_SECRET_KEY}
-      - HIAGENT_API_KEY=${HIAGENT_API_KEY}
-      - HIAGENT_APP_ID=${HIAGENT_APP_ID}
-      - HIAGENT_API_URL=${HIAGENT_API_URL}
-      - HIAGENT_QA_API_KEY=${HIAGENT_QA_API_KEY:-}
-      - HIAGENT_QA_APP_ID=${HIAGENT_QA_APP_ID:-}
-      - AI_TRANSLATE_API_KEY=${AI_TRANSLATE_API_KEY:-}
-      - AI_TRANSLATE_API_URL=${AI_TRANSLATE_API_URL:-}
-      - AI_TRANSLATE_MODEL=${AI_TRANSLATE_MODEL:-}
-      - SPRING_PROFILES_ACTIVE=prod
+      TZ: Asia/Shanghai
+      SPRING_PROFILES_ACTIVE: sso
+      # 主库
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      # 从库（读写分离，可选）
+      DB_SLAVE_URL: ${DB_SLAVE_URL}
+      DB_SLAVE_USERNAME: ${DB_SLAVE_USERNAME:-${DB_USERNAME}}
+      DB_SLAVE_PASSWORD: ${DB_SLAVE_PASSWORD:-${DB_PASSWORD}}
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 认证 & AI
+      JWT_SECRET: ${JWT_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      TUTOR_API_BASE_URL: ${TUTOR_API_BASE_URL}
+      # HiAgent (文章版本生成 + AI问答)
+      HIAGENT_API_KEY: ${HIAGENT_API_KEY:-}
+      HIAGENT_APP_ID: ${HIAGENT_APP_ID:-}
+      HIAGENT_API_URL: ${HIAGENT_API_URL:-https://agent.imau.edu.cn:32300/api/proxy/api/v1}
+      HIAGENT_QA_API_KEY: ${HIAGENT_QA_API_KEY:-}
+      HIAGENT_QA_APP_ID: ${HIAGENT_QA_APP_ID:-}
+      # 备份
+      BACKUP_DIR: /app/backups
+      MYSQLDUMP_PATH: mysqldump
+      # CORS
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
+      # AI 翻译（可选，也可在运维面板配置）
+      AI_TRANSLATE_API_URL: ${AI_TRANSLATE_API_URL:-}
+      AI_TRANSLATE_API_KEY: ${AI_TRANSLATE_API_KEY:-}
+      AI_TRANSLATE_MODEL: ${AI_TRANSLATE_MODEL:-}
+      # SSO Configuration
+      SSO_ENABLED: ${SSO_ENABLED:-true}
+      SSO_PROTOCOL: ${SSO_PROTOCOL:-CAS}
+      SSO_CAS_ENABLED: ${SSO_CAS_ENABLED:-true}
+      SSO_CAS_SERVER_URL: ${SSO_CAS_SERVER_URL:-https://ids.imau.edu.cn/authserver}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8088}
+      APP_UPDATE_SUPPORTED: "false"
+      APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
     ports:
-      - "8080:8080"
-    depends_on:
-      - mysql
+      - "${PORT_BACKEND:-8080}:8080"
+    volumes:
+      - app_logs:/app/logs
+      - app_uploads:/app/uploads
+      # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
+      - ../backups:/app/backups
     networks:
       - langhack-network
-    volumes:
-      - backend_logs:/app/logs
+    depends_on:
+      mysql-master:
+        condition: service_healthy   # 主库进程必须存活（阻塞）
+      mysql-slave:
+        condition: service_healthy   # 从库进程必须存活（阻塞）；复制状态由 DynamicDataSource 运行时降级处理
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
 
+  # ─────────────────────────────────────────────
+  # Vue 3 前端 (Nginx 反向代理)
+  # ─────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Pass environment variables to the build process
-        VITE_API_BASE_URL: /api
-        VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-http://101.42.92.220/tutor}
+        VITE_API_BASE_URL: ""
+        VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
     container_name: langhack-frontend
-    restart: always
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 64M
     ports:
-      - "80:80"
-      # Expose 443 if you add SSL certificates later
-      # - "443:443"
+      - "${PORT_FRONTEND:-80}:80"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      - backend
     networks:
       - langhack-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
+# ─────────────────────────────────────────────
+# 网络
+# ─────────────────────────────────────────────
 networks:
   langhack-network:
     driver: bridge
 
+# ─────────────────────────────────────────────
+# 持久化卷
+# ─────────────────────────────────────────────
 volumes:
-  mysql_data:
-  backend_logs:
+  mysql_master_data:
+    driver: local
+  mysql_slave_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_logs:
+    driver: local
+  app_uploads:
+    driver: local

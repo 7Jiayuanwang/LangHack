@@ -4,6 +4,12 @@ app:
   update:
     supported: ${APP_UPDATE_SUPPORTED:true}
     unsupported-reason: ${APP_UPDATE_UNSUPPORTED_REASON:Self-update is not supported in the current deployment mode.}
+  base-url: ${APP_BASE_URL:http://localhost:3000}
+
+# 管理员登录配置
+admin:
+  login:
+    secret: ${ADMIN_LOGIN_SECRET:default-secret}
 
 
 server:
