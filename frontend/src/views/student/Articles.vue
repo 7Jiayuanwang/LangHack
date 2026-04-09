@@ -3,10 +3,7 @@
     
     <!-- Sticky Header -->
     <header class="mobile-header">
-      <div class="header-content">
-        <h1 class="header-title">发现文章</h1>
-        <p class="header-subtitle">Daily Picks</p>
-      </div>
+      <div></div>
       <div class="header-actions">
         <span v-if="!filterVisible" class="current-filter-label">{{ currentCategoryLabel }}</span>
         <button class="icon-btn" @click="toggleFilter" :title="filterVisible ? '收起筛选' : '展开筛选'">
@@ -40,6 +37,22 @@
           </button>
         </div>
       </div>
+      </transition>
+
+      <!-- Search Bar -->
+      <transition name="filter-collapse">
+        <div v-show="searchVisible" class="search-bar">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜索文章标题或内容..."
+            clearable
+            @keyup.enter="currentPage = 1"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
       </transition>
 
       <!-- Articles Feed -->
@@ -163,11 +176,27 @@ const filterVisible = ref(true)
 const loadError = ref(false)
 const currentPage = ref(1)
 const pageSize = 5
+const searchQuery = ref('')
+const searchVisible = ref(false)
 
-const totalPages = computed(() => Math.ceil(allArticles.value.length / pageSize))
+const totalPages = computed(() => Math.ceil(filteredArticles.value.length / pageSize))
+const filteredArticles = computed(() => {
+  let result = allArticles.value
+  if (selectedCategory.value) {
+    result = result.filter(item => item.category === selectedCategory.value)
+  }
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase()
+    result = result.filter(item =>
+      item.title?.toLowerCase().includes(q) ||
+      item.content?.toLowerCase().includes(q)
+    )
+  }
+  return result
+})
 const articles = computed(() => {
   const start = (currentPage.value - 1) * pageSize
-  return allArticles.value.slice(start, start + pageSize)
+  return filteredArticles.value.slice(start, start + pageSize)
 })
 
 // 筛选栏开关
@@ -212,7 +241,6 @@ const getRandomGradient = () => {
 const selectCategory = (val) => {
   selectedCategory.value = val
   currentPage.value = 1
-  loadArticles()
 }
 
 const goToPage = (page) => {
@@ -225,7 +253,10 @@ const prevPage = () => goToPage(currentPage.value - 1)
 const nextPage = () => goToPage(currentPage.value + 1)
 
 const toggleSearch = () => {
-  ElMessage.info('搜索功能即将上线')
+  searchVisible.value = !searchVisible.value
+  if (!searchVisible.value) {
+    searchQuery.value = ''
+  }
 }
 
 const getRandomCategory = () => {
@@ -265,10 +296,6 @@ const loadArticles = async () => {
           readingTime: Math.max(1, Math.ceil(contentLength / 800))
         }
       })
-
-      if (selectedCategory.value) {
-        fetched = fetched.filter(item => item.category === selectedCategory.value)
-      }
 
       allArticles.value = fetched
     } else {
@@ -423,29 +450,6 @@ onMounted(() => {
   padding-top: max(env(safe-area-inset-top, 12px), 12px);
 }
 
-.header-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.header-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  background: linear-gradient(to right, #0f172a, rgba(19, 127, 236, 0.8));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.header-subtitle {
-  margin: 2px 0 0 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--app-text-muted);
-}
 
 .header-actions {
   display: flex;
@@ -506,6 +510,14 @@ onMounted(() => {
   -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(226, 232, 240, 0.6);
   padding: 12px 0;
+}
+
+.search-bar {
+  padding: 12px 20px;
+  background: rgba(246, 247, 248, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .filter-scroll {

@@ -7,7 +7,6 @@
           <el-icon><ArrowLeft /></el-icon>
           <span>返回阅读</span>
         </button>
-        <h1 class="qa-title">AI 助教</h1>
         <div class="qa-avatar">
           <el-icon :size="22"><Monitor /></el-icon>
         </div>
@@ -282,15 +281,6 @@ onBeforeUnmount(() => {
   transition: color 0.2s;
 }
 .qa-back-btn:hover { color: #197fe6; }
-
-.qa-title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 17px;
-  font-weight: 700;
-  color: #1e293b;
-}
 
 .qa-avatar {
   width: 36px;

@@ -1,24 +1,6 @@
 <template>
   <div class="articles-mobile-page">
 
-    <!-- Sticky Header -->
-    <header class="mobile-header">
-      <div class="page-content-wrapper header-inner">
-        <div class="header-content">
-          <h1 class="header-title">发现文章</h1>
-          <p class="header-subtitle">Daily Picks</p>
-        </div>
-        <div class="header-actions">
-          <button class="icon-btn" @click="handleLogin">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </header>
-
     <!-- Main Content Area -->
     <main class="page-main">
       <div class="page-content-wrapper">
@@ -406,81 +388,11 @@ onMounted(() => {
   }
 }
 
-/* --- Header --- */
-.mobile-header {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-}
-
-.header-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  padding-top: max(env(safe-area-inset-top, 12px), 12px);
-}
-
-@media (min-width: 768px) {
-  .header-inner {
-    padding: 20px 0;
-  }
-}
-
-.header-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.header-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  background: linear-gradient(to right, #0f172a, rgba(19, 127, 236, 0.8));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.header-subtitle {
-  margin: 2px 0 0 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--app-text-muted);
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.icon-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: #475569;
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.icon-btn:hover { background: #f1f5f9; color: #0f172a; }
 
 /* --- Filter Bar --- */
 .filter-bar {
   position: sticky;
-  top: calc(env(safe-area-inset-top, 0px) + 60px);
+  top: max(env(safe-area-inset-top, 0px), 0px);
   z-index: 40;
   background: rgba(246, 247, 248, 0.95);
   backdrop-filter: blur(8px);
@@ -854,7 +766,6 @@ onMounted(() => {
 /* Touch optimization */
 .article-card,
 .filter-pill,
-.icon-btn,
 .nav-item,
 .article-card,
 .page-btn {

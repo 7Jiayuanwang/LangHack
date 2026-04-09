@@ -3,14 +3,6 @@
     <!-- 状态栏占位 -->
     <div class="status-bar"></div>
 
-    <!-- 顶部导航栏 - 时尚设计（文章页有自带 header，此处隐藏避免重叠） -->
-    <header class="trend-header" v-show="pageTitle">
-      <div class="header-container">
-        <div class="header-center">
-          <h1 class="page-title">{{ pageTitle }}</h1>
-        </div>
-      </div>
-    </header>
 
     <!-- 主内容区域 -->
     <main class="main-content">
@@ -320,6 +312,7 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
 }
 
 .content-wrapper {
@@ -336,7 +329,10 @@ onUnmounted(() => {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--glass-border);
-  position: relative;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 998;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
