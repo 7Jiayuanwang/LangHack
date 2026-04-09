@@ -7,14 +7,17 @@
 #   从 seed/（database/）和 seed-backups/（backups/）两个目录中，
 #   按文件修改时间选择最新的一个 .sql 或 .sql.gz 文件导入。
 #
-#   full backup（english_learning_*.sql）和 pre-update backup
-#   （pre-update_*.sql.gz）都是完整的 mysqldump，因此只需导入
-#   时间戳最新的那一个即可获得最完整的数据。
+#   - 全量备份（FULL）：包含完整表结构和数据，可直接导入
+#   - 增量备份（INCREMENTAL）：仅包含数据变更，需要先有表结构
 #
 # 查找优先级：
 #   1. DB_SEED_SQL 环境变量指定的文件
 #   2. seed/ + seed-backups/ 中修改时间最新的 .sql 或 .sql.gz
 #   3. 传统固定路径：/docker-entrypoint-initdb.d/03-import-backup.sql
+#
+# 增量备份处理：
+#   - 检测到增量备份时，延迟到 04-apply-all-migrations.sql 之后导入
+#   - 创建标记文件供后续步骤使用
 #
 # 如果找不到有效的种子文件，打印提示后继续（不报错），
 # 后续 04-apply-all-migrations.sql 会创建所有必要的表结构。
@@ -109,9 +112,27 @@ if [ "$FILE_SIZE" -lt 1024 ]; then
     exit 0
 fi
 
-# ── 执行导入 ─────────────────────────────────────────
+# ── 检测备份类型 ─────────────────────────────────────
+# 检查是否为增量备份（文件头包含 "Incremental backup"）
+BACKUP_TYPE="FULL"
+if head -5 "$SEED_FILE" 2>/dev/null | grep -qi "Incremental backup"; then
+    BACKUP_TYPE="INCREMENTAL"
+    echo "[seed] 检测到增量备份，需要先创建表结构"
+fi
+
+# 如果是增量备份，延迟到 04-apply-all-migrations.sql 之后导入
+if [ "$BACKUP_TYPE" = "INCREMENTAL" ]; then
+    echo "[seed] ⏸️  增量备份将在表结构创建后导入"
+    echo "[seed] 创建延迟导入标记: /tmp/pending-incremental-backup.txt"
+    echo "$SEED_FILE" > /tmp/pending-incremental-backup.txt
+    echo "[seed] ======================================"
+    exit 0
+fi
+
+# ── 执行导入（仅全量备份）─────────────────────────────
 FILE_SIZE_MB=$(( FILE_SIZE / 1024 / 1024 ))
 echo "[seed] 文件大小: ${FILE_SIZE_MB} MB，开始导入..."
+echo "[seed] 备份类型: ${BACKUP_TYPE}"
 START_TIME=$(date +%s)
 
 case "$SEED_FILE" in

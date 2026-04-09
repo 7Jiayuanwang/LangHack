@@ -24,7 +24,8 @@
 
     <!-- Main Content Area -->
     <main class="page-main">
-      <!-- Filter Pills -->
+      <div class="page-content-wrapper">
+        <!-- Filter Pills -->
       <transition name="filter-collapse">
         <div v-show="filterVisible" class="filter-bar">
         <div class="filter-scroll">
@@ -115,9 +116,29 @@
           </article>
         </template>
       </div>
-      
+
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="pagination">
+        <button class="page-btn" :disabled="currentPage === 1" @click="prevPage">
+          <el-icon><ArrowLeft /></el-icon>
+        </button>
+        <button
+          v-for="page in totalPages"
+          :key="page"
+          class="page-btn page-number"
+          :class="{ active: currentPage === page }"
+          @click="goToPage(page)"
+        >
+          {{ page }}
+        </button>
+        <button class="page-btn" :disabled="currentPage === totalPages" @click="nextPage">
+          <el-icon><ArrowRight /></el-icon>
+        </button>
+      </div>
+
       <!-- Bottom Safe Area Spacer -->
       <div class="bottom-spacer"></div>
+      </div>
     </main>
 
   </div>
@@ -130,16 +151,24 @@ import { ElMessage } from 'element-plus'
 import {
   Search, Bell, DocumentRemove, Timer,
   TrendCharts, Connection, Reading, Medal,
-  ArrowUp, ArrowDown
+  ArrowUp, ArrowDown, ArrowLeft, ArrowRight
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
 const loading = ref(true)
-const articles = ref([])
+const allArticles = ref([])
 const selectedCategory = ref('')
 const filterVisible = ref(true)
 const loadError = ref(false)
+const currentPage = ref(1)
+const pageSize = 5
+
+const totalPages = computed(() => Math.ceil(allArticles.value.length / pageSize))
+const articles = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return allArticles.value.slice(start, start + pageSize)
+})
 
 // 筛选栏开关
 const toggleFilter = () => {
@@ -182,8 +211,18 @@ const getRandomGradient = () => {
 
 const selectCategory = (val) => {
   selectedCategory.value = val
+  currentPage.value = 1
   loadArticles()
 }
+
+const goToPage = (page) => {
+  if (page < 1 || page > totalPages.value) return
+  currentPage.value = page
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const prevPage = () => goToPage(currentPage.value - 1)
+const nextPage = () => goToPage(currentPage.value + 1)
 
 const toggleSearch = () => {
   ElMessage.info('搜索功能即将上线')
@@ -231,7 +270,7 @@ const loadArticles = async () => {
         fetched = fetched.filter(item => item.category === selectedCategory.value)
       }
 
-      articles.value = fetched
+      allArticles.value = fetched
     } else {
       loadError.value = true
     }
@@ -306,24 +345,65 @@ onMounted(() => {
 }
 
 .articles-mobile-page {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background-color: var(--app-bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--app-text);
-  max-width: 1200px;
-  margin: 0 auto;
   position: relative;
 }
 
-/* --- Responsive Layout for Desktop Wrapper --- */
+/* --- Responsive Layout for Desktop --- */
 @media (min-width: 768px) {
   .articles-mobile-page {
-    box-shadow: 0 0 40px rgba(0,0,0,0.05);
-    border-radius: 24px;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    /* 移除嵌套滚动：让外层 Layout 的 content-wrapper 统一处理滚动 */
+    max-width: 100%;
+    height: 100vh;
+  }
+
+  .page-content-wrapper {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .articles-feed {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    padding: 0;
+  }
+
+  .bottom-spacer,
+  .pagination {
+    display: none;
+  }
+
+  .page-main {
+    padding-bottom: 0;
+  }
+
+  .article-card {
+    min-height: 280px;
+  }
+
+  .article-cover {
+    height: 140px;
+  }
+
+  .article-content {
+    flex: 1;
+  }
+
+  .article-content {
+    padding: 12px 16px 10px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .articles-feed {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -453,11 +533,19 @@ onMounted(() => {
 
 .filter-pill:active { transform: scale(0.96); }
 
+.filter-pill,
+.article-card,
+.page-btn {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 .filter-pill.active {
-  background: var(--app-primary);
+  background: #1d4ed8;
   color: white;
-  border-color: var(--app-primary);
-  box-shadow: 0 2px 10px rgba(19, 127, 236, 0.3);
+  border-color: #1d4ed8;
+  border-radius: 50px;
+  box-shadow: 0 4px 16px rgba(29, 78, 216, 0.45);
 }
 
 /* --- Feed --- */
@@ -684,6 +772,54 @@ onMounted(() => {
 @keyframes shimmer {
   0% { background-position: -200px 0; }
   100% { background-position: 400px 0; }
+}
+
+/* --- Pagination --- */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 0;
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 50px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-btn:not(:disabled):hover {
+  border-color: #1d4ed8;
+  color: #1d4ed8;
+}
+
+.page-btn.active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+}
+
+.page-number {
+  font-weight: 600;
 }
 
 .bottom-spacer {

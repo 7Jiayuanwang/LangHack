@@ -123,7 +123,7 @@ describe('Articles.vue (Public Articles)', () => {
 
   it('articles array can contain multiple items', () => {
     const wrapper = createWrapper()
-    wrapper.vm.articles = [
+    wrapper.vm.allArticles = [
       { id: 1, title: 'Article 1' },
       { id: 2, title: 'Article 2' },
       { id: 3, title: 'Article 3' }
@@ -143,7 +143,7 @@ describe('Articles.vue (Public Articles)', () => {
 
   it('articles can be mapped for display', () => {
     const wrapper = createWrapper()
-    wrapper.vm.articles = [
+    wrapper.vm.allArticles = [
       { id: 1, title: 'A1' },
       { id: 2, title: 'A2' },
       { id: 3, title: 'A3' }

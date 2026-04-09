@@ -53,7 +53,8 @@ services:
       - mysql_master_data:/var/lib/mysql
       - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
       # docker-entrypoint-initdb.d 按文件名顺序执行（仅首次启动）
-      # 01: 字符集配置 → 02: 复制用户 → 03: 历史数据导入(可选) → 04: 合并迁移(V1~V14) → 05: ECDICT词典
+      # 00: 基础表结构 → 01: 字符集配置 → 02: 复制用户 → 03: 历史数据导入(可选) → 04: 合并迁移(V1~V14) → 05: 增量备份 → 06: ECDICT词典
+      - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
       - ./mysql/init/01-create-replication-user.sh:/docker-entrypoint-initdb.d/02-create-replication-user.sh:ro
       - ./mysql/init/03-import-backup.sh:/docker-entrypoint-initdb.d/03-import-backup.sh:ro
@@ -62,7 +63,8 @@ services:
       - ../database:/docker-entrypoint-initdb.d/seed:ro
       - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
       - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
-      - ./mysql/init/05-import-ecdict.sh:/docker-entrypoint-initdb.d/05-import-ecdict.sh:ro
+      - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
+      - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
       - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
     networks:
       - langhack-network
@@ -113,16 +115,18 @@ services:
     volumes:
       - mysql_slave_data:/var/lib/mysql
       - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
-      # 从库也需要完整的初始化数据（备份 + 迁移 + ECDICT）
+      # 从库也需要完整的初始化数据（基础表 + 备份 + 迁移 + 增量备份 + ECDICT）
+      - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
       - ./mysql/init/03-import-backup.sh:/docker-entrypoint-initdb.d/03-import-backup.sh:ro
       - ../database:/docker-entrypoint-initdb.d/seed:ro
       - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
       - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
-      - ./mysql/init/05-import-ecdict.sh:/docker-entrypoint-initdb.d/05-import-ecdict.sh:ro
+      - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
+      - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
       - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
       # 复制初始化标记（在 initdb 阶段创建标记，实际初始化由 deploy.sh 执行）
-      - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/06-create-replication-marker.sh:ro
+      - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/07-create-replication-marker.sh:ro
       - ./mysql/slave/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
     networks:
       - langhack-network

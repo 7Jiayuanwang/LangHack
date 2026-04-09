@@ -3,39 +3,42 @@
 
     <!-- Sticky Header -->
     <header class="mobile-header">
-      <div class="header-content">
-        <h1 class="header-title">发现文章</h1>
-        <p class="header-subtitle">Daily Picks</p>
-      </div>
-      <div class="header-actions">
-        <button class="icon-btn" @click="handleLogin">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
-        </button>
+      <div class="page-content-wrapper header-inner">
+        <div class="header-content">
+          <h1 class="header-title">发现文章</h1>
+          <p class="header-subtitle">Daily Picks</p>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" @click="handleLogin">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </header>
 
     <!-- Main Content Area -->
     <main class="page-main">
-      <!-- Filter Pills -->
-      <div class="filter-bar">
-        <div class="filter-scroll">
-          <button
-            v-for="cat in categories"
-            :key="cat.value"
-            class="filter-pill"
-            :class="{ 'active': selectedCategory === cat.value }"
-            @click="selectCategory(cat.value)"
-          >
-            {{ cat.label }}
-          </button>
+      <div class="page-content-wrapper">
+        <!-- Filter Pills -->
+        <div class="filter-bar">
+          <div class="filter-scroll">
+            <button
+              v-for="cat in categories"
+              :key="cat.value"
+              class="filter-pill"
+              :class="{ 'active': selectedCategory === cat.value }"
+              @click="selectCategory(cat.value)"
+            >
+              {{ cat.label }}
+            </button>
+          </div>
         </div>
-      </div>
 
-      <!-- Articles Feed -->
-      <div class="articles-feed">
+        <!-- Articles Feed -->
+        <div class="articles-feed">
         <!-- Skeleton Loading State -->
         <template v-if="loading">
           <div v-for="n in 3" :key="'skel-' + n" class="article-card skeleton-card">
@@ -112,8 +115,32 @@
         </template>
       </div>
 
-      <!-- Bottom Safe Area Spacer -->
-      <div class="bottom-spacer"></div>
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="pagination">
+          <button class="page-btn" :disabled="currentPage === 1" @click="prevPage">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15,18 9,12 15,6"/>
+            </svg>
+          </button>
+          <button
+            v-for="page in totalPages"
+            :key="page"
+            class="page-btn page-number"
+            :class="{ active: currentPage === page }"
+            @click="goToPage(page)"
+          >
+            {{ page }}
+          </button>
+          <button class="page-btn" :disabled="currentPage === totalPages" @click="nextPage">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9,18 15,12 9,6"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Bottom Safe Area Spacer -->
+        <div class="bottom-spacer"></div>
+      </div>
     </main>
 
     <!-- 底部导航栏 -->
@@ -146,15 +173,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const loading = ref(true)
-const articles = ref([])
+const allArticles = ref([])
 const selectedCategory = ref('')
 const loadError = ref(false)
+const currentPage = ref(1)
+const pageSize = 5
+
+const totalPages = computed(() => Math.ceil(allArticles.value.length / pageSize))
+const articles = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return allArticles.value.slice(start, start + pageSize)
+})
 
 const categories = [
   { label: '全部', value: '' },
@@ -184,8 +219,18 @@ const getRandomGradient = () => {
 
 const selectCategory = (val) => {
   selectedCategory.value = val
+  currentPage.value = 1
   loadArticles()
 }
+
+const goToPage = (page) => {
+  if (page < 1 || page > totalPages.value) return
+  currentPage.value = page
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const prevPage = () => goToPage(currentPage.value - 1)
+const nextPage = () => goToPage(currentPage.value + 1)
 
 const getRandomCategory = () => {
   const cats = categories.filter(c => c.value !== '')
@@ -227,7 +272,7 @@ const loadArticles = async () => {
         fetched = fetched.filter(item => item.category === selectedCategory.value)
       }
 
-      articles.value = fetched
+      allArticles.value = fetched
     } else {
       loadError.value = true
     }
@@ -297,18 +342,67 @@ onMounted(() => {
   background-color: var(--app-bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--app-text);
-  max-width: 600px;
-  margin: 0 auto;
   position: relative;
 }
 
+/* PC layout */
 @media (min-width: 768px) {
   .articles-mobile-page {
-    box-shadow: 0 0 40px rgba(0,0,0,0.05);
-    border-radius: 24px;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    height: calc(100vh - 40px);
+    max-width: 100%;
+    height: 100vh;
+  }
+
+  .page-content-wrapper {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .articles-feed {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    padding: 0;
+  }
+
+  .pagination {
+    display: none;
+  }
+
+  .bottom-nav {
+    border-radius: 0;
+  }
+
+  .bottom-spacer {
+    display: block;
+    height: 80px;
+  }
+
+  .bottom-spacer {
+    display: none;
+  }
+
+  .page-main {
+    padding-bottom: 100px
+  }
+
+  .article-card {
+    min-height: 280px;
+  }
+
+  .article-cover {
+    height: 140px;
+  }
+
+  .article-content {
+    flex: 1;
+    padding: 12px 16px 10px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .articles-feed {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -321,11 +415,20 @@ onMounted(() => {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.header-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
   padding-top: max(env(safe-area-inset-top, 12px), 12px);
+}
+
+@media (min-width: 768px) {
+  .header-inner {
+    padding: 20px 0;
+  }
 }
 
 .header-content {
@@ -412,10 +515,11 @@ onMounted(() => {
 .filter-pill:active { transform: scale(0.96); }
 
 .filter-pill.active {
-  background: var(--app-primary);
+  background: #1d4ed8;
   color: white;
-  border-color: var(--app-primary);
-  box-shadow: 0 2px 10px rgba(19, 127, 236, 0.3);
+  border-color: #1d4ed8;
+  border-radius: 50px;
+  box-shadow: 0 4px 16px rgba(29, 78, 216, 0.45);
 }
 
 /* --- Feed --- */
@@ -637,6 +741,54 @@ onMounted(() => {
   100% { background-position: 400px 0; }
 }
 
+/* --- Pagination --- */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 0;
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 50px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-btn:not(:disabled):hover {
+  border-color: #1d4ed8;
+  color: #1d4ed8;
+}
+
+.page-btn.active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+}
+
+.page-number {
+  font-weight: 600;
+}
+
 .bottom-spacer {
   height: calc(80px + env(safe-area-inset-bottom, 0px));
 }
@@ -703,7 +855,9 @@ onMounted(() => {
 .article-card,
 .filter-pill,
 .icon-btn,
-.nav-item {
+.nav-item,
+.article-card,
+.page-btn {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
