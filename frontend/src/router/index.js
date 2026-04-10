@@ -26,7 +26,7 @@ const routes = [
     meta: { title: "登录", public: true },
   },
   {
-    path: "/admin-portal",
+    path: "/" + (import.meta.env.VITE_ADMIN_PORTAL_PATH || "admin-portal"),
     name: "AdminLogin",
     component: () => import("@/views/AdminLogin.vue"),
     meta: { title: "管理员登录", public: true },

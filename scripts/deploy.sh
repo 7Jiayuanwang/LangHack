@@ -492,6 +492,48 @@ if [ "$SKIP_ENV" = false ]; then
     ask_value "CORS 允许来源" "$CORS_DEFAULT" CFG_CORS_ORIGINS
 
     echo ""
+    echo "  [ 统一身份认证 (SSO) ]"
+    DEF_SSO_ENABLED=$(load_env_value "SSO_ENABLED" "false")
+    CFG_SSO_ENABLED="false"
+    CFG_SSO_SERVER_URL=$(load_env_value "SSO_CAS_SERVER_URL" "https://ids.imau.edu.cn/authserver")
+    if [ "$DEF_SSO_ENABLED" = "true" ]; then
+        ask_yn "启用 SSO 统一身份认证？" "y" CFG_SSO_YN
+    else
+        ask_yn "启用 SSO 统一身份认证？" "n" CFG_SSO_YN
+    fi
+    if [ "$CFG_SSO_YN" = true ]; then
+        CFG_SSO_ENABLED="true"
+        ask_value "CAS 服务器地址" "$CFG_SSO_SERVER_URL" CFG_SSO_SERVER_URL
+
+        echo ""
+        echo "  [ 管理员叩门入口 ]"
+        echo "  SSO 启用后，管理员/运维需通过隐藏入口登录"
+        DEF_ADMIN_SECRET=$(load_env_value "ADMIN_LOGIN_SECRET" "")
+        if [ -n "$DEF_ADMIN_SECRET" ]; then
+            ask_secret "叩门密钥 (回车保留当前)" "$DEF_ADMIN_SECRET" CFG_ADMIN_SECRET
+        else
+            # 自动生成随机密钥（openssl rand 跨平台兼容，避免 tr/urandom 在 Windows 下异常）
+            CFG_ADMIN_SECRET=$(openssl rand -hex 16 2>/dev/null || LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 32 || echo "knock$(date +%s)")
+            echo "  已自动生成叩门密钥: ${CFG_ADMIN_SECRET}"
+            ask_secret "叩门密钥 (回车使用自动生成)" "$CFG_ADMIN_SECRET" CFG_ADMIN_SECRET
+        fi
+        DEF_ADMIN_PATH=$(load_env_value "ADMIN_PORTAL_PATH" "")
+        if [ -n "$DEF_ADMIN_PATH" ]; then
+            ask_value "管理员入口路径" "$DEF_ADMIN_PATH" CFG_ADMIN_PATH
+        else
+            # 自动生成随机入口路径（openssl rand 跨平台兼容）
+            CFG_ADMIN_PATH=$(openssl rand -hex 6 2>/dev/null || LC_ALL=C tr -dc 'a-z0-9' </dev/urandom 2>/dev/null | head -c 12 || echo "portal$(date +%s)")
+            echo "  已自动生成入口路径: /${CFG_ADMIN_PATH}"
+            ask_value "管理员入口路径 (不含前导/)" "$CFG_ADMIN_PATH" CFG_ADMIN_PATH
+        fi
+        # 去除用户可能输入的前导 /
+        CFG_ADMIN_PATH="${CFG_ADMIN_PATH#/}"
+    else
+        CFG_ADMIN_SECRET=""
+        CFG_ADMIN_PATH=""
+    fi
+
+    echo ""
     echo "  [ 备份 ]"
     ask_yn "启用自动备份？" "y" CFG_BACKUP_YN
     CFG_BACKUP_ENABLED="false"
@@ -580,6 +622,14 @@ if [ "$SKIP_ENV" = false ]; then
             printf 'SSL_KEY_PATH=%s\n'   "$CFG_SSL_KEY"
             printf 'SSL_DOMAIN=%s\n'     "$CFG_SSL_DOMAIN"
         fi
+        printf 'SSO_ENABLED=%s\n'          "$CFG_SSO_ENABLED"
+        printf 'SSO_PROTOCOL=CAS\n'
+        printf 'SSO_CAS_ENABLED=%s\n'      "$CFG_SSO_ENABLED"
+        printf 'SSO_CAS_SERVER_URL=%s\n'   "$CFG_SSO_SERVER_URL"
+        if [ "$CFG_SSO_ENABLED" = "true" ]; then
+            printf 'ADMIN_LOGIN_SECRET=%s\n'  "$CFG_ADMIN_SECRET"
+            printf 'ADMIN_PORTAL_PATH=%s\n'   "$CFG_ADMIN_PATH"
+        fi
     } > "$ENV_FILE"
     # 设置 .env 文件权限为 600（仅所有者可读写，保护敏感信息）
     chmod 600 "$ENV_FILE" 2>/dev/null || true
@@ -664,6 +714,12 @@ if [ "${CFG_AUTO_UPDATE_ENABLED:-false}" = "true" ]; then
     echo "  自动更新: 已启用 (${CFG_AUTO_UPDATE_CRON}) → ${CFG_AUTO_UPDATE_BRANCH}"
 else
     echo "  自动更新: 未启用"
+fi
+if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
+    echo "  SSO: 已启用 (${CFG_SSO_SERVER_URL})"
+    echo "  管理员入口: /${CFG_ADMIN_PATH}"
+else
+    echo "  SSO: 未启用"
 fi
 
 ask_yn "开始部署？" "y" GO
@@ -1138,6 +1194,32 @@ fi
 # ── AI 密钥种子化：应用启动时 @PostConstruct 自动完成，无需外部触发 ──
 echo "[INFO] AI 服务商密钥将在后端启动时自动从环境变量种子化到数据库"
 echo "       如需手动管理，请访问运维面板 → AI服务管理"
+
+# ── SSO 管理员叩门入口信息 ──
+SSO_ENABLED_VAL="${CFG_SSO_ENABLED:-$(load_env_value "SSO_ENABLED" "false" "$ENV_FILE")}"
+if [ "$SSO_ENABLED_VAL" = "true" ]; then
+    ADMIN_PATH_VAL="${CFG_ADMIN_PATH:-$(load_env_value "ADMIN_PORTAL_PATH" "" "$ENV_FILE")}"
+    ADMIN_SECRET_VAL="${CFG_ADMIN_SECRET:-$(load_env_value "ADMIN_LOGIN_SECRET" "" "$ENV_FILE")}"
+    if [ -n "$ADMIN_PATH_VAL" ]; then
+        if [ "$HTTPS_ENABLED_VAL" = "true" ]; then
+            DISPLAY_HOST="${SSL_DOMAIN_VAL:-$SERVER_IP}"
+            HTTPS_PORT_SUFFIX=""; [ "$PORT_HTTPS_VAL" != "443" ] && HTTPS_PORT_SUFFIX=":${PORT_HTTPS_VAL}"
+            ADMIN_BASE="https://${DISPLAY_HOST}${HTTPS_PORT_SUFFIX}"
+        else
+            PORT_FRONTEND="${CFG_PORT_FE:-$(load_env_value "PORT_FRONTEND" "80" "$ENV_FILE")}"
+            ADMIN_BASE="http://${SERVER_IP}:${PORT_FRONTEND}"
+        fi
+        echo ""
+        echo "── 管理员叩门入口 ──"
+        echo "  入口路径: ${ADMIN_BASE}/${ADMIN_PATH_VAL}"
+        echo "  生成叩门链接 (在服务器上运行):"
+        echo "    ADMIN_LOGIN_SECRET='${ADMIN_SECRET_VAL}' \\"
+        echo "    ADMIN_PORTAL_PATH='${ADMIN_PATH_VAL}' \\"
+        echo "    node frontend/scripts/generate-admin-login-url.js --base-url ${ADMIN_BASE}"
+        echo ""
+        echo "  提示: 叩门链接 5 分钟有效，请通过安全渠道分享给管理员"
+    fi
+fi
 
 # ── 设置 Let's Encrypt 证书自动续期 ────────────────────────────
 if [ "$HTTPS_ENABLED_VAL" = "true" ]; then

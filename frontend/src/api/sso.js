@@ -27,6 +27,7 @@ export function ssoCallback(params) {
 export function getSsoStatus() {
   return request({
     url: '/api/auth/sso/status',
-    method: 'get'
+    method: 'get',
+    skipErrorHandler: true
   })
 }

@@ -15,7 +15,10 @@ services:
   # MySQL 主库
   # ─────────────────────────────────────────────
   mysql-master:
-    image: mysql:8.0
+    build:
+      context: ./docker
+      dockerfile: mysql/master/Dockerfile
+    image: langhack-mysql-master:latest
     container_name: langhack-mysql-master
     restart: unless-stopped
     logging: *default-logging
@@ -51,21 +54,11 @@ services:
       - "${PORT_MYSQL:-3306}:3306"
     volumes:
       - mysql_master_data:/var/lib/mysql
-      - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
-      # docker-entrypoint-initdb.d 按文件名顺序执行（仅首次启动）
-      # 00: 基础表结构 → 01: 字符集配置 → 02: 复制用户 → 03: 历史数据导入(可选) → 04: 合并迁移(V1~V14) → 05: 增量备份 → 06: ECDICT词典
-      - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
-      - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
-      - ./mysql/init/01-create-replication-user.sh:/docker-entrypoint-initdb.d/02-create-replication-user.sh:ro
-      - ./mysql/init/03-import-backup.sh:/docker-entrypoint-initdb.d/03-import-backup.sh:ro
-      # 历史数据 SQL 目录（优先级：backups/ 全量备份 > database/ 旧备份）
-      # 03-import-backup.sh 自动选取最新全量备份（排除 pre-update_* 增量文件）
-      - ../database:/docker-entrypoint-initdb.d/seed:ro
-      - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
-      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
-      - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
-      - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
-      - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
+      # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
+      # 仅挂载动态数据：历史备份目录 + ECDICT 词典 CSV（体积大且非 git 追踪）
+      - ./database:/docker-entrypoint-initdb.d/seed:ro
+      - ./backups:/docker-entrypoint-initdb.d/seed-backups:ro
+      - ./ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
     networks:
       - langhack-network
     healthcheck:
@@ -79,7 +72,10 @@ services:
   # MySQL 从库（只读副本）
   # ─────────────────────────────────────────────
   mysql-slave:
-    image: mysql:8.0
+    build:
+      context: ./docker
+      dockerfile: mysql/slave/Dockerfile
+    image: langhack-mysql-slave:latest
     container_name: langhack-mysql-slave
     restart: unless-stopped
     logging: *default-logging
@@ -109,25 +105,14 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
       MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
+      MYSQL_ROLE: slave
       TZ: Asia/Shanghai
     ports:
       - "${PORT_MYSQL_SLAVE:-3307}:3306"
     volumes:
       - mysql_slave_data:/var/lib/mysql
-      - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
-      # 从库也需要完整的初始化数据（基础表 + 备份 + 迁移 + 增量备份 + ECDICT）
-      - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
-      - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
-      - ./mysql/init/03-import-backup.sh:/docker-entrypoint-initdb.d/03-import-backup.sh:ro
-      - ../database:/docker-entrypoint-initdb.d/seed:ro
-      - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
-      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
-      - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
-      - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
-      - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
-      # 复制初始化标记（在 initdb 阶段创建标记，实际初始化由 deploy.sh 执行）
-      - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/07-create-replication-marker.sh:ro
-      - ./mysql/slave/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
+      # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
+      # 从库通过 MYSQL_ROLE=slave 跳过所有数据导入（数据由主从复制同步）
     networks:
       - langhack-network
     depends_on:
@@ -238,7 +223,7 @@ services:
       - app_logs:/app/logs
       - app_uploads:/app/uploads
       # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
-      - ../backups:/app/backups
+      - ./backups:/app/backups
     networks:
       - langhack-network
     depends_on:

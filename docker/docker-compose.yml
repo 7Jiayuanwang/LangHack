@@ -25,8 +25,8 @@ services:
           memory: 2G
         reservations:
           memory: 512M
-    # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
-    # （MySQL 8.0 会忽略 world-writable 的 .cnf 文件）
+    # 使用 command 传递关键配置（Windows bind-mount 权限 777 会导致 .cnf 被忽略）
+    # .cnf 文件已不再 bind-mount，仅通过 command + Dockerfile COPY 覆盖
     command: >
       --server-id=1
       --log-bin=mysql-bin
@@ -51,7 +51,6 @@ services:
       - "${PORT_MYSQL:-3306}:3306"
     volumes:
       - mysql_master_data:/var/lib/mysql
-      - ./mysql/master/my.cnf:/etc/mysql/conf.d/master.cnf:ro
       # docker-entrypoint-initdb.d 按文件名顺序执行（仅首次启动）
       # 00: 基础表结构 → 01: 字符集配置 → 02: 复制用户 → 03: 历史数据导入(可选) → 04: 合并迁移(V1~V14) → 05: 增量备份 → 06: ECDICT词典
       - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
@@ -89,7 +88,7 @@ services:
           memory: 2G
         reservations:
           memory: 512M
-    # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
+    # 使用 command 传递关键配置（Windows bind-mount 权限 777 会导致 .cnf 被忽略）
     # 注意: super-read-only 不能在 my.cnf 或 command 中设置，否则阻塞 init 脚本
     # (ERROR 1290) — 在 init-replication.sh 末尾通过 SET GLOBAL 动态启用
     command: >
@@ -114,7 +113,6 @@ services:
       - "${PORT_MYSQL_SLAVE:-3307}:3306"
     volumes:
       - mysql_slave_data:/var/lib/mysql
-      - ./mysql/slave/my.cnf:/etc/mysql/conf.d/slave.cnf:ro
       # 从库也需要完整的初始化数据（基础表 + 备份 + 迁移 + 增量备份 + ECDICT）
       - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
@@ -232,6 +230,8 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8088}
       APP_UPDATE_SUPPORTED: "false"
       APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
+      # 管理员叩门密钥（前后端必须一致）
+      ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
     ports:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:
@@ -265,6 +265,8 @@ services:
       args:
         VITE_API_BASE_URL: ""
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
+        VITE_ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
+        VITE_ADMIN_PORTAL_PATH: ${ADMIN_PORTAL_PATH:-admin-portal}
     container_name: langhack-frontend
     restart: unless-stopped
     logging: *default-logging

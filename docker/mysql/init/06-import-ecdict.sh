@@ -10,6 +10,13 @@ set -e
 ECDICT_CSV="/docker-entrypoint-initdb.d/ecdict.csv"
 DB_NAME="${MYSQL_DATABASE:-english_learning}"
 
+# 从库跳过 ECDICT 导入：数据通过主从复制同步，无需重复导入
+# 主库导入耗时 1-3 分钟，从库执行会导致容器超时崩溃
+if [ "${MYSQL_ROLE:-}" = "slave" ]; then
+    echo "[ecdict] ℹ️  从库环境，跳过 ECDICT 导入（数据将通过复制同步）"
+    exit 0
+fi
+
 echo "[ecdict] ======================================"
 echo "[ecdict] ECDICT 词典数据导入开始..."
 echo "[ecdict] 时间: $(date '+%Y-%m-%d %H:%M:%S')"

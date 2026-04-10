@@ -135,11 +135,13 @@ request.interceptors.response.use(
       }
     }
 
-    ElMessage({
-      message,
-      type: 'error',
-      duration: 5 * 1000
-    })
+    if (!error.config?.skipErrorHandler) {
+      ElMessage({
+        message,
+        type: 'error',
+        duration: 5 * 1000
+      })
+    }
 
     // 返回标准化的错误对象，不透传原始 data，防止后端堆栈信息泄露到前端日志
     const errorResponse = {

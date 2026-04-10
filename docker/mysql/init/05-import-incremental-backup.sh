@@ -14,6 +14,12 @@ set -e
 MARKER_FILE="/tmp/pending-incremental-backup.txt"
 DB_NAME="${MYSQL_DATABASE:-english_learning}"
 
+# 从库跳过增量备份导入：数据通过主从复制同步，无需重复导入
+if [ "${MYSQL_ROLE:-}" = "slave" ]; then
+    echo "[incr-seed] ℹ️  从库环境，跳过增量备份导入（数据将通过复制同步）"
+    exit 0
+fi
+
 echo "[incr-seed] ======================================"
 echo "[incr-seed] 增量备份延迟导入检查..."
 echo "[incr-seed] 时间: $(date '+%Y-%m-%d %H:%M:%S')"

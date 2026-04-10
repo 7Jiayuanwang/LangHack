@@ -15,6 +15,7 @@ const args = process.argv.slice(2);
 const baseUrlIndex = args.indexOf('--base-url');
 const baseUrl = baseUrlIndex !== -1 ? args[baseUrlIndex + 1] : (process.env.APP_BASE_URL || 'http://localhost:3000');
 const secret = process.env.ADMIN_LOGIN_SECRET || 'default-secret';
+const portalPath = process.env.ADMIN_PORTAL_PATH || 'admin-portal';
 
 // 生成时间戳
 const timestamp = Date.now();
@@ -34,7 +35,7 @@ function generateToken(timestamp, secret) {
 const token = generateToken(timestamp, secret);
 
 // 生成完整的 URL
-const adminLoginUrl = `${baseUrl}/admin-portal?token=${token}&t=${timestamp}`;
+const adminLoginUrl = `${baseUrl}/${portalPath}?token=${token}&t=${timestamp}`;
 
 console.log('\n==============================================');
 console.log('管理员登录链接生成器');

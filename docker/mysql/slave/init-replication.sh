@@ -12,7 +12,7 @@
 #   5. CHANGE REPLICATION SOURCE TO + START REPLICA
 # ─────────────────────────────────────────────
 
-set -e
+set +e  # 复制配置失败不应导致容器崩溃，显式处理各步骤错误
 
 echo "[replication] ======================================"
 echo "[replication] 从库复制初始化开始..."
@@ -36,6 +36,28 @@ done
 
 echo "[replication] ✅ 主库已就绪"
 
+# 等待主库数据库初始化完成（检查 V16 最后创建的表，确保所有迁移脚本已执行完毕）
+# 主库健康检查只验证 MySQL 进程存活，init 脚本可能仍在执行
+# 若此时捕获 GTID 集合不完整，从库会尝试复制主库后续的 init 事务，导致"表已存在"等复制错误
+echo "[replication] 等待主库数据库初始化完成（V16 表: administrative_class）..."
+MAX_INIT_RETRIES=90
+INIT_RETRY=0
+while true; do
+    TABLE_EXISTS=$(mysql -h mysql-master -u root -p"${MYSQL_ROOT_PASSWORD}" -N -e \
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='english_learning' AND table_name='administrative_class';" 2>/dev/null || echo "0")
+    if [ "$TABLE_EXISTS" = "1" ]; then
+        echo "[replication] ✅ 主库初始化完成"
+        break
+    fi
+    INIT_RETRY=$((INIT_RETRY + 1))
+    if [ $INIT_RETRY -ge $MAX_INIT_RETRIES ]; then
+        echo "[replication] ⚠️ 等待主库初始化超时，继续配置复制（可能存在复制错误）..."
+        break
+    fi
+    echo "[replication] 等待主库初始化... (${INIT_RETRY}/${MAX_INIT_RETRIES})"
+    sleep 2
+done
+
 # 获取主库的 GTID 执行集
 echo "[replication] 获取主库 GTID 执行集..."
 MASTER_GTID=$(mysql -h mysql-master -u root -p"${MYSQL_ROOT_PASSWORD}" -N -e "SELECT @@global.gtid_executed;" 2>/dev/null || echo "")
@@ -52,16 +74,9 @@ echo "[replication] 配置 CHANGE REPLICATION SOURCE TO..."
 if [ -n "$MASTER_GTID" ]; then
     # 标准流程：清除从库本地 GTID + 设置 gtid_purged + 启动复制
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<-EOSQL
-        -- 停止已有的复制进程
         STOP REPLICA;
-
-        -- 清除从库本地 GTID 集（主从各自独立执行了 init 脚本，GTID 不同）
         RESET MASTER;
-
-        -- 设置 gtid_purged：告诉从库"主库的这些事务我的数据里已经包含了"
         SET GLOBAL gtid_purged='${MASTER_GTID}';
-
-        -- 配置复制源：使用 GTID 自动定位
         CHANGE REPLICATION SOURCE TO
             SOURCE_HOST='mysql-master',
             SOURCE_PORT=3306,
@@ -69,8 +84,6 @@ if [ -n "$MASTER_GTID" ]; then
             SOURCE_PASSWORD='${MYSQL_REPLICATION_PASSWORD}',
             SOURCE_AUTO_POSITION=1,
             GET_SOURCE_PUBLIC_KEY=1;
-
-        -- 启动复制
         START REPLICA;
 EOSQL
 else
@@ -78,7 +91,6 @@ else
     mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<-EOSQL
         STOP REPLICA;
         RESET MASTER;
-
         CHANGE REPLICATION SOURCE TO
             SOURCE_HOST='mysql-master',
             SOURCE_PORT=3306,
@@ -86,7 +98,6 @@ else
             SOURCE_PASSWORD='${MYSQL_REPLICATION_PASSWORD}',
             SOURCE_AUTO_POSITION=1,
             GET_SOURCE_PUBLIC_KEY=1;
-
         START REPLICA;
 EOSQL
 fi
