@@ -505,6 +505,34 @@ if [ "$SKIP_ENV" = false ]; then
         CFG_SSO_ENABLED="true"
         ask_value "CAS 服务器地址" "$CFG_SSO_SERVER_URL" CFG_SSO_SERVER_URL
 
+        # APP_BASE_URL：用于构建 SSO 回调地址 {APP_BASE_URL}/api/auth/sso/callback
+        echo ""
+        echo "  [ 应用地址 (APP_BASE_URL) ]"
+        echo "  用于构建 SSO 回调地址: {APP_BASE_URL}/api/auth/sso/callback"
+        echo "  需要在统一身份认证平台注册此回调地址"
+        DEF_APP_BASE_URL=$(load_env_value "APP_BASE_URL" "")
+        if [ -z "$DEF_APP_BASE_URL" ]; then
+            # 智能推断默认值：优先 HTTPS 域名，其次 HTTP+IP+端口
+            if [ "$CFG_HTTPS_ENABLED" = "true" ] && [ -n "$CFG_SSL_DOMAIN" ]; then
+                if [ "${CFG_PORT_HTTPS:-443}" = "443" ]; then
+                    DEF_APP_BASE_URL="https://${CFG_SSL_DOMAIN}"
+                else
+                    DEF_APP_BASE_URL="https://${CFG_SSL_DOMAIN}:${CFG_PORT_HTTPS}"
+                fi
+            elif [ -n "$SERVER_IP_HINT" ]; then
+                if [ "$CFG_PORT_BE" = "80" ]; then
+                    DEF_APP_BASE_URL="http://${SERVER_IP_HINT}"
+                else
+                    DEF_APP_BASE_URL="http://${SERVER_IP_HINT}:${CFG_PORT_BE}"
+                fi
+            else
+                DEF_APP_BASE_URL="http://localhost:${CFG_PORT_BE}"
+            fi
+        fi
+        ask_value "应用基础 URL" "$DEF_APP_BASE_URL" CFG_APP_BASE_URL
+        # 去除末尾斜杠
+        CFG_APP_BASE_URL="${CFG_APP_BASE_URL%/}"
+
         echo ""
         echo "  [ 管理员叩门入口 ]"
         echo "  SSO 启用后，管理员/运维需通过隐藏入口登录"
@@ -627,6 +655,7 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'SSO_CAS_ENABLED=%s\n'      "$CFG_SSO_ENABLED"
         printf 'SSO_CAS_SERVER_URL=%s\n'   "$CFG_SSO_SERVER_URL"
         if [ "$CFG_SSO_ENABLED" = "true" ]; then
+            printf 'APP_BASE_URL=%s\n'        "${CFG_APP_BASE_URL:-}"
             printf 'ADMIN_LOGIN_SECRET=%s\n'  "$CFG_ADMIN_SECRET"
             printf 'ADMIN_PORTAL_PATH=%s\n'   "$CFG_ADMIN_PATH"
         fi
@@ -717,6 +746,8 @@ else
 fi
 if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
     echo "  SSO: 已启用 (${CFG_SSO_SERVER_URL})"
+    echo "  应用地址 (APP_BASE_URL): ${CFG_APP_BASE_URL}"
+    echo "  回调地址: ${CFG_APP_BASE_URL}/api/auth/sso/callback"
     echo "  管理员入口: /${CFG_ADMIN_PATH}"
 else
     echo "  SSO: 未启用"
@@ -1110,7 +1141,11 @@ EOSQL
     [ -n "$REPAIR_ERRORS" ] && echo "[WARN] 修复输出: $REPAIR_ERRORS"
 
     # 等待复制线程启动（最多 30s）
+    # 自动跳过 GTID 错误：部署过程中主库可能产生 backup_records 等表的 UPDATE/DELETE，
+    # 但从库是从空库初始化的，这些记录不存在，导致 Error 1032 (HA_ERR_KEY_NOT_FOUND)
     echo "[INFO] 等待复制线程启动..."
+    GTID_SKIP_COUNT=0
+    MAX_GTID_SKIPS=10  # 最多跳过 10 个错误事务，防止无限循环
     repair_wait=0
     while [ $repair_wait -lt 30 ]; do
         sleep 3; repair_wait=$((repair_wait + 3))
@@ -1123,12 +1158,65 @@ EOSQL
             replication_ok=true
             break
         fi
+        # SQL 线程停止且 IO 正常 → 检查是否为可跳过的 GTID 错误（1032/1062）
+        if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "No" ] && [ $GTID_SKIP_COUNT -lt $MAX_GTID_SKIPS ]; then
+            # MySQL 8.0 多线程复制：SHOW REPLICA STATUS 的 Last_SQL_Errno 可能为 0
+            # 真正的错误在 performance_schema.replication_applier_status_by_worker
+            SQL_ERRNO=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Errno:" | awk '{print $2}' || echo "0")
+            APPLYING_GTID=$(echo "$REPLICA_STATUS" | grep "APPLYING_TRANSACTION:" | head -1 | awk '{print $2}' || echo "")
+            # Fallback 1: 查 performance_schema（MTS 模式下错误在此）
+            if [ -z "$APPLYING_GTID" ] || [ "$SQL_ERRNO" = "0" ] || [ -z "$SQL_ERRNO" ]; then
+                WORKER_ERR=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -N -e \
+                    "SELECT LAST_ERROR_NUMBER, LAST_SEEN_TRANSACTION FROM performance_schema.replication_applier_status_by_worker WHERE LAST_ERROR_NUMBER <> 0 LIMIT 1;" \
+                    2>/dev/null || true)
+                if [ -n "$WORKER_ERR" ]; then
+                    SQL_ERRNO=$(echo "$WORKER_ERR" | awk '{print $1}')
+                    APPLYING_GTID=$(echo "$WORKER_ERR" | awk '{print $2}')
+                fi
+            fi
+            # Fallback 2: 从 Last_SQL_Error 消息中提取 GTID（格式: "transaction 'UUID:N'"）
+            if [ -z "$APPLYING_GTID" ]; then
+                LAST_SQL_ERR_LOOP=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_SQL_Error: //' || echo "")
+                APPLYING_GTID=$(echo "$LAST_SQL_ERR_LOOP" | grep -oP "transaction '\\K[^']+" || echo "")
+            fi
+            if [ "$SQL_ERRNO" = "1032" ] || [ "$SQL_ERRNO" = "1062" ]; then
+                if [ -n "$APPLYING_GTID" ]; then
+                    echo "[WARN] 检测到可跳过的复制错误 (Errno: ${SQL_ERRNO})，跳过事务: ${APPLYING_GTID}"
+                    # 注入空事务跳过错误的 GTID
+                    docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -e \
+                        "SET GTID_NEXT='${APPLYING_GTID}'; BEGIN; COMMIT; SET GTID_NEXT='AUTOMATIC';" \
+                        2>/dev/null || true
+                    docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -e \
+                        "START REPLICA;" 2>/dev/null || true
+                    GTID_SKIP_COUNT=$((GTID_SKIP_COUNT + 1))
+                    sleep 2
+                    continue  # 立即重新检查状态
+                fi
+            fi
+        fi
         echo "[INFO] 等待复制线程... (${repair_wait}s, IO: ${IO_RUNNING}, SQL: ${SQL_RUNNING})"
     done
+    [ $GTID_SKIP_COUNT -gt 0 ] && echo "[INFO] 共跳过 ${GTID_SKIP_COUNT} 个错误 GTID 事务"
 
     if [ "$replication_ok" = false ]; then
         LAST_IO_ERR=$(echo "$REPLICA_STATUS" | grep "Last_IO_Error:" | sed 's/.*Last_IO_Error: //' || echo "")
         LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_SQL_Error: //' || echo "")
+        APPLYING_GTID=$(echo "$REPLICA_STATUS" | grep "APPLYING_TRANSACTION:" | head -1 | awk '{print $2}' || echo "")
+        SQL_ERRNO=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Errno:" | awk '{print $2}' || echo "0")
+        # 多线程复制：从 performance_schema 获取真实的错误 GTID
+        if [ -z "$APPLYING_GTID" ] || [ "$SQL_ERRNO" = "0" ] || [ -z "$SQL_ERRNO" ]; then
+            WORKER_ERR=$(docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -N -e \
+                "SELECT LAST_ERROR_NUMBER, LAST_SEEN_TRANSACTION FROM performance_schema.replication_applier_status_by_worker WHERE LAST_ERROR_NUMBER <> 0 LIMIT 1;" \
+                2>/dev/null || true)
+            if [ -n "$WORKER_ERR" ]; then
+                [ -z "$SQL_ERRNO" ] || [ "$SQL_ERRNO" = "0" ] && SQL_ERRNO=$(echo "$WORKER_ERR" | awk '{print $1}')
+                [ -z "$APPLYING_GTID" ] && APPLYING_GTID=$(echo "$WORKER_ERR" | awk '{print $2}')
+            fi
+        fi
+        # Fallback: 从 Last_SQL_Error 消息中提取 GTID
+        if [ -z "$APPLYING_GTID" ] && [ -n "$LAST_SQL_ERR" ]; then
+            APPLYING_GTID=$(echo "$LAST_SQL_ERR" | grep -oP "transaction '\\K[^']+" || echo "")
+        fi
         echo ""
         echo "[ERROR] ══════════════════════════════════════════════════════"
         echo "[ERROR] 从库复制初始化失败，部署终止"
@@ -1136,6 +1224,9 @@ EOSQL
         echo "[ERROR] SQL Thread: ${SQL_RUNNING}"
         [ -n "$LAST_IO_ERR" ]  && echo "[ERROR] IO 错误:  $LAST_IO_ERR"
         [ -n "$LAST_SQL_ERR" ] && echo "[ERROR] SQL 错误: $LAST_SQL_ERR"
+        [ -n "$SQL_ERRNO" ] && [ "$SQL_ERRNO" != "0" ] && echo "[ERROR] SQL 错误码: ${SQL_ERRNO}"
+        [ -n "$APPLYING_GTID" ] && echo "[ERROR] 卡住的事务: ${APPLYING_GTID}"
+        [ $GTID_SKIP_COUNT -ge $MAX_GTID_SKIPS ] && echo "[ERROR] 已达到最大跳过次数 (${MAX_GTID_SKIPS})，仍有未解决的错误"
         echo "[ERROR] ══════════════════════════════════════════════════════"
         echo ""
         echo "── 手动排查步骤 ──────────────────────────────────────────────"
@@ -1150,7 +1241,11 @@ EOSQL
         echo "  docker exec $MASTER_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
         echo "    -e \"SHOW VARIABLES LIKE 'log_bin'; SHOW VARIABLES LIKE 'gtid_mode';\""
         echo ""
-        echo "  # 4. 手动重置并重试"
+        echo "  # 4. 手动跳过错误事务（如 Error 1032/1062）"
+        echo "  docker exec $SLAVE_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
+        echo "    -e \"SET GTID_NEXT='${APPLYING_GTID:-UNKNOWN}'; BEGIN; COMMIT; SET GTID_NEXT='AUTOMATIC'; START REPLICA;\""
+        echo ""
+        echo "  # 5. 手动重置并重试"
         echo "  docker exec $SLAVE_CONTAINER mysql -uroot -p\"\$DB_ROOT_PW\" \\"
         echo "    -e \"STOP REPLICA; RESET REPLICA ALL;\""
         echo "  docker compose restart mysql-slave"

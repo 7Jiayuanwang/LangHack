@@ -17,7 +17,7 @@ DB_NAME="${MYSQL_DATABASE:-english_learning}"
 # 从库跳过增量备份导入：数据通过主从复制同步，无需重复导入
 if [ "${MYSQL_ROLE:-}" = "slave" ]; then
     echo "[incr-seed] ℹ️  从库环境，跳过增量备份导入（数据将通过复制同步）"
-    exit 0
+    return 0
 fi
 
 echo "[incr-seed] ======================================"

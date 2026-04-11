@@ -14,7 +14,7 @@ DB_NAME="${MYSQL_DATABASE:-english_learning}"
 # 主库导入耗时 1-3 分钟，从库执行会导致容器超时崩溃
 if [ "${MYSQL_ROLE:-}" = "slave" ]; then
     echo "[ecdict] ℹ️  从库环境，跳过 ECDICT 导入（数据将通过复制同步）"
-    exit 0
+    return 0
 fi
 
 echo "[ecdict] ======================================"

@@ -6,16 +6,45 @@
  * 用法：
  *   node scripts/generate-admin-login-url.js
  *   node scripts/generate-admin-login-url.js --base-url https://learn.imau.edu.cn
+ *
+ * 自动读取 docker/.env 中的 ADMIN_LOGIN_SECRET 和 ADMIN_PORTAL_PATH
  */
 
-const crypto = require('crypto');
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// 从命令行参数或环境变量获取配置
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// 从 docker/.env 加载配置
+function loadDotEnv() {
+  const envPath = resolve(__dirname, '../../docker/.env');
+  try {
+    const content = readFileSync(envPath, 'utf-8');
+    const env = {};
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      env[key] = val;
+    }
+    return env;
+  } catch {
+    return {};
+  }
+}
+
+const dotenv = loadDotEnv();
+
+// 从命令行参数或环境变量或 .env 文件获取配置
 const args = process.argv.slice(2);
 const baseUrlIndex = args.indexOf('--base-url');
-const baseUrl = baseUrlIndex !== -1 ? args[baseUrlIndex + 1] : (process.env.APP_BASE_URL || 'http://localhost:3000');
-const secret = process.env.ADMIN_LOGIN_SECRET || 'default-secret';
-const portalPath = process.env.ADMIN_PORTAL_PATH || 'admin-portal';
+const baseUrl = baseUrlIndex !== -1 ? args[baseUrlIndex + 1] : (process.env.APP_BASE_URL || dotenv.APP_BASE_URL || 'http://localhost:3000');
+const secret = process.env.ADMIN_LOGIN_SECRET || dotenv.ADMIN_LOGIN_SECRET || 'default-secret';
+const portalPath = process.env.ADMIN_PORTAL_PATH || dotenv.ADMIN_PORTAL_PATH || 'admin-portal';
 
 // 生成时间戳
 const timestamp = Date.now();
