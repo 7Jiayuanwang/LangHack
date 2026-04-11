@@ -71,12 +71,12 @@
           @learning-record="handleLearningRecord"
         />
         
-        <div 
+        <MarkdownRenderer 
           v-else 
-          class="markdown-content" 
-          v-html="textContent"
-          @click="handleMarkdownClick"
-        ></div>
+          :html="textContent"
+          :show-background="false"
+          :clickable-images="true"
+        />
       </section>
 
       <!-- Completion Section -->
@@ -297,6 +297,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay } from '@element-plus/icons-vue'
 import InteractiveText from '@/components/InteractiveText.vue'
+import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -2086,11 +2087,14 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 }
 
 .article-body :deep(img),
-.markdown-content :deep(img) {
-  max-width: 100% !important;
-  height: auto !important;
-  border-radius: 12px;
-  margin: 24px 0;
+.markdown-content :deep(img),
+.markdown-content :deep(video) {
+  max-height: 100px !important; /* 约 3-4 行高度 */
+  width: auto !important;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: 16px 0;
   display: block;
 }
 

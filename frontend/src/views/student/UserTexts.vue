@@ -112,6 +112,7 @@
       title="上传课文"
       width="90%"
       :close-on-click-modal="false"
+      class="editor-dialog"
       @close="resetUploadForm"
     >
       <el-form
@@ -183,7 +184,7 @@
             show-word-limit
           />
         </el-form-item>
-        <el-form-item v-if="uploadForm.contentType === 'MARKDOWN'" label="Markdown内容">
+        <el-form-item v-if="uploadForm.contentType === 'MARKDOWN'" label="Markdown内容" class="md-editor-item">
           <MarkdownEditor :modelValue="uploadMarkdownContent" @update:modelValue="uploadMarkdownContent = $event" />
         </el-form-item>
 
@@ -231,6 +232,7 @@
       title="编辑课文"
       width="90%"
       :close-on-click-modal="false"
+      class="editor-dialog"
     >
       <el-form
         ref="editFormRef"
@@ -301,7 +303,7 @@
             show-word-limit
           />
         </el-form-item>
-        <el-form-item v-if="editForm.contentType === 'MARKDOWN'" label="Markdown内容">
+        <el-form-item v-if="editForm.contentType === 'MARKDOWN'" label="Markdown内容" class="md-editor-item">
           <MarkdownEditor :modelValue="editMarkdownContent" @update:modelValue="editMarkdownContent = $event" />
         </el-form-item>
 
@@ -1125,5 +1127,40 @@ onMounted(() => {
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+</style>
+
+<style>
+.editor-dialog .el-dialog.is-fullscreen {
+  display: flex;
+  flex-direction: column;
+}
+.editor-dialog .el-dialog.is-fullscreen .el-dialog__body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.editor-dialog .el-dialog.is-fullscreen .text-form {
+  max-height: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.editor-dialog .el-dialog.is-fullscreen .text-form .md-editor-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 400px;
+}
+.editor-dialog .el-dialog.is-fullscreen .text-form .md-editor-item .el-form-item__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.editor-dialog .el-dialog.is-fullscreen .text-form .markdown-editor {
+  height: 100% !important;
+  flex: 1;
 }
 </style>
