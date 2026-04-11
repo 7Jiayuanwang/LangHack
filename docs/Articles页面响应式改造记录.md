@@ -1,6 +1,6 @@
 # Articles 页面响应式改造记录
 
-> 更新日期：2026-04-08/09/10
+> 更新日期：2026-04-08/09/10/11
 
 ---
 
@@ -102,17 +102,27 @@
 
 修复 iOS Safari 环境下底部导航栏被浏览器地址栏遮挡的问题：
 
-- **student/Layout.vue**：`.trend-nav` 改为 `position: fixed; bottom: 0; left: 0; right: 0;`，并为 `.main-content` 添加底部 padding 防止内容被遮挡
-- **shared/MobileLayout.vue**：`.mobile-nav` 同样改为 `position: fixed; bottom: 0;`，为 `.mobile-main` 添加底部 padding
-- 使用 `env(safe-area-inset-bottom)` 适配 iPhone 刘海屏和 Safari 地址栏高度变化
+- **容器高度改为 `100dvh`**：将 `.trending-app` 和 `.mobile-layout` 的 `height: 100vh` 改为 `height: 100dvh`（dynamic viewport height），Safari 会自动响应其动态工具栏的显示/隐藏状态
+- **移除 `overflow: hidden`**：原 `overflow: hidden` 会干扰 Safari 的动态视口计算，移除后 `100dvh` 能正确响应地址栏变化
+- **`.trend-nav` / `.mobile-nav`**：改为 `position: fixed; bottom: 0; left: 0; right: 0;`
+- **`.main-content` / `.mobile-main`**：添加底部 padding 防止内容被底部导航栏遮挡
+- 使用 `env(safe-area-inset-bottom)` 适配 iPhone 刘海屏和安全区域
 
 ### 2.10 ElMessage 提示位置偏移
 
-为 ElMessage 提示消息添加全局 CSS 样式，使其往下偏移 50px，避免被页面顶部元素遮挡：
+为 ElMessage 提示消息添加全局样式，使其往下偏移，避免被页面顶部元素遮挡：
 
-- 新增 `frontend/src/assets/message-offset.css` 全局样式文件
-- 在 `main.js` 中引入该 CSS 文件
-- 样式规则：`.el-message { top: 50px !important; }`
+- 在 `InteractiveText.vue` 的 `<style>` 中使用 `:global(.el-message) { top: 100px !important; }`
+- 不使用独立的 CSS 文件，直接在组件样式中声明
+
+### 2.11 单词本分页与圆形按钮
+
+`/student/vocabulary` 单词本页面分页改造：
+
+- **移动端**：每页 10 个单词，显示分页器
+- **PC 端**：所有单词一次显示完，不显示分页器
+- **动态适配**：监听 `window.innerWidth`，屏幕宽度 < 768px 切换到移动端模式，≥ 768px 切换到 PC 模式，切换时自动回到第 1 页
+- **分页按钮圆形**：`el-pager li` 添加 `border-radius: 50%` 样式
 
 ---
 
@@ -123,10 +133,10 @@
 | `frontend/src/views/public/Articles.vue` | 响应式布局、分页、筛选样式、底部导航修复、点击高亮、移除顶部标题 |
 | `frontend/src/views/student/Articles.vue` | 响应式布局、分页、筛选样式、点击高亮、移除顶部标题、搜索功能 |
 | `frontend/src/views/student/AiQa.vue` | 移除"AI 助教"标题 |
-| `frontend/src/views/student/Layout.vue` | Safari 底部导航栏遮挡修复（position: fixed + padding-bottom） |
-| `frontend/src/views/shared/MobileLayout.vue` | Safari 底部导航栏遮挡修复（position: fixed + padding-bottom） |
-| `frontend/src/assets/message-offset.css` | 新增全局 CSS 文件，ElMessage 往下偏移 50px |
-| `frontend/src/main.js` | 引入 message-offset.css 全局样式 |
+| `frontend/src/views/student/Layout.vue` | Safari 底部导航栏遮挡修复（100dvh + position: fixed + overflow 移除） |
+| `frontend/src/views/shared/MobileLayout.vue` | Safari 底部导航栏遮挡修复（100dvh + position: fixed + overflow 移除） |
+| `frontend/src/views/student/InteractiveText.vue` | ElMessage 提示往下偏移 100px（:global CSS） |
+| `frontend/src/views/student/Vocabulary.vue` | 单词本分页（移动端10条/PC端全显示）、圆形分页按钮 |
 
 ---
 

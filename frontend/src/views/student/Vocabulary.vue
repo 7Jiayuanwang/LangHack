@@ -138,8 +138,8 @@
         </div>
       </div>
 
-      <!-- 分页 -->
-      <div class="pagination-v2" v-if="total > pageSize">
+      <!-- 分页：仅移动端显示 -->
+      <div class="pagination-v2" v-if="isMobile && total > pageSize">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -361,8 +361,12 @@ const searchWord = ref('')
 const vocabulary = ref([])
 const total = ref(0)
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(window.innerWidth < 768 ? 10 : 999)
 const selectedWords = ref([])
+const screenWidth = ref(window.innerWidth)
+
+// 是否移动端
+const isMobile = computed(() => screenWidth.value < 768)
 
 // 统计数据
 const stats = reactive({
@@ -1060,9 +1064,18 @@ const formatDate = (date) => {
 
 onMounted(() => {
   loadVocabulary()
+  window.addEventListener('resize', handleScreenResize)
 })
 
+const handleScreenResize = () => {
+  screenWidth.value = window.innerWidth
+  pageSize.value = screenWidth.value < 768 ? 10 : 999
+  currentPage.value = 1
+  loadVocabulary()
+}
+
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleScreenResize)
   // 清理 timeout
   if (answerTimeoutId) {
     clearTimeout(answerTimeoutId)
@@ -1331,7 +1344,7 @@ onBeforeUnmount(() => {
 }
 
 .level-badge.new { background: #e0f2fe; color: #0369a1; }
-.level-badge.learning { background: #fef3c7; color: #b45309; margin-left: -60px; margin-bottom: 500px; }
+.level-badge.learning { background: #fef3c7; color: #b45309; margin-left: -15px; margin-bottom: 500px; }
 .level-badge.mastered { background: #dcfce7; color: #15803d; }
 
 .phonetic {
@@ -1380,6 +1393,14 @@ onBeforeUnmount(() => {
   justify-content: center;
   margin-top: 40px;
   padding-bottom: 40px;
+}
+
+/* 分页按钮圆形 */
+.pagination-v2 :deep(.el-pager li) {
+  border-radius: 50% !important;
+  min-width: 32px;
+  height: 32px;
+  line-height: 32px;
 }
 
 /* Mobile Responsive */

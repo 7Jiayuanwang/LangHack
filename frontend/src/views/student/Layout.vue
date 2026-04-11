@@ -240,13 +240,12 @@ onUnmounted(() => {
 <style scoped>
 /* 时尚应用容器 */
 .trending-app {
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  overflow: hidden;
   position: relative;
 }
 

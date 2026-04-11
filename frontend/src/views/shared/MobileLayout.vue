@@ -378,12 +378,11 @@ onUnmounted(() => {
 
 <style scoped>
 .mobile-layout {
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
-  overflow: hidden;
 }
 
 /* 顶部标题栏 */
