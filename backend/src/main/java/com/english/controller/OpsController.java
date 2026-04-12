@@ -7,6 +7,7 @@ import com.english.entity.SystemConfig;
 import com.english.exception.BusinessException;
 import com.english.service.AiProviderService;
 import com.english.service.FeatureToggleService;
+import com.english.service.SchoolDataConfigRefreshService;
 import com.english.service.SystemConfigService;
 import com.english.service.TencentTranslateService;
 import com.english.service.UserService;
@@ -51,6 +52,9 @@ public class OpsController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private SchoolDataConfigRefreshService schoolDataConfigRefreshService;
 
     /**
      * 清理不一致的数据
@@ -246,6 +250,45 @@ public class OpsController {
         } catch (Exception e) {
             logger.error("AI服务商连通性测试失败 id={}", id, e);
             return Result.error("测试失败，请稍后重试");
+        }
+    }
+
+    // ==================== 学校数据配置管理 ====================
+
+    /**
+     * 更新学校数据配置（含刷新 + 副作用：重调度、重建数据源）
+     */
+    @PutMapping("/school-data/config")
+    public Result<String> updateSchoolDataConfig(@RequestBody List<SystemConfig> configs,
+                                                  Authentication authentication) {
+        try {
+            String username = authentication.getName();
+            schoolDataConfigRefreshService.updateAndRefresh(configs, username);
+            return Result.success("学校数据配置更新成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("更新学校数据配置失败", e);
+            return Result.error("更新学校数据配置失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 测试学校数据源连接
+     */
+    @PostMapping("/school-data/test-connection")
+    public Result<Map<String, Object>> testSchoolDataConnection() {
+        try {
+            boolean success = schoolDataConfigRefreshService.testConnection();
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", success);
+            data.put("source", schoolDataConfigRefreshService.getCurrentSource());
+            return Result.success(data);
+        } catch (Exception e) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", false);
+            data.put("error", e.getMessage());
+            return Result.success(data);
         }
     }
 

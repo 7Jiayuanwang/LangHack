@@ -136,7 +136,7 @@ import {
   DataBoard, School, Edit, Reading,
   Upload, Document, House,
   User, EditPen, Setting,
-  DataLine, FolderOpened, Connection, Refresh, Switch,
+  DataLine, FolderOpened, Connection, Refresh, Switch, Coin,
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -186,6 +186,7 @@ const NAV_ITEMS = {
     { path: '/ops/users',           label: '用户', icon: User        },
     { path: '/ops/ai-providers',    label: 'AI',   icon: Connection  },
     { path: '/ops/feature-toggles', label: '开关', icon: Switch      },
+    { path: '/ops/school-data',     label: '数据', icon: Coin        },
     { path: '/ops/update',          label: '更新', icon: Refresh     },
   ],
   admin: [
@@ -237,6 +238,7 @@ const ROUTE_MAP = {
     '/ops/users':           '用户管理',
     '/ops/ai-providers':    'AI 服务管理',
     '/ops/feature-toggles': '功能开关',
+    '/ops/school-data':     '学校数据',
     '/ops/update':          '系统更新',
   },
   admin: {

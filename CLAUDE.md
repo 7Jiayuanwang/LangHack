@@ -81,7 +81,7 @@ src/views/
 
 MobileLayout 的角色差异：
 - `admin`：含二级"管理"下拉菜单（`moreItems`），`system` 命令，权限守卫用 `router.replace`
-- `ops`：含 `ElevationDialog` 提权对话框，`elevate` 命令，权限守卫用 `router.replace`
+- `ops`：含 `ElevationDialog` 提权对话框，`elevate` 命令，权限守卫用 `router.replace`，7个导航项（含"数据"学校数据配置）
 - `teacher`：权限守卫用 `router.push`，keyboard Escape 监听
 - `user`：最简，无权限守卫
 

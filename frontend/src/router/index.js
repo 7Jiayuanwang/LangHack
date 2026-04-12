@@ -157,6 +157,12 @@ const routes = [
         component: () => import("@/views/ops/FeatureToggles.vue"),
         meta: { title: "功能开关", roles: ["OPS", "ADMIN"] },
       },
+      {
+        path: "school-data",
+        name: "OpsSchoolData",
+        component: () => import("@/views/ops/SchoolDataConfig.vue"),
+        meta: { title: "学校数据", roles: ["OPS", "ADMIN"] },
+      },
     ],
   },
   {

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.SchoolCourseMapper">
+
+    <!-- 学校课程 UPSERT：按 course_code 唯一键 -->
+    <insert id="upsertByCourseCode" parameterType="com.english.entity.SchoolCourse">
+        INSERT INTO school_course (
+            course_code, course_name, course_name_en, course_short_name,
+            course_nature, course_category, credits, total_hours,
+            theory_hours, experiment_hours, practice_hours, computer_hours,
+            college_code, college_name, department_code, department_name,
+            leader_code, leader_name, assessment_method,
+            is_bilingual, is_online, applicable_majors,
+            prerequisite_codes, prerequisite_names, course_intro, teaching_objectives,
+            course_status, sync_time, sync_source
+        ) VALUES (
+            #{courseCode}, #{courseName}, #{courseNameEn}, #{courseShortName},
+            #{courseNature}, #{courseCategory}, #{credits}, #{totalHours},
+            #{theoryHours}, #{experimentHours}, #{practiceHours}, #{computerHours},
+            #{collegeCode}, #{collegeName}, #{departmentCode}, #{departmentName},
+            #{leaderCode}, #{leaderName}, #{assessmentMethod},
+            #{isBilingual}, #{isOnline}, #{applicableMajors},
+            #{prerequisiteCodes}, #{prerequisiteNames}, #{courseIntro}, #{teachingObjectives},
+            #{courseStatus}, #{syncTime}, #{syncSource}
+        )
+        ON DUPLICATE KEY UPDATE
+            course_name = #{courseName},
+            course_name_en = #{courseNameEn},
+            course_short_name = #{courseShortName},
+            course_nature = #{courseNature},
+            course_category = #{courseCategory},
+            credits = #{credits},
+            total_hours = #{totalHours},
+            theory_hours = #{theoryHours},
+            experiment_hours = #{experimentHours},
+            practice_hours = #{practiceHours},
+            computer_hours = #{computerHours},
+            college_code = #{collegeCode},
+            college_name = #{collegeName},
+            department_code = #{departmentCode},
+            department_name = #{departmentName},
+            leader_code = #{leaderCode},
+            leader_name = #{leaderName},
+            assessment_method = #{assessmentMethod},
+            is_bilingual = #{isBilingual},
+            is_online = #{isOnline},
+            applicable_majors = #{applicableMajors},
+            prerequisite_codes = #{prerequisiteCodes},
+            prerequisite_names = #{prerequisiteNames},
+            course_intro = #{courseIntro},
+            teaching_objectives = #{teachingObjectives},
+            course_status = #{courseStatus},
+            sync_time = #{syncTime},
+            sync_source = #{syncSource}
+    </insert>
+
+</mapper>
