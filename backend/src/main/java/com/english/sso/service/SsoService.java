@@ -43,4 +43,12 @@ public interface SsoService {
      * @return true=启用, false=禁用
      */
     boolean isEnabled();
+
+    /**
+     * 生成 SSO 登出 URL
+     *
+     * @param serviceUrl 登出后跳转回的服务地址
+     * @return SSO 登出页面 URL
+     */
+    String generateLogoutUrl(String serviceUrl);
 }

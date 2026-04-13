@@ -232,6 +232,22 @@ public class SsoAuthController {
     }
 
     /**
+     * 获取 CAS 登出 URL（供前端退出登录后跳转，确保 CAS 侧也登出）
+     *
+     * 统一身份认证对接要求：点击退出后返回统一身份认证页面，
+     * 否则用户在 CAS 侧仍处于登录状态，再次 SSO 登录会自动跳回而无法切换账号。
+     */
+    @GetMapping("/logout-url")
+    public Result<Map<String, String>> getLogoutUrl() {
+        Map<String, String> data = new HashMap<>();
+        String callbackUrl = buildCallbackUrl();
+        // CAS logout 协议：service 参数指定登出后跳转回的地址
+        String logoutUrl = ssoService.generateLogoutUrl(callbackUrl);
+        data.put("logoutUrl", logoutUrl);
+        return Result.success(data);
+    }
+
+    /**
      * 构建回调 URL，确保使用 HTTPS
      */
     private String buildCallbackUrl() {

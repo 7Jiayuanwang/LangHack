@@ -33,3 +33,14 @@ export function getSsoStatus() {
     skipErrorHandler: true
   })
 }
+
+/**
+ * 获取 SSO 登出 URL（用于退出登录后跳转到 CAS 登出页）
+ */
+export function getSsoLogoutUrl() {
+  return request({
+    url: '/api/auth/sso/logout-url',
+    method: 'get',
+    skipErrorHandler: true
+  })
+}

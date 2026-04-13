@@ -52,6 +52,9 @@ sso:
       - STUDENT
       - USER
 
+  # 403 无权限提示联系方式（统一身份认证接入规范要求）
+  access-denied-contact: ${SSO_ACCESS_DENIED_CONTACT:信息技术中心 0471-4300000}
+
 # 应用基础URL（用于构建回调地址）
 # ⚠️ 生产环境必须设置为 HTTPS URL（如 https://langhack.imau.edu.cn）
 # CAS 回调的 service URL 必须与 CAS 服务器注册的服务地址一致

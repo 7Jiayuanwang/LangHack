@@ -90,6 +90,14 @@ public class CasSsoService implements SsoService {
         return ssoProperties.isEnabled() && ssoProperties.getCas().isEnabled();
     }
 
+    @Override
+    public String generateLogoutUrl(String serviceUrl) {
+        String casServerUrl = ssoProperties.getCas().getServerUrl();
+        // CAS logout 协议：service 参数指定登出后跳转回的应用地址
+        return casServerUrl + "/logout?service=" +
+                URLEncoder.encode(serviceUrl, StandardCharsets.UTF_8);
+    }
+
     /**
      * 解析 CAS XML 响应
      */
