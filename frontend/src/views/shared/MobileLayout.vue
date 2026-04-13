@@ -372,17 +372,7 @@ const onElevationSuccess = () => {
 const ssoEnabled = ref(false)
 
 onMounted(async () => {
-  // 检查 SSO 是否启用（静默失败，不影响主流程）
-  try {
-    const ssoRes = await getSsoStatus()
-    if (ssoRes?.code === 200) {
-      ssoEnabled.value = ssoRes.data?.enabled || false
-      sessionStorage.setItem('sso_enabled', ssoEnabled.value ? 'true' : 'false')
-    }
-  } catch {
-    ssoEnabled.value = false
-  }
-
+  // 权限守卫（同步执行，确保测试和首次渲染立即可用）
   if (props.role === 'teacher' && !userStore.isTeacher) {
     console.warn('Unauthorized: non-teacher user attempted to access teacher layout')
     ElMessage.error('您没有权限访问此区域')
@@ -395,6 +385,17 @@ onMounted(async () => {
   if (props.role === 'admin' && (!userStore.isLoggedIn || !userStore.hasAdminAccess)) {
     ElMessage.error('权限不足，请以管理员身份登录')
     router.replace('/login')
+  }
+
+  // 检查 SSO 是否启用（静默失败，不影响主流程）
+  try {
+    const ssoRes = await getSsoStatus()
+    if (ssoRes?.code === 200) {
+      ssoEnabled.value = ssoRes.data?.enabled || false
+      sessionStorage.setItem('sso_enabled', ssoEnabled.value ? 'true' : 'false')
+    }
+  } catch {
+    ssoEnabled.value = false
   }
 })
 
