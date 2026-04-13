@@ -20,6 +20,12 @@ server:
       enabled: true
       force: true
   tomcat:
+    redirect-context-root: false
+    remoteip:
+      # 信任负载均衡的 X-Forwarded-* 头，使 sendRedirect 等生成 https:// URL
+      internal-proxies: 10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}
+      protocol-header: X-Forwarded-Proto
+      host-header: X-Forwarded-Host
     threads:
       max: 500
       min-spare: 50
