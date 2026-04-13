@@ -16,6 +16,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 
+import javax.servlet.http.HttpServletRequest;
+
 import java.net.ConnectException;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -58,9 +60,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
-    public Result<?> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+    public Result<?> handleMethodNotSupported(HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
         log.warn("Method not allowed: {} {} (supported: {})",
-                e.getMethod(), e.getRequestURL(),
+                e.getMethod(), request.getRequestURI(),
                 e.getSupportedHttpMethods() != null ? e.getSupportedHttpMethods() : "none");
         return Result.error(405, "请求方法不允许");
     }
