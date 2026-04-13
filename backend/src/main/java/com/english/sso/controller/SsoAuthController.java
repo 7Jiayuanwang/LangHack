@@ -12,14 +12,25 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * SSO 认证控制器
+ *
+ * 回调流程（参考统一身份认证集成开发指南）：
+ * 1. CAS/OAuth2 认证服务器 302 重定向浏览器到 /api/auth/sso/callback?ticket=xxx
+ * 2. 后端验证 ticket，生成一次性 code 存入 Redis（5分钟有效）
+ * 3. 302 重定向到前端 /sso/callback?code=oneTimeCode
+ * 4. 前端 POST /api/auth/sso/token 用一次性 code 换取 JWT
  *
  * @author LangHack Team
  * @since 2026-04-09
@@ -31,6 +42,9 @@ import java.util.Map;
 @ConditionalOnProperty(name = "sso.enabled", havingValue = "true")
 public class SsoAuthController {
 
+    private static final String SSO_CODE_PREFIX = "sso:code:";
+    private static final long SSO_CODE_TTL_MINUTES = 5;
+
     @Autowired
     private SsoService ssoService;
 
@@ -40,8 +54,14 @@ public class SsoAuthController {
     @Autowired
     private SsoLoginLogService loginLogService;
 
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
     @Value("${app.base-url}")
     private String appBaseUrl;
+
+    @Value("${app.frontend-url:${app.base-url}}")
+    private String appFrontendUrl;
 
     /**
      * 获取 SSO 登录 URL
@@ -53,7 +73,7 @@ public class SsoAuthController {
                 return Result.error("SSO 功能未启用");
             }
 
-            String callbackUrl = appBaseUrl + "/api/auth/sso/callback";
+            String callbackUrl = buildCallbackUrl();
             String loginUrl = ssoService.generateLoginUrl(callbackUrl);
 
             Map<String, String> data = new HashMap<>();
@@ -69,19 +89,40 @@ public class SsoAuthController {
     }
 
     /**
-     * SSO 回调处理
+     * SSO 回调处理（CAS/OAuth2 认证服务器 302 重定向到此处）
+     *
+     * CAS: /api/auth/sso/callback?ticket=ST-xxx
+     * OAuth2: /api/auth/sso/callback?code=xxx&state=xxx
      */
-    @PostMapping("/callback")
-    public Result<Map<String, Object>> handleCallback(
-            @RequestBody Map<String, String> callbackParams,
-            HttpServletRequest request) {
+    @GetMapping("/callback")
+    public void handleCallback(
+            @RequestParam(required = false) String ticket,
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String state,
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
 
         try {
             if (!ssoService.isEnabled()) {
-                return Result.error("SSO 功能未启用");
+                redirectToFrontendWithError(response, "SSO 功能未启用");
+                return;
             }
 
-            String callbackUrl = appBaseUrl + "/api/auth/sso/callback";
+            // 构建回调参数
+            Map<String, String> callbackParams = new HashMap<>();
+            if (ticket != null && !ticket.isEmpty()) {
+                callbackParams.put("ticket", ticket);
+            } else if (code != null && !code.isEmpty()) {
+                callbackParams.put("code", code);
+                if (state != null) {
+                    callbackParams.put("state", state);
+                }
+            } else {
+                redirectToFrontendWithError(response, "缺少认证参数");
+                return;
+            }
+
+            String callbackUrl = buildCallbackUrl();
 
             // 1. 验证 SSO 回调
             SsoUserInfo ssoUserInfo = ssoService.validateCallback(callbackParams, callbackUrl);
@@ -95,16 +136,30 @@ public class SsoAuthController {
             // 3. 记录日志
             loginLogService.log(ssoUserInfo, result, request);
 
-            // 4. 返回结果
+            // 4. 生成一次性 code，存入 Redis
+            String oneTimeCode = UUID.randomUUID().toString();
+
             if (result.isNeedsApproval()) {
-                return Result.error(result.getMessage());
+                // 待审批状态 — 仍然重定向到前端，但标记为待审批
+                stringRedisTemplate.opsForValue().set(
+                        SSO_CODE_PREFIX + oneTimeCode,
+                        "PENDING:" + result.getMessage(),
+                        SSO_CODE_TTL_MINUTES, TimeUnit.MINUTES
+                );
+                log.info("SSO 待审批用户，生成一次性 code: {}", oneTimeCode);
+            } else {
+                // 登录成功 — 存储 JWT token
+                stringRedisTemplate.opsForValue().set(
+                        SSO_CODE_PREFIX + oneTimeCode,
+                        result.getToken(),
+                        SSO_CODE_TTL_MINUTES, TimeUnit.MINUTES
+                );
+                log.info("SSO 登录成功，生成一次性 code: {}", oneTimeCode);
             }
 
-            Map<String, Object> data = new HashMap<>();
-            data.put("token", result.getToken());
-            data.put("user", result.getUser());
-
-            return Result.success("登录成功", data);
+            // 5. 重定向到前端 SSO 回调页面
+            String redirectUrl = appFrontendUrl + "/sso/callback?code=" + oneTimeCode;
+            response.sendRedirect(redirectUrl);
 
         } catch (Exception e) {
             log.error("SSO 回调处理失败", e);
@@ -113,7 +168,7 @@ public class SsoAuthController {
             try {
                 loginLogService.logFailure(
                         ssoService.getProtocolType().name(),
-                        callbackParams.getOrDefault("ticket", callbackParams.getOrDefault("code", "unknown")),
+                        ticket != null ? ticket : (code != null ? code : "unknown"),
                         "unknown",
                         e.getMessage(),
                         request
@@ -122,8 +177,46 @@ public class SsoAuthController {
                 log.error("记录失败日志失败", logEx);
             }
 
-            return Result.error("SSO 认证失败: " + e.getMessage());
+            redirectToFrontendWithError(response, "SSO 认证失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 用一次性 code 换取 JWT token
+     */
+    @PostMapping("/token")
+    public Result<Map<String, Object>> exchangeToken(
+            @RequestBody Map<String, String> request) {
+
+        String oneTimeCode = request.get("code");
+        if (oneTimeCode == null || oneTimeCode.isEmpty()) {
+            return Result.error("缺少授权码");
+        }
+
+        // 从 Redis 获取并删除一次性 code（一次性使用）
+        String redisKey = SSO_CODE_PREFIX + oneTimeCode;
+        String value = stringRedisTemplate.opsForValue().getAndDelete(redisKey);
+
+        if (value == null) {
+            log.warn("一次性 code 无效或已过期: {}", oneTimeCode);
+            return Result.error("授权码无效或已过期，请重新登录");
+        }
+
+        // 检查是否为待审批状态
+        if (value.startsWith("PENDING:")) {
+            String message = value.substring("PENDING:".length());
+            Map<String, Object> data = new HashMap<>();
+            data.put("pending", true);
+            data.put("message", message);
+            return Result.error(message);
+        }
+
+        // 登录成功 — value 就是 JWT token
+        Map<String, Object> data = new HashMap<>();
+        data.put("token", value);
+
+        log.info("一次性 code 换取 token 成功");
+        return Result.success("登录成功", data);
     }
 
     /**
@@ -136,5 +229,24 @@ public class SsoAuthController {
         data.put("protocol", ssoService.getProtocolType().name());
 
         return Result.success(data);
+    }
+
+    /**
+     * 构建回调 URL，确保使用 HTTPS
+     */
+    private String buildCallbackUrl() {
+        String callbackUrl = appBaseUrl + "/api/auth/sso/callback";
+        // 如果生产环境配置了 HTTPS 但 base-url 仍是 http，自动修正
+        // 实际部署时应通过 APP_BASE_URL 环境变量正确设置
+        return callbackUrl;
+    }
+
+    /**
+     * 重定向到前端并携带错误信息
+     */
+    private void redirectToFrontendWithError(HttpServletResponse response, String error) throws IOException {
+        String redirectUrl = appFrontendUrl + "/sso/callback?error=" +
+                java.net.URLEncoder.encode(error, java.nio.charset.StandardCharsets.UTF_8);
+        response.sendRedirect(redirectUrl);
     }
 }

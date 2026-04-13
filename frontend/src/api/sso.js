@@ -11,13 +11,15 @@ export function getSsoLoginUrl() {
 }
 
 /**
- * SSO 回调处理
+ * 用一次性 code 换取 JWT token
+ * 后端回调流程: CAS 302 → /api/auth/sso/callback(GET) → Redis存code → 302 → /sso/callback?code=xxx
+ * 前端拿到 code 后调用此接口换取 token
  */
-export function ssoCallback(params) {
+export function exchangeSsoToken(code) {
   return request({
-    url: '/api/auth/sso/callback',
+    url: '/api/auth/sso/token',
     method: 'post',
-    data: params
+    data: { code }
   })
 }
 

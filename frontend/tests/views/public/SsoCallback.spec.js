@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import SsoCallback from '@/views/public/SsoCallback.vue'
 import { useUserStore } from '@/store/user'
@@ -8,14 +7,14 @@ import * as ssoApi from '@/api/sso'
 
 // Mock API
 vi.mock('@/api/sso', () => ({
-  ssoCallback: vi.fn()
+  exchangeSsoToken: vi.fn()
 }))
 
 // Mock router
 const mockPush = vi.fn()
 const mockRoute = {
   query: {
-    ticket: 'ST-123-abc'
+    code: 'test-one-time-code'
   }
 }
 
@@ -30,6 +29,14 @@ vi.mock('vue-router', async () => {
   }
 })
 
+// Helper: create a fake JWT with given role
+function createFakeJwt(role, username = 'testuser') {
+  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const payload = btoa(JSON.stringify({ sub: username, role }))
+  const signature = btoa('fake-signature')
+  return `${header}.${payload}.${signature}`
+}
+
 describe('SsoCallback.vue', () => {
   let wrapper
   let userStore
@@ -40,48 +47,39 @@ describe('SsoCallback.vue', () => {
     mockPush.mockClear()
     vi.clearAllMocks()
     // Reset mockRoute to default
-    mockRoute.query = { ticket: 'ST-123-abc' }
+    mockRoute.query = { code: 'test-one-time-code' }
   })
 
-  it('should handle successful SSO callback with CAS ticket', async () => {
+  it('should handle successful SSO token exchange and redirect STUDENT', async () => {
+    const fakeJwt = createFakeJwt('STUDENT', '2023122066164')
     const mockResponse = {
       code: 200,
       data: {
-        token: 'mock-jwt-token',
-        user: {
-          id: 1,
-          username: '2023122066164',
-          role: 'STUDENT',
-          realName: '张三'
-        }
+        token: fakeJwt
       }
     }
 
-    ssoApi.ssoCallback.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
 
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(ssoApi.ssoCallback).toHaveBeenCalledWith({ ticket: 'ST-123-abc' })
-    expect(userStore.token).toBe('mock-jwt-token')
+    expect(ssoApi.exchangeSsoToken).toHaveBeenCalledWith('test-one-time-code')
+    expect(userStore.token).toBe(fakeJwt)
     expect(userStore.userRole).toBe('STUDENT')
     expect(mockPush).toHaveBeenCalledWith('/student')
   })
 
   it('should redirect to admin page for ADMIN role', async () => {
+    const fakeJwt = createFakeJwt('ADMIN', 'admin')
     const mockResponse = {
       code: 200,
       data: {
-        token: 'admin-token',
-        user: {
-          id: 1,
-          username: 'admin',
-          role: 'ADMIN'
-        }
+        token: fakeJwt
       }
     }
 
-    ssoApi.ssoCallback.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -90,19 +88,15 @@ describe('SsoCallback.vue', () => {
   })
 
   it('should redirect to ops page for OPS role', async () => {
+    const fakeJwt = createFakeJwt('OPS', 'ops')
     const mockResponse = {
       code: 200,
       data: {
-        token: 'ops-token',
-        user: {
-          id: 1,
-          username: 'ops',
-          role: 'OPS'
-        }
+        token: fakeJwt
       }
     }
 
-    ssoApi.ssoCallback.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -111,19 +105,15 @@ describe('SsoCallback.vue', () => {
   })
 
   it('should redirect to teacher page for TEACHER role', async () => {
+    const fakeJwt = createFakeJwt('TEACHER', 'teacher')
     const mockResponse = {
       code: 200,
       data: {
-        token: 'teacher-token',
-        user: {
-          id: 1,
-          username: 'teacher',
-          role: 'TEACHER'
-        }
+        token: fakeJwt
       }
     }
 
-    ssoApi.ssoCallback.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -132,19 +122,15 @@ describe('SsoCallback.vue', () => {
   })
 
   it('should redirect to user page for USER role', async () => {
+    const fakeJwt = createFakeJwt('USER', 'user')
     const mockResponse = {
       code: 200,
       data: {
-        token: 'user-token',
-        user: {
-          id: 1,
-          username: 'user',
-          role: 'USER'
-        }
+        token: fakeJwt
       }
     }
 
-    ssoApi.ssoCallback.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -152,13 +138,13 @@ describe('SsoCallback.vue', () => {
     expect(mockPush).toHaveBeenCalledWith('/user')
   })
 
-  it('should display error message when callback fails', async () => {
+  it('should display error message when token exchange fails (pending approval)', async () => {
     const mockError = {
       code: 400,
       message: '您的账号正在审批中，请联系管理员'
     }
 
-    ssoApi.ssoCallback.mockResolvedValue(mockError)
+    ssoApi.exchangeSsoToken.mockResolvedValue(mockError)
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -167,18 +153,27 @@ describe('SsoCallback.vue', () => {
     expect(wrapper.find('.error p').text()).toBe('您的账号正在审批中，请联系管理员')
   })
 
-  it('should display error when missing authentication parameters', async () => {
+  it('should display error when missing code parameter', async () => {
     mockRoute.query = {}
 
     wrapper = mount(SsoCallback)
     await flushPromises()
 
     expect(wrapper.find('.error').exists()).toBe(true)
-    expect(wrapper.find('.error p').text()).toContain('缺少认证参数')
+    expect(wrapper.find('.error p').text()).toContain('缺少授权码')
+  })
+
+  it('should display error from backend redirect (query.error)', async () => {
+    mockRoute.query = { error: 'SSO%20%E8%AE%A4%E8%AF%81%E5%A4%B1%E8%B4%A5' }
+
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(wrapper.find('.error').exists()).toBe(true)
   })
 
   it('should handle network errors gracefully', async () => {
-    ssoApi.ssoCallback.mockRejectedValue(new Error('Network error'))
+    ssoApi.exchangeSsoToken.mockRejectedValue(new Error('Network error'))
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -193,7 +188,7 @@ describe('SsoCallback.vue', () => {
   })
 
   it('should allow user to return to login page on error', async () => {
-    ssoApi.ssoCallback.mockRejectedValue(new Error('Login failed'))
+    ssoApi.exchangeSsoToken.mockRejectedValue(new Error('Login failed'))
 
     wrapper = mount(SsoCallback)
     await flushPromises()
