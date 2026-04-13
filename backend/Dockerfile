@@ -40,12 +40,15 @@ RUN mkdir -p /app/logs /app/uploads /app/backups
 # -XX:MaxGCPauseMillis=200  : 目标最大 GC 停顿 200ms
 # -XX:+HeapDumpOnOutOfMemoryError : OOM 时自动 dump，便于排查
 # -Djava.security.egd=file:/dev/./urandom : 加快 SecureRandom 初始化
+# -Djdk.tls.client.signingAlgorithms=...  : 重新允许 rsa_pkcs1_sha1，
+#   因 CAS 服务器(ids.imau.edu.cn)的 TLS 握手使用此已弃用算法（Java 17+ 默认禁用）
 ENV JAVA_OPTS="-Xms1g -Xmx4g \
                -XX:+UseG1GC \
                -XX:MaxGCPauseMillis=200 \
                -XX:+HeapDumpOnOutOfMemoryError \
                -XX:HeapDumpPath=/tmp/heap.hprof \
-               -Djava.security.egd=file:/dev/./urandom"
+               -Djava.security.egd=file:/dev/./urandom \
+               -Djdk.tls.client.signingAlgorithms=rsa_pkcs1_sha256,rsa_pkcs1_sha384,rsa_pkcs1_sha512,rsa_pss_rsae_sha256,rsa_pss_rsae_sha384,rsa_pss_rsae_sha512,ecdsa_secp256r1_sha256,ecdsa_secp384r1_sha384,ecdsa_secp521r1_sha512,rsa_pkcs1_sha1"
 
 EXPOSE 8080
 
