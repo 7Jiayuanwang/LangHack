@@ -533,19 +533,15 @@ if [ "$SKIP_ENV" = false ]; then
         # 去除末尾斜杠
         CFG_APP_BASE_URL="${CFG_APP_BASE_URL%/}"
 
-        # SSO_CAS_SERVICE_URL：CAS 回调地址，默认由 APP_BASE_URL 动态构建
+        # SSO_CAS_SERVER_NAME：对应官方 web.xml 的 serverName（固定配置，不从请求头推断）
         echo ""
-        echo "  [ CAS Service URL ]"
-        echo "  CAS 验证 ticket 时要求 service URL 与注册的精确匹配"
-        echo "  默认值: ${CFG_APP_BASE_URL}/api/auth/sso/callback"
-        echo "  如 CAS 报'票根不符合目标服务'，需在此精确指定"
-        DEF_CAS_SERVICE_URL=$(load_env_value "SSO_CAS_SERVICE_URL" "")
-        if [ -n "$DEF_CAS_SERVICE_URL" ]; then
-            ask_value "CAS Service URL (回车保留当前，留空使用默认)" "$DEF_CAS_SERVICE_URL" CFG_CAS_SERVICE_URL
-        else
-            ask_value "CAS Service URL (留空使用默认)" "" CFG_CAS_SERVICE_URL
-        fi
-        CFG_CAS_SERVICE_URL="${CFG_CAS_SERVICE_URL%/}"
+        echo "  [ CAS Server Name (应用服务器地址) ]"
+        echo "  对应官方 web.xml 的 serverName 参数"
+        echo "  格式: 协议://域名[:端口]  示例: https://langhack.imau.edu.cn"
+        echo "  service URL = serverName + /api/auth/sso/callback"
+        DEF_CAS_SERVER_NAME=$(load_env_value "SSO_CAS_SERVER_NAME" "$CFG_APP_BASE_URL")
+        ask_value "CAS Server Name" "$DEF_CAS_SERVER_NAME" CFG_CAS_SERVER_NAME
+        CFG_CAS_SERVER_NAME="${CFG_CAS_SERVER_NAME%/}"
 
         echo ""
         echo "  [ 管理员叩门入口 ]"
@@ -669,9 +665,9 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'SSO_CAS_ENABLED=%s\n'      "$CFG_SSO_ENABLED"
         printf 'SSO_CAS_SERVER_URL=%s\n'   "$CFG_SSO_SERVER_URL"
         if [ "$CFG_SSO_ENABLED" = "true" ]; then
-            printf 'APP_BASE_URL=%s\n'        "${CFG_APP_BASE_URL:-}"
-            printf 'SSO_CAS_SERVICE_URL=%s\n' "${CFG_CAS_SERVICE_URL:-}"
-            printf 'ADMIN_LOGIN_SECRET=%s\n'  "$CFG_ADMIN_SECRET"
+            printf 'APP_BASE_URL=%s\n'          "${CFG_APP_BASE_URL:-}"
+            printf 'SSO_CAS_SERVER_NAME=%s\n'   "${CFG_CAS_SERVER_NAME:-}"
+            printf 'ADMIN_LOGIN_SECRET=%s\n'     "$CFG_ADMIN_SECRET"
             printf 'ADMIN_PORTAL_PATH=%s\n'   "$CFG_ADMIN_PATH"
         fi
     } > "$ENV_FILE"

@@ -61,9 +61,6 @@ public class SsoAuthController {
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
-    @Value("${app.base-url}")
-    private String appBaseUrl;
-
     @Value("${app.frontend-url:${app.base-url}}")
     private String appFrontendUrl;
 
@@ -71,14 +68,14 @@ public class SsoAuthController {
      * 获取 SSO 登录 URL
      */
     @GetMapping("/login-url")
-    public Result<Map<String, String>> getLoginUrl(HttpServletRequest request) {
+    public Result<Map<String, String>> getLoginUrl() {
         try {
             if (!ssoService.isEnabled()) {
                 return Result.error("SSO 功能未启用");
             }
 
-            String callbackUrl = buildCallbackUrl(request);
-            String loginUrl = ssoService.generateLoginUrl(callbackUrl);
+            String serviceUrl = buildServiceUrl();
+            String loginUrl = ssoService.generateLoginUrl(serviceUrl);
 
             Map<String, String> data = new HashMap<>();
             data.put("loginUrl", loginUrl);
@@ -126,10 +123,10 @@ public class SsoAuthController {
                 return;
             }
 
-            String callbackUrl = buildCallbackUrl(request);
+            String serviceUrl = buildServiceUrl();
 
             // 1. 验证 SSO 回调
-            SsoUserInfo ssoUserInfo = ssoService.validateCallback(callbackParams, callbackUrl);
+            SsoUserInfo ssoUserInfo = ssoService.validateCallback(callbackParams, serviceUrl);
 
             // 2. 处理用户映射/创建
             SsoLoginResult result = mappingService.processLogin(
@@ -238,16 +235,13 @@ public class SsoAuthController {
     /**
      * 获取 CAS 登出 URL（供前端退出登录后跳转，确保 CAS 侧也登出）
      *
-     * 统一身份认证对接要求：点击退出后返回统一身份认证页面，
-     * 否则用户在 CAS 侧仍处于登录状态，再次 SSO 登录会自动跳回而无法切换账号。
-     *
-     * CAS logout 的 service 参数是登出后跳转回的应用页面（前端登录页），
-     * 不是 CAS 回调地址（参照官方 caslogout.jsp 示例）。
+     * 参照官方 caslogout.jsp：
+     *   casLogoutURL + "?service=" + URLEncoder.encode("http://app:port/login.jsp")
+     * service 参数是登出后跳转回的应用页面（前端登录页），不是 CAS 回调地址。
      */
     @GetMapping("/logout-url")
     public Result<Map<String, String>> getLogoutUrl() {
         Map<String, String> data = new HashMap<>();
-        // logout 的 service 参数：登出后跳转到前端登录页（非 CAS 回调地址）
         String logoutServiceUrl = appFrontendUrl + "/login";
         String logoutUrl = ssoService.generateLogoutUrl(logoutServiceUrl);
         data.put("logoutUrl", logoutUrl);
@@ -255,43 +249,32 @@ public class SsoAuthController {
     }
 
     /**
-     * 构建 CAS service URL（回调地址）
+     * 构建 CAS service URL
      *
-     * 参照官方 cas-client-core-3.2.1 的 serverName 模式：
-     * 标准 CAS 客户端通过 serverName + request.getRequestURI() 动态构建 service URL，
-     * 确保 CAS 颁发 ticket 时记录的 service 与验证时提供的 service 完全一致。
+     * 与官方 cas-client-core-3.2.1 的 serverName 模式完全一致：
+     *   官方: service URL = serverName + request.getRequestURI()
+     *   本项目: service URL = serverName + "/api/auth/sso/callback"
      *
-     * 优先级：
-     * 1. SSO_CAS_SERVICE_URL 环境变量（精确指定，适用于特殊场景）
-     * 2. 从当前 HTTP 请求动态构建（与官方 CAS 客户端行为一致）
-     *    - Nginx 反向代理场景下，通过 X-Forwarded-Proto/Header 还原真实协议和域名
-     * 3. 回退到 APP_BASE_URL + 路径（兼容无代理的直连场景）
+     * serverName 是固定配置值（对应官方 web.xml 的 serverName 参数），
+     * 不依赖任何 HTTP 请求头推断，保证登录和验证时 service URL 绝对一致。
+     *
+     * @see <a href="https://github.com/apereo/java-cas-client/blob/3.2.x/cas-client-core/src/main/java/org/jasig/cas/client/util/CommonUtils.java">CommonUtils.constructServiceUrl()</a>
      */
-    private String buildCallbackUrl(HttpServletRequest request) {
-        // 优先使用显式配置的 service URL
-        String configuredServiceUrl = ssoProperties.getCas().getServiceUrl();
-        if (configuredServiceUrl != null && !configuredServiceUrl.isEmpty()) {
-            log.info("使用配置的 CAS service URL: {}", configuredServiceUrl);
-            return configuredServiceUrl;
+    private String buildServiceUrl() {
+        String serverName = ssoProperties.getCas().getServerName();
+        if (serverName == null || serverName.isEmpty()) {
+            throw new IllegalStateException(
+                    "sso.cas.server-name (SSO_CAS_SERVER_NAME) 未配置。" +
+                    "此参数对应官方 web.xml 的 serverName，格式: 协议://域名[:端口]，" +
+                    "示例: https://langhack.imau.edu.cn");
         }
-
-        // 从请求动态构建（参照 CAS 客户端 serverName 模式）
-        // Nginx 设置了 X-Forwarded-Proto 和 Host，可还原用户实际访问的 URL
-        String scheme = request.getHeader("X-Forwarded-Proto");
-        String host = request.getHeader("Host");
-
-        if (scheme != null && !scheme.isEmpty() && host != null && !host.isEmpty()) {
-            // 反向代理场景：使用用户实际访问的协议和域名
-            String callbackUrl = scheme + "://" + host + "/api/auth/sso/callback";
-            log.info("从请求头动态构建 CAS service URL: {} (X-Forwarded-Proto={}, Host={})",
-                    callbackUrl, scheme, host);
-            return callbackUrl;
+        // 去掉尾部斜杠（与官方 AbstractCasFilter.setServerName() 一致）
+        if (serverName.endsWith("/")) {
+            serverName = serverName.substring(0, serverName.length() - 1);
         }
-
-        // 回退：使用 APP_BASE_URL
-        String fallbackUrl = appBaseUrl + "/api/auth/sso/callback";
-        log.info("回退使用 APP_BASE_URL 构建 CAS service URL: {}", fallbackUrl);
-        return fallbackUrl;
+        String serviceUrl = serverName + "/api/auth/sso/callback";
+        log.debug("CAS service URL: {}", serviceUrl);
+        return serviceUrl;
     }
 
     /**
