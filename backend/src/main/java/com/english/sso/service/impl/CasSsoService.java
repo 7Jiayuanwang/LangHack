@@ -18,6 +18,7 @@ import org.w3c.dom.NodeList;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -72,7 +73,11 @@ public class CasSsoService implements SsoService {
         log.info("CAS 验证请求 URL: {}", validateUrl);
 
         try {
-            String response = restTemplate.getForObject(validateUrl, String.class);
+            // 必须用 URI.create() 而非直接传 String！
+            // RestTemplate.getForObject(String url, ...) 会把已编码的 %3A%2F 再编码成 %253A%252F（双重编码）
+            // 导致 CAS 收到的 service 参数与 ticket 绑定的原始 URL 不匹配 → INVALID_SERVICE
+            // URI.create() 告诉 RestTemplate 这个 URL 已经完成编码，不要再处理
+            String response = restTemplate.getForObject(URI.create(validateUrl), String.class);
             log.info("CAS 验证响应: {}", response);
 
             return parseCasResponse(response);
