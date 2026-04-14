@@ -131,18 +131,32 @@ public class CasSsoService implements SsoService {
             }
             String username = userNodes.item(0).getTextContent();
 
-            // 提取属性
+            // 提取属性（参照官方 Cas20ServiceTicketValidator.extractCustomAttributes()）：
+            // 同一属性名出现多次时（如多个 memberOf），单值存 String，多值存 List<String>
             Map<String, Object> attributes = new HashMap<>();
             NodeList attributesNodes = successElement.getElementsByTagName("cas:attributes");
             if (attributesNodes.getLength() > 0) {
                 Element attributesElement = (Element) attributesNodes.item(0);
                 NodeList children = attributesElement.getChildNodes();
+
+                // 先收集同名属性的所有值
+                Map<String, List<String>> attrValuesMap = new LinkedHashMap<>();
                 for (int i = 0; i < children.getLength(); i++) {
                     if (children.item(i) instanceof Element) {
                         Element attrElement = (Element) children.item(i);
                         String attrName = attrElement.getLocalName();
                         String attrValue = attrElement.getTextContent();
-                        attributes.put(attrName, attrValue);
+                        attrValuesMap.computeIfAbsent(attrName, k -> new ArrayList<>()).add(attrValue);
+                    }
+                }
+
+                // 单值存 String，多值存 List<String>（与官方 cas-client-core 行为一致）
+                for (Map.Entry<String, List<String>> entry : attrValuesMap.entrySet()) {
+                    List<String> values = entry.getValue();
+                    if (values.size() == 1) {
+                        attributes.put(entry.getKey(), values.get(0));
+                    } else {
+                        attributes.put(entry.getKey(), values);
                     }
                 }
             }
