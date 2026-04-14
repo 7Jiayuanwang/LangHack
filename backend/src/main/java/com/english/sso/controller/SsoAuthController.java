@@ -1,6 +1,7 @@
 package com.english.sso.controller;
 
 import com.english.dto.Result;
+import com.english.sso.config.SsoProperties;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
 import com.english.sso.service.SsoLoginLogService;
@@ -49,6 +50,9 @@ public class SsoAuthController {
     private SsoService ssoService;
 
     @Autowired
+    private SsoProperties ssoProperties;
+
+    @Autowired
     private SsoUserMappingService mappingService;
 
     @Autowired
@@ -67,13 +71,13 @@ public class SsoAuthController {
      * 获取 SSO 登录 URL
      */
     @GetMapping("/login-url")
-    public Result<Map<String, String>> getLoginUrl() {
+    public Result<Map<String, String>> getLoginUrl(HttpServletRequest request) {
         try {
             if (!ssoService.isEnabled()) {
                 return Result.error("SSO 功能未启用");
             }
 
-            String callbackUrl = buildCallbackUrl();
+            String callbackUrl = buildCallbackUrl(request);
             String loginUrl = ssoService.generateLoginUrl(callbackUrl);
 
             Map<String, String> data = new HashMap<>();
@@ -122,7 +126,7 @@ public class SsoAuthController {
                 return;
             }
 
-            String callbackUrl = buildCallbackUrl();
+            String callbackUrl = buildCallbackUrl(request);
 
             // 1. 验证 SSO 回调
             SsoUserInfo ssoUserInfo = ssoService.validateCallback(callbackParams, callbackUrl);
@@ -238,9 +242,9 @@ public class SsoAuthController {
      * 否则用户在 CAS 侧仍处于登录状态，再次 SSO 登录会自动跳回而无法切换账号。
      */
     @GetMapping("/logout-url")
-    public Result<Map<String, String>> getLogoutUrl() {
+    public Result<Map<String, String>> getLogoutUrl(HttpServletRequest request) {
         Map<String, String> data = new HashMap<>();
-        String callbackUrl = buildCallbackUrl();
+        String callbackUrl = buildCallbackUrl(request);
         // CAS logout 协议：service 参数指定登出后跳转回的地址
         String logoutUrl = ssoService.generateLogoutUrl(callbackUrl);
         data.put("logoutUrl", logoutUrl);
@@ -248,13 +252,43 @@ public class SsoAuthController {
     }
 
     /**
-     * 构建回调 URL，确保使用 HTTPS
+     * 构建 CAS service URL（回调地址）
+     *
+     * 参照官方 cas-client-core-3.2.1 的 serverName 模式：
+     * 标准 CAS 客户端通过 serverName + request.getRequestURI() 动态构建 service URL，
+     * 确保 CAS 颁发 ticket 时记录的 service 与验证时提供的 service 完全一致。
+     *
+     * 优先级：
+     * 1. SSO_CAS_SERVICE_URL 环境变量（精确指定，适用于特殊场景）
+     * 2. 从当前 HTTP 请求动态构建（与官方 CAS 客户端行为一致）
+     *    - Nginx 反向代理场景下，通过 X-Forwarded-Proto/Header 还原真实协议和域名
+     * 3. 回退到 APP_BASE_URL + 路径（兼容无代理的直连场景）
      */
-    private String buildCallbackUrl() {
-        String callbackUrl = appBaseUrl + "/api/auth/sso/callback";
-        // 如果生产环境配置了 HTTPS 但 base-url 仍是 http，自动修正
-        // 实际部署时应通过 APP_BASE_URL 环境变量正确设置
-        return callbackUrl;
+    private String buildCallbackUrl(HttpServletRequest request) {
+        // 优先使用显式配置的 service URL
+        String configuredServiceUrl = ssoProperties.getCas().getServiceUrl();
+        if (configuredServiceUrl != null && !configuredServiceUrl.isEmpty()) {
+            log.info("使用配置的 CAS service URL: {}", configuredServiceUrl);
+            return configuredServiceUrl;
+        }
+
+        // 从请求动态构建（参照 CAS 客户端 serverName 模式）
+        // Nginx 设置了 X-Forwarded-Proto 和 Host，可还原用户实际访问的 URL
+        String scheme = request.getHeader("X-Forwarded-Proto");
+        String host = request.getHeader("Host");
+
+        if (scheme != null && !scheme.isEmpty() && host != null && !host.isEmpty()) {
+            // 反向代理场景：使用用户实际访问的协议和域名
+            String callbackUrl = scheme + "://" + host + "/api/auth/sso/callback";
+            log.info("从请求头动态构建 CAS service URL: {} (X-Forwarded-Proto={}, Host={})",
+                    callbackUrl, scheme, host);
+            return callbackUrl;
+        }
+
+        // 回退：使用 APP_BASE_URL
+        String fallbackUrl = appBaseUrl + "/api/auth/sso/callback";
+        log.info("回退使用 APP_BASE_URL 构建 CAS service URL: {}", fallbackUrl);
+        return fallbackUrl;
     }
 
     /**
