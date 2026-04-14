@@ -18,7 +18,7 @@
             <span class="pill-label">难度</span>
             <span class="pill-value">{{ difficultyText }}</span>
           </div>
-          <button class="favorite-btn" :class="{ 'is-favorite': isFavorite }" @click="addToFavorite">
+          <button v-if="canFavorite" class="favorite-btn" :class="{ 'is-favorite': isFavorite }" @click="addToFavorite">
             <el-icon><Star v-if="!isFavorite" /><StarFilled v-else /></el-icon>
           </button>
         </div>
@@ -71,16 +71,16 @@
           @learning-record="handleLearningRecord"
         />
         
-        <MarkdownRenderer 
+        <div 
           v-else 
-          :html="textContent"
-          :show-background="false"
-          :clickable-images="true"
-        />
+          class="markdown-content" 
+          v-html="textContent"
+          @click="handleMarkdownClick"
+        ></div>
       </section>
 
       <!-- Completion Section -->
-      <footer class="reader-footer" v-if="!isCompleted">
+      <footer class="reader-footer" v-if="!isCompleted && !isPreviewMode">
         <div class="footer-divider"></div>
         <button 
           class="premium-completion-btn"
@@ -100,7 +100,7 @@
         <p class="completion-hint">完成阅读以记录您的学习进度</p>
       </footer>
       
-      <div class="reader-footer completed-notif" v-else>
+      <div class="reader-footer completed-notif" v-else-if="isCompleted && !isPreviewMode">
         <el-result
           icon="success"
           title="阅读已完成"
@@ -278,6 +278,27 @@
       </template>
     </el-dialog>
 
+    <!-- 浮动翻译按钮（Markdown 模式下由父页面提供，样式与子组件一致） -->
+    <div
+      v-if="isMarkdown"
+      class="floating-translate-btn"
+      :class="{ 'selecting': isSelectingMode }"
+      :style="{ top: floatingBtnPosition.y + 'px', left: floatingBtnPosition.x + 'px' }"
+      @mousedown="startTranslateBtnDrag"
+      @touchstart.prevent="startTranslateBtnDrag"
+    >
+      <el-tooltip :content="isSelectingMode ? '选择文本后点击翻译' : '点击开始翻译'" placement="left">
+        <button
+          class="translate-fab"
+          :class="isSelectingMode ? 'fab-active' : 'fab-default'"
+        >
+          <span v-if="isSelectingMode" class="fab-icon">✓</span>
+          <span v-else class="fab-icon">译</span>
+          <span class="fab-label">{{ isSelectingMode ? '翻译' : '划词翻译' }}</span>
+        </button>
+      </el-tooltip>
+    </div>
+
     <!-- 文本选择菜单 -->
     <SelectionMenu
       :visible="showSelectionMenu"
@@ -343,6 +364,8 @@ const learnedWordsCount = ref(0)
 const studyTime = ref(0)
 const isCompleted = ref(false)
 const isFavorite = ref(false)
+const isPublic = ref(0)
+const isFeatured = ref(0)
 const recording = ref(false)
 const isFullscreen = ref(true) // 默认开启全屏模式
 const showSuggestionDialog = ref(false)
@@ -434,6 +457,27 @@ const selectionIsUnderlined = computed(() => {
   if (!selectedTextContent.value || sharedUnderlines.value.length === 0) return false
   const trimmed = selectedTextContent.value.trim()
   return sharedUnderlines.value.some(u => u.selectedText && u.selectedText.trim() === trimmed)
+})
+
+/**
+ * 判断是否为预览模式（管理员预览或用户自己查看上传页面）
+ */
+const isPreviewMode = computed(() => {
+  return fromSource.value === 'user-upload' || route.path.includes('/admin/text-preview')
+})
+
+/**
+ * 判断当前文章是否可以收藏（仅限公开文章或系统课程文章）
+ */
+const canFavorite = computed(() => {
+  // 预览模式下不显示收藏按钮
+  if (isPreviewMode.value) return false
+
+  // 如果是学生自己上传的文章（通常unitId为999且不是公开文章），不显示收藏按钮
+  if (unitId.value === 999 && isPublic.value !== 1) return false
+  
+  // 推荐文章、公开文章、或属于正规课程单元的文章均可收藏
+  return isPublic.value === 1 || isFeatured.value === 1 || (unitId.value && unitId.value !== 999)
 })
 
 /** SelectionMenu 中划线按钮的动态标签 */
@@ -530,6 +574,10 @@ const loadTextDetail = async () => {
       learningProgress.value = data.learningProgress || 0
       learnedWordsCount.value = data.learnedWordsCount || 0
       isCompleted.value = data.isCompleted || false
+
+      // 权限和标记位
+      isPublic.value = data.isPublic || 0
+      isFeatured.value = data.isFeatured || 0
 
       // 检查是否为 Markdown 格式
       if (data.contentType === 'MARKDOWN') {
@@ -663,6 +711,9 @@ const startReading = async () => {
 
 // 自动开始阅读方法
 const autoStartReading = async () => {
+  // 预览模式不记录阅读进度
+  if (isPreviewMode.value) return
+  
   // 如果已经在学习中，不重复开始
   if (recording.value) return
   
@@ -1040,6 +1091,13 @@ const checkExerciseCompletion = () => {
 const goBack = () => {
   // 检查来源，智能返回
   const from = route.query.from
+  if (from === 'admin') {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'close-preview' }, '*')
+      return
+    }
+  }
+  
   if (from === 'assignment') {
     // 从任务页面跳转来的，返回任务页面
     router.push('/student/assignments')
@@ -2087,14 +2145,11 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 }
 
 .article-body :deep(img),
-.markdown-content :deep(img),
-.markdown-content :deep(video) {
-  max-height: 100px !important; /* 约 3-4 行高度 */
-  width: auto !important;
-  max-width: 100%;
-  object-fit: contain;
-  border-radius: 8px;
-  margin: 16px 0;
+.markdown-content :deep(img) {
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 12px;
+  margin: 24px 0;
   display: block;
 }
 
@@ -2289,5 +2344,109 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 :deep(.shared-underline) {
   border-bottom: 2px dashed #10b981; /* Green dashed for shared */
   background-color: rgba(16, 185, 129, 0.05);
+}
+
+/* 浮动翻译按钮（Markdown 模式，样式与 components/InteractiveText.vue 保持一致） */
+.floating-translate-btn {
+  position: fixed;
+  z-index: 1000;
+  cursor: move;
+  touch-action: none;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
+  transition: filter 0.2s;
+}
+
+.floating-translate-btn:hover {
+  filter: drop-shadow(0 6px 20px rgba(24, 144, 255, 0.4));
+}
+
+.floating-translate-btn .translate-fab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  gap: 2px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.floating-translate-btn .translate-fab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.2s;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.floating-translate-btn .translate-fab:hover::before { opacity: 1; }
+.floating-translate-btn .translate-fab:active { transform: scale(0.94) !important; }
+
+.floating-translate-btn .fab-default {
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  box-shadow: 0 4px 14px rgba(24, 144, 255, 0.5), 0 0 0 3px rgba(24, 144, 255, 0.15);
+}
+
+.floating-translate-btn .fab-active {
+  background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
+  box-shadow: 0 4px 14px rgba(82, 196, 26, 0.5), 0 0 0 3px rgba(82, 196, 26, 0.15);
+  animation: md-pulse-active 1.5s ease-in-out infinite;
+}
+
+.floating-translate-btn .fab-icon {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.floating-translate-btn .fab-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.floating-translate-btn:hover .translate-fab {
+  transform: scale(1.08) translateY(-2px);
+}
+
+@keyframes md-pulse-active {
+  0%, 100% {
+    box-shadow: 0 4px 14px rgba(82, 196, 26, 0.5), 0 0 0 3px rgba(82, 196, 26, 0.15);
+  }
+  50% {
+    box-shadow: 0 6px 20px rgba(82, 196, 26, 0.65), 0 0 0 6px rgba(82, 196, 26, 0.1);
+  }
+}
+
+@media (max-width: 768px) {
+  .floating-translate-btn .translate-fab {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+  }
+  .floating-translate-btn .fab-icon { font-size: 18px; }
+  .floating-translate-btn .fab-label { font-size: 8px; }
+}
+
+@media (max-width: 480px) {
+  .floating-translate-btn .translate-fab {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+  .floating-translate-btn .fab-icon { font-size: 17px; }
 }
 </style>

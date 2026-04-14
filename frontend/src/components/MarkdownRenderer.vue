@@ -141,16 +141,13 @@ const handleClick = (event) => {
 }
 
 .markdown-content :deep(img) {
-  max-height: 100px !important;
-  width: auto !important;
-  max-width: 100%;
-  object-fit: contain;
-  border-radius: 8px;
-  margin: 16px 0;
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 12px;
+  margin: 24px 0;
   display: block;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid transparent;
 }
 
 .markdown-content :deep(img:hover) {

@@ -138,6 +138,7 @@
 
     <template #footer>
       <el-button @click="handleClose">取消</el-button>
+      <el-button type="info" v-if="isEdit" @click="handlePreview">预览</el-button>
       <el-button type="primary" @click="handleSubmit" :loading="submitting">
         {{ isEdit ? '更新' : '创建' }}
       </el-button>
@@ -157,10 +158,22 @@
       <img :src="formData.coverUrl" alt="封面预览" class="preview-full-image" />
     </div>
   </el-dialog>
+
+  <!-- iframe内容预览 -->
+  <el-dialog
+    v-model="previewDialogVisible"
+    title="课程页预览"
+    fullscreen
+    :append-to-body="true"
+    destroy-on-close
+  >
+    <iframe v-if="previewUrl" :src="previewUrl" style="width:100%; height:calc(100vh - 80px); border:none;"></iframe>
+  </el-dialog>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Upload, Picture, ZoomIn, Delete } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
@@ -187,6 +200,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'success'])
 
+const router = useRouter()
+
 const visible = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val)
@@ -199,6 +214,9 @@ const submitting = ref(false)
 const markdownContent = ref('')
 const courses = ref([])
 const units = ref([])
+
+const previewDialogVisible = ref(false)
+const previewUrl = ref('')
 
 const formData = reactive({
   id: null,
@@ -438,11 +456,30 @@ const handleClose = () => {
   visible.value = false
 }
 
+// 预览课文
+const handlePreview = () => {
+  if (formData.id) {
+    previewUrl.value = router.resolve({ path: '/admin/text-preview', query: { textId: formData.id, from: 'admin' } }).href
+    previewDialogVisible.value = true
+  }
+}
+
+const handleMessage = (e) => {
+  if (e.data && e.data.type === 'close-preview') {
+    previewDialogVisible.value = false
+  }
+}
+
 // 组件挂载时加载课程列表
 onMounted(() => {
   if (!props.unitId) {
     loadCourses()
   }
+  window.addEventListener('message', handleMessage)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', handleMessage)
 })
 </script>
 

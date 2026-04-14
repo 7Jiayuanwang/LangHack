@@ -94,6 +94,12 @@ const routes = [
         component: () => import("@/views/admin/Assignments.vue"),
         meta: { title: "作业管理", roles: ["ADMIN"] },
       },
+      {
+        path: "text-preview",
+        name: "AdminTextPreview",
+        component: () => import("@/views/student/InteractiveText.vue"),
+        meta: { title: "课文预览", roles: ["ADMIN"] },
+      },
     ],
   },
   {
@@ -279,7 +285,7 @@ const routes = [
       {
         path: "text-learning",
         name: "UserTextLearning",
-        component: () => import("@/views/user/SimpleTextView.vue"),
+        component: () => import("@/views/student/InteractiveText.vue"),
         meta: { title: "课文学习", roles: ["USER"] },
       },
       {
@@ -393,7 +399,8 @@ router.beforeEach((to, from, next) => {
     if (
       requiredRoles &&
       Array.isArray(requiredRoles) &&
-      !requiredRoles.includes(userRole)
+      !requiredRoles.includes(userRole) &&
+      userRole !== "ADMIN" // ADMIN拥有所有权限，方便进行各种页面的预览
     ) {
       // 检查提权状态：ADMIN 可通过提权访问 OPS 路由，OPS 可通过提权访问 ADMIN 路由
       const elevatedRole = userStore.elevatedRole;

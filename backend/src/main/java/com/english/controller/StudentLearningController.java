@@ -94,7 +94,7 @@ public class StudentLearningController {
      * 获取学生仪表板数据
      */
     @GetMapping("/dashboard")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getDashboardData(Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -167,7 +167,7 @@ public class StudentLearningController {
      * 获取学生的课程列表
      */
     @GetMapping("/courses")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getStudentCourses(Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -190,7 +190,7 @@ public class StudentLearningController {
      * 获取课程下的单元列表
      */
     @GetMapping("/courses/{courseId}/units")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getCourseUnits(
             @PathVariable Long courseId,
             Authentication authentication) {
@@ -218,7 +218,7 @@ public class StudentLearningController {
      * 获取单元详细内容（课文和单词）
      */
     @GetMapping("/units/{unitId}/content")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getUnitContent(
             @PathVariable Long unitId,
             Authentication authentication) {
@@ -250,7 +250,7 @@ public class StudentLearningController {
      * 获取课文详细内容
      */
     @GetMapping("/texts/{textId}")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getTextDetail(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
@@ -284,7 +284,7 @@ public class StudentLearningController {
      * 记录课文学习
      */
     @PostMapping("/record/text-view")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<String> recordTextView(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -344,7 +344,7 @@ public class StudentLearningController {
      * 开始阅读课文
      */
     @PostMapping("/texts/{textId}/start")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Long> startReading(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
@@ -372,7 +372,7 @@ public class StudentLearningController {
      * 完成阅读课文（手动提交）
      */
     @PostMapping("/records/{recordId}/complete")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<String> completeReading(
             @PathVariable Long recordId,
             Authentication authentication) {
@@ -405,7 +405,7 @@ public class StudentLearningController {
      * 标记课文为已完成
      */
     @PostMapping("/texts/{textId}/complete")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> markTextAsCompleted(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
@@ -479,7 +479,7 @@ public class StudentLearningController {
      * 通用学习记录API（支持各种学习活动）
      */
     @PostMapping("/record/learning")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<String> recordLearning(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -566,7 +566,7 @@ public class StudentLearningController {
      * 记录单词学习
      */
     @PostMapping("/record/word-view")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<String> recordWordView(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -626,7 +626,7 @@ public class StudentLearningController {
      * 添加单词到生词本
      */
     @PostMapping("/vocabulary/add")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<String> addToVocabulary(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -679,6 +679,13 @@ public class StudentLearningController {
      * 逻辑：学生所在班级 -> 班级关联的课程 -> 是否包含目标courseId
      */
     private void assertStudentCanAccessCourse(Long studentId, Long courseId) {
+        // 放行管理员和教师
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_TEACHER") || a.getAuthority().equals("ROLE_OPS"))) {
+            return;
+        }
+
         List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
         if (classIds == null || classIds.isEmpty()) {
             throw new BusinessException("您未加入任何班级，无法访问该课程");
@@ -700,6 +707,16 @@ public class StudentLearningController {
      * 校验学生是否有权记录学习（校验 textId/wordId/assignmentId 归属）
      */
     private void assertStudentCanRecord(Long studentId, Long textId, Long wordId, Long assignmentId) {
+        // 管理员、教师、运维角色拥有所有文章的访问权，直接放行
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_TEACHER")
+                        || a.getAuthority().equals("ROLE_OPS"))) {
+            return;
+        }
+
         // 如果有 assignmentId，校验学生是否有权访问该任务
         if (assignmentId != null) {
             List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
@@ -715,6 +732,22 @@ public class StudentLearningController {
             if (text == null) {
                 throw new BusinessException("课文不存在");
             }
+            
+            // 允许作者访问自己上传的课文
+            if (text.getUploadedBy() != null && text.getUploadedBy().equals(studentId)) {
+                return;
+            }
+            
+            // 允许访问别人上传的公开课文
+            if (text.getIsPublic() != null && text.getIsPublic() == 1) {
+                return;
+            }
+
+            // 用户上传专区课文（通常挂在单元999下），如果既非作者又不公开则不能访问
+            if (text.getUnitId() != null && text.getUnitId() == 999L) {
+                throw new BusinessException("无权访问该课文");
+            }
+
             // 推荐文章（isFeatured=1）作为公开发现内容，跳过课程注册校验
             boolean isFeatured = text.getIsFeatured() != null && text.getIsFeatured() == 1;
             // 如果课文关联了单元，且非推荐文章，则校验单元所属课程
@@ -1087,7 +1120,7 @@ public class StudentLearningController {
      * 获取生词本（带分页和筛选）
      */
     @GetMapping("/vocabulary")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getVocabulary(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -1132,7 +1165,7 @@ public class StudentLearningController {
      * 检查单词是否在生词本中
      */
     @GetMapping("/vocabulary/check")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Boolean> checkVocabularyStatus(
             @RequestParam String word,
             Authentication authentication) {
@@ -1164,7 +1197,7 @@ public class StudentLearningController {
      * 通过单词添加到生词本（支持WordNet词汇）
      */
     @PostMapping("/vocabulary")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<String> addToVocabularyByWord(@RequestBody Map<String, Object> params,
             Authentication authentication) {
         try {
@@ -1248,7 +1281,7 @@ public class StudentLearningController {
      * 从生词本移除单词
      */
     @DeleteMapping("/vocabulary/{wordId}")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<String> removeFromVocabulary(@PathVariable Long wordId, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -1267,7 +1300,7 @@ public class StudentLearningController {
      * 更新单词掌握程度
      */
     @PutMapping("/vocabulary/{wordId}/mastery")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<String> updateMasteryLevel(
             @PathVariable Long wordId,
             @RequestBody Map<String, Object> params,
@@ -1297,7 +1330,7 @@ public class StudentLearningController {
      * 获取生词本统计信息
      */
     @GetMapping("/vocabulary/stats")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getVocabularyStats(Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -1316,7 +1349,7 @@ public class StudentLearningController {
      * 标记单词为已完成
      */
     @PostMapping("/words/{wordId}/complete")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> markWordAsCompleted(
             @PathVariable Long wordId,
             @RequestParam(required = false) Long assignmentId,
@@ -1379,12 +1412,27 @@ public class StudentLearningController {
      * 收藏/取消收藏文章（toggle）
      */
     @PostMapping("/favorites/{textId}")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> toggleFavorite(@PathVariable Long textId, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
             if (textId == null || textId <= 0) {
                 return Result.error("文章ID无效");
+            }
+
+            // 权限校验：首先确保学生能访问这篇课文
+            assertStudentCanRecord(studentId, textId, null, null);
+
+            // 业务校验：只有公开文章或系统课程文章可收藏，禁止收藏个人非公开上传
+            Text text = textMapper.selectById(textId);
+            if (text == null) return Result.error("文章不存在");
+            
+            boolean isPublic = (text.getIsPublic() != null && text.getIsPublic() == 1);
+            boolean isFeatured = (text.getIsFeatured() != null && text.getIsFeatured() == 1);
+            boolean isCourseText = (text.getUnitId() != null && text.getUnitId() != 999);
+            
+            if (!isPublic && !isFeatured && !isCourseText) {
+                return Result.error("该类型的文章暂不支持收藏");
             }
 
             QueryWrapper<ArticleFavorite> wrapper = new QueryWrapper<>();
@@ -1416,7 +1464,7 @@ public class StudentLearningController {
      * 检查文章是否已收藏
      */
     @GetMapping("/favorites/{textId}/check")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> checkFavorite(@PathVariable Long textId, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -1435,7 +1483,7 @@ public class StudentLearningController {
      * 获取收藏文章列表
      */
     @GetMapping("/favorites")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getFavoriteArticles(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -1493,7 +1541,7 @@ public class StudentLearningController {
      * 获取阅读记录列表（含时长统计）
      */
     @GetMapping("/reading-history")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
     public Result<Map<String, Object>> getReadingHistory(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,

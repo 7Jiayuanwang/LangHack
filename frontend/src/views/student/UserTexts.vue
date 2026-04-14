@@ -3,10 +3,18 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <h1>我的上传内容</h1>
-      <el-button type="primary" @click="showUploadDialog = true">
-        <el-icon><Upload /></el-icon>
-        上传课文
-      </el-button>
+      <div class="header-actions">
+        <el-button type="success" @click="triggerMdImport">
+          <el-icon><Document /></el-icon>
+          批量导入 Markdown
+        </el-button>
+        <el-button type="primary" @click="showUploadDialog = true">
+          <el-icon><Upload /></el-icon>
+          上传课文
+        </el-button>
+        <!-- 隐藏的文件选择器 -->
+        <input type="file" ref="mdFileInputRef" multiple accept=".md,image/*" style="display: none" @change="handleMdFileChange" />
+      </div>
     </div>
 
     <!-- 筛选和搜索 -->
@@ -63,7 +71,7 @@
           v-for="text in myTexts"
           :key="text.id"
           class="text-item"
-          @click="viewText(text)"
+          @click="studyText(text)"
         >
           <div class="text-header">
             <h3 class="text-title">{{ text.title }}</h3>
@@ -78,7 +86,7 @@
           </div>
 
           <div class="text-content">
-            <p>{{ getContentPreview(text.content) }}</p>
+            <p>{{ getContentPreview(text.contentType === 'MARKDOWN' ? text.markdownContent : text.content) }}</p>
           </div>
 
           <div class="text-footer">
@@ -344,46 +352,6 @@
       </template>
     </el-dialog>
 
-    <!-- 课文详情对话框 -->
-    <el-dialog
-      v-model="showDetailDialog"
-      :title="currentText?.title || '课文详情'"
-      width="min(800px, 96vw)"
-    >
-      <div class="text-detail" v-if="currentText">
-        <div class="detail-header">
-          <div class="detail-meta">
-            <el-tag :type="getDifficultyType(currentText.difficulty)">
-              {{ getDifficultyText(currentText.difficulty) }}
-            </el-tag>
-            <el-tag v-if="currentText.tags" type="info">
-              {{ currentText.tags }}
-            </el-tag>
-          </div>
-
-          <div class="detail-stats">
-            <span><el-icon><View /></el-icon> 浏览：{{ currentText.viewCount || 0 }}</span>
-            <span><el-icon><Star /></el-icon> 点赞：{{ currentText.likeCount || 0 }}</span>
-            <span><el-icon><Calendar /></el-icon> {{ formatDate(currentText.createdAt) }}</span>
-          </div>
-        </div>
-
-        <div class="detail-content">
-          <div class="content-text" v-html="formatContent(currentText.content)"></div>
-        </div>
-
-        <div class="detail-actions">
-          <el-button @click="likeText(currentText)" :loading="likeLoading">
-            <el-icon><Star /></el-icon>
-            点赞
-          </el-button>
-          <el-button type="primary" @click="studyText(currentText)">
-            <el-icon><Reading /></el-icon>
-            开始学习
-          </el-button>
-        </div>
-      </div>
-    </el-dialog>
 
     <!-- 封面大图预览弹窗 -->
     <el-dialog
@@ -400,6 +368,33 @@
         />
       </div>
     </el-dialog>
+
+    <!-- 智能导入进度对话框 -->
+    <el-dialog
+      v-model="importDialogVisible"
+      title="智能导入处理中"
+      width="500px"
+      :close-on-click-modal="false"
+      class="import-dialog"
+      :show-close="false"
+    >
+      <div class="import-progress-container">
+        <p class="current-file"><strong>正在处理:</strong> {{ currentImportFile }}</p>
+        <el-progress :percentage="importProgress" :status="importComplete ? 'success' : ''" />
+        
+        <div class="import-stats" v-if="importLogs.length > 0">
+          <div class="logs-title">处理日志:</div>
+          <div class="log-list">
+            <div v-for="(log, idx) in importLogs" :key="idx" :class="['log-item', `log-${log.type}`]">
+              {{ log.msg }}
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer v-if="importComplete">
+        <el-button type="primary" @click="closeImportDialog">确定并继续编辑</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -412,7 +407,9 @@ import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import { getAuthHeader } from '@/utils/auth'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
+import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { isCoverFileValid } from '@/utils/coverUpload'
+import { uploadMedia } from '@/api/media'
 
 const router = useRouter()
 
@@ -466,6 +463,158 @@ const uploadHeaders = computed(() => {
 })
 
 const coverPreviewVisible = ref(false)
+
+// 智能导入相关的响应式数据
+const mdFileInputRef = ref(null)
+const importDialogVisible = ref(false)
+const importProgress = ref(0)
+const currentImportFile = ref('')
+const importLogs = ref([])
+const importComplete = ref(false)
+
+const triggerMdImport = () => {
+  if (mdFileInputRef.value) {
+    mdFileInputRef.value.click()
+  }
+}
+
+const closeImportDialog = () => {
+  importDialogVisible.value = false
+}
+
+const handleMdFileChange = async (event) => {
+  const files = Array.from(event.target.files)
+  if (files.length === 0) return
+
+  const mdFile = files.find(f => f.name.toLowerCase().endsWith('.md'))
+  if (!mdFile) {
+    ElMessage.error('未找到Markdown文件，请确保选中了一个.md文件')
+    event.target.value = ''
+    return
+  }
+
+  // 准备弹窗
+  importDialogVisible.value = true
+  importProgress.value = 0
+  importLogs.value = []
+  importComplete.value = false
+  currentImportFile.value = mdFile.name
+  
+  importLogs.value.push({ type: 'info', msg: `开始提取 ${mdFile.name} 的内容...` })
+  
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    let content = e.target.result
+    
+    // 打开上传弹窗并填充基础信息
+    resetUploadForm()
+    uploadForm.title = mdFile.name.replace(/\.md$/i, '')
+    uploadForm.contentType = 'MARKDOWN'
+    
+    // 正则匹配图片
+    const imgRegex = /!\[(.*?)\]\((.*?)\)/g
+    const matches = [...content.matchAll(imgRegex)]
+    const totalImages = matches.length
+    
+    if (totalImages === 0) {
+      importLogs.value.push({ type: 'success', msg: '未检测到任何图片链接，提取完成。' })
+      importProgress.value = 100
+      uploadMarkdownContent.value = content
+      showUploadDialog.value = true
+      importComplete.value = true
+      return
+    }
+
+    importLogs.value.push({ type: 'info', msg: `共检测到 ${totalImages} 个图片链接，进入混合搬运流水线...` })
+    
+    let processedCount = 0
+    let successCount = 0
+    let localMatchCount = 0
+    let skipCount = 0
+    
+    for (const match of matches) {
+      const fullMatch = match[0]
+      const imgPath = match[2]
+      
+      currentImportFile.value = imgPath
+      
+      try {
+        if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
+          // 云端地址处理
+          try {
+            const resp = await fetch(imgPath)
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+            const blob = await resp.blob()
+            const filename = imgPath.split('/').pop().split('?')[0] || 'cloud_image.jpg'
+            const fileObj = new File([blob], filename, { type: blob.type || 'image/jpeg' })
+            
+            const uploadResp = await uploadMedia(fileObj, 'IMAGE')
+            if (uploadResp && uploadResp.code === 200) {
+              const mediaId = uploadResp.data.mediaId
+              const newUrl = `/api/media/${mediaId}/download`
+              content = content.replace(fullMatch, `![${match[1]}](${newUrl})`)
+              successCount++
+              importLogs.value.push({ type: 'success', msg: `[云端搬运] ${filename} 成功` })
+            } else {
+              throw new Error(uploadResp?.message || '上传接口返回失败')
+            }
+          } catch (fetchErr) {
+            skipCount++
+            importLogs.value.push({ type: 'warning', msg: `[云端搬运] 跨域受阻或失败，保留原链接: ${imgPath}` })
+            console.warn('Fetch error:', fetchErr)
+          }
+        } else {
+          // 本地引用处理
+          const expectedFilename = imgPath.split('/').pop() // 取文件名
+          const decodedFilename = decodeURIComponent(expectedFilename) // 处理URL编码
+          const matchedFile = files.find(f => f.name === expectedFilename || f.name === decodedFilename)
+          
+          if (matchedFile) {
+            const uploadResp = await uploadMedia(matchedFile, 'IMAGE')
+            if (uploadResp && uploadResp.code === 200) {
+              const mediaId = uploadResp.data.mediaId
+              const newUrl = `/api/media/${mediaId}/download`
+              content = content.replace(fullMatch, `![${match[1]}](${newUrl})`)
+              localMatchCount++
+              successCount++
+              importLogs.value.push({ type: 'success', msg: `[本地匹配] ${matchedFile.name} 替换成功` })
+            } else {
+              skipCount++
+              importLogs.value.push({ type: 'error', msg: `[本地匹配] ${expectedFilename} 上传失败: ${uploadResp?.message}` })
+            }
+          } else {
+            skipCount++
+            importLogs.value.push({ type: 'warning', msg: `[本地匹配] 未找到匹配文件，保留原链接: ${imgPath}` })
+          }
+        }
+      } catch (err) {
+        skipCount++
+        importLogs.value.push({ type: 'error', msg: `[处理异常] ${imgPath} 发生错误: ${err.message}` })
+      }
+      
+      processedCount++
+      importProgress.value = Math.floor((processedCount / totalImages) * 100)
+    }
+    
+    importLogs.value.push({ type: 'info', msg: `🎉 处理完成！成功搬运/匹配 ${successCount} 张（含本地 ${localMatchCount} 张），跳过/失败 ${skipCount} 张。` })
+    importProgress.value = 100
+    importComplete.value = true
+    
+    // 将最终的内容赋值给编辑器
+    uploadMarkdownContent.value = content
+    showUploadDialog.value = true
+  }
+  
+  reader.onerror = () => {
+    ElMessage.error('读取文件报错')
+    importDialogVisible.value = false
+  }
+  
+  reader.readAsText(mdFile)
+  
+  // 清空 value 允许重复选择同一批文件
+  event.target.value = ''
+}
 
 // 封面图上传逻辑
 const beforeCoverUpload = (rawFile) => {
@@ -719,8 +868,8 @@ const deleteText = (text) => {
 }
 
 const viewText = (text) => {
-  currentText.value = text
-  showDetailDialog.value = true
+  // 直接跳转到阅读页面，不再弹出详情对话框
+  studyText(text)
 }
 
 const likeText = async (text) => {
@@ -828,6 +977,55 @@ onMounted(() => {
   font-size: 24px;
 }
 
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.import-progress-container {
+  padding: 10px 0;
+}
+
+.current-file {
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: #606266;
+  word-break: break-all;
+}
+
+.import-stats {
+  margin-top: 25px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  padding: 15px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.logs-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #303133;
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.log-item {
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.log-info { color: #909399; }
+.log-success { color: #67c23a; }
+.log-warning { color: #e6a23c; }
+.log-error { color: #f56c6c; }
+
 .filter-card {
   margin-bottom: 20px;
 }
@@ -864,8 +1062,18 @@ onMounted(() => {
   transform: translateY(-2px);
 }
 
-.text-header {
-  margin-bottom: 12px;
+.text-detail {
+  display: flex;
+  flex-direction: column;
+  max-height: 75vh;
+}
+
+.detail-header {
+  flex-shrink: 0;
+  background-color: var(--el-bg-color, #fff);
+  padding: 0 0 16px 0;
+  border-bottom: 2px solid #f5f7fa;
+  z-index: 10;
 }
 
 .text-title {
@@ -934,8 +1142,9 @@ onMounted(() => {
 }
 
 .text-detail {
-  max-height: 70vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 75vh;
 }
 
 .detail-header {
@@ -964,7 +1173,10 @@ onMounted(() => {
 }
 
 .detail-content {
+  flex-grow: 1;
+  overflow-y: auto;
   padding: 20px 0;
+  margin-top: 0;
 }
 
 .content-text {
@@ -976,11 +1188,17 @@ onMounted(() => {
   overflow-wrap: break-word;
 }
 
+.header-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .detail-actions {
   display: flex;
   gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid #f0f0f0;
 }
 
 /* 响应式设计 */
