@@ -226,6 +226,8 @@ services:
       SSO_PROTOCOL: ${SSO_PROTOCOL:-CAS}
       SSO_CAS_ENABLED: ${SSO_CAS_ENABLED:-true}
       SSO_CAS_SERVER_URL: ${SSO_CAS_SERVER_URL:-https://ids.imau.edu.cn/authserver}
+      # CAS service URL（精确指定可避免"票根不符合目标服务"错误）
+      SSO_CAS_SERVICE_URL: ${SSO_CAS_SERVICE_URL:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8088}
       APP_UPDATE_SUPPORTED: "false"
       APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.

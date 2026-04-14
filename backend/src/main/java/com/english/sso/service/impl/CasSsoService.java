@@ -46,9 +46,10 @@ public class CasSsoService implements SsoService {
             throw new BusinessException("CAS SSO 未启用");
         }
 
+        String serviceUrl = resolveServiceUrl(callbackUrl);
         String casServerUrl = ssoProperties.getCas().getServerUrl();
         String loginUrl = casServerUrl + "/login?service=" +
-                URLEncoder.encode(callbackUrl, StandardCharsets.UTF_8);
+                URLEncoder.encode(serviceUrl, StandardCharsets.UTF_8);
 
         log.info("生成 CAS 登录 URL: {}", loginUrl);
         return loginUrl;
@@ -61,17 +62,21 @@ public class CasSsoService implements SsoService {
             throw new BusinessException("缺少 CAS ticket 参数");
         }
 
-        log.info("验证 CAS ticket: {}", ticket);
+        String serviceUrl = resolveServiceUrl(callbackUrl);
+
+        log.info("验证 CAS ticket: {}, service URL: {}", ticket, serviceUrl);
 
         // 调用 CAS /serviceValidate 验证 ticket
         String casServerUrl = ssoProperties.getCas().getServerUrl();
         String validateUrl = casServerUrl + "/serviceValidate?service=" +
-                URLEncoder.encode(callbackUrl, StandardCharsets.UTF_8) +
-                "&ticket=" + ticket;
+                URLEncoder.encode(serviceUrl, StandardCharsets.UTF_8) +
+                "&ticket=" + URLEncoder.encode(ticket, StandardCharsets.UTF_8);
+
+        log.info("CAS 验证请求 URL: {}", validateUrl);
 
         try {
             String response = restTemplate.getForObject(validateUrl, String.class);
-            log.debug("CAS 验证响应: {}", response);
+            log.info("CAS 验证响应: {}", response);
 
             return parseCasResponse(response);
         } catch (Exception e) {
@@ -96,6 +101,26 @@ public class CasSsoService implements SsoService {
         // CAS logout 协议：service 参数指定登出后跳转回的应用地址
         return casServerUrl + "/logout?service=" +
                 URLEncoder.encode(serviceUrl, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 确定 CAS service URL
+     *
+     * 优先级：
+     * 1. sso.cas.service-url 配置（精确控制，适用于 CAS 注册的 URL 与动态构建不一致的场景）
+     * 2. callbackUrl 参数（由 SsoAuthController.buildCallbackUrl() 动态构建）
+     *
+     * CAS 的 service URL 必须与 CAS 服务器注册的 URL 精确匹配，
+     * 否则会报 "票根不符合目标服务" 错误。
+     * 通过 SSO_CAS_SERVICE_URL 环境变量可精确指定。
+     */
+    private String resolveServiceUrl(String callbackUrl) {
+        String configuredServiceUrl = ssoProperties.getCas().getServiceUrl();
+        if (configuredServiceUrl != null && !configuredServiceUrl.isEmpty()) {
+            log.info("使用配置的 CAS service URL: {} (忽略动态构建的: {})", configuredServiceUrl, callbackUrl);
+            return configuredServiceUrl;
+        }
+        return callbackUrl;
     }
 
     /**

@@ -12,7 +12,11 @@ sso:
   cas:
     enabled: ${SSO_CAS_ENABLED:true}
     server-url: ${SSO_CAS_SERVER_URL:https://ids.imau.edu.cn/authserver}
-    service-url: ${SSO_CAS_SERVICE_URL:${APP_BASE_URL}/api/auth/sso/callback}
+    # CAS service URL（回调地址，CAS 验证 ticket 时必须与此值精确匹配）
+    # 默认由 APP_BASE_URL + /api/auth/sso/callback 动态构建
+    # 如 CAS 报"票根不符合目标服务"，需通过 SSO_CAS_SERVICE_URL 精确指定
+    # 示例: SSO_CAS_SERVICE_URL=https://langhack.imau.edu.cn/api/auth/sso/callback
+    service-url: ${SSO_CAS_SERVICE_URL:}
     # CAS 属性映射
     attributes:
       username: uid
