@@ -38,6 +38,24 @@ public class User {
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedTime;
 
+    /**
+     * 是否通过SSO绑定
+     */
+    @TableField("sso_bound")
+    private Integer ssoBound;
+
+    /**
+     * SSO提供商
+     */
+    @TableField("sso_provider")
+    private String ssoProvider;
+
+    /**
+     * SSO唯一标识
+     */
+    @TableField("sso_subject")
+    private String ssoSubject;
+
     // Getters and Setters
     public Long getId() {
         return id;
@@ -133,5 +151,29 @@ public class User {
 
     public void setUpdatedTime(LocalDateTime updatedTime) {
         this.updatedTime = updatedTime;
+    }
+
+    public Integer getSsoBound() {
+        return ssoBound;
+    }
+
+    public void setSsoBound(Integer ssoBound) {
+        this.ssoBound = ssoBound;
+    }
+
+    public String getSsoProvider() {
+        return ssoProvider;
+    }
+
+    public void setSsoProvider(String ssoProvider) {
+        this.ssoProvider = ssoProvider;
+    }
+
+    public String getSsoSubject() {
+        return ssoSubject;
+    }
+
+    public void setSsoSubject(String ssoSubject) {
+        this.ssoSubject = ssoSubject;
     }
 }

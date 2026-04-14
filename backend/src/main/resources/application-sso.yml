@@ -1,0 +1,68 @@
+spring:
+  profiles: sso
+
+sso:
+  # SSO功能总开关（运行时控制）
+  enabled: ${SSO_ENABLED:false}
+
+  # 协议选择: CAS 或 OAUTH2
+  protocol: ${SSO_PROTOCOL:CAS}
+
+  # CAS 配置
+  cas:
+    enabled: ${SSO_CAS_ENABLED:true}
+    # CAS 服务端地址（不含 /login），对应官方 casServerUrlPrefix
+    server-url: ${SSO_CAS_SERVER_URL:https://ids.imau.edu.cn/authserver}
+    # 应用服务器地址（协议+域名+端口），对应官方 web.xml 的 serverName
+    # ⚠️ 必填！service URL = serverName + /api/auth/sso/callback
+    # 示例: https://langhack.imau.edu.cn
+    server-name: ${SSO_CAS_SERVER_NAME:http://localhost:8080}
+    # CAS 属性映射
+    attributes:
+      username: uid
+      email: mail
+      real-name: cn
+      member-of: memberOf
+
+  # OAuth 2.0 配置
+  oauth2:
+    enabled: ${SSO_OAUTH2_ENABLED:false}
+    authorization-url: ${SSO_OAUTH2_AUTH_URL:https://ids.imau.edu.cn/authserver/oauth2.0/authorize}
+    token-url: ${SSO_OAUTH2_TOKEN_URL:https://ids.imau.edu.cn/authserver/oauth2.0/accessToken}
+    userinfo-url: ${SSO_OAUTH2_USERINFO_URL:https://ids.imau.edu.cn/authserver/oauthApi/user/profile}
+    client-id: ${SSO_OAUTH2_CLIENT_ID:}
+    client-secret: ${SSO_OAUTH2_CLIENT_SECRET:}
+    redirect-uri: ${APP_BASE_URL}/api/auth/sso/callback
+    scope: openid,profile,email
+
+  # 角色映射规则（可在数据库 sso_config 表中覆盖）
+  role-mapping:
+    default-rules:
+      "ou=管理员": ADMIN
+      "ou=admin": ADMIN
+      "ou=运维": OPS
+      "ou=ops": OPS
+      "ou=教师": TEACHER
+      "ou=teacher": TEACHER
+      "ou=学生": STUDENT
+      "ou=student": STUDENT
+
+  # 自动审批规则
+  auto-approval:
+    enabled: ${SSO_AUTO_APPROVAL_ENABLED:true}
+    # 可自动审批的角色（ADMIN/OPS 必须人工审批）
+    allowed-roles:
+      - TEACHER
+      - STUDENT
+      - USER
+
+  # 403 无权限提示联系方式（统一身份认证接入规范要求）
+  access-denied-contact: ${SSO_ACCESS_DENIED_CONTACT:信息技术中心 0471-4300000}
+
+# 应用基础URL（用于构建回调地址）
+# ⚠️ 生产环境必须设置为 HTTPS URL（如 https://langhack.imau.edu.cn）
+# CAS 回调的 service URL 必须与 CAS 服务器注册的服务地址一致
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+  # 前端 URL（后端 302 重定向浏览器时使用，默认与 base-url 相同）
+  frontend-url: ${APP_FRONTEND_URL:${APP_BASE_URL:http://localhost:8080}}

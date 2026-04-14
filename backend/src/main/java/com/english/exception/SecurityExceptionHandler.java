@@ -3,6 +3,7 @@ package com.english.exception;
 import com.english.dto.Result;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
@@ -30,6 +31,12 @@ public class SecurityExceptionHandler implements AuthenticationEntryPoint, Acces
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Value("${sso.enabled:false}")
+    private boolean ssoEnabled;
+
+    @Value("${sso.access-denied-contact:信息技术中心 0471-4300000}")
+    private String ssoAccessDeniedContact;
+
     /**
      * 未认证时调用（401 Unauthorized）
      */
@@ -49,7 +56,13 @@ public class SecurityExceptionHandler implements AuthenticationEntryPoint, Acces
                        HttpServletResponse response,
                        AccessDeniedException accessDeniedException) throws IOException {
         log.warn("Access denied to [{}]: {}", request.getRequestURI(), accessDeniedException.getMessage());
-        writeJson(response, HttpStatus.FORBIDDEN.value(), "权限不足，无法执行该操作");
+        String message;
+        if (ssoEnabled) {
+            message = "温馨提示：对不起，您无权使用LangHack英语学习平台。如有疑问请致电：" + ssoAccessDeniedContact;
+        } else {
+            message = "权限不足，无法执行该操作";
+        }
+        writeJson(response, HttpStatus.FORBIDDEN.value(), message);
     }
 
     private void writeJson(HttpServletResponse response, int httpStatus, String message) throws IOException {

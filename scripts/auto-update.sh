@@ -20,7 +20,7 @@
 #     (消除 heredoc 与合并 SQL 双重维护问题，deploy.sh / auto-update.sh 单一数据源)
 #   - 迁移执行改用 root 账户（DDL 需要 root 权限）
 #   - 新增版本同步校验：Flyway 文件数 vs 合并 SQL 头部列表
-#   - verify_flyway_migrations 补充 V14 新增表（user_tags / feature_override）
+#   - verify_flyway_migrations 补充 V7 新增表（user_tags / feature_override）+ V8/V9
 #   - 迁移文件变更（04-apply-all-migrations.sql / db/migration/）时强制执行迁移
 #   - 新增从库复制延迟验证
 #
@@ -552,13 +552,11 @@ verify_flyway_migrations() {
     # 关键标志表（每个引入新表的 V 版本选一张有代表性的表）：
     #   V1: score_records       V2: text_learning_records   V3: media
     #   V4: backup_records      V5: access_log              V6: system_config
-    #   V7: ai_provider         V8: update_config           V12: article_favorites
-    #   V14: user_tags          V14: feature_override
-    # V9/V10/V11/V13 只做 ALTER，无新表，不需要单独验证
+    #   V7: article_favorites   V8: sso_user_bindings       V9: administrative_class
     local missing_tables=""
     for tbl in score_records text_learning_records media backup_records access_log \
-               system_config ai_provider update_config article_favorites \
-               user_tags feature_override; do
+               system_config ai_provider article_favorites user_tags feature_override \
+               sso_user_bindings administrative_class; do
         local exists
         exists=$(docker exec "$mysql_container" \
             mysql -uroot -p"$db_root_pw" english_learning \
@@ -577,7 +575,7 @@ verify_flyway_migrations() {
         return 1
     fi
 
-    log "SCHEMA: 核心表验证通过 ✓ (V1~V14 全部关键表存在)"
+    log "SCHEMA: 核心表验证通过 ✓ (V1~V9 全部关键表存在)"
     return 0
 }
 

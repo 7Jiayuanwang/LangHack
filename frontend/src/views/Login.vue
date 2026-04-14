@@ -3,7 +3,16 @@
     <!-- 状态栏占位 -->
     <div class="status-bar"></div>
 
-    <div class="trend-container">
+    <!-- SSO 重定向提示 -->
+    <div v-if="ssoEnabled" class="sso-redirect-overlay">
+      <div class="redirect-content">
+        <div class="redirect-spinner"></div>
+        <h2>正在跳转到统一身份认证...</h2>
+        <p>请稍候，即将跳转到学校统一身份认证平台</p>
+      </div>
+    </div>
+
+    <div class="trend-container" v-show="!ssoEnabled">
       <!-- 时尚背景 -->
       <div class="trend-background">
         <div class="bg-gradient"></div>
@@ -182,6 +191,45 @@
                     <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                   </svg>
                 </div>
+              </button>
+
+              <!-- SSO 登录按钮 -->
+              <div v-if="ssoEnabled" class="sso-divider">
+                <span>或</span>
+              </div>
+              <button
+                v-if="ssoEnabled"
+                type="button"
+                class="sso-button"
+                :disabled="ssoLoading"
+                @click="handleSsoLogin"
+              >
+                <svg
+                  v-if="!ssoLoading"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                  <polyline points="10 17 15 12 10 7" />
+                  <line x1="15" y1="12" x2="3" y2="12" />
+                </svg>
+                <div v-else class="loading-spinner">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                </div>
+                <span>统一身份认证登录</span>
               </button>
             </form>
 
@@ -453,16 +501,30 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from "vue";
+import { ref, reactive, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { useUserStore } from "@/store/user";
 import request from "@/utils/request";
+import { useSsoLogin } from "@/composables/useSsoLogin";
 
 const router = useRouter();
 const userStore = useUserStore();
 
+// SSO 登录功能
+const { ssoEnabled, ssoLoading, handleSsoLogin } = useSsoLogin();
+
 const loginLoading = ref(false);
+
+// 当 SSO 启用时，自动重定向到 SSO 登录
+watch(ssoEnabled, (enabled) => {
+  if (enabled) {
+    // 延迟一小段时间，让用户看到页面正在跳转
+    setTimeout(() => {
+      handleSsoLogin();
+    }, 500);
+  }
+});
 const registerLoading = ref(false);
 const activeTab = ref("login");
 const showPassword = ref(false);
@@ -1310,6 +1372,120 @@ const fillDemo = (role) => {
 
 .benefit-emoji {
   font-size: 14px;
+}
+
+/* SSO 重定向覆盖层 */
+.sso-redirect-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-hero);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.redirect-content {
+  text-align: center;
+  color: white;
+  animation: fadeInUp 0.5s ease;
+}
+
+.redirect-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top: 4px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 24px;
+}
+
+.redirect-content h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 12px 0;
+  letter-spacing: -0.5px;
+}
+
+.redirect-content p {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+}
+
+/* SSO 登录样式 */
+.sso-divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.sso-divider::before,
+.sso-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--separator-color);
+}
+
+.sso-divider span {
+  padding: 0 12px;
+}
+
+.sso-button {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: 0.3px;
+}
+
+.sso-button:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.sso-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.sso-button:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border-color: var(--border-light);
+  cursor: not-allowed;
+}
+
+.sso-button svg {
+  flex-shrink: 0;
 }
 
 /* 响应式设计 */

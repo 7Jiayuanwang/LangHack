@@ -26,6 +26,9 @@ public class WordNetService {
     @Autowired
     private ECDICTService ecdictService;
 
+    @Autowired(required = false)
+    private TencentTranslateService translateService;
+
     private ObjectMapper objectMapper;
 
     @PostConstruct
@@ -96,12 +99,19 @@ public class WordNetService {
                 result.put("found", true);
                 result.put("primarySource", "database");
             } else {
-                // 如果数据库中也没有，创建一个基本的词汇信息
+                // 如果数据库中也没有，尝试 AI 翻译服务
                 result.put("word", word);
-                result.put("definition", "该词汇暂无详细定义");
                 result.put("found", false);
-                result.put("suggestion", "可以在词汇管理中添加该词汇的详细信息");
                 result.put("primarySource", "none");
+
+                String translation = tryTranslate(word);
+                if (translation != null && !translation.isEmpty()) {
+                    result.put("definition", translation);
+                    result.put("suggestion", "AI 翻译结果，仅供参考");
+                } else {
+                    result.put("definition", "该词汇暂无详细定义");
+                    result.put("suggestion", "可以在词汇管理中添加该词汇的详细信息");
+                }
             }
 
             result.put("word", word);
@@ -531,5 +541,26 @@ public class WordNetService {
     public boolean isWordNetAvailable() {
         // 当前版本总是返回true，因为使用数据库词汇
         return true;
+    }
+
+    /**
+     * 尝试使用 AI 翻译服务获取词义
+     * 仅在 ECDICT 和数据库都没有该词时调用
+     */
+    private String tryTranslate(String word) {
+        if (translateService == null) {
+            logger.debug("翻译服务不可用，跳过 AI 翻译: {}", word);
+            return null;
+        }
+        try {
+            String translation = translateService.translateEnToCn(word);
+            if (translation != null && !translation.isEmpty()) {
+                logger.info("AI 翻译成功: {} → {}", word, translation);
+                return translation;
+            }
+        } catch (Exception e) {
+            logger.warn("AI 翻译失败: {} - {}", word, e.getMessage());
+        }
+        return null;
     }
 }

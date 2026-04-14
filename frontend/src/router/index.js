@@ -26,6 +26,18 @@ const routes = [
     meta: { title: "登录", public: true },
   },
   {
+    path: "/" + (import.meta.env.VITE_ADMIN_PORTAL_PATH || "admin-portal"),
+    name: "AdminLogin",
+    component: () => import("@/views/AdminLogin.vue"),
+    meta: { title: "管理员登录", public: true },
+  },
+  {
+    path: "/sso/callback",
+    name: "SsoCallback",
+    component: () => import("@/views/public/SsoCallback.vue"),
+    meta: { title: "SSO 登录回调", public: true },
+  },
+  {
     path: "/admin",
     name: "Admin",
     component: () => import("@/views/admin/Layout.vue"),
@@ -99,6 +111,12 @@ const routes = [
         name: "AdminTextPreview",
         component: () => import("@/views/student/InteractiveText.vue"),
         meta: { title: "课文预览", roles: ["ADMIN"] },
+      },
+      {
+        path: "sso-pending",
+        name: "AdminSsoPending",
+        component: () => import("@/views/admin/SsoPendingApprovals.vue"),
+        meta: { title: "SSO 用户审批", roles: ["ADMIN"] },
       },
     ],
   },

@@ -2,6 +2,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { getAuthHeader } from '@/utils/auth'
+import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
@@ -22,8 +23,22 @@ const handleLogout = async () => {
     console.error('Logout failed:', e)
   } finally {
     isLoggingOut = false
-    // 本地状态已清理完毕，再跳转到登录页（replace 避免后退回到需认证的页面）
-    window.location.replace('/login')
+    // SSO 启用时跳转到 CAS 登出页（统一身份认证要求）
+    // 优先检查 sessionStorage 缓存的 SSO 状态，避免额外网络请求
+    const ssoEnabled = sessionStorage.getItem('sso_enabled') === 'true'
+    if (ssoEnabled) {
+      getSsoLogoutUrl().then(res => {
+        if (res?.code === 200 && res.data?.logoutUrl) {
+          window.location.href = res.data.logoutUrl
+        } else {
+          window.location.replace('/login')
+        }
+      }).catch(() => {
+        window.location.replace('/login')
+      })
+    } else {
+      window.location.replace('/login')
+    }
   }
 }
 
@@ -135,11 +150,13 @@ request.interceptors.response.use(
       }
     }
 
-    ElMessage({
-      message,
-      type: 'error',
-      duration: 5 * 1000
-    })
+    if (!error.config?.skipErrorHandler) {
+      ElMessage({
+        message,
+        type: 'error',
+        duration: 5 * 1000
+      })
+    }
 
     // 返回标准化的错误对象，不透传原始 data，防止后端堆栈信息泄露到前端日志
     const errorResponse = {

@@ -1,0 +1,6 @@
+spring:
+  profiles: test
+
+# 测试环境禁用 SSO
+sso:
+  enabled: false

@@ -77,6 +77,7 @@
 import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
+import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getFeatureToggles, getPersonalFeatureToggles } from '@/api/systemConfig'
 import {
@@ -97,6 +98,7 @@ const userStore = useUserStore()
 const showUserMenu = ref(false)
 const screenWidth = ref(window.innerWidth)
 const featureToggles = ref({})
+const ssoEnabled = ref(false)
 
 // 处理键盘事件关闭菜单
 const handleKeyDown = (event) => {
@@ -209,6 +211,18 @@ const handleUserAction = async (action) => {
         })
         await userStore.logout()
         ElMessage.success('退出登录成功')
+        // SSO 启用时跳转到 CAS 登出页
+        if (ssoEnabled.value) {
+          try {
+            const res = await getSsoLogoutUrl()
+            if (res?.code === 200 && res.data?.logoutUrl) {
+              window.location.href = res.data.logoutUrl
+              return
+            }
+          } catch (e) {
+            console.error('获取 CAS 登出 URL 失败:', e)
+          }
+        }
         router.push('/login')
       } catch (error) {
         // 用户取消操作
@@ -225,6 +239,13 @@ const handleResize = () => {
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   window.addEventListener('keydown', handleKeyDown)
+  // 检查 SSO 是否启用（静默失败，不影响主流程）
+  getSsoStatus().then(res => {
+    if (res?.code === 200) {
+      ssoEnabled.value = res.data?.enabled || false
+      sessionStorage.setItem('sso_enabled', ssoEnabled.value ? 'true' : 'false')
+    }
+  }).catch(() => {})
   // 加载功能开关配置（登录后优先使用个性化接口，失败时回退公开接口）
   getPersonalFeatureToggles().then(res => {
     if (res?.code === 200 && res?.data) {

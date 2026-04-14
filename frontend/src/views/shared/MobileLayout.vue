@@ -130,6 +130,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
+import { getSsoLogoutUrl, getSsoStatus } from '@/api/sso'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ElevationDialog from '@/components/ElevationDialog.vue'
 import {
@@ -333,7 +334,19 @@ const handleCommand = async (command) => {
           return
         }
         ElMessage.success('退出登录成功')
-        // ops/admin 用 replace 不留历史；teacher/user 用 push
+        // SSO 启用时跳转到 CAS 登出页（统一身份认证要求：退出后必须回到 CAS 登出页）
+        if (ssoEnabled.value) {
+          try {
+            const res = await getSsoLogoutUrl()
+            if (res?.code === 200 && res.data?.logoutUrl) {
+              window.location.href = res.data.logoutUrl
+              return
+            }
+          } catch (e) {
+            console.error('获取 CAS 登出 URL 失败:', e)
+          }
+        }
+        // 非 SSO 或获取 CAS 登出 URL 失败时，回退到本地登录页
         if (['ops', 'admin'].includes(props.role)) {
           router.replace('/login')
         } else {
@@ -355,7 +368,11 @@ const onElevationSuccess = () => {
 
 // ── 生命周期 ──────────────────────────────────────────────────────────────────
 
-onMounted(() => {
+// SSO 状态（用于 CAS 登出重定向）
+const ssoEnabled = ref(false)
+
+onMounted(async () => {
+  // 权限守卫（同步执行，确保测试和首次渲染立即可用）
   if (props.role === 'teacher' && !userStore.isTeacher) {
     console.warn('Unauthorized: non-teacher user attempted to access teacher layout')
     ElMessage.error('您没有权限访问此区域')
@@ -368,6 +385,17 @@ onMounted(() => {
   if (props.role === 'admin' && (!userStore.isLoggedIn || !userStore.hasAdminAccess)) {
     ElMessage.error('权限不足，请以管理员身份登录')
     router.replace('/login')
+  }
+
+  // 检查 SSO 是否启用（静默失败，不影响主流程）
+  try {
+    const ssoRes = await getSsoStatus()
+    if (ssoRes?.code === 200) {
+      ssoEnabled.value = ssoRes.data?.enabled || false
+      sessionStorage.setItem('sso_enabled', ssoEnabled.value ? 'true' : 'false')
+    }
+  } catch {
+    ssoEnabled.value = false
   }
 })
 
