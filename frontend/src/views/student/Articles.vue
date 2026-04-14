@@ -171,6 +171,7 @@ const router = useRouter()
 
 const loading = ref(true)
 const allArticles = ref([])
+const recommendedArticles = ref([])
 const selectedCategory = ref('')
 const filterVisible = ref(true)
 const loadError = ref(false)
@@ -181,6 +182,9 @@ const searchVisible = ref(false)
 
 const totalPages = computed(() => Math.ceil(filteredArticles.value.length / pageSize))
 const filteredArticles = computed(() => {
+  if (selectedCategory.value === 'recommendation') {
+    return recommendedArticles.value
+  }
   let result = allArticles.value
   if (selectedCategory.value) {
     result = result.filter(item => item.category === selectedCategory.value)
@@ -206,7 +210,8 @@ const toggleFilter = () => {
 
 // Predefined categories based on design
 const categories = [
-  { label: '全部', value: '' },
+  { label: '全部', value: '', icon: 'House' },
+  { label: '推荐', value: 'recommendation', icon: 'Star' },
   { label: '科技', value: 'technology', icon: 'Monitor' },
   { label: '商务', value: 'business', icon: 'TrendCharts' },
   { label: '教育', value: 'education', icon: 'School' },
@@ -241,6 +246,11 @@ const getRandomGradient = () => {
 const selectCategory = (val) => {
   selectedCategory.value = val
   currentPage.value = 1
+  if (val === 'recommendation') {
+    loadRecommended()
+  } else {
+    loadArticles()
+  }
 }
 
 const goToPage = (page) => {
@@ -260,8 +270,35 @@ const toggleSearch = () => {
 }
 
 const getRandomCategory = () => {
-  const cats = categories.filter(c => c.value !== '')
+  const cats = categories.filter(c => c.value !== '' && c.value !== 'recommendation')
   return cats[Math.floor(Math.random() * cats.length)].value
+}
+
+const loadRecommended = async () => {
+  loading.value = true
+  loadError.value = false
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/recommended?count=12`)
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+    const data = await response.json()
+    if (data?.code === 200) {
+      recommendedArticles.value = (Array.isArray(data.data) ? data.data : []).map(text => {
+        return {
+          ...text,
+          category: 'recommendation',
+          coverGradient: getRandomGradient(),
+          readingTime: Math.max(1, Math.ceil((text.content?.length || 0) / 800))
+        }
+      })
+    } else {
+      loadError.value = true
+    }
+  } catch (error) {
+    console.error('加载推荐失败:', error)
+    loadError.value = true
+  } finally {
+    loading.value = false
+  }
 }
 
 const loadArticles = async () => {
@@ -352,7 +389,11 @@ const getDifficultyIcon = (diff) => {
 }
 
 onMounted(() => {
-  loadArticles()
+  if (selectedCategory.value === 'recommendation') {
+    loadRecommended()
+  } else {
+    loadArticles()
+  }
 })
 </script>
 

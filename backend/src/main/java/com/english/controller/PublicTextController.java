@@ -6,7 +6,10 @@ import com.english.entity.Text;
 import com.english.entity.UserTextRead;
 import com.english.entity.User;
 import com.english.mapper.UserTextReadMapper;
+import com.english.mapper.SimilarityMatrixMapper;
 import com.english.service.ArticleVersionService;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import com.english.service.TextService;
 import com.english.service.UserService;
 import org.slf4j.Logger;
@@ -45,6 +48,9 @@ public class PublicTextController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private SimilarityMatrixMapper similarityMatrixMapper;
 
     /**
      * 获取首页推荐文章
@@ -389,6 +395,42 @@ public class PublicTextController {
         } catch (Exception e) {
             log.error("获取课文详情失败, textId={}", textId, e);
             return Result.error("获取课文详情失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 获取个性化推荐文章（需要登录）
+     * 基于阅读历史查找相似文章（排除已读），无阅读记录时回退到 featured
+     */
+    @GetMapping("/recommended")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<List<Text>> getRecommendedTexts(
+            @RequestParam(defaultValue = "12") int count) {
+        try {
+            count = Math.min(Math.max(count, 1), 50);
+            Long userId = getCurrentUserId();
+
+            // 未登录：返回空列表
+            if (userId == null) {
+                return Result.success(new ArrayList<>());
+            }
+
+            // 有阅读记录：查推荐
+            List<Text> recommended = similarityMatrixMapper.selectRecommendedTexts(userId, count);
+            if (recommended == null || recommended.isEmpty()) {
+                // 无推荐结果：回退到 featured
+                List<Text> featuredTexts = textService.lambdaQuery()
+                        .eq(Text::getDeleted, 0)
+                        .eq(Text::getIsFeatured, 1)
+                        .orderByDesc(Text::getFeaturedPriority)
+                        .orderByDesc(Text::getCreatedAt)
+                        .list();
+                return Result.success(featuredTexts);
+            }
+            return Result.success(recommended);
+        } catch (Exception e) {
+            log.error("获取推荐文章失败", e);
+            return Result.error("获取推荐文章失败，请稍后重试");
         }
     }
 }
