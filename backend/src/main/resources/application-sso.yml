@@ -11,8 +11,12 @@ sso:
   # CAS 配置
   cas:
     enabled: ${SSO_CAS_ENABLED:true}
+    # CAS 服务端地址（不含 /login），对应官方 casServerUrlPrefix
     server-url: ${SSO_CAS_SERVER_URL:https://ids.imau.edu.cn/authserver}
-    service-url: ${SSO_CAS_SERVICE_URL:${APP_BASE_URL}/api/auth/sso/callback}
+    # 应用服务器地址（协议+域名+端口），对应官方 web.xml 的 serverName
+    # ⚠️ 必填！service URL = serverName + /api/auth/sso/callback
+    # 示例: https://langhack.imau.edu.cn
+    server-name: ${SSO_CAS_SERVER_NAME:http://localhost:8080}
     # CAS 属性映射
     attributes:
       username: uid

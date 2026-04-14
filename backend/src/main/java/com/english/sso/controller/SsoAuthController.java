@@ -1,6 +1,7 @@
 package com.english.sso.controller;
 
 import com.english.dto.Result;
+import com.english.sso.config.SsoProperties;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
 import com.english.sso.service.SsoLoginLogService;
@@ -49,6 +50,9 @@ public class SsoAuthController {
     private SsoService ssoService;
 
     @Autowired
+    private SsoProperties ssoProperties;
+
+    @Autowired
     private SsoUserMappingService mappingService;
 
     @Autowired
@@ -56,9 +60,6 @@ public class SsoAuthController {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
-
-    @Value("${app.base-url}")
-    private String appBaseUrl;
 
     @Value("${app.frontend-url:${app.base-url}}")
     private String appFrontendUrl;
@@ -73,8 +74,8 @@ public class SsoAuthController {
                 return Result.error("SSO 功能未启用");
             }
 
-            String callbackUrl = buildCallbackUrl();
-            String loginUrl = ssoService.generateLoginUrl(callbackUrl);
+            String serviceUrl = buildServiceUrl();
+            String loginUrl = ssoService.generateLoginUrl(serviceUrl);
 
             Map<String, String> data = new HashMap<>();
             data.put("loginUrl", loginUrl);
@@ -122,10 +123,10 @@ public class SsoAuthController {
                 return;
             }
 
-            String callbackUrl = buildCallbackUrl();
+            String serviceUrl = buildServiceUrl();
 
             // 1. 验证 SSO 回调
-            SsoUserInfo ssoUserInfo = ssoService.validateCallback(callbackParams, callbackUrl);
+            SsoUserInfo ssoUserInfo = ssoService.validateCallback(callbackParams, serviceUrl);
 
             // 2. 处理用户映射/创建
             SsoLoginResult result = mappingService.processLogin(
@@ -234,27 +235,46 @@ public class SsoAuthController {
     /**
      * 获取 CAS 登出 URL（供前端退出登录后跳转，确保 CAS 侧也登出）
      *
-     * 统一身份认证对接要求：点击退出后返回统一身份认证页面，
-     * 否则用户在 CAS 侧仍处于登录状态，再次 SSO 登录会自动跳回而无法切换账号。
+     * 参照官方 caslogout.jsp：
+     *   casLogoutURL + "?service=" + URLEncoder.encode("http://app:port/login.jsp")
+     * service 参数是登出后跳转回的应用页面（前端登录页），不是 CAS 回调地址。
      */
     @GetMapping("/logout-url")
     public Result<Map<String, String>> getLogoutUrl() {
         Map<String, String> data = new HashMap<>();
-        String callbackUrl = buildCallbackUrl();
-        // CAS logout 协议：service 参数指定登出后跳转回的地址
-        String logoutUrl = ssoService.generateLogoutUrl(callbackUrl);
+        String logoutServiceUrl = appFrontendUrl + "/login";
+        String logoutUrl = ssoService.generateLogoutUrl(logoutServiceUrl);
         data.put("logoutUrl", logoutUrl);
         return Result.success(data);
     }
 
     /**
-     * 构建回调 URL，确保使用 HTTPS
+     * 构建 CAS service URL
+     *
+     * 与官方 cas-client-core-3.2.1 的 serverName 模式完全一致：
+     *   官方: service URL = serverName + request.getRequestURI()
+     *   本项目: service URL = serverName + "/api/auth/sso/callback"
+     *
+     * serverName 是固定配置值（对应官方 web.xml 的 serverName 参数），
+     * 不依赖任何 HTTP 请求头推断，保证登录和验证时 service URL 绝对一致。
+     *
+     * @see <a href="https://github.com/apereo/java-cas-client/blob/3.2.x/cas-client-core/src/main/java/org/jasig/cas/client/util/CommonUtils.java">CommonUtils.constructServiceUrl()</a>
      */
-    private String buildCallbackUrl() {
-        String callbackUrl = appBaseUrl + "/api/auth/sso/callback";
-        // 如果生产环境配置了 HTTPS 但 base-url 仍是 http，自动修正
-        // 实际部署时应通过 APP_BASE_URL 环境变量正确设置
-        return callbackUrl;
+    private String buildServiceUrl() {
+        String serverName = ssoProperties.getCas().getServerName();
+        if (serverName == null || serverName.isEmpty()) {
+            throw new IllegalStateException(
+                    "sso.cas.server-name (SSO_CAS_SERVER_NAME) 未配置。" +
+                    "此参数对应官方 web.xml 的 serverName，格式: 协议://域名[:端口]，" +
+                    "示例: https://langhack.imau.edu.cn");
+        }
+        // 去掉尾部斜杠（与官方 AbstractCasFilter.setServerName() 一致）
+        if (serverName.endsWith("/")) {
+            serverName = serverName.substring(0, serverName.length() - 1);
+        }
+        String serviceUrl = serverName + "/api/auth/sso/callback";
+        log.debug("CAS service URL: {}", serviceUrl);
+        return serviceUrl;
     }
 
     /**

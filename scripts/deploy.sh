@@ -533,6 +533,16 @@ if [ "$SKIP_ENV" = false ]; then
         # 去除末尾斜杠
         CFG_APP_BASE_URL="${CFG_APP_BASE_URL%/}"
 
+        # SSO_CAS_SERVER_NAME：对应官方 web.xml 的 serverName（固定配置，不从请求头推断）
+        echo ""
+        echo "  [ CAS Server Name (应用服务器地址) ]"
+        echo "  对应官方 web.xml 的 serverName 参数"
+        echo "  格式: 协议://域名[:端口]  示例: https://langhack.imau.edu.cn"
+        echo "  service URL = serverName + /api/auth/sso/callback"
+        DEF_CAS_SERVER_NAME=$(load_env_value "SSO_CAS_SERVER_NAME" "$CFG_APP_BASE_URL")
+        ask_value "CAS Server Name" "$DEF_CAS_SERVER_NAME" CFG_CAS_SERVER_NAME
+        CFG_CAS_SERVER_NAME="${CFG_CAS_SERVER_NAME%/}"
+
         echo ""
         echo "  [ 管理员叩门入口 ]"
         echo "  SSO 启用后，管理员/运维需通过隐藏入口登录"
@@ -655,8 +665,9 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'SSO_CAS_ENABLED=%s\n'      "$CFG_SSO_ENABLED"
         printf 'SSO_CAS_SERVER_URL=%s\n'   "$CFG_SSO_SERVER_URL"
         if [ "$CFG_SSO_ENABLED" = "true" ]; then
-            printf 'APP_BASE_URL=%s\n'        "${CFG_APP_BASE_URL:-}"
-            printf 'ADMIN_LOGIN_SECRET=%s\n'  "$CFG_ADMIN_SECRET"
+            printf 'APP_BASE_URL=%s\n'          "${CFG_APP_BASE_URL:-}"
+            printf 'SSO_CAS_SERVER_NAME=%s\n'   "${CFG_CAS_SERVER_NAME:-}"
+            printf 'ADMIN_LOGIN_SECRET=%s\n'     "$CFG_ADMIN_SECRET"
             printf 'ADMIN_PORTAL_PATH=%s\n'   "$CFG_ADMIN_PATH"
         fi
     } > "$ENV_FILE"

@@ -18,6 +18,7 @@ import org.w3c.dom.NodeList;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -41,14 +42,14 @@ public class CasSsoService implements SsoService {
     private RestTemplate restTemplate;
 
     @Override
-    public String generateLoginUrl(String callbackUrl) {
+    public String generateLoginUrl(String serviceUrl) {
         if (!isEnabled()) {
             throw new BusinessException("CAS SSO 未启用");
         }
 
         String casServerUrl = ssoProperties.getCas().getServerUrl();
         String loginUrl = casServerUrl + "/login?service=" +
-                URLEncoder.encode(callbackUrl, StandardCharsets.UTF_8);
+                URLEncoder.encode(serviceUrl, StandardCharsets.UTF_8);
 
         log.info("生成 CAS 登录 URL: {}", loginUrl);
         return loginUrl;
@@ -61,17 +62,23 @@ public class CasSsoService implements SsoService {
             throw new BusinessException("缺少 CAS ticket 参数");
         }
 
-        log.info("验证 CAS ticket: {}", ticket);
+        log.info("验证 CAS ticket: {}, service URL: {}", ticket, callbackUrl);
 
         // 调用 CAS /serviceValidate 验证 ticket
         String casServerUrl = ssoProperties.getCas().getServerUrl();
         String validateUrl = casServerUrl + "/serviceValidate?service=" +
                 URLEncoder.encode(callbackUrl, StandardCharsets.UTF_8) +
-                "&ticket=" + ticket;
+                "&ticket=" + URLEncoder.encode(ticket, StandardCharsets.UTF_8);
+
+        log.info("CAS 验证请求 URL: {}", validateUrl);
 
         try {
-            String response = restTemplate.getForObject(validateUrl, String.class);
-            log.debug("CAS 验证响应: {}", response);
+            // 必须用 URI.create() 而非直接传 String！
+            // RestTemplate.getForObject(String url, ...) 会把已编码的 %3A%2F 再编码成 %253A%252F（双重编码）
+            // 导致 CAS 收到的 service 参数与 ticket 绑定的原始 URL 不匹配 → INVALID_SERVICE
+            // URI.create() 告诉 RestTemplate 这个 URL 已经完成编码，不要再处理
+            String response = restTemplate.getForObject(URI.create(validateUrl), String.class);
+            log.info("CAS 验证响应: {}", response);
 
             return parseCasResponse(response);
         } catch (Exception e) {
@@ -129,18 +136,32 @@ public class CasSsoService implements SsoService {
             }
             String username = userNodes.item(0).getTextContent();
 
-            // 提取属性
+            // 提取属性（参照官方 Cas20ServiceTicketValidator.extractCustomAttributes()）：
+            // 同一属性名出现多次时（如多个 memberOf），单值存 String，多值存 List<String>
             Map<String, Object> attributes = new HashMap<>();
             NodeList attributesNodes = successElement.getElementsByTagName("cas:attributes");
             if (attributesNodes.getLength() > 0) {
                 Element attributesElement = (Element) attributesNodes.item(0);
                 NodeList children = attributesElement.getChildNodes();
+
+                // 先收集同名属性的所有值
+                Map<String, List<String>> attrValuesMap = new LinkedHashMap<>();
                 for (int i = 0; i < children.getLength(); i++) {
                     if (children.item(i) instanceof Element) {
                         Element attrElement = (Element) children.item(i);
                         String attrName = attrElement.getLocalName();
                         String attrValue = attrElement.getTextContent();
-                        attributes.put(attrName, attrValue);
+                        attrValuesMap.computeIfAbsent(attrName, k -> new ArrayList<>()).add(attrValue);
+                    }
+                }
+
+                // 单值存 String，多值存 List<String>（与官方 cas-client-core 行为一致）
+                for (Map.Entry<String, List<String>> entry : attrValuesMap.entrySet()) {
+                    List<String> values = entry.getValue();
+                    if (values.size() == 1) {
+                        attributes.put(entry.getKey(), values.get(0));
+                    } else {
+                        attributes.put(entry.getKey(), values);
                     }
                 }
             }
