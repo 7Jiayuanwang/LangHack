@@ -1,5 +1,7 @@
 # 学校数据接入完整方案
 
+> **注意**: 官方API字段规范请以 [`SCHOOL_DATA_API_SPEC.md`](./SCHOOL_DATA_API_SPEC.md) 为准。本文档中的"学校字段"列已更新为小写拼音缩写，但接口详情（请求参数、完整字段列表等）请参考API规范文档。
+>
 > 版本: v3.0
 > 创建日期: 2026-04-09
 > 最后更新: 2026-04-12
@@ -212,24 +214,24 @@ RUNNING  ─────>  SUCCESS
 | 字段名 | 类型 | 约束 | 说明 | 学校字段 |
 |-------|------|------|------|---------|
 | id | BIGINT | PK, AUTO_INCREMENT | 主键 | - |
-| class_code | VARCHAR(50) | NOT NULL, UNIQUE | 行政班编号 | XZBH |
-| class_name | VARCHAR(100) | NOT NULL | 行政班名称 | XZBMC |
-| class_short_name | VARCHAR(50) | NULL | 行政班简称 | XZBJC |
-| college_code | VARCHAR(50) | NOT NULL | 学院编号 | YXBH |
-| college_name | VARCHAR(100) | NOT NULL | 学院名称 | YXMC |
-| major_code | VARCHAR(50) | NOT NULL | 专业编号 | ZYBH |
-| major_name | VARCHAR(100) | NOT NULL | 专业名称 | ZYMC |
-| grade | VARCHAR(10) | NOT NULL | 年级 | NJ |
-| class_type | VARCHAR(20) | NULL | 班级类型 | BJLX |
-| head_teacher_code | VARCHAR(50) | NULL | 班主任工号 | BZRGH |
-| head_teacher_name | VARCHAR(50) | NULL | 班主任姓名 | BZRXM |
-| student_count | INT | DEFAULT 0 | 学生人数 | XSRS |
-| male_count | INT | DEFAULT 0 | 男生人数 | NSRS |
-| female_count | INT | DEFAULT 0 | 女生人数 | NSRS_NV |
-| class_status | VARCHAR(20) | NOT NULL | 班级状态 | BJZT |
-| establish_date | DATE | NULL | 成立日期 | CLRQ |
-| graduate_date | DATE | NULL | 毕业日期 | BYRQ |
-| remark | VARCHAR(500) | NULL | 备注 | BZ |
+| class_code | VARCHAR(50) | NOT NULL, UNIQUE | 行政班编号 | xzbh |
+| class_name | VARCHAR(100) | NOT NULL | 行政班名称 | xzbmc |
+| class_short_name | VARCHAR(50) | NULL | 行政班简称 | xzbjc |
+| college_code | VARCHAR(50) | NOT NULL | 学院编号 | yxbh |
+| college_name | VARCHAR(100) | NOT NULL | 学院名称 | yxmc |
+| major_code | VARCHAR(50) | NOT NULL | 专业编号 | zybh |
+| major_name | VARCHAR(100) | NOT NULL | 专业名称 | zymc |
+| grade | VARCHAR(10) | NOT NULL | 年级 | nj |
+| class_type | VARCHAR(20) | NULL | 班级类型 | bjlx |
+| head_teacher_code | VARCHAR(50) | NULL | 班主任工号 | bzrgh |
+| head_teacher_name | VARCHAR(50) | NULL | 班主任姓名 | bzrxm |
+| student_count | INT | DEFAULT 0 | 学生人数 | xsrs |
+| male_count | INT | DEFAULT 0 | 男生人数 | nsrs |
+| female_count | INT | DEFAULT 0 | 女生人数 | nsrs_nv |
+| class_status | VARCHAR(20) | NOT NULL | 班级状态 | bjzt |
+| establish_date | DATE | NULL | 成立日期 | clrq |
+| graduate_date | DATE | NULL | 毕业日期 | byrq |
+| remark | VARCHAR(500) | NULL | 备注 | bz |
 | sync_time | DATETIME | NOT NULL | 同步时间 | - |
 | sync_source | VARCHAR(20) | NOT NULL | 同步来源 | - |
 | created_at | DATETIME | NOT NULL | 创建时间 | CJSJ |
@@ -254,29 +256,29 @@ RUNNING  ─────>  SUCCESS
 | 字段名 | 类型 | 约束 | 说明 | 学校字段 |
 |-------|------|------|------|---------|
 | id | BIGINT | PK, AUTO_INCREMENT | 主键 | - |
-| course_code | VARCHAR(50) | NOT NULL, UNIQUE | 课程编号 | KCBH |
-| course_name | VARCHAR(200) | NOT NULL | 课程名称 | KCMC |
-| course_name_en | VARCHAR(200) | NULL | 课程英文名称 | KCYWMC |
-| course_short_name | VARCHAR(100) | NULL | 课程简称 | KCJC |
-| course_nature | VARCHAR(50) | NOT NULL | 课程性质 | KCXZ |
-| course_category | VARCHAR(50) | NOT NULL | 课程类别 | KCLB |
-| credits | DECIMAL(3,1) | NOT NULL | 学分 | XF |
-| total_hours | INT | NOT NULL | 总学时 | ZXS |
-| theory_hours | INT | NULL | 理论学时 | LLXS |
-| experiment_hours | INT | NULL | 实验学时 | SYXS |
-| practice_hours | INT | NULL | 实践学时 | SJXS |
-| computer_hours | INT | NULL | 上机学时 | SJXS_PC |
-| college_code | VARCHAR(50) | NOT NULL | 开课学院编号 | KKYXBH |
-| college_name | VARCHAR(100) | NOT NULL | 开课学院名称 | KKYXMC |
-| department_code | VARCHAR(50) | NULL | 开课系部编号 | KKXBBH |
-| department_name | VARCHAR(100) | NULL | 开课系部名称 | KKXBMC |
-| leader_code | VARCHAR(50) | NULL | 课程负责人工号 | KCFZRGH |
-| leader_name | VARCHAR(50) | NULL | 课程负责人姓名 | KCFZRXM |
-| assessment_method | VARCHAR(50) | NOT NULL | 考核方式 | KHFS |
-| is_bilingual | VARCHAR(10) | NULL | 是否双语教学 | SFSYJX |
-| is_online | VARCHAR(10) | NULL | 是否网络课程 | SFWLKC |
-| applicable_majors | VARCHAR(500) | NULL | 适用专业 | SYZY |
-| prerequisite_codes | VARCHAR(500) | NULL | 先修课程编号 | XXKCBH |
+| course_code | VARCHAR(50) | NOT NULL, UNIQUE | 课程编号 | kcbh |
+| course_name | VARCHAR(200) | NOT NULL | 课程名称 | kcmc |
+| course_name_en | VARCHAR(200) | NULL | 课程英文名称 | kcywmc |
+| course_short_name | VARCHAR(100) | NULL | 课程简称 | kcjc |
+| course_nature | VARCHAR(50) | NOT NULL | 课程性质 | kcxz |
+| course_category | VARCHAR(50) | NOT NULL | 课程类别 | kclb |
+| credits | DECIMAL(3,1) | NOT NULL | 学分 | xf |
+| total_hours | INT | NOT NULL | 总学时 | zxs |
+| theory_hours | INT | NULL | 理论学时 | llxs |
+| experiment_hours | INT | NULL | 实验学时 | syxs |
+| practice_hours | INT | NULL | 实践学时 | sjxs |
+| computer_hours | INT | NULL | 上机学时 | sjxs_pc |
+| college_code | VARCHAR(50) | NOT NULL | 开课学院编号 | kkyxbh |
+| college_name | VARCHAR(100) | NOT NULL | 开课学院名称 | kkyxmc |
+| department_code | VARCHAR(50) | NULL | 开课系部编号 | kkxbbh |
+| department_name | VARCHAR(100) | NULL | 开课系部名称 | kkxbmc |
+| leader_code | VARCHAR(50) | NULL | 课程负责人工号 | kcfzrgh |
+| leader_name | VARCHAR(50) | NULL | 课程负责人姓名 | kcfzrxm |
+| assessment_method | VARCHAR(50) | NOT NULL | 考核方式 | khfs |
+| is_bilingual | VARCHAR(10) | NULL | 是否双语教学 | sfsyjx |
+| is_online | VARCHAR(10) | NULL | 是否网络课程 | sfwlkc |
+| applicable_majors | VARCHAR(500) | NULL | 适用专业 | syzy |
+| prerequisite_codes | VARCHAR(500) | NULL | 先修课程编号 | xxkcbh |
 | prerequisite_names | VARCHAR(500) | NULL | 先修课程名称 | XXKCMC |
 | course_intro | TEXT | NULL | 课程简介 | KCJJ |
 | teaching_objectives | TEXT | NULL | 教学目标 | JXMB |
@@ -309,17 +311,17 @@ RUNNING  ─────>  SUCCESS
 | 字段名 | 类型 | 约束 | 说明 | 学校字段 |
 |-------|------|------|------|---------|
 | id | BIGINT | PK, AUTO_INCREMENT | 主键 | - |
-| class_id | VARCHAR(50) | NOT NULL, UNIQUE | 教学班号 | JXBID |
-| class_name | VARCHAR(100) | NULL | 教学班名称 | JXBMC |
-| course_code | VARCHAR(50) | NOT NULL, FK | 课程编号 | KCBH |
-| course_name | VARCHAR(200) | NOT NULL | 课程名称 | KCMC |
-| teacher_id | VARCHAR(50) | NOT NULL | 授课教师工号 | JGH |
-| teacher_name | VARCHAR(50) | NOT NULL | 授课教师姓名 | XM |
-| academic_year | VARCHAR(20) | NOT NULL | 学年 | XNM |
-| semester | INT | NOT NULL | 学期 | XQM |
-| capacity | INT | NOT NULL | 班级容量 | - |
-| enrolled_count | INT | DEFAULT 0 | 已选人数 | - |
-| class_status | VARCHAR(20) | NOT NULL | 课程状态 | - |
+| class_id | VARCHAR(50) | NOT NULL, UNIQUE | 教学班号 | jxbid |
+| class_name | VARCHAR(100) | NULL | 教学班名称 | jxbmc |
+| course_code | VARCHAR(50) | NOT NULL, FK | 课程编号 | kcbh |
+| course_name | VARCHAR(200) | NOT NULL | 课程名称 | kcmc |
+| teacher_id | VARCHAR(50) | NOT NULL | 授课教师工号 | jgh |
+| teacher_name | VARCHAR(50) | NOT NULL | 授课教师姓名 | xm |
+| academic_year | VARCHAR(20) | NOT NULL | 学年 | xn |
+| semester | INT | NOT NULL | 学期 | xq |
+| capacity | INT | NOT NULL | 班级容量 | bjrl |
+| enrolled_count | INT | DEFAULT 0 | 已选人数 | yxrs |
+| class_status | VARCHAR(20) | NOT NULL | 课程状态 | kczt |
 | sync_time | DATETIME | NOT NULL | 同步时间 | - |
 | sync_source | VARCHAR(20) | NOT NULL | 同步来源 | - |
 | created_at | DATETIME | NOT NULL | 创建时间 | - |
@@ -346,13 +348,13 @@ RUNNING  ─────>  SUCCESS
 | 字段名 | 类型 | 约束 | 说明 | 学校字段 |
 |-------|------|------|------|---------|
 | id | BIGINT | PK, AUTO_INCREMENT | 主键 | - |
-| class_id | VARCHAR(50) | NOT NULL, FK | 教学班号 | JXBID |
-| day_of_week | INT | NOT NULL | 星期几 (1-7) | XQJ |
-| period | VARCHAR(20) | NOT NULL | 节次 (如"1-2") | JCS |
-| week_range | VARCHAR(50) | NOT NULL | 周次 (如"1-16周") | ZCD |
-| class_location | VARCHAR(100) | NOT NULL | 上课地点 | CDMC |
-| academic_year | VARCHAR(20) | NOT NULL | 学年 | XNM |
-| semester | INT | NOT NULL | 学期 | XQM |
+| class_id | VARCHAR(50) | NOT NULL, FK | 教学班号 | jxbid |
+| day_of_week | INT | NOT NULL | 星期几 (1-7) | skxqj |
+| period | VARCHAR(20) | NOT NULL | 节次 (如"1-2") | skjc |
+| week_range | VARCHAR(50) | NOT NULL | 周次 (如"1-16周") | zcd |
+| class_location | VARCHAR(100) | NOT NULL | 上课地点 | cdmc |
+| academic_year | VARCHAR(20) | NOT NULL | 学年 | xn |
+| semester | INT | NOT NULL | 学期 | xq |
 | sync_time | DATETIME | NOT NULL | 同步时间 | - |
 | sync_source | VARCHAR(20) | NOT NULL | 同步来源 | - |
 | created_at | DATETIME | NOT NULL | 创建时间 | - |
@@ -505,43 +507,43 @@ RUNNING  ─────>  SUCCESS
 
 | 学校字段 | 本地字段 | 转换器 | 说明 |
 |---------|---------|--------|------|
-| XZBH | class_code | - | 行政班编号 |
-| XZBMC | class_name | - | 行政班名称 |
-| YXBH | college_code | - | 学院编号 |
-| ZYBH | major_code | - | 专业编号 |
-| NJ | grade | - | 年级 |
-| XSRS | student_count | - | 学生人数 |
-| BJZT | class_status | - | 班级状态 |
+| xzbh | class_code | - | 行政班编号 |
+| xzbmc | class_name | - | 行政班名称 |
+| yxbh | college_code | - | 学院编号 |
+| zybh | major_code | - | 专业编号 |
+| nj | grade | - | 年级 |
+| xsrs | student_count | - | 学生人数 |
+| bjzt | class_status | - | 班级状态 |
 
 ### 课程字段映射
 
 | 学校字段 | 本地字段 | 转换器 | 说明 |
 |---------|---------|--------|------|
-| KCBH | course_code | - | 课程编号 |
-| KCMC | course_name | - | 课程名称 |
-| XF | credits | - | 学分 |
-| ZXS | total_hours | - | 总学时 |
-| KCXZ | course_nature | - | 课程性质 |
-| KCLB | course_category | - | 课程类别 |
+| kcbh | course_code | - | 课程编号 |
+| kcmc | course_name | - | 课程名称 |
+| xf | credits | - | 学分 |
+| zxs | total_hours | - | 总学时 |
+| kcxz | course_nature | - | 课程性质 |
+| kclb | course_category | - | 课程类别 |
 
 ### 教学班字段映射
 
 | 学校字段 | 本地字段 | 转换器 | 说明 |
 |---------|---------|--------|------|
-| JXBID | class_id | - | 教学班号 |
-| KCBH | course_code | - | 课程编号 |
-| JGH | teacher_id | - | 教师工号 |
-| XNM | academic_year | - | 学年 |
-| XQM | semester | - | 学期 |
+| jxbid | class_id | - | 教学班号 |
+| kcbh | course_code | - | 课程编号 |
+| jgh | teacher_id | - | 教师工号 |
+| xn | academic_year | - | 学年 |
+| xq | semester | - | 学期 |
 
 ### 课程安排字段映射
 
 | 学校字段 | 本地字段 | 转换器 | 说明 |
 |---------|---------|--------|------|
-| XQJ | day_of_week | - | 星期几 (1-7) |
-| JCS | period | - | 节次 (如"1-2") |
-| ZCD | week_range | - | 周次 (如"1-16周") |
-| CDMC | class_location | - | 上课地点 |
+| skxqj | day_of_week | - | 上课星期几 (1-7) |
+| skjc | period | - | 上课节次 (如"1-2") |
+| zcd | week_range | - | 周次 (如"1-16周") |
+| cdmc | class_location | - | 上课地点 |
 
 ---
 
