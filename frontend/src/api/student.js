@@ -475,6 +475,24 @@ export function refreshStudentSchedule(params) {
   })
 }
 
+// 获取当前学生等级考试成绩
+export function getMyScores(params) {
+  return request({
+    url: '/api/student/scores',
+    method: 'get',
+    params
+  })
+}
+
+// 获取当前学生选课记录
+export function getMyCourseSelections(params) {
+  return request({
+    url: '/api/student/course-selections',
+    method: 'get',
+    params
+  })
+}
+
 // ==================== 文章收藏相关API ====================
 
 // 收藏/取消收藏文章
@@ -588,7 +606,10 @@ const studentApi = {
   getReadingHistory,
   // 学生课表
   getStudentSchedule,
-  refreshStudentSchedule
+  refreshStudentSchedule,
+  // 学生成绩和选课
+  getMyScores,
+  getMyCourseSelections
 }
 
 export default studentApi

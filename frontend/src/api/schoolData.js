@@ -20,3 +20,75 @@ export function updateSchoolDataConfig(configs) {
 export function testSchoolDataConnection() {
   return request({ url: '/api/ops/school-data/test-connection', method: 'post' })
 }
+
+// ==================== 学校数据查询（管理员/运维） ====================
+
+/**
+ * 获取学校数据概览（各表记录数）
+ */
+export function getSchoolDataOverview() {
+  return request({ url: '/api/admin/school-data/overview', method: 'get' })
+}
+
+/**
+ * 查询行政班数据
+ */
+export function getAdministrativeClasses(params) {
+  return request({ url: '/api/admin/school-data/administrative-classes', method: 'get', params })
+}
+
+/**
+ * 查询课程数据
+ */
+export function getSchoolCourses(params) {
+  return request({ url: '/api/admin/school-data/courses', method: 'get', params })
+}
+
+/**
+ * 查询教学班数据
+ */
+export function getTeachingClasses(params) {
+  return request({ url: '/api/admin/school-data/teaching-classes', method: 'get', params })
+}
+
+/**
+ * 查询课程安排数据
+ */
+export function getCourseSchedules(params) {
+  return request({ url: '/api/admin/school-data/course-schedules', method: 'get', params })
+}
+
+/**
+ * 查询选课记录数据
+ */
+export function getCourseSelections(params) {
+  return request({ url: '/api/admin/school-data/course-selections', method: 'get', params })
+}
+
+/**
+ * 查询等级考试成绩数据
+ */
+export function getLevelExamScores(params) {
+  return request({ url: '/api/admin/school-data/level-exam-scores', method: 'get', params })
+}
+
+/**
+ * 查询教学计划数据
+ */
+export function getTeachingPlans(params) {
+  return request({ url: '/api/admin/school-data/teaching-plans', method: 'get', params })
+}
+
+/**
+ * 查询教学计划课程明细
+ */
+export function getTeachingPlanCourses(planId) {
+  return request({ url: `/api/admin/school-data/teaching-plans/${planId}/courses`, method: 'get' })
+}
+
+/**
+ * 查询学生课表数据（管理员视角）
+ */
+export function getStudentSchedules(params) {
+  return request({ url: '/api/admin/school-data/student-schedules', method: 'get', params })
+}
