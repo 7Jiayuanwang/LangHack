@@ -92,7 +92,31 @@ public class SsoUserMappingService {
             return SsoLoginResult.success(token, user);
         }
 
-        // 2. 首次登录：自动识别角色
+        // 2. 首次登录：检查 users 表是否已有同名用户（可能是之前注册或绑定丢失）
+        User existingUser = userService.getUserByUsername(ssoUserInfo.getSsoUsername());
+        if (existingUser != null) {
+            log.info("用户已存在但无绑定，自动关联: userId={}, username={}", existingUser.getId(), existingUser.getUsername());
+            String mappedRole = roleMappingService.mapRole(ssoUserInfo.getMemberOf());
+            boolean autoApproved = mappedRole != null && !roleMappingService.requiresManualConfirmation(mappedRole, ssoUserInfo.getMemberOf());
+            SsoUserBinding newBinding = createBinding(existingUser.getId(), ssoUserInfo, protocol, autoApproved);
+
+            if (!autoApproved) {
+                return SsoLoginResult.pendingApproval(newBinding.getId(), "您的账号正在审批中，请联系管理员");
+            }
+
+            // 更新用户的 SSO 信息
+            existingUser.setSsoBound(1);
+            existingUser.setSsoProvider(ssoUserInfo.getProvider());
+            existingUser.setSsoSubject(ssoUserInfo.getSsoUserId());
+            existingUser.setRealName(ssoUserInfo.getRealName());
+            userService.updateUser(existingUser);
+
+            String token = jwtUtil.generateToken(existingUser.getUsername(), existingUser.getRole());
+            log.info("SSO 登录成功（关联已有用户）: username={}, role={}", existingUser.getUsername(), existingUser.getRole());
+            return SsoLoginResult.success(token, existingUser);
+        }
+
+        // 3. 自动识别角色
         String mappedRole = roleMappingService.mapRole(ssoUserInfo.getMemberOf());
 
         if (mappedRole == null) {
@@ -101,16 +125,16 @@ public class SsoUserMappingService {
             return createPendingUser(ssoUserInfo, protocol);
         }
 
-        // 3. 检查是否需要人工确认
+        // 4. 检查是否需要人工确认
         if (roleMappingService.requiresManualConfirmation(mappedRole, ssoUserInfo.getMemberOf())) {
             log.info("角色 {} 需要人工确认", mappedRole);
             return createPendingUser(ssoUserInfo, protocol);
         }
 
-        // 4. 自动创建用户并绑定
+        // 5. 自动创建用户并绑定
         log.info("自动创建用户: username={}, role={}", ssoUserInfo.getSsoUsername(), mappedRole);
         User newUser = createUserFromSso(ssoUserInfo, mappedRole);
-        SsoUserBinding newBinding = createBinding(newUser.getId(), ssoUserInfo, protocol, true);
+        SsoUserBinding newBinding2 = createBinding(newUser.getId(), ssoUserInfo, protocol, true);
 
         String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
 

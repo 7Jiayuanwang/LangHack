@@ -50,36 +50,62 @@ if [ -n "${DB_SEED_SQL:-}" ] && [ -f "$DB_SEED_SQL" ]; then
     echo "[seed] 使用环境变量指定文件: $SEED_FILE"
 fi
 
-# 优先级 2：跨 seed/ 和 seed-backups/ 找修改时间最新的 .sql / .sql.gz
+# 优先级 2：跨 seed/ 和 seed-backups/ 找全量备份（优先）或最新文件
+# 策略：全量备份优先于增量备份，同类型内选修改时间最新的
 if [ -z "$SEED_FILE" ]; then
-    CANDIDATES=""
+    FULL_CANDIDATES=""
+    ALL_CANDIDATES=""
     for dir in "$SEED_DIR" "$BACKUP_DIR"; do
         if [ -d "$dir" ]; then
-            # 收集 .sql 和 .sql.gz（只收集常规文件，排除目录）
             for pattern in "*.sql" "*.sql.gz"; do
                 for file in "$dir"/$pattern; do
-                    # 检查文件是否存在且为常规文件（非目录）
                     if [ -f "$file" ]; then
-                        CANDIDATES="${CANDIDATES}${file}"$'\n'
+                        ALL_CANDIDATES="${ALL_CANDIDATES}${file}"$'\n'
+                        # 跳过增量备份：文件头含 "Incremental backup" 或文件名含 "_incr_"
+                        BASENAME=$(basename "$file")
+                        if echo "$BASENAME" | grep -q "_incr_"; then
+                            echo "[seed] 跳过增量备份: $BASENAME（增量备份应在全量备份之后导入）"
+                            continue
+                        fi
+                        # 跳过过小的文件（可能是空备份）
+                        FSIZE=$(stat -c%s "$file" 2>/dev/null || echo "0")
+                        if [ "$FSIZE" -lt 1024 ]; then
+                            echo "[seed] 跳过过小文件: $BASENAME (${FSIZE} 字节)"
+                            continue
+                        fi
+                        FULL_CANDIDATES="${FULL_CANDIDATES}${file}"$'\n'
                     fi
                 done
             done
         fi
     done
 
-    if [ -n "$CANDIDATES" ]; then
-        # 按修改时间降序排列，取最新的
-        SEED_FILE=$(echo "$CANDIDATES" | tr -s '\n' | grep -v '^$' \
+    # 优先从全量候选中选最新的
+    if [ -n "$FULL_CANDIDATES" ]; then
+        SEED_FILE=$(echo "$FULL_CANDIDATES" | tr -s '\n' | grep -v '^$' \
             | xargs -I{} stat -c '%Y {}' {} 2>/dev/null \
             | sort -rn | head -1 | awk '{print $2}' || true)
 
-        # 如果 stat 输出格式不对，回退到简单的 ls -t 排序
         if [ -z "$SEED_FILE" ] || [ ! -f "$SEED_FILE" ]; then
-            SEED_FILE=$(echo "$CANDIDATES" | tr -s '\n' | grep -v '^$' \
+            SEED_FILE=$(echo "$FULL_CANDIDATES" | tr -s '\n' | grep -v '^$' \
                 | xargs ls -t 2>/dev/null | head -1 || true)
         fi
 
-        [ -n "$SEED_FILE" ] && [ -f "$SEED_FILE" ] && echo "[seed] 发现最新备份文件: $(basename "$SEED_FILE")"
+        [ -n "$SEED_FILE" ] && [ -f "$SEED_FILE" ] && echo "[seed] 发现全量备份文件: $(basename "$SEED_FILE")"
+    fi
+
+    # 如果没有全量备份，回退到所有候选（含增量）
+    if [ -z "$SEED_FILE" ] && [ -n "$ALL_CANDIDATES" ]; then
+        SEED_FILE=$(echo "$ALL_CANDIDATES" | tr -s '\n' | grep -v '^$' \
+            | xargs -I{} stat -c '%Y {}' {} 2>/dev/null \
+            | sort -rn | head -1 | awk '{print $2}' || true)
+
+        if [ -z "$SEED_FILE" ] || [ ! -f "$SEED_FILE" ]; then
+            SEED_FILE=$(echo "$ALL_CANDIDATES" | tr -s '\n' | grep -v '^$' \
+                | xargs ls -t 2>/dev/null | head -1 || true)
+        fi
+
+        [ -n "$SEED_FILE" ] && [ -f "$SEED_FILE" ] && echo "[seed] 未找到全量备份，使用最新文件: $(basename "$SEED_FILE")"
     fi
 fi
 

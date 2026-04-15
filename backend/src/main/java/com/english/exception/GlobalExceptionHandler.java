@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
+
+import javax.servlet.http.HttpServletRequest;
 
 import java.net.ConnectException;
 import java.util.concurrent.TimeoutException;
@@ -50,6 +53,18 @@ public class GlobalExceptionHandler {
         log.warn("Validation failed: {}", msg);
         // 只在日志中记录详细信息，不返回给前端（防止用户输入泄漏）
         return Result.error(400, "参数校验失败，请检查请求参数");
+    }
+
+    /**
+     * 请求方法不支持 (如 GET 请求到了 POST-only 端点)
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+    public Result<?> handleMethodNotSupported(HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
+        log.warn("Method not allowed: {} {} (supported: {})",
+                e.getMethod(), request.getRequestURI(),
+                e.getSupportedHttpMethods() != null ? e.getSupportedHttpMethods() : "none");
+        return Result.error(405, "请求方法不允许");
     }
 
     /**

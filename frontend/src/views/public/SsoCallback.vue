@@ -17,7 +17,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { ssoCallback } from '@/api/sso'
+import { exchangeSsoToken } from '@/api/sso'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,33 +28,45 @@ const error = ref('')
 
 onMounted(async () => {
   try {
-    // 获取回调参数（CAS 使用 ticket，OAuth 2.0 使用 code）
-    const params = {}
-    if (route.query.ticket) {
-      params.ticket = route.query.ticket
-    } else if (route.query.code) {
-      params.code = route.query.code
-      params.state = route.query.state
-    } else {
-      throw new Error('缺少认证参数')
+    // 检查后端重定向携带的错误信息
+    if (route.query.error) {
+      throw new Error(decodeURIComponent(route.query.error))
     }
 
-    // 调用后端处理回调
-    const response = await ssoCallback(params)
+    // 获取一次性 code（后端回调重定向到此处携带的参数）
+    const code = route.query.code
+    if (!code) {
+      throw new Error('缺少授权码')
+    }
+
+    // 用一次性 code 换取 JWT token
+    const response = await exchangeSsoToken(code)
 
     if (response.code !== 200) {
       throw new Error(response.message || '登录失败')
     }
 
-    const { token, user } = response.data
+    const { token } = response.data
 
     // 保存认证信息
     userStore.token = token
-    userStore.userInfo = user
-    userStore.userRole = user.role
+
+    // 解析 JWT 中的用户信息（角色等）
+    // JWT payload 格式: { sub: username, role: "STUDENT", ... }
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      userStore.userRole = payload.role
+      userStore.userInfo = {
+        username: payload.sub,
+        role: payload.role
+      }
+    } catch (e) {
+      console.error('解析 token 失败:', e)
+    }
 
     // 根据角色跳转
-    switch (user.role) {
+    const role = userStore.userRole
+    switch (role) {
       case 'ADMIN':
         router.push('/admin')
         break

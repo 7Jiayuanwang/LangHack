@@ -28,5 +28,5 @@ fi
 
 echo "[replication-marker] ======================================"
 echo "[replication-marker] 复制将在容器启动后由 deploy.sh 自动配置"
-echo "[replication-marker] 或手动执行: docker exec <container> bash /var/lib/mysql/init-replication.sh"
+echo "[replication-marker] init-replication.sh 现在包含 mysqldump 数据同步，无需额外操作"
 echo "[replication-marker] ======================================"

@@ -1,5 +1,6 @@
 package com.english.service;
 
+import com.english.datasource.UseMaster;
 import com.english.entity.ECDICTWord;
 import com.english.mapper.ECDICTWordMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -452,7 +453,9 @@ public class ECDICTService {
 
     /**
      * 查询单词信息
+     * 强制走主库：ecdict_words 表在从库可能不存在（数据量大跳过了 mysqldump 导出）
      */
+    @UseMaster
     public Map<String, Object> getWordInfo(String word) {
         Map<String, Object> result = new HashMap<>();
 

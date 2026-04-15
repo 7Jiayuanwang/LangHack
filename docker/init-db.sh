@@ -7,7 +7,7 @@
 #   01-init-db.sh                      ← 本文件（设置字符集）
 #   02-create-replication-user.sh      ← 创建主从复制用户（仅主库挂载）
 #   03-import-backup.sql               ← 导入完整备份数据
-#   04-apply-all-migrations.sql        ← 合并迁移脚本（V1~V14，全幂等）
+#   04-apply-all-migrations.sql        ← 合并迁移脚本（V1~V9，全幂等）
 #   05-import-ecdict.sh                ← 导入 ECDICT 词典（可选）
 #   06-init-replication.sh             ← 从库复制初始化（仅从库挂载）
 # ─────────────────────────────────────────────
@@ -31,7 +31,7 @@ echo "[init-db] ✅ 字符集配置完成 (utf8mb4_unicode_ci)"
 echo "[init-db] 后续 SQL 文件将自动按文件名顺序执行："
 echo "[init-db]   → 02: 主从复制用户创建"
 echo "[init-db]   → 03: 历史备份数据导入"
-echo "[init-db]   → 04: 合并迁移脚本（V1~V14）"
+echo "[init-db]   → 04: 合并迁移脚本（V1~V9）"
 echo "[init-db]   → 05: ECDICT 词典导入（可选）"
 echo "[init-db]   → 06: 从库复制初始化（仅从库）"
 echo "[init-db] ======================================"

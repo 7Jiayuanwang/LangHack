@@ -31,6 +31,11 @@ vi.mock('@/api/auth', () => ({
   logout: vi.fn().mockResolvedValue({ code: 200 }),
 }))
 
+vi.mock('@/api/sso', () => ({
+  getSsoStatus: vi.fn().mockResolvedValue({ code: 200, data: { enabled: false } }),
+  getSsoLogoutUrl: vi.fn().mockResolvedValue({ code: 200, data: { logoutUrl: '' } }),
+}))
+
 // ── 组件 + store import（放在 mock 之后）──────────────────────────────────
 
 import AdminLayout   from '@/views/admin/Layout.vue'

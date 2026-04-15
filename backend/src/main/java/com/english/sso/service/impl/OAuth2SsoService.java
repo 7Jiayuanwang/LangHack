@@ -87,6 +87,14 @@ public class OAuth2SsoService implements SsoService {
         return ssoProperties.isEnabled() && ssoProperties.getOauth2().isEnabled();
     }
 
+    @Override
+    public String generateLogoutUrl(String serviceUrl) {
+        // OAuth2 场景下，CAS 统一身份认证的 logout 端点仍然可用
+        String casServerUrl = ssoProperties.getCas().getServerUrl();
+        return casServerUrl + "/logout?service=" +
+                URLEncoder.encode(serviceUrl, StandardCharsets.UTF_8);
+    }
+
     /**
      * 用授权码换取访问令牌
      */
