@@ -272,6 +272,12 @@ const routes = [
         meta: { title: "我的学习", roles: ["STUDENT", "USER"] },
       },
       {
+        path: "schedule",
+        name: "StudentSchedule",
+        component: () => import("@/views/student/Schedule.vue"),
+        meta: { title: "我的课表", roles: ["STUDENT", "USER"] },
+      },
+      {
         path: "word-test",
         redirect: "/student/vocabulary",
       },

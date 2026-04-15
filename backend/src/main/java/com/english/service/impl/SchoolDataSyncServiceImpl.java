@@ -676,6 +676,15 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         String academicYear = getStringValue(data, "academicYear");
         Integer semester = getIntegerValue(data, "semester");
 
+        if (studentId != null && academicYear != null && semester != null) {
+            // 先删除该学生同学期的旧课表数据
+            QueryWrapper<StudentSchedule> deleteWrapper = new QueryWrapper<>();
+            deleteWrapper.eq("student_id", studentId)
+                    .eq("academic_year", academicYear)
+                    .eq("semester", semester);
+            studentScheduleMapper.delete(deleteWrapper);
+        }
+
         StudentSchedule entity = new StudentSchedule();
         entity.setStudentId(studentId);
         entity.setStudentName(getStringValue(data, "studentName"));
@@ -818,6 +827,52 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             default:
                 return 0;
         }
+    }
+
+    // =========================================================================
+    // 学生课表 按学生同步 & 查询
+    // =========================================================================
+
+    @Override
+    public List<StudentSchedule> syncStudentSchedule(String studentId, String academicYear, Integer semester) {
+        // 1. 从学校API拉取课表
+        List<Map<String, Object>> fetchData = apiClient.fetchStudentSchedules(studentId, academicYear, semester);
+        if (fetchData == null || fetchData.isEmpty()) {
+            logger.info("学校API返回空课表数据: studentId={}, academicYear={}, semester={}", studentId, academicYear, semester);
+            return getStudentSchedule(studentId, academicYear, semester);
+        }
+
+        // 2. 应用字段映射并持久化（会自动执行 delete-then-insert）
+        LocalDateTime syncTime = LocalDateTime.now();
+        for (Map<String, Object> sourceRecord : fetchData) {
+            try {
+                Map<String, Object> mappedData = fieldMappingService.applyMapping("student_schedule", sourceRecord);
+                mappedData.put("syncTime", syncTime);
+                mappedData.put("syncSource", "SCHOOL_API");
+                upsertEntity("student_schedule", mappedData);
+            } catch (Exception e) {
+                logger.warn("同步学生课表单条数据失败: studentId={}, 错误={}", studentId, e.getMessage());
+            }
+        }
+
+        logger.info("学生课表同步完成: studentId={}, 拉取{}条", studentId, fetchData.size());
+
+        // 3. 返回本地数据
+        return getStudentSchedule(studentId, academicYear, semester);
+    }
+
+    @Override
+    public List<StudentSchedule> getStudentSchedule(String studentId, String academicYear, Integer semester) {
+        QueryWrapper<StudentSchedule> wrapper = new QueryWrapper<>();
+        wrapper.eq("student_id", studentId);
+        if (academicYear != null) {
+            wrapper.eq("academic_year", academicYear);
+        }
+        if (semester != null) {
+            wrapper.eq("semester", semester);
+        }
+        wrapper.orderByAsc("day_of_week", "period");
+        return studentScheduleMapper.selectList(wrapper);
     }
 
     // =========================================================================

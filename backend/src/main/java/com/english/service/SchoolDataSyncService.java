@@ -61,4 +61,24 @@ public interface SchoolDataSyncService {
      * @return 校验结果
      */
     Map<String, Object> validateData();
+
+    /**
+     * 同步指定学生的课表数据（从学校API拉取并保存到本地）
+     *
+     * @param studentId    学号
+     * @param academicYear 学年（如 2025-2026）
+     * @param semester     学期（1 或 2）
+     * @return 同步的课表记录列表
+     */
+    List<com.english.entity.StudentSchedule> syncStudentSchedule(String studentId, String academicYear, Integer semester);
+
+    /**
+     * 查询指定学生的本地课表数据
+     *
+     * @param studentId    学号
+     * @param academicYear 学年（可选）
+     * @param semester     学期（可选）
+     * @return 课表记录列表
+     */
+    List<com.english.entity.StudentSchedule> getStudentSchedule(String studentId, String academicYear, Integer semester);
 }

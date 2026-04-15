@@ -455,6 +455,26 @@ export function completeReading(recordId) {
   })
 }
 
+// ==================== 学生课表相关API ====================
+
+// 获取当前学生课表
+export function getStudentSchedule(params) {
+  return request({
+    url: '/api/student/schedule',
+    method: 'get',
+    params
+  })
+}
+
+// 从学校API刷新课表数据
+export function refreshStudentSchedule(params) {
+  return request({
+    url: '/api/student/schedule',
+    method: 'get',
+    params: { ...params, refresh: true }
+  })
+}
+
 // ==================== 文章收藏相关API ====================
 
 // 收藏/取消收藏文章
@@ -565,7 +585,10 @@ const studentApi = {
   toggleArticleFavorite,
   checkArticleFavorite,
   getFavoriteArticles,
-  getReadingHistory
+  getReadingHistory,
+  // 学生课表
+  getStudentSchedule,
+  refreshStudentSchedule
 }
 
 export default studentApi
