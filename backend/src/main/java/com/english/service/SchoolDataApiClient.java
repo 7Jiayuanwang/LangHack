@@ -83,6 +83,14 @@ public interface SchoolDataApiClient {
     List<Map<String, Object>> fetchStudentSchedules(String studentId, String academicYear, Integer semester);
 
     /**
+     * 获取教师授课数据
+     *
+     * @param params 查询参数（academicYear, semester, teacherId等）
+     * @return 教师授课数据列表
+     */
+    List<Map<String, Object>> fetchTeacherCourses(Map<String, String> params);
+
+    /**
      * 测试API连通性
      *
      * @return 是否连通

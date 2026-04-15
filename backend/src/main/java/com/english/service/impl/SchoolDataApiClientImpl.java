@@ -121,6 +121,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     @Override
+    public List<Map<String, Object>> fetchTeacherCourses(Map<String, String> params) {
+        return fetchData("teacher_courses", params);
+    }
+
+    @Override
     public boolean testConnection() {
         String baseUrl = properties.getApi().getBaseUrl();
         if (baseUrl == null || baseUrl.isEmpty()) {

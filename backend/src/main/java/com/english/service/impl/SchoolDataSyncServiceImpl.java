@@ -36,7 +36,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private static final List<String> DATA_SOURCES = List.of(
             "administrative_class", "school_course", "teaching_class",
             "course_schedule", "course_selection", "level_exam_scores",
-            "teaching_plans"
+            "teaching_plans", "teacher_courses", "student_schedule"
     );
 
     /** 防止重入标志 */
@@ -54,6 +54,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private final LevelExamScoreMapper levelExamScoreMapper;
     private final TeachingPlanMapper teachingPlanMapper;
     private final TeachingPlanCourseMapper teachingPlanCourseMapper;
+    private final StudentScheduleMapper studentScheduleMapper;
     private final ObjectMapper objectMapper;
     private final SchoolDataProperties properties;
 
@@ -68,6 +69,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                                      LevelExamScoreMapper levelExamScoreMapper,
                                      TeachingPlanMapper teachingPlanMapper,
                                      TeachingPlanCourseMapper teachingPlanCourseMapper,
+                                     StudentScheduleMapper studentScheduleMapper,
                                      ObjectMapper objectMapper,
                                      SchoolDataProperties properties) {
         this.apiClient = apiClient;
@@ -81,6 +83,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         this.levelExamScoreMapper = levelExamScoreMapper;
         this.teachingPlanMapper = teachingPlanMapper;
         this.teachingPlanCourseMapper = teachingPlanCourseMapper;
+        this.studentScheduleMapper = studentScheduleMapper;
         this.objectMapper = objectMapper;
         this.properties = properties;
     }
@@ -359,6 +362,12 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 return apiClient.fetchLevelExamScores(params);
             case "teaching_plans":
                 return apiClient.fetchTeachingPlans(params);
+            case "teacher_courses":
+                return apiClient.fetchTeacherCourses(params);
+            case "student_schedule":
+                // student_schedule 按学生查询，不支持全量拉取，在fetchFromApi中返回空
+                logger.info("student_schedule requires studentId parameter, skipping batch fetch");
+                return Collections.emptyList();
             default:
                 logger.warn("Unknown data source: {}", dataSource);
                 return Collections.emptyList();
@@ -434,6 +443,13 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 break;
             case "teaching_plans":
                 upsertTeachingPlan(mappedData);
+                break;
+            case "teacher_courses":
+                // 教师授课数据映射到teaching_class表，与bzkcxx接口共享
+                upsertTeachingClass(mappedData);
+                break;
+            case "student_schedule":
+                upsertStudentSchedule(mappedData);
                 break;
             default:
                 throw new BusinessException("不支持的数据源: " + dataSource);
@@ -654,6 +670,32 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         }
     }
 
+    private void upsertStudentSchedule(Map<String, Object> data) {
+        // student_schedule 使用 delete-then-insert 模式（按 student_id + academic_year + semester）
+        String studentId = getStringValue(data, "studentId");
+        String academicYear = getStringValue(data, "academicYear");
+        Integer semester = getIntegerValue(data, "semester");
+
+        StudentSchedule entity = new StudentSchedule();
+        entity.setStudentId(studentId);
+        entity.setStudentName(getStringValue(data, "studentName"));
+        entity.setClassId(getStringValue(data, "classId"));
+        entity.setCourseCode(getStringValue(data, "courseCode"));
+        entity.setCourseName(getStringValue(data, "courseName"));
+        entity.setTeacherId(getStringValue(data, "teacherId"));
+        entity.setTeacherName(getStringValue(data, "teacherName"));
+        entity.setDayOfWeek(getIntegerValue(data, "dayOfWeek"));
+        entity.setPeriod(getStringValue(data, "period"));
+        entity.setWeekRange(getStringValue(data, "weekRange"));
+        entity.setClassLocation(getStringValue(data, "classLocation"));
+        entity.setAcademicYear(academicYear);
+        entity.setSemester(semester);
+        entity.setSyncTime((LocalDateTime) data.getOrDefault("syncTime", LocalDateTime.now()));
+        entity.setSyncSource((String) data.getOrDefault("syncSource", "SCHOOL_API"));
+
+        studentScheduleMapper.insert(entity);
+    }
+
     /**
      * 同步教学计划课程明细
      */
@@ -771,6 +813,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 return levelExamScoreMapper.selectCount(null);
             case "teaching_plans":
                 return teachingPlanMapper.selectCount(null);
+            case "student_schedule":
+                return studentScheduleMapper.selectCount(null);
             default:
                 return 0;
         }

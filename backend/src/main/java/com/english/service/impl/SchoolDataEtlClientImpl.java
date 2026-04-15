@@ -123,6 +123,11 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
     }
 
     @Override
+    public List<Map<String, Object>> fetchTeacherCourses(Map<String, String> params) {
+        return fetchByDataSource("teacher_courses", params);
+    }
+
+    @Override
     public boolean testConnection() {
         String jdbcUrl = properties.getEtl().getJdbcUrl();
         if (jdbcUrl == null || jdbcUrl.isEmpty()) {
