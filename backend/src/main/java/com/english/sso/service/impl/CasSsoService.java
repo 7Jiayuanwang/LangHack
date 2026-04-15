@@ -83,7 +83,7 @@ public class CasSsoService implements SsoService {
             return parseCasResponse(response);
         } catch (Exception e) {
             log.error("CAS ticket 验证失败", e);
-            throw new BusinessException("CAS 认证失败: " + e.getMessage());
+            throw new BusinessException("CAS 认证失败，请稍后重试");
         }
     }
 
@@ -194,7 +194,7 @@ public class CasSsoService implements SsoService {
 
         } catch (Exception e) {
             log.error("解析 CAS 响应失败", e);
-            throw new BusinessException("解析 CAS 响应失败: " + e.getMessage());
+            throw new BusinessException("解析 CAS 响应失败，请联系管理员");
         }
     }
 

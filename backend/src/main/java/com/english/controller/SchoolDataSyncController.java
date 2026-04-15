@@ -57,7 +57,7 @@ public class SchoolDataSyncController {
             return Result.success("全量同步完成", syncLog);
         } catch (Exception e) {
             logger.error("全量同步失败: dataSource={}", dataSource, e);
-            return Result.error("全量同步失败: " + e.getMessage());
+            return Result.error("全量同步失败，请查看同步日志了解详情");
         }
     }
 
@@ -75,7 +75,7 @@ public class SchoolDataSyncController {
             return Result.success("增量同步完成", syncLog);
         } catch (Exception e) {
             logger.error("增量同步失败: dataSource={}", dataSource, e);
-            return Result.error("增量同步失败: " + e.getMessage());
+            return Result.error("增量同步失败，请查看同步日志了解详情");
         }
     }
 
@@ -92,7 +92,7 @@ public class SchoolDataSyncController {
             return Result.success("全量同步所有数据源完成", logs);
         } catch (Exception e) {
             logger.error("全量同步所有数据源失败", e);
-            return Result.error("全量同步所有数据源失败: " + e.getMessage());
+            return Result.error("全量同步所有数据源失败，请查看同步日志了解详情");
         }
     }
 
@@ -109,7 +109,7 @@ public class SchoolDataSyncController {
             return Result.success("增量同步所有数据源完成", logs);
         } catch (Exception e) {
             logger.error("增量同步所有数据源失败", e);
-            return Result.error("增量同步所有数据源失败: " + e.getMessage());
+            return Result.error("增量同步所有数据源失败，请查看同步日志了解详情");
         }
     }
 
@@ -215,7 +215,7 @@ public class SchoolDataSyncController {
             return Result.success("字段映射更新成功", updated);
         } catch (Exception e) {
             logger.error("更新字段映射失败", e);
-            return Result.error("更新字段映射失败: " + e.getMessage());
+            return Result.error("更新字段映射失败，请检查输入参数");
         }
     }
 

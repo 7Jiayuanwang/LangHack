@@ -3,6 +3,7 @@ package com.english.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 
@@ -18,6 +19,18 @@ import java.util.List;
 @Configuration
 @ConfigurationProperties(prefix = "school.data")
 public class SchoolDataProperties {
+
+    /** API Base URL 白名单域名 */
+    private static final List<String> API_ALLOWED_DOMAINS = Arrays.asList(
+            "api.imau.edu.cn",
+            "imau.edu.cn"
+    );
+
+    /** ETL JDBC URL 白名单主机 */
+    private static final List<String> ETL_ALLOWED_HOSTS = Arrays.asList(
+            "school-db.imau.edu.cn",
+            "localhost"
+    );
 
     /** 数据源类型: api 或 etl */
     private String source = "api";
@@ -96,6 +109,7 @@ public class SchoolDataProperties {
         }
 
         public void setBaseUrl(String baseUrl) {
+            validateApiBaseUrl(baseUrl);
             this.baseUrl = baseUrl;
         }
 
@@ -225,6 +239,7 @@ public class SchoolDataProperties {
         }
 
         public void setJdbcUrl(String jdbcUrl) {
+            validateEtlJdbcUrl(jdbcUrl);
             this.jdbcUrl = jdbcUrl;
         }
 
@@ -403,6 +418,54 @@ public class SchoolDataProperties {
 
         public void setFullSyncOnStartup(boolean fullSyncOnStartup) {
             this.fullSyncOnStartup = fullSyncOnStartup;
+        }
+    }
+
+    // =========================================================================
+    // URL 安全校验
+    // =========================================================================
+
+    /**
+     * 校验 API Base URL 是否在白名单域名内
+     * 防止SSRF攻击：管理员配置 api_base_url 指向内网元数据服务等
+     */
+    private static void validateApiBaseUrl(String url) {
+        if (url == null || url.isBlank()) return;
+        try {
+            URI uri = new URI(url);
+            String host = uri.getHost();
+            if (host == null) {
+                throw new IllegalArgumentException("API Base URL 缺少主机名: " + url);
+            }
+            boolean allowed = API_ALLOWED_DOMAINS.stream()
+                    .anyMatch(domain -> host.equals(domain) || host.endsWith("." + domain));
+            if (!allowed) {
+                throw new IllegalArgumentException(
+                        "API Base URL 域名不在白名单中: " + host + "，允许的域名: " + API_ALLOWED_DOMAINS);
+            }
+        } catch (java.net.URISyntaxException e) {
+            throw new IllegalArgumentException("API Base URL 格式无效: " + url);
+        }
+    }
+
+    /**
+     * 校验 ETL JDBC URL 是否在白名单主机内
+     * 防止SSRF/数据库直连攻击：管理员配置 etl_jdbc_url 指向任意数据库
+     */
+    private static void validateEtlJdbcUrl(String jdbcUrl) {
+        if (jdbcUrl == null || jdbcUrl.isBlank()) return;
+        if (!jdbcUrl.startsWith("jdbc:mysql://")) {
+            throw new IllegalArgumentException("ETL JDBC URL 必须以 jdbc:mysql:// 开头: " + jdbcUrl);
+        }
+        // 提取主机名: jdbc:mysql://host:port/db → host
+        String afterProtocol = jdbcUrl.substring("jdbc:mysql://".length());
+        String hostPort = afterProtocol.split("/", 2)[0].split("\\?")[0];
+        String host = hostPort.split(":")[0];
+        boolean allowed = ETL_ALLOWED_HOSTS.stream()
+                .anyMatch(allowedHost -> host.equals(allowedHost));
+        if (!allowed) {
+            throw new IllegalArgumentException(
+                    "ETL JDBC URL 主机不在白名单中: " + host + "，允许的主机: " + ETL_ALLOWED_HOSTS);
         }
     }
 }
