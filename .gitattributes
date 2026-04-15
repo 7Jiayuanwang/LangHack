@@ -30,3 +30,4 @@ database/*.sql filter=lfs diff=lfs merge=lfs -text
 *.jar       binary
 *.class     binary
 docker/mysql/init/04-apply-all-migrations.sql filter=lfs diff=lfs merge=lfs -text
+backend/src/main/resources/db/migration/*.sql filter=lfs diff=lfs merge=lfs -text

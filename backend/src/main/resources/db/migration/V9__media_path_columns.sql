@@ -1,6 +1,3 @@
--- V9: add media storage path columns
-ALTER TABLE media
-    ADD COLUMN IF NOT EXISTS file_path VARCHAR(500) COMMENT 'stored media file path';
-
-ALTER TABLE media
-    ADD COLUMN IF NOT EXISTS thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path';
+version https://git-lfs.github.com/spec/v1
+oid sha256:d803bb908626391a4dd0eec8ace3ab762b92494781859db0e12762fc67ace5cb
+size 256
