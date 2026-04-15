@@ -30,8 +30,8 @@
           <!-- API 模式配置 -->
           <template v-if="form.source === 'api'">
             <el-divider content-position="left">API 接口配置</el-divider>
-            <el-form label-width="130px" size="default">
-              <el-form-item label="Base URL">
+            <el-form label-width="130px" size="default" :model="form" :rules="apiRules" ref="apiFormRef">
+              <el-form-item label="Base URL" prop="api_base_url">
                 <el-input v-model="form.api_base_url" placeholder="https://api.imau.edu.cn" />
               </el-form-item>
               <el-form-item label="Token">
@@ -52,8 +52,8 @@
           <!-- ETL 模式配置 -->
           <template v-if="form.source === 'etl'">
             <el-divider content-position="left">ETL 数据库配置</el-divider>
-            <el-form label-width="130px" size="default">
-              <el-form-item label="JDBC URL">
+            <el-form label-width="130px" size="default" :model="form" :rules="etlRules" ref="etlFormRef">
+              <el-form-item label="JDBC URL" prop="etl_jdbc_url">
                 <el-input v-model="form.etl_jdbc_url" placeholder="jdbc:mysql://host:3306/school_db" />
               </el-form-item>
               <el-form-item label="用户名">
@@ -170,6 +170,22 @@ const testing = ref(false)
 const testResult = ref(null)
 const testSource = ref('')
 const activePanels = ref(['source', 'sync', 'actions'])
+const apiFormRef = ref(null)
+const etlFormRef = ref(null)
+
+const apiRules = {
+  api_base_url: [
+    { required: true, message: '请输入API Base URL', trigger: 'blur' },
+    { pattern: /^https?:\/\/.+/, message: 'URL必须以http://或https://开头', trigger: 'blur' }
+  ]
+}
+
+const etlRules = {
+  etl_jdbc_url: [
+    { required: true, message: '请输入JDBC URL', trigger: 'blur' },
+    { pattern: /^jdbc:mysql:\/\/.+/, message: 'JDBC URL必须以jdbc:mysql://开头', trigger: 'blur' }
+  ]
+}
 
 const form = reactive({
   source: 'api',
@@ -224,6 +240,14 @@ const loadConfig = async () => {
 }
 
 const handleSave = async () => {
+  // 表单验证
+  if (form.source === 'api' && apiFormRef.value) {
+    try { await apiFormRef.value.validate() } catch { return }
+  }
+  if (form.source === 'etl' && etlFormRef.value) {
+    try { await etlFormRef.value.validate() } catch { return }
+  }
+
   saving.value = true
   try {
     // 构建 config 列表，保留原始 id/configGroup/isSecret
