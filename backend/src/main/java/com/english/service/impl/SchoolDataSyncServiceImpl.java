@@ -824,6 +824,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 return teachingPlanMapper.selectCount(null);
             case "student_schedule":
                 return studentScheduleMapper.selectCount(null);
+            case "teacher_courses":
+                // teacher_courses 共享 teaching_class 表
+                return teachingClassMapper.selectCount(null);
             default:
                 return 0;
         }
