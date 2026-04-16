@@ -93,14 +93,14 @@ class RoleMappingServiceTest {
     void testMapRole_NoMatch() {
         List<String> memberOf = Arrays.asList("ou=其他,ou=用户,dc=imau,dc=edu,dc=cn");
         String role = roleMappingService.mapRole(memberOf);
-        assertNull(role);
+        assertEquals("USER", role); // 无匹配规则 → 默认角色 USER（自动审批）
     }
 
     @Test
     void testMapRole_EmptyList() {
         List<String> memberOf = Arrays.asList();
         String role = roleMappingService.mapRole(memberOf);
-        assertNull(role);
+        assertEquals("USER", role); // memberOf 为空 → 默认角色 USER（自动审批）
     }
 
     @Test
