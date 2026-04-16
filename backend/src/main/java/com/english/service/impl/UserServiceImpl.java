@@ -12,6 +12,7 @@ import com.english.service.UserService;
 import com.english.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
@@ -128,10 +130,36 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional
     public void createUser(User user) {
-        // 检查用户名是否已存在
+        // 检查用户名是否已存在（活跃用户）
         User existingUser = getUserByUsername(user.getUsername());
         if (existingUser != null) {
             throw new BusinessException("用户名已存在");
+        }
+
+        // 检查是否有同名的软删除用户 → 恢复并更新信息
+        User deletedUser = baseMapper.findDeletedByUsername(user.getUsername());
+        if (deletedUser != null) {
+            log.info("发现同名软删除用户 id={}，恢复并更新", deletedUser.getId());
+            // 先恢复（undeleteById 绕过 @TableLogic，设 deleted=0）
+            baseMapper.undeleteById(deletedUser.getId());
+            // 刷新 deletedUser 的 deleted 状态，使 updateById 的 WHERE deleted=0 能匹配
+            deletedUser.setDeleted(0);
+            // 用新信息覆盖旧数据
+            deletedUser.setPassword(passwordEncoder.encode(user.getPassword()));
+            deletedUser.setEmail(user.getEmail());
+            deletedUser.setNickname(user.getNickname());
+            deletedUser.setRealName(user.getRealName());
+            deletedUser.setRole(user.getRole());
+            deletedUser.setStatus(user.getStatus() != null ? user.getStatus() : "ACTIVE");
+            deletedUser.setAvatar(user.getAvatar());
+            deletedUser.setSsoBound(user.getSsoBound());
+            deletedUser.setSsoProvider(user.getSsoProvider());
+            deletedUser.setSsoSubject(user.getSsoSubject());
+            deletedUser.setUpdatedTime(LocalDateTime.now());
+            updateById(deletedUser);
+            // 将 ID 回写到入参 user，供调用方获取新建用户 ID
+            user.setId(deletedUser.getId());
+            return;
         }
 
         // 检查邮箱是否已存在（邮箱为空时跳过）
