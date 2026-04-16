@@ -34,20 +34,20 @@ public class RoleMappingService {
      * 根据 memberOf 属性映射角色
      *
      * @param memberOf SSO 组织单位列表
-     * @return 映射的角色 (ADMIN/OPS/TEACHER/STUDENT/USER)，无法识别时返回默认角色 USER
+     * @return 映射的角色 (ADMIN/OPS/TEACHER/STUDENT)，无法识别时返回 null（由调用方决定是否进入待审批或赋予默认角色）
      */
     public String mapRole(List<String> memberOf) {
         if (memberOf == null || memberOf.isEmpty()) {
-            log.info("memberOf 为空，使用默认角色 USER");
-            return "USER";
+            log.info("memberOf 为空，无法识别角色");
+            return null;
         }
 
         // 获取映射规则（优先从数据库读取，缓存）
         Map<String, String> mappingRules = getRoleMappingRules();
 
-        // 优先级: ADMIN > OPS > TEACHER > STUDENT > USER
+        // 优先级: ADMIN > OPS > TEACHER > STUDENT
         // 收集所有匹配的角色，然后按优先级返回最高的
-        String[] rolePriority = {"ADMIN", "OPS", "TEACHER", "STUDENT", "USER"};
+        String[] rolePriority = {"ADMIN", "OPS", "TEACHER", "STUDENT"};
 
         for (String priorityRole : rolePriority) {
             for (String ou : memberOf) {
@@ -64,8 +64,19 @@ public class RoleMappingService {
             }
         }
 
-        log.warn("无法匹配角色规则，memberOf: {}，使用默认角色 USER", memberOf);
-        return "USER"; // 无法匹配规则 → 默认给 USER 角色（自动审批）
+        log.warn("无法匹配角色规则，memberOf: {}", memberOf);
+        return null; // 无法匹配规则 → 返回 null，由调用方决定是否进入待审批
+    }
+
+    /**
+     * 根据 memberOf 映射角色，无法识别时返回默认角色 STUDENT（校园环境大多数人是学生）
+     *
+     * @param memberOf SSO 组织单位列表
+     * @return 映射的角色，无法识别时返回 "STUDENT"
+     */
+    public String mapRoleWithDefault(List<String> memberOf) {
+        String role = mapRole(memberOf);
+        return role != null ? role : "STUDENT";
     }
 
     /**

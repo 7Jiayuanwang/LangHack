@@ -80,7 +80,7 @@ onMounted(async () => {
         router.push('/student')
         break
       default:
-        router.push('/user')
+        router.push('/student')  // USER 等其他角色在校园环境中进入学生端
     }
 
   } catch (e) {

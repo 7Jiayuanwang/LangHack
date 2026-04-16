@@ -600,7 +600,7 @@ const handleLogin = async () => {
         router.push("/student");
         break;
       case "USER":
-        router.push("/user");
+        router.push("/student");  // USER 角色在校园环境中等同于学生，进入学生端
         break;
       default:
         router.push("/");

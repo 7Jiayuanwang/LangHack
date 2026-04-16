@@ -48,6 +48,11 @@ public class SsoUserMappingService {
     /**
      * 处理 SSO 登录：绑定/创建用户，返回登录结果
      *
+     * 角色同步策略：
+     * - SSO 能明确识别角色 → 同步到数据库（覆盖）
+     * - SSO 无法识别角色 → 保留数据库现有角色（尊重管理员手动修改）
+     * - 待审批用户重新登录 → 如果现在能识别角色，自动审批
+     *
      * @param ssoUserInfo SSO 用户信息
      * @param protocol    SSO 协议类型
      * @return 登录结果
@@ -62,6 +67,9 @@ public class SsoUserMappingService {
                 ssoUserInfo.getSsoUserId()
         );
 
+        // 尝试从 SSO 信息映射角色
+        String ssoMappedRole = roleMappingService.mapRole(ssoUserInfo.getMemberOf());
+
         if (binding != null) {
             // 已绑定用户
             log.info("找到已有绑定: bindingId={}, userId={}", binding.getId(), binding.getUserId());
@@ -69,9 +77,8 @@ public class SsoUserMappingService {
             if (binding.getAutoApproved() == 0) {
                 // 重新评估角色映射：之前因 memberOf 为空等原因进入待审批的用户，
                 // 如果角色现在可以自动映射，直接放行（避免用户永远卡在待审批）
-                String reMappedRole = roleMappingService.mapRole(ssoUserInfo.getMemberOf());
-                if (reMappedRole != null && !roleMappingService.requiresManualConfirmation(reMappedRole, ssoUserInfo.getMemberOf())) {
-                    log.info("待审批用户角色可自动映射，自动审批: bindingId={}, role={}", binding.getId(), reMappedRole);
+                if (ssoMappedRole != null && !roleMappingService.requiresManualConfirmation(ssoMappedRole, ssoUserInfo.getMemberOf())) {
+                    log.info("待审批用户角色可自动映射，自动审批: bindingId={}, role={}", binding.getId(), ssoMappedRole);
                     // 更新绑定状态
                     binding.setAutoApproved(1);
                     binding.setLastLoginTime(LocalDateTime.now());
@@ -80,7 +87,7 @@ public class SsoUserMappingService {
                     // 更新用户角色和状态
                     User pendingUser = userService.getUserById(binding.getUserId());
                     if (pendingUser != null) {
-                        pendingUser.setRole(reMappedRole);
+                        pendingUser.setRole(ssoMappedRole);
                         pendingUser.setStatus("ACTIVE");
                         userService.updateUser(pendingUser);
 
@@ -108,7 +115,16 @@ public class SsoUserMappingService {
                 throw new BusinessException("用户不存在");
             }
 
-            // 生成 JWT token
+            // SSO 能识别角色 → 同步到数据库（确保角色始终与 SSO 身份一致）
+            // SSO 无法识别角色 → 保留数据库现有角色（尊重管理员手动修改）
+            if (ssoMappedRole != null && !ssoMappedRole.equals(user.getRole())) {
+                log.info("SSO 角色与数据库不一致，同步角色: username={}, dbRole={}, ssoRole={}",
+                        user.getUsername(), user.getRole(), ssoMappedRole);
+                user.setRole(ssoMappedRole);
+                userService.updateUser(user);
+            }
+
+            // 生成 JWT token（使用数据库中的最新角色）
             String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
 
             log.info("SSO 登录成功: username={}, role={}", user.getUsername(), user.getRole());
@@ -119,19 +135,23 @@ public class SsoUserMappingService {
         User existingUser = userService.getUserByUsername(ssoUserInfo.getSsoUsername());
         if (existingUser != null) {
             log.info("用户已存在但无绑定，自动关联: userId={}, username={}", existingUser.getId(), existingUser.getUsername());
-            String mappedRole = roleMappingService.mapRole(ssoUserInfo.getMemberOf());
-            boolean autoApproved = mappedRole != null && !roleMappingService.requiresManualConfirmation(mappedRole, ssoUserInfo.getMemberOf());
+
+            // 确定角色：SSO 能识别 → 用 SSO 角色；否则保留数据库角色
+            String effectiveRole = ssoMappedRole != null ? ssoMappedRole : existingUser.getRole();
+            boolean autoApproved = effectiveRole != null
+                    && !roleMappingService.requiresManualConfirmation(effectiveRole, ssoUserInfo.getMemberOf());
             SsoUserBinding newBinding = createBinding(existingUser.getId(), ssoUserInfo, protocol, autoApproved);
 
             if (!autoApproved) {
                 return SsoLoginResult.pendingApproval(newBinding.getId(), "您的账号正在审批中，请联系管理员");
             }
 
-            // 更新用户的 SSO 信息
+            // 更新用户的 SSO 信息和角色
             existingUser.setSsoBound(1);
             existingUser.setSsoProvider(ssoUserInfo.getProvider());
             existingUser.setSsoSubject(ssoUserInfo.getSsoUserId());
             existingUser.setRealName(ssoUserInfo.getRealName());
+            existingUser.setRole(effectiveRole);
             userService.updateUser(existingUser);
 
             String token = jwtUtil.generateToken(existingUser.getUsername(), existingUser.getRole());
@@ -139,24 +159,22 @@ public class SsoUserMappingService {
             return SsoLoginResult.success(token, existingUser);
         }
 
-        // 3. 自动识别角色
-        String mappedRole = roleMappingService.mapRole(ssoUserInfo.getMemberOf());
-
-        if (mappedRole == null) {
-            // 无法识别角色 → 创建待审批记录
-            log.warn("无法识别角色，创建待审批记录");
+        // 3. 全新用户：自动识别角色
+        if (ssoMappedRole == null) {
+            // 无法识别角色 → 创建待审批记录，默认角色 STUDENT（校园环境大多数人是学生）
+            log.warn("无法识别角色，创建待审批记录，默认角色 STUDENT");
             return createPendingUser(ssoUserInfo, protocol);
         }
 
         // 4. 检查是否需要人工确认
-        if (roleMappingService.requiresManualConfirmation(mappedRole, ssoUserInfo.getMemberOf())) {
-            log.info("角色 {} 需要人工确认", mappedRole);
+        if (roleMappingService.requiresManualConfirmation(ssoMappedRole, ssoUserInfo.getMemberOf())) {
+            log.info("角色 {} 需要人工确认", ssoMappedRole);
             return createPendingUser(ssoUserInfo, protocol);
         }
 
         // 5. 自动创建用户并绑定
-        log.info("自动创建用户: username={}, role={}", ssoUserInfo.getSsoUsername(), mappedRole);
-        User newUser = createUserFromSso(ssoUserInfo, mappedRole);
+        log.info("自动创建用户: username={}, role={}", ssoUserInfo.getSsoUsername(), ssoMappedRole);
+        User newUser = createUserFromSso(ssoUserInfo, ssoMappedRole);
         SsoUserBinding newBinding2 = createBinding(newUser.getId(), ssoUserInfo, protocol, true);
 
         String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
@@ -195,7 +213,7 @@ public class SsoUserMappingService {
         pendingUser.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
         pendingUser.setEmail(ssoInfo.getEmail());
         pendingUser.setRealName(ssoInfo.getRealName());
-        pendingUser.setRole("USER"); // 临时角色
+        pendingUser.setRole("STUDENT"); // 默认角色（校园环境大多数人是学生）
         pendingUser.setStatus("PENDING_APPROVAL");
         pendingUser.setSsoBound(1);
         pendingUser.setSsoProvider(ssoInfo.getProvider());

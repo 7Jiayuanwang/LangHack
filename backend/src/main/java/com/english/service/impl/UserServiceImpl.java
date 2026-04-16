@@ -17,11 +17,14 @@ import org.springframework.stereotype.Service;
 import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.data.redis.core.StringRedisTemplate;
+
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -32,6 +35,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    /** JwtAuthenticationFilter 中 user:active 缓存的前缀，需保持一致 */
+    private static final String USER_ACTIVE_CACHE_PREFIX = "user:active:";
 
     @PostConstruct
     public void init() {
@@ -201,6 +210,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
+
+        // 角色变更时，清除 user:active 缓存，使旧 JWT 立即失效
+        // 缓存 key 格式: user:active:{username}:{role}
+        // 需要清除旧角色和新角色对应的缓存（新角色缓存可能不存在，清除也无害）
+        if (user.getRole() != null && !user.getRole().equals(existingUser.getRole())) {
+            log.info("用户 {} 角色变更: {} → {}，清除 user:active 缓存",
+                    existingUser.getUsername(), existingUser.getRole(), user.getRole());
+            try {
+                stringRedisTemplate.delete(USER_ACTIVE_CACHE_PREFIX + existingUser.getUsername() + ":" + existingUser.getRole());
+                stringRedisTemplate.delete(USER_ACTIVE_CACHE_PREFIX + existingUser.getUsername() + ":" + user.getRole());
+            } catch (Exception e) {
+                log.warn("清除 user:active 缓存失败（Redis 不可用），角色变更将在缓存过期后生效（最多5分钟）", e);
+            }
+        }
     }
 
     @Override

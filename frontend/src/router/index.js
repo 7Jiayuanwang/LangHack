@@ -388,7 +388,7 @@ router.beforeEach((to, from, next) => {
         OPS: "/ops",
         TEACHER: "/teacher",
         STUDENT: "/student",
-        USER: "/user",
+        USER: "/student",  // USER 角色在校园环境中等同于学生，进入学生端
       };
       next(roleRoutes[userRole] || "/");
     } else {
@@ -429,7 +429,7 @@ router.beforeEach((to, from, next) => {
         OPS: "/ops",
         TEACHER: "/teacher",
         STUDENT: "/student",
-        USER: "/user",
+        USER: "/student",  // USER 角色在校园环境中等同于学生，进入学生端
       };
       console.warn(
         `权限不足: 尝试访问 ${to.path}，当前角色 ${userRole}，需要角色 ${requiredRoles}`,

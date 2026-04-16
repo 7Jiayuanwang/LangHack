@@ -93,14 +93,35 @@ class RoleMappingServiceTest {
     void testMapRole_NoMatch() {
         List<String> memberOf = Arrays.asList("ou=其他,ou=用户,dc=imau,dc=edu,dc=cn");
         String role = roleMappingService.mapRole(memberOf);
-        assertEquals("USER", role); // 无匹配规则 → 默认角色 USER（自动审批）
+        assertNull(role); // 无法匹配规则 → 返回 null，由调用方决定是否待审批
     }
 
     @Test
     void testMapRole_EmptyList() {
         List<String> memberOf = Arrays.asList();
         String role = roleMappingService.mapRole(memberOf);
-        assertEquals("USER", role); // memberOf 为空 → 默认角色 USER（自动审批）
+        assertNull(role); // memberOf 为空 → 返回 null，由调用方决定是否待审批
+    }
+
+    @Test
+    void testMapRoleWithDefault_NoMatch() {
+        List<String> memberOf = Arrays.asList("ou=其他,ou=用户,dc=imau,dc=edu,dc=cn");
+        String role = roleMappingService.mapRoleWithDefault(memberOf);
+        assertEquals("STUDENT", role); // 无法匹配规则 → 默认角色 STUDENT（校园环境大多数人是学生）
+    }
+
+    @Test
+    void testMapRoleWithDefault_EmptyList() {
+        List<String> memberOf = Arrays.asList();
+        String role = roleMappingService.mapRoleWithDefault(memberOf);
+        assertEquals("STUDENT", role); // memberOf 为空 → 默认角色 STUDENT
+    }
+
+    @Test
+    void testMapRoleWithDefault_Matched() {
+        List<String> memberOf = Arrays.asList("ou=教师,ou=用户,dc=imau,dc=edu,dc=cn");
+        String role = roleMappingService.mapRoleWithDefault(memberOf);
+        assertEquals("TEACHER", role); // 匹配到规则 → 返回映射角色
     }
 
     @Test

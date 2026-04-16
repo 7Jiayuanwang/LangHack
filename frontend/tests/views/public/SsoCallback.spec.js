@@ -121,7 +121,7 @@ describe('SsoCallback.vue', () => {
     expect(mockPush).toHaveBeenCalledWith('/teacher')
   })
 
-  it('should redirect to user page for USER role', async () => {
+  it('should redirect to student page for USER role', async () => {
     const fakeJwt = createFakeJwt('USER', 'user')
     const mockResponse = {
       code: 200,
@@ -135,7 +135,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockPush).toHaveBeenCalledWith('/user')
+    expect(mockPush).toHaveBeenCalledWith('/student')  // USER 在校园环境中等同于学生
   })
 
   it('should display error message when token exchange fails (pending approval)', async () => {
