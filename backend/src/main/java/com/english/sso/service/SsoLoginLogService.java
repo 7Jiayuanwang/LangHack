@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 @Profile("sso")
 public class SsoLoginLogService {
 
+    private static final int MAX_VARCHAR_500 = 500;
+
     @Autowired
     private SsoLoginLogMapper loginLogMapper;
 
@@ -42,13 +44,14 @@ public class SsoLoginLogService {
 
             if (result.isNeedsApproval()) {
                 loginLog.setLoginResult("PENDING_APPROVAL");
-                loginLog.setFailureReason(result.getMessage());
+                String msg = result.getMessage();
+                loginLog.setFailureReason(truncate(msg, MAX_VARCHAR_500));
             } else {
                 loginLog.setLoginResult("SUCCESS");
             }
 
             loginLog.setIpAddress(getClientIp(request));
-            loginLog.setUserAgent(request.getHeader("User-Agent"));
+            loginLog.setUserAgent(truncate(request.getHeader("User-Agent"), MAX_VARCHAR_500));
             loginLog.setCreatedTime(LocalDateTime.now());
 
             loginLogMapper.insert(loginLog);
@@ -77,9 +80,10 @@ public class SsoLoginLogService {
             loginLog.setSsoUserId(userId);
             loginLog.setSsoUsername(username);
             loginLog.setLoginResult("FAILED");
-            loginLog.setFailureReason(reason);
+            // failure_reason 列为 VARCHAR(500)，截断防止 Data too long
+            loginLog.setFailureReason(truncate(reason, MAX_VARCHAR_500));
             loginLog.setIpAddress(getClientIp(request));
-            loginLog.setUserAgent(request.getHeader("User-Agent"));
+            loginLog.setUserAgent(truncate(request.getHeader("User-Agent"), MAX_VARCHAR_500));
             loginLog.setCreatedTime(LocalDateTime.now());
 
             loginLogMapper.insert(loginLog);
@@ -100,5 +104,13 @@ public class SsoLoginLogService {
             return xForwardedFor.split(",")[0].trim();
         }
         return request.getRemoteAddr();
+    }
+
+    /**
+     * 截断字符串到指定最大长度，防止 VARCHAR 列 Data too long
+     */
+    private String truncate(String value, int maxLength) {
+        if (value == null) return null;
+        return value.length() > maxLength ? value.substring(0, maxLength) : value;
     }
 }
