@@ -189,6 +189,18 @@ public class CasSsoService implements SsoService {
                 userInfo.setMemberOf(parseMemberOf(memberOfValue));
             }
 
+            // 回退：CAS 常不返回 memberOf，但可能返回 containerId（如 ou=2000001,ou=People）
+            // containerId 包含 OU 信息，可用于角色映射
+            if ((userInfo.getMemberOf() == null || userInfo.getMemberOf().isEmpty())
+                    && attributes.containsKey("containerId")) {
+                Object containerIdValue = attributes.get("containerId");
+                List<String> containerIdAsMemberOf = parseMemberOf(containerIdValue);
+                if (!containerIdAsMemberOf.isEmpty()) {
+                    log.info("CAS 未返回 memberOf，回退使用 containerId 作为组织信息: {}", containerIdAsMemberOf);
+                    userInfo.setMemberOf(containerIdAsMemberOf);
+                }
+            }
+
             log.info("CAS 用户信息解析成功: username={}, realName={}", username, userInfo.getRealName());
             return userInfo;
 

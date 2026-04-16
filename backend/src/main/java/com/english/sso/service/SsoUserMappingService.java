@@ -67,7 +67,30 @@ public class SsoUserMappingService {
             log.info("找到已有绑定: bindingId={}, userId={}", binding.getId(), binding.getUserId());
 
             if (binding.getAutoApproved() == 0) {
-                // 待审批状态
+                // 重新评估角色映射：之前因 memberOf 为空等原因进入待审批的用户，
+                // 如果角色现在可以自动映射，直接放行（避免用户永远卡在待审批）
+                String reMappedRole = roleMappingService.mapRole(ssoUserInfo.getMemberOf());
+                if (reMappedRole != null && !roleMappingService.requiresManualConfirmation(reMappedRole, ssoUserInfo.getMemberOf())) {
+                    log.info("待审批用户角色可自动映射，自动审批: bindingId={}, role={}", binding.getId(), reMappedRole);
+                    // 更新绑定状态
+                    binding.setAutoApproved(1);
+                    binding.setLastLoginTime(LocalDateTime.now());
+                    bindingMapper.updateById(binding);
+
+                    // 更新用户角色和状态
+                    User pendingUser = userService.getUserById(binding.getUserId());
+                    if (pendingUser != null) {
+                        pendingUser.setRole(reMappedRole);
+                        pendingUser.setStatus("ACTIVE");
+                        userService.updateUser(pendingUser);
+
+                        String token = jwtUtil.generateToken(pendingUser.getUsername(), pendingUser.getRole());
+                        log.info("SSO 自动审批登录成功: username={}, role={}", pendingUser.getUsername(), pendingUser.getRole());
+                        return SsoLoginResult.success(token, pendingUser);
+                    }
+                }
+
+                // 仍需人工审批
                 log.warn("用户待审批: bindingId={}", binding.getId());
                 return SsoLoginResult.pendingApproval(
                         binding.getId(),

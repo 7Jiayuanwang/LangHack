@@ -202,10 +202,11 @@ const navItems = computed(() => NAV_ITEMS[props.role] || [])
 // admin 专属：二级管理菜单
 const MORE_ITEMS = {
   admin: [
-    { path: '/admin/units',       label: '单元管理', icon: Reading  },
-    { path: '/admin/words',       label: '单词管理', icon: EditPen  },
-    { path: '/admin/texts',       label: '课文管理', icon: Document },
-    { path: '/admin/assignments', label: '作业管理', icon: Document },
+    { path: '/admin/units',          label: '单元管理', icon: Reading  },
+    { path: '/admin/words',          label: '单词管理', icon: EditPen  },
+    { path: '/admin/texts',          label: '课文管理', icon: Document },
+    { path: '/admin/assignments',    label: '作业管理', icon: Document },
+    { path: '/admin/sso-pending',    label: 'SSO审批', icon: User     },
   ],
 }
 
@@ -249,6 +250,7 @@ const ROUTE_MAP = {
     '/admin/words':       '单词管理',
     '/admin/texts':       '课文管理',
     '/admin/assignments': '作业管理',
+    '/admin/sso-pending': 'SSO 用户审批',
   },
 }
 

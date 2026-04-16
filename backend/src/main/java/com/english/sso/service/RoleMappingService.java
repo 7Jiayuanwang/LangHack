@@ -34,12 +34,12 @@ public class RoleMappingService {
      * 根据 memberOf 属性映射角色
      *
      * @param memberOf SSO 组织单位列表
-     * @return 映射的角色 (ADMIN/OPS/TEACHER/STUDENT/USER)，无法识别返回 null
+     * @return 映射的角色 (ADMIN/OPS/TEACHER/STUDENT/USER)，无法识别时返回默认角色 USER
      */
     public String mapRole(List<String> memberOf) {
         if (memberOf == null || memberOf.isEmpty()) {
-            log.warn("memberOf 为空，无法映射角色");
-            return null;
+            log.info("memberOf 为空，使用默认角色 USER");
+            return "USER";
         }
 
         // 获取映射规则（优先从数据库读取，缓存）
@@ -64,8 +64,8 @@ public class RoleMappingService {
             }
         }
 
-        log.warn("无法识别角色，memberOf: {}", memberOf);
-        return null; // 无法识别 → 需要管理员审批
+        log.warn("无法匹配角色规则，memberOf: {}，使用默认角色 USER", memberOf);
+        return "USER"; // 无法匹配规则 → 默认给 USER 角色（自动审批）
     }
 
     /**
