@@ -1,6 +1,7 @@
 package com.english.sso.controller;
 
 import com.english.dto.Result;
+import com.english.entity.User;
 import com.english.sso.config.SsoProperties;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
@@ -8,6 +9,8 @@ import com.english.sso.service.SsoLoginLogService;
 import com.english.sso.service.SsoProtocolType;
 import com.english.sso.service.SsoService;
 import com.english.sso.service.SsoUserMappingService;
+import com.english.service.UserService;
+import com.english.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,6 +63,12 @@ public class SsoAuthController {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private UserService userService;
 
     @Value("${app.frontend-url:${app.base-url}}")
     private String appFrontendUrl;
@@ -215,6 +224,19 @@ public class SsoAuthController {
         // 登录成功 — value 就是 JWT token
         Map<String, Object> data = new HashMap<>();
         data.put("token", value);
+
+        // 从 JWT 中提取用户名，查询完整用户信息返回给前端
+        try {
+            String username = jwtUtil.getUsernameFromToken(value);
+            User user = userService.getUserByUsername(username);
+            if (user != null) {
+                user.setPassword(null); // 清除密码，避免返回给前端
+                data.put("user", user);
+            }
+            data.put("expiresIn", jwtUtil.getExpiration());
+        } catch (Exception e) {
+            log.warn("SSO token 交换时获取用户信息失败，仅返回 token", e);
+        }
 
         log.info("一次性 code 换取 token 成功");
         return Result.success("登录成功", data);

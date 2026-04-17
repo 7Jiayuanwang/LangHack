@@ -18,6 +18,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { exchangeSsoToken } from '@/api/sso'
+import { setToken } from '@/utils/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -46,23 +47,42 @@ onMounted(async () => {
       throw new Error(response.message || '登录失败')
     }
 
-    const { token } = response.data
+    const { token, user: serverUser } = response.data
 
-    // 保存认证信息
-    userStore.token = token
-
-    // 解析 JWT 中的用户信息（角色等）
-    // JWT payload 格式: { sub: username, role: "STUDENT", ... }
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      userStore.userRole = payload.role
-      userStore.userInfo = {
-        username: payload.sub,
-        role: payload.role
+    // 优先使用后端返回的用户信息（完整），否则从 JWT 解析（兜底）
+    let jwtRole = ''
+    let jwtUserInfo = {}
+    if (serverUser && serverUser.role) {
+      // 后端返回了完整用户信息
+      jwtRole = serverUser.role
+      jwtUserInfo = serverUser
+    } else {
+      // 兜底：从 JWT payload 解析
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        jwtRole = payload.role || ''
+        jwtUserInfo = {
+          username: payload.sub,
+          role: payload.role
+        }
+      } catch (e) {
+        console.error('解析 token 失败:', e)
       }
-    } catch (e) {
-      console.error('解析 token 失败:', e)
     }
+
+    // 验证角色有效性
+    const validRoles = ['ADMIN', 'TEACHER', 'STUDENT', 'USER', 'OPS']
+    if (!jwtRole || !validRoles.includes(jwtRole)) {
+      throw new Error('登录响应角色异常: ' + jwtRole)
+    }
+
+    // 保存认证信息到 Pinia + localStorage（与 store/user.js login() 保持一致）
+    userStore.token = token
+    userStore.userRole = jwtRole
+    userStore.userInfo = jwtUserInfo
+    setToken(token)
+    localStorage.setItem('userInfo', JSON.stringify(jwtUserInfo))
+    localStorage.setItem('userRole', jwtRole)
 
     // 根据角色跳转
     const role = userStore.userRole

@@ -185,6 +185,16 @@ cd backend && mvn test
 4. **测试**：前端跑 Vitest，后端跑 mvn test
 5. **部署**：本地重构不需 rebuild Docker，直接 `npm run build` 后 `docker cp` 替换静态文件
 
+### 文档索引
+
+| 文档 | 路径 | 说明 |
+|------|------|------|
+| AI 模型提供商集成文档 | `docs/AI模型提供商集成文档.md` | HiAgent / OpenRouter / SiliconFlow+Qwen / 腾讯云ASR 配置、协议、独立请求样例、路由架构 |
+| API 接口文档 | `docs/API接口文档.md` | 后端 REST API 接口说明 |
+| 部署文档 | `docs/DEPLOYMENT.md` | Docker Compose 部署指南 |
+| 数据库协作规范 | `docs/DATABASE_COLLABORATION_GUIDE.md` | 数据库表登记与变更规范 |
+| 故障排查 | `docs/TROUBLESHOOTING.md` | 常见问题排查 |
+
 ---
 
 ## 端口速查

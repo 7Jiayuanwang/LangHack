@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -115,13 +117,42 @@ public class SsoUserMappingService {
                 throw new BusinessException("用户不存在");
             }
 
-            // SSO 能识别角色 → 同步到数据库（确保角色始终与 SSO 身份一致）
-            // SSO 无法识别角色 → 保留数据库现有角色（尊重管理员手动修改）
-            if (ssoMappedRole != null && !ssoMappedRole.equals(user.getRole())) {
-                log.info("SSO 角色与数据库不一致，同步角色: username={}, dbRole={}, ssoRole={}",
-                        user.getUsername(), user.getRole(), ssoMappedRole);
-                user.setRole(ssoMappedRole);
+            // 状态检查：已审批绑定但用户仍为 PENDING_APPROVAL 时自动激活
+            // 场景：管理员审批后 binding.autoApproved=1，但 users.status 未更新（理论上不应发生）
+            if (!"ACTIVE".equals(user.getStatus())) {
+                log.info("已审批用户状态为 {}，自动激活: userId={}", user.getStatus(), user.getId());
+                user.setStatus("ACTIVE");
                 userService.updateUser(user);
+            }
+
+            // SSO 能识别角色 → 同步到数据库（确保角色始终与 SSO 身份一致）
+            // 但管理员审批的角色应优先，不被 SSO 映射覆盖
+            // 判断依据：binding.autoApproved=1 且 SSO 映射角色 ≠ 数据库角色时，
+            //   仅在从未有过管理员干预（即用户是自动创建的）时才同步
+            //   管理员审批场景：用户原为 PENDING_APPROVAL，管理员手动设置角色并激活
+            //   → 此时不应被 SSO 映射覆盖
+            if (ssoMappedRole != null && !ssoMappedRole.equals(user.getRole())) {
+                // 检查用户是否曾经是待审批状态（管理员干预过）
+                // 如果用户状态为 ACTIVE 且角色不同于 SSO 映射，说明角色可能是管理员指定的
+                // 管理员审批场景：createPendingUser 设置 role=STUDENT, status=PENDING_APPROVAL
+                //   → 管理员审批后设 role=approvedRole, status=ACTIVE
+                //   → 此时 binding.autoApproved=1 是管理员审批时设置的
+                // 自动创建场景：processLogin 第5步自动创建，autoApproved=1 且 status=ACTIVE
+                // 区分方式：管理员审批前 binding.autoApproved=0，审批后改为 1
+                //   自动创建时 autoApproved 一开始就是 1
+                // 更简洁的策略：仅当 SSO 映射角色优先级高于当前角色时才同步（升权不降权）
+                // 这样管理员审批的低优先级角色（如 STUDENT）不会被 SSO 映射覆盖
+                // 但 SSO 映射的高优先级角色（如 ADMIN）仍可同步
+                boolean shouldSyncRole = isRoleUpgrade(user.getRole(), ssoMappedRole);
+                if (shouldSyncRole) {
+                    log.info("SSO 角色优先级更高，同步角色: username={}, dbRole={}, ssoRole={}",
+                            user.getUsername(), user.getRole(), ssoMappedRole);
+                    user.setRole(ssoMappedRole);
+                    userService.updateUser(user);
+                } else {
+                    log.info("保留数据库角色（管理员审批/当前角色优先级更高）: username={}, dbRole={}, ssoRole={}",
+                            user.getUsername(), user.getRole(), ssoMappedRole);
+                }
             }
 
             // 生成 JWT token（使用数据库中的最新角色）
@@ -251,5 +282,21 @@ public class SsoUserMappingService {
         bindingMapper.insert(binding);
         log.info("创建 SSO 绑定: id={}, userId={}, autoApproved={}", binding.getId(), userId, autoApproved);
         return binding;
+    }
+
+    /** 角色优先级定义：ADMIN > OPS > TEACHER > STUDENT > USER */
+    private static final List<String> ROLE_PRIORITY = Arrays.asList("USER", "STUDENT", "TEACHER", "OPS", "ADMIN");
+
+    /**
+     * 判断 newRole 是否比 currentRole 优先级更高（升权）
+     * 升权时允许 SSO 同步，降权时保留当前角色（保护管理员审批结果）
+     */
+    private boolean isRoleUpgrade(String currentRole, String newRole) {
+        int currentIndex = ROLE_PRIORITY.indexOf(currentRole);
+        int newIndex = ROLE_PRIORITY.indexOf(newRole);
+        // 未知角色视为最低优先级
+        if (currentIndex < 0) currentIndex = -1;
+        if (newIndex < 0) newIndex = -1;
+        return newIndex > currentIndex;
     }
 }

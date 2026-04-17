@@ -200,6 +200,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return false;
         }
 
+        // 校验用户状态（防止 PENDING_APPROVAL 等非活跃用户通过已有 JWT 访问）
+        if (!"ACTIVE".equals(user.getStatus())) {
+            logger.warn("User '{}' status is '{}', invalidating token", username, user.getStatus());
+            return false;
+        }
+
         // 写入缓存
         try {
             stringRedisTemplate.opsForValue().set(cacheKey, "1",

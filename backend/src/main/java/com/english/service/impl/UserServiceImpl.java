@@ -211,17 +211,23 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
 
-        // 角色变更时，清除 user:active 缓存，使旧 JWT 立即失效
+        // 角色或状态变更时，清除 user:active 缓存，使旧 JWT 立即失效
         // 缓存 key 格式: user:active:{username}:{role}
-        // 需要清除旧角色和新角色对应的缓存（新角色缓存可能不存在，清除也无害）
-        if (user.getRole() != null && !user.getRole().equals(existingUser.getRole())) {
-            log.info("用户 {} 角色变更: {} → {}，清除 user:active 缓存",
-                    existingUser.getUsername(), existingUser.getRole(), user.getRole());
+        boolean roleChanged = user.getRole() != null && !user.getRole().equals(existingUser.getRole());
+        boolean statusChanged = user.getStatus() != null && !user.getStatus().equals(existingUser.getStatus());
+        if (roleChanged || statusChanged) {
+            String reason = roleChanged ? String.format("角色变更: %s → %s", existingUser.getRole(), user.getRole())
+                    : String.format("状态变更: %s → %s", existingUser.getStatus(), user.getStatus());
+            log.info("用户 {} {}，清除 user:active 缓存", existingUser.getUsername(), reason);
             try {
+                // 清除旧角色缓存（用户当前使用的 JWT 包含旧角色）
                 stringRedisTemplate.delete(USER_ACTIVE_CACHE_PREFIX + existingUser.getUsername() + ":" + existingUser.getRole());
-                stringRedisTemplate.delete(USER_ACTIVE_CACHE_PREFIX + existingUser.getUsername() + ":" + user.getRole());
+                // 清除新角色缓存（角色变更后新 JWT 可能已经缓存）
+                if (roleChanged) {
+                    stringRedisTemplate.delete(USER_ACTIVE_CACHE_PREFIX + existingUser.getUsername() + ":" + user.getRole());
+                }
             } catch (Exception e) {
-                log.warn("清除 user:active 缓存失败（Redis 不可用），角色变更将在缓存过期后生效（最多5分钟）", e);
+                log.warn("清除 user:active 缓存失败（Redis 不可用），变更将在缓存过期后生效（最多5分钟）", e);
             }
         }
     }
