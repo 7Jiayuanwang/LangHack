@@ -81,7 +81,10 @@ import {
   ChatLineRound,
   MessageBox,
   Notebook,
-  VideoPlay
+  VideoPlay,
+  Calendar,
+  Trophy,
+  Tickets
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -104,6 +107,9 @@ const allNavigationItems = [
   { path: '/student/dashboard', label: '发现', icon: markRaw(DataBoard), badge: null, toggleKey: 'page_dashboard' },
   { path: '/student/classes', label: '社区', icon: markRaw(House), badge: null, toggleKey: 'page_classes' },
   { path: '/student/assignments', label: '任务', icon: markRaw(Edit), badge: null, toggleKey: 'page_assignments' },
+  { path: '/student/schedule', label: '课表', icon: markRaw(Calendar), badge: null, toggleKey: 'page_schedule' },
+  { path: '/student/scores', label: '成绩', icon: markRaw(Trophy), badge: null, toggleKey: 'page_scores' },
+  { path: '/student/course-selections', label: '选课', icon: markRaw(Tickets), badge: null, toggleKey: 'page_course_selections' },
   { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, toggleKey: 'page_articles' },
   { path: '/student/vocabulary', label: '单词', icon: markRaw(Document), badge: null, toggleKey: 'page_vocabulary' },
   { path: '/student/my-study', label: '学习', icon: markRaw(Reading), badge: null, toggleKey: 'page_my_study' },
@@ -128,6 +134,9 @@ const pageTitle = computed(() => {
     '/student/courses': '课程学习',
     '/student/classes': '学习社区',
     '/student/assignments': '学习任务',
+    '/student/schedule': '我的课表',
+    '/student/scores': '等级考试',
+    '/student/course-selections': '我的选课',
     '/student/articles': '',
     '/student/vocabulary': '单词本',
     '/student/ai-video': 'AI 视频字幕',

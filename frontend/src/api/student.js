@@ -455,6 +455,44 @@ export function completeReading(recordId) {
   })
 }
 
+// ==================== 学生课表相关API ====================
+
+// 获取当前学生课表
+export function getStudentSchedule(params) {
+  return request({
+    url: '/api/student/schedule',
+    method: 'get',
+    params
+  })
+}
+
+// 从学校API刷新课表数据
+export function refreshStudentSchedule(params) {
+  return request({
+    url: '/api/student/schedule',
+    method: 'get',
+    params: { ...params, refresh: true }
+  })
+}
+
+// 获取当前学生等级考试成绩
+export function getMyScores(params) {
+  return request({
+    url: '/api/student/scores',
+    method: 'get',
+    params
+  })
+}
+
+// 获取当前学生选课记录
+export function getMyCourseSelections(params) {
+  return request({
+    url: '/api/student/course-selections',
+    method: 'get',
+    params
+  })
+}
+
 // ==================== 文章收藏相关API ====================
 
 // 收藏/取消收藏文章
@@ -565,7 +603,13 @@ const studentApi = {
   toggleArticleFavorite,
   checkArticleFavorite,
   getFavoriteArticles,
-  getReadingHistory
+  getReadingHistory,
+  // 学生课表
+  getStudentSchedule,
+  refreshStudentSchedule,
+  // 学生成绩和选课
+  getMyScores,
+  getMyCourseSelections
 }
 
 export default studentApi

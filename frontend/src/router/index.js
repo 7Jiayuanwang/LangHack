@@ -157,6 +157,18 @@ const routes = [
         component: () => import("@/views/ops/FeatureToggles.vue"),
         meta: { title: "功能开关", roles: ["OPS", "ADMIN"] },
       },
+      {
+        path: "school-data",
+        name: "OpsSchoolData",
+        component: () => import("@/views/ops/SchoolDataConfig.vue"),
+        meta: { title: "学校数据", roles: ["OPS", "ADMIN"] },
+      },
+      {
+        path: "school-data-browser",
+        name: "OpsSchoolDataBrowser",
+        component: () => import("@/views/ops/SchoolDataBrowser.vue"),
+        meta: { title: "数据浏览", roles: ["OPS", "ADMIN"] },
+      },
     ],
   },
   {
@@ -189,6 +201,12 @@ const routes = [
         name: "TeacherAssignments",
         component: () => import("@/views/teacher/Assignments.vue"),
         meta: { title: "任务管理", roles: ["TEACHER"] },
+      },
+      {
+        path: "my-courses",
+        name: "TeacherMyCourses",
+        component: () => import("@/views/teacher/MyCourses.vue"),
+        meta: { title: "我的授课", roles: ["TEACHER"] },
       },
     ],
   },
@@ -264,6 +282,24 @@ const routes = [
         name: "StudentMyStudy",
         component: () => import("@/views/student/MyStudy.vue"),
         meta: { title: "我的学习", roles: ["STUDENT", "USER"] },
+      },
+      {
+        path: "schedule",
+        name: "StudentSchedule",
+        component: () => import("@/views/student/Schedule.vue"),
+        meta: { title: "我的课表", roles: ["STUDENT", "USER"] },
+      },
+      {
+        path: "scores",
+        name: "StudentScores",
+        component: () => import("@/views/student/Scores.vue"),
+        meta: { title: "等级考试", roles: ["STUDENT", "USER"] },
+      },
+      {
+        path: "course-selections",
+        name: "StudentCourseSelections",
+        component: () => import("@/views/student/CourseSelections.vue"),
+        meta: { title: "我的选课", roles: ["STUDENT", "USER"] },
       },
       {
         path: "word-test",

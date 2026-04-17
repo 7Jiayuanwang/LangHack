@@ -31,7 +31,7 @@ onMounted(async () => {
   try {
     // 检查后端重定向携带的错误信息
     if (route.query.error) {
-      throw new Error(decodeURIComponent(route.query.error))
+      throw new Error(decodeURIComponent(String(route.query.error)))
     }
 
     // 获取一次性 code（后端回调重定向到此处携带的参数）
@@ -45,6 +45,10 @@ onMounted(async () => {
 
     if (response.code !== 200) {
       throw new Error(response.message || '登录失败')
+    }
+
+    if (!response.data || !response.data.token) {
+      throw new Error('登录返回数据异常')
     }
 
     const { token, user: serverUser } = response.data

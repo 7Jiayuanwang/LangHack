@@ -137,7 +137,7 @@ import {
   DataBoard, School, Edit, Reading,
   Upload, Document, House,
   User, EditPen, Setting,
-  DataLine, FolderOpened, Connection, Refresh, Switch,
+  DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -174,6 +174,7 @@ const NAV_ITEMS = {
     { path: '/teacher/dashboard',   label: '首页', icon: DataBoard, badge: null },
     { path: '/teacher/classes',     label: '班级', icon: School,    badge: null },
     { path: '/teacher/assignments', label: '任务', icon: Edit,      badge: null },
+    { path: '/teacher/my-courses',  label: '授课', icon: Notebook,  badge: null },
     { path: '/teacher/courses',     label: '课程', icon: Reading,   badge: null },
   ],
   user: [
@@ -187,6 +188,8 @@ const NAV_ITEMS = {
     { path: '/ops/users',           label: '用户', icon: User        },
     { path: '/ops/ai-providers',    label: 'AI',   icon: Connection  },
     { path: '/ops/feature-toggles', label: '开关', icon: Switch      },
+    { path: '/ops/school-data',         label: '数据', icon: Coin        },
+    { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine    },
     { path: '/ops/update',          label: '更新', icon: Refresh     },
   ],
   admin: [
@@ -226,6 +229,7 @@ const ROUTE_MAP = {
     '/teacher/dashboard':   '教学首页',
     '/teacher/classes':     '班级管理',
     '/teacher/assignments': '任务管理',
+    '/teacher/my-courses':  '我的授课',
     '/teacher/courses':     '课程浏览',
   },
   user: {
@@ -239,6 +243,8 @@ const ROUTE_MAP = {
     '/ops/users':           '用户管理',
     '/ops/ai-providers':    'AI 服务管理',
     '/ops/feature-toggles': '功能开关',
+    '/ops/school-data':         '学校数据',
+    '/ops/school-data-browser':  '数据浏览',
     '/ops/update':          '系统更新',
   },
   admin: {

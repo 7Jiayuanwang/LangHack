@@ -97,4 +97,15 @@ public class AsyncConfig {
         scheduler.initialize();
         return scheduler;
     }
+
+    @Bean(name = "syncTaskScheduler")
+    public TaskScheduler syncTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("sync-sched-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(60);
+        scheduler.initialize();
+        return scheduler;
+    }
 }

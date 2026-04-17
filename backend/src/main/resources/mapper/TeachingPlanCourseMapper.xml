@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.TeachingPlanCourseMapper">
+
+    <!-- 教学计划课程明细 UPSERT：按 detail_id 唯一键 -->
+    <insert id="upsertByDetailId" parameterType="com.english.entity.TeachingPlanCourse">
+        INSERT INTO teaching_plan_courses (
+            detail_id, plan_id, course_code, course_name,
+            course_type, course_category, credits, hours,
+            theory_hours, lab_hours, semester,
+            assessment_method, prerequisite_courses, sort_order,
+            sync_time, sync_source
+        ) VALUES (
+            #{detailId}, #{planId}, #{courseCode}, #{courseName},
+            #{courseType}, #{courseCategory}, #{credits}, #{hours},
+            #{theoryHours}, #{labHours}, #{semester},
+            #{assessmentMethod}, #{prerequisiteCourses}, #{sortOrder},
+            #{syncTime}, #{syncSource}
+        )
+        ON DUPLICATE KEY UPDATE
+            course_name = #{courseName},
+            course_type = #{courseType},
+            course_category = #{courseCategory},
+            credits = #{credits},
+            hours = #{hours},
+            theory_hours = #{theoryHours},
+            lab_hours = #{labHours},
+            semester = #{semester},
+            assessment_method = #{assessmentMethod},
+            prerequisite_courses = #{prerequisiteCourses},
+            sort_order = #{sortOrder},
+            sync_time = #{syncTime},
+            sync_source = #{syncSource}
+    </insert>
+
+</mapper>

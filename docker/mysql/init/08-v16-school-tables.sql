@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS administrative_class (
     sync_source VARCHAR(20) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
-    
+
     INDEX idx_college (college_code),
     INDEX idx_major (major_code),
     INDEX idx_grade (grade),
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS course (
     sync_source VARCHAR(20) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
-    
+
     INDEX idx_college (college_code),
     INDEX idx_nature (course_nature),
     INDEX idx_category (course_category),
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS teaching_class (
     sync_source VARCHAR(20) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
-    
+
     FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_course (course_code),
     INDEX idx_teacher (teacher_id),
@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS course_schedule (
     sync_source VARCHAR(20) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
-    
+
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE CASCADE ON UPDATE CASCADE,
     INDEX idx_class_id (class_id),
     INDEX idx_day_period (day_of_week, period),
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS course_selection (
     sync_source VARCHAR(20) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
-    
+
     FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_student (student_id),
@@ -215,7 +215,7 @@ CREATE TABLE IF NOT EXISTS level_exam_scores (
     sync_source VARCHAR(20) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
-    
+
     UNIQUE KEY uk_student_exam (student_id, exam_type, exam_date),
     INDEX idx_student_id (student_id),
     INDEX idx_exam_type (exam_type),
@@ -261,7 +261,7 @@ CREATE TABLE IF NOT EXISTS teaching_plans (
     sync_source VARCHAR(20) NOT NULL ,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,
-    
+
     INDEX idx_major_grade (major_code, grade),
     INDEX idx_plan_status (plan_status),
     INDEX idx_effective_date (effective_date),
