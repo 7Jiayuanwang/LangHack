@@ -2286,4 +2286,8 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   border-bottom: 2px dashed #10b981; /* Green dashed for shared */
   background-color: rgba(16, 185, 129, 0.05);
 }
+
+:global(.el-message) {
+  top: 55px !important;
+}
 </style>

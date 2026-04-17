@@ -408,12 +408,11 @@ onUnmounted(() => {
 
 <style scoped>
 .mobile-layout {
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
-  overflow: hidden;
 }
 
 /* 顶部标题栏 */
@@ -461,6 +460,7 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding-bottom: calc(60px + max(8px, env(safe-area-inset-bottom)));
 }
 
 .content-container {
@@ -476,7 +476,10 @@ onUnmounted(() => {
   background: var(--surface-color);
   border-top: 1px solid var(--border-light);
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
-  position: relative;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
 }

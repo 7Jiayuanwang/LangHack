@@ -138,8 +138,8 @@
         </div>
       </div>
 
-      <!-- 分页 -->
-      <div class="pagination-v2" v-if="total > pageSize">
+      <!-- 分页：仅移动端显示 -->
+      <div class="pagination-v2" v-if="isMobile && total > pageSize">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -361,8 +361,12 @@ const searchWord = ref('')
 const vocabulary = ref([])
 const total = ref(0)
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(window.innerWidth < 768 ? 10 : 999)
 const selectedWords = ref([])
+const screenWidth = ref(window.innerWidth)
+
+// 是否移动端
+const isMobile = computed(() => screenWidth.value < 768)
 
 // 统计数据
 const stats = reactive({
@@ -1060,9 +1064,18 @@ const formatDate = (date) => {
 
 onMounted(() => {
   loadVocabulary()
+  window.addEventListener('resize', handleScreenResize)
 })
 
+const handleScreenResize = () => {
+  screenWidth.value = window.innerWidth
+  pageSize.value = screenWidth.value < 768 ? 10 : 999
+  currentPage.value = 1
+  loadVocabulary()
+}
+
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleScreenResize)
   // 清理 timeout
   if (answerTimeoutId) {
     clearTimeout(answerTimeoutId)
@@ -1264,8 +1277,8 @@ onBeforeUnmount(() => {
 
 .word-card-v2 {
   background: white;
-  border-radius: 24px;
-  padding: 20px;
+  border-radius: 16px;
+  padding: 12px;
   position: relative;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   border: 1px solid #f0f0f0;
@@ -1295,27 +1308,15 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
-.word-text {
-  font-size: 20px;
-  font-weight: 800;
-  margin: 0;
-  color: #1a1a1a;
+.word-tags {
+
+  margin-left: -60px;
+  margin-top: -30px;
 }
 
-.level-badge {
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.level-badge.new { background: #e0f2fe; color: #0369a1; }
-.level-badge.learning { background: #fef3c7; color: #b45309; }
-.level-badge.mastered { background: #dcfce7; color: #15803d; }
 
 .phonetic {
   font-family: monospace;
@@ -1327,11 +1328,40 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
+.word-text {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 0;
+  color: #1a1a1a;
+}
+
+.level-badge {
+  font-size: 8px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.level-badge.new { background: #e0f2fe; color: #0369a1; }
+.level-badge.learning { background: #fef3c7; color: #b45309; margin-left: -15px; margin-bottom: 500px; }
+.level-badge.mastered { background: #dcfce7; color: #15803d; }
+
+.phonetic {
+  font-family: monospace;
+  color: #94a3b8;
+  font-size: 10px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
 .translation {
-  font-size: 14px;
+  font-size: 11px;
   color: #4b5563;
-  line-height: 1.6;
-  margin-bottom: 20px;
+  line-height: 1.4;
+  margin-bottom: 8px;
   flex-grow: 1;
   word-break: break-word;
   overflow-wrap: break-word;
@@ -1341,19 +1371,19 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 15px;
+  padding-top: 8px;
   border-top: 1px solid #f1f5f9;
 }
 
 .review-info {
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 600;
   color: #94a3b8;
 }
 
 .footer-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 /* Pagination */
@@ -1365,44 +1395,53 @@ onBeforeUnmount(() => {
   padding-bottom: 40px;
 }
 
+/* 分页按钮圆形 */
+.pagination-v2 :deep(.el-pager li) {
+  border-radius: 50% !important;
+  min-width: 32px;
+  height: 32px;
+  line-height: 32px;
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .vocabulary-container {
     padding: 16px;
   }
-  
+
   .page-header {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .search-wrapper {
     max-width: 100%;
   }
-  
+
   .action-bar-v2 {
     flex-direction: column;
     align-items: flex-start;
     padding: 16px;
   }
-  
+
   .chips-container {
     overflow-x: auto;
     width: 100%;
     padding-bottom: 4px;
   }
-  
+
   .secondary-actions {
     width: 100%;
     justify-content: space-between;
   }
-  
+
   .start-btn {
     flex-grow: 1;
   }
-  
+
   .vocabulary-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
   }
 }
 

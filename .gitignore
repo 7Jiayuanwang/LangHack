@@ -175,6 +175,9 @@ Thumbs.db
 my_env/
 memory/
 
+# Internal design documents
+推荐算法实现逻辑与过程.md
+
 # Webhook secrets
 deploy/webhook.env
 backend/src/main/resources/application-dev.yml
