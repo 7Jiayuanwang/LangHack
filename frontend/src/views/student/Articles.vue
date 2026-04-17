@@ -112,7 +112,7 @@
             <!-- Content Area -->
             <div class="article-content">
               <h2 class="article-title">{{ article.title }}</h2>
-              <p class="article-snippet">{{ getSnippet(article.content) }}</p>
+              <p class="article-snippet">{{ getSnippet(article) }}</p>
             </div>
 
             <!-- Footer Area -->
@@ -288,7 +288,9 @@ const loadArticles = async () => {
     if (data?.code === 200) {
       let fetched = (Array.isArray(data.data) ? data.data : []).map(text => {
         const cat = getRandomCategory()
-        const contentLength = typeof text.content === 'string' ? text.content.length : 0
+        const contentLength = typeof text.content === 'string' && text.content.length > 0
+          ? text.content.length
+          : (typeof text.markdownContent === 'string' ? text.markdownContent.length : 0)
         return {
           ...text,
           category: cat,
@@ -326,9 +328,27 @@ const readArticle = (article) => {
   })
 }
 
-const getSnippet = (content) => {
-  if (typeof content !== 'string' || !content) return ''
-  return content.replace(/[\n\r]+/g, ' ').substring(0, 120) + (content.length > 120 ? '...' : '')
+const getSnippet = (article) => {
+  // 优先使用 content，若为空则尝试 markdownContent
+  let raw = article.content || article.markdownContent || ''
+  if (typeof raw !== 'string' || !raw) return ''
+
+  // 清理 Markdown 语法标记，提取纯文字
+  let clean = raw
+    .replace(/!\[.*?\]\(.*?\)/g, '')          // 删除图片 ![alt](url)
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')       // 链接保留文字 [text](url) → text
+    .replace(/^#{1,6}\s+/gm, '')              // 删除标题符 # ## ###
+    .replace(/[*_]{1,3}(.*?)[*_]{1,3}/g, '$1') // 加粗/斜体保留文字
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')        // 删除行内代码和代码块
+    .replace(/^>\s?/gm, '')                   // 删除引用 >
+    .replace(/^[-*+]\s+/gm, '')               // 删除无序列表标记
+    .replace(/^\d+\.\s+/gm, '')               // 删除有序列表标记
+    .replace(/---+|\*\*\*+|___+/g, '')        // 删除分割线
+    .replace(/[\n\r]+/g, ' ')                  // 换行转空格
+    .replace(/\s+/g, ' ')                      // 合并多余空格
+    .trim()
+
+  return clean.length > 120 ? clean.substring(0, 120) + '...' : clean
 }
 
 const getCategoryText = (val) => {

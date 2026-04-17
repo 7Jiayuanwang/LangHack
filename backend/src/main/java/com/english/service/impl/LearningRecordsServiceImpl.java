@@ -272,6 +272,8 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             detail.put("markdownContent", text.getMarkdownContent());
             detail.put("difficulty", text.getDifficulty());
             detail.put("audioUrl", text.getAudioUrl());
+            detail.put("isPublic", text.getIsPublic());
+            detail.put("isFeatured", text.getIsFeatured());
 
             // 添加所有可用版本
             Map<String, String> versions = new HashMap<>();

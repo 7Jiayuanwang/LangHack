@@ -107,6 +107,12 @@ const routes = [
         meta: { title: "作业管理", roles: ["ADMIN"] },
       },
       {
+        path: "text-preview",
+        name: "AdminTextPreview",
+        component: () => import("@/views/student/InteractiveText.vue"),
+        meta: { title: "课文预览", roles: ["ADMIN"] },
+      },
+      {
         path: "sso-pending",
         name: "AdminSsoPending",
         component: () => import("@/views/admin/SsoPendingApprovals.vue"),
@@ -333,7 +339,7 @@ const routes = [
       {
         path: "text-learning",
         name: "UserTextLearning",
-        component: () => import("@/views/user/SimpleTextView.vue"),
+        component: () => import("@/views/student/InteractiveText.vue"),
         meta: { title: "课文学习", roles: ["USER"] },
       },
       {
@@ -365,13 +371,13 @@ const routes = [
   // 仅在开发环境注册测试路由 - 防止生产环境暴露测试页面
   ...(import.meta.env.DEV
     ? [
-        {
-          path: "/test/translate",
-          name: "TranslateTest",
-          component: () => import("@/views/test/TranslateTest.vue"),
-          meta: { title: "翻译功能测试", public: true },
-        },
-      ]
+      {
+        path: "/test/translate",
+        name: "TranslateTest",
+        component: () => import("@/views/test/TranslateTest.vue"),
+        meta: { title: "翻译功能测试", public: true },
+      },
+    ]
     : []),
   // 404 兜底路由
   {
@@ -447,7 +453,8 @@ router.beforeEach((to, from, next) => {
     if (
       requiredRoles &&
       Array.isArray(requiredRoles) &&
-      !requiredRoles.includes(userRole)
+      !requiredRoles.includes(userRole) &&
+      userRole !== "ADMIN" // ADMIN拥有所有权限，方便进行各种页面的预览
     ) {
       // 检查提权状态：ADMIN 可通过提权访问 OPS 路由，OPS 可通过提权访问 ADMIN 路由
       const elevatedRole = userStore.elevatedRole;

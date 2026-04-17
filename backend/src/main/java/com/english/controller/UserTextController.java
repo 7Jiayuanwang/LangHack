@@ -54,17 +54,30 @@ public class UserTextController {
             // 安全地获取和设置字段
             String title = (String) textData.get("title");
             String content = (String) textData.get("content");
+            String markdownContent = (String) textData.get("markdownContent");
+            String contentType = (String) textData.getOrDefault("contentType", "TEXT");
             String difficulty = (String) textData.getOrDefault("difficulty", "MEDIUM");
             String tags = (String) textData.getOrDefault("tags", "");
 
             if (title == null || title.trim().isEmpty()) {
                 return Result.error("课文标题不能为空");
             }
-            if (content == null || content.trim().isEmpty()) {
-                return Result.error("课文内容不能为空");
+
+            // 根据类型校验内容
+            if ("MARKDOWN".equalsIgnoreCase(contentType)) {
+                if (markdownContent == null || markdownContent.trim().isEmpty()) {
+                    return Result.error("Markdown内容不能为空");
+                }
+            } else {
+                if (content == null || content.trim().isEmpty()) {
+                    return Result.error("课文内容不能为空");
+                }
             }
+
             text.setTitle(title);
             text.setContent(content);
+            text.setMarkdownContent(markdownContent);
+            text.setContentType(contentType);
             text.setDifficulty(difficulty);
             text.setTags(tags != null ? tags : "");
             text.setUploadedBy(user.getId());
@@ -175,18 +188,36 @@ public class UserTextController {
 
             Object titleVal = textData.get("title");
             Object contentVal = textData.get("content");
+            Object markdownContentVal = textData.get("markdownContent");
+            Object contentTypeVal = textData.get("contentType");
             Object difficultyVal = textData.get("difficulty");
             Object tagsVal = textData.get("tags");
+
             if (textData.containsKey("title") && (titleVal == null || titleVal.toString().trim().isEmpty())) {
                 return Result.error("课文标题不能为空");
             }
-            if (textData.containsKey("content") && (contentVal == null || contentVal.toString().trim().isEmpty())) {
-                return Result.error("课文内容不能为空");
+
+            // 获取当前的类型（请求中带了就用请求的，没带就用数据库里的）
+            String currentType = contentTypeVal != null ? contentTypeVal.toString() : text.getContentType();
+            if (currentType == null) currentType = "TEXT";
+
+            // 根据类型校验内容
+            if ("MARKDOWN".equalsIgnoreCase(currentType)) {
+                if (textData.containsKey("markdownContent") && (markdownContentVal == null || markdownContentVal.toString().trim().isEmpty())) {
+                    return Result.error("Markdown内容不能为空");
+                }
+            } else {
+                if (textData.containsKey("content") && (contentVal == null || contentVal.toString().trim().isEmpty())) {
+                    return Result.error("课文内容不能为空");
+                }
             }
-            text.setTitle(textData.containsKey("title") && titleVal != null ? titleVal.toString() : (text.getTitle() != null ? text.getTitle() : ""));
-            text.setContent(textData.containsKey("content") && contentVal != null ? contentVal.toString() : (text.getContent() != null ? text.getContent() : ""));
-            text.setDifficulty(textData.containsKey("difficulty") && difficultyVal != null ? difficultyVal.toString() : (text.getDifficulty() != null ? text.getDifficulty() : "MEDIUM"));
-            text.setTags(textData.containsKey("tags") && tagsVal != null ? tagsVal.toString() : (text.getTags() != null ? text.getTags() : ""));
+
+            if (textData.containsKey("title")) text.setTitle(titleVal != null ? titleVal.toString() : "");
+            if (textData.containsKey("content")) text.setContent(contentVal != null ? contentVal.toString() : "");
+            if (textData.containsKey("markdownContent")) text.setMarkdownContent(markdownContentVal != null ? markdownContentVal.toString() : "");
+            if (textData.containsKey("contentType")) text.setContentType(contentTypeVal != null ? contentTypeVal.toString() : "TEXT");
+            if (textData.containsKey("difficulty")) text.setDifficulty(difficultyVal != null ? difficultyVal.toString() : "MEDIUM");
+            if (textData.containsKey("tags")) text.setTags(tagsVal != null ? tagsVal.toString() : "");
 
             textService.updateById(text);
             return Result.success("更新成功");

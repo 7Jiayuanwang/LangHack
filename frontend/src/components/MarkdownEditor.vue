@@ -1,5 +1,5 @@
 <template>
-  <div class="markdown-editor">
+  <div class="markdown-editor" :class="{ 'is-fullscreen': isFullscreen }">
     <!-- 工具栏 -->
     <div class="editor-toolbar">
       <el-button-group>
@@ -32,28 +32,34 @@
       </el-button-group>
 
       <el-button-group style="margin-left: 10px">
-        <el-button size="small" :type="previewMode ? 'primary' : ''" @click="togglePreview">
-          预览
-        </el-button>
         <el-button size="small" @click="clearContent">清空</el-button>
+        <el-button size="small" @click="toggleFullscreen" :type="isFullscreen ? 'primary' : ''">
+          {{ isFullscreen ? '小窗' : '全屏' }}
+        </el-button>
       </el-button-group>
     </div>
 
-    <!-- 编辑区域 -->
+    <!-- 编辑区域：左右分栏 -->
     <div class="editor-container">
-      <!-- 编辑器 -->
-      <div class="editor-pane" v-if="!previewMode">
+      <!-- 左侧：编辑器 -->
+      <div class="editor-pane">
         <textarea
+          ref="textareaRef"
           v-model="content"
           class="markdown-textarea"
           placeholder="在此输入Markdown内容..."
           @input="handleInput"
+          @scroll="handleEditorScroll"
         ></textarea>
       </div>
 
-      <!-- 预览区域 -->
-      <div class="preview-pane" v-if="previewMode">
-        <div class="markdown-preview" v-html="renderedMarkdown"></div>
+      <!-- 分隔线 -->
+      <div class="editor-divider"></div>
+
+      <!-- 右侧：实时预览（直接调用学生端渲染组件） -->
+      <div class="preview-pane" ref="previewPaneRef" @scroll="handlePreviewScroll">
+        <div class="preview-header">📖 学生端预览</div>
+        <MarkdownRenderer :markdown="content" :show-background="true" :clickable-images="true" />
       </div>
     </div>
 
@@ -84,11 +90,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
-import { uploadMedia } from '@/api/media'
+import { uploadMedia, deleteMedia } from '@/api/media'
+import MarkdownRenderer from './MarkdownRenderer.vue'
 
 const props = defineProps({
   modelValue: {
@@ -100,52 +105,100 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const content = ref(props.modelValue)
-const previewMode = ref(false)
+const isFullscreen = ref(false)
 const uploadDialogVisible = ref(false)
 const uploadProgress = ref(0)
 const uploadStatus = ref('')
 const imageInput = ref(null)
 const videoInput = ref(null)
+const textareaRef = ref(null)
+const previewPaneRef = ref(null)
+
+// 滚动同步防循环标志
+let isEditorScrolling = false
+let isPreviewScrolling = false
+
+const handleEditorScroll = () => {
+  if (isPreviewScrolling) return
+  isEditorScrolling = true
+  const textarea = textareaRef.value
+  const preview = previewPaneRef.value
+  if (textarea && preview) {
+    const scrollRatio = textarea.scrollTop / (textarea.scrollHeight - textarea.clientHeight || 1)
+    preview.scrollTop = scrollRatio * (preview.scrollHeight - preview.clientHeight)
+  }
+  requestAnimationFrame(() => { isEditorScrolling = false })
+}
+
+const handlePreviewScroll = () => {
+  if (isEditorScrolling) return
+  isPreviewScrolling = true
+  const textarea = textareaRef.value
+  const preview = previewPaneRef.value
+  if (textarea && preview) {
+    const scrollRatio = preview.scrollTop / (preview.scrollHeight - preview.clientHeight || 1)
+    textarea.scrollTop = scrollRatio * (textarea.scrollHeight - textarea.clientHeight)
+  }
+  requestAnimationFrame(() => { isPreviewScrolling = false })
+}
 
 // 追踪上传相关的 setTimeout timers，防止内存泄漏
 let uploadTimer = null
 
+// 追踪当前内容中的 media IDs，用于删除检测
+let previousMediaIds = new Set()
+
+// 从内容中提取所有 media IDs
+const extractMediaIds = (text) => {
+  const ids = new Set()
+  if (!text) return ids
+  // 匹配 ![...]( /api/media/{id}/download ) 和 src="/api/media/{id}/download"
+  const regex = /\/api\/media\/(\d+)\/download/g
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    ids.add(match[1])
+  }
+  return ids
+}
+
+// 初始化已有的 media IDs
+previousMediaIds = extractMediaIds(props.modelValue)
+
 // 监听props变化
 watch(() => props.modelValue, (newVal) => {
   content.value = newVal
+  previousMediaIds = extractMediaIds(newVal)
 })
 
-// 计算渲染后的Markdown
-const renderedMarkdown = computed(() => {
-  try {
-    if (!content.value) return ''
-    const html = marked(content.value)
-    // DOMPurify 配置：允许必要的 Markdown 标签和属性
-    const config = {
-      ALLOWED_TAGS: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'strong', 'em', 'code', 'pre', 'blockquote', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'video', 'source'],
-      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'width', 'height', 'target', 'controls', 'type'],
-      KEEP_CONTENT: true
-    }
-    return DOMPurify.sanitize(html, config)
-  } catch (e) {
-    console.error('Markdown 渲染错误:', e)
-    // 返回已清理的错误提示（不包含用户输入内容）
-    return DOMPurify.sanitize('<p style="color:#f56c6c;">Markdown 渲染失败，请检查语法</p>', {
-      ALLOWED_TAGS: ['p'],
-      ALLOWED_ATTR: ['style']
-    })
-  }
-})
 
-// 处理输入
+// 处理输入，并检测被删除的媒体
 const handleInput = () => {
-  emit('update:modelValue', content.value)
+  const newContent = content.value
+  emit('update:modelValue', newContent)
+
+  // 检测被移除的 media IDs 并自动删除
+  const currentMediaIds = extractMediaIds(newContent)
+  for (const id of previousMediaIds) {
+    if (!currentMediaIds.has(id)) {
+      deleteMedia(id).then(() => {
+        console.log(`已删除媒体: ${id}`)
+      }).catch(err => {
+        console.warn(`删除媒体 ${id} 失败:`, err)
+      })
+    }
+  }
+  previousMediaIds = currentMediaIds
+}
+
+// 获取 textarea DOM 元素
+const getTextarea = () => {
+  return textareaRef.value
 }
 
 // 插入Markdown语法
 const insertMarkdown = async (syntax) => {
-  const textarea = document.querySelector('.markdown-textarea')
-  if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return
+  const textarea = getTextarea()
+  if (!textarea) return
 
   const start = textarea.selectionStart
   const end = textarea.selectionEnd
@@ -161,10 +214,9 @@ const insertMarkdown = async (syntax) => {
 
   emit('update:modelValue', content.value)
 
-  // 等待 DOM 更新后重新获取 textarea 引用并设置光标位置
   await nextTick()
-  const updatedTextarea = document.querySelector('.markdown-textarea')
-  if (updatedTextarea && updatedTextarea instanceof HTMLTextAreaElement) {
+  const updatedTextarea = getTextarea()
+  if (updatedTextarea) {
     updatedTextarea.focus()
     updatedTextarea.selectionStart = start + syntax.length
     updatedTextarea.selectionEnd = start + syntax.length + 2
@@ -173,8 +225,8 @@ const insertMarkdown = async (syntax) => {
 
 // 插入链接
 const insertLink = async () => {
-  const textarea = document.querySelector('.markdown-textarea')
-  if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return
+  const textarea = getTextarea()
+  if (!textarea) return
 
   const start = textarea.selectionStart
   const beforeText = content.value.substring(0, start)
@@ -183,20 +235,19 @@ const insertLink = async () => {
   content.value = beforeText + '[链接文本](https://example.com)' + afterText
   emit('update:modelValue', content.value)
 
-  // 等待 DOM 更新后重新获取 textarea 引用并设置光标位置
   await nextTick()
-  const updatedTextarea = document.querySelector('.markdown-textarea')
-  if (updatedTextarea && updatedTextarea instanceof HTMLTextAreaElement) {
+  const updatedTextarea = getTextarea()
+  if (updatedTextarea) {
     updatedTextarea.focus()
-    updatedTextarea.selectionStart = start + 1  // 选中 '[' 后
-    updatedTextarea.selectionEnd = start + 5    // 选中 '链接文本'
+    updatedTextarea.selectionStart = start + 1
+    updatedTextarea.selectionEnd = start + 5
   }
 }
 
 // 插入代码
 const insertCode = async () => {
-  const textarea = document.querySelector('.markdown-textarea')
-  if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return
+  const textarea = getTextarea()
+  if (!textarea) return
 
   const start = textarea.selectionStart
   const beforeText = content.value.substring(0, start)
@@ -205,20 +256,19 @@ const insertCode = async () => {
   content.value = beforeText + '```\n代码\n```\n' + afterText
   emit('update:modelValue', content.value)
 
-  // 等待 DOM 更新后重新获取 textarea 引用并设置光标位置
   await nextTick()
-  const updatedTextarea = document.querySelector('.markdown-textarea')
-  if (updatedTextarea && updatedTextarea instanceof HTMLTextAreaElement) {
+  const updatedTextarea = getTextarea()
+  if (updatedTextarea) {
     updatedTextarea.focus()
-    updatedTextarea.selectionStart = start + 4  // 代码块开始后
-    updatedTextarea.selectionEnd = start + 6    // 代码文字位置
+    updatedTextarea.selectionStart = start + 4
+    updatedTextarea.selectionEnd = start + 6
   }
 }
 
 // 插入表格
 const insertTable = async () => {
-  const textarea = document.querySelector('.markdown-textarea')
-  if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return
+  const textarea = getTextarea()
+  if (!textarea) return
 
   const start = textarea.selectionStart
   const beforeText = content.value.substring(0, start)
@@ -228,12 +278,11 @@ const insertTable = async () => {
   content.value = beforeText + table + afterText
   emit('update:modelValue', content.value)
 
-  // 等待 DOM 更新后重新获取 textarea 引用并设置光标位置
   await nextTick()
-  const updatedTextarea = document.querySelector('.markdown-textarea')
-  if (updatedTextarea && updatedTextarea instanceof HTMLTextAreaElement) {
+  const updatedTextarea = getTextarea()
+  if (updatedTextarea) {
     updatedTextarea.focus()
-    updatedTextarea.selectionStart = start  // 表格起始位置
+    updatedTextarea.selectionStart = start
   }
 }
 
@@ -260,7 +309,6 @@ const handleImageUpload = async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
   await uploadMediaFile(file, 'IMAGE')
-  // 清空 input，允许重复上传同一文件
   if (imageInput.value) {
     imageInput.value.value = ''
   }
@@ -271,7 +319,6 @@ const handleVideoUpload = async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
   await uploadMediaFile(file, 'VIDEO')
-  // 清空 input，允许重复上传同一文件
   if (videoInput.value) {
     videoInput.value.value = ''
   }
@@ -299,8 +346,8 @@ const uploadMediaFile = async (file, mediaType) => {
       }
 
       // 插入Markdown语法
-      const textarea = document.querySelector('.markdown-textarea')
-      if (textarea && textarea instanceof HTMLTextAreaElement) {
+      const textarea = getTextarea()
+      if (textarea) {
         const start = textarea.selectionStart
         const beforeText = content.value.substring(0, start)
         const afterText = content.value.substring(start)
@@ -309,19 +356,18 @@ const uploadMediaFile = async (file, mediaType) => {
         if (mediaType === 'IMAGE') {
           markdown = `![${fileName}](/api/media/${mediaId}/download)\n`
         } else {
-          markdown = `<video src="/api/media/${mediaId}/download" controls width="100%"></video>\n`
+          markdown = `<video src="/api/media/${mediaId}/download" controls width="50%"></video>\n`
         }
 
         content.value = beforeText + markdown + afterText
         emit('update:modelValue', content.value)
+        // 更新追踪的 media IDs
+        previousMediaIds = extractMediaIds(content.value)
       }
 
-      // 1秒后关闭上传对话框
-      // 清理前一个计时器
       if (uploadTimer) {
         clearTimeout(uploadTimer)
       }
-      // 设置新计时器
       uploadTimer = setTimeout(() => {
         uploadDialogVisible.value = false
         ElMessage.success('上传成功')
@@ -336,25 +382,38 @@ const uploadMediaFile = async (file, mediaType) => {
   }
 }
 
-// 切换预览模式
-const togglePreview = () => {
-  previewMode.value = !previewMode.value
-}
-
 // 清空内容
 const clearContent = () => {
   if (confirm('确定要清空所有内容吗？')) {
+    // 删除所有已上传的媒体
+    for (const id of previousMediaIds) {
+      deleteMedia(id).catch(err => {
+        console.warn(`删除媒体 ${id} 失败:`, err)
+      })
+    }
+    previousMediaIds = new Set()
     content.value = ''
     emit('update:modelValue', '')
   }
 }
 
-// 清理 setTimeout timers 防止内存泄漏
+// 切换全屏
+const toggleFullscreen = () => {
+  isFullscreen.value = !isFullscreen.value
+  if (isFullscreen.value) {
+    document.body.style.overflow = 'hidden'
+  } else {
+    document.body.style.overflow = ''
+  }
+}
+
+// 清理
 onBeforeUnmount(() => {
   if (uploadTimer) {
     clearTimeout(uploadTimer)
     uploadTimer = null
   }
+  document.body.style.overflow = ''
 })
 </script>
 
@@ -363,9 +422,20 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 500px;
   border: 1px solid #dcdfe4;
   border-radius: 4px;
   overflow: hidden;
+  background-color: white;
+}
+
+.markdown-editor.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  border-radius: 0;
+  border: none;
+  height: 100vh !important;
 }
 
 .editor-toolbar {
@@ -383,114 +453,72 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.editor-pane,
+.editor-pane {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+}
+
+.editor-divider {
+  width: 1px;
+  background-color: #dcdfe4;
+  flex-shrink: 0;
+}
+
 .preview-pane {
   flex: 1;
   overflow: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-header {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: #64748b;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid #ebeef5;
+  flex-shrink: 0;
+  font-weight: 500;
 }
 
 .markdown-textarea {
   width: 100%;
   height: 100%;
-  padding: 12px;
+  padding: 32px 24px;
   border: none;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 14px;
-  line-height: 1.6;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 18px;
+  line-height: 1.8;
+  color: #1e293b;
   resize: none;
   outline: none;
-  box-sizing: border-box; /* 防止 padding 撑出容器宽度 */
-}
-
-.markdown-preview {
-  padding: 12px;
-  font-size: 14px;
-  line-height: 1.6;
-  overflow-x: auto; /* 防止宽表格/代码块横向溢出 */
-  word-break: break-word; /* 长 URL / 单词自动换行 */
-}
-
-.markdown-preview h1,
-.markdown-preview h2,
-.markdown-preview h3 {
-  margin: 16px 0 8px 0;
-  font-weight: bold;
-}
-
-.markdown-preview h1 {
-  font-size: 28px;
-}
-
-.markdown-preview h2 {
-  font-size: 24px;
-}
-
-.markdown-preview h3 {
-  font-size: 20px;
-}
-
-.markdown-preview p {
-  margin: 8px 0;
-}
-
-.markdown-preview ul,
-.markdown-preview ol {
-  margin: 8px 0;
-  padding-left: 24px;
-}
-
-.markdown-preview li {
-  margin: 4px 0;
-}
-
-.markdown-preview code {
-  background-color: #f5f7fa;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-}
-
-.markdown-preview pre {
-  background-color: #f5f7fa;
-  padding: 12px;
-  border-radius: 4px;
-  overflow-x: auto;
-  margin: 8px 0;
-}
-
-.markdown-preview blockquote {
-  border-left: 4px solid #409eff;
-  padding-left: 12px;
-  margin: 8px 0;
-  color: #666;
-}
-
-.markdown-preview table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 8px 0;
-}
-
-.markdown-preview table th,
-.markdown-preview table td {
-  border: 1px solid #dcdfe4;
-  padding: 8px;
-  text-align: left;
-}
-
-.markdown-preview table th {
-  background-color: #f5f7fa;
-  font-weight: bold;
+  box-sizing: border-box;
 }
 
 /* 移动端适配 */
 @media (max-width: 768px) {
+  .editor-container {
+    flex-direction: column;
+  }
+
+  .editor-divider {
+    width: 100%;
+    height: 1px;
+  }
+
+  .editor-pane,
+  .preview-pane {
+    flex: none;
+    height: 50%;
+  }
+
   .editor-toolbar {
     padding: 8px;
     gap: 4px;
   }
 
-  /* 按钮组间距收紧 */
   .editor-toolbar .el-button-group {
     margin-left: 4px !important;
   }
@@ -499,29 +527,10 @@ onBeforeUnmount(() => {
     margin-left: 0 !important;
   }
 
-  /* 工具栏按钮最小触摸高度 */
   .editor-toolbar .el-button {
     min-height: 36px;
     padding: 0 8px;
     font-size: 12px;
-  }
-
-  .markdown-preview {
-    font-size: 13px;
-  }
-
-  /* 移动端代码块横向滚动 */
-  .markdown-preview pre {
-    max-width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* 移动端表格横向滚动 */
-  .markdown-preview table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
 }
 </style>
