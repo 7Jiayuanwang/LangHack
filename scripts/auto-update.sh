@@ -227,7 +227,7 @@ backup_env() {
 
         # 清理旧备份，只保留最近 N 份
         local count
-        count=$(ls -1 "$BACKUP_DIR"/.env.pre-update.* 2>/dev/null | wc -l || echo "0")
+        count=$(ls -1 "$BACKUP_DIR"/.env.pre-update.* 2>/dev/null | wc -l | tr -d '\r' || echo "0")
         if [ "$count" -gt "$ENV_BACKUP_KEEP" ]; then
             ls -1t "$BACKUP_DIR"/.env.pre-update.* | tail -n +"$((ENV_BACKUP_KEEP + 1))" | xargs rm -f 2>/dev/null || true
             log "CONFIG: 已清理旧 .env 备份 (保留 $ENV_BACKUP_KEEP 份)"
@@ -429,12 +429,21 @@ run_incremental_migrations() {
         return 1
     fi
 
+    # Git LFS 指针文件检测：LFS 文件未下载时内容是版本指针而非真实 SQL
+    if head -1 "$migration_sql" 2>/dev/null | grep -qE '^version https://git-lfs\.github\.com'; then
+        log "ERROR: MIGRATE: 迁移脚本为 Git LFS 指针文件，未下载真实内容"
+        log "ERROR:   文件: $migration_sql"
+        log "ERROR:   请执行 'git lfs pull' 后重新部署"
+        notify "部署阻塞: 迁移脚本是 LFS 指针文件，请执行 git lfs pull"
+        return 1
+    fi
+
     # 版本同步校验：Flyway 文件数 vs 合并脚本头部列表
     local flyway_dir="$PROJECT_ROOT/backend/src/main/resources/db/migration"
     if [ -d "$flyway_dir" ]; then
         local flyway_count merged_count
-        flyway_count=$(ls "$flyway_dir"/V*.sql 2>/dev/null | wc -l || echo 0)
-        merged_count=$(grep -cE '^--   V[0-9]+__' "$migration_sql" 2>/dev/null || echo 0)
+        flyway_count=$(ls "$flyway_dir"/V*.sql 2>/dev/null | wc -l | tr -d '\r' || echo 0)
+        merged_count=$(grep -cE '^--   V[0-9]+__' "$migration_sql" 2>/dev/null | tr -d '\r' || echo 0)
         if [ "$flyway_count" -gt "$merged_count" ]; then
             log "ERROR: MIGRATE: 迁移脚本版本不同步，阻塞部署"
             log "ERROR:   Flyway 文件数: ${flyway_count}"
@@ -653,6 +662,7 @@ if [ -f "$LOCK_FILE" ]; then
 fi
 echo $$ > "$LOCK_FILE"
 trap cleanup EXIT
+trap 'log "WARN: 收到中断信号，正在安全退出..."; exit 130' SIGINT SIGTERM
 
 # ── 进入项目目录 ──────────────────────────────────────
 cd "$PROJECT_ROOT"
@@ -763,13 +773,26 @@ fi
 # ⑤ 数据库备份
 pre_update_backup
 
-# ⑥ 拉取新代码
+# ⑥ 拉取新代码（强制同步，清理本地修改/未跟踪文件冲突）
 log "INFO: 拉取最新代码..."
+git stash --include-untracked 2>/dev/null || true
+git checkout --force "$BRANCH" --quiet 2>/dev/null || true
 if ! git pull origin "$BRANCH" --ff-only; then
-    log "ERROR: git pull 失败（可能有本地冲突），跳过本次更新"
-    notify "自动更新失败: git pull 出现冲突，需要手动处理"
-    disable_maintenance
-    exit 1
+    # ff-only 失败时尝试 reset（应对本地历史与远程分叉的情况）
+    log "WARN: fast-forward 失败，尝试 reset 到远程版本..."
+    if git reset --hard "origin/$BRANCH" --quiet 2>/dev/null; then
+        log "INFO: 已强制同步到远程版本"
+    else
+        log "ERROR: git pull/reset 均失败，跳过本次更新"
+        notify "自动更新失败: git pull 出现冲突，需要手动处理"
+        disable_maintenance
+        exit 1
+    fi
+fi
+
+# ⑥.5 确保 Git LFS 文件已下载（git pull 后 LFS 文件可能仍为指针）
+if command -v git-lfs &>/dev/null || git lfs version &>/dev/null; then
+    git lfs pull 2>/dev/null || log "WARN: git lfs pull 失败，LFS 文件可能未下载（如 .sql 迁移脚本）"
 fi
 
 # ⑦ 验证 .env 仍存在
