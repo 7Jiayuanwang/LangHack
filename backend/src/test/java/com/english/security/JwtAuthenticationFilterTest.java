@@ -95,6 +95,7 @@ class JwtAuthenticationFilterTest {
         // Mock user active check
         User adminUser = new User();
         adminUser.setRole("ADMIN");
+        adminUser.setStatus("ACTIVE");
         when(userService.getUserByUsername("admin_user")).thenReturn(adminUser);
 
         invokeDoFilterInternal();
@@ -129,6 +130,7 @@ class JwtAuthenticationFilterTest {
             // Mock user active check
             User user = new User();
             user.setRole(role);
+            user.setStatus("ACTIVE");
             when(userService.getUserByUsername("user_" + role)).thenReturn(user);
 
             invokeDoFilterInternal();
@@ -154,6 +156,7 @@ class JwtAuthenticationFilterTest {
         // Mock user active check
         User user = new User();
         user.setRole("USER");
+        user.setStatus("ACTIVE");
         when(userService.getUserByUsername("testuser")).thenReturn(user);
 
         invokeDoFilterInternal();
@@ -316,6 +319,7 @@ class JwtAuthenticationFilterTest {
         // Mock user active check
         User user = new User();
         user.setRole("USER");
+        user.setStatus("ACTIVE");
         when(userService.getUserByUsername("user")).thenReturn(user);
 
         invokeDoFilterInternal();
@@ -406,6 +410,7 @@ class JwtAuthenticationFilterTest {
 
         User user = new User();
         user.setRole("OPS");
+        user.setStatus("ACTIVE");
         when(userService.getUserByUsername("ops_user")).thenReturn(user);
 
         invokeDoFilterInternal();
@@ -444,6 +449,7 @@ class JwtAuthenticationFilterTest {
 
         User adminUser = new User();
         adminUser.setRole("ADMIN");
+        adminUser.setStatus("ACTIVE");
         when(userService.getUserByUsername("ops_user")).thenReturn(adminUser);
 
         // Elevation: ADMIN user elevated to OPS
@@ -473,6 +479,7 @@ class JwtAuthenticationFilterTest {
 
         User normalUser = new User();
         normalUser.setRole("USER");
+        normalUser.setStatus("ACTIVE");
         when(userService.getUserByUsername("normal_user")).thenReturn(normalUser);
 
         // No elevation
@@ -499,6 +506,7 @@ class JwtAuthenticationFilterTest {
 
         User adminUser = new User();
         adminUser.setRole("ADMIN");
+        adminUser.setStatus("ACTIVE");
         when(userService.getUserByUsername("admin_user")).thenReturn(adminUser);
 
         // Elevation check throws exception (e.g., Redis down)
