@@ -505,16 +505,107 @@ run_incremental_migrations() {
     fi
     log "MIGRATE: 增量迁移完成 ✓ (V1~V${max_ver})"
 
-    # 种子数据检查：关键表为空时提示需要重新导入（docker compose down -v 后可能丢失）
-    local texts_count ecdict_count
+    # 种子数据检查与自动补全：docker compose down -v 后可能丢失
+    local texts_count ecdict_count article_count
     texts_count=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" \
         -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
     ecdict_count=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" \
         -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
-    if [ "${texts_count:-0}" = "0" ] || [ "${ecdict_count:-0}" -lt 100000 ]; then
-        log "WARN: MIGRATE: 检测到空数据库（texts: ${texts_count}, ecdict_words: ${ecdict_count}）"
-        log "WARN:          可能需要重新运行 deploy.sh 以导入种子数据"
-        notify "数据库可能缺少种子数据（texts: ${texts_count}, ecdict: ${ecdict_count}），请检查"
+    article_count=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" \
+        -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+
+    local need_seed=false
+    [ "${texts_count:-0}" = "0" ] && need_seed=true
+    [ "${ecdict_count:-0}" -lt 100000 ] && need_seed=true
+
+    if [ "$need_seed" = true ]; then
+        log "SEED: 检测到空数据库（texts: ${texts_count}, ecdict_words: ${ecdict_count}, article: ${article_count}），开始自动导入..."
+
+        local db_name="${MYSQL_DATABASE:-english_learning}"
+
+        # ① 全量备份
+        local seed_file=""
+        for dir in "$PROJECT_ROOT/database" "$PROJECT_ROOT/backups"; do
+            [ -d "$dir" ] || continue
+            for file in "$dir"/*.sql "$dir"/*.sql.gz; do
+                [ -f "$file" ] || continue
+                basename "$file" | grep -q "_incr_" && continue
+                local fsize; fsize=$(stat -c%s "$file" 2>/dev/null || echo "0")
+                [ "$fsize" -lt 1024 ] && continue
+                basename "$file" | grep -qi "schema_export" && continue
+                if [ -z "$seed_file" ]; then
+                    seed_file="$file"
+                else
+                    local cur_mtime best_mtime
+                    cur_mtime=$(stat -c%Y "$file" 2>/dev/null || echo "0")
+                    best_mtime=$(stat -c%Y "$seed_file" 2>/dev/null || echo "0")
+                    [ "$cur_mtime" -gt "$best_mtime" ] && seed_file="$file"
+                fi
+            done
+        done
+
+        if [ -n "$seed_file" ] && [ -f "$seed_file" ]; then
+            log "SEED: 导入全量备份: $(basename "$seed_file")"
+            case "$seed_file" in
+                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql)    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
+            esac
+            log "SEED: 全量备份导入完成 ✓"
+        else
+            log "WARN: SEED: 未找到全量备份文件，跳过"
+        fi
+
+        # ② 3Blue1Brown 课文
+        local article_dir="$PROJECT_ROOT/database/3Blue1Brown"
+        if [ -d "$article_dir" ]; then
+            local article_after; article_after=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+                -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+            if [ "${article_after:-0}" = "0" ]; then
+                log "SEED: 导入课文数据 (3Blue1Brown)..."
+                for f in "$article_dir"/*.sql; do
+                    [ -f "$f" ] || continue
+                    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
+                done
+                log "SEED: 课文数据导入完成 ✓"
+            fi
+        fi
+
+        # ③ ECDICT 词典
+        local ecdict_after; ecdict_after=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+            -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        if [ "${ecdict_after:-0}" -lt 100000 ]; then
+            local ecdict_csv="$PROJECT_ROOT/ECDICT-master/ecdict.csv"
+            if [ -f "$ecdict_csv" ]; then
+                log "SEED: 导入 ECDICT 词典（预计 1-3 分钟）..."
+                docker cp "$ecdict_csv" "$mysql_container:/tmp/ecdict.csv"
+                docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
+                docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" --local-infile=1 "$db_name" -e \
+                    "TRUNCATE TABLE ecdict_words;
+                     LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
+                     INTO TABLE ecdict_words
+                     CHARACTER SET utf8mb4
+                     FIELDS TERMINATED BY ','
+                     OPTIONALLY ENCLOSED BY '\"'
+                     LINES TERMINATED BY '\n'
+                     IGNORE 1 LINES
+                     (word, phonetic, definition, translation, pos, collins, oxford, tag, bnc, frq, exchange, @detail, @audio);" 2>&1 \
+                    | grep -v "Using a password" || true
+                docker exec "$mysql_container" rm -f /tmp/ecdict.csv
+                log "SEED: ECDICT 词典导入完成 ✓"
+            else
+                log "WARN: SEED: ECDICT CSV 不存在: $ecdict_csv"
+            fi
+        fi
+
+        # 验证
+        local texts_final ecdict_final article_final
+        texts_final=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+            -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        ecdict_final=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+            -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        article_final=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+            -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        log "SEED: 种子数据导入完成 ✓ (texts: ${texts_final}, ecdict_words: ${ecdict_final}, article: ${article_final})"
     fi
 
     # 验证从库复制延迟
