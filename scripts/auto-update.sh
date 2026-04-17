@@ -505,6 +505,18 @@ run_incremental_migrations() {
     fi
     log "MIGRATE: 增量迁移完成 ✓ (V1~V${max_ver})"
 
+    # 种子数据检查：关键表为空时提示需要重新导入（docker compose down -v 后可能丢失）
+    local texts_count ecdict_count
+    texts_count=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" \
+        -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    ecdict_count=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" \
+        -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    if [ "${texts_count:-0}" = "0" ] || [ "${ecdict_count:-0}" -lt 100000 ]; then
+        log "WARN: MIGRATE: 检测到空数据库（texts: ${texts_count}, ecdict_words: ${ecdict_count}）"
+        log "WARN:          可能需要重新运行 deploy.sh 以导入种子数据"
+        notify "数据库可能缺少种子数据（texts: ${texts_count}, ecdict: ${ecdict_count}），请检查"
+    fi
+
     # 验证从库复制延迟
     local slave_container slave_lag_wait=0
     slave_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.slave|mysql-slave' | head -1 || echo "")

@@ -1058,6 +1058,128 @@ elif [ -n "$MIGRATE_ERRORS" ]; then
 fi
 echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
 
+# ── 数据导入检查与补全 ──────────────────────────────────────────
+# docker compose down -v 后重建时，Docker init 脚本可能未成功导入种子数据
+# 此步骤检测关键表数据量，为空时自动从 database/ 和 backups/ 导入
+echo "[INFO] 检查数据库种子数据..."
+
+# 检查关键表的数据量（texts=文章, ecdict_words=词典, article=课文）
+DB_NAME="${MYSQL_DATABASE:-english_learning}"
+TEXTS_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+    -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+ECDICT_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+    -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+ARTICLE_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+    -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+
+NEED_SEED=false
+[ "${TEXTS_COUNT:-0}" = "0" ] && NEED_SEED=true
+[ "${ECDICT_COUNT:-0}" = "0" ] && NEED_SEED=true
+
+if [ "$NEED_SEED" = true ]; then
+    echo "[WARN] 检测到空数据库（texts: ${TEXTS_COUNT}, ecdict_words: ${ECDICT_COUNT}, article: ${ARTICLE_COUNT}）"
+    echo "[INFO] 开始自动导入种子数据..."
+
+    # ① 导入全量备份（database/ 中最新的 .sql，优先全量备份）
+    SEED_DIR="$PROJECT_ROOT/database"
+    BACKUP_SEED_DIR="$PROJECT_ROOT/backups"
+    SEED_FILE=""
+    for dir in "$SEED_DIR" "$BACKUP_SEED_DIR"; do
+        if [ -d "$dir" ]; then
+            for file in "$dir"/*.sql "$dir"/*.sql.gz; do
+                [ -f "$file" ] || continue
+                # 跳过增量备份
+                basename "$file" | grep -q "_incr_" && continue
+                # 跳过过小文件
+                fsize=$(stat -c%s "$file" 2>/dev/null || echo "0")
+                [ "$fsize" -lt 1024 ] && continue
+                # 跳过非备份文件（schema_export, texts_full_export 等单独处理）
+                basename "$file" | grep -qi "schema_export" && continue
+                # 选修改时间最新的
+                if [ -z "$SEED_FILE" ]; then
+                    SEED_FILE="$file"
+                else
+                    cur_mtime=$(stat -c%Y "$file" 2>/dev/null || echo "0")
+                    best_mtime=$(stat -c%Y "$SEED_FILE" 2>/dev/null || echo "0")
+                    [ "$cur_mtime" -gt "$best_mtime" ] && SEED_FILE="$file"
+                fi
+            done
+        fi
+    done
+
+    if [ -n "$SEED_FILE" ] && [ -f "$SEED_FILE" ]; then
+        echo "[INFO] 导入全量备份: $(basename "$SEED_FILE")"
+        case "$SEED_FILE" in
+            *.sql.gz)
+                zcat "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" \
+                    mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password" || true
+                ;;
+            *.sql)
+                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                    < "$SEED_FILE" 2>&1 | grep -v "Using a password" || true
+                ;;
+        esac
+        echo "[OK] 全量备份导入完成"
+    else
+        echo "[WARN] 未找到全量备份文件，跳过数据导入"
+    fi
+
+    # ② 导入课文数据（3Blue1Brown 等）
+    ARTICLE_DIR="$PROJECT_ROOT/database/3Blue1Brown"
+    if [ -d "$ARTICLE_DIR" ]; then
+        ARTICLE_COUNT_AFTER=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+            -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        if [ "${ARTICLE_COUNT_AFTER:-0}" = "0" ]; then
+            echo "[INFO] 导入课文数据 (3Blue1Brown)..."
+            for f in "$ARTICLE_DIR"/*.sql; do
+                [ -f "$f" ] || continue
+                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                    < "$f" 2>&1 | grep -v "Using a password" || true
+            done
+            echo "[OK] 课文数据导入完成"
+        fi
+    fi
+
+    # ③ 导入 ECDICT 词典（74万词）
+    ECDICT_COUNT_AFTER=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+        -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    if [ "${ECDICT_COUNT_AFTER:-0}" -lt 100000 ]; then
+        ECDICT_CSV_PATH="$PROJECT_ROOT/ECDICT-master/ecdict.csv"
+        if [ -f "$ECDICT_CSV_PATH" ]; then
+            echo "[INFO] 导入 ECDICT 词典（预计 1-3 分钟）..."
+            # 通过 docker cp + LOAD DATA 方式导入（比管道快得多）
+            docker cp "$ECDICT_CSV_PATH" "$MASTER_CONTAINER:/tmp/ecdict.csv"
+            docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
+            docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" --local-infile=1 "$DB_NAME" -e \
+                "TRUNCATE TABLE ecdict_words;
+                 LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
+                 INTO TABLE ecdict_words
+                 CHARACTER SET utf8mb4
+                 FIELDS TERMINATED BY ','
+                 OPTIONALLY ENCLOSED BY '\"'
+                 LINES TERMINATED BY '\n'
+                 IGNORE 1 LINES
+                 (word, phonetic, definition, translation, pos, collins, oxford, tag, bnc, frq, exchange, @detail, @audio);" 2>&1 \
+                | grep -v "Using a password" || true
+            docker exec "$MASTER_CONTAINER" rm -f /tmp/ecdict.csv
+            echo "[OK] ECDICT 词典导入完成"
+        else
+            echo "[WARN] ECDICT CSV 文件不存在: $ECDICT_CSV_PATH，跳过词典导入"
+        fi
+    fi
+
+    # 验证导入结果
+    TEXTS_FINAL=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+        -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    ECDICT_FINAL=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+        -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    ARTICLE_FINAL=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+        -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    echo "[OK] 种子数据导入完成（texts: ${TEXTS_FINAL}, ecdict_words: ${ECDICT_FINAL}, article: ${ARTICLE_FINAL}）"
+else
+    echo "[OK] 数据库已有种子数据（texts: ${TEXTS_COUNT}, ecdict_words: ${ECDICT_COUNT}, article: ${ARTICLE_COUNT}）"
+fi
+
 # Schema 验证：确认关键表存在（与 auto-update.sh 保持一致）
 echo "[INFO] 验证数据库 Schema 完整性..."
 SCHEMA_MISSING=""
