@@ -170,9 +170,13 @@ class SchoolDataConfigRefreshServiceTest {
         void shouldTriggerRecreateDataSourceOnEtlChange() {
             SystemConfig etlConfig = new SystemConfig();
             etlConfig.setConfigKey("etl_jdbc_url");
-            etlConfig.setConfigValue("jdbc:mysql://school-db.imau.edu.cn:3306/db");
+            etlConfig.setConfigValue("jdbc:mysql://school-db.imau.edu.cn:3306/new_db");
 
-            when(configService.getByGroup("school_data")).thenReturn(Collections.emptyMap());
+            // Mock DB config to return source=etl (required for ETL DataSource recreation)
+            Map<String, String> dbConfig = new HashMap<>();
+            dbConfig.put("source", "etl");
+            dbConfig.put("etl_jdbc_url", "jdbc:mysql://school-db.imau.edu.cn:3306/old_db");
+            when(configService.getByGroup("school_data")).thenReturn(dbConfig);
 
             refreshService.updateAndRefresh(List.of(etlConfig), "admin");
 

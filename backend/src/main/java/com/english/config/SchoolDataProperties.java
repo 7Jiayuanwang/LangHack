@@ -22,6 +22,7 @@ public class SchoolDataProperties {
 
     /** API Base URL 白名单域名 */
     private static final List<String> API_ALLOWED_DOMAINS = Arrays.asList(
+            "cdsp.imau.edu.cn",
             "api.imau.edu.cn",
             "imau.edu.cn"
     );
@@ -76,8 +77,9 @@ public class SchoolDataProperties {
     // =========================================================================
 
     public static class ApiProperties {
-        /** API 基础URL */
-        private String baseUrl = "https://api.imau.edu.cn";
+        /** API 基础URL（已废弃，每个接口使用完整独立 URL） */
+        @Deprecated
+        private String baseUrl = "https://cdsp.imau.edu.cn";
 
         /** 认证 Token */
         private String token;
@@ -91,17 +93,17 @@ public class SchoolDataProperties {
         /** 重试次数 */
         private int retryAttempts = 3;
 
-        /** API 端点路径映射 */
+        /** API 端点完整 URL 映射（基于官方接口文档） */
         private List<EndpointMapping> endpoints = Arrays.asList(
-                new EndpointMapping("administrative_class", "/api/xzxx"),
-                new EndpointMapping("school_course", "/api/kcxx"),
-                new EndpointMapping("teaching_class", "/api/bzkcxx"),
-                new EndpointMapping("course_schedule", "/api/kcap"),
-                new EndpointMapping("course_selection", "/api/xsxk"),
-                new EndpointMapping("level_exam_scores", "/api/djcj"),
-                new EndpointMapping("teaching_plans", "/api/jxjh"),
-                new EndpointMapping("teacher_courses", "/api/jssk"),
-                new EndpointMapping("student_schedule", "/api/xskb")
+                new EndpointMapping("administrative_class", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171094991198337"),
+                new EndpointMapping("school_course", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529094506435"),
+                new EndpointMapping("teaching_class", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_172180403086015"),
+                new EndpointMapping("course_schedule", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529037780151"),
+                new EndpointMapping("course_selection", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529480287192"),
+                new EndpointMapping("level_exam_scores", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0076"),
+                new EndpointMapping("teaching_plans", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171528965502646"),
+                new EndpointMapping("teacher_courses", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529464567780"),
+                new EndpointMapping("student_schedule", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529439727434")
         );
 
         public String getBaseUrl() {
@@ -172,7 +174,7 @@ public class SchoolDataProperties {
         /** 数据源名称（如 administrative_class） */
         private String dataSource;
 
-        /** API 端点路径（如 /api/xzxx） */
+        /** API 完整 URL（如 https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171094991198337） */
         private String path;
 
         public EndpointMapping() {

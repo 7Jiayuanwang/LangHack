@@ -131,6 +131,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getSsoLogoutUrl, getSsoStatus } from '@/api/sso'
+import { getFeatureToggles } from '@/api/systemConfig'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ElevationDialog from '@/components/ElevationDialog.vue'
 import {
@@ -155,6 +156,9 @@ const userStore = useUserStore()
 // ops 专属状态
 const showElevationDialog = ref(false)
 const elevationTarget     = ref('ADMIN')
+
+// 功能开关状态
+const featureToggles = ref({})
 
 // ── 主题（accent 颜色）────────────────────────────────────────────────────────
 
@@ -188,8 +192,8 @@ const NAV_ITEMS = {
     { path: '/ops/users',           label: '用户', icon: User        },
     { path: '/ops/ai-providers',    label: 'AI',   icon: Connection  },
     { path: '/ops/feature-toggles', label: '开关', icon: Switch      },
-    { path: '/ops/school-data',         label: '数据', icon: Coin        },
-    { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine    },
+    { path: '/ops/school-data',         label: '数据', icon: Coin,        featureKey: 'ops.school_data_config' },
+    { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine,    featureKey: 'ops.school_data_browser' },
     { path: '/ops/update',          label: '更新', icon: Refresh     },
   ],
   admin: [
@@ -200,7 +204,18 @@ const NAV_ITEMS = {
   ],
 }
 
-const navItems = computed(() => NAV_ITEMS[props.role] || [])
+const navItems = computed(() => {
+  const items = NAV_ITEMS[props.role] || []
+  // 运维端需要根据功能开关过滤导航项
+  if (props.role === 'ops') {
+    return items.filter(item => {
+      if (!item.featureKey) return true
+      const val = featureToggles.value[item.featureKey]
+      return val === undefined || val === true || val === 'true'
+    })
+  }
+  return items
+})
 
 // admin 专属：二级管理菜单
 const MORE_ITEMS = {
@@ -393,6 +408,18 @@ onMounted(async () => {
   if (props.role === 'admin' && (!userStore.isLoggedIn || !userStore.hasAdminAccess)) {
     ElMessage.error('权限不足，请以管理员身份登录')
     router.replace('/login')
+  }
+
+  // 加载功能开关（运维端）
+  if (props.role === 'ops') {
+    try {
+      const res = await getFeatureToggles()
+      if (res?.code === 200 && res.data) {
+        featureToggles.value = res.data
+      }
+    } catch (e) {
+      console.error('Failed to load feature toggles:', e)
+    }
   }
 
   // 检查 SSO 是否启用（静默失败，不影响主流程）

@@ -22,16 +22,16 @@ import java.util.Map;
 /**
  * 学校数据API客户端实现 - 通过REST API对接学校数据源
  * <p>
- * 端点路径使用学校实际API规范（拼音缩写）:
- * - /api/xzxx  行政班信息
- * - /api/kcxx  课程基本信息
- * - /api/bzkcxx 本专科生课程(教学班)
- * - /api/kcap  课程安排
- * - /api/xsxk  学生选课
- * - /api/djcj  等级考试成绩
- * - /api/jxjh  教学计划
- * - /api/jssk  教师授课
- * - /api/xskb  学生课表
+ * 每个数据源使用独立的完整 URL（基于官方接口文档）:
+ * - administrative_class: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171094991198337
+ * - school_course: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529094506435
+ * - teaching_class: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_172180403086015
+ * - course_schedule: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529037780151
+ * - course_selection: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529480287192
+ * - level_exam_scores: https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0076
+ * - teaching_plans: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171528965502646
+ * - teacher_courses: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529464567780
+ * - student_schedule: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529439727434
  * <p>
  * 仅在 school.data.source=api 时激活
  */
@@ -54,10 +54,10 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         factory.setReadTimeout(properties.getApi().getReadTimeout());
         this.restTemplate = new RestTemplate(factory);
 
-        logger.info("SchoolDataApiClient initialized - baseUrl: {}, connectTimeout: {}ms, readTimeout: {}ms",
-                properties.getApi().getBaseUrl(),
+        logger.info("SchoolDataApiClient initialized - connectTimeout: {}ms, readTimeout: {}ms, endpoints: {}",
                 properties.getApi().getConnectTimeout(),
-                properties.getApi().getReadTimeout());
+                properties.getApi().getReadTimeout(),
+                properties.getApi().getEndpoints().size());
     }
 
     @Override
@@ -127,17 +127,17 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
     @Override
     public boolean testConnection() {
-        String baseUrl = properties.getApi().getBaseUrl();
-        if (baseUrl == null || baseUrl.isEmpty()) {
-            logger.warn("School data API base URL is not configured");
-            return false;
-        }
-
         try {
             HttpHeaders headers = buildHeaders();
             HttpEntity<Void> entity = new HttpEntity<>(headers);
+            // 使用行政班接口测试连接（完整 URL）
+            String testEndpoint = properties.getApi().getEndpointPath("administrative_class");
+            if (testEndpoint == null || testEndpoint.isEmpty()) {
+                logger.warn("School data API endpoint for administrative_class is not configured");
+                return false;
+            }
             ResponseEntity<String> response = restTemplate.exchange(
-                    baseUrl + "/api/health", HttpMethod.GET, entity, String.class);
+                    testEndpoint + "?pageSize=1", HttpMethod.GET, entity, String.class);
             return response.getStatusCode().is2xxSuccessful();
         } catch (RestClientException e) {
             logger.error("School data API connection test failed", e);
@@ -162,16 +162,15 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     /**
-     * 通过完整路径获取数据
+     * 通过完整 URL 获取数据
      */
-    private List<Map<String, Object>> fetchDataWithPath(String path, Map<String, String> params) {
-        String baseUrl = properties.getApi().getBaseUrl();
-        if (baseUrl == null || baseUrl.isEmpty()) {
-            logger.error("School data API base URL is not configured");
+    private List<Map<String, Object>> fetchDataWithPath(String fullUrl, Map<String, String> params) {
+        if (fullUrl == null || fullUrl.isEmpty()) {
+            logger.error("School data API URL is not configured");
             return Collections.emptyList();
         }
 
-        String url = buildUrl(baseUrl, path, params);
+        String url = buildUrl(fullUrl, params);
 
         int retryAttempts = properties.getApi().getRetryAttempts();
         for (int attempt = 1; attempt <= retryAttempts; attempt++) {
@@ -207,12 +206,8 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     /**
      * Build full URL with query parameters
      */
-    private String buildUrl(String baseUrl, String path, Map<String, String> params) {
-        StringBuilder url = new StringBuilder(baseUrl);
-        if (!baseUrl.endsWith("/") && !path.startsWith("/")) {
-            url.append("/");
-        }
-        url.append(path);
+    private String buildUrl(String fullUrl, Map<String, String> params) {
+        StringBuilder url = new StringBuilder(fullUrl);
 
         if (params != null && !params.isEmpty()) {
             url.append("?");

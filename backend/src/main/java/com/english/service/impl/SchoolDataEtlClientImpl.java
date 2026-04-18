@@ -254,8 +254,14 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
     private DataSource createSchoolDataSource() {
         SchoolDataProperties.EtlProperties etl = properties.getEtl();
 
+        // 校验必填配置
+        String jdbcUrl = etl.getJdbcUrl();
+        if (jdbcUrl == null || jdbcUrl.isEmpty() || jdbcUrl.isBlank()) {
+            throw new IllegalArgumentException("ETL jdbcUrl is required but not configured");
+        }
+
         HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(etl.getJdbcUrl());
+        config.setJdbcUrl(jdbcUrl);
         config.setUsername(etl.getUsername());
         config.setPassword(etl.getPassword());
         config.setDriverClassName(etl.getDriverClassName());

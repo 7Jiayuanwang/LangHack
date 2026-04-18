@@ -102,11 +102,17 @@ public class SchoolDataConfigRefreshService {
             scheduler.rescheduleAll();
         }
 
-        // 6. 如果 ETL 数据源配置变了 → 重建 DataSource
+        // 6. 如果 ETL 数据源配置变了 → 重建 DataSource（仅当 source=etl 且配置完整时）
         boolean etlDsChanged = changedKeys.stream().anyMatch(ETL_DATASOURCE_KEYS::contains);
-        if (etlDsChanged) {
-            logger.info("ETL datasource config changed, recreating DataSource");
-            etlClient.recreateDataSource();
+        if (etlDsChanged && "etl".equalsIgnoreCase(properties.getSource())) {
+            // 检查 ETL 配置是否完整
+            String jdbcUrl = properties.getEtl().getJdbcUrl();
+            if (jdbcUrl != null && !jdbcUrl.isEmpty() && !jdbcUrl.isBlank()) {
+                logger.info("ETL datasource config changed, recreating DataSource");
+                etlClient.recreateDataSource();
+            } else {
+                logger.warn("ETL datasource config changed but jdbcUrl is empty, skip DataSource recreation");
+            }
         }
     }
 

@@ -154,18 +154,21 @@ public class FieldMappingServiceImpl implements FieldMappingService {
                 }
             }
 
-            result.put(targetField, convertedValue);
+            // Convert target field to camelCase for API response
+            String camelCaseField = toCamelCase(targetField);
+            result.put(camelCaseField, convertedValue);
         }
 
         // Check for required fields that were missing from source data
         for (FieldMapping mapping : mappings) {
+            String camelCaseField = toCamelCase(mapping.getTargetField());
             if (Boolean.TRUE.equals(mapping.getIsRequired())
-                    && !result.containsKey(mapping.getTargetField())
+                    && !result.containsKey(camelCaseField)
                     && !sourceData.containsKey(mapping.getSourceField())) {
                 // Required field entirely missing from source
                 if (mapping.getDefaultValue() != null && !mapping.getDefaultValue().isEmpty()) {
                     Object defaultValue = convertType(mapping.getDefaultValue(), mapping.getTargetType(), mapping.getConverterConfig());
-                    result.put(mapping.getTargetField(), defaultValue);
+                    result.put(camelCaseField, defaultValue);
                 }
             }
         }
@@ -409,5 +412,37 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             logger.warn("Failed to parse number: {}", strValue);
             return 0;
         }
+    }
+
+    /**
+     * Convert snake_case to camelCase
+     */
+    private String toCamelCase(String snakeCase) {
+        if (snakeCase == null || snakeCase.isEmpty()) {
+            return snakeCase;
+        }
+
+        // If no underscore, return as-is
+        if (!snakeCase.contains("_")) {
+            return snakeCase;
+        }
+
+        StringBuilder result = new StringBuilder();
+        boolean capitalizeNext = false;
+
+        for (char c : snakeCase.toCharArray()) {
+            if (c == '_') {
+                capitalizeNext = true;
+            } else {
+                if (capitalizeNext) {
+                    result.append(Character.toUpperCase(c));
+                    capitalizeNext = false;
+                } else {
+                    result.append(c);
+                }
+            }
+        }
+
+        return result.toString();
     }
 }
