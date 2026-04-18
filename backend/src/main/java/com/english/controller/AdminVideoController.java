@@ -7,7 +7,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import com.english.entity.User;
+import com.english.service.UserService;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +29,9 @@ public class AdminVideoController {
 
     @Autowired
     private VideoService videoService;
+
+    @Autowired
+    private UserService userService;
 
     /**
      * 分页获取视频列表
@@ -91,6 +98,17 @@ public class AdminVideoController {
             if (video.getMediaId() == null) {
                 return Result.error("视频文件不能为空");
             }
+
+            // 获取当前管理员用户ID
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication.getName();
+            User adminUser = userService.getUserByUsername(username);
+            if (adminUser != null) {
+                video.setUserId(adminUser.getId());
+            } else {
+                return Result.error("当前管理员用户不存在");
+            }
+
             videoService.createVideo(video);
 
             Map<String, Object> result = new HashMap<>();

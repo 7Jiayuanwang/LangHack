@@ -1,10 +1,10 @@
 <template>
   <div class="articles-mobile-page">
-    
+
     <!-- Sticky Header -->
     <header class="mobile-header">
       <div class="header-content">
-        <h1 class="header-title">发现文章</h1>
+        <h1 class="header-title">发现内容</h1>
         <p class="header-subtitle">Daily Picks</p>
       </div>
       <div class="header-actions">
@@ -29,8 +29,8 @@
       <transition name="filter-collapse">
         <div v-show="filterVisible" class="filter-bar">
         <div class="filter-scroll">
-          <button 
-            v-for="cat in categories" 
+          <button
+            v-for="cat in categories"
             :key="cat.value"
             class="filter-pill"
             :class="{ 'active': selectedCategory === cat.value }"
@@ -62,22 +62,23 @@
         </template>
 
         <!-- Empty / Error State -->
-        <div v-else-if="articles.length === 0" class="empty-state">
+        <div v-else-if="feed.length === 0" class="empty-state">
           <div class="empty-icon-wrap">
             <el-icon :size="48"><DocumentRemove /></el-icon>
           </div>
-          <h3 class="empty-title">{{ loadError ? '加载失败' : '暂无文章内容' }}</h3>
+          <h3 class="empty-title">{{ loadError ? '加载失败' : '暂无推荐内容' }}</h3>
           <p class="empty-desc">{{ loadError ? '网络异常，请检查连接后重试' : '换个分类试试，或者稍后再来看看' }}</p>
-          <button class="refresh-btn" @click="loadArticles">重新加载</button>
+          <button class="refresh-btn" @click="loadFeed">重新加载</button>
         </div>
 
-        <!-- Article Cards -->
+        <!-- Article / Video Cards -->
         <template v-else>
-          <article 
-            v-for="article in articles" 
-            :key="article.id" 
+          <article
+            v-for="item in feed"
+            :key="item._type + '-' + item.id"
             class="article-card"
-            @click="readArticle(article)"
+            :class="{ 'is-video': item._type === 'video' }"
+            @click="handleItemClick(item)"
           >
             <!-- Image Header -->
             <div class="article-cover">
@@ -85,32 +86,45 @@
               <div
                 class="cover-image"
                 :style="{
-                  background: article.coverUrl ? `url(${article.coverUrl})` : article.coverGradient,
+                  background: item.coverUrl
+                    ? `url(${item.coverUrl})`
+                    : item.coverMediaId
+                      ? `url(${apiBase}/api/media/${item.coverMediaId}/download)`
+                      : item.coverGradient,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center'
                 }"
               ></div>
+              <!-- Video play icon badge -->
+              <div v-if="item._type === 'video'" class="video-badge">
+                <el-icon :size="14"><VideoPlay /></el-icon>
+                <span>视频</span>
+              </div>
               <div class="category-badge">
-                <el-icon :size="14"><component :is="getCategoryIcon(article.category)" /></el-icon>
-                <span>{{ getCategoryText(article.category) }}</span>
+                <el-icon :size="14"><component :is="getCategoryIcon(item.category)" /></el-icon>
+                <span>{{ getCategoryText(item.category) }}</span>
               </div>
             </div>
 
             <!-- Content Area -->
             <div class="article-content">
-              <h2 class="article-title">{{ article.title }}</h2>
-              <p class="article-snippet">{{ getSnippet(article.content) }}</p>
+              <h2 class="article-title">{{ item.title }}</h2>
+              <p class="article-snippet">{{ getSnippet(item._type === 'video' ? item.description : item.content) }}</p>
             </div>
 
             <!-- Footer Area -->
             <div class="article-footer">
-              <div class="difficulty-pill" :class="article.difficulty">
-                <el-icon :size="14"><component :is="getDifficultyIcon(article.difficulty)" /></el-icon>
-                <span>{{ getDifficultyText(article.difficulty) }}</span>
+              <div v-if="item._type === 'article'" class="difficulty-pill" :class="item.difficulty">
+                <el-icon :size="14"><component :is="getDifficultyIcon(item.difficulty)" /></el-icon>
+                <span>{{ getDifficultyText(item.difficulty) }}</span>
+              </div>
+              <div v-if="item._type === 'video' && item.tags" class="video-tag-pill">
+                {{ item.tags.split(',')[0] }}
               </div>
               <div class="reading-time">
-                <el-icon :size="16"><Timer /></el-icon>
-                <span>{{ article.readingTime }} min</span>
+                <el-icon v-if="item._type === 'article'" :size="16"><Timer /></el-icon>
+                <el-icon v-else :size="16"><View /></el-icon>
+                <span>{{ item._type === 'video' ? `${item.viewCount || 0} 次观看` : `${item.readingTime} min` }}</span>
               </div>
             </div>
           </article>
@@ -149,25 +163,27 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  Search, Bell, DocumentRemove, Timer,
+  Search, Bell, DocumentRemove, Timer, VideoPlay, View,
   TrendCharts, Connection, Reading, Medal,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight
 } from '@element-plus/icons-vue'
+import { getFeaturedVideos } from '@/api/video'
 
 const router = useRouter()
+const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const loading = ref(true)
-const allArticles = ref([])
+const allItems = ref([])
 const selectedCategory = ref('')
 const filterVisible = ref(true)
 const loadError = ref(false)
 const currentPage = ref(1)
 const pageSize = 5
 
-const totalPages = computed(() => Math.ceil(allArticles.value.length / pageSize))
-const articles = computed(() => {
+const totalPages = computed(() => Math.ceil(allItems.value.length / pageSize))
+const feed = computed(() => {
   const start = (currentPage.value - 1) * pageSize
-  return allArticles.value.slice(start, start + pageSize)
+  return allItems.value.slice(start, start + pageSize)
 })
 
 // 筛选栏开关
@@ -178,6 +194,7 @@ const toggleFilter = () => {
 // Predefined categories based on design
 const categories = [
   { label: '全部', value: '' },
+  { label: '视频', value: 'video' },
   { label: '科技', value: 'technology', icon: 'Monitor' },
   { label: '商务', value: 'business', icon: 'TrendCharts' },
   { label: '教育', value: 'education', icon: 'School' },
@@ -212,7 +229,7 @@ const getRandomGradient = () => {
 const selectCategory = (val) => {
   selectedCategory.value = val
   currentPage.value = 1
-  loadArticles()
+  loadFeed()
 }
 
 const goToPage = (page) => {
@@ -229,74 +246,88 @@ const toggleSearch = () => {
 }
 
 const getRandomCategory = () => {
-  const cats = categories.filter(c => c.value !== '')
+  const cats = categories.filter(c => c.value !== '' && c.value !== 'video')
   return cats[Math.floor(Math.random() * cats.length)].value
 }
 
-const loadArticles = async () => {
+const loadFeed = async () => {
   loading.value = true
   loadError.value = false
   try {
-    const params = { count: 10 }
+    const [articlesRes, videosRes] = await Promise.all([
+      fetch(`${apiBase}/api/public/texts/featured?count=10`).then(r => r.json()),
+      getFeaturedVideos({ count: 10 }).catch(() => ({ code: 0, data: [] }))
+    ])
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`)
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    let data
-    try {
-      data = await response.json()
-    } catch (parseError) {
-      console.error('JSON parse error:', parseError)
-      loadError.value = true
-      return
-    }
-
-    if (data?.code === 200) {
-      let fetched = (Array.isArray(data.data) ? data.data : []).map(text => {
+    let articleItems = []
+    if (articlesRes?.code === 200) {
+      articleItems = (Array.isArray(articlesRes.data) ? articlesRes.data : []).map(text => {
         const cat = getRandomCategory()
         const contentLength = typeof text.content === 'string' ? text.content.length : 0
         return {
           ...text,
+          _type: 'article',
           category: cat,
           coverGradient: getRandomGradient(),
           readingTime: Math.max(1, Math.ceil(contentLength / 800))
         }
       })
-
-      if (selectedCategory.value) {
-        fetched = fetched.filter(item => item.category === selectedCategory.value)
-      }
-
-      allArticles.value = fetched
-    } else {
-      loadError.value = true
     }
+
+    let videoItems = []
+    if (videosRes?.code === 200) {
+      videoItems = (Array.isArray(videosRes.data) ? videosRes.data : []).map(v => ({
+        ...v,
+        _type: 'video',
+        category: 'video',
+        coverGradient: getRandomGradient()
+      }))
+    }
+
+    let merged = [...articleItems, ...videoItems]
+    // Shuffle to interleave articles and videos
+    for (let i = merged.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [merged[i], merged[j]] = [merged[j], merged[i]]
+    }
+
+    // Apply category filter
+    if (selectedCategory.value === 'video') {
+      merged = merged.filter(item => item._type === 'video')
+    } else if (selectedCategory.value) {
+      merged = merged.filter(item => item.category === selectedCategory.value)
+    }
+
+    allItems.value = merged
   } catch (error) {
-    console.error('加载文章失败:', error)
+    console.error('加载内容失败:', error)
     loadError.value = true
   } finally {
     loading.value = false
   }
 }
 
-const readArticle = (article) => {
-  if (!article?.id) {
-    console.warn('readArticle: 文章ID不存在', article)
-    return
-  }
-  // Fire-and-forget: 标记文章为已读
-  fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST' }).catch(() => {})
-  router.push({
-    path: '/student/text-learning',
-    query: {
-      textId: article.id,
-      from: 'articles',
-      _title: encodeURIComponent(article.title || '')
+const handleItemClick = (item) => {
+  if (item._type === 'video') {
+    router.push({
+      path: '/student/video-player',
+      query: { videoId: item.id }
+    })
+  } else {
+    if (!item?.id) {
+      console.warn('readArticle: 文章ID不存在', item)
+      return
     }
-  })
+    fetch(`${apiBase}/api/public/texts/${item.id}/read`, { method: 'POST' }).catch(() => {})
+    router.push({
+      path: '/student/text-learning',
+      query: {
+        textId: item.id,
+        from: 'articles',
+        _title: encodeURIComponent(item.title || '')
+      }
+    })
+  }
 }
 
 const getSnippet = (content) => {
@@ -305,11 +336,13 @@ const getSnippet = (content) => {
 }
 
 const getCategoryText = (val) => {
+  if (val === 'video') return '视频'
   const cat = categories.find(c => c.value === val)
   return cat ? cat.label : '综合'
 }
 
 const getCategoryIcon = (val) => {
+  if (val === 'video') return VideoPlay
   const cat = categories.find(c => c.value === val)
   return cat ? cat.icon : Reading
 }
@@ -325,7 +358,7 @@ const getDifficultyIcon = (diff) => {
 }
 
 onMounted(() => {
-  loadArticles()
+  loadFeed()
 })
 </script>
 
@@ -631,6 +664,39 @@ onMounted(() => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.video-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  background: rgba(29, 78, 216, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.video-tag-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(29, 78, 216, 0.08);
+  color: #1d4ed8;
 }
 
 /* Content */

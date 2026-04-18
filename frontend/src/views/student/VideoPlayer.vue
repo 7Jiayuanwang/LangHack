@@ -25,7 +25,11 @@
     <div v-else-if="video" class="player-content">
       <!-- ArtPlayer Container -->
       <div class="player-wrapper">
-        <div ref="artPlayerRef" class="art-player-container"></div>
+        <div v-show="!playerError" ref="artPlayerRef" class="art-player-container"></div>
+        <video v-if="playerError" :src="videoUrl" controls class="native-video"></video>
+        <div v-if="playerError" class="player-error-text" style="color:red; text-align:center; padding: 10px;">
+          播放器组件加载失败，已切换至内置播放器。错误: {{ playerErrorMsg }}
+        </div>
       </div>
 
       <!-- Video Info -->
@@ -92,22 +96,32 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, View, Star, Reading } from '@element-plus/icons-vue'
 import Artplayer from 'artplayer'
 import { getPublicVideoDetail } from '@/api/video'
 import { likeVideo } from '@/api/video'
+import { getMediaDetail } from '@/api/media'
 
 const router = useRouter()
 const route = useRoute()
+
+const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg']
 
 const artPlayerRef = ref(null)
 const video = ref(null)
 const loading = ref(true)
 const error = ref(false)
 const likeLoading = ref(false)
+const playerError = ref(false)
+const playerErrorMsg = ref('')
+const videoUrl = computed(() => {
+  if (!video.value) return ''
+  const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+  return `${apiBase}/api/media/${video.value.mediaId}/download`
+})
 
 let artInstance = null
 
@@ -115,7 +129,7 @@ const goBack = () => {
   if (window.history.length > 1) {
     router.back()
   } else {
-    router.push('/student/videos')
+    router.push('/student/articles')
   }
 }
 
@@ -133,11 +147,31 @@ const loadVideo = async () => {
     const res = await getPublicVideoDetail(videoId)
     if (res.code === 200 && res.data) {
       video.value = res.data
+
+      // Validate media MIME type before initializing player
+      if (video.value.mediaId) {
+        try {
+          const mediaRes = await getMediaDetail(video.value.mediaId)
+          if (mediaRes.code === 200 && mediaRes.data) {
+            const mimeType = mediaRes.data.mimeType
+            if (mimeType && !VIDEO_MIME_TYPES.includes(mimeType)) {
+              playerError.value = true
+              playerErrorMsg.value = `文件类型为 ${mimeType}，不是可播放的视频格式`
+              loading.value = false
+              return
+            }
+          }
+        } catch (e) {
+          console.warn('获取媒体详情失败，跳过 MIME 校验:', e)
+        }
+      }
+
+      loading.value = false
       await nextTick()
       initPlayer()
-    } else {
-      error.value = true
+      return
     }
+    error.value = true
   } catch (e) {
     console.error('加载视频失败:', e)
     error.value = true
@@ -147,14 +181,31 @@ const loadVideo = async () => {
 }
 
 const initPlayer = () => {
-  if (!artPlayerRef.value || !video.value) return
+  if (!video.value) return
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || ''
-  const videoUrl = `${apiBase}/api/media/${video.value.mediaId}/download`
+  // 容器未就绪时降级到 native <video>，避免静默黑屏
+  if (!artPlayerRef.value) {
+    playerError.value = true
+    playerErrorMsg.value = '播放器容器未就绪'
+    return
+  }
+
+  // 如果没有 mediaId 或 URL 为空，直接显示错误
+  if (!video.value.mediaId || !videoUrl.value) {
+    playerError.value = true
+    playerErrorMsg.value = '视频文件不存在或已被删除'
+    return
+  }
+
+  playerError.value = false
+  playerErrorMsg.value = ''
+
+  try {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
   const options = {
     container: artPlayerRef.value,
-    url: videoUrl,
+    url: videoUrl.value,
     volume: 0.7,
     autoplay: false,
     pip: true,
@@ -191,12 +242,41 @@ const initPlayer = () => {
     }
   }
 
-  // 封面
-  if (video.value.coverMediaId) {
-    options.poster = `${apiBase}/api/media/${video.value.coverMediaId}/download`
-  }
+    // 封面
+    if (video.value.coverMediaId) {
+      options.poster = `${apiBase}/api/media/${video.value.coverMediaId}/download`
+    }
 
-  artInstance = new Artplayer(options)
+    artInstance = new Artplayer(options)
+
+    // 视频解码错误（文件损坏或格式不支持）
+    artInstance.on('video:error', () => {
+      const videoEl = artInstance?.video
+      if (videoEl?.error) {
+        const code = videoEl.error.code
+        if (code === 3) {
+          playerErrorMsg.value = '视频文件格式不支持或文件已损坏'
+        } else if (code === 4) {
+          playerErrorMsg.value = '视频源不可用或格式不受支持'
+        } else if (code === 2) {
+          playerErrorMsg.value = '网络错误，视频加载失败'
+        }
+      }
+      playerError.value = true
+    })
+
+    artInstance.on('error', (err) => {
+      console.error('ArtPlayer runtime error:', err)
+      if (!playerError.value) {
+        playerError.value = true
+        playerErrorMsg.value = playerErrorMsg.value || String(err?.message || err)
+      }
+    })
+  } catch (err) {
+    console.error('ArtPlayer init failed:', err)
+    playerError.value = true
+    playerErrorMsg.value = String(err?.message || err)
+  }
 }
 
 const handleLike = async () => {
@@ -292,12 +372,15 @@ onBeforeUnmount(() => {
 .player-wrapper {
   width: 100%;
   background: #000;
+  min-height: 200px;
 }
 
-.art-player-container {
+.art-player-container, .native-video {
   width: 100%;
   aspect-ratio: 16 / 9;
+  min-height: 200px;
   max-height: 70vh;
+  display: block;
 }
 
 .video-info {

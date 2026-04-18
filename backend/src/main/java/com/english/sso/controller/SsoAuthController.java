@@ -40,7 +40,6 @@ import java.util.concurrent.TimeUnit;
 @RestController
 @RequestMapping("/api/auth/sso")
 @Profile("sso")
-@ConditionalOnProperty(name = "sso.enabled", havingValue = "true")
 public class SsoAuthController {
 
     private static final String SSO_CODE_PREFIX = "sso:code:";
@@ -96,6 +95,7 @@ public class SsoAuthController {
      * OAuth2: /api/auth/sso/callback?code=xxx&state=xxx
      */
     @GetMapping("/callback")
+    @ConditionalOnProperty(name = "sso.enabled", havingValue = "true")
     public void handleCallback(
             @RequestParam(required = false) String ticket,
             @RequestParam(required = false) String code,
@@ -186,6 +186,7 @@ public class SsoAuthController {
      * 用一次性 code 换取 JWT token
      */
     @PostMapping("/token")
+    @ConditionalOnProperty(name = "sso.enabled", havingValue = "true")
     public Result<Map<String, Object>> exchangeToken(
             @RequestBody Map<String, String> request) {
 

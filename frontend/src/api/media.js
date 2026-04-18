@@ -2,7 +2,7 @@ import request from '@/utils/request'
 
 // 文件大小限制 (字节)
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024  // 10 MB
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024  // 100 MB
+const MAX_VIDEO_SIZE = 250 * 1024 * 1024  // 250 MB
 
 // 允许的文件类型
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
@@ -71,7 +71,7 @@ export function uploadMedia(file, mediaType) {
     url: '/api/media/upload',
     method: 'post',
     data: formData,
-    timeout: 60000,  // 文件上传超时时间延长到 60 秒
+    timeout: 300000,  // 文件上传超时时间延长到 300 秒
     headers: {
       // 显式移除 Content-Type 头，让浏览器自动设置 multipart/form-data 及 boundary
       'Content-Type': undefined

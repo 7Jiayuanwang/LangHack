@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.http.converter.HttpMessageConverter;
+import java.util.List;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,6 +38,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
         // Force master datasource for admin/ops paths to avoid read-after-write inconsistency
         registry.addInterceptor(adminMasterInterceptor)
                 .addPathPatterns("/api/admin/**", "/api/ops/**");
+    }
+
+    @Override
+    public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
     }
 
     @Override

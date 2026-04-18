@@ -160,7 +160,7 @@
           >
             <el-button type="primary">选择视频文件</el-button>
             <template #tip>
-              <div class="el-upload__tip">支持 MP4/WebM/OGG，最大 100MB</div>
+              <div class="el-upload__tip">支持 MP4/WebM/OGG，最大 250MB</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -317,61 +317,64 @@ const resetForm = () => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
+  try {
+    const valid = await formRef.value.validate()
     if (!valid) return
-    submitLoading.value = true
-    try {
-      // 上传视频文件
-      if (videoFile) {
-        const uploadRes = await uploadMedia(videoFile, 'VIDEO')
-        if (uploadRes.code === 200 && uploadRes.data?.mediaId) {
-          form.mediaId = uploadRes.data.mediaId
-          form.videoUrl = uploadRes.data.url
-        } else {
-          ElMessage.error('视频上传失败'); return
-        }
-      }
-      // 上传封面
-      if (coverFile) {
-        const coverRes = await uploadMedia(coverFile, 'IMAGE')
-        if (coverRes.code === 200 && coverRes.data?.mediaId) {
-          form.coverMediaId = coverRes.data.mediaId
-          form.coverUrl = coverRes.data.url
-        }
-      }
-
-      if (!editingVideo.value && !form.mediaId) {
-        ElMessage.error('请选择视频文件'); return
-      }
-
-      const data = {
-        title: form.title,
-        description: form.description,
-        mediaId: form.mediaId,
-        coverMediaId: form.coverMediaId,
-        tags: form.tags,
-        subtitleContent: form.subtitleContent || null,
-        isPublic: form.isPublicBool ? 1 : 0,
-        status: 'APPROVED',
-        videoUrl: form.videoUrl,
-        coverUrl: form.coverUrl
-      }
-
-      if (editingVideo.value) {
-        const res = await videoApi.updateVideo(editingVideo.value.id, data)
-        if (res.code === 200) { ElMessage.success('更新成功'); dialogVisible.value = false; loadVideos(); loadStats() }
-        else ElMessage.error(res.message || '更新失败')
+  } catch {
+    return
+  }
+  submitLoading.value = true
+  try {
+    // 上传视频文件
+    if (videoFile) {
+      const uploadRes = await uploadMedia(videoFile, 'VIDEO')
+      if (uploadRes.code === 200 && uploadRes.data?.mediaId) {
+        form.mediaId = uploadRes.data.mediaId
+        form.videoUrl = uploadRes.data.url || `/api/media/${uploadRes.data.mediaId}/download`
       } else {
-        const res = await videoApi.createVideo(data)
-        if (res.code === 200) { ElMessage.success('创建成功'); dialogVisible.value = false; loadVideos(); loadStats() }
-        else ElMessage.error(res.message || '创建失败')
+        ElMessage.error('视频上传失败'); return
       }
-    } catch (e) {
-      ElMessage.error('操作失败')
-    } finally {
-      submitLoading.value = false
     }
-  })
+    // 上传封面
+    if (coverFile) {
+      const coverRes = await uploadMedia(coverFile, 'IMAGE')
+      if (coverRes.code === 200 && coverRes.data?.mediaId) {
+        form.coverMediaId = coverRes.data.mediaId
+        form.coverUrl = coverRes.data.url || `/api/media/${coverRes.data.mediaId}/download`
+      }
+    }
+
+    if (!editingVideo.value && !form.mediaId) {
+      ElMessage.error('请选择视频文件'); return
+    }
+
+    const data = {
+      title: form.title,
+      description: form.description,
+      mediaId: form.mediaId,
+      coverMediaId: form.coverMediaId,
+      tags: form.tags,
+      subtitleContent: form.subtitleContent || null,
+      isPublic: form.isPublicBool ? 1 : 0,
+      status: 'APPROVED',
+      videoUrl: form.videoUrl,
+      coverUrl: form.coverUrl
+    }
+
+    if (editingVideo.value) {
+      const res = await videoApi.updateVideo(editingVideo.value.id, data)
+      if (res.code === 200) { ElMessage.success('更新成功'); dialogVisible.value = false; loadVideos(); loadStats() }
+      else ElMessage.error(res.message || '更新失败')
+    } else {
+      const res = await videoApi.createVideo(data)
+      if (res.code === 200) { ElMessage.success('创建成功'); dialogVisible.value = false; loadVideos(); loadStats() }
+      else ElMessage.error(res.message || '创建失败')
+    }
+  } catch (e) {
+    ElMessage.error('操作失败')
+  } finally {
+    submitLoading.value = false
+  }
 }
 
 const handleDelete = (row) => {

@@ -119,38 +119,10 @@ request.interceptors.response.use(
         message = '网络连接失败，请检查网络后重试'
       }
     }
-    if (error.response) {
+    if (!error.config?.skipErrorHandler) {
       const reqUrl = error.config?.url || 'unknown'
       console.warn(`[HTTP ${error.response.status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
-      switch (error.response.status) {
-        case 401:
-          message = '未授权，请重新登录'
-          handleLogout()
-          break
-        case 403:
-          message = '拒绝访问'
-          console.error('[403 Debug] URL:', reqUrl, 'Response:', JSON.stringify(error.response?.data))
-          break
-        case 404:
-          message = '请求地址不存在'
-          break
-        case 500: {
-          // 运维人员：显示后端返回的详细错误信息
-          const userStore = useUserStore()
-          const detail = error.response?.data?.detail
-          if (userStore.hasOpsAccess && detail) {
-            message = `服务器错误: ${detail}`
-          } else {
-            message = '服务器内部错误'
-          }
-          break
-        }
-        default:
-          message = '请求失败，请稍后重试'
-      }
-    }
 
-    if (!error.config?.skipErrorHandler) {
       ElMessage({
         message,
         type: 'error',
