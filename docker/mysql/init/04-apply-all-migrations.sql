@@ -3,6 +3,7 @@
 -- 将 Flyway V1 ~ V9 的所有迁移合并为单个幂等脚本
 --
 -- 对应 Flyway 迁移文件（整合后）:
+--   V0__base_tables.sql                      (独立追加)
 --   V1__scoring_and_assignments.sql         (原 V1)
 --   V2__text_and_learning.sql               (原 V2 + V10 + V17)
 --   V3__media_and_annotations.sql           (原 V3 + V9)
