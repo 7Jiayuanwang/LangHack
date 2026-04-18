@@ -57,7 +57,7 @@ class SyncMonitorServiceTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> summary = (Map<String, Object>) result.get("summary");
             assertEquals("CRITICAL", summary.get("overallStatus"));
-            assertEquals(7, summary.get("criticalCount"));
+            assertEquals(9, summary.get("criticalCount"));
             assertEquals(0, summary.get("healthyCount"));
         }
 
@@ -78,7 +78,7 @@ class SyncMonitorServiceTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> summary = (Map<String, Object>) result.get("summary");
             assertEquals("ERROR", summary.get("overallStatus"));
-            assertEquals(7, summary.get("errorCount"));
+            assertEquals(9, summary.get("errorCount"));
         }
 
         @Test
@@ -97,7 +97,7 @@ class SyncMonitorServiceTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> summary = (Map<String, Object>) result.get("summary");
             assertEquals("HEALTHY", summary.get("overallStatus"));
-            assertEquals(7, summary.get("healthyCount"));
+            assertEquals(9, summary.get("healthyCount"));
         }
 
         @Test

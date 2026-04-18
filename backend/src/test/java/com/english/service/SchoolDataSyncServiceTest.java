@@ -1,6 +1,7 @@
 package com.english.service;
 
 import com.english.config.SchoolDataProperties;
+import com.english.entity.FieldMapping;
 import com.english.entity.SyncLog;
 import com.english.mapper.*;
 import com.english.service.impl.SchoolDataSyncServiceImpl;
@@ -69,6 +70,9 @@ class SchoolDataSyncServiceTest {
     @Mock
     private TeachingPlanCourseMapper teachingPlanCourseMapper;
 
+    @Mock
+    private StudentScheduleMapper studentScheduleMapper;
+
     private ObjectMapper objectMapper;
     private SchoolDataProperties properties;
 
@@ -80,7 +84,8 @@ class SchoolDataSyncServiceTest {
                 apiClient, fieldMappingService, syncLogMapper,
                 administrativeClassMapper, schoolCourseMapper, teachingClassMapper,
                 courseScheduleMapper, courseSelectionMapper, levelExamScoreMapper,
-                teachingPlanMapper, teachingPlanCourseMapper, objectMapper, properties
+                teachingPlanMapper, teachingPlanCourseMapper, studentScheduleMapper,
+                objectMapper, properties
         );
     }
 
@@ -117,10 +122,10 @@ class SchoolDataSyncServiceTest {
             );
 
             when(apiClient.fetchAdministrativeClasses(any())).thenReturn(apiData);
-            when(fieldMappingService.applyMapping(anyString(), any())).thenReturn(
-                    Map.of("classCode", "20230101", "className", "计算机1班",
-                            "syncTime", LocalDateTime.now(), "syncSource", "SCHOOL_API")
-            );
+            Map<String, Object> mappedResult = new HashMap<>();
+            mappedResult.put("classCode", "20230101");
+            mappedResult.put("className", "计算机1班");
+            when(fieldMappingService.applyMapping(anyString(), any())).thenReturn(mappedResult);
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
             doNothing().when(administrativeClassMapper).upsertByClassCode(any());
@@ -153,7 +158,7 @@ class SchoolDataSyncServiceTest {
     class FullSyncAllTests {
 
         @Test
-        @DisplayName("同步所有7个数据源")
+        @DisplayName("同步所有9个数据源")
         void fullSyncAll_syncsAllDataSources() {
             when(apiClient.fetchAdministrativeClasses(any())).thenReturn(Collections.emptyList());
             when(apiClient.fetchSchoolCourses(any())).thenReturn(Collections.emptyList());
@@ -162,12 +167,14 @@ class SchoolDataSyncServiceTest {
             when(apiClient.fetchCourseSelections(any())).thenReturn(Collections.emptyList());
             when(apiClient.fetchLevelExamScores(any())).thenReturn(Collections.emptyList());
             when(apiClient.fetchTeachingPlans(any())).thenReturn(Collections.emptyList());
+            when(apiClient.fetchTeacherCourses(any())).thenReturn(Collections.emptyList());
+            // student_schedule: fullSync不支持批量拉取，直接返回空列表，不调用apiClient
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
             List<SyncLog> results = syncService.fullSyncAll("SCHEDULED", "SYSTEM");
 
-            assertEquals(7, results.size());
+            assertEquals(9, results.size());
         }
 
         @Test
@@ -180,12 +187,14 @@ class SchoolDataSyncServiceTest {
             when(apiClient.fetchCourseSelections(any())).thenReturn(Collections.emptyList());
             when(apiClient.fetchLevelExamScores(any())).thenReturn(Collections.emptyList());
             when(apiClient.fetchTeachingPlans(any())).thenReturn(Collections.emptyList());
+            when(apiClient.fetchTeacherCourses(any())).thenReturn(Collections.emptyList());
+            // student_schedule: fullSync不支持批量拉取，直接返回空列表，不调用apiClient
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
             List<SyncLog> results = syncService.fullSyncAll("SCHEDULED", "SYSTEM");
 
-            assertEquals(7, results.size());
+            assertEquals(9, results.size());
             assertEquals("FAILED", results.get(1).getStatus());
             assertEquals("SUCCESS", results.get(2).getStatus());
         }
@@ -244,12 +253,15 @@ class SchoolDataSyncServiceTest {
             when(courseSelectionMapper.selectCount(any())).thenReturn(0L);
             when(levelExamScoreMapper.selectCount(any())).thenReturn(0L);
             when(teachingPlanMapper.selectCount(any())).thenReturn(0L);
+            when(studentScheduleMapper.selectCount(any())).thenReturn(0L);
 
             Map<String, Object> overview = syncService.getSyncStatusOverview();
 
-            assertEquals(7, overview.size());
+            assertEquals(9, overview.size());
             assertTrue(overview.containsKey("administrative_class"));
             assertTrue(overview.containsKey("teaching_plans"));
+            assertTrue(overview.containsKey("teacher_courses"));
+            assertTrue(overview.containsKey("student_schedule"));
         }
 
         @Test

@@ -34,9 +34,9 @@ CREATE TABLE IF NOT EXISTS media (
 
 -- ────────────────────────────────────────
 -- 2. 媒体路径列 [原 V9]
+--    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_media_paths;
-DELIMITER //
 CREATE PROCEDURE _add_col_media_paths()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path') THEN
@@ -45,8 +45,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path') THEN
         ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path';
     END IF;
-END//
-DELIMITER ;
+END;
 CALL _add_col_media_paths();
 DROP PROCEDURE IF EXISTS _add_col_media_paths;
 
@@ -54,7 +53,6 @@ DROP PROCEDURE IF EXISTS _add_col_media_paths;
 -- 3. 词汇本添加 SM-2 间隔重复字段 [原 V3]
 -- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_sm2;
-DELIMITER //
 CREATE PROCEDURE _add_col_sm2()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition') THEN
@@ -69,8 +67,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time') THEN
         ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT 'SM-2 下次复习时间';
     END IF;
-END//
-DELIMITER ;
+END;
 CALL _add_col_sm2();
 DROP PROCEDURE IF EXISTS _add_col_sm2;
 

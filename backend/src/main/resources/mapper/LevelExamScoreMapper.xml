@@ -3,7 +3,7 @@
 <mapper namespace="com.english.mapper.LevelExamScoreMapper">
 
     <!-- 等级考试成绩 UPSERT：按 uk_student_exam 唯一键 -->
-    <insert id="upsertByStudentExam" parameterType="com.english.entity.LevelExamScore">
+    <insert id="upsertByStudentExam" parameterType="com.english.entity.LevelExamScore" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO level_exam_scores (
             student_id, student_name, exam_type, exam_name, admission_ticket_no,
             exam_date, score, grade, is_passed, passing_score,

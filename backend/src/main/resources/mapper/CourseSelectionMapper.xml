@@ -3,7 +3,7 @@
 <mapper namespace="com.english.mapper.CourseSelectionMapper">
 
     <!-- 选课记录 UPSERT：按 selection_id 唯一键 -->
-    <insert id="upsertBySelectionId" parameterType="com.english.entity.CourseSelection">
+    <insert id="upsertBySelectionId" parameterType="com.english.entity.CourseSelection" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO course_selection (
             selection_id, student_id, student_name, course_code, course_name,
             class_id, teacher_id, teacher_name, credits,

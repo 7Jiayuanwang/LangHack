@@ -119,14 +119,15 @@ class FieldMappingServiceTest {
         }
 
         @Test
-        @DisplayName("无映射配置时返回空Map（源字段被跳过）")
-        void applyMapping_noMappings_returnsEmptyMap() {
+        @DisplayName("无映射配置时返回源数据副本（所有字段原样透传）")
+        void applyMapping_noMappings_returnsSourceDataCopy() {
             when(fieldMappingMapper.selectList(any())).thenReturn(Collections.emptyList());
 
             Map<String, Object> source = Map.of("XZBH", "20230101");
             Map<String, Object> result = fieldMappingService.applyMapping("test", source);
 
-            assertTrue(result.isEmpty());
+            assertFalse(result.isEmpty());
+            assertEquals("20230101", result.get("XZBH"));
         }
 
         @Test

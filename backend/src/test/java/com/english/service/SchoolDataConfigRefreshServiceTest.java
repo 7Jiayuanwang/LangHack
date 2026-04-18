@@ -65,8 +65,8 @@ class SchoolDataConfigRefreshServiceTest {
         void shouldApplyDbConfigToProperties() {
             Map<String, String> dbConfig = new HashMap<>();
             dbConfig.put("source", "etl");
-            dbConfig.put("api_base_url", "https://custom.api.cn");
-            dbConfig.put("etl_jdbc_url", "jdbc:mysql://school-db:3306/data");
+            dbConfig.put("api_base_url", "https://api.imau.edu.cn");
+            dbConfig.put("etl_jdbc_url", "jdbc:mysql://localhost:3306/data");
             dbConfig.put("sync_enabled", "true");
             dbConfig.put("sync_batch_size", "200");
             when(configService.getByGroup("school_data")).thenReturn(dbConfig);
@@ -74,8 +74,8 @@ class SchoolDataConfigRefreshServiceTest {
             refreshService.refreshFromDb();
 
             assertEquals("etl", properties.getSource());
-            assertEquals("https://custom.api.cn", properties.getApi().getBaseUrl());
-            assertEquals("jdbc:mysql://school-db:3306/data", properties.getEtl().getJdbcUrl());
+            assertEquals("https://api.imau.edu.cn", properties.getApi().getBaseUrl());
+            assertEquals("jdbc:mysql://localhost:3306/data", properties.getEtl().getJdbcUrl());
             assertTrue(properties.getSync().isEnabled());
             assertEquals(200, properties.getSync().getBatchSize());
         }
@@ -127,10 +127,10 @@ class SchoolDataConfigRefreshServiceTest {
 
             SystemConfig normalConfig = new SystemConfig();
             normalConfig.setConfigKey("api_base_url");
-            normalConfig.setConfigValue("https://new.api.cn");
+            normalConfig.setConfigValue("https://imau.edu.cn");
 
             when(configService.getByGroup("school_data")).thenReturn(Map.of(
-                    "api_base_url", "https://new.api.cn"
+                    "api_base_url", "https://imau.edu.cn"
             ));
 
             refreshService.updateAndRefresh(List.of(maskedConfig, normalConfig), "admin");
@@ -170,7 +170,7 @@ class SchoolDataConfigRefreshServiceTest {
         void shouldTriggerRecreateDataSourceOnEtlChange() {
             SystemConfig etlConfig = new SystemConfig();
             etlConfig.setConfigKey("etl_jdbc_url");
-            etlConfig.setConfigValue("jdbc:mysql://new-host:3306/db");
+            etlConfig.setConfigValue("jdbc:mysql://school-db.imau.edu.cn:3306/db");
 
             when(configService.getByGroup("school_data")).thenReturn(Collections.emptyMap());
 
@@ -184,7 +184,7 @@ class SchoolDataConfigRefreshServiceTest {
         void shouldNotTriggerSideEffectsForNormalConfig() {
             SystemConfig normalConfig = new SystemConfig();
             normalConfig.setConfigKey("api_base_url");
-            normalConfig.setConfigValue("https://api.example.com");
+            normalConfig.setConfigValue("https://api.imau.edu.cn/test");
 
             when(configService.getByGroup("school_data")).thenReturn(Collections.emptyMap());
 

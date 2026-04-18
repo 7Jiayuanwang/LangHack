@@ -8,20 +8,19 @@
 
 -- ────────────────────────────────────────
 -- 1. 学习记录添加课文关联 [原 V2]
+--    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_lr_text;
-DELIMITER //
 CREATE PROCEDURE _add_col_lr_text()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id') THEN
         ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT '关联的课文ID' AFTER word_id;
     END IF;
-END//
-DELIMITER ;
+END;
 CALL _add_col_lr_text();
 DROP PROCEDURE IF EXISTS _add_col_lr_text;
+
 DROP PROCEDURE IF EXISTS _add_fk_lr_text;
-DELIMITER //
 CREATE PROCEDURE _add_fk_lr_text()
 BEGIN
     IF NOT EXISTS (
@@ -31,12 +30,11 @@ BEGIN
         ALTER TABLE learning_records ADD CONSTRAINT fk_learning_record_text
             FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE SET NULL;
     END IF;
-END//
-DELIMITER ;
+END;
 CALL _add_fk_lr_text();
 DROP PROCEDURE IF EXISTS _add_fk_lr_text;
+
 DROP PROCEDURE IF EXISTS _add_index_lr_text;
-DELIMITER //
 CREATE PROCEDURE _add_index_lr_text()
 BEGIN
     IF NOT EXISTS (
@@ -45,8 +43,7 @@ BEGIN
     ) THEN
         CREATE INDEX idx_text_id ON learning_records (text_id);
     END IF;
-END//
-DELIMITER ;
+END;
 CALL _add_index_lr_text();
 DROP PROCEDURE IF EXISTS _add_index_lr_text;
 
@@ -54,7 +51,6 @@ DROP PROCEDURE IF EXISTS _add_index_lr_text;
 -- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
 -- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_texts_batch;
-DELIMITER //
 CREATE PROCEDURE _add_col_texts_batch()
 BEGIN
     -- 中英对照内容 [原 V2]
@@ -121,14 +117,12 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='status') THEN
         ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED';
     END IF;
-END//
-DELIMITER ;
+END;
 CALL _add_col_texts_batch();
 DROP PROCEDURE IF EXISTS _add_col_texts_batch;
 
 -- 推荐优先级复合索引 [原 V10]
 DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
-DELIMITER //
 CREATE PROCEDURE _add_idx_featured_priority()
 BEGIN
     IF NOT EXISTS (
@@ -137,8 +131,7 @@ BEGIN
     ) THEN
         CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC);
     END IF;
-END//
-DELIMITER ;
+END;
 CALL _add_idx_featured_priority();
 DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
 

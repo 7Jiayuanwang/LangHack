@@ -3,7 +3,7 @@
 <mapper namespace="com.english.mapper.TeachingPlanMapper">
 
     <!-- 教学计划 UPSERT：按 plan_id 唯一键 -->
-    <insert id="upsertByPlanId" parameterType="com.english.entity.TeachingPlan">
+    <insert id="upsertByPlanId" parameterType="com.english.entity.TeachingPlan" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO teaching_plans (
             plan_id, plan_name, major_code, major_name, grade,
             schooling_length, degree_type, education_level,

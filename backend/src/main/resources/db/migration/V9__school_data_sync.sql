@@ -287,3 +287,54 @@ CREATE TABLE IF NOT EXISTS teaching_plan_courses (
     INDEX idx_course_code (course_code),
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教学计划课程明细表';
+
+-- ============================================================================
+-- 6. 辅助表
+-- ============================================================================
+
+-- 6.1 同步日志表
+CREATE TABLE IF NOT EXISTS sync_logs (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `sync_type` VARCHAR(50) NOT NULL COMMENT '同步类型: FULL/INCREMENTAL',
+    `data_source` VARCHAR(50) NOT NULL COMMENT '数据源',
+    `sync_method` VARCHAR(50) NOT NULL COMMENT '同步方法: REPLACE_ALL/UPSERT',
+    `status` VARCHAR(50) NOT NULL COMMENT '状态: RUNNING/SUCCESS/FAILED',
+    `total_count` INT DEFAULT 0 COMMENT '总记录数',
+    `success_count` INT DEFAULT 0 COMMENT '成功数',
+    `fail_count` INT DEFAULT 0 COMMENT '失败数',
+    `skip_count` INT DEFAULT 0 COMMENT '跳过数',
+    `start_time` DATETIME COMMENT '开始时间',
+    `end_time` DATETIME COMMENT '结束时间',
+    `duration_ms` BIGINT COMMENT '耗时（毫秒）',
+    `error_message` TEXT COMMENT '错误信息',
+    `trigger_type` VARCHAR(50) COMMENT '触发类型: MANUAL/SCHEDULED',
+    `operator` VARCHAR(50) COMMENT '操作人',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    INDEX idx_data_source (`data_source`),
+    INDEX idx_status (`status`),
+    INDEX idx_sync_type (`sync_type`),
+    INDEX idx_start_time (`start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='同步日志表';
+
+-- 6.2 字段映射配置表
+CREATE TABLE IF NOT EXISTS field_mappings (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `data_source` VARCHAR(50) NOT NULL COMMENT '数据源标识',
+    `source_field` VARCHAR(100) NOT NULL COMMENT '源字段名（API返回的JSON键名）',
+    `target_field` VARCHAR(100) NOT NULL COMMENT '目标字段名（Java实体属性名）',
+    `source_type` VARCHAR(20) NOT NULL DEFAULT 'STRING' COMMENT '源字段类型',
+    `target_type` VARCHAR(20) NOT NULL DEFAULT 'STRING' COMMENT '目标字段类型',
+    `converter` VARCHAR(50) NOT NULL DEFAULT 'NONE' COMMENT '转换器: NONE/SPLIT/BOOLEAN/DATE',
+    `converter_config` JSON COMMENT '转换器配置（JSON格式）',
+    `default_value` VARCHAR(500) COMMENT '默认值（源数据为空时使用）',
+    `is_required` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否必填',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序顺序',
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+    `remark` VARCHAR(500) COMMENT '字段映射说明',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    INDEX idx_data_source (`data_source`),
+    INDEX idx_target_field (`target_field`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='字段映射配置表';

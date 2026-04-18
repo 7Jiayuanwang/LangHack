@@ -10,6 +10,7 @@ import com.english.service.SyncMonitorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,6 +32,7 @@ public class SchoolDataSyncController {
     private SchoolDataSyncService syncService;
 
     @Autowired
+    @Qualifier("schoolDataApiClientDelegate")
     private SchoolDataApiClient apiClient;
 
     @Autowired

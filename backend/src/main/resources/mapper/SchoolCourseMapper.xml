@@ -3,7 +3,7 @@
 <mapper namespace="com.english.mapper.SchoolCourseMapper">
 
     <!-- 学校课程 UPSERT：按 course_code 唯一键 -->
-    <insert id="upsertByCourseCode" parameterType="com.english.entity.SchoolCourse">
+    <insert id="upsertByCourseCode" parameterType="com.english.entity.SchoolCourse" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO school_course (
             course_code, course_name, course_name_en, course_short_name,
             course_nature, course_category, credits, total_hours,

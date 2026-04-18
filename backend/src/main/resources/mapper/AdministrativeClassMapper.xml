@@ -3,7 +3,7 @@
 <mapper namespace="com.english.mapper.AdministrativeClassMapper">
 
     <!-- 行政班 UPSERT：按 class_code 唯一键 -->
-    <insert id="upsertByClassCode" parameterType="com.english.entity.AdministrativeClass">
+    <insert id="upsertByClassCode" parameterType="com.english.entity.AdministrativeClass" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO administrative_class (
             class_code, class_name, class_short_name, college_code, college_name,
             major_code, major_name, grade, class_type, head_teacher_code, head_teacher_name,

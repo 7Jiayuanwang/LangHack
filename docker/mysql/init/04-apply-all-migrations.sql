@@ -15,6 +15,10 @@
 --   V10__user_nickname_and_avatar_rename.sql (独立追加)
 --   V11__text_featured_and_vocab_sm2.sql     (独立追加)
 --   V12__fix_role_mapping_cleanup.sql         (独立追加)
+--   V12.1__init_field_mappings_data.sql       (独立追加)
+--   V13__school_data_system_config.sql         (独立追加)
+--   V14__student_schedule_and_teacher_courses_mapping.sql (独立追加)
+--   V16__rename_course_to_school_course.sql  (独立追加)
 --
 -- 此脚本有两个用途：
 --   1. 新环境初始化（docker-entrypoint-initdb.d，仅首次启动执行）
@@ -904,7 +908,7 @@ CREATE TABLE IF NOT EXISTS administrative_class (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 1.2 课程表
-CREATE TABLE IF NOT EXISTS course (
+CREATE TABLE IF NOT EXISTS school_course (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     course_code VARCHAR(50) NOT NULL UNIQUE,
     course_name VARCHAR(200) NOT NULL,
@@ -961,7 +965,7 @@ CREATE TABLE IF NOT EXISTS teaching_class (
     sync_source VARCHAR(20) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_course (course_code),
     INDEX idx_teacher (teacher_id),
     INDEX idx_academic_year_semester (academic_year, semester),
@@ -1018,7 +1022,7 @@ CREATE TABLE IF NOT EXISTS course_selection (
     sync_source VARCHAR(20) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_student (student_id),
     INDEX idx_course (course_code),
@@ -1311,5 +1315,279 @@ WHERE u.role = 'TEACHER'
   AND b.sso_member_of IS NOT NULL
   AND b.sso_member_of NOT LIKE '%ou=教师%'
   AND b.sso_member_of NOT LIKE '%ou=teacher%';
+
+-- ════════════════════════════════════════════════════════════════
+-- V9 补充: sync_logs 和 field_mappings 建表
+-- 04 文件中 V9 仅创建了学校数据同步业务表，遗漏了辅助表
+-- ════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS sync_logs (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `sync_type` VARCHAR(50) NOT NULL COMMENT '同步类型: FULL/INCREMENTAL',
+    `data_source` VARCHAR(50) NOT NULL COMMENT '数据源',
+    `sync_method` VARCHAR(50) NOT NULL COMMENT '同步方法: REPLACE_ALL/UPSERT',
+    `status` VARCHAR(50) NOT NULL COMMENT '状态: RUNNING/SUCCESS/FAILED',
+    `total_count` INT DEFAULT 0 COMMENT '总记录数',
+    `success_count` INT DEFAULT 0 COMMENT '成功数',
+    `fail_count` INT DEFAULT 0 COMMENT '失败数',
+    `skip_count` INT DEFAULT 0 COMMENT '跳过数',
+    `start_time` DATETIME COMMENT '开始时间',
+    `end_time` DATETIME COMMENT '结束时间',
+    `duration_ms` BIGINT COMMENT '耗时（毫秒）',
+    `error_message` TEXT COMMENT '错误信息',
+    `trigger_type` VARCHAR(50) COMMENT '触发类型: MANUAL/SCHEDULED',
+    `operator` VARCHAR(50) COMMENT '操作人',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    INDEX idx_data_source (`data_source`),
+    INDEX idx_status (`status`),
+    INDEX idx_sync_type (`sync_type`),
+    INDEX idx_start_time (`start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='同步日志表';
+
+CREATE TABLE IF NOT EXISTS field_mappings (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `data_source` VARCHAR(50) NOT NULL COMMENT '数据源标识',
+    `source_field` VARCHAR(100) NOT NULL COMMENT '源字段名（API返回的JSON键名）',
+    `target_field` VARCHAR(100) NOT NULL COMMENT '目标字段名（Java实体属性名）',
+    `source_type` VARCHAR(20) NOT NULL DEFAULT 'STRING' COMMENT '源字段类型',
+    `target_type` VARCHAR(20) NOT NULL DEFAULT 'STRING' COMMENT '目标字段类型',
+    `converter` VARCHAR(50) NOT NULL DEFAULT 'NONE' COMMENT '转换器: NONE/SPLIT/BOOLEAN/DATE',
+    `converter_config` JSON COMMENT '转换器配置（JSON格式）',
+    `default_value` VARCHAR(500) COMMENT '默认值（源数据为空时使用）',
+    `is_required` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否必填',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序顺序',
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+    `remark` VARCHAR(500) COMMENT '字段映射说明',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    INDEX idx_data_source (`data_source`),
+    INDEX idx_target_field (`target_field`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='字段映射配置表';
+
+-- ════════════════════════════════════════════════════════════════
+-- V12.1: 初始化字段映射配置数据
+-- 整合自: V12.1__init_field_mappings_data.sql
+-- ════════════════════════════════════════════════════════════════
+
+-- 1. 行政班 (administrative_class) 字段映射 — 接口: /api/xzxx
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('administrative_class', 'xzbh', 'classCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '行政班编号'),
+('administrative_class', 'xzbmc', 'className', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '行政班名称'),
+('administrative_class', 'xzbjc', 'classShortName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '行政班简称'),
+('administrative_class', 'yxbh', 'collegeCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '学院编号'),
+('administrative_class', 'yxmc', 'collegeName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '学院名称'),
+('administrative_class', 'zybh', 'majorCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '专业编号'),
+('administrative_class', 'zymc', 'majorName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '专业名称'),
+('administrative_class', 'nj', 'grade', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8, 1, '年级'),
+('administrative_class', 'bjlx', 'classType', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '班级类型'),
+('administrative_class', 'bzrgh', 'headTeacherCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '班主任工号'),
+('administrative_class', 'bzrxm', 'headTeacherName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 11, 1, '班主任姓名'),
+('administrative_class', 'xsrs', 'studentCount', 'NUMBER', 'NUMBER', 'NONE', NULL, '0', 0, 12, 1, '学生人数'),
+('administrative_class', 'nsrs', 'maleCount', 'NUMBER', 'NUMBER', 'NONE', NULL, '0', 0, 13, 1, '男生人数'),
+('administrative_class', 'nsrs_nv', 'femaleCount', 'NUMBER', 'NUMBER', 'NONE', NULL, '0', 0, 14, 1, '女生人数'),
+('administrative_class', 'bjzt', 'classStatus', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 15, 1, '班级状态'),
+('administrative_class', 'clrq', 'establishDate', 'STRING', 'DATE', 'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 16, 1, '成立日期'),
+('administrative_class', 'byrq', 'graduateDate', 'STRING', 'DATE', 'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 17, 1, '毕业日期'),
+('administrative_class', 'bz', 'remark', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 18, 1, '备注');
+
+-- 2. 学校课程 (school_course) 字段映射 — 接口: /api/kcxx
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('school_course', 'kcbh', 'courseCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程编号'),
+('school_course', 'kcmc', 'courseName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称'),
+('school_course', 'kcywmc', 'courseNameEn', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称'),
+('school_course', 'kcjc', 'courseShortName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '课程简称'),
+('school_course', 'kcxz', 'courseNature', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '课程性质'),
+('school_course', 'kclb', 'courseCategory', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '课程类别'),
+('school_course', 'xf', 'credits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7, 1, '学分'),
+('school_course', 'zxs', 'totalHours', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 8, 1, '总学时'),
+('school_course', 'llxs', 'theoryHours', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 9, 1, '理论学时'),
+('school_course', 'syxs', 'experimentHours', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 10, 1, '实验学时'),
+('school_course', 'sjxs', 'practiceHours', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 11, 1, '实践学时'),
+('school_course', 'sjxs_pc', 'computerHours', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 12, 1, '上机学时'),
+('school_course', 'kkyxbh', 'collegeCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 13, 1, '开课学院编号'),
+('school_course', 'kkyxmc', 'collegeName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 14, 1, '开课学院名称'),
+('school_course', 'kkxbbh', 'departmentCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 15, 1, '开课系部编号'),
+('school_course', 'kkxbmc', 'departmentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 16, 1, '开课系部名称'),
+('school_course', 'kcfzrgh', 'leaderCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 17, 1, '课程负责人工号'),
+('school_course', 'kcfzrxm', 'leaderName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 18, 1, '课程负责人姓名'),
+('school_course', 'khfs', 'assessmentMethod', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 19, 1, '考核方式'),
+('school_course', 'sfsyjx', 'isBilingual', 'STRING', 'STRING', 'BOOLEAN', '{"trueValues":["是","1","true"],"falseValues":["否","0","false"]}', NULL, 0, 20, 1, '是否双语教学'),
+('school_course', 'sfwlkc', 'isOnline', 'STRING', 'STRING', 'BOOLEAN', '{"trueValues":["是","1","true"],"falseValues":["否","0","false"]}', NULL, 0, 21, 1, '是否网络课程'),
+('school_course', 'syzy', 'applicableMajors', 'STRING', 'STRING', 'SPLIT', '{"delimiter":","}', NULL, 0, 22, 1, '适用专业'),
+('school_course', 'xxkcbh', 'prerequisiteCodes', 'STRING', 'STRING', 'SPLIT', '{"delimiter":","}', NULL, 0, 23, 1, '先修课程编号'),
+('school_course', 'xxkcmc', 'prerequisiteNames', 'STRING', 'STRING', 'SPLIT', '{"delimiter":","}', NULL, 0, 24, 1, '先修课程名称'),
+('school_course', 'kcjj', 'courseIntro', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 25, 1, '课程简介'),
+('school_course', 'jxmb', 'teachingObjectives', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 26, 1, '教学目标'),
+('school_course', 'kczt', 'courseStatus', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 27, 1, '课程状态');
+
+-- 3. 教学班 (teaching_class) 字段映射 — 接口: /api/bzkcxx
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('teaching_class', 'jxbid', 'classId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '教学班号'),
+('teaching_class', 'jxbmc', 'className', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2, 1, '教学班名称'),
+('teaching_class', 'kcbh', 'courseCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '课程编号'),
+('teaching_class', 'kcmc', 'courseName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '课程名称'),
+('teaching_class', 'jgh', 'teacherId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '授课教师工号'),
+('teaching_class', 'xm', 'teacherName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '授课教师姓名'),
+('teaching_class', 'xn', 'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学年'),
+('teaching_class', 'xq', 'semester', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 8, 1, '学期'),
+('teaching_class', 'bjrl', 'capacity', 'NUMBER', 'NUMBER', 'NONE', NULL, '0', 0, 9, 1, '班级容量'),
+('teaching_class', 'yxrs', 'enrolledCount', 'NUMBER', 'NUMBER', 'NONE', NULL, '0', 0, 10, 1, '已选人数'),
+('teaching_class', 'kczt', 'classStatus', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '课程状态');
+
+-- 4. 课程安排 (course_schedule) 字段映射 — 接口: /api/kcap
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('course_schedule', 'jxbid', 'classId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '教学班号'),
+('course_schedule', 'skxqj', 'dayOfWeek', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '上课星期几 1-7'),
+('course_schedule', 'skjc', 'period', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '上课节次'),
+('course_schedule', 'zcd', 'weekRange', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '周次'),
+('course_schedule', 'cdmc', 'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '上课地点'),
+('course_schedule', 'xn', 'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年'),
+('course_schedule', 'xq', 'semester', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7, 1, '学期');
+
+-- 5. 选课记录 (course_selection) 字段映射 — 接口: /api/xsxk
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('course_selection', 'xh', 'studentId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
+('course_selection', 'kcbh', 'courseCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程编号'),
+('course_selection', 'kcmc', 'courseName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '课程名称'),
+('course_selection', 'jhbh', 'planId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '计划编号'),
+('course_selection', 'xn', 'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '学年'),
+('course_selection', 'xq', 'semester', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 6, 1, '学期'),
+('course_selection', 'xf', 'credits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7, 1, '学分'),
+('course_selection', 'cjj', 'totalGrade', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 8, 1, '成绩'),
+('course_selection', 'kcxz', 'courseNature', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '课程性质'),
+('course_selection', 'jxbid', 'classId', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教学班号'),
+('course_selection', 'jgh', 'teacherId', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 11, 1, '教师工号'),
+('course_selection', 'xm', 'teacherName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '教师姓名');
+
+-- 6. 等级考试成绩 (level_exam_scores) 字段映射 — 接口: /api/djcj
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('level_exam_scores', 'xh', 'studentId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
+('level_exam_scores', 'xm', 'studentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '姓名'),
+('level_exam_scores', 'ksbh', 'examId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '考试编号'),
+('level_exam_scores', 'ksmc', 'examName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '考试名称'),
+('level_exam_scores', 'ksrq', 'examDate', 'STRING', 'DATE', 'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 1, 5, 1, '考试日期'),
+('level_exam_scores', 'cj', 'score', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 6, 1, '成绩'),
+('level_exam_scores', 'dj', 'grade', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '等级'),
+('level_exam_scores', 'zkzh', 'admissionTicketNo', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '准考证号'),
+('level_exam_scores', 'bz', 'remark', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '备注');
+
+-- 7. 教学计划 (teaching_plans) 字段映射 — 接口: /api/jxjh
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('teaching_plans', 'jhbh', 'planId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '计划编号'),
+('teaching_plans', 'jhmc', 'planName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '计划名称'),
+('teaching_plans', 'zybh', 'majorCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '专业代码'),
+('teaching_plans', 'zymc', 'majorName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '专业名称'),
+('teaching_plans', 'nj', 'grade', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '年级'),
+('teaching_plans', 'xz', 'schoolingLength', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 6, 1, '学制'),
+('teaching_plans', 'xwlx', 'degreeType', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学位类型'),
+('teaching_plans', 'pycc', 'educationLevel', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8, 1, '培养层次'),
+('teaching_plans', 'yxbh', 'collegeCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 9, 1, '学院代码'),
+('teaching_plans', 'yxmc', 'collegeName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 10, 1, '学院名称'),
+('teaching_plans', 'zxf', 'totalCredits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 11, 1, '总学分'),
+('teaching_plans', 'bxxf', 'requiredCredits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 12, 1, '必修学分'),
+('teaching_plans', 'xxxf', 'electiveCredits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 13, 1, '选修学分'),
+('teaching_plans', 'sjxf', 'practiceCredits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 14, 1, '实践学分'),
+('teaching_plans', 'jhzt', 'planStatus', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 15, 1, '计划状态');
+
+-- ════════════════════════════════════════════════════════════════
+-- V13: 学校数据接入配置种子数据（system_config school_data 组）
+-- 整合自: V13__school_data_system_config.sql
+-- ════════════════════════════════════════════════════════════════
+
+-- 数据源配置
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('school_data', 'source', 'api', '数据源类型: api 或 etl', 0),
+('school_data', 'api_base_url', 'https://api.imau.edu.cn', 'API基础URL', 0),
+('school_data', 'api_token', '', 'API认证Token', 1),
+('school_data', 'api_connect_timeout', '5000', 'API连接超时(ms)', 0),
+('school_data', 'api_read_timeout', '30000', 'API读取超时(ms)', 0),
+('school_data', 'api_retry_attempts', '3', 'API重试次数', 0),
+('school_data', 'etl_jdbc_url', '', 'ETL JDBC连接URL', 0),
+('school_data', 'etl_username', '', 'ETL数据库用户名', 0),
+('school_data', 'etl_password', '', 'ETL数据库密码', 1),
+('school_data', 'etl_connection_timeout', '30000', 'ETL连接超时(ms)', 0),
+('school_data', 'etl_query_timeout', '60000', 'ETL查询超时(ms)', 0);
+
+-- 同步调度配置
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('school_data', 'sync_enabled', 'false', '是否启用同步调度', 0),
+('school_data', 'sync_full_cron', '0 0 2 * * ?', '全量同步cron', 0),
+('school_data', 'sync_incremental_cron', '0 0 * * * ?', '增量同步cron', 0),
+('school_data', 'sync_validation_cron', '0 0 4 * * ?', '数据校验cron', 0),
+('school_data', 'sync_batch_size', '500', '批量大小', 0),
+('school_data', 'sync_timeout_minutes', '60', '同步超时(分钟)', 0);
+
+-- ════════════════════════════════════════════════════════════════
+-- V14: 学生课表表结构+字段映射, 教师授课字段映射
+-- 整合自: V14__student_schedule_and_teacher_courses_mapping.sql
+-- ════════════════════════════════════════════════════════════════
+
+-- 1. 学生课表 (student_schedule) 表结构 — 接口: /api/xskb
+CREATE TABLE IF NOT EXISTS student_schedule (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    student_id VARCHAR(50) NOT NULL,
+    student_name VARCHAR(100) NOT NULL,
+    class_id VARCHAR(50) NOT NULL,
+    course_code VARCHAR(50) NOT NULL,
+    course_name VARCHAR(200) NOT NULL,
+    teacher_id VARCHAR(50) NOT NULL,
+    teacher_name VARCHAR(50) NOT NULL,
+    day_of_week INT NOT NULL,
+    period VARCHAR(20) NOT NULL,
+    week_range VARCHAR(50) NOT NULL,
+    class_location VARCHAR(100) NOT NULL,
+    academic_year VARCHAR(20) NOT NULL,
+    semester INT NOT NULL,
+    sync_time DATETIME NOT NULL,
+    sync_source VARCHAR(20) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_student (student_id),
+    INDEX idx_class_id (class_id),
+    INDEX idx_course (course_code),
+    INDEX idx_academic_year_semester (academic_year, semester),
+    INDEX idx_sync_time (sync_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Student schedule info';
+
+-- 2. 教师授课 (teacher_courses) 字段映射 — 接口: /api/jssk
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('teacher_courses', 'jgh', 'teacherId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '教师工号'),
+('teacher_courses', 'xm', 'teacherName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '教师姓名'),
+('teacher_courses', 'jxbid', 'classId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '教学班号'),
+('teacher_courses', 'kcbh', 'courseCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '课程编号'),
+('teacher_courses', 'kcmc', 'courseName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '课程名称'),
+('teacher_courses', 'xn', 'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年'),
+('teacher_courses', 'xq', 'semester', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7, 1, '学期');
+
+-- 3. 学生课表 (student_schedule) 字段映射 — 接口: /api/xskb
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('student_schedule', 'xh', 'studentId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
+('student_schedule', 'xm', 'studentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '学生姓名'),
+('student_schedule', 'jxbid', 'classId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '教学班号'),
+('student_schedule', 'kcbh', 'courseCode', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '课程编号'),
+('student_schedule', 'kcmc', 'courseName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '课程名称'),
+('student_schedule', 'jgh', 'teacherId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '教师工号'),
+('student_schedule', 'jsxm', 'teacherName', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '教师姓名'),
+('student_schedule', 'skxqj', 'dayOfWeek', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 8, 1, '上课星期几 1-7'),
+('student_schedule', 'skjc', 'period', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 9, 1, '上课节次'),
+('student_schedule', 'zcd', 'weekRange', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 10, 1, '周次'),
+('student_schedule', 'cdmc', 'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '上课地点'),
+('student_schedule', 'xn', 'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学年'),
+('student_schedule', 'xq', 'semester', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 13, 1, '学期');
+
+-- ════════════════════════════════════════════════════════════════
+-- V16: 重命名 course → school_course (存量数据库升级)
+-- 新环境初始化时上方已直接创建 school_course 表，此段仅处理已有数据库
+-- ════════════════════════════════════════════════════════════════
+SET @course_exists = (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'course');
+SET @school_course_exists = (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'school_course');
+-- 仅当 course 存在且 school_course 不存在时执行重命名
+SET @sql = IF(@course_exists = 1 AND @school_course_exists = 0, 'RENAME TABLE `course` TO `school_course`', 'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- ════════════════════════════════════════════════════════════════

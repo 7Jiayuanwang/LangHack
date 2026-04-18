@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- V5: 成绩记录表 + 任务扩展
+-- V1: 成绩记录表 + 任务扩展
 -- 整合自: V5 (score_records), V6 (weight), V7 (ideal_study_time), V17 (unique constraint)
 -- ═══════════════════════════════════════════════════════════════
 
@@ -33,13 +33,36 @@ CREATE TABLE IF NOT EXISTS score_records (
 
 -- ────────────────────────────────────────
 -- 2. 任务表扩展 [原 V6 + V7]
+--    使用存储过程 IF NOT EXISTS 防止重复添加列
+--    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
--- 任务权重（加权平均分）
-ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00
-    COMMENT '任务权重（用于计算加权平均分，默认1.00）' AFTER deadline;
-CREATE INDEX idx_weight ON assignments (weight);
+DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
+CREATE PROCEDURE _add_col_assignments_weight()
+BEGIN
+    -- 任务权重（加权平均分）
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='weight') THEN
+        ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00
+            COMMENT '任务权重（用于计算加权平均分，默认1.00）' AFTER deadline;
+    END IF;
+    -- 理想学习时长
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='ideal_study_time_minutes') THEN
+        ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60
+            COMMENT '理想学习时长（分钟），默认60分钟' AFTER weight;
+    END IF;
+END;
+CALL _add_col_assignments_weight();
+DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
 
--- 理想学习时长
-ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60
-    COMMENT '理想学习时长（分钟），默认60分钟' AFTER weight;
-CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes);
+-- 索引（幂等：IF NOT EXISTS 检查）
+DROP PROCEDURE IF EXISTS _add_idx_assignments;
+CREATE PROCEDURE _add_idx_assignments()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_weight') THEN
+        CREATE INDEX idx_weight ON assignments (weight);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_ideal_study_time') THEN
+        CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes);
+    END IF;
+END;
+CALL _add_idx_assignments();
+DROP PROCEDURE IF EXISTS _add_idx_assignments;

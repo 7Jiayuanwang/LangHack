@@ -28,7 +28,7 @@ public class SyncMonitorService {
     private static final List<String> DATA_SOURCES = List.of(
             "administrative_class", "school_course", "teaching_class",
             "course_schedule", "course_selection", "level_exam_scores",
-            "teaching_plans"
+            "teaching_plans", "teacher_courses", "student_schedule"
     );
 
     /** 告警阈值配置 */
