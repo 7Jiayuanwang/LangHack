@@ -34,10 +34,10 @@ import java.util.concurrent.TimeUnit;
 public class OAuth2SsoService implements SsoService {
 
     /** Redis 中 state 的 key 前缀，用于 OAuth2 CSRF 防护 */
-    static final String STATE_KEY_PREFIX = "sso:oauth2:state:";
+    public static final String STATE_KEY_PREFIX = "sso:oauth2:state:";
 
     /** state 的 TTL（秒），覆盖正常 OAuth 登录流程的时长 */
-    static final long STATE_TTL_SECONDS = 300L;
+    public static final long STATE_TTL_SECONDS = 300L;
 
     @Autowired
     private SsoProperties ssoProperties;
