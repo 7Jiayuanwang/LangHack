@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
 -- LangHack 合并迁移脚本（MySQL 8.0 兼容）
--- 将 Flyway V0 ~ V13 的所有迁移合并为单个幂等脚本
+-- 将 Flyway V0 ~ V14 的所有迁移合并为单个幂等脚本
 --
 -- 对应 Flyway 迁移文件（整合后 - 2026-04-19 补丁合并）:
 --   V0__base_tables.sql                     (基础表)
@@ -17,6 +17,7 @@
 --   V11__role_mapping_cleanup.sql           (合并: 旧 V12 重命名)
 --   V12__school_data_integration.sql        (合并: 旧 V12.1/V13/V14/V16/V18/V19/V20)
 --   V13__access_log_covering_index.sql      (监控热点页查询索引优化)
+--   V14__expand_feature_toggles.sql         (学生页全覆盖 + admin.* 模块 toggle)
 --
 -- 注意：V19 列名修正 — 使用 `converter`/`remark`（原 V19 误写为
 --       `converter_type`/`description`/`created_by` 导致 INSERT IGNORE 静默失败）
