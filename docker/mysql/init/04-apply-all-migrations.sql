@@ -569,7 +569,7 @@ ALTER TABLE users MODIFY COLUMN role ENUM('USER','STUDENT','TEACHER','ADMIN','OP
 -- ────────────────────────────────────────
 -- 确保 teacher 账号存在
 INSERT INTO users (username, password, role, real_name, status, deleted, created_time, updated_time)
-SELECT 'teacher'),
+SELECT 'teacher',
        (SELECT password FROM users WHERE username = 'admin' LIMIT 1),
        'TEACHER', '演示教师', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
@@ -577,7 +577,7 @@ WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'teacher');
 
 -- 确保 student 账号存在
 INSERT INTO users (username, password, role, real_name, status, deleted, created_time, updated_time)
-SELECT 'student'),
+SELECT 'student',
        (SELECT password FROM users WHERE username = 'admin' LIMIT 1),
        'STUDENT', '演示学生', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
@@ -586,7 +586,7 @@ WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'student');
 -- 同步密码 + 确保 ACTIVE 状态 + 未被软删除
 UPDATE users SET
     password = (SELECT pw FROM (SELECT password AS pw FROM users WHERE username = 'admin' LIMIT 1) tmp),
-    status = 'ACTIVE'),
+    status = 'ACTIVE',
     deleted = 0
 WHERE username IN ('teacher', 'student');
 
@@ -640,8 +640,8 @@ INSERT IGNORE INTO `ai_provider`
     (`id`, `service`, `name`, `api_url`, `api_key`, `model`, `weight`, `enabled`, `timeout_ms`, `remark`)
 SELECT
     1,
-    'translate'),
-    'SiliconFlow (default)'),
+    'translate',
+    'SiliconFlow (default)',
     COALESCE((SELECT config_value FROM system_config WHERE config_group='ai_translate' AND config_key='api_url'),
              'https://api.siliconflow.cn/v1/chat/completions'),
     COALESCE((SELECT config_value FROM system_config WHERE config_group='ai_translate' AND config_key='api_key'), ''),
@@ -827,7 +827,7 @@ CREATE TABLE IF NOT EXISTS sso_config (
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_bound');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''是否通过SSO绑定: 0=否, 1=是'''),
+    'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''是否通过SSO绑定: 0=否, 1=是''',
     'SELECT ''Column sso_bound already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -837,7 +837,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_provider');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO提供商'''),
+    'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO提供商''',
     'SELECT ''Column sso_provider already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -847,7 +847,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_subject');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO唯一标识'''),
+    'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO唯一标识''',
     'SELECT ''Column sso_subject already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -857,7 +857,7 @@ DEALLOCATE PREPARE stmt;
 SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_bound');
 SET @sql = IF(@idx_exists = 0,
-    'ALTER TABLE users ADD INDEX idx_sso_bound (sso_bound)'),
+    'ALTER TABLE users ADD INDEX idx_sso_bound (sso_bound)',
     'SELECT ''Index idx_sso_bound already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -867,7 +867,7 @@ DEALLOCATE PREPARE stmt;
 SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_subject');
 SET @sql = IF(@idx_exists = 0,
-    'ALTER TABLE users ADD INDEX idx_sso_subject (sso_provider, sso_subject)'),
+    'ALTER TABLE users ADD INDEX idx_sso_subject (sso_provider, sso_subject)',
     'SELECT ''Index idx_sso_subject already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1148,7 +1148,7 @@ CREATE TABLE IF NOT EXISTS teaching_plan_courses (
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'nickname');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE users ADD COLUMN nickname VARCHAR(50) DEFAULT NULL COMMENT ''昵称'' AFTER role'),
+    'ALTER TABLE users ADD COLUMN nickname VARCHAR(50) DEFAULT NULL COMMENT ''昵称'' AFTER role',
     'SELECT ''Column nickname already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1160,7 +1160,7 @@ SET @avatar_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
 SET @avatar_url_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'avatar_url');
 SET @sql = IF(@avatar_exists = 0 AND @avatar_url_exists > 0,
-    'ALTER TABLE users RENAME COLUMN avatar_url TO avatar'),
+    'ALTER TABLE users RENAME COLUMN avatar_url TO avatar',
     'SELECT ''Column avatar already exists or avatar_url does not exist'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1174,7 +1174,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'cover_url');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE texts ADD COLUMN cover_url VARCHAR(255) DEFAULT NULL COMMENT ''封面图URL'' AFTER chinese_parallel_markdown_content'),
+    'ALTER TABLE texts ADD COLUMN cover_url VARCHAR(255) DEFAULT NULL COMMENT ''封面图URL'' AFTER chinese_parallel_markdown_content',
     'SELECT ''Column cover_url already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1184,7 +1184,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'is_featured');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT ''是否推荐'''),
+    'ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT ''是否推荐''',
     'SELECT ''Column is_featured already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1194,7 +1194,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'featured_priority');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE texts ADD COLUMN featured_priority INT DEFAULT 0 COMMENT ''推荐优先级'''),
+    'ALTER TABLE texts ADD COLUMN featured_priority INT DEFAULT 0 COMMENT ''推荐优先级''',
     'SELECT ''Column featured_priority already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1204,7 +1204,7 @@ DEALLOCATE PREPARE stmt;
 SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'texts' AND INDEX_NAME = 'idx_is_featured');
 SET @sql = IF(@idx_exists = 0,
-    'ALTER TABLE texts ADD INDEX idx_is_featured (is_featured)'),
+    'ALTER TABLE texts ADD INDEX idx_is_featured (is_featured)',
     'SELECT ''Index idx_is_featured already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1214,7 +1214,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = 'repetition');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT ''SM2重复次数'' AFTER mastery_level'),
+    'ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT ''SM2重复次数'' AFTER mastery_level',
     'SELECT ''Column repetition already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1224,7 +1224,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = 'interval_days');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 1 COMMENT ''SM2间隔天数'' AFTER repetition'),
+    'ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 1 COMMENT ''SM2间隔天数'' AFTER repetition',
     'SELECT ''Column interval_days already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1234,7 +1234,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = 'easiness_factor');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT ''SM2难度因子'' AFTER interval_days'),
+    'ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT ''SM2难度因子'' AFTER interval_days',
     'SELECT ''Column easiness_factor already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -1244,7 +1244,7 @@ DEALLOCATE PREPARE stmt;
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'english_learning' AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = 'next_review_time');
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME DEFAULT NULL COMMENT ''下次复习时间'' AFTER easiness_factor'),
+    'ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME DEFAULT NULL COMMENT ''下次复习时间'' AFTER easiness_factor',
     'SELECT ''Column next_review_time already exists'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
