@@ -482,8 +482,7 @@ class JwtAuthenticationFilterTest {
         normalUser.setStatus("ACTIVE");
         when(userService.getUserByUsername("normal_user")).thenReturn(normalUser);
 
-        // No elevation
-        when(elevationService.getElevatedRole("normal_user")).thenReturn(null);
+        // USER 角色不会触发 elevation 查询（优化：仅 ADMIN/OPS 才查 Redis）
 
         invokeDoFilterInternal();
 
