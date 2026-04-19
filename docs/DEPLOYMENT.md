@@ -130,6 +130,36 @@ SCHOOL_SYNC_ENABLED=true         # 启用定时同步
 
 由学校数据平台（cdsp.imau.edu.cn）管理员分配，具体申请流程咨询学校信息化中心。
 
+### 更新前端 UI（学校数据 App ID/App Secret）
+
+**症状**：`/ops/school-data` 仍显示 "API Token" 字段而非 "App ID" / "App Secret"
+
+**根因**：frontend docker image 未重建，生产使用的是旧镜像
+
+**修复**：
+```bash
+cd /path/to/LangHack
+git pull
+docker compose build frontend
+docker compose up -d frontend
+```
+重建后浏览器 `Ctrl+F5` 清缓存，即可看到新的 App ID / App Secret 输入框。
+
+### 配置完成后的强制验证（关键）
+
+保存 App ID / App Secret 后，**必须** 通过以下任一方式验证端到端链路：
+
+1. **运维面板** — 点击"测试连接"按钮，应显示 "✅ 连接成功 (api)"
+2. **后端 API** — `curl -H "Authorization: Bearer $ADMIN_JWT" -X POST http://localhost:8080/api/ops/school-data/test-connection`
+   - 预期返回：`{"code":200,"data":{"success":true,"source":"api"}}`
+3. **同步验证** — 在运维面板点击"立即同步（行政班）"，观察数据库 `SELECT COUNT(*) FROM administrative_class` > 0
+
+**测试失败的排查步骤**：
+1. 检查 `/ops/school-data` 顶部横幅是否消失（消失 = 配置已写入）
+2. 后端日志：`docker logs langhack-backend | grep -i "school"` — 查找 "School API auth missing" 或 4xx/5xx
+3. 网络：`curl -v https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171094991198337?pageSize=1` （从后端容器内执行）
+4. App ID/Secret 正确性：向学校信息化中心确认凭证
+
 ---
 
 ## 3. 配置方式（三选一）

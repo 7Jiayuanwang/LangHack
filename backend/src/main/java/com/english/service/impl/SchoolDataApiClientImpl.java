@@ -1,6 +1,7 @@
 package com.english.service.impl;
 
 import com.english.config.SchoolDataProperties;
+import com.english.exception.BusinessException;
 import com.english.service.SchoolDataApiClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -139,6 +140,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             ResponseEntity<String> response = restTemplate.exchange(
                     testEndpoint + "?pageSize=1", HttpMethod.GET, entity, String.class);
             return response.getStatusCode().is2xxSuccessful();
+        } catch (BusinessException e) {
+            logger.error("School data API connection test failed (auth not configured): {}", e.getMessage());
+            return false;
         } catch (RestClientException e) {
             logger.error("School data API connection test failed", e);
             return false;
@@ -235,6 +239,8 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      *     sign      = Base64( MD5( appId + appSecret + timestamp ) )
      * <p>
      * 每次请求实时生成 timestamp 和 sign，保证签名时效性。
+     * <p>
+     * 认证缺失 → 抛 {@link BusinessException}，避免向学校 API 发送无效的无认证请求。
      */
     private HttpHeaders buildHeaders() {
         HttpHeaders headers = new HttpHeaders();
@@ -249,11 +255,13 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             headers.set("appId", appId);
             headers.set("timestamp", String.valueOf(timestamp));
             headers.set("sign", sign);
-        } else {
-            logger.warn("School API auth missing — appId or appSecret not configured; requests will be unauthenticated");
+            return headers;
         }
 
-        return headers;
+        logger.error("School API auth missing — appId or appSecret not configured. "
+                + "请在运维面板 → 学校数据配置 填入 App ID / App Secret，或设置 "
+                + "SCHOOL_API_APP_ID / SCHOOL_API_APP_SECRET 环境变量并重启后端。");
+        throw new BusinessException("学校 API 认证未配置，请先在运维面板或 .env 中设置 App ID / App Secret");
     }
 
     /**

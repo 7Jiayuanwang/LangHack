@@ -71,7 +71,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getFeatureToggles, getPersonalFeatureToggles } from '@/api/systemConfig'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   DataBoard,
   Reading,
@@ -84,7 +84,8 @@ import {
   VideoPlay,
   Calendar,
   Trophy,
-  Tickets
+  Tickets,
+  School
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -92,7 +93,7 @@ const route = useRoute()
 const userStore = useUserStore()
 const showUserMenu = ref(false)
 const screenWidth = ref(window.innerWidth)
-const featureToggles = ref({})
+const { toggles: featureToggles, load: loadFeatureToggles } = useFeatureToggles()
 const ssoEnabled = ref(false)
 
 // 处理键盘事件关闭菜单
@@ -105,12 +106,14 @@ const handleKeyDown = (event) => {
 // 所有导航项配置（含 toggleKey 用于功能开关过滤）
 const allNavigationItems = [
   { path: '/student/dashboard', label: '发现', icon: markRaw(DataBoard), badge: null, toggleKey: 'page_dashboard' },
+  { path: '/student/courses', label: '课程', icon: markRaw(School), badge: null, toggleKey: 'page_courses' },
   { path: '/student/classes', label: '社区', icon: markRaw(House), badge: null, toggleKey: 'page_classes' },
   { path: '/student/assignments', label: '任务', icon: markRaw(Edit), badge: null, toggleKey: 'page_assignments' },
   { path: '/student/schedule', label: '课表', icon: markRaw(Calendar), badge: null, toggleKey: 'page_schedule' },
   { path: '/student/scores', label: '成绩', icon: markRaw(Trophy), badge: null, toggleKey: 'page_scores' },
   { path: '/student/course-selections', label: '选课', icon: markRaw(Tickets), badge: null, toggleKey: 'page_course_selections' },
   { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, toggleKey: 'page_articles' },
+  { path: '/student/text-learning', label: '课文', icon: markRaw(Reading), badge: null, toggleKey: 'page_text_learning' },
   { path: '/student/vocabulary', label: '单词', icon: markRaw(Document), badge: null, toggleKey: 'page_vocabulary' },
   { path: '/student/my-study', label: '学习', icon: markRaw(Reading), badge: null, toggleKey: 'page_my_study' },
   { path: '/student/ai-video', label: '视频', icon: markRaw(VideoPlay), badge: null, toggleKey: 'page_ai_video' },
@@ -247,18 +250,9 @@ onMounted(() => {
       sessionStorage.setItem('sso_enabled', ssoEnabled.value ? 'true' : 'false')
     }
   }).catch(() => {})
-  // 加载功能开关配置（登录后优先使用个性化接口，失败时回退公开接口）
-  getPersonalFeatureToggles().then(res => {
-    if (res?.code === 200 && res?.data) {
-      featureToggles.value = res.data
-    }
-  }).catch(() => {
-    getFeatureToggles().then(res => {
-      if (res?.code === 200 && res?.data) {
-        featureToggles.value = res.data
-      }
-    }).catch(() => {})
-  })
+  // 加载功能开关配置 — 与路由守卫共享 useFeatureToggles 缓存（sessionStorage 5 min TTL）
+  // 登录状态下使用 personal 接口以应用三层覆盖（全局→标签→用户）
+  loadFeatureToggles({ personal: !!userStore.token }).catch(() => {})
 })
 
 onUnmounted(() => {

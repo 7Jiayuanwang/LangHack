@@ -131,7 +131,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getSsoLogoutUrl, getSsoStatus } from '@/api/sso'
-import { getFeatureToggles } from '@/api/systemConfig'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ElevationDialog from '@/components/ElevationDialog.vue'
 import {
@@ -157,8 +157,8 @@ const userStore = useUserStore()
 const showElevationDialog = ref(false)
 const elevationTarget     = ref('ADMIN')
 
-// 功能开关状态
-const featureToggles = ref({})
+// 功能开关状态（与路由守卫 + 其他 layout 共享缓存）
+const { toggles: featureToggles, load: loadFeatureToggles } = useFeatureToggles()
 
 // ── 主题（accent 颜色）────────────────────────────────────────────────────────
 
@@ -197,17 +197,17 @@ const NAV_ITEMS = {
     { path: '/ops/update',          label: '更新', icon: Refresh     },
   ],
   admin: [
-    { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null },
-    { path: '/admin/courses',   label: '课程', icon: Reading,   badge: null },
-    { path: '/admin/classes',   label: '班级', icon: School,    badge: null },
-    { path: '/admin/users',     label: '用户', icon: User,      badge: null },
+    { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null, featureKey: 'admin.dashboard' },
+    { path: '/admin/courses',   label: '课程', icon: Reading,   badge: null, featureKey: 'admin.courses' },
+    { path: '/admin/classes',   label: '班级', icon: School,    badge: null, featureKey: 'admin.classes' },
+    { path: '/admin/users',     label: '用户', icon: User,      badge: null, featureKey: 'admin.users' },
   ],
 }
 
 const navItems = computed(() => {
   const items = NAV_ITEMS[props.role] || []
-  // 运维端需要根据功能开关过滤导航项
-  if (props.role === 'ops') {
+  // ops / admin 均需根据功能开关过滤导航项（teacher / user 暂无 featureKey）
+  if (props.role === 'ops' || props.role === 'admin') {
     return items.filter(item => {
       if (!item.featureKey) return true
       const val = featureToggles.value[item.featureKey]
@@ -220,15 +220,25 @@ const navItems = computed(() => {
 // admin 专属：二级管理菜单
 const MORE_ITEMS = {
   admin: [
-    { path: '/admin/units',          label: '单元管理', icon: Reading  },
-    { path: '/admin/words',          label: '单词管理', icon: EditPen  },
-    { path: '/admin/texts',          label: '课文管理', icon: Document },
-    { path: '/admin/assignments',    label: '作业管理', icon: Document },
-    { path: '/admin/sso-pending',    label: 'SSO审批', icon: User     },
+    { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
+    { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
+    { path: '/admin/texts',          label: '课文管理', icon: Document, featureKey: 'admin.texts' },
+    { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
+    { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
   ],
 }
 
-const moreItems = computed(() => MORE_ITEMS[props.role] || [])
+const moreItems = computed(() => {
+  const items = MORE_ITEMS[props.role] || []
+  if (props.role === 'admin') {
+    return items.filter(item => {
+      if (!item.featureKey) return true
+      const val = featureToggles.value[item.featureKey]
+      return val === undefined || val === true || val === 'true'
+    })
+  }
+  return items
+})
 
 const isManagementRouteActive = computed(() => {
   if (props.role !== 'admin') return false
@@ -410,13 +420,10 @@ onMounted(async () => {
     router.replace('/login')
   }
 
-  // 加载功能开关（运维端）
-  if (props.role === 'ops') {
+  // 加载功能开关（运维端 + 管理员端共用缓存）
+  if (props.role === 'ops' || props.role === 'admin') {
     try {
-      const res = await getFeatureToggles()
-      if (res?.code === 200 && res.data) {
-        featureToggles.value = res.data
-      }
+      await loadFeatureToggles({ personal: !!userStore.token })
     } catch (e) {
       console.error('Failed to load feature toggles:', e)
     }

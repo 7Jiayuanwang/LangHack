@@ -714,6 +714,24 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('feature_toggle', 'page_user_texts', 'true', '学生端-我的上传页', 0);
 
 -- ─────────────────────────────────────────────
+-- V14: 扩展 feature_toggle 覆盖学生端全量 + 管理员分级
+-- ─────────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'page_scores',            'true',  '学生端-等级考试成绩页',         0),
+  ('feature_toggle', 'page_course_selections', 'true',  '学生端-我的选课页',             0),
+  ('feature_toggle', 'page_text_learning',     'true',  '学生端-课文学习子页',           0),
+  ('feature_toggle', 'page_schedule',          'true',  '学生端-我的课表页',             0),
+  ('feature_toggle', 'admin.dashboard',    'true', '管理员-仪表盘',     0),
+  ('feature_toggle', 'admin.courses',      'true', '管理员-课程管理',   0),
+  ('feature_toggle', 'admin.classes',      'true', '管理员-班级管理',   0),
+  ('feature_toggle', 'admin.users',        'true', '管理员-用户管理',   0),
+  ('feature_toggle', 'admin.units',        'true', '管理员-单元管理',   0),
+  ('feature_toggle', 'admin.words',        'true', '管理员-单词管理',   0),
+  ('feature_toggle', 'admin.texts',        'true', '管理员-课文管理',   0),
+  ('feature_toggle', 'admin.assignments',  'true', '管理员-作业管理',   0),
+  ('feature_toggle', 'admin.sso_approval', 'true', '管理员-SSO 审批',   0);
+
+-- ─────────────────────────────────────────────
 -- V7: 修复 system_config description 乱码
 -- （SET NAMES utf8mb4 已在文件头部声明，此处 UPDATE 可正确写入中文）
 -- ─────────────────────────────────────────────

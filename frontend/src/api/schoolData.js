@@ -21,6 +21,13 @@ export function testSchoolDataConnection() {
   return request({ url: '/api/ops/school-data/test-connection', method: 'post' })
 }
 
+/**
+ * 查询学校数据集成配置状态（含 authConfigured / missingKeys / lastTestResult 等）
+ */
+export function getSchoolDataConfigStatus() {
+  return request({ url: '/api/ops/school-data/config-status', method: 'get' })
+}
+
 // ==================== 学校数据查询（管理员/运维） ====================
 
 /**

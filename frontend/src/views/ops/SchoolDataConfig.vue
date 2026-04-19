@@ -2,10 +2,69 @@
   <div class="school-data-config">
     <div class="page-header">
       <h2>学校数据配置</h2>
-      <el-button @click="loadConfig" :loading="loading">
+      <el-button @click="loadAll" :loading="loading">
         <el-icon><Refresh /></el-icon> 刷新
       </el-button>
     </div>
+
+    <!-- 配置状态警告横幅 -->
+    <el-alert
+      v-if="showAuthWarning"
+      type="error"
+      :closable="false"
+      show-icon
+      class="status-banner"
+    >
+      <template #title>
+        <strong>学校 API 认证未配置 — 数据同步当前全部失败</strong>
+      </template>
+      <template #default>
+        <div>
+          缺失项:
+          <el-tag
+            v-for="k in status.missingKeys"
+            :key="k"
+            type="danger"
+            size="small"
+            class="missing-tag"
+          >{{ k }}</el-tag>
+        </div>
+        <div class="banner-hint">
+          请在下方 "API 接口配置" 区填入 <strong>App ID</strong> 与 <strong>App Secret</strong>，保存后点击"测试连接"验证。
+        </div>
+      </template>
+    </el-alert>
+    <el-alert
+      v-else-if="showEtlWarning"
+      type="error"
+      :closable="false"
+      show-icon
+      class="status-banner"
+    >
+      <template #title>
+        <strong>ETL 数据库配置未完成 — JDBC 直连当前不可用</strong>
+      </template>
+      <template #default>
+        <div>
+          缺失项:
+          <el-tag
+            v-for="k in status.missingKeys"
+            :key="k"
+            type="danger"
+            size="small"
+            class="missing-tag"
+          >{{ k }}</el-tag>
+        </div>
+      </template>
+    </el-alert>
+    <el-alert
+      v-else-if="status.authConfigured || status.etlConfigured"
+      type="success"
+      :closable="false"
+      show-icon
+      class="status-banner"
+      :title="`${status.source === 'api' ? 'API' : 'ETL'} 配置已完成，可点击下方 '测试连接' 验证`"
+    />
 
     <div v-if="loading" class="loading-state">
       <el-icon class="is-loading" :size="32"><Loading /></el-icon>
@@ -34,14 +93,16 @@
               <el-form-item label="Base URL" prop="api_base_url">
                 <el-input v-model="form.api_base_url" placeholder="https://api.imau.edu.cn" />
               </el-form-item>
-              <el-form-item label="App ID">
+              <el-form-item label="App ID" :class="{ 'field-missing': isMissing('api_app_id') }">
                 <el-input v-model="form.api_app_id" placeholder="学校数据平台分配的应用 ID" />
+                <div v-if="isMissing('api_app_id')" class="field-warning">必填 — 当前未配置，同步将失败</div>
               </el-form-item>
-              <el-form-item label="App Secret">
+              <el-form-item label="App Secret" :class="{ 'field-missing': isMissing('api_app_secret') }">
                 <el-input v-model="form.api_app_secret" type="password" show-password placeholder="应用 Secret (用于签名认证)" />
                 <div class="form-subhint">
                   签名公式: sign = Base64(MD5(appId + appSecret + timestamp))
                 </div>
+                <div v-if="isMissing('api_app_secret')" class="field-warning">必填 — 当前未配置，同步将失败</div>
               </el-form-item>
               <el-form-item label="连接超时(ms)">
                 <el-input-number v-model="form.api_connect_timeout" :min="1000" :max="60000" :step="1000" />
@@ -158,7 +219,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Refresh, Loading, QuestionFilled, InfoFilled,
@@ -167,7 +228,8 @@ import {
 import {
   getSchoolDataConfig,
   updateSchoolDataConfig,
-  testSchoolDataConnection
+  testSchoolDataConnection,
+  getSchoolDataConfigStatus
 } from '@/api/schoolData'
 
 const loading = ref(false)
@@ -178,6 +240,25 @@ const testSource = ref('')
 const activePanels = ref(['source', 'sync', 'actions'])
 const apiFormRef = ref(null)
 const etlFormRef = ref(null)
+
+const status = reactive({
+  source: 'api',
+  apiConfigured: false,
+  authConfigured: false,
+  etlConfigured: false,
+  syncEnabled: false,
+  missingKeys: [],
+  lastTestResult: null
+})
+
+const showAuthWarning = computed(
+  () => status.source === 'api' && !status.authConfigured
+)
+const showEtlWarning = computed(
+  () => status.source === 'etl' && !status.etlConfigured
+)
+
+const isMissing = (key) => Array.isArray(status.missingKeys) && status.missingKeys.includes(key)
 
 const apiRules = {
   api_base_url: [
@@ -217,6 +298,17 @@ const form = reactive({
 // 原始配置列表（用于获取 id 等字段）
 const rawConfigs = ref([])
 
+const loadStatus = async () => {
+  try {
+    const res = await getSchoolDataConfigStatus()
+    if (res?.code === 200 && res.data) {
+      Object.assign(status, res.data)
+    }
+  } catch {
+    // 静默降级，banner 不显示
+  }
+}
+
 const loadConfig = async () => {
   loading.value = true
   try {
@@ -226,7 +318,6 @@ const loadConfig = async () => {
       for (const item of res.data) {
         const key = item.configKey
         if (key in form) {
-          // 数值型字段
           if (['api_connect_timeout', 'api_read_timeout', 'api_retry_attempts',
                'etl_connection_timeout', 'etl_query_timeout',
                'sync_batch_size', 'sync_timeout_minutes'].includes(key)) {
@@ -246,8 +337,11 @@ const loadConfig = async () => {
   }
 }
 
+const loadAll = async () => {
+  await Promise.all([loadConfig(), loadStatus()])
+}
+
 const handleSave = async () => {
-  // 表单验证
   if (form.source === 'api' && apiFormRef.value) {
     try { await apiFormRef.value.validate() } catch { return }
   }
@@ -257,7 +351,6 @@ const handleSave = async () => {
 
   saving.value = true
   try {
-    // 构建 config 列表，保留原始 id/configGroup/isSecret
     const configs = rawConfigs.value.map(item => {
       const key = item.configKey
       let value
@@ -270,15 +363,16 @@ const handleSave = async () => {
       } else {
         value = String(form[key] ?? '')
       }
-      return {
-        ...item,
-        configValue: value
-      }
+      return { ...item, configValue: value }
     })
     const res = await updateSchoolDataConfig(configs)
     if (res?.code === 200) {
-      ElMessage.success('配置已保存')
-      await loadConfig()
+      ElMessage.success('配置已保存，正在自动测试连接...')
+      await loadAll()
+      // 保存成功后自动测试连接，确保端到端链路可用
+      if (status.authConfigured || status.etlConfigured) {
+        await autoTestAfterSave()
+      }
     } else {
       ElMessage.error(res?.message || '保存失败')
     }
@@ -286,6 +380,31 @@ const handleSave = async () => {
     ElMessage.error('保存配置失败')
   } finally {
     saving.value = false
+  }
+}
+
+const autoTestAfterSave = async () => {
+  testing.value = true
+  testResult.value = null
+  try {
+    const res = await testSchoolDataConnection()
+    if (res?.code === 200 && res.data) {
+      testResult.value = res.data.success
+      testSource.value = res.data.source || ''
+      if (res.data.success) {
+        ElMessage.success('✅ 学校数据源连接测试成功，同步链路可用')
+      } else {
+        ElMessage.warning('⚠️ 连接测试失败，请检查 App ID/Secret 是否正确、学校 API 是否可达')
+      }
+    } else {
+      testResult.value = false
+    }
+    await loadStatus()
+  } catch {
+    testResult.value = false
+    ElMessage.warning('⚠️ 连接测试异常，请查看后端日志')
+  } finally {
+    testing.value = false
   }
 }
 
@@ -301,6 +420,7 @@ const handleTestConnection = async () => {
     } else {
       testResult.value = false
     }
+    await loadStatus()
   } catch {
     testResult.value = false
   } finally {
@@ -308,7 +428,7 @@ const handleTestConnection = async () => {
   }
 }
 
-onMounted(loadConfig)
+onMounted(loadAll)
 </script>
 
 <style scoped>
@@ -403,5 +523,30 @@ onMounted(loadConfig)
 .test-fail {
   background: #fef2f2;
   color: #dc2626;
+}
+
+.status-banner {
+  margin-bottom: 16px;
+}
+
+.missing-tag {
+  margin: 0 4px 0 4px;
+}
+
+.banner-hint {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #991b1b;
+}
+
+.field-missing :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #dc2626 inset !important;
+}
+
+.field-warning {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #dc2626;
+  font-weight: 500;
 }
 </style>

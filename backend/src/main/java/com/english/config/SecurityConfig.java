@@ -144,6 +144,9 @@ public class SecurityConfig {
                 // 管理员权限（部分只读端点允许 OPS 访问，须放在 /api/admin/** 之前）
                 .antMatchers("/api/admin/users/**", "/api/admin/users").hasAnyRole("ADMIN", "OPS")
                 .antMatchers(HttpMethod.GET, "/api/admin/stats").hasAnyRole("ADMIN", "OPS")
+                // 学校数据查询/同步：OPS 也可访问（Controller 层同样有 @PreAuthorize 双重校验）
+                .antMatchers("/api/admin/school-data/**").hasAnyRole("ADMIN", "OPS")
+                .antMatchers("/api/admin/sync/**").hasAnyRole("ADMIN", "OPS")
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
                 // 运维权限
                 .antMatchers("/api/ops/**").hasAnyRole("OPS", "ADMIN")

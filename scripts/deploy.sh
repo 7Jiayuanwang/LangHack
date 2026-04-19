@@ -1514,6 +1514,42 @@ if [ "${CFG_SCHOOL_FEATURE_ENABLED:-false}" = "true" ]; then
     echo "[OK] 学校数据功能开关已启用（运维端入口 + 学生端课表）"
 fi
 
+# ── 学校数据 API 连通性验证（端到端保障）───────────────────────
+# 配置完成后主动验证 appId/appSecret 是否真能从学校 API 拉到数据。
+# 此步骤不阻塞部署（学校 API 可能暂时不可达），但会给出明确提示。
+SCHOOL_API_APP_ID_VAL=$(load_env_value "SCHOOL_API_APP_ID" "" "$ENV_FILE")
+SCHOOL_API_APP_SECRET_VAL=$(load_env_value "SCHOOL_API_APP_SECRET" "" "$ENV_FILE")
+if [ -n "$SCHOOL_API_APP_ID_VAL" ] && [ -n "$SCHOOL_API_APP_SECRET_VAL" ]; then
+    echo ""
+    echo "[INFO] 验证学校 API 连通性（appId=${SCHOOL_API_APP_ID_VAL:0:8}..., appSecret=***）..."
+    BACKEND_URL="http://localhost:${PORT_BACKEND:-8080}"
+    # 使用默认 admin 账号登录（部署后运维应立即修改）
+    LOGIN_RESP=$(curl -sS --max-time 10 \
+        -X POST "${BACKEND_URL}/api/auth/login" \
+        -H "Content-Type: application/json" \
+        -d '{"username":"admin","password":"admin123"}' 2>/dev/null || echo "{}")
+    ADMIN_JWT=$(echo "$LOGIN_RESP" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+    if [ -n "$ADMIN_JWT" ]; then
+        TEST_RESP=$(curl -sS --max-time 30 \
+            -X POST "${BACKEND_URL}/api/ops/school-data/test-connection" \
+            -H "Authorization: Bearer ${ADMIN_JWT}" 2>/dev/null || echo "{}")
+        if echo "$TEST_RESP" | grep -q '"success":true'; then
+            echo "[OK] ✅ 学校 API 连接测试通过 — 同步链路就绪"
+        else
+            echo "[WARN] ⚠️  学校 API 连接测试失败"
+            echo "       响应: $(echo "$TEST_RESP" | head -c 200)"
+            echo "       排查: 1) App ID/Secret 正确性  2) cdsp.imau.edu.cn 网络可达  3) 后端日志 docker logs langhack-backend | grep -i school"
+            echo "       修复后可运维面板 → 学校数据配置 → 测试连接 重新验证"
+        fi
+    else
+        echo "[WARN] 无法获取 admin JWT 自动验证连接（可能 admin 密码已修改）"
+        echo "       请登录运维面板 → 学校数据配置 → 测试连接 手动验证"
+    fi
+else
+    echo "[INFO] 学校 API 认证未配置（SCHOOL_API_APP_ID/SECRET 为空），跳过连通性验证"
+    echo "       如需启用，请在运维面板 → 学校数据配置 → 填入 App ID / App Secret → 保存 → 测试连接"
+fi
+
 # ── SSO 管理员叩门入口信息 ──
 SSO_ENABLED_VAL="${CFG_SSO_ENABLED:-$(load_env_value "SSO_ENABLED" "false" "$ENV_FILE")}"
 if [ "$SSO_ENABLED_VAL" = "true" ]; then

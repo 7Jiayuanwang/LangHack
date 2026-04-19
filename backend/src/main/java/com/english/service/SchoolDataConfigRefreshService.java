@@ -9,10 +9,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 学校数据配置刷新服务
@@ -29,6 +33,9 @@ public class SchoolDataConfigRefreshService {
     private final SchoolDataSyncScheduler scheduler;
     private final SchoolDataApiClientDelegate delegate;
     private final SchoolDataEtlClientImpl etlClient;
+
+    /** 最近一次连接测试结果 + 时间（重启失效可接受，内存存储） */
+    private final AtomicReference<Map<String, Object>> lastTestResult = new AtomicReference<>();
 
     /** 需要触发调度器重新调度的配置key */
     private static final Set<String> CRON_KEYS = Set.of(
@@ -117,10 +124,26 @@ public class SchoolDataConfigRefreshService {
     }
 
     /**
-     * 测试数据源连接
+     * 测试数据源连接（同时记录结果供 /config-status 返回）
      */
     public boolean testConnection() {
-        return delegate.testConnection();
+        Map<String, Object> result = new HashMap<>();
+        result.put("timestamp", Instant.now().toString());
+        result.put("source", properties.getSource());
+        try {
+            boolean ok = delegate.testConnection();
+            result.put("success", ok);
+            if (!ok) {
+                result.put("message", "学校数据源连接测试失败（请检查日志）");
+            }
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", e.getMessage());
+            lastTestResult.set(result);
+            throw e;
+        }
+        lastTestResult.set(result);
+        return Boolean.TRUE.equals(result.get("success"));
     }
 
     /**
@@ -128,6 +151,46 @@ public class SchoolDataConfigRefreshService {
      */
     public String getCurrentSource() {
         return properties.getSource();
+    }
+
+    /**
+     * 汇总当前学校数据集成配置状态，供 /config-status 端点返回。
+     * 敏感值不返回，只返回 "是否已配置" 的 boolean。
+     */
+    public Map<String, Object> getConfigStatus() {
+        SchoolDataProperties.ApiProperties api = properties.getApi();
+        SchoolDataProperties.EtlProperties etl = properties.getEtl();
+        SchoolDataProperties.SyncProperties sync = properties.getSync();
+
+        Map<String, Object> status = new HashMap<>();
+        status.put("source", properties.getSource());
+        status.put("apiConfigured", notBlank(api.getBaseUrl()));
+        status.put("authConfigured", notBlank(api.getAppId()) && notBlank(api.getAppSecret()));
+        status.put("etlConfigured", notBlank(etl.getJdbcUrl()) && notBlank(etl.getUsername()));
+        status.put("syncEnabled", sync.isEnabled());
+        status.put("missingKeys", collectMissingKeys());
+        status.put("lastTestResult", lastTestResult.get());
+        return status;
+    }
+
+    private List<String> collectMissingKeys() {
+        List<String> missing = new ArrayList<>();
+        String source = properties.getSource();
+        if ("api".equalsIgnoreCase(source)) {
+            SchoolDataProperties.ApiProperties api = properties.getApi();
+            if (!notBlank(api.getAppId())) missing.add("api_app_id");
+            if (!notBlank(api.getAppSecret())) missing.add("api_app_secret");
+        } else if ("etl".equalsIgnoreCase(source)) {
+            SchoolDataProperties.EtlProperties etl = properties.getEtl();
+            if (!notBlank(etl.getJdbcUrl())) missing.add("etl_jdbc_url");
+            if (!notBlank(etl.getUsername())) missing.add("etl_username");
+            if (!notBlank(etl.getPassword())) missing.add("etl_password");
+        }
+        return missing;
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isEmpty() && !s.isBlank();
     }
 
     /**

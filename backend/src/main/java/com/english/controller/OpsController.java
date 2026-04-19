@@ -292,6 +292,20 @@ public class OpsController {
         }
     }
 
+    /**
+     * 查询学校数据集成配置状态（敏感值不返回，仅返回 "是否已配置" 的 boolean）
+     * 前端根据此结果展示顶部警告横幅与未配置项 badge。
+     */
+    @GetMapping("/school-data/config-status")
+    public Result<Map<String, Object>> getSchoolDataConfigStatus() {
+        try {
+            return Result.success(schoolDataConfigRefreshService.getConfigStatus());
+        } catch (Exception e) {
+            logger.error("获取学校数据配置状态失败", e);
+            return Result.error("获取配置状态失败");
+        }
+    }
+
     // ==================== 个性化功能开关管理 ====================
 
     /**
