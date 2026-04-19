@@ -493,7 +493,9 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.featureKey) {
     const { isEnabled, load, isLoaded } = useFeatureToggles();
     if (!isLoaded()) {
-      await load({ personal: hasValidToken });
+      // personal 接口仅 STUDENT/USER 角色可访问；其他角色走公共接口避免 403
+      const usePersonal = hasValidToken && (userRole === "STUDENT" || userRole === "USER");
+      await load({ personal: usePersonal });
     }
     if (!isEnabled(to.meta.featureKey)) {
       const fallbackRoutes = {

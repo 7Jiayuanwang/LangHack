@@ -141,7 +141,14 @@ public class SchoolDataProperties {
         /**
          * 计算签名（官方要求的认证方式）
          * <p>
-         * 公式: sign = Base64( MD5( appId + appSecret + timestamp ) )
+         * 官方文档定义（行政班基本信息接口文档.pdf 第 1 页 2.1 节）：
+         *   "签名，通过 appId + appSecret + timestamp 拼接成字符串，
+         *    对拼接后的字符串做 md5 变换，然后再对变换后的字符串做 base64 变换"
+         * <p>
+         * 注意"变换后的字符串"指 MD5 的 <b>十六进制字符串表示</b>（32 字符小写），
+         * 而非 MD5 的 16 字节原始摘要。Base64 编码的是这个 hex 字符串的 UTF-8 字节。
+         * <p>
+         * 公式: sign = Base64( hex(MD5(appId + appSecret + timestamp)).getBytes(UTF-8) )
          *
          * @param timestamp 当前时间戳（毫秒）
          * @return Base64 编码的签名，如果 appId/appSecret 为空返回 null
@@ -154,7 +161,11 @@ public class SchoolDataProperties {
                 String raw = appId + appSecret + timestamp;
                 MessageDigest md5 = MessageDigest.getInstance("MD5");
                 byte[] digest = md5.digest(raw.getBytes(StandardCharsets.UTF_8));
-                return Base64.getEncoder().encodeToString(digest);
+                StringBuilder hex = new StringBuilder(digest.length * 2);
+                for (byte b : digest) {
+                    hex.append(String.format("%02x", b));
+                }
+                return Base64.getEncoder().encodeToString(hex.toString().getBytes(StandardCharsets.UTF_8));
             } catch (NoSuchAlgorithmException e) {
                 throw new IllegalStateException("MD5 algorithm not available in JRE", e);
             }

@@ -100,7 +100,7 @@
               <el-form-item label="App Secret" :class="{ 'field-missing': isMissing('api_app_secret') }">
                 <el-input v-model="form.api_app_secret" type="password" show-password placeholder="应用 Secret (用于签名认证)" />
                 <div class="form-subhint">
-                  签名公式: sign = Base64(MD5(appId + appSecret + timestamp))
+                  签名公式: sign = Base64(hex(MD5(appId + appSecret + timestamp)).getBytes(UTF-8))
                 </div>
                 <div v-if="isMissing('api_app_secret')" class="field-warning">必填 — 当前未配置，同步将失败</div>
               </el-form-item>

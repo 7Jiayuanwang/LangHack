@@ -232,11 +232,12 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     /**
      * Build HTTP headers with authentication
      * <p>
-     * 官方接口认证规范（cdsp.imau.edu.cn data-api v2）：
+     * 官方接口认证规范（cdsp.imau.edu.cn data-api v2，基于行政班基本信息接口文档.pdf 第 1 页 2.1 节）：
      *   请求头:
      *     appId     = <应用ID>
      *     timestamp = <毫秒时间戳>
-     *     sign      = Base64( MD5( appId + appSecret + timestamp ) )
+     *     sign      = Base64( hex(MD5(appId + appSecret + timestamp)).getBytes(UTF-8) )
+     *                 （先 MD5 得到 32 字符 hex 字符串，再对该字符串做 Base64）
      * <p>
      * 每次请求实时生成 timestamp 和 sign，保证签名时效性。
      * <p>

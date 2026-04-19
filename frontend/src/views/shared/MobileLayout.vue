@@ -421,9 +421,10 @@ onMounted(async () => {
   }
 
   // 加载功能开关（运维端 + 管理员端共用缓存）
+  // OPS/ADMIN 无权访问 /api/student/feature-toggles，必须使用 public 端点
   if (props.role === 'ops' || props.role === 'admin') {
     try {
-      await loadFeatureToggles({ personal: !!userStore.token })
+      await loadFeatureToggles({ personal: false })
     } catch (e) {
       console.error('Failed to load feature toggles:', e)
     }

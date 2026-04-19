@@ -251,8 +251,9 @@ onMounted(() => {
     }
   }).catch(() => {})
   // 加载功能开关配置 — 与路由守卫共享 useFeatureToggles 缓存（sessionStorage 5 min TTL）
-  // 登录状态下使用 personal 接口以应用三层覆盖（全局→标签→用户）
-  loadFeatureToggles({ personal: !!userStore.token }).catch(() => {})
+  // personal 接口仅 STUDENT/USER 可访问；ADMIN 预览学生端时走公共端点避免 403
+  const usePersonal = !!userStore.token && (userStore.userRole === 'STUDENT' || userStore.userRole === 'USER')
+  loadFeatureToggles({ personal: usePersonal }).catch(() => {})
 })
 
 onUnmounted(() => {

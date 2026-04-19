@@ -1,9 +1,15 @@
 # 学校数据接口地址修复
 
 > **⚠️ 2026-04-18 更新**: 官方认证方式为 **appId + appSecret + timestamp 签名**，非 Bearer Token。
-> - 请求头: `appId`, `timestamp`（毫秒）, `sign`（Base64(MD5(appId+appSecret+timestamp))）
+> - 请求头: `appId`, `timestamp`（毫秒）, `sign`
 > - 环境变量: `SCHOOL_API_APP_ID` + `SCHOOL_API_APP_SECRET`（旧 `SCHOOL_API_TOKEN` 已废弃）
 > - 每次请求实时生成 timestamp 和 sign，保证签名时效性
+>
+> **⚠️ 2026-04-19 更新**: 签名公式修正（原实现导致 10016 "接口签名(sign)无效"）
+> - ❌ 旧：`sign = Base64(MD5_raw_bytes)` — 直接对 16 字节摘要做 Base64
+> - ✅ 新：`sign = Base64(hex(MD5(...)).getBytes(UTF-8))` — 先 MD5→32字符hex字符串，再对该字符串 Base64
+> - 官方 PDF 原文："对拼接后的字符串做 md5 变换，然后再对**变换后的字符串**做 base64 变换"
+>   "变换后的字符串" 指 MD5 的十六进制表示（32 字符），不是原始字节
 
 ## 问题发现
 
