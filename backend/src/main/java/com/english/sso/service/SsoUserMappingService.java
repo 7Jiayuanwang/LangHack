@@ -145,10 +145,17 @@ public class SsoUserMappingService {
                 // 但 SSO 映射的高优先级角色（如 ADMIN）仍可同步
                 boolean shouldSyncRole = isRoleUpgrade(user.getRole(), ssoMappedRole);
                 if (shouldSyncRole) {
-                    log.info("SSO 角色优先级更高，同步角色: username={}, dbRole={}, ssoRole={}",
-                            user.getUsername(), user.getRole(), ssoMappedRole);
-                    user.setRole(ssoMappedRole);
-                    userService.updateUser(user);
+                    // 安全护栏：升权到 ADMIN/OPS 等高权限角色必须走人工确认，
+                    // 不允许 SSO 组变更直接改写 DB 角色（防止 LDAP 配置被误改或劫持导致权限提升）
+                    if (roleMappingService.requiresManualConfirmation(ssoMappedRole, ssoUserInfo.getMemberOf())) {
+                        log.warn("SSO 升权到 {} 需人工审批，保留数据库角色: username={}, dbRole={}",
+                                ssoMappedRole, user.getUsername(), user.getRole());
+                    } else {
+                        log.info("SSO 角色优先级更高，同步角色: username={}, dbRole={}, ssoRole={}",
+                                user.getUsername(), user.getRole(), ssoMappedRole);
+                        user.setRole(ssoMappedRole);
+                        userService.updateUser(user);
+                    }
                 } else {
                     log.info("保留数据库角色（管理员审批/当前角色优先级更高）: username={}, dbRole={}, ssoRole={}",
                             user.getUsername(), user.getRole(), ssoMappedRole);

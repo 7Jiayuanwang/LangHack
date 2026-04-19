@@ -139,7 +139,9 @@ public class SchoolDataConfigRefreshService {
 
         // api
         setIfPresent(dbConfig, "api_base_url", v -> properties.getApi().setBaseUrl(v));
-        setIfPresent(dbConfig, "api_token", v -> properties.getApi().setToken(v));
+        // 认证: appId + appSecret 签名（官方规范）
+        setIfPresent(dbConfig, "api_app_id", v -> properties.getApi().setAppId(v));
+        setIfPresent(dbConfig, "api_app_secret", v -> properties.getApi().setAppSecret(v));
         setIfPresent(dbConfig, "api_connect_timeout", v -> properties.getApi().setConnectTimeout(parseInt(v)));
         setIfPresent(dbConfig, "api_read_timeout", v -> properties.getApi().setReadTimeout(parseInt(v)));
         setIfPresent(dbConfig, "api_retry_attempts", v -> properties.getApi().setRetryAttempts(parseInt(v)));

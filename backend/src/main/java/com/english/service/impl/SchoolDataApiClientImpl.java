@@ -227,15 +227,30 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
     /**
      * Build HTTP headers with authentication
+     * <p>
+     * 官方接口认证规范（cdsp.imau.edu.cn data-api v2）：
+     *   请求头:
+     *     appId     = <应用ID>
+     *     timestamp = <毫秒时间戳>
+     *     sign      = Base64( MD5( appId + appSecret + timestamp ) )
+     * <p>
+     * 每次请求实时生成 timestamp 和 sign，保证签名时效性。
      */
     private HttpHeaders buildHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Content-Type", "application/json");
         headers.set("Accept", "application/json");
 
-        String token = properties.getApi().getToken();
-        if (token != null && !token.isEmpty()) {
-            headers.set("Authorization", "Bearer " + token);
+        String appId = properties.getApi().getAppId();
+        long timestamp = System.currentTimeMillis();
+        String sign = properties.getApi().sign(timestamp);
+
+        if (appId != null && !appId.isEmpty() && sign != null) {
+            headers.set("appId", appId);
+            headers.set("timestamp", String.valueOf(timestamp));
+            headers.set("sign", sign);
+        } else {
+            logger.warn("School API auth missing — appId or appSecret not configured; requests will be unauthenticated");
         }
 
         return headers;

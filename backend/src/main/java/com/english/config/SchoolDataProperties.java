@@ -4,7 +4,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 
 /**
@@ -81,8 +85,11 @@ public class SchoolDataProperties {
         @Deprecated
         private String baseUrl = "https://cdsp.imau.edu.cn";
 
-        /** 认证 Token */
-        private String token;
+        /** 应用 ID（由学校数据平台分配） */
+        private String appId;
+
+        /** 应用 Secret（由学校数据平台分配，用于签名计算） */
+        private String appSecret;
 
         /** 连接超时（毫秒） */
         private int connectTimeout = 5000;
@@ -115,12 +122,42 @@ public class SchoolDataProperties {
             this.baseUrl = baseUrl;
         }
 
-        public String getToken() {
-            return token;
+        public String getAppId() {
+            return appId;
         }
 
-        public void setToken(String token) {
-            this.token = token;
+        public void setAppId(String appId) {
+            this.appId = appId;
+        }
+
+        public String getAppSecret() {
+            return appSecret;
+        }
+
+        public void setAppSecret(String appSecret) {
+            this.appSecret = appSecret;
+        }
+
+        /**
+         * 计算签名（官方要求的认证方式）
+         * <p>
+         * 公式: sign = Base64( MD5( appId + appSecret + timestamp ) )
+         *
+         * @param timestamp 当前时间戳（毫秒）
+         * @return Base64 编码的签名，如果 appId/appSecret 为空返回 null
+         */
+        public String sign(long timestamp) {
+            if (appId == null || appId.isEmpty() || appSecret == null || appSecret.isEmpty()) {
+                return null;
+            }
+            try {
+                String raw = appId + appSecret + timestamp;
+                MessageDigest md5 = MessageDigest.getInstance("MD5");
+                byte[] digest = md5.digest(raw.getBytes(StandardCharsets.UTF_8));
+                return Base64.getEncoder().encodeToString(digest);
+            } catch (NoSuchAlgorithmException e) {
+                throw new IllegalStateException("MD5 algorithm not available in JRE", e);
+            }
         }
 
         public int getConnectTimeout() {

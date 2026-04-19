@@ -122,7 +122,7 @@ class SchoolDataConfigRefreshServiceTest {
         @DisplayName("should filter masked values containing ****")
         void shouldFilterMaskedValues() {
             SystemConfig maskedConfig = new SystemConfig();
-            maskedConfig.setConfigKey("api_token");
+            maskedConfig.setConfigKey("api_app_secret");
             maskedConfig.setConfigValue("****6789");
 
             SystemConfig normalConfig = new SystemConfig();
@@ -143,7 +143,7 @@ class SchoolDataConfigRefreshServiceTest {
         @DisplayName("should skip update entirely when all values are masked")
         void shouldSkipUpdateWhenAllMasked() {
             SystemConfig maskedConfig = new SystemConfig();
-            maskedConfig.setConfigKey("api_token");
+            maskedConfig.setConfigKey("api_app_secret");
             maskedConfig.setConfigValue("****6789");
 
             refreshService.updateAndRefresh(List.of(maskedConfig), "admin");

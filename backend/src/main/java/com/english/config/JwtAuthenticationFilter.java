@@ -118,17 +118,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         List<SimpleGrantedAuthority> authorities = new ArrayList<>();
                         authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
 
-                        // 检查 Redis 中是否有有效的提权状态
-                        try {
-                            String elevatedRole = elevationService.getElevatedRole(username);
-                            if (elevatedRole != null && !elevatedRole.equals(role)
-                                    && VALID_ROLES.contains(elevatedRole)) {
-                                authorities.add(new SimpleGrantedAuthority("ROLE_" + elevatedRole));
-                                logger.debug("User {} has elevation to {}", username, elevatedRole);
+                        // 提权仅在 ADMIN ↔ OPS 之间双向切换，其他角色不查 Redis
+                        // 这避免了学生/教师每次请求都打 Redis，节省 >90% 的 elevation GET
+                        if ("ADMIN".equals(role) || "OPS".equals(role)) {
+                            try {
+                                String elevatedRole = elevationService.getElevatedRole(username);
+                                if (elevatedRole != null && !elevatedRole.equals(role)
+                                        && VALID_ROLES.contains(elevatedRole)) {
+                                    authorities.add(new SimpleGrantedAuthority("ROLE_" + elevatedRole));
+                                    logger.debug("User {} has elevation to {}", username, elevatedRole);
+                                }
+                            } catch (Exception ex) {
+                                // Redis 不可用时忽略提权检查，仅使用基础角色
+                                logger.debug("Elevation check failed, using base role only");
                             }
-                        } catch (Exception ex) {
-                            // Redis 不可用时忽略提权检查，仅使用基础角色
-                            logger.debug("Elevation check failed, using base role only");
                         }
 
                         UsernamePasswordAuthenticationToken authToken =

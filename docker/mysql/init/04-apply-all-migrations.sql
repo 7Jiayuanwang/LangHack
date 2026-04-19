@@ -1,25 +1,25 @@
 -- ══════════════════════════════════════════════════════════════
 -- LangHack 合并迁移脚本（MySQL 8.0 兼容）
--- 将 Flyway V1 ~ V9 的所有迁移合并为单个幂等脚本
+-- 将 Flyway V0 ~ V13 的所有迁移合并为单个幂等脚本
 --
--- 对应 Flyway 迁移文件（整合后）:
---   V0__base_tables.sql                      (独立追加)
---   V1__scoring_and_assignments.sql         (原 V1)
---   V2__text_and_learning.sql               (原 V2 + V10 + V17)
---   V3__media_and_annotations.sql           (原 V3 + V9)
---   V4__backup_and_update_system.sql        (原 V4 + V8)
---   V5__monitoring_and_access.sql           (原 V5)
---   V6__system_config_and_ai_providers.sql  (原 V6 + V7 + V11)
---   V7__feature_toggles.sql                 (原 V12 + V13 + V14)
---   V8__sso_integration.sql                 (原 V15)
---   V9__school_data_sync.sql                (原 V16)
---   V10__user_nickname_and_avatar_rename.sql (独立追加)
---   V11__text_featured_and_vocab_sm2.sql     (独立追加)
---   V12__fix_role_mapping_cleanup.sql         (独立追加)
---   V12.1__init_field_mappings_data.sql       (独立追加)
---   V13__school_data_system_config.sql         (独立追加)
---   V14__student_schedule_and_teacher_courses_mapping.sql (独立追加)
---   V16__rename_course_to_school_course.sql  (独立追加)
+-- 对应 Flyway 迁移文件（整合后 - 2026-04-19 补丁合并）:
+--   V0__base_tables.sql                     (基础表)
+--   V1__scoring_and_assignments.sql         (评分+作业)
+--   V2__text_and_learning.sql               (文本+学习)
+--   V3__media_and_annotations.sql           (媒体+批注)
+--   V4__backup_and_update_system.sql        (备份+更新)
+--   V5__monitoring_and_access.sql           (监控+访问)
+--   V6__system_config_and_ai_providers.sql  (系统配置+AI)
+--   V7__feature_toggles.sql                 (功能开关)
+--   V8__sso_integration.sql                 (CAS SSO)
+--   V9__school_data_sync.sql                (学校数据基础表)
+--   V10__user_and_text_updates.sql          (合并: 旧 V10 + V11)
+--   V11__role_mapping_cleanup.sql           (合并: 旧 V12 重命名)
+--   V12__school_data_integration.sql        (合并: 旧 V12.1/V13/V14/V16/V18/V19/V20)
+--   V13__access_log_covering_index.sql      (监控热点页查询索引优化)
+--
+-- 注意：V19 列名修正 — 使用 `converter`/`remark`（原 V19 误写为
+--       `converter_type`/`description`/`created_by` 导致 INSERT IGNORE 静默失败）
 --
 -- 此脚本有两个用途：
 --   1. 新环境初始化（docker-entrypoint-initdb.d，仅首次启动执行）
@@ -1498,10 +1498,10 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 -- ════════════════════════════════════════════════════════════════
 
 -- 数据源配置
+-- NOTE: api_app_id / api_app_secret 在 V20 section 添加（appId + appSecret 签名认证）
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('school_data', 'source', 'api', '数据源类型: api 或 etl', 0),
 ('school_data', 'api_base_url', 'https://api.imau.edu.cn', 'API基础URL', 0),
-('school_data', 'api_token', '', 'API认证Token', 1),
 ('school_data', 'api_connect_timeout', '5000', 'API连接超时(ms)', 0),
 ('school_data', 'api_read_timeout', '30000', 'API读取超时(ms)', 0),
 ('school_data', 'api_retry_attempts', '3', 'API重试次数', 0),
@@ -1615,7 +1615,7 @@ VALUES
 -- ════════════════════════════════════════════════════════════════
 
 -- 学生课表字段映射（/api/xskb）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 -- 基础信息
 ('student_schedule', 'zcdm', 'week_code', 'NONE', NULL, '周次代码'),
@@ -1635,7 +1635,7 @@ VALUES
 ('student_schedule', 'kcbh', 'class_code', 'NONE', NULL, '课程班号');
 
 -- 行政班基本信息字段映射（/api/xzxx）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 ('administrative_class', 'xzbh', 'class_code', 'NONE', NULL, '行政班编号'),
 ('administrative_class', 'xzmc', 'class_name', 'NONE', NULL, '行政班名称'),
@@ -1657,7 +1657,7 @@ VALUES
 ('administrative_class', 'bz', 'remark', 'NONE', NULL, '备注');
 
 -- 课程基本信息字段映射（/api/kcxx）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 ('school_course', 'kcbh', 'course_code', 'NONE', NULL, '课程编号'),
 ('school_course', 'kcmc', 'course_name', 'NONE', NULL, '课程名称'),
@@ -1688,7 +1688,7 @@ VALUES
 ('school_course', 'kczt', 'course_status', 'NONE', NULL, '课程状态');
 
 -- 教学班信息字段映射（/api/bzkcxx）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 ('teaching_class', 'jxbid', 'class_id', 'NONE', NULL, '教学班号'),
 ('teaching_class', 'jxbmc', 'class_name', 'NONE', NULL, '教学班名称'),
@@ -1703,7 +1703,7 @@ VALUES
 ('teaching_class', 'kczt', 'class_status', 'NONE', NULL, '课程状态');
 
 -- 课程安排字段映射（/api/kcap）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 ('course_schedule', 'jxbid', 'class_id', 'NONE', NULL, '教学班号'),
 ('course_schedule', 'xqj', 'day_of_week', 'NONE', NULL, '星期几'),
@@ -1714,7 +1714,7 @@ VALUES
 ('course_schedule', 'xqm', 'semester', 'NONE', NULL, '学期');
 
 -- 学生选课字段映射（/api/xsxk）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 ('course_selection', 'xkjlid', 'selection_id', 'NONE', NULL, '选课记录ID'),
 ('course_selection', 'xh', 'student_id', 'NONE', NULL, '学号'),
@@ -1740,7 +1740,7 @@ VALUES
 ('course_selection', 'cjbz', 'grade_remark', 'NONE', NULL, '成绩备注');
 
 -- 等级考试成绩字段映射（/api/djcj）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 ('level_exam_scores', 'xh', 'student_id', 'NONE', NULL, '学号'),
 ('level_exam_scores', 'xm', 'student_name', 'NONE', NULL, '学生姓名'),
@@ -1767,7 +1767,7 @@ VALUES
 ('level_exam_scores', 'bz', 'remark', 'NONE', NULL, '备注');
 
 -- 教学计划字段映射（/api/jxjh）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 ('teaching_plans', 'jhbh', 'plan_id', 'NONE', NULL, '教学计划编号'),
 ('teaching_plans', 'jhmc', 'plan_name', 'NONE', NULL, '教学计划名称'),
@@ -1777,7 +1777,7 @@ VALUES
 ('teaching_plans', 'xz', 'schooling_length', 'NONE', NULL, '学制（年）');
 
 -- 教师授课字段映射（/api/jssk）
-INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter_type`, `converter_config`, `description`, `created_by`)
+INSERT IGNORE INTO `field_mappings` (`data_source`, `source_field`, `target_field`, `converter`, `converter_config`, `remark`)
 VALUES
 ('teacher_courses', 'jgh', 'teacher_id', 'NONE', NULL, '教师职工号'),
 ('teacher_courses', 'jsxm', 'teacher_name', 'NONE', NULL, '教师姓名'),
@@ -1787,5 +1787,47 @@ VALUES
 ('teacher_courses', 'xnm', 'academic_year', 'NONE', NULL, '学年'),
 ('teacher_courses', 'xqm', 'semester', 'NONE', NULL, '学期'),
 ('teacher_courses', 'skrs', 'student_count', 'NONE', NULL, '上课人数');
+
+-- ════════════════════════════════════════════════════════════════
+-- V20: 学校数据 API 认证方式迁移 — token → appId + appSecret 签名
+-- 整合自: V20__school_data_api_auth_appid.sql
+--
+-- 背景: 官方接口文档要求 appId + appSecret + timestamp 签名认证
+--       sign = Base64( MD5( appId + appSecret + timestamp ) )
+--       请求头: appId / timestamp / sign
+-- ════════════════════════════════════════════════════════════════
+
+-- 新增 appId / appSecret 配置项（签名认证）
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('school_data', 'api_app_id', '', 'API 应用 ID（由学校数据平台分配，用于签名认证）', 1),
+('school_data', 'api_app_secret', '', 'API 应用 Secret（由学校数据平台分配，与 appId + timestamp 组合生成签名）', 1);
+
+-- 清理旧部署遗留的 api_token（Bearer Token 认证已废弃；全新部署不会有此记录）
+DELETE FROM `system_config`
+WHERE `config_group` = 'school_data' AND `config_key` = 'api_token';
+
+-- ════════════════════════════════════════════════════════════════
+-- V13: access_log 覆盖索引 — 加速 top_pages 查询
+-- 整合自: V13__access_log_covering_index.sql
+--
+-- 背景: MonitoringController.getTopPages → AccessLogMapper.topPagesByDateRange
+--       SQL: SELECT uri, COUNT(*) FROM access_log WHERE created_time BETWEEN ?
+--            GROUP BY uri ORDER BY count DESC LIMIT ?
+--       原表仅 (created_time) 索引 → GROUP BY uri 走文件排序，大日志量下延迟显著。
+-- 方案: 增加 (created_time, uri(191)) 复合索引 → 走索引范围扫描 + 索引内 GROUP BY。
+-- ════════════════════════════════════════════════════════════════
+
+SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'access_log'
+      AND INDEX_NAME = 'idx_created_time_uri');
+
+SET @stmt = IF(@idx_exists > 0,
+    'SELECT 1',
+    'ALTER TABLE access_log ADD INDEX idx_created_time_uri (created_time, uri(191))'
+);
+PREPARE alterIfNotExists FROM @stmt;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
 
 -- ════════════════════════════════════════════════════════════════

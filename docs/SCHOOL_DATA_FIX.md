@@ -1,5 +1,11 @@
 # 学校数据功能修复总结
 
+> **⚠️ 2026-04-18 更新**: API 认证方式已从 Bearer Token 改为 **appId + appSecret + timestamp 签名** 认证。
+> - 环境变量：`SCHOOL_API_TOKEN` → `SCHOOL_API_APP_ID` + `SCHOOL_API_APP_SECRET`
+> - 配置项：`api_token` → `api_app_id` + `api_app_secret`（旧字段保留向后兼容）
+> - 签名公式：`sign = Base64(MD5(appId + appSecret + timestamp))`
+> - 请求头：`appId`, `timestamp`, `sign`
+
 ## 问题诊断
 
 ### 1. 核心错误：接口地址配置错误

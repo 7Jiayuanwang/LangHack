@@ -1,5 +1,10 @@
 # 学校数据接口地址修复
 
+> **⚠️ 2026-04-18 更新**: 官方认证方式为 **appId + appSecret + timestamp 签名**，非 Bearer Token。
+> - 请求头: `appId`, `timestamp`（毫秒）, `sign`（Base64(MD5(appId+appSecret+timestamp))）
+> - 环境变量: `SCHOOL_API_APP_ID` + `SCHOOL_API_APP_SECRET`（旧 `SCHOOL_API_TOKEN` 已废弃）
+> - 每次请求实时生成 timestamp 和 sign，保证签名时效性
+
 ## 问题发现
 
 代码中配置的接口地址与官方文档**完全不符**：

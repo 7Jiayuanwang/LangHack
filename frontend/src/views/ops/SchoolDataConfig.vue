@@ -34,8 +34,14 @@
               <el-form-item label="Base URL" prop="api_base_url">
                 <el-input v-model="form.api_base_url" placeholder="https://api.imau.edu.cn" />
               </el-form-item>
-              <el-form-item label="Token">
-                <el-input v-model="form.api_token" type="password" show-password placeholder="API认证Token" />
+              <el-form-item label="App ID">
+                <el-input v-model="form.api_app_id" placeholder="学校数据平台分配的应用 ID" />
+              </el-form-item>
+              <el-form-item label="App Secret">
+                <el-input v-model="form.api_app_secret" type="password" show-password placeholder="应用 Secret (用于签名认证)" />
+                <div class="form-subhint">
+                  签名公式: sign = Base64(MD5(appId + appSecret + timestamp))
+                </div>
               </el-form-item>
               <el-form-item label="连接超时(ms)">
                 <el-input-number v-model="form.api_connect_timeout" :min="1000" :max="60000" :step="1000" />
@@ -190,7 +196,8 @@ const etlRules = {
 const form = reactive({
   source: 'api',
   api_base_url: '',
-  api_token: '',
+  api_app_id: '',
+  api_app_secret: '',
   api_connect_timeout: 5000,
   api_read_timeout: 30000,
   api_retry_attempts: 3,
@@ -342,6 +349,14 @@ onMounted(loadConfig)
   margin-left: 12px;
   font-size: 12px;
   color: #94a3b8;
+}
+
+.form-subhint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+  line-height: 1.4;
 }
 
 .cron-hint {

@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -18,6 +19,7 @@ import org.springframework.web.client.RestTemplate;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 /**
  * OAuth 2.0 SSO 服务实现
@@ -31,11 +33,20 @@ import java.util.*;
 @ConditionalOnProperty(name = "sso.protocol", havingValue = "OAUTH2")
 public class OAuth2SsoService implements SsoService {
 
+    /** Redis 中 state 的 key 前缀，用于 OAuth2 CSRF 防护 */
+    static final String STATE_KEY_PREFIX = "sso:oauth2:state:";
+
+    /** state 的 TTL（秒），覆盖正常 OAuth 登录流程的时长 */
+    static final long STATE_TTL_SECONDS = 300L;
+
     @Autowired
     private SsoProperties ssoProperties;
 
     @Autowired
     private RestTemplate restTemplate;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
     @Override
     public String generateLoginUrl(String callbackUrl) {
@@ -44,12 +55,22 @@ public class OAuth2SsoService implements SsoService {
         }
 
         SsoProperties.OAuth2Config oauth2 = ssoProperties.getOauth2();
+        String state = UUID.randomUUID().toString();
+
+        // 存入 Redis：callback 时必须携带此 state 并通过校验 → 防 CSRF
+        // Redis 失败时记录告警但不阻塞登录（向后兼容），validateCallback 也有 graceful degradation
+        try {
+            redisTemplate.opsForValue().set(STATE_KEY_PREFIX + state, "1", STATE_TTL_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.warn("Failed to persist OAuth2 state to Redis, CSRF protection degraded: {}", e.getMessage());
+        }
+
         String authUrl = oauth2.getAuthorizationUrl() +
                 "?response_type=code" +
                 "&client_id=" + oauth2.getClientId() +
                 "&redirect_uri=" + URLEncoder.encode(callbackUrl, StandardCharsets.UTF_8) +
                 "&scope=" + oauth2.getScope() +
-                "&state=" + UUID.randomUUID().toString();
+                "&state=" + state;
 
         log.info("生成 OAuth 2.0 登录 URL: {}", authUrl);
         return authUrl;
@@ -60,6 +81,27 @@ public class OAuth2SsoService implements SsoService {
         String code = callbackParams.get("code");
         if (code == null || code.isEmpty()) {
             throw new BusinessException("缺少 OAuth 2.0 code 参数");
+        }
+
+        // CSRF 防护：校验 state 参数
+        String state = callbackParams.get("state");
+        if (state == null || state.isEmpty()) {
+            throw new BusinessException("缺少 state 参数");
+        }
+        try {
+            Boolean deleted = redisTemplate.delete(STATE_KEY_PREFIX + state);
+            if (Boolean.FALSE.equals(deleted)) {
+                // Redis 明确返回 false → state 不存在或已被消费 → 拒绝
+                throw new BusinessException("state 无效或已过期");
+            }
+            // deleted == null 表示 Redis 连接异常 → graceful degradation，记录告警但继续
+            if (deleted == null) {
+                log.warn("Redis unavailable during OAuth2 state validation, CSRF protection degraded");
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("OAuth2 state validation threw exception, CSRF protection degraded: {}", e.getMessage());
         }
 
         log.info("验证 OAuth 2.0 code: {}", code);

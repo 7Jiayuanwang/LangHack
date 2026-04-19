@@ -298,4 +298,58 @@ public class AuthController {
         }
         return Result.success("退出登录成功");
     }
+
+    /**
+     * 使用 refresh token 换取新的 access token。
+     *
+     * 验证链：签名有效 → 非黑名单 → type=refresh → 用户存在且 ACTIVE → 签发新 access token
+     * 降低长期 token 泄漏的风险窗口（30d → 2h）。
+     *
+     * 请求体：{"refreshToken": "..."}
+     * 响应：{"accessToken": "..."} 或错误信息
+     */
+    @PostMapping("/refresh")
+    public Result<Map<String, Object>> refresh(@RequestBody Map<String, String> body) {
+        try {
+            String refreshToken = body == null ? null : body.get("refreshToken");
+            if (refreshToken == null || refreshToken.trim().isEmpty()) {
+                return Result.error("refresh token 无效");
+            }
+
+            // 1. 校验签名 & 过期
+            String username = jwtUtil.getUsernameFromToken(refreshToken);
+            if (username == null || !jwtUtil.validateToken(refreshToken, username)) {
+                return Result.error("refresh token 无效");
+            }
+
+            // 2. 黑名单检查（已登出的 token 不能刷新）
+            if (tokenBlacklistService.isBlacklisted(refreshToken)) {
+                log.warn("Blacklisted refresh token attempted to refresh: user={}", username);
+                return Result.error("refresh token 无效");
+            }
+
+            // 3. 类型检查：必须是 refresh token
+            if (!jwtUtil.isRefreshToken(refreshToken)) {
+                log.warn("Non-refresh token attempted to refresh: user={}", username);
+                return Result.error("refresh token 无效");
+            }
+
+            // 4. 用户状态检查（从 DB 取最新 role）
+            User user = userService.getUserByUsername(username);
+            if (user == null || !"ACTIVE".equals(user.getStatus())) {
+                log.warn("Refresh rejected: user '{}' not found or inactive", username);
+                return Result.error("refresh token 无效");
+            }
+
+            // 5. 签发新的 access token
+            String newAccessToken = jwtUtil.generateAccessToken(user.getUsername(), user.getRole());
+            Map<String, Object> result = new HashMap<>();
+            result.put("accessToken", newAccessToken);
+            log.info("Access token refreshed for user {}", username);
+            return Result.success("刷新成功", result);
+        } catch (Exception e) {
+            log.error("刷新 token 失败", e);
+            return Result.error("refresh token 无效");
+        }
+    }
 }

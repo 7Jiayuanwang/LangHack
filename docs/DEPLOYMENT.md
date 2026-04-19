@@ -72,6 +72,66 @@ bash scripts/setup-replication.sh   # 或手动执行第 4 节命令
 
 ---
 
+## 2.5. 学校数据集成配置
+
+`scripts/deploy.sh` 向导在 SSO 配置之后、备份配置之前会交互式询问学校数据集成设置。
+
+### 向导交互流程
+
+```
+启用学校数据集成？ [y/N]
+  └─ y → 数据源类型: 1) API 接口 (推荐)  2) ETL 数据库
+          ├─ API 模式：
+          │    • App ID     （学校数据平台分配）
+          │    • App Secret （学校数据平台分配，用于签名认证）
+          │    9 个数据接口 URL 已内置，无需配置
+          └─ ETL 模式：
+               • JDBC URL (默认: jdbc:mysql://school-db.imau.edu.cn:3306/school_db)
+               • 数据库用户名 / 密码
+               7 个查询 SQL 已内置
+          启用定时同步？ [Y/n]（全量 02:00 / 增量每小时 / 校验 04:00）
+          启用功能开关？ [Y/n]（运维端数据浏览/配置 + 学生端课表入口）
+```
+
+### API 签名认证方式（官方规范）
+
+```
+每次请求生成：
+    timestamp = System.currentTimeMillis()
+    sign      = Base64( MD5( appId + appSecret + timestamp ) )
+
+请求头：
+    appId:     <App ID>
+    timestamp: <毫秒时间戳>
+    sign:      <Base64 编码签名>
+```
+
+### 手动配置方式
+
+除向导外，也可直接编辑 `docker/.env`：
+
+```ini
+SCHOOL_DATA_SOURCE=api           # 或 etl
+SCHOOL_API_APP_ID=<app-id>       # 学校数据平台分配
+SCHOOL_API_APP_SECRET=<secret>   # 学校数据平台分配
+SCHOOL_SYNC_ENABLED=true         # 启用定时同步
+```
+
+配置变更后重启后端：`docker compose restart backend`
+
+### 运维面板配置
+
+部署完成后，也可在运维面板管理（无需重启）：
+- **路径**：`https://<域名>/#/ops/school-data-config`
+- **权限**：`OPS` 或 `ADMIN` 角色
+- **支持**：数据源类型切换、appId/appSecret 修改、定时同步开关、连接测试
+
+### App ID/Secret 获取方式
+
+由学校数据平台（cdsp.imau.edu.cn）管理员分配，具体申请流程咨询学校信息化中心。
+
+---
+
 ## 3. 配置方式（三选一）
 
 项目支持三种配置方式，按需选择：

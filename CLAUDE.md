@@ -50,7 +50,7 @@
 | `ADMIN` | `/admin` | `/api/admin/**` |
 | `TEACHER` | `/teacher` | `/api/teacher/**` |
 | `STUDENT` | `/student` | `/api/student/**` |
-| `USER` | `/user` | `/api/public/**` 为主 |
+| `USER` | `/student` | `/api/public/**` + `/api/student/**`（校园环境中 USER 视同学生） |
 | `OPS` | `/ops` | `/api/admin/**`（可提权） |
 | —（公开） | `/articles`, `/login` | `/api/public/**` |
 
@@ -149,6 +149,37 @@ backend/src/main/resources/db/migration/V{n}__{description}.sql
 
 图片/视频存为 BLOB（`media` 表），通过 `/api/media/{id}/download` 访问。
 
+### SSO 集成
+
+- 协议：CAS（内蒙古农业大学统一身份认证）
+- 后端配置：`application.yml` 的 `sso.*` / `app.base-url` 属性
+- 前端回调：`public/SsoCallback.vue`
+- API 文档：`docs/sso/` 目录（5 份文档）
+- 角色映射：CAS 属性 → 系统角色（`SsoAuthController` + `SsoUserService`）
+
+### 学校数据集成
+
+- 双模式：`api`（REST API）或 `etl`（JDBC 直连）
+- **API 认证方式**：`appId + appSecret + timestamp` 签名（2026-04-18 从旧 Bearer Token 迁移）
+  - 签名公式：`sign = Base64(MD5(appId + appSecret + timestamp))`
+  - 请求头：`appId`, `timestamp`（毫秒）, `sign`
+  - 环境变量：`SCHOOL_API_APP_ID` + `SCHOOL_API_APP_SECRET`（旧 `SCHOOL_API_TOKEN` 已废弃）
+  - 9 个数据源 endpoint URL 代码内置（`SchoolDataProperties.java:97-107`），无需配置
+- **部署配置入口**：`scripts/deploy.sh` 交互向导（SSO 之后、备份之前）或运维面板 → 学校数据配置
+- 后端核心：`SchoolDataSyncServiceImpl` + `SchoolDataApiClientDelegate`
+- 控制器：`SchoolDataQueryController` + `SchoolDataSyncController`
+- 实体：`AdministrativeClass`, `SchoolCourse`, `TeachingClass`, `CourseSchedule` 等
+- 功能开关：`GET /api/public/system/feature-toggles` 中的 school_data 相关项
+- Flyway：V9 基础表 + V12 合并脚本（2026-04-19 将 V12.1/V13/V14/V16/V18/V19/V20 合并为单个 V12__school_data_integration.sql）
+
+### AI 服务集成
+
+- 多提供商路由：`AiProviderService` → HiAgent / OpenRouter / SiliconFlow
+- 翻译：`TranslateController`（AI 翻译接口）
+- AI 问答：`AiQaController`（文章划词 AI 问答）
+- ASR：`AsrController`（腾讯云语音识别）
+- 视频代理：`BilibiliProxyController`
+
 ---
 
 ## 测试
@@ -157,8 +188,8 @@ backend/src/main/resources/db/migration/V{n}__{description}.sql
 
 ```bash
 cd frontend
-npx vitest run                          # 运行所有测试
-npx vitest run tests/views/layouts/    # 只运行布局测试（当前 58/58 通过）
+npx vitest run                          # 运行所有测试（当前 63 文件 1124 测试全通过）
+npx vitest run tests/views/layouts/    # 只运行布局测试
 npx vitest run tests/components/       # 运行组件测试
 ```
 
@@ -194,6 +225,9 @@ cd backend && mvn test
 | 部署文档 | `docs/DEPLOYMENT.md` | Docker Compose 部署指南 |
 | 数据库协作规范 | `docs/DATABASE_COLLABORATION_GUIDE.md` | 数据库表登记与变更规范 |
 | 故障排查 | `docs/TROUBLESHOOTING.md` | 常见问题排查 |
+| SSO 集成文档 | `docs/sso/` | CAS 统一身份认证集成（5 份文档） |
+| 学校数据修复记录 | `docs/SCHOOL_DATA_FIX.md` | 学校数据集成问题修复文档 |
+| 学校数据 API 修复 | `docs/SCHOOL_DATA_API_FIX.md` | 学校数据 API 端点配置修复 |
 
 ---
 

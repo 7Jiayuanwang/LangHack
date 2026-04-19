@@ -320,7 +320,7 @@ wait_for_health() {
 
     while [ $elapsed -lt "$timeout" ]; do
         # 1. 检查是否有容器 unhealthy 或异常退出（快速失败）
-        svc_statuses=$(docker compose -f "$DOCKER_DIR/docker-compose.yml" \
+        svc_statuses=$(docker compose -f "$COMPOSE_FILE" \
             ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
         if [ -n "$svc_statuses" ]; then
             failed=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
@@ -329,7 +329,7 @@ wait_for_health() {
                 echo "$failed" | while read -r svc; do
                     log "ERROR:   [$svc] $(echo "$svc_statuses" | awk -F'\t' -v s="$svc" '$1==s{print $2}')"
                     log "ERROR:   [$svc] 最近日志:"
-                    docker compose -f "$DOCKER_DIR/docker-compose.yml" logs --tail=20 "$svc" 2>/dev/null \
+                    docker compose -f "$COMPOSE_FILE" logs --tail=20 "$svc" 2>/dev/null \
                         | while read -r line; do log "         $line"; done
                 done
                 return 1
@@ -349,7 +349,7 @@ wait_for_health() {
 
     log "ERROR: HEALTH: 健康检查超时 (${timeout}s)"
     # 超时时打印当前容器状态
-    docker compose -f "$DOCKER_DIR/docker-compose.yml" ps 2>/dev/null | while read -r line; do
+    docker compose -f "$COMPOSE_FILE" ps 2>/dev/null | while read -r line; do
         log "         $line"
     done
     return 1

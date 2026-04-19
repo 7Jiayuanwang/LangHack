@@ -572,6 +572,56 @@ if [ "$SKIP_ENV" = false ]; then
     fi
 
     echo ""
+    echo "  [ 学校数据集成 ]"
+    echo "  (教务数据接入：行政班、课表、教学计划等)"
+    DEF_SCHOOL_SYNC=$(load_env_value "SCHOOL_SYNC_ENABLED" "false")
+    SCHOOL_DEFAULT="n"; [ "$DEF_SCHOOL_SYNC" = "true" ] && SCHOOL_DEFAULT="y"
+    ask_yn "启用学校数据集成？" "$SCHOOL_DEFAULT" CFG_SCHOOL_YN
+    # 初始化所有变量为空（禁用时清空）
+    CFG_SCHOOL_DATA_SOURCE=""
+    CFG_SCHOOL_APP_ID=""
+    CFG_SCHOOL_APP_SECRET=""
+    CFG_SCHOOL_ETL_JDBC_URL=""
+    CFG_SCHOOL_ETL_USERNAME=""
+    CFG_SCHOOL_ETL_PASSWORD=""
+    CFG_SCHOOL_SYNC_ENABLED="false"
+    CFG_SCHOOL_FEATURE_ENABLED="false"
+    if [ "$CFG_SCHOOL_YN" = true ]; then
+        DEF_SOURCE=$(load_env_value "SCHOOL_DATA_SOURCE" "api")
+        SOURCE_DEFAULT_IDX=1; [ "$DEF_SOURCE" = "etl" ] && SOURCE_DEFAULT_IDX=2
+        ask_choice "数据源类型:" "API 接口 (HTTPS+签名，推荐)|ETL 数据库 (JDBC 直连)" SCHOOL_SRC_MODE "$SOURCE_DEFAULT_IDX"
+        case $SCHOOL_SRC_MODE in
+            1)
+                CFG_SCHOOL_DATA_SOURCE="api"
+                echo "  [提示] 9 个数据接口 URL 已在代码中内置 (cdsp.imau.edu.cn)"
+                echo "         认证方式: sign = Base64(MD5(appId + appSecret + timestamp))"
+                DEF_APP_ID=$(load_env_value "SCHOOL_API_APP_ID" "")
+                ask_value "App ID" "$DEF_APP_ID" CFG_SCHOOL_APP_ID
+                DEF_APP_SECRET=$(load_env_value "SCHOOL_API_APP_SECRET" "")
+                ask_secret "App Secret" "$DEF_APP_SECRET" CFG_SCHOOL_APP_SECRET
+                ;;
+            2)
+                CFG_SCHOOL_DATA_SOURCE="etl"
+                echo "  [提示] 7 个查询 SQL 已在代码中内置，只需配置数据库连接"
+                DEF_JDBC_URL=$(load_env_value "SCHOOL_ETL_JDBC_URL" "jdbc:mysql://school-db.imau.edu.cn:3306/school_db")
+                ask_value "JDBC URL" "$DEF_JDBC_URL" CFG_SCHOOL_ETL_JDBC_URL
+                DEF_ETL_USER=$(load_env_value "SCHOOL_ETL_USERNAME" "")
+                ask_value "数据库用户名" "$DEF_ETL_USER" CFG_SCHOOL_ETL_USERNAME
+                DEF_ETL_PASS=$(load_env_value "SCHOOL_ETL_PASSWORD" "")
+                ask_secret "数据库密码" "$DEF_ETL_PASS" CFG_SCHOOL_ETL_PASSWORD
+                ;;
+        esac
+        echo ""
+        echo "  [提示] 定时同步计划（默认）: 全量 02:00 / 增量每小时 / 校验 04:00"
+        ask_yn "启用定时同步？" "y" SCHOOL_SYNC_YN
+        [ "$SCHOOL_SYNC_YN" = true ] && CFG_SCHOOL_SYNC_ENABLED="true"
+        echo ""
+        echo "  [提示] 启用功能开关后，运维端显示'数据浏览/数据配置'，学生端显示'课表'"
+        ask_yn "启用功能开关（运维端+学生端入口）？" "y" SCHOOL_FEATURE_YN
+        [ "$SCHOOL_FEATURE_YN" = true ] && CFG_SCHOOL_FEATURE_ENABLED="true"
+    fi
+
+    echo ""
     echo "  [ 备份 ]"
     ask_yn "启用自动备份？" "y" CFG_BACKUP_YN
     CFG_BACKUP_ENABLED="false"
@@ -670,6 +720,23 @@ if [ "$SKIP_ENV" = false ]; then
             printf 'ADMIN_LOGIN_SECRET=%s\n'     "$CFG_ADMIN_SECRET"
             printf 'ADMIN_PORTAL_PATH=%s\n'   "$CFG_ADMIN_PATH"
         fi
+        # ── 学校数据集成 ──────────────────────────────────────
+        if [ "$CFG_SCHOOL_YN" = true ]; then
+            printf 'SCHOOL_DATA_SOURCE=%s\n'   "$CFG_SCHOOL_DATA_SOURCE"
+            if [ "$CFG_SCHOOL_DATA_SOURCE" = "api" ]; then
+                printf 'SCHOOL_API_APP_ID=%s\n'     "$CFG_SCHOOL_APP_ID"
+                printf 'SCHOOL_API_APP_SECRET=%s\n' "$CFG_SCHOOL_APP_SECRET"
+            fi
+            if [ "$CFG_SCHOOL_DATA_SOURCE" = "etl" ]; then
+                printf 'SCHOOL_ETL_JDBC_URL=%s\n'   "$CFG_SCHOOL_ETL_JDBC_URL"
+                printf 'SCHOOL_ETL_USERNAME=%s\n'   "$CFG_SCHOOL_ETL_USERNAME"
+                printf 'SCHOOL_ETL_PASSWORD=%s\n'   "$CFG_SCHOOL_ETL_PASSWORD"
+            fi
+            printf 'SCHOOL_SYNC_ENABLED=%s\n' "$CFG_SCHOOL_SYNC_ENABLED"
+        else
+            printf '# 学校数据集成未启用（可在运维面板 → 学校数据配置中手动启用）\n'
+            printf 'SCHOOL_SYNC_ENABLED=false\n'
+        fi
     } > "$ENV_FILE"
     # 设置 .env 文件权限为 600（仅所有者可读写，保护敏感信息）
     chmod 600 "$ENV_FILE" 2>/dev/null || true
@@ -762,6 +829,19 @@ if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
     echo "  管理员入口: /${CFG_ADMIN_PATH}"
 else
     echo "  SSO: 未启用"
+fi
+if [ "${CFG_SCHOOL_YN:-false}" = true ]; then
+    echo "  学校数据: 已启用 (${CFG_SCHOOL_DATA_SOURCE})"
+    if [ "$CFG_SCHOOL_DATA_SOURCE" = "api" ]; then
+        echo "    认证方式: appId + appSecret 签名"
+        [ -n "$CFG_SCHOOL_APP_ID" ] && echo "    App ID: ${CFG_SCHOOL_APP_ID}" || echo "    App ID: (未配置)"
+    elif [ "$CFG_SCHOOL_DATA_SOURCE" = "etl" ]; then
+        echo "    JDBC: ${CFG_SCHOOL_ETL_JDBC_URL}"
+    fi
+    echo "    定时同步: ${CFG_SCHOOL_SYNC_ENABLED}"
+    echo "    功能开关: ${CFG_SCHOOL_FEATURE_ENABLED}"
+else
+    echo "  学校数据: 未启用"
 fi
 
 ask_yn "开始部署？" "y" GO
@@ -1422,6 +1502,17 @@ fi
 # ── AI 密钥种子化：应用启动时 @PostConstruct 自动完成，无需外部触发 ──
 echo "[INFO] AI 服务商密钥将在后端启动时自动从环境变量种子化到数据库"
 echo "       如需手动管理，请访问运维面板 → AI服务管理"
+
+# ── 学校数据功能开关激活 ───────────────────────────────────────
+if [ "${CFG_SCHOOL_FEATURE_ENABLED:-false}" = "true" ]; then
+    echo "[INFO] 激活学校数据功能开关..."
+    docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" -e \
+        "UPDATE system_config SET config_value='true'
+         WHERE config_group='feature_toggle'
+           AND config_key IN ('ops.school_data_browser', 'ops.school_data_config', 'page_schedule');" \
+        2>&1 | grep -v "Using a password" || true
+    echo "[OK] 学校数据功能开关已启用（运维端入口 + 学生端课表）"
+fi
 
 # ── SSO 管理员叩门入口信息 ──
 SSO_ENABLED_VAL="${CFG_SSO_ENABLED:-$(load_env_value "SSO_ENABLED" "false" "$ENV_FILE")}"
