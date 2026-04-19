@@ -59,7 +59,7 @@ public class TencentAsrService {
             this.asrClient = new AsrClient(cred, region, clientProfile);
             logger.info("AsrClient 初始化完成，region={}", region);
         } catch (Exception e) {
-            logger.error("AsrClient 初始化失败: {}", e.getMessage());
+            logger.error("AsrClient 初始化失败 region={} err={}", region, e.getMessage(), e);
             // 不抛出异常，让 recognize() 方法处理
         }
     }
@@ -119,13 +119,14 @@ public class TencentAsrService {
             return result != null ? result : "";
 
         } catch (TencentCloudSDKException e) {
-            // 不在日志中暴露错误详情，只记录错误码
-            logger.error("ASR 识别失败 - 错误码: {}", e.getErrorCode());
+            // 记录腾讯云返回的错误码 + requestId + 原始消息，便于跨系统排查（堆栈保留以诊断 SDK 层问题）
+            logger.error("ASR 调用腾讯云失败 errorCode={} requestId={} format={} lang={} msg={}",
+                    e.getErrorCode(), e.getRequestId(), format, lang, e.getMessage(), e);
             if (aiCallMetricsService != null) {
                 aiCallMetricsService.recordFailure("TENCENT_ASR", "recognize", startTime,
                         e.getErrorCode(), user);
             }
-            
+
             // 根据错误类型返回更友好的提示
             String errorCode = e.getErrorCode();
             if (errorCode != null && errorCode.contains("Unauthorized")) {
@@ -136,8 +137,9 @@ public class TencentAsrService {
                 throw new BusinessException("ASR 识别失败，请稍后重试");
             }
         } catch (Exception e) {
-            // FIX: 捕获其他异常（如超时、网络错误等）
-            logger.error("ASR 识别出错: {}", e.getMessage());
+            // 捕获其他异常（如超时、网络错误等），保留堆栈用于定位 region/网络/JVM 问题
+            logger.error("ASR 识别出错 format={} lang={} region={} err={}",
+                    format, lang, region, e.getMessage(), e);
             if (aiCallMetricsService != null) {
                 aiCallMetricsService.recordFailure("TENCENT_ASR", "recognize", startTime,
                         e.getMessage(), user);

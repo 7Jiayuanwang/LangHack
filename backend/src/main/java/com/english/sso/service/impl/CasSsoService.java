@@ -10,6 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -81,8 +84,30 @@ public class CasSsoService implements SsoService {
             log.info("CAS 验证响应: {}", response);
 
             return parseCasResponse(response);
+        } catch (BusinessException e) {
+            // parseCasResponse 抛出的业务异常（如 INVALID_SERVICE/INVALID_TICKET）应透传，不再包裹
+            throw e;
+        } catch (HttpStatusCodeException e) {
+            // CAS 服务器返回了 HTTP 错误（4xx/5xx），记录状态码 + 响应体片段便于排查
+            // 典型场景：404（serverUrl 配置错误）、500（CAS 服务异常）、403（网络策略阻断）
+            log.error("CAS ticket 验证失败（HTTP 错误） validateUrl={} status={} bodyPreview={} err={}",
+                    validateUrl, e.getStatusCode(), truncateForLog(e.getResponseBodyAsString()),
+                    e.getMessage(), e);
+            throw new BusinessException("CAS 认证失败（服务器错误 " + e.getStatusCode() + "），请联系管理员");
+        } catch (ResourceAccessException e) {
+            // 网络层错误：连接超时 / DNS 失败 / SSL 握手失败
+            log.error("CAS ticket 验证失败（网络/超时） validateUrl={} err={}",
+                    validateUrl, e.getMessage(), e);
+            throw new BusinessException("CAS 服务网络异常，请稍后重试");
+        } catch (RestClientException e) {
+            // 其他 RestTemplate 异常（如反序列化失败）
+            log.error("CAS ticket 验证失败（HTTP 客户端异常） validateUrl={} err={}",
+                    validateUrl, e.getMessage(), e);
+            throw new BusinessException("CAS 认证失败，请稍后重试");
         } catch (Exception e) {
-            log.error("CAS ticket 验证失败", e);
+            // 兜底：记录上下文 + 堆栈
+            log.error("CAS ticket 验证失败（未预期异常） validateUrl={} ticket={} err={}",
+                    validateUrl, ticket, e.getMessage(), e);
             throw new BusinessException("CAS 认证失败，请稍后重试");
         }
     }
@@ -204,10 +229,25 @@ public class CasSsoService implements SsoService {
             log.info("CAS 用户信息解析成功: username={}, realName={}", username, userInfo.getRealName());
             return userInfo;
 
+        } catch (BusinessException e) {
+            // CAS 认证失败 / 响应格式错误等业务异常透传（已含可读消息）
+            throw e;
         } catch (Exception e) {
-            log.error("解析 CAS 响应失败", e);
+            // XML 解析 / 属性提取异常：记录 XML 片段便于诊断上游响应格式变化
+            log.error("解析 CAS 响应失败 xmlPreview={} err={}",
+                    truncateForLog(xml), e.getMessage(), e);
             throw new BusinessException("解析 CAS 响应失败，请联系管理员");
         }
+    }
+
+    /**
+     * 截断响应体片段用于日志，避免：
+     *   ① CAS XML 响应过长污染日志；
+     *   ② 若响应包含用户敏感属性（memberOf/containerId），限制回显长度。
+     */
+    private String truncateForLog(String body) {
+        if (body == null) return "null";
+        return body.length() > 500 ? body.substring(0, 500) + "...(truncated)" : body;
     }
 
     /**

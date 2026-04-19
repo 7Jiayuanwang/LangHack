@@ -131,14 +131,20 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
     public boolean testConnection() {
         String jdbcUrl = properties.getEtl().getJdbcUrl();
         if (jdbcUrl == null || jdbcUrl.isEmpty()) {
-            logger.warn("School ETL JDBC URL is not configured");
+            logger.warn("学校 ETL JDBC URL 未配置，跳过连接测试");
             return false;
         }
 
         try (Connection conn = getOrCreateDataSource().getConnection()) {
-            return conn.isValid(properties.getEtl().getConnectionTimeout() / 1000);
+            boolean valid = conn.isValid(properties.getEtl().getConnectionTimeout() / 1000);
+            if (!valid) {
+                logger.error("学校 ETL 数据库连接无效 jdbcUrl={} timeout={}ms",
+                        jdbcUrl, properties.getEtl().getConnectionTimeout());
+            }
+            return valid;
         } catch (SQLException e) {
-            logger.error("School ETL database connection test failed", e);
+            logger.error("学校 ETL 数据库连接测试失败 jdbcUrl={} username={} err={}",
+                    jdbcUrl, properties.getEtl().getUsername(), e.getMessage(), e);
             return false;
         }
     }
@@ -163,7 +169,7 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
     private List<Map<String, Object>> fetchByDataSource(String dataSource, Map<String, String> params) {
         String sql = properties.getEtl().getQuerySql(dataSource);
         if (sql == null) {
-            logger.error("No ETL query mapping configured for data source: {}", dataSource);
+            logger.error("学校 ETL 未配置数据源 SQL 映射 dataSource={}", dataSource);
             return Collections.emptyList();
         }
 
@@ -180,13 +186,16 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
                 stmt.setString(1, updatedSince);
             }
 
-            logger.info("Executing ETL query for {}: {} (updatedSince={})", dataSource, sql, updatedSince);
+            logger.info("学校 ETL SQL 执行中 dataSource={} updatedSince={} sql={}",
+                    dataSource, updatedSince, sql);
 
             try (ResultSet rs = stmt.executeQuery()) {
                 return resultSetToList(rs);
             }
         } catch (SQLException e) {
-            logger.error("Failed to execute ETL query for {}: {}", dataSource, e.getMessage(), e);
+            logger.error("学校 ETL SQL 执行失败 dataSource={} jdbcUrl={} sqlState={} errorCode={} err={}",
+                    dataSource, properties.getEtl().getJdbcUrl(),
+                    e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
             return Collections.emptyList();
         }
     }

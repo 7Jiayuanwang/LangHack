@@ -248,7 +248,8 @@ public class AiProviderServiceImpl implements AiProviderService {
             }
         } catch (Exception e) {
             long latency = System.currentTimeMillis() - start;
-            log.warn("AI provider test failed id={}: {}", id, e.getMessage());
+            log.error("AI 服务商连通性测试失败 id={} name={} url={} model={} err={}",
+                    id, p.getName(), testUrl, p.getModel(), e.getMessage(), e);
             result.put("success", false);
             result.put("error", e.getMessage());
             result.put("latencyMs", latency);

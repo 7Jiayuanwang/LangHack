@@ -13,7 +13,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Collections;
@@ -128,23 +130,35 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
     @Override
     public boolean testConnection() {
+        String testEndpoint = properties.getApi().getEndpointPath("administrative_class");
         try {
             HttpHeaders headers = buildHeaders();
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             // 使用行政班接口测试连接（完整 URL）
-            String testEndpoint = properties.getApi().getEndpointPath("administrative_class");
             if (testEndpoint == null || testEndpoint.isEmpty()) {
-                logger.warn("School data API endpoint for administrative_class is not configured");
+                logger.warn("学校 API 连接测试失败：administrative_class 端点未配置");
                 return false;
             }
             ResponseEntity<String> response = restTemplate.exchange(
                     testEndpoint + "?pageSize=1", HttpMethod.GET, entity, String.class);
-            return response.getStatusCode().is2xxSuccessful();
+            boolean ok = response.getStatusCode().is2xxSuccessful();
+            if (!ok) {
+                logger.error("学校 API 连接测试返回非成功状态 endpoint={} status={} bodyPreview={}",
+                        testEndpoint, response.getStatusCode(), truncateForLog(response.getBody()));
+            }
+            return ok;
         } catch (BusinessException e) {
-            logger.error("School data API connection test failed (auth not configured): {}", e.getMessage());
+            logger.error("学校 API 连接测试失败（认证未配置） endpoint={} err={}",
+                    testEndpoint, e.getMessage());
+            return false;
+        } catch (HttpStatusCodeException e) {
+            logger.error("学校 API 连接测试失败（HTTP 错误） endpoint={} status={} bodyPreview={} err={}",
+                    testEndpoint, e.getStatusCode(), truncateForLog(e.getResponseBodyAsString()),
+                    e.getMessage(), e);
             return false;
         } catch (RestClientException e) {
-            logger.error("School data API connection test failed", e);
+            logger.error("学校 API 连接测试失败（网络/超时） endpoint={} err={}",
+                    testEndpoint, e.getMessage(), e);
             return false;
         }
     }
@@ -170,7 +184,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      */
     private List<Map<String, Object>> fetchDataWithPath(String fullUrl, Map<String, String> params) {
         if (fullUrl == null || fullUrl.isEmpty()) {
-            logger.error("School data API URL is not configured");
+            logger.error("学校数据 API URL 未配置（fetchDataWithPath 接收到空 URL），返回空集合");
             return Collections.emptyList();
         }
 
@@ -182,24 +196,44 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 HttpHeaders headers = buildHeaders();
                 HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-                logger.info("Fetching data from: {} (attempt {}/{})", url, attempt, retryAttempts);
+                logger.info("学校数据 API 请求中 url={} attempt={}/{}", url, attempt, retryAttempts);
                 ResponseEntity<String> response = restTemplate.exchange(
                         url, HttpMethod.GET, entity, String.class);
 
                 if (response.getBody() == null || response.getBody().isEmpty()) {
-                    logger.warn("Empty response from: {}", url);
+                    logger.warn("学校数据 API 响应体为空 url={} status={}", url, response.getStatusCode());
                     return Collections.emptyList();
                 }
 
-                return parseResponse(response.getBody());
-            } catch (RestClientException e) {
-                logger.warn("Failed to fetch data from: {} (attempt {}/{}): {}", url, attempt, retryAttempts, e.getMessage());
+                return parseResponse(response.getBody(), url);
+            } catch (HttpStatusCodeException e) {
+                // 4xx/5xx：必定含状态码 + 响应体，属于上游业务错误（鉴权失败/参数错误/限流等）
+                logger.error("学校数据 API HTTP 错误 url={} status={} attempt={}/{} bodyPreview={}",
+                        url, e.getStatusCode(), attempt, retryAttempts,
+                        truncateForLog(e.getResponseBodyAsString()));
                 if (attempt == retryAttempts) {
-                    logger.error("All {} retry attempts exhausted for: {}", retryAttempts, url);
+                    return Collections.emptyList();
+                }
+            } catch (ResourceAccessException e) {
+                // 网络层错误（连接超时、DNS 失败、SSL 握手）
+                logger.warn("学校数据 API 网络异常 url={} attempt={}/{} err={}",
+                        url, attempt, retryAttempts, e.getMessage());
+                if (attempt == retryAttempts) {
+                    logger.error("学校数据 API 已重试 {} 次仍失败（网络） url={} err={}",
+                            retryAttempts, url, e.getMessage(), e);
+                    return Collections.emptyList();
+                }
+            } catch (RestClientException e) {
+                logger.warn("学校数据 API 调用失败 url={} attempt={}/{} err={}",
+                        url, attempt, retryAttempts, e.getMessage());
+                if (attempt == retryAttempts) {
+                    logger.error("学校数据 API 已重试 {} 次仍失败 url={} err={}",
+                            retryAttempts, url, e.getMessage(), e);
                     return Collections.emptyList();
                 }
             } catch (Exception e) {
-                logger.error("Unexpected error fetching data from: {}", url, e);
+                logger.error("学校数据 API 未预期异常 url={} attempt={}/{} err={}",
+                        url, attempt, retryAttempts, e.getMessage(), e);
                 return Collections.emptyList();
             }
         }
@@ -270,7 +304,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      * School API format: {"code": 200, "data": [...], "msg": "success"}
      */
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> parseResponse(String responseBody) {
+    private List<Map<String, Object>> parseResponse(String responseBody, String url) {
         try {
             // Try parsing as array directly
             return objectMapper.readValue(responseBody,
@@ -284,7 +318,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 // Check for school API response code
                 Object code = wrapper.get("code");
                 if (code instanceof Number && ((Number) code).intValue() != 200) {
-                    logger.warn("School API returned non-200 code: {}, msg: {}", code, wrapper.get("msg"));
+                    // 上游业务错误码（鉴权失败/参数错误/限流），记录为 error 级别
+                    logger.error("学校 API 返回非 200 业务错误 url={} code={} msg={} bodyPreview={}",
+                            url, code, wrapper.get("msg"), truncateForLog(responseBody));
                     return Collections.emptyList();
                 }
 
@@ -296,12 +332,22 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     }
                 }
 
-                logger.warn("Response wrapper does not contain a recognized data array");
+                logger.error("学校 API 响应 wrapper 不包含数据数组字段 url={} keys={} bodyPreview={}",
+                        url, wrapper.keySet(), truncateForLog(responseBody));
                 return Collections.emptyList();
             } catch (Exception e2) {
-                logger.error("Failed to parse API response", e2);
+                logger.error("学校 API 响应体无法解析为 JSON url={} bodyPreview={} err={}",
+                        url, truncateForLog(responseBody), e2.getMessage(), e2);
                 return Collections.emptyList();
             }
         }
+    }
+
+    /**
+     * 截断响应体用于日志，避免泄漏过长内容或敏感字段回显
+     */
+    private String truncateForLog(String body) {
+        if (body == null) return "null";
+        return body.length() > 300 ? body.substring(0, 300) + "...(truncated)" : body;
     }
 }

@@ -164,12 +164,25 @@ public class SchoolDataConfigRefreshService {
 
         Map<String, Object> status = new HashMap<>();
         status.put("source", properties.getSource());
-        status.put("apiConfigured", notBlank(api.getBaseUrl()));
+        status.put("apiConfigured", api.getEndpoints() != null && !api.getEndpoints().isEmpty());
         status.put("authConfigured", notBlank(api.getAppId()) && notBlank(api.getAppSecret()));
         status.put("etlConfigured", notBlank(etl.getJdbcUrl()) && notBlank(etl.getUsername()));
         status.put("syncEnabled", sync.isEnabled());
         status.put("missingKeys", collectMissingKeys());
         status.put("lastTestResult", lastTestResult.get());
+
+        // 数据源端点列表（代码内置，不可编辑，用于前端只读展示）
+        List<Map<String, String>> endpoints = new ArrayList<>();
+        if (api.getEndpoints() != null) {
+            for (SchoolDataProperties.EndpointMapping e : api.getEndpoints()) {
+                Map<String, String> item = new HashMap<>();
+                item.put("dataSource", e.getDataSource());
+                item.put("url", e.getPath());
+                endpoints.add(item);
+            }
+        }
+        status.put("endpoints", endpoints);
+
         return status;
     }
 

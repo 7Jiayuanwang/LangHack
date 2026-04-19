@@ -403,7 +403,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 result.success++;
             } catch (Exception e) {
                 result.fail++;
-                logger.warn("同步单条数据失败: 数据源={}, 错误={}", dataSource, e.getMessage());
+                // 保留堆栈以定位字段映射/类型转换/UPSERT 约束冲突等问题
+                logger.warn("同步单条数据失败 dataSource={} recordPreview={} err={}",
+                        dataSource, truncateRecordForLog(sourceRecord), e.getMessage(), e);
                 // 单条失败不影响整体，继续处理
             }
 
@@ -743,7 +745,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
                     teachingPlanCourseMapper.upsertByDetailId(courseEntity);
                 } catch (Exception e) {
-                    logger.warn("同步教学计划课程明细失败: planId={}, 错误={}", planId, e.getMessage());
+                    // 保留堆栈以诊断课程明细字段类型转换 / detailId 重复等问题
+                    logger.warn("同步教学计划课程明细失败 planId={} detailPreview={} err={}",
+                            planId, truncateRecordForLog(sourceRecord), e.getMessage(), e);
                 }
             }
         } catch (Exception e) {
@@ -854,7 +858,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 mappedData.put("syncSource", "SCHOOL_API");
                 upsertEntity("student_schedule", mappedData);
             } catch (Exception e) {
-                logger.warn("同步学生课表单条数据失败: studentId={}, 错误={}", studentId, e.getMessage());
+                // 保留堆栈以定位排课 delete-then-insert 过程中的约束冲突或类型转换问题
+                logger.warn("同步学生课表单条数据失败 studentId={} recordPreview={} err={}",
+                        studentId, truncateRecordForLog(sourceRecord), e.getMessage(), e);
             }
         }
 
@@ -968,6 +974,18 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             return (LocalDateTime) value;
         }
         return null;
+    }
+
+    /**
+     * 将单条源记录截断用于日志，避免：
+     *   ① 单条数据过大导致日志膨胀；
+     *   ② 敏感字段（身份证/手机号等）完整回显到 info/warn 级别日志。
+     * 用于失败时锚定问题记录，便于从上游核对。
+     */
+    private String truncateRecordForLog(Map<String, Object> record) {
+        if (record == null) return "null";
+        String str = record.toString();
+        return str.length() > 300 ? str.substring(0, 300) + "...(truncated)" : str;
     }
 
     // =========================================================================

@@ -158,6 +158,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { getAuthHeader } from '@/utils/auth'
 
 const router = useRouter()
 const loading = ref(true)
@@ -225,7 +226,9 @@ const loadArticles = async () => {
   try {
     const params = { count: 12 }
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`)
+    const authHeader = getAuthHeader()
+    const headers = authHeader ? { Authorization: authHeader } : {}
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`, { headers })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -273,7 +276,9 @@ const readArticle = (article) => {
   }
   // 记录阅读，但不阻塞导航，同时正确处理错误
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-  fetch(`${baseUrl}/api/public/texts/${article.id}/read`, { method: 'POST' })
+  const authHeader = getAuthHeader()
+  const headers = authHeader ? { Authorization: authHeader } : {}
+  fetch(`${baseUrl}/api/public/texts/${article.id}/read`, { method: 'POST', headers })
     .then(response => {
       // 仅检查网络错误，不处理HTTP错误状态（后端已返回成功）
       if (!response.ok) {

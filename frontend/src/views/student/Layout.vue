@@ -75,16 +75,9 @@ import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   DataBoard,
   Reading,
-  House,
   Edit,
   Document,
   ChatLineRound,
-  MessageBox,
-  Notebook,
-  VideoPlay,
-  Calendar,
-  Trophy,
-  Tickets,
   School
 } from '@element-plus/icons-vue'
 
@@ -103,22 +96,16 @@ const handleKeyDown = (event) => {
   }
 }
 
-// 所有导航项配置（含 toggleKey 用于功能开关过滤）
+// 所有导航项配置（仅保留高频主入口；低频与子页面通过"我的学习"聚合跳转）
+// 完整可达性清单（feature toggle 关闭时隐藏对应入口，路由守卫兜底）：
+//   - 发现 / 社区 / 课表 / 成绩 / 选课 / 创作 / AI视频 / AI问答 → MyStudy 快捷入口
+//   - 课文学习 → Articles / Courses / Assignments / UserTexts / MyStudy 中点击课文卡片进入
 const allNavigationItems = [
-  { path: '/student/dashboard', label: '发现', icon: markRaw(DataBoard), badge: null, toggleKey: 'page_dashboard' },
-  { path: '/student/courses', label: '课程', icon: markRaw(School), badge: null, toggleKey: 'page_courses' },
-  { path: '/student/classes', label: '社区', icon: markRaw(House), badge: null, toggleKey: 'page_classes' },
-  { path: '/student/assignments', label: '任务', icon: markRaw(Edit), badge: null, toggleKey: 'page_assignments' },
-  { path: '/student/schedule', label: '课表', icon: markRaw(Calendar), badge: null, toggleKey: 'page_schedule' },
-  { path: '/student/scores', label: '成绩', icon: markRaw(Trophy), badge: null, toggleKey: 'page_scores' },
-  { path: '/student/course-selections', label: '选课', icon: markRaw(Tickets), badge: null, toggleKey: 'page_course_selections' },
   { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, toggleKey: 'page_articles' },
-  { path: '/student/text-learning', label: '课文', icon: markRaw(Reading), badge: null, toggleKey: 'page_text_learning' },
+  { path: '/student/courses', label: '课程', icon: markRaw(School), badge: null, toggleKey: 'page_courses' },
+  { path: '/student/assignments', label: '任务', icon: markRaw(Edit), badge: null, toggleKey: 'page_assignments' },
   { path: '/student/vocabulary', label: '单词', icon: markRaw(Document), badge: null, toggleKey: 'page_vocabulary' },
-  { path: '/student/my-study', label: '学习', icon: markRaw(Reading), badge: null, toggleKey: 'page_my_study' },
-  { path: '/student/ai-video', label: '视频', icon: markRaw(VideoPlay), badge: null, toggleKey: 'page_ai_video' },
-  { path: '/student/ai-qa', label: 'AI问答', icon: markRaw(MessageBox), badge: null, toggleKey: 'page_ai_qa' },
-  { path: '/student/user-texts', label: '我的创作', icon: markRaw(Notebook), badge: null, toggleKey: 'page_user_texts' }
+  { path: '/student/my-study', label: '学习', icon: markRaw(DataBoard), badge: null, toggleKey: 'page_my_study' }
 ]
 
 // 根据功能开关过滤导航项

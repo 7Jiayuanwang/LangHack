@@ -14,6 +14,9 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
@@ -62,7 +65,8 @@ public class OAuth2SsoService implements SsoService {
         try {
             redisTemplate.opsForValue().set(STATE_KEY_PREFIX + state, "1", STATE_TTL_SECONDS, TimeUnit.SECONDS);
         } catch (Exception e) {
-            log.warn("Failed to persist OAuth2 state to Redis, CSRF protection degraded: {}", e.getMessage());
+            // 保留堆栈以诊断 Redis 连接异常 / 序列化失败 / 权限问题
+            log.warn("OAuth2 state 写入 Redis 失败，CSRF 防护降级 err={}", e.getMessage(), e);
         }
 
         String authUrl = oauth2.getAuthorizationUrl() +
@@ -101,7 +105,8 @@ public class OAuth2SsoService implements SsoService {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("OAuth2 state validation threw exception, CSRF protection degraded: {}", e.getMessage());
+            // 保留堆栈以诊断 Redis 异常；此时走 graceful degradation 而不是拒绝登录
+            log.warn("OAuth2 state 校验异常，CSRF 防护降级 err={}", e.getMessage(), e);
         }
 
         log.info("验证 OAuth 2.0 code: {}", code);
@@ -113,9 +118,21 @@ public class OAuth2SsoService implements SsoService {
             // 2. 用 access_token 获取用户信息
             return fetchUserInfo(accessToken);
 
+        } catch (BusinessException e) {
+            // exchangeCodeForToken / fetchUserInfo 已在内部记录上下文（含 tokenUrl/userinfoUrl/status/bodyPreview）
+            throw e;
+        } catch (HttpStatusCodeException e) {
+            // 兜底 IdP 响应错误（通常会在内部方法先被捕获，这里作为防御）
+            log.error("OAuth 2.0 认证失败（HTTP 错误） status={} bodyPreview={} err={}",
+                    e.getStatusCode(), truncateForLog(e.getResponseBodyAsString()),
+                    e.getMessage(), e);
+            throw new BusinessException("OAuth 2.0 认证失败（服务器错误 " + e.getStatusCode() + "）");
+        } catch (ResourceAccessException e) {
+            log.error("OAuth 2.0 认证失败（网络/超时） err={}", e.getMessage(), e);
+            throw new BusinessException("OAuth 2.0 服务网络异常，请稍后重试");
         } catch (Exception e) {
-            log.error("OAuth 2.0 认证失败", e);
-            throw new BusinessException("OAuth 2.0 认证失败: " + e.getMessage());
+            log.error("OAuth 2.0 认证失败（未预期异常） err={}", e.getMessage(), e);
+            throw new BusinessException("OAuth 2.0 认证失败，请稍后重试");
         }
     }
 
@@ -142,6 +159,7 @@ public class OAuth2SsoService implements SsoService {
      */
     private String exchangeCodeForToken(String code, String redirectUri) {
         SsoProperties.OAuth2Config oauth2 = ssoProperties.getOauth2();
+        String tokenUrl = oauth2.getTokenUrl();
 
         // 构建请求参数
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
@@ -157,14 +175,28 @@ public class OAuth2SsoService implements SsoService {
 
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
 
-        // 发送请求
-        ResponseEntity<Map> response = restTemplate.postForEntity(
-                oauth2.getTokenUrl(),
-                request,
-                Map.class
-        );
+        ResponseEntity<Map> response;
+        try {
+            response = restTemplate.postForEntity(tokenUrl, request, Map.class);
+        } catch (HttpStatusCodeException e) {
+            // IdP 拒绝换取 token：400（code 失效/已使用/redirect_uri 不匹配）、401（client_id/secret 错）
+            log.error("OAuth 2.0 换取 access_token 失败（HTTP 错误） tokenUrl={} status={} bodyPreview={} err={}",
+                    tokenUrl, e.getStatusCode(), truncateForLog(e.getResponseBodyAsString()),
+                    e.getMessage(), e);
+            throw new BusinessException("换取 access_token 失败（IdP 返回 " + e.getStatusCode() + "）");
+        } catch (ResourceAccessException e) {
+            log.error("OAuth 2.0 换取 access_token 网络异常 tokenUrl={} err={}",
+                    tokenUrl, e.getMessage(), e);
+            throw new BusinessException("换取 access_token 失败：IdP 网络异常");
+        } catch (RestClientException e) {
+            log.error("OAuth 2.0 换取 access_token 客户端异常 tokenUrl={} err={}",
+                    tokenUrl, e.getMessage(), e);
+            throw new BusinessException("换取 access_token 失败");
+        }
 
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            log.error("OAuth 2.0 换取 access_token 响应异常 tokenUrl={} status={} body={}",
+                    tokenUrl, response.getStatusCode(), response.getBody());
             throw new BusinessException("换取 access_token 失败");
         }
 
@@ -172,6 +204,10 @@ public class OAuth2SsoService implements SsoService {
         String accessToken = (String) tokenResponse.get("access_token");
 
         if (accessToken == null || accessToken.isEmpty()) {
+            // 有些 IdP 会在 body 中返回 error/error_description
+            log.error("OAuth 2.0 tokenUrl={} 响应未携带 access_token responseKeys={} error={} errorDesc={}",
+                    tokenUrl, tokenResponse.keySet(),
+                    tokenResponse.get("error"), tokenResponse.get("error_description"));
             throw new BusinessException("access_token 为空");
         }
 
@@ -184,6 +220,7 @@ public class OAuth2SsoService implements SsoService {
      */
     private SsoUserInfo fetchUserInfo(String accessToken) {
         SsoProperties.OAuth2Config oauth2 = ssoProperties.getOauth2();
+        String userinfoUrl = oauth2.getUserinfoUrl();
 
         // 构建请求头
         HttpHeaders headers = new HttpHeaders();
@@ -196,14 +233,28 @@ public class OAuth2SsoService implements SsoService {
 
         HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
 
-        // 发送请求
-        ResponseEntity<Map> response = restTemplate.postForEntity(
-                oauth2.getUserinfoUrl(),
-                request,
-                Map.class
-        );
+        ResponseEntity<Map> response;
+        try {
+            response = restTemplate.postForEntity(userinfoUrl, request, Map.class);
+        } catch (HttpStatusCodeException e) {
+            // 401 token 过期 / 403 scope 不足 / 5xx IdP 故障
+            log.error("OAuth 2.0 获取用户信息失败（HTTP 错误） userinfoUrl={} status={} bodyPreview={} err={}",
+                    userinfoUrl, e.getStatusCode(), truncateForLog(e.getResponseBodyAsString()),
+                    e.getMessage(), e);
+            throw new BusinessException("获取用户信息失败（IdP 返回 " + e.getStatusCode() + "）");
+        } catch (ResourceAccessException e) {
+            log.error("OAuth 2.0 获取用户信息网络异常 userinfoUrl={} err={}",
+                    userinfoUrl, e.getMessage(), e);
+            throw new BusinessException("获取用户信息失败：IdP 网络异常");
+        } catch (RestClientException e) {
+            log.error("OAuth 2.0 获取用户信息客户端异常 userinfoUrl={} err={}",
+                    userinfoUrl, e.getMessage(), e);
+            throw new BusinessException("获取用户信息失败");
+        }
 
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            log.error("OAuth 2.0 获取用户信息响应异常 userinfoUrl={} status={} body={}",
+                    userinfoUrl, response.getStatusCode(), response.getBody());
             throw new BusinessException("获取用户信息失败");
         }
 
@@ -230,6 +281,14 @@ public class OAuth2SsoService implements SsoService {
 
         log.info("OAuth 2.0 用户信息解析成功: userId={}, realName={}", userInfo.getSsoUserId(), userInfo.getRealName());
         return userInfo;
+    }
+
+    /**
+     * 截断响应体用于日志，避免 IdP 返回的 access_token / 用户信息在日志中完整回显。
+     */
+    private String truncateForLog(String body) {
+        if (body == null) return "null";
+        return body.length() > 300 ? body.substring(0, 300) + "...(truncated)" : body;
     }
 
     /**

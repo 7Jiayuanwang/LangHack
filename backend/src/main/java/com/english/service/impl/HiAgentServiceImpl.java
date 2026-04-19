@@ -324,6 +324,9 @@ public class HiAgentServiceImpl implements HiAgentService {
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            // 记录 URL + 状态码 + 响应体片段，便于定位 HiAgent 签名失败 / AppId 错误 / 服务故障
+            log.error("HiAgent create_conversation 非 200 响应 url={} status={} bodyPreview={}",
+                    url, response.getStatusCode(), truncateForLog(response.getBody()));
             throw new BusinessException("无法创建 AI 会话: " + response.getStatusCode());
         }
 
@@ -363,6 +366,9 @@ public class HiAgentServiceImpl implements HiAgentService {
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            // 记录 URL + conversationId + 状态码 + 响应体片段，便于定位配额超限 / 内容审查失败等
+            log.error("HiAgent chat_query_v2 非 200 响应 url={} conversationId={} status={} bodyPreview={}",
+                    url, conversationId, response.getStatusCode(), truncateForLog(response.getBody()));
             throw new BusinessException("AI 服务响应失败: " + response.getStatusCode());
         }
 
@@ -442,6 +448,8 @@ public class HiAgentServiceImpl implements HiAgentService {
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            log.error("HiAgent (QA) create_conversation 非 200 响应 url={} status={} bodyPreview={}",
+                    url, response.getStatusCode(), truncateForLog(response.getBody()));
             throw new BusinessException("无法创建 AI Q&A 会话: " + response.getStatusCode());
         }
 
@@ -481,6 +489,8 @@ public class HiAgentServiceImpl implements HiAgentService {
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            log.error("HiAgent (QA) chat_query_v2 非 200 响应 url={} conversationId={} status={} bodyPreview={}",
+                    url, conversationId, response.getStatusCode(), truncateForLog(response.getBody()));
             throw new BusinessException("AI Q&A 服务响应失败: " + response.getStatusCode());
         }
 

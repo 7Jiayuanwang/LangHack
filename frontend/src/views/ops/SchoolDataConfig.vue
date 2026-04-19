@@ -89,10 +89,38 @@
           <!-- API 模式配置 -->
           <template v-if="form.source === 'api'">
             <el-divider content-position="left">API 接口配置</el-divider>
+
+            <!-- 只读的数据源端点列表（9 个 URL 由代码内置，不可编辑） -->
+            <div class="endpoints-panel">
+              <div class="endpoints-title">
+                <el-icon><InfoFilled /></el-icon>
+                <span>数据源端点（代码内置，不可编辑）</span>
+                <el-tag size="small" type="info">共 {{ status.endpoints?.length || 0 }} 个</el-tag>
+              </div>
+              <el-table
+                :data="status.endpoints || []"
+                size="small"
+                class="endpoints-table"
+                :show-header="true"
+                stripe
+              >
+                <el-table-column prop="dataSource" label="数据源" width="180">
+                  <template #default="{ row }">
+                    <code class="ds-name">{{ row.dataSource }}</code>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="url" label="完整 URL">
+                  <template #default="{ row }">
+                    <span class="ds-url">{{ row.url }}</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="endpoints-hint">
+                每个数据源使用独立完整 URL，无需配置 Base URL。如需变更需在 <code>SchoolDataProperties.java</code> 中修改。
+              </div>
+            </div>
+
             <el-form label-width="130px" size="default" :model="form" :rules="apiRules" ref="apiFormRef">
-              <el-form-item label="Base URL" prop="api_base_url">
-                <el-input v-model="form.api_base_url" placeholder="https://api.imau.edu.cn" />
-              </el-form-item>
               <el-form-item label="App ID" :class="{ 'field-missing': isMissing('api_app_id') }">
                 <el-input v-model="form.api_app_id" placeholder="学校数据平台分配的应用 ID" />
                 <div v-if="isMissing('api_app_id')" class="field-warning">必填 — 当前未配置，同步将失败</div>
@@ -248,6 +276,7 @@ const status = reactive({
   etlConfigured: false,
   syncEnabled: false,
   missingKeys: [],
+  endpoints: [],
   lastTestResult: null
 })
 
@@ -260,12 +289,7 @@ const showEtlWarning = computed(
 
 const isMissing = (key) => Array.isArray(status.missingKeys) && status.missingKeys.includes(key)
 
-const apiRules = {
-  api_base_url: [
-    { required: true, message: '请输入API Base URL', trigger: 'blur' },
-    { pattern: /^https?:\/\/.+/, message: 'URL必须以http://或https://开头', trigger: 'blur' }
-  ]
-}
+const apiRules = {}
 
 const etlRules = {
   etl_jdbc_url: [
@@ -276,7 +300,6 @@ const etlRules = {
 
 const form = reactive({
   source: 'api',
-  api_base_url: '',
   api_app_id: '',
   api_app_secret: '',
   api_connect_timeout: 5000,
@@ -294,6 +317,9 @@ const form = reactive({
   sync_batch_size: 500,
   sync_timeout_minutes: 60
 })
+
+// 不参与前端表单的配置 key（由代码/系统维护，避免保存时被空值覆盖）
+const READ_ONLY_KEYS = ['api_base_url']
 
 // 原始配置列表（用于获取 id 等字段）
 const rawConfigs = ref([])
@@ -351,20 +377,22 @@ const handleSave = async () => {
 
   saving.value = true
   try {
-    const configs = rawConfigs.value.map(item => {
-      const key = item.configKey
-      let value
-      if (key === 'sync_enabled') {
-        value = form[key] ? 'true' : 'false'
-      } else if (['api_connect_timeout', 'api_read_timeout', 'api_retry_attempts',
-                   'etl_connection_timeout', 'etl_query_timeout',
-                   'sync_batch_size', 'sync_timeout_minutes'].includes(key)) {
-        value = String(form[key])
-      } else {
-        value = String(form[key] ?? '')
-      }
-      return { ...item, configValue: value }
-    })
+    const configs = rawConfigs.value
+      .filter(item => !READ_ONLY_KEYS.includes(item.configKey))
+      .map(item => {
+        const key = item.configKey
+        let value
+        if (key === 'sync_enabled') {
+          value = form[key] ? 'true' : 'false'
+        } else if (['api_connect_timeout', 'api_read_timeout', 'api_retry_attempts',
+                     'etl_connection_timeout', 'etl_query_timeout',
+                     'sync_batch_size', 'sync_timeout_minutes'].includes(key)) {
+          value = String(form[key])
+        } else {
+          value = String(form[key] ?? '')
+        }
+        return { ...item, configValue: value }
+      })
     const res = await updateSchoolDataConfig(configs)
     if (res?.code === 200) {
       ElMessage.success('配置已保存，正在自动测试连接...')
@@ -548,5 +576,59 @@ onMounted(loadAll)
   font-size: 12px;
   color: #dc2626;
   font-weight: 500;
+}
+
+.endpoints-panel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 8px 0 16px 0;
+}
+
+.endpoints-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.endpoints-table {
+  background: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.ds-name {
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.ds-url {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: #475569;
+  word-break: break-all;
+}
+
+.endpoints-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.endpoints-hint code {
+  background: #e2e8f0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
 }
 </style>

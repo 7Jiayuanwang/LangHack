@@ -27,6 +27,9 @@ import java.util.regex.Pattern;
 @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class BilibiliProxyController {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(BilibiliProxyController.class);
+
     private static final Pattern BVID_PATTERN = Pattern.compile("^BV[a-zA-Z0-9]{10}$");
     private static final Pattern CID_PATTERN  = Pattern.compile("^\\d{1,20}$");
     // 只允许 *.hdslb.com/bfs/subtitle/ 下纯字母数字路径，拒绝 .. 等路径遍历
@@ -90,9 +93,8 @@ public class BilibiliProxyController {
             // 返回响应前自动由 RestTemplate 处理资源释放
             return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
         } catch (Exception e) {
-            // 仅记录异常类型，不输出详细消息防止信息泄漏
-            org.slf4j.LoggerFactory.getLogger(BilibiliProxyController.class)
-                .debug("Failed to fetch bilibili view: {}", bvid);
+            // 记录外部服务调用失败详情，便于生产环境排查（URL 已由正则校验过）
+            log.warn("调用 B 站 API /view 失败 bvid={} err={}", bvid, e.getMessage(), e);
             return error("请求B站API失败");
         }
     }
@@ -117,9 +119,8 @@ public class BilibiliProxyController {
             if (body == null || body.isBlank()) return error("字幕列表返回空响应");
             return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
         } catch (Exception e) {
-            // 仅记录异常类型，不输出详细消息防止信息泄漏
-            org.slf4j.LoggerFactory.getLogger(BilibiliProxyController.class)
-                .debug("Failed to fetch bilibili player: bvid={}, cid={}", bvid, cid);
+            log.warn("调用 B 站 API /player 失败 bvid={} cid={} err={}",
+                    bvid, cid, e.getMessage(), e);
             return error("请求字幕列表失败");
         }
     }
@@ -143,9 +144,7 @@ public class BilibiliProxyController {
             if (body == null || body.isBlank()) return error("字幕文件返回空响应");
             return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
         } catch (Exception e) {
-            // 仅记录异常类型，不输出详细消息防止信息泄漏
-            org.slf4j.LoggerFactory.getLogger(BilibiliProxyController.class)
-                .debug("Failed to fetch subtitle file from hdslb");
+            log.warn("下载 B 站字幕文件失败 url={} err={}", url, e.getMessage(), e);
             return error("下载字幕文件失败");
         }
     }

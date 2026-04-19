@@ -166,6 +166,7 @@ import {
   TrendCharts, Connection, Reading, Medal,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight
 } from '@element-plus/icons-vue'
+import { getAuthHeader } from '@/utils/auth'
 
 const router = useRouter()
 
@@ -270,7 +271,9 @@ const loadArticles = async () => {
   try {
     const params = { count: 10 }
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`)
+    const authHeader = getAuthHeader()
+    const headers = authHeader ? { Authorization: authHeader } : {}
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`, { headers })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -317,7 +320,9 @@ const readArticle = (article) => {
     return
   }
   // Fire-and-forget: 标记文章为已读
-  fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST' }).catch(() => {})
+  const authHeader = getAuthHeader()
+  const headers = authHeader ? { Authorization: authHeader } : {}
+  fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST', headers }).catch(() => {})
   router.push({
     path: '/student/text-learning',
     query: {
