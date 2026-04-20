@@ -133,8 +133,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   StarFilled, Clock, Timer, Reading, Loading,
-  DataBoard, House, Calendar, Trophy, Tickets, Notebook,
-  VideoPlay, MessageBox
+  House, Calendar, Trophy, Tickets, Notebook,
+  VideoPlay, MessageBox, Edit
 } from '@element-plus/icons-vue'
 import { getFavoriteArticles, getReadingHistory } from '@/api/student'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
@@ -143,8 +143,9 @@ const router = useRouter()
 const activeTab = ref('favorites')
 
 // 聚合被移出主导航的子页面入口（按优先级排序）
+// 注：发现页已在底部导航栏首位强制显示，不再重复列出
 const QUICK_ENTRIES = [
-  { key: 'dashboard',         path: '/student/dashboard',         label: '发现',      icon: markRaw(DataBoard), color: '#0ea5e9', toggleKey: 'page_dashboard' },
+  { key: 'assignments',       path: '/student/assignments',       label: '任务',      icon: markRaw(Edit),      color: '#f97316', toggleKey: 'page_assignments' },
   { key: 'classes',           path: '/student/classes',           label: '社区',      icon: markRaw(House),     color: '#14b8a6', toggleKey: 'page_classes' },
   { key: 'schedule',          path: '/student/schedule',          label: '课表',      icon: markRaw(Calendar),  color: '#6366f1', toggleKey: 'page_schedule' },
   { key: 'scores',            path: '/student/scores',            label: '成绩',      icon: markRaw(Trophy),    color: '#f59e0b', toggleKey: 'page_scores' },
@@ -211,7 +212,7 @@ const loadHistory = async () => {
 }
 
 const readArticle = (textId) => {
-  router.push({ path: '/student/text-learning', query: { textId, from: 'my-study' } })
+  router.push({ path: `/article/${textId}`, query: { from: 'my-study' } })
 }
 
 const getDifficultyText = (diff) => {

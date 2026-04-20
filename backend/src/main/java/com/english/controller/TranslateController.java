@@ -237,11 +237,9 @@ public class TranslateController {
         }
 
         String userId = resolveUserId(authentication, httpRequest);
-        // 批量翻译按实际条数计入限流（每条算一次）
-        for (int i = 0; i < request.getTexts().size(); i++) {
-            if (isRateLimited(userId)) {
-                return Result.error("请求过于频繁，请稍后重试");
-            }
+        // 批量翻译按 1 次请求计入限流（而非按条数），避免单次调用耗尽用户整分钟额度
+        if (isRateLimited(userId)) {
+            return Result.error("请求过于频繁，请稍后重试");
         }
 
         String direction = request.getDirection() == null ? "en-to-zh" : request.getDirection();

@@ -348,19 +348,33 @@ if [ "$SKIP_ENV" = false ]; then
     if [ -n "$CFG_AI_TRANSLATE_KEY" ]; then
         echo "  (可选) 配置更多服务商以启用负载均衡:"
         ask_secret "OpenRouter API Key (留空跳过)" "$(load_env_value "OPENROUTER_API_KEY" "")" CFG_OPENROUTER_KEY
-        echo "  HiAgent 用于文章改写和 AI 问答（专有协议，Key 共享，App ID 可分开）"
-        ask_secret "HiAgent API Key (留空跳过)"   "$(load_env_value "HIAGENT_API_KEY" "")"    CFG_HIAGENT_KEY
+        echo "  HiAgent 专有协议 — AI 改写与 AI 问答必须使用两套完全不同的应用凭证（Key+AppID 均独立）"
+        ask_secret "HiAgent 改写 API Key (留空跳过改写)"    "$(load_env_value "HIAGENT_API_KEY" "")"    CFG_HIAGENT_KEY
         if [ -n "$CFG_HIAGENT_KEY" ]; then
-            ask_value  "HiAgent 文章改写 App ID" "$(load_env_value "HIAGENT_APP_ID" "")"    CFG_HIAGENT_APP_ID
-            ask_value  "HiAgent AI问答 App ID (留空则与文章改写共用)" "$(load_env_value "HIAGENT_QA_APP_ID" "${CFG_HIAGENT_APP_ID}")" CFG_HIAGENT_QA_APP_ID
+            ask_value  "HiAgent 改写 App ID" "$(load_env_value "HIAGENT_APP_ID" "")"    CFG_HIAGENT_APP_ID
         else
             CFG_HIAGENT_APP_ID=""
+        fi
+        echo "  [提示] AI 问答需独立的 HiAgent 应用，不 fallback 到改写凭证；留空则禁用问答功能。"
+        ask_secret "HiAgent 问答 API Key (留空禁用问答)"    "$(load_env_value "HIAGENT_QA_API_KEY" "")" CFG_HIAGENT_QA_KEY
+        if [ -n "$CFG_HIAGENT_QA_KEY" ]; then
+            ask_value  "HiAgent 问答 App ID" "$(load_env_value "HIAGENT_QA_APP_ID" "")" CFG_HIAGENT_QA_APP_ID
+            # 校验：问答凭证必须与改写凭证完全不同
+            if [ -n "$CFG_HIAGENT_KEY" ] && [ "$CFG_HIAGENT_QA_KEY" = "$CFG_HIAGENT_KEY" ]; then
+                echo "  [WARN] 问答 API Key 与改写 API Key 相同，违反"两套完全不同"的应用隔离要求。"
+                echo "         请在 HiAgent 控制台创建独立的问答应用后重新填入。"
+            fi
+            if [ -n "$CFG_HIAGENT_APP_ID" ] && [ "$CFG_HIAGENT_QA_APP_ID" = "$CFG_HIAGENT_APP_ID" ]; then
+                echo "  [WARN] 问答 App ID 与改写 App ID 相同，违反应用隔离要求。"
+            fi
+        else
             CFG_HIAGENT_QA_APP_ID=""
         fi
     else
         CFG_OPENROUTER_KEY=""
         CFG_HIAGENT_KEY=""
         CFG_HIAGENT_APP_ID=""
+        CFG_HIAGENT_QA_KEY=""
         CFG_HIAGENT_QA_APP_ID=""
     fi
 
@@ -676,6 +690,7 @@ if [ "$SKIP_ENV" = false ]; then
         [ -n "$CFG_OPENROUTER_KEY" ] && printf 'OPENROUTER_API_KEY=%s\n' "$CFG_OPENROUTER_KEY" || printf '# OPENROUTER_API_KEY=\n'
         [ -n "$CFG_HIAGENT_KEY" ]    && printf 'HIAGENT_API_KEY=%s\n'    "$CFG_HIAGENT_KEY"    || printf '# HIAGENT_API_KEY=\n'
         [ -n "$CFG_HIAGENT_APP_ID" ] && printf 'HIAGENT_APP_ID=%s\n'    "$CFG_HIAGENT_APP_ID" || printf '# HIAGENT_APP_ID=\n'
+        [ -n "$CFG_HIAGENT_QA_KEY" ]    && printf 'HIAGENT_QA_API_KEY=%s\n' "$CFG_HIAGENT_QA_KEY"    || printf '# HIAGENT_QA_API_KEY=\n'
         [ -n "$CFG_HIAGENT_QA_APP_ID" ] && printf 'HIAGENT_QA_APP_ID=%s\n' "$CFG_HIAGENT_QA_APP_ID" || printf '# HIAGENT_QA_APP_ID=\n'
         printf 'MYSQL_ROOT_PASSWORD=%s\n'          "$CFG_DB_PASSWORD"
         printf 'MYSQL_DATABASE=english_learning\n'

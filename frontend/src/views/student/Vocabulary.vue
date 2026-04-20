@@ -154,7 +154,7 @@
       <!-- 空状态 -->
       <div v-if="!loading && vocabulary.length === 0" class="empty-state-v2">
         <el-empty description="暂时没有生词哦" :image-size="120">
-          <el-button type="primary" round @click="$router.push('/student/courses')">去探索新词</el-button>
+          <el-button v-if="isEnabled('page_courses')" type="primary" round @click="$router.push('/student/courses')">去探索新词</el-button>
         </el-empty>
       </div>
     </div>
@@ -355,6 +355,10 @@ import {
   batchOperateVocabulary,
   getQuizData
 } from '@/api/student'
+import { useUserStore } from '@/store/user'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
+
+const { isEnabled, load: loadFeatureToggles, isLoaded: toggleLoaded } = useFeatureToggles()
 
 const loading = ref(false)
 const searchWord = ref('')
@@ -1065,6 +1069,13 @@ const formatDate = (date) => {
 onMounted(() => {
   loadVocabulary()
   window.addEventListener('resize', handleScreenResize)
+  try {
+    if (!toggleLoaded()) {
+      const userStore = useUserStore()
+      const usePersonal = !!userStore.token && (userStore.userRole === 'STUDENT' || userStore.userRole === 'USER')
+      loadFeatureToggles({ personal: usePersonal }).catch(() => {})
+    }
+  } catch { /* 测试环境或无 Pinia 时静默跳过（路由守卫与 Layout 已加载） */ }
 })
 
 const handleScreenResize = () => {

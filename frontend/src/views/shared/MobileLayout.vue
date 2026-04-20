@@ -19,7 +19,7 @@
     <main class="mobile-main">
       <div class="content-container">
         <transition name="fade" mode="out-in">
-          <router-view />
+          <slot><router-view /></slot>
         </transition>
       </div>
     </main>
@@ -420,11 +420,10 @@ onMounted(async () => {
     router.replace('/login')
   }
 
-  // 加载功能开关（运维端 + 管理员端共用缓存）
-  // OPS/ADMIN 无权访问 /api/student/feature-toggles，必须使用 public 端点
+  // 加载功能开关（admin/ops 走新的 /api/user/feature-toggles，能享受用户级覆盖）
   if (props.role === 'ops' || props.role === 'admin') {
     try {
-      await loadFeatureToggles({ personal: false })
+      await loadFeatureToggles({ authenticated: userStore.isLoggedIn })
     } catch (e) {
       console.error('Failed to load feature toggles:', e)
     }

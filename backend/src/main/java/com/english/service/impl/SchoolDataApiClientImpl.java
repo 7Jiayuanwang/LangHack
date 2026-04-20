@@ -18,6 +18,8 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -25,16 +27,30 @@ import java.util.Map;
 /**
  * 学校数据API客户端实现 - 通过REST API对接学校数据源
  * <p>
- * 每个数据源使用独立的完整 URL（基于官方接口文档）:
- * - administrative_class: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171094991198337
- * - school_course: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529094506435
- * - teaching_class: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_172180403086015
- * - course_schedule: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529037780151
- * - course_selection: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529480287192
- * - level_exam_scores: https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0076
- * - teaching_plans: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171528965502646
- * - teacher_courses: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529464567780
- * - student_schedule: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529439727434
+ * 每个数据源使用独立的完整 URL（基于官方接口文档，PDF 原文核对 2026-04-20）:
+ * - administrative_class: https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1710949911983374368
+ * - school_course:        https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715290945064353805
+ * - teaching_class:       https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1721804030860152850
+ * - course_schedule:      https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715290377801515044
+ * - course_selection:     https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294802871926794
+ * - level_exam_scores:    https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0076
+ * - teaching_plans:       https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715289655026466836
+ * - teacher_courses:      https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294645677801497
+ * - student_schedule:     https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294397274341377
+ * <p>
+ * <b>请求参数规范</b>（详见 docs/SCHOOL_DATA_API_SPEC.md）：
+ * <ul>
+ *   <li><b>不支持 OData $filter URI customQuery</b>（错误码 IY1103）—— 必须使用 PDF 第 3 节定义的原生参数</li>
+ *   <li><b>字段大小写按端点区分</b>:
+ *     <ul>
+ *       <li>大写端点: administrative_class (XZBH/BJMC), teaching_class (KCMC/KCH), course_selection (XH/KSXZDM)</li>
+ *       <li>小写端点: 其余 6 个 (xh/xn/xq 等)</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>xn (学年)</b>: numeric 单起始年份，如 "2025"（不是 "2025-2026"）</li>
+ *   <li><b>xq (学期)</b>: varchar 中文汉字，"秋"=第一学期, "春"=第二学期</li>
+ *   <li><b>updatedSince</b>: 非 PDF/OData 标准参数，学校 API 会忽略，增量同步实际退化为全量拉取</li>
+ * </ul>
  * <p>
  * 仅在 school.data.source=api 时激活
  */
@@ -116,11 +132,54 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             logger.warn("No endpoint mapping for student_schedule");
             return Collections.emptyList();
         }
+
+        // 与学校API官方文档一致：xh=学号(varchar), xn=学年(numeric 单年份), xq=学期(varchar 中文)
+        // PDF 返回示例: 学年:"2024", 学期:"春"
+        // 官方端点不支持 OData $filter URI customQuery（IY1103），必须使用原生参数
         Map<String, String> params = new java.util.HashMap<>();
-        if (studentId != null) params.put("studentId", studentId);
-        if (academicYear != null) params.put("academicYear", academicYear);
-        if (semester != null) params.put("semester", String.valueOf(semester));
+        if (studentId != null && !studentId.isEmpty()) {
+            params.put("xh", studentId);
+        }
+        String xnValue = toSchoolAcademicYear(academicYear);
+        if (xnValue != null) {
+            params.put("xn", xnValue);
+        }
+        String xqValue = toSchoolSemester(semester);
+        if (xqValue != null) {
+            params.put("xq", xqValue);
+        }
+
         return fetchDataWithPath(basePath, params);
+    }
+
+    /**
+     * 学年格式转换：本地 "2025-2026" → 学校API "2025"（起始年份）
+     * 已是单年份格式则原样返回。
+     */
+    private String toSchoolAcademicYear(String academicYear) {
+        if (academicYear == null || academicYear.isEmpty()) {
+            return null;
+        }
+        int dash = academicYear.indexOf('-');
+        return dash > 0 ? academicYear.substring(0, dash) : academicYear;
+    }
+
+    /**
+     * 学期格式转换：本地 Integer 1/2 → 学校API "秋"/"春"
+     * 对齐 PDF 返回示例（varchar 中文）：秋=第一学期(Fall), 春=第二学期(Spring)。
+     */
+    private String toSchoolSemester(Integer semester) {
+        if (semester == null) {
+            return null;
+        }
+        switch (semester) {
+            case 1:
+                return "秋";
+            case 2:
+                return "春";
+            default:
+                return String.valueOf(semester);
+        }
     }
 
     @Override
@@ -140,7 +199,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 return false;
             }
             ResponseEntity<String> response = restTemplate.exchange(
-                    testEndpoint + "?pageSize=1", HttpMethod.GET, entity, String.class);
+                    testEndpoint + "?$top=1", HttpMethod.GET, entity, String.class);
             boolean ok = response.getStatusCode().is2xxSuccessful();
             if (!ok) {
                 logger.error("学校 API 连接测试返回非成功状态 endpoint={} status={} bodyPreview={}",
@@ -242,7 +301,8 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     /**
-     * Build full URL with query parameters
+     * Build full URL with query parameters.
+     * 对 key 和 value 做 URL 编码，防止含 &/=/空格/中文的值破坏 URL 结构。
      */
     private String buildUrl(String fullUrl, Map<String, String> params) {
         StringBuilder url = new StringBuilder(fullUrl);
@@ -251,7 +311,10 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             url.append("?");
             params.forEach((key, value) -> {
                 if (value != null && !value.isEmpty()) {
-                    url.append(key).append("=").append(value).append("&");
+                    url.append(URLEncoder.encode(key, StandardCharsets.UTF_8))
+                       .append("=")
+                       .append(URLEncoder.encode(value, StandardCharsets.UTF_8))
+                       .append("&");
                 }
             });
             // Remove trailing '&'
@@ -324,8 +387,8 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     return Collections.emptyList();
                 }
 
-                // Check common wrapper keys
-                for (String key : List.of("data", "result", "records", "list", "items")) {
+                // Check common wrapper keys（"value" 是 OData 规范标准字段，cdsp v2 使用）
+                for (String key : List.of("value", "data", "result", "records", "list", "items")) {
                     Object data = wrapper.get(key);
                     if (data instanceof List) {
                         return (List<Map<String, Object>>) data;

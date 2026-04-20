@@ -666,7 +666,7 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
             long masteredCount = vocabularyBookMapper.selectCount(masteredWrapper);
             stats.put("masteredCount", masteredCount);
 
-            // learningCount = 总数 - 新词 - 已掌握，涵盖所有中间状态（LEARNING/REVIEWING/FAMILIAR等）
+            // learningCount = 总数 - 新词 - 已掌握，涵盖所有中间状态（LEARNING/FAMILIAR等）
             long learningCount = Math.max(0, totalCount - newCount - masteredCount);
             stats.put("learningCount", learningCount);
 

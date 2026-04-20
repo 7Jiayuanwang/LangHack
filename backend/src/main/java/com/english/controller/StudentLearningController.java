@@ -1311,7 +1311,7 @@ public class StudentLearningController {
             String masteryLevel = masteryLevelObj != null ? masteryLevelObj.toString() : null;
 
             // 验证masteryLevel枚举值
-            if (masteryLevel == null || !java.util.Set.of("NEW", "LEARNING", "REVIEWING", "MASTERED").contains(masteryLevel)) {
+            if (masteryLevel == null || !java.util.Set.of("NEW", "LEARNING", "FAMILIAR", "MASTERED").contains(masteryLevel)) {
                 return Result.error("无效的掌握程度");
             }
 

@@ -103,10 +103,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, reactive, onBeforeUnmount } from 'vue'
+import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Reading, Monitor, Top, ChatLineSquare } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
@@ -121,18 +120,23 @@ const loading = ref(false)
 const chatContainer = ref(null)
 let abortController = null
 
-const candidateQuestions = reactive([
-  { label: '结合文章内容解释本段意思' },
-  { label: '深度解读' },
-])
+// 文章划词进入：带 selectedText 上下文，候选偏向讲解本段
+// 独立入口（MyStudy 快捷入口）：无上下文，候选偏向通用英语问答
+const candidateQuestions = computed(() => selectedText.value
+  ? [
+      { label: '结合文章内容解释本段意思' },
+      { label: '深度解读' }
+    ]
+  : [
+      { label: '英语语法疑问咨询' },
+      { label: '单词用法与辨析' }
+    ]
+)
 
 onMounted(() => {
   selectedText.value = route.query.text || ''
   articleTitle.value = route.query.articleTitle || ''
-
-  if (!selectedText.value) {
-    ElMessage.warning('未检测到选中文本')
-  }
+  // 不再对"未检测到选中文本"报警 — 允许从 MyStudy 入口进入做独立对话。
 })
 
 const fillQuestion = (q) => {

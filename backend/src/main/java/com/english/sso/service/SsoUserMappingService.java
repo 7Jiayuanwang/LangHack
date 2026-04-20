@@ -2,11 +2,12 @@ package com.english.sso.service;
 
 import com.alibaba.fastjson.JSON;
 import com.english.entity.User;
-import com.english.exception.BusinessException;
 import com.english.service.UserService;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
 import com.english.sso.entity.SsoUserBinding;
+import com.english.sso.exception.SsoBusinessException;
+import com.english.sso.exception.SsoErrorCode;
 import com.english.sso.mapper.SsoUserBindingMapper;
 import com.english.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -103,7 +104,7 @@ public class SsoUserMappingService {
                 log.warn("用户待审批: bindingId={}", binding.getId());
                 return SsoLoginResult.pendingApproval(
                         binding.getId(),
-                        "您的账号正在审批中，请联系管理员"
+                        "对不起，您无权使用LangHack英语学习智能体平台。\n如有疑问请致电：计算机与信息工程学院43019235"
                 );
             }
 
@@ -114,7 +115,8 @@ public class SsoUserMappingService {
             // 获取用户信息
             User user = userService.getUserById(binding.getUserId());
             if (user == null) {
-                throw new BusinessException("用户不存在");
+                throw new SsoBusinessException(SsoErrorCode.USER_NOT_FOUND,
+                        "SSO 绑定已存在但对应用户丢失，请联系管理员");
             }
 
             // 状态检查：已审批绑定但用户仍为 PENDING_APPROVAL 时自动激活
@@ -181,7 +183,7 @@ public class SsoUserMappingService {
             SsoUserBinding newBinding = createBinding(existingUser.getId(), ssoUserInfo, protocol, autoApproved);
 
             if (!autoApproved) {
-                return SsoLoginResult.pendingApproval(newBinding.getId(), "您的账号正在审批中，请联系管理员");
+                return SsoLoginResult.pendingApproval(newBinding.getId(), "对不起，您无权使用LangHack英语学习智能体平台。\n如有疑问请致电：计算机与信息工程学院43019235");
             }
 
             // 更新用户的 SSO 信息和角色
@@ -265,7 +267,7 @@ public class SsoUserMappingService {
 
         return SsoLoginResult.pendingApproval(
                 binding.getId(),
-                "您的账号正在审批中，请联系管理员"
+                "对不起，您无权使用LangHack英语学习智能体平台。\n如有疑问请致电：计算机与信息工程学院43019235"
         );
     }
 

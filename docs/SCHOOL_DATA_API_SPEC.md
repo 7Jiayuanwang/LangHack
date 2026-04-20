@@ -1,8 +1,9 @@
 # 学校数据接入 — 官方接口规范文档
 
 > **数据来源**: `E:\项目\兴趣小组\智能与安全社团\服务器使用\数据资源\接口文档\` 目录下的9个官方PDF文档
-> **版本**: v1.0
+> **版本**: v2.0
 > **创建日期**: 2026-04-15
+> **最近修订**: 2026-04-20 — 按 PDF 原文核对，修正认证、URL、xn/xq 格式和字段大小写约定
 > **原则**: 本文档为字段映射的唯一事实来源（Single Source of Truth），所有代码和SQL必须与此文档保持一致
 
 ---
@@ -26,64 +27,141 @@
 
 ## 概述
 
-学校教务系统提供9个REST API接口，通过 `https://api.imau.edu.cn` 基础URL访问，使用Bearer Token认证。
+学校教务系统通过 CDSP（校园数据服务平台，cdsp.imau.edu.cn）提供 9 个 REST API 接口，基于 **OData v2** 协议。每个接口使用独立的完整 URL（非共享 base + path 模式），使用 `appId + appSecret + timestamp` 签名认证。
 
 ### 9个接口总览
 
-| 序号 | 接口名称 | API路径 | 对应数据源 | 对应本地表 |
+| 序号 | 接口名称 | 完整 URL | 对应数据源 | 对应本地表 |
 |------|---------|---------|-----------|-----------|
-| 1 | 行政班基本信息 | `/api/xzxx` | `administrative_class` | `administrative_class` |
-| 2 | 课程基本信息 | `/api/kcxx` | `school_course` | `course` |
-| 3 | 本专科生课程信息 | `/api/bzkcxx` | `teaching_class` | `teaching_class` |
-| 4 | 课程安排信息 | `/api/kcap` | `course_schedule` | `course_schedule` |
-| 5 | 学生选课 | `/api/xsxk` | `course_selection` | `course_selection` |
-| 6 | 本专科生等级考试成绩 | `/api/djcj` | `level_exam_scores` | `level_exam_scores` |
-| 7 | 教学计划信息 | `/api/jxjh` | `teaching_plans` | `teaching_plans` |
-| 8 | 教师授课 | `/api/jssk` | `teaching_class`（补充） | `teaching_class` |
-| 9 | 学生课表 | `/api/xskb` | 新数据源 | 新表 |
+| 1 | 行政班基本信息 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1710949911983374368` | `administrative_class` | `administrative_class` |
+| 2 | 课程基本信息 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715290945064353805` | `school_course` | `course` |
+| 3 | 本专科生课程信息 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1721804030860152850` | `teaching_class` | `teaching_class` |
+| 4 | 课程安排信息 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715290377801515044` | `course_schedule` | `course_schedule` |
+| 5 | 学生选课 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294802871926794` | `course_selection` | `course_selection` |
+| 6 | 本专科生等级考试成绩 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0076` | `level_exam_scores` | `level_exam_scores` |
+| 7 | 教学计划信息 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715289655026466836` | `teaching_plans` | `teaching_plans` |
+| 8 | 教师授课 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294645677801497` | `teacher_courses` | `teaching_class`（补充） |
+| 9 | 学生课表 | `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294397274341377` | `student_schedule` | `student_schedule` |
+
+> 端点映射在代码中定义于 `SchoolDataProperties.java:97-107`，也可通过 `school.data.api.endpoints` 配置覆盖。
 
 ---
 
 ## 通用说明
 
-### API认证方式
+### API 认证方式（2026-04-18 从 Bearer Token 迁移）
 
 ```
-Authorization: Bearer <token>
+appId:     <应用ID>
+timestamp: <毫秒时间戳，每次请求实时生成>
+sign:      Base64( hex(MD5(appId + appSecret + timestamp)).getBytes(UTF-8) )
 Content-Type: application/json
+Accept:       application/json
 ```
+
+签名算法：先对 `appId + appSecret + timestamp` 做 MD5 → 得到 32 字符 hex 字符串 → 对该字符串做 Base64 编码。
+
+环境变量：`SCHOOL_API_APP_ID` + `SCHOOL_API_APP_SECRET`（旧 `SCHOOL_API_TOKEN` 已废弃）。
 
 ### 请求方式
 
 所有接口均为 `GET` 请求。
 
+### ⚠️ 请求参数规范（核心）
+
+**1. 不支持 OData `$filter` URI customQuery（错误码 `IY1103`）**
+
+CDSP v2 虽基于 OData，但仅支持 OData 标准的分页参数（`$top`, `$skip`），不支持 `$filter`。错误日志示例：
+
+```
+HTTP 400 Bad Request
+[IY1103] NOT SUPPORTED: URI: customQuery
+URL: .../cdsp_XXX?$filter=xh eq '2023122066164' and xn eq '2025-2026'
+```
+
+所有条件过滤必须使用 PDF 第 3 节定义的**原生查询参数**（如 `xh`, `xn`, `xq`, `jgh`），以 URL query string 形式传递：
+
+```
+✅ .../cdsp_XXX?xh=2023122066164&xn=2025&xq=秋
+❌ .../cdsp_XXX?$filter=xh eq '2023122066164'
+```
+
+**2. `updatedSince` 参数会被静默忽略**
+
+项目内 `SchoolDataSyncServiceImpl.doIncrementalSync()` 向所有端点传递 `updatedSince=<ISO8601>`，该参数**不在 PDF 也不在 OData 标准中**，学校 API 会忽略该参数并返回全量数据。即"增量同步"实际退化为全量拉取（结合 UPSERT 策略保证最终一致性，功能上无误，但流量和耗时为全量）。
+
+**3. 字段大小写约定（按端点区分！）**
+
+CDSP 端点对参数名和返回字段的大小写敏感，且**每个端点的约定不同**：
+
+| 端点 | 字段大小写 | 示例 |
+|------|-----------|------|
+| `administrative_class` | **UPPERCASE** | `XZBH`, `BJMC`, `SSXYMC` |
+| `teaching_class` | **UPPERCASE** | `KCMC`, `KCH`, `KKYX` |
+| `course_selection` | **UPPERCASE** | `XH`, `KSXZDM`, `KCBH` |
+| `school_course` | lowercase | `kcdm`, `kcmc`, `kcxf` |
+| `course_schedule` | lowercase | `xn`, `xq`, `skxqj`, `skjc`, `jsgh` |
+| `teacher_courses` | lowercase | `rkjs`, `kcdm`, `xn`, `xq` |
+| `teaching_plans` | lowercase | `zxs`, `skjszgh`, `kkjhid` |
+| `level_exam_scores` | lowercase | `xh`, `kskm`, `ksrq`, `fskscj` |
+| `student_schedule` | lowercase | `xh`, `xn`, `xq`, `skxqj`, `skjc` |
+
+### ⚠️ 通用查询参数（xn/xq）格式
+
+本项目内部格式与学校 API 格式**不一致**，必须在调用 API 前做转换（`SchoolDataApiClientImpl.toSchoolAcademicYear/toSchoolSemester`）：
+
+| 参数 | 类型 | 学校 API 格式（PDF 权威） | 本项目内部格式 | 转换规则 |
+|------|------|------------------------|-------------|---------|
+| `xn` | numeric | **单起始年份** 如 `"2025"` | `"2025-2026"` | 取破折号前的部分 |
+| `xq` | varchar | **中文汉字** `"秋"`/`"春"`/`"夏"` | `Integer` `1`/`2`/`3` | 1→秋, 2→春, 3→夏 |
+
+PDF 返回示例对照（来自《学生课表接口文档.pdf》第 4 节）：
+
+```json
+{
+  "学年": "2024",
+  "学期": "春"
+}
+```
+
+### 学期编码映射
+
+| 本地 Integer | 学校 API varchar | 含义 |
+|--------------|-----------------|------|
+| `1` | `"秋"` | 第一学期（秋季） |
+| `2` | `"春"` | 第二学期（春季） |
+| `3` | `"夏"` | 第三学期（夏季短学期） |
+
 ### 字段命名规范
 
-- **API返回字段（source_field）**: 全部为**小写拼音缩写**，如 `xzbh`、`kcbh`、`xn`
-- **本地数据库字段（target_field）**: 使用**下划线命名**（snake_case），如 `class_code`、`course_code`、`academic_year`
+- **API 返回字段（source_field）**: 小写或大写**拼音缩写**（按端点区分，见上表）
+- **本地数据库字段（target_field）**: 使用**下划线命名**（snake_case），如 `class_code`, `course_code`, `academic_year`
 
-### 通用查询参数
+### 响应结构
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `xn` | String | 学年，如 "2025-2026" |
-| `xq` | String | 学期：3=第一学期, 12=第二学期, 16=第三学期 |
+OData v2 标准包装：
 
-### 学期编码说明
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "value": [ { ...记录1... }, { ...记录2... } ]
+}
+```
 
-| 值 | 含义 |
-|----|------|
-| 3 | 第一学期（秋季） |
-| 12 | 第二学期（春季） |
-| 16 | 第三学期（夏季短学期） |
+解析策略（`SchoolDataApiClientImpl.parseResponse`）：
+1. 先尝试直接解析为 JSON 数组
+2. 失败后解析为包装对象，依次取 `value` → `data` → `result` → `records` → `list` → `items` 字段
+3. 业务错误码 `code != 200` 记录为 error 并返回空集
 
 ---
 
 ## 1. 行政班基本信息接口
 
-**API路径**: `/api/xzxx`
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1710949911983374368`
 **对应数据源**: `administrative_class`
 **对应本地表**: `administrative_class`
+**字段大小写**: **UPPERCASE**（`XZBH`, `BJMC`, `SSXYMC` 等）
 
 ### 请求参数
 
@@ -122,9 +200,10 @@ Content-Type: application/json
 
 ## 2. 课程基本信息接口
 
-**API路径**: `/api/kcxx`
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715290945064353805`
 **对应数据源**: `school_course`
 **对应本地表**: `course`
+**字段大小写**: lowercase（`kcdm`, `kcmc`, `kcxf` 等）
 
 ### 请求参数
 
@@ -182,9 +261,10 @@ Content-Type: application/json
 
 ## 3. 本专科生课程信息接口
 
-**API路径**: `/api/bzkcxx`
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1721804030860152850`
 **对应数据源**: `teaching_class`
 **对应本地表**: `teaching_class`
+**字段大小写**: **UPPERCASE**（`KCH`, `KCMC`, `KCXS`, `KCXF`, `KKYX` 等）
 
 > 本接口提供教学班信息，一个课程可以有多个教学班。
 
@@ -219,9 +299,10 @@ Content-Type: application/json
 
 ## 4. 课程安排信息接口
 
-**API路径**: `/api/kcap`
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715290377801515044`
 **对应数据源**: `course_schedule`
 **对应本地表**: `course_schedule`
+**字段大小写**: lowercase（`xkkch`, `skxqj`, `skjc`, `zcd`, `skdd` 等）
 
 ### 请求参数
 
@@ -255,9 +336,10 @@ Content-Type: application/json
 
 ## 5. 学生选课接口
 
-**API路径**: `/api/xsxk`
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294802871926794`
 **对应数据源**: `course_selection`
 **对应本地表**: `course_selection`
+**字段大小写**: **UPPERCASE**（`XH`, `KSXZDM`, `KSXZMC`, `KCBH` 等）
 
 ### 请求参数
 
@@ -292,9 +374,10 @@ Content-Type: application/json
 
 ## 6. 本专科生等级考试成绩接口
 
-**API路径**: `/api/djcj`
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0076`
 **对应数据源**: `level_exam_scores`
 **对应本地表**: `level_exam_scores`
+**字段大小写**: lowercase（`xh`, `kskm`, `ksrq`, `fskscj` 等）
 
 ### 请求参数
 
@@ -327,9 +410,10 @@ Content-Type: application/json
 
 ## 7. 教学计划信息接口
 
-**API路径**: `/api/jxjh`
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715289655026466836`
 **对应数据源**: `teaching_plans`
 **对应本地表**: `teaching_plans`
+**字段大小写**: lowercase（`zxs`, `skjszgh`, `kkjhid`, `kkxn`, `kkxq` 等）
 
 ### 请求参数
 
@@ -364,9 +448,10 @@ Content-Type: application/json
 
 ## 8. 教师授课接口
 
-**API路径**: `/api/jssk`
-**对应数据源**: `teaching_class`（与本专科课程信息接口共同填充teaching_class表）
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294645677801497`
+**对应数据源**: `teacher_courses`（与《本专科生课程信息接口》共同填充 `teaching_class` 表）
 **对应本地表**: `teaching_class`
+**字段大小写**: lowercase（`rkjsh`, `rkjsxm`, `kcdm`, `xn`, `xq` 等）
 
 > 此接口补充教师与教学班的关联信息，与接口3（本专科生课程信息）共同维护teaching_class表。
 
@@ -399,19 +484,28 @@ Content-Type: application/json
 
 ## 9. 学生课表接口
 
-**API路径**: `/api/xskb`
-**对应数据源**: `student_schedule`（新数据源）
-**对应本地表**: `student_schedule`（新表，需创建）
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294397274341377`
+**对应数据源**: `student_schedule`
+**对应本地表**: `student_schedule`（V12 迁移已创建）
+**字段大小写**: lowercase
 
-> 此接口为学生维度课表数据，包含学生选课后的完整课表信息。当前系统中尚未实现此接口的数据同步。
+> 学生维度课表数据，包含学生选课后的完整课表信息。
 
 ### 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `xh` | String | 是 | 学号 |
-| `xn` | String | 是 | 学年 |
-| `xq` | String | 是 | 学期 |
+| 参数 | 类型 | 必填 | 学校 API 格式 | 说明 |
+|------|------|------|-------------|------|
+| `xh` | varchar | 是 | 如 `"2023122066164"` | 学号 |
+| `xn` | numeric | 是 | **单起始年份** `"2025"`（非 `"2025-2026"`） | 学年 |
+| `xq` | varchar | 是 | **中文汉字** `"秋"`/`"春"`/`"夏"`（非整数） | 学期 |
+
+**请求示例**：
+
+```
+GET .../cdsp_1715294397274341377?xh=2023122066164&xn=2025&xq=秋
+```
+
+⚠️ **不要使用 OData `$filter`**（`[IY1103] NOT SUPPORTED: URI: customQuery`）。
 
 ### 返回字段
 
@@ -432,117 +526,44 @@ Content-Type: application/json
 | `xq` | `semester` | NUMBER | 是 | 学期 |
 
 ### 实现状态
-- [ ] 数据库表创建（Flyway迁移）
-- [ ] Entity/Mapper实现
-- [ ] API客户端fetchStudentSchedules方法
-- [ ] 同步服务集成
-- [ ] 字段映射配置
-- [ ] 前端学生课表页面
+- [x] 数据库表创建（V12 Flyway 迁移）
+- [x] Entity/Mapper 实现（`StudentSchedule` + `StudentScheduleMapper`）
+- [x] API 客户端 `fetchStudentSchedules` 方法（参数格式转换已对齐 PDF）
+- [x] 同步服务集成（`SchoolDataSyncServiceImpl.syncStudentSchedule`）
+- [x] 字段映射配置（V12 Part 3）
+- [x] 前端学生课表页面（`StudentScheduleController` + 前端已实现）
 
 ---
 
 ## 字段映射总表
 
-### 当前V12迁移 vs 官方规范 差异对照
+> 字段映射的权威存储位置：`field_mappings` 表（由 V12 Flyway 迁移 Part 3 seed）。
+> 如需调整某端点的 source_field，请先对照 PDF 原文确认大小写，再通过运维面板或 Flyway 补丁修改。
 
-以下列出当前V12迁移文件中的source_field与官方API实际返回字段的差异：
+### 按端点字段大小写索引
 
-#### 1. administrative_class — 无差异 ✅
+| 数据源 | source_field 大小写 | 典型字段 | V12 初始化状态 |
+|-------|-------------------|---------|--------------|
+| `administrative_class` | **UPPERCASE** | `XZBH`, `BJMC`, `SSXYMC`, `SSNJ`, `BZRGH` | V12 Part 3 |
+| `school_course` | lowercase | `kcdm`, `kcmc`, `kcxf`, `kslx`, `kkyx` | V12 Part 3 |
+| `teaching_class` | **UPPERCASE** | `KCH`, `KCMC`, `KCXS`, `KCXF`, `KKYX` | V12 Part 3 |
+| `course_schedule` | lowercase | `xkkch`, `skxqj`, `skjc`, `zcd`, `skdd` | V12 Part 3 |
+| `course_selection` | **UPPERCASE** | `XH`, `KSXZDM`, `KSXZMC`, `KCBH` | V12 Part 3 |
+| `level_exam_scores` | lowercase | `xh`, `kskm`, `ksrq`, `fskscj` | V12 Part 3 |
+| `teaching_plans` | lowercase | `zxs`, `kkjhid`, `kkxn`, `kkxq`, `skjszgh` | V12 Part 3 |
+| `teacher_courses` | lowercase | `rkjsh`, `rkjsxm`, `kcdm`, `xn`, `xq` | V12 Part 3 |
+| `student_schedule` | lowercase | `xh`, `xn`, `xq`, `skxqj`, `skjc`, `cdmc` | V12 Part 3 |
 
-V12已使用正确的小写拼音缩写（`xzbh`, `xzbmc` 等）。
+### 历史差异说明（已在 v2.0 更正）
 
-#### 2. school_course — 无差异 ✅
+v1.0 版本中的 "V12 vs 官方规范差异表" 基于"所有字段应为小写"的错误假设，误将部分 UPPERCASE 端点（`administrative_class`, `teaching_class`, `course_selection`）标记为需要改小写。**实际上这三个端点的 UPPERCASE 源字段是正确的**，不应修改。
 
-V12已使用正确的小写拼音缩写（`kcbh`, `kcmc` 等）。
+2026-04-20 v2.0 修订后，权威顺序：
+1. **PDF 原文**（`E:\项目\兴趣小组\智能与安全社团\服务器使用\数据资源\接口文档\`）
+2. **本文档**（与 PDF 保持同步）
+3. **V12 Flyway 迁移**（Part 3 INSERT 语句，与本文档保持同步）
 
-#### 3. teaching_class — 字段名大小写差异 ⚠️
-
-| V12当前source_field | 官方API实际字段 | 差异 |
-|--------------------|----------------|------|
-| `JXBID` | `jxbid` | 大写→小写 |
-| `JXBMC` | `jxbmc` | 大写→小写 |
-| `KCBH` | `kcbh` | 大写→小写 |
-| `KCMC` | `kcmc` | 大写→小写 |
-| `JGH` | `jgh` | 大写→小写 |
-| `XM` | `xm` | 大写→小写 |
-| `XNM` | `xn` | 大写+多字符→小写缩写 |
-| `XQM` | `xq` | 大写+多字符→小写缩写 |
-| `BJRL` | `bjrl` | 大写→小写 |
-| `YXRS` | `yxrs` | 大写→小写 |
-| `KCZT` | `kczt` | 大写→小写 |
-
-#### 4. course_schedule — 字段名差异 ⚠️
-
-| V12当前source_field | 官方API实际字段 | 差异 |
-|--------------------|----------------|------|
-| `JXBID` | `jxbid` | 大写→小写 |
-| `XQJ` | `skxqj` | **字段名不同！** `XQJ`应为`skxqj` |
-| `JCS` | `skjc` | **字段名不同！** `JCS`应为`skjc` |
-| `ZCD` | `zcd` | 大写→小写 |
-| `CDMC` | `cdmc` | 大写→小写 |
-| `XNM` | `xn` | 大写+多字符→小写缩写 |
-| `XQM` | `xq` | 大写+多字符→小写缩写 |
-
-#### 5. course_selection — 字段名大小写+缩写差异 ⚠️
-
-| V12当前source_field | 官方API实际字段 | 差异 |
-|--------------------|----------------|------|
-| `XH` | `xh` | 大写→小写 |
-| `KCBH` | `kcbh` | 大写→小写 |
-| `KCMC` | `kcmc` | 大写→小写 |
-| `JHBH` | `jhbh` | 大写→小写 |
-| `XNM` | `xn` | 大写+多字符→小写缩写 |
-| `XQM` | `xq` | 大写+多字符→小写缩写 |
-| `XF` | `xf` | 大写→小写 |
-| `CJJ` | `cjj` | 大写→小写 |
-| `KCXZ` | `kcxz` | 大写→小写 |
-| `JXBID` | `jxbid` | 大写→小写 |
-| `JGH` | `jgh` | 大写→小写 |
-| `XM` | `xm` | 大写→小写 |
-
-#### 6. level_exam_scores — 字段名大小写差异 ⚠️
-
-| V12当前source_field | 官方API实际字段 | 差异 |
-|--------------------|----------------|------|
-| `XH` | `xh` | 大写→小写 |
-| `XM` | `xm` | 大写→小写 |
-| `KSBH` | `ksbh` | 大写→小写 |
-| `KSMC` | `ksmc` | 大写→小写 |
-| `KSRQ` | `ksrq` | 大写→小写 |
-| `CJ` | `cj` | 大写→小写 |
-| `DJ` | `dj` | 大写→小写 |
-| `ZKZH` | `zkzh` | 大写→小写 |
-| `BZ` | `bz` | 大写→小写 |
-
-#### 7. teaching_plans — 字段名大小写差异 ⚠️
-
-| V12当前source_field | 官方API实际字段 | 差异 |
-|--------------------|----------------|------|
-| `JHBH` | `jhbh` | 大写→小写 |
-| `JHMC` | `jhmc` | 大写→小写 |
-| `ZYBH` | `zybh` | 大写→小写 |
-| `ZYMC` | `zymc` | 大写→小写 |
-| `NJ` | `nj` | 大写→小写 |
-| `XZ` | `xz` | 大写→小写 |
-| `XWLX` | `xwlx` | 大写→小写 |
-| `PYCC` | `pycc` | 大写→小写 |
-| `YXBH` | `yxbh` | 大写→小写 |
-| `YXMC` | `yxmc` | 大写→小写 |
-| `ZXF` | `zxf` | 大写→小写 |
-| `BXXF` | `bxxf` | 大写→小写 |
-| `XXXF` | `xxxf` | 大写→小写 |
-| `SJXF` | `sjxf` | 大写→小写 |
-| `JHZT` | `jhzt` | 大写→小写 |
-
-### 差异总结
-
-1. **全局问题**: V12中所有source_field使用**大写**，但官方API返回**小写** — 需全部改为小写
-2. **严重问题**: 课程安排接口中有2个字段名完全不同：
-   - `XQJ` → 应为 `skxqj`（上课星期几）
-   - `JCS` → 应为 `skjc`（上课节次）
-3. **缩写差异**: 学年/学期字段在V12中为 `XNM`/`XQM`，官方API为 `xn`/`xq`
-4. **新增接口**: 学生课表接口（`/api/xskb`）尚未实现
-5. **新增接口**: 教师授课接口（`/api/jssk`）尚未纳入字段映射
+如发现三者不一致，以 PDF 为准并同步更新另两者。
 
 ---
 
@@ -550,4 +571,5 @@ V12已使用正确的小写拼音缩写（`kcbh`, `kcmc` 等）。
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
-| 2026-04-15 | v1.0 | 初始版本，基于9个官方PDF文档整理 |
+| 2026-04-20 | v2.0 | **重大修订**：按 PDF 原文核对，修正：①API base URL 改为 `cdsp.imau.edu.cn/cdsp/data-api/v2/`，每端点独立完整 URL；② 认证从 Bearer Token 改为 `appId + timestamp + sign` 签名；③ `xn` 格式为单起始年份（非 `2025-2026`）；④ `xq` 格式为中文汉字 `秋/春/夏`（非整数 `3/12/16`）；⑤ 新增 IY1103 错误说明（不支持 OData `$filter`）；⑥ 新增 `updatedSince` 被忽略说明；⑦ 新增每端点字段大小写约定表（UPPERCASE vs lowercase） |
+| 2026-04-15 | v1.0 | 初始版本，基于9个官方PDF文档整理（注：当时对认证方式和 xn/xq 格式描述有误，已在 v2.0 更正） |

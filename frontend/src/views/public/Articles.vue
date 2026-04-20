@@ -1,6 +1,24 @@
 <template>
   <div class="articles-mobile-page">
 
+    <!-- Sticky Header -->
+    <header class="mobile-header" v-if="!isLoggedIn">
+      <div class="page-content-wrapper header-inner">
+        <div class="header-content">
+          <h1 class="header-title">发现文章</h1>
+          <p class="header-subtitle">Daily Picks</p>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" @click="handleLogin">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
     <!-- Main Content Area -->
     <main class="page-main">
       <div class="page-content-wrapper">
@@ -126,7 +144,7 @@
     </main>
 
     <!-- 底部导航栏 -->
-    <nav class="bottom-nav">
+    <nav class="bottom-nav" v-if="!isLoggedIn">
       <div class="nav-wrapper">
         <router-link
           to="/articles"
@@ -159,8 +177,12 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getAuthHeader } from '@/utils/auth'
+import { useUserStore } from '@/store/user'
 
 const router = useRouter()
+const userStore = useUserStore()
+// 登录用户由外层 Layout (ArticlesHost) 提供顶/底栏，隐藏组件自带的游客 chrome
+const isLoggedIn = computed(() => !!userStore.token)
 const loading = ref(true)
 const allArticles = ref([])
 const selectedCategory = ref('')

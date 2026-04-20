@@ -34,7 +34,11 @@
         </el-table>
       </el-tab-pane>
 
-      <el-tab-pane label="教学班" name="teaching_class">
+      <el-tab-pane label="教学班 / 教师授课" name="teaching_class">
+        <div class="tab-note">
+          <el-icon><InfoFilled /></el-icon>
+          <span>官方 9 个数据源中「教师授课」(/api/jssk) 的字段并入教学班表存储，在此 Tab 统一展示。</span>
+        </div>
         <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
           <el-table-column prop="classId" label="教学班ID" width="120" />
           <el-table-column prop="courseName" label="课程" min-width="180" />
@@ -129,6 +133,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { InfoFilled } from '@element-plus/icons-vue'
 import {
   getSchoolDataOverview,
   getAdministrativeClasses,
@@ -144,7 +149,7 @@ import {
 const dataSourceLabels = {
   administrative_class: '行政班',
   school_course: '课程',
-  teaching_class: '教学班',
+  teaching_class: '教学班 / 教师授课',
   course_schedule: '课程安排',
   course_selection: '选课记录',
   level_exam_scores: '等级考试',
@@ -253,5 +258,18 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+.tab-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary, #888);
+  background: var(--bg-secondary, #f7f8fa);
+  border-left: 3px solid var(--primary-color, #0066cc);
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 4px;
 }
 </style>

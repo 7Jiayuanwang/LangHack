@@ -375,6 +375,15 @@ export function addWordToVocabulary(data) {
   })
 }
 
+// 通过单词字符串添加到生词本（支持自动创建新词）
+export function addWordToVocabularyByWord(data) {
+  return request({
+    url: '/api/student/words/vocabulary/by-word',
+    method: 'post',
+    data
+  })
+}
+
 // 从生词本移除单词
 export function removeFromVocabulary(wordId) {
   return request({

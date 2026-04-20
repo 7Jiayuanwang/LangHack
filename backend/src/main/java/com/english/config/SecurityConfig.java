@@ -136,6 +136,7 @@ public class SecurityConfig {
                 // 允许访问的接口 - 无需认证
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/public/**").permitAll()
+                .antMatchers("/api/sso/**").permitAll() // SSO相关接口允许公开访问
                 .antMatchers(HttpMethod.POST, "/api/errors/report").permitAll()
                 .antMatchers("/api/wordnet/**").permitAll() // 允许公开访问单词查询接口
                 .antMatchers(HttpMethod.GET, "/api/media/**").permitAll() // 媒体文件仅 GET 公开

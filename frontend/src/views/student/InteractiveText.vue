@@ -339,7 +339,8 @@ renderer.image = function({ href, title, text }) {
 }
 marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
-import rangy from 'rangy'
+import { getArticlesPath } from '@/config/site'
+import * as rangy from '@/utils/rangy'
 import 'rangy/lib/rangy-classapplier'
 import 'rangy/lib/rangy-highlighter'
 import 'rangy/lib/rangy-serializer'
@@ -348,7 +349,7 @@ const route = useRoute()
 const router = useRouter()
 
 // 响应式数据
-const textId = ref(Number(route.query.textId) || 0)
+const textId = ref(Number(route.params.id || route.query.textId) || 0)
 const assignmentId = ref(route.query.assignmentId || null)
 const fromSource = ref(route.query.from || null)
 const courseId = ref(null)
@@ -1102,14 +1103,14 @@ const goBack = () => {
     // 从任务页面跳转来的，返回任务页面
     router.push('/student/assignments')
   } else if (from === 'articles') {
-    // 从文章列表来的，返回学生文章页
-    router.push('/student/articles')
+    // 从文章列表来的，跳转到外部文章页
+    window.location.href = getArticlesPath()
   } else if (window.history.length > 1) {
     // 其他情况，使用默认返回
     router.go(-1)
   } else {
-    // 无历史记录时，跳转到学生文章列表
-    router.push('/student/articles')
+    // 无历史记录时，跳转到外部文章列表
+    window.location.href = getArticlesPath()
   }
 }
 

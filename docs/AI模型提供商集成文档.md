@@ -39,16 +39,18 @@
 **配置类**: `com.english.config.HiAgentConfig`
 **YAML 前缀**: `hiagent`
 
-| 属性 | YAML 键 | 环境变量 | 默认值 |
-|------|--------|---------|--------|
-| apiKey | `hiagent.api-key` | `HIAGENT_API_KEY` | 空 |
-| apiUrl | `hiagent.api-url` | `HIAGENT_API_URL` | `https://agent.imau.edu.cn:32300/api/proxy/api/v1` |
-| appId | `hiagent.app-id` | `HIAGENT_APP_ID` | 空 |
-| userId | `hiagent.user-id` | `HIAGENT_USER_ID` | `LangHack_System` |
-| qaApiKey | `hiagent.qa-api-key` | `HIAGENT_QA_API_KEY` | 回退到 `HIAGENT_API_KEY` |
-| qaAppId | `hiagent.qa-app-id` | `HIAGENT_QA_APP_ID` | 空 |
-| timeout | `hiagent.timeout` | — | 60000 (ms) |
-| maxRetries | `hiagent.max-retries` | — | 3 |
+> **⚠️ 应用隔离要求**：AI 改写（CET-4/6/学术版/中英对照）与 AI 问答（文章划词问答）必须使用**两套完全不同**的 HiAgent 应用凭证。QA 凭证**不再 fallback** 到改写凭证，未配置时 AI 问答功能将返回错误，改写功能不受影响。
+
+| 属性 | YAML 键 | 环境变量 | 默认值 | 用途 |
+|------|--------|---------|--------|------|
+| apiKey | `hiagent.api-key` | `HIAGENT_API_KEY` | 空 | 改写应用 |
+| apiUrl | `hiagent.api-url` | `HIAGENT_API_URL` | `https://agent.imau.edu.cn:32300/api/proxy/api/v1` | 共用 |
+| appId | `hiagent.app-id` | `HIAGENT_APP_ID` | 空 | 改写应用 |
+| userId | `hiagent.user-id` | `HIAGENT_USER_ID` | `LangHack_System` | 共用 |
+| qaApiKey | `hiagent.qa-api-key` | `HIAGENT_QA_API_KEY` | 空（**必须独立配置**，不 fallback） | 问答应用 |
+| qaAppId | `hiagent.qa-app-id` | `HIAGENT_QA_APP_ID` | 空（**必须独立配置**，不 fallback） | 问答应用 |
+| timeout | `hiagent.timeout` | — | 60000 (ms) | 共用 |
+| maxRetries | `hiagent.max-retries` | — | 3 | 共用 |
 
 ### 2.2 请求协议
 
@@ -194,11 +196,12 @@ echo "Generated CET-4 Version: ${ANSWER}"
 
 ```bash
 #!/bin/bash
-# HiAgent AI 问答 — 使用 QA 专用凭据 (或回退到主凭据)
+# HiAgent AI 问答 — 必须使用 QA 专用凭据（与改写凭据完全隔离，不 fallback）
+# 若未配置 HIAGENT_QA_API_KEY / HIAGENT_QA_APP_ID，后端将抛 BusinessException 并禁用 AI 问答
 
 HIAGENT_API_URL="https://agent.imau.edu.cn:32300/api/proxy/api/v1"
-HIAGENT_QA_API_KEY="${HIAGENT_QA_API_KEY:-$HIAGENT_API_KEY}"  # 回退到主密钥
-HIAGENT_QA_APP_ID="${HIAGENT_QA_APP_ID:-$HIAGENT_APP_ID}"      # 回退到主 App ID
+HIAGENT_QA_API_KEY="${HIAGENT_QA_API_KEY:?AI 问答要求独立 QA 密钥，未配置则禁用}"
+HIAGENT_QA_APP_ID="${HIAGENT_QA_APP_ID:?AI 问答要求独立 QA App ID，未配置则禁用}"
 USER_ID="LangHack_System"
 
 X_DATE=$(TZ=UTC date +%Y%m%dT%H%M%SZ)
@@ -877,8 +880,8 @@ HiAgent 使用自有协议 (非 OpenAI 兼容)，**不参与** `ai_provider` 表
 | `HIAGENT_API_URL` | HiAgent API 地址 | 否 | `https://agent.imau.edu.cn:32300/api/proxy/api/v1` |
 | `HIAGENT_APP_ID` | HiAgent 应用 ID | 是 | — |
 | `HIAGENT_USER_ID` | HiAgent 用户标识 | 否 | `LangHack_System` |
-| `HIAGENT_QA_API_KEY` | HiAgent QA 密钥 | 否 | 回退到 `HIAGENT_API_KEY` |
-| `HIAGENT_QA_APP_ID` | HiAgent QA 应用 ID | 否 | 空 (回退到主 App ID) |
+| `HIAGENT_QA_API_KEY` | HiAgent QA 密钥（AI 问答专用，与改写凭据必须不同） | 启用 AI 问答时必填 | — (**无 fallback**，未配置则禁用问答) |
+| `HIAGENT_QA_APP_ID` | HiAgent QA 应用 ID（AI 问答专用，与改写凭据必须不同） | 启用 AI 问答时必填 | — (**无 fallback**，未配置则禁用问答) |
 | `OPENROUTER_API_KEY` | OpenRouter API 密钥 | 推荐 | — |
 | `OPENROUTER_API_URL` | OpenRouter API 地址 | 否 | `https://openrouter.ai/api/v1/chat/completions` |
 | `OPENROUTER_MODEL` | OpenRouter 模型 | 否 | `tngtech/deepseek-r1t2-chimera:free` |

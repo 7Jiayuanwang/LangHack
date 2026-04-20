@@ -76,7 +76,8 @@ public class OAuth2SsoService implements SsoService {
                 "&scope=" + oauth2.getScope() +
                 "&state=" + state;
 
-        log.info("生成 OAuth 2.0 登录 URL: {}", authUrl);
+        // 避免 state（CSRF token）被日志泄露；只记录 IdP 端点，不记录完整 URL
+        log.info("生成 OAuth 2.0 登录 URL，IdP 端点: {}", oauth2.getAuthorizationUrl());
         return authUrl;
     }
 
@@ -109,7 +110,8 @@ public class OAuth2SsoService implements SsoService {
             log.warn("OAuth2 state 校验异常，CSRF 防护降级 err={}", e.getMessage(), e);
         }
 
-        log.info("验证 OAuth 2.0 code: {}", code);
+        // code 是一次性授权码，避免完整记录到日志（即使一次性，堆栈日志可能被长期保留）
+        log.info("验证 OAuth 2.0 code: {}", maskSensitive(code));
 
         try {
             // 1. 用 code 换取 access_token
@@ -268,15 +270,18 @@ public class OAuth2SsoService implements SsoService {
         userInfo.setSsoUsername((String) userInfoResponse.get("id"));
         userInfo.setAttributes(userInfoResponse);
 
-        // 提取 attributes 对象
-        if (userInfoResponse.containsKey("attributes")) {
-            Map<String, Object> attributes = (Map<String, Object>) userInfoResponse.get("attributes");
+        // 提取 attributes 对象（IdP 响应格式可能变化，防御性 instanceof 检查）
+        Object attrsRaw = userInfoResponse.get("attributes");
+        if (attrsRaw instanceof Map) {
+            Map<String, Object> attributes = (Map<String, Object>) attrsRaw;
             userInfo.setRealName((String) attributes.get("nickName"));
             userInfo.setEmail((String) attributes.get("email"));
 
             // 提取 memberOf
             Object memberOfValue = attributes.get("memberOf");
             userInfo.setMemberOf(parseMemberOf(memberOfValue));
+        } else if (attrsRaw != null) {
+            log.warn("OAuth 2.0 attributes 字段类型不是 Map，实际类型: {}", attrsRaw.getClass().getSimpleName());
         }
 
         log.info("OAuth 2.0 用户信息解析成功: userId={}, realName={}", userInfo.getSsoUserId(), userInfo.getRealName());
@@ -289,6 +294,15 @@ public class OAuth2SsoService implements SsoService {
     private String truncateForLog(String body) {
         if (body == null) return "null";
         return body.length() > 300 ? body.substring(0, 300) + "...(truncated)" : body;
+    }
+
+    /**
+     * 遮罩敏感字符串（如 OAuth code / token）用于日志：仅保留前 4 位 + 后 4 位
+     */
+    private String maskSensitive(String value) {
+        if (value == null) return "null";
+        if (value.length() <= 8) return "***";
+        return value.substring(0, 4) + "***" + value.substring(value.length() - 4);
     }
 
     /**

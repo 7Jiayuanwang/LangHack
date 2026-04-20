@@ -303,4 +303,90 @@ class HiAgentServiceTest {
 
         assertDoesNotThrow(() -> hiAgentService.destroy());
     }
+
+    // ==================== chatQA — Credential Isolation ====================
+    // 业务契约：AI 问答必须使用独立 QA 凭证（与改写凭证完全不同），不 fallback。
+
+    @Test
+    void chatQA_qaApiKeyNull_throwsBusinessExceptionWithoutRetry() {
+        when(config.getQaApiKey()).thenReturn(null);
+        lenient().when(config.getQaAppId()).thenReturn("qa-app");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> hiAgentService.chatQA("什么意思?", "Hello world", "context"));
+        assertTrue(ex.getMessage().contains("HIAGENT_QA_API_KEY"),
+                "Expected error to name the missing env var, got: " + ex.getMessage());
+        // Fast-fail：pre-check 必须在任何 HTTP 调用之前拒绝，且不触发 maxRetries 重试
+        verify(restTemplate, never()).exchange(anyString(), any(HttpMethod.class),
+                any(HttpEntity.class), eq(String.class));
+    }
+
+    @Test
+    void chatQA_qaApiKeyBlank_throwsBusinessExceptionWithoutRetry() {
+        when(config.getQaApiKey()).thenReturn("   ");
+        lenient().when(config.getQaAppId()).thenReturn("qa-app");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> hiAgentService.chatQA("问题", "text", null));
+        assertTrue(ex.getMessage().contains("独立凭证"));
+        verify(restTemplate, never()).exchange(anyString(), any(HttpMethod.class),
+                any(HttpEntity.class), eq(String.class));
+    }
+
+    @Test
+    void chatQA_qaAppIdMissing_throwsBusinessExceptionWithoutRetry() {
+        when(config.getQaApiKey()).thenReturn("qa-key");
+        when(config.getQaAppId()).thenReturn("");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> hiAgentService.chatQA("问题", "text", null));
+        assertTrue(ex.getMessage().contains("HIAGENT_QA_APP_ID"));
+        verify(restTemplate, never()).exchange(anyString(), any(HttpMethod.class),
+                any(HttpEntity.class), eq(String.class));
+    }
+
+    @Test
+    void chatQA_distinctQaCredentials_successUsesQaHeaders() {
+        // Arrange — 改写凭证 vs 问答凭证完全不同
+        when(config.getQaApiKey()).thenReturn("qa-key-distinct");
+        when(config.getQaAppId()).thenReturn("qa-app-distinct");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getUserId()).thenReturn("test-user");
+        when(config.getMaxRetries()).thenReturn(1);
+
+        String createResponse = "{\"Conversation\":{\"AppConversationID\":\"qa-conv-1\"}}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/create_conversation"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(createResponse, HttpStatus.OK));
+
+        String chatResponse = "{\"answer\":\"这是 AI 问答的回答\"}";
+        when(restTemplate.exchange(
+                eq("https://test.api.com/v1/chat_query_v2"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(chatResponse, HttpStatus.OK));
+
+        // Act
+        String answer = hiAgentService.chatQA("这段话什么意思?",
+                "Artificial intelligence", "AI 是一门计算机科学分支...");
+
+        // Assert
+        assertEquals("这是 AI 问答的回答", answer);
+
+        // 关键验证：QA 请求必须携带 QA 专用 Apikey/Appid，而非改写凭证
+        org.mockito.ArgumentCaptor<HttpEntity<?>> captor =
+                org.mockito.ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate, times(2)).exchange(anyString(), eq(HttpMethod.POST),
+                captor.capture(), eq(String.class));
+        for (HttpEntity<?> entity : captor.getAllValues()) {
+            assertEquals("qa-key-distinct", entity.getHeaders().getFirst("Apikey"),
+                    "chatQA 必须使用 QA 专用 Apikey，禁止 fallback 到改写 Api-Key");
+            assertEquals("qa-app-distinct", entity.getHeaders().getFirst("Appid"),
+                    "chatQA 必须使用 QA 专用 Appid，禁止 fallback 到改写 App-ID");
+        }
+
+        // 不应读取改写凭证 — 保证两套应用隔离
+        verify(config, never()).getApiKey();
+        verify(config, never()).getAppId();
+    }
 }

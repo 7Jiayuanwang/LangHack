@@ -100,17 +100,19 @@ public class SchoolDataProperties {
         /** 重试次数 */
         private int retryAttempts = 3;
 
-        /** API 端点完整 URL 映射（基于官方接口文档） */
+        /** API 端点完整 URL 映射（基于官方接口文档 2026-04-20 核对 PDF 原文修正：
+         *  此前 cdsp_ 后数字 ID 因 PDF 换行仅复制首行、尾部 4 位数字漏掉，
+         *  导致上游返回 10022 "接口请求资源无效"。DS0076 保持不变。） */
         private List<EndpointMapping> endpoints = Arrays.asList(
-                new EndpointMapping("administrative_class", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171094991198337"),
-                new EndpointMapping("school_course", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529094506435"),
-                new EndpointMapping("teaching_class", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_172180403086015"),
-                new EndpointMapping("course_schedule", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529037780151"),
-                new EndpointMapping("course_selection", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529480287192"),
+                new EndpointMapping("administrative_class", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1710949911983374368"),
+                new EndpointMapping("school_course", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715290945064353805"),
+                new EndpointMapping("teaching_class", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1721804030860152850"),
+                new EndpointMapping("course_schedule", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715290377801515044"),
+                new EndpointMapping("course_selection", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294802871926794"),
                 new EndpointMapping("level_exam_scores", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0076"),
-                new EndpointMapping("teaching_plans", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171528965502646"),
-                new EndpointMapping("teacher_courses", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529464567780"),
-                new EndpointMapping("student_schedule", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171529439727434")
+                new EndpointMapping("teaching_plans", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715289655026466836"),
+                new EndpointMapping("teacher_courses", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294645677801497"),
+                new EndpointMapping("student_schedule", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294397274341377")
         );
 
         public String getBaseUrl() {

@@ -81,7 +81,10 @@ public class CasSsoService implements SsoService {
             // 导致 CAS 收到的 service 参数与 ticket 绑定的原始 URL 不匹配 → INVALID_SERVICE
             // URI.create() 告诉 RestTemplate 这个 URL 已经完成编码，不要再处理
             String response = restTemplate.getForObject(URI.create(validateUrl), String.class);
-            log.info("CAS 验证响应: {}", response);
+            // 完整 XML 响应可能含用户属性（memberOf/containerId 等 PII），仅在 debug 级别记录
+            if (log.isDebugEnabled()) {
+                log.debug("CAS 验证响应: {}", response);
+            }
 
             return parseCasResponse(response);
         } catch (BusinessException e) {
@@ -137,6 +140,13 @@ public class CasSsoService implements SsoService {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
+            // XXE 防护：禁用 DTD / 外部实体，避免恶意 XML 导致 SSRF / 本地文件读取 / DoS
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
 

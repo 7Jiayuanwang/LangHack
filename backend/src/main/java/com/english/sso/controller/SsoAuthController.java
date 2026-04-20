@@ -5,6 +5,8 @@ import com.english.entity.User;
 import com.english.sso.config.SsoProperties;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
+import com.english.sso.exception.SsoBusinessException;
+import com.english.sso.exception.SsoErrorCode;
 import com.english.sso.service.SsoLoginLogService;
 import com.english.sso.service.SsoProtocolType;
 import com.english.sso.service.SsoService;
@@ -114,7 +116,7 @@ public class SsoAuthController {
 
         try {
             if (!ssoService.isEnabled()) {
-                redirectToFrontendWithError(response, "SSO 功能未启用");
+                redirectToFrontendWithError(response, SsoErrorCode.SSO_DISABLED, "SSO 功能未启用");
                 return;
             }
 
@@ -128,14 +130,20 @@ public class SsoAuthController {
                     callbackParams.put("state", state);
                 }
             } else {
-                redirectToFrontendWithError(response, "缺少认证参数");
+                redirectToFrontendWithError(response, SsoErrorCode.MISSING_PARAM, "缺少认证参数");
                 return;
             }
 
             String serviceUrl = buildServiceUrl();
 
             // 1. 验证 SSO 回调
-            SsoUserInfo ssoUserInfo = ssoService.validateCallback(callbackParams, serviceUrl);
+            SsoUserInfo ssoUserInfo;
+            try {
+                ssoUserInfo = ssoService.validateCallback(callbackParams, serviceUrl);
+            } catch (Exception ex) {
+                // 票据/code 校验失败 — 归类到 AUTH_FAILED
+                throw new SsoBusinessException(SsoErrorCode.AUTH_FAILED, ex.getMessage(), ex);
+            }
 
             // 2. 处理用户映射/创建
             SsoLoginResult result = mappingService.processLogin(
@@ -187,7 +195,21 @@ public class SsoAuthController {
                 log.error("记录失败日志失败", logEx);
             }
 
-            redirectToFrontendWithError(response, "SSO 认证失败: " + e.getMessage());
+            // 分类错误：已知 SsoBusinessException 保留其 errorCode，其他归为 SYSTEM_ERROR
+            SsoErrorCode errorCode;
+            String message;
+            if (e instanceof SsoBusinessException) {
+                errorCode = ((SsoBusinessException) e).getErrorCode();
+                message = e.getMessage();
+            } else if (e instanceof com.english.exception.BusinessException) {
+                // 未知业务异常兜底到 UNKNOWN
+                errorCode = SsoErrorCode.UNKNOWN;
+                message = e.getMessage();
+            } else {
+                errorCode = SsoErrorCode.SYSTEM_ERROR;
+                message = "SSO 认证失败: " + e.getMessage();
+            }
+            redirectToFrontendWithError(response, errorCode, message);
         }
     }
 
@@ -200,7 +222,7 @@ public class SsoAuthController {
 
         String oneTimeCode = request.get("code");
         if (oneTimeCode == null || oneTimeCode.isEmpty()) {
-            return Result.error("缺少授权码");
+            return errorWithCode(SsoErrorCode.MISSING_PARAM, "缺少授权码");
         }
 
         // 从 Redis 获取并删除一次性 code（一次性使用）
@@ -209,16 +231,13 @@ public class SsoAuthController {
 
         if (value == null) {
             log.warn("一次性 code 无效或已过期: {}", oneTimeCode);
-            return Result.error("授权码无效或已过期，请重新登录");
+            return errorWithCode(SsoErrorCode.CODE_EXPIRED, "授权码无效或已过期，请重新登录");
         }
 
         // 检查是否为待审批状态
         if (value.startsWith("PENDING:")) {
             String message = value.substring("PENDING:".length());
-            Map<String, Object> data = new HashMap<>();
-            data.put("pending", true);
-            data.put("message", message);
-            return Result.error(message);
+            return errorWithCode(SsoErrorCode.PENDING_APPROVAL, message);
         }
 
         // 登录成功 — value 就是 JWT token
@@ -240,6 +259,17 @@ public class SsoAuthController {
 
         log.info("一次性 code 换取 token 成功");
         return Result.success("登录成功", data);
+    }
+
+    /**
+     * 构造带 errorCode 的错误响应
+     */
+    private Result<Map<String, Object>> errorWithCode(SsoErrorCode errorCode, String message) {
+        Result<Map<String, Object>> result = Result.error(message);
+        Map<String, Object> data = new HashMap<>();
+        data.put("errorCode", errorCode.getCode());
+        result.setData(data);
+        return result;
     }
 
     /**
@@ -300,11 +330,14 @@ public class SsoAuthController {
     }
 
     /**
-     * 重定向到前端并携带错误信息
+     * 重定向到前端并携带错误信息（附带 errorCode 供前端分类展示）
      */
-    private void redirectToFrontendWithError(HttpServletResponse response, String error) throws IOException {
-        String redirectUrl = appFrontendUrl + "/sso/callback?error=" +
-                java.net.URLEncoder.encode(error, java.nio.charset.StandardCharsets.UTF_8);
+    private void redirectToFrontendWithError(HttpServletResponse response, SsoErrorCode errorCode, String error)
+            throws IOException {
+        String safeMessage = error == null ? errorCode.getDefaultMessage() : error;
+        String redirectUrl = appFrontendUrl + "/sso/callback?error="
+                + java.net.URLEncoder.encode(safeMessage, java.nio.charset.StandardCharsets.UTF_8)
+                + "&errorCode=" + errorCode.getCode();
         response.sendRedirect(redirectUrl);
     }
 }

@@ -99,3 +99,10 @@ export function getAuthHeader() {
   if (!isValidToken(clean)) return null
   return `Bearer ${clean}`
 }
+
+/**
+ * Check if user is logged in (has valid token)
+ */
+export function isLoggedIn() {
+  return !!getToken()
+}

@@ -17,9 +17,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // Mock API 层
 const mockGetFeatureToggles = vi.fn()
 const mockGetPersonalFeatureToggles = vi.fn()
+const mockGetUserFeatureToggles = vi.fn()
 vi.mock('@/api/systemConfig', () => ({
   getFeatureToggles: (...args) => mockGetFeatureToggles(...args),
   getPersonalFeatureToggles: (...args) => mockGetPersonalFeatureToggles(...args),
+  getUserFeatureToggles: (...args) => mockGetUserFeatureToggles(...args),
 }))
 
 const CACHE_KEY = 'feature_toggles_cache_v1'
@@ -102,6 +104,31 @@ describe('useFeatureToggles', () => {
       await load({ personal: true })
       expect(mockGetPersonalFeatureToggles).toHaveBeenCalledTimes(1)
       expect(mockGetFeatureToggles).not.toHaveBeenCalled()
+    })
+
+    it('authenticated=true 调用 getUserFeatureToggles（登录用户三层合并）', async () => {
+      mockGetUserFeatureToggles.mockResolvedValueOnce({
+        code: 200,
+        data: { admin_users: false, page_vocabulary: true },
+      })
+      const { load, isEnabled } = useFeatureToggles()
+      await load({ authenticated: true })
+      expect(mockGetUserFeatureToggles).toHaveBeenCalledTimes(1)
+      expect(mockGetFeatureToggles).not.toHaveBeenCalled()
+      expect(mockGetPersonalFeatureToggles).not.toHaveBeenCalled()
+      expect(isEnabled('admin_users')).toBe(false)
+      expect(isEnabled('page_vocabulary')).toBe(true)
+    })
+
+    it('authenticated=false 走公开端点（未登录/游客）', async () => {
+      mockGetFeatureToggles.mockResolvedValueOnce({
+        code: 200,
+        data: { page_dashboard: true },
+      })
+      const { load } = useFeatureToggles()
+      await load({ authenticated: false })
+      expect(mockGetFeatureToggles).toHaveBeenCalledTimes(1)
+      expect(mockGetUserFeatureToggles).not.toHaveBeenCalled()
     })
 
     it('API 失败时降级为空 toggles（isEnabled 默认启用）', async () => {

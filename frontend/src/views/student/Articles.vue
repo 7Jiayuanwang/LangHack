@@ -324,9 +324,8 @@ const readArticle = (article) => {
   const headers = authHeader ? { Authorization: authHeader } : {}
   fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST', headers }).catch(() => {})
   router.push({
-    path: '/student/text-learning',
+    path: `/article/${article.id}`,
     query: {
-      textId: article.id,
       from: 'articles',
       _title: encodeURIComponent(article.title || '')
     }

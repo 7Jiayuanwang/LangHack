@@ -5,11 +5,16 @@
       <p>正在处理登录...</p>
     </div>
 
-    <div v-else-if="error" class="error">
-      <h2>登录失败</h2>
-      <p>{{ error }}</p>
-      <button @click="goToLogin">返回登录</button>
-    </div>
+    <!-- 任何错误统一以温馨提示展示，始终包含主管部门联系方式 -->
+    <PermissionDenied
+      v-else-if="errorInfo"
+      :main-message="errorInfo.mainMessage"
+      :sub-message="errorInfo.subMessage"
+      :contact-phone="errorInfo.contactPhone"
+      :contact-department="errorInfo.contactDepartment"
+      :theme="errorInfo.theme"
+      :raw-message="errorInfo.rawMessage"
+    />
   </div>
 </template>
 
@@ -19,36 +24,72 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { exchangeSsoToken } from '@/api/sso'
 import { setToken } from '@/utils/auth'
+import PermissionDenied from '@/components/PermissionDenied.vue'
+import { mapSsoError } from '@/utils/ssoErrorMapper'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
 const loading = ref(true)
-const error = ref('')
+const errorInfo = ref(null)
+
+function showError({ errorCode, rawMessage }) {
+  errorInfo.value = mapSsoError({ errorCode, rawMessage })
+  loading.value = false
+}
 
 onMounted(async () => {
   try {
-    // 检查后端重定向携带的错误信息
-    if (route.query.error) {
-      throw new Error(decodeURIComponent(String(route.query.error)))
+    // 1. 后端重定向携带的错误信息（handleCallback 异常路径）
+    if (route.query.error || route.query.errorCode) {
+      const rawMessage = route.query.error
+        ? decodeURIComponent(String(route.query.error))
+        : ''
+      showError({
+        errorCode: route.query.errorCode ? String(route.query.errorCode) : '',
+        rawMessage
+      })
+      return
     }
 
-    // 获取一次性 code（后端回调重定向到此处携带的参数）
+    // 2. 必须携带一次性 code
     const code = route.query.code
     if (!code) {
-      throw new Error('缺少授权码')
+      showError({ errorCode: 'MISSING_PARAM', rawMessage: '缺少授权码' })
+      return
     }
 
-    // 用一次性 code 换取 JWT token
-    const response = await exchangeSsoToken(code)
+    // 3. 用一次性 code 换取 JWT token
+    let response
+    try {
+      response = await exchangeSsoToken(code)
+    } catch (err) {
+      // HTTP / 网络错误
+      const extractedCode = err?.response?.data?.data?.errorCode
+      const extractedMsg = err?.response?.data?.message || err?.message
+      showError({
+        errorCode: extractedCode || 'SYSTEM_ERROR',
+        rawMessage: extractedMsg || '网络异常，无法完成登录'
+      })
+      return
+    }
 
-    if (response.code !== 200) {
-      throw new Error(response.message || '登录失败')
+    if (!response || response.code !== 200) {
+      // 后端返回业务错误，优先使用结构化 errorCode
+      showError({
+        errorCode: response?.data?.errorCode || '',
+        rawMessage: response?.message || '登录失败'
+      })
+      return
     }
 
     if (!response.data || !response.data.token) {
-      throw new Error('登录返回数据异常')
+      showError({
+        errorCode: 'SYSTEM_ERROR',
+        rawMessage: '登录响应缺少凭证数据'
+      })
+      return
     }
 
     const { token, user: serverUser } = response.data
@@ -57,11 +98,9 @@ onMounted(async () => {
     let jwtRole = ''
     let jwtUserInfo = {}
     if (serverUser && serverUser.role) {
-      // 后端返回了完整用户信息
       jwtRole = serverUser.role
       jwtUserInfo = serverUser
     } else {
-      // 兜底：从 JWT payload 解析
       try {
         const payload = JSON.parse(atob(token.split('.')[1]))
         jwtRole = payload.role || ''
@@ -74,10 +113,13 @@ onMounted(async () => {
       }
     }
 
-    // 验证角色有效性
     const validRoles = ['ADMIN', 'TEACHER', 'STUDENT', 'USER', 'OPS']
     if (!jwtRole || !validRoles.includes(jwtRole)) {
-      throw new Error('登录响应角色异常: ' + jwtRole)
+      showError({
+        errorCode: 'SYSTEM_ERROR',
+        rawMessage: '登录响应角色异常: ' + jwtRole
+      })
+      return
     }
 
     // 保存认证信息到 Pinia + localStorage（与 store/user.js login() 保持一致）
@@ -89,8 +131,7 @@ onMounted(async () => {
     localStorage.setItem('userRole', jwtRole)
 
     // 根据角色跳转
-    const role = userStore.userRole
-    switch (role) {
+    switch (jwtRole) {
       case 'ADMIN':
         router.push('/admin')
         break
@@ -104,18 +145,15 @@ onMounted(async () => {
         router.push('/student')
         break
       default:
-        router.push('/student')  // USER 等其他角色在校园环境中进入学生端
+        router.push('/student') // USER 等其他角色在校园环境中进入学生端
     }
-
   } catch (e) {
-    error.value = e.message || '登录失败，请重试'
-    loading.value = false
+    showError({
+      errorCode: 'SYSTEM_ERROR',
+      rawMessage: e?.message || '登录失败，请重试'
+    })
   }
 })
-
-const goToLogin = () => {
-  router.push('/login')
-}
 </script>
 
 <style scoped>
@@ -123,7 +161,7 @@ const goToLogin = () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  min-height: 100vh;
   background: #f5f5f5;
 }
 
@@ -144,32 +182,5 @@ const goToLogin = () => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-.error {
-  text-align: center;
-  padding: 40px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.error h2 {
-  color: #e74c3c;
-  margin-bottom: 10px;
-}
-
-.error button {
-  margin-top: 20px;
-  padding: 10px 20px;
-  background: #3498db;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.error button:hover {
-  background: #2980b9;
 }
 </style>

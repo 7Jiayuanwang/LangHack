@@ -285,7 +285,7 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:80/ || exit 1"]
+      test: ["CMD-SHELL", "test -f /usr/share/nginx/html/maintenance.flag || curl -sf http://localhost:80/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

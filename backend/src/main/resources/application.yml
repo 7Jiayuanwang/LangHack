@@ -1,6 +1,6 @@
 app:
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080,http://127.0.0.1:*,http://localhost:*}
     # 允许局域网IP访问（手机测试）
     allowed-origin-patterns: http://192.168.*.*:3000,http://172.*.*.*:3000,http://10.*.*.*:3000
   update:
@@ -136,14 +136,16 @@ mybatis-plus:
 
 hiagent:
   #此处禁止删除
-  # HiAgent Native API Settings
+  # HiAgent Native API Settings（AI 改写应用：CET-4/6/学术版/中英对照）
   api-key: ${HIAGENT_API_KEY:}
   api-url: ${HIAGENT_API_URL:https://agent.imau.edu.cn:32300/api/proxy/api/v1}
   app-id: ${HIAGENT_APP_ID:}
   user-id: ${HIAGENT_USER_ID:LangHack_System}
 
-  # HiAgent Q&A App (for article highlight AI Q&A)
-  qa-api-key: ${HIAGENT_QA_API_KEY:${HIAGENT_API_KEY:}}
+  # HiAgent Q&A App（AI 问答应用：文章划词 AI 问答）
+  # 必须与改写凭证（api-key/app-id）使用完全不同的 HiAgent 应用凭证
+  # 未配置时 AI 问答功能不可用（改写功能不受影响）
+  qa-api-key: ${HIAGENT_QA_API_KEY:}
   qa-app-id: ${HIAGENT_QA_APP_ID:}
 
   timeout: 60000

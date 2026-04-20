@@ -217,6 +217,20 @@ disable_maintenance() {
     fi
 }
 
+# 清理上次部署异常中断残留的 maintenance.flag
+# (与 MAINTENANCE_ACTIVE 无关，这是会话启动时的残留清理)
+clear_stale_maintenance() {
+    [ "$MAINTENANCE_MODE" != "true" ] && return 0
+    local container
+    container=$(docker compose -f "$COMPOSE_FILE" ps -q frontend 2>/dev/null || true)
+    if [ -n "$container" ]; then
+        if MSYS_NO_PATHCONV=1 docker exec "$container" test -f /usr/share/nginx/html/maintenance.flag 2>/dev/null; then
+            log "MAINTENANCE: 检测到残留 maintenance.flag，清理中..."
+            MSYS_NO_PATHCONV=1 docker exec "$container" rm -f /usr/share/nginx/html/maintenance.flag 2>/dev/null || true
+        fi
+    fi
+}
+
 # ── .env 备份 & 验证 ─────────────────────────────────
 
 backup_env() {
@@ -324,6 +338,10 @@ wait_for_health() {
             ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
         if [ -n "$svc_statuses" ]; then
             failed=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
+            # 维护模式期间，frontend 因 nginx 返回 503 必然 unhealthy，这是设计行为，排除
+            if [ "$MAINTENANCE_ACTIVE" = "true" ]; then
+                failed=$(echo "$failed" | grep -v '^frontend$' || true)
+            fi
             if [ -n "$failed" ]; then
                 log "ERROR: HEALTH: 以下服务启动失败，终止健康等待："
                 echo "$failed" | while read -r svc; do
@@ -860,6 +878,7 @@ PRE_PULL_COMMIT="$LOCAL_HASH"   # 保存 pull 前的 HEAD，用于 git checkout 
 OLD_COMMIT="$DEPLOYED_HASH"     # 用已部署 commit 作为 diff 基准，检测本次变更范围
 
 # ② 开启维护模式
+clear_stale_maintenance
 enable_maintenance
 
 # ③ 备份 .env 配置文件

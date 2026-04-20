@@ -11,14 +11,14 @@ const routes = [
   {
     path: "/articles",
     name: "Articles",
-    component: () => import("@/views/public/Articles.vue"),
-    meta: { title: "文章列表", public: true }, // 标记为公开页面
+    component: () => import("@/views/shared/ArticlesHost.vue"),
+    meta: { title: "文章列表", public: true }, // 公开页面：游客可看，登录用户保留身份 Layout
   },
   {
     path: "/article/:id",
     name: "ArticleDetail",
-    component: () => import("@/views/user/SimpleTextView.vue"),
-    meta: { title: "文章详情", public: true }, // 公开的文章详情页
+    component: () => import("@/views/shared/ArticleDetailHost.vue"),
+    meta: { title: "文章详情", public: true }, // 公开页面：游客可看，登录用户保留身份 Layout
   },
   {
     path: "/login",
@@ -221,7 +221,7 @@ const routes = [
     path: "/student",
     name: "Student",
     component: () => import("@/views/student/Layout.vue"),
-    redirect: "/student/articles",
+    redirect: "/articles",
     meta: { title: "文章", roles: ["STUDENT", "USER"] },
     children: [
       {
@@ -243,6 +243,12 @@ const routes = [
         meta: { title: "我的任务", roles: ["STUDENT", "USER"], featureKey: "page_assignments" },
       },
       {
+        path: "word-recite",
+        name: "StudentWordRecite",
+        component: () => import("@/features/VocabularyFeatures/WordRecite.vue"),
+        meta: { title: "单词背诵", roles: ["STUDENT", "USER"], featureKey: "page_word_recite" },
+      },
+      {
         path: "vocabulary",
         name: "StudentVocabulary",
         component: () => import("@/views/student/Vocabulary.vue"),
@@ -258,13 +264,18 @@ const routes = [
         path: "ai-qa",
         name: "StudentAiQa",
         component: () => import("@/views/student/AiQa.vue"),
-        meta: { title: "AI问答", roles: ["STUDENT", "USER"], featureKey: "page_ai_qa" },
+        // 不加 featureKey：AI 问答页路由始终可达，避免 toggle 误关或缓存漂移导致"进不去"。
+        // 入口显隐由 MyStudy.vue 快捷入口 + 文章划词菜单自行根据 page_ai_qa toggle 过滤。
+        meta: { title: "AI问答", roles: ["STUDENT", "USER"] },
       },
       {
         path: "text-learning",
-        name: "StudentTextLearning",
-        component: () => import("@/views/student/InteractiveText.vue"),
-        meta: { title: "课文学习", roles: ["STUDENT", "USER"], featureKey: "page_text_learning" },
+        redirect: (to) => {
+          const { textId, ...rest } = to.query;
+          return textId
+            ? { path: `/article/${textId}`, query: rest }
+            : "/articles";
+        },
       },
       {
         path: "ai-video",
@@ -280,9 +291,7 @@ const routes = [
       },
       {
         path: "articles",
-        name: "StudentArticles",
-        component: () => import("@/views/student/Articles.vue"),
-        meta: { roles: ["STUDENT", "USER"], featureKey: "page_articles" },
+        redirect: "/articles",
       },
       {
         path: "my-study",
@@ -339,9 +348,12 @@ const routes = [
       },
       {
         path: "text-learning",
-        name: "UserTextLearning",
-        component: () => import("@/views/student/InteractiveText.vue"),
-        meta: { title: "课文学习", roles: ["USER"] },
+        redirect: (to) => {
+          const { textId, ...rest } = to.query;
+          return textId
+            ? { path: `/article/${textId}`, query: rest }
+            : "/articles";
+        },
       },
       {
         path: "vocabulary",
@@ -488,33 +500,72 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  // Feature toggle 守卫 — 角色/提权已通过后，再检查功能开关
-  // 防止用户绕过导航栏直接访问被关闭的页面
+  // Feature toggle 守卫 — 对所有角色（含 ADMIN）一视同仁
+  // 防止用户绕过导航栏直接访问被关闭的页面；运维控制的页面可见性应对管理员同样生效。
   if (to.meta.featureKey) {
-    const { isEnabled, load, isLoaded } = useFeatureToggles();
-    if (!isLoaded()) {
-      // personal 接口仅 STUDENT/USER 角色可访问；其他角色走公共接口避免 403
-      const usePersonal = hasValidToken && (userRole === "STUDENT" || userRole === "USER");
-      await load({ personal: usePersonal });
-    }
-    if (!isEnabled(to.meta.featureKey)) {
+    // ADMIN 访问 /admin/dashboard 始终允许，防止管理员把自己锁在门外
+    const isAdminDashboardFallback =
+      userRole === "ADMIN" && to.path === "/admin/dashboard";
+
+    if (!isAdminDashboardFallback) {
       const fallbackRoutes = {
         ADMIN: "/admin/dashboard",
         OPS: "/ops/monitoring",
         TEACHER: "/teacher/dashboard",
-        STUDENT: "/student/articles",
-        USER: "/student/articles",
+        STUDENT: "/articles",
+        USER: "/articles",
       };
       const fallback = fallbackRoutes[userRole] || "/";
-      console.warn(
-        `Feature '${to.meta.featureKey}' disabled, redirecting to ${fallback}`,
-      );
-      if (to.path === fallback) {
-        next();
-      } else {
-        next(fallback);
+
+      try {
+        const { isEnabled, load, isLoaded } = useFeatureToggles();
+
+        // 首次访问时需要先加载功能开关数据
+        if (!isLoaded()) {
+          try {
+            await load({ authenticated: hasValidToken });
+          } catch (error) {
+            console.error("Failed to load feature toggles:", error);
+            // Fail-closed：加载失败 + 无缓存 → 重定向到兜底页面
+            if (to.path === fallback) {
+              next();
+            } else {
+              next(fallback);
+            }
+            return;
+          }
+        }
+
+        // 检查功能开关是否启用
+        if (!isEnabled(to.meta.featureKey)) {
+          console.warn(
+            `Feature '${to.meta.featureKey}' disabled for user ${userRole}, redirecting to ${fallback}`,
+          );
+
+          // 显示用户友好的提示信息
+          if (typeof window !== 'undefined' && window.ELEMENT_MESSAGE) {
+            window.ELEMENT_MESSAGE.warning('该功能已被管理员关闭');
+          }
+
+          // 防止无限重定向
+          if (to.path === fallback) {
+            next();
+          } else {
+            next(fallback);
+          }
+          return;
+        }
+      } catch (error) {
+        console.error("Feature toggle check failed:", error);
+        // Fail-closed：异常时 → 若已有缓存则放行（缓存在上面 isEnabled 已用），
+        // 走到此分支说明连缓存读取都异常，保守重定向到兜底页面。
+        if (to.path === fallback) {
+          next();
+        } else {
+          next(fallback);
+        }
+        return;
       }
-      return;
     }
   }
 

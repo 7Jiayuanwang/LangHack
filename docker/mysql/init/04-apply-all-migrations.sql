@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
 -- LangHack 合并迁移脚本（MySQL 8.0 兼容）
--- 将 Flyway V0 ~ V14 的所有迁移合并为单个幂等脚本
+-- 将 Flyway V0 ~ V18 的所有迁移合并为单个幂等脚本
 --
 -- 对应 Flyway 迁移文件（整合后 - 2026-04-19 补丁合并）:
 --   V0__base_tables.sql                     (基础表)
@@ -18,6 +18,9 @@
 --   V12__school_data_integration.sql        (合并: 旧 V12.1/V13/V14/V16/V18/V19/V20)
 --   V13__access_log_covering_index.sql      (监控热点页查询索引优化)
 --   V14__expand_feature_toggles.sql         (学生页全覆盖 + admin.* 模块 toggle)
+--   V15__ImportECDICTData.java              (JDBC 迁移 - 导入 ECDICT 词典数据)
+--   V17__ai_qa_recovery_and_hiagent_config.sql (AI 问答开关恢复 + HiAgent 凭证迁 DB)
+--   V18__add_page_word_recite_toggle.sql    (学生端-背单词页 feature_toggle seed)
 --
 -- 注意：V19 列名修正 — 使用 `converter`/`remark`（原 V19 误写为
 --       `converter_type`/`description`/`created_by` 导致 INSERT IGNORE 静默失败）
@@ -731,6 +734,19 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
   ('feature_toggle', 'admin.texts',        'true', '管理员-课文管理',   0),
   ('feature_toggle', 'admin.assignments',  'true', '管理员-作业管理',   0),
   ('feature_toggle', 'admin.sso_approval', 'true', '管理员-SSO 审批',   0);
+
+-- ─────────────────────────────────────────────
+-- V18: 补齐学生端"背单词"页 toggle
+-- Layout.vue 底部导航 + Dashboard.vue 快捷入口均引用此键
+-- ─────────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`)
+VALUES ('feature_toggle', 'page_word_recite', 'true', '学生端-背单词页', 0);
+
+UPDATE `system_config`
+SET `description` = '学生端-背单词页'
+WHERE `config_group` = 'feature_toggle'
+  AND `config_key` = 'page_word_recite'
+  AND (`description` IS NULL OR `description` = '');
 
 -- ─────────────────────────────────────────────
 -- V7: 修复 system_config description 乱码
@@ -1848,5 +1864,60 @@ SET @stmt = IF(@idx_exists > 0,
 PREPARE alterIfNotExists FROM @stmt;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
+
+-- ════════════════════════════════════════════════════════════════
+-- V17: AI 问答恢复 + HiAgent 凭证前端可配置化
+-- 整合自: V17__ai_qa_recovery_and_hiagent_config.sql
+--
+-- 背景:
+--   1. 运维操作 / 缓存漂移 / 历史覆盖可能导致 page_ai_qa 被置为 'false'
+--      或 feature_override 里有对 page_ai_qa 的禁用规则 → 路由守卫拦截
+--   2. HiAgent 改写/问答凭证原本只通过 application.yml + 环境变量注入，
+--      把 4+1 个 HiAgent 凭证迁到 system_config.ai_config 使前端可配
+-- ════════════════════════════════════════════════════════════════
+
+-- 恢复 page_ai_qa 开关为 true
+UPDATE `system_config`
+SET `config_value` = 'true'
+WHERE `config_group` = 'feature_toggle'
+  AND `config_key`   = 'page_ai_qa';
+
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`)
+VALUES ('feature_toggle', 'page_ai_qa', 'true', '学生端-AI问答页', 0);
+
+-- 清除所有对 page_ai_qa 的禁用覆盖
+DELETE FROM `feature_override` WHERE `feature_key` = 'page_ai_qa';
+
+-- HiAgent 凭证 seed 到 ai_config group
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('ai_config', 'hiagent_api_url',    '', 'HiAgent API Base URL（留空则使用环境变量 HIAGENT_API_URL）',         0),
+  ('ai_config', 'hiagent_api_key',    '', 'HiAgent 改写应用 API Key（留空则使用环境变量 HIAGENT_API_KEY）',      1),
+  ('ai_config', 'hiagent_app_id',     '', 'HiAgent 改写应用 App ID（留空则使用环境变量 HIAGENT_APP_ID）',        0),
+  ('ai_config', 'hiagent_qa_api_key', '', 'HiAgent 问答应用 API Key（必须与改写凭证不同；留空则用 HIAGENT_QA_API_KEY）', 1),
+  ('ai_config', 'hiagent_qa_app_id',  '', 'HiAgent 问答应用 App ID（必须与改写凭证不同；留空则用 HIAGENT_QA_APP_ID）',  0);
+
+-- ════════════════════════════════════════════════════════════════
+-- V19: AI 服务商协议类型字段
+-- ════════════════════════════════════════════════════════════════
+
+-- 使用存储过程检查并添加列（兼容 MySQL 5.7+）
+DELIMITER //
+CREATE PROCEDURE IF NOT EXISTS AddProtocolColumn()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'ai_provider'
+        AND COLUMN_NAME = 'protocol'
+    ) THEN
+        ALTER TABLE `ai_provider`
+            ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
+            COMMENT '协议类型: openai_compatible | hiagent'
+            AFTER `service`;
+    END IF;
+END //
+DELIMITER ;
+CALL AddProtocolColumn();
+DROP PROCEDURE IF EXISTS AddProtocolColumn;
 
 -- ════════════════════════════════════════════════════════════════

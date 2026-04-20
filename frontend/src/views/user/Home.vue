@@ -256,7 +256,7 @@ const handleRecommendationClick = () => {
   if (recommendation.type === "word") {
     router.push("/user/vocabulary");
   } else {
-    router.push(`/user/text-learning?textId=${recommendation.id}`);
+    router.push(`/article/${recommendation.id}`);
   }
 };
 

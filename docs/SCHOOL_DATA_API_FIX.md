@@ -1,5 +1,26 @@
 # 学校数据接口地址修复
 
+> **⚠️ 2026-04-20 更新**: PDF 原文再次核对，发现 8 个 cdsp_ 数据源 ID 尾部 4 位数字此前被 PDF 换行截断（PDF 接口地址行会换行到下一行，之前仅复制了首行）。
+> - 错误表现: 上游返回 `{"error":{"code":"10022","message":"接口请求资源无效"}}`
+> - 真实 ID（2026-04-20 版）:
+>   - administrative_class → `cdsp_1710949911983374368`（旧 `...8337`，补 `4368`）
+>   - school_course → `cdsp_1715290945064353805`（补 `3805`）
+>   - teaching_class → `cdsp_1721804030860152850`（补 `2850`）
+>   - course_schedule → `cdsp_1715290377801515044`（补 `5044`）
+>   - course_selection → `cdsp_1715294802871926794`（补 `6794`）
+>   - teaching_plans → `cdsp_1715289655026466836`（补 `6836`）
+>   - teacher_courses → `cdsp_1715294645677801497`（补 `1497`）
+>   - student_schedule → `cdsp_1715294397274341377`（补 `1377`）
+>   - level_exam_scores → `DS0076`（不变）
+> - 同步修复: testConnection 查询参数 `?pageSize=1` → `?$top=1`（OData 规范，见 PDF 第 6 节），否则会触发 `10012 不可用请求参数`
+> - 同步修复: parseResponse 候选 key 数组加入 `"value"`（OData 标准字段），否则即使成功响应也被判"不包含数据数组字段"
+
+> **⚠️ 2026-04-19 更新**: 签名公式修正（原实现导致 10016 "接口签名(sign)无效"）
+> - ❌ 旧：`sign = Base64(MD5_raw_bytes)` — 直接对 16 字节摘要做 Base64
+> - ✅ 新：`sign = Base64(hex(MD5(...)).getBytes(UTF-8))` — 先 MD5→32字符hex字符串，再对该字符串 Base64
+> - 官方 PDF 原文："对拼接后的字符串做 md5 变换，然后再对**变换后的字符串**做 base64 变换"
+>   "变换后的字符串" 指 MD5 的十六进制表示（32 字符），不是原始字节
+
 > **⚠️ 2026-04-18 更新**: 官方认证方式为 **appId + appSecret + timestamp 签名**，非 Bearer Token。
 > - 请求头: `appId`, `timestamp`（毫秒）, `sign`
 > - 环境变量: `SCHOOL_API_APP_ID` + `SCHOOL_API_APP_SECRET`（旧 `SCHOOL_API_TOKEN` 已废弃）

@@ -908,9 +908,8 @@ const studyText = (text) => {
     return
   }
   router.push({
-    path: '/student/text-learning',
+    path: `/article/${text.id}`,
     query: {
-      textId: text.id,
       from: 'user-upload'
     }
   })

@@ -157,7 +157,7 @@ docker compose up -d frontend
 **测试失败的排查步骤**：
 1. 检查 `/ops/school-data` 顶部横幅是否消失（消失 = 配置已写入）
 2. 后端日志：`docker logs langhack-backend | grep -i "school"` — 查找 "School API auth missing" 或 4xx/5xx
-3. 网络：`curl -v https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_171094991198337?pageSize=1` （从后端容器内执行）
+3. 网络：`curl -v 'https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1710949911983374368?$top=1'` （从后端容器内执行）
 4. App ID/Secret 正确性：向学校信息化中心确认凭证
 
 ---
