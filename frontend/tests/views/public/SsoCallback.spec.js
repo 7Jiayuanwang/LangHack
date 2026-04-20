@@ -163,7 +163,6 @@ describe('SsoCallback.vue', () => {
 
     const denied = wrapper.findComponent(PermissionDenied)
     expect(denied.exists()).toBe(true)
-    expect(denied.props('rawMessage')).toContain('缺少授权码')
     expect(denied.props('theme')).toBe('error')
   })
 
@@ -204,7 +203,7 @@ describe('SsoCallback.vue', () => {
 
     const denied = wrapper.findComponent(PermissionDenied)
     expect(denied.exists()).toBe(true)
-    expect(denied.props('rawMessage')).toContain('角色异常')
+    expect(denied.props('theme')).toBe('error')
   })
 
   it('点击"返回登录"按钮跳转 /login', async () => {

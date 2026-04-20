@@ -13,7 +13,6 @@
       :contact-phone="errorInfo.contactPhone"
       :contact-department="errorInfo.contactDepartment"
       :theme="errorInfo.theme"
-      :raw-message="errorInfo.rawMessage"
     />
   </div>
 </template>
@@ -36,6 +35,10 @@ const errorInfo = ref(null)
 
 function showError({ errorCode, rawMessage }) {
   errorInfo.value = mapSsoError({ errorCode, rawMessage })
+  // 详细错误只写入浏览器控制台供开发者排错，不在 UI 展示
+  if (rawMessage) {
+    console.error('[SSO] 登录失败:', { errorCode: errorInfo.value.errorCode, rawMessage })
+  }
   loading.value = false
 }
 

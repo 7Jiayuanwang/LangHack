@@ -24,9 +24,6 @@
       <div class="permission-message">
         <p class="main-message">{{ mainMessage }}</p>
         <p v-if="subMessage" class="sub-message">{{ subMessage }}</p>
-        <p v-if="showRawMessage && rawMessage" class="raw-message" :title="rawMessage">
-          错误详情：{{ rawMessage }}
-        </p>
       </div>
 
       <!-- 联系方式 -->
@@ -92,16 +89,6 @@ const props = defineProps({
     type: String,
     default: 'warning',
     validator: (value) => ['warning', 'info', 'error'].includes(value)
-  },
-  // 原始错误消息（供排错展示）
-  rawMessage: {
-    type: String,
-    default: ''
-  },
-  // 是否展示原始错误消息
-  showRawMessage: {
-    type: Boolean,
-    default: true
   }
 })
 
@@ -201,17 +188,6 @@ const retryLogin = () => {
   font-size: 14px;
   color: #666;
   line-height: 1.5;
-}
-
-.raw-message {
-  margin-top: 12px;
-  font-size: 12px;
-  color: #999;
-  line-height: 1.5;
-  background: #f6f7f9;
-  border-radius: 6px;
-  padding: 6px 10px;
-  word-break: break-all;
 }
 
 .contact-info {

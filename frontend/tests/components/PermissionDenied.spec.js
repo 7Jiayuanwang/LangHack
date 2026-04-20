@@ -4,7 +4,6 @@
  * 覆盖：
  *   - 默认 props 渲染（联系电话 43019235，部门计算机与信息工程学院）
  *   - 不同 theme 切换 CSS class 和图标颜色
- *   - rawMessage 按 showRawMessage 控制展示
  *   - 点击"返回登录"/"重新登录"按钮跳转 /login
  *
  * 运行：npx vitest run tests/components/PermissionDenied.spec.js
@@ -56,23 +55,9 @@ describe('PermissionDenied', () => {
     expect(wrapper.find('.permission-denied').classes()).toContain('theme-error')
   })
 
-  it('提供 rawMessage 时展示原始错误详情', () => {
-    const wrapper = mount(PermissionDenied, {
-      props: { rawMessage: 'SSO 认证失败: 用户不存在' }
-    })
-    expect(wrapper.find('.raw-message').exists()).toBe(true)
-    expect(wrapper.find('.raw-message').text()).toContain('用户不存在')
-  })
-
-  it('showRawMessage=false 时不展示错误详情', () => {
-    const wrapper = mount(PermissionDenied, {
-      props: { rawMessage: 'Something', showRawMessage: false }
-    })
-    expect(wrapper.find('.raw-message').exists()).toBe(false)
-  })
-
-  it('rawMessage 为空时不渲染错误详情块', () => {
-    const wrapper = mount(PermissionDenied, { props: { rawMessage: '' } })
+  it('不在 UI 中展示原始错误详情（仅日志可见）', () => {
+    const wrapper = mount(PermissionDenied)
+    expect(wrapper.text()).not.toContain('错误详情')
     expect(wrapper.find('.raw-message').exists()).toBe(false)
   })
 
