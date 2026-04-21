@@ -114,7 +114,8 @@ class SchoolDataSyncIntegrationTest {
 
             assertNotNull(mappings);
             assertFalse(mappings.isEmpty(), "行政班字段映射不应为空");
-            assertTrue(mappings.stream().anyMatch(m -> "xzbh".equals(m.getSourceField())));
+            // V12 按 CDSP 官方 PDF 对齐: source_field 使用 UPPERCASE (XZBH/BJMC 等)
+            assertTrue(mappings.stream().anyMatch(m -> "XZBH".equals(m.getSourceField())));
             assertTrue(mappings.stream().anyMatch(m -> "classCode".equals(m.getTargetField())));
         }
 
@@ -130,11 +131,12 @@ class SchoolDataSyncIntegrationTest {
         @Test
         @DisplayName("字段映射应用 - 行政班数据转换")
         void applyMapping_administrativeClass() {
+            // V12 按 PDF 对齐后 administrative_class 字段: XZBH/BJMC/SSXYBM/SSXYMC
             Map<String, Object> sourceData = new LinkedHashMap<>();
-            sourceData.put("xzbh", "2023010101");
-            sourceData.put("xzbmc", "计算机1班");
-            sourceData.put("yxbh", "01");
-            sourceData.put("yxmc", "计算机学院");
+            sourceData.put("XZBH", "2023010101");
+            sourceData.put("BJMC", "计算机1班");
+            sourceData.put("SSXYBM", "01");
+            sourceData.put("SSXYMC", "计算机学院");
 
             Map<String, Object> result = fieldMappingService.applyMapping("administrative_class", sourceData);
 
@@ -146,15 +148,14 @@ class SchoolDataSyncIntegrationTest {
         @Test
         @DisplayName("BOOLEAN转换器 - 中文值正确转换")
         void booleanConverter_chineseValues() {
+            // 注意: V12 按 PDF 对齐后 school_course 不再包含 sfsyjx/isBilingual 映射
+            // 此处仅验证 applyMapping 在无匹配字段时仍能正常返回（不抛异常）
             Map<String, Object> sourceData = new LinkedHashMap<>();
             sourceData.put("sfsyjx", "是");
 
             Map<String, Object> result = fieldMappingService.applyMapping("school_course", sourceData);
 
-            // isBilingual should be true after BOOLEAN conversion
-            if (result.containsKey("isBilingual")) {
-                assertEquals(true, result.get("isBilingual"));
-            }
+            assertNotNull(result);
         }
     }
 

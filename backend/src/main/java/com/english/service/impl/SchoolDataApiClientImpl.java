@@ -133,14 +133,17 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             return Collections.emptyList();
         }
 
-        // 与学校API官方文档一致：xh=学号(varchar), xn=学年(numeric 单年份), xq=学期(varchar 中文)
-        // PDF 返回示例: 学年:"2024", 学期:"春"
-        // 官方端点不支持 OData $filter URI customQuery（IY1103），必须使用原生参数
+        // 与学校API官方文档一致：xh=学号(varchar), xn=学年(numeric), xq=学期(varchar 中文)
+        // 关键：学校 CDSP 的 "学年" 是课程所在的 **自然年**（非学年起始年），与学期绑定：
+        //   秋学期 → xn = 学年起始年（如 2025-2026 秋 → xn=2025）
+        //   春学期 → xn = 学年结束年（如 2025-2026 春 → xn=2026）
+        // 证据：CDSP 后台截图 学生 2023112101479 春季课表 "学年"列显示 2026；
+        //       PDF 返回示例中 学年:"2024",学期:"春" 与 学年:"2023",学期:"秋" 并存。
         Map<String, String> params = new java.util.HashMap<>();
         if (studentId != null && !studentId.isEmpty()) {
             params.put("xh", studentId);
         }
-        String xnValue = toSchoolAcademicYear(academicYear);
+        String xnValue = toSchoolAcademicYear(academicYear, semester);
         if (xnValue != null) {
             params.put("xn", xnValue);
         }
@@ -148,20 +151,39 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         if (xqValue != null) {
             params.put("xq", xqValue);
         }
+        // $beauty=true 强制返回英文别名 key（xh/xn/xq/kcmc/jsmc 等）以匹配 field_mappings seed。
+        // 若不传此参数，CDSP 默认返回中文字段名（学号/学年/学期/...）导致字段映射全 miss。
+        // 证据：PDF 第 6 节 "$beauty: 返回 KEY 格式，默认字段名。如需返回别名，可设置$beauty=true"。
+        params.put("$beauty", "true");
 
         return fetchDataWithPath(basePath, params);
     }
 
     /**
-     * 学年格式转换：本地 "2025-2026" → 学校API "2025"（起始年份）
+     * 学年格式转换：本地 "2025-2026" + 学期 → 学校API 自然年
+     * <p>
+     * 学校 "学年" 字段 = 课程所在的日历年，与学期绑定：
+     *   秋(1) → 学年起始年
+     *   春(2) → 学年结束年
+     * <p>
      * 已是单年份格式则原样返回。
      */
-    private String toSchoolAcademicYear(String academicYear) {
+    private String toSchoolAcademicYear(String academicYear, Integer semester) {
         if (academicYear == null || academicYear.isEmpty()) {
             return null;
         }
         int dash = academicYear.indexOf('-');
-        return dash > 0 ? academicYear.substring(0, dash) : academicYear;
+        if (dash <= 0) {
+            // 已是单年份，原样返回
+            return academicYear;
+        }
+        String startYear = academicYear.substring(0, dash);
+        String endYear = academicYear.substring(dash + 1);
+        // 春学期用结束年；秋学期或 semester 为空时用起始年
+        if (semester != null && semester == 2) {
+            return endYear;
+        }
+        return startYear;
     }
 
     /**
