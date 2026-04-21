@@ -8,6 +8,21 @@
       </div>
     </div>
 
+    <!-- 同步操作区 -->
+    <div class="sync-controls">
+      <el-radio-group v-model="syncMode" size="small">
+        <el-radio-button value="full">全量同步</el-radio-button>
+        <el-radio-button value="incremental">增量同步</el-radio-button>
+      </el-radio-group>
+      <el-button size="small" @click="openFilterDialog">设置筛选条件</el-button>
+      <el-button type="primary" size="small" :loading="syncing" @click="handleSync">
+        同步当前数据源
+      </el-button>
+      <div v-if="currentFilters.length > 0" class="filter-summary">
+        当前筛选: {{ filterSummary }}
+      </div>
+    </div>
+
     <!-- 数据源Tab -->
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="行政班" name="administrative_class">
@@ -128,12 +143,74 @@
         @size-change="loadData"
       />
     </div>
+
+    <!-- 筛选条件对话框 -->
+    <el-dialog v-model="filterDialogVisible" title="设置筛选条件" width="90%" :append-to-body="true">
+      <div class="filter-builder">
+        <div v-for="(group, groupIndex) in filterGroups" :key="groupIndex" class="filter-group">
+          <div class="group-header">
+            <span class="group-label">条件组 {{ groupIndex + 1 }}</span>
+            <el-radio-group v-model="group.relation" size="small">
+              <el-radio-button value="AND">且 (AND)</el-radio-button>
+              <el-radio-button value="OR">或 (OR)</el-radio-button>
+            </el-radio-group>
+            <el-button
+              size="small"
+              type="danger"
+              text
+              @click="removeGroup(groupIndex)"
+              :disabled="filterGroups.length === 1"
+            >
+              删除组
+            </el-button>
+          </div>
+
+          <div v-for="(condition, condIndex) in group.conditions" :key="condIndex" class="filter-condition">
+            <el-select v-model="condition.field" placeholder="选择字段" size="small" style="width: 140px" @change="onFieldChange(condition)">
+              <el-option
+                v-for="field in availableFields"
+                :key="field.field"
+                :label="field.label"
+                :value="field.field"
+              />
+            </el-select>
+            <el-select v-model="condition.operator" placeholder="操作符" size="small" style="width: 100px">
+              <el-option value="eq" label="等于" />
+              <el-option value="contains" label="包含" />
+              <el-option value="gte" label="大于等于" />
+              <el-option value="lte" label="小于等于" />
+              <el-option value="in" label="在列表中" />
+            </el-select>
+            <el-input v-model="condition.value" placeholder="值" size="small" style="width: 150px" />
+            <el-button
+              size="small"
+              type="danger"
+              text
+              @click="removeCondition(groupIndex, condIndex)"
+              :disabled="group.conditions.length === 1"
+            >
+              删除
+            </el-button>
+          </div>
+
+          <el-button size="small" @click="addCondition(groupIndex)">+ 添加条件</el-button>
+        </div>
+
+        <el-button size="small" @click="addGroup">+ 添加条件组</el-button>
+      </div>
+
+      <template #footer>
+        <el-button @click="filterDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveFilters">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { InfoFilled } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import {
   getSchoolDataOverview,
   getAdministrativeClasses,
@@ -143,7 +220,9 @@ import {
   getCourseSelections,
   getLevelExamScores,
   getTeachingPlans,
-  getStudentSchedules
+  getStudentSchedules,
+  fullSyncSchoolDataFiltered,
+  incrementalSyncSchoolDataFiltered
 } from '@/api/schoolData'
 
 const dataSourceLabels = {
@@ -157,6 +236,48 @@ const dataSourceLabels = {
   student_schedule: '学生课表'
 }
 
+// 每个数据源的可筛选字段定义
+const dataSourceFields = {
+  administrative_class: [
+    { label: '学院代码', field: 'collegeCode' },
+    { label: '年级', field: 'grade' }
+  ],
+  school_course: [
+    { label: '课程编码', field: 'courseCode' },
+    { label: '课程名称', field: 'courseName' },
+    { label: '学院代码', field: 'collegeCode' }
+  ],
+  teaching_class: [
+    { label: '教师工号', field: 'teacherId' },
+    { label: '课程编码', field: 'courseCode' },
+    { label: '年份', field: 'academicYear' },
+    { label: '学期', field: 'semester' }
+  ],
+  course_schedule: [
+    { label: '教学班ID', field: 'classId' },
+    { label: '年份', field: 'academicYear' },
+    { label: '学期', field: 'semester' }
+  ],
+  course_selection: [
+    { label: '学号', field: 'studentId' },
+    { label: '年份', field: 'academicYear' },
+    { label: '学期', field: 'semester' }
+  ],
+  level_exam_scores: [
+    { label: '学号', field: 'studentId' },
+    { label: '考试类型', field: 'examType' }
+  ],
+  teaching_plans: [
+    { label: '专业代码', field: 'majorCode' },
+    { label: '年级', field: 'grade' }
+  ],
+  student_schedule: [
+    { label: '学号', field: 'studentId' },
+    { label: '年份', field: 'academicYear' },
+    { label: '学期', field: 'semester' }
+  ]
+}
+
 const activeTab = ref('administrative_class')
 const loading = ref(false)
 const tableData = ref([])
@@ -164,6 +285,20 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const overview = ref(null)
+
+// 同步相关状态
+const syncMode = ref('full')
+const syncing = ref(false)
+const filterDialogVisible = ref(false)
+const filterGroups = ref([
+  {
+    relation: 'AND',
+    conditions: [
+      { field: '', label: '', operator: 'eq', value: '' }
+    ]
+  }
+])
+const currentFilters = ref([])
 
 const apiMap = {
   administrative_class: getAdministrativeClasses,
@@ -175,6 +310,21 @@ const apiMap = {
   teaching_plans: getTeachingPlans,
   student_schedule: getStudentSchedules
 }
+
+const availableFields = computed(() => {
+  return dataSourceFields[activeTab.value] || []
+})
+
+const filterSummary = computed(() => {
+  if (currentFilters.value.length === 0) return ''
+  const parts = currentFilters.value.map(group => {
+    const condStrs = group.conditions
+      .filter(c => c.field && c.value)
+      .map(c => `${c.label || c.field} ${c.operator} ${c.value}`)
+    return condStrs.length > 0 ? `(${condStrs.join(` ${group.relation} `)})` : ''
+  }).filter(s => s)
+  return parts.join(' AND ')
+})
 
 async function loadOverview() {
   try {
@@ -205,7 +355,93 @@ async function loadData() {
 
 function handleTabChange() {
   currentPage.value = 1
+  currentFilters.value = []
   loadData()
+}
+
+function openFilterDialog() {
+  filterGroups.value = currentFilters.value.length > 0
+    ? JSON.parse(JSON.stringify(currentFilters.value))
+    : [{ relation: 'AND', conditions: [{ field: '', label: '', operator: 'eq', value: '' }] }]
+  filterDialogVisible.value = true
+}
+
+function addGroup() {
+  filterGroups.value.push({
+    relation: 'AND',
+    conditions: [{ field: '', label: '', operator: 'eq', value: '' }]
+  })
+}
+
+function removeGroup(groupIndex) {
+  if (filterGroups.value.length > 1) {
+    filterGroups.value.splice(groupIndex, 1)
+  }
+}
+
+function addCondition(groupIndex) {
+  filterGroups.value[groupIndex].conditions.push({
+    field: '',
+    label: '',
+    operator: 'eq',
+    value: ''
+  })
+}
+
+function removeCondition(groupIndex, condIndex) {
+  const group = filterGroups.value[groupIndex]
+  if (group.conditions.length > 1) {
+    group.conditions.splice(condIndex, 1)
+  }
+}
+
+function onFieldChange(condition) {
+  const fieldDef = availableFields.value.find(f => f.field === condition.field)
+  if (fieldDef) {
+    condition.label = fieldDef.label
+  }
+}
+
+function saveFilters() {
+  const validGroups = filterGroups.value
+    .map(group => ({
+      relation: group.relation,
+      conditions: group.conditions.filter(c => c.field && c.value)
+    }))
+    .filter(group => group.conditions.length > 0)
+
+  currentFilters.value = validGroups
+  filterDialogVisible.value = false
+  ElMessage.success('筛选条件已保存')
+}
+
+async function handleSync() {
+  syncing.value = true
+  try {
+    const payload = {
+      triggerType: 'MANUAL',
+      filterGroups: currentFilters.value
+    }
+
+    const syncFn = syncMode.value === 'full'
+      ? fullSyncSchoolDataFiltered
+      : incrementalSyncSchoolDataFiltered
+
+    const res = await syncFn(activeTab.value, payload)
+
+    if (res?.code === 200) {
+      ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步成功`)
+      await loadOverview()
+      await loadData()
+    } else {
+      ElMessage.error(res?.message || '同步失败')
+    }
+  } catch (e) {
+    console.error('同步失败:', e)
+    ElMessage.error('同步失败，请稍后重试')
+  } finally {
+    syncing.value = false
+  }
 }
 
 onMounted(() => {
@@ -254,6 +490,30 @@ onMounted(() => {
   margin-top: 4px;
 }
 
+.sync-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
@@ -271,5 +531,40 @@ onMounted(() => {
   padding: 8px 12px;
   margin-bottom: 8px;
   border-radius: 4px;
+}
+
+.filter-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-group {
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg-secondary);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.group-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.filter-condition {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 </style>

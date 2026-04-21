@@ -231,14 +231,15 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 
 -- 4. course_schedule (cdsp_1715290377801515044 / 课程安排信息)
 -- PDF fields (lowercase): xkkch, xn, xq, skxqj, skjc, kczc, skdd
+-- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('course_schedule', 'xkkch', 'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '选课课号（作 class_id）'),
 ('course_schedule', 'skxqj', 'dayOfWeek',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '上课星期几 1-7'),
 ('course_schedule', 'skjc',  'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '上课节次'),
 ('course_schedule', 'kczc',  'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '课程周次（描述性）'),
 ('course_schedule', 'skdd',  'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '上课地点'),
-('course_schedule', 'xn',    'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年'),
-('course_schedule', 'xq',    'semester',      'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7, 1, '学期');
+('course_schedule', 'xn',    'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年（CDSP 单年如 "2024"）'),
+('course_schedule', 'xq',    'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学期中文 "秋"/"春"，service 层转 Integer');
 
 -- 5. course_selection (cdsp_1715294802871926794 / 学生选课)
 -- PDF fields (UPPERCASE): XH, KSXZDM, KSXZMC, KCBH
@@ -276,19 +277,26 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- 8. teacher_courses (cdsp_1715294645677801497 / 教师授课)
 -- PDF fields (lowercase): rkjs, xn, xq, kcdm, kxh, rkjsh, kcmc, kcbh, sfzj, kcbbm, rkjsxm
 -- 教师授课数据 upsert 到 TeachingClass 实体（service 代码既有逻辑）
+-- 语义（按 PDF 返回示例核对 2026-04-21）:
+--   kcdm = 课程代码（如 "594625"，课程本身编码）→ courseCode
+--   kcbh = 课程班号（如 "51425977"，某次开班的全局唯一 ID）→ classId (TeachingClass 主键)
+--   kxh  = 课序号（班内序号，通常与 kcdm 相同）→ 不入库
+--   xq   = 学期，API 返回中文 "秋"/"春" varchar → target_type=STRING 先保留原值，
+--          SchoolDataSyncServiceImpl.upsertTeachingClass 读取时再做中文→Integer 转换
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('teacher_courses', 'kxh',    'classId',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课序号（作 class_id）'),
-('teacher_courses', 'kcbh',   'courseCode',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程编号'),
+('teacher_courses', 'kcbh',   'classId',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程班号（作 class_id，全局唯一开班 ID）'),
+('teacher_courses', 'kcdm',   'courseCode',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程代码'),
 ('teacher_courses', 'kcmc',   'courseName',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '课程名称'),
 ('teacher_courses', 'rkjsh',  'teacherId',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '任课教师工号'),
 ('teacher_courses', 'rkjsxm', 'teacherName',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '任课教师姓名'),
-('teacher_courses', 'xn',     'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年'),
-('teacher_courses', 'xq',     'semester',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7, 1, '学期'),
-('teacher_courses', 'kcbbm',  'className',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '课程版本码（作班级名）');
+('teacher_courses', 'xn',     'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年（CDSP 单年格式如 "2024"）'),
+('teacher_courses', 'xq',     'semester',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学期 varchar 中文 "秋"/"春"，service 层转 Integer'),
+('teacher_courses', 'kcbbm',  'className',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '课程班别名（作班级展示名）');
 
 -- 9. student_schedule (cdsp_1715294397274341377 / 学生课表)
 -- PDF fields (lowercase): zcdm, skjszgh, jsmc, lsxykh, kcmc, js, skcd, djj, xqj,
 --   xkkh, xh, xq, xn, zcap, kcbh
+-- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('student_schedule', 'xh',      'studentId',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号'),
 ('student_schedule', 'xkkh',    'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '选课课号（作 class_id）'),
@@ -300,5 +308,5 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 ('student_schedule', 'djj',     'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '第几节'),
 ('student_schedule', 'zcap',    'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '周次安排（如 "1-9"）'),
 ('student_schedule', 'js',      'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室'),
-('student_schedule', 'xn',      'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年'),
-('student_schedule', 'xq',      'semester',      'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 12, 1, '学期');
+('student_schedule', 'xn',      'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"）'),
+('student_schedule', 'xq',      'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"，service 层转 Integer');

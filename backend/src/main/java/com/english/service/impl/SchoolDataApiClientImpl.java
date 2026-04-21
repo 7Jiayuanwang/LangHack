@@ -133,57 +133,39 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             return Collections.emptyList();
         }
 
-        // 与学校API官方文档一致：xh=学号(varchar), xn=学年(numeric), xq=学期(varchar 中文)
-        // 关键：学校 CDSP 的 "学年" 是课程所在的 **自然年**（非学年起始年），与学期绑定：
-        //   秋学期 → xn = 学年起始年（如 2025-2026 秋 → xn=2025）
-        //   春学期 → xn = 学年结束年（如 2025-2026 春 → xn=2026）
-        // 证据：CDSP 后台截图 学生 2023112101479 春季课表 "学年"列显示 2026；
-        //       PDF 返回示例中 学年:"2024",学期:"春" 与 学年:"2023",学期:"秋" 并存。
+        // 与学校API官方文档一致：仅传递文档定义参数 xh/xn/xq，且按返回示例使用原始值。
+        // 本地学年若为 "2025-2026"，统一拆分为单年份：2025 秋、2026 春。
+        // 这里仅向接口传单年份 xn，避免把双年份字符串直接传给学校接口。
         Map<String, String> params = new java.util.HashMap<>();
         if (studentId != null && !studentId.isEmpty()) {
             params.put("xh", studentId);
         }
-        String xnValue = toSchoolAcademicYear(academicYear, semester);
-        if (xnValue != null) {
-            params.put("xn", xnValue);
+        if (academicYear != null && !academicYear.isEmpty()) {
+            params.put("xn", splitAcademicYearToSingleYear(academicYear, semester));
         }
-        String xqValue = toSchoolSemester(semester);
-        if (xqValue != null) {
-            params.put("xq", xqValue);
+        if (semester != null) {
+            params.put("xq", toSchoolSemester(semester));
         }
-        // $beauty=true 强制返回英文别名 key（xh/xn/xq/kcmc/jsmc 等）以匹配 field_mappings seed。
-        // 若不传此参数，CDSP 默认返回中文字段名（学号/学年/学期/...）导致字段映射全 miss。
-        // 证据：PDF 第 6 节 "$beauty: 返回 KEY 格式，默认字段名。如需返回别名，可设置$beauty=true"。
-        params.put("$beauty", "true");
 
         return fetchDataWithPath(basePath, params);
     }
 
     /**
-     * 学年格式转换：本地 "2025-2026" + 学期 → 学校API 自然年
-     * <p>
-     * 学校 "学年" 字段 = 课程所在的日历年，与学期绑定：
-     *   秋(1) → 学年起始年
-     *   春(2) → 学年结束年
-     * <p>
-     * 已是单年份格式则原样返回。
+     * 本地学年拆分为学校接口所需的单年份。
+     * 规则：2025-2026 = 2025秋 + 2026春。
+     * 若 semester 未提供，默认取起始年；若已是单年份则原样返回。
      */
-    private String toSchoolAcademicYear(String academicYear, Integer semester) {
+    private String splitAcademicYearToSingleYear(String academicYear, Integer semester) {
         if (academicYear == null || academicYear.isEmpty()) {
             return null;
         }
         int dash = academicYear.indexOf('-');
         if (dash <= 0) {
-            // 已是单年份，原样返回
             return academicYear;
         }
         String startYear = academicYear.substring(0, dash);
         String endYear = academicYear.substring(dash + 1);
-        // 春学期用结束年；秋学期或 semester 为空时用起始年
-        if (semester != null && semester == 2) {
-            return endYear;
-        }
-        return startYear;
+        return semester != null && semester == 2 ? endYear : startYear;
     }
 
     /**
@@ -262,6 +244,12 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
     /**
      * 通过完整 URL 获取数据
+     * <p>
+     * <b>重要</b>：CDSP API 实际不支持 $beauty 参数（返回 IY1103 错误），
+     * 尽管 PDF 文档第 6 节提到该参数。API 默认返回英文别名字段名（xh/xn/xq/kcmc/...），
+     * 与 V12 field_mappings seed 对齐，无需额外参数。
+     * <p>
+     * 支持的 OData 参数仅限：$top, $skip（分页），其他参数（$filter/$select/$beauty）均不支持。
      */
     private List<Map<String, Object>> fetchDataWithPath(String fullUrl, Map<String, String> params) {
         if (fullUrl == null || fullUrl.isEmpty()) {
@@ -269,7 +257,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             return Collections.emptyList();
         }
 
-        String url = buildUrl(fullUrl, params);
+        Map<String, String> effectiveParams = params == null
+                ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(params);
+
+        String url = buildUrl(fullUrl, effectiveParams);
 
         int retryAttempts = properties.getApi().getRetryAttempts();
         for (int attempt = 1; attempt <= retryAttempts; attempt++) {

@@ -99,3 +99,11 @@ export function getTeachingPlanCourses(planId) {
 export function getStudentSchedules(params) {
   return request({ url: '/api/admin/school-data/student-schedules', method: 'get', params })
 }
+
+export function fullSyncSchoolDataFiltered(dataSource, data) {
+  return request({ url: `/api/admin/sync/full/${dataSource}/filtered`, method: 'post', data })
+}
+
+export function incrementalSyncSchoolDataFiltered(dataSource, data) {
+  return request({ url: `/api/admin/sync/incremental/${dataSource}/filtered`, method: 'post', data })
+}

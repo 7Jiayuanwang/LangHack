@@ -1677,8 +1677,8 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 ('course_schedule', 'skjc',  'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '上课节次'),
 ('course_schedule', 'kczc',  'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '课程周次'),
 ('course_schedule', 'skdd',  'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '上课地点'),
-('course_schedule', 'xn',    'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年'),
-('course_schedule', 'xq',    'semester',      'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7, 1, '学期');
+('course_schedule', 'xn',    'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年（CDSP 单年如 "2024"）'),
+('course_schedule', 'xq',    'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学期中文 "秋"/"春"');
 
 -- 5. course_selection (cdsp_1715294802871926794 / 学生选课)
 -- PDF fields (UPPERCASE): XH, KSXZDM, KSXZMC, KCBH
@@ -1713,17 +1713,22 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 ('teaching_plans', 'ksfsmc',      'version',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 11, 1, '考试方式名称');
 
 -- 8. teacher_courses (cdsp_1715294645677801497 / 教师授课)
--- PDF fields (lowercase): kxh, kcbh, kcmc, rkjsh, rkjsxm, xn, xq, kcbbm
+-- PDF fields (lowercase): kxh, kcbh, kcmc, rkjsh, rkjsxm, xn, xq, kcbbm, kcdm
 -- 数据落到 TeachingClass 表（service 逻辑一致）
+-- 语义对齐 CDSP 后台 API 返回示例（2026-04-21 截图）:
+--   kcdm = 课程代码 (如 "594625") → courseCode
+--   kcbh = 课程班号 (如 "51425977" 开班唯一 ID) → classId
+--   kxh  = 课序号（通常与 kcdm 同值）→ 不入库
+--   xq   = 学期 varchar 中文 "秋"/"春" → STRING，service 层 parseSchoolSemester 转 Integer
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('teacher_courses', 'kxh',    'classId',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课序号'),
-('teacher_courses', 'kcbh',   'courseCode',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程编号'),
+('teacher_courses', 'kcbh',   'classId',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程班号（作 class_id）'),
+('teacher_courses', 'kcdm',   'courseCode',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程代码'),
 ('teacher_courses', 'kcmc',   'courseName',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '课程名称'),
 ('teacher_courses', 'rkjsh',  'teacherId',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '任课教师工号'),
 ('teacher_courses', 'rkjsxm', 'teacherName',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '任课教师姓名'),
-('teacher_courses', 'xn',     'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年'),
-('teacher_courses', 'xq',     'semester',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7, 1, '学期'),
-('teacher_courses', 'kcbbm',  'className',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '课程版本码（作班级名）');
+('teacher_courses', 'xn',     'academicYear', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年（CDSP 单年如 "2024"）'),
+('teacher_courses', 'xq',     'semester',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学期中文 "秋"/"春"'),
+('teacher_courses', 'kcbbm',  'className',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '课程班别名（作班级展示名）');
 
 -- 9. student_schedule (cdsp_1715294397274341377 / 学生课表)
 -- PDF fields (lowercase): xh, xkkh, kcbh, kcmc, skjszgh, jsmc, xqj, djj,
@@ -1739,7 +1744,7 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 ('student_schedule', 'djj',     'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '第几节'),
 ('student_schedule', 'zcap',    'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '周次安排'),
 ('student_schedule', 'js',      'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室'),
-('student_schedule', 'xn',      'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年'),
-('student_schedule', 'xq',      'semester',      'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 12, 1, '学期');
+('student_schedule', 'xn',      'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"）'),
+('student_schedule', 'xq',      'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"');
 
 -- ════════════════════════════════════════════════════════════════

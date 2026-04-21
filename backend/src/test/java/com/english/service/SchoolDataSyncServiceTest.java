@@ -14,7 +14,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -207,14 +206,14 @@ class SchoolDataSyncServiceTest {
     class IncrementalSyncTests {
 
         @Test
-        @DisplayName("增量同步正确传递updatedSince参数")
-        void incrementalSync_passesUpdatedSinceParam() {
-            SyncLog lastSync = new SyncLog();
-            lastSync.setEndTime(LocalDateTime.of(2026, 4, 11, 10, 0, 0));
-
-            when(syncLogMapper.selectLatestByDataSource("administrative_class")).thenReturn(lastSync);
+        @DisplayName("增量同步调用API并写入同步日志")
+        void incrementalSync_callsApiAndWritesLog() {
             when(apiClient.fetchAdministrativeClasses(any())).thenReturn(Collections.emptyList());
-            when(syncLogMapper.insert(any())).thenReturn(1);
+            when(syncLogMapper.insert(any())).thenAnswer(invocation -> {
+                SyncLog log = invocation.getArgument(0);
+                log.setId(1L);
+                return 1;
+            });
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
             syncService.incrementalSync("administrative_class", "MANUAL", "admin");
@@ -223,11 +222,14 @@ class SchoolDataSyncServiceTest {
         }
 
         @Test
-        @DisplayName("无上次同步记录时不传updatedSince参数")
-        void incrementalSync_noLastSync_noUpdatedSince() {
-            when(syncLogMapper.selectLatestByDataSource("administrative_class")).thenReturn(null);
+        @DisplayName("增量同步无数据时仍完成日志记录")
+        void incrementalSync_emptyResult_completesSuccessfully() {
             when(apiClient.fetchAdministrativeClasses(any())).thenReturn(Collections.emptyList());
-            when(syncLogMapper.insert(any())).thenReturn(1);
+            when(syncLogMapper.insert(any())).thenAnswer(invocation -> {
+                SyncLog log = invocation.getArgument(0);
+                log.setId(1L);
+                return 1;
+            });
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
             syncService.incrementalSync("administrative_class", "MANUAL", "admin");

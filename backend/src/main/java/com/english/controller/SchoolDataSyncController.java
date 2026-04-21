@@ -1,6 +1,7 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.dto.SchoolDataSyncFilterRequest;
 import com.english.entity.FieldMapping;
 import com.english.entity.SyncLog;
 import com.english.service.FieldMappingService;
@@ -78,6 +79,38 @@ public class SchoolDataSyncController {
         } catch (Exception e) {
             logger.error("增量同步失败: dataSource={}", dataSource, e);
             return Result.error("增量同步失败，请查看同步日志了解详情");
+        }
+    }
+
+    @PostMapping("/full/{dataSource}/filtered")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<SyncLog> fullSyncFiltered(@PathVariable String dataSource,
+                                            @RequestBody(required = false) SchoolDataSyncFilterRequest request) {
+        String triggerType = request != null && request.getTriggerType() != null && !request.getTriggerType().isEmpty()
+                ? request.getTriggerType() : "MANUAL";
+        logger.info("手动触发筛选全量同步: dataSource={}, triggerType={}", dataSource, triggerType);
+        try {
+            SyncLog syncLog = syncService.fullSync(dataSource, triggerType, getCurrentOperator(), request);
+            return Result.success("筛选全量同步完成", syncLog);
+        } catch (Exception e) {
+            logger.error("筛选全量同步失败: dataSource={}", dataSource, e);
+            return Result.error(e.getMessage() != null ? e.getMessage() : "筛选全量同步失败，请查看同步日志了解详情");
+        }
+    }
+
+    @PostMapping("/incremental/{dataSource}/filtered")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<SyncLog> incrementalSyncFiltered(@PathVariable String dataSource,
+                                                   @RequestBody(required = false) SchoolDataSyncFilterRequest request) {
+        String triggerType = request != null && request.getTriggerType() != null && !request.getTriggerType().isEmpty()
+                ? request.getTriggerType() : "MANUAL";
+        logger.info("手动触发筛选增量同步: dataSource={}, triggerType={}", dataSource, triggerType);
+        try {
+            SyncLog syncLog = syncService.incrementalSync(dataSource, triggerType, getCurrentOperator(), request);
+            return Result.success("筛选增量同步完成", syncLog);
+        } catch (Exception e) {
+            logger.error("筛选增量同步失败: dataSource={}", dataSource, e);
+            return Result.error(e.getMessage() != null ? e.getMessage() : "筛选增量同步失败，请查看同步日志了解详情");
         }
     }
 

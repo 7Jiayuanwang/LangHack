@@ -228,6 +228,11 @@
               <el-icon><Connection /></el-icon> 测试连接
             </el-button>
             <el-button
+              @click="router.push('/ops/school-data-browser')"
+            >
+              前往数据浏览并手动同步
+            </el-button>
+            <el-button
               type="primary"
               :loading="saving"
               @click="handleSave"
@@ -248,6 +253,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Refresh, Loading, QuestionFilled, InfoFilled,
@@ -261,6 +267,7 @@ import {
 } from '@/api/schoolData'
 
 const loading = ref(false)
+const router = useRouter()
 const saving = ref(false)
 const testing = ref(false)
 const testResult = ref(null)

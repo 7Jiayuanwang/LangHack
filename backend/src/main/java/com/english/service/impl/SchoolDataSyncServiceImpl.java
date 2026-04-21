@@ -2,6 +2,7 @@ package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.english.config.SchoolDataProperties;
+import com.english.dto.SchoolDataSyncFilterRequest;
 import com.english.entity.*;
 import com.english.exception.BusinessException;
 import com.english.mapper.*;
@@ -17,7 +18,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -94,6 +94,11 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     @Override
     public SyncLog fullSync(String dataSource, String triggerType, String operator) {
+        return fullSync(dataSource, triggerType, operator, null);
+    }
+
+    @Override
+    public SyncLog fullSync(String dataSource, String triggerType, String operator, SchoolDataSyncFilterRequest request) {
         if (!DATA_SOURCES.contains(dataSource)) {
             throw new BusinessException("不支持的数据源: " + dataSource);
         }
@@ -107,7 +112,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
         try {
             logger.info("开始全量同步数据源: {}, 触发方式: {}", dataSource, triggerType);
-            SyncResult result = doFullSync(dataSource);
+            SyncResult result = doFullSync(dataSource, request);
             completeSyncLog(syncLog, result, startTime);
             logger.info("全量同步完成: 数据源={}, 总数={}, 成功={}, 失败={}, 跳过={}",
                     dataSource, result.total, result.success, result.fail, result.skip);
@@ -157,6 +162,12 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     @Override
     public SyncLog incrementalSync(String dataSource, String triggerType, String operator) {
+        return incrementalSync(dataSource, triggerType, operator, null);
+    }
+
+    @Override
+    public SyncLog incrementalSync(String dataSource, String triggerType, String operator,
+                                   SchoolDataSyncFilterRequest request) {
         if (!DATA_SOURCES.contains(dataSource)) {
             throw new BusinessException("不支持的数据源: " + dataSource);
         }
@@ -170,7 +181,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
         try {
             logger.info("开始增量同步数据源: {}, 触发方式: {}", dataSource, triggerType);
-            SyncResult result = doIncrementalSync(dataSource);
+            SyncResult result = doIncrementalSync(dataSource, request);
             completeSyncLog(syncLog, result, startTime);
             logger.info("增量同步完成: 数据源={}, 总数={}, 成功={}, 失败={}, 跳过={}",
                     dataSource, result.total, result.success, result.fail, result.skip);
@@ -307,7 +318,16 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
      * 执行单个数据源的全量同步
      */
     private SyncResult doFullSync(String dataSource) {
-        List<Map<String, Object>> fetchData = fetchFromApi(dataSource, null);
+        return doFullSync(dataSource, null);
+    }
+
+    private SyncResult doFullSync(String dataSource, SchoolDataSyncFilterRequest request) {
+        if ("student_schedule".equals(dataSource) && hasFilterRequest(request)) {
+            return syncFilteredStudentSchedule(request);
+        }
+        Map<String, String> upstreamParams = buildUpstreamParams(dataSource, request);
+        List<Map<String, Object>> fetchData = fetchFromApi(dataSource, upstreamParams);
+        fetchData = applyFilterGroups(dataSource, fetchData, request);
         if (fetchData.isEmpty()) {
             return new SyncResult(0, 0, 0, 0);
         }
@@ -317,19 +337,23 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     /**
      * 执行单个数据源的增量同步
-     * 增量同步: 获取上次同步时间，仅同步更新的数据
+     * <p>
+     * CDSP API 实际仅支持基本分页参数（$top/$skip），不支持 $filter/$select/$beauty 等 OData 扩展参数
+     * （会触发 IY1103 "NOT SUPPORTED: URI: customQuery"），
+     * 因此增量同步实际退化为全量拉取 + 按业务主键 UPSERT（由 upsertEntity 内部处理去重/覆盖）。
+     * 未来如需真正增量，需改用 $filter=<timestamp_field> gt <since_datetime> 的 OData 表达式（如果 API 支持）。
      */
     private SyncResult doIncrementalSync(String dataSource) {
-        // 获取上次同步时间
-        SyncLog lastSync = syncLogMapper.selectLatestByDataSource(dataSource);
-        Map<String, String> params = new HashMap<>();
+        return doIncrementalSync(dataSource, null);
+    }
 
-        if (lastSync != null && lastSync.getEndTime() != null) {
-            String since = lastSync.getEndTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-            params.put("updatedSince", since);
+    private SyncResult doIncrementalSync(String dataSource, SchoolDataSyncFilterRequest request) {
+        if ("student_schedule".equals(dataSource) && hasFilterRequest(request)) {
+            return syncFilteredStudentSchedule(request);
         }
-
-        List<Map<String, Object>> fetchData = fetchFromApi(dataSource, params);
+        Map<String, String> upstreamParams = buildUpstreamParams(dataSource, request);
+        List<Map<String, Object>> fetchData = fetchFromApi(dataSource, upstreamParams);
+        fetchData = applyFilterGroups(dataSource, fetchData, request);
         if (fetchData.isEmpty()) {
             return new SyncResult(0, 0, 0, 0);
         }
@@ -365,13 +389,179 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             case "teacher_courses":
                 return apiClient.fetchTeacherCourses(params);
             case "student_schedule":
-                // student_schedule 按学生查询，不支持全量拉取，在fetchFromApi中返回空
-                logger.info("student_schedule requires studentId parameter, skipping batch fetch");
+                logger.info("student_schedule requires studentId parameter, skipping generic batch fetch");
                 return Collections.emptyList();
             default:
                 logger.warn("Unknown data source: {}", dataSource);
                 return Collections.emptyList();
         }
+    }
+
+    private boolean hasFilterRequest(SchoolDataSyncFilterRequest request) {
+        return request != null && request.getFilterGroups() != null && !request.getFilterGroups().isEmpty();
+    }
+
+    private Map<String, String> buildUpstreamParams(String dataSource, SchoolDataSyncFilterRequest request) {
+        Map<String, String> params = new LinkedHashMap<>();
+        if (!hasFilterRequest(request)) {
+            return params;
+        }
+        for (SchoolDataSyncFilterRequest.FilterGroup group : request.getFilterGroups()) {
+            if (group == null || group.getConditions() == null) {
+                continue;
+            }
+            for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
+                if (condition == null || condition.getField() == null || condition.getValue() == null || condition.getValue().trim().isEmpty()) {
+                    continue;
+                }
+                String field = condition.getField().trim();
+                String value = condition.getValue().trim();
+                if (!"eq".equalsIgnoreCase(defaultString(condition.getOperator(), "eq"))) {
+                    continue;
+                }
+                switch (dataSource) {
+                    case "administrative_class":
+                        if ("collegeCode".equals(field)) params.put("XSH", value);
+                        else if ("grade".equals(field)) params.put("NJ", value);
+                        break;
+                    case "course_schedule":
+                        if ("classId".equals(field)) params.put("xkkch", value);
+                        else if ("academicYear".equals(field)) params.put("xn", value);
+                        else if ("semester".equals(field)) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
+                        else if ("dayOfWeek".equals(field)) params.put("skxqj", value);
+                        else if ("period".equals(field)) params.put("skjc", value);
+                        break;
+                    case "course_selection":
+                        if ("studentId".equals(field)) params.put("XH", value);
+                        else if ("academicYear".equals(field)) params.put("XN", value);
+                        else if ("semester".equals(field)) params.put("XQ", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
+                        break;
+                    case "level_exam_scores":
+                        if ("studentId".equals(field)) params.put("xh", value);
+                        break;
+                    case "teaching_plans":
+                        if ("grade".equals(field)) params.put("nj", value);
+                        break;
+                    case "teacher_courses":
+                        if ("teacherId".equals(field)) params.put("rkjsh", value);
+                        else if ("courseCode".equals(field)) params.put("kcdm", value);
+                        else if ("academicYear".equals(field)) params.put("xn", value);
+                        else if ("semester".equals(field)) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        return params;
+    }
+
+    private List<Map<String, Object>> applyFilterGroups(String dataSource, List<Map<String, Object>> fetchData,
+                                                        SchoolDataSyncFilterRequest request) {
+        if (!hasFilterRequest(request) || fetchData == null || fetchData.isEmpty()) {
+            return fetchData == null ? Collections.emptyList() : fetchData;
+        }
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (Map<String, Object> row : fetchData) {
+            if (matchesAllGroups(dataSource, row, request.getFilterGroups())) {
+                filtered.add(row);
+            }
+        }
+        return filtered;
+    }
+
+    private boolean matchesAllGroups(String dataSource, Map<String, Object> row,
+                                     List<SchoolDataSyncFilterRequest.FilterGroup> groups) {
+        for (SchoolDataSyncFilterRequest.FilterGroup group : groups) {
+            if (group == null || group.getConditions() == null || group.getConditions().isEmpty()) {
+                continue;
+            }
+            boolean isOr = "OR".equalsIgnoreCase(defaultString(group.getRelation(), "AND"));
+            boolean groupResult = isOr ? false : true;
+            for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
+                boolean conditionMatched = matchesCondition(row, condition);
+                if (isOr) {
+                    groupResult = groupResult || conditionMatched;
+                    if (groupResult) break;
+                } else {
+                    groupResult = groupResult && conditionMatched;
+                    if (!groupResult) break;
+                }
+            }
+            if (!groupResult) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean matchesCondition(Map<String, Object> row, SchoolDataSyncFilterRequest.FilterCondition condition) {
+        if (condition == null || condition.getField() == null) {
+            return true;
+        }
+        String operator = defaultString(condition.getOperator(), "eq").toLowerCase(Locale.ROOT);
+        String actual = stringValue(row.get(condition.getField()));
+        String expected = defaultString(condition.getValue(), "").trim();
+        switch (operator) {
+            case "contains":
+                return actual.contains(expected);
+            case "gte":
+                return compareAsNumber(actual, expected) >= 0;
+            case "lte":
+                return compareAsNumber(actual, expected) <= 0;
+            case "in":
+                return Arrays.stream(expected.split(",")).map(String::trim).anyMatch(actual::equals);
+            case "eq":
+            default:
+                return actual.equals(expected);
+        }
+    }
+
+    private int compareAsNumber(String actual, String expected) {
+        try {
+            return new java.math.BigDecimal(actual).compareTo(new java.math.BigDecimal(expected));
+        } catch (Exception e) {
+            return actual.compareTo(expected);
+        }
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private String defaultString(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private SyncResult syncFilteredStudentSchedule(SchoolDataSyncFilterRequest request) {
+        String studentId = null;
+        String academicYear = null;
+        Integer semester = null;
+        for (SchoolDataSyncFilterRequest.FilterGroup group : request.getFilterGroups()) {
+            if (group == null || group.getConditions() == null) {
+                continue;
+            }
+            for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
+                if (condition == null || condition.getField() == null) {
+                    continue;
+                }
+                String field = condition.getField();
+                String value = defaultString(condition.getValue(), "").trim();
+                if ("studentId".equals(field)) studentId = value;
+                if ("academicYear".equals(field)) academicYear = value;
+                if ("semester".equals(field) && !value.isEmpty()) semester = Integer.parseInt(value);
+            }
+        }
+        if (studentId == null || studentId.isEmpty()) {
+            throw new BusinessException("student_schedule 手动同步必须提供学号");
+        }
+        List<StudentSchedule> schedules = syncStudentSchedule(studentId, academicYear, semester);
+        SyncResult result = new SyncResult();
+        result.total = schedules.size();
+        result.success = schedules.size();
+        result.fail = 0;
+        result.skip = 0;
+        return result;
     }
 
     // =========================================================================
@@ -471,7 +661,14 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setClassShortName(getStringValue(data, "classShortName"));
         entity.setCollegeCode(getStringValue(data, "collegeCode"));
         entity.setCollegeName(getStringValue(data, "collegeName"));
-        entity.setMajorCode(getStringValue(data, "majorCode"));
+
+        // majorCode: 外部 API 可能不提供，使用默认值或从 majorName 提取
+        String majorCode = getStringValue(data, "majorCode");
+        if (majorCode == null || majorCode.trim().isEmpty()) {
+            majorCode = "UNKNOWN";  // 默认值
+        }
+        entity.setMajorCode(majorCode);
+
         entity.setMajorName(getStringValue(data, "majorName"));
         entity.setGrade(getStringValue(data, "grade"));
         entity.setClassType(getStringValue(data, "classType"));
@@ -480,7 +677,14 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setStudentCount(getIntegerValue(data, "studentCount"));
         entity.setMaleCount(getIntegerValue(data, "maleCount"));
         entity.setFemaleCount(getIntegerValue(data, "femaleCount"));
-        entity.setClassStatus(getStringValue(data, "classStatus"));
+
+        // classStatus: 外部 API 可能不提供，使用默认值
+        String classStatus = getStringValue(data, "classStatus");
+        if (classStatus == null || classStatus.trim().isEmpty()) {
+            classStatus = "ACTIVE";  // 默认为活跃状态
+        }
+        entity.setClassStatus(classStatus);
+
         entity.setEstablishDate(getLocalDateValue(data, "establishDate"));
         entity.setGraduateDate(getLocalDateValue(data, "graduateDate"));
         entity.setRemark(getStringValue(data, "remark"));
@@ -496,15 +700,35 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setCourseName(getStringValue(data, "courseName"));
         entity.setCourseNameEn(getStringValue(data, "courseNameEn"));
         entity.setCourseShortName(getStringValue(data, "courseShortName"));
-        entity.setCourseNature(getStringValue(data, "courseNature"));
-        entity.setCourseCategory(getStringValue(data, "courseCategory"));
+
+        // courseNature: 外部 API 可能不提供，使用默认值
+        String courseNature = getStringValue(data, "courseNature");
+        if (courseNature == null || courseNature.trim().isEmpty()) {
+            courseNature = "必修";  // 默认必修
+        }
+        entity.setCourseNature(courseNature);
+
+        // courseCategory: 外部 API 可能不提供，使用默认值
+        String courseCategory = getStringValue(data, "courseCategory");
+        if (courseCategory == null || courseCategory.trim().isEmpty()) {
+            courseCategory = "专业课";  // 默认专业课
+        }
+        entity.setCourseCategory(courseCategory);
+
         entity.setCredits(getBigDecimalValue(data, "credits"));
         entity.setTotalHours(getIntegerValue(data, "totalHours"));
         entity.setTheoryHours(getIntegerValue(data, "theoryHours"));
         entity.setExperimentHours(getIntegerValue(data, "experimentHours"));
         entity.setPracticeHours(getIntegerValue(data, "practiceHours"));
         entity.setComputerHours(getIntegerValue(data, "computerHours"));
-        entity.setCollegeCode(getStringValue(data, "collegeCode"));
+
+        // collegeCode: 外部 API 可能不提供，从 collegeName 提取或使用默认值
+        String collegeCode = getStringValue(data, "collegeCode");
+        if (collegeCode == null || collegeCode.trim().isEmpty()) {
+            collegeCode = "UNKNOWN";
+        }
+        entity.setCollegeCode(collegeCode);
+
         entity.setCollegeName(getStringValue(data, "collegeName"));
         entity.setDepartmentCode(getStringValue(data, "departmentCode"));
         entity.setDepartmentName(getStringValue(data, "departmentName"));
@@ -518,7 +742,14 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setPrerequisiteNames(getStringValue(data, "prerequisiteNames"));
         entity.setCourseIntro(getStringValue(data, "courseIntro"));
         entity.setTeachingObjectives(getStringValue(data, "teachingObjectives"));
-        entity.setCourseStatus(getStringValue(data, "courseStatus"));
+
+        // courseStatus: 外部 API 可能不提供，使用默认值
+        String courseStatus = getStringValue(data, "courseStatus");
+        if (courseStatus == null || courseStatus.trim().isEmpty()) {
+            courseStatus = "ACTIVE";  // 默认活跃状态
+        }
+        entity.setCourseStatus(courseStatus);
+
         entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
         entity.setSyncSource(getStringValue(data, "syncSource"));
 
@@ -534,10 +765,24 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setTeacherId(getStringValue(data, "teacherId"));
         entity.setTeacherName(getStringValue(data, "teacherName"));
         entity.setAcademicYear(getStringValue(data, "academicYear"));
-        entity.setSemester(getIntegerValue(data, "semester"));
-        entity.setCapacity(getIntegerValue(data, "capacity"));
+        entity.setSemester(parseSchoolSemester(data, "semester"));
+
+        // capacity: 外部 API 可能不提供，使用默认值
+        Integer capacity = getIntegerValue(data, "capacity");
+        if (capacity == null) {
+            capacity = 100;  // 默认容量
+        }
+        entity.setCapacity(capacity);
+
         entity.setEnrolledCount(getIntegerValue(data, "enrolledCount"));
-        entity.setClassStatus(getStringValue(data, "classStatus"));
+
+        // classStatus: 外部 API 可能不提供，使用默认值
+        String classStatus = getStringValue(data, "classStatus");
+        if (classStatus == null || classStatus.trim().isEmpty()) {
+            classStatus = "ACTIVE";  // 默认为活跃状态
+        }
+        entity.setClassStatus(classStatus);
+
         entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
         entity.setSyncSource(getStringValue(data, "syncSource"));
 
@@ -548,7 +793,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         // course_schedule 没有自然唯一键，使用 delete-then-insert 模式
         String classId = getStringValue(data, "classId");
         String academicYear = getStringValue(data, "academicYear");
-        Integer semester = getIntegerValue(data, "semester");
+        Integer semester = parseSchoolSemester(data, "semester");
 
         if (classId != null && academicYear != null && semester != null) {
             // 先删除同班级同学期的旧数据
@@ -571,17 +816,36 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private void upsertCourseSelection(Map<String, Object> data) {
         CourseSelection entity = new CourseSelection();
-        entity.setSelectionId(getStringValue(data, "selectionId"));
-        entity.setStudentId(getStringValue(data, "studentId"));
+
+        // 生成复合唯一键：学号_课程班号_学年_学期
+        // 外部 API 不提供选课记录ID，需要根据业务字段生成
+        String studentId = getStringValue(data, "studentId");
+        String classId = getStringValue(data, "classId");
+        String academicYear = getStringValue(data, "academicYear");
+        Integer semester = parseSchoolSemester(data, "semester");
+
+        String selectionId = getStringValue(data, "selectionId");
+        if (selectionId == null || selectionId.trim().isEmpty()) {
+            // 生成复合键：学号_课程班号_学年_学期
+            if (studentId != null && classId != null && academicYear != null && semester != null) {
+                selectionId = studentId + "_" + classId + "_" + academicYear + "_" + semester;
+            } else {
+                throw new BusinessException("选课记录缺少必要字段: studentId=" + studentId
+                    + ", classId=" + classId + ", academicYear=" + academicYear + ", semester=" + semester);
+            }
+        }
+
+        entity.setSelectionId(selectionId);
+        entity.setStudentId(studentId);
         entity.setStudentName(getStringValue(data, "studentName"));
         entity.setCourseCode(getStringValue(data, "courseCode"));
         entity.setCourseName(getStringValue(data, "courseName"));
-        entity.setClassId(getStringValue(data, "classId"));
+        entity.setClassId(classId);
         entity.setTeacherId(getStringValue(data, "teacherId"));
         entity.setTeacherName(getStringValue(data, "teacherName"));
         entity.setCredits(getBigDecimalValue(data, "credits"));
-        entity.setAcademicYear(getStringValue(data, "academicYear"));
-        entity.setSemester(getIntegerValue(data, "semester"));
+        entity.setAcademicYear(academicYear);
+        entity.setSemester(semester);
         entity.setClassTime(getStringValue(data, "classTime"));
         entity.setClassLocation(getStringValue(data, "classLocation"));
         entity.setSelectionTime(getLocalDateTimeValue(data, "selectionTime"));
@@ -603,13 +867,46 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         LevelExamScore entity = new LevelExamScore();
         entity.setStudentId(getStringValue(data, "studentId"));
         entity.setStudentName(getStringValue(data, "studentName"));
-        entity.setExamType(getStringValue(data, "examType"));
+
+        // examType: 外部 API 可能不提供，从 examName 推断或使用默认值
+        String examType = getStringValue(data, "examType");
+        if (examType == null || examType.trim().isEmpty()) {
+            String examName = getStringValue(data, "examName");
+            if (examName != null && examName.contains("CET")) {
+                examType = "CET";
+            } else if (examName != null && examName.contains("四级")) {
+                examType = "CET4";
+            } else if (examName != null && examName.contains("六级")) {
+                examType = "CET6";
+            } else {
+                examType = "OTHER";
+            }
+        }
+        entity.setExamType(examType);
+
         entity.setExamName(getStringValue(data, "examName"));
         entity.setAdmissionTicketNo(getStringValue(data, "admissionTicketNo"));
         entity.setExamDate(getLocalDateValue(data, "examDate"));
-        entity.setScore(getBigDecimalValue(data, "score"));
+
+        BigDecimal score = getBigDecimalValue(data, "score");
+        entity.setScore(score);
         entity.setGrade(getStringValue(data, "grade"));
-        entity.setIsPassed(getBooleanValue(data, "isPassed"));
+
+        // isPassed: 外部 API 可能不提供，根据成绩判断
+        Boolean isPassed = getBooleanValue(data, "isPassed");
+        if (isPassed == null) {
+            BigDecimal passingScore = getBigDecimalValue(data, "passingScore");
+            if (score != null && passingScore != null) {
+                isPassed = score.compareTo(passingScore) >= 0;
+            } else if (score != null) {
+                // 默认及格线60分
+                isPassed = score.compareTo(new BigDecimal("60")) >= 0;
+            } else {
+                isPassed = false;
+            }
+        }
+        entity.setIsPassed(isPassed);
+
         entity.setPassingScore(getBigDecimalValue(data, "passingScore"));
         entity.setListeningScore(getBigDecimalValue(data, "listeningScore"));
         entity.setReadingScore(getBigDecimalValue(data, "readingScore"));
@@ -634,17 +931,62 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         TeachingPlan entity = new TeachingPlan();
         entity.setPlanId(getStringValue(data, "planId"));
         entity.setPlanName(getStringValue(data, "planName"));
-        entity.setMajorCode(getStringValue(data, "majorCode"));
-        entity.setMajorName(getStringValue(data, "majorName"));
+
+        // majorCode: 外部 API 可能不提供，使用默认值
+        String majorCode = getStringValue(data, "majorCode");
+        if (majorCode == null || majorCode.trim().isEmpty()) {
+            majorCode = "UNKNOWN";
+        }
+        entity.setMajorCode(majorCode);
+
+        // majorName: 外部 API 可能不提供，使用默认值
+        String majorName = getStringValue(data, "majorName");
+        if (majorName == null || majorName.trim().isEmpty()) {
+            majorName = "未知专业";
+        }
+        entity.setMajorName(majorName);
+
         entity.setGrade(getStringValue(data, "grade"));
-        entity.setSchoolingLength(getIntegerValue(data, "schoolingLength"));
-        entity.setDegreeType(getStringValue(data, "degreeType"));
-        entity.setEducationLevel(getStringValue(data, "educationLevel"));
+
+        // schoolingLength: 外部 API 可能不提供，使用默认值
+        Integer schoolingLength = getIntegerValue(data, "schoolingLength");
+        if (schoolingLength == null) {
+            schoolingLength = 4;  // 默认4年制
+        }
+        entity.setSchoolingLength(schoolingLength);
+
+        // degreeType: 外部 API 可能不提供，使用默认值
+        String degreeType = getStringValue(data, "degreeType");
+        if (degreeType == null || degreeType.trim().isEmpty()) {
+            degreeType = "学士";
+        }
+        entity.setDegreeType(degreeType);
+
+        // educationLevel: 外部 API 可能不提供，使用默认值
+        String educationLevel = getStringValue(data, "educationLevel");
+        if (educationLevel == null || educationLevel.trim().isEmpty()) {
+            educationLevel = "本科";
+        }
+        entity.setEducationLevel(educationLevel);
+
         entity.setCollegeCode(getStringValue(data, "collegeCode"));
         entity.setCollegeName(getStringValue(data, "collegeName"));
         entity.setTotalCredits(getBigDecimalValue(data, "totalCredits"));
-        entity.setRequiredCredits(getBigDecimalValue(data, "requiredCredits"));
-        entity.setElectiveCredits(getBigDecimalValue(data, "electiveCredits"));
+
+        // requiredCredits: 外部 API 可能不提供，使用默认值
+        BigDecimal requiredCredits = getBigDecimalValue(data, "requiredCredits");
+        if (requiredCredits == null) {
+            requiredCredits = BigDecimal.ZERO;
+        }
+        entity.setRequiredCredits(requiredCredits);
+
+        // electiveCredits: 外部 API 可能不提供，使用默认值
+        BigDecimal electiveCredits = getBigDecimalValue(data, "electiveCredits");
+        if (electiveCredits == null) {
+            electiveCredits = BigDecimal.ZERO;
+        }
+        entity.setElectiveCredits(electiveCredits);
+
         entity.setPracticeCredits(getBigDecimalValue(data, "practiceCredits"));
         entity.setGeneralEducationCredits(getBigDecimalValue(data, "generalEducationCredits"));
         entity.setMajorCoreCredits(getBigDecimalValue(data, "majorCoreCredits"));
@@ -654,7 +996,14 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setMainDisciplines(getStringValue(data, "mainDisciplines"));
         entity.setCoreCourses(getStringValue(data, "coreCourses"));
         entity.setPlanStatus(getStringValue(data, "planStatus"));
-        entity.setEffectiveDate(getLocalDateValue(data, "effectiveDate"));
+
+        // effectiveDate: 外部 API 可能不提供，使用默认值
+        LocalDate effectiveDate = getLocalDateValue(data, "effectiveDate");
+        if (effectiveDate == null) {
+            effectiveDate = LocalDate.now();
+        }
+        entity.setEffectiveDate(effectiveDate);
+
         entity.setExpiryDate(getLocalDateValue(data, "expiryDate"));
         entity.setCreator(getStringValue(data, "creator"));
         entity.setReviewer(getStringValue(data, "reviewer"));
@@ -678,7 +1027,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         // student_schedule 使用 delete-then-insert 模式（按 student_id + academic_year + semester）
         String studentId = getStringValue(data, "studentId");
         String academicYear = getStringValue(data, "academicYear");
-        Integer semester = getIntegerValue(data, "semester");
+        Integer semester = parseSchoolSemester(data, "semester");
 
         if (studentId != null && academicYear != null && semester != null) {
             // 先删除该学生同学期的旧课表数据
@@ -911,6 +1260,41 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             return Integer.parseInt(String.valueOf(value));
         } catch (NumberFormatException e) {
             return null;
+        }
+    }
+
+    /**
+     * 学期字段解析：兼容 CDSP API 返回的中文 varchar "秋"/"春" 与 Integer 1/2。
+     * V12 field_mappings 对 student_schedule/course_schedule/teacher_courses 的 xq
+     * 保留 STRING 原值（API 返回的 "秋"/"春" 无法 parse 为 NUMBER），
+     * upsert 层在此处做中文→Integer 的语义转换（秋=1, 春=2）。
+     */
+    private Integer parseSchoolSemester(Map<String, Object> data, String key) {
+        Object value = data.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        String str = String.valueOf(value).trim();
+        if (str.isEmpty()) {
+            return null;
+        }
+        switch (str) {
+            case "秋":
+            case "1":
+                return 1;
+            case "春":
+            case "2":
+                return 2;
+            default:
+                try {
+                    return Integer.parseInt(str);
+                } catch (NumberFormatException e) {
+                    logger.warn("无法解析学期字段值 key={} value={}", key, str);
+                    return null;
+                }
         }
     }
 

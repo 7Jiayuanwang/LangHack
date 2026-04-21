@@ -48,6 +48,11 @@ export function useFeatureToggles() {
       return
     }
 
+    const token = window.localStorage?.getItem('token')
+    if (!token) {
+      return
+    }
+
     // 添加WebSocket事件监听器
     wsCleanup = featureToggleWS.addListener((event) => {
       switch (event.type) {

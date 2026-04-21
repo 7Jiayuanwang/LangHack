@@ -1,9 +1,9 @@
 # 学校数据接入 — 官方接口规范文档
 
 > **数据来源**: `E:\项目\兴趣小组\智能与安全社团\服务器使用\数据资源\接口文档\` 目录下的9个官方PDF文档
-> **版本**: v2.0
+> **版本**: v2.2
 > **创建日期**: 2026-04-15
-> **最近修订**: 2026-04-20 — 按 PDF 原文核对，修正认证、URL、xn/xq 格式和字段大小写约定
+> **最近修订**: 2026-04-21 — 移除 $beauty 参数（实际不支持，返回 IY1103 错误）
 > **原则**: 本文档为字段映射的唯一事实来源（Single Source of Truth），所有代码和SQL必须与此文档保持一致
 
 ---
@@ -86,11 +86,28 @@ URL: .../cdsp_XXX?$filter=xh eq '2023122066164' and xn eq '2025-2026'
 ❌ .../cdsp_XXX?$filter=xh eq '2023122066164'
 ```
 
-**2. `updatedSince` 参数会被静默忽略**
+**2. `updatedSince` 参数已从客户端移除（2026-04-21）**
 
-项目内 `SchoolDataSyncServiceImpl.doIncrementalSync()` 向所有端点传递 `updatedSince=<ISO8601>`，该参数**不在 PDF 也不在 OData 标准中**，学校 API 会忽略该参数并返回全量数据。即"增量同步"实际退化为全量拉取（结合 UPSERT 策略保证最终一致性，功能上无误，但流量和耗时为全量）。
+历史上 `SchoolDataSyncServiceImpl.doIncrementalSync()` 曾向所有端点传递 `updatedSince=<ISO8601>`，该参数**不在 PDF 也不在 OData 标准中**。部分 CDSP 版本**并非静默忽略**该未知参数，而是直接返回 `IY1103` 框架错误，阻断整个增量同步流程。
 
-**3. 字段大小写约定（按端点区分！）**
+**现状**（2026-04-21 起）：客户端**不再**传递 `updatedSince`。增量同步 = 全量拉取 + UPSERT，功能上等价于"终态一致"策略。流量和耗时为全量，但保证不会被 IY1103 拦截。
+
+**3. `$beauty` 参数不支持（2026-04-21 验证）**
+
+尽管 PDF 文档第 6 节提到 `$beauty=true` 参数可使 API 返回英文别名字段名，但**实际测试发现 CDSP API 不支持该参数**，返回错误：
+
+```
+HTTP 400 Bad Request
+[IY1103] NOT SUPPORTED: URI: customQuery
+URL: .../cdsp_XXX?xh=2023112101479&xn=2024&xq=秋&$beauty=true
+```
+
+**现状**（2026-04-21 起）：
+- 客户端**不再**传递 `$beauty` 参数
+- CDSP API 默认返回英文别名字段名（`xh`, `xn`, `xq`, `kcmc` 等），无需额外参数
+- V12 `field_mappings` seed 已配置正确的英文别名字段名，与 API 默认返回格式对齐
+
+**4. 字段大小写约定（按端点区分！）**
 
 CDSP 端点对参数名和返回字段的大小写敏感，且**每个端点的约定不同**：
 
@@ -139,20 +156,47 @@ PDF 返回示例对照（来自《学生课表接口文档.pdf》第 4 节）：
 
 ### 响应结构
 
-OData v2 标准包装：
+OData v2 标准包装（API 默认返回英文别名字段名）：
 
 ```json
 {
   "code": 200,
   "msg": "success",
-  "value": [ { ...记录1... }, { ...记录2... } ]
+  "value": [ { "xh": "...", "xn": "2024", "xq": "春", ... }, ... ]
 }
 ```
+
+> CDSP API 默认返回英文别名字段名（`xh`/`xn`/`xq`），与 V12 field_mappings 对齐，无需额外参数。
 
 解析策略（`SchoolDataApiClientImpl.parseResponse`）：
 1. 先尝试直接解析为 JSON 数组
 2. 失败后解析为包装对象，依次取 `value` → `data` → `result` → `records` → `list` → `items` 字段
 3. 业务错误码 `code != 200` 记录为 error 并返回空集
+
+### 服务层学期解析（`parseSchoolSemester`）
+
+CDSP `xq` 返回 varchar 中文 `"秋"`/`"春"`/`"夏"`，但本地 `teaching_class.semester` / `course_schedule.semester` / `student_schedule.semester` 字段为 `Integer`。映射通过 `FieldMapping` 保持原始字符串（target_type=STRING），到 service 层 UPSERT 时再由 `parseSchoolSemester(Map<String,Object> data, String key)` 统一转换：
+
+```java
+private Integer parseSchoolSemester(Map<String,Object> data, String key) {
+    Object v = data.get(key);
+    if (v == null) return null;
+    String s = v.toString().trim();
+    switch (s) {
+        case "秋": return 1;
+        case "春": return 2;
+        case "夏": return 3;
+        default:
+            try { return Integer.parseInt(s); }
+            catch (NumberFormatException e) {
+                log.warn("Unknown semester value: {}", s);
+                return null;
+            }
+    }
+}
+```
+
+调用点：`upsertStudentSchedule`, `upsertTeachingClass`, `upsertCourseSchedule`, `upsertCourseSelection`。
 
 ---
 
@@ -320,8 +364,8 @@ OData v2 标准包装：
 | `skjc` | `period` | STRING | 是 | 上课节次（如"1-2"） |
 | `zcd` | `week_range` | STRING | 是 | 周次（如"1-16周"） |
 | `cdmc` | `class_location` | STRING | 是 | 上课地点名称 |
-| `xn` | `academic_year` | STRING | 是 | 学年 |
-| `xq` | `semester` | NUMBER | 是 | 学期 |
+| `xn` | `academic_year` | STRING | 是 | 学年（CDSP 单年如"2024"） |
+| `xq` | `semester` | STRING | 是 | 学期 varchar 中文"秋"/"春"，service 层 `parseSchoolSemester` 转 Integer |
 
 ### 注意事项
 - 一个教学班可以有多个时间安排
@@ -334,12 +378,12 @@ OData v2 标准包装：
 
 ---
 
-## 5. 学生选课接口
+## 5. 学生课表接口
 
-**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294802871926794`
-**对应数据源**: `course_selection`
-**对应本地表**: `course_selection`
-**字段大小写**: **UPPERCASE**（`XH`, `KSXZDM`, `KSXZMC`, `KCBH` 等）
+**完整 URL**: `https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294397274341377`
+**对应数据源**: `student_schedule`
+**对应本地表**: `student_schedule`
+**字段大小写**: lowercase（`xh`, `kcbh`, `kcmc`, `xn`, `xq`, `skxqj`, `skjc`, `zcd`, `cdmc` 等）
 
 ### 请求参数
 
@@ -465,15 +509,23 @@ OData v2 标准包装：
 
 ### 返回字段
 
+> ⚠️ **CDSP 语义关键澄清**（2026-04-21 基于官方后台截图核对修正）：
+> - `kcdm` = **课程代码**（如 `"594625"`），对应 `course.course_code`
+> - `kcbh` = **课程班号/教学班号**（如 `"51425977"`），对应 `teaching_class.class_id`
+> - `kxh`  = **课序号**（如 `"594625"`，通常等于课程代码），此字段本项目不映射
+>
+> V12 之前误将 `kxh→classId` 和 `kcbh→courseCode`（语义颠倒），2026-04-21 已修正。
+
 | API字段(source) | 本地字段(target) | 类型 | 必填 | 说明 |
 |----------------|-----------------|------|------|------|
-| `jgh` | `teacher_id` | STRING | 是 | 教师工号 |
-| `xm` | `teacher_name` | STRING | 是 | 教师姓名 |
-| `jxbid` | `class_id` | STRING | 是 | 教学班号 |
-| `kcbh` | `course_code` | STRING | 是 | 课程编号 |
+| `rkjsh` / `jgh` | `teacher_id` | STRING | 是 | 教师工号 |
+| `rkjsxm` / `xm` | `teacher_name` | STRING | 是 | 教师姓名 |
+| `kcbh` | `class_id` | STRING | 是 | **课程班号 / 教学班号**（非课程代码） |
+| `kcdm` | `course_code` | STRING | 是 | **课程代码**（如"594625"） |
 | `kcmc` | `course_name` | STRING | 是 | 课程名称 |
-| `xn` | `academic_year` | STRING | 是 | 学年 |
-| `xq` | `semester` | NUMBER | 是 | 学期 |
+| `xn` | `academic_year` | STRING | 是 | 学年（CDSP 单年如"2024"） |
+| `xq` | `semester` | STRING | 是 | 学期 varchar 中文"秋"/"春"，service 层 `parseSchoolSemester` 转 Integer |
+| `kcbbm` | `class_name` | STRING | 否 | 课程班别名（作班级展示名） |
 
 ### 同步说明
 - 此接口与接口3共享 `teaching_class` 表
@@ -522,8 +574,8 @@ GET .../cdsp_1715294397274341377?xh=2023122066164&xn=2025&xq=秋
 | `skjc` | `period` | STRING | 是 | 上课节次（如"1-2"） |
 | `zcd` | `week_range` | STRING | 是 | 周次（如"1-16周"） |
 | `cdmc` | `class_location` | STRING | 是 | 上课地点名称 |
-| `xn` | `academic_year` | STRING | 是 | 学年 |
-| `xq` | `semester` | NUMBER | 是 | 学期 |
+| `xn` | `academic_year` | STRING | 是 | 学年（CDSP 单年如"2024"） |
+| `xq` | `semester` | STRING | 是 | 学期 varchar 中文"秋"/"春"，service 层 `parseSchoolSemester` 转 Integer |
 
 ### 实现状态
 - [x] 数据库表创建（V12 Flyway 迁移）
@@ -571,5 +623,7 @@ v1.0 版本中的 "V12 vs 官方规范差异表" 基于"所有字段应为小写
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-04-21 | v2.2 | **$beauty 参数移除**：实际测试发现 CDSP API 不支持 `$beauty` 参数（返回 IY1103 错误），尽管 PDF 文档提到该参数。API 默认返回英文别名字段名，无需额外参数。移除所有 `$beauty=true` 注入代码，更新文档说明。 |
+| 2026-04-21 | v2.1 | **代码层修复同步**：① `fetchDataWithPath` 全局注入 `$beauty=true` → 所有端点返回英文别名 KEY（修复中文 KEY 导致 100% 字段映射未命中问题）；② `doIncrementalSync` 移除 `updatedSince` 参数（部分 CDSP 版本返回 `IY1103` 而非静默忽略，增量同步退化为全量 + UPSERT）；③ `teacher_courses` 字段映射语义修正 —— `kcbh→classId`（课程班号），`kcdm→courseCode`（课程代码），去除错误的 `kxh→classId` / `kcbh→courseCode`；④ `teacher_courses` / `course_schedule` / `student_schedule` 的 `xq` 字段 target_type 改 STRING（CDSP 返回 varchar 中文），新增 `SchoolDataSyncServiceImpl.parseSchoolSemester` helper 在 service 层将 `"秋"/"春"` 转 Integer `1/2`（原 NUMBER 类型 parseInt 直接丢弃中文值）；⑤ V12 迁移脚本 + `docker/mysql/init/04-apply-all-migrations.sql` 双写同步 |
 | 2026-04-20 | v2.0 | **重大修订**：按 PDF 原文核对，修正：①API base URL 改为 `cdsp.imau.edu.cn/cdsp/data-api/v2/`，每端点独立完整 URL；② 认证从 Bearer Token 改为 `appId + timestamp + sign` 签名；③ `xn` 格式为单起始年份（非 `2025-2026`）；④ `xq` 格式为中文汉字 `秋/春/夏`（非整数 `3/12/16`）；⑤ 新增 IY1103 错误说明（不支持 OData `$filter`）；⑥ 新增 `updatedSince` 被忽略说明；⑦ 新增每端点字段大小写约定表（UPPERCASE vs lowercase） |
 | 2026-04-15 | v1.0 | 初始版本，基于9个官方PDF文档整理（注：当时对认证方式和 xn/xq 格式描述有误，已在 v2.0 更正） |

@@ -2,12 +2,12 @@
   <div class="student-schedule">
     <!-- 学期选择器 -->
     <div class="semester-selector">
-      <el-select v-model="academicYear" placeholder="学年" size="small" style="width: 130px" @change="loadSchedule">
+      <el-select v-model="academicYear" placeholder="年份" size="small" style="width: 130px" @change="loadSchedule">
         <el-option v-for="y in academicYears" :key="y" :label="y" :value="y" />
       </el-select>
-      <el-select v-model="semester" placeholder="学期" size="small" style="width: 80px" @change="loadSchedule">
-        <el-option :value="1" label="第一学期" />
-        <el-option :value="2" label="第二学期" />
+      <el-select v-model="semester" placeholder="学期" size="small" style="width: 96px" @change="loadSchedule">
+        <el-option :value="1" label="秋季学期" />
+        <el-option :value="2" label="春季学期" />
       </el-select>
       <el-button size="small" :loading="refreshing" @click="handleRefresh">
         刷新
@@ -100,20 +100,17 @@ const scheduleList = ref([])
 const now = new Date()
 const currentMonth = now.getMonth() + 1
 const currentYear = now.getFullYear()
-const defaultAcademicYear = currentMonth >= 8
-  ? `${currentYear}-${currentYear + 1}`
-  : `${currentYear - 1}-${currentYear}`
+const defaultAcademicYear = String(currentYear)
 const defaultSemester = (currentMonth >= 2 && currentMonth <= 7) ? 2 : 1
 
 const academicYear = ref(defaultAcademicYear)
 const semester = ref(defaultSemester)
 
-// 生成可选学年（当前学年 ± 2年）
+// 生成年份选项（当前年向前 4 年）
 const academicYears = computed(() => {
-  const base = currentYear
   const years = []
-  for (let i = -2; i <= 2; i++) {
-    years.push(`${base + i}-${base + i + 1}`)
+  for (let year = currentYear - 4; year <= currentYear; year++) {
+    years.push(String(year))
   }
   return years
 })

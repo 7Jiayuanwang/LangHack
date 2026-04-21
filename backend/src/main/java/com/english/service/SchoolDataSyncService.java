@@ -20,6 +20,9 @@ public interface SchoolDataSyncService {
      */
     SyncLog fullSync(String dataSource, String triggerType, String operator);
 
+    SyncLog fullSync(String dataSource, String triggerType, String operator,
+                     com.english.dto.SchoolDataSyncFilterRequest request);
+
     /**
      * 增量同步指定数据源
      *
@@ -29,6 +32,9 @@ public interface SchoolDataSyncService {
      * @return 同步日志
      */
     SyncLog incrementalSync(String dataSource, String triggerType, String operator);
+
+    SyncLog incrementalSync(String dataSource, String triggerType, String operator,
+                            com.english.dto.SchoolDataSyncFilterRequest request);
 
     /**
      * 全量同步所有数据源
