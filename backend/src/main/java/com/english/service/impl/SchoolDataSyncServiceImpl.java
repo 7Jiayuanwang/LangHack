@@ -432,7 +432,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 upsertSchoolCourse(mappedData);
                 break;
             case "teaching_class":
-                upsertTeachingClass(mappedData);
+                // bzkcxx (cdsp_1721804030860152850) 端点实际返回课程基本信息（2026-04-21 PDF 复核），
+                // 字段与 school_course 重叠，路由到 upsertSchoolCourse 避免 TeachingClass NOT NULL 约束失败
+                upsertSchoolCourse(mappedData);
                 break;
             case "course_schedule":
                 upsertCourseSchedule(mappedData);
@@ -817,7 +819,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             case "school_course":
                 return schoolCourseMapper.selectCount(null);
             case "teaching_class":
-                return teachingClassMapper.selectCount(null);
+                // bzkcxx 端点实际落到 school_course 表（见 upsertEntity 注释）
+                return schoolCourseMapper.selectCount(null);
             case "course_schedule":
                 return courseScheduleMapper.selectCount(null);
             case "course_selection":

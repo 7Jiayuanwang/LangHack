@@ -16,9 +16,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -95,14 +98,24 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             return new HashMap<>(sourceData);
         }
 
-        // Build lookup: sourceField -> mapping
+        // Build lookup: sourceField(lowercase) -> mapping
+        // CDSP 字段大小写按端点区分（3 个 UPPERCASE + 6 个 lowercase），V12 seed 统一用 lowercase；
+        // 此处做大小写不敏感的查表以兼容 API 返回任意大小写
         Map<String, FieldMapping> mappingLookup = mappings.stream()
                 .collect(Collectors.toMap(
-                        FieldMapping::getSourceField,
+                        m -> m.getSourceField() == null ? "" : m.getSourceField().toLowerCase(Locale.ROOT),
                         m -> m,
                         (a, b) -> a,  // duplicate key: keep first
                         LinkedHashMap::new
                 ));
+
+        // 预构建 sourceData 的 lowercase key 集合，用于必填字段缺失检测（case-insensitive）
+        Set<String> sourceDataKeysLower = new HashSet<>();
+        for (String key : sourceData.keySet()) {
+            if (key != null) {
+                sourceDataKeysLower.add(key.toLowerCase(Locale.ROOT));
+            }
+        }
 
         Map<String, Object> result = new LinkedHashMap<>();
 
@@ -110,7 +123,8 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             String sourceField = entry.getKey();
             Object value = entry.getValue();
 
-            FieldMapping mapping = mappingLookup.get(sourceField);
+            String lookupKey = sourceField == null ? "" : sourceField.toLowerCase(Locale.ROOT);
+            FieldMapping mapping = mappingLookup.get(lookupKey);
             if (mapping == null) {
                 // No mapping configured for this source field, skip it
                 continue;
@@ -162,9 +176,12 @@ public class FieldMappingServiceImpl implements FieldMappingService {
         // Check for required fields that were missing from source data
         for (FieldMapping mapping : mappings) {
             String camelCaseField = toCamelCase(mapping.getTargetField());
+            String srcKeyLower = mapping.getSourceField() == null
+                    ? ""
+                    : mapping.getSourceField().toLowerCase(Locale.ROOT);
             if (Boolean.TRUE.equals(mapping.getIsRequired())
                     && !result.containsKey(camelCaseField)
-                    && !sourceData.containsKey(mapping.getSourceField())) {
+                    && !sourceDataKeysLower.contains(srcKeyLower)) {
                 // Required field entirely missing from source
                 if (mapping.getDefaultValue() != null && !mapping.getDefaultValue().isEmpty()) {
                     Object defaultValue = convertType(mapping.getDefaultValue(), mapping.getTargetType(), mapping.getConverterConfig());
