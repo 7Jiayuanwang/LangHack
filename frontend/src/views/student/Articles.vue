@@ -166,6 +166,7 @@ import {
   TrendCharts, Connection, Reading, Medal,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight
 } from '@element-plus/icons-vue'
+import { getRecommendedTexts } from '@/api/texts'
 
 const router = useRouter()
 
@@ -278,9 +279,7 @@ const loadRecommended = async () => {
   loading.value = true
   loadError.value = false
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/recommended?count=12`)
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
-    const data = await response.json()
+    const data = await getRecommendedTexts(12)
     if (data?.code === 200) {
       recommendedArticles.value = (Array.isArray(data.data) ? data.data : []).map(text => {
         return {

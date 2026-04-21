@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -40,7 +41,7 @@ class SimilarityMatrixControllerTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         controller = new SimilarityMatrixController();
-        controller.scheduleTask = scheduleTask;
+        ReflectionTestUtils.setField(controller, "scheduleTask", scheduleTask);
 
         // 设置 ADMIN 认证
         var auth = new UsernamePasswordAuthenticationToken(
