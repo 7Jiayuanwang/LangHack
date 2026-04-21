@@ -154,6 +154,18 @@
       </div>
     </main>
 
+    <!-- Floating Refresh Button (仅推荐 Tab 显示) -->
+    <button
+      v-if="selectedCategory === 'recommendation'"
+      class="fab-refresh"
+      :class="{ 'is-loading': loading }"
+      :disabled="loading"
+      @click="loadRecommended"
+      title="换一批推荐"
+    >
+      <el-icon :size="22"><Refresh /></el-icon>
+    </button>
+
   </div>
 </template>
 
@@ -164,7 +176,7 @@ import { ElMessage } from 'element-plus'
 import {
   Search, Bell, DocumentRemove, Timer,
   TrendCharts, Connection, Reading, Medal,
-  ArrowUp, ArrowDown, ArrowLeft, ArrowRight
+  ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Refresh
 } from '@element-plus/icons-vue'
 import { getRecommendedTexts } from '@/api/texts'
 
@@ -180,6 +192,8 @@ const currentPage = ref(1)
 const pageSize = 5
 const searchQuery = ref('')
 const searchVisible = ref(false)
+// 本会话中已展示过的推荐文章 ID — 传给后端用于"换一批"时排除
+const shownRecommendedIds = ref([])
 
 const totalPages = computed(() => Math.ceil(filteredArticles.value.length / pageSize))
 const filteredArticles = computed(() => {
@@ -248,6 +262,8 @@ const selectCategory = (val) => {
   selectedCategory.value = val
   currentPage.value = 1
   if (val === 'recommendation') {
+    // 切换到推荐 tab 时清空"已展示"记录，重新开一批
+    shownRecommendedIds.value = []
     loadRecommended()
   } else {
     loadArticles()
@@ -275,18 +291,39 @@ const getRandomCategory = () => {
   return cats[Math.floor(Math.random() * cats.length)].value
 }
 
-const loadRecommended = async () => {
+const COUNT_PER_BATCH = 5
+
+const mapRecommendedText = (text) => ({
+  ...text,
+  category: 'recommendation',
+  coverGradient: getRandomGradient(),
+  readingTime: Math.max(1, Math.ceil((text.content?.length || 0) / 800))
+})
+
+const loadRecommended = async ({ resetExclusions = false } = {}) => {
   loading.value = true
   loadError.value = false
+  if (resetExclusions) {
+    shownRecommendedIds.value = []
+  }
   try {
-    const data = await getRecommendedTexts(12)
+    let data = await getRecommendedTexts(COUNT_PER_BATCH, shownRecommendedIds.value)
+    // 后端已把已读 + exclude 都排除了 —— 如果返回 0 条且 exclude 非空，说明候选池被本会话吃光了
+    // 这时清空 exclude 再请求一次，让用户重新循环看
     if (data?.code === 200) {
-      recommendedArticles.value = (Array.isArray(data.data) ? data.data : []).map(text => {
-        return {
-          ...text,
-          category: 'recommendation',
-          coverGradient: getRandomGradient(),
-          readingTime: Math.max(1, Math.ceil((text.content?.length || 0) / 800))
+      const list = Array.isArray(data.data) ? data.data : []
+      if (list.length === 0 && shownRecommendedIds.value.length > 0) {
+        shownRecommendedIds.value = []
+        data = await getRecommendedTexts(COUNT_PER_BATCH, [])
+      }
+    }
+    if (data?.code === 200) {
+      const list = Array.isArray(data.data) ? data.data : []
+      recommendedArticles.value = list.map(mapRecommendedText)
+      // 累积本批次的 id
+      list.forEach(t => {
+        if (t?.id != null && !shownRecommendedIds.value.includes(t.id)) {
+          shownRecommendedIds.value.push(t.id)
         }
       })
     } else {
@@ -876,6 +913,58 @@ onMounted(() => {
 
 .bottom-spacer {
   height: calc(80px + env(safe-area-inset-bottom, 0px)); /* Match Layout nav + safe area */
+}
+
+/* --- Floating Refresh Button --- */
+.fab-refresh {
+  position: fixed;
+  right: 20px;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px)); /* 避开底部导航栏 */
+  z-index: 60;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #1d4ed8 0%, #137fec 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(29, 78, 216, 0.35), 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.fab-refresh:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 12px 32px rgba(29, 78, 216, 0.45), 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.fab-refresh:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.fab-refresh:disabled {
+  cursor: wait;
+  opacity: 0.85;
+}
+
+.fab-refresh.is-loading .el-icon {
+  animation: fab-spin 0.9s linear infinite;
+}
+
+@keyframes fab-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (min-width: 768px) {
+  .fab-refresh {
+    right: 32px;
+    bottom: 32px;
+  }
 }
 
 /* --- Filter Collapse Transition --- */

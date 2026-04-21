@@ -2,6 +2,7 @@ package com.english.service;
 
 import com.english.entity.Text;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -16,9 +17,17 @@ public interface RecommendationService {
     /**
      * 为用户生成个性化推荐列表。
      *
-     * @param userId 目标用户 ID（非空）
-     * @param count  期望返回的文章数量（外部已夹紧到合理区间）
+     * @param userId     目标用户 ID（非空）
+     * @param count      期望返回的文章数量（外部已夹紧到合理区间）
+     * @param excludeIds 额外需要排除的文章 ID（如客户端已展示过的，用于"换一批"场景）
      * @return 推荐文章列表，可能少于 count（极端情况下整个库无可推荐文章）
      */
-    List<Text> recommend(Long userId, int count);
+    List<Text> recommend(Long userId, int count, Collection<Long> excludeIds);
+
+    /**
+     * 便捷重载：不排除额外 ID。
+     */
+    default List<Text> recommend(Long userId, int count) {
+        return recommend(userId, count, null);
+    }
 }

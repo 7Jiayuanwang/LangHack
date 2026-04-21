@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -79,13 +80,16 @@ public class RecommendationServiceImpl implements RecommendationService {
     private TextService textService;
 
     @Override
-    public List<Text> recommend(Long userId, int count) {
+    public List<Text> recommend(Long userId, int count, Collection<Long> excludeIds) {
         if (userId == null || count <= 0) {
             return Collections.emptyList();
         }
 
         List<Long> readTextIds = userTextReadMapper.selectReadTextIds(userId);
         Set<Long> excludeSet = new HashSet<>(readTextIds);
+        if (excludeIds != null && !excludeIds.isEmpty()) {
+            excludeSet.addAll(excludeIds);
+        }
 
         if (readTextIds.size() < coldStartMinReads) {
             log.debug("[Recommend] userId={} 冷启动 (reads={} < {}), 走兜底策略",
