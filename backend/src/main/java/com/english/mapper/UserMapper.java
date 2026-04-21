@@ -29,6 +29,12 @@ public interface UserMapper extends BaseMapper<User> {
     User findDeletedByUsername(String username);
 
     /**
+     * 通过 ID 查找已软删除的用户（绕过 @TableLogic 过滤）
+     */
+    @Select("SELECT * FROM users WHERE id = #{id} AND deleted = 1 LIMIT 1")
+    User findDeletedById(Long id);
+
+    /**
      * 恢复软删除用户（设置 deleted=0）
      */
     @Update("UPDATE users SET deleted = 0, updated_time = NOW() WHERE id = #{id} AND deleted = 1")

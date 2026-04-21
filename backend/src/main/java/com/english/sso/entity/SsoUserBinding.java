@@ -54,6 +54,11 @@ public class SsoUserBinding {
     private String ssoMemberOf;
 
     /**
+     * 管理员备注：记录特殊情况（如用户被删除后重新登录）
+     */
+    private String adminRemark;
+
+    /**
      * 是否自动审批: 0=待审批, 1=已审批
      */
     private Integer autoApproved;

@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
 -- LangHack 合并迁移脚本（MySQL 8.0 兼容）
--- 将 Flyway V0 ~ V18 的所有迁移合并为单个幂等脚本
+-- 将 Flyway V0 ~ V21 的所有迁移合并为单个幂等脚本
 --
 -- 对应 Flyway 迁移文件（整合后 - 2026-04-21 V12 瘦身 + V20 合入 + V17-V19 重编号）:
 --   V0__base_tables.sql                     (基础表)
@@ -23,6 +23,7 @@
 --   V16__ai_qa_recovery_and_hiagent_config.sql (AI 问答开关恢复 + HiAgent 凭证迁 DB, 旧 V17)
 --   V17__add_page_word_recite_toggle.sql    (学生端-背单词页 feature_toggle seed, 旧 V18)
 --   V18__ai_provider_protocol.sql           (AI 服务商协议类型字段, 旧 V19)
+--   V21__add_sso_binding_admin_remark.sql   (SSO 绑定表添加管理员备注字段)
 --
 -- 注意：旧 V20__align_field_mappings_with_pdf.sql 已于 2026-04-21 合并进 V12，
 --       V12 Part 3.1/3.2/3.3 的 camelCase/snake_case 冗余 field_mappings 已删除
@@ -1746,5 +1747,36 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 ('student_schedule', 'js',      'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室'),
 ('student_schedule', 'xn',      'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"）'),
 ('student_schedule', 'xq',      'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"');
+
+-- ════════════════════════════════════════════════════════════════
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- V21: SSO 绑定表添加管理员备注字段
+-- 用于记录用户被删除后重新登录等需要管理员审核的情况
+-- ═══════════════════════════════════════════════════════════════
+
+-- 检查列是否存在的存储过程
+DELIMITER $$
+DROP PROCEDURE IF EXISTS add_column_if_not_exists_v21$$
+CREATE PROCEDURE add_column_if_not_exists_v21()
+BEGIN
+    DECLARE col_exists INT DEFAULT 0;
+
+    SELECT COUNT(*) INTO col_exists
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = 'english_learning'
+      AND TABLE_NAME = 'sso_user_bindings'
+      AND COLUMN_NAME = 'admin_remark';
+
+    IF col_exists = 0 THEN
+        ALTER TABLE sso_user_bindings
+        ADD COLUMN admin_remark TEXT COMMENT '管理员备注：记录特殊情况（如用户被删除后重新登录）' AFTER sso_member_of;
+    END IF;
+END$$
+DELIMITER ;
+
+CALL add_column_if_not_exists_v21();
+DROP PROCEDURE IF EXISTS add_column_if_not_exists_v21;
 
 -- ════════════════════════════════════════════════════════════════

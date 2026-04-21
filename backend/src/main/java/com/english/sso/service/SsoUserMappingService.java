@@ -2,6 +2,7 @@ package com.english.sso.service;
 
 import com.alibaba.fastjson.JSON;
 import com.english.entity.User;
+import com.english.mapper.UserMapper;
 import com.english.service.UserService;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
@@ -47,6 +48,9 @@ public class SsoUserMappingService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private UserMapper userMapper;
 
     /**
      * 处理 SSO 登录：绑定/创建用户，返回登录结果
@@ -115,6 +119,37 @@ public class SsoUserMappingService {
             // 获取用户信息
             User user = userService.getUserById(binding.getUserId());
             if (user == null) {
+                // 检查用户是否被软删除
+                User deletedUser = userMapper.findDeletedById(binding.getUserId());
+                if (deletedUser != null) {
+                    log.warn("SSO 用户对应的本地账号已被删除，提交管理员审核: bindingId={}, userId={}, username={}, deletedTime={}",
+                            binding.getId(), deletedUser.getId(), deletedUser.getUsername(), deletedUser.getUpdatedTime());
+
+                    // 构建管理员备注
+                    String remark = String.format(
+                            "用户 %s (ID: %d) 曾于 %s 被删除，于 %s 通过 SSO 重新登录。" +
+                            "删除前角色: %s，状态: %s。请管理员审核是否允许恢复访问。",
+                            deletedUser.getUsername(),
+                            deletedUser.getId(),
+                            deletedUser.getUpdatedTime(),
+                            LocalDateTime.now(),
+                            deletedUser.getRole(),
+                            deletedUser.getStatus()
+                    );
+
+                    // 更新绑定为待审批状态，并添加备注
+                    binding.setAutoApproved(0);
+                    binding.setAdminRemark(remark);
+                    bindingMapper.updateById(binding);
+
+                    log.info("已将绑定设为待审批状态并添加备注: bindingId={}", binding.getId());
+                    return SsoLoginResult.pendingApproval(
+                            binding.getId(),
+                            "您的账号曾被删除，需要管理员重新审核。\n如有疑问请致电：计算机与信息工程学院43019235"
+                    );
+                }
+
+                // 用户彻底不存在（硬删除或数据异常）
                 throw new SsoBusinessException(SsoErrorCode.USER_NOT_FOUND,
                         "SSO 绑定已存在但对应用户丢失，请联系管理员");
             }
