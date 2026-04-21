@@ -61,6 +61,20 @@ public class FieldMappingServiceImpl implements FieldMappingService {
              .eq("is_active", 1);
         FieldMapping mapping = fieldMappingMapper.selectOne(query);
 
+        // 未命中时兜底：若 sourceField 是中文参数名，按字典翻译为英文别名后再查
+        // CDSP API 返回的 JSON key 默认为中文（"学号"/"开课计划id"...），与 V12 seed 的
+        // 英文别名（xh/kkjhid）不一致，需要此兜底保证外部调用方传中文也能命中
+        if (mapping == null) {
+            String alias = SchoolDataFieldAlias.resolveAlias(dataSource, sourceField);
+            if (alias != null) {
+                QueryWrapper<FieldMapping> aliasQuery = new QueryWrapper<>();
+                aliasQuery.eq("data_source", dataSource)
+                         .eq("is_active", 1)
+                         .apply("LOWER(source_field) = {0}", alias);
+                mapping = fieldMappingMapper.selectOne(aliasQuery);
+            }
+        }
+
         if (mapping == null) {
             // 无映射配置，原样返回
             return value;
@@ -99,7 +113,7 @@ public class FieldMappingServiceImpl implements FieldMappingService {
         }
 
         // Build lookup: sourceField(lowercase) -> mapping
-        // CDSP 字段大小写按端点区分（3 个 UPPERCASE + 6 个 lowercase），V12 seed 统一用 lowercase；
+        // CDSP 字段大小写按端点区分（3 个 UPPERCASE + 6 个 lowercase），V12 seed 按 PDF 原文保留；
         // 此处做大小写不敏感的查表以兼容 API 返回任意大小写
         Map<String, FieldMapping> mappingLookup = mappings.stream()
                 .collect(Collectors.toMap(
@@ -110,10 +124,16 @@ public class FieldMappingServiceImpl implements FieldMappingService {
                 ));
 
         // 预构建 sourceData 的 lowercase key 集合，用于必填字段缺失检测（case-insensitive）
+        // 中文 key 额外翻译为英文别名一并加入，避免中文 key 被误判为"源数据缺失"
         Set<String> sourceDataKeysLower = new HashSet<>();
         for (String key : sourceData.keySet()) {
-            if (key != null) {
-                sourceDataKeysLower.add(key.toLowerCase(Locale.ROOT));
+            if (key == null) {
+                continue;
+            }
+            sourceDataKeysLower.add(key.toLowerCase(Locale.ROOT));
+            String alias = SchoolDataFieldAlias.resolveAlias(dataSource, key);
+            if (alias != null) {
+                sourceDataKeysLower.add(alias);
             }
         }
 
@@ -123,8 +143,19 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             String sourceField = entry.getKey();
             Object value = entry.getValue();
 
+            // 1. 先按原字段 lowercase 查（英文别名或大小写变体）
             String lookupKey = sourceField == null ? "" : sourceField.toLowerCase(Locale.ROOT);
             FieldMapping mapping = mappingLookup.get(lookupKey);
+
+            // 2. 未命中兜底：中文参数名 → 英文别名 lowercase
+            //    CDSP API 实测返回中文 key（"学号"/"开课计划id"等），与 V12 seed 英文别名不一致
+            if (mapping == null && sourceField != null) {
+                String alias = SchoolDataFieldAlias.resolveAlias(dataSource, sourceField);
+                if (alias != null) {
+                    mapping = mappingLookup.get(alias);
+                }
+            }
+
             if (mapping == null) {
                 // No mapping configured for this source field, skip it
                 continue;

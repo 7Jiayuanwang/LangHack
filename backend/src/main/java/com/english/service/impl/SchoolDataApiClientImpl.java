@@ -246,8 +246,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      * 通过完整 URL 获取数据
      * <p>
      * <b>重要</b>：CDSP API 实际不支持 $beauty 参数（返回 IY1103 错误），
-     * 尽管 PDF 文档第 6 节提到该参数。API 默认返回英文别名字段名（xh/xn/xq/kcmc/...），
-     * 与 V12 field_mappings seed 对齐，无需额外参数。
+     * 尽管 PDF 文档第 6 节提到该参数。API 默认返回<b>中文参数名</b>作为 JSON keys
+     * （如 "学号"/"开课计划id"/"课程名称"），与 V12 {@code field_mappings.source_field} 存的
+     * 英文别名（xh/kkjhid/kcmc）不一致 —— 字段映射层
+     * ({@link FieldMappingServiceImpl#applyMapping}) 通过 {@link SchoolDataFieldAlias}
+     * 做中文→英文别名兜底查表，保证同步不被 key 不匹配拦截。
      * <p>
      * 支持的 OData 参数仅限：$top, $skip（分页），其他参数（$filter/$select/$beauty）均不支持。
      */

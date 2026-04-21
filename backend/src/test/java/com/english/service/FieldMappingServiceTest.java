@@ -261,6 +261,74 @@ class FieldMappingServiceTest {
 
             assertEquals("DEFAULT", result.get("targetField"));
         }
+
+        @Test
+        @DisplayName("中文 key 经字典兜底翻译为英文别名后命中 mapping（CDSP 实际返回场景）")
+        void applyMapping_chineseKey_resolvesToAlias() {
+            FieldMapping mapping = new FieldMapping();
+            mapping.setId(1L);
+            mapping.setDataSource("teaching_plans");
+            mapping.setSourceField("kkjhid");
+            mapping.setTargetField("planId");
+            mapping.setTargetType("STRING");
+            mapping.setConverter("NONE");
+            mapping.setIsActive(true);
+            mapping.setIsRequired(true);
+
+            when(fieldMappingMapper.selectList(any())).thenReturn(List.of(mapping));
+
+            Map<String, Object> source = new HashMap<>();
+            source.put("开课计划id", "1244967");
+            Map<String, Object> result = fieldMappingService.applyMapping("teaching_plans", source);
+
+            assertEquals("1244967", result.get("planId"));
+        }
+
+        @Test
+        @DisplayName("UPPERCASE 端点同样支持中文 key 兜底（course_selection 场景）")
+        void applyMapping_chineseKeyForUppercaseEndpoint_resolvesToAlias() {
+            FieldMapping mapping = new FieldMapping();
+            mapping.setId(1L);
+            mapping.setDataSource("course_selection");
+            mapping.setSourceField("XH");
+            mapping.setTargetField("studentId");
+            mapping.setTargetType("STRING");
+            mapping.setConverter("NONE");
+            mapping.setIsActive(true);
+            mapping.setIsRequired(true);
+
+            when(fieldMappingMapper.selectList(any())).thenReturn(List.of(mapping));
+
+            Map<String, Object> source = new HashMap<>();
+            source.put("学号", "2023122066164");
+            Map<String, Object> result = fieldMappingService.applyMapping("course_selection", source);
+
+            assertEquals("2023122066164", result.get("studentId"));
+        }
+
+        @Test
+        @DisplayName("中文 key 存在时必填字段不应误判为缺失（兜底翻译加入 keys 集合）")
+        void applyMapping_chineseKeyPresent_doesNotTriggerMissingDefault() {
+            FieldMapping mapping = new FieldMapping();
+            mapping.setId(1L);
+            mapping.setDataSource("student_schedule");
+            mapping.setSourceField("xh");
+            mapping.setTargetField("studentId");
+            mapping.setTargetType("STRING");
+            mapping.setConverter("NONE");
+            mapping.setIsActive(true);
+            mapping.setIsRequired(true);
+            mapping.setDefaultValue("FALLBACK");
+
+            when(fieldMappingMapper.selectList(any())).thenReturn(List.of(mapping));
+
+            Map<String, Object> source = new HashMap<>();
+            source.put("学号", "20231001");
+            Map<String, Object> result = fieldMappingService.applyMapping("student_schedule", source);
+
+            // 应该取中文 key 对应的值，而不是触发 default 回填
+            assertEquals("20231001", result.get("studentId"));
+        }
     }
 
     // ==================== updateFieldMapping tests ====================
