@@ -102,8 +102,8 @@ class SsoUserMappingServiceDeletedUserTest {
         SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
         // 验证结果
-        assertFalse(result.isSuccess(), "应该返回待审批状态");
-        assertTrue(result.isPendingApproval(), "应该标记为待审批");
+        assertNull(result.getToken(), "应该返回待审批状态");
+        assertTrue(result.isNeedsApproval(), "应该标记为待审批");
         assertEquals(1L, result.getBindingId(), "应该返回绑定 ID");
         assertTrue(result.getMessage().contains("曾被删除"), "错误消息应该提示用户曾被删除");
 
