@@ -1,7 +1,6 @@
 <template>
   <div class="permission-denied" :class="`theme-${theme}`">
     <div class="content-wrapper">
-      <!-- 渐变头部 -->
       <div class="header-area">
         <div class="decor-circle c1"></div>
         <div class="decor-circle c2"></div>
@@ -23,7 +22,6 @@
         <h2 class="permission-title">温馨提示</h2>
       </div>
 
-      <!-- 白色主体 -->
       <div class="body-area">
         <div class="permission-message">
           <p class="main-message">{{ mainMessage }}</p>
@@ -120,20 +118,19 @@ const retryLogin = () => {
 .permission-denied {
   min-height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   background: linear-gradient(160deg, #667eea 0%, #764ba2 50%, #6a5acd 100%);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  padding: 24px;
+  padding: 0;
   box-sizing: border-box;
 }
 
 .content-wrapper {
   width: 100%;
-  max-width: 520px;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.15);
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(320px, 42vw) minmax(420px, 1fr);
   animation: fadeInUp 0.5s ease;
 }
 
@@ -142,11 +139,14 @@ const retryLogin = () => {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ===== 渐变头部 ===== */
 .header-area {
   position: relative;
-  background: linear-gradient(160deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.04) 100%);
-  padding: 48px 24px 36px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 100%);
+  padding: 56px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   overflow: hidden;
 }
@@ -154,22 +154,22 @@ const retryLogin = () => {
 .decor-circle {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
 }
-.c1 { width: 120px; height: 120px; top: -30px; right: -20px; }
-.c2 { width: 80px; height: 80px; bottom: 10px; left: -15px; }
-.c3 { width: 50px; height: 50px; top: 20px; left: 40%; }
+.c1 { width: 220px; height: 220px; top: -40px; right: -40px; }
+.c2 { width: 140px; height: 140px; bottom: 40px; left: -30px; }
+.c3 { width: 88px; height: 88px; top: 72px; left: 18%; }
 
 .permission-icon {
   position: relative;
   z-index: 1;
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 16px;
+  margin: 0 auto 20px;
   animation: popIn 0.4s ease;
 }
 
@@ -181,31 +181,34 @@ const retryLogin = () => {
 .permission-title {
   position: relative;
   z-index: 1;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 700;
   color: white;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
+  margin: 0;
 }
 
-/* ===== 白色主体 ===== */
 .body-area {
-  background: white;
-  padding: 32px 28px 28px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+  padding: 56px clamp(24px, 4vw, 72px);
   display: flex;
   flex-direction: column;
+  justify-content: center;
 }
 
 .permission-message {
-  text-align: center;
-  margin-bottom: 24px;
+  text-align: left;
+  margin-bottom: 28px;
+  max-width: 720px;
 }
 
 .main-message {
-  font-size: 16px;
-  font-weight: 500;
+  font-size: clamp(28px, 2.6vw, 40px);
+  font-weight: 700;
   color: #555;
-  line-height: 1.6;
-  margin-bottom: 6px;
+  line-height: 1.35;
+  margin: 0 0 12px;
 }
 
 .theme-error .main-message { color: #c0392b; }
@@ -213,61 +216,62 @@ const retryLogin = () => {
 .theme-warning .main-message { color: #d35400; }
 
 .sub-message {
-  font-size: 13px;
-  color: #999;
-  line-height: 1.5;
+  font-size: clamp(16px, 1.2vw, 18px);
+  color: #6b7280;
+  line-height: 1.7;
+  margin: 0;
 }
 
-/* ===== 联系方式 ===== */
 .contact-card {
   background: #f8f9fb;
-  border-radius: 14px;
-  padding: 20px;
-  text-align: center;
-  margin-bottom: 28px;
+  border-radius: 18px;
+  padding: 28px 32px;
+  text-align: left;
+  margin-bottom: 32px;
+  max-width: 720px;
 }
 
 .contact-label {
-  font-size: 12px;
-  color: #bbb;
-  margin-bottom: 10px;
+  font-size: 14px;
+  color: #9ca3af;
+  margin-bottom: 12px;
 }
 
 .contact-phone {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 24px;
-  font-weight: 700;
+  gap: 10px;
+  font-size: clamp(28px, 2.4vw, 40px);
+  font-weight: 800;
   color: #2c3e50;
-  margin-bottom: 6px;
-  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
 }
 
 .contact-department {
-  font-size: 13px;
-  color: #aaa;
+  font-size: 16px;
+  color: #6b7280;
 }
 
-/* ===== 操作按钮 ===== */
 .permission-actions {
   display: flex;
-  gap: 10px;
+  gap: 14px;
+  max-width: 720px;
 }
 
 .btn-back,
 .btn-retry {
   flex: 1;
+  min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 14px 0;
+  gap: 8px;
+  padding: 0 20px;
   border: none;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 500;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -301,47 +305,87 @@ const retryLogin = () => {
   transform: scale(0.97);
 }
 
-/* ===== 移动端：全屏铺满 ===== */
-@media (max-width: 520px) {
-  .permission-denied {
-    align-items: stretch;
-    padding: 0;
-  }
-
+@media (max-width: 900px) {
   .content-wrapper {
-    max-width: none;
-    border-radius: 0;
-    box-shadow: none;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .header-area {
-    flex-shrink: 0;
-    border-radius: 0;
+    padding: 48px 24px 36px;
+    min-height: 34vh;
   }
 
   .body-area {
-    flex: 1;
-    border-radius: 0;
-    min-height: 0;
+    padding: 32px 24px 28px;
   }
 
-  .permission-message {
-    padding: 0 4px;
+  .permission-message,
+  .contact-card,
+  .permission-actions {
+    max-width: none;
   }
 
-  .main-message {
-    font-size: 15px;
-  }
-
-  .permission-title {
-    font-size: 20px;
+  .permission-message,
+  .contact-card {
+    text-align: center;
   }
 
   .contact-phone {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .permission-title {
     font-size: 22px;
+    letter-spacing: 1px;
+  }
+
+  .main-message {
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.6;
+    margin-bottom: 6px;
+  }
+
+  .sub-message {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .contact-card {
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 28px;
+  }
+
+  .contact-label {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  .contact-phone {
+    font-size: 24px;
+    margin-bottom: 6px;
+    letter-spacing: 1.5px;
+  }
+
+  .contact-department {
+    font-size: 13px;
+    color: #aaa;
+  }
+
+  .permission-actions {
+    flex-direction: row;
+    gap: 10px;
+  }
+
+  .btn-back,
+  .btn-retry {
+    min-height: 48px;
+    font-size: 15px;
+    font-weight: 500;
+    border-radius: 12px;
   }
 }
 </style>

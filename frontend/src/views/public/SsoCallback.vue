@@ -68,8 +68,7 @@ onMounted(async () => {
     try {
       response = await exchangeSsoToken(code)
     } catch (err) {
-      // HTTP / 网络错误
-      const extractedCode = err?.response?.data?.data?.errorCode
+      const extractedCode = err?.response?.data?.data?.errorCode || err?.code
       const extractedMsg = err?.response?.data?.message || err?.message
       showError({
         errorCode: extractedCode || 'SYSTEM_ERROR',
