@@ -1,61 +1,61 @@
 <template>
   <div class="permission-denied" :class="`theme-${theme}`">
-    <!-- 顶部渐变区域 -->
-    <div class="header-area">
-      <div class="decor-circle c1"></div>
-      <div class="decor-circle c2"></div>
-      <div class="decor-circle c3"></div>
-      <div class="permission-icon" :style="{ background: iconBgColor }">
-        <svg v-if="theme === 'info'" width="44" height="44" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
-          <path d="M12 16v-5m0-3h.01" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <svg v-else-if="theme === 'error'" width="44" height="44" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
-          <path d="M15 9l-6 6m0-6l6 6" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <svg v-else width="44" height="44" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
-          <path d="M12 7v5m0 3h.01" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <h2 class="permission-title">温馨提示</h2>
-    </div>
-
-    <!-- 主体白色区域 -->
-    <div class="body-area">
-      <div class="permission-message">
-        <p class="main-message">{{ mainMessage }}</p>
-        <p v-if="subMessage" class="sub-message">{{ subMessage }}</p>
-      </div>
-
-      <!-- 联系方式 -->
-      <div class="contact-card">
-        <div class="contact-label">如有疑问请联系</div>
-        <div class="contact-phone">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81-.7A2 2 0 0 1 22 16.92z" :stroke="themeColor" stroke-width="2" stroke-linecap="round"/>
+    <div class="content-wrapper">
+      <!-- 渐变头部 -->
+      <div class="header-area">
+        <div class="decor-circle c1"></div>
+        <div class="decor-circle c2"></div>
+        <div class="decor-circle c3"></div>
+        <div class="permission-icon" :style="{ background: iconBgColor }">
+          <svg v-if="theme === 'info'" width="44" height="44" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
+            <path d="M12 16v-5m0-3h.01" stroke="white" stroke-width="2" stroke-linecap="round"/>
           </svg>
-          {{ contactPhone }}
+          <svg v-else-if="theme === 'error'" width="44" height="44" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
+            <path d="M15 9l-6 6m0-6l6 6" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg v-else width="44" height="44" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
+            <path d="M12 7v5m0 3h.01" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          </svg>
         </div>
-        <div class="contact-department">{{ contactDepartment }}</div>
+        <h2 class="permission-title">温馨提示</h2>
       </div>
 
-      <!-- 操作按钮 -->
-      <div class="permission-actions">
-        <button @click="goBack" class="btn-back">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M19 12H5m7-7l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          返回登录
-        </button>
-        <button @click="retryLogin" class="btn-retry">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          重新登录
-        </button>
+      <!-- 白色主体 -->
+      <div class="body-area">
+        <div class="permission-message">
+          <p class="main-message">{{ mainMessage }}</p>
+          <p v-if="subMessage" class="sub-message">{{ subMessage }}</p>
+        </div>
+
+        <div class="contact-card">
+          <div class="contact-label">如有疑问请联系</div>
+          <div class="contact-phone">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81-.7A2 2 0 0 1 22 16.92z" :stroke="themeColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            {{ contactPhone }}
+          </div>
+          <div class="contact-department">{{ contactDepartment }}</div>
+        </div>
+
+        <div class="permission-actions">
+          <button @click="goBack" class="btn-back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M19 12H5m7-7l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            返回登录
+          </button>
+          <button @click="retryLogin" class="btn-retry">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            重新登录
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -120,18 +120,35 @@ const retryLogin = () => {
 .permission-denied {
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #667eea 0%, #764ba2 50%, #6a5acd 100%);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  padding: 24px;
+  box-sizing: border-box;
 }
 
-/* ===== 顶部渐变区域 ===== */
+.content-wrapper {
+  width: 100%;
+  max-width: 520px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.15);
+  animation: fadeInUp 0.5s ease;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 渐变头部 ===== */
 .header-area {
   position: relative;
-  background: linear-gradient(160deg, #667eea 0%, #764ba2 50%, #6a5acd 100%);
+  background: linear-gradient(160deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.04) 100%);
   padding: 48px 24px 36px;
   text-align: center;
   overflow: hidden;
-  flex-shrink: 0;
 }
 
 .decor-circle {
@@ -170,21 +187,12 @@ const retryLogin = () => {
   letter-spacing: 1px;
 }
 
-/* ===== 主体白色区域 ===== */
+/* ===== 白色主体 ===== */
 .body-area {
-  flex: 1;
   background: white;
-  border-radius: 24px 24px 0 0;
-  margin-top: -20px;
-  padding: 32px 24px 24px;
+  padding: 32px 28px 28px;
   display: flex;
   flex-direction: column;
-  animation: slideUp 0.4s ease;
-}
-
-@keyframes slideUp {
-  from { transform: translateY(30px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
 }
 
 .permission-message {
@@ -246,7 +254,6 @@ const retryLogin = () => {
 .permission-actions {
   display: flex;
   gap: 10px;
-  margin-top: auto;
 }
 
 .btn-back,
@@ -270,8 +277,12 @@ const retryLogin = () => {
   color: #666;
 }
 
-.btn-back:active {
+.btn-back:hover {
   background: #e4e6e9;
+}
+
+.btn-back:active {
+  background: #dce0e4;
 }
 
 .btn-retry {
@@ -280,20 +291,57 @@ const retryLogin = () => {
   box-shadow: 0 4px 14px rgba(102, 126, 234, 0.3);
 }
 
+.btn-retry:hover {
+  box-shadow: 0 6px 18px rgba(102, 126, 234, 0.4);
+  transform: translateY(-1px);
+}
+
 .btn-retry:active {
   box-shadow: 0 2px 6px rgba(102, 126, 234, 0.2);
   transform: scale(0.97);
 }
 
-/* ===== 响应式 ===== */
-@media (min-width: 481px) {
+/* ===== 移动端：全屏铺满 ===== */
+@media (max-width: 520px) {
   .permission-denied {
-    max-width: 420px;
-    margin: 0 auto;
-    border-radius: 20px;
-    overflow: hidden;
-    min-height: auto;
-    height: 100vh;
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .content-wrapper {
+    max-width: none;
+    border-radius: 0;
+    box-shadow: none;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header-area {
+    flex-shrink: 0;
+    border-radius: 0;
+  }
+
+  .body-area {
+    flex: 1;
+    border-radius: 0;
+    min-height: 0;
+  }
+
+  .permission-message {
+    padding: 0 4px;
+  }
+
+  .main-message {
+    font-size: 15px;
+  }
+
+  .permission-title {
+    font-size: 20px;
+  }
+
+  .contact-phone {
+    font-size: 22px;
   }
 }
 </style>
