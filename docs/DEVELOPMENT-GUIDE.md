@@ -1,12 +1,12 @@
 # 开发指南
 
-本文档提供 LangHack 项目的详细开发指南，包括分支管理、工作流程、代码规范和常见问题。
+本文档提供 LangHack 项目的详细开发指南，包括协作流程、工作方式、代码规范和常见问题。
 
 ---
 
 ## 目录
 
-- [分支管理策略](#分支管理策略)
+- [协作策略](#协作策略)
 - [开发工作流](#开发工作流)
 - [代码规范](#代码规范)
 - [测试规范](#测试规范)
@@ -14,29 +14,27 @@
 
 ---
 
-## 分支管理策略
+## 协作策略
 
-### 分支结构
+### 当前分支约定
 
-```
-master (生产分支)
-  ↑
-  └─ develop (开发分支)
-       ↑
-       ├─ feature/xxx (功能分支)
-       ├─ fix/xxx (修复分支)
-       └─ refactor/xxx (重构分支)
+```text
+master
+ ├─ feature/xxx
+ ├─ fix/xxx
+ ├─ refactor/xxx
+ └─ hotfix/xxx
 ```
 
 ### 分支说明
 
-| 分支 | 用途 | 保护规则 | 部署环境 |
-|------|------|---------|---------|
-| `master` | 生产代码，随时可发布 | 禁止直接推送，仅接受来自 develop 的合并 | 生产环境 |
-| `develop` | 开发主分支，集成所有功能 | 禁止直接推送，仅接受来自功能分支的 PR | 测试环境 |
-| `feature/*` | 新功能开发 | 开发完成后合并到 develop | 本地 |
-| `fix/*` | Bug 修复 | 修复完成后合并到 develop | 本地 |
-| `hotfix/*` | 紧急修复 | 从 master 创建，修复后合并回 master 和 develop | 本地 |
+| 分支 | 用途 | 说明 |
+|------|------|------|
+| `master` | 主分支 / 发布基线 | 当前仓库主要协作分支 |
+| `feature/*` | 新功能开发 | 从 `master` 切出，完成后合并回 `master` |
+| `fix/*` | Bug 修复 | 从 `master` 切出，完成后合并回 `master` |
+| `refactor/*` | 重构 | 从 `master` 切出，完成后合并回 `master` |
+| `hotfix/*` | 紧急修复 | 从 `master` 切出，优先回合到 `master` |
 
 ---
 
@@ -45,11 +43,11 @@ master (生产分支)
 ### 1. 新功能开发
 
 ```bash
-# 步骤 1: 更新 develop 分支
-git checkout develop
-git pull origin develop
+# 步骤 1: 更新 master
+git checkout master
+git pull origin master
 
-# 步骤 2: 创建功能分支（命名规范：feature/功能描述）
+# 步骤 2: 创建功能分支
 git checkout -b feature/add-user-profile
 
 # 步骤 3: 开发并提交
@@ -59,18 +57,13 @@ git commit -m "feat: 添加用户个人资料页面"
 # 步骤 4: 推送到远程
 git push origin feature/add-user-profile
 
-# 步骤 5: 在 GitHub 创建 Pull Request
-# - Base: develop
+# 步骤 5: 创建 Pull Request
+# - Base: master
 # - Compare: feature/add-user-profile
-# - 填写 PR 描述，关联相关 Issue
 
-# 步骤 6: 代码审查通过后，使用 "Merge" 按钮合并
-# - 选择 "Create a merge commit" 保留完整历史
-# - 删除远程功能分支
-
-# 步骤 7: 本地清理
-git checkout develop
-git pull origin develop
+# 步骤 6: 合并后同步本地
+git checkout master
+git pull origin master
 git branch -d feature/add-user-profile
 ```
 
@@ -78,14 +71,13 @@ git branch -d feature/add-user-profile
 
 ```bash
 # 与新功能开发流程相同，但分支命名为 fix/bug-description
-git checkout develop
+git checkout master
+git pull origin master
 git checkout -b fix/login-error
 # ... 开发、提交、推送、PR
 ```
 
 ### 3. 紧急修复（Hotfix）
-
-用于修复生产环境的紧急问题，需要同时更新 master 和 develop。
 
 ```bash
 # 步骤 1: 从 master 创建 hotfix 分支
@@ -97,44 +89,32 @@ git checkout -b hotfix/critical-security-fix
 git add .
 git commit -m "fix(security): 修复 SQL 注入漏洞"
 
-# 步骤 3: 合并到 master
+# 步骤 3: 推送并创建 PR
+git push origin hotfix/critical-security-fix
+
+# 步骤 4: 合并回 master
 git checkout master
-git merge --no-ff hotfix/critical-security-fix -m "Merge hotfix: 修复 SQL 注入漏洞"
-git push origin master
-
-# 步骤 4: 同步到 develop（重要！）
-git checkout develop
-git pull origin develop
-git merge --no-ff master -m "Merge master hotfix into develop"
-git push origin develop
-
-# 步骤 5: 清理 hotfix 分支
-git branch -d hotfix/critical-security-fix
+git pull origin master
 ```
 
 ### 4. 发布流程
 
-定期将 develop 合并到 master 进行发布。
-
 ```bash
-# 步骤 1: 确保 develop 分支稳定
-cd frontend && npx vitest run  # 前端测试
-cd ../backend && mvn test      # 后端测试
+# 步骤 1: 确保当前分支稳定
+cd frontend && npx vitest run
+cd ../backend && mvn test
 
-# 步骤 2: 合并到 master
+# 步骤 2: 打标签发布
 git checkout master
 git pull origin master
-git merge --no-ff develop -m "Release: v1.2.0 - 新增用户个人资料功能"
-
-# 步骤 3: 打标签
 git tag -a v1.2.0 -m "Release v1.2.0"
 git push origin master --tags
 
-# 步骤 4: 部署到生产环境
+# 步骤 3: 部署到目标环境
 # 在服务器上执行：
 # cd /path/to/LangHack
 # git pull origin master
-# ./scripts/deploy.sh
+# bash scripts/deploy.sh
 ```
 
 ---
@@ -401,7 +381,7 @@ class UserServiceTest {
 
 ## 常见问题
 
-### Q1: 为什么不能直接在 master/develop 上开发？
+### Q1: 为什么不能直接在主分支或长期集成分支上开发？
 
 **原因**：
 - 保持主分支稳定，避免未完成的功能影响其他开发者
@@ -417,16 +397,16 @@ class UserServiceTest {
 
 **问题案例**：
 ```bash
-# ❌ 错误做法：cherry-pick 导致分支分叉
-git checkout develop
+# ❌ 错误做法：在错误分支上 cherry-pick 导致历史分叉
+git checkout feature/another-work
 git cherry-pick abc123  # 从 master 复制提交
 
-# 结果：develop 和 master 有相同内容但不同 hash 的提交
-# 未来合并时可能产生冲突
+# 结果：多个分支可能出现内容相同但 hash 不同的提交
+# 后续合并时更容易产生重复提交或冲突
 
-# ✅ 正确做法：使用 merge
-git checkout develop
-git merge master  # 保留完整历史
+# ✅ 正确做法：优先通过正常分支合并保留历史
+git checkout master
+git merge feature/bugfix-branch
 ```
 
 ### Q3: 如何解决合并冲突？
@@ -470,8 +450,8 @@ git push origin <branch>
 
 **验证**：
 ```bash
-git pull origin master  # 或 develop
-./scripts/deploy.sh     # 应该正常运行
+git pull origin master
+bash scripts/deploy.sh
 ```
 
 ### Q6: 前端测试失败：Pinia getter 无法 mock

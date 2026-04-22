@@ -101,6 +101,12 @@ class SchoolDataSyncIntegrationTest {
     @Autowired
     private SyncLogMapper syncLogMapper;
 
+    @Autowired
+    private SchoolStudentMapper schoolStudentMapper;
+
+    @Autowired
+    private SchoolTeacherMapper schoolTeacherMapper;
+
     // ==================== Field Mapping Integration ====================
 
     @Nested
@@ -402,6 +408,85 @@ class SchoolDataSyncIntegrationTest {
             levelExamScoreMapper.upsertByStudentExam(entity);
 
             assertNotNull(entity.getId());
+        }
+
+        @Test
+        @DisplayName("school_student UPSERT - 更新目录字段与同步时间")
+        void upsertSchoolStudent_updateDirectoryFields() {
+            String studentId = "SSO_STU_" + System.currentTimeMillis();
+
+            SchoolStudent first = new SchoolStudent();
+            first.setStudentId(studentId);
+            first.setStudentName("张三");
+            first.setCollegeName("外国语学院");
+            first.setCollegeCode("FL");
+            first.setClassCode("OLD_CLASS");
+            first.setClassName("旧班级");
+            first.setGrade("2023");
+            first.setMajorName("旧专业");
+            first.setSourceCourseCodes("ENG101");
+            first.setSyncTime(LocalDateTime.now().minusDays(2));
+            first.setLastExamSyncTime(LocalDateTime.now().minusDays(2));
+            first.setLastScheduleSyncTime(LocalDateTime.now().minusDays(2));
+            first.setSyncSource("TEST_1");
+            schoolStudentMapper.upsertByStudentId(first);
+
+            SchoolStudent second = new SchoolStudent();
+            second.setStudentId(studentId);
+            second.setStudentName("张三");
+            second.setCollegeName("外国语学院");
+            second.setCollegeCode("FL");
+            second.setClassCode("NEW_CLASS");
+            second.setClassName("新班级");
+            second.setGrade("2023");
+            second.setMajorName("英语");
+            second.setSourceCourseCodes("ENG101,ENG102");
+            second.setSyncTime(LocalDateTime.now());
+            second.setLastExamSyncTime(LocalDateTime.now().minusHours(2));
+            second.setLastScheduleSyncTime(LocalDateTime.now().minusHours(1));
+            second.setSyncSource("TEST_2");
+            schoolStudentMapper.upsertByStudentId(second);
+
+            SchoolStudent stored = schoolStudentMapper.selectByStudentId(studentId);
+            assertNotNull(stored);
+            assertEquals("NEW_CLASS", stored.getClassCode());
+            assertEquals("新班级", stored.getClassName());
+            assertEquals("英语", stored.getMajorName());
+            assertEquals("ENG101,ENG102", stored.getSourceCourseCodes());
+            assertEquals("TEST_2", stored.getSyncSource());
+            assertNotNull(stored.getLastExamSyncTime());
+            assertNotNull(stored.getLastScheduleSyncTime());
+        }
+
+        @Test
+        @DisplayName("school_teacher UPSERT - 更新 lastScheduleSyncTime")
+        void upsertSchoolTeacher_updateLastScheduleSyncTime() {
+            String teacherId = "SSO_TCH_" + System.currentTimeMillis();
+
+            SchoolTeacher first = new SchoolTeacher();
+            first.setTeacherId(teacherId);
+            first.setTeacherName("李老师");
+            first.setCollegeName("外国语学院");
+            first.setCollegeCode("FL");
+            first.setSyncTime(LocalDateTime.now().minusDays(1));
+            first.setLastScheduleSyncTime(LocalDateTime.now().minusDays(1));
+            first.setSyncSource("TEST_1");
+            schoolTeacherMapper.upsertByTeacherId(first);
+
+            SchoolTeacher second = new SchoolTeacher();
+            second.setTeacherId(teacherId);
+            second.setTeacherName("李老师");
+            second.setCollegeName("外国语学院");
+            second.setCollegeCode("FL");
+            second.setSyncTime(LocalDateTime.now());
+            second.setLastScheduleSyncTime(LocalDateTime.now().minusMinutes(30));
+            second.setSyncSource("TEST_2");
+            schoolTeacherMapper.upsertByTeacherId(second);
+
+            SchoolTeacher stored = schoolTeacherMapper.selectByTeacherId(teacherId);
+            assertNotNull(stored);
+            assertEquals("TEST_2", stored.getSyncSource());
+            assertNotNull(stored.getLastScheduleSyncTime());
         }
 
         @Test

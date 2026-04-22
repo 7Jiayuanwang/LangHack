@@ -1,24 +1,22 @@
 package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.english.config.SchoolDataProperties;
 import com.english.dto.SchoolDataSyncFilterRequest;
 import com.english.entity.*;
 import com.english.exception.BusinessException;
 import com.english.mapper.*;
 import com.english.service.FieldMappingService;
 import com.english.service.SchoolDataApiClient;
+import com.english.service.SchoolDataFetchService;
+import com.english.service.SchoolDataPersistService;
 import com.english.service.SchoolDataSyncService;
 import org.springframework.beans.factory.annotation.Qualifier;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,60 +45,33 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private final AtomicBoolean incrementalSyncRunning = new AtomicBoolean(false);
 
     private final SchoolDataApiClient apiClient;
+    private final SchoolDataFetchService fetchService;
+    private final SchoolDataPersistService persistService;
     private final FieldMappingService fieldMappingService;
     private final SyncLogMapper syncLogMapper;
-    private final AdministrativeClassMapper administrativeClassMapper;
-    private final SchoolCourseMapper schoolCourseMapper;
-    private final TeachingClassMapper teachingClassMapper;
-    private final CourseScheduleMapper courseScheduleMapper;
-    private final CourseSelectionMapper courseSelectionMapper;
     private final LevelExamScoreMapper levelExamScoreMapper;
-    private final TeachingPlanMapper teachingPlanMapper;
-    private final TeachingPlanCourseMapper teachingPlanCourseMapper;
     private final StudentScheduleMapper studentScheduleMapper;
     private final SchoolStudentMapper schoolStudentMapper;
-    private final SchoolTeacherMapper schoolTeacherMapper;
     private final TeacherStudentBindingMapper teacherStudentBindingMapper;
-    private final UserMapper userMapper;
-    private final ObjectMapper objectMapper;
-    private final SchoolDataProperties properties;
 
     public SchoolDataSyncServiceImpl(@Qualifier("schoolDataApiClientDelegate") SchoolDataApiClient apiClient,
+                                     SchoolDataFetchService fetchService,
+                                     SchoolDataPersistService persistService,
                                      FieldMappingService fieldMappingService,
                                      SyncLogMapper syncLogMapper,
-                                     AdministrativeClassMapper administrativeClassMapper,
-                                     SchoolCourseMapper schoolCourseMapper,
-                                     TeachingClassMapper teachingClassMapper,
-                                     CourseScheduleMapper courseScheduleMapper,
-                                     CourseSelectionMapper courseSelectionMapper,
                                      LevelExamScoreMapper levelExamScoreMapper,
-                                     TeachingPlanMapper teachingPlanMapper,
-                                     TeachingPlanCourseMapper teachingPlanCourseMapper,
                                      StudentScheduleMapper studentScheduleMapper,
                                      SchoolStudentMapper schoolStudentMapper,
-                                     SchoolTeacherMapper schoolTeacherMapper,
-                                     TeacherStudentBindingMapper teacherStudentBindingMapper,
-                                     UserMapper userMapper,
-                                     ObjectMapper objectMapper,
-                                     SchoolDataProperties properties) {
+                                     TeacherStudentBindingMapper teacherStudentBindingMapper) {
         this.apiClient = apiClient;
+        this.fetchService = fetchService;
+        this.persistService = persistService;
         this.fieldMappingService = fieldMappingService;
         this.syncLogMapper = syncLogMapper;
-        this.administrativeClassMapper = administrativeClassMapper;
-        this.schoolCourseMapper = schoolCourseMapper;
-        this.teachingClassMapper = teachingClassMapper;
-        this.courseScheduleMapper = courseScheduleMapper;
-        this.courseSelectionMapper = courseSelectionMapper;
         this.levelExamScoreMapper = levelExamScoreMapper;
-        this.teachingPlanMapper = teachingPlanMapper;
-        this.teachingPlanCourseMapper = teachingPlanCourseMapper;
         this.studentScheduleMapper = studentScheduleMapper;
         this.schoolStudentMapper = schoolStudentMapper;
-        this.schoolTeacherMapper = schoolTeacherMapper;
         this.teacherStudentBindingMapper = teacherStudentBindingMapper;
-        this.userMapper = userMapper;
-        this.objectMapper = objectMapper;
-        this.properties = properties;
     }
 
     // =========================================================================
@@ -391,17 +362,12 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     }
 
     private SyncResult doFullSync(String dataSource, SchoolDataSyncFilterRequest request) {
-        if ("student_schedule".equals(dataSource) && hasFilterRequest(request)) {
-            return syncFilteredStudentSchedule(request);
-        }
-        Map<String, String> upstreamParams = buildUpstreamParams(dataSource, request);
-        List<Map<String, Object>> fetchData = fetchFromApi(dataSource, upstreamParams);
-        fetchData = applyFilterGroups(dataSource, fetchData, request);
+        List<Map<String, Object>> fetchData = fetchService.fetchRawData(dataSource, request);
         if (fetchData.isEmpty()) {
             return new SyncResult(0, 0, 0, 0);
         }
 
-        return persistData(dataSource, fetchData);
+        return toSyncResult(persistService.persistRawData(dataSource, fetchData, "SCHOOL_API"));
     }
 
     /**
@@ -417,17 +383,12 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     }
 
     private SyncResult doIncrementalSync(String dataSource, SchoolDataSyncFilterRequest request) {
-        if ("student_schedule".equals(dataSource) && hasFilterRequest(request)) {
-            return syncFilteredStudentSchedule(request);
-        }
-        Map<String, String> upstreamParams = buildUpstreamParams(dataSource, request);
-        List<Map<String, Object>> fetchData = fetchFromApi(dataSource, upstreamParams);
-        fetchData = applyFilterGroups(dataSource, fetchData, request);
+        List<Map<String, Object>> fetchData = fetchService.fetchRawData(dataSource, request);
         if (fetchData.isEmpty()) {
             return new SyncResult(0, 0, 0, 0);
         }
 
-        return persistData(dataSource, fetchData);
+        return toSyncResult(persistService.persistRawData(dataSource, fetchData, "SCHOOL_API"));
     }
 
     // =========================================================================
@@ -437,165 +398,6 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     /**
      * 从学校API获取数据
      */
-    private List<Map<String, Object>> fetchFromApi(String dataSource, Map<String, String> extraParams) {
-        Map<String, String> params = extraParams != null ? new HashMap<>(extraParams) : new HashMap<>();
-
-        switch (dataSource) {
-            case "administrative_class":
-                return apiClient.fetchAdministrativeClasses(params);
-            case "school_course":
-                return apiClient.fetchSchoolCourses(params);
-            case "teaching_class":
-                return apiClient.fetchTeachingClasses(params);
-            case "course_schedule":
-                return apiClient.fetchCourseSchedules(params);
-            case "course_selection":
-                return apiClient.fetchCourseSelections(params);
-            case "level_exam_scores":
-                return apiClient.fetchLevelExamScores(params);
-            case "teaching_plans":
-                return apiClient.fetchTeachingPlans(params);
-            case "teacher_courses":
-                return apiClient.fetchTeacherCourses(params);
-            case "student_schedule":
-                logger.info("student_schedule requires studentId parameter, skipping generic batch fetch");
-                return Collections.emptyList();
-            default:
-                logger.warn("Unknown data source: {}", dataSource);
-                return Collections.emptyList();
-        }
-    }
-
-    private boolean hasFilterRequest(SchoolDataSyncFilterRequest request) {
-        return request != null && request.getFilterGroups() != null && !request.getFilterGroups().isEmpty();
-    }
-
-    private Map<String, String> buildUpstreamParams(String dataSource, SchoolDataSyncFilterRequest request) {
-        Map<String, String> params = new LinkedHashMap<>();
-        if (!hasFilterRequest(request)) {
-            return params;
-        }
-        for (SchoolDataSyncFilterRequest.FilterGroup group : request.getFilterGroups()) {
-            if (group == null || group.getConditions() == null) {
-                continue;
-            }
-            for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
-                if (condition == null || condition.getField() == null || condition.getValue() == null || condition.getValue().trim().isEmpty()) {
-                    continue;
-                }
-                String field = condition.getField().trim();
-                String value = condition.getValue().trim();
-                if (!"eq".equalsIgnoreCase(defaultString(condition.getOperator(), "eq"))) {
-                    continue;
-                }
-                switch (dataSource) {
-                    case "administrative_class":
-                        if ("collegeCode".equals(field)) params.put("XSH", value);
-                        else if ("grade".equals(field)) params.put("NJ", value);
-                        break;
-                    case "school_course":
-                        // KKYX=开课院系（学院名），CDSP 对该字段可能忽略导致全校返回，客户端兜底过滤
-                        if ("collegeName".equals(field)) params.put("kkyx", value);
-                        else if ("courseCode".equals(field)) params.put("kcdm", value);
-                        break;
-                    case "course_schedule":
-                        if ("classId".equals(field)) params.put("xkkch", value);
-                        else if ("dayOfWeek".equals(field)) params.put("skxqj", value);
-                        else if ("period".equals(field)) params.put("skjc", value);
-                        break;
-                    case "course_selection":
-                        if ("studentId".equals(field)) params.put("XH", value);
-                        else if ("courseClassCode".equals(field) || "classId".equals(field)) params.put("KCBH", value);
-                        break;
-                    case "level_exam_scores":
-                        if ("studentId".equals(field)) params.put("xh", value);
-                        break;
-                    case "teaching_plans":
-                        if ("grade".equals(field)) params.put("nj", value);
-                        break;
-                    case "teacher_courses":
-                        if ("teacherId".equals(field)) params.put("rkjsh", value);
-                        else if ("courseCode".equals(field)) params.put("kcdm", value);
-                        else if ("academicYear".equals(field)) params.put("xn", value);
-                        else if ("semester".equals(field)) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-        return params;
-    }
-
-    private List<Map<String, Object>> applyFilterGroups(String dataSource, List<Map<String, Object>> fetchData,
-                                                        SchoolDataSyncFilterRequest request) {
-        if (!hasFilterRequest(request) || fetchData == null || fetchData.isEmpty()) {
-            return fetchData == null ? Collections.emptyList() : fetchData;
-        }
-        List<Map<String, Object>> filtered = new ArrayList<>();
-        for (Map<String, Object> row : fetchData) {
-            if (matchesAllGroups(dataSource, row, request.getFilterGroups())) {
-                filtered.add(row);
-            }
-        }
-        return filtered;
-    }
-
-    private boolean matchesAllGroups(String dataSource, Map<String, Object> row,
-                                     List<SchoolDataSyncFilterRequest.FilterGroup> groups) {
-        for (SchoolDataSyncFilterRequest.FilterGroup group : groups) {
-            if (group == null || group.getConditions() == null || group.getConditions().isEmpty()) {
-                continue;
-            }
-            boolean isOr = "OR".equalsIgnoreCase(defaultString(group.getRelation(), "AND"));
-            boolean groupResult = isOr ? false : true;
-            for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
-                boolean conditionMatched = matchesCondition(row, condition);
-                if (isOr) {
-                    groupResult = groupResult || conditionMatched;
-                    if (groupResult) break;
-                } else {
-                    groupResult = groupResult && conditionMatched;
-                    if (!groupResult) break;
-                }
-            }
-            if (!groupResult) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean matchesCondition(Map<String, Object> row, SchoolDataSyncFilterRequest.FilterCondition condition) {
-        if (condition == null || condition.getField() == null) {
-            return true;
-        }
-        String operator = defaultString(condition.getOperator(), "eq").toLowerCase(Locale.ROOT);
-        String actual = stringValue(row.get(condition.getField()));
-        String expected = defaultString(condition.getValue(), "").trim();
-        switch (operator) {
-            case "contains":
-                return actual.contains(expected);
-            case "gte":
-                return compareAsNumber(actual, expected) >= 0;
-            case "lte":
-                return compareAsNumber(actual, expected) <= 0;
-            case "in":
-                return Arrays.stream(expected.split(",")).map(String::trim).anyMatch(actual::equals);
-            case "eq":
-            default:
-                return actual.equals(expected);
-        }
-    }
-
-    private int compareAsNumber(String actual, String expected) {
-        try {
-            return new java.math.BigDecimal(actual).compareTo(new java.math.BigDecimal(expected));
-        } catch (Exception e) {
-            return actual.compareTo(expected);
-        }
-    }
-
     private String firstNonBlank(String... values) {
         if (values == null) {
             return null;
@@ -659,100 +461,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         }
     }
 
-    private SyncResult syncFilteredStudentSchedule(SchoolDataSyncFilterRequest request) {
-        String studentId = null;
-        String academicYear = null;
-        Integer semester = null;
-        for (SchoolDataSyncFilterRequest.FilterGroup group : request.getFilterGroups()) {
-            if (group == null || group.getConditions() == null) {
-                continue;
-            }
-            for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
-                if (condition == null || condition.getField() == null) {
-                    continue;
-                }
-                String field = condition.getField();
-                String value = defaultString(condition.getValue(), "").trim();
-                if ("studentId".equals(field)) studentId = value;
-                if ("academicYear".equals(field)) academicYear = value;
-                if ("semester".equals(field) && !value.isEmpty()) semester = normalizeSemesterValue(value);
-            }
-        }
-        if (studentId == null || studentId.isEmpty()) {
-            throw new BusinessException("student_schedule 手动同步必须提供学号");
-        }
-        List<StudentSchedule> schedules = syncStudentSchedule(studentId, academicYear, semester);
-        SyncResult result = new SyncResult();
-        result.total = schedules.size();
-        result.success = schedules.size();
-        result.fail = 0;
-        result.skip = 0;
-        return result;
-    }
-
     // =========================================================================
-    // 数据持久化
+    // 学生课表 按学生同步 & 查询
     // =========================================================================
-
-    /**
-     * 将映射后的数据持久化到数据库
-     * 单条记录失败不影响整体（catch后继续处理下一条），不使用事务
-     */
-    public SyncResult persistData(String dataSource, List<Map<String, Object>> rawData) {
-        SyncResult result = new SyncResult();
-        result.total = rawData.size();
-
-        LocalDateTime syncTime = LocalDateTime.now();
-        int batchCount = 0;
-
-        for (Map<String, Object> sourceRecord : rawData) {
-            try {
-                // 1. 应用字段映射
-                Map<String, Object> mappedData = fieldMappingService.applyMapping(dataSource, sourceRecord);
-
-                // 2. 设置同步元数据
-                mappedData.put("syncTime", syncTime);
-                mappedData.put("syncSource", "SCHOOL_API");
-
-                // 3. 转换为实体并UPSERT
-                upsertEntity(dataSource, mappedData);
-                result.success++;
-            } catch (Exception e) {
-                result.fail++;
-                // 保留堆栈以定位字段映射/类型转换/UPSERT 约束冲突等问题
-                logger.warn("同步单条数据失败 dataSource={} recordPreview={} err={}",
-                        dataSource, truncateRecordForLog(sourceRecord), e.getMessage(), e);
-                // 单条失败不影响整体，继续处理
-            }
-
-            // 批量刷新（避免大事务）
-            batchCount++;
-            if (batchCount % properties.getSync().getBatchSize() == 0) {
-                logger.debug("批量处理进度: {}/{}", batchCount, rawData.size());
-            }
-        }
-
-        result.skip = result.total - result.success - result.fail;
-        return result;
-    }
-
-    /**
-     * 根据数据源类型执行UPSERT
-     */
-    private void upsertEntity(String dataSource, Map<String, Object> mappedData) {
-        switch (dataSource) {
-            case "administrative_class":
-                upsertAdministrativeClass(mappedData);
-                break;
-            case "school_course":
-                upsertSchoolCourse(mappedData);
-                break;
-            case "teaching_class":
-                // bzkcxx (cdsp_1721804030860152850) 端点实际返回课程基本信息（2026-04-21 PDF 复核），
-                // 字段与 school_course 重叠，路由到 upsertSchoolCourse 避免 TeachingClass NOT NULL 约束失败
-                upsertSchoolCourse(mappedData);
-                break;
-            case "course_schedule":
                 upsertCourseSchedule(mappedData);
                 break;
             case "course_selection":
@@ -1361,7 +1072,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 Map<String, Object> mappedData = fieldMappingService.applyMapping("student_schedule", sourceRecord);
                 mappedData.put("syncTime", syncTime);
                 mappedData.put("syncSource", "SCHOOL_API");
-                upsertEntity("student_schedule", mappedData);
+                persistService.persistMappedRecord("student_schedule", mappedData);
             } catch (Exception e) {
                 // 保留堆栈以定位排课 delete-then-insert 过程中的约束冲突或类型转换问题
                 logger.warn("同步学生课表单条数据失败 studentId={} recordPreview={} err={}",
@@ -1549,7 +1260,25 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             for (String xh : studentIds) {
                 try {
                     Set<String> courses = studentToCourses.getOrDefault(xh, Collections.emptySet());
-                    upsertSchoolStudent(xh, normalizedCollege, courses, syncTime);
+                    Map<String, Object> mappedStudent = new HashMap<>();
+                    mappedStudent.put("studentId", xh);
+                    mappedStudent.put("collegeName", normalizedCollege);
+                    if (xh != null && xh.length() >= 4) {
+                        String gradePrefix = xh.substring(0, 4);
+                        if (gradePrefix.matches("\\d{4}")) {
+                            mappedStudent.put("grade", gradePrefix);
+                        }
+                    }
+                    if (courses != null && !courses.isEmpty()) {
+                        try {
+                            mappedStudent.put("sourceCourseCodes", objectMapper.writeValueAsString(courses));
+                        } catch (Exception e) {
+                            mappedStudent.put("sourceCourseCodes", String.join(",", courses));
+                        }
+                    }
+                    mappedStudent.put("syncTime", syncTime);
+                    mappedStudent.put("syncSource", "CHAIN_SYNC");
+                    persistService.persistMappedRecord("school_student", mappedStudent);
                     studentInserted++;
                 } catch (Exception e) {
                     logger.warn("[chainFetch] upsert school_student 失败 xh={} err={}", xh, e.getMessage());
@@ -1557,7 +1286,13 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             }
             for (SchoolTeacher t : teacherMap.values()) {
                 try {
-                    schoolTeacherMapper.upsertByTeacherId(t);
+                    Map<String, Object> mappedTeacher = new HashMap<>();
+                    mappedTeacher.put("teacherId", t.getTeacherId());
+                    mappedTeacher.put("teacherName", t.getTeacherName());
+                    mappedTeacher.put("collegeName", t.getCollegeName());
+                    mappedTeacher.put("syncTime", t.getSyncTime());
+                    mappedTeacher.put("syncSource", t.getSyncSource());
+                    persistService.persistMappedRecord("school_teacher", mappedTeacher);
                     teacherInserted++;
                 } catch (Exception e) {
                     logger.warn("[chainFetch] upsert school_teacher 失败 tid={} err={}", t.getTeacherId(), e.getMessage());
@@ -1605,24 +1340,14 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 List<Map<String, Object>> raw = apiClient.fetchLevelExamScores(Map.of("xh", studentId));
                 if (raw != null) {
                     LocalDateTime now = LocalDateTime.now();
-                    for (Map<String, Object> r : raw) {
-                        try {
-                            Map<String, Object> mapped = fieldMappingService.applyMapping("level_exam_scores", r);
-                            mapped.put("syncTime", now);
-                            mapped.put("syncSource", "LAZY_SYNC");
-                            upsertLevelExamScore(mapped);
-                        } catch (Exception e) {
-                            logger.warn("Lazy 四六级 upsert 失败 xh={} err={}", studentId, e.getMessage());
-                        }
-                    }
+                    persistService.persistLevelExamScores(raw, "LAZY_SYNC", studentId, now);
                     schoolStudentMapper.updateLastExamSyncTime(studentId, now);
                 }
             } catch (Exception e) {
                 logger.warn("Lazy 四六级同步失败 xh={}，降级返回本地数据: {}", studentId, e.getMessage());
             }
         }
-        return levelExamScoreMapper.selectList(
-                new QueryWrapper<LevelExamScore>().eq("student_id", studentId).orderByDesc("exam_date"));
+        return persistService.queryLevelExamScores(studentId);
     }
 
     @Override
@@ -1681,27 +1406,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         return true;
     }
 
-    private void upsertSchoolStudent(String studentId, String collegeName, Set<String> courseCodes, LocalDateTime syncTime) {
-        SchoolStudent entity = new SchoolStudent();
-        entity.setStudentId(studentId);
-        entity.setCollegeName(collegeName);
-        // grade 可从学号前 4 位推断（如 2023122066164 → 2023）
-        if (studentId != null && studentId.length() >= 4) {
-            String gradePrefix = studentId.substring(0, 4);
-            if (gradePrefix.matches("\\d{4}")) {
-                entity.setGrade(gradePrefix);
-            }
-        }
-        if (courseCodes != null && !courseCodes.isEmpty()) {
-            try {
-                entity.setSourceCourseCodes(objectMapper.writeValueAsString(courseCodes));
-            } catch (Exception e) {
-                entity.setSourceCourseCodes(String.join(",", courseCodes));
-            }
-        }
-        entity.setSyncTime(syncTime);
-        entity.setSyncSource("CHAIN_SYNC");
-        schoolStudentMapper.upsertByStudentId(entity);
+    private SyncResult toSyncResult(SchoolDataPersistService.PersistResult result) {
+        return new SyncResult(result.getTotal(), result.getSuccess(), result.getFail(), result.getSkip());
     }
 
     // =========================================================================

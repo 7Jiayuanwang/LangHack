@@ -1,12 +1,9 @@
 package com.english.service;
 
-import com.english.config.SchoolDataProperties;
 import com.english.entity.FieldMapping;
-import com.english.entity.SchoolStudent;
 import com.english.entity.SyncLog;
 import com.english.mapper.*;
 import com.english.service.impl.SchoolDataSyncServiceImpl;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -15,7 +12,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDate;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,6 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 /**
@@ -42,6 +39,12 @@ class SchoolDataSyncServiceTest {
 
     @Mock
     private SchoolDataApiClient apiClient;
+
+    @Mock
+    private SchoolDataFetchService fetchService;
+
+    @Mock
+    private SchoolDataPersistService persistService;
 
     @Mock
     private FieldMappingService fieldMappingService;
@@ -71,37 +74,20 @@ class SchoolDataSyncServiceTest {
     private TeachingPlanMapper teachingPlanMapper;
 
     @Mock
-    private TeachingPlanCourseMapper teachingPlanCourseMapper;
-
-    @Mock
     private StudentScheduleMapper studentScheduleMapper;
 
     @Mock
     private SchoolStudentMapper schoolStudentMapper;
 
     @Mock
-    private SchoolTeacherMapper schoolTeacherMapper;
-
-    @Mock
     private TeacherStudentBindingMapper teacherStudentBindingMapper;
-
-    @Mock
-    private UserMapper userMapper;
-
-    private ObjectMapper objectMapper;
-    private SchoolDataProperties properties;
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
-        properties = new SchoolDataProperties();
         syncService = new SchoolDataSyncServiceImpl(
-                apiClient, fieldMappingService, syncLogMapper,
-                administrativeClassMapper, schoolCourseMapper, teachingClassMapper,
-                courseScheduleMapper, courseSelectionMapper, levelExamScoreMapper,
-                teachingPlanMapper, teachingPlanCourseMapper, studentScheduleMapper,
-                schoolStudentMapper, schoolTeacherMapper, teacherStudentBindingMapper,
-                userMapper, objectMapper, properties
+                apiClient, fetchService, persistService, fieldMappingService, syncLogMapper,
+                levelExamScoreMapper, studentScheduleMapper, schoolStudentMapper,
+                teacherStudentBindingMapper
         );
     }
 
@@ -121,13 +107,13 @@ class SchoolDataSyncServiceTest {
         @Test
         @DisplayName("API返回空数据时返回零计数同步日志")
         void fullSync_emptyApiData_returnsZeroCounts() {
-            when(apiClient.fetchAdministrativeClasses(any())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("administrative_class"), isNull())).thenReturn(Collections.emptyList());
             when(syncLogMapper.insert(any())).thenReturn(1);
 
             SyncLog result = syncService.fullSync("administrative_class", "MANUAL", "admin");
 
             assertNotNull(result);
-            verify(apiClient).fetchAdministrativeClasses(any());
+            verify(fetchService).fetchRawData(eq("administrative_class"), isNull());
         }
 
         @Test
@@ -137,20 +123,17 @@ class SchoolDataSyncServiceTest {
                     Map.of("XZBH", "20230101", "XZMC", "计算机1班")
             );
 
-            when(apiClient.fetchAdministrativeClasses(any())).thenReturn(apiData);
-            Map<String, Object> mappedResult = new HashMap<>();
-            mappedResult.put("classCode", "20230101");
-            mappedResult.put("className", "计算机1班");
-            when(fieldMappingService.applyMapping(anyString(), any())).thenReturn(mappedResult);
+            when(fetchService.fetchRawData(eq("administrative_class"), isNull())).thenReturn(apiData);
+            when(persistService.persistRawData(eq("administrative_class"), eq(apiData), eq("SCHOOL_API")))
+                    .thenReturn(new SchoolDataPersistService.PersistResult(1, 1, 0, 0));
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
-            doNothing().when(administrativeClassMapper).upsertByClassCode(any());
 
             SyncLog result = syncService.fullSync("administrative_class", "MANUAL", "admin");
 
             assertNotNull(result);
             assertEquals("SUCCESS", result.getStatus());
-            verify(administrativeClassMapper).upsertByClassCode(any());
+            verify(persistService).persistRawData(eq("administrative_class"), eq(apiData), eq("SCHOOL_API"));
         }
 
         @Test
@@ -160,22 +143,16 @@ class SchoolDataSyncServiceTest {
                     Map.of("XH", "2023001", "KCBH", "ENG101-01")
             );
 
-            when(apiClient.fetchCourseSelections(any())).thenReturn(apiData);
-            when(fieldMappingService.applyMapping(eq("course_selection"), any())).thenReturn(new HashMap<>(Map.of(
-                    "studentId", "2023001",
-                    "classId", "ENG101-01"
-            )));
+            when(fetchService.fetchRawData(eq("course_selection"), isNull())).thenReturn(apiData);
+            when(persistService.persistRawData(eq("course_selection"), eq(apiData), eq("SCHOOL_API")))
+                    .thenReturn(new SchoolDataPersistService.PersistResult(1, 1, 0, 0));
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
-            doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
 
             SyncLog result = syncService.fullSync("course_selection", "MANUAL", "admin");
 
             assertEquals("SUCCESS", result.getStatus());
-            verify(courseSelectionMapper).upsertBySelectionId(argThat(entity ->
-                    "2023001_ENG101-01_UNKNOWN_0".equals(entity.getSelectionId())
-                            && "UNKNOWN".equals(entity.getAcademicYear())
-                            && Integer.valueOf(0).equals(entity.getSemester())));
+            verify(persistService).persistRawData(eq("course_selection"), eq(apiData), eq("SCHOOL_API"));
         }
 
         @Test
@@ -185,21 +162,16 @@ class SchoolDataSyncServiceTest {
                     Map.of("XZBH", "150108", "XZMC", "15植保2")
             );
 
-            when(apiClient.fetchAdministrativeClasses(any())).thenReturn(apiData);
-            when(fieldMappingService.applyMapping(eq("administrative_class"), any())).thenReturn(new HashMap<>(Map.of(
-                    "classCode", "150108",
-                    "className", "15植保2"
-            )));
+            when(fetchService.fetchRawData(eq("administrative_class"), isNull())).thenReturn(apiData);
+            when(persistService.persistRawData(eq("administrative_class"), eq(apiData), eq("SCHOOL_API")))
+                    .thenReturn(new SchoolDataPersistService.PersistResult(1, 1, 0, 0));
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
-            doNothing().when(administrativeClassMapper).upsertByClassCode(any());
 
             SyncLog result = syncService.fullSync("administrative_class", "MANUAL", "admin");
 
             assertEquals("SUCCESS", result.getStatus());
-            verify(administrativeClassMapper).upsertByClassCode(argThat(entity ->
-                    "UNKNOWN".equals(entity.getCollegeCode())
-                            && "未知学院".equals(entity.getCollegeName())));
+            verify(persistService).persistRawData(eq("administrative_class"), eq(apiData), eq("SCHOOL_API"));
         }
 
 
@@ -210,27 +182,16 @@ class SchoolDataSyncServiceTest {
                     Map.of("xh", "2023001", "kskm", "CET4", "ksrq", "2026-01-01", "fskscj", 425)
             );
 
-            Map<String, Object> mapped = new HashMap<>();
-            mapped.put("studentId", "2023001");
-            mapped.put("examName", "CET4");
-            mapped.put("examDate", LocalDate.of(2026, 1, 1));
-            mapped.put("score", new java.math.BigDecimal("425"));
-
-            SchoolStudent schoolStudent = new SchoolStudent();
-            schoolStudent.setStudentId("2023001");
-            schoolStudent.setStudentName("张三");
-
-            when(apiClient.fetchLevelExamScores(any())).thenReturn(apiData);
-            when(fieldMappingService.applyMapping(eq("level_exam_scores"), any())).thenReturn(mapped);
+            when(fetchService.fetchRawData(eq("level_exam_scores"), isNull())).thenReturn(apiData);
+            when(persistService.persistRawData(eq("level_exam_scores"), eq(apiData), eq("SCHOOL_API")))
+                    .thenReturn(new SchoolDataPersistService.PersistResult(1, 1, 0, 0));
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
-            when(schoolStudentMapper.selectByStudentId("2023001")).thenReturn(schoolStudent);
 
             SyncLog result = syncService.fullSync("level_exam_scores", "MANUAL", "admin");
 
             assertEquals("SUCCESS", result.getStatus());
-            verify(levelExamScoreMapper).upsertByStudentExam(argThat(entity ->
-                    "张三".equals(entity.getStudentName())));
+            verify(persistService).persistRawData(eq("level_exam_scores"), eq(apiData), eq("SCHOOL_API"));
         }
     }
 
@@ -243,35 +204,28 @@ class SchoolDataSyncServiceTest {
         @Test
         @DisplayName("同步所有9个数据源")
         void fullSyncAll_syncsAllDataSources() {
-            when(apiClient.fetchAdministrativeClasses(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchSchoolCourses(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchTeachingClasses(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchCourseSchedules(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchCourseSelections(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchLevelExamScores(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchTeachingPlans(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchTeacherCourses(any())).thenReturn(Collections.emptyList());
-            // student_schedule: fullSync不支持批量拉取，直接返回空列表，不调用apiClient
+            when(fetchService.fetchRawData(anyString(), isNull())).thenReturn(Collections.emptyList());
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
             List<SyncLog> results = syncService.fullSyncAll("SCHEDULED", "SYSTEM");
 
             assertEquals(9, results.size());
+            verify(fetchService, times(9)).fetchRawData(anyString(), isNull());
         }
 
         @Test
         @DisplayName("单个数据源失败不影响其他数据源")
         void fullSyncAll_singleFailure_continuesWithOthers() {
-            when(apiClient.fetchAdministrativeClasses(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchSchoolCourses(any())).thenThrow(new RuntimeException("API错误"));
-            when(apiClient.fetchTeachingClasses(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchCourseSchedules(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchCourseSelections(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchLevelExamScores(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchTeachingPlans(any())).thenReturn(Collections.emptyList());
-            when(apiClient.fetchTeacherCourses(any())).thenReturn(Collections.emptyList());
-            // student_schedule: fullSync不支持批量拉取，直接返回空列表，不调用apiClient
+            when(fetchService.fetchRawData(eq("administrative_class"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("school_course"), isNull())).thenThrow(new RuntimeException("API错误"));
+            when(fetchService.fetchRawData(eq("teaching_class"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("course_schedule"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("course_selection"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("level_exam_scores"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("teaching_plans"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("teacher_courses"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("student_schedule"), isNull())).thenReturn(Collections.emptyList());
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
@@ -292,7 +246,7 @@ class SchoolDataSyncServiceTest {
         @Test
         @DisplayName("增量同步调用API并写入同步日志")
         void incrementalSync_callsApiAndWritesLog() {
-            when(apiClient.fetchAdministrativeClasses(any())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("administrative_class"), any())).thenReturn(Collections.emptyList());
             when(syncLogMapper.insert(any())).thenAnswer(invocation -> {
                 SyncLog log = invocation.getArgument(0);
                 log.setId(1L);
@@ -302,13 +256,13 @@ class SchoolDataSyncServiceTest {
 
             syncService.incrementalSync("administrative_class", "MANUAL", "admin");
 
-            verify(apiClient).fetchAdministrativeClasses(any());
+            verify(fetchService).fetchRawData(eq("administrative_class"), any());
         }
 
         @Test
         @DisplayName("增量同步无数据时仍完成日志记录")
         void incrementalSync_emptyResult_completesSuccessfully() {
-            when(apiClient.fetchAdministrativeClasses(any())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawData(eq("administrative_class"), any())).thenReturn(Collections.emptyList());
             when(syncLogMapper.insert(any())).thenAnswer(invocation -> {
                 SyncLog log = invocation.getArgument(0);
                 log.setId(1L);
@@ -318,7 +272,7 @@ class SchoolDataSyncServiceTest {
 
             syncService.incrementalSync("administrative_class", "MANUAL", "admin");
 
-            verify(apiClient).fetchAdministrativeClasses(any());
+            verify(fetchService).fetchRawData(eq("administrative_class"), any());
         }
     }
 
@@ -554,8 +508,6 @@ class SchoolDataSyncServiceTest {
 
             doNothing().when(schoolCourseMapper).upsertByCourseCode(any());
             doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
-            doNothing().when(schoolStudentMapper).upsertByStudentId(any());
-            doNothing().when(schoolTeacherMapper).upsertByTeacherId(any());
             doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
 
             Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
@@ -566,8 +518,8 @@ class SchoolDataSyncServiceTest {
             assertEquals(2, result.get("teacherCount")); // T001, T002
             assertTrue((Integer) result.get("bindingCount") > 0);
             verify(schoolCourseMapper, times(2)).upsertByCourseCode(any());
-            verify(schoolStudentMapper, times(3)).upsertByStudentId(any());
-            verify(schoolTeacherMapper, times(2)).upsertByTeacherId(any());
+            verify(persistService, times(3)).persistMappedRecord(eq("school_student"), any());
+            verify(persistService, times(2)).persistMappedRecord(eq("school_teacher"), any());
         }
 
         @Test
@@ -606,8 +558,6 @@ class SchoolDataSyncServiceTest {
 
             doNothing().when(schoolCourseMapper).upsertByCourseCode(any());
             doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
-            doNothing().when(schoolStudentMapper).upsertByStudentId(any());
-            doNothing().when(schoolTeacherMapper).upsertByTeacherId(any());
             doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
 
             Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
@@ -615,7 +565,7 @@ class SchoolDataSyncServiceTest {
             assertNotNull(result);
             assertEquals(false, result.get("upstreamKcbhSupported"));
             assertEquals(1, result.get("studentCount")); // Only 2023001 matches ENG101-01 via classId
-            verify(schoolStudentMapper, times(1)).upsertByStudentId(any());
+            verify(persistService, times(1)).persistMappedRecord(eq("school_student"), any());
         }
 
         @Test
@@ -653,8 +603,6 @@ class SchoolDataSyncServiceTest {
 
             doNothing().when(schoolCourseMapper).upsertByCourseCode(any());
             doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
-            doNothing().when(schoolStudentMapper).upsertByStudentId(any());
-            doNothing().when(schoolTeacherMapper).upsertByTeacherId(any());
             doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
 
             Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
@@ -664,6 +612,8 @@ class SchoolDataSyncServiceTest {
             assertEquals(true, result.get("upstreamKcbhSupported"));
             verify(courseSelectionMapper).upsertBySelectionId(argThat(entity ->
                     "ENG101-01".equals(entity.getClassId()) && entity.getCourseCode() == null));
+            verify(persistService, times(1)).persistMappedRecord(eq("school_student"), any());
+            verify(persistService, times(1)).persistMappedRecord(eq("school_teacher"), any());
         }
 
         @Test
@@ -700,8 +650,8 @@ class SchoolDataSyncServiceTest {
             assertNotNull(result);
             assertEquals(1, result.get("courseCount"));
             verify(schoolCourseMapper, never()).upsertByCourseCode(any());
-            verify(schoolStudentMapper, never()).upsertByStudentId(any());
-            verify(schoolTeacherMapper, never()).upsertByTeacherId(any());
+            verify(persistService, never()).persistMappedRecord(eq("school_student"), any());
+            verify(persistService, never()).persistMappedRecord(eq("school_teacher"), any());
         }
     }
 }

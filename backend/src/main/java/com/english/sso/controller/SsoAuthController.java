@@ -1,5 +1,4 @@
-package com.english.sso.controller;
-
+import com.alibaba.fastjson.JSON;
 import com.english.dto.Result;
 import com.english.entity.User;
 import com.english.sso.config.SsoProperties;
@@ -105,6 +104,8 @@ public class SsoAuthController {
      *
      * CAS: /api/auth/sso/callback?ticket=ST-xxx
      * OAuth2: /api/auth/sso/callback?code=xxx&state=xxx
+     *
+     * state 的有效性校验由 SsoService.validateCallback(...) 负责。
      */
     @GetMapping("/callback")
     public void handleCallback(
@@ -157,23 +158,19 @@ public class SsoAuthController {
             // 4. 生成一次性 code，存入 Redis
             String oneTimeCode = UUID.randomUUID().toString();
 
-            if (result.isNeedsApproval()) {
-                // 待审批状态 — 仍然重定向到前端，但标记为待审批
-                stringRedisTemplate.opsForValue().set(
-                        SSO_CODE_PREFIX + oneTimeCode,
-                        "PENDING:" + result.getMessage(),
-                        SSO_CODE_TTL_MINUTES, TimeUnit.MINUTES
-                );
-                log.info("SSO 待审批用户，生成一次性 code: {}", oneTimeCode);
-            } else {
-                // 登录成功 — 存储 JWT token
-                stringRedisTemplate.opsForValue().set(
-                        SSO_CODE_PREFIX + oneTimeCode,
-                        result.getToken(),
-                        SSO_CODE_TTL_MINUTES, TimeUnit.MINUTES
-                );
-                log.info("SSO 登录成功，生成一次性 code: {}", oneTimeCode);
-            }
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("status", result.isNeedsApproval() ? "PENDING" : "SUCCESS");
+            payload.put("token", result.getToken());
+            payload.put("needsApproval", result.isNeedsApproval() || result.isApprovalPendingAfterLogin());
+            payload.put("approvalPendingAfterLogin", result.isApprovalPendingAfterLogin());
+            payload.put("bindingId", result.getBindingId());
+            payload.put("message", result.getMessage());
+            stringRedisTemplate.opsForValue().set(
+                    SSO_CODE_PREFIX + oneTimeCode,
+                    JSON.toJSONString(payload),
+                    SSO_CODE_TTL_MINUTES, TimeUnit.MINUTES
+            );
+            log.info("SSO 回调结果已写入一次性 code: code={}, status={}", oneTimeCode, payload.get("status"));
 
             // 5. 重定向到前端 SSO 回调页面
             String redirectUrl = appFrontendUrl + "/sso/callback?code=" + oneTimeCode;
@@ -234,25 +231,51 @@ public class SsoAuthController {
             return errorWithCode(SsoErrorCode.CODE_EXPIRED, "授权码无效或已过期，请重新登录");
         }
 
-        // 检查是否为待审批状态
-        if (value.startsWith("PENDING:")) {
-            String message = value.substring("PENDING:".length());
-            return errorWithCode(SsoErrorCode.PENDING_APPROVAL, message);
+        Map<String, Object> payload;
+        try {
+            payload = JSON.parseObject(value);
+        } catch (Exception e) {
+            log.warn("一次性 code 数据格式非法: {}", value);
+            return errorWithCode(SsoErrorCode.CODE_EXPIRED, "授权码无效或已过期，请重新登录");
         }
 
-        // 登录成功 — value 就是 JWT token
+        String status = String.valueOf(payload.getOrDefault("status", "SUCCESS"));
+        if ("PENDING".equals(status)) {
+            return errorWithCode(SsoErrorCode.PENDING_APPROVAL, String.valueOf(payload.getOrDefault("message", "待审批")));
+        }
+
+        String token = payload.get("token") == null ? null : String.valueOf(payload.get("token"));
+        if (token == null || token.isBlank()) {
+            return errorWithCode(SsoErrorCode.CODE_EXPIRED, "授权码无效或已过期，请重新登录");
+        }
+        String pendingApprovalMessage = payload.get("message") == null ? null : String.valueOf(payload.get("message"));
+        Long pendingBindingId = null;
+        Object bindingIdValue = payload.get("bindingId");
+        if (bindingIdValue instanceof Number) {
+            pendingBindingId = ((Number) bindingIdValue).longValue();
+        }
+        Boolean approvalPendingAfterLogin = Boolean.TRUE.equals(payload.get("approvalPendingAfterLogin"));
+
         Map<String, Object> data = new HashMap<>();
-        data.put("token", value);
+        data.put("token", token);
 
         // 从 JWT 中提取用户名，查询完整用户信息返回给前端
         try {
-            String username = jwtUtil.getUsernameFromToken(value);
+            String username = jwtUtil.getUsernameFromToken(token);
             User user = userService.getUserByUsername(username);
             if (user != null) {
                 user.setPassword(null); // 清除密码，避免返回给前端
                 data.put("user", user);
             }
             data.put("expiresIn", jwtUtil.getExpiration());
+            if (pendingApprovalMessage != null && approvalPendingAfterLogin) {
+                data.put("needsApproval", true);
+                data.put("approvalPendingAfterLogin", true);
+                data.put("approvalMessage", pendingApprovalMessage);
+                if (pendingBindingId != null) {
+                    data.put("bindingId", pendingBindingId);
+                }
+            }
         } catch (Exception e) {
             log.warn("SSO token 交换时获取用户信息失败，仅返回 token", e);
         }
