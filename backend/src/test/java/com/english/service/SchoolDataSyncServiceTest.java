@@ -409,7 +409,7 @@ class SchoolDataSyncServiceTest {
             });
 
             doNothing().when(schoolCourseMapper).upsertByCourseCode(any());
-            doNothing().when(courseSelectionMapper).upsertByStudentAndCourse(any());
+            doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
             doNothing().when(schoolStudentMapper).upsertByStudentId(any());
             doNothing().when(schoolTeacherMapper).upsertByTeacherId(any());
             doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
@@ -461,7 +461,7 @@ class SchoolDataSyncServiceTest {
             });
 
             doNothing().when(schoolCourseMapper).upsertByCourseCode(any());
-            doNothing().when(courseSelectionMapper).upsertByStudentAndCourse(any());
+            doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
             doNothing().when(schoolStudentMapper).upsertByStudentId(any());
             doNothing().when(schoolTeacherMapper).upsertByTeacherId(any());
             doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
