@@ -1857,7 +1857,7 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 -- ────────────────────────────────────────
 
 -- SSO: CAS containerId 通用组 → STUDENT
-INSERT IGNORE INTO sso_config (config_key, config_value, config_type, remark) VALUES
+INSERT IGNORE INTO sso_config (config_key, config_value, config_type, description) VALUES
 ('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId 通用组 → STUDENT（大多数人是学生）');
 
 -- level_exam_scores: student_name / exam_type / is_passed 改为可空（CDSP 不提供）
