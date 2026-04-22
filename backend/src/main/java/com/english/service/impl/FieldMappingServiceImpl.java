@@ -55,26 +55,7 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             return null;
         }
 
-        QueryWrapper<FieldMapping> query = new QueryWrapper<>();
-        query.eq("data_source", dataSource)
-             .eq("source_field", sourceField)
-             .eq("is_active", 1);
-        FieldMapping mapping = fieldMappingMapper.selectOne(query);
-
-        // 未命中时兜底：若 sourceField 是中文参数名，按字典翻译为英文别名后再查
-        // CDSP API 返回的 JSON key 默认为中文（"学号"/"开课计划id"...），与 V12 seed 的
-        // 英文别名（xh/kkjhid）不一致，需要此兜底保证外部调用方传中文也能命中
-        if (mapping == null) {
-            String alias = SchoolDataFieldAlias.resolveAlias(dataSource, sourceField);
-            if (alias != null) {
-                QueryWrapper<FieldMapping> aliasQuery = new QueryWrapper<>();
-                aliasQuery.eq("data_source", dataSource)
-                         .eq("is_active", 1)
-                         .apply("LOWER(source_field) = {0}", alias);
-                mapping = fieldMappingMapper.selectOne(aliasQuery);
-            }
-        }
-
+        FieldMapping mapping = findActiveMapping(dataSource, sourceField);
         if (mapping == null) {
             // 无映射配置，原样返回
             return value;
@@ -130,10 +111,10 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             if (key == null) {
                 continue;
             }
-            sourceDataKeysLower.add(key.toLowerCase(Locale.ROOT));
+            sourceDataKeysLower.add(normalizeFieldKey(key));
             String alias = SchoolDataFieldAlias.resolveAlias(dataSource, key);
             if (alias != null) {
-                sourceDataKeysLower.add(alias);
+                sourceDataKeysLower.add(normalizeFieldKey(alias));
             }
         }
 
@@ -144,7 +125,7 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             Object value = entry.getValue();
 
             // 1. 先按原字段 lowercase 查（英文别名或大小写变体）
-            String lookupKey = sourceField == null ? "" : sourceField.toLowerCase(Locale.ROOT);
+            String lookupKey = normalizeFieldKey(sourceField);
             FieldMapping mapping = mappingLookup.get(lookupKey);
 
             // 2. 未命中兜底：中文参数名 → 英文别名 lowercase
@@ -152,7 +133,7 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             if (mapping == null && sourceField != null) {
                 String alias = SchoolDataFieldAlias.resolveAlias(dataSource, sourceField);
                 if (alias != null) {
-                    mapping = mappingLookup.get(alias);
+                    mapping = mappingLookup.get(normalizeFieldKey(alias));
                 }
             }
 
@@ -207,9 +188,7 @@ public class FieldMappingServiceImpl implements FieldMappingService {
         // Check for required fields that were missing from source data
         for (FieldMapping mapping : mappings) {
             String camelCaseField = toCamelCase(mapping.getTargetField());
-            String srcKeyLower = mapping.getSourceField() == null
-                    ? ""
-                    : mapping.getSourceField().toLowerCase(Locale.ROOT);
+            String srcKeyLower = normalizeFieldKey(mapping.getSourceField());
             if (Boolean.TRUE.equals(mapping.getIsRequired())
                     && !result.containsKey(camelCaseField)
                     && !sourceDataKeysLower.contains(srcKeyLower)) {
@@ -249,6 +228,37 @@ public class FieldMappingServiceImpl implements FieldMappingService {
         logger.info("Field mapping updated: id={}, dataSource={}, sourceField={}",
                 fieldMapping.getId(), existing.getDataSource(), existing.getSourceField());
         return fieldMappingMapper.selectById(fieldMapping.getId());
+    }
+
+    private FieldMapping findActiveMapping(String dataSource, String sourceField) {
+        if (dataSource == null || sourceField == null) {
+            return null;
+        }
+
+        String normalizedSourceField = normalizeFieldKey(sourceField);
+        QueryWrapper<FieldMapping> query = new QueryWrapper<>();
+        query.eq("data_source", dataSource)
+             .eq("is_active", 1)
+             .apply("LOWER(source_field) = {0}", normalizedSourceField);
+        FieldMapping mapping = fieldMappingMapper.selectOne(query);
+        if (mapping != null) {
+            return mapping;
+        }
+
+        String alias = SchoolDataFieldAlias.resolveAlias(dataSource, sourceField);
+        if (alias == null) {
+            return null;
+        }
+
+        QueryWrapper<FieldMapping> aliasQuery = new QueryWrapper<>();
+        aliasQuery.eq("data_source", dataSource)
+                  .eq("is_active", 1)
+                  .apply("LOWER(source_field) = {0}", normalizeFieldKey(alias));
+        return fieldMappingMapper.selectOne(aliasQuery);
+    }
+
+    private String normalizeFieldKey(String key) {
+        return key == null ? "" : key.toLowerCase(Locale.ROOT);
     }
 
     // =========================================================================

@@ -300,11 +300,39 @@ class SchoolDataSyncServiceTest {
     class ValidateDataTests {
 
         @Test
-        @DisplayName("所有数据源都有字段映射时校验通过")
+        @DisplayName("所有数据源都有关键字段映射时校验通过")
         void validateData_hasMappings_returnsHealthy() {
-            FieldMapping mapping = new FieldMapping();
-            mapping.setId(1L);
-            when(fieldMappingService.getMappingsByDataSource(anyString())).thenReturn(List.of(mapping));
+            when(fieldMappingService.getMappingsByDataSource(anyString())).thenAnswer(invocation -> {
+                String dataSource = invocation.getArgument(0);
+                List<String> targets;
+                switch (dataSource) {
+                    case "teacher_courses":
+                        targets = List.of("classId", "courseCode");
+                        break;
+                    case "course_selection":
+                        targets = List.of("studentId", "classId");
+                        break;
+                    case "student_schedule":
+                        targets = List.of("classId", "courseCode");
+                        break;
+                    case "course_schedule":
+                        targets = List.of("classId");
+                        break;
+                    case "level_exam_scores":
+                        targets = List.of("studentId", "examName");
+                        break;
+                    default:
+                        targets = List.of("ok");
+                        break;
+                }
+                List<FieldMapping> mappings = new ArrayList<>();
+                for (String target : targets) {
+                    FieldMapping mapping = new FieldMapping();
+                    mapping.setTargetField(target);
+                    mappings.add(mapping);
+                }
+                return mappings;
+            });
             when(syncLogMapper.selectLatestByDataSource(anyString())).thenReturn(null);
 
             Map<String, Object> result = syncService.validateData();
@@ -314,15 +342,59 @@ class SchoolDataSyncServiceTest {
         }
 
         @Test
-        @DisplayName("缺少字段映射配置时产生告警")
-        void validateData_noMappings_reportsIssue() {
-            when(fieldMappingService.getMappingsByDataSource(anyString())).thenReturn(Collections.emptyList());
+        @DisplayName("关键数据源缺少关键 targetField 时 validateData 报告问题")
+        void validateData_missingCriticalMappings_reportsIssue() {
+            FieldMapping teacherCourseMapping = new FieldMapping();
+            teacherCourseMapping.setTargetField("courseCode");
+            FieldMapping courseSelectionMapping = new FieldMapping();
+            courseSelectionMapping.setTargetField("studentId");
+            FieldMapping studentScheduleMapping = new FieldMapping();
+            studentScheduleMapping.setTargetField("courseCode");
+            FieldMapping courseScheduleMapping = new FieldMapping();
+            courseScheduleMapping.setTargetField("courseCode");
+            FieldMapping levelExamMapping = new FieldMapping();
+            levelExamMapping.setTargetField("studentId");
+
+            when(fieldMappingService.getMappingsByDataSource(anyString())).thenAnswer(invocation -> {
+                String dataSource = invocation.getArgument(0);
+                switch (dataSource) {
+                    case "teacher_courses":
+                        return List.of(teacherCourseMapping);
+                    case "course_selection":
+                        return List.of(courseSelectionMapping);
+                    case "student_schedule":
+                        return List.of(studentScheduleMapping);
+                    case "course_schedule":
+                        return List.of(courseScheduleMapping);
+                    case "level_exam_scores":
+                        return List.of(levelExamMapping);
+                    default:
+                        FieldMapping mapping = new FieldMapping();
+                        mapping.setTargetField("ok");
+                        return List.of(mapping);
+                }
+            });
             when(syncLogMapper.selectLatestByDataSource(anyString())).thenReturn(null);
 
             Map<String, Object> result = syncService.validateData();
 
-            assertTrue((int) result.get("totalIssues") > 0);
-            assertEquals(false, result.get("overallHealthy"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> teacherCourses = (Map<String, Object>) result.get("teacher_courses");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> courseSelection = (Map<String, Object>) result.get("course_selection");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> studentSchedule = (Map<String, Object>) result.get("student_schedule");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> courseSchedule = (Map<String, Object>) result.get("course_schedule");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> levelExamScores = (Map<String, Object>) result.get("level_exam_scores");
+
+            assertFalse((Boolean) teacherCourses.get("healthy"));
+            assertFalse((Boolean) courseSelection.get("healthy"));
+            assertFalse((Boolean) studentSchedule.get("healthy"));
+            assertFalse((Boolean) courseSchedule.get("healthy"));
+            assertFalse((Boolean) levelExamScores.get("healthy"));
+            assertTrue((int) result.get("totalIssues") >= 5);
         }
     }
 
@@ -472,6 +544,54 @@ class SchoolDataSyncServiceTest {
             assertEquals(false, result.get("upstreamKcbhSupported"));
             assertEquals(1, result.get("studentCount")); // Only 2023001 matches ENG101-01 via classId
             verify(schoolStudentMapper, times(1)).upsertByStudentId(any());
+        }
+
+        @Test
+        @DisplayName("course_selection 历史 KCBH→courseCode 映射时仍可完成链式拉取")
+        void chainFetch_legacyCourseSelectionMapping_fallsBackToCourseCode() {
+            List<Map<String, Object>> courses = new ArrayList<>();
+            courses.add(new HashMap<>(Map.of("课程代码", "ENG101", "课程名称", "大学英语", "开课院系", "外国语学院")));
+            when(apiClient.fetchSchoolCourses(any())).thenReturn(courses);
+
+            Map<String, Object> mappedCourse = new HashMap<>(Map.of(
+                    "courseCode", "ENG101", "courseName", "大学英语", "collegeName", "外国语学院"));
+
+            List<Map<String, Object>> rawTc = new ArrayList<>();
+            rawTc.add(new HashMap<>(Map.of("rkjsh", "T001", "rkjsxm", "张老师", "kcdm", "ENG101", "kcbh", "ENG101-01")));
+            when(apiClient.fetchTeacherCourses(any())).thenReturn(rawTc);
+
+            Map<String, Object> mappedTc = new HashMap<>(Map.of(
+                    "teacherId", "T001", "teacherName", "张老师", "courseCode", "ENG101", "classId", "ENG101-01"));
+
+            List<Map<String, Object>> rawSelections = new ArrayList<>();
+            rawSelections.add(new HashMap<>(Map.of("xh", "2023001", "kcbh", "ENG101-01")));
+            when(apiClient.fetchCourseSelections(any())).thenReturn(rawSelections);
+
+            when(fieldMappingService.applyMapping(eq("school_course"), any())).thenReturn(mappedCourse);
+            when(fieldMappingService.applyMapping(eq("teacher_courses"), any())).thenReturn(mappedTc);
+            when(fieldMappingService.applyMapping(eq("course_selection"), any())).thenAnswer(inv -> {
+                Map<String, Object> raw = inv.getArgument(1);
+                Map<String, Object> mapped = new HashMap<>();
+                mapped.put("studentId", raw.get("xh"));
+                mapped.put("courseCode", raw.get("kcbh"));
+                mapped.put("academicYear", "2025-2026");
+                mapped.put("semester", "1");
+                return mapped;
+            });
+
+            doNothing().when(schoolCourseMapper).upsertByCourseCode(any());
+            doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
+            doNothing().when(schoolStudentMapper).upsertByStudentId(any());
+            doNothing().when(schoolTeacherMapper).upsertByTeacherId(any());
+            doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
+
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
+
+            assertNotNull(result);
+            assertEquals(1, result.get("studentCount"));
+            assertEquals(true, result.get("upstreamKcbhSupported"));
+            verify(courseSelectionMapper).upsertBySelectionId(argThat(entity ->
+                    "ENG101-01".equals(entity.getClassId()) && entity.getCourseCode() == null));
         }
 
         @Test

@@ -294,6 +294,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             List<FieldMapping> mappings = fieldMappingService.getMappingsByDataSource(dataSource);
             if (mappings.isEmpty()) {
                 issues.add("无字段映射配置");
+            } else {
+                validateCriticalMappings(dataSource, mappings, issues);
             }
 
             // 检查最近一次同步是否失败
@@ -319,6 +321,58 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         validationResult.put("validatedAt", LocalDateTime.now());
 
         return validationResult;
+    }
+
+    private void validateCriticalMappings(String dataSource, List<FieldMapping> mappings, List<String> issues) {
+        Set<String> targetFields = mappings.stream()
+                .map(FieldMapping::getTargetField)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        switch (dataSource) {
+            case "teacher_courses":
+                if (!targetFields.contains("classId")) {
+                    issues.add("teacher_courses 缺少关键映射: classId");
+                }
+                if (!targetFields.contains("courseCode")) {
+                    issues.add("teacher_courses 缺少关键映射: courseCode");
+                }
+                break;
+            case "course_selection":
+                if (!targetFields.contains("studentId")) {
+                    issues.add("course_selection 缺少关键映射: studentId");
+                }
+                if (!targetFields.contains("classId")) {
+                    issues.add("course_selection 缺少关键映射: classId（课程班号）");
+                }
+                if (targetFields.contains("courseCode") && !targetFields.contains("classId")) {
+                    issues.add("course_selection 疑似仍将 KCBH 映射到 courseCode");
+                }
+                break;
+            case "student_schedule":
+                if (!targetFields.contains("classId")) {
+                    issues.add("student_schedule 缺少关键映射: classId");
+                }
+                if (!targetFields.contains("courseCode")) {
+                    issues.add("student_schedule 缺少关键映射: courseCode");
+                }
+                break;
+            case "course_schedule":
+                if (!targetFields.contains("classId")) {
+                    issues.add("course_schedule 缺少关键映射: classId");
+                }
+                break;
+            case "level_exam_scores":
+                if (!targetFields.contains("studentId")) {
+                    issues.add("level_exam_scores 缺少关键映射: studentId");
+                }
+                if (!targetFields.contains("examName")) {
+                    issues.add("level_exam_scores 缺少关键映射: examName");
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     // =========================================================================
@@ -837,7 +891,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         // 生成复合唯一键：学号_课程班号_学年_学期
         // 外部 API 不提供选课记录ID，需要根据业务字段生成
         String studentId = getStringValue(data, "studentId");
-        String classId = getStringValue(data, "classId");
+        String classId = getClassIdValue(data);
         String academicYear = getStringValue(data, "academicYear");
         Integer semester = parseSchoolSemester(data, "semester");
 
@@ -855,7 +909,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setSelectionId(selectionId);
         entity.setStudentId(studentId);
         entity.setStudentName(getStringValue(data, "studentName"));
-        entity.setCourseCode(getStringValue(data, "courseCode"));
+        entity.setCourseCode(getCourseCodeValue(data));
         entity.setCourseName(getStringValue(data, "courseName"));
         entity.setClassId(classId);
         entity.setTeacherId(getStringValue(data, "teacherId"));
@@ -953,7 +1007,17 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private void upsertTeachingPlan(Map<String, Object> data) {
         TeachingPlan entity = new TeachingPlan();
         entity.setPlanId(getStringValue(data, "planId"));
-        entity.setPlanName(getStringValue(data, "planName"));
+
+        String planName = firstNonBlank(
+                getStringValue(data, "planName"),
+                getStringValue(data, "courseName"),
+                getStringValue(data, "collegeName"),
+                getStringValue(data, "grade")
+        );
+        if (planName == null) {
+            planName = "教学计划-" + firstNonBlank(entity.getPlanId(), "UNKNOWN");
+        }
+        entity.setPlanName(planName);
 
         // majorCode: 外部 API 可能不提供，使用默认值
         String majorCode = getStringValue(data, "majorCode");
@@ -1064,8 +1128,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         StudentSchedule entity = new StudentSchedule();
         entity.setStudentId(studentId);
         entity.setStudentName(getStringValue(data, "studentName"));
-        entity.setClassId(getStringValue(data, "classId"));
-        entity.setCourseCode(getStringValue(data, "courseCode"));
+        entity.setClassId(getClassIdValue(data));
+        entity.setCourseCode(getCourseCodeValue(data));
         entity.setCourseName(getStringValue(data, "courseName"));
         entity.setTeacherId(getStringValue(data, "teacherId"));
         entity.setTeacherName(getStringValue(data, "teacherName"));
@@ -1329,8 +1393,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             Map<String, List<Map<String, Object>>> tcByClassCode = new LinkedHashMap<>();
             for (Map<String, Object> tc : rawTcs) {
                 Map<String, Object> mapped = fieldMappingService.applyMapping("teacher_courses", tc);
-                if (!kcdm.equals(stringValue(mapped.get("courseCode")))) continue;
-                String kcbh = stringValue(mapped.get("classId"));
+                if (!kcdm.equals(getCourseCodeValue(mapped))) continue;
+                String kcbh = getClassIdValue(mapped);
                 if (kcbh == null || kcbh.isEmpty()) continue;
                 tcByClassCode.computeIfAbsent(kcbh, k -> new ArrayList<>()).add(mapped);
             }
@@ -1361,8 +1425,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 for (Map<String, Object> sel : rawSels) {
                     Map<String, Object> mapped = fieldMappingService.applyMapping("course_selection", sel);
                     if (Boolean.FALSE.equals(kcbhSupported)
-                            && !kcbh.equals(stringValue(mapped.get("classId")))
-                            && !kcbh.equals(stringValue(mapped.get("courseCode")))) {
+                            && !kcbh.equals(getClassIdValue(mapped))) {
                         continue;
                     }
                     String xh = stringValue(mapped.get("studentId"));
@@ -1546,9 +1609,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         int probeCount = Math.min(3, rawSels.size());
         for (int i = 0; i < probeCount; i++) {
             Map<String, Object> mapped = fieldMappingService.applyMapping("course_selection", rawSels.get(i));
-            String classId = stringValue(mapped.get("classId"));
-            // V12 对 course_selection 映射历史 KCBH → courseCode，兼容两个取位
-            if (classId.isEmpty()) classId = stringValue(mapped.get("courseCode"));
+            String classId = getClassIdValue(mapped);
             if (!kcbh.equals(classId)) return false;
         }
         return true;
@@ -1587,6 +1648,29 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             return null;
         }
         return String.valueOf(value);
+    }
+
+    private String getClassIdValue(Map<String, Object> data) {
+        return firstNonBlank(
+                getStringValue(data, "classId"),
+                getStringValue(data, "courseCode")
+        );
+    }
+
+    private String getCourseCodeValue(Map<String, Object> data) {
+        return getStringValue(data, "courseCode");
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 
     private Integer getIntegerValue(Map<String, Object> data, String key) {

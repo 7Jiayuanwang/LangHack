@@ -146,16 +146,59 @@ class SchoolDataSyncIntegrationTest {
         }
 
         @Test
-        @DisplayName("BOOLEAN转换器 - 中文值正确转换")
-        void booleanConverter_chineseValues() {
-            // 注意: V12 按 PDF 对齐后 school_course 不再包含 sfsyjx/isBilingual 映射
-            // 此处仅验证 applyMapping 在无匹配字段时仍能正常返回（不抛异常）
+        @DisplayName("9个学校数据源字段映射均存在")
+        void allNineDataSourcesHaveMappings() {
+            List<String> dataSources = List.of(
+                    "administrative_class",
+                    "school_course",
+                    "teaching_class",
+                    "course_schedule",
+                    "course_selection",
+                    "level_exam_scores",
+                    "teaching_plans",
+                    "teacher_courses",
+                    "student_schedule"
+            );
+
+            for (String dataSource : dataSources) {
+                List<FieldMapping> mappings = fieldMappingService.getMappingsByDataSource(dataSource);
+                assertNotNull(mappings, dataSource + " mappings should not be null");
+                assertFalse(mappings.isEmpty(), dataSource + " mappings should not be empty");
+            }
+        }
+
+        @Test
+        @DisplayName("course_selection 中 KCBH 应映射为 classId")
+        void courseSelectionKcbhMapsToClassId() {
+            List<FieldMapping> mappings = fieldMappingService.getMappingsByDataSource("course_selection");
+
+            assertTrue(mappings.stream().anyMatch(m -> "KCBH".equals(m.getSourceField()) && "classId".equals(m.getTargetField())));
+        }
+
+        @Test
+        @DisplayName("level_exam_scores 已包含 xm 到 studentName 映射")
+        void levelExamScoresIncludesXmStudentNameMapping() {
+            List<FieldMapping> mappings = fieldMappingService.getMappingsByDataSource("level_exam_scores");
+
+            assertTrue(mappings.stream().anyMatch(m -> "xm".equals(m.getSourceField()) && "studentName".equals(m.getTargetField())));
+        }
+
+        @Test
+        @DisplayName("student_schedule 中文字段 课程编号 应映射为 courseCode")
+        void applyMapping_studentScheduleCourseCodeAlias() {
             Map<String, Object> sourceData = new LinkedHashMap<>();
-            sourceData.put("sfsyjx", "是");
+            sourceData.put("课程编号", "KC-001");
+            sourceData.put("学号", "20230001");
+            sourceData.put("选课课号", "XKKH-001");
+            sourceData.put("课程名称", "大学英语");
+            sourceData.put("星期几", 1);
+            sourceData.put("第几节", "1-2");
+            sourceData.put("学年", "2024");
+            sourceData.put("学期", "秋");
 
-            Map<String, Object> result = fieldMappingService.applyMapping("school_course", sourceData);
+            Map<String, Object> result = fieldMappingService.applyMapping("student_schedule", sourceData);
 
-            assertNotNull(result);
+            assertEquals("KC-001", result.get("courseCode"));
         }
     }
 

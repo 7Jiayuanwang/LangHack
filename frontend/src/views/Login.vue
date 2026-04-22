@@ -546,7 +546,7 @@ const loginIdentity = ref("student");
 // 权限拒绝相关状态
 const showPermissionDenied = ref(false);
 const permissionDeniedData = ref({
-  mainMessage: '对不起，您无权使用LangHack英语学习智能体平台',
+  mainMessage: '对不起，您无权使用Langhack英语学习智能体平台。',
   subMessage: '您的账号正在审批中或权限不足',
   contactPhone: '43019235',
   contactDepartment: '计算机与信息工程学院'
@@ -640,7 +640,7 @@ const handleLogin = async () => {
       // 解析权限拒绝信息
       const lines = errorMsg.split('\n')
       showPermissionDenied.value = true
-      permissionDeniedData.value.mainMessage = lines[0] || '对不起，您无权使用LangHack英语学习智能体平台'
+      permissionDeniedData.value.mainMessage = lines[0] || '对不起，您无权使用Langhack英语学习智能体平台。'
       permissionDeniedData.value.subMessage = lines.length > 1 ? '' : '您的账号正在审批中或权限不足'
       
       // 提取联系电话（如果有的话）

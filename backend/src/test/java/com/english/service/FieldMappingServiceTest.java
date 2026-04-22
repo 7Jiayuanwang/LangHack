@@ -103,6 +103,43 @@ class FieldMappingServiceTest {
             Object result = fieldMappingService.convertField("test", "unknown", "hello");
             assertEquals("hello", result);
         }
+
+        @Test
+        @DisplayName("source_field 大小写不一致时仍能命中映射")
+        void convertField_caseInsensitiveLookup_returnsConvertedValue() {
+            FieldMapping mapping = new FieldMapping();
+            mapping.setId(1L);
+            mapping.setDataSource("course_selection");
+            mapping.setSourceField("XH");
+            mapping.setTargetField("studentId");
+            mapping.setTargetType("STRING");
+            mapping.setConverter("NONE");
+            mapping.setIsActive(true);
+
+            when(fieldMappingMapper.selectOne(any())).thenReturn(mapping);
+
+            Object result = fieldMappingService.convertField("course_selection", "xh", 2023122066164L);
+            assertEquals("2023122066164", result);
+        }
+
+        @Test
+        @DisplayName("中文字段名可通过别名字典兜底命中映射")
+        void convertField_chineseKeyFallback_returnsConvertedValue() {
+            FieldMapping mapping = new FieldMapping();
+            mapping.setId(1L);
+            mapping.setDataSource("teaching_plans");
+            mapping.setSourceField("kkjhid");
+            mapping.setTargetField("planId");
+            mapping.setTargetType("STRING");
+            mapping.setConverter("NONE");
+            mapping.setIsActive(true);
+
+            when(fieldMappingMapper.selectOne(any())).thenReturn(null).thenReturn(mapping);
+
+            Object result = fieldMappingService.convertField("teaching_plans", "开课计划id", 1244967L);
+            assertEquals("1244967", result);
+            verify(fieldMappingMapper, times(2)).selectOne(any());
+        }
     }
 
     // ==================== applyMapping tests ====================
@@ -307,27 +344,69 @@ class FieldMappingServiceTest {
         }
 
         @Test
-        @DisplayName("中文 key 存在时必填字段不应误判为缺失（兜底翻译加入 keys 集合）")
-        void applyMapping_chineseKeyPresent_doesNotTriggerMissingDefault() {
+        @DisplayName("student_schedule 的 课程编号 中文 key 应命中 courseCode")
+        void applyMapping_studentScheduleCourseCodeAlias_resolvesCorrectly() {
             FieldMapping mapping = new FieldMapping();
             mapping.setId(1L);
             mapping.setDataSource("student_schedule");
-            mapping.setSourceField("xh");
-            mapping.setTargetField("studentId");
+            mapping.setSourceField("kcbh");
+            mapping.setTargetField("courseCode");
             mapping.setTargetType("STRING");
             mapping.setConverter("NONE");
             mapping.setIsActive(true);
             mapping.setIsRequired(true);
-            mapping.setDefaultValue("FALLBACK");
 
             when(fieldMappingMapper.selectList(any())).thenReturn(List.of(mapping));
 
             Map<String, Object> source = new HashMap<>();
-            source.put("学号", "20231001");
+            source.put("课程编号", "KC2024-001");
             Map<String, Object> result = fieldMappingService.applyMapping("student_schedule", source);
 
-            // 应该取中文 key 对应的值，而不是触发 default 回填
-            assertEquals("20231001", result.get("studentId"));
+            assertEquals("KC2024-001", result.get("courseCode"));
+        }
+
+        @Test
+        @DisplayName("course_selection 的 KCBH 应稳定映射到 classId")
+        void applyMapping_courseSelectionKcbh_mapsToClassId() {
+            FieldMapping mapping = new FieldMapping();
+            mapping.setId(1L);
+            mapping.setDataSource("course_selection");
+            mapping.setSourceField("KCBH");
+            mapping.setTargetField("classId");
+            mapping.setTargetType("STRING");
+            mapping.setConverter("NONE");
+            mapping.setIsActive(true);
+            mapping.setIsRequired(true);
+
+            when(fieldMappingMapper.selectList(any())).thenReturn(List.of(mapping));
+
+            Map<String, Object> source = new HashMap<>();
+            source.put("课程班号", "51425977");
+            Map<String, Object> result = fieldMappingService.applyMapping("course_selection", source);
+
+            assertEquals("51425977", result.get("classId"));
+        }
+
+        @Test
+        @DisplayName("teaching_plans 的 参考书目 中文 key 应命中 cksm")
+        void applyMapping_teachingPlansCksmAlias_resolvesCorrectly() {
+            FieldMapping mapping = new FieldMapping();
+            mapping.setId(1L);
+            mapping.setDataSource("teaching_plans");
+            mapping.setSourceField("cksm");
+            mapping.setTargetField("trainingObjective");
+            mapping.setTargetType("STRING");
+            mapping.setConverter("NONE");
+            mapping.setIsActive(true);
+            mapping.setIsRequired(false);
+
+            when(fieldMappingMapper.selectList(any())).thenReturn(List.of(mapping));
+
+            Map<String, Object> source = new HashMap<>();
+            source.put("参考书目", "教材A;教材B");
+            Map<String, Object> result = fieldMappingService.applyMapping("teaching_plans", source);
+
+            assertEquals("教材A;教材B", result.get("trainingObjective"));
         }
     }
 

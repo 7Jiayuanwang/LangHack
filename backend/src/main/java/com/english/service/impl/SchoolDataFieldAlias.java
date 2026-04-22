@@ -161,7 +161,7 @@ final class SchoolDataFieldAlias {
         studentSchedule.put("学期", "xq");
         studentSchedule.put("学年", "xn");
         studentSchedule.put("周次安排", "zcap");
-        studentSchedule.put("课程班号", "kcbh");
+        studentSchedule.put("课程编号", "kcbh");
         all.put("student_schedule", Collections.unmodifiableMap(studentSchedule));
 
         CHINESE_TO_ALIAS = Collections.unmodifiableMap(all);

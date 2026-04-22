@@ -67,7 +67,7 @@ const router = useRouter()
 const props = defineProps({
   mainMessage: {
     type: String,
-    default: '对不起，您无权使用LangHack英语学习智能体平台'
+    default: '对不起，您无权使用Langhack英语学习智能体平台。'
   },
   subMessage: {
     type: String,
