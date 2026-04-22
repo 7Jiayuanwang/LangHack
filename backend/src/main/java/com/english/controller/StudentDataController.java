@@ -16,6 +16,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -90,6 +91,25 @@ public class StudentDataController {
         } catch (Exception e) {
             logger.error("获取选课记录失败", e);
             return Result.error("获取选课记录失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 获取当前学生的等级考试成绩（Lazy 同步）
+     * GET /api/student/level-exam-scores
+     *
+     * 与 /scores 的区别：此端点按需触发 CDSP 拉取并刷新本地数据（陈旧度阈值 1 天）。
+     */
+    @GetMapping("/level-exam-scores")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<List<LevelExamScore>> getMyLevelExamScores(Authentication authentication) {
+        try {
+            String studentId = getStudentId(authentication);
+            List<LevelExamScore> scores = syncService.getOrSyncLevelExamScores(studentId, Duration.ofDays(1));
+            return Result.success(scores);
+        } catch (Exception e) {
+            logger.error("获取学生四六级成绩失败", e);
+            return Result.error("获取成绩失败，请稍后重试");
         }
     }
 

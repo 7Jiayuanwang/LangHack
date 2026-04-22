@@ -416,6 +416,9 @@ public class SchoolDataProperties {
         /** 启动时是否执行全量同步 */
         private boolean fullSyncOnStartup = false;
 
+        /** 按学院链式拉取定时刷新配置 */
+        private CollegeChainProperties collegeChain = new CollegeChainProperties();
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -470,6 +473,64 @@ public class SchoolDataProperties {
 
         public void setFullSyncOnStartup(boolean fullSyncOnStartup) {
             this.fullSyncOnStartup = fullSyncOnStartup;
+        }
+
+        public CollegeChainProperties getCollegeChain() {
+            return collegeChain;
+        }
+
+        public void setCollegeChain(CollegeChainProperties collegeChain) {
+            this.collegeChain = collegeChain;
+        }
+    }
+
+    /**
+     * 按学院链式拉取定时刷新配置。
+     * cron 表达式默认每日 3:30（错开全量同步窗口），学院白名单默认包含外国语学院。
+     */
+    public static class CollegeChainProperties {
+        /** 是否启用定时链式刷新 */
+        private boolean enabled = false;
+
+        /** 定时 cron */
+        private String cron = "0 30 3 * * ?";
+
+        /** 学院白名单（逗号分隔） */
+        private List<String> colleges = Arrays.asList("外国语学院");
+
+        /** 学院匹配模式：eq 精确 / contains 模糊 */
+        private String matchMode = "eq";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            this.cron = cron;
+        }
+
+        public List<String> getColleges() {
+            return colleges;
+        }
+
+        public void setColleges(List<String> colleges) {
+            this.colleges = colleges;
+        }
+
+        public String getMatchMode() {
+            return matchMode;
+        }
+
+        public void setMatchMode(String matchMode) {
+            this.matchMode = matchMode;
         }
     }
 

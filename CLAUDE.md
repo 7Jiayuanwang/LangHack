@@ -172,6 +172,19 @@ backend/src/main/resources/db/migration/V{n}__{description}.sql
 - 功能开关：`GET /api/public/system/feature-toggles` 中的 school_data 相关项
 - Flyway：V9 基础表 + V12 合并脚本（2026-04-19 将 V12.1/V13/V14/V16/V18/V19/V20 合并为单个 V12__school_data_integration.sql）
 
+### 按学院链式拉取
+
+- **链路**: 学院 → school_course(KKYX) → teacher_courses(kcdm) → course_selection(KCBH) → 学生/教师/绑定落库
+- **核心方法**: `SchoolDataSyncServiceImpl.chainFetchStudentsByCollege(collegeName, matchMode, persist)`
+- **REST 端点**: `POST /api/admin/sync/chain/students-by-college` (ADMIN/OPS)
+- **学生端 Lazy**: `GET /api/student/level-exam-scores` (USER/STUDENT) — 按需拉取四六级，陈旧度阈值1天
+- **Cron**: `SchoolDataSyncScheduler.executeCollegeChainRefresh` — 默认3:30，配置 `school.data.sync.college-chain.*`
+- **新表**: `school_student` / `school_teacher` / `teacher_student_binding`（V13 Flyway）
+- **SSO 自动授权**: `SsoUserMappingService.tryAutoGrantFromSchoolDirectory` — student > teacher > 原流程，feature toggle 控制（默认关）
+- **Feature toggles**: `ops.school_data_chain_fetch` / `sso.auto_grant_student` / `sso.auto_grant_teacher` / `student.lazy_data_sync`
+- **KCBH 降级**: CDSP 可能忽略 KCBH 参数，首条探测后切换客户端过滤（`probeKcbhSupport`）
+- **字段映射注意**: teacher_courses 和 course_selection 映射后 kcbh 字段名为 `classId`（非 courseClassCode）
+
 ### AI 服务集成
 
 - 多提供商路由：`AiProviderService` → HiAgent / OpenRouter / SiliconFlow
@@ -188,7 +201,7 @@ backend/src/main/resources/db/migration/V{n}__{description}.sql
 
 ```bash
 cd frontend
-npx vitest run                          # 运行所有测试（当前 63 文件 1124 测试全通过）
+npx vitest run                          # 运行所有测试（当前 69 文件 1199 测试全通过）
 npx vitest run tests/views/layouts/    # 只运行布局测试
 npx vitest run tests/components/       # 运行组件测试
 ```

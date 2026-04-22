@@ -148,6 +148,30 @@ public class SchoolDataSyncController {
         }
     }
 
+    /**
+     * 按学院链式拉取学生/教师/绑定关系
+     * POST /api/admin/sync/chain/students-by-college
+     *
+     * 链路: school_course(KKYX) → teacher_courses(KCDM) → course_selection(KCBH)
+     *      → school_student / school_teacher / teacher_student_binding 全部落库。
+     */
+    @PostMapping("/chain/students-by-college")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<Map<String, Object>> chainStudentsByCollege(
+            @RequestParam String collegeName,
+            @RequestParam(defaultValue = "eq") String matchMode,
+            @RequestParam(defaultValue = "true") boolean persist) {
+        logger.info("手动触发链式拉取: collegeName={}, matchMode={}, persist={}",
+                collegeName, matchMode, persist);
+        try {
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege(collegeName, matchMode, persist);
+            return Result.success("链式拉取完成", result);
+        } catch (Exception e) {
+            logger.error("链式拉取失败: collegeName={}", collegeName, e);
+            return Result.error(e.getMessage() != null ? e.getMessage() : "链式拉取失败");
+        }
+    }
+
     // =========================================================================
     // 状态查询
     // =========================================================================

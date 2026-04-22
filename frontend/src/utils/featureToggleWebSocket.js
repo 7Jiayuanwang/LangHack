@@ -14,6 +14,8 @@ class FeatureToggleWebSocket {
     this.heartbeatInterval = 30000 // 30秒心跳
     this.listeners = new Set()
     this.isConnecting = false
+    // Backend WebSocket not yet implemented — flag to prevent auto-connect
+    this._backendSupported = false
     this.url = this.getWebSocketUrl()
   }
 
@@ -25,6 +27,12 @@ class FeatureToggleWebSocket {
 
   connect() {
     if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
+      return
+    }
+
+    // No backend WebSocket handler exists — skip connection entirely to avoid
+    // repeated 401 warnings in server logs. Re-enable when backend adds WS support.
+    if (!this._backendSupported) {
       return
     }
 

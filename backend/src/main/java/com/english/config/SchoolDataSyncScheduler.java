@@ -41,11 +41,13 @@ public class SchoolDataSyncScheduler {
     private ScheduledFuture<?> fullSyncTask;
     private ScheduledFuture<?> incrementalSyncTask;
     private ScheduledFuture<?> validationTask;
+    private ScheduledFuture<?> collegeChainTask;
 
     /** 防止重入标志 */
     private final AtomicBoolean fullSyncRunning = new AtomicBoolean(false);
     private final AtomicBoolean incrementalSyncRunning = new AtomicBoolean(false);
     private final AtomicBoolean validationRunning = new AtomicBoolean(false);
+    private final AtomicBoolean collegeChainRunning = new AtomicBoolean(false);
 
     public SchoolDataSyncScheduler(@Qualifier("syncTaskScheduler") TaskScheduler taskScheduler,
                                     @Lazy SchoolDataSyncService syncService,
@@ -67,11 +69,14 @@ public class SchoolDataSyncScheduler {
         scheduleFullSync();
         scheduleIncrementalSync();
         scheduleValidation();
+        scheduleCollegeChain();
 
-        logger.info("School data sync scheduler initialized - Full: [{}], Incremental: [{}], Validation: [{}]",
+        logger.info("School data sync scheduler initialized - Full: [{}], Incremental: [{}], Validation: [{}], CollegeChain: [{}] (enabled={})",
                 properties.getSync().getFullSyncCron(),
                 properties.getSync().getIncrementalSyncCron(),
-                properties.getSync().getValidationCron());
+                properties.getSync().getValidationCron(),
+                properties.getSync().getCollegeChain().getCron(),
+                properties.getSync().getCollegeChain().isEnabled());
     }
 
     /**
@@ -83,6 +88,7 @@ public class SchoolDataSyncScheduler {
             scheduleFullSync();
             scheduleIncrementalSync();
             scheduleValidation();
+            scheduleCollegeChain();
             logger.info("School data sync scheduler rescheduled");
         } else {
             logger.info("School data sync scheduler is disabled, all tasks cancelled");
@@ -96,6 +102,7 @@ public class SchoolDataSyncScheduler {
         cancelTask(fullSyncTask, "full-sync");
         cancelTask(incrementalSyncTask, "incremental-sync");
         cancelTask(validationTask, "validation");
+        cancelTask(collegeChainTask, "college-chain");
     }
 
     // =========================================================================
@@ -120,6 +127,18 @@ public class SchoolDataSyncScheduler {
         validationTask = taskScheduler.schedule(
                 this::executeValidation,
                 new CronTrigger(properties.getSync().getValidationCron())
+        );
+    }
+
+    private void scheduleCollegeChain() {
+        SchoolDataProperties.CollegeChainProperties cc = properties.getSync().getCollegeChain();
+        if (!cc.isEnabled()) {
+            logger.info("College chain refresh is disabled, skipping schedule");
+            return;
+        }
+        collegeChainTask = taskScheduler.schedule(
+                this::executeCollegeChainRefresh,
+                new CronTrigger(cc.getCron())
         );
     }
 
@@ -196,6 +215,32 @@ public class SchoolDataSyncScheduler {
             logger.error("定时数据校验异常", e);
         } finally {
             validationRunning.set(false);
+        }
+    }
+
+    private void executeCollegeChainRefresh() {
+        if (!collegeChainRunning.compareAndSet(false, true)) {
+            logger.warn("链式刷新正在运行中，跳过本次调度");
+            return;
+        }
+
+        SchoolDataProperties.CollegeChainProperties cc = properties.getSync().getCollegeChain();
+        try {
+            logger.info("=== 定时链式刷新开始 colleges={} matchMode={} ===", cc.getColleges(), cc.getMatchMode());
+            for (String college : cc.getColleges()) {
+                if (college == null || college.trim().isEmpty()) continue;
+                try {
+                    Map<String, Object> result = syncService.chainFetchStudentsByCollege(college.trim(), cc.getMatchMode(), true);
+                    logger.info("链式刷新完成 college={}, result={}", college, result);
+                } catch (Exception e) {
+                    logger.error("链式刷新单学院失败 college={}", college, e);
+                }
+            }
+            logger.info("=== 定时链式刷新完成 ===");
+        } catch (Exception e) {
+            logger.error("定时链式刷新异常", e);
+        } finally {
+            collegeChainRunning.set(false);
         }
     }
 }

@@ -19,6 +19,8 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -72,6 +74,15 @@ class SchoolDataSyncServiceTest {
     @Mock
     private StudentScheduleMapper studentScheduleMapper;
 
+    @Mock
+    private SchoolStudentMapper schoolStudentMapper;
+
+    @Mock
+    private SchoolTeacherMapper schoolTeacherMapper;
+
+    @Mock
+    private TeacherStudentBindingMapper teacherStudentBindingMapper;
+
     private ObjectMapper objectMapper;
     private SchoolDataProperties properties;
 
@@ -84,6 +95,7 @@ class SchoolDataSyncServiceTest {
                 administrativeClassMapper, schoolCourseMapper, teachingClassMapper,
                 courseScheduleMapper, courseSelectionMapper, levelExamScoreMapper,
                 teachingPlanMapper, teachingPlanCourseMapper, studentScheduleMapper,
+                schoolStudentMapper, schoolTeacherMapper, teacherStudentBindingMapper,
                 objectMapper, properties
         );
     }
@@ -311,6 +323,194 @@ class SchoolDataSyncServiceTest {
 
             assertTrue((int) result.get("totalIssues") > 0);
             assertEquals(false, result.get("overallHealthy"));
+        }
+    }
+
+    // ==================== chainFetchStudentsByCollege tests ====================
+
+    @Nested
+    @DisplayName("chainFetchStudentsByCollege 按学院链式拉取")
+    class ChainFetchStudentsByCollegeTests {
+
+        @Test
+        @DisplayName("成功链式拉取外国语学院数据")
+        void chainFetch_success_returnsCompleteResult() {
+            // Step 1: school_course by kkyx → raw data, filterCoursesByCollege applies mapping
+            List<Map<String, Object>> courses = new ArrayList<>();
+            courses.add(new HashMap<>(Map.of("课程代码", "ENG101", "课程名称", "大学英语", "开课院系", "外国语学院")));
+            courses.add(new HashMap<>(Map.of("课程代码", "ENG102", "课程名称", "英语听力", "开课院系", "外国语学院")));
+            when(apiClient.fetchSchoolCourses(any())).thenReturn(courses);
+
+            // school_course mapping: needs collegeName for filter + courseCode for matchedCourseCodes
+            Map<String, Object> mappedCourse1 = new HashMap<>(Map.of(
+                    "courseCode", "ENG101", "courseName", "大学英语", "collegeName", "外国语学院"));
+            Map<String, Object> mappedCourse2 = new HashMap<>(Map.of(
+                    "courseCode", "ENG102", "courseName", "英语听力", "collegeName", "外国语学院"));
+
+            // Step 2.5: teacher_courses by kcdm — mapped uses classId (not courseClassCode)
+            List<Map<String, Object>> rawTc1 = new ArrayList<>();
+            rawTc1.add(new HashMap<>(Map.of("rkjsh", "T001", "rkjsxm", "张老师", "kcdm", "ENG101", "kcbh", "ENG101-01", "xn", "2025-2026", "xq", "1")));
+            List<Map<String, Object>> rawTc2 = new ArrayList<>();
+            rawTc2.add(new HashMap<>(Map.of("rkjsh", "T002", "rkjsxm", "李老师", "kcdm", "ENG102", "kcbh", "ENG102-01", "xn", "2025-2026", "xq", "1")));
+            when(apiClient.fetchTeacherCourses(argThat(params ->
+                    "ENG101".equals(params.get("kcdm"))))).thenReturn(rawTc1);
+            when(apiClient.fetchTeacherCourses(argThat(params ->
+                    "ENG102".equals(params.get("kcdm"))))).thenReturn(rawTc2);
+
+            Map<String, Object> mappedTc1 = new HashMap<>(Map.of(
+                    "teacherId", "T001", "teacherName", "张老师", "courseCode", "ENG101",
+                    "classId", "ENG101-01", "academicYear", "2025-2026", "semester", "1"));
+            Map<String, Object> mappedTc2 = new HashMap<>(Map.of(
+                    "teacherId", "T002", "teacherName", "李老师", "courseCode", "ENG102",
+                    "classId", "ENG102-01", "academicYear", "2025-2026", "semester", "1"));
+
+            // Step 2: course_selection by KCBH — mapped uses classId for KCBH check
+            List<Map<String, Object>> rawSel1 = new ArrayList<>();
+            rawSel1.add(new HashMap<>(Map.of("xh", "2023001", "kcbh", "ENG101-01")));
+            rawSel1.add(new HashMap<>(Map.of("xh", "2023002", "kcbh", "ENG101-01")));
+            List<Map<String, Object>> rawSel2 = new ArrayList<>();
+            rawSel2.add(new HashMap<>(Map.of("xh", "2023001", "kcbh", "ENG102-01")));
+            rawSel2.add(new HashMap<>(Map.of("xh", "2023003", "kcbh", "ENG102-01")));
+            when(apiClient.fetchCourseSelections(argThat(params ->
+                    "ENG101-01".equals(params.get("KCBH"))))).thenReturn(rawSel1);
+            when(apiClient.fetchCourseSelections(argThat(params ->
+                    "ENG102-01".equals(params.get("KCBH"))))).thenReturn(rawSel2);
+
+            Map<String, Object> mappedSel1 = new HashMap<>(Map.of("studentId", "2023001", "classId", "ENG101-01"));
+            Map<String, Object> mappedSel2 = new HashMap<>(Map.of("studentId", "2023002", "classId", "ENG101-01"));
+            Map<String, Object> mappedSel3 = new HashMap<>(Map.of("studentId", "2023001", "classId", "ENG102-01"));
+            Map<String, Object> mappedSel4 = new HashMap<>(Map.of("studentId", "2023003", "classId", "ENG102-01"));
+
+            when(fieldMappingService.applyMapping(eq("school_course"), any())).thenAnswer(inv -> {
+                Map<String, Object> raw = inv.getArgument(1);
+                String code = (String) raw.get("课程代码");
+                if ("ENG101".equals(code)) return mappedCourse1;
+                if ("ENG102".equals(code)) return mappedCourse2;
+                return new HashMap<>();
+            });
+
+            when(fieldMappingService.applyMapping(eq("teacher_courses"), any())).thenAnswer(inv -> {
+                Map<String, Object> raw = inv.getArgument(1);
+                String tid = (String) raw.get("rkjsh");
+                if ("T001".equals(tid)) return mappedTc1;
+                if ("T002".equals(tid)) return mappedTc2;
+                return new HashMap<>();
+            });
+
+            when(fieldMappingService.applyMapping(eq("course_selection"), any())).thenAnswer(inv -> {
+                Map<String, Object> raw = inv.getArgument(1);
+                String xh = (String) raw.get("xh");
+                String kcbh = (String) raw.get("kcbh");
+                if ("2023001".equals(xh) && "ENG101-01".equals(kcbh)) return mappedSel1;
+                if ("2023002".equals(xh) && "ENG101-01".equals(kcbh)) return mappedSel2;
+                if ("2023001".equals(xh) && "ENG102-01".equals(kcbh)) return mappedSel3;
+                if ("2023003".equals(xh) && "ENG102-01".equals(kcbh)) return mappedSel4;
+                return new HashMap<>();
+            });
+
+            doNothing().when(schoolCourseMapper).upsertByCourseCode(any());
+            doNothing().when(courseSelectionMapper).upsertByStudentAndCourse(any());
+            doNothing().when(schoolStudentMapper).upsertByStudentId(any());
+            doNothing().when(schoolTeacherMapper).upsertByTeacherId(any());
+            doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
+
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
+
+            assertNotNull(result);
+            assertEquals(2, result.get("courseCount"));
+            assertEquals(3, result.get("studentCount")); // 2023001, 2023002, 2023003
+            assertEquals(2, result.get("teacherCount")); // T001, T002
+            assertTrue((Integer) result.get("bindingCount") > 0);
+            verify(schoolCourseMapper, times(2)).upsertByCourseCode(any());
+            verify(schoolStudentMapper, times(3)).upsertByStudentId(any());
+            verify(schoolTeacherMapper, times(2)).upsertByTeacherId(any());
+        }
+
+        @Test
+        @DisplayName("KCBH参数不支持时客户端过滤生效")
+        void chainFetch_kcbhNotSupported_clientSideFiltering() {
+            List<Map<String, Object>> courses = new ArrayList<>();
+            courses.add(new HashMap<>(Map.of("课程代码", "ENG101", "课程名称", "大学英语", "开课院系", "外国语学院")));
+            when(apiClient.fetchSchoolCourses(any())).thenReturn(courses);
+
+            Map<String, Object> mappedCourse = new HashMap<>(Map.of(
+                    "courseCode", "ENG101", "courseName", "大学英语", "collegeName", "外国语学院"));
+
+            // Need teacher to establish tcByClassCode → kcbh="ENG101-01"
+            List<Map<String, Object>> rawTc = new ArrayList<>();
+            rawTc.add(new HashMap<>(Map.of("rkjsh", "T001", "rkjsxm", "张老师", "kcdm", "ENG101", "kcbh", "ENG101-01")));
+            when(apiClient.fetchTeacherCourses(any())).thenReturn(rawTc);
+
+            Map<String, Object> mappedTc = new HashMap<>(Map.of(
+                    "teacherId", "T001", "teacherName", "张老师", "courseCode", "ENG101", "classId", "ENG101-01"));
+
+            // CDSP ignores KCBH and returns all selections
+            List<Map<String, Object>> allSelections = new ArrayList<>();
+            allSelections.add(new HashMap<>(Map.of("xh", "2023001", "kcbh", "ENG101-01")));
+            allSelections.add(new HashMap<>(Map.of("xh", "2023002", "kcbh", "OTHER-01"))); // Different class
+            when(apiClient.fetchCourseSelections(any())).thenReturn(allSelections);
+
+            when(fieldMappingService.applyMapping(eq("school_course"), any())).thenReturn(mappedCourse);
+            when(fieldMappingService.applyMapping(eq("teacher_courses"), any())).thenReturn(mappedTc);
+            when(fieldMappingService.applyMapping(eq("course_selection"), any())).thenAnswer(inv -> {
+                Map<String, Object> raw = inv.getArgument(1);
+                Map<String, Object> mapped = new HashMap<>();
+                mapped.put("studentId", raw.get("xh"));
+                mapped.put("classId", raw.get("kcbh"));
+                return mapped;
+            });
+
+            doNothing().when(schoolCourseMapper).upsertByCourseCode(any());
+            doNothing().when(courseSelectionMapper).upsertByStudentAndCourse(any());
+            doNothing().when(schoolStudentMapper).upsertByStudentId(any());
+            doNothing().when(schoolTeacherMapper).upsertByTeacherId(any());
+            doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
+
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
+
+            assertNotNull(result);
+            assertEquals(false, result.get("upstreamKcbhSupported"));
+            assertEquals(1, result.get("studentCount")); // Only 2023001 matches ENG101-01 via classId
+            verify(schoolStudentMapper, times(1)).upsertByStudentId(any());
+        }
+
+        @Test
+        @DisplayName("学院无匹配课程时返回零计数")
+        void chainFetch_noMatchingCourses_returnsZeroCounts() {
+            when(apiClient.fetchSchoolCourses(any())).thenReturn(Collections.emptyList());
+
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("不存在的学院", "eq", true);
+
+            assertNotNull(result);
+            assertEquals(0, result.get("courseCount"));
+            assertEquals(0, result.get("studentCount"));
+            assertEquals(0, result.get("teacherCount"));
+            assertEquals(0, result.get("bindingCount"));
+            verify(apiClient, never()).fetchCourseSelections(any());
+            verify(apiClient, never()).fetchTeacherCourses(any());
+        }
+
+        @Test
+        @DisplayName("persist=false时不写入数据库")
+        void chainFetch_persistFalse_doesNotWriteToDb() {
+            List<Map<String, Object>> courses = new ArrayList<>();
+            courses.add(new HashMap<>(Map.of("课程代码", "ENG101", "课程名称", "大学英语", "开课院系", "外国语学院")));
+            when(apiClient.fetchSchoolCourses(any())).thenReturn(courses);
+
+            Map<String, Object> mappedCourse = new HashMap<>(Map.of(
+                    "courseCode", "ENG101", "courseName", "大学英语", "collegeName", "外国语学院"));
+            when(fieldMappingService.applyMapping(eq("school_course"), any())).thenReturn(mappedCourse);
+
+            // No teacher → no tcByClassCode → no course_selection calls
+            when(apiClient.fetchTeacherCourses(any())).thenReturn(Collections.emptyList());
+
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", false);
+
+            assertNotNull(result);
+            assertEquals(1, result.get("courseCount"));
+            verify(schoolCourseMapper, never()).upsertByCourseCode(any());
+            verify(schoolStudentMapper, never()).upsertByStudentId(any());
+            verify(schoolTeacherMapper, never()).upsertByTeacherId(any());
         }
     }
 }

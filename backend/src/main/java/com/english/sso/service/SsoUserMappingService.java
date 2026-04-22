@@ -1,8 +1,13 @@
 package com.english.sso.service;
 
 import com.alibaba.fastjson.JSON;
+import com.english.entity.SchoolStudent;
+import com.english.entity.SchoolTeacher;
 import com.english.entity.User;
+import com.english.mapper.SchoolStudentMapper;
+import com.english.mapper.SchoolTeacherMapper;
 import com.english.mapper.UserMapper;
+import com.english.service.SystemConfigService;
 import com.english.service.UserService;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
@@ -21,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -51,6 +57,15 @@ public class SsoUserMappingService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired(required = false)
+    private SchoolStudentMapper schoolStudentMapper;
+
+    @Autowired(required = false)
+    private SchoolTeacherMapper schoolTeacherMapper;
+
+    @Autowired(required = false)
+    private SystemConfigService systemConfigService;
 
     /**
      * 处理 SSO 登录：绑定/创建用户，返回登录结果
@@ -234,6 +249,13 @@ public class SsoUserMappingService {
             return SsoLoginResult.success(token, existingUser);
         }
 
+        // 2.5 链式主数据自动授权：school_student / school_teacher 命中时直接创建对应角色账户
+        //     优先级：student > teacher > 原流程（避免学号与工号号段重叠时误判）
+        SsoLoginResult autoGrantResult = tryAutoGrantFromSchoolDirectory(ssoUserInfo, protocol);
+        if (autoGrantResult != null) {
+            return autoGrantResult;
+        }
+
         // 3. 全新用户：自动识别角色
         if (ssoMappedRole == null) {
             // 无法识别角色 → 创建待审批记录，默认角色 STUDENT（校园环境大多数人是学生）
@@ -342,5 +364,122 @@ public class SsoUserMappingService {
         if (currentIndex < 0) currentIndex = -1;
         if (newIndex < 0) newIndex = -1;
         return newIndex > currentIndex;
+    }
+
+    // =========================================================================
+    // 链式主数据自动授权（school_student / school_teacher）
+    // =========================================================================
+
+    /**
+     * 根据 school_student / school_teacher 主数据自动授权：
+     * - 命中 school_student 且 feature toggle sso.auto_grant_student=true → 创建 STUDENT
+     * - 命中 school_teacher 且 feature toggle sso.auto_grant_teacher=true → 创建 TEACHER
+     * - 未命中或未启用 → 返回 null，走原流程
+     *
+     * 返回 SsoLoginResult 表示已处理；返回 null 表示跳过自动授权。
+     */
+    private SsoLoginResult tryAutoGrantFromSchoolDirectory(SsoUserInfo ssoUserInfo, SsoProtocolType protocol) {
+        if (schoolStudentMapper == null && schoolTeacherMapper == null) {
+            return null;
+        }
+        String uid = ssoUserInfo.getSsoUsername();
+        if (uid == null || uid.trim().isEmpty()) {
+            return null;
+        }
+
+        // student 优先
+        if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
+            SchoolStudent ss = null;
+            try {
+                ss = schoolStudentMapper.selectByStudentId(uid);
+            } catch (Exception e) {
+                log.warn("查询 school_student 失败 uid={}: {}", uid, e.getMessage());
+            }
+            if (ss != null) {
+                log.info("school_student 命中，自动授权 STUDENT: uid={}, college={}", uid, ss.getCollegeName());
+                // 回填 class 信息（若 CAS attributes 提供）
+                backfillStudentClassInfo(uid, ssoUserInfo.getAttributes());
+                // 学生姓名优先使用 school_student，其次 CAS realName
+                if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
+                        && ss.getStudentName() != null) {
+                    ssoUserInfo.setRealName(ss.getStudentName());
+                }
+                User student = createUserFromSso(ssoUserInfo, "STUDENT");
+                SsoUserBinding binding = createBinding(student.getId(), ssoUserInfo, protocol, true);
+                String token = jwtUtil.generateToken(student.getUsername(), student.getRole());
+                log.info("SSO 自动授权 STUDENT 成功: username={}, bindingId={}", student.getUsername(), binding.getId());
+                return SsoLoginResult.success(token, student);
+            }
+        }
+
+        // teacher 次之
+        if (schoolTeacherMapper != null && isFeatureEnabled("sso.auto_grant_teacher")) {
+            SchoolTeacher st = null;
+            try {
+                st = schoolTeacherMapper.selectByTeacherId(uid);
+            } catch (Exception e) {
+                log.warn("查询 school_teacher 失败 uid={}: {}", uid, e.getMessage());
+            }
+            if (st != null) {
+                log.info("school_teacher 命中，自动授权 TEACHER: uid={}, college={}", uid, st.getCollegeName());
+                if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
+                        && st.getTeacherName() != null) {
+                    ssoUserInfo.setRealName(st.getTeacherName());
+                }
+                User teacher = createUserFromSso(ssoUserInfo, "TEACHER");
+                SsoUserBinding binding = createBinding(teacher.getId(), ssoUserInfo, protocol, true);
+                String token = jwtUtil.generateToken(teacher.getUsername(), teacher.getRole());
+                log.info("SSO 自动授权 TEACHER 成功: username={}, bindingId={}", teacher.getUsername(), binding.getId());
+                return SsoLoginResult.success(token, teacher);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 从 CAS attributes 中提取班级/专业并回填 school_student。
+     * 兼容常见字段名：class / className / classCode / major / majorName / department。
+     */
+    private void backfillStudentClassInfo(String studentId, Map<String, Object> attributes) {
+        if (attributes == null || attributes.isEmpty() || schoolStudentMapper == null) return;
+        String classCode = firstNonEmpty(attributes, "classCode", "class_code");
+        String className = firstNonEmpty(attributes, "className", "class_name", "class");
+        String majorName = firstNonEmpty(attributes, "majorName", "major_name", "major", "majorDescription");
+        if (classCode == null && className == null && majorName == null) {
+            return;
+        }
+        try {
+            schoolStudentMapper.updateClassInfo(studentId, classCode, className, majorName);
+            log.info("从 CAS attributes 回填 school_student.class_* 成功: uid={}, classCode={}, className={}, major={}",
+                    studentId, classCode, className, majorName);
+        } catch (Exception e) {
+            log.warn("回填 school_student.class_* 失败 uid={}: {}", studentId, e.getMessage());
+        }
+    }
+
+    private String firstNonEmpty(Map<String, Object> attrs, String... keys) {
+        for (String key : keys) {
+            Object v = attrs.get(key);
+            if (v != null) {
+                String s = String.valueOf(v).trim();
+                if (!s.isEmpty() && !"null".equalsIgnoreCase(s)) return s;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 读取 feature toggle（system_config.feature_toggle 分组）。
+     */
+    private boolean isFeatureEnabled(String key) {
+        if (systemConfigService == null) return false;
+        try {
+            String value = systemConfigService.get("feature_toggle", key, "false");
+            return "true".equalsIgnoreCase(value) || "1".equals(value);
+        } catch (Exception e) {
+            log.warn("读取 feature toggle {} 失败: {}", key, e.getMessage());
+            return false;
+        }
     }
 }

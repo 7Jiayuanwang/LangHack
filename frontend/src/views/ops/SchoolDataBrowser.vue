@@ -23,6 +23,60 @@
       </div>
     </div>
 
+    <!-- 链式拉取卡片 -->
+    <div v-if="chainFetchEnabled" class="chain-fetch-card">
+      <div class="card-header">
+        <span class="card-title">按学院链式拉取</span>
+        <span class="card-subtitle">课程 → 教师 → 学生 → 绑定关系</span>
+      </div>
+      <div class="card-body">
+        <div class="input-row">
+          <el-input
+            v-model="chainCollegeName"
+            placeholder="学院名称（如：外国语学院）"
+            size="small"
+            style="width: 200px"
+          />
+          <el-select v-model="chainMatchMode" size="small" style="width: 120px">
+            <el-option value="eq" label="精确匹配" />
+            <el-option value="contains" label="模糊匹配" />
+          </el-select>
+          <el-button
+            type="primary"
+            size="small"
+            :loading="chainFetching"
+            @click="handleChainFetch"
+          >
+            执行链式拉取
+          </el-button>
+        </div>
+        <div v-if="chainResult" class="result-summary">
+          <div class="result-item">
+            <span class="result-label">课程数:</span>
+            <span class="result-value">{{ chainResult.courseCount || 0 }}</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">学生数:</span>
+            <span class="result-value">{{ chainResult.studentCount || 0 }}</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">教师数:</span>
+            <span class="result-value">{{ chainResult.teacherCount || 0 }}</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">绑定数:</span>
+            <span class="result-value">{{ chainResult.bindingCount || 0 }}</span>
+          </div>
+          <div v-if="chainResult.upstreamKcbhSupported !== undefined" class="result-item">
+            <span class="result-label">KCBH支持:</span>
+            <el-tag :type="chainResult.upstreamKcbhSupported ? 'success' : 'warning'" size="small">
+              {{ chainResult.upstreamKcbhSupported ? '是' : '否（客户端过滤）' }}
+            </el-tag>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 数据源Tab -->
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="行政班" name="administrative_class">
@@ -222,8 +276,10 @@ import {
   getTeachingPlans,
   getStudentSchedules,
   fullSyncSchoolDataFiltered,
-  incrementalSyncSchoolDataFiltered
+  incrementalSyncSchoolDataFiltered,
+  chainFetchStudentsByCollege
 } from '@/api/schoolData'
+import { getFeatureToggles } from '@/api/systemConfig'
 
 const dataSourceLabels = {
   administrative_class: '行政班',
@@ -299,6 +355,13 @@ const filterGroups = ref([
   }
 ])
 const currentFilters = ref([])
+
+// 链式拉取相关状态
+const chainFetchEnabled = ref(false)
+const chainFetching = ref(false)
+const chainCollegeName = ref('外国语学院')
+const chainMatchMode = ref('eq')
+const chainResult = ref(null)
 
 const apiMap = {
   administrative_class: getAdministrativeClasses,
@@ -444,7 +507,48 @@ async function handleSync() {
   }
 }
 
+async function handleChainFetch() {
+  if (!chainCollegeName.value.trim()) {
+    ElMessage.warning('请输入学院名称')
+    return
+  }
+
+  chainFetching.value = true
+  chainResult.value = null
+  try {
+    const res = await chainFetchStudentsByCollege({
+      collegeName: chainCollegeName.value.trim(),
+      matchMode: chainMatchMode.value,
+      persist: true
+    })
+
+    if (res?.code === 200) {
+      chainResult.value = res.data
+      ElMessage.success('链式拉取完成')
+      await loadOverview()
+    } else {
+      ElMessage.error(res?.message || '链式拉取失败')
+    }
+  } catch (e) {
+    console.error('链式拉取失败:', e)
+    ElMessage.error('链式拉取失败，请稍后重试')
+  } finally {
+    chainFetching.value = false
+  }
+}
+
+async function loadFeatureToggles() {
+  try {
+    const res = await getFeatureToggles()
+    const toggles = res?.data || {}
+    chainFetchEnabled.value = toggles['ops.school_data_chain_fetch'] === true || toggles['ops.school_data_chain_fetch'] === 'true'
+  } catch (e) {
+    console.error('获取功能开关失败:', e)
+  }
+}
+
 onMounted(() => {
+  loadFeatureToggles()
   loadOverview()
   loadData()
 })
@@ -567,4 +671,72 @@ onMounted(() => {
   margin-bottom: 8px;
   flex-wrap: wrap;
 }
+
+.chain-fetch-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.card-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.card-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.result-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+  flex-wrap: wrap;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.result-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.result-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
 </style>

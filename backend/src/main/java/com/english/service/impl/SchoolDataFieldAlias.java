@@ -108,6 +108,7 @@ final class SchoolDataFieldAlias {
         // 6. level_exam_scores — 本专科生等级考试成绩（PDF 列: lowercase）
         Map<String, String> levelExamScores = new HashMap<>();
         levelExamScores.put("学号", "xh");
+        levelExamScores.put("姓名", "xm");
         levelExamScores.put("考试科目", "kskm");
         levelExamScores.put("考试日期", "ksrq");
         levelExamScores.put("分数考试成绩", "fskscj");

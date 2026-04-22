@@ -107,3 +107,11 @@ export function fullSyncSchoolDataFiltered(dataSource, data) {
 export function incrementalSyncSchoolDataFiltered(dataSource, data) {
   return request({ url: `/api/admin/sync/incremental/${dataSource}/filtered`, method: 'post', data })
 }
+
+/**
+ * 按学院链式拉取学生/教师/绑定关系
+ * POST /api/admin/sync/chain/students-by-college?collegeName=外国语学院&matchMode=eq&persist=true
+ */
+export function chainFetchStudentsByCollege(params) {
+  return request({ url: '/api/admin/sync/chain/students-by-college', method: 'post', params })
+}

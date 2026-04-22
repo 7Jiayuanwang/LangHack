@@ -14,8 +14,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -55,6 +57,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private final TeachingPlanMapper teachingPlanMapper;
     private final TeachingPlanCourseMapper teachingPlanCourseMapper;
     private final StudentScheduleMapper studentScheduleMapper;
+    private final SchoolStudentMapper schoolStudentMapper;
+    private final SchoolTeacherMapper schoolTeacherMapper;
+    private final TeacherStudentBindingMapper teacherStudentBindingMapper;
     private final ObjectMapper objectMapper;
     private final SchoolDataProperties properties;
 
@@ -70,6 +75,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                                      TeachingPlanMapper teachingPlanMapper,
                                      TeachingPlanCourseMapper teachingPlanCourseMapper,
                                      StudentScheduleMapper studentScheduleMapper,
+                                     SchoolStudentMapper schoolStudentMapper,
+                                     SchoolTeacherMapper schoolTeacherMapper,
+                                     TeacherStudentBindingMapper teacherStudentBindingMapper,
                                      ObjectMapper objectMapper,
                                      SchoolDataProperties properties) {
         this.apiClient = apiClient;
@@ -84,6 +92,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         this.teachingPlanMapper = teachingPlanMapper;
         this.teachingPlanCourseMapper = teachingPlanCourseMapper;
         this.studentScheduleMapper = studentScheduleMapper;
+        this.schoolStudentMapper = schoolStudentMapper;
+        this.schoolTeacherMapper = schoolTeacherMapper;
+        this.teacherStudentBindingMapper = teacherStudentBindingMapper;
         this.objectMapper = objectMapper;
         this.properties = properties;
     }
@@ -424,6 +435,11 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                         if ("collegeCode".equals(field)) params.put("XSH", value);
                         else if ("grade".equals(field)) params.put("NJ", value);
                         break;
+                    case "school_course":
+                        // KKYX=开课院系（学院名），CDSP 对该字段可能忽略导致全校返回，客户端兜底过滤
+                        if ("collegeName".equals(field)) params.put("kkyx", value);
+                        else if ("courseCode".equals(field)) params.put("kcdm", value);
+                        break;
                     case "course_schedule":
                         if ("classId".equals(field)) params.put("xkkch", value);
                         else if ("academicYear".equals(field)) params.put("xn", value);
@@ -435,6 +451,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                         if ("studentId".equals(field)) params.put("XH", value);
                         else if ("academicYear".equals(field)) params.put("XN", value);
                         else if ("semester".equals(field)) params.put("XQ", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
+                        else if ("courseClassCode".equals(field) || "classId".equals(field)) params.put("KCBH", value);
                         break;
                     case "level_exam_scores":
                         if ("studentId".equals(field)) params.put("xh", value);
@@ -866,7 +883,13 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private void upsertLevelExamScore(Map<String, Object> data) {
         LevelExamScore entity = new LevelExamScore();
         entity.setStudentId(getStringValue(data, "studentId"));
-        entity.setStudentName(getStringValue(data, "studentName"));
+
+        // studentName: CDSP 等级考试成绩不返回姓名，回退使用学号
+        String studentName = getStringValue(data, "studentName");
+        if (studentName == null || studentName.trim().isEmpty()) {
+            studentName = entity.getStudentId();
+        }
+        entity.setStudentName(studentName);
 
         // examType: 外部 API 可能不提供，从 examName 推断或使用默认值
         String examType = getStringValue(data, "examType");
@@ -1234,6 +1257,324 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         }
         wrapper.orderByAsc("day_of_week", "period");
         return studentScheduleMapper.selectList(wrapper);
+    }
+
+    // =========================================================================
+    // 按学院链式拉取：school_course → teacher_courses → course_selection
+    // 衍生：school_student / school_teacher / teacher_student_binding
+    // =========================================================================
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> chainFetchStudentsByCollege(String collegeName, String matchMode, boolean persist) {
+        if (collegeName == null || collegeName.trim().isEmpty()) {
+            throw new BusinessException("学院名称不能为空");
+        }
+        String normalizedCollege = collegeName.trim();
+        String mode = defaultString(matchMode, "eq").toLowerCase(Locale.ROOT);
+        LocalDateTime syncTime = LocalDateTime.now();
+        logger.info("[chainFetch] 开始: collegeName={}, matchMode={}, persist={}", normalizedCollege, mode, persist);
+
+        // Step 1: 按 KKYX 拉 school_course + 客户端过滤
+        Map<String, String> courseParams = new LinkedHashMap<>();
+        courseParams.put("kkyx", normalizedCollege);
+        List<Map<String, Object>> rawCourses;
+        try {
+            rawCourses = apiClient.fetchSchoolCourses(courseParams);
+        } catch (Exception e) {
+            logger.error("[chainFetch] 拉取课程失败 college={}", normalizedCollege, e);
+            throw new BusinessException("拉取学校课程失败: " + e.getMessage());
+        }
+        if (rawCourses == null) rawCourses = Collections.emptyList();
+        List<Map<String, Object>> matchedCourses = filterCoursesByCollege(rawCourses, normalizedCollege, mode);
+        logger.info("[chainFetch] Step1 课程: upstream={}, matched={}", rawCourses.size(), matchedCourses.size());
+
+        List<String> matchedCourseCodes = new ArrayList<>();
+        for (Map<String, Object> course : matchedCourses) {
+            Map<String, Object> mapped = fieldMappingService.applyMapping("school_course", course);
+            String kcdm = stringValue(mapped.get("courseCode"));
+            if (kcdm == null || kcdm.isEmpty()) continue;
+            matchedCourseCodes.add(kcdm);
+            if (persist) {
+                mapped.put("syncTime", syncTime);
+                mapped.put("syncSource", "CHAIN_SYNC");
+                try {
+                    upsertSchoolCourse(mapped);
+                } catch (Exception e) {
+                    logger.warn("[chainFetch] upsert school_course 失败 kcdm={} err={}", kcdm, e.getMessage());
+                }
+            }
+        }
+
+        // Step 2 & 2.5: 每门课拉 teacher_courses（按 kcdm）→ 得到 kcbh + 教师
+        //               + course_selection（按 KCBH）→ 得到学号
+        Set<String> studentIds = new LinkedHashSet<>();
+        Map<String, Set<String>> studentToCourses = new LinkedHashMap<>();
+        Map<String, SchoolTeacher> teacherMap = new LinkedHashMap<>();
+        List<TeacherStudentBinding> bindings = new ArrayList<>();
+        Boolean kcbhSupported = null;
+
+        for (String kcdm : matchedCourseCodes) {
+            // 2.5: teacher_courses 按 kcdm 拉 → 得到 (kcbh, rkjsh, rkjsxm, xn, xq)
+            List<Map<String, Object>> rawTcs;
+            try {
+                rawTcs = apiClient.fetchTeacherCourses(Map.of("kcdm", kcdm));
+            } catch (Exception e) {
+                logger.warn("[chainFetch] 拉取 teacher_courses 失败 kcdm={} err={}", kcdm, e.getMessage());
+                continue;
+            }
+            if (rawTcs == null) rawTcs = Collections.emptyList();
+
+            // 客户端过滤：CDSP 可能忽略 kcdm 过滤，确保只保留当前课程记录
+            Map<String, List<Map<String, Object>>> tcByClassCode = new LinkedHashMap<>();
+            for (Map<String, Object> tc : rawTcs) {
+                Map<String, Object> mapped = fieldMappingService.applyMapping("teacher_courses", tc);
+                if (!kcdm.equals(stringValue(mapped.get("courseCode")))) continue;
+                String kcbh = stringValue(mapped.get("classId"));
+                if (kcbh == null || kcbh.isEmpty()) continue;
+                tcByClassCode.computeIfAbsent(kcbh, k -> new ArrayList<>()).add(mapped);
+            }
+
+            // 2: 对每个 kcbh 拉 course_selection
+            for (Map.Entry<String, List<Map<String, Object>>> entry : tcByClassCode.entrySet()) {
+                String kcbh = entry.getKey();
+                List<Map<String, Object>> tcs = entry.getValue();
+
+                List<Map<String, Object>> rawSels;
+                try {
+                    rawSels = apiClient.fetchCourseSelections(Map.of("KCBH", kcbh));
+                } catch (Exception e) {
+                    logger.warn("[chainFetch] 拉取 course_selection 失败 kcbh={} err={}", kcbh, e.getMessage());
+                    continue;
+                }
+                if (rawSels == null) rawSels = Collections.emptyList();
+
+                // 首次探测 KCBH 支持：若第一批返回记录的 classId 不全匹配 kcbh → 降级客户端过滤
+                if (kcbhSupported == null && !rawSels.isEmpty()) {
+                    kcbhSupported = probeKcbhSupport(rawSels, kcbh);
+                    if (Boolean.FALSE.equals(kcbhSupported)) {
+                        logger.warn("[chainFetch] CDSP 忽略 KCBH 参数，切换客户端过滤");
+                    }
+                }
+
+                List<String> courseStudentIds = new ArrayList<>();
+                for (Map<String, Object> sel : rawSels) {
+                    Map<String, Object> mapped = fieldMappingService.applyMapping("course_selection", sel);
+                    if (Boolean.FALSE.equals(kcbhSupported)
+                            && !kcbh.equals(stringValue(mapped.get("classId")))
+                            && !kcbh.equals(stringValue(mapped.get("courseCode")))) {
+                        continue;
+                    }
+                    String xh = stringValue(mapped.get("studentId"));
+                    if (xh == null || xh.isEmpty()) continue;
+                    studentIds.add(xh);
+                    studentToCourses.computeIfAbsent(xh, k -> new LinkedHashSet<>()).add(kcdm);
+                    courseStudentIds.add(xh);
+                    if (persist) {
+                        mapped.put("syncTime", syncTime);
+                        mapped.put("syncSource", "CHAIN_SYNC");
+                        try {
+                            upsertCourseSelection(mapped);
+                        } catch (Exception e) {
+                            logger.warn("[chainFetch] upsert course_selection 失败 xh={} err={}", xh, e.getMessage());
+                        }
+                    }
+                }
+
+                // 教师去重 + 绑定关系构建（teacher × student 笛卡尔积，限定于 kcbh）
+                for (Map<String, Object> tc : tcs) {
+                    String tid = stringValue(tc.get("teacherId"));
+                    if (tid == null || tid.isEmpty()) continue;
+                    teacherMap.computeIfAbsent(tid, k -> {
+                        SchoolTeacher t = new SchoolTeacher();
+                        t.setTeacherId(tid);
+                        t.setTeacherName(stringValue(tc.get("teacherName")));
+                        t.setCollegeName(normalizedCollege);
+                        t.setSyncTime(syncTime);
+                        t.setSyncSource("CHAIN_SYNC");
+                        return t;
+                    });
+                    String xn = stringValue(tc.get("academicYear"));
+                    String xq = stringValue(tc.get("semester"));
+                    for (String sid : courseStudentIds) {
+                        TeacherStudentBinding b = new TeacherStudentBinding();
+                        b.setTeacherId(tid);
+                        b.setStudentId(sid);
+                        b.setCourseCode(kcdm);
+                        b.setCourseClassCode(kcbh);
+                        b.setAcademicYear(xn == null ? "" : xn);
+                        b.setSemester(xq == null ? "" : xq);
+                        b.setSourceType("CHAIN_SYNC");
+                        b.setSyncTime(syncTime);
+                        bindings.add(b);
+                    }
+                }
+            }
+        }
+
+        // Step 3 & 3.5: 主数据落库
+        int studentInserted = 0;
+        int teacherInserted = 0;
+        int bindingInserted = 0;
+        if (persist) {
+            for (String xh : studentIds) {
+                try {
+                    Set<String> courses = studentToCourses.getOrDefault(xh, Collections.emptySet());
+                    upsertSchoolStudent(xh, normalizedCollege, courses, syncTime);
+                    studentInserted++;
+                } catch (Exception e) {
+                    logger.warn("[chainFetch] upsert school_student 失败 xh={} err={}", xh, e.getMessage());
+                }
+            }
+            for (SchoolTeacher t : teacherMap.values()) {
+                try {
+                    schoolTeacherMapper.upsertByTeacherId(t);
+                    teacherInserted++;
+                } catch (Exception e) {
+                    logger.warn("[chainFetch] upsert school_teacher 失败 tid={} err={}", t.getTeacherId(), e.getMessage());
+                }
+            }
+            for (TeacherStudentBinding b : bindings) {
+                try {
+                    teacherStudentBindingMapper.upsertBinding(b);
+                    bindingInserted++;
+                } catch (Exception e) {
+                    logger.warn("[chainFetch] upsert binding 失败 tid={} sid={} kcdm={} err={}",
+                            b.getTeacherId(), b.getStudentId(), b.getCourseCode(), e.getMessage());
+                }
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("collegeName", normalizedCollege);
+        result.put("matchMode", mode);
+        result.put("persist", persist);
+        result.put("courseCount", matchedCourses.size());
+        result.put("studentCount", studentIds.size());
+        result.put("teacherCount", teacherMap.size());
+        result.put("bindingCount", bindings.size());
+        result.put("studentInserted", studentInserted);
+        result.put("teacherInserted", teacherInserted);
+        result.put("bindingInserted", bindingInserted);
+        result.put("upstreamKcbhSupported", kcbhSupported);
+        result.put("matchedCourseCodes", matchedCourseCodes);
+        result.put("syncTime", syncTime);
+        logger.info("[chainFetch] 完成: {}", result);
+        return result;
+    }
+
+    @Override
+    public List<LevelExamScore> getOrSyncLevelExamScores(String studentId, Duration staleness) {
+        if (studentId == null || studentId.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        Duration effectiveStaleness = staleness == null ? Duration.ofDays(1) : staleness;
+        LocalDateTime last = schoolStudentMapper.selectLastExamSyncTime(studentId);
+        boolean stale = last == null || last.isBefore(LocalDateTime.now().minus(effectiveStaleness));
+        if (stale) {
+            try {
+                List<Map<String, Object>> raw = apiClient.fetchLevelExamScores(Map.of("xh", studentId));
+                if (raw != null) {
+                    LocalDateTime now = LocalDateTime.now();
+                    for (Map<String, Object> r : raw) {
+                        try {
+                            Map<String, Object> mapped = fieldMappingService.applyMapping("level_exam_scores", r);
+                            mapped.put("syncTime", now);
+                            mapped.put("syncSource", "LAZY_SYNC");
+                            upsertLevelExamScore(mapped);
+                        } catch (Exception e) {
+                            logger.warn("Lazy 四六级 upsert 失败 xh={} err={}", studentId, e.getMessage());
+                        }
+                    }
+                    schoolStudentMapper.updateLastExamSyncTime(studentId, now);
+                }
+            } catch (Exception e) {
+                logger.warn("Lazy 四六级同步失败 xh={}，降级返回本地数据: {}", studentId, e.getMessage());
+            }
+        }
+        return levelExamScoreMapper.selectList(
+                new QueryWrapper<LevelExamScore>().eq("student_id", studentId).orderByDesc("exam_date"));
+    }
+
+    @Override
+    public List<StudentSchedule> getOrSyncStudentSchedule(String studentId,
+                                                          String academicYear,
+                                                          Integer semester,
+                                                          Duration staleness) {
+        if (studentId == null || studentId.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        Duration effectiveStaleness = staleness == null ? Duration.ofHours(6) : staleness;
+        LocalDateTime last = schoolStudentMapper.selectLastScheduleSyncTime(studentId);
+        boolean stale = last == null || last.isBefore(LocalDateTime.now().minus(effectiveStaleness));
+        if (stale) {
+            try {
+                syncStudentSchedule(studentId, academicYear, semester);
+                schoolStudentMapper.updateLastScheduleSyncTime(studentId, LocalDateTime.now());
+            } catch (Exception e) {
+                logger.warn("Lazy 课表同步失败 xh={}，降级返回本地数据: {}", studentId, e.getMessage());
+            }
+        }
+        return getStudentSchedule(studentId, academicYear, semester);
+    }
+
+    // ---- 链式拉取辅助方法 ----
+
+    private List<Map<String, Object>> filterCoursesByCollege(List<Map<String, Object>> rawCourses,
+                                                             String collegeName, String matchMode) {
+        if (rawCourses == null || rawCourses.isEmpty() || collegeName == null) {
+            return Collections.emptyList();
+        }
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (Map<String, Object> raw : rawCourses) {
+            Map<String, Object> mapped = fieldMappingService.applyMapping("school_course", raw);
+            String actual = stringValue(mapped.get("collegeName"));
+            if (actual.isEmpty()) continue;
+            boolean matches = "contains".equalsIgnoreCase(matchMode)
+                    ? actual.contains(collegeName)
+                    : actual.equals(collegeName);
+            if (matches) filtered.add(raw);
+        }
+        return filtered;
+    }
+
+    /**
+     * 探测 CDSP 是否支持 KCBH 过滤：若前 3 条记录的 classId 全等于目标 kcbh → true；否则 false。
+     */
+    private Boolean probeKcbhSupport(List<Map<String, Object>> rawSels, String kcbh) {
+        if (rawSels == null || rawSels.isEmpty() || kcbh == null) return null;
+        int probeCount = Math.min(3, rawSels.size());
+        for (int i = 0; i < probeCount; i++) {
+            Map<String, Object> mapped = fieldMappingService.applyMapping("course_selection", rawSels.get(i));
+            String classId = stringValue(mapped.get("classId"));
+            // V12 对 course_selection 映射历史 KCBH → courseCode，兼容两个取位
+            if (classId.isEmpty()) classId = stringValue(mapped.get("courseCode"));
+            if (!kcbh.equals(classId)) return false;
+        }
+        return true;
+    }
+
+    private void upsertSchoolStudent(String studentId, String collegeName, Set<String> courseCodes, LocalDateTime syncTime) {
+        SchoolStudent entity = new SchoolStudent();
+        entity.setStudentId(studentId);
+        entity.setCollegeName(collegeName);
+        // grade 可从学号前 4 位推断（如 2023122066164 → 2023）
+        if (studentId != null && studentId.length() >= 4) {
+            String gradePrefix = studentId.substring(0, 4);
+            if (gradePrefix.matches("\\d{4}")) {
+                entity.setGrade(gradePrefix);
+            }
+        }
+        if (courseCodes != null && !courseCodes.isEmpty()) {
+            try {
+                entity.setSourceCourseCodes(objectMapper.writeValueAsString(courseCodes));
+            } catch (Exception e) {
+                entity.setSourceCourseCodes(String.join(",", courseCodes));
+            }
+        }
+        entity.setSyncTime(syncTime);
+        entity.setSyncSource("CHAIN_SYNC");
+        schoolStudentMapper.upsertByStudentId(entity);
     }
 
     // =========================================================================
