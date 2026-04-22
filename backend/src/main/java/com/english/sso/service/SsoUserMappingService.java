@@ -123,7 +123,7 @@ public class SsoUserMappingService {
                 log.warn("用户待审批: bindingId={}", binding.getId());
                 return SsoLoginResult.pendingApproval(
                         binding.getId(),
-                        "对不起，您无权使用LangHack英语学习智能体平台。\n如有疑问请致电：计算机与信息工程学院43019235"
+                        "对不起，您无权使用Langhack英语学习智能体平台。\n如有疑问请致电：计算机与信息工程学院43019235"
                 );
             }
 

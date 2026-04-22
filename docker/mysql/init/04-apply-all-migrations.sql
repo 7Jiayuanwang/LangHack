@@ -1686,17 +1686,18 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- PDF fields (UPPERCASE): XH, KSXZDM, KSXZMC, KCBH
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('course_selection', 'XH',     'studentId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
-('course_selection', 'KCBH',   'courseCode',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程编号'),
+('course_selection', 'KCBH',   'classId',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程班号（作 class_id）'),
 ('course_selection', 'KSXZDM', 'selectionStatus', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '考试性质代码'),
 ('course_selection', 'KSXZMC', 'classTime',       'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '考试性质名称');
 
 -- 6. level_exam_scores (DS0076 / 本专科生等级考试成绩)
--- PDF fields (lowercase): xh, kskm, ksrq, fskscj
+-- PDF fields (lowercase): xh, xhxm, xm, kskm, ksrq, fskscj
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('level_exam_scores', 'xh',     'studentId', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
-('level_exam_scores', 'kskm',   'examName',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '考试科目'),
-('level_exam_scores', 'ksrq',   'examDate',  'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 1, 3, 1, '考试日期'),
-('level_exam_scores', 'fskscj', 'score',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 4, 1, '考试成绩');
+('level_exam_scores', 'xh',     'studentId',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
+('level_exam_scores', 'xm',     'studentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2, 1, '姓名'),
+('level_exam_scores', 'kskm',   'examName',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '考试科目'),
+('level_exam_scores', 'ksrq',   'examDate',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 1, 4, 1, '考试日期'),
+('level_exam_scores', 'fskscj', 'score',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 5, 1, '考试成绩');
 
 -- 7. teaching_plans (cdsp_1715289655026466836 / 教学计划信息)
 -- PDF fields (lowercase): kkjhid, kcdm, cksm, zxs, skjszgh, kkdwdm, kkdwdm_name,
@@ -1704,7 +1705,7 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('teaching_plans', 'kkjhid',      'planId',             'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '开课计划 ID'),
 ('teaching_plans', 'kcdm',        'courseCode',         'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2,  1, '课程代码'),
-('teaching_plans', 'cksm',        'trainingObjective',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '参考说明'),
+('teaching_plans', 'cksm',        'trainingObjective',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '参考书目'),
 ('teaching_plans', 'zxs',         'totalCredits',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4,  1, '总学时'),
 ('teaching_plans', 'skjszgh',     'creator',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '授课教师职工号'),
 ('teaching_plans', 'kkdwdm',      'collegeCode',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '开课单位代码'),
@@ -1857,7 +1858,7 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 -- ────────────────────────────────────────
 
 -- SSO: CAS containerId 通用组 → STUDENT
-INSERT IGNORE INTO sso_config (config_key, config_value, config_type, remark) VALUES
+INSERT IGNORE INTO sso_config (config_key, config_value, config_type, description) VALUES
 ('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId 通用组 → STUDENT（大多数人是学生）');
 
 -- level_exam_scores: student_name / exam_type / is_passed 改为可空（CDSP 不提供）
@@ -1865,6 +1866,4 @@ ALTER TABLE level_exam_scores MODIFY COLUMN student_name VARCHAR(100) COMMENT '�
 ALTER TABLE level_exam_scores MODIFY COLUMN exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）';
 ALTER TABLE level_exam_scores MODIFY COLUMN is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）';
 
--- 补充 xm → studentName 字段映射
-INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('level_exam_scores', 'xm', 'studentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学生姓名（CDSP 可能不返回）');-- ════════════════════════════════════════════════════════════════
+-- ════════════════════════════════════════════════════════════════

@@ -19,7 +19,8 @@ export function exchangeSsoToken(code) {
   return request({
     url: '/api/auth/sso/token',
     method: 'post',
-    data: { code }
+    data: { code },
+    skipErrorHandler: true
   })
 }
 

@@ -190,7 +190,7 @@
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
         :total="total"
-        :page-sizes="[20, 50, 100]"
+        :page-sizes="PAGE_SIZE_OPTIONS"
         layout="total, sizes, prev, pager, next"
         size="small"
         @current-change="loadData"
@@ -281,6 +281,9 @@ import {
 } from '@/api/schoolData'
 import { getFeatureToggles } from '@/api/systemConfig'
 
+const DEFAULT_PAGE_SIZE = 20
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500, 1000]
+
 const dataSourceLabels = {
   administrative_class: '行政班',
   school_course: '课程',
@@ -299,24 +302,22 @@ const dataSourceFields = {
     { label: '年级', field: 'grade' }
   ],
   school_course: [
-    { label: '课程编码', field: 'courseCode' },
-    { label: '课程名称', field: 'courseName' },
-    { label: '学院代码', field: 'collegeCode' }
+    { label: '课程性质', field: 'courseNature' },
+    { label: '课程类别', field: 'courseCategory' }
   ],
   teaching_class: [
-    { label: '教师工号', field: 'teacherId' },
-    { label: '课程编码', field: 'courseCode' },
-    { label: '年份', field: 'academicYear' },
+    { label: '学年', field: 'academicYear' },
     { label: '学期', field: 'semester' }
   ],
   course_schedule: [
     { label: '教学班ID', field: 'classId' },
-    { label: '年份', field: 'academicYear' },
+    { label: '学年', field: 'academicYear' },
     { label: '学期', field: 'semester' }
   ],
   course_selection: [
     { label: '学号', field: 'studentId' },
-    { label: '年份', field: 'academicYear' },
+    { label: '课程编码', field: 'courseCode' },
+    { label: '学年', field: 'academicYear' },
     { label: '学期', field: 'semester' }
   ],
   level_exam_scores: [
@@ -329,7 +330,7 @@ const dataSourceFields = {
   ],
   student_schedule: [
     { label: '学号', field: 'studentId' },
-    { label: '年份', field: 'academicYear' },
+    { label: '学年', field: 'academicYear' },
     { label: '学期', field: 'semester' }
   ]
 }
@@ -339,7 +340,7 @@ const loading = ref(false)
 const tableData = ref([])
 const total = ref(0)
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const overview = ref(null)
 
 // 同步相关状态
@@ -389,6 +390,18 @@ const filterSummary = computed(() => {
   return parts.join(' AND ')
 })
 
+function buildListParams() {
+  const params = { page: currentPage.value, size: pageSize.value }
+  currentFilters.value.forEach(group => {
+    group.conditions
+      .filter(condition => condition.operator === 'eq' && condition.field && condition.value)
+      .forEach(condition => {
+        params[condition.field] = condition.value
+      })
+  })
+  return params
+}
+
 async function loadOverview() {
   try {
     const res = await getSchoolDataOverview()
@@ -403,7 +416,7 @@ async function loadData() {
   try {
     const apiFn = apiMap[activeTab.value]
     if (!apiFn) return
-    const res = await apiFn({ page: currentPage.value, size: pageSize.value })
+    const res = await apiFn(buildListParams())
     const pageData = res?.data
     tableData.value = pageData?.records || []
     total.value = pageData?.total || 0
@@ -418,6 +431,7 @@ async function loadData() {
 
 function handleTabChange() {
   currentPage.value = 1
+  pageSize.value = DEFAULT_PAGE_SIZE
   currentFilters.value = []
   loadData()
 }
@@ -474,8 +488,10 @@ function saveFilters() {
     .filter(group => group.conditions.length > 0)
 
   currentFilters.value = validGroups
+  currentPage.value = 1
   filterDialogVisible.value = false
   ElMessage.success('筛选条件已保存')
+  loadData()
 }
 
 async function handleSync() {
@@ -490,18 +506,12 @@ async function handleSync() {
       ? fullSyncSchoolDataFiltered
       : incrementalSyncSchoolDataFiltered
 
-    const res = await syncFn(activeTab.value, payload)
-
-    if (res?.code === 200) {
-      ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步成功`)
-      await loadOverview()
-      await loadData()
-    } else {
-      ElMessage.error(res?.message || '同步失败')
-    }
+    await syncFn(activeTab.value, payload)
+    ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步成功`)
+    await loadOverview()
+    await loadData()
   } catch (e) {
     console.error('同步失败:', e)
-    ElMessage.error('同步失败，请稍后重试')
   } finally {
     syncing.value = false
   }
@@ -522,16 +532,11 @@ async function handleChainFetch() {
       persist: true
     })
 
-    if (res?.code === 200) {
-      chainResult.value = res.data
-      ElMessage.success('链式拉取完成')
-      await loadOverview()
-    } else {
-      ElMessage.error(res?.message || '链式拉取失败')
-    }
+    chainResult.value = res?.data || null
+    ElMessage.success('链式拉取完成')
+    await loadOverview()
   } catch (e) {
     console.error('链式拉取失败:', e)
-    ElMessage.error('链式拉取失败，请稍后重试')
   } finally {
     chainFetching.value = false
   }

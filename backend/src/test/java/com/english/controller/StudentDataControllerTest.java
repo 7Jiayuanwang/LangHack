@@ -67,7 +67,7 @@ class StudentDataControllerTest {
             LevelExamScore score = new LevelExamScore();
             score.setStudentId("2023122066164");
             score.setExamType("CET4");
-            score.setScore(450);
+            score.setScore(java.math.BigDecimal.valueOf(450));
             when(syncService.getOrSyncLevelExamScores(eq("2023122066164"), any(Duration.class)))
                     .thenReturn(List.of(score));
 

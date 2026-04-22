@@ -82,10 +82,16 @@ public class SsoAdminController {
                 return Result.error("绑定记录不存在");
             }
 
-            // 更新用户角色和状态
+            // 更新用户角色和状态；若用户已被软删除则先恢复
             User user = userService.getUserById(binding.getUserId());
             if (user == null) {
-                return Result.error("用户不存在");
+                User deletedUser = userMapper.findDeletedById(binding.getUserId());
+                if (deletedUser == null) {
+                    return Result.error("用户不存在");
+                }
+                userMapper.undeleteById(deletedUser.getId());
+                deletedUser.setDeleted(0);
+                user = deletedUser;
             }
 
             user.setRole(approvedRole);

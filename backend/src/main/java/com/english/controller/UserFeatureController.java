@@ -8,6 +8,7 @@ import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +34,9 @@ public class UserFeatureController {
 
     private static final Logger logger = LoggerFactory.getLogger(UserFeatureController.class);
 
+    @Value("${sso.enabled:false}")
+    private boolean ssoEnabled;
+
     @Autowired
     private FeatureToggleService featureToggleService;
 
@@ -50,19 +54,32 @@ public class UserFeatureController {
             User user = userService.getUserByUsername(username);
             if (user == null) {
                 logger.warn("Authenticated user '{}' not found in database, falling back to global toggles", username);
-                return Result.success(toBooleanMap(systemConfigService.getByGroup("feature_toggle")));
+                return Result.success(toBooleanMapWithRuntime(systemConfigService.getByGroup("feature_toggle")));
             }
             Map<String, Boolean> toggles = featureToggleService.getMergedTogglesForUser(user.getId());
-            return Result.success(toggles != null ? toggles : new LinkedHashMap<>());
+            LinkedHashMap<String, Boolean> result = new LinkedHashMap<>(toggles != null ? toggles : new LinkedHashMap<>());
+            result.put("sso_login", ssoEnabled);
+            result.put("password_change", !ssoEnabled);
+            return Result.success(result);
         } catch (Exception e) {
             logger.error("获取用户功能开关失败，降级返回全局配置", e);
             try {
-                return Result.success(toBooleanMap(systemConfigService.getByGroup("feature_toggle")));
+                return Result.success(toBooleanMapWithRuntime(systemConfigService.getByGroup("feature_toggle")));
             } catch (Exception fallbackEx) {
                 logger.error("降级查询全局配置亦失败", fallbackEx);
-                return Result.success(new HashMap<>());
+                LinkedHashMap<String, Boolean> result = new LinkedHashMap<>();
+                result.put("sso_login", ssoEnabled);
+                result.put("password_change", !ssoEnabled);
+                return Result.success(result);
             }
         }
+    }
+
+    private Map<String, Boolean> toBooleanMapWithRuntime(Map<String, String> raw) {
+        Map<String, Boolean> result = new LinkedHashMap<>(toBooleanMap(raw));
+        result.put("sso_login", ssoEnabled);
+        result.put("password_change", !ssoEnabled);
+        return result;
     }
 
     private Map<String, Boolean> toBooleanMap(Map<String, String> raw) {

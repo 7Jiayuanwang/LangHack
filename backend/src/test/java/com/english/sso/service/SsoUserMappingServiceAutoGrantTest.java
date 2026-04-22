@@ -106,7 +106,7 @@ class SsoUserMappingServiceAutoGrantTest {
         doAnswer(invocation -> {
             User user = invocation.getArgument(0);
             user.setId(userId);
-            return;
+            return null;
         }).when(userService).createUser(any(User.class));
     }
 
@@ -157,7 +157,7 @@ class SsoUserMappingServiceAutoGrantTest {
             verify(userService).createUser(argThat(user ->
                     "2023122066164".equals(user.getUsername()) &&
                     "STUDENT".equals(user.getRole()) &&
-                    user.getEnabled()
+                    "ACTIVE".equals(user.getStatus())
             ));
             verify(bindingMapper).insert(any(SsoUserBinding.class));
         }
@@ -238,7 +238,7 @@ class SsoUserMappingServiceAutoGrantTest {
             verify(userService).createUser(argThat(user ->
                     "T001".equals(user.getUsername()) &&
                     "TEACHER".equals(user.getRole()) &&
-                    user.getEnabled()
+                    "ACTIVE".equals(user.getStatus())
             ));
         }
 
