@@ -279,3 +279,5 @@ school:
       batch-size: ${SCHOOL_SYNC_BATCH_SIZE:500}
       sync-timeout-minutes: ${SCHOOL_SYNC_TIMEOUT_MINUTES:60}
       full-sync-on-startup: ${SCHOOL_SYNC_FULL_ON_STARTUP:false}
+    cli:
+      enabled: ${SCHOOL_DATA_CLI_ENABLED:false}

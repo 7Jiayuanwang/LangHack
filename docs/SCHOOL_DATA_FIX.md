@@ -6,6 +6,100 @@
 > - 签名公式：`sign = Base64(MD5(appId + appSecret + timestamp))`
 > - 请求头：`appId`, `timestamp`, `sign`
 
+## 容器外独立运行学校数据同步（2026-04-22）
+
+当前学校数据同步已拆为两段：
+- **拉取层**：`SchoolDataFetchService`，只从学校 API 拉原始数据
+- **持久化层**：`SchoolDataPersistService`，只做字段映射和本地库 UPSERT
+
+并新增了容器外 CLI 入口：
+- `backend/src/main/java/com/english/runner/SchoolDataCliRunner.java`
+
+### 运行前提
+
+1. **本地数据库必须是真实持久化数据库**
+   - `spring.datasource.*` 应指向宿主机 MySQL / 独立 MySQL
+   - 不要指向随 Docker 容器销毁重建的临时库
+2. **学校 API 认证必须已配置**
+   - `SCHOOL_API_APP_ID`
+   - `SCHOOL_API_APP_SECRET`
+3. **CLI 默认关闭**
+   - 配置项：`school.data.cli.enabled=false`
+   - 环境变量：`SCHOOL_DATA_CLI_ENABLED=false`
+
+### 推荐环境变量
+
+```bash
+export SCHOOL_DATA_CLI_ENABLED=true
+export SCHOOL_DATA_CLI_MODE=fetch
+export SCHOOL_DATA_CLI_DATA_SOURCE=school_course
+export SCHOOL_API_APP_ID=你的appId
+export SCHOOL_API_APP_SECRET=你的appSecret
+```
+
+Windows PowerShell 可改为：
+
+```powershell
+$env:SCHOOL_DATA_CLI_ENABLED="true"
+$env:SCHOOL_DATA_CLI_MODE="fetch"
+$env:SCHOOL_DATA_CLI_DATA_SOURCE="school_course"
+$env:SCHOOL_API_APP_ID="你的appId"
+$env:SCHOOL_API_APP_SECRET="你的appSecret"
+```
+
+### 容器外运行命令
+
+在 Claude Code 里可直接用 `!` 执行。
+
+#### 1. 只拉取，不入库
+
+```bash
+! cd backend && mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dschool.data.cli.enabled=true -Dschool.data.cli.mode=fetch -Dschool.data.cli.data-source=school_course"
+```
+
+#### 2. 拉取并写入本地数据库
+
+```bash
+! cd backend && mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dschool.data.cli.enabled=true -Dschool.data.cli.mode=sync -Dschool.data.cli.data-source=school_course"
+```
+
+#### 3. 按其他数据源执行
+
+可替换 `school_course` 为：
+
+```text
+administrative_class
+school_course
+teaching_class
+course_schedule
+course_selection
+level_exam_scores
+teaching_plans
+teacher_courses
+student_schedule
+```
+
+例如同步四六级成绩：
+
+```bash
+! cd backend && mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dschool.data.cli.enabled=true -Dschool.data.cli.mode=sync -Dschool.data.cli.data-source=level_exam_scores"
+```
+
+### mode 说明
+
+- `fetch`：只拉学校侧数据，用于验证接口与认证
+- `sync`：拉取并持久化到本地数据库
+- `persist`：当前实现与 `sync` 等价，保留给后续分阶段执行扩展
+
+### 设计目标
+
+这样改造后：
+- 学校数据更新逻辑可在 **Docker 外** 单独运行
+- 本地真实数据库不会因容器重建而丢失
+- 应用容器与数据更新解耦，后续更新脚本/调度逻辑不影响容器本身
+
+---
+
 ## 问题诊断
 
 ### 1. 核心错误：接口地址配置错误

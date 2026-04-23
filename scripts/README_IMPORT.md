@@ -63,7 +63,7 @@ python3 scripts/import_class_students.py \
 | `--db-host` | 否 | localhost | 数据库主机地址 |
 | `--db-port` | 否 | 3306 | 数据库端口 |
 | `--db-user` | 否 | root | 数据库用户名 |
-| `--db-password` | 否 | Dao030916 | 数据库密码 |
+| `--db-password` | 否 | 运行时提供或读取脚本默认配置 | 数据库密码 |
 | `--db-name` | 否 | english_learning | 数据库名称 |
 
 ## 使用示例

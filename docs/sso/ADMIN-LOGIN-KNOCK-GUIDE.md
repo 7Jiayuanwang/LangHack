@@ -118,7 +118,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 **创建 .env 文件**:
 ```bash
 cd frontend
-cp .env.example .env
+cp .env.production.example .env
 ```
 
 **编辑 .env**:

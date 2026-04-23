@@ -1,10 +1,10 @@
 # 学校数据接入完整方案
 
-> **注意**: 官方API字段规范请以 [`SCHOOL_DATA_API_SPEC.md`](./SCHOOL_DATA_API_SPEC.md) 为准。本文档中的"学校字段"列已更新为小写拼音缩写，但接口详情（请求参数、完整字段列表等）请参考API规范文档。
+> **注意**: 官方 API 字段规范请以 [`SCHOOL_DATA_API_SPEC.md`](./SCHOOL_DATA_API_SPEC.md) 为准。
 >
-> 版本: v3.0
+> 版本: v3.2
 > 创建日期: 2026-04-09
-> 最后更新: 2026-04-12
+> 最后更新: 2026-04-22
 
 ---
 
@@ -36,15 +36,15 @@
 
 | 模式 | 配置值 | 实现类 | 说明 |
 |------|--------|--------|------|
-| **API接口** | `api`（默认） | `SchoolDataApiClientImpl` | 通过学校REST API获取数据，Bearer Token认证 |
+| **API接口** | `api`（默认） | `SchoolDataApiClientImpl` | 通过学校 REST API 获取数据，使用 `appId + appSecret + timestamp` 签名认证 |
 | **ETL直连** | `etl` | `SchoolDataEtlClientImpl` | 通过JDBC直连学校数据库，独立连接池 |
 
 ### 数据流向
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  school.data.source = api                           │
-│  学校教务API (https://api.imau.edu.cn, Bearer Token) │
+│  school.data.source = api                                              │
+│  学校教务API (https://api.imau.edu.cn, appId/appSecret 签名认证)         │
 │      |                                               │
 │      v                                               │
 │  SchoolDataApiClientImpl (RestTemplate + 响应解析)    │
@@ -71,7 +71,7 @@ FieldMappingServiceImpl (4种转换器: DATE/BOOLEAN/SPLIT/JSON)
 MyBatis Mapper UPSERT (INSERT ... ON DUPLICATE KEY UPDATE)
     |
     v
-本地同步表 (7个数据源)
+本地同步表（核心同步 7 个数据源 + 链式拉取扩展表）
     |
     v
 业务系统使用
@@ -82,7 +82,7 @@ MyBatis Mapper UPSERT (INSERT ... ON DUPLICATE KEY UPDATE)
 | 组件 | 类名 | 职责 |
 |------|------|------|
 | **配置类** | `SchoolDataProperties` | `@ConfigurationProperties(prefix="school.data")`，集中管理API/ETL/Sync配置 |
-| **API客户端** | `SchoolDataApiClientImpl` | 调用学校REST API，Bearer Token认证（始终注册，`@Service("schoolDataApiClientApi")`） |
+| **API客户端** | `SchoolDataApiClientImpl` | 调用学校 REST API，使用签名认证（始终注册，`@Service("schoolDataApiClientApi")`） |
 | **ETL客户端** | `SchoolDataEtlClientImpl` | JDBC直连学校数据库，独立HikariCP连接池（始终注册，`@Service("schoolDataApiClientEtl")`，延迟初始化DataSource） |
 | **委托代理** | `SchoolDataApiClientDelegate` | 根据 `properties.getSource()` 路由到 API/ETL 实现 |
 | **配置刷新** | `SchoolDataConfigRefreshService` | DB → Properties 刷新 + 脱敏过滤 + 副作用触发 |
@@ -93,7 +93,7 @@ MyBatis Mapper UPSERT (INSERT ... ON DUPLICATE KEY UPDATE)
 | **管理接口** | `SchoolDataSyncController` | REST API，ADMIN/OPS角色专用 |
 | **启动初始化** | `SchoolDataConfigInitializer` | `@EventListener(ApplicationReadyEvent)`，启动时从DB刷新配置 |
 
-### 7个数据源
+### 7 个核心数据源
 
 | 数据源名称 | 对应表 | 唯一键 | UPSERT策略 |
 |-----------|--------|--------|-----------|
@@ -122,7 +122,7 @@ SchoolDataApiClientDelegate   FieldMappingServiceImpl   SyncMonitorService
 (委托代理, 运行时路由)         (4种转换器)               (健康检查 + 告警)
    |
    ├── SchoolDataApiClientImpl     (@Service("schoolDataApiClientApi"), 始终注册)
-   │   RestTemplate + Bearer Token
+   │   RestTemplate + appId/appSecret 签名认证
    │   学校API端点映射: xzxx/kcxx/bzkcxx/kcap/xsxk/djcj/jxjh
    │
    └── SchoolDataEtlClientImpl     (@Service("schoolDataApiClientEtl"), 始终注册)
@@ -161,7 +161,7 @@ RUNNING  ─────>  SUCCESS
 
 每个数据源的同步无事务包裹（`persistData` 方法不标注 `@Transactional`，因为 Spring AOP 自调用无法代理）：
 - 一个数据源失败不影响其他数据源
-- `fullSyncAll` / `incrementalSyncAll` 遍历7个数据源，逐个执行
+- `fullSyncAll` / `incrementalSyncAll` 遍历 7 个核心数据源，逐个执行；链式拉取单独通过学院维度任务触发
 - 单条记录失败会被捕获跳过，不影响同数据源的其他记录（catch and continue）
 
 ---
@@ -606,8 +606,8 @@ RUNNING  ─────>  SUCCESS
 |------|------|------|---------|
 | POST | `/full/{dataSource}` | 全量同步指定数据源 | `triggerType` (默认 MANUAL) |
 | POST | `/incremental/{dataSource}` | 增量同步指定数据源 | `triggerType` (默认 MANUAL) |
-| POST | `/full-all` | 全量同步所有7个数据源 | `triggerType` (默认 MANUAL) |
-| POST | `/incremental-all` | 增量同步所有7个数据源 | `triggerType` (默认 MANUAL) |
+| POST | `/full-all` | 全量同步 7 个核心数据源 | `triggerType` (默认 MANUAL) |
+| POST | `/incremental-all` | 增量同步 7 个核心数据源 | `triggerType` (默认 MANUAL) |
 
 ### 状态查询
 
@@ -769,18 +769,16 @@ INFO  - === 定时全量同步完成: 成功=7, 失败=0 ===
 ```yaml
 school:
   data:
-    # 接入方式: api (REST接口) 或 etl (JDBC直连)
     source: ${SCHOOL_DATA_SOURCE:api}
 
-    # API模式配置 (source=api时使用)
     api:
       base-url: ${SCHOOL_API_BASE_URL:https://api.imau.edu.cn}
-      token: ${SCHOOL_API_TOKEN:}
+      app-id: ${SCHOOL_API_APP_ID:}
+      app-secret: ${SCHOOL_API_APP_SECRET:}
       connect-timeout: ${SCHOOL_API_CONNECT_TIMEOUT:5000}
       read-timeout: ${SCHOOL_API_READ_TIMEOUT:30000}
       retry-attempts: ${SCHOOL_API_RETRY_ATTEMPTS:3}
 
-    # ETL模式配置 (source=etl时使用)
     etl:
       jdbc-url: ${SCHOOL_ETL_JDBC_URL:jdbc:mysql://school-db.imau.edu.cn:3306/school_db}
       username: ${SCHOOL_ETL_USERNAME:}
@@ -789,7 +787,6 @@ school:
       connection-timeout: ${SCHOOL_ETL_CONNECTION_TIMEOUT:30000}
       query-timeout: ${SCHOOL_ETL_QUERY_TIMEOUT:60000}
 
-    # 同步调度配置
     sync:
       enabled: ${SCHOOL_SYNC_ENABLED:false}
       full-sync-cron: ${SCHOOL_SYNC_FULL_CRON:0 0 2 * * ?}
@@ -813,8 +810,9 @@ school:
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `SCHOOL_API_BASE_URL` | `https://api.imau.edu.cn` | 学校教务API基础地址 |
-| `SCHOOL_API_TOKEN` | (空) | Bearer Token认证令牌 |
+| `SCHOOL_API_BASE_URL` | `https://api.imau.edu.cn` | 学校教务 API 基础地址 |
+| `SCHOOL_API_APP_ID` | (空) | API 签名认证 appId |
+| `SCHOOL_API_APP_SECRET` | (空) | API 签名认证 appSecret |
 | `SCHOOL_API_CONNECT_TIMEOUT` | `5000` | 连接超时(ms) |
 | `SCHOOL_API_READ_TIMEOUT` | `30000` | 读取超时(ms) |
 | `SCHOOL_API_RETRY_ATTEMPTS` | `3` | 请求失败重试次数 |
@@ -872,7 +870,7 @@ PUT /api/ops/school-data/config
     v
 SchoolDataConfigRefreshService.updateAndRefresh()
     │
-    ├─1. 过滤 **** 脱敏值（不覆盖原密码/Token）
+    ├─1. 过滤 **** 脱敏值（不覆盖原密码/appSecret）
     ├─2. batchUpdate 到 DB system_config
     ├─3. refreshFromDb() → 写入 SchoolDataProperties
     ├─4. cron 变更 → scheduler.rescheduleAll()
@@ -881,7 +879,7 @@ SchoolDataConfigRefreshService.updateAndRefresh()
 
 #### 脱敏保护
 
-前端加载配置时，`is_secret=1` 的字段值会被替换为 `****` 前缀（如 `****6789`）。保存时，`updateAndRefresh()` 自动过滤包含 `****` 的值，不会用脱敏值覆盖数据库中的真实密码/Token。
+前端加载配置时，`is_secret=1` 的字段值会被替换为 `****` 前缀（如 `****6789`）。保存时，`updateAndRefresh()` 自动过滤包含 `****` 的值，不会用脱敏值覆盖数据库中的真实密码或 appSecret。
 
 #### 前端运维面板
 
@@ -902,10 +900,10 @@ SchoolDataConfigRefreshService.updateAndRefresh()
 
 通过 `SCHOOL_DATA_SOURCE` 环境变量或运维面板切换接入方式：
 
-- **`api`** (默认): 激活 `SchoolDataApiClientImpl`，通过REST接口获取数据
-  - 需配置: `SCHOOL_API_BASE_URL`, `SCHOOL_API_TOKEN`
+- **`api`** (默认): 激活 `SchoolDataApiClientImpl`，通过 REST 接口获取数据
+  - 需配置: `SCHOOL_API_BASE_URL`, `SCHOOL_API_APP_ID`, `SCHOOL_API_APP_SECRET`
   - 优势: 松耦合，不直接访问学校数据库
-  - 限制: 部分查询(如按学生查课表)依赖API支持
+  - 限制: 部分查询(如按学生查课表)依赖 API 支持
 
 - **`etl`**: 激活 `SchoolDataEtlClientImpl`，通过JDBC直连学校数据库
   - 需配置: `SCHOOL_ETL_JDBC_URL`, `SCHOOL_ETL_USERNAME`, `SCHOOL_ETL_PASSWORD`
@@ -1017,6 +1015,11 @@ cd backend && mvn test -Dtest="SchoolDataSyncIntegrationTest"
 
 **文档结束**
 
+> v3.2 更新记录 (2026-04-22):
+> - 学校数据 API 认证方式从 Bearer Token 文档表述统一更新为 `appId + appSecret + timestamp` 签名认证
+> - 环境变量说明更新为 `SCHOOL_API_APP_ID` / `SCHOOL_API_APP_SECRET`
+> - 补充链式拉取扩展表与学院维度任务说明
+>
 > v3.1 更新记录 (2026-04-12):
 > - 新增运行时配置机制：DB system_config (school_data组) 优先于 YAML/环境变量
 > - 新增 SchoolDataConfigRefreshService：DB→Properties刷新 + 脱敏过滤 + 副作用触发
@@ -1042,7 +1045,7 @@ cd backend && mvn test -Dtest="SchoolDataSyncIntegrationTest"
 > v2.0 更新记录 (2026-04-12):
 > - 新增系统架构、API接口文档、定时调度、监控与告警、配置说明、测试覆盖章节
 > - 更新数据流向图反映实际实现（SchoolDataApiClientImpl, SchoolDataSyncServiceImpl等）
-> - 补充7个数据源的UPSERT策略对比
+> - 补充 7 个核心数据源的 UPSERT 策略对比
 > - 补充SyncLog生命周期和防重入机制说明
 > - 补充4级告警触发条件和健康检查返回格式
 

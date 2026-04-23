@@ -184,6 +184,7 @@ const NAV_ITEMS = {
   user: [
     { path: '/user',            label: '首页', icon: House,    badge: null },
     { path: '/user/user-texts', label: '我的', icon: Upload,   badge: null },
+    { path: '/articles',        label: '文章', icon: Reading,  badge: null },
     { path: '/user/vocabulary', label: '生词', icon: Document, badge: null },
   ],
   ops: [
@@ -260,6 +261,7 @@ const ROUTE_MAP = {
   user: {
     '/user':            '首页',
     '/user/user-texts': '我的上传',
+    '/articles':        '文章',
     '/user/vocabulary': '我的生词',
   },
   ops: {

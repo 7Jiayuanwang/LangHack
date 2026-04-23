@@ -16,6 +16,7 @@
             college_name = #{collegeName},
             college_code = COALESCE(#{collegeCode}, college_code),
             sync_time = #{syncTime},
+            last_schedule_sync_time = COALESCE(#{lastScheduleSyncTime}, last_schedule_sync_time),
             sync_source = #{syncSource}
     </insert>
 

@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# LangHack 自动更新脚本 (v2.3)
+# LangHack 自动更新脚本 (v2.4)
 # 定时从 GitHub 拉取最新代码，检测变更后自动重新构建并部署
 #
-# v2.0 新增:
+# v2.4 新增:
+#   - 支持 UPDATE_MODE=auto|docker|local
+#   - Docker 模式保留原有容器更新/回滚能力
+#   - Local 模式支持按需重启 backend/frontend dev 进程
+#   - 新增本地 PID 文件与本地健康检查/代码回退逻辑
+#
 #   - 维护模式: 更新前显示维护页面，完成后自动恢复
 #   - 数据库备份: 更新前自动 mysqldump
 #   - .env 保护: 备份 + 验证关键配置
@@ -42,12 +47,15 @@ set -euo pipefail
 # ── 配置 ──────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANCH="${DEPLOY_BRANCH:-master}"
+UPDATE_MODE="${UPDATE_MODE:-auto}"
 # docker-compose.yml 绝对路径（优先使用环境变量覆盖）
 COMPOSE_FILE="${COMPOSE_FILE:-$PROJECT_ROOT/docker/docker-compose.yml}"
 LOG_FILE="${LOG_FILE:-/var/log/langhack-update.log}"
 LOCK_FILE="/tmp/langhack-update.lock"
 INTERACTIVE=false
 WEBHOOK_URL="${WEBHOOK_URL:-}"
+BACKEND_PID_FILE="$PROJECT_ROOT/logs/backend.pid"
+FRONTEND_PID_FILE="$PROJECT_ROOT/logs/frontend.pid"
 
 # 部署记录文件：记录上次成功部署的 commit hash
 # 用于替代 git HEAD 作为「已部署版本」的基准
@@ -112,8 +120,14 @@ while [[ $# -gt 0 ]]; do
             echo "  -i, --interactive       交互式选择分支"
             echo "  -h, --help              显示帮助信息"
             echo ""
+            echo "模式说明:"
+            echo "  UPDATE_MODE=auto        自动识别 Docker / Local (默认)"
+            echo "  UPDATE_MODE=docker      强制使用 Docker 更新路径"
+            echo "  UPDATE_MODE=local       强制使用本地开发更新路径"
+            echo ""
             echo "环境变量 (.env):"
             echo "  DEPLOY_BRANCH              默认跟踪分支 (优先级低于 -b)"
+            echo "  UPDATE_MODE                更新模式: auto|docker|local"
             echo "  COMPOSE_FILE               docker-compose 文件路径"
             echo "  WEBHOOK_URL                通知 Webhook URL"
             echo "  AUTO_UPDATE_MAINTENANCE    更新时启用维护模式 (true/false)"
@@ -169,6 +183,201 @@ fi
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+is_pid_running() {
+    local pid="$1"
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+read_pid_file() {
+    local pid_file="$1"
+    [ -f "$pid_file" ] || return 1
+    tr -d '[:space:]' < "$pid_file"
+}
+
+remove_pid_file() {
+    local pid_file="$1"
+    [ -f "$pid_file" ] && rm -f "$pid_file"
+}
+
+resolve_update_mode() {
+    case "$UPDATE_MODE" in
+        docker|local)
+            echo "$UPDATE_MODE"
+            return 0
+            ;;
+        auto)
+            ;;
+        *)
+            log "ERROR: UPDATE_MODE 必须是 auto、docker 或 local，当前为: $UPDATE_MODE"
+            exit 1
+            ;;
+    esac
+
+    if command -v docker >/dev/null 2>&1 && [ -f "$COMPOSE_FILE" ]; then
+        local services
+        services=$(docker compose -f "$COMPOSE_FILE" ps --services 2>/dev/null || true)
+        if echo "$services" | grep -qE '^(backend|frontend|mysql-master|mysql-slave|redis)$'; then
+            echo "docker"
+            return 0
+        fi
+    fi
+
+    if pgrep -f "spring-boot:run" >/dev/null 2>&1 || pgrep -f "vite|npm run dev" >/dev/null 2>&1 || [ -f "$PROJECT_ROOT/.env" ]; then
+        echo "local"
+        return 0
+    fi
+
+    if [ -f "$PROJECT_ROOT/docker/.env" ]; then
+        echo "docker"
+        return 0
+    fi
+
+    echo "local"
+}
+
+wait_for_port_state() {
+    local port="$1"
+    local expected="$2"
+    local timeout="${3:-30}"
+    local elapsed=0
+
+    while [ "$elapsed" -lt "$timeout" ]; do
+        local listening=false
+        if command -v ss >/dev/null 2>&1; then
+            ss -tln 2>/dev/null | grep -q ":${port}[[:space:]]" && listening=true
+        elif command -v netstat >/dev/null 2>&1; then
+            netstat -tln 2>/dev/null | grep -q ":${port}[[:space:]]" && listening=true
+        else
+            curl -s "http://localhost:${port}" >/dev/null 2>&1 && listening=true || true
+        fi
+
+        if { [ "$expected" = "open" ] && [ "$listening" = true ]; } || { [ "$expected" = "closed" ] && [ "$listening" = false ]; }; then
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    return 1
+}
+
+stop_pid_or_pattern() {
+    local pid_file="$1"
+    local pattern="$2"
+    local label="$3"
+    local pid=""
+
+    pid=$(read_pid_file "$pid_file" 2>/dev/null || true)
+    if is_pid_running "$pid"; then
+        log "LOCAL: 停止 ${label} 进程 (PID: $pid)"
+        kill "$pid" 2>/dev/null || true
+        for _ in $(seq 1 10); do
+            is_pid_running "$pid" || break
+            sleep 1
+        done
+        if is_pid_running "$pid"; then
+            log "LOCAL: 强制停止 ${label} 进程 (PID: $pid)"
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+        remove_pid_file "$pid_file"
+        return 0
+    fi
+
+    local matched
+    matched=$(pgrep -f "$pattern" 2>/dev/null || true)
+    if [ -n "$matched" ]; then
+        log "LOCAL: 停止 ${label} 进程模式匹配: $matched"
+        echo "$matched" | xargs -r kill 2>/dev/null || true
+        sleep 2
+        matched=$(pgrep -f "$pattern" 2>/dev/null || true)
+        if [ -n "$matched" ]; then
+            echo "$matched" | xargs -r kill -9 2>/dev/null || true
+        fi
+    fi
+    remove_pid_file "$pid_file"
+}
+
+local_stop_backend() {
+    stop_pid_or_pattern "$BACKEND_PID_FILE" "spring-boot:run|backend/start_backend\.sh" "backend"
+    wait_for_port_state 8080 closed 30 || log "WARN: backend 8080 端口未在预期时间内释放"
+}
+
+local_stop_frontend() {
+    stop_pid_or_pattern "$FRONTEND_PID_FILE" "vite|npm run dev" "frontend"
+    wait_for_port_state 3000 closed 30 || log "WARN: frontend 3000 端口未在预期时间内释放"
+}
+
+local_start_backend() {
+    mkdir -p "$PROJECT_ROOT/logs"
+    log "LOCAL: 启动 backend..."
+    nohup bash "$PROJECT_ROOT/backend/start_backend.sh" > "$PROJECT_ROOT/logs/backend.log" 2>&1 &
+    local pid=$!
+    echo "$pid" > "$BACKEND_PID_FILE"
+}
+
+local_start_frontend() {
+    mkdir -p "$PROJECT_ROOT/logs"
+    log "LOCAL: 启动 frontend..."
+    (cd "$PROJECT_ROOT/frontend" && nohup npm run dev > "$PROJECT_ROOT/logs/frontend.log" 2>&1 & echo $! > "$FRONTEND_PID_FILE")
+}
+
+local_wait_for_health() {
+    local timeout="${1:-120}"
+    local elapsed=0
+    log "LOCAL: 等待本地服务健康检查通过 (超时 ${timeout}s)..."
+
+    while [ "$elapsed" -lt "$timeout" ]; do
+        local backend_ok=false
+        local frontend_ok=false
+        curl -sf http://localhost:8080/api/health >/dev/null 2>&1 && backend_ok=true || true
+        curl -sf -I http://localhost:3000 >/dev/null 2>&1 && frontend_ok=true || true
+
+        if [ "$backend_ok" = true ] && [ "$frontend_ok" = true ]; then
+            log "LOCAL: 本地服务健康检查通过 ✓ (${elapsed}s)"
+            return 0
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    log "ERROR: LOCAL: 本地服务健康检查失败，请检查 logs/backend.log 与 logs/frontend.log"
+    return 1
+}
+
+local_restart_changed_services() {
+    local restart_backend="$1"
+    local restart_frontend="$2"
+
+    [ "$restart_backend" = true ] && local_stop_backend
+    [ "$restart_frontend" = true ] && local_stop_frontend
+    [ "$restart_backend" = true ] && local_start_backend
+    [ "$restart_frontend" = true ] && local_start_frontend
+    local_wait_for_health "$HEALTH_CHECK_TIMEOUT"
+}
+
+local_rollback_code_only() {
+    local old_commit="$1"
+    local restart_backend="$2"
+    local restart_frontend="$3"
+
+    log "ROLLBACK: LOCAL 模式回退到 ${old_commit:0:8}..."
+    notify "本地模式更新失败，正在回退到 ${old_commit:0:8}..."
+
+    git checkout "$old_commit" --force --quiet 2>/dev/null || {
+        log "CRITICAL: LOCAL 回退代码失败，需要人工介入"
+        ops_log "ERROR" "${old_commit:0:8}" "LOCAL 回退代码失败"
+        return 1
+    }
+
+    if local_restart_changed_services "$restart_backend" "$restart_frontend"; then
+        log "ROLLBACK: LOCAL 回退成功 ✓"
+        ops_log "ROLLBACK" "${old_commit:0:8}" "LOCAL 模式重启失败后已回退代码并恢复进程"
+        return 0
+    fi
+
+    log "CRITICAL: LOCAL 回退后重启仍失败，需要人工介入"
+    ops_log "ERROR" "${old_commit:0:8}" "LOCAL 回退后重启仍失败"
+    return 1
 }
 
 notify() {
@@ -788,6 +997,9 @@ trap 'log "WARN: 收到中断信号，正在安全退出..."; exit 130' SIGINT S
 # ── 进入项目目录 ──────────────────────────────────────
 cd "$PROJECT_ROOT"
 
+RUNTIME_MODE=$(resolve_update_mode)
+log "INFO: 当前更新模式: $RUNTIME_MODE"
+
 # ── 确保在目标分支上 ──────────────────────────────────
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
@@ -952,95 +1164,117 @@ if echo "$CHANGED_FILES" | grep -qE '(docker/mysql/init/04-apply-all-migrations\
     log "INFO: 检测到数据库迁移脚本变更，将执行增量迁移"
 fi
 
-# ── 执行重建 ──────────────────────────────────────────
-if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
-    SERVICES=""
-    [ "$REBUILD_BACKEND" = true ] && SERVICES="backend"
-    [ "$REBUILD_FRONTEND" = true ] && SERVICES="${SERVICES:+$SERVICES }frontend"
+if [ "$RUNTIME_MODE" = "local" ] && [ "$RUN_MIGRATIONS" = true ]; then
+    log "WARN: LOCAL 模式检测到迁移文件变化；当前不会自动执行容器式迁移，请手动确认本地数据库 schema。"
+fi
 
-    # ⑨ 构建新镜像（旧容器仍在运行）
-    log "INFO: 构建新镜像... (服务: $SERVICES)"
-    if ! docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES; then
-        log "ERROR: 构建失败，回退代码"
-        notify "自动更新失败: Docker 构建失败，正在回退代码..."
-        # 构建失败 → 旧容器未受影响，只需 revert git
-        git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
-        # 部署记录文件不更新，保持指向上次成功部署的 commit
-        disable_maintenance
-        notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
-        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
-        exit 1
-    fi
+# ── 执行重建 / 重启 ───────────────────────────────────
+if [ "$RUNTIME_MODE" = "docker" ]; then
+    if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
+        SERVICES=""
+        [ "$REBUILD_BACKEND" = true ] && SERVICES="backend"
+        [ "$REBUILD_FRONTEND" = true ] && SERVICES="${SERVICES:+$SERVICES }frontend"
 
-    # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
-    if [ "$RUN_MIGRATIONS" = true ]; then
-        run_incremental_migrations || {
-            log "ERROR: 增量迁移失败，回退代码（旧容器未受影响）"
+        # ⑨ 构建新镜像（旧容器仍在运行）
+        log "INFO: 构建新镜像... (服务: $SERVICES)"
+        if ! docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES; then
+            log "ERROR: 构建失败，回退代码"
+            notify "自动更新失败: Docker 构建失败，正在回退代码..."
+            # 构建失败 → 旧容器未受影响，只需 revert git
             git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+            # 部署记录文件不更新，保持指向上次成功部署的 commit
             disable_maintenance
-            notify "自动更新失败: 数据库迁移失败，已回退代码，旧服务继续运行"
-            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "迁移失败，已回退代码，部署记录未更新"
+            notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
+            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
             exit 1
-        }
-        verify_flyway_migrations || {
-            log "ERROR: Schema 验证失败，回退代码（旧容器未受影响）"
-            git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+        fi
+
+        # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
+        if [ "$RUN_MIGRATIONS" = true ]; then
+            run_incremental_migrations || {
+                log "ERROR: 增量迁移失败，回退代码（旧容器未受影响）"
+                git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+                disable_maintenance
+                notify "自动更新失败: 数据库迁移失败，已回退代码，旧服务继续运行"
+                ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "迁移失败，已回退代码，部署记录未更新"
+                exit 1
+            }
+            verify_flyway_migrations || {
+                log "ERROR: Schema 验证失败，回退代码（旧容器未受影响）"
+                git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+                disable_maintenance
+                notify "自动更新失败: Schema 验证失败，已回退代码，旧服务继续运行"
+                ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "Schema 验证失败，已回退代码，部署记录未更新"
+                exit 1
+            }
+        fi
+
+        # ⑩.5 替换为新容器（Schema 已就绪，后端可安全启动）
+        log "INFO: 启动新容器..."
+        docker compose -f "$COMPOSE_FILE" up -d $SERVICES
+
+        # ⑪ 健康检查
+        if wait_for_health $HEALTH_CHECK_TIMEOUT; then
+            # ⑫ 成功！关闭维护模式并更新部署记录
             disable_maintenance
-            notify "自动更新失败: Schema 验证失败，已回退代码，旧服务继续运行"
-            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "Schema 验证失败，已回退代码，部署记录未更新"
+
+            NEW_COMMIT=$(git rev-parse HEAD)
+            echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+
+            # ⑫.5 数据完整性告警检查（不触发回滚，仅告警）
+            verify_ai_providers
+
+            log "SUCCESS: 服务已更新并重启"
+            log "  更新服务: $SERVICES"
+            log "  当前版本: $(git rev-parse --short HEAD)"
+            log "  提交信息: $(git log -1 --format='%s')"
+            ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "$(git log -1 --format='%s') [服务: $SERVICES]"
+
+            notify "自动更新成功\n版本: $(git rev-parse --short HEAD)\n提交: $(git log -1 --format='%s')\n服务: $SERVICES"
+        else
+            # 健康检查失败 → 自动回滚
+            log "ERROR: 新版本健康检查失败，启动自动回滚..."
+            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
             exit 1
-        }
-    fi
-
-    # ⑩.5 替换为新容器（Schema 已就绪，后端可安全启动）
-    log "INFO: 启动新容器..."
-    docker compose -f "$COMPOSE_FILE" up -d $SERVICES
-
-    # ⑪ 健康检查
-    if wait_for_health $HEALTH_CHECK_TIMEOUT; then
-        # ⑫ 成功！关闭维护模式并更新部署记录
-        disable_maintenance
-
+        fi
+    else
+        log "INFO: 变更不涉及前后端代码（可能是文档/脚本/迁移），跳过重建"
+        if [ "$RUN_MIGRATIONS" = true ]; then
+            run_incremental_migrations || {
+                log "ERROR: 迁移执行失败，启动自动回滚..."
+                rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+                exit 1
+            }
+            verify_flyway_migrations || {
+                log "ERROR: Schema 验证失败，启动自动回滚..."
+                rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+                exit 1
+            }
+        fi
         NEW_COMMIT=$(git rev-parse HEAD)
         echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
-
-        # ⑫.5 数据完整性告警检查（不触发回滚，仅告警）
-        verify_ai_providers
-
-        log "SUCCESS: 服务已更新并重启"
-        log "  更新服务: $SERVICES"
-        log "  当前版本: $(git rev-parse --short HEAD)"
-        log "  提交信息: $(git log -1 --format='%s')"
-        ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "$(git log -1 --format='%s') [服务: $SERVICES]"
-
-        notify "自动更新成功\n版本: $(git rev-parse --short HEAD)\n提交: $(git log -1 --format='%s')\n服务: $SERVICES"
-    else
-        # 健康检查失败 → 自动回滚
-        log "ERROR: 新版本健康检查失败，启动自动回滚..."
-        rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
-        # disable_maintenance 在 rollback 内部或 trap cleanup 中处理
-        exit 1
+        ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "仅文档/脚本变更，跳过重建"
+        disable_maintenance
     fi
 else
-    log "INFO: 变更不涉及前后端代码（可能是文档/脚本/迁移），跳过重建"
-    # 即使不重建，也要执行迁移（如仅合并 SQL 或 Flyway 文件有更新）
-    if [ "$RUN_MIGRATIONS" = true ]; then
-        run_incremental_migrations || {
-            log "ERROR: 迁移执行失败，启动自动回滚..."
-            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+    if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
+        if local_restart_changed_services "$REBUILD_BACKEND" "$REBUILD_FRONTEND"; then
+            NEW_COMMIT=$(git rev-parse HEAD)
+            echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+            log "SUCCESS: LOCAL 模式服务已更新并重启"
+            ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "LOCAL 模式更新成功 [backend=$REBUILD_BACKEND frontend=$REBUILD_FRONTEND]"
+            notify "本地模式自动更新成功\n版本: $(git rev-parse --short HEAD)\n提交: $(git log -1 --format='%s')"
+        else
+            log "ERROR: LOCAL 模式健康检查失败，启动代码回退..."
+            local_rollback_code_only "$PRE_PULL_COMMIT" "$REBUILD_BACKEND" "$REBUILD_FRONTEND"
             exit 1
-        }
-        verify_flyway_migrations || {
-            log "ERROR: Schema 验证失败，启动自动回滚..."
-            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
-            exit 1
-        }
+        fi
+    else
+        NEW_COMMIT=$(git rev-parse HEAD)
+        echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+        log "INFO: LOCAL 模式检测到无需重启的变更，更新部署记录"
+        ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "LOCAL 模式仅文档/脚本变更，跳过重启"
     fi
-    # 无需重建，更新部署记录到最新 commit，直接关闭维护模式
-    NEW_COMMIT=$(git rev-parse HEAD)
-    echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
-    ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "仅文档/脚本变更，跳过重建"
-    disable_maintenance
 fi
 
 log "──── 更新完成 ────"

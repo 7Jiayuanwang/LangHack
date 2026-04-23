@@ -268,6 +268,94 @@ class SsoUserMappingServiceAutoGrantTest {
     }
 
     @Nested
+    @DisplayName("已有用户登录时按学校目录升权")
+    class ExistingUserUpgradeTests {
+
+        @Test
+        @DisplayName("已有USER用户命中school_student时自动升权为STUDENT")
+        void existingUser_studentDirectoryMatch_upgradesToStudent() {
+            User existingUser = new User();
+            existingUser.setId(300L);
+            existingUser.setUsername("2023122066164");
+            existingUser.setRole("USER");
+            existingUser.setStatus("ACTIVE");
+
+            when(bindingMapper.findByProviderAndSsoUserId("CAS", "2023122066164")).thenReturn(null);
+            when(userService.getUserByUsername("2023122066164")).thenReturn(existingUser);
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
+                    .thenReturn("true");
+
+            SchoolStudent student = new SchoolStudent();
+            student.setStudentId("2023122066164");
+            student.setStudentName("张三");
+            when(schoolStudentMapper.selectByStudentId("2023122066164")).thenReturn(student);
+
+            doNothing().when(schoolStudentMapper).updateClassInfo(anyString(), anyString(), anyString(), anyString());
+            doNothing().when(userService).updateUser(any(User.class));
+            doAnswer(invocation -> {
+                SsoUserBinding binding = invocation.getArgument(0);
+                binding.setId(301L);
+                return 1;
+            }).when(bindingMapper).insert(any(SsoUserBinding.class));
+            when(jwtUtil.generateToken("2023122066164", "STUDENT")).thenReturn("student_token");
+
+            SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
+
+            assertNotNull(result);
+            assertFalse(result.isNeedsApproval());
+            assertEquals("STUDENT", result.getUser().getRole());
+            assertEquals("student_token", result.getToken());
+            verify(userService).updateUser(argThat(user ->
+                    user.getId().equals(300L)
+                            && "STUDENT".equals(user.getRole())
+                            && "ACTIVE".equals(user.getStatus())
+            ));
+            verify(bindingMapper).insert(argThat(binding ->
+                    binding.getUserId().equals(300L) && binding.getAutoApproved() == 1
+            ));
+        }
+
+        @Test
+        @DisplayName("已有TEACHER用户命中school_student时不降权")
+        void existingTeacher_studentDirectoryMatch_doesNotDowngrade() {
+            User existingUser = new User();
+            existingUser.setId(302L);
+            existingUser.setUsername("2023122066164");
+            existingUser.setRole("TEACHER");
+            existingUser.setStatus("ACTIVE");
+
+            when(bindingMapper.findByProviderAndSsoUserId("CAS", "2023122066164")).thenReturn(null);
+            when(userService.getUserByUsername("2023122066164")).thenReturn(existingUser);
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
+                    .thenReturn("true");
+
+            SchoolStudent student = new SchoolStudent();
+            student.setStudentId("2023122066164");
+            when(schoolStudentMapper.selectByStudentId("2023122066164")).thenReturn(student);
+            when(roleMappingService.mapRole(anyList())).thenReturn(null);
+            doAnswer(invocation -> {
+                SsoUserBinding binding = invocation.getArgument(0);
+                binding.setId(302L);
+                return 1;
+            }).when(bindingMapper).insert(any(SsoUserBinding.class));
+            doNothing().when(userService).updateUser(any(User.class));
+            when(jwtUtil.generateToken("2023122066164", "TEACHER")).thenReturn("teacher_token");
+
+            SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
+
+            assertNotNull(result);
+            assertTrue(result.isNeedsApproval());
+            assertEquals("TEACHER", result.getUser().getRole());
+            verify(userService).updateUser(argThat(user ->
+                    user.getId().equals(302L)
+                            && "TEACHER".equals(user.getRole())
+                            && "ACTIVE".equals(user.getStatus())
+            ));
+            verify(schoolStudentMapper).selectByStudentId("2023122066164");
+        }
+    }
+
+    @Nested
     @DisplayName("CAS attributes回填")
     class CasAttributesBackfillTests {
 

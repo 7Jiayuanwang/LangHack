@@ -3,6 +3,7 @@ package com.english.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.english.entity.User;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -39,4 +40,7 @@ public interface UserMapper extends BaseMapper<User> {
      */
     @Update("UPDATE users SET deleted = 0, updated_time = NOW() WHERE id = #{id} AND deleted = 1")
     int undeleteById(Long id);
+
+    @Select("SELECT * FROM users WHERE username = #{username} AND deleted = 0 LIMIT 1")
+    User selectActiveByUsername(@Param("username") String username);
 }

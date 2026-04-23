@@ -20,7 +20,9 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -260,12 +262,39 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             return Collections.emptyList();
         }
 
-        Map<String, String> effectiveParams = params == null
-                ? new java.util.LinkedHashMap<>()
-                : new java.util.LinkedHashMap<>(params);
+        Map<String, String> baseParams = params == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(params);
 
-        String url = buildUrl(fullUrl, effectiveParams);
+        final int pageSize = 1000;
+        int skip = 0;
+        List<Map<String, Object>> allRows = new ArrayList<>();
 
+        while (true) {
+            Map<String, String> effectiveParams = new LinkedHashMap<>(baseParams);
+            effectiveParams.put("$top", String.valueOf(pageSize));
+            effectiveParams.put("$skip", String.valueOf(skip));
+            String url = buildUrl(fullUrl, effectiveParams);
+
+            List<Map<String, Object>> pageRows = fetchPage(url);
+            if (pageRows.isEmpty()) {
+                break;
+            }
+
+            allRows.addAll(pageRows);
+            logger.info("学校数据 API 分页拉取完成一页 url={} skip={} pageSize={} received={} total={}",
+                    fullUrl, skip, pageSize, pageRows.size(), allRows.size());
+
+            if (pageRows.size() < pageSize) {
+                break;
+            }
+            skip += pageSize;
+        }
+
+        return allRows;
+    }
+
+    private List<Map<String, Object>> fetchPage(String url) {
         int retryAttempts = properties.getApi().getRetryAttempts();
         for (int attempt = 1; attempt <= retryAttempts; attempt++) {
             try {
@@ -283,7 +312,6 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
                 return parseResponse(response.getBody(), url);
             } catch (HttpStatusCodeException e) {
-                // 4xx/5xx：必定含状态码 + 响应体，属于上游业务错误（鉴权失败/参数错误/限流等）
                 logger.error("学校数据 API HTTP 错误 url={} status={} attempt={}/{} bodyPreview={}",
                         url, e.getStatusCode(), attempt, retryAttempts,
                         truncateForLog(e.getResponseBodyAsString()));
@@ -291,7 +319,6 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     return Collections.emptyList();
                 }
             } catch (ResourceAccessException e) {
-                // 网络层错误（连接超时、DNS 失败、SSL 握手）
                 logger.warn("学校数据 API 网络异常 url={} attempt={}/{} err={}",
                         url, attempt, retryAttempts, e.getMessage());
                 if (attempt == retryAttempts) {

@@ -117,9 +117,16 @@
         <el-form-item label="密码" prop="password" v-if="!isEdit">
           <el-input v-model="userForm.password" type="password" />
         </el-form-item>
-        <el-form-item label="新密码" prop="password" v-if="isEdit">
+        <el-form-item label="新密码" prop="password" v-if="isEdit && !ssoEnabled">
           <el-input v-model="userForm.password" type="password" placeholder="留空则不修改" />
         </el-form-item>
+        <el-alert
+          v-if="isEdit && ssoEnabled"
+          title="已启用统一身份认证，默认禁用密码修改"
+          type="info"
+          :closable="false"
+          style="margin-bottom: 18px"
+        />
         <el-form-item label="真实姓名" prop="realName">
           <el-input v-model="userForm.realName" />
         </el-form-item>
@@ -243,6 +250,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, MoreFilled, Delete, UploadFilled } from '@element-plus/icons-vue'
 import { getUsers, createUser, updateUser, deleteUser as deleteUserApi, importUsers } from '@/api/admin'
+import request from '@/utils/request'
 
 // 响应式数据
 const users = ref([])
@@ -251,6 +259,7 @@ const isEdit = ref(false)
 const saving = ref(false)
 const loading = ref(false)
 const userFormRef = ref()
+const ssoEnabled = ref(false)
 
 // 批量导入相关
 const importDialogVisible = ref(false)
@@ -335,6 +344,15 @@ const loadUsers = async () => {
   }
 }
 
+const loadFeatureToggles = async () => {
+  try {
+    const response = await request({ url: '/api/user/feature-toggles', method: 'get' })
+    ssoEnabled.value = response?.data?.sso_login === true
+  } catch (error) {
+    ssoEnabled.value = false
+  }
+}
+
 const handleSearch = () => {
   pagination.current = 1
   loadUsers()
@@ -386,7 +404,11 @@ const saveUser = async () => {
       saving.value = true
       try {
         if (isEdit.value) {
-          await updateUser(userForm.id, userForm)
+          const payload = { ...userForm }
+          if (ssoEnabled.value) {
+            payload.password = ''
+          }
+          await updateUser(userForm.id, payload)
           ElMessage.success('用户更新成功')
         } else {
           await createUser(userForm)
@@ -511,6 +533,7 @@ const submitImport = async () => {
 
 // 生命周期
 onMounted(() => {
+  loadFeatureToggles()
   loadUsers()
 })
 </script>

@@ -47,7 +47,7 @@ docker compose version    # Docker Compose version v2.x.x
 
 ## 2. 快速启动
 
-以下 5 步完成首次部署：
+以下 5 步完成首次 Docker 部署：
 
 ```bash
 # 1. 克隆仓库
@@ -56,17 +56,18 @@ cd LangHack
 
 # 2. 复制并编辑环境变量文件
 cp docker/.env.example docker/.env
-# 用编辑器打开并填写所有必填变量（见第 3 节）
+# 用编辑器打开并填写所有必填变量（见第 4 节）
 nano docker/.env
 
-# 3. 执行一键部署脚本
+# 3. 执行交互式部署脚本
 bash scripts/deploy.sh
 
-# 4. （首次部署）配置 MySQL 主从复制（见第 4 节）
-bash scripts/setup-replication.sh   # 或手动执行第 4 节命令
+# 4. 校验容器与服务状态
+docker compose ps
+curl http://localhost:8080/actuator/health
 
 # 5. 访问应用
-#    应用首页:  http://<服务器IP>:8080
+#    应用首页:  http://<服务器IP>
 #    健康检查:  http://<服务器IP>:8080/actuator/health
 ```
 
@@ -122,7 +123,8 @@ SCHOOL_SYNC_ENABLED=true         # 启用定时同步
 ### 运维面板配置
 
 部署完成后，也可在运维面板管理（无需重启）：
-- **路径**：`https://<域名>/#/ops/school-data-config`
+- **配置页路径**：`/ops/school-data`
+- **数据浏览路径**：`/ops/school-data-browser`
 - **权限**：`OPS` 或 `ADMIN` 角色
 - **支持**：数据源类型切换、appId/appSecret 修改、定时同步开关、连接测试
 
@@ -149,16 +151,86 @@ docker compose up -d frontend
 
 保存 App ID / App Secret 后，**必须** 通过以下任一方式验证端到端链路：
 
-1. **运维面板** — 点击"测试连接"按钮，应显示 "✅ 连接成功 (api)"
+1. **运维面板** — 在 `/ops/school-data` 点击“测试连接”，应显示连接成功
 2. **后端 API** — `curl -H "Authorization: Bearer $ADMIN_JWT" -X POST http://localhost:8080/api/ops/school-data/test-connection`
    - 预期返回：`{"code":200,"data":{"success":true,"source":"api"}}`
-3. **同步验证** — 在运维面板点击"立即同步（行政班）"，观察数据库 `SELECT COUNT(*) FROM administrative_class` > 0
+3. **同步验证** — 在运维面板触发同步后，观察数据库 `SELECT COUNT(*) FROM administrative_class` > 0
 
 **测试失败的排查步骤**：
 1. 检查 `/ops/school-data` 顶部横幅是否消失（消失 = 配置已写入）
 2. 后端日志：`docker logs langhack-backend | grep -i "school"` — 查找 "School API auth missing" 或 4xx/5xx
 3. 网络：`curl -v 'https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1710949911983374368?$top=1'` （从后端容器内执行）
 4. App ID/Secret 正确性：向学校信息化中心确认凭证
+
+---
+
+## 2. 本地开发环境（非 Docker）
+
+适用于本机安装了 JDK / Maven / Node / MySQL 的开发场景。
+
+```bash
+# 1. 创建数据库
+mysql -u root -p -e "CREATE DATABASE english_learning DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 2. 准备本地 .env
+# scripts/start.sh 会从项目根目录读取 .env
+cp backend/.env.example .env
+nano .env
+
+# 3. 启动前后端
+bash scripts/start.sh
+```
+
+也可以手动启动：
+
+```bash
+cd backend && mvn spring-boot:run
+cd frontend && npm install && npm run dev
+```
+
+> 本地开发主要使用 `backend/.env.example` 作为变量参考；Docker 部署使用 `docker/.env.example`。
+
+---
+
+## 2.6. 一键更新（Docker + 本地开发）
+
+`scripts/auto-update.sh` 现支持两种运行模式：
+
+### Docker 模式
+- 适用于服务器部署、Docker 本地环境、容器化测试环境
+- 能力：
+  - git 拉取更新
+  - 按 backend/frontend 变更范围重建镜像
+  - 执行容器式增量迁移与 schema 校验
+  - 健康检查
+  - 自动回滚到旧版本
+
+```bash
+bash scripts/auto-update.sh
+UPDATE_MODE=docker bash scripts/auto-update.sh
+bash scripts/auto-update.sh -b master
+```
+
+### Local 模式
+- 适用于本机直接运行 `bash scripts/start.sh` 的开发环境
+- 能力：
+  - git 拉取更新
+  - 按变更范围重启本地 backend/frontend 进程
+  - 生成 `logs/backend.pid` / `logs/frontend.pid`
+  - 健康检查失败时回退代码并尝试恢复进程
+
+```bash
+UPDATE_MODE=local bash scripts/auto-update.sh
+```
+
+### 模式选择
+- `UPDATE_MODE=auto`：自动识别（默认）
+- `UPDATE_MODE=docker`：强制 Docker 模式
+- `UPDATE_MODE=local`：强制本地模式
+
+### 限制说明
+- Local 模式不会执行 Docker 风格的维护模式切换、容器内 mysqldump、主从复制校验。
+- Local 模式检测到迁移脚本变化时，只会告警提示，不会直接执行容器式迁移 SQL。
 
 ---
 

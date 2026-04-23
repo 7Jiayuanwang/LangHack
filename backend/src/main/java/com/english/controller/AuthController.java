@@ -12,6 +12,7 @@ import com.english.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,6 +38,9 @@ public class AuthController {
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
         "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
     );
+
+    @Value("${sso.enabled:false}")
+    private boolean ssoEnabled;
 
     @Autowired
     private UserService userService;
@@ -72,6 +76,9 @@ public class AuthController {
 
     @PostMapping("/register")
     public Result<String> register(@RequestBody User user) {
+        if (ssoEnabled) {
+            return Result.error("已启用统一身份认证，默认禁用密码注册与密码修改");
+        }
         // 空请求体判空
         if (user == null) {
             return Result.error("请求参数不能为空");
