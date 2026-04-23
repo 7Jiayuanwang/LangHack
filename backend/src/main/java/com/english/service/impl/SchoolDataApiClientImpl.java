@@ -412,9 +412,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     private String resolveDataSourceName(String fullUrl) {
-        for (Map.Entry<String, String> entry : properties.getApi().getEndpoints().entrySet()) {
-            if (fullUrl.equals(entry.getValue())) {
-                return entry.getKey();
+        for (SchoolDataProperties.EndpointMapping endpoint : properties.getApi().getEndpoints()) {
+            if (fullUrl.equals(endpoint.getPath())) {
+                return endpoint.getDataSource();
             }
         }
         return null;
