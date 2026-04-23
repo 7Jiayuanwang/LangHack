@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
@@ -22,6 +23,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -117,63 +122,100 @@ public class MediaController {
             @PathVariable Long mediaId,
             @RequestHeader HttpHeaders headers) {
         try {
-            // getMediaById already checks for deleted=0
             Media media = mediaService.getMediaById(mediaId);
             if (media == null) {
                 logger.warn("Media not found or deleted: {}", mediaId);
                 return ResponseEntity.notFound().build();
             }
 
-            byte[] content = media.getFileContent();
-            if (content == null || content.length == 0) {
-                logger.warn("Media content is empty: {}", mediaId);
-                return ResponseEntity.noContent().build();
-            }
-
-            long fileLength = content.length;
-            logger.debug("Serving media: {}, size: {} bytes", mediaId, fileLength);
-
-            // Sanitize filename
             String rawFileName = media.getFileName() != null ? media.getFileName() : "media_" + mediaId;
             String safeFileName = rawFileName.replaceAll("[\r\n\"\\\\;]", "_").replaceAll("[/\\\\]", "_");
-
-            // MIME whitelist check
             String rawMime = media.getMimeType();
             String safeMime = (rawMime != null && ALLOWED_MIME_TYPES.contains(rawMime))
                     ? rawMime : "application/octet-stream";
 
-            // Handle Range requests for video seeking (HTTP 206 Partial Content)
-            List<HttpRange> ranges = headers.getRange();
-            if (!ranges.isEmpty()) {
-                HttpRange range = ranges.get(0);
-                long start = range.getRangeStart(fileLength);
-                long end = range.getRangeEnd(fileLength);
-                long rangeLength = end - start + 1;
-
-                logger.debug("Range request for media {}: {}-{} / {}", mediaId, start, end, fileLength);
-                byte[] rangeContent = Arrays.copyOfRange(content, (int) start, (int) end + 1);
-
-                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + safeFileName + "\"")
-                        .contentType(MediaType.parseMediaType(safeMime))
-                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                        .header(HttpHeaders.CONTENT_RANGE,
-                                "bytes " + start + "-" + end + "/" + fileLength)
-                        .contentLength(rangeLength)
-                        .body(new ByteArrayResource(rangeContent));
+            if (media.getFilePath() != null && !media.getFilePath().isEmpty()) {
+                return serveFromFileSystem(media.getFilePath(), safeFileName, safeMime, headers);
             }
 
-            // Full content response
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + safeFileName + "\"")
-                    .contentType(MediaType.parseMediaType(safeMime))
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .contentLength(fileLength)
-                    .body(new ByteArrayResource(content));
+            return serveFromBlob(media, safeFileName, safeMime, headers);
         } catch (Exception e) {
             logger.error("Error serving media {}", mediaId, e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    private ResponseEntity<Resource> serveFromFileSystem(
+            String filePath, String fileName, String mimeType, HttpHeaders headers) throws IOException {
+        Path path = Paths.get(filePath);
+        if (!Files.exists(path)) {
+            logger.warn("File not found on disk: {}", filePath);
+            return ResponseEntity.notFound().build();
+        }
+
+        Resource resource = new FileSystemResource(path);
+        long fileLength = Files.size(path);
+
+        List<HttpRange> ranges = headers.getRange();
+        if (!ranges.isEmpty()) {
+            HttpRange range = ranges.get(0);
+            long start = range.getRangeStart(fileLength);
+            long end = range.getRangeEnd(fileLength);
+            long rangeLength = end - start + 1;
+
+            ResourceRegion region = new ResourceRegion(resource, start, rangeLength);
+            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                    .contentType(MediaType.parseMediaType(mimeType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE,
+                            "bytes " + start + "-" + end + "/" + fileLength)
+                    .contentLength(rangeLength)
+                    .body(resource);
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                .contentType(MediaType.parseMediaType(mimeType))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .contentLength(fileLength)
+                .body(resource);
+    }
+
+    private ResponseEntity<Resource> serveFromBlob(
+            Media media, String fileName, String mimeType, HttpHeaders headers) {
+        byte[] content = media.getFileContent();
+        if (content == null || content.length == 0) {
+            logger.warn("Media content is empty: {}", media.getId());
+            return ResponseEntity.noContent().build();
+        }
+
+        long fileLength = content.length;
+
+        List<HttpRange> ranges = headers.getRange();
+        if (!ranges.isEmpty()) {
+            HttpRange range = ranges.get(0);
+            long start = range.getRangeStart(fileLength);
+            long end = range.getRangeEnd(fileLength);
+            long rangeLength = end - start + 1;
+
+            byte[] rangeContent = Arrays.copyOfRange(content, (int) start, (int) end + 1);
+            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                    .contentType(MediaType.parseMediaType(mimeType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE,
+                            "bytes " + start + "-" + end + "/" + fileLength)
+                    .contentLength(rangeLength)
+                    .body(new ByteArrayResource(rangeContent));
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                .contentType(MediaType.parseMediaType(mimeType))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .contentLength(fileLength)
+                .body(new ByteArrayResource(content));
     }
 
     @DeleteMapping("/{mediaId}")

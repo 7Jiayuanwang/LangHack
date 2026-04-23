@@ -160,7 +160,7 @@
           >
             <el-button type="primary">选择视频文件</el-button>
             <template #tip>
-              <div class="el-upload__tip">支持 MP4/WebM/OGG，最大 250MB</div>
+              <div class="el-upload__tip">支持 MP4/WebM/OGG，最大 512MB</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -371,7 +371,8 @@ const handleSubmit = async () => {
       else ElMessage.error(res.message || '创建失败')
     }
   } catch (e) {
-    ElMessage.error('操作失败')
+    console.error('Submit error:', e)
+    ElMessage.error(e.message || '操作失败')
   } finally {
     submitLoading.value = false
   }

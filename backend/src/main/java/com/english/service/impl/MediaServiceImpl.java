@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Media;
 import com.english.mapper.MediaMapper;
 import com.english.service.MediaService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -12,25 +14,47 @@ import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
 
+import javax.annotation.PostConstruct;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 @Service
 public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements MediaService {
 
+    private static final Logger logger = LoggerFactory.getLogger(MediaServiceImpl.class);
+
     private final Semaphore uploadSemaphore = new Semaphore(5);
 
-    // 文件扩展名白名单
     private static final Set<String> ALLOWED_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
     private static final Set<String> ALLOWED_VIDEO_EXTENSIONS = Set.of("mp4", "webm", "ogg", "mov", "avi", "mkv");
 
     @Value("${media.upload.max-image-size:10485760}")
     private long maxImageSize;
 
-    @Value("${media.upload.max-video-size:104857600}")
+    @Value("${media.upload.max-video-size:536870912}")
     private long maxVideoSize;
+
+    @Value("${media.upload.storage-path:/app/uploads}")
+    private String storagePath;
+
+    @PostConstruct
+    public void init() {
+        try {
+            Files.createDirectories(Paths.get(storagePath, "video"));
+            Files.createDirectories(Paths.get(storagePath, "image"));
+        } catch (IOException e) {
+            logger.error("Failed to create upload directories", e);
+        }
+    }
 
     @Override
     @Transactional
@@ -53,7 +77,6 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             if (originalFileName == null || originalFileName.isEmpty()) {
                 originalFileName = "upload_" + System.currentTimeMillis();
             }
-            // Strip path separators to prevent path traversal in stored filename
             originalFileName = new java.io.File(originalFileName).getName()
                     .replaceAll("[/\\\\]", "_");
             if (originalFileName.isEmpty()) {
@@ -61,31 +84,19 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             }
             String mimeType = file.getContentType();
 
-            // 验证文件大小（在读取文件内容之前，防止大文件 OOM）
             long maxSize = "IMAGE".equals(mediaType) ? maxImageSize : maxVideoSize;
             if (file.getSize() > maxSize) {
                 String limit = maxSize / (1024 * 1024) + "MB";
                 throw new BusinessException("文件大小超过限制（最大 " + limit + "）");
             }
 
-            // 验证文件类型（MIME + 扩展名）
             if (!isValidMediaType(mediaType, mimeType, originalFileName)) {
                 throw new BusinessException("不支持的文件类型");
             }
 
-            // 读取文件内容（已通过文件大小检查）
-            byte[] fileContent;
-            try {
-                fileContent = file.getBytes();
-            } catch (java.io.IOException e) {
-                throw new BusinessException("文件读取失败");
-            }
-
-            // 创建Media对象
             Media media = new Media();
             media.setMediaType(mediaType);
             media.setFileName(originalFileName);
-            media.setFileContent(fileContent);
             media.setFileSize(file.getSize());
             media.setMimeType(mimeType);
             media.setUploadedBy(uploadedBy);
@@ -93,11 +104,37 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             media.setCreatedAt(LocalDateTime.now());
             media.setUpdatedAt(LocalDateTime.now());
 
-            // 保存到数据库
+            if ("VIDEO".equals(mediaType)) {
+                String filePath = saveToFileSystem(file, mediaType, originalFileName);
+                media.setFilePath(filePath);
+            } else {
+                try {
+                    media.setFileContent(file.getBytes());
+                } catch (IOException e) {
+                    throw new BusinessException("文件读取失败");
+                }
+            }
+
             this.save(media);
             return media;
         } finally {
             uploadSemaphore.release();
+        }
+    }
+
+    private String saveToFileSystem(MultipartFile file, String mediaType, String originalFileName) {
+        String ext = getFileExtension(originalFileName);
+        String dateDir = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
+        String uniqueName = UUID.randomUUID().toString() + (ext.isEmpty() ? "" : "." + ext);
+        Path dir = Paths.get(storagePath, mediaType.toLowerCase(), dateDir);
+        try {
+            Files.createDirectories(dir);
+            Path target = dir.resolve(uniqueName);
+            file.transferTo(target.toFile());
+            return target.toString();
+        } catch (IOException e) {
+            logger.error("Failed to save file to disk: {}", originalFileName, e);
+            throw new BusinessException("文件保存失败");
         }
     }
 
@@ -144,7 +181,13 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
         if (existing == null) {
             throw new BusinessException("媒体文件不存在或已被删除");
         }
-        // 使用 removeById() 让 @TableLogic 自动处理软删除（更新 deleted=1）
         removeById(id);
+        if (existing.getFilePath() != null && !existing.getFilePath().isEmpty()) {
+            try {
+                Files.deleteIfExists(Paths.get(existing.getFilePath()));
+            } catch (IOException e) {
+                logger.warn("Failed to delete file on disk: {}", existing.getFilePath(), e);
+            }
+        }
     }
 }

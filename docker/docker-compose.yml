@@ -22,9 +22,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 6G
         reservations:
-          memory: 512M
+          memory: 2G
     # 使用 command 传递关键配置（Windows bind-mount 权限 777 会导致 .cnf 被忽略）
     # .cnf 文件已不再 bind-mount，仅通过 command + Dockerfile COPY 覆盖
     command: >
@@ -37,11 +37,13 @@ services:
       --enforce-gtid-consistency=ON
       --innodb-buffer-pool-size=1G
       --innodb-buffer-pool-instances=2
-      --innodb-log-file-size=256M
+      --innodb-log-file-size=1024M
       --innodb-flush-log-at-trx-commit=1
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
-      --max-allowed-packet=256M
+      --max-allowed-packet=512M
+      --net_read_timeout=600
+      --net_write_timeout=600
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -86,9 +88,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 6G
         reservations:
-          memory: 512M
+          memory: 2G
     # 使用 command 传递关键配置（Windows bind-mount 权限 777 会导致 .cnf 被忽略）
     # 注意: super-read-only 不能在 my.cnf 或 command 中设置，否则阻塞 init 脚本
     # (ERROR 1290) — 在 init-replication.sh 末尾通过 SET GLOBAL 动态启用
@@ -102,9 +104,12 @@ services:
       --log-slave-updates=ON
       --innodb-buffer-pool-size=1G
       --innodb-flush-log-at-trx-commit=2
+      --innodb-log-file-size=1024M
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
-      --max-allowed-packet=256M
+      --max-allowed-packet=512M
+      --net_read_timeout=600
+      --net_write_timeout=600
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -239,7 +244,8 @@ services:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:
       - app_logs:/app/logs
-      - app_uploads:/app/uploads
+      # 上传文件绑定到宿主机，防止 docker compose down -v 丢失视频数据
+      - ../uploads:/app/uploads
       # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
       - ../backups:/app/backups
     networks:
@@ -313,6 +319,4 @@ volumes:
   redis_data:
     driver: local
   app_logs:
-    driver: local
-  app_uploads:
     driver: local

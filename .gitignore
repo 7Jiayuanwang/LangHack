@@ -212,3 +212,6 @@ backups/*.sql.zip
 backups/.env.pre-update.*
 # 允许 .gitkeep 保留目录结构
 !backups/.gitkeep
+
+# ── 上传文件目录（视频/图片存储）──
+uploads/
