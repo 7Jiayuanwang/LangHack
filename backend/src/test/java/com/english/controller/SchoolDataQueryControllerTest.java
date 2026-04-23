@@ -163,7 +163,7 @@ class SchoolDataQueryControllerTest {
                                                 "value", "英语"
                                         ))
                                 ))
-                        )))
+                        ))))
                 .andExpect(status().is5xxServerError());
     }
 
