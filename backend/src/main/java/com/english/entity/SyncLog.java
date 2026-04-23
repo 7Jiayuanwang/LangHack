@@ -64,25 +64,25 @@ public class SyncLog {
     @TableField("operator")
     private String operator;
 
-    @TableField("pagination_complete")
+    @TableField(exist = false)
     private Boolean paginationComplete;
 
-    @TableField("pagination_stop_reason")
+    @TableField(exist = false)
     private String paginationStopReason;
 
-    @TableField("pagination_pages_fetched")
+    @TableField(exist = false)
     private Integer paginationPagesFetched;
 
-    @TableField("pagination_last_skip")
+    @TableField(exist = false)
     private Integer paginationLastSkip;
 
-    @TableField("pagination_page_size")
+    @TableField(exist = false)
     private Integer paginationPageSize;
 
-    @TableField("pagination_guard_hit")
+    @TableField(exist = false)
     private Boolean paginationGuardHit;
 
-    @TableField("fetched_row_count")
+    @TableField(exist = false)
     private Integer fetchedRowCount;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

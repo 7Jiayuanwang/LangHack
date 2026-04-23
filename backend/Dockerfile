@@ -1,7 +1,8 @@
 # ─────────────────────────────────────────────
 # 阶段一：构建（Maven + JDK 17）
 # ─────────────────────────────────────────────
-FROM maven:3.8-openjdk-17 AS builder
+ARG IMAGE_REGISTRY_PREFIX=
+FROM ${IMAGE_REGISTRY_PREFIX}maven:3.8-openjdk-17 AS builder
 
 WORKDIR /app
 
@@ -17,7 +18,8 @@ RUN mvn package -DskipTests -B
 # ─────────────────────────────────────────────
 # 阶段二：运行（轻量 JRE 17）
 # ─────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+ARG IMAGE_REGISTRY_PREFIX=
+FROM ${IMAGE_REGISTRY_PREFIX}eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 

@@ -1,5 +1,6 @@
 # Stage 1: Build the Vue application
-FROM node:20-alpine AS builder
+ARG IMAGE_REGISTRY_PREFIX=
+FROM ${IMAGE_REGISTRY_PREFIX}node:20-alpine AS builder
 
 # Accept build arguments
 ARG VITE_API_BASE_URL
@@ -28,7 +29,8 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Serve the application with Nginx
-FROM nginx:alpine
+ARG IMAGE_REGISTRY_PREFIX=
+FROM ${IMAGE_REGISTRY_PREFIX}nginx:alpine
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html

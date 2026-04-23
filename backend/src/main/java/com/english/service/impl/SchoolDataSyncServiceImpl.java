@@ -393,6 +393,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private SyncResult doFullSync(String dataSource, SchoolDataSyncFilterRequest request) {
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
+        ensureCompleteFetch(dataSource, fetchResult);
         if (fetchResult.getRows().isEmpty()) {
             return new SyncResult(0, 0, 0, 0, fetchResult.getPaginationSummary());
         }
@@ -403,10 +404,10 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     /**
      * 执行单个数据源的增量同步
      * <p>
-     * CDSP API 实际仅支持基本分页参数（$top/$skip），不支持 $filter/$select/$beauty 等 OData 扩展参数
-     * （会触发 IY1103 "NOT SUPPORTED: URI: customQuery"），
+     * CDSP API 当前按端点原生参数请求，不自动追加 $top/$skip/$filter/$select/$beauty 等 OData 参数，
+     * 避免触发 IY1103 "NOT SUPPORTED: URI: customQuery"。
      * 因此增量同步实际退化为全量拉取 + 按业务主键 UPSERT（由 upsertEntity 内部处理去重/覆盖）。
-     * 未来如需真正增量，需改用 $filter=<timestamp_field> gt <since_datetime> 的 OData 表达式（如果 API 支持）。
+     * 未来如需真正增量，需改用学校 API 明确支持的更新时间参数。
      */
     private SyncResult doIncrementalSync(String dataSource) {
         return doIncrementalSync(dataSource, null);
@@ -414,11 +415,25 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private SyncResult doIncrementalSync(String dataSource, SchoolDataSyncFilterRequest request) {
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
+        ensureCompleteFetch(dataSource, fetchResult);
         if (fetchResult.getRows().isEmpty()) {
             return new SyncResult(0, 0, 0, 0, fetchResult.getPaginationSummary());
         }
 
         return toSyncResult(persistService.persistRawData(dataSource, fetchResult.getRows(), "SCHOOL_API"), fetchResult.getPaginationSummary());
+    }
+
+    private void ensureCompleteFetch(String dataSource, SchoolDataFetchResult fetchResult) {
+        if (fetchResult == null) {
+            throw new BusinessException("学校数据拉取结果为空，已终止同步: dataSource=" + dataSource);
+        }
+        SchoolDataFetchResult.PaginationSummary summary = fetchResult.getPaginationSummary();
+        if (summary != null && !summary.isComplete()) {
+            throw new BusinessException("学校数据未完整拉取，已终止同步: dataSource="
+                    + dataSource
+                    + ", reason=" + summary.getStopReason()
+                    + ", fetchedRows=" + summary.getFetchedRowCount());
+        }
     }
 
     // =========================================================================

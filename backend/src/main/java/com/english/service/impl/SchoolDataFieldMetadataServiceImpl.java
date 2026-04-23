@@ -81,6 +81,31 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
             result.put(dto.getField(), dto);
         }
         for (FieldMapping mapping : fieldMappingService.getMappingsByDataSource(dataSource)) {
+            if (mapping.getSourceField() != null && !mapping.getSourceField().trim().isEmpty()) {
+                String sourceField = mapping.getSourceField().trim();
+                SchoolDataFilterFieldDto targetDto = mapping.getTargetField() == null
+                        ? null
+                        : result.get(mapping.getTargetField().trim());
+                SchoolDataFilterFieldDto sourceDto = result.computeIfAbsent(sourceField, field -> {
+                    SchoolDataFilterFieldDto created = new SchoolDataFilterFieldDto();
+                    created.setField(field);
+                    created.setSourceField(field);
+                    created.setLabel(resolveLabel(dataSource, field));
+                    created.setType(normalizeMappingType(mapping.getSourceType()));
+                    created.setOperators(resolveOperators(created.getType()));
+                    created.getCapabilities().setLocalSyncFilter(true);
+                    return created;
+                });
+                if (targetDto != null && targetDto.getColumn() != null && !targetDto.getColumn().isEmpty()) {
+                    sourceDto.setColumn(targetDto.getColumn());
+                    sourceDto.getCapabilities().setListQuery(true);
+                }
+                if (sourceDto.getType() == null || sourceDto.getType().isEmpty()) {
+                    sourceDto.setType(normalizeMappingType(mapping.getSourceType()));
+                    sourceDto.setOperators(resolveOperators(sourceDto.getType()));
+                }
+                sourceDto.getCapabilities().setLocalSyncFilter(true);
+            }
             if (mapping.getTargetField() == null || mapping.getTargetField().trim().isEmpty()) {
                 continue;
             }

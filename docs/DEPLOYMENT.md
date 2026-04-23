@@ -62,6 +62,12 @@ nano docker/.env
 # 3. 执行交互式部署脚本
 bash scripts/deploy.sh
 
+# 可选：公网不可用时，先把公共基础镜像同步到本地 registry
+bash scripts/sync-docker-images.sh --registry localhost:5000
+
+# 也可强制走本地 registry 部署
+IMAGE_SOURCE_MODE=local LOCAL_REGISTRY=localhost:5000 bash scripts/deploy.sh --quick
+
 # 4. 校验容器与服务状态
 docker compose ps
 curl http://localhost:8080/actuator/health
@@ -69,6 +75,71 @@ curl http://localhost:8080/actuator/health
 # 5. 访问应用
 #    应用首页:  http://<服务器IP>
 #    健康检查:  http://<服务器IP>:8080/actuator/health
+```
+
+---
+
+## 2.1. Docker 镜像源自动降级与本地 registry
+
+当服务器公网访问 Docker Hub 不稳定时，可启用本地 Docker registry 作为降级镜像源。
+
+### 部署脚本支持的模式
+
+- `IMAGE_SOURCE_MODE=auto`：默认。公共镜像可用时走公共源；不可用时自动切换到本地 registry
+- `IMAGE_SOURCE_MODE=public`：强制使用公共镜像
+- `IMAGE_SOURCE_MODE=local`：强制使用本地 registry
+
+相关环境变量位于 `docker/.env`：
+
+```ini
+IMAGE_SOURCE_MODE=auto
+LOCAL_REGISTRY=localhost:5000
+IMAGE_REGISTRY_PREFIX=
+PUBLIC_IMAGE_PROBE=node:20-alpine
+```
+
+### 一次性搭建本地 registry
+
+```bash
+docker run -d --restart=always \
+  -p 5000:5000 \
+  -v /opt/registry:/var/lib/registry \
+  --name local-registry \
+  registry:2
+```
+
+### 同步项目所需的基础镜像
+
+```bash
+bash scripts/sync-docker-images.sh --registry localhost:5000
+```
+
+当前同步脚本会同步以下基础镜像：
+- `mysql:8.0`
+- `redis:6-alpine`
+- `maven:3.8-openjdk-17`
+- `eclipse-temurin:17-jre-alpine`
+- `node:20-alpine`
+- `nginx:alpine`
+
+### 强制走本地 registry 部署
+
+```bash
+IMAGE_SOURCE_MODE=local LOCAL_REGISTRY=localhost:5000 bash scripts/deploy.sh --quick
+```
+
+### 自动降级行为
+
+`scripts/deploy.sh` 会在构建前探测 `PUBLIC_IMAGE_PROBE`（默认 `node:20-alpine`）是否可通过 `docker pull` 获取：
+- 成功：保持公共镜像源
+- 失败：自动将 `IMAGE_REGISTRY_PREFIX` 设置为 `${LOCAL_REGISTRY}/`
+
+降级到本地 registry 后，部署脚本会先执行 `docker manifest inspect ${LOCAL_REGISTRY}/${PUBLIC_IMAGE_PROBE}` 验证探测镜像已同步；验证失败会阻断部署，避免到 `docker compose build/up` 阶段才失败。
+
+如果自动降级后本地 registry 尚未同步镜像，先执行：
+
+```bash
+bash scripts/sync-docker-images.sh --registry localhost:5000
 ```
 
 ---

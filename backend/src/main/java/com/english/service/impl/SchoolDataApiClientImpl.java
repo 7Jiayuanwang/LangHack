@@ -20,7 +20,6 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -124,7 +123,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             logger.warn("No endpoint mapping for teaching_plans");
             return Collections.emptyList();
         }
-        return fetchDataWithPath(basePath + "/" + planId + "/courses", null).getRows();
+        return rowsFromCompleteResult("teaching_plan_courses", fetchDataWithPath(basePath + "/" + planId + "/courses", null));
     }
 
     @Override
@@ -149,7 +148,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             params.put("xq", toSchoolSemester(semester));
         }
 
-        return fetchDataWithPath(basePath, params).getRows();
+        return rowsFromCompleteResult("student_schedule", fetchDataWithPath(basePath, params));
     }
 
     /**
@@ -205,7 +204,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 return false;
             }
             ResponseEntity<String> response = restTemplate.exchange(
-                    testEndpoint + "?$top=1", HttpMethod.GET, entity, String.class);
+                    testEndpoint, HttpMethod.GET, entity, String.class);
             boolean ok = response.getStatusCode().is2xxSuccessful();
             if (!ok) {
                 logger.error("学校 API 连接测试返回非成功状态 endpoint={} status={} bodyPreview={}",
@@ -242,7 +241,25 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     private List<Map<String, Object>> fetchData(String dataSource, Map<String, String> params) {
-        return fetchDataWithSummary(dataSource, params).getRows();
+        return rowsFromCompleteResult(dataSource, fetchDataWithSummary(dataSource, params));
+    }
+
+    private List<Map<String, Object>> rowsFromCompleteResult(String dataSource, SchoolDataFetchResult fetchResult) {
+        ensureCompleteFetch(dataSource, fetchResult);
+        return fetchResult.getRows();
+    }
+
+    private void ensureCompleteFetch(String dataSource, SchoolDataFetchResult fetchResult) {
+        if (fetchResult == null) {
+            throw new BusinessException("学校数据拉取结果为空: dataSource=" + dataSource);
+        }
+        SchoolDataFetchResult.PaginationSummary summary = fetchResult.getPaginationSummary();
+        if (summary != null && !summary.isComplete()) {
+            throw new BusinessException("学校数据未完整拉取: dataSource="
+                    + dataSource
+                    + ", reason=" + summary.getStopReason()
+                    + ", fetchedRows=" + summary.getFetchedRowCount());
+        }
     }
 
     /**
@@ -254,7 +271,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      * ({@link FieldMappingServiceImpl#applyMapping}) 通过 {@link SchoolDataFieldAlias}
      * 做中文→英文别名兜底查表，保证同步不被 key 不匹配拦截。
      * <p>
-     * 支持的 OData 参数仅限：$top, $skip（分页），其他参数（$filter/$select/$beauty）均不支持。
+     * 当前按端点原生参数直接请求，不再自动追加 $top/$skip，避免触发 IY1103 customQuery。
      */
     private SchoolDataFetchResult fetchDataWithPath(String fullUrl, Map<String, String> params) {
         if (fullUrl == null || fullUrl.isEmpty()) {
@@ -265,68 +282,12 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         Map<String, String> baseParams = params == null
                 ? new LinkedHashMap<>()
                 : new LinkedHashMap<>(params);
-
-        if ("level_exam_scores".equals(resolveDataSourceName(fullUrl))) {
-            List<Map<String, Object>> rows = fetchPage(buildUrl(fullUrl, baseParams));
-            return new SchoolDataFetchResult(
-                    rows,
-                    new SchoolDataFetchResult.PaginationSummary(true, rows.isEmpty() ? "EMPTY_FIRST_PAGE" : "NON_PAGINATED_ENDPOINT", rows.isEmpty() ? 0 : 1, 0, 0, false, rows.size())
-            );
-        }
-
-        final int pageSize = 1000;
-        final int maxPages = 200;
-        int skip = 0;
-        int pageIndex = 0;
-        String previousPageFingerprint = null;
-        List<Map<String, Object>> allRows = new ArrayList<>();
-
-        while (pageIndex < maxPages) {
-            Map<String, String> effectiveParams = new LinkedHashMap<>(baseParams);
-            effectiveParams.put("$top", String.valueOf(pageSize));
-            effectiveParams.put("$skip", String.valueOf(skip));
-            String url = buildUrl(fullUrl, effectiveParams);
-
-            List<Map<String, Object>> pageRows = fetchPage(url);
-            if (pageRows.isEmpty()) {
-                String stopReason = pageIndex == 0 ? "EMPTY_FIRST_PAGE" : "EMPTY_PAGE_AFTER_FULL_PAGE";
-                logger.info("学校数据 API 分页拉取结束 url={} reason={} pageIndex={} skip={} total={}",
-                        fullUrl, stopReason, pageIndex, skip, allRows.size());
-                return new SchoolDataFetchResult(
-                        allRows,
-                        new SchoolDataFetchResult.PaginationSummary(true, stopReason, pageIndex, skip, pageSize, false, allRows.size())
-                );
-            }
-
-            String currentFingerprint = fingerprintPage(pageRows);
-            if (skip > 0 && currentFingerprint.equals(previousPageFingerprint)) {
-                logger.error("学校数据 API 分页异常：疑似上游忽略 $skip url={} skip={} pageSize={} totalSoFar={}",
-                        fullUrl, skip, pageSize, allRows.size());
-                throw new BusinessException("学校数据分页异常：上游接口未正确翻页，已中止以避免重复拉取");
-            }
-
-            allRows.addAll(pageRows);
-            pageIndex++;
-            logger.info("学校数据 API 分页拉取完成一页 url={} pageIndex={} skip={} pageSize={} received={} total={}",
-                    fullUrl, pageIndex, skip, pageSize, pageRows.size(), allRows.size());
-
-            if (pageRows.size() < pageSize) {
-                logger.info("学校数据 API 分页拉取结束 url={} reason=LAST_PAGE_LT_PAGE_SIZE pageIndex={} skip={} total={}",
-                        fullUrl, pageIndex, skip, allRows.size());
-                return new SchoolDataFetchResult(
-                        allRows,
-                        new SchoolDataFetchResult.PaginationSummary(true, "LAST_PAGE_LT_PAGE_SIZE", pageIndex, skip, pageSize, false, allRows.size())
-                );
-            }
-            previousPageFingerprint = currentFingerprint;
-            skip += pageSize;
-        }
-
-        logger.error("学校数据 API 分页超过最大页数限制 url={} maxPages={} total={}", fullUrl, maxPages, allRows.size());
-        throw new BusinessException("学校数据分页异常：超过最大分页次数，请缩小范围后重试");
+        ParsedResponse parsed = fetchPage(buildUrl(fullUrl, baseParams));
+        SchoolDataFetchResult.PaginationSummary summary = buildPaginationSummary(parsed);
+        return new SchoolDataFetchResult(parsed.rows, summary);
     }
 
-    private List<Map<String, Object>> fetchPage(String url) {
+    private ParsedResponse fetchPage(String url) {
         int retryAttempts = properties.getApi().getRetryAttempts();
         for (int attempt = 1; attempt <= retryAttempts; attempt++) {
             try {
@@ -339,7 +300,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
                 if (response.getBody() == null || response.getBody().isEmpty()) {
                     logger.warn("学校数据 API 响应体为空 url={} status={}", url, response.getStatusCode());
-                    return Collections.emptyList();
+                    return ParsedResponse.direct(Collections.emptyList());
                 }
 
                 return parseResponse(response.getBody(), url);
@@ -348,7 +309,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                         url, e.getStatusCode(), attempt, retryAttempts,
                         truncateForLog(e.getResponseBodyAsString()));
                 if (attempt == retryAttempts) {
-                    return Collections.emptyList();
+                    throw new BusinessException("学校数据 API 请求失败: HTTP " + e.getStatusCode());
                 }
             } catch (ResourceAccessException e) {
                 logger.warn("学校数据 API 网络异常 url={} attempt={}/{} err={}",
@@ -356,7 +317,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 if (attempt == retryAttempts) {
                     logger.error("学校数据 API 已重试 {} 次仍失败（网络） url={} err={}",
                             retryAttempts, url, e.getMessage(), e);
-                    return Collections.emptyList();
+                    throw new BusinessException("学校数据 API 网络异常: " + e.getMessage());
                 }
             } catch (RestClientException e) {
                 logger.warn("学校数据 API 调用失败 url={} attempt={}/{} err={}",
@@ -364,16 +325,18 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 if (attempt == retryAttempts) {
                     logger.error("学校数据 API 已重试 {} 次仍失败 url={} err={}",
                             retryAttempts, url, e.getMessage(), e);
-                    return Collections.emptyList();
+                    throw new BusinessException("学校数据 API 调用失败: " + e.getMessage());
                 }
+            } catch (BusinessException e) {
+                throw e;
             } catch (Exception e) {
                 logger.error("学校数据 API 未预期异常 url={} attempt={}/{} err={}",
                         url, attempt, retryAttempts, e.getMessage(), e);
-                return Collections.emptyList();
+                throw new BusinessException("学校数据 API 响应处理失败: " + e.getMessage());
             }
         }
 
-        return Collections.emptyList();
+        throw new BusinessException("学校数据 API 请求失败");
     }
 
     /**
@@ -473,42 +436,152 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      * School API format: {"code": 200, "data": [...], "msg": "success"}
      */
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> parseResponse(String responseBody, String url) {
+    private ParsedResponse parseResponse(String responseBody, String url) {
         try {
-            // Try parsing as array directly
-            return objectMapper.readValue(responseBody,
-                    new TypeReference<List<Map<String, Object>>>() {});
+            return ParsedResponse.direct(objectMapper.readValue(responseBody,
+                    new TypeReference<List<Map<String, Object>>>() {}));
         } catch (Exception e1) {
             try {
-                // Try parsing as wrapped response: {"code": 200, "data": [...], "msg": "success"}
                 Map<String, Object> wrapper = objectMapper.readValue(responseBody,
                         new TypeReference<Map<String, Object>>() {});
 
-                // Check for school API response code
                 Object code = wrapper.get("code");
                 if (code instanceof Number && ((Number) code).intValue() != 200) {
-                    // 上游业务错误码（鉴权失败/参数错误/限流），记录为 error 级别
                     logger.error("学校 API 返回非 200 业务错误 url={} code={} msg={} bodyPreview={}",
                             url, code, wrapper.get("msg"), truncateForLog(responseBody));
-                    return Collections.emptyList();
+                    throw new BusinessException("学校 API 返回错误: " + code + " " + wrapper.get("msg"));
                 }
 
-                // Check common wrapper keys（"value" 是 OData 规范标准字段，cdsp v2 使用）
                 for (String key : List.of("value", "data", "result", "records", "list", "items")) {
                     Object data = wrapper.get(key);
                     if (data instanceof List) {
-                        return (List<Map<String, Object>>) data;
+                        return new ParsedResponse((List<Map<String, Object>>) data, wrapper);
                     }
                 }
 
                 logger.error("学校 API 响应 wrapper 不包含数据数组字段 url={} keys={} bodyPreview={}",
                         url, wrapper.keySet(), truncateForLog(responseBody));
-                return Collections.emptyList();
+                throw new BusinessException("学校 API 响应缺少数据数组字段");
+            } catch (BusinessException e2) {
+                throw e2;
             } catch (Exception e2) {
                 logger.error("学校 API 响应体无法解析为 JSON url={} bodyPreview={} err={}",
                         url, truncateForLog(responseBody), e2.getMessage(), e2);
-                return Collections.emptyList();
+                throw new BusinessException("学校 API 响应体无法解析为 JSON");
             }
+        }
+    }
+
+    private SchoolDataFetchResult.PaginationSummary buildPaginationSummary(ParsedResponse parsed) {
+        int rowCount = parsed.rows.size();
+        if (parsed.wrapper == null) {
+            return new SchoolDataFetchResult.PaginationSummary(
+                    true,
+                    rowCount == 0 ? "EMPTY_FIRST_PAGE" : "DIRECT_ARRAY_RESPONSE",
+                    rowCount == 0 ? 0 : 1,
+                    0,
+                    0,
+                    false,
+                    rowCount
+            );
+        }
+
+        Integer total = firstInteger(parsed.wrapper, "total", "count", "totalCount", "recordCount");
+        Integer pageSize = firstInteger(parsed.wrapper, "pageSize", "size", "limit");
+        Integer page = firstInteger(parsed.wrapper, "page", "current", "pageNum", "currentPage");
+        Integer pages = firstInteger(parsed.wrapper, "pages", "totalPages", "pageCount");
+        Boolean hasNext = firstBoolean(parsed.wrapper, "hasNext", "hasMore", "nextPage", "next");
+        boolean nextValuePresent = hasMeaningfulValue(parsed.wrapper.get("next")) || hasMeaningfulValue(parsed.wrapper.get("nextPage"));
+
+        if ((total != null && total > rowCount)
+                || (pages != null && pages > 1)
+                || Boolean.TRUE.equals(hasNext)
+                || nextValuePresent) {
+            logger.error("学校 API 响应显示可能存在未拉取数据 total={} rows={} pages={} page={} hasNext={} nextPresent={}",
+                    total, rowCount, pages, page, hasNext, nextValuePresent);
+            return new SchoolDataFetchResult.PaginationSummary(
+                    false,
+                    "UPSTREAM_HAS_MORE_UNSUPPORTED",
+                    rowCount == 0 ? 0 : 1,
+                    0,
+                    pageSize == null ? 0 : pageSize,
+                    true,
+                    rowCount
+            );
+        }
+
+        return new SchoolDataFetchResult.PaginationSummary(
+                true,
+                rowCount == 0 ? "EMPTY_FIRST_PAGE" : "WRAPPED_COMPLETE_RESPONSE",
+                rowCount == 0 ? 0 : 1,
+                0,
+                pageSize == null ? 0 : pageSize,
+                false,
+                rowCount
+        );
+    }
+
+    private Integer firstInteger(Map<String, Object> wrapper, String... keys) {
+        for (String key : keys) {
+            Object value = wrapper.get(key);
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+            if (value != null) {
+                try {
+                    return Integer.parseInt(String.valueOf(value).trim());
+                } catch (NumberFormatException ignored) {
+                    // try next key
+                }
+            }
+        }
+        return null;
+    }
+
+    private Boolean firstBoolean(Map<String, Object> wrapper, String... keys) {
+        for (String key : keys) {
+            Object value = wrapper.get(key);
+            if (value instanceof Boolean) {
+                return (Boolean) value;
+            }
+            if (value != null) {
+                String normalized = String.valueOf(value).trim().toLowerCase(java.util.Locale.ROOT);
+                if ("true".equals(normalized) || "1".equals(normalized) || "yes".equals(normalized)) {
+                    return true;
+                }
+                if ("false".equals(normalized) || "0".equals(normalized) || "no".equals(normalized)) {
+                    return false;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean hasMeaningfulValue(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue() > 0;
+        }
+        String text = String.valueOf(value).trim();
+        return !text.isEmpty() && !"false".equalsIgnoreCase(text) && !"0".equals(text) && !"null".equalsIgnoreCase(text);
+    }
+
+    private static class ParsedResponse {
+        private final List<Map<String, Object>> rows;
+        private final Map<String, Object> wrapper;
+
+        private ParsedResponse(List<Map<String, Object>> rows, Map<String, Object> wrapper) {
+            this.rows = rows == null ? Collections.emptyList() : rows;
+            this.wrapper = wrapper;
+        }
+
+        private static ParsedResponse direct(List<Map<String, Object>> rows) {
+            return new ParsedResponse(rows, null);
         }
     }
 

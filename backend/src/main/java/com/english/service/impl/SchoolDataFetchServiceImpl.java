@@ -67,7 +67,22 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
 
     @Override
     public List<Map<String, Object>> fetchRawData(String dataSource, SchoolDataSyncFilterRequest request) {
-        return fetchRawDataWithSummary(dataSource, request).getRows();
+        SchoolDataFetchResult fetchResult = fetchRawDataWithSummary(dataSource, request);
+        ensureCompleteFetch(dataSource, fetchResult);
+        return fetchResult.getRows();
+    }
+
+    private void ensureCompleteFetch(String dataSource, SchoolDataFetchResult fetchResult) {
+        if (fetchResult == null) {
+            throw new BusinessException("学校数据拉取结果为空: dataSource=" + dataSource);
+        }
+        SchoolDataFetchResult.PaginationSummary summary = fetchResult.getPaginationSummary();
+        if (summary != null && !summary.isComplete()) {
+            throw new BusinessException("学校数据未完整拉取: dataSource="
+                    + dataSource
+                    + ", reason=" + summary.getStopReason()
+                    + ", fetchedRows=" + summary.getFetchedRowCount());
+        }
     }
 
     @Override
@@ -134,33 +149,33 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
                 }
                 switch (dataSource) {
                     case "administrative_class":
-                        if ("collegeCode".equals(field)) params.put("XSH", value);
-                        else if ("grade".equals(field)) params.put("NJ", value);
+                        if (matchesAnyField(field, "collegeCode", "XSH", "xsh", "ssxybm")) params.put("XSH", value);
+                        else if (matchesAnyField(field, "grade", "NJ", "nj", "ssnj")) params.put("NJ", value);
                         break;
                     case "school_course":
-                        if ("collegeName".equals(field)) params.put("kkyx", value);
-                        else if ("courseCode".equals(field)) params.put("kcdm", value);
+                        if (matchesAnyField(field, "collegeName", "kkyx")) params.put("kkyx", value);
+                        else if (matchesAnyField(field, "courseCode", "kcdm")) params.put("kcdm", value);
                         break;
                     case "course_schedule":
-                        if ("classId".equals(field)) params.put("xkkch", value);
-                        else if ("dayOfWeek".equals(field)) params.put("skxqj", value);
-                        else if ("period".equals(field)) params.put("skjc", value);
+                        if (matchesAnyField(field, "classId", "xkkch")) params.put("xkkch", value);
+                        else if (matchesAnyField(field, "dayOfWeek", "skxqj")) params.put("skxqj", value);
+                        else if (matchesAnyField(field, "period", "skjc")) params.put("skjc", value);
                         break;
                     case "course_selection":
-                        if ("studentId".equals(field)) params.put("XH", value);
-                        else if ("courseClassCode".equals(field) || "classId".equals(field)) params.put("KCBH", value);
+                        if (matchesAnyField(field, "studentId", "XH", "xh")) params.put("XH", value);
+                        else if (matchesAnyField(field, "courseClassCode", "classId", "KCBH", "kcbh")) params.put("KCBH", value);
                         break;
                     case "level_exam_scores":
-                        if ("studentId".equals(field)) params.put("xh", value);
+                        if (matchesAnyField(field, "studentId", "xh")) params.put("xh", value);
                         break;
                     case "teaching_plans":
-                        if ("grade".equals(field)) params.put("nj", value);
+                        if (matchesAnyField(field, "grade", "nj")) params.put("nj", value);
                         break;
                     case "teacher_courses":
-                        if ("teacherId".equals(field)) params.put("rkjsh", value);
-                        else if ("courseCode".equals(field)) params.put("kcdm", value);
-                        else if ("academicYear".equals(field)) params.put("xn", value);
-                        else if ("semester".equals(field)) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
+                        if (matchesAnyField(field, "teacherId", "rkjsh")) params.put("rkjsh", value);
+                        else if (matchesAnyField(field, "courseCode", "kcdm")) params.put("kcdm", value);
+                        else if (matchesAnyField(field, "academicYear", "xn")) params.put("xn", value);
+                        else if (matchesAnyField(field, "semester", "xq")) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
                         break;
                     default:
                         break;
@@ -168,6 +183,18 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
             }
         }
         return params;
+    }
+
+    private boolean matchesAnyField(String field, String... candidates) {
+        if (field == null) {
+            return false;
+        }
+        for (String candidate : candidates) {
+            if (candidate != null && candidate.equalsIgnoreCase(field)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<Map<String, Object>> applyFilterGroups(String dataSource,
@@ -236,16 +263,32 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
     }
 
     private String resolveFilterValue(String dataSource, Map<String, Object> row, String field) {
-        Object direct = row.get(field);
+        Object direct = getValueIgnoreCase(row, field);
         if (direct != null) {
             return stringValue(direct);
         }
         Map<String, Object> mapped = fieldMappingService.applyMapping(dataSource, row);
-        Object mappedValue = mapped.get(field);
+        Object mappedValue = getValueIgnoreCase(mapped, field);
         if (mappedValue != null) {
             return stringValue(mappedValue);
         }
         return "";
+    }
+
+    private Object getValueIgnoreCase(Map<String, Object> row, String field) {
+        if (row == null || field == null) {
+            return null;
+        }
+        Object direct = row.get(field);
+        if (direct != null) {
+            return direct;
+        }
+        for (Map.Entry<String, Object> entry : row.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(field)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private int compareAsNumber(String actual, String expected) {
