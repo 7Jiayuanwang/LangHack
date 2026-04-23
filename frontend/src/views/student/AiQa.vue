@@ -7,7 +7,6 @@
           <el-icon><ArrowLeft /></el-icon>
           <span>返回阅读</span>
         </button>
-        <h1 class="qa-title">AI 助教</h1>
         <div class="qa-avatar">
           <el-icon :size="22"><Monitor /></el-icon>
         </div>
@@ -104,10 +103,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, reactive, onBeforeUnmount } from 'vue'
+import { ref, onMounted, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Reading, Monitor, Top, ChatLineSquare } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
@@ -122,18 +120,23 @@ const loading = ref(false)
 const chatContainer = ref(null)
 let abortController = null
 
-const candidateQuestions = reactive([
-  { label: '结合文章内容解释本段意思' },
-  { label: '深度解读' },
-])
+// 文章划词进入：带 selectedText 上下文，候选偏向讲解本段
+// 独立入口（MyStudy 快捷入口）：无上下文，候选偏向通用英语问答
+const candidateQuestions = computed(() => selectedText.value
+  ? [
+      { label: '结合文章内容解释本段意思' },
+      { label: '深度解读' }
+    ]
+  : [
+      { label: '英语语法疑问咨询' },
+      { label: '单词用法与辨析' }
+    ]
+)
 
 onMounted(() => {
   selectedText.value = route.query.text || ''
   articleTitle.value = route.query.articleTitle || ''
-
-  if (!selectedText.value) {
-    ElMessage.warning('未检测到选中文本')
-  }
+  // 不再对"未检测到选中文本"报警 — 允许从 MyStudy 入口进入做独立对话。
 })
 
 const fillQuestion = (q) => {
@@ -282,15 +285,6 @@ onBeforeUnmount(() => {
   transition: color 0.2s;
 }
 .qa-back-btn:hover { color: #197fe6; }
-
-.qa-title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 17px;
-  font-weight: 700;
-  color: #1e293b;
-}
 
 .qa-avatar {
   width: 36px;

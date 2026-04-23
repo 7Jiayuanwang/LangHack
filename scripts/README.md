@@ -1,6 +1,15 @@
 # Scripts 目录说明
 
-本目录包含用于管理和维护英语学习平台的各种脚本。
+本目录包含用于部署、更新、开发启动和数据导入的脚本。
+
+## 📌 核心脚本职责
+
+| 脚本 | 适用环境 | 用途 |
+|------|----------|------|
+| `deploy.sh` | Docker | 交互式部署、生成 `docker/.env`、启动容器与部署配置 |
+| `auto-update.sh` | Docker / Local | 一键拉取更新；Docker 模式重建容器，本地模式重启 dev 进程 |
+| `start.sh` | Local | 本地开发一键启动后端 + 前端 |
+| `check-health.sh` | Docker | 检查后端、Redis、MySQL 主从与复制状态 |
 
 ## 📂 文件列表
 
@@ -267,10 +276,9 @@ python3 scripts/import_book1_readings.py
 4. 所有操作在一个事务中完成，失败会自动回滚
 
 **数据库配置**:
-- 主机: localhost
-- 用户: root
-- 密码: Dao030916
-- 数据库: english_learning
+- 默认连接本地 `english_learning`
+- 用户名、密码等请以脚本当前 `DB_CONFIG` 或运行参数为准
+- 不要在文档中写入真实凭据
 
 如需修改配置，请编辑脚本中的 `DB_CONFIG` 变量。
 

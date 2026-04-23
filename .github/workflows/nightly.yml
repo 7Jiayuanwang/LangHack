@@ -39,6 +39,7 @@ jobs:
         working-directory: backend
         env:
           DB_URL: jdbc:mysql://127.0.0.1:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+          DB_SLAVE_URL: jdbc:mysql://127.0.0.1:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
           DB_USERNAME: root
           DB_PASSWORD: testpass
           JWT_SECRET: nightly-test-secret-key-at-least-32-chars-long

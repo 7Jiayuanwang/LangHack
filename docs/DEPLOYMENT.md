@@ -47,7 +47,7 @@ docker compose version    # Docker Compose version v2.x.x
 
 ## 2. 快速启动
 
-以下 5 步完成首次部署：
+以下 5 步完成首次 Docker 部署：
 
 ```bash
 # 1. 克隆仓库
@@ -56,19 +56,252 @@ cd LangHack
 
 # 2. 复制并编辑环境变量文件
 cp docker/.env.example docker/.env
-# 用编辑器打开并填写所有必填变量（见第 3 节）
+# 用编辑器打开并填写所有必填变量（见第 4 节）
 nano docker/.env
 
-# 3. 执行一键部署脚本
+# 3. 执行交互式部署脚本
 bash scripts/deploy.sh
 
-# 4. （首次部署）配置 MySQL 主从复制（见第 4 节）
-bash scripts/setup-replication.sh   # 或手动执行第 4 节命令
+# 可选：公网不可用时，先把公共基础镜像同步到本地 registry
+bash scripts/sync-docker-images.sh --registry localhost:5000
+
+# 也可强制走本地 registry 部署
+IMAGE_SOURCE_MODE=local LOCAL_REGISTRY=localhost:5000 bash scripts/deploy.sh --quick
+
+# 4. 校验容器与服务状态
+docker compose ps
+curl http://localhost:8080/actuator/health
 
 # 5. 访问应用
-#    应用首页:  http://<服务器IP>:8080
+#    应用首页:  http://<服务器IP>
 #    健康检查:  http://<服务器IP>:8080/actuator/health
 ```
+
+---
+
+## 2.1. Docker 镜像源自动降级与本地 registry
+
+当服务器公网访问 Docker Hub 不稳定时，可启用本地 Docker registry 作为降级镜像源。
+
+### 部署脚本支持的模式
+
+- `IMAGE_SOURCE_MODE=auto`：默认。公共镜像可用时走公共源；不可用时自动切换到本地 registry
+- `IMAGE_SOURCE_MODE=public`：强制使用公共镜像
+- `IMAGE_SOURCE_MODE=local`：强制使用本地 registry
+
+相关环境变量位于 `docker/.env`：
+
+```ini
+IMAGE_SOURCE_MODE=auto
+LOCAL_REGISTRY=localhost:5000
+IMAGE_REGISTRY_PREFIX=
+PUBLIC_IMAGE_PROBE=node:20-alpine
+```
+
+### 一次性搭建本地 registry
+
+```bash
+docker run -d --restart=always \
+  -p 5000:5000 \
+  -v /opt/registry:/var/lib/registry \
+  --name local-registry \
+  registry:2
+```
+
+### 同步项目所需的基础镜像
+
+```bash
+bash scripts/sync-docker-images.sh --registry localhost:5000
+```
+
+当前同步脚本会同步以下基础镜像：
+- `mysql:8.0`
+- `redis:6-alpine`
+- `maven:3.8-openjdk-17`
+- `eclipse-temurin:17-jre-alpine`
+- `node:20-alpine`
+- `nginx:alpine`
+
+### 强制走本地 registry 部署
+
+```bash
+IMAGE_SOURCE_MODE=local LOCAL_REGISTRY=localhost:5000 bash scripts/deploy.sh --quick
+```
+
+### 自动降级行为
+
+`scripts/deploy.sh` 会在构建前探测 `PUBLIC_IMAGE_PROBE`（默认 `node:20-alpine`）是否可通过 `docker pull` 获取：
+- 成功：保持公共镜像源
+- 失败：自动将 `IMAGE_REGISTRY_PREFIX` 设置为 `${LOCAL_REGISTRY}/`
+
+降级到本地 registry 后，部署脚本会先执行 `docker manifest inspect ${LOCAL_REGISTRY}/${PUBLIC_IMAGE_PROBE}` 验证探测镜像已同步；验证失败会阻断部署，避免到 `docker compose build/up` 阶段才失败。
+
+如果自动降级后本地 registry 尚未同步镜像，先执行：
+
+```bash
+bash scripts/sync-docker-images.sh --registry localhost:5000
+```
+
+---
+
+## 2.5. 学校数据集成配置
+
+`scripts/deploy.sh` 向导在 SSO 配置之后、备份配置之前会交互式询问学校数据集成设置。
+
+### 向导交互流程
+
+```
+启用学校数据集成？ [y/N]
+  └─ y → 数据源类型: 1) API 接口 (推荐)  2) ETL 数据库
+          ├─ API 模式：
+          │    • App ID     （学校数据平台分配）
+          │    • App Secret （学校数据平台分配，用于签名认证）
+          │    9 个数据接口 URL 已内置，无需配置
+          └─ ETL 模式：
+               • JDBC URL (默认: jdbc:mysql://school-db.imau.edu.cn:3306/school_db)
+               • 数据库用户名 / 密码
+               7 个查询 SQL 已内置
+          启用定时同步？ [Y/n]（全量 02:00 / 增量每小时 / 校验 04:00）
+          启用功能开关？ [Y/n]（运维端数据浏览/配置 + 学生端课表入口）
+```
+
+### API 签名认证方式（官方规范）
+
+```
+每次请求生成：
+    timestamp = System.currentTimeMillis()
+    sign      = Base64( MD5( appId + appSecret + timestamp ) )
+
+请求头：
+    appId:     <App ID>
+    timestamp: <毫秒时间戳>
+    sign:      <Base64 编码签名>
+```
+
+### 手动配置方式
+
+除向导外，也可直接编辑 `docker/.env`：
+
+```ini
+SCHOOL_DATA_SOURCE=api           # 或 etl
+SCHOOL_API_APP_ID=<app-id>       # 学校数据平台分配
+SCHOOL_API_APP_SECRET=<secret>   # 学校数据平台分配
+SCHOOL_SYNC_ENABLED=true         # 启用定时同步
+```
+
+配置变更后重启后端：`docker compose restart backend`
+
+### 运维面板配置
+
+部署完成后，也可在运维面板管理（无需重启）：
+- **配置页路径**：`/ops/school-data`
+- **数据浏览路径**：`/ops/school-data-browser`
+- **权限**：`OPS` 或 `ADMIN` 角色
+- **支持**：数据源类型切换、appId/appSecret 修改、定时同步开关、连接测试
+
+### App ID/Secret 获取方式
+
+由学校数据平台（cdsp.imau.edu.cn）管理员分配，具体申请流程咨询学校信息化中心。
+
+### 更新前端 UI（学校数据 App ID/App Secret）
+
+**症状**：`/ops/school-data` 仍显示 "API Token" 字段而非 "App ID" / "App Secret"
+
+**根因**：frontend docker image 未重建，生产使用的是旧镜像
+
+**修复**：
+```bash
+cd /path/to/LangHack
+git pull
+docker compose build frontend
+docker compose up -d frontend
+```
+重建后浏览器 `Ctrl+F5` 清缓存，即可看到新的 App ID / App Secret 输入框。
+
+### 配置完成后的强制验证（关键）
+
+保存 App ID / App Secret 后，**必须** 通过以下任一方式验证端到端链路：
+
+1. **运维面板** — 在 `/ops/school-data` 点击“测试连接”，应显示连接成功
+2. **后端 API** — `curl -H "Authorization: Bearer $ADMIN_JWT" -X POST http://localhost:8080/api/ops/school-data/test-connection`
+   - 预期返回：`{"code":200,"data":{"success":true,"source":"api"}}`
+3. **同步验证** — 在运维面板触发同步后，观察数据库 `SELECT COUNT(*) FROM administrative_class` > 0
+
+**测试失败的排查步骤**：
+1. 检查 `/ops/school-data` 顶部横幅是否消失（消失 = 配置已写入）
+2. 后端日志：`docker logs langhack-backend | grep -i "school"` — 查找 "School API auth missing" 或 4xx/5xx
+3. 网络：`curl -v 'https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1710949911983374368?$top=1'` （从后端容器内执行）
+4. App ID/Secret 正确性：向学校信息化中心确认凭证
+
+---
+
+## 2. 本地开发环境（非 Docker）
+
+适用于本机安装了 JDK / Maven / Node / MySQL 的开发场景。
+
+```bash
+# 1. 创建数据库
+mysql -u root -p -e "CREATE DATABASE english_learning DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 2. 准备本地 .env
+# scripts/start.sh 会从项目根目录读取 .env
+cp backend/.env.example .env
+nano .env
+
+# 3. 启动前后端
+bash scripts/start.sh
+```
+
+也可以手动启动：
+
+```bash
+cd backend && mvn spring-boot:run
+cd frontend && npm install && npm run dev
+```
+
+> 本地开发主要使用 `backend/.env.example` 作为变量参考；Docker 部署使用 `docker/.env.example`。
+
+---
+
+## 2.6. 一键更新（Docker + 本地开发）
+
+`scripts/auto-update.sh` 现支持两种运行模式：
+
+### Docker 模式
+- 适用于服务器部署、Docker 本地环境、容器化测试环境
+- 能力：
+  - git 拉取更新
+  - 按 backend/frontend 变更范围重建镜像
+  - 执行容器式增量迁移与 schema 校验
+  - 健康检查
+  - 自动回滚到旧版本
+
+```bash
+bash scripts/auto-update.sh
+UPDATE_MODE=docker bash scripts/auto-update.sh
+bash scripts/auto-update.sh -b master
+```
+
+### Local 模式
+- 适用于本机直接运行 `bash scripts/start.sh` 的开发环境
+- 能力：
+  - git 拉取更新
+  - 按变更范围重启本地 backend/frontend 进程
+  - 生成 `logs/backend.pid` / `logs/frontend.pid`
+  - 健康检查失败时回退代码并尝试恢复进程
+
+```bash
+UPDATE_MODE=local bash scripts/auto-update.sh
+```
+
+### 模式选择
+- `UPDATE_MODE=auto`：自动识别（默认）
+- `UPDATE_MODE=docker`：强制 Docker 模式
+- `UPDATE_MODE=local`：强制本地模式
+
+### 限制说明
+- Local 模式不会执行 Docker 风格的维护模式切换、容器内 mysqldump、主从复制校验。
+- Local 模式检测到迁移脚本变化时，只会告警提示，不会直接执行容器式迁移 SQL。
 
 ---
 

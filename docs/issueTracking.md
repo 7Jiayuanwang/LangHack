@@ -2,7 +2,7 @@
 
 问题跟踪文档，记录已知问题、待修复的 Bug、待实现的功能以及技术债务。
 
-最后更新: 2025-12-29 18:30
+最后更新: 2026-04-18
 
 ## 环境配置
 
@@ -58,7 +58,27 @@ cd backend
 
 ### 高优先级
 
-#### 1. 待完成任务计数不准确
+#### 1. 学校数据 API 认证方式修正
+- 状态: 已修复 (2026-04-18)
+- 描述: 旧实现使用 `Authorization: Bearer <token>` 请求头，但官方接口文档规定认证方式为 `appId + appSecret + timestamp` 签名
+- 影响: API 模式数据同步无法通过认证（学校数据集成不可用）
+- 修复:
+  - `SchoolDataProperties.ApiProperties`: 删除 `token` 字段，新增 `appId` + `appSecret` + `sign(timestamp)` 方法
+  - `SchoolDataApiClientImpl.buildHeaders()`: 改为添加 `appId`/`timestamp`/`sign` 三个请求头
+  - 签名公式: `sign = Base64(MD5(appId + appSecret + timestamp))`
+  - 环境变量: `SCHOOL_API_TOKEN` → `SCHOOL_API_APP_ID` + `SCHOOL_API_APP_SECRET`
+  - DB 配置: `api_token` → `api_app_id` + `api_app_secret`（V20 迁移）
+  - 运维面板: Token 输入框 → App ID + App Secret 两个输入框
+  - 部署脚本: `scripts/deploy.sh` 新增学校数据向导（交互式配置 + 功能开关自动激活）
+- 相关文件:
+  - `backend/src/main/java/com/english/config/SchoolDataProperties.java`
+  - `backend/src/main/java/com/english/service/impl/SchoolDataApiClientImpl.java`
+  - `backend/src/main/java/com/english/service/SchoolDataConfigRefreshService.java`
+  - `backend/src/main/resources/db/migration/V20__school_data_api_auth_appid.sql`
+  - `frontend/src/views/ops/SchoolDataConfig.vue`
+  - `scripts/deploy.sh`, `docker/.env.example`, `docker-compose.yml`
+
+#### 2. 待完成任务计数不准确
 - 状态: 已修复
 - 描述: 学生端待完成任务数显示不正确，已完成的任务仍被计入
 - 影响: 学生端发现页面
@@ -190,30 +210,30 @@ cd backend
 ### 低优先级
 
 #### 5. 用户体验优化
-- 状态: 待实现
+- 状态: 部分完成
 - 描述:
-  - 响应式设计优化（移动端适配完善）
-  - 国际化支持（多语言界面）
-  - 无障碍功能（可访问性优化）
+  - ✅ 响应式设计优化（移动端全面适配）
+  - ❌ 国际化支持（多语言界面）
+  - ❌ 无障碍功能（可访问性优化）
 - 优先级: 低
 
 #### 6. 性能优化
-- 状态: 待实现
+- 状态: 部分完成
 - 描述:
-  - Redis缓存机制
-  - 文件上传功能（音频文件管理）
-  - 批量操作功能（批量导入导出）
-  - 全文搜索功能
+  - ✅ Redis缓存机制（已集成 Redis 6 + Spring Cache）
+  - ❌ 文件上传功能（音频文件管理）
+  - ❌ 批量操作功能（批量导入导出）
+  - ❌ 全文搜索功能
 - 优先级: 低
 
 #### 7. 系统管理功能
-- 状态: 待实现
+- 状态: 已实现
 - 描述:
-  - 操作日志系统
-  - 系统配置管理界面
-  - 数据备份恢复功能
-  - 系统监控面板
-- 优先级: 低
+  - ✅ 操作日志系统（AccessLog + 访问统计）
+  - ✅ 系统配置管理界面（运维面板 system_config 表）
+  - ✅ 数据备份恢复功能（mysqldump 自动备份 + 增量备份）
+  - ✅ 系统监控面板（运维面板 + AI 服务商状态监控）
+- 优先级: 已完成
 
 ---
 
@@ -251,9 +271,9 @@ cd backend
 ### 安全性
 
 #### 6. 敏感信息保护
-- 状态: 待检查
-- 描述: 需要确保配置文件中的敏感信息（如数据库密码、JWT密钥）不被提交到版本控制
-- 建议: 使用环境变量或配置加密
+- 状态: 部分改善
+- 描述: .env 文件包含明文凭据，已在 .gitignore 中但需确保不被提交
+- 建议: 生产环境使用 Docker secrets 或 Vault；.env 文件权限设为 600
 
 #### 7. API权限验证
 - 状态: 基本完成
@@ -329,16 +349,28 @@ cd backend
 | 高优先级Bug | 3 | 3 | 0 | 0 |
 | 中优先级Bug | 2 | 2 | 0 | 0 |
 | 低优先级Bug | 4 | 3 | 0 | 1 |
-| 待实现功能 | 7 | 1 | 0 | 6 |
-| 技术债务 | 7 | 2 | 0 | 5 |
+| 待实现功能 | 7 | 4 | 0 | 3 |
+| 技术债务 | 7 | 3 | 0 | 4 |
 | 性能问题 | 3 | 2 | 0 | 1 |
-| 安全问题 | 3 | 1 | 0 | 2 |
+| 安全问题 | 3 | 2 | 0 | 1 |
 
-总计: 29个问题，已解决14个，待处理15个
+总计: 29个问题，已解决19个，待处理10个
 
 ---
 
 ## 更新日志
+
+### 2026-04-18
+- 全面排查项目问题，修复关键 Bug 和配置不一致
+- 修复 application.yml YAML `//` 行内注释导致 CORS 配置失效
+- 修复 V16 Flyway 迁移脚本 DELIMITER 不兼容问题（改用 PREPARED STATEMENT）
+- 修复 auto-update.sh 中 `$DOCKER_DIR` 未定义导致健康检查静默失败
+- 添加 frontend nginx.conf / nginx-ssl.conf 缺失的 /tutor 代理位置
+- 同步根目录 docker-compose.yml 缺失的环境变量（SSO_CAS_SERVER_NAME, ADMIN_LOGIN_SECRET, VITE_ADMIN_*）
+- 同步 docker/.env 缺失的 APP_BASE_URL 和 SCHOOL_DATA_* 变量
+- 移动根目录散落文档（SCHOOL_DATA_*.MD → docs/），删除调试文件（111.txt）
+- 更新 CLAUDE.md：修正 USER 路由、添加 SSO/学校数据/AI 功能文档
+- 更新 TODO.md：标记已实现的 Docker/Redis/运维功能，添加后续新增功能
 
 ### 2025-12-29
 - 修复今日学习时长计算异常问题
@@ -374,10 +406,10 @@ cd backend
 
 ## 相关文档
 
-- [README.md](./README.md) - 项目概述和快速开始
-- [TODO.md](./TODO.md) - 待实现功能清单
-- [OPTIMIZATION_DOCUMENTATION.md](./OPTIMIZATION_DOCUMENTATION.md) - 优化文档
-- [API_DOCUMENTATION.md](./backend/API_DOCUMENTATION.md) - API接口文档
+- [README.md](../README.md) - 项目概述和快速开始
+- [TODO.md](../TODO.md) - 待实现功能清单
+- [CLAUDE.md](../CLAUDE.md) - AI 开发助手上下文
+- [API接口文档.md](./API接口文档.md) - API接口文档
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - 故障排除指南
-- [COURSE_PROGRESS_DOCUMENTATION.md](./COURSE_PROGRESS_DOCUMENTATION.md) - 课程进度计算文档
-- [SCORE_CALCULATION_DOCUMENTATION.md](./SCORE_CALCULATION_DOCUMENTATION.md) - 分数计算规则文档
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - 部署指南
+- [DATABASE_COLLABORATION_GUIDE.md](./DATABASE_COLLABORATION_GUIDE.md) - 数据库协作规范

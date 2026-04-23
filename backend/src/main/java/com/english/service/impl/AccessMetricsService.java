@@ -27,6 +27,11 @@ public class AccessMetricsService {
     private final AtomicLong peakConcurrentToday = new AtomicLong(0);
     private volatile String lastPeakDate = LocalDate.now().format(DATE_KEY);
 
+    /** 缓存 SystemMetrics 5 秒，避免 SSE 每 5s 为每个订阅者重复做 Redis INFO + JMX + HikariPool + 磁盘 IO。 */
+    private static final long SYSTEM_METRICS_CACHE_TTL_MS = 5000L;
+    private volatile Map<String, Object> cachedSystemMetrics;
+    private volatile long cachedSystemMetricsAt = 0L;
+
     public AccessMetricsService(StringRedisTemplate redisTemplate,
                                  SystemMetricsService systemMetricsService) {
         this.redisTemplate = redisTemplate;
@@ -135,7 +140,7 @@ public class AccessMetricsService {
         try {
             Map<String, Object> initialData = new LinkedHashMap<>();
             initialData.put("realtime", getRealTimeMetrics());
-            initialData.put("system", systemMetricsService.getSystemMetrics());
+            initialData.put("system", getCachedSystemMetrics());
             emitter.send(SseEmitter.event().data(initialData));
         } catch (Exception e) {
             logger.debug("Failed to send initial SSE data", e);
@@ -144,7 +149,31 @@ public class AccessMetricsService {
         return emitter;
     }
 
-    @Scheduled(fixedRate = 3000)
+    /**
+     * 返回最多 5 秒旧的 SystemMetrics 快照。
+     * 调用方（SSE 广播 + initial emit）共享同一份缓存，
+     * 避免 N 个 SSE 订阅者时每秒 N 次 Redis INFO/JMX 查询。
+     */
+    private Map<String, Object> getCachedSystemMetrics() {
+        long now = System.currentTimeMillis();
+        Map<String, Object> snapshot = cachedSystemMetrics;
+        if (snapshot != null && now - cachedSystemMetricsAt < SYSTEM_METRICS_CACHE_TTL_MS) {
+            return snapshot;
+        }
+        try {
+            snapshot = systemMetricsService.getSystemMetrics();
+            cachedSystemMetrics = snapshot;
+            cachedSystemMetricsAt = now;
+        } catch (Exception e) {
+            logger.debug("Failed to refresh system metrics cache", e);
+            if (snapshot == null) {
+                snapshot = Collections.emptyMap();
+            }
+        }
+        return snapshot;
+    }
+
+    @Scheduled(fixedRate = 5000)
     public void pushMetrics() {
         if (emitters.isEmpty()) {
             return;
@@ -152,7 +181,7 @@ public class AccessMetricsService {
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("realtime", getRealTimeMetrics());
-        data.put("system", systemMetricsService.getSystemMetrics());
+        data.put("system", getCachedSystemMetrics());
         data.put("timestamp", System.currentTimeMillis());
 
         List<SseEmitter> deadEmitters = new ArrayList<>();

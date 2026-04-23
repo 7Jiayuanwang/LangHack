@@ -19,7 +19,7 @@
     <main class="mobile-main">
       <div class="content-container">
         <transition name="fade" mode="out-in">
-          <router-view />
+          <slot><router-view /></slot>
         </transition>
       </div>
     </main>
@@ -131,13 +131,14 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getSsoLogoutUrl, getSsoStatus } from '@/api/sso'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ElevationDialog from '@/components/ElevationDialog.vue'
 import {
   DataBoard, School, Edit, Reading,
   Upload, Document, House,
   User, EditPen, Setting,
-  DataLine, FolderOpened, Connection, Refresh, Switch,
+  DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
   VideoPlay,
 } from '@element-plus/icons-vue'
 
@@ -157,6 +158,9 @@ const userStore = useUserStore()
 const showElevationDialog = ref(false)
 const elevationTarget     = ref('ADMIN')
 
+// 功能开关状态（与路由守卫 + 其他 layout 共享缓存）
+const { toggles: featureToggles, load: loadFeatureToggles } = useFeatureToggles()
+
 // ── 主题（accent 颜色）────────────────────────────────────────────────────────
 
 const THEME = {
@@ -175,11 +179,13 @@ const NAV_ITEMS = {
     { path: '/teacher/dashboard',   label: '首页', icon: DataBoard, badge: null },
     { path: '/teacher/classes',     label: '班级', icon: School,    badge: null },
     { path: '/teacher/assignments', label: '任务', icon: Edit,      badge: null },
+    { path: '/teacher/my-courses',  label: '授课', icon: Notebook,  badge: null },
     { path: '/teacher/courses',     label: '课程', icon: Reading,   badge: null },
   ],
   user: [
     { path: '/user',            label: '首页', icon: House,    badge: null },
     { path: '/user/user-texts', label: '我的', icon: Upload,   badge: null },
+    { path: '/articles',        label: '文章', icon: Reading,  badge: null },
     { path: '/user/vocabulary', label: '生词', icon: Document, badge: null },
   ],
   ops: [
@@ -188,30 +194,54 @@ const NAV_ITEMS = {
     { path: '/ops/users',           label: '用户', icon: User        },
     { path: '/ops/ai-providers',    label: 'AI',   icon: Connection  },
     { path: '/ops/feature-toggles', label: '开关', icon: Switch      },
+    { path: '/ops/school-data',         label: '数据', icon: Coin,        featureKey: 'ops.school_data_config' },
+    { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine,    featureKey: 'ops.school_data_browser' },
     { path: '/ops/update',          label: '更新', icon: Refresh     },
   ],
   admin: [
-    { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null },
-    { path: '/admin/courses',   label: '课程', icon: Reading,   badge: null },
-    { path: '/admin/classes',   label: '班级', icon: School,    badge: null },
-    { path: '/admin/users',     label: '用户', icon: User,      badge: null },
+    { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null, featureKey: 'admin.dashboard' },
+    { path: '/admin/courses',   label: '课程', icon: Reading,   badge: null, featureKey: 'admin.courses' },
+    { path: '/admin/classes',   label: '班级', icon: School,    badge: null, featureKey: 'admin.classes' },
+    { path: '/admin/users',     label: '用户', icon: User,      badge: null, featureKey: 'admin.users' },
   ],
 }
 
-const navItems = computed(() => NAV_ITEMS[props.role] || [])
+const navItems = computed(() => {
+  const items = NAV_ITEMS[props.role] || []
+  // ops / admin 均需根据功能开关过滤导航项（teacher / user 暂无 featureKey）
+  if (props.role === 'ops' || props.role === 'admin') {
+    return items.filter(item => {
+      if (!item.featureKey) return true
+      const val = featureToggles.value[item.featureKey]
+      return val === undefined || val === true || val === 'true'
+    })
+  }
+  return items
+})
 
 // admin 专属：二级管理菜单
 const MORE_ITEMS = {
   admin: [
-    { path: '/admin/units',       label: '单元管理', icon: Reading  },
-    { path: '/admin/words',       label: '单词管理', icon: EditPen  },
-    { path: '/admin/texts',       label: '课文管理', icon: Document },
-    { path: '/admin/videos',      label: '视频管理', icon: VideoPlay },
-    { path: '/admin/assignments', label: '作业管理', icon: Document },
+    { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
+    { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
+    { path: '/admin/texts',          label: '课文管理', icon: Document, featureKey: 'admin.texts' },
+    { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'admin.videos' },
+    { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
+    { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
   ],
 }
 
-const moreItems = computed(() => MORE_ITEMS[props.role] || [])
+const moreItems = computed(() => {
+  const items = MORE_ITEMS[props.role] || []
+  if (props.role === 'admin') {
+    return items.filter(item => {
+      if (!item.featureKey) return true
+      const val = featureToggles.value[item.featureKey]
+      return val === undefined || val === true || val === 'true'
+    })
+  }
+  return items
+})
 
 const isManagementRouteActive = computed(() => {
   if (props.role !== 'admin') return false
@@ -227,11 +257,13 @@ const ROUTE_MAP = {
     '/teacher/dashboard':   '教学首页',
     '/teacher/classes':     '班级管理',
     '/teacher/assignments': '任务管理',
+    '/teacher/my-courses':  '我的授课',
     '/teacher/courses':     '课程浏览',
   },
   user: {
     '/user':            '首页',
     '/user/user-texts': '我的上传',
+    '/articles':        '文章',
     '/user/vocabulary': '我的生词',
   },
   ops: {
@@ -240,6 +272,8 @@ const ROUTE_MAP = {
     '/ops/users':           '用户管理',
     '/ops/ai-providers':    'AI 服务管理',
     '/ops/feature-toggles': '功能开关',
+    '/ops/school-data':         '学校数据',
+    '/ops/school-data-browser':  '数据浏览',
     '/ops/update':          '系统更新',
   },
   admin: {
@@ -251,6 +285,7 @@ const ROUTE_MAP = {
     '/admin/words':       '单词管理',
     '/admin/texts':       '课文管理',
     '/admin/assignments': '作业管理',
+    '/admin/sso-pending': 'SSO 用户审批',
   },
 }
 
@@ -389,6 +424,15 @@ onMounted(async () => {
     router.replace('/login')
   }
 
+  // 加载功能开关（admin/ops 走新的 /api/user/feature-toggles，能享受用户级覆盖）
+  if (props.role === 'ops' || props.role === 'admin') {
+    try {
+      await loadFeatureToggles({ authenticated: userStore.isLoggedIn })
+    } catch (e) {
+      console.error('Failed to load feature toggles:', e)
+    }
+  }
+
   // 检查 SSO 是否启用（静默失败，不影响主流程）
   try {
     const ssoRes = await getSsoStatus()
@@ -408,12 +452,11 @@ onUnmounted(() => {
 
 <style scoped>
 .mobile-layout {
-  height: 100vh;
+  height: 100dvh;
   width: 100vw;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
-  overflow: hidden;
 }
 
 /* 顶部标题栏 */
@@ -461,6 +504,7 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding-bottom: calc(60px + max(8px, env(safe-area-inset-bottom)));
 }
 
 .content-container {
@@ -476,7 +520,10 @@ onUnmounted(() => {
   background: var(--surface-color);
   border-top: 1px solid var(--border-light);
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
-  position: relative;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
 }

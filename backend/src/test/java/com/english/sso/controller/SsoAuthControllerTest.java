@@ -1,6 +1,7 @@
 package com.english.sso.controller;
 
 import com.english.entity.User;
+import com.english.sso.controller.SsoAuthController;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
 import com.english.sso.service.SsoProtocolType;

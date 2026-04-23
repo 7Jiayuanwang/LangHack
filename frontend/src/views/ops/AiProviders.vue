@@ -18,6 +18,143 @@
       />
     </el-tabs>
 
+    <!-- HiAgent 专有协议配置卡片（改写 + 问答 两套凭证应用级隔离）-->
+    <el-card class="hiagent-card" shadow="never">
+      <template #header>
+        <div class="hiagent-header">
+          <div class="hiagent-title">
+            <span class="title-text">HiAgent 专有协议配置</span>
+            <el-tag size="small" type="warning">两套凭证必须完全不同，不 fallback</el-tag>
+          </div>
+          <div class="hiagent-header-actions">
+            <el-button size="small" @click="loadHiAgentConfig" :loading="hiagentLoading">
+              <el-icon><Refresh /></el-icon>
+              重新载入
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <el-alert
+        type="info"
+        show-icon
+        :closable="false"
+        style="margin-bottom:12px"
+      >
+        <template #title>
+          <strong>AI 改写</strong> (CET-4/6/学术版/中英对照) 使用 api_key + app_id；
+          <strong>AI 问答</strong> (文章划词) 使用 qa_api_key + qa_app_id。
+          保存后立即生效（读取自 system_config，60s 内存缓存刷新）。
+        </template>
+      </el-alert>
+
+      <el-form :model="hiagentForm" label-width="130px" class="hiagent-form">
+        <el-form-item label="API 地址">
+          <el-input
+            v-model="hiagentForm.hiagent_api_url"
+            placeholder="如：https://agentbuilder.volces.com/api/v1"
+          />
+          <div class="field-hint">两套凭证共用的网关地址</div>
+        </el-form-item>
+
+        <el-divider content-position="left">
+          <span class="divider-tag">改写凭证</span>
+        </el-divider>
+
+        <el-form-item label="改写 API Key">
+          <el-input
+            v-model="hiagentForm.hiagent_api_key"
+            :type="showKeys.rewriteKey ? 'text' : 'password'"
+            :placeholder="statusMap.hiagent_api_key_configured ? '留空保持原值不变' : '尚未配置，请输入改写 API Key'"
+          >
+            <template #append>
+              <el-button @click="showKeys.rewriteKey = !showKeys.rewriteKey">
+                <el-icon><View v-if="!showKeys.rewriteKey" /><Hide v-else /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+          <div class="field-hint">
+            <el-tag size="small" :type="statusMap.hiagent_api_key_configured ? 'success' : 'danger'">
+              {{ statusMap.hiagent_api_key_configured ? '已配置' : '未配置' }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="改写 App ID">
+          <el-input v-model="hiagentForm.hiagent_app_id" placeholder="改写 App ID（明文）" />
+          <div class="field-hint">
+            <el-tag size="small" :type="statusMap.hiagent_app_id_configured ? 'success' : 'danger'">
+              {{ statusMap.hiagent_app_id_configured ? '已配置' : '未配置' }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-divider content-position="left">
+          <span class="divider-tag">问答凭证（与改写必须不同）</span>
+        </el-divider>
+
+        <el-form-item label="问答 API Key">
+          <el-input
+            v-model="hiagentForm.hiagent_qa_api_key"
+            :type="showKeys.qaKey ? 'text' : 'password'"
+            :placeholder="statusMap.hiagent_qa_api_key_configured ? '留空保持原值不变' : '尚未配置，请输入问答 API Key'"
+          >
+            <template #append>
+              <el-button @click="showKeys.qaKey = !showKeys.qaKey">
+                <el-icon><View v-if="!showKeys.qaKey" /><Hide v-else /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+          <div class="field-hint">
+            <el-tag size="small" :type="statusMap.hiagent_qa_api_key_configured ? 'success' : 'danger'">
+              {{ statusMap.hiagent_qa_api_key_configured ? '已配置' : '未配置' }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="问答 App ID">
+          <el-input v-model="hiagentForm.hiagent_qa_app_id" placeholder="问答 App ID（明文）" />
+          <div class="field-hint">
+            <el-tag size="small" :type="statusMap.hiagent_qa_app_id_configured ? 'success' : 'danger'">
+              {{ statusMap.hiagent_qa_app_id_configured ? '已配置' : '未配置' }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item>
+          <el-button type="primary" @click="saveHiAgentConfig" :loading="hiagentSaving">
+            <el-icon><Check /></el-icon>
+            保存配置
+          </el-button>
+          <el-button
+            @click="runHiAgentTest('rewrite')"
+            :loading="hiagentTesting.rewrite"
+            :disabled="!statusMap.rewrite_ready_from_db"
+          >
+            测试改写
+          </el-button>
+          <el-button
+            @click="runHiAgentTest('qa')"
+            :loading="hiagentTesting.qa"
+            :disabled="!statusMap.qa_ready_from_db"
+          >
+            测试问答
+          </el-button>
+        </el-form-item>
+      </el-form>
+
+      <!-- 改写测试结果 -->
+      <div v-if="hiagentResults.rewrite" class="test-result" :class="hiagentResults.rewrite.success ? 'is-success' : 'is-error'">
+        <span class="test-label">{{ hiagentResults.rewrite.success ? '✓ 改写测试通过' : '✗ 改写测试失败' }}</span>
+        <span class="test-detail">{{ hiagentResults.rewrite.success ? hiagentResults.rewrite.preview : hiagentResults.rewrite.error }}</span>
+      </div>
+      <!-- 问答测试结果 -->
+      <div v-if="hiagentResults.qa" class="test-result" :class="hiagentResults.qa.success ? 'is-success' : 'is-error'">
+        <span class="test-label">{{ hiagentResults.qa.success ? '✓ 问答测试通过' : '✗ 问答测试失败' }}</span>
+        <span class="test-detail">{{ hiagentResults.qa.success ? hiagentResults.qa.preview : hiagentResults.qa.error }}</span>
+      </div>
+    </el-card>
+
     <!-- 工具栏 -->
     <div class="toolbar">
       <el-tag type="info" size="small">
@@ -44,6 +181,13 @@
           <div class="provider-name">
             <el-tag :type="p.enabled === 1 ? 'success' : 'info'" size="small" style="margin-right:8px">
               {{ p.enabled === 1 ? '启用' : '禁用' }}
+            </el-tag>
+            <el-tag
+              :type="p.protocol === 'hiagent' ? 'warning' : ''"
+              size="small"
+              style="margin-right:8px"
+            >
+              {{ p.protocol === 'hiagent' ? 'HiAgent' : 'OpenAI' }}
             </el-tag>
             <span class="name-text">{{ p.name }}</span>
           </div>
@@ -122,7 +266,7 @@
       width="560px"
       :close-on-click-modal="false"
     >
-      <el-form :model="form" label-width="100px" ref="formRef" :rules="rules">
+      <el-form :model="form" label-width="100px" ref="formRef" :rules="computedRules">
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" placeholder="如：SiliconFlow-主" />
         </el-form-item>
@@ -131,8 +275,28 @@
             <el-option v-for="svc in serviceTypes" :key="svc.value" :label="svc.label" :value="svc.value" />
           </el-select>
         </el-form-item>
+        <el-form-item label="协议类型" prop="protocol">
+          <el-radio-group v-model="form.protocol" :disabled="!!editingProvider" @change="onProtocolChange">
+            <el-radio value="openai_compatible">OpenAI 兼容格式</el-radio>
+            <el-radio value="hiagent">HiAgent 专有协议</el-radio>
+          </el-radio-group>
+          <div class="field-hint" v-if="form.protocol === 'hiagent'">
+            使用 create_conversation → chat_query_v2 两步调用，需配置 App ID
+          </div>
+          <div class="field-hint" v-else>
+            标准 /v1/chat/completions 接口，Bearer Token 认证
+          </div>
+        </el-form-item>
         <el-form-item label="API 地址" prop="apiUrl">
-          <el-input v-model="form.apiUrl" placeholder="https://api.siliconflow.cn/v1/chat/completions" />
+          <el-input
+            v-model="form.apiUrl"
+            :placeholder="form.protocol === 'hiagent'
+              ? 'https://agentbuilder.volces.com/api/v1'
+              : 'https://api.siliconflow.cn/v1/chat/completions'"
+          />
+          <div class="field-hint" v-if="form.protocol === 'hiagent'">
+            HiAgent 网关地址，不含 /create_conversation 等路径后缀
+          </div>
         </el-form-item>
         <el-form-item label="API Key">
           <el-input
@@ -146,13 +310,23 @@
               </el-button>
             </template>
           </el-input>
+          <div class="field-hint" v-if="form.protocol === 'hiagent'">
+            HiAgent 请求头 Apikey 字段值
+          </div>
         </el-form-item>
-        <el-form-item label="App ID">
-          <el-input v-model="form.appId" placeholder="HiAgent 等服务商必填，其他可留空" />
-          <div class="field-hint">HiAgent Q&A 功能必须填写，其他服务商可留空</div>
+        <el-form-item v-if="form.protocol === 'hiagent'" label="App ID" prop="appId">
+          <el-input v-model="form.appId" placeholder="HiAgent App ID（必填）" />
+          <div class="field-hint">HiAgent 请求头 Appid / X-App-Id 字段值</div>
         </el-form-item>
-        <el-form-item label="模型">
+        <el-form-item v-else label="App ID">
+          <el-input v-model="form.appId" placeholder="仅极少数专有协议商需要，可留空" />
+        </el-form-item>
+        <el-form-item v-if="form.protocol !== 'hiagent'" label="模型" prop="model">
           <el-input v-model="form.model" placeholder="如：tencent/Hunyuan-MT-7B" />
+        </el-form-item>
+        <el-form-item v-else label="模型">
+          <el-input v-model="form.model" placeholder="由 App 决定，可留空" />
+          <div class="field-hint">HiAgent 协议下模型由 App 配置决定，此字段仅作备注</div>
         </el-form-item>
         <el-form-item label="权重">
           <el-input-number v-model="form.weight" :min="1" :max="100" style="width:100%" />
@@ -177,16 +351,21 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Plus, View, Hide } from '@element-plus/icons-vue'
+import { Refresh, Plus, View, Hide, Check } from '@element-plus/icons-vue'
 import {
   listAiProviders,
   createAiProvider,
   updateAiProvider,
   deleteAiProvider,
   toggleAiProvider,
-  testAiProvider
+  testAiProvider,
+  getSystemConfig,
+  updateSystemConfig,
+  getHiAgentStatus,
+  testHiAgentRewrite,
+  testHiAgentQa
 } from '@/api/systemConfig'
 
 const serviceTypes = [
@@ -210,6 +389,7 @@ const formRef         = ref(null)
 const form = ref({
   name: '',
   service: 'translate',
+  protocol: 'openai_compatible',
   apiUrl: '',
   apiKey: '',
   appId: '',
@@ -220,11 +400,23 @@ const form = ref({
   remark: ''
 })
 
-const rules = {
+const baseRules = {
   name:    [{ required: true, message: '请输入名称', trigger: 'blur' }],
   service: [{ required: true, message: '请选择服务类型', trigger: 'change' }],
+  protocol:[{ required: true, message: '请选择协议类型', trigger: 'change' }],
   apiUrl:  [{ required: true, message: '请输入 API 地址', trigger: 'blur' }]
 }
+
+const computedRules = computed(() => {
+  const r = { ...baseRules }
+  if (form.value.protocol === 'hiagent') {
+    r.appId = [{ required: true, message: 'HiAgent 协议必须填写 App ID', trigger: 'blur' }]
+  }
+  if (form.value.protocol !== 'hiagent') {
+    r.model = [{ required: true, message: '请输入模型名称', trigger: 'blur' }]
+  }
+  return r
+})
 
 const currentProviders = computed(() =>
   allProviders.value.filter(p => p.service === activeService.value)
@@ -258,6 +450,7 @@ const openCreateDialog = () => {
   form.value = {
     name: '',
     service: activeService.value,
+    protocol: 'openai_compatible',
     apiUrl: '',
     apiKey: '',
     appId: '',
@@ -276,6 +469,7 @@ const openEditDialog = (p) => {
   form.value = {
     name: p.name,
     service: p.service,
+    protocol: p.protocol || 'openai_compatible',
     apiUrl: p.apiUrl,
     apiKey: '',
     appId: p.appId || '',
@@ -288,6 +482,12 @@ const openEditDialog = (p) => {
   dialogVisible.value = true
 }
 
+const onProtocolChange = (val) => {
+  if (val === 'hiagent') {
+    form.value.appId = form.value.appId || ''
+  }
+}
+
 const handleSave = async () => {
   await formRef.value?.validate()
   saving.value = true
@@ -295,9 +495,10 @@ const handleSave = async () => {
     const payload = {
       name:      form.value.name,
       service:   form.value.service,
+      protocol:  form.value.protocol,
       apiUrl:    form.value.apiUrl,
       appId:     form.value.appId || null,
-      model:     form.value.model,
+      model:     form.value.model || (form.value.protocol === 'hiagent' ? 'hiagent-app' : ''),
       weight:    form.value.weight,
       timeoutMs: form.value.timeoutMs,
       enabled:   form.value.enabledBool ? 1 : 0,
@@ -359,7 +560,139 @@ const openTestPanel = async (p) => {
   }
 }
 
-onMounted(loadProviders)
+onMounted(() => {
+  loadProviders()
+  loadHiAgentConfig()
+})
+
+// ==================== HiAgent 凭证配置 ====================
+
+const HIAGENT_KEYS = [
+  'hiagent_api_url',
+  'hiagent_api_key',
+  'hiagent_app_id',
+  'hiagent_qa_api_key',
+  'hiagent_qa_app_id'
+]
+const HIAGENT_SECRET_KEYS = new Set(['hiagent_api_key', 'hiagent_qa_api_key'])
+
+const hiagentLoading = ref(false)
+const hiagentSaving  = ref(false)
+const hiagentTesting = reactive({ rewrite: false, qa: false })
+const hiagentResults = reactive({ rewrite: null, qa: null })
+const showKeys       = reactive({ rewriteKey: false, qaKey: false })
+const statusMap      = reactive({
+  hiagent_api_url_configured:    false,
+  hiagent_api_key_configured:    false,
+  hiagent_app_id_configured:     false,
+  hiagent_qa_api_key_configured: false,
+  hiagent_qa_app_id_configured:  false,
+  rewrite_ready_from_db:         false,
+  qa_ready_from_db:              false
+})
+
+// 保存原始（脱敏）值，用于判断用户是否修改过密钥字段
+const originalMaskedKeys = reactive({
+  hiagent_api_key:    '',
+  hiagent_qa_api_key: ''
+})
+
+const hiagentForm = reactive({
+  hiagent_api_url:    '',
+  hiagent_api_key:    '',
+  hiagent_app_id:     '',
+  hiagent_qa_api_key: '',
+  hiagent_qa_app_id:  ''
+})
+
+const loadHiAgentConfig = async () => {
+  hiagentLoading.value = true
+  try {
+    // 1) 拉 system_config（明文非密钥 + 脱敏密钥）
+    const cfgRes = await getSystemConfig('ai_config')
+    const configs = cfgRes.data?.data || cfgRes.data || []
+    const byKey = {}
+    configs.forEach(c => { byKey[c.configKey] = c })
+
+    HIAGENT_KEYS.forEach(k => {
+      const val = byKey[k]?.configValue || ''
+      if (HIAGENT_SECRET_KEYS.has(k)) {
+        hiagentForm[k] = val          // 脱敏值或空
+        originalMaskedKeys[k] = val   // 记录原始脱敏值
+      } else {
+        hiagentForm[k] = val
+      }
+    })
+
+    // 2) 拉 status（真实"是否已配置"判断）
+    const statusRes = await getHiAgentStatus()
+    const status = statusRes.data?.data || statusRes.data || {}
+    Object.keys(statusMap).forEach(k => {
+      if (k in status) statusMap[k] = !!status[k]
+    })
+
+    hiagentResults.rewrite = null
+    hiagentResults.qa = null
+  } catch (e) {
+    ElMessage.error('加载 HiAgent 配置失败')
+  } finally {
+    hiagentLoading.value = false
+  }
+}
+
+const saveHiAgentConfig = async () => {
+  hiagentSaving.value = true
+  try {
+    const payload = []
+    HIAGENT_KEYS.forEach(k => {
+      const current = (hiagentForm[k] || '').trim()
+      // 密钥字段：值未变（仍为脱敏原值）或为空，不回传，避免覆盖成脱敏串
+      if (HIAGENT_SECRET_KEYS.has(k)) {
+        if (!current) return
+        if (current === originalMaskedKeys[k]) return
+        if (current.includes('****')) return
+      }
+      payload.push({
+        configGroup: 'ai_config',
+        configKey:   k,
+        configValue: current,
+        isSecret:    HIAGENT_SECRET_KEYS.has(k) ? 1 : 0
+      })
+    })
+
+    if (payload.length === 0) {
+      ElMessage.info('未检测到修改，无需保存')
+      return
+    }
+
+    await updateSystemConfig(payload)
+    ElMessage.success('HiAgent 配置已保存，后端缓存将在 60s 内刷新')
+    await loadHiAgentConfig()
+  } catch (e) {
+    if (e?.response?.data?.message) {
+      ElMessage.error(e.response.data.message)
+    } else {
+      ElMessage.error('保存失败，请检查字段值')
+    }
+  } finally {
+    hiagentSaving.value = false
+  }
+}
+
+const runHiAgentTest = async (mode) => {
+  hiagentTesting[mode] = true
+  hiagentResults[mode] = null
+  try {
+    const res = mode === 'rewrite'
+      ? await testHiAgentRewrite()
+      : await testHiAgentQa()
+    hiagentResults[mode] = res.data?.data || res.data || {}
+  } catch (e) {
+    hiagentResults[mode] = { success: false, error: e?.response?.data?.message || '请求失败' }
+  } finally {
+    hiagentTesting[mode] = false
+  }
+}
 </script>
 
 <style scoped>
@@ -502,5 +835,38 @@ onMounted(loadProviders)
   font-size: 12px;
   color: var(--el-text-color-secondary);
   margin-top: 4px;
+}
+
+.hiagent-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.hiagent-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.hiagent-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-text {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.hiagent-form {
+  max-width: 620px;
+}
+
+.divider-tag {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
 }
 </style>

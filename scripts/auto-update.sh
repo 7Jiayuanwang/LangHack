@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# LangHack 自动更新脚本 (v2.3)
+# LangHack 自动更新脚本 (v2.4)
 # 定时从 GitHub 拉取最新代码，检测变更后自动重新构建并部署
 #
-# v2.0 新增:
+# v2.4 新增:
+#   - 支持 UPDATE_MODE=auto|docker|local
+#   - Docker 模式保留原有容器更新/回滚能力
+#   - Local 模式支持按需重启 backend/frontend dev 进程
+#   - 新增本地 PID 文件与本地健康检查/代码回退逻辑
+#
 #   - 维护模式: 更新前显示维护页面，完成后自动恢复
 #   - 数据库备份: 更新前自动 mysqldump
 #   - .env 保护: 备份 + 验证关键配置
@@ -31,23 +36,26 @@
 #
 # 用法:
 #   chmod +x scripts/auto-update.sh
-#   ./scripts/auto-update.sh                    # 默认 master 分支
+#   ./scripts/auto-update.sh                    # 默认更新当前分支
 #   ./scripts/auto-update.sh -b main            # 指定分支
 #   ./scripts/auto-update.sh -i                 # 交互式选择分支
 #   # crontab (每小时检查)
-#   0 * * * * /path/to/LangHack/scripts/auto-update.sh -b master >> /var/log/langhack-update.log 2>&1
+#   0 * * * * /path/to/LangHack/scripts/auto-update.sh >> /var/log/langhack-update.log 2>&1
 # ==============================================================================
 set -euo pipefail
 
 # ── 配置 ──────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRANCH="${DEPLOY_BRANCH:-master}"
+BRANCH="${DEPLOY_BRANCH:-}"
+UPDATE_MODE="${UPDATE_MODE:-auto}"
 # docker-compose.yml 绝对路径（优先使用环境变量覆盖）
 COMPOSE_FILE="${COMPOSE_FILE:-$PROJECT_ROOT/docker/docker-compose.yml}"
 LOG_FILE="${LOG_FILE:-/var/log/langhack-update.log}"
 LOCK_FILE="/tmp/langhack-update.lock"
 INTERACTIVE=false
 WEBHOOK_URL="${WEBHOOK_URL:-}"
+BACKEND_PID_FILE="$PROJECT_ROOT/logs/backend.pid"
+FRONTEND_PID_FILE="$PROJECT_ROOT/logs/frontend.pid"
 
 # 部署记录文件：记录上次成功部署的 commit hash
 # 用于替代 git HEAD 作为「已部署版本」的基准
@@ -108,12 +116,18 @@ while [[ $# -gt 0 ]]; do
             echo "用法: $0 [选项]"
             echo ""
             echo "选项:"
-            echo "  -b, --branch <分支名>   指定要跟踪的分支 (默认: master)"
+            echo "  -b, --branch <分支名>   指定要跟踪的分支 (默认: 当前分支)"
             echo "  -i, --interactive       交互式选择分支"
             echo "  -h, --help              显示帮助信息"
             echo ""
+            echo "模式说明:"
+            echo "  UPDATE_MODE=auto        自动识别 Docker / Local (默认)"
+            echo "  UPDATE_MODE=docker      强制使用 Docker 更新路径"
+            echo "  UPDATE_MODE=local       强制使用本地开发更新路径"
+            echo ""
             echo "环境变量 (.env):"
             echo "  DEPLOY_BRANCH              默认跟踪分支 (优先级低于 -b)"
+            echo "  UPDATE_MODE                更新模式: auto|docker|local"
             echo "  COMPOSE_FILE               docker-compose 文件路径"
             echo "  WEBHOOK_URL                通知 Webhook URL"
             echo "  AUTO_UPDATE_MAINTENANCE    更新时启用维护模式 (true/false)"
@@ -171,6 +185,201 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
 
+is_pid_running() {
+    local pid="$1"
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+read_pid_file() {
+    local pid_file="$1"
+    [ -f "$pid_file" ] || return 1
+    tr -d '[:space:]' < "$pid_file"
+}
+
+remove_pid_file() {
+    local pid_file="$1"
+    [ -f "$pid_file" ] && rm -f "$pid_file"
+}
+
+resolve_update_mode() {
+    case "$UPDATE_MODE" in
+        docker|local)
+            echo "$UPDATE_MODE"
+            return 0
+            ;;
+        auto)
+            ;;
+        *)
+            log "ERROR: UPDATE_MODE 必须是 auto、docker 或 local，当前为: $UPDATE_MODE"
+            exit 1
+            ;;
+    esac
+
+    if command -v docker >/dev/null 2>&1 && [ -f "$COMPOSE_FILE" ]; then
+        local services
+        services=$(docker compose -f "$COMPOSE_FILE" ps --services 2>/dev/null || true)
+        if echo "$services" | grep -qE '^(backend|frontend|mysql-master|mysql-slave|redis)$'; then
+            echo "docker"
+            return 0
+        fi
+    fi
+
+    if pgrep -f "spring-boot:run" >/dev/null 2>&1 || pgrep -f "vite|npm run dev" >/dev/null 2>&1 || [ -f "$PROJECT_ROOT/.env" ]; then
+        echo "local"
+        return 0
+    fi
+
+    if [ -f "$PROJECT_ROOT/docker/.env" ]; then
+        echo "docker"
+        return 0
+    fi
+
+    echo "local"
+}
+
+wait_for_port_state() {
+    local port="$1"
+    local expected="$2"
+    local timeout="${3:-30}"
+    local elapsed=0
+
+    while [ "$elapsed" -lt "$timeout" ]; do
+        local listening=false
+        if command -v ss >/dev/null 2>&1; then
+            ss -tln 2>/dev/null | grep -q ":${port}[[:space:]]" && listening=true
+        elif command -v netstat >/dev/null 2>&1; then
+            netstat -tln 2>/dev/null | grep -q ":${port}[[:space:]]" && listening=true
+        else
+            curl -s "http://localhost:${port}" >/dev/null 2>&1 && listening=true || true
+        fi
+
+        if { [ "$expected" = "open" ] && [ "$listening" = true ]; } || { [ "$expected" = "closed" ] && [ "$listening" = false ]; }; then
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    return 1
+}
+
+stop_pid_or_pattern() {
+    local pid_file="$1"
+    local pattern="$2"
+    local label="$3"
+    local pid=""
+
+    pid=$(read_pid_file "$pid_file" 2>/dev/null || true)
+    if is_pid_running "$pid"; then
+        log "LOCAL: 停止 ${label} 进程 (PID: $pid)"
+        kill "$pid" 2>/dev/null || true
+        for _ in $(seq 1 10); do
+            is_pid_running "$pid" || break
+            sleep 1
+        done
+        if is_pid_running "$pid"; then
+            log "LOCAL: 强制停止 ${label} 进程 (PID: $pid)"
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+        remove_pid_file "$pid_file"
+        return 0
+    fi
+
+    local matched
+    matched=$(pgrep -f "$pattern" 2>/dev/null || true)
+    if [ -n "$matched" ]; then
+        log "LOCAL: 停止 ${label} 进程模式匹配: $matched"
+        echo "$matched" | xargs -r kill 2>/dev/null || true
+        sleep 2
+        matched=$(pgrep -f "$pattern" 2>/dev/null || true)
+        if [ -n "$matched" ]; then
+            echo "$matched" | xargs -r kill -9 2>/dev/null || true
+        fi
+    fi
+    remove_pid_file "$pid_file"
+}
+
+local_stop_backend() {
+    stop_pid_or_pattern "$BACKEND_PID_FILE" "spring-boot:run|backend/start_backend\.sh" "backend"
+    wait_for_port_state 8080 closed 30 || log "WARN: backend 8080 端口未在预期时间内释放"
+}
+
+local_stop_frontend() {
+    stop_pid_or_pattern "$FRONTEND_PID_FILE" "vite|npm run dev" "frontend"
+    wait_for_port_state 3000 closed 30 || log "WARN: frontend 3000 端口未在预期时间内释放"
+}
+
+local_start_backend() {
+    mkdir -p "$PROJECT_ROOT/logs"
+    log "LOCAL: 启动 backend..."
+    nohup bash "$PROJECT_ROOT/backend/start_backend.sh" > "$PROJECT_ROOT/logs/backend.log" 2>&1 &
+    local pid=$!
+    echo "$pid" > "$BACKEND_PID_FILE"
+}
+
+local_start_frontend() {
+    mkdir -p "$PROJECT_ROOT/logs"
+    log "LOCAL: 启动 frontend..."
+    (cd "$PROJECT_ROOT/frontend" && nohup npm run dev > "$PROJECT_ROOT/logs/frontend.log" 2>&1 & echo $! > "$FRONTEND_PID_FILE")
+}
+
+local_wait_for_health() {
+    local timeout="${1:-120}"
+    local elapsed=0
+    log "LOCAL: 等待本地服务健康检查通过 (超时 ${timeout}s)..."
+
+    while [ "$elapsed" -lt "$timeout" ]; do
+        local backend_ok=false
+        local frontend_ok=false
+        curl -sf http://localhost:8080/api/health >/dev/null 2>&1 && backend_ok=true || true
+        curl -sf -I http://localhost:3000 >/dev/null 2>&1 && frontend_ok=true || true
+
+        if [ "$backend_ok" = true ] && [ "$frontend_ok" = true ]; then
+            log "LOCAL: 本地服务健康检查通过 ✓ (${elapsed}s)"
+            return 0
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    log "ERROR: LOCAL: 本地服务健康检查失败，请检查 logs/backend.log 与 logs/frontend.log"
+    return 1
+}
+
+local_restart_changed_services() {
+    local restart_backend="$1"
+    local restart_frontend="$2"
+
+    [ "$restart_backend" = true ] && local_stop_backend
+    [ "$restart_frontend" = true ] && local_stop_frontend
+    [ "$restart_backend" = true ] && local_start_backend
+    [ "$restart_frontend" = true ] && local_start_frontend
+    local_wait_for_health "$HEALTH_CHECK_TIMEOUT"
+}
+
+local_rollback_code_only() {
+    local old_commit="$1"
+    local restart_backend="$2"
+    local restart_frontend="$3"
+
+    log "ROLLBACK: LOCAL 模式回退到 ${old_commit:0:8}..."
+    notify "本地模式更新失败，正在回退到 ${old_commit:0:8}..."
+
+    git checkout "$old_commit" --force --quiet 2>/dev/null || {
+        log "CRITICAL: LOCAL 回退代码失败，需要人工介入"
+        ops_log "ERROR" "${old_commit:0:8}" "LOCAL 回退代码失败"
+        return 1
+    }
+
+    if local_restart_changed_services "$restart_backend" "$restart_frontend"; then
+        log "ROLLBACK: LOCAL 回退成功 ✓"
+        ops_log "ROLLBACK" "${old_commit:0:8}" "LOCAL 模式重启失败后已回退代码并恢复进程"
+        return 0
+    fi
+
+    log "CRITICAL: LOCAL 回退后重启仍失败，需要人工介入"
+    ops_log "ERROR" "${old_commit:0:8}" "LOCAL 回退后重启仍失败"
+    return 1
+}
+
 notify() {
     local message="$1"
     if [ -n "$WEBHOOK_URL" ]; then
@@ -217,6 +426,20 @@ disable_maintenance() {
     fi
 }
 
+# 清理上次部署异常中断残留的 maintenance.flag
+# (与 MAINTENANCE_ACTIVE 无关，这是会话启动时的残留清理)
+clear_stale_maintenance() {
+    [ "$MAINTENANCE_MODE" != "true" ] && return 0
+    local container
+    container=$(docker compose -f "$COMPOSE_FILE" ps -q frontend 2>/dev/null || true)
+    if [ -n "$container" ]; then
+        if MSYS_NO_PATHCONV=1 docker exec "$container" test -f /usr/share/nginx/html/maintenance.flag 2>/dev/null; then
+            log "MAINTENANCE: 检测到残留 maintenance.flag，清理中..."
+            MSYS_NO_PATHCONV=1 docker exec "$container" rm -f /usr/share/nginx/html/maintenance.flag 2>/dev/null || true
+        fi
+    fi
+}
+
 # ── .env 备份 & 验证 ─────────────────────────────────
 
 backup_env() {
@@ -227,7 +450,7 @@ backup_env() {
 
         # 清理旧备份，只保留最近 N 份
         local count
-        count=$(ls -1 "$BACKUP_DIR"/.env.pre-update.* 2>/dev/null | wc -l || echo "0")
+        count=$(ls -1 "$BACKUP_DIR"/.env.pre-update.* 2>/dev/null | wc -l | tr -d '\r' || echo "0")
         if [ "$count" -gt "$ENV_BACKUP_KEEP" ]; then
             ls -1t "$BACKUP_DIR"/.env.pre-update.* | tail -n +"$((ENV_BACKUP_KEEP + 1))" | xargs rm -f 2>/dev/null || true
             log "CONFIG: 已清理旧 .env 备份 (保留 $ENV_BACKUP_KEEP 份)"
@@ -320,16 +543,20 @@ wait_for_health() {
 
     while [ $elapsed -lt "$timeout" ]; do
         # 1. 检查是否有容器 unhealthy 或异常退出（快速失败）
-        svc_statuses=$(docker compose -f "$DOCKER_DIR/docker-compose.yml" \
+        svc_statuses=$(docker compose -f "$COMPOSE_FILE" \
             ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
         if [ -n "$svc_statuses" ]; then
             failed=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
+            # 维护模式期间，frontend 因 nginx 返回 503 必然 unhealthy，这是设计行为，排除
+            if [ "$MAINTENANCE_ACTIVE" = "true" ]; then
+                failed=$(echo "$failed" | grep -v '^frontend$' || true)
+            fi
             if [ -n "$failed" ]; then
                 log "ERROR: HEALTH: 以下服务启动失败，终止健康等待："
                 echo "$failed" | while read -r svc; do
                     log "ERROR:   [$svc] $(echo "$svc_statuses" | awk -F'\t' -v s="$svc" '$1==s{print $2}')"
                     log "ERROR:   [$svc] 最近日志:"
-                    docker compose -f "$DOCKER_DIR/docker-compose.yml" logs --tail=20 "$svc" 2>/dev/null \
+                    docker compose -f "$COMPOSE_FILE" logs --tail=20 "$svc" 2>/dev/null \
                         | while read -r line; do log "         $line"; done
                 done
                 return 1
@@ -349,7 +576,7 @@ wait_for_health() {
 
     log "ERROR: HEALTH: 健康检查超时 (${timeout}s)"
     # 超时时打印当前容器状态
-    docker compose -f "$DOCKER_DIR/docker-compose.yml" ps 2>/dev/null | while read -r line; do
+    docker compose -f "$COMPOSE_FILE" ps 2>/dev/null | while read -r line; do
         log "         $line"
     done
     return 1
@@ -429,12 +656,21 @@ run_incremental_migrations() {
         return 1
     fi
 
+    # Git LFS 指针文件检测：LFS 文件未下载时内容是版本指针而非真实 SQL
+    if head -1 "$migration_sql" 2>/dev/null | grep -qE '^version https://git-lfs\.github\.com'; then
+        log "ERROR: MIGRATE: 迁移脚本为 Git LFS 指针文件，未下载真实内容"
+        log "ERROR:   文件: $migration_sql"
+        log "ERROR:   请执行 'git lfs pull' 后重新部署"
+        notify "部署阻塞: 迁移脚本是 LFS 指针文件，请执行 git lfs pull"
+        return 1
+    fi
+
     # 版本同步校验：Flyway 文件数 vs 合并脚本头部列表
     local flyway_dir="$PROJECT_ROOT/backend/src/main/resources/db/migration"
     if [ -d "$flyway_dir" ]; then
         local flyway_count merged_count
-        flyway_count=$(ls "$flyway_dir"/V*.sql 2>/dev/null | wc -l || echo 0)
-        merged_count=$(grep -cE '^--   V[0-9]+__' "$migration_sql" 2>/dev/null || echo 0)
+        flyway_count=$(ls "$flyway_dir"/V*.sql 2>/dev/null | wc -l | tr -d '\r' || echo 0)
+        merged_count=$(grep -cE '^--   V[0-9]+(\.[0-9]+)?__' "$migration_sql" 2>/dev/null | tr -d '\r' || echo 0)
         if [ "$flyway_count" -gt "$merged_count" ]; then
             log "ERROR: MIGRATE: 迁移脚本版本不同步，阻塞部署"
             log "ERROR:   Flyway 文件数: ${flyway_count}"
@@ -495,6 +731,109 @@ run_incremental_migrations() {
         log "$migrate_errors"
     fi
     log "MIGRATE: 增量迁移完成 ✓ (V1~V${max_ver})"
+
+    # 种子数据检查与自动补全：docker compose down -v 后可能丢失
+    local texts_count ecdict_count article_count
+    texts_count=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" \
+        -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    ecdict_count=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" \
+        -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    article_count=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" \
+        -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+
+    local need_seed=false
+    [ "${texts_count:-0}" = "0" ] && need_seed=true
+    [ "${ecdict_count:-0}" -lt 100000 ] && need_seed=true
+
+    if [ "$need_seed" = true ]; then
+        log "SEED: 检测到空数据库（texts: ${texts_count}, ecdict_words: ${ecdict_count}, article: ${article_count}），开始自动导入..."
+
+        local db_name="${MYSQL_DATABASE:-english_learning}"
+
+        # ① 全量备份
+        local seed_file=""
+        for dir in "$PROJECT_ROOT/database" "$PROJECT_ROOT/backups"; do
+            [ -d "$dir" ] || continue
+            for file in "$dir"/*.sql "$dir"/*.sql.gz; do
+                [ -f "$file" ] || continue
+                basename "$file" | grep -q "_incr_" && continue
+                local fsize; fsize=$(stat -c%s "$file" 2>/dev/null || echo "0")
+                [ "$fsize" -lt 1024 ] && continue
+                basename "$file" | grep -qi "schema_export" && continue
+                if [ -z "$seed_file" ]; then
+                    seed_file="$file"
+                else
+                    local cur_mtime best_mtime
+                    cur_mtime=$(stat -c%Y "$file" 2>/dev/null || echo "0")
+                    best_mtime=$(stat -c%Y "$seed_file" 2>/dev/null || echo "0")
+                    [ "$cur_mtime" -gt "$best_mtime" ] && seed_file="$file"
+                fi
+            done
+        done
+
+        if [ -n "$seed_file" ] && [ -f "$seed_file" ]; then
+            log "SEED: 导入全量备份: $(basename "$seed_file")"
+            case "$seed_file" in
+                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql)    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
+            esac
+            log "SEED: 全量备份导入完成 ✓"
+        else
+            log "WARN: SEED: 未找到全量备份文件，跳过"
+        fi
+
+        # ② 3Blue1Brown 课文
+        local article_dir="$PROJECT_ROOT/database/3Blue1Brown"
+        if [ -d "$article_dir" ]; then
+            local article_after; article_after=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+                -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+            if [ "${article_after:-0}" = "0" ]; then
+                log "SEED: 导入课文数据 (3Blue1Brown)..."
+                for f in "$article_dir"/*.sql; do
+                    [ -f "$f" ] || continue
+                    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
+                done
+                log "SEED: 课文数据导入完成 ✓"
+            fi
+        fi
+
+        # ③ ECDICT 词典
+        local ecdict_after; ecdict_after=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+            -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        if [ "${ecdict_after:-0}" -lt 100000 ]; then
+            local ecdict_csv="$PROJECT_ROOT/ECDICT-master/ecdict.csv"
+            if [ -f "$ecdict_csv" ]; then
+                log "SEED: 导入 ECDICT 词典（预计 1-3 分钟）..."
+                docker cp "$ecdict_csv" "$mysql_container:/tmp/ecdict.csv"
+                docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
+                docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" --local-infile=1 "$db_name" -e \
+                    "TRUNCATE TABLE ecdict_words;
+                     LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
+                     INTO TABLE ecdict_words
+                     CHARACTER SET utf8mb4
+                     FIELDS TERMINATED BY ','
+                     OPTIONALLY ENCLOSED BY '\"'
+                     LINES TERMINATED BY '\n'
+                     IGNORE 1 LINES
+                     (word, phonetic, definition, translation, pos, collins, oxford, tag, bnc, frq, exchange, @detail, @audio);" 2>&1 \
+                    | grep -v "Using a password" || true
+                docker exec "$mysql_container" rm -f /tmp/ecdict.csv
+                log "SEED: ECDICT 词典导入完成 ✓"
+            else
+                log "WARN: SEED: ECDICT CSV 不存在: $ecdict_csv"
+            fi
+        fi
+
+        # 验证
+        local texts_final ecdict_final article_final
+        texts_final=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+            -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        ecdict_final=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+            -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        article_final=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+            -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        log "SEED: 种子数据导入完成 ✓ (texts: ${texts_final}, ecdict_words: ${ecdict_final}, article: ${article_final})"
+    fi
 
     # 验证从库复制延迟
     local slave_container slave_lag_wait=0
@@ -653,12 +992,25 @@ if [ -f "$LOCK_FILE" ]; then
 fi
 echo $$ > "$LOCK_FILE"
 trap cleanup EXIT
+trap 'log "WARN: 收到中断信号，正在安全退出..."; exit 130' SIGINT SIGTERM
 
 # ── 进入项目目录 ──────────────────────────────────────
 cd "$PROJECT_ROOT"
 
-# ── 确保在目标分支上 ──────────────────────────────────
+RUNTIME_MODE=$(resolve_update_mode)
+log "INFO: 当前更新模式: $RUNTIME_MODE"
+
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+if [ -z "$BRANCH" ]; then
+    if [ "$CURRENT_BRANCH" = "HEAD" ] || [ "$CURRENT_BRANCH" = "unknown" ]; then
+        log "ERROR: 无法识别当前分支，请使用 -b <分支名> 或设置 DEPLOY_BRANCH"
+        notify "自动更新失败: 无法识别当前分支"
+        exit 1
+    fi
+    BRANCH="$CURRENT_BRANCH"
+fi
+
+# ── 确保在目标分支上 ──────────────────────────────────
 if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
     log "INFO: 切换分支 $CURRENT_BRANCH → $BRANCH"
     git checkout "$BRANCH" --quiet 2>/dev/null || {
@@ -747,6 +1099,7 @@ PRE_PULL_COMMIT="$LOCAL_HASH"   # 保存 pull 前的 HEAD，用于 git checkout 
 OLD_COMMIT="$DEPLOYED_HASH"     # 用已部署 commit 作为 diff 基准，检测本次变更范围
 
 # ② 开启维护模式
+clear_stale_maintenance
 enable_maintenance
 
 # ③ 备份 .env 配置文件
@@ -763,13 +1116,26 @@ fi
 # ⑤ 数据库备份
 pre_update_backup
 
-# ⑥ 拉取新代码
+# ⑥ 拉取新代码（强制同步，清理本地修改/未跟踪文件冲突）
 log "INFO: 拉取最新代码..."
+git stash --include-untracked 2>/dev/null || true
+git checkout --force "$BRANCH" --quiet 2>/dev/null || true
 if ! git pull origin "$BRANCH" --ff-only; then
-    log "ERROR: git pull 失败（可能有本地冲突），跳过本次更新"
-    notify "自动更新失败: git pull 出现冲突，需要手动处理"
-    disable_maintenance
-    exit 1
+    # ff-only 失败时尝试 reset（应对本地历史与远程分叉的情况）
+    log "WARN: fast-forward 失败，尝试 reset 到远程版本..."
+    if git reset --hard "origin/$BRANCH" --quiet 2>/dev/null; then
+        log "INFO: 已强制同步到远程版本"
+    else
+        log "ERROR: git pull/reset 均失败，跳过本次更新"
+        notify "自动更新失败: git pull 出现冲突，需要手动处理"
+        disable_maintenance
+        exit 1
+    fi
+fi
+
+# ⑥.5 确保 Git LFS 文件已下载（git pull 后 LFS 文件可能仍为指针）
+if command -v git-lfs &>/dev/null || git lfs version &>/dev/null; then
+    git lfs pull 2>/dev/null || log "WARN: git lfs pull 失败，LFS 文件可能未下载（如 .sql 迁移脚本）"
 fi
 
 # ⑦ 验证 .env 仍存在
@@ -807,95 +1173,117 @@ if echo "$CHANGED_FILES" | grep -qE '(docker/mysql/init/04-apply-all-migrations\
     log "INFO: 检测到数据库迁移脚本变更，将执行增量迁移"
 fi
 
-# ── 执行重建 ──────────────────────────────────────────
-if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
-    SERVICES=""
-    [ "$REBUILD_BACKEND" = true ] && SERVICES="backend"
-    [ "$REBUILD_FRONTEND" = true ] && SERVICES="${SERVICES:+$SERVICES }frontend"
+if [ "$RUNTIME_MODE" = "local" ] && [ "$RUN_MIGRATIONS" = true ]; then
+    log "WARN: LOCAL 模式检测到迁移文件变化；当前不会自动执行容器式迁移，请手动确认本地数据库 schema。"
+fi
 
-    # ⑨ 构建新镜像（旧容器仍在运行）
-    log "INFO: 构建新镜像... (服务: $SERVICES)"
-    if ! docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES; then
-        log "ERROR: 构建失败，回退代码"
-        notify "自动更新失败: Docker 构建失败，正在回退代码..."
-        # 构建失败 → 旧容器未受影响，只需 revert git
-        git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
-        # 部署记录文件不更新，保持指向上次成功部署的 commit
-        disable_maintenance
-        notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
-        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
-        exit 1
-    fi
+# ── 执行重建 / 重启 ───────────────────────────────────
+if [ "$RUNTIME_MODE" = "docker" ]; then
+    if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
+        SERVICES=""
+        [ "$REBUILD_BACKEND" = true ] && SERVICES="backend"
+        [ "$REBUILD_FRONTEND" = true ] && SERVICES="${SERVICES:+$SERVICES }frontend"
 
-    # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
-    if [ "$RUN_MIGRATIONS" = true ]; then
-        run_incremental_migrations || {
-            log "ERROR: 增量迁移失败，回退代码（旧容器未受影响）"
+        # ⑨ 构建新镜像（旧容器仍在运行）
+        log "INFO: 构建新镜像... (服务: $SERVICES)"
+        if ! docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES; then
+            log "ERROR: 构建失败，回退代码"
+            notify "自动更新失败: Docker 构建失败，正在回退代码..."
+            # 构建失败 → 旧容器未受影响，只需 revert git
             git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+            # 部署记录文件不更新，保持指向上次成功部署的 commit
             disable_maintenance
-            notify "自动更新失败: 数据库迁移失败，已回退代码，旧服务继续运行"
-            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "迁移失败，已回退代码，部署记录未更新"
+            notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
+            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
             exit 1
-        }
-        verify_flyway_migrations || {
-            log "ERROR: Schema 验证失败，回退代码（旧容器未受影响）"
-            git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+        fi
+
+        # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
+        if [ "$RUN_MIGRATIONS" = true ]; then
+            run_incremental_migrations || {
+                log "ERROR: 增量迁移失败，回退代码（旧容器未受影响）"
+                git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+                disable_maintenance
+                notify "自动更新失败: 数据库迁移失败，已回退代码，旧服务继续运行"
+                ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "迁移失败，已回退代码，部署记录未更新"
+                exit 1
+            }
+            verify_flyway_migrations || {
+                log "ERROR: Schema 验证失败，回退代码（旧容器未受影响）"
+                git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+                disable_maintenance
+                notify "自动更新失败: Schema 验证失败，已回退代码，旧服务继续运行"
+                ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "Schema 验证失败，已回退代码，部署记录未更新"
+                exit 1
+            }
+        fi
+
+        # ⑩.5 替换为新容器（Schema 已就绪，后端可安全启动）
+        log "INFO: 启动新容器..."
+        docker compose -f "$COMPOSE_FILE" up -d $SERVICES
+
+        # ⑪ 健康检查
+        if wait_for_health $HEALTH_CHECK_TIMEOUT; then
+            # ⑫ 成功！关闭维护模式并更新部署记录
             disable_maintenance
-            notify "自动更新失败: Schema 验证失败，已回退代码，旧服务继续运行"
-            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "Schema 验证失败，已回退代码，部署记录未更新"
+
+            NEW_COMMIT=$(git rev-parse HEAD)
+            echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+
+            # ⑫.5 数据完整性告警检查（不触发回滚，仅告警）
+            verify_ai_providers
+
+            log "SUCCESS: 服务已更新并重启"
+            log "  更新服务: $SERVICES"
+            log "  当前版本: $(git rev-parse --short HEAD)"
+            log "  提交信息: $(git log -1 --format='%s')"
+            ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "$(git log -1 --format='%s') [服务: $SERVICES]"
+
+            notify "自动更新成功\n版本: $(git rev-parse --short HEAD)\n提交: $(git log -1 --format='%s')\n服务: $SERVICES"
+        else
+            # 健康检查失败 → 自动回滚
+            log "ERROR: 新版本健康检查失败，启动自动回滚..."
+            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
             exit 1
-        }
-    fi
-
-    # ⑩.5 替换为新容器（Schema 已就绪，后端可安全启动）
-    log "INFO: 启动新容器..."
-    docker compose -f "$COMPOSE_FILE" up -d $SERVICES
-
-    # ⑪ 健康检查
-    if wait_for_health $HEALTH_CHECK_TIMEOUT; then
-        # ⑫ 成功！关闭维护模式并更新部署记录
-        disable_maintenance
-
+        fi
+    else
+        log "INFO: 变更不涉及前后端代码（可能是文档/脚本/迁移），跳过重建"
+        if [ "$RUN_MIGRATIONS" = true ]; then
+            run_incremental_migrations || {
+                log "ERROR: 迁移执行失败，启动自动回滚..."
+                rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+                exit 1
+            }
+            verify_flyway_migrations || {
+                log "ERROR: Schema 验证失败，启动自动回滚..."
+                rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+                exit 1
+            }
+        fi
         NEW_COMMIT=$(git rev-parse HEAD)
         echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
-
-        # ⑫.5 数据完整性告警检查（不触发回滚，仅告警）
-        verify_ai_providers
-
-        log "SUCCESS: 服务已更新并重启"
-        log "  更新服务: $SERVICES"
-        log "  当前版本: $(git rev-parse --short HEAD)"
-        log "  提交信息: $(git log -1 --format='%s')"
-        ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "$(git log -1 --format='%s') [服务: $SERVICES]"
-
-        notify "自动更新成功\n版本: $(git rev-parse --short HEAD)\n提交: $(git log -1 --format='%s')\n服务: $SERVICES"
-    else
-        # 健康检查失败 → 自动回滚
-        log "ERROR: 新版本健康检查失败，启动自动回滚..."
-        rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
-        # disable_maintenance 在 rollback 内部或 trap cleanup 中处理
-        exit 1
+        ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "仅文档/脚本变更，跳过重建"
+        disable_maintenance
     fi
 else
-    log "INFO: 变更不涉及前后端代码（可能是文档/脚本/迁移），跳过重建"
-    # 即使不重建，也要执行迁移（如仅合并 SQL 或 Flyway 文件有更新）
-    if [ "$RUN_MIGRATIONS" = true ]; then
-        run_incremental_migrations || {
-            log "ERROR: 迁移执行失败，启动自动回滚..."
-            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
+    if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
+        if local_restart_changed_services "$REBUILD_BACKEND" "$REBUILD_FRONTEND"; then
+            NEW_COMMIT=$(git rev-parse HEAD)
+            echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+            log "SUCCESS: LOCAL 模式服务已更新并重启"
+            ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "LOCAL 模式更新成功 [backend=$REBUILD_BACKEND frontend=$REBUILD_FRONTEND]"
+            notify "本地模式自动更新成功\n版本: $(git rev-parse --short HEAD)\n提交: $(git log -1 --format='%s')"
+        else
+            log "ERROR: LOCAL 模式健康检查失败，启动代码回退..."
+            local_rollback_code_only "$PRE_PULL_COMMIT" "$REBUILD_BACKEND" "$REBUILD_FRONTEND"
             exit 1
-        }
-        verify_flyway_migrations || {
-            log "ERROR: Schema 验证失败，启动自动回滚..."
-            rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
-            exit 1
-        }
+        fi
+    else
+        NEW_COMMIT=$(git rev-parse HEAD)
+        echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
+        log "INFO: LOCAL 模式检测到无需重启的变更，更新部署记录"
+        ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "LOCAL 模式仅文档/脚本变更，跳过重启"
     fi
-    # 无需重建，更新部署记录到最新 commit，直接关闭维护模式
-    NEW_COMMIT=$(git rev-parse HEAD)
-    echo "$NEW_COMMIT" > "$DEPLOY_RECORD_FILE"
-    ops_log "SUCCESS" "$(git rev-parse --short HEAD)" "仅文档/脚本变更，跳过重建"
-    disable_maintenance
 fi
 
 log "──── 更新完成 ────"

@@ -1,6 +1,31 @@
+# application-test.yml is loaded automatically when test profile is active.
+# Only overrides needed for the test profile go here.
+
+# 测试环境启用 Flyway 自动建表
 spring:
-  profiles: test
+  flyway:
+    enabled: true
+    url: ${DB_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
+    user: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    validate-on-migrate: false
+  main:
+    allow-bean-definition-overriding: true
+  cache:
+    type: none
 
 # 测试环境禁用 SSO
 sso:
   enabled: false
+
+# 测试环境禁用备份调度
+backup:
+  enabled: false
+
+# 测试环境禁用学校数据同步调度
+school:
+  data:
+    sync:
+      enabled: false

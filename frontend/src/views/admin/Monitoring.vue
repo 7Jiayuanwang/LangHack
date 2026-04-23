@@ -121,7 +121,7 @@
     <div class="section-title" style="margin-top: 16px;">
       最近 AI 调用日志
       <el-select v-model="aiLogFilter" placeholder="全部服务" clearable size="small"
-                 style="width: 160px; margin-left: 12px;" @change="loadAiCallsRecent">
+                 style="width: 160px; margin-left: 12px;">
         <el-option v-for="s in serviceNames" :key="s" :label="formatServiceName(s)" :value="s" />
       </el-select>
       <el-select v-model="aiLogStatusFilter" placeholder="全部状态" clearable size="small"
@@ -474,7 +474,7 @@ const loadAiCallsRecent = async () => {
 const loadAppLogs = async () => {
   appLogsLoading.value = true
   try {
-    const params = { limit: 500 }
+    const params = { limit: 100 }
     if (appLogLevelFilter.value) params.level = appLogLevelFilter.value
     if (appLogKeyword.value) params.keyword = appLogKeyword.value
     const res = await getApplicationLogs(params)
@@ -492,16 +492,23 @@ watch(appLogLevelFilter, () => loadAppLogs())
 const refreshAll = async () => {
   refreshing.value = true
   try {
-    await Promise.all([
+    // 优先加载关键指标卡（实时 + 系统），避免首屏空白
+    const snapshotPromise = (async () => {
+      try {
+        const [rtRes, sysRes] = await Promise.all([getRealTimeMetrics(), getSystemMetrics()])
+        if (rtRes.code === 200) Object.assign(realtime, rtRes.data)
+        if (sysRes.code === 200) Object.assign(system, sysRes.data)
+      } catch { /* ignore */ }
+    })()
+
+    // 次要数据错峰加载（图表/日志/AI），避免 9 个请求同时打后端
+    const secondaryPromise = Promise.all([
       loadChartData(), loadTopPages(), loadAiStats(),
       loadAiDailyData(), loadAiCallsRecent(), loadAppLogs()
     ])
-    // Always fetch a snapshot to avoid empty cards before the first SSE message arrives.
-    try {
-      const [rtRes, sysRes] = await Promise.all([getRealTimeMetrics(), getSystemMetrics()])
-      if (rtRes.code === 200) Object.assign(realtime, rtRes.data)
-      if (sysRes.code === 200) Object.assign(system, sysRes.data)
-    } catch { /* ignore */ }
+
+    await snapshotPromise
+    await secondaryPromise
   } catch {
     ElMessage.error('刷新失败')
   } finally {
@@ -572,7 +579,8 @@ const getSuccessRateColor = (rate) => {
 // Lifecycle
 onMounted(() => {
   connectSSE()
-  refreshAll()
+  // 错峰启动：先连 SSE 拿 realtime/system 快照，其余 HTTP 推后一拍
+  setTimeout(() => { refreshAll() }, 0)
 })
 
 onBeforeUnmount(() => {

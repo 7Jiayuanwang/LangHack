@@ -114,7 +114,8 @@ public class AsrController {
             String result = asrService.recognize(request.getAudioData(), format, lang);
             return Result.success(result);
         } catch (Exception e) {
-            log.debug("ASR recognition failed, format={}, lang={}", format, lang, e);
+            log.error("ASR 识别调用外部服务失败 user={} format={} lang={} audioLen={} err={}",
+                    userId, format, lang, request.getAudioData().length(), e.getMessage(), e);
             return Result.error("语音识别失败，请稍后重试");
         }
     }

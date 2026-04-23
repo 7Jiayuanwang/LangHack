@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.SchoolTeacherMapper">
+
+    <!-- 教师主数据 UPSERT：按 teacher_id 唯一键 -->
+    <insert id="upsertByTeacherId" parameterType="com.english.entity.SchoolTeacher" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO school_teacher (
+            teacher_id, teacher_name, college_name, college_code,
+            sync_time, last_schedule_sync_time, sync_source
+        ) VALUES (
+            #{teacherId}, #{teacherName}, #{collegeName}, #{collegeCode},
+            #{syncTime}, #{lastScheduleSyncTime}, #{syncSource}
+        )
+        ON DUPLICATE KEY UPDATE
+            teacher_name = COALESCE(#{teacherName}, teacher_name),
+            college_name = #{collegeName},
+            college_code = COALESCE(#{collegeCode}, college_code),
+            sync_time = #{syncTime},
+            last_schedule_sync_time = COALESCE(#{lastScheduleSyncTime}, last_schedule_sync_time),
+            sync_source = #{syncSource}
+    </insert>
+
+    <select id="selectByTeacherId" resultType="com.english.entity.SchoolTeacher">
+        SELECT * FROM school_teacher WHERE teacher_id = #{teacherId} LIMIT 1
+    </select>
+
+</mapper>

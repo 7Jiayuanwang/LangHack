@@ -13,25 +13,75 @@
           <el-icon class="is-loading" :size="32"><Loading /></el-icon>
           <p>加载中...</p>
         </div>
-        <div v-else class="toggles-list">
-          <div v-for="toggle in toggles" :key="toggle.configKey" class="toggle-card">
-            <div class="toggle-info">
-              <h3 class="toggle-name">{{ toggle.description }}</h3>
-              <span class="toggle-key">{{ toggle.configKey }}</span>
-            </div>
-            <el-switch
-              v-model="toggle.enabled"
-              @change="(val) => handleToggle(toggle, val)"
-              :loading="toggle.saving"
-              active-text="启用"
-              inactive-text="关闭"
-            />
+        <template v-else>
+          <div class="role-filter-row">
+            <span class="role-filter-label">按角色筛选：</span>
+            <el-radio-group v-model="roleFilter" size="default">
+              <el-radio-button value="all">
+                全部 <el-tag size="small" round>{{ toggles.length }}</el-tag>
+              </el-radio-button>
+              <el-radio-button
+                v-for="g in groupDefs"
+                :key="g.key"
+                :value="g.key"
+              >
+                {{ g.label }}
+                <el-tag size="small" round :type="countTagType(g.key)">
+                  {{ groupCounts[g.key] || 0 }}
+                </el-tag>
+              </el-radio-button>
+            </el-radio-group>
           </div>
-        </div>
-        <div class="save-hint" v-if="!loadingGlobal">
-          <el-icon><InfoFilled /></el-icon>
-          <span>全局开关即时生效，学生刷新后可见变化</span>
-        </div>
+
+          <el-collapse v-model="activeGroupPanels" class="group-collapse">
+            <el-collapse-item
+              v-for="group in visibleGroupedToggles"
+              :key="group.key"
+              :name="group.key"
+            >
+              <template #title>
+                <div class="group-title">
+                  <el-icon class="group-icon" :class="`group-icon--${group.key}`">
+                    <component :is="group.iconName" />
+                  </el-icon>
+                  <span class="group-label">{{ group.label }}</span>
+                  <el-tag size="small" :type="countTagType(group.key)" round class="group-count">
+                    {{ group.items.length }}
+                  </el-tag>
+                  <span class="group-desc">{{ group.desc }}</span>
+                </div>
+              </template>
+              <div class="toggles-list">
+                <div
+                  v-for="toggle in group.items"
+                  :key="toggle.configKey"
+                  class="toggle-card"
+                >
+                  <div class="toggle-info">
+                    <h3 class="toggle-name">{{ toggle.description }}</h3>
+                    <span class="toggle-key">{{ toggle.configKey }}</span>
+                  </div>
+                  <el-switch
+                    v-model="toggle.enabled"
+                    @change="(val) => handleToggle(toggle, val)"
+                    :loading="toggle.saving"
+                    active-text="启用"
+                    inactive-text="关闭"
+                  />
+                </div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+
+          <div v-if="visibleGroupedToggles.length === 0" class="empty-filter">
+            当前筛选无任何开关
+          </div>
+
+          <div class="save-hint">
+            <el-icon><InfoFilled /></el-icon>
+            <span>全局开关即时生效；用户刷新页面后立即可见变化</span>
+          </div>
+        </template>
       </el-tab-pane>
 
       <!-- ── Tab 2：标签管理 ──────────────────────────────────────── -->
@@ -284,9 +334,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, InfoFilled, Plus, User, Refresh } from '@element-plus/icons-vue'
+import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled } from '@element-plus/icons-vue'
 import {
   getSystemConfig, updateSystemConfig,
   listAllTags, getUsersByTag, deleteTag, getUserTags, setUserTags,
@@ -303,6 +353,53 @@ watch(activeTab, (val) => {
 // ── Tab1：全局开关 ──────────────────────────────────────────────────
 const loadingGlobal = ref(true)
 const toggles = ref([])
+
+// 角色分组定义（按 configKey 前缀分组）
+const groupDefs = [
+  { key: 'student', label: '学生端', desc: '学生端页面与导航可见性', prefix: 'page_', iconName: 'User' },
+  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',  prefix: 'admin.', iconName: 'Management' },
+  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',  prefix: 'ops.',   iconName: 'Monitor' },
+  { key: 'other',   label: '其他',    desc: '未归类的全局开关',        prefix: null,     iconName: 'MoreFilled' }
+]
+
+const roleFilter = ref('all')
+const activeGroupPanels = ref(['student', 'admin', 'ops', 'other'])
+
+const categorize = (key) => {
+  const hit = groupDefs.find(g => g.prefix && key && key.startsWith(g.prefix))
+  return hit ? hit.key : 'other'
+}
+
+const groupedToggles = computed(() => {
+  const groups = groupDefs.map(g => ({ ...g, items: [] }))
+  const otherGroup = groups.find(g => g.key === 'other')
+  for (const t of toggles.value) {
+    const cat = categorize(t.configKey)
+    const target = groups.find(g => g.key === cat) || otherGroup
+    target.items.push(t)
+  }
+  return groups.filter(g => g.items.length > 0)
+})
+
+const visibleGroupedToggles = computed(() => {
+  if (roleFilter.value === 'all') return groupedToggles.value
+  return groupedToggles.value.filter(g => g.key === roleFilter.value)
+})
+
+const groupCounts = computed(() => {
+  const counts = {}
+  for (const g of groupedToggles.value) counts[g.key] = g.items.length
+  return counts
+})
+
+const countTagType = (key) => {
+  switch (key) {
+    case 'student': return 'info'
+    case 'admin':   return 'danger'
+    case 'ops':     return 'warning'
+    default:        return ''
+  }
+}
 
 const loadToggles = async () => {
   loadingGlobal.value = true
@@ -605,6 +702,76 @@ onMounted(() => {
   flex-direction: column;
   gap: 12px;
   margin-top: 8px;
+}
+
+.role-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.role-filter-label {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.role-filter-row :deep(.el-radio-button__inner) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group-collapse {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding-right: 8px;
+}
+
+.group-icon {
+  font-size: 16px;
+}
+
+.group-icon--student { color: #2563eb; }
+.group-icon--admin   { color: #dc2626; }
+.group-icon--ops     { color: #d97706; }
+.group-icon--other   { color: #64748b; }
+
+.group-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.group-count {
+  margin-left: 2px;
+}
+
+.group-desc {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: normal;
+}
+
+.empty-filter {
+  padding: 40px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .toggle-card {

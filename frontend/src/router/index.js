@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useUserStore } from "@/store/user";
 import { isValidToken } from "@/utils/auth";
+import { useFeatureToggles } from "@/composables/useFeatureToggles";
 
 const routes = [
   {
@@ -10,14 +11,14 @@ const routes = [
   {
     path: "/articles",
     name: "Articles",
-    component: () => import("@/views/public/Articles.vue"),
-    meta: { title: "文章列表", public: true }, // 标记为公开页面
+    component: () => import("@/views/shared/ArticlesHost.vue"),
+    meta: { title: "文章列表" }, // 需登录：未登录用户重定向到 SSO 统一身份认证
   },
   {
     path: "/article/:id",
     name: "ArticleDetail",
-    component: () => import("@/views/user/SimpleTextView.vue"),
-    meta: { title: "文章详情", public: true }, // 公开的文章详情页
+    component: () => import("@/views/shared/ArticleDetailHost.vue"),
+    meta: { title: "文章详情", public: true }, // 公开页面：游客可看，登录用户保留身份 Layout
   },
   {
     path: "/login",
@@ -48,63 +49,69 @@ const routes = [
         path: "dashboard",
         name: "AdminDashboard",
         component: () => import("@/views/admin/Dashboard.vue"),
-        meta: { title: "仪表盘", roles: ["ADMIN"] },
+        meta: { title: "仪表盘", roles: ["ADMIN"], featureKey: "admin.dashboard" },
       },
       {
         path: "courses",
         name: "AdminCourses",
         component: () => import("@/views/admin/Courses.vue"),
-        meta: { title: "课程管理", roles: ["ADMIN"] },
+        meta: { title: "课程管理", roles: ["ADMIN"], featureKey: "admin.courses" },
       },
       {
         path: "classes",
         name: "AdminClasses",
         component: () => import("@/views/admin/Classes.vue"),
-        meta: { title: "班级管理", roles: ["ADMIN"] },
+        meta: { title: "班级管理", roles: ["ADMIN"], featureKey: "admin.classes" },
       },
       {
         path: "users",
         name: "AdminUsers",
         component: () => import("@/views/admin/Users.vue"),
-        meta: { title: "用户管理", roles: ["ADMIN"] },
+        meta: { title: "用户管理", roles: ["ADMIN"], featureKey: "admin.users" },
       },
       {
         path: "units",
         name: "AdminUnits",
         component: () => import("@/views/admin/Units.vue"),
-        meta: { title: "单元管理", roles: ["ADMIN"] },
+        meta: { title: "单元管理", roles: ["ADMIN"], featureKey: "admin.units" },
       },
       {
         path: "units/:unitId/words",
         name: "AdminUnitWords",
         component: () => import("@/views/admin/UnitWords.vue"),
-        meta: { title: "单元单词管理", roles: ["ADMIN"] },
+        meta: { title: "单元单词管理", roles: ["ADMIN"], featureKey: "admin.units" },
         props: true,
       },
       {
         path: "units/:unitId/texts",
         name: "AdminUnitTexts",
         component: () => import("@/views/admin/UnitTexts.vue"),
-        meta: { title: "单元课文管理", roles: ["ADMIN"] },
+        meta: { title: "单元课文管理", roles: ["ADMIN"], featureKey: "admin.units" },
         props: true,
       },
       {
         path: "words",
         name: "AdminWords",
         component: () => import("@/views/admin/Words.vue"),
-        meta: { title: "单词管理", roles: ["ADMIN"] },
+        meta: { title: "单词管理", roles: ["ADMIN"], featureKey: "admin.words" },
       },
       {
         path: "texts",
         name: "AdminTexts",
         component: () => import("@/views/admin/Texts.vue"),
-        meta: { title: "课文管理", roles: ["ADMIN"] },
+        meta: { title: "课文管理", roles: ["ADMIN"], featureKey: "admin.texts" },
       },
       {
         path: "assignments",
         name: "AdminAssignments",
         component: () => import("@/views/admin/Assignments.vue"),
-        meta: { title: "作业管理", roles: ["ADMIN"] },
+        meta: { title: "作业管理", roles: ["ADMIN"], featureKey: "admin.assignments" },
+      },
+      {
+        path: "text-preview",
+        name: "AdminTextPreview",
+        component: () => import("@/views/student/InteractiveText.vue"),
+        meta: { title: "课文预览", roles: ["ADMIN"], featureKey: "admin.texts" },
       },
       {
         path: "videos",
@@ -116,7 +123,7 @@ const routes = [
         path: "sso-pending",
         name: "AdminSsoPending",
         component: () => import("@/views/admin/SsoPendingApprovals.vue"),
-        meta: { title: "SSO 用户审批", roles: ["ADMIN"] },
+        meta: { title: "SSO 用户审批", roles: ["ADMIN"], featureKey: "admin.sso_approval" },
       },
     ],
   },
@@ -163,6 +170,18 @@ const routes = [
         component: () => import("@/views/ops/FeatureToggles.vue"),
         meta: { title: "功能开关", roles: ["OPS", "ADMIN"] },
       },
+      {
+        path: "school-data",
+        name: "OpsSchoolData",
+        component: () => import("@/views/ops/SchoolDataConfig.vue"),
+        meta: { title: "学校数据", roles: ["OPS", "ADMIN"], featureKey: "ops.school_data_config" },
+      },
+      {
+        path: "school-data-browser",
+        name: "OpsSchoolDataBrowser",
+        component: () => import("@/views/ops/SchoolDataBrowser.vue"),
+        meta: { title: "数据浏览", roles: ["OPS", "ADMIN"], featureKey: "ops.school_data_browser" },
+      },
     ],
   },
   {
@@ -196,62 +215,79 @@ const routes = [
         component: () => import("@/views/teacher/Assignments.vue"),
         meta: { title: "任务管理", roles: ["TEACHER"] },
       },
+      {
+        path: "my-courses",
+        name: "TeacherMyCourses",
+        component: () => import("@/views/teacher/MyCourses.vue"),
+        meta: { title: "我的授课", roles: ["TEACHER"] },
+      },
     ],
   },
   {
     path: "/student",
     name: "Student",
     component: () => import("@/views/student/Layout.vue"),
-    redirect: "/student/articles",
+    redirect: "/articles",
     meta: { title: "文章", roles: ["STUDENT", "USER"] },
     children: [
       {
         path: "dashboard",
         name: "StudentDashboard",
         component: () => import("@/views/student/Dashboard.vue"),
-        meta: { title: "仪表盘", roles: ["STUDENT", "USER"] },
+        meta: { title: "仪表盘", roles: ["STUDENT", "USER"], featureKey: "page_dashboard" },
       },
       {
         path: "courses",
         name: "StudentCourses",
         component: () => import("@/views/student/Courses.vue"),
-        meta: { title: "课程学习", roles: ["STUDENT", "USER"] },
+        meta: { title: "课程学习", roles: ["STUDENT", "USER"], featureKey: "page_courses" },
       },
       {
         path: "assignments",
         name: "StudentAssignments",
         component: () => import("@/views/student/Assignments.vue"),
-        meta: { title: "我的任务", roles: ["STUDENT", "USER"] },
+        meta: { title: "我的任务", roles: ["STUDENT", "USER"], featureKey: "page_assignments" },
+      },
+      {
+        path: "word-recite",
+        name: "StudentWordRecite",
+        component: () => import("@/features/VocabularyFeatures/WordRecite.vue"),
+        meta: { title: "单词背诵", roles: ["STUDENT", "USER"], featureKey: "page_word_recite" },
       },
       {
         path: "vocabulary",
         name: "StudentVocabulary",
         component: () => import("@/views/student/Vocabulary.vue"),
-        meta: { title: "生词本", roles: ["STUDENT", "USER"] },
+        meta: { title: "生词本", roles: ["STUDENT", "USER"], featureKey: "page_vocabulary" },
       },
       {
         path: "classes",
         name: "StudentClasses",
         component: () => import("@/views/student/Classes.vue"),
-        meta: { title: "我的班级", roles: ["STUDENT", "USER"] },
+        meta: { title: "我的班级", roles: ["STUDENT", "USER"], featureKey: "page_classes" },
       },
       {
         path: "ai-qa",
         name: "StudentAiQa",
         component: () => import("@/views/student/AiQa.vue"),
+        // 不加 featureKey：AI 问答页路由始终可达，避免 toggle 误关或缓存漂移导致"进不去"。
+        // 入口显隐由 MyStudy.vue 快捷入口 + 文章划词菜单自行根据 page_ai_qa toggle 过滤。
         meta: { title: "AI问答", roles: ["STUDENT", "USER"] },
       },
       {
         path: "text-learning",
-        name: "StudentTextLearning",
-        component: () => import("@/views/student/InteractiveText.vue"),
-        meta: { title: "课文学习", roles: ["STUDENT", "USER"] },
+        redirect: (to) => {
+          const { textId, ...rest } = to.query;
+          return textId
+            ? { path: `/article/${textId}`, query: rest }
+            : "/articles";
+        },
       },
       {
         path: "ai-video",
         name: "StudentAiVideo",
         component: () => import("@/views/student/VideoSubtitlePlayer.vue"),
-        meta: { title: "AI视频字幕", roles: ["STUDENT", "USER"] },
+        meta: { title: "AI视频字幕", roles: ["STUDENT", "USER"], featureKey: "page_ai_video" },
       },
       {
         path: "videos",
@@ -269,19 +305,35 @@ const routes = [
         path: "user-texts",
         name: "StudentUserTexts",
         component: () => import("@/views/student/UserTexts.vue"),
-        meta: { title: "我的上传", roles: ["STUDENT", "USER"] },
+        meta: { title: "我的上传", roles: ["STUDENT", "USER"], featureKey: "page_user_texts" },
       },
       {
         path: "articles",
-        name: "StudentArticles",
-        component: () => import("@/views/student/Articles.vue"),
-        meta: { roles: ["STUDENT", "USER"] },
+        redirect: "/articles",
       },
       {
         path: "my-study",
         name: "StudentMyStudy",
         component: () => import("@/views/student/MyStudy.vue"),
-        meta: { title: "我的学习", roles: ["STUDENT", "USER"] },
+        meta: { title: "我的学习", roles: ["STUDENT", "USER"], featureKey: "page_my_study" },
+      },
+      {
+        path: "schedule",
+        name: "StudentSchedule",
+        component: () => import("@/views/student/Schedule.vue"),
+        meta: { title: "我的课表", roles: ["STUDENT", "USER"], featureKey: "page_schedule" },
+      },
+      {
+        path: "scores",
+        name: "StudentScores",
+        component: () => import("@/views/student/Scores.vue"),
+        meta: { title: "等级考试", roles: ["STUDENT", "USER"], featureKey: "page_scores" },
+      },
+      {
+        path: "course-selections",
+        name: "StudentCourseSelections",
+        component: () => import("@/views/student/CourseSelections.vue"),
+        meta: { title: "我的选课", roles: ["STUDENT", "USER"], featureKey: "page_course_selections" },
       },
       {
         path: "word-test",
@@ -314,9 +366,12 @@ const routes = [
       },
       {
         path: "text-learning",
-        name: "UserTextLearning",
-        component: () => import("@/views/user/SimpleTextView.vue"),
-        meta: { title: "课文学习", roles: ["USER"] },
+        redirect: (to) => {
+          const { textId, ...rest } = to.query;
+          return textId
+            ? { path: `/article/${textId}`, query: rest }
+            : "/articles";
+        },
       },
       {
         path: "vocabulary",
@@ -347,13 +402,13 @@ const routes = [
   // 仅在开发环境注册测试路由 - 防止生产环境暴露测试页面
   ...(import.meta.env.DEV
     ? [
-        {
-          path: "/test/translate",
-          name: "TranslateTest",
-          component: () => import("@/views/test/TranslateTest.vue"),
-          meta: { title: "翻译功能测试", public: true },
-        },
-      ]
+      {
+        path: "/test/translate",
+        name: "TranslateTest",
+        component: () => import("@/views/test/TranslateTest.vue"),
+        meta: { title: "翻译功能测试", public: true },
+      },
+    ]
     : []),
   // 404 兜底路由
   {
@@ -372,7 +427,7 @@ const router = createRouter({
 // 注意: 此守卫仅用于 UX 优化（避免用户看到无权限页面再被拒绝），
 // 真实权限控制由后端 JWT + @PreAuthorize 实现。本地 userRole 可被篡改，
 // 但不会造成安全风险，因为后端会独立验证每个请求的 Token 和角色。
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
 
   // 验证路由参数（防止注入攻击）
@@ -406,7 +461,7 @@ router.beforeEach((to, from, next) => {
         OPS: "/ops",
         TEACHER: "/teacher",
         STUDENT: "/student",
-        USER: "/user",
+        USER: "/student",  // USER 角色在校园环境中等同于学生，进入学生端
       };
       next(roleRoutes[userRole] || "/");
     } else {
@@ -423,31 +478,30 @@ router.beforeEach((to, from, next) => {
     } else {
       next();
     }
-  } else {
-    // 检查角色权限，防止 meta.roles 为 undefined 导致的 TypeError
-    const requiredRoles = to.meta.roles;
-    if (
-      requiredRoles &&
-      Array.isArray(requiredRoles) &&
-      !requiredRoles.includes(userRole)
-    ) {
-      // 检查提权状态：ADMIN 可通过提权访问 OPS 路由，OPS 可通过提权访问 ADMIN 路由
-      const elevatedRole = userStore.elevatedRole;
-      const expiresAt = userStore.elevationExpiresAt;
-      const isElevationValid =
-        elevatedRole && expiresAt && new Date(expiresAt) > new Date();
-      if (isElevationValid && requiredRoles.includes(elevatedRole)) {
-        next();
-        return;
-      }
+    return;
+  }
 
+  // 检查角色权限，防止 meta.roles 为 undefined 导致的 TypeError
+  const requiredRoles = to.meta.roles;
+  if (
+    requiredRoles &&
+    Array.isArray(requiredRoles) &&
+    !requiredRoles.includes(userRole) &&
+    userRole !== "ADMIN" // ADMIN拥有所有权限，方便进行各种页面的预览
+  ) {
+    // 检查提权状态：ADMIN 可通过提权访问 OPS 路由，OPS 可通过提权访问 ADMIN 路由
+    const elevatedRole = userStore.elevatedRole;
+    const expiresAt = userStore.elevationExpiresAt;
+    const isElevationValid =
+      elevatedRole && expiresAt && new Date(expiresAt) > new Date();
+    if (!(isElevationValid && requiredRoles.includes(elevatedRole))) {
       // 无权限访问，跳转到对应主页
       const roleRoutes = {
         ADMIN: "/admin",
         OPS: "/ops",
         TEACHER: "/teacher",
         STUDENT: "/student",
-        USER: "/user",
+        USER: "/student",
       };
       console.warn(
         `权限不足: 尝试访问 ${to.path}，当前角色 ${userRole}，需要角色 ${requiredRoles}`,
@@ -460,10 +514,80 @@ router.beforeEach((to, from, next) => {
       } else {
         next(targetRoute || "/login");
       }
-    } else {
-      next();
+      return;
     }
   }
+
+  // Feature toggle 守卫 — 对所有角色（含 ADMIN）一视同仁
+  // 防止用户绕过导航栏直接访问被关闭的页面；运维控制的页面可见性应对管理员同样生效。
+  if (to.meta.featureKey) {
+    // ADMIN 访问 /admin/dashboard 始终允许，防止管理员把自己锁在门外
+    const isAdminDashboardFallback =
+      userRole === "ADMIN" && to.path === "/admin/dashboard";
+
+    if (!isAdminDashboardFallback) {
+      const fallbackRoutes = {
+        ADMIN: "/admin/dashboard",
+        OPS: "/ops/monitoring",
+        TEACHER: "/teacher/dashboard",
+        STUDENT: "/articles",
+        USER: "/articles",
+      };
+      const fallback = fallbackRoutes[userRole] || "/";
+
+      try {
+        const { isEnabled, load, isLoaded } = useFeatureToggles();
+
+        // 首次访问时需要先加载功能开关数据
+        if (!isLoaded()) {
+          try {
+            await load({ authenticated: hasValidToken });
+          } catch (error) {
+            console.error("Failed to load feature toggles:", error);
+            // Fail-closed：加载失败 + 无缓存 → 重定向到兜底页面
+            if (to.path === fallback) {
+              next();
+            } else {
+              next(fallback);
+            }
+            return;
+          }
+        }
+
+        // 检查功能开关是否启用
+        if (!isEnabled(to.meta.featureKey)) {
+          console.warn(
+            `Feature '${to.meta.featureKey}' disabled for user ${userRole}, redirecting to ${fallback}`,
+          );
+
+          // 显示用户友好的提示信息
+          if (typeof window !== 'undefined' && window.ELEMENT_MESSAGE) {
+            window.ELEMENT_MESSAGE.warning('该功能已被管理员关闭');
+          }
+
+          // 防止无限重定向
+          if (to.path === fallback) {
+            next();
+          } else {
+            next(fallback);
+          }
+          return;
+        }
+      } catch (error) {
+        console.error("Feature toggle check failed:", error);
+        // Fail-closed：异常时 → 若已有缓存则放行（缓存在上面 isEnabled 已用），
+        // 走到此分支说明连缓存读取都异常，保守重定向到兜底页面。
+        if (to.path === fallback) {
+          next();
+        } else {
+          next(fallback);
+        }
+        return;
+      }
+    }
+  }
+
+  next();
 });
 
 export default router;

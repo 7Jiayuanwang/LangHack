@@ -1,12 +1,9 @@
 <template>
   <div class="articles-mobile-page">
-
+    
     <!-- Sticky Header -->
     <header class="mobile-header">
-      <div class="header-content">
-        <h1 class="header-title">发现内容</h1>
-        <p class="header-subtitle">Daily Picks</p>
-      </div>
+      <div></div>
       <div class="header-actions">
         <span v-if="!filterVisible" class="current-filter-label">{{ currentCategoryLabel }}</span>
         <button class="icon-btn" @click="toggleFilter" :title="filterVisible ? '收起筛选' : '展开筛选'">
@@ -29,8 +26,8 @@
       <transition name="filter-collapse">
         <div v-show="filterVisible" class="filter-bar">
         <div class="filter-scroll">
-          <button
-            v-for="cat in categories"
+          <button 
+            v-for="cat in categories" 
             :key="cat.value"
             class="filter-pill"
             :class="{ 'active': selectedCategory === cat.value }"
@@ -40,6 +37,22 @@
           </button>
         </div>
       </div>
+      </transition>
+
+      <!-- Search Bar -->
+      <transition name="filter-collapse">
+        <div v-show="searchVisible" class="search-bar">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜索文章标题或内容..."
+            clearable
+            @keyup.enter="currentPage = 1"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
       </transition>
 
       <!-- Articles Feed -->
@@ -62,23 +75,22 @@
         </template>
 
         <!-- Empty / Error State -->
-        <div v-else-if="feed.length === 0" class="empty-state">
+        <div v-else-if="articles.length === 0" class="empty-state">
           <div class="empty-icon-wrap">
             <el-icon :size="48"><DocumentRemove /></el-icon>
           </div>
-          <h3 class="empty-title">{{ loadError ? '加载失败' : '暂无推荐内容' }}</h3>
+          <h3 class="empty-title">{{ loadError ? '加载失败' : '暂无文章内容' }}</h3>
           <p class="empty-desc">{{ loadError ? '网络异常，请检查连接后重试' : '换个分类试试，或者稍后再来看看' }}</p>
-          <button class="refresh-btn" @click="loadFeed">重新加载</button>
+          <button class="refresh-btn" @click="loadArticles">重新加载</button>
         </div>
 
-        <!-- Article / Video Cards -->
+        <!-- Article Cards -->
         <template v-else>
-          <article
-            v-for="item in feed"
-            :key="item._type + '-' + item.id"
+          <article 
+            v-for="article in articles" 
+            :key="article.id" 
             class="article-card"
-            :class="{ 'is-video': item._type === 'video' }"
-            @click="handleItemClick(item)"
+            @click="readArticle(article)"
           >
             <!-- Image Header -->
             <div class="article-cover">
@@ -86,45 +98,32 @@
               <div
                 class="cover-image"
                 :style="{
-                  background: item.coverUrl
-                    ? `url(${item.coverUrl})`
-                    : item.coverMediaId
-                      ? `url(${apiBase}/api/media/${item.coverMediaId}/download)`
-                      : item.coverGradient,
+                  background: article.coverUrl ? `url(${article.coverUrl})` : article.coverGradient,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center'
                 }"
               ></div>
-              <!-- Video play icon badge -->
-              <div v-if="item._type === 'video'" class="video-badge">
-                <el-icon :size="14"><VideoPlay /></el-icon>
-                <span>视频</span>
-              </div>
               <div class="category-badge">
-                <el-icon :size="14"><component :is="getCategoryIcon(item.category)" /></el-icon>
-                <span>{{ getCategoryText(item.category) }}</span>
+                <el-icon :size="14"><component :is="getCategoryIcon(article.category)" /></el-icon>
+                <span>{{ getCategoryText(article.category) }}</span>
               </div>
             </div>
 
             <!-- Content Area -->
             <div class="article-content">
-              <h2 class="article-title">{{ item.title }}</h2>
-              <p class="article-snippet">{{ getSnippet(item._type === 'video' ? item.description : item.content) }}</p>
+              <h2 class="article-title">{{ article.title }}</h2>
+              <p class="article-snippet">{{ getSnippet(article) }}</p>
             </div>
 
             <!-- Footer Area -->
             <div class="article-footer">
-              <div v-if="item._type === 'article'" class="difficulty-pill" :class="item.difficulty">
-                <el-icon :size="14"><component :is="getDifficultyIcon(item.difficulty)" /></el-icon>
-                <span>{{ getDifficultyText(item.difficulty) }}</span>
-              </div>
-              <div v-if="item._type === 'video' && item.tags" class="video-tag-pill">
-                {{ item.tags.split(',')[0] }}
+              <div class="difficulty-pill" :class="article.difficulty">
+                <el-icon :size="14"><component :is="getDifficultyIcon(article.difficulty)" /></el-icon>
+                <span>{{ getDifficultyText(article.difficulty) }}</span>
               </div>
               <div class="reading-time">
-                <el-icon v-if="item._type === 'article'" :size="16"><Timer /></el-icon>
-                <el-icon v-else :size="16"><View /></el-icon>
-                <span>{{ item._type === 'video' ? `${item.viewCount || 0} 次观看` : `${item.readingTime} min` }}</span>
+                <el-icon :size="16"><Timer /></el-icon>
+                <span>{{ article.readingTime }} min</span>
               </div>
             </div>
           </article>
@@ -163,27 +162,42 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  Search, Bell, DocumentRemove, Timer, VideoPlay, View,
+  Search, Bell, DocumentRemove, Timer,
   TrendCharts, Connection, Reading, Medal,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight
 } from '@element-plus/icons-vue'
-import { getFeaturedVideos } from '@/api/video'
+import { getAuthHeader } from '@/utils/auth'
 
 const router = useRouter()
-const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const loading = ref(true)
-const allItems = ref([])
+const allArticles = ref([])
 const selectedCategory = ref('')
 const filterVisible = ref(true)
 const loadError = ref(false)
 const currentPage = ref(1)
 const pageSize = 5
+const searchQuery = ref('')
+const searchVisible = ref(false)
 
-const totalPages = computed(() => Math.ceil(allItems.value.length / pageSize))
-const feed = computed(() => {
+const totalPages = computed(() => Math.ceil(filteredArticles.value.length / pageSize))
+const filteredArticles = computed(() => {
+  let result = allArticles.value
+  if (selectedCategory.value) {
+    result = result.filter(item => item.category === selectedCategory.value)
+  }
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase()
+    result = result.filter(item =>
+      item.title?.toLowerCase().includes(q) ||
+      item.content?.toLowerCase().includes(q)
+    )
+  }
+  return result
+})
+const articles = computed(() => {
   const start = (currentPage.value - 1) * pageSize
-  return allItems.value.slice(start, start + pageSize)
+  return filteredArticles.value.slice(start, start + pageSize)
 })
 
 // 筛选栏开关
@@ -194,7 +208,6 @@ const toggleFilter = () => {
 // Predefined categories based on design
 const categories = [
   { label: '全部', value: '' },
-  { label: '视频', value: 'video' },
   { label: '科技', value: 'technology', icon: 'Monitor' },
   { label: '商务', value: 'business', icon: 'TrendCharts' },
   { label: '教育', value: 'education', icon: 'School' },
@@ -229,7 +242,6 @@ const getRandomGradient = () => {
 const selectCategory = (val) => {
   selectedCategory.value = val
   currentPage.value = 1
-  loadFeed()
 }
 
 const goToPage = (page) => {
@@ -242,107 +254,113 @@ const prevPage = () => goToPage(currentPage.value - 1)
 const nextPage = () => goToPage(currentPage.value + 1)
 
 const toggleSearch = () => {
-  ElMessage.info('搜索功能即将上线')
+  searchVisible.value = !searchVisible.value
+  if (!searchVisible.value) {
+    searchQuery.value = ''
+  }
 }
 
 const getRandomCategory = () => {
-  const cats = categories.filter(c => c.value !== '' && c.value !== 'video')
+  const cats = categories.filter(c => c.value !== '')
   return cats[Math.floor(Math.random() * cats.length)].value
 }
 
-const loadFeed = async () => {
+const loadArticles = async () => {
   loading.value = true
   loadError.value = false
   try {
-    const [articlesRes, videosRes] = await Promise.all([
-      fetch(`${apiBase}/api/public/texts/featured?count=10`).then(r => r.json()),
-      getFeaturedVideos({ count: 10 }).catch(() => ({ code: 0, data: [] }))
-    ])
+    const params = { count: 10 }
 
-    let articleItems = []
-    if (articlesRes?.code === 200) {
-      articleItems = (Array.isArray(articlesRes.data) ? articlesRes.data : []).map(text => {
+    const authHeader = getAuthHeader()
+    const headers = authHeader ? { Authorization: authHeader } : {}
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`, { headers })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    let data
+    try {
+      data = await response.json()
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError)
+      loadError.value = true
+      return
+    }
+
+    if (data?.code === 200) {
+      let fetched = (Array.isArray(data.data) ? data.data : []).map(text => {
         const cat = getRandomCategory()
-        const contentLength = typeof text.content === 'string' ? text.content.length : 0
+        const contentLength = typeof text.content === 'string' && text.content.length > 0
+          ? text.content.length
+          : (typeof text.markdownContent === 'string' ? text.markdownContent.length : 0)
         return {
           ...text,
-          _type: 'article',
           category: cat,
           coverGradient: getRandomGradient(),
           readingTime: Math.max(1, Math.ceil(contentLength / 800))
         }
       })
-    }
 
-    let videoItems = []
-    if (videosRes?.code === 200) {
-      videoItems = (Array.isArray(videosRes.data) ? videosRes.data : []).map(v => ({
-        ...v,
-        _type: 'video',
-        category: 'video',
-        coverGradient: getRandomGradient()
-      }))
+      allArticles.value = fetched
+    } else {
+      loadError.value = true
     }
-
-    let merged = [...articleItems, ...videoItems]
-    // Shuffle to interleave articles and videos
-    for (let i = merged.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [merged[i], merged[j]] = [merged[j], merged[i]]
-    }
-
-    // Apply category filter
-    if (selectedCategory.value === 'video') {
-      merged = merged.filter(item => item._type === 'video')
-    } else if (selectedCategory.value) {
-      merged = merged.filter(item => item.category === selectedCategory.value)
-    }
-
-    allItems.value = merged
   } catch (error) {
-    console.error('加载内容失败:', error)
+    console.error('加载文章失败:', error)
     loadError.value = true
   } finally {
     loading.value = false
   }
 }
 
-const handleItemClick = (item) => {
-  if (item._type === 'video') {
-    router.push({
-      path: '/student/video-player',
-      query: { videoId: item.id }
-    })
-  } else {
-    if (!item?.id) {
-      console.warn('readArticle: 文章ID不存在', item)
-      return
-    }
-    fetch(`${apiBase}/api/public/texts/${item.id}/read`, { method: 'POST' }).catch(() => {})
-    router.push({
-      path: '/student/text-learning',
-      query: {
-        textId: item.id,
-        from: 'articles',
-        _title: encodeURIComponent(item.title || '')
-      }
-    })
+const readArticle = (article) => {
+  if (!article?.id) {
+    console.warn('readArticle: 文章ID不存在', article)
+    return
   }
+  // Fire-and-forget: 标记文章为已读
+  const authHeader = getAuthHeader()
+  const headers = authHeader ? { Authorization: authHeader } : {}
+  fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST', headers }).catch(() => {})
+  router.push({
+    path: `/article/${article.id}`,
+    query: {
+      from: 'articles',
+      _title: encodeURIComponent(article.title || '')
+    }
+  })
 }
 
-const getSnippet = (content) => {
-  if (typeof content !== 'string' || !content) return ''
-  return content.replace(/[\n\r]+/g, ' ').substring(0, 120) + (content.length > 120 ? '...' : '')
+const getSnippet = (article) => {
+  // 优先使用 content，若为空则尝试 markdownContent
+  let raw = article.content || article.markdownContent || ''
+  if (typeof raw !== 'string' || !raw) return ''
+
+  // 清理 Markdown 语法标记，提取纯文字
+  let clean = raw
+    .replace(/!\[.*?\]\(.*?\)/g, '')          // 删除图片 ![alt](url)
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')       // 链接保留文字 [text](url) → text
+    .replace(/^#{1,6}\s+/gm, '')              // 删除标题符 # ## ###
+    .replace(/[*_]{1,3}(.*?)[*_]{1,3}/g, '$1') // 加粗/斜体保留文字
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')        // 删除行内代码和代码块
+    .replace(/^>\s?/gm, '')                   // 删除引用 >
+    .replace(/^[-*+]\s+/gm, '')               // 删除无序列表标记
+    .replace(/^\d+\.\s+/gm, '')               // 删除有序列表标记
+    .replace(/---+|\*\*\*+|___+/g, '')        // 删除分割线
+    .replace(/[\n\r]+/g, ' ')                  // 换行转空格
+    .replace(/\s+/g, ' ')                      // 合并多余空格
+    .trim()
+
+  return clean.length > 120 ? clean.substring(0, 120) + '...' : clean
 }
 
 const getCategoryText = (val) => {
-  if (val === 'video') return '视频'
   const cat = categories.find(c => c.value === val)
   return cat ? cat.label : '综合'
 }
 
 const getCategoryIcon = (val) => {
-  if (val === 'video') return VideoPlay
   const cat = categories.find(c => c.value === val)
   return cat ? cat.icon : Reading
 }
@@ -358,7 +376,7 @@ const getDifficultyIcon = (diff) => {
 }
 
 onMounted(() => {
-  loadFeed()
+  loadArticles()
 })
 </script>
 
@@ -456,29 +474,6 @@ onMounted(() => {
   padding-top: max(env(safe-area-inset-top, 12px), 12px);
 }
 
-.header-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.header-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  background: linear-gradient(to right, #0f172a, rgba(19, 127, 236, 0.8));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.header-subtitle {
-  margin: 2px 0 0 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--app-text-muted);
-}
 
 .header-actions {
   display: flex;
@@ -539,6 +534,14 @@ onMounted(() => {
   -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(226, 232, 240, 0.6);
   padding: 12px 0;
+}
+
+.search-bar {
+  padding: 12px 20px;
+  background: rgba(246, 247, 248, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .filter-scroll {
@@ -664,39 +667,6 @@ onMounted(() => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-}
-
-.video-badge {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 2;
-  background: rgba(29, 78, 216, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  color: white;
-  padding: 4px 10px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-
-.video-tag-pill {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: rgba(29, 78, 216, 0.08);
-  color: #1d4ed8;
 }
 
 /* Content */

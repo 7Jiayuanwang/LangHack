@@ -1,3 +1,6 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:d63a86dd19d89ecb844f4707955a532fc8933ba7567d38c4dd5aca99710fda48
-size 11560
+USE `english_learning`;
+SET NAMES utf8mb4;
+
+-- Legacy placeholder kept only because docker-compose mounts this file for slave init.
+-- Current school-data schema source of truth is 04-apply-all-migrations.sql.
+-- Intentionally no-op to avoid reintroducing outdated course / foreign-key definitions.

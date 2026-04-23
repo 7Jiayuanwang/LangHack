@@ -738,9 +738,8 @@ const studyText = (text) => {
     // 跳转到课文学习页面
     // 注意：不在这里记录学习时长，学习时长由学习页面本身管理
     router.push({
-      path: '/student/text-learning',
+      path: `/article/${text.id}`,
       query: {
-        textId: text.id,
         assignmentId: currentAssignment.value.id,
         from: 'assignment' // 标记来源，便于返回
       }

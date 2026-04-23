@@ -36,16 +36,15 @@ sso:
     scope: openid,profile,email
 
   # 角色映射规则（可在数据库 sso_config 表中覆盖）
+  # ⚠️ Spring Boot @ConfigurationProperties 会吞掉 Map key 中的 '='，
+  #    导致 "ou=admin" 变成 "ouadmin" 被校验过滤。因此只保留中文规则（不受影响），
+  #    英文规则请在 sso_config 表 (config_type=ROLE_MAPPING) 中添加。
   role-mapping:
     default-rules:
       "ou=管理员": ADMIN
-      "ou=admin": ADMIN
       "ou=运维": OPS
-      "ou=ops": OPS
       "ou=教师": TEACHER
-      "ou=teacher": TEACHER
       "ou=学生": STUDENT
-      "ou=student": STUDENT
 
   # 自动审批规则
   auto-approval:

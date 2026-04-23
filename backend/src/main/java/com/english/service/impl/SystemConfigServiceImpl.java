@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.english.entity.SystemConfig;
 import com.english.mapper.SystemConfigMapper;
 import com.english.service.SystemConfigService;
+import com.english.service.FeatureToggleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -22,6 +24,10 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     @Autowired
     private SystemConfigMapper mapper;
+
+    @Autowired
+    @Lazy
+    private FeatureToggleService featureToggleService;
 
     private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
@@ -80,6 +86,19 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         }
 
         cache.remove(group);
+        
+        // 如果是功能开关配置更新，通知FeatureToggleService清除相关缓存
+        if ("feature_toggle".equals(group)) {
+            try {
+                // 使用反射调用FeatureToggleServiceImpl的evictAllCache方法
+                if (featureToggleService instanceof com.english.service.impl.FeatureToggleServiceImpl) {
+                    ((com.english.service.impl.FeatureToggleServiceImpl) featureToggleService).evictAllCache();
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to evict feature toggle cache: {}", e.getMessage());
+            }
+        }
+        
         logger.info("System config updated: {}.{} by {}", group, key, updatedBy);
     }
 
@@ -116,6 +135,18 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         // Clear cache for all affected groups
         for (String group : groupsToInvalidate) {
             cache.remove(group);
+        }
+
+        // 如果包含功能开关配置更新，通知FeatureToggleService清除相关缓存
+        if (groupsToInvalidate.contains("feature_toggle")) {
+            try {
+                // 使用反射调用FeatureToggleServiceImpl的evictAllCache方法
+                if (featureToggleService instanceof com.english.service.impl.FeatureToggleServiceImpl) {
+                    ((com.english.service.impl.FeatureToggleServiceImpl) featureToggleService).evictAllCache();
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to evict feature toggle cache: {}", e.getMessage());
+            }
         }
 
         logger.info("Batch updated {} configs by {}", configs.size(), updatedBy);

@@ -7,6 +7,8 @@ import com.english.entity.SystemConfig;
 import com.english.exception.BusinessException;
 import com.english.service.AiProviderService;
 import com.english.service.FeatureToggleService;
+import com.english.service.HiAgentService;
+import com.english.service.SchoolDataConfigRefreshService;
 import com.english.service.SystemConfigService;
 import com.english.service.TencentTranslateService;
 import com.english.service.UserService;
@@ -51,6 +53,12 @@ public class OpsController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private SchoolDataConfigRefreshService schoolDataConfigRefreshService;
+
+    @Autowired(required = false)
+    private HiAgentService hiAgentService;
 
     /**
      * 清理不一致的数据
@@ -249,6 +257,59 @@ public class OpsController {
         }
     }
 
+    // ==================== 学校数据配置管理 ====================
+
+    /**
+     * 更新学校数据配置（含刷新 + 副作用：重调度、重建数据源）
+     */
+    @PutMapping("/school-data/config")
+    public Result<String> updateSchoolDataConfig(@RequestBody List<SystemConfig> configs,
+                                                  Authentication authentication) {
+        try {
+            String username = authentication.getName();
+            schoolDataConfigRefreshService.updateAndRefresh(configs, username);
+            return Result.success("学校数据配置更新成功");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("更新学校数据配置失败", e);
+            return Result.error("更新学校数据配置失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 测试学校数据源连接
+     */
+    @PostMapping("/school-data/test-connection")
+    public Result<Map<String, Object>> testSchoolDataConnection() {
+        try {
+            boolean success = schoolDataConfigRefreshService.testConnection();
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", success);
+            data.put("source", schoolDataConfigRefreshService.getCurrentSource());
+            return Result.success(data);
+        } catch (Exception e) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("success", false);
+            data.put("error", e.getMessage());
+            return Result.success(data);
+        }
+    }
+
+    /**
+     * 查询学校数据集成配置状态（敏感值不返回，仅返回 "是否已配置" 的 boolean）
+     * 前端根据此结果展示顶部警告横幅与未配置项 badge。
+     */
+    @GetMapping("/school-data/config-status")
+    public Result<Map<String, Object>> getSchoolDataConfigStatus() {
+        try {
+            return Result.success(schoolDataConfigRefreshService.getConfigStatus());
+        } catch (Exception e) {
+            logger.error("获取学校数据配置状态失败", e);
+            return Result.error("获取配置状态失败");
+        }
+    }
+
     // ==================== 个性化功能开关管理 ====================
 
     /**
@@ -338,5 +399,88 @@ public class OpsController {
                                                 Authentication authentication) {
         featureToggleService.deleteOverride(scope, scopeValue, featureKey, authentication.getName());
         return Result.success("覆盖规则已删除");
+    }
+
+    // ==================== HiAgent 凭证配置与连通测试 ====================
+
+    /**
+     * HiAgent 配置状态汇总（不返回真实密钥，仅返回每项是否已配置）
+     * 用于前端面板展示"改写/问答凭证是否就绪"
+     */
+    @GetMapping("/hiagent/status")
+    public Result<Map<String, Object>> hiAgentStatus() {
+        Map<String, String> dbCfg = systemConfigService.getByGroup("ai_config");
+        Map<String, Object> result = new HashMap<>();
+        for (String key : new String[]{"hiagent_api_url", "hiagent_api_key", "hiagent_app_id",
+                                        "hiagent_qa_api_key", "hiagent_qa_app_id"}) {
+            String v = dbCfg.get(key);
+            result.put(key + "_configured", v != null && !v.isBlank());
+        }
+        // 改写 + 问答 两路是否具备最小凭证
+        boolean rewriteReady = Boolean.TRUE.equals(result.get("hiagent_api_key_configured"))
+                && Boolean.TRUE.equals(result.get("hiagent_app_id_configured"));
+        boolean qaReady = Boolean.TRUE.equals(result.get("hiagent_qa_api_key_configured"))
+                && Boolean.TRUE.equals(result.get("hiagent_qa_app_id_configured"));
+        result.put("rewrite_ready_from_db", rewriteReady);
+        result.put("qa_ready_from_db", qaReady);
+        return Result.success(result);
+    }
+
+    /**
+     * HiAgent 改写应用连通测试（调用短文本 CET-4 改写）
+     */
+    @PostMapping("/hiagent/test-rewrite")
+    public Result<Map<String, Object>> testHiAgentRewrite(@RequestBody(required = false) Map<String, String> body) {
+        Map<String, Object> data = new HashMap<>();
+        if (hiAgentService == null) {
+            data.put("success", false);
+            data.put("error", "HiAgent 服务未注入");
+            return Result.success(data);
+        }
+        String sample = (body != null && body.get("text") != null && !body.get("text").isBlank())
+                ? body.get("text") : "This is a short test sentence for HiAgent rewrite.";
+        try {
+            String out = hiAgentService.generateCET4Version(sample);
+            data.put("success", true);
+            data.put("preview", out != null && out.length() > 200 ? out.substring(0, 200) + "..." : out);
+        } catch (BusinessException e) {
+            data.put("success", false);
+            data.put("error", e.getMessage());
+        } catch (Exception e) {
+            logger.error("HiAgent 改写测试失败", e);
+            data.put("success", false);
+            data.put("error", "改写测试调用失败，请检查日志");
+        }
+        return Result.success(data);
+    }
+
+    /**
+     * HiAgent 问答应用连通测试（调用 chatQA，独立凭证校验）
+     */
+    @PostMapping("/hiagent/test-qa")
+    public Result<Map<String, Object>> testHiAgentQa(@RequestBody(required = false) Map<String, String> body) {
+        Map<String, Object> data = new HashMap<>();
+        if (hiAgentService == null) {
+            data.put("success", false);
+            data.put("error", "HiAgent 服务未注入");
+            return Result.success(data);
+        }
+        String question = (body != null && body.get("question") != null && !body.get("question").isBlank())
+                ? body.get("question") : "请用一句话解释这句话的含义。";
+        String selected = (body != null && body.get("selectedText") != null && !body.get("selectedText").isBlank())
+                ? body.get("selectedText") : "Knowledge is power.";
+        try {
+            String out = hiAgentService.chatQA(question, selected, "");
+            data.put("success", true);
+            data.put("preview", out != null && out.length() > 200 ? out.substring(0, 200) + "..." : out);
+        } catch (BusinessException e) {
+            data.put("success", false);
+            data.put("error", e.getMessage());
+        } catch (Exception e) {
+            logger.error("HiAgent 问答测试失败", e);
+            data.put("success", false);
+            data.put("error", "问答测试调用失败，请检查日志");
+        }
+        return Result.success(data);
     }
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -12,7 +13,8 @@ vi.mock('element-plus', () => ({
 
 vi.mock('@/api/student', () => ({
   getStudentDashboard: vi.fn().mockResolvedValue({ data: {} }),
-  getTodayLearningStats: vi.fn().mockResolvedValue({ data: {} })
+  getTodayLearningStats: vi.fn().mockResolvedValue({ data: {} }),
+  getVocabularyStats: vi.fn().mockResolvedValue({ data: {} })
 }))
 
 import Dashboard from '@/views/student/Dashboard.vue'
@@ -20,6 +22,7 @@ import Dashboard from '@/views/student/Dashboard.vue'
 describe('Student Dashboard.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    setActivePinia(createPinia())
   })
 
   const createWrapper = () => shallowMount(Dashboard)

@@ -490,10 +490,7 @@ const studyText = (text) => {
     return
   }
   router.push({
-    path: '/user/text-learning',
-    query: {
-      textId: text.id
-    }
+    path: `/article/${text.id}`
   })
 }
 

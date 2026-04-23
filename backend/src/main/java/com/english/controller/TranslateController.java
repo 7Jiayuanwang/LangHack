@@ -111,7 +111,8 @@ public class TranslateController {
             String result = translateService.translateAuto(request.getText());
             return Result.success(result);
         } catch (Exception e) {
-            log.debug("translateAuto failed", e);
+            log.error("翻译调用外部服务失败 [auto] user={} textLen={} err={}",
+                    userId, request.getText().length(), e.getMessage(), e);
             return Result.error("翻译服务暂时不可用，请稍后重试");
         }
     }
@@ -137,7 +138,8 @@ public class TranslateController {
             String result = translateService.translateEnToCn(request.getText());
             return Result.success(result);
         } catch (Exception e) {
-            log.debug("translateEnToCn failed", e);
+            log.error("翻译调用外部服务失败 [en-to-cn] user={} textLen={} err={}",
+                    userId, request.getText().length(), e.getMessage(), e);
             return Result.error("翻译服务暂时不可用，请稍后重试");
         }
     }
@@ -163,7 +165,8 @@ public class TranslateController {
             String result = translateService.translateCnToEn(request.getText());
             return Result.success(result);
         } catch (Exception e) {
-            log.debug("translateCnToEn failed", e);
+            log.error("翻译调用外部服务失败 [cn-to-en] user={} textLen={} err={}",
+                    userId, request.getText().length(), e.getMessage(), e);
             return Result.error("翻译服务暂时不可用，请稍后重试");
         }
     }
@@ -200,7 +203,9 @@ public class TranslateController {
             );
             return Result.success(result);
         } catch (Exception e) {
-            log.debug("translateCustom failed", e);
+            log.error("翻译调用外部服务失败 [custom] user={} source={} target={} textLen={} err={}",
+                    userId, request.getSource(), request.getTarget(), request.getText().length(),
+                    e.getMessage(), e);
             return Result.error("翻译服务暂时不可用，请稍后重试");
         }
     }
@@ -232,11 +237,9 @@ public class TranslateController {
         }
 
         String userId = resolveUserId(authentication, httpRequest);
-        // 批量翻译按实际条数计入限流（每条算一次）
-        for (int i = 0; i < request.getTexts().size(); i++) {
-            if (isRateLimited(userId)) {
-                return Result.error("请求过于频繁，请稍后重试");
-            }
+        // 批量翻译按 1 次请求计入限流（而非按条数），避免单次调用耗尽用户整分钟额度
+        if (isRateLimited(userId)) {
+            return Result.error("请求过于频繁，请稍后重试");
         }
 
         String direction = request.getDirection() == null ? "en-to-zh" : request.getDirection();
@@ -286,12 +289,16 @@ public class TranslateController {
                         try {
                             results.add(translateService.translate(text, src, tgt));
                         } catch (Exception e) {
+                            log.warn("批量翻译逐条回退失败 [batch-item] user={} direction={} idx={} textLen={} err={}",
+                                    userId, direction, i, text.length(), e.getMessage(), e);
                             results.add("");
                         }
                     }
                 }
             } catch (Exception e) {
                 // 彻底失败时该批次置空
+                log.error("批量翻译整批调用外部服务失败 [batch] user={} direction={} chunkSize={} chunkChars={} err={}",
+                        userId, direction, chunk.size(), charCount, e.getMessage(), e);
                 for (int i = start; i < end; i++) results.add("");
             }
             start = end;

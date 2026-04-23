@@ -256,7 +256,7 @@ const handleRecommendationClick = () => {
   if (recommendation.type === "word") {
     router.push("/user/vocabulary");
   } else {
-    router.push(`/user/text-learning?textId=${recommendation.id}`);
+    router.push(`/article/${recommendation.id}`);
   }
 };
 
@@ -283,6 +283,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+:deep(.el-card) {
+  border-radius: 12px;
+}
+
 .user-home {
   padding: 20px;
 }
@@ -298,10 +302,23 @@ onMounted(async () => {
 
 .stat-card {
   text-align: center;
+  border-radius: 12px;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+:deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
 }
 
 .stat-number {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: bold;
   color: #333;
 }

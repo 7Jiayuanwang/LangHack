@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class FeatureToggleServiceImpl implements FeatureToggleService {
 
     private static final Logger logger = LoggerFactory.getLogger(FeatureToggleServiceImpl.class);
-    private static final long CACHE_TTL_MS = 60_000;
+    private static final long CACHE_TTL_MS = 30_000; // 缩短缓存时间到30秒，提高响应性
 
     @Autowired
     private SystemConfigService systemConfigService;
@@ -209,11 +209,40 @@ public class FeatureToggleServiceImpl implements FeatureToggleService {
     private void evictCache(String scope, String scopeValue) {
         if ("tag".equals(scope)) {
             tagCache.remove(scopeValue);
+            logger.info("Evicted tag cache for tag: {}", scopeValue);
         } else if ("user".equals(scope)) {
             try {
                 userCache.remove(Long.valueOf(scopeValue));
+                logger.info("Evicted user cache for userId: {}", scopeValue);
             } catch (NumberFormatException ignored) {}
         }
+    }
+
+    /**
+     * 清除所有功能开关相关缓存
+     * 在系统配置批量更新时调用
+     */
+    public void evictAllCache() {
+        tagCache.clear();
+        userCache.clear();
+        logger.info("Evicted all feature toggle caches");
+    }
+
+    /**
+     * 清除指定用户的所有相关缓存（包括标签缓存）
+     * @param userId 用户ID
+     */
+    public void evictUserRelatedCache(Long userId) {
+        // 清除用户级缓存
+        userCache.remove(userId);
+        
+        // 获取用户的所有标签并清除对应的标签缓存
+        List<String> userTags = userTagMapper.selectTagsByUserId(userId);
+        for (String tag : userTags) {
+            tagCache.remove(tag);
+        }
+        
+        logger.info("Evicted cache for userId: {} and related tags: {}", userId, userTags);
     }
 
     private static class CacheEntry {

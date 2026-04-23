@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -15,6 +16,7 @@ import Articles from '@/views/public/Articles.vue'
 describe('Articles.vue (Public Articles)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    setActivePinia(createPinia())
     // Mock fetch globally
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

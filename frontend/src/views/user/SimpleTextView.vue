@@ -23,7 +23,9 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <el-breadcrumb separator="/">
-        <el-breadcrumb-item :to="{ path: breadcrumbParent.path }">{{ breadcrumbParent.label }}</el-breadcrumb-item>
+        <el-breadcrumb-item>
+          <a :href="breadcrumbParent.path">{{ breadcrumbParent.label }}</a>
+        </el-breadcrumb-item>
         <el-breadcrumb-item>{{ textTitle }}</el-breadcrumb-item>
       </el-breadcrumb>
 
@@ -190,6 +192,7 @@ import VersionSelector from '@/components/VersionSelector.vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
+import { getArticlesPath } from '@/config/site'
 
 void VideoPlay
 
@@ -200,11 +203,10 @@ const textId = ref(route.params.id || route.query.textId)
 
 // 面包屑导航：根据来源决定父级链接
 const breadcrumbParent = computed(() => {
-  const isStudentRoute = route.path.startsWith('/student')
   if (route.query.from === 'articles') {
-    return { path: isStudentRoute ? '/student/articles' : '/articles', label: '文章推荐' }
+    return { path: getArticlesPath(), label: '文章推荐', external: true }
   }
-  return { path: '/articles', label: '文章' }
+  return { path: getArticlesPath(), label: '文章', external: true }
 })
 
 const textTitle = ref('')
@@ -702,13 +704,12 @@ const getDifficultyText = (difficulty) => {
 const goBack = () => {
   const from = route.query.from
   if (from === 'articles') {
-    const isStudentRoute = route.path.startsWith('/student')
-    router.push(isStudentRoute ? '/student/articles' : '/articles')
+    window.location.href = getArticlesPath()
   } else if (window.history.length > 1) {
     router.back()
   } else {
     // 无历史记录时，跳转到公开文章页
-    router.push('/articles')
+    window.location.href = getArticlesPath()
   }
 }
 

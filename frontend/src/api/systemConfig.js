@@ -53,6 +53,20 @@ export function testAiProvider(id, text) {
   return request({ url: `/api/ops/ai-providers/${id}/test`, method: 'post', data: { text } })
 }
 
+// ---------- HiAgent 凭证配置与连通测试（OPS）----------
+
+export function getHiAgentStatus() {
+  return request({ url: '/api/ops/hiagent/status', method: 'get' })
+}
+
+export function testHiAgentRewrite(text) {
+  return request({ url: '/api/ops/hiagent/test-rewrite', method: 'post', data: text ? { text } : {} })
+}
+
+export function testHiAgentQa(payload) {
+  return request({ url: '/api/ops/hiagent/test-qa', method: 'post', data: payload || {} })
+}
+
 // 功能开关（公开接口，无需鉴权）
 export function getFeatureToggles() {
   return request({
@@ -61,10 +75,18 @@ export function getFeatureToggles() {
   })
 }
 
-// 个性化功能开关（学生端登录后使用）
+// 个性化功能开关（任意已登录用户：学生/教师/运维/管理员，三层合并）
+export function getUserFeatureToggles() {
+  return request({
+    url: '/api/user/feature-toggles',
+    method: 'get'
+  })
+}
+
+// 旧接口保留兼容：学生端专用，实际已被 getUserFeatureToggles 取代
 export function getPersonalFeatureToggles() {
   return request({
-    url: '/api/student/feature-toggles',
+    url: '/api/user/feature-toggles',
     method: 'get'
   })
 }

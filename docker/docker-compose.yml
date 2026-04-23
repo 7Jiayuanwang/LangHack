@@ -15,7 +15,7 @@ services:
   # MySQL 主库
   # ─────────────────────────────────────────────
   mysql-master:
-    image: mysql:8.0
+    image: ${IMAGE_REGISTRY_PREFIX:-}mysql:8.0
     container_name: langhack-mysql-master
     restart: unless-stopped
     logging: *default-logging
@@ -81,7 +81,7 @@ services:
   # MySQL 从库（只读副本）
   # ─────────────────────────────────────────────
   mysql-slave:
-    image: mysql:8.0
+    image: ${IMAGE_REGISTRY_PREFIX:-}mysql:8.0
     container_name: langhack-mysql-slave
     restart: unless-stopped
     logging: *default-logging
@@ -150,7 +150,7 @@ services:
   # Redis 缓存
   # ─────────────────────────────────────────────
   redis:
-    image: redis:6-alpine
+    image: ${IMAGE_REGISTRY_PREFIX:-}redis:6-alpine
     container_name: langhack-redis
     restart: unless-stopped
     logging: *default-logging
@@ -185,6 +185,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+      args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
     container_name: langhack-backend
     restart: unless-stopped
     logging: *default-logging
@@ -272,6 +274,7 @@ services:
       context: ../frontend
       dockerfile: Dockerfile
       args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
         VITE_API_BASE_URL: ""
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
         VITE_ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}

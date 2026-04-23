@@ -2,7 +2,7 @@
   <div class="articles-mobile-page">
 
     <!-- Sticky Header -->
-    <header class="mobile-header">
+    <header class="mobile-header" v-if="!isLoggedIn">
       <div class="page-content-wrapper header-inner">
         <div class="header-content">
           <h1 class="header-title">发现文章</h1>
@@ -144,7 +144,7 @@
     </main>
 
     <!-- 底部导航栏 -->
-    <nav class="bottom-nav">
+    <nav class="bottom-nav" v-if="!isLoggedIn">
       <div class="nav-wrapper">
         <router-link
           to="/articles"
@@ -176,8 +176,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { getAuthHeader } from '@/utils/auth'
+import { useUserStore } from '@/store/user'
 
 const router = useRouter()
+const userStore = useUserStore()
+// 登录用户由外层 Layout (ArticlesHost) 提供顶/底栏，隐藏组件自带的游客 chrome
+const isLoggedIn = computed(() => !!userStore.token)
 const loading = ref(true)
 const allArticles = ref([])
 const selectedCategory = ref('')
@@ -243,7 +248,9 @@ const loadArticles = async () => {
   try {
     const params = { count: 12 }
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`)
+    const authHeader = getAuthHeader()
+    const headers = authHeader ? { Authorization: authHeader } : {}
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`, { headers })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -291,7 +298,9 @@ const readArticle = (article) => {
   }
   // 记录阅读，但不阻塞导航，同时正确处理错误
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-  fetch(`${baseUrl}/api/public/texts/${article.id}/read`, { method: 'POST' })
+  const authHeader = getAuthHeader()
+  const headers = authHeader ? { Authorization: authHeader } : {}
+  fetch(`${baseUrl}/api/public/texts/${article.id}/read`, { method: 'POST', headers })
     .then(response => {
       // 仅检查网络错误，不处理HTTP错误状态（后端已返回成功）
       if (!response.ok) {
@@ -406,6 +415,7 @@ onMounted(() => {
   }
 }
 
+
 /* --- Header --- */
 .mobile-header {
   position: sticky;
@@ -415,59 +425,46 @@ onMounted(() => {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  padding: 12px 20px;
+  padding-top: max(env(safe-area-inset-top, 12px), 12px);
 }
 
 .header-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
-  padding-top: max(env(safe-area-inset-top, 12px), 12px);
-}
-
-@media (min-width: 768px) {
-  .header-inner {
-    padding: 20px 0;
-  }
 }
 
 .header-content {
-  display: flex;
-  flex-direction: column;
+  flex: 1;
 }
 
 .header-title {
   margin: 0;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  background: linear-gradient(to right, #0f172a, rgba(19, 127, 236, 0.8));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #0f172a;
 }
 
 .header-subtitle {
-  margin: 2px 0 0 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--app-text-muted);
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .header-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
 .icon-btn {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: none;
   background: transparent;
   color: #475569;
-  font-size: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -475,12 +472,15 @@ onMounted(() => {
   transition: background-color 0.2s;
 }
 
-.icon-btn:hover { background: #f1f5f9; color: #0f172a; }
+.icon-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
 
 /* --- Filter Bar --- */
 .filter-bar {
   position: sticky;
-  top: calc(env(safe-area-inset-top, 0px) + 60px);
+  top: max(env(safe-area-inset-top, 0px), 0px);
   z-index: 40;
   background: rgba(246, 247, 248, 0.95);
   backdrop-filter: blur(8px);
@@ -854,7 +854,6 @@ onMounted(() => {
 /* Touch optimization */
 .article-card,
 .filter-pill,
-.icon-btn,
 .nav-item,
 .article-card,
 .page-btn {
