@@ -94,7 +94,7 @@ public class StudentLearningController {
      * 获取学生仪表板数据
      */
     @GetMapping("/dashboard")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getDashboardData(Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -167,7 +167,7 @@ public class StudentLearningController {
      * 获取学生的课程列表
      */
     @GetMapping("/courses")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getStudentCourses(Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -190,7 +190,7 @@ public class StudentLearningController {
      * 获取课程下的单元列表
      */
     @GetMapping("/courses/{courseId}/units")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getCourseUnits(
             @PathVariable Long courseId,
             Authentication authentication) {
@@ -218,7 +218,7 @@ public class StudentLearningController {
      * 获取单元详细内容（课文和单词）
      */
     @GetMapping("/units/{unitId}/content")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getUnitContent(
             @PathVariable Long unitId,
             Authentication authentication) {
@@ -250,7 +250,7 @@ public class StudentLearningController {
      * 获取课文详细内容
      */
     @GetMapping("/texts/{textId}")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getTextDetail(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
@@ -284,7 +284,7 @@ public class StudentLearningController {
      * 记录课文学习
      */
     @PostMapping("/record/text-view")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<String> recordTextView(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -344,7 +344,7 @@ public class StudentLearningController {
      * 开始阅读课文
      */
     @PostMapping("/texts/{textId}/start")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Long> startReading(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
@@ -372,7 +372,7 @@ public class StudentLearningController {
      * 完成阅读课文（手动提交）
      */
     @PostMapping("/records/{recordId}/complete")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<String> completeReading(
             @PathVariable Long recordId,
             Authentication authentication) {
@@ -405,7 +405,7 @@ public class StudentLearningController {
      * 标记课文为已完成
      */
     @PostMapping("/texts/{textId}/complete")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> markTextAsCompleted(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
@@ -479,7 +479,7 @@ public class StudentLearningController {
      * 通用学习记录API（支持各种学习活动）
      */
     @PostMapping("/record/learning")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<String> recordLearning(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -566,7 +566,7 @@ public class StudentLearningController {
      * 记录单词学习
      */
     @PostMapping("/record/word-view")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<String> recordWordView(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -626,7 +626,7 @@ public class StudentLearningController {
      * 添加单词到生词本
      */
     @PostMapping("/vocabulary/add")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<String> addToVocabulary(@RequestBody Map<String, Object> params, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -1120,7 +1120,7 @@ public class StudentLearningController {
      * 获取生词本（带分页和筛选）
      */
     @GetMapping("/vocabulary")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getVocabulary(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -1165,7 +1165,7 @@ public class StudentLearningController {
      * 检查单词是否在生词本中
      */
     @GetMapping("/vocabulary/check")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Boolean> checkVocabularyStatus(
             @RequestParam String word,
             Authentication authentication) {
@@ -1197,7 +1197,7 @@ public class StudentLearningController {
      * 通过单词添加到生词本（支持WordNet词汇）
      */
     @PostMapping("/vocabulary")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<String> addToVocabularyByWord(@RequestBody Map<String, Object> params,
             Authentication authentication) {
         try {
@@ -1281,7 +1281,7 @@ public class StudentLearningController {
      * 从生词本移除单词
      */
     @DeleteMapping("/vocabulary/{wordId}")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<String> removeFromVocabulary(@PathVariable Long wordId, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -1300,7 +1300,7 @@ public class StudentLearningController {
      * 更新单词掌握程度
      */
     @PutMapping("/vocabulary/{wordId}/mastery")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<String> updateMasteryLevel(
             @PathVariable Long wordId,
             @RequestBody Map<String, Object> params,
@@ -1330,7 +1330,7 @@ public class StudentLearningController {
      * 获取生词本统计信息
      */
     @GetMapping("/vocabulary/stats")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getVocabularyStats(Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -1349,7 +1349,7 @@ public class StudentLearningController {
      * 标记单词为已完成
      */
     @PostMapping("/words/{wordId}/complete")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> markWordAsCompleted(
             @PathVariable Long wordId,
             @RequestParam(required = false) Long assignmentId,
@@ -1412,7 +1412,7 @@ public class StudentLearningController {
      * 收藏/取消收藏文章（toggle）
      */
     @PostMapping("/favorites/{textId}")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> toggleFavorite(@PathVariable Long textId, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -1464,7 +1464,7 @@ public class StudentLearningController {
      * 检查文章是否已收藏
      */
     @GetMapping("/favorites/{textId}/check")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> checkFavorite(@PathVariable Long textId, Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -1483,7 +1483,7 @@ public class StudentLearningController {
      * 获取收藏文章列表
      */
     @GetMapping("/favorites")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getFavoriteArticles(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -1541,7 +1541,7 @@ public class StudentLearningController {
      * 获取阅读记录列表（含时长统计）
      */
     @GetMapping("/reading-history")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<Map<String, Object>> getReadingHistory(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,

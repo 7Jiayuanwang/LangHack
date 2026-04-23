@@ -12,7 +12,7 @@ const routes = [
     path: "/articles",
     name: "Articles",
     component: () => import("@/views/shared/ArticlesHost.vue"),
-    meta: { title: "文章列表", public: true }, // 公开页面：游客可看，登录用户保留身份 Layout
+    meta: { title: "文章列表" }, // 需登录：未登录用户重定向到 SSO 统一身份认证
   },
   {
     path: "/article/:id",

@@ -210,6 +210,31 @@ class StudentLearningControllerTest {
     }
 
     @Test
+    void getTextDetail_opsRoleAllowed() throws Exception {
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                "ops1", null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_OPS")));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        User opsUser = new User();
+        opsUser.setId(9L);
+        opsUser.setUsername("ops1");
+        opsUser.setRole("OPS");
+        when(userService.getUserByUsername("ops1")).thenReturn(opsUser);
+
+        Map<String, Object> detail = Map.of("title", "Ops Visible Text", "content", "Hello ops");
+        when(learningRecordsService.getTextDetailWithAnnotation(eq(9L), eq(5L), isNull()))
+                .thenReturn(detail);
+
+        mockMvc.perform(get("/api/student/learning/texts/5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.title").value("Ops Visible Text"));
+
+        verify(articleVersionService).checkAndGenerateVersions(5L);
+        verify(textMapper, never()).selectById(5L);
+    }
+
+    @Test
     void recordTextView_success() throws Exception {
         // Mock assertStudentCanRecord: text exists, no unitId → access check passes
         Text text = new Text();
