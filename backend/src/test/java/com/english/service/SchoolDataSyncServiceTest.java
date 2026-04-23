@@ -1,5 +1,6 @@
 package com.english.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.entity.FieldMapping;
 import com.english.entity.SyncLog;
 import com.english.mapper.*;
@@ -82,12 +83,23 @@ class SchoolDataSyncServiceTest {
     @Mock
     private TeacherStudentBindingMapper teacherStudentBindingMapper;
 
+    @Mock
+    private TeachingPlanCourseMapper teachingPlanCourseMapper;
+
+    @Mock
+    private UserMapper userMapper;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
     @BeforeEach
     void setUp() {
         syncService = new SchoolDataSyncServiceImpl(
                 apiClient, fetchService, persistService, fieldMappingService, syncLogMapper,
                 levelExamScoreMapper, studentScheduleMapper, schoolStudentMapper,
-                teacherStudentBindingMapper
+                teacherStudentBindingMapper, administrativeClassMapper, schoolCourseMapper,
+                teachingClassMapper, courseScheduleMapper, courseSelectionMapper,
+                teachingPlanMapper, teachingPlanCourseMapper, userMapper, objectMapper
         );
     }
 

@@ -139,6 +139,65 @@ class SchoolDataSyncControllerTest {
         }
     }
 
+    @Nested
+    @DisplayName("POST /api/admin/sync/incremental-all 增量同步所有数据源")
+    class IncrementalSyncAllTests {
+
+        @Test
+        @DisplayName("增量同步所有数据源成功")
+        void incrementalSyncAll_success() throws Exception {
+            when(syncService.incrementalSyncAll(anyString(), anyString()))
+                    .thenReturn(Collections.emptyList());
+
+            mockMvc.perform(post("/api/admin/sync/incremental-all"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(200));
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/admin/sync/chain/students-by-college 按学院链式拉取")
+    class ChainFetchTests {
+
+        @Test
+        @DisplayName("按学院链式拉取成功")
+        void chainFetch_success() throws Exception {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("collegeName", "外国语学院");
+            result.put("courseCount", 5);
+            result.put("studentCount", 120);
+            result.put("teacherCount", 8);
+            result.put("bindingCount", 600);
+
+            when(syncService.chainFetchStudentsByCollege("外国语学院", "eq", true))
+                    .thenReturn(result);
+
+            mockMvc.perform(post("/api/admin/sync/chain/students-by-college")
+                            .param("collegeName", "外国语学院")
+                            .param("matchMode", "eq")
+                            .param("persist", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(200))
+                    .andExpect(jsonPath("$.data.courseCount").value(5))
+                    .andExpect(jsonPath("$.data.studentCount").value(120));
+        }
+
+        @Test
+        @DisplayName("按学院链式拉取失败返回错误")
+        void chainFetch_failure() throws Exception {
+            when(syncService.chainFetchStudentsByCollege("外国语学院", "eq", true))
+                    .thenThrow(new RuntimeException("分页异常"));
+
+            mockMvc.perform(post("/api/admin/sync/chain/students-by-college")
+                            .param("collegeName", "外国语学院")
+                            .param("matchMode", "eq")
+                            .param("persist", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(500))
+                    .andExpect(jsonPath("$.message").value("分页异常"));
+        }
+    }
+
     // ==================== Status tests ====================
 
     @Nested

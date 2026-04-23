@@ -124,7 +124,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             logger.warn("No endpoint mapping for teaching_plans");
             return Collections.emptyList();
         }
-        return fetchDataWithPath(basePath + "/" + planId + "/courses", null);
+        return fetchDataWithPath(basePath + "/" + planId + "/courses", null).getRows();
     }
 
     @Override
@@ -149,7 +149,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             params.put("xq", toSchoolSemester(semester));
         }
 
-        return fetchDataWithPath(basePath, params);
+        return fetchDataWithPath(basePath, params).getRows();
     }
 
     /**
@@ -232,20 +232,20 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     // Internal helpers
     // =========================================================================
 
-    /**
-     * 通过数据源名称获取数据（使用配置的端点映射）
-     */
-    private List<Map<String, Object>> fetchData(String dataSource, Map<String, String> params) {
+    SchoolDataFetchResult fetchDataWithSummary(String dataSource, Map<String, String> params) {
         String endpointPath = properties.getApi().getEndpointPath(dataSource);
         if (endpointPath == null) {
             logger.error("No API endpoint mapping configured for data source: {}", dataSource);
-            return Collections.emptyList();
+            return new SchoolDataFetchResult(Collections.emptyList(), SchoolDataFetchResult.PaginationSummary.empty());
         }
         return fetchDataWithPath(endpointPath, params);
     }
 
+    private List<Map<String, Object>> fetchData(String dataSource, Map<String, String> params) {
+        return fetchDataWithSummary(dataSource, params).getRows();
+    }
+
     /**
-     * 通过完整 URL 获取数据
      * <p>
      * <b>重要</b>：CDSP API 实际不支持 $beauty 参数（返回 IY1103 错误），
      * 尽管 PDF 文档第 6 节提到该参数。API 默认返回<b>中文参数名</b>作为 JSON keys
@@ -256,21 +256,32 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      * <p>
      * 支持的 OData 参数仅限：$top, $skip（分页），其他参数（$filter/$select/$beauty）均不支持。
      */
-    private List<Map<String, Object>> fetchDataWithPath(String fullUrl, Map<String, String> params) {
+    private SchoolDataFetchResult fetchDataWithPath(String fullUrl, Map<String, String> params) {
         if (fullUrl == null || fullUrl.isEmpty()) {
             logger.error("学校数据 API URL 未配置（fetchDataWithPath 接收到空 URL），返回空集合");
-            return Collections.emptyList();
+            return new SchoolDataFetchResult(Collections.emptyList(), SchoolDataFetchResult.PaginationSummary.empty());
         }
 
         Map<String, String> baseParams = params == null
                 ? new LinkedHashMap<>()
                 : new LinkedHashMap<>(params);
 
+        if ("level_exam_scores".equals(resolveDataSourceName(fullUrl))) {
+            List<Map<String, Object>> rows = fetchPage(buildUrl(fullUrl, baseParams));
+            return new SchoolDataFetchResult(
+                    rows,
+                    new SchoolDataFetchResult.PaginationSummary(true, rows.isEmpty() ? "EMPTY_FIRST_PAGE" : "NON_PAGINATED_ENDPOINT", rows.isEmpty() ? 0 : 1, 0, 0, false, rows.size())
+            );
+        }
+
         final int pageSize = 1000;
+        final int maxPages = 200;
         int skip = 0;
+        int pageIndex = 0;
+        String previousPageFingerprint = null;
         List<Map<String, Object>> allRows = new ArrayList<>();
 
-        while (true) {
+        while (pageIndex < maxPages) {
             Map<String, String> effectiveParams = new LinkedHashMap<>(baseParams);
             effectiveParams.put("$top", String.valueOf(pageSize));
             effectiveParams.put("$skip", String.valueOf(skip));
@@ -278,20 +289,41 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
             List<Map<String, Object>> pageRows = fetchPage(url);
             if (pageRows.isEmpty()) {
-                break;
+                String stopReason = pageIndex == 0 ? "EMPTY_FIRST_PAGE" : "EMPTY_PAGE_AFTER_FULL_PAGE";
+                logger.info("学校数据 API 分页拉取结束 url={} reason={} pageIndex={} skip={} total={}",
+                        fullUrl, stopReason, pageIndex, skip, allRows.size());
+                return new SchoolDataFetchResult(
+                        allRows,
+                        new SchoolDataFetchResult.PaginationSummary(true, stopReason, pageIndex, skip, pageSize, false, allRows.size())
+                );
+            }
+
+            String currentFingerprint = fingerprintPage(pageRows);
+            if (skip > 0 && currentFingerprint.equals(previousPageFingerprint)) {
+                logger.error("学校数据 API 分页异常：疑似上游忽略 $skip url={} skip={} pageSize={} totalSoFar={}",
+                        fullUrl, skip, pageSize, allRows.size());
+                throw new BusinessException("学校数据分页异常：上游接口未正确翻页，已中止以避免重复拉取");
             }
 
             allRows.addAll(pageRows);
-            logger.info("学校数据 API 分页拉取完成一页 url={} skip={} pageSize={} received={} total={}",
-                    fullUrl, skip, pageSize, pageRows.size(), allRows.size());
+            pageIndex++;
+            logger.info("学校数据 API 分页拉取完成一页 url={} pageIndex={} skip={} pageSize={} received={} total={}",
+                    fullUrl, pageIndex, skip, pageSize, pageRows.size(), allRows.size());
 
             if (pageRows.size() < pageSize) {
-                break;
+                logger.info("学校数据 API 分页拉取结束 url={} reason=LAST_PAGE_LT_PAGE_SIZE pageIndex={} skip={} total={}",
+                        fullUrl, pageIndex, skip, allRows.size());
+                return new SchoolDataFetchResult(
+                        allRows,
+                        new SchoolDataFetchResult.PaginationSummary(true, "LAST_PAGE_LT_PAGE_SIZE", pageIndex, skip, pageSize, false, allRows.size())
+                );
             }
+            previousPageFingerprint = currentFingerprint;
             skip += pageSize;
         }
 
-        return allRows;
+        logger.error("学校数据 API 分页超过最大页数限制 url={} maxPages={} total={}", fullUrl, maxPages, allRows.size());
+        throw new BusinessException("学校数据分页异常：超过最大分页次数，请缩小范围后重试");
     }
 
     private List<Map<String, Object>> fetchPage(String url) {
@@ -368,6 +400,36 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         }
 
         return url.toString();
+    }
+
+    private String fingerprintPage(List<Map<String, Object>> pageRows) {
+        if (pageRows == null || pageRows.isEmpty()) {
+            return "empty";
+        }
+        Map<String, Object> first = pageRows.get(0);
+        Map<String, Object> last = pageRows.get(pageRows.size() - 1);
+        return pageRows.size() + "|" + fingerprintRecord(first) + "|" + fingerprintRecord(last);
+    }
+
+    private String resolveDataSourceName(String fullUrl) {
+        for (Map.Entry<String, String> entry : properties.getApi().getEndpoints().entrySet()) {
+            if (fullUrl.equals(entry.getValue())) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    private String fingerprintRecord(Map<String, Object> record) {
+        if (record == null || record.isEmpty()) {
+            return "null";
+        }
+        return record.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(5)
+                .map(entry -> entry.getKey() + "=" + String.valueOf(entry.getValue()))
+                .reduce((left, right) -> left + "&" + right)
+                .orElse("empty");
     }
 
     /**

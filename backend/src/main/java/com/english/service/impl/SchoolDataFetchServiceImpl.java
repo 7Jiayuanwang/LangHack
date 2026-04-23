@@ -2,6 +2,7 @@ package com.english.service.impl;
 
 import com.english.dto.SchoolDataSyncFilterRequest;
 import com.english.exception.BusinessException;
+import com.english.service.FieldMappingService;
 import com.english.service.SchoolDataApiClient;
 import com.english.service.SchoolDataFetchService;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,13 +21,16 @@ import java.util.Map;
 public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
 
     private final SchoolDataApiClient apiClient;
+    private final FieldMappingService fieldMappingService;
 
-    public SchoolDataFetchServiceImpl(@Qualifier("schoolDataApiClientDelegate") SchoolDataApiClient apiClient) {
+    public SchoolDataFetchServiceImpl(@Qualifier("schoolDataApiClientDelegate") SchoolDataApiClient apiClient,
+                                      FieldMappingService fieldMappingService) {
         this.apiClient = apiClient;
+        this.fieldMappingService = fieldMappingService;
     }
 
     @Override
-    public List<Map<String, Object>> fetchRawData(String dataSource, SchoolDataSyncFilterRequest request) {
+    public SchoolDataFetchResult fetchRawDataWithSummary(String dataSource, SchoolDataSyncFilterRequest request) {
         if ("student_schedule".equals(dataSource) && hasFilterRequest(request)) {
             String studentId = null;
             String academicYear = null;
@@ -49,18 +53,35 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
             if (studentId == null || studentId.isEmpty()) {
                 throw new BusinessException("student_schedule 手动同步必须提供学号");
             }
-            return fetchStudentScheduleRaw(studentId, academicYear, semester);
+            return new SchoolDataFetchResult(
+                    fetchStudentScheduleRaw(studentId, academicYear, semester),
+                    new SchoolDataFetchResult.PaginationSummary(true, "STUDENT_SCHEDULE_DIRECT", 1, 0, 0, false, 0)
+            );
         }
 
         Map<String, String> upstreamParams = buildUpstreamParams(dataSource, request);
-        List<Map<String, Object>> fetchData = fetchFromApi(dataSource, upstreamParams);
-        return applyFilterGroups(fetchData, request);
+        SchoolDataFetchResult fetchResult = fetchFromApiWithSummary(dataSource, upstreamParams);
+        List<Map<String, Object>> filtered = applyFilterGroups(dataSource, fetchResult.getRows(), request);
+        return new SchoolDataFetchResult(filtered, fetchResult.getPaginationSummary());
+    }
+
+    @Override
+    public List<Map<String, Object>> fetchRawData(String dataSource, SchoolDataSyncFilterRequest request) {
+        return fetchRawDataWithSummary(dataSource, request).getRows();
     }
 
     @Override
     public List<Map<String, Object>> fetchStudentScheduleRaw(String studentId, String academicYear, Integer semester) {
         List<Map<String, Object>> fetchData = apiClient.fetchStudentSchedules(studentId, academicYear, semester);
         return fetchData == null ? Collections.emptyList() : fetchData;
+    }
+
+    private SchoolDataFetchResult fetchFromApiWithSummary(String dataSource, Map<String, String> extraParams) {
+        if (apiClient instanceof SchoolDataApiClientDelegate) {
+            return ((SchoolDataApiClientDelegate) apiClient).fetchDataWithSummary(dataSource, extraParams);
+        }
+        List<Map<String, Object>> rows = fetchFromApi(dataSource, extraParams);
+        return new SchoolDataFetchResult(rows, new SchoolDataFetchResult.PaginationSummary(true, "LEGACY_CLIENT", rows.isEmpty() ? 0 : 1, 0, 0, false, rows.size()));
     }
 
     private List<Map<String, Object>> fetchFromApi(String dataSource, Map<String, String> extraParams) {
@@ -149,21 +170,23 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
         return params;
     }
 
-    private List<Map<String, Object>> applyFilterGroups(List<Map<String, Object>> fetchData,
+    private List<Map<String, Object>> applyFilterGroups(String dataSource,
+                                                        List<Map<String, Object>> fetchData,
                                                         SchoolDataSyncFilterRequest request) {
         if (!hasFilterRequest(request) || fetchData == null || fetchData.isEmpty()) {
             return fetchData == null ? Collections.emptyList() : fetchData;
         }
         List<Map<String, Object>> filtered = new ArrayList<>();
         for (Map<String, Object> row : fetchData) {
-            if (matchesAllGroups(row, request.getFilterGroups())) {
+            if (matchesAllGroups(dataSource, row, request.getFilterGroups())) {
                 filtered.add(row);
             }
         }
         return filtered;
     }
 
-    private boolean matchesAllGroups(Map<String, Object> row,
+    private boolean matchesAllGroups(String dataSource,
+                                     Map<String, Object> row,
                                      List<SchoolDataSyncFilterRequest.FilterGroup> groups) {
         for (SchoolDataSyncFilterRequest.FilterGroup group : groups) {
             if (group == null || group.getConditions() == null || group.getConditions().isEmpty()) {
@@ -172,7 +195,7 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
             boolean isOr = "OR".equalsIgnoreCase(defaultString(group.getRelation(), "AND"));
             boolean groupResult = !isOr;
             for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
-                boolean conditionMatched = matchesCondition(row, condition);
+                boolean conditionMatched = matchesCondition(dataSource, row, condition);
                 if (isOr) {
                     groupResult = groupResult || conditionMatched;
                     if (groupResult) break;
@@ -188,12 +211,14 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
         return true;
     }
 
-    private boolean matchesCondition(Map<String, Object> row, SchoolDataSyncFilterRequest.FilterCondition condition) {
+    private boolean matchesCondition(String dataSource,
+                                     Map<String, Object> row,
+                                     SchoolDataSyncFilterRequest.FilterCondition condition) {
         if (condition == null || condition.getField() == null) {
             return true;
         }
         String operator = defaultString(condition.getOperator(), "eq").toLowerCase(Locale.ROOT);
-        String actual = stringValue(row.get(condition.getField()));
+        String actual = resolveFilterValue(dataSource, row, condition.getField());
         String expected = defaultString(condition.getValue(), "").trim();
         switch (operator) {
             case "contains":
@@ -208,6 +233,19 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
             default:
                 return actual.equals(expected);
         }
+    }
+
+    private String resolveFilterValue(String dataSource, Map<String, Object> row, String field) {
+        Object direct = row.get(field);
+        if (direct != null) {
+            return stringValue(direct);
+        }
+        Map<String, Object> mapped = fieldMappingService.applyMapping(dataSource, row);
+        Object mappedValue = mapped.get(field);
+        if (mappedValue != null) {
+            return stringValue(mappedValue);
+        }
+        return "";
     }
 
     private int compareAsNumber(String actual, String expected) {
