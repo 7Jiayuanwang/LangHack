@@ -31,6 +31,11 @@ vi.mock('@/api/auth', () => ({
   logout: vi.fn().mockResolvedValue({ code: 200 }),
 }))
 
+vi.mock('@/api/sso', () => ({
+  getSsoStatus: vi.fn().mockResolvedValue({ code: 200, data: { enabled: false } }),
+  getSsoLogoutUrl: vi.fn().mockResolvedValue({ code: 200, data: { logoutUrl: '' } }),
+}))
+
 vi.mock('@/api/systemConfig', () => ({
   getFeatureToggles: vi.fn().mockResolvedValue({
     code: 200,
