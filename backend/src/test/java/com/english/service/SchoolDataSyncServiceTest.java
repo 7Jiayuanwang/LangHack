@@ -1,8 +1,10 @@
 package com.english.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.entity.FieldMapping;
 import com.english.entity.SyncLog;
 import com.english.mapper.*;
+import com.english.service.impl.SchoolDataFetchResult;
 import com.english.service.impl.SchoolDataSyncServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -82,12 +84,23 @@ class SchoolDataSyncServiceTest {
     @Mock
     private TeacherStudentBindingMapper teacherStudentBindingMapper;
 
+    @Mock
+    private TeachingPlanCourseMapper teachingPlanCourseMapper;
+
+    @Mock
+    private UserMapper userMapper;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
     @BeforeEach
     void setUp() {
         syncService = new SchoolDataSyncServiceImpl(
                 apiClient, fetchService, persistService, fieldMappingService, syncLogMapper,
                 levelExamScoreMapper, studentScheduleMapper, schoolStudentMapper,
-                teacherStudentBindingMapper
+                teacherStudentBindingMapper, administrativeClassMapper, schoolCourseMapper,
+                teachingClassMapper, courseScheduleMapper, courseSelectionMapper,
+                teachingPlanMapper, teachingPlanCourseMapper, userMapper, objectMapper
         );
     }
 
@@ -107,13 +120,13 @@ class SchoolDataSyncServiceTest {
         @Test
         @DisplayName("API返回空数据时返回零计数同步日志")
         void fullSync_emptyApiData_returnsZeroCounts() {
-            when(fetchService.fetchRawData(eq("administrative_class"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawDataWithSummary(eq("administrative_class"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(syncLogMapper.insert(any())).thenReturn(1);
 
             SyncLog result = syncService.fullSync("administrative_class", "MANUAL", "admin");
 
             assertNotNull(result);
-            verify(fetchService).fetchRawData(eq("administrative_class"), isNull());
+            verify(fetchService).fetchRawDataWithSummary(eq("administrative_class"), isNull());
         }
 
         @Test
@@ -123,7 +136,7 @@ class SchoolDataSyncServiceTest {
                     Map.of("XZBH", "20230101", "XZMC", "计算机1班")
             );
 
-            when(fetchService.fetchRawData(eq("administrative_class"), isNull())).thenReturn(apiData);
+            when(fetchService.fetchRawDataWithSummary(eq("administrative_class"), isNull())).thenReturn(fetchResult(apiData));
             when(persistService.persistRawData(eq("administrative_class"), eq(apiData), eq("SCHOOL_API")))
                     .thenReturn(new SchoolDataPersistService.PersistResult(1, 1, 0, 0));
             when(syncLogMapper.insert(any())).thenReturn(1);
@@ -143,7 +156,7 @@ class SchoolDataSyncServiceTest {
                     Map.of("XH", "2023001", "KCBH", "ENG101-01")
             );
 
-            when(fetchService.fetchRawData(eq("course_selection"), isNull())).thenReturn(apiData);
+            when(fetchService.fetchRawDataWithSummary(eq("course_selection"), isNull())).thenReturn(fetchResult(apiData));
             when(persistService.persistRawData(eq("course_selection"), eq(apiData), eq("SCHOOL_API")))
                     .thenReturn(new SchoolDataPersistService.PersistResult(1, 1, 0, 0));
             when(syncLogMapper.insert(any())).thenReturn(1);
@@ -162,7 +175,7 @@ class SchoolDataSyncServiceTest {
                     Map.of("XZBH", "150108", "XZMC", "15植保2")
             );
 
-            when(fetchService.fetchRawData(eq("administrative_class"), isNull())).thenReturn(apiData);
+            when(fetchService.fetchRawDataWithSummary(eq("administrative_class"), isNull())).thenReturn(fetchResult(apiData));
             when(persistService.persistRawData(eq("administrative_class"), eq(apiData), eq("SCHOOL_API")))
                     .thenReturn(new SchoolDataPersistService.PersistResult(1, 1, 0, 0));
             when(syncLogMapper.insert(any())).thenReturn(1);
@@ -175,6 +188,23 @@ class SchoolDataSyncServiceTest {
         }
 
 
+
+        @Test
+        @DisplayName("上游响应显示未完整拉取时全量同步失败且不落库")
+        void fullSync_incompleteFetch_failsWithoutPersisting() {
+            List<Map<String, Object>> apiData = List.of(Map.of("XZBH", "20230101"));
+            when(fetchService.fetchRawDataWithSummary(eq("administrative_class"), isNull()))
+                    .thenReturn(incompleteFetchResult(apiData));
+            when(syncLogMapper.insert(any())).thenReturn(1);
+            when(syncLogMapper.updateById(any())).thenReturn(1);
+
+            SyncLog result = syncService.fullSync("administrative_class", "MANUAL", "admin");
+
+            assertEquals("FAILED", result.getStatus());
+            assertTrue(result.getErrorMessage().contains("学校数据未完整拉取"));
+            verify(persistService, never()).persistRawData(anyString(), any(), anyString());
+        }
+
         @Test
         @DisplayName("level_exam_scores 姓名优先使用本地 school_student 映射")
         void fullSync_levelExamScores_nameResolvedFromSchoolStudent() {
@@ -182,7 +212,7 @@ class SchoolDataSyncServiceTest {
                     Map.of("xh", "2023001", "kskm", "CET4", "ksrq", "2026-01-01", "fskscj", 425)
             );
 
-            when(fetchService.fetchRawData(eq("level_exam_scores"), isNull())).thenReturn(apiData);
+            when(fetchService.fetchRawDataWithSummary(eq("level_exam_scores"), isNull())).thenReturn(fetchResult(apiData));
             when(persistService.persistRawData(eq("level_exam_scores"), eq(apiData), eq("SCHOOL_API")))
                     .thenReturn(new SchoolDataPersistService.PersistResult(1, 1, 0, 0));
             when(syncLogMapper.insert(any())).thenReturn(1);
@@ -204,28 +234,28 @@ class SchoolDataSyncServiceTest {
         @Test
         @DisplayName("同步所有9个数据源")
         void fullSyncAll_syncsAllDataSources() {
-            when(fetchService.fetchRawData(anyString(), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawDataWithSummary(anyString(), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
             List<SyncLog> results = syncService.fullSyncAll("SCHEDULED", "SYSTEM");
 
             assertEquals(9, results.size());
-            verify(fetchService, times(9)).fetchRawData(anyString(), isNull());
+            verify(fetchService, times(9)).fetchRawDataWithSummary(anyString(), isNull());
         }
 
         @Test
         @DisplayName("单个数据源失败不影响其他数据源")
         void fullSyncAll_singleFailure_continuesWithOthers() {
-            when(fetchService.fetchRawData(eq("administrative_class"), isNull())).thenReturn(Collections.emptyList());
-            when(fetchService.fetchRawData(eq("school_course"), isNull())).thenThrow(new RuntimeException("API错误"));
-            when(fetchService.fetchRawData(eq("teaching_class"), isNull())).thenReturn(Collections.emptyList());
-            when(fetchService.fetchRawData(eq("course_schedule"), isNull())).thenReturn(Collections.emptyList());
-            when(fetchService.fetchRawData(eq("course_selection"), isNull())).thenReturn(Collections.emptyList());
-            when(fetchService.fetchRawData(eq("level_exam_scores"), isNull())).thenReturn(Collections.emptyList());
-            when(fetchService.fetchRawData(eq("teaching_plans"), isNull())).thenReturn(Collections.emptyList());
-            when(fetchService.fetchRawData(eq("teacher_courses"), isNull())).thenReturn(Collections.emptyList());
-            when(fetchService.fetchRawData(eq("student_schedule"), isNull())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawDataWithSummary(eq("administrative_class"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            when(fetchService.fetchRawDataWithSummary(eq("school_course"), isNull())).thenThrow(new RuntimeException("API错误"));
+            when(fetchService.fetchRawDataWithSummary(eq("teaching_class"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            when(fetchService.fetchRawDataWithSummary(eq("course_schedule"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            when(fetchService.fetchRawDataWithSummary(eq("course_selection"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            when(fetchService.fetchRawDataWithSummary(eq("level_exam_scores"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            when(fetchService.fetchRawDataWithSummary(eq("teaching_plans"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            when(fetchService.fetchRawDataWithSummary(eq("teacher_courses"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            when(fetchService.fetchRawDataWithSummary(eq("student_schedule"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
@@ -246,7 +276,7 @@ class SchoolDataSyncServiceTest {
         @Test
         @DisplayName("增量同步调用API并写入同步日志")
         void incrementalSync_callsApiAndWritesLog() {
-            when(fetchService.fetchRawData(eq("administrative_class"), any())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawDataWithSummary(eq("administrative_class"), any())).thenReturn(fetchResult(Collections.emptyList()));
             when(syncLogMapper.insert(any())).thenAnswer(invocation -> {
                 SyncLog log = invocation.getArgument(0);
                 log.setId(1L);
@@ -256,13 +286,13 @@ class SchoolDataSyncServiceTest {
 
             syncService.incrementalSync("administrative_class", "MANUAL", "admin");
 
-            verify(fetchService).fetchRawData(eq("administrative_class"), any());
+            verify(fetchService).fetchRawDataWithSummary(eq("administrative_class"), any());
         }
 
         @Test
         @DisplayName("增量同步无数据时仍完成日志记录")
         void incrementalSync_emptyResult_completesSuccessfully() {
-            when(fetchService.fetchRawData(eq("administrative_class"), any())).thenReturn(Collections.emptyList());
+            when(fetchService.fetchRawDataWithSummary(eq("administrative_class"), any())).thenReturn(fetchResult(Collections.emptyList()));
             when(syncLogMapper.insert(any())).thenAnswer(invocation -> {
                 SyncLog log = invocation.getArgument(0);
                 log.setId(1L);
@@ -272,7 +302,27 @@ class SchoolDataSyncServiceTest {
 
             syncService.incrementalSync("administrative_class", "MANUAL", "admin");
 
-            verify(fetchService).fetchRawData(eq("administrative_class"), any());
+            verify(fetchService).fetchRawDataWithSummary(eq("administrative_class"), any());
+        }
+
+        @Test
+        @DisplayName("上游响应显示未完整拉取时增量同步失败且不落库")
+        void incrementalSync_incompleteFetch_failsWithoutPersisting() {
+            List<Map<String, Object>> apiData = List.of(Map.of("XZBH", "20230101"));
+            when(fetchService.fetchRawDataWithSummary(eq("administrative_class"), any()))
+                    .thenReturn(incompleteFetchResult(apiData));
+            when(syncLogMapper.insert(any())).thenAnswer(invocation -> {
+                SyncLog log = invocation.getArgument(0);
+                log.setId(1L);
+                return 1;
+            });
+            when(syncLogMapper.updateById(any())).thenReturn(1);
+
+            SyncLog result = syncService.incrementalSync("administrative_class", "MANUAL", "admin");
+
+            assertEquals("FAILED", result.getStatus());
+            assertTrue(result.getErrorMessage().contains("学校数据未完整拉取"));
+            verify(persistService, never()).persistRawData(anyString(), any(), anyString());
         }
     }
 
@@ -654,4 +704,14 @@ class SchoolDataSyncServiceTest {
             verify(persistService, never()).persistMappedRecord(eq("school_teacher"), any());
         }
     }
+    private SchoolDataFetchResult fetchResult(List<Map<String, Object>> rows) {
+        return new SchoolDataFetchResult(rows, new SchoolDataFetchResult.PaginationSummary(
+                true, rows.isEmpty() ? "EMPTY_FIRST_PAGE" : "DIRECT_ARRAY_RESPONSE", rows.isEmpty() ? 0 : 1, 0, 0, false, rows.size()));
+    }
+
+    private SchoolDataFetchResult incompleteFetchResult(List<Map<String, Object>> rows) {
+        return new SchoolDataFetchResult(rows, new SchoolDataFetchResult.PaginationSummary(
+                false, "UPSTREAM_HAS_MORE_UNSUPPORTED", 1, 0, 0, true, rows.size()));
+    }
+
 }

@@ -293,13 +293,13 @@ public class SsoUserMappingService {
         if (ssoMappedRole == null) {
             log.warn("无法识别角色，授予普通用户 USER，并保留待审批状态等待管理员提升权限");
             User newUser = createUserFromSso(ssoUserInfo, "USER");
-            SsoUserBinding binding = createBinding(newUser.getId(), ssoUserInfo, protocol, false);
+            SsoUserBinding pendingBinding = createBinding(newUser.getId(), ssoUserInfo, protocol, false);
             String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
-            log.info("SSO 登录成功（无法识别角色时授予 USER 且待审批）: username={}, role={}, bindingId={}", newUser.getUsername(), newUser.getRole(), binding.getId());
+            log.info("SSO 登录成功（无法识别角色时授予 USER 且待审批）: username={}, role={}, bindingId={}", newUser.getUsername(), newUser.getRole(), pendingBinding.getId());
             return SsoLoginResult.successWithPendingApproval(
                     token,
                     newUser,
-                    binding.getId(),
+                    pendingBinding.getId(),
                     "当前已授予普通用户权限，您仍可正常登录；如需学生/教师等更高权限，请等待管理员审核。"
             );
         }
@@ -308,12 +308,12 @@ public class SsoUserMappingService {
         if (roleMappingService.requiresManualConfirmation(ssoMappedRole, ssoUserInfo.getMemberOf())) {
             log.info("角色 {} 需要人工确认，先授予 USER 并保留待审批", ssoMappedRole);
             User newUser = createUserFromSso(ssoUserInfo, "USER");
-            SsoUserBinding binding = createBinding(newUser.getId(), ssoUserInfo, protocol, false);
+            SsoUserBinding pendingBinding = createBinding(newUser.getId(), ssoUserInfo, protocol, false);
             String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
             return SsoLoginResult.successWithPendingApproval(
                     token,
                     newUser,
-                    binding.getId(),
+                    pendingBinding.getId(),
                     "当前已授予普通用户权限，您仍可正常登录；如需更高权限，请等待管理员审核。"
             );
         }
@@ -327,6 +327,18 @@ public class SsoUserMappingService {
 
         log.info("SSO 登录成功（新用户）: username={}, role={}", newUser.getUsername(), newUser.getRole());
         return SsoLoginResult.success(token, newUser);
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 
     /**

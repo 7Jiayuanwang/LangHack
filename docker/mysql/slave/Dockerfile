@@ -1,4 +1,5 @@
-FROM mysql:8.0
+ARG IMAGE_REGISTRY_PREFIX=
+FROM ${IMAGE_REGISTRY_PREFIX}mysql:8.0
 
 # Build context: docker/
 # 从库仅复制表结构脚本（00、04、08），数据通过 init-replication.sh 的 mysqldump 从主库同步

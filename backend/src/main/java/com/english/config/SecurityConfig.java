@@ -154,6 +154,7 @@ public class SecurityConfig {
                 // 教师权限
                 .antMatchers("/api/teacher/**").hasAnyRole("TEACHER", "ADMIN")
                 // 学生权限
+                .antMatchers("/api/student/learning/**").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN", "OPS")
                 .antMatchers("/api/student/**").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN")
                 // 个性化功能开关：OPS 也需要访问，用于共享后台布局
                 .antMatchers("/api/user/feature-toggles").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN", "OPS")

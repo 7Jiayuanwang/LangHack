@@ -100,12 +100,34 @@ export function getStudentSchedules(params) {
   return request({ url: '/api/admin/school-data/student-schedules', method: 'get', params })
 }
 
+/**
+ * 获取指定数据源的筛选字段元数据
+ */
+export function getSchoolDataFilterFields(dataSource) {
+  return request({ url: `/api/admin/school-data/${dataSource}/filter-fields`, method: 'get' })
+}
+
+/**
+ * 使用统一 filterGroups 查询学校数据
+ */
+export function querySchoolData(dataSource, data) {
+  return request({ url: `/api/admin/school-data/${dataSource}/query`, method: 'post', data })
+}
+
 export function fullSyncSchoolDataFiltered(dataSource, data) {
   return request({ url: `/api/admin/sync/full/${dataSource}/filtered`, method: 'post', data })
 }
 
 export function incrementalSyncSchoolDataFiltered(dataSource, data) {
   return request({ url: `/api/admin/sync/incremental/${dataSource}/filtered`, method: 'post', data })
+}
+
+export function fullSyncAllSchoolData(params) {
+  return request({ url: '/api/admin/sync/full-all', method: 'post', params })
+}
+
+export function incrementalSyncAllSchoolData(params) {
+  return request({ url: '/api/admin/sync/incremental-all', method: 'post', params })
 }
 
 /**

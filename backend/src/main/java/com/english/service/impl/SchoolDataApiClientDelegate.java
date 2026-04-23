@@ -42,6 +42,44 @@ public class SchoolDataApiClientDelegate implements SchoolDataApiClient {
         return apiClient; // default to api
     }
 
+    SchoolDataFetchResult fetchDataWithSummary(String dataSource, Map<String, String> params) {
+        SchoolDataApiClient target = delegate();
+        if (target instanceof SchoolDataApiClientImpl) {
+            return ((SchoolDataApiClientImpl) target).fetchDataWithSummary(dataSource, params);
+        }
+        List<Map<String, Object>> rows;
+        switch (dataSource) {
+            case "administrative_class":
+                rows = target.fetchAdministrativeClasses(params);
+                break;
+            case "school_course":
+                rows = target.fetchSchoolCourses(params);
+                break;
+            case "teaching_class":
+                rows = target.fetchTeachingClasses(params);
+                break;
+            case "course_schedule":
+                rows = target.fetchCourseSchedules(params);
+                break;
+            case "course_selection":
+                rows = target.fetchCourseSelections(params);
+                break;
+            case "level_exam_scores":
+                rows = target.fetchLevelExamScores(params);
+                break;
+            case "teaching_plans":
+                rows = target.fetchTeachingPlans(params);
+                break;
+            case "teacher_courses":
+                rows = target.fetchTeacherCourses(params);
+                break;
+            default:
+                rows = List.of();
+                break;
+        }
+        return new SchoolDataFetchResult(rows, new SchoolDataFetchResult.PaginationSummary(true, "DELEGATE_FALLBACK", rows.isEmpty() ? 0 : 1, 0, 0, false, rows.size()));
+    }
+
     @Override
     public List<Map<String, Object>> fetchAdministrativeClasses(Map<String, String> params) {
         return delegate().fetchAdministrativeClasses(params);

@@ -1,6 +1,7 @@
 package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.dto.SchoolDataSyncFilterRequest;
 import com.english.entity.*;
 import com.english.exception.BusinessException;
@@ -16,7 +17,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +56,15 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private final StudentScheduleMapper studentScheduleMapper;
     private final SchoolStudentMapper schoolStudentMapper;
     private final TeacherStudentBindingMapper teacherStudentBindingMapper;
+    private final AdministrativeClassMapper administrativeClassMapper;
+    private final SchoolCourseMapper schoolCourseMapper;
+    private final TeachingClassMapper teachingClassMapper;
+    private final CourseScheduleMapper courseScheduleMapper;
+    private final CourseSelectionMapper courseSelectionMapper;
+    private final TeachingPlanMapper teachingPlanMapper;
+    private final TeachingPlanCourseMapper teachingPlanCourseMapper;
+    private final UserMapper userMapper;
+    private final ObjectMapper objectMapper;
 
     public SchoolDataSyncServiceImpl(@Qualifier("schoolDataApiClientDelegate") SchoolDataApiClient apiClient,
                                      SchoolDataFetchService fetchService,
@@ -62,7 +74,16 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                                      LevelExamScoreMapper levelExamScoreMapper,
                                      StudentScheduleMapper studentScheduleMapper,
                                      SchoolStudentMapper schoolStudentMapper,
-                                     TeacherStudentBindingMapper teacherStudentBindingMapper) {
+                                     TeacherStudentBindingMapper teacherStudentBindingMapper,
+                                     AdministrativeClassMapper administrativeClassMapper,
+                                     SchoolCourseMapper schoolCourseMapper,
+                                     TeachingClassMapper teachingClassMapper,
+                                     CourseScheduleMapper courseScheduleMapper,
+                                     CourseSelectionMapper courseSelectionMapper,
+                                     TeachingPlanMapper teachingPlanMapper,
+                                     TeachingPlanCourseMapper teachingPlanCourseMapper,
+                                     UserMapper userMapper,
+                                     ObjectMapper objectMapper) {
         this.apiClient = apiClient;
         this.fetchService = fetchService;
         this.persistService = persistService;
@@ -72,6 +93,15 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         this.studentScheduleMapper = studentScheduleMapper;
         this.schoolStudentMapper = schoolStudentMapper;
         this.teacherStudentBindingMapper = teacherStudentBindingMapper;
+        this.administrativeClassMapper = administrativeClassMapper;
+        this.schoolCourseMapper = schoolCourseMapper;
+        this.teachingClassMapper = teachingClassMapper;
+        this.courseScheduleMapper = courseScheduleMapper;
+        this.courseSelectionMapper = courseSelectionMapper;
+        this.teachingPlanMapper = teachingPlanMapper;
+        this.teachingPlanCourseMapper = teachingPlanCourseMapper;
+        this.userMapper = userMapper;
+        this.objectMapper = objectMapper;
     }
 
     // =========================================================================
@@ -362,33 +392,48 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     }
 
     private SyncResult doFullSync(String dataSource, SchoolDataSyncFilterRequest request) {
-        List<Map<String, Object>> fetchData = fetchService.fetchRawData(dataSource, request);
-        if (fetchData.isEmpty()) {
-            return new SyncResult(0, 0, 0, 0);
+        SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
+        ensureCompleteFetch(dataSource, fetchResult);
+        if (fetchResult.getRows().isEmpty()) {
+            return new SyncResult(0, 0, 0, 0, fetchResult.getPaginationSummary());
         }
 
-        return toSyncResult(persistService.persistRawData(dataSource, fetchData, "SCHOOL_API"));
+        return toSyncResult(persistService.persistRawData(dataSource, fetchResult.getRows(), "SCHOOL_API"), fetchResult.getPaginationSummary());
     }
 
     /**
      * 执行单个数据源的增量同步
      * <p>
-     * CDSP API 实际仅支持基本分页参数（$top/$skip），不支持 $filter/$select/$beauty 等 OData 扩展参数
-     * （会触发 IY1103 "NOT SUPPORTED: URI: customQuery"），
+     * CDSP API 当前按端点原生参数请求，不自动追加 $top/$skip/$filter/$select/$beauty 等 OData 参数，
+     * 避免触发 IY1103 "NOT SUPPORTED: URI: customQuery"。
      * 因此增量同步实际退化为全量拉取 + 按业务主键 UPSERT（由 upsertEntity 内部处理去重/覆盖）。
-     * 未来如需真正增量，需改用 $filter=<timestamp_field> gt <since_datetime> 的 OData 表达式（如果 API 支持）。
+     * 未来如需真正增量，需改用学校 API 明确支持的更新时间参数。
      */
     private SyncResult doIncrementalSync(String dataSource) {
         return doIncrementalSync(dataSource, null);
     }
 
     private SyncResult doIncrementalSync(String dataSource, SchoolDataSyncFilterRequest request) {
-        List<Map<String, Object>> fetchData = fetchService.fetchRawData(dataSource, request);
-        if (fetchData.isEmpty()) {
-            return new SyncResult(0, 0, 0, 0);
+        SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
+        ensureCompleteFetch(dataSource, fetchResult);
+        if (fetchResult.getRows().isEmpty()) {
+            return new SyncResult(0, 0, 0, 0, fetchResult.getPaginationSummary());
         }
 
-        return toSyncResult(persistService.persistRawData(dataSource, fetchData, "SCHOOL_API"));
+        return toSyncResult(persistService.persistRawData(dataSource, fetchResult.getRows(), "SCHOOL_API"), fetchResult.getPaginationSummary());
+    }
+
+    private void ensureCompleteFetch(String dataSource, SchoolDataFetchResult fetchResult) {
+        if (fetchResult == null) {
+            throw new BusinessException("学校数据拉取结果为空，已终止同步: dataSource=" + dataSource);
+        }
+        SchoolDataFetchResult.PaginationSummary summary = fetchResult.getPaginationSummary();
+        if (summary != null && !summary.isComplete()) {
+            throw new BusinessException("学校数据未完整拉取，已终止同步: dataSource="
+                    + dataSource
+                    + ", reason=" + summary.getStopReason()
+                    + ", fetchedRows=" + summary.getFetchedRowCount());
+        }
     }
 
     // =========================================================================
@@ -464,28 +509,6 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     // =========================================================================
     // 学生课表 按学生同步 & 查询
     // =========================================================================
-                upsertCourseSchedule(mappedData);
-                break;
-            case "course_selection":
-                upsertCourseSelection(mappedData);
-                break;
-            case "level_exam_scores":
-                upsertLevelExamScore(mappedData);
-                break;
-            case "teaching_plans":
-                upsertTeachingPlan(mappedData);
-                break;
-            case "teacher_courses":
-                // 教师授课数据映射到teaching_class表，与bzkcxx接口共享
-                upsertTeachingClass(mappedData);
-                break;
-            case "student_schedule":
-                upsertStudentSchedule(mappedData);
-                break;
-            default:
-                throw new BusinessException("不支持的数据源: " + dataSource);
-        }
-    }
 
     // =========================================================================
     // 各数据源 UPSERT 实现
@@ -1000,6 +1023,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         syncLog.setSuccessCount(result.success);
         syncLog.setFailCount(result.fail);
         syncLog.setSkipCount(result.skip);
+        applyPaginationSummary(syncLog, result.paginationSummary);
         syncLog.setEndTime(LocalDateTime.now());
         syncLog.setDurationMs(java.time.Duration.between(startTime, syncLog.getEndTime()).toMillis());
         syncLogMapper.updateById(syncLog);
@@ -1012,6 +1036,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         syncLog.setStatus("FAILED");
         syncLog.setEndTime(LocalDateTime.now());
         syncLog.setDurationMs(java.time.Duration.between(startTime, syncLog.getEndTime()).toMillis());
+        if (syncLog.getPaginationComplete() == null) {
+            syncLog.setPaginationComplete(false);
+        }
         // 错误信息截断，防止过长
         String errorMsg = e.getMessage();
         if (errorMsg != null && errorMsg.length() > 500) {
@@ -1406,8 +1433,22 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         return true;
     }
 
-    private SyncResult toSyncResult(SchoolDataPersistService.PersistResult result) {
-        return new SyncResult(result.getTotal(), result.getSuccess(), result.getFail(), result.getSkip());
+    private SyncResult toSyncResult(SchoolDataPersistService.PersistResult result,
+                                    SchoolDataFetchResult.PaginationSummary paginationSummary) {
+        return new SyncResult(result.getTotal(), result.getSuccess(), result.getFail(), result.getSkip(), paginationSummary);
+    }
+
+    private void applyPaginationSummary(SyncLog syncLog, SchoolDataFetchResult.PaginationSummary summary) {
+        if (syncLog == null || summary == null) {
+            return;
+        }
+        syncLog.setPaginationComplete(summary.isComplete());
+        syncLog.setPaginationStopReason(summary.getStopReason());
+        syncLog.setPaginationPagesFetched(summary.getPagesFetched());
+        syncLog.setPaginationLastSkip(summary.getLastSkip());
+        syncLog.setPaginationPageSize(summary.getPageSize());
+        syncLog.setPaginationGuardHit(summary.isGuardHit());
+        syncLog.setFetchedRowCount(summary.getFetchedRowCount());
     }
 
     // =========================================================================
@@ -1551,15 +1592,21 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         int success;
         int fail;
         int skip;
+        SchoolDataFetchResult.PaginationSummary paginationSummary;
 
         SyncResult() {
+            this.paginationSummary = SchoolDataFetchResult.PaginationSummary.empty();
         }
 
-        SyncResult(int total, int success, int fail, int skip) {
+        SyncResult(int total, int success, int fail, int skip,
+                   SchoolDataFetchResult.PaginationSummary paginationSummary) {
             this.total = total;
             this.success = success;
             this.fail = fail;
             this.skip = skip;
+            this.paginationSummary = paginationSummary == null
+                    ? SchoolDataFetchResult.PaginationSummary.empty()
+                    : paginationSummary;
         }
     }
 }

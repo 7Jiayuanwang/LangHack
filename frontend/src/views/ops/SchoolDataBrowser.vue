@@ -229,11 +229,12 @@
               />
             </el-select>
             <el-select v-model="condition.operator" placeholder="操作符" size="small" style="width: 100px">
-              <el-option value="eq" label="等于" />
-              <el-option value="contains" label="包含" />
-              <el-option value="gte" label="大于等于" />
-              <el-option value="lte" label="小于等于" />
-              <el-option value="in" label="在列表中" />
+              <el-option
+                v-for="operator in availableOperators(condition.field)"
+                :key="operator.value"
+                :label="operator.label"
+                :value="operator.value"
+              />
             </el-select>
             <el-input v-model="condition.value" placeholder="值" size="small" style="width: 150px" />
             <el-button
@@ -267,14 +268,8 @@ import { InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   getSchoolDataOverview,
-  getAdministrativeClasses,
-  getSchoolCourses,
-  getTeachingClasses,
-  getCourseSchedules,
-  getCourseSelections,
-  getLevelExamScores,
-  getTeachingPlans,
-  getStudentSchedules,
+  getSchoolDataFilterFields,
+  querySchoolData,
   fullSyncSchoolDataFiltered,
   incrementalSyncSchoolDataFiltered,
   chainFetchStudentsByCollege
@@ -282,7 +277,14 @@ import {
 import { getFeatureToggles } from '@/api/systemConfig'
 
 const DEFAULT_PAGE_SIZE = 20
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500, 1000]
+
+const OPERATOR_LABELS = {
+  eq: '等于',
+  contains: '包含',
+  gte: '大于等于',
+  lte: '小于等于',
+  in: '在列表中'
+}
 
 const dataSourceLabels = {
   administrative_class: '行政班',
@@ -295,46 +297,6 @@ const dataSourceLabels = {
   student_schedule: '学生课表'
 }
 
-// 每个数据源的可筛选字段定义
-const dataSourceFields = {
-  administrative_class: [
-    { label: '学院代码', field: 'collegeCode' },
-    { label: '年级', field: 'grade' }
-  ],
-  school_course: [
-    { label: '课程性质', field: 'courseNature' },
-    { label: '课程类别', field: 'courseCategory' }
-  ],
-  teaching_class: [
-    { label: '学年', field: 'academicYear' },
-    { label: '学期', field: 'semester' }
-  ],
-  course_schedule: [
-    { label: '教学班ID', field: 'classId' },
-    { label: '学年', field: 'academicYear' },
-    { label: '学期', field: 'semester' }
-  ],
-  course_selection: [
-    { label: '学号', field: 'studentId' },
-    { label: '课程编码', field: 'courseCode' },
-    { label: '学年', field: 'academicYear' },
-    { label: '学期', field: 'semester' }
-  ],
-  level_exam_scores: [
-    { label: '学号', field: 'studentId' },
-    { label: '考试类型', field: 'examType' }
-  ],
-  teaching_plans: [
-    { label: '专业代码', field: 'majorCode' },
-    { label: '年级', field: 'grade' }
-  ],
-  student_schedule: [
-    { label: '学号', field: 'studentId' },
-    { label: '学年', field: 'academicYear' },
-    { label: '学期', field: 'semester' }
-  ]
-}
-
 const activeTab = ref('administrative_class')
 const loading = ref(false)
 const tableData = ref([])
@@ -342,6 +304,7 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
 const overview = ref(null)
+const filterFields = ref([])
 
 // 同步相关状态
 const syncMode = ref('full')
@@ -364,42 +327,45 @@ const chainCollegeName = ref('外国语学院')
 const chainMatchMode = ref('eq')
 const chainResult = ref(null)
 
-const apiMap = {
-  administrative_class: getAdministrativeClasses,
-  school_course: getSchoolCourses,
-  teaching_class: getTeachingClasses,
-  course_schedule: getCourseSchedules,
-  course_selection: getCourseSelections,
-  level_exam_scores: getLevelExamScores,
-  teaching_plans: getTeachingPlans,
-  student_schedule: getStudentSchedules
-}
-
 const availableFields = computed(() => {
-  return dataSourceFields[activeTab.value] || []
+  return filterFields.value
 })
+
+function availableOperators(fieldName) {
+  const fieldDef = availableFields.value.find(field => field.field === fieldName)
+  return (fieldDef?.operators || ['eq']).map(value => ({ value, label: OPERATOR_LABELS[value] || value }))
+}
 
 const filterSummary = computed(() => {
   if (currentFilters.value.length === 0) return ''
   const parts = currentFilters.value.map(group => {
     const condStrs = group.conditions
       .filter(c => c.field && c.value)
-      .map(c => `${c.label || c.field} ${c.operator} ${c.value}`)
+      .map(c => {
+        const capability = c.capabilityLabel ? ` [${c.capabilityLabel}]` : ''
+        return `${c.label || c.field} ${c.operator} ${c.value}${capability}`
+      })
     return condStrs.length > 0 ? `(${condStrs.join(` ${group.relation} `)})` : ''
   }).filter(s => s)
   return parts.join(' AND ')
 })
 
-function buildListParams() {
-  const params = { page: currentPage.value, size: pageSize.value }
-  currentFilters.value.forEach(group => {
-    group.conditions
-      .filter(condition => condition.operator === 'eq' && condition.field && condition.value)
-      .forEach(condition => {
-        params[condition.field] = condition.value
-      })
-  })
-  return params
+function buildQueryPayload() {
+  return {
+    page: currentPage.value,
+    size: pageSize.value,
+    filterGroups: currentFilters.value
+  }
+}
+
+async function loadFilterFields() {
+  try {
+    const res = await getSchoolDataFilterFields(activeTab.value)
+    filterFields.value = res?.data || []
+  } catch (e) {
+    console.error('获取筛选字段失败:', e)
+    filterFields.value = []
+  }
 }
 
 async function loadOverview() {
@@ -414,9 +380,7 @@ async function loadOverview() {
 async function loadData() {
   loading.value = true
   try {
-    const apiFn = apiMap[activeTab.value]
-    if (!apiFn) return
-    const res = await apiFn(buildListParams())
+    const res = await querySchoolData(activeTab.value, buildQueryPayload())
     const pageData = res?.data
     tableData.value = pageData?.records || []
     total.value = pageData?.total || 0
@@ -429,10 +393,11 @@ async function loadData() {
   }
 }
 
-function handleTabChange() {
+async function handleTabChange() {
   currentPage.value = 1
   pageSize.value = DEFAULT_PAGE_SIZE
   currentFilters.value = []
+  await loadFilterFields()
   loadData()
 }
 
@@ -476,7 +441,17 @@ function onFieldChange(condition) {
   const fieldDef = availableFields.value.find(f => f.field === condition.field)
   if (fieldDef) {
     condition.label = fieldDef.label
+    condition.operator = fieldDef.operators?.[0] || 'eq'
+    condition.capabilityLabel = formatCapability(fieldDef.capabilities)
   }
+}
+
+function formatCapability(capabilities = {}) {
+  const labels = []
+  if (capabilities.listQuery) labels.push('列表')
+  if (capabilities.localSyncFilter) labels.push('同步后过滤')
+  if (capabilities.upstreamSyncFilter) labels.push('上游过滤')
+  return labels.join('/')
 }
 
 function saveFilters() {
@@ -552,10 +527,11 @@ async function loadFeatureToggles() {
   }
 }
 
-onMounted(() => {
-  loadFeatureToggles()
-  loadOverview()
-  loadData()
+onMounted(async () => {
+  await loadFeatureToggles()
+  await loadOverview()
+  await loadFilterFields()
+  await loadData()
 })
 </script>
 

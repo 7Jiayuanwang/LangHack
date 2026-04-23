@@ -2,6 +2,7 @@ package com.english.service.impl;
 
 import com.english.dto.SchoolDataSyncFilterRequest;
 import com.english.exception.BusinessException;
+import com.english.service.FieldMappingService;
 import com.english.service.SchoolDataApiClient;
 import com.english.service.SchoolDataFetchService;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,13 +21,16 @@ import java.util.Map;
 public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
 
     private final SchoolDataApiClient apiClient;
+    private final FieldMappingService fieldMappingService;
 
-    public SchoolDataFetchServiceImpl(@Qualifier("schoolDataApiClientDelegate") SchoolDataApiClient apiClient) {
+    public SchoolDataFetchServiceImpl(@Qualifier("schoolDataApiClientDelegate") SchoolDataApiClient apiClient,
+                                      FieldMappingService fieldMappingService) {
         this.apiClient = apiClient;
+        this.fieldMappingService = fieldMappingService;
     }
 
     @Override
-    public List<Map<String, Object>> fetchRawData(String dataSource, SchoolDataSyncFilterRequest request) {
+    public SchoolDataFetchResult fetchRawDataWithSummary(String dataSource, SchoolDataSyncFilterRequest request) {
         if ("student_schedule".equals(dataSource) && hasFilterRequest(request)) {
             String studentId = null;
             String academicYear = null;
@@ -49,18 +53,50 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
             if (studentId == null || studentId.isEmpty()) {
                 throw new BusinessException("student_schedule 手动同步必须提供学号");
             }
-            return fetchStudentScheduleRaw(studentId, academicYear, semester);
+            return new SchoolDataFetchResult(
+                    fetchStudentScheduleRaw(studentId, academicYear, semester),
+                    new SchoolDataFetchResult.PaginationSummary(true, "STUDENT_SCHEDULE_DIRECT", 1, 0, 0, false, 0)
+            );
         }
 
         Map<String, String> upstreamParams = buildUpstreamParams(dataSource, request);
-        List<Map<String, Object>> fetchData = fetchFromApi(dataSource, upstreamParams);
-        return applyFilterGroups(fetchData, request);
+        SchoolDataFetchResult fetchResult = fetchFromApiWithSummary(dataSource, upstreamParams);
+        List<Map<String, Object>> filtered = applyFilterGroups(dataSource, fetchResult.getRows(), request);
+        return new SchoolDataFetchResult(filtered, fetchResult.getPaginationSummary());
+    }
+
+    @Override
+    public List<Map<String, Object>> fetchRawData(String dataSource, SchoolDataSyncFilterRequest request) {
+        SchoolDataFetchResult fetchResult = fetchRawDataWithSummary(dataSource, request);
+        ensureCompleteFetch(dataSource, fetchResult);
+        return fetchResult.getRows();
+    }
+
+    private void ensureCompleteFetch(String dataSource, SchoolDataFetchResult fetchResult) {
+        if (fetchResult == null) {
+            throw new BusinessException("学校数据拉取结果为空: dataSource=" + dataSource);
+        }
+        SchoolDataFetchResult.PaginationSummary summary = fetchResult.getPaginationSummary();
+        if (summary != null && !summary.isComplete()) {
+            throw new BusinessException("学校数据未完整拉取: dataSource="
+                    + dataSource
+                    + ", reason=" + summary.getStopReason()
+                    + ", fetchedRows=" + summary.getFetchedRowCount());
+        }
     }
 
     @Override
     public List<Map<String, Object>> fetchStudentScheduleRaw(String studentId, String academicYear, Integer semester) {
         List<Map<String, Object>> fetchData = apiClient.fetchStudentSchedules(studentId, academicYear, semester);
         return fetchData == null ? Collections.emptyList() : fetchData;
+    }
+
+    private SchoolDataFetchResult fetchFromApiWithSummary(String dataSource, Map<String, String> extraParams) {
+        if (apiClient instanceof SchoolDataApiClientDelegate) {
+            return ((SchoolDataApiClientDelegate) apiClient).fetchDataWithSummary(dataSource, extraParams);
+        }
+        List<Map<String, Object>> rows = fetchFromApi(dataSource, extraParams);
+        return new SchoolDataFetchResult(rows, new SchoolDataFetchResult.PaginationSummary(true, "LEGACY_CLIENT", rows.isEmpty() ? 0 : 1, 0, 0, false, rows.size()));
     }
 
     private List<Map<String, Object>> fetchFromApi(String dataSource, Map<String, String> extraParams) {
@@ -113,33 +149,33 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
                 }
                 switch (dataSource) {
                     case "administrative_class":
-                        if ("collegeCode".equals(field)) params.put("XSH", value);
-                        else if ("grade".equals(field)) params.put("NJ", value);
+                        if (matchesAnyField(field, "collegeCode", "XSH", "xsh", "ssxybm")) params.put("XSH", value);
+                        else if (matchesAnyField(field, "grade", "NJ", "nj", "ssnj")) params.put("NJ", value);
                         break;
                     case "school_course":
-                        if ("collegeName".equals(field)) params.put("kkyx", value);
-                        else if ("courseCode".equals(field)) params.put("kcdm", value);
+                        if (matchesAnyField(field, "collegeName", "kkyx")) params.put("kkyx", value);
+                        else if (matchesAnyField(field, "courseCode", "kcdm")) params.put("kcdm", value);
                         break;
                     case "course_schedule":
-                        if ("classId".equals(field)) params.put("xkkch", value);
-                        else if ("dayOfWeek".equals(field)) params.put("skxqj", value);
-                        else if ("period".equals(field)) params.put("skjc", value);
+                        if (matchesAnyField(field, "classId", "xkkch")) params.put("xkkch", value);
+                        else if (matchesAnyField(field, "dayOfWeek", "skxqj")) params.put("skxqj", value);
+                        else if (matchesAnyField(field, "period", "skjc")) params.put("skjc", value);
                         break;
                     case "course_selection":
-                        if ("studentId".equals(field)) params.put("XH", value);
-                        else if ("courseClassCode".equals(field) || "classId".equals(field)) params.put("KCBH", value);
+                        if (matchesAnyField(field, "studentId", "XH", "xh")) params.put("XH", value);
+                        else if (matchesAnyField(field, "courseClassCode", "classId", "KCBH", "kcbh")) params.put("KCBH", value);
                         break;
                     case "level_exam_scores":
-                        if ("studentId".equals(field)) params.put("xh", value);
+                        if (matchesAnyField(field, "studentId", "xh")) params.put("xh", value);
                         break;
                     case "teaching_plans":
-                        if ("grade".equals(field)) params.put("nj", value);
+                        if (matchesAnyField(field, "grade", "nj")) params.put("nj", value);
                         break;
                     case "teacher_courses":
-                        if ("teacherId".equals(field)) params.put("rkjsh", value);
-                        else if ("courseCode".equals(field)) params.put("kcdm", value);
-                        else if ("academicYear".equals(field)) params.put("xn", value);
-                        else if ("semester".equals(field)) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
+                        if (matchesAnyField(field, "teacherId", "rkjsh")) params.put("rkjsh", value);
+                        else if (matchesAnyField(field, "courseCode", "kcdm")) params.put("kcdm", value);
+                        else if (matchesAnyField(field, "academicYear", "xn")) params.put("xn", value);
+                        else if (matchesAnyField(field, "semester", "xq")) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
                         break;
                     default:
                         break;
@@ -149,21 +185,35 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
         return params;
     }
 
-    private List<Map<String, Object>> applyFilterGroups(List<Map<String, Object>> fetchData,
+    private boolean matchesAnyField(String field, String... candidates) {
+        if (field == null) {
+            return false;
+        }
+        for (String candidate : candidates) {
+            if (candidate != null && candidate.equalsIgnoreCase(field)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<Map<String, Object>> applyFilterGroups(String dataSource,
+                                                        List<Map<String, Object>> fetchData,
                                                         SchoolDataSyncFilterRequest request) {
         if (!hasFilterRequest(request) || fetchData == null || fetchData.isEmpty()) {
             return fetchData == null ? Collections.emptyList() : fetchData;
         }
         List<Map<String, Object>> filtered = new ArrayList<>();
         for (Map<String, Object> row : fetchData) {
-            if (matchesAllGroups(row, request.getFilterGroups())) {
+            if (matchesAllGroups(dataSource, row, request.getFilterGroups())) {
                 filtered.add(row);
             }
         }
         return filtered;
     }
 
-    private boolean matchesAllGroups(Map<String, Object> row,
+    private boolean matchesAllGroups(String dataSource,
+                                     Map<String, Object> row,
                                      List<SchoolDataSyncFilterRequest.FilterGroup> groups) {
         for (SchoolDataSyncFilterRequest.FilterGroup group : groups) {
             if (group == null || group.getConditions() == null || group.getConditions().isEmpty()) {
@@ -172,7 +222,7 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
             boolean isOr = "OR".equalsIgnoreCase(defaultString(group.getRelation(), "AND"));
             boolean groupResult = !isOr;
             for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
-                boolean conditionMatched = matchesCondition(row, condition);
+                boolean conditionMatched = matchesCondition(dataSource, row, condition);
                 if (isOr) {
                     groupResult = groupResult || conditionMatched;
                     if (groupResult) break;
@@ -188,12 +238,14 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
         return true;
     }
 
-    private boolean matchesCondition(Map<String, Object> row, SchoolDataSyncFilterRequest.FilterCondition condition) {
+    private boolean matchesCondition(String dataSource,
+                                     Map<String, Object> row,
+                                     SchoolDataSyncFilterRequest.FilterCondition condition) {
         if (condition == null || condition.getField() == null) {
             return true;
         }
         String operator = defaultString(condition.getOperator(), "eq").toLowerCase(Locale.ROOT);
-        String actual = stringValue(row.get(condition.getField()));
+        String actual = resolveFilterValue(dataSource, row, condition.getField());
         String expected = defaultString(condition.getValue(), "").trim();
         switch (operator) {
             case "contains":
@@ -208,6 +260,35 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
             default:
                 return actual.equals(expected);
         }
+    }
+
+    private String resolveFilterValue(String dataSource, Map<String, Object> row, String field) {
+        Object direct = getValueIgnoreCase(row, field);
+        if (direct != null) {
+            return stringValue(direct);
+        }
+        Map<String, Object> mapped = fieldMappingService.applyMapping(dataSource, row);
+        Object mappedValue = getValueIgnoreCase(mapped, field);
+        if (mappedValue != null) {
+            return stringValue(mappedValue);
+        }
+        return "";
+    }
+
+    private Object getValueIgnoreCase(Map<String, Object> row, String field) {
+        if (row == null || field == null) {
+            return null;
+        }
+        Object direct = row.get(field);
+        if (direct != null) {
+            return direct;
+        }
+        for (Map.Entry<String, Object> entry : row.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(field)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private int compareAsNumber(String actual, String expected) {

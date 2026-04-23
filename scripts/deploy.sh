@@ -122,6 +122,86 @@ load_env_value() {
     echo "$default"
 }
 
+set_env_value() {
+    local file="$1" key="$2" value="$3" tmp="${file}.tmp.$$"
+    local found=false
+    touch "$file"
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" == "$key="* ]] || [[ "$line" == "# $key="* ]] || [[ "$line" == "#$key="* ]]; then
+            printf '%s=%s\n' "$key" "$value" >> "$tmp"
+            found=true
+        else
+            printf '%s\n' "$line" >> "$tmp"
+        fi
+    done < "$file"
+    if [ "$found" = false ]; then
+        printf '%s=%s\n' "$key" "$value" >> "$tmp"
+    fi
+    mv "$tmp" "$file"
+}
+
+normalize_registry_prefix() {
+    local registry="$1"
+    registry="${registry#http://}"
+    registry="${registry#https://}"
+    registry="${registry%/}"
+    [ -n "$registry" ] && printf '%s/' "$registry"
+}
+
+probe_public_image() {
+    local image="$1"
+    echo "  [INFO] 探测公共镜像源: docker pull $image"
+    if docker pull "$image" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+resolve_image_registry_prefix() {
+    local mode="$1" local_registry="$2" probe_image="$3"
+    RESOLVED_IMAGE_REGISTRY_PREFIX=""
+    RESOLVED_IMAGE_SOURCE_LABEL="公共镜像"
+
+    case "${mode,,}" in
+        public)
+            RESOLVED_IMAGE_REGISTRY_PREFIX=""
+            RESOLVED_IMAGE_SOURCE_LABEL="公共镜像（强制）"
+            ;;
+        local)
+            RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
+            RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry})"
+            ;;
+        auto|"")
+            if probe_public_image "$probe_image"; then
+                echo "  [OK] 公共镜像源可用"
+                RESOLVED_IMAGE_REGISTRY_PREFIX=""
+                RESOLVED_IMAGE_SOURCE_LABEL="公共镜像（自动）"
+            else
+                RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
+                RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry}, 公共镜像不可达自动降级)"
+                echo "  [WARN] 公共镜像不可达，自动降级到本地 registry: $local_registry"
+                echo "  [提示] 如本地 registry 尚未同步，请先运行: bash scripts/sync-docker-images.sh --registry $local_registry"
+            fi
+            ;;
+        *)
+            echo "[ERROR] IMAGE_SOURCE_MODE 无效: $mode (有效值: auto/public/local)"
+            exit 1
+            ;;
+    esac
+
+    if [ -z "$RESOLVED_IMAGE_REGISTRY_PREFIX" ]; then
+        echo "  [INFO] Docker 镜像前缀: (空，使用公共镜像)"
+    else
+        echo "  [INFO] Docker 镜像前缀: $RESOLVED_IMAGE_REGISTRY_PREFIX"
+        if ! docker manifest inspect "${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}" >/dev/null 2>&1; then
+            echo "  [ERROR] 本地 registry 缺少探测镜像: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
+            echo "  [修复] 先同步镜像: bash scripts/sync-docker-images.sh --registry $local_registry"
+            exit 1
+        fi
+        echo "  [OK] 本地 registry 探测镜像可用: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
+    fi
+}
+
 is_placeholder() {
     [[ "$1" == *"your"* ]] || [[ "$1" == *"here"* ]] || [[ "$1" == *"change_this"* ]] || [ -z "$1" ]
 }
@@ -636,6 +716,25 @@ if [ "$SKIP_ENV" = false ]; then
     fi
 
     echo ""
+    echo "  [ Docker 镜像源 ]"
+    DEF_IMAGE_SOURCE_MODE=$(load_env_value "IMAGE_SOURCE_MODE" "auto")
+    case "${DEF_IMAGE_SOURCE_MODE,,}" in
+        auto) IMAGE_SOURCE_DEFAULT_IDX=1 ;;
+        public) IMAGE_SOURCE_DEFAULT_IDX=2 ;;
+        local) IMAGE_SOURCE_DEFAULT_IDX=3 ;;
+        *) IMAGE_SOURCE_DEFAULT_IDX=1 ;;
+    esac
+    ask_choice "镜像源模式:" "自动降级 (公共不可达时切换本地 registry)|强制公共镜像|强制本地 registry" IMAGE_SOURCE_CHOICE "$IMAGE_SOURCE_DEFAULT_IDX"
+    case "$IMAGE_SOURCE_CHOICE" in
+        1) CFG_IMAGE_SOURCE_MODE="auto" ;;
+        2) CFG_IMAGE_SOURCE_MODE="public" ;;
+        3) CFG_IMAGE_SOURCE_MODE="local" ;;
+    esac
+    ask_value "本地 registry 地址" "$(load_env_value "LOCAL_REGISTRY" "localhost:5000")" CFG_LOCAL_REGISTRY
+    ask_value "公共镜像探测镜像" "$(load_env_value "PUBLIC_IMAGE_PROBE" "node:20-alpine")" CFG_PUBLIC_IMAGE_PROBE
+    CFG_IMAGE_REGISTRY_PREFIX=""
+
+    echo ""
     echo "  [ 备份 ]"
     ask_yn "启用自动备份？" "y" CFG_BACKUP_YN
     CFG_BACKUP_ENABLED="false"
@@ -709,6 +808,10 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'PORT_MYSQL=%s\n'         "$CFG_PORT_DB"
         printf 'PORT_MYSQL_SLAVE=%s\n'   "$CFG_PORT_SLAVE"
         printf 'PORT_REDIS=6379\n'
+        printf 'IMAGE_SOURCE_MODE=%s\n' "${CFG_IMAGE_SOURCE_MODE:-auto}"
+        printf 'LOCAL_REGISTRY=%s\n' "${CFG_LOCAL_REGISTRY:-localhost:5000}"
+        printf 'IMAGE_REGISTRY_PREFIX=%s\n' "${CFG_IMAGE_REGISTRY_PREFIX:-}"
+        printf 'PUBLIC_IMAGE_PROBE=%s\n' "${CFG_PUBLIC_IMAGE_PROBE:-node:20-alpine}"
         printf 'BACKUP_ENABLED=%s\n'     "$CFG_BACKUP_ENABLED"
         printf 'BACKUP_DIR=%s\n'         "$CFG_BACKUP_DIR"
         printf 'BACKUP_RETENTION_DAYS=%s\n' "$CFG_BACKUP_RETENTION"
@@ -795,7 +898,15 @@ PORT_BACKEND=$(load_env_value  "PORT_BACKEND"  "8080" "$ENV_FILE")
 HTTPS_ENABLED_VAL=$(load_env_value "HTTPS_ENABLED" "false" "$ENV_FILE")
 PORT_HTTPS_VAL=$(load_env_value "PORT_HTTPS" "443" "$ENV_FILE")
 SSL_DOMAIN_VAL=$(load_env_value "SSL_DOMAIN" "" "$ENV_FILE")
+IMAGE_SOURCE_MODE_VAL="${IMAGE_SOURCE_MODE:-$(load_env_value "IMAGE_SOURCE_MODE" "auto" "$ENV_FILE")}"
+LOCAL_REGISTRY_VAL="${LOCAL_REGISTRY:-$(load_env_value "LOCAL_REGISTRY" "localhost:5000" "$ENV_FILE")}"
+PUBLIC_IMAGE_PROBE_VAL="${PUBLIC_IMAGE_PROBE:-$(load_env_value "PUBLIC_IMAGE_PROBE" "node:20-alpine" "$ENV_FILE")}"
 echo "  [OK] 环境变量检查通过"
+
+echo ""
+echo "  [ Docker 镜像源 ]"
+resolve_image_registry_prefix "$IMAGE_SOURCE_MODE_VAL" "$LOCAL_REGISTRY_VAL" "$PUBLIC_IMAGE_PROBE_VAL"
+set_env_value "$ENV_FILE" "IMAGE_REGISTRY_PREFIX" "$RESOLVED_IMAGE_REGISTRY_PREFIX"
 
 # ══════════════════════════════════════════════════════
 # 步骤 3: 构建选项
@@ -837,6 +948,7 @@ if [ "${CFG_AUTO_UPDATE_ENABLED:-false}" = "true" ]; then
 else
     echo "  自动更新: 未启用"
 fi
+echo "  Docker 镜像源: ${RESOLVED_IMAGE_SOURCE_LABEL:-$(load_env_value "IMAGE_REGISTRY_PREFIX" "" "$ENV_FILE")}"
 if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
     echo "  SSO: 已启用 (${CFG_SSO_SERVER_URL})"
     echo "  应用地址 (APP_BASE_URL): ${CFG_APP_BASE_URL}"

@@ -36,17 +36,17 @@
 #
 # 用法:
 #   chmod +x scripts/auto-update.sh
-#   ./scripts/auto-update.sh                    # 默认 master 分支
+#   ./scripts/auto-update.sh                    # 默认更新当前分支
 #   ./scripts/auto-update.sh -b main            # 指定分支
 #   ./scripts/auto-update.sh -i                 # 交互式选择分支
 #   # crontab (每小时检查)
-#   0 * * * * /path/to/LangHack/scripts/auto-update.sh -b master >> /var/log/langhack-update.log 2>&1
+#   0 * * * * /path/to/LangHack/scripts/auto-update.sh >> /var/log/langhack-update.log 2>&1
 # ==============================================================================
 set -euo pipefail
 
 # ── 配置 ──────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRANCH="${DEPLOY_BRANCH:-master}"
+BRANCH="${DEPLOY_BRANCH:-}"
 UPDATE_MODE="${UPDATE_MODE:-auto}"
 # docker-compose.yml 绝对路径（优先使用环境变量覆盖）
 COMPOSE_FILE="${COMPOSE_FILE:-$PROJECT_ROOT/docker/docker-compose.yml}"
@@ -116,7 +116,7 @@ while [[ $# -gt 0 ]]; do
             echo "用法: $0 [选项]"
             echo ""
             echo "选项:"
-            echo "  -b, --branch <分支名>   指定要跟踪的分支 (默认: master)"
+            echo "  -b, --branch <分支名>   指定要跟踪的分支 (默认: 当前分支)"
             echo "  -i, --interactive       交互式选择分支"
             echo "  -h, --help              显示帮助信息"
             echo ""
@@ -1000,8 +1000,17 @@ cd "$PROJECT_ROOT"
 RUNTIME_MODE=$(resolve_update_mode)
 log "INFO: 当前更新模式: $RUNTIME_MODE"
 
-# ── 确保在目标分支上 ──────────────────────────────────
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+if [ -z "$BRANCH" ]; then
+    if [ "$CURRENT_BRANCH" = "HEAD" ] || [ "$CURRENT_BRANCH" = "unknown" ]; then
+        log "ERROR: 无法识别当前分支，请使用 -b <分支名> 或设置 DEPLOY_BRANCH"
+        notify "自动更新失败: 无法识别当前分支"
+        exit 1
+    fi
+    BRANCH="$CURRENT_BRANCH"
+fi
+
+# ── 确保在目标分支上 ──────────────────────────────────
 if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
     log "INFO: 切换分支 $CURRENT_BRANCH → $BRANCH"
     git checkout "$BRANCH" --quiet 2>/dev/null || {
