@@ -2,7 +2,15 @@ package com.english.service.impl;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.english.dto.SchoolDataFilterFieldDto;
-import com.english.entity.*;
+import com.english.entity.AdministrativeClass;
+import com.english.entity.CourseSchedule;
+import com.english.entity.CourseSelection;
+import com.english.entity.FieldMapping;
+import com.english.entity.LevelExamScore;
+import com.english.entity.SchoolCourse;
+import com.english.entity.StudentSchedule;
+import com.english.entity.TeachingClass;
+import com.english.entity.TeachingPlan;
 import com.english.service.FieldMappingService;
 import com.english.service.SchoolDataFieldMetadataService;
 import org.springframework.stereotype.Service;
