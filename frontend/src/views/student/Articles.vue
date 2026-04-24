@@ -987,7 +987,7 @@ onMounted(() => {
 @media (min-width: 768px) {
   .fab-refresh {
     right: 32px;
-    bottom: 32px;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 }
 
