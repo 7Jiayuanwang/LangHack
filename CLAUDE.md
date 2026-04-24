@@ -236,6 +236,7 @@ cd backend && mvn test
 | AI 模型提供商集成文档 | `docs/AI模型提供商集成文档.md` | HiAgent / OpenRouter / SiliconFlow+Qwen / 腾讯云ASR 配置、协议、独立请求样例、路由架构 |
 | API 接口文档 | `docs/API接口文档.md` | 后端 REST API 接口说明 |
 | 部署文档 | `docs/DEPLOYMENT.md` | Docker Compose 部署指南 |
+| Docker 镜像同步工具 | `docs/DOCKER_IMAGE_SYNC.md` | 本地 registry 镜像同步、内网部署、故障排查 |
 | 数据库协作规范 | `docs/DATABASE_COLLABORATION_GUIDE.md` | 数据库表登记与变更规范 |
 | 故障排查 | `docs/TROUBLESHOOTING.md` | 常见问题排查 |
 | SSO 集成文档 | `docs/sso/` | CAS 统一身份认证集成（5 份文档） |

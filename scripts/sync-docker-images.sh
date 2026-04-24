@@ -3,9 +3,21 @@
 # LangHack 公共 Docker 镜像同步到本地 registry
 #
 # 用法:
+#   bash scripts/sync-docker-images.sh [选项]
+#
+# 选项:
+#   --registry <host:port>  本地 registry 地址 (默认: localhost:5000)
+#   --dry-run               只打印命令，不实际执行
+#   --help, -h              显示帮助
+#
+# 环境变量:
+#   LOCAL_REGISTRY          Registry 地址
+#   REGISTRY_DATA_PATH      数据存储路径 (默认: /data/registry)
+#
+# 示例:
 #   bash scripts/sync-docker-images.sh
 #   bash scripts/sync-docker-images.sh --registry localhost:5000
-#   bash scripts/sync-docker-images.sh --dry-run
+#   REGISTRY_DATA_PATH=/data/registry bash scripts/sync-docker-images.sh
 # ==============================================================================
 set -euo pipefail
 
@@ -46,9 +58,14 @@ LangHack Docker 镜像同步工具
   --dry-run               只打印将执行的命令，不实际 pull/tag/push
   --help, -h              显示帮助
 
+环境变量:
+  LOCAL_REGISTRY          Registry 地址 (默认: localhost:5000)
+  REGISTRY_DATA_PATH      数据存储路径 (默认: /data/registry)
+
 示例:
   bash scripts/sync-docker-images.sh --registry localhost:5000
   LOCAL_REGISTRY=192.168.1.10:5000 bash scripts/sync-docker-images.sh
+  REGISTRY_DATA_PATH=/data/registry bash scripts/sync-docker-images.sh
 USAGE
 }
 
@@ -94,6 +111,55 @@ run_cmd() {
     fi
 }
 
+# 检查并启动本地 Registry（如果目标是 localhost 且 Registry 未运行）
+# 环境变量:
+#   REGISTRY_DATA_PATH - 数据存储路径，默认: /data/registry
+ensure_local_registry() {
+    local registry="$1"
+    # 只处理 localhost/127.0.0.1 的 registry
+    if [[ "$registry" == localhost:* ]] || [[ "$registry" == 127.0.0.1:* ]]; then
+        local port="${registry##*:}"
+        local port="${port:-5000}"
+        local data_path="${REGISTRY_DATA_PATH:-/data/registry}"
+
+        # 检查 Registry 是否可访问
+        if ! curl -sf "http://${registry}/v2/_catalog" &>/dev/null; then
+            echo "[WARN] Registry $registry 未启动，正在启动..."
+            echo "[INFO] 数据存储路径: $data_path"
+
+            # 检查是否存在已停止的 local-registry 容器
+            if docker ps -a --format '{{.Names}}' | grep -q "^local-registry$"; then
+                run_cmd docker start local-registry
+            else
+                # 确保数据目录存在
+                if [ "$DRY_RUN" = false ]; then
+                    mkdir -p "$data_path"
+                fi
+                run_cmd docker run -d \
+                    -p "${port}:5000" \
+                    --name local-registry \
+                    --restart always \
+                    -v "${data_path}:/var/lib/registry" \
+                    registry:2
+            fi
+
+            # 等待 Registry 启动
+            local retries=10
+            while [ $retries -gt 0 ]; do
+                if curl -sf "http://${registry}/v2/_catalog" &>/dev/null; then
+                    echo "[OK] Registry $registry 已就绪"
+                    return 0
+                fi
+                sleep 1
+                retries=$((retries - 1))
+            done
+
+            echo "[ERROR] Registry 启动失败或无法连接: $registry"
+            exit 1
+        fi
+    fi
+}
+
 echo "======================================"
 echo " LangHack Docker 镜像同步"
 echo "======================================"
@@ -104,6 +170,9 @@ echo ""
 echo "[INFO] 同步镜像清单:"
 printf '  - %s\n' "${IMAGES[@]}"
 echo ""
+
+# 确保本地 Registry 已启动
+ensure_local_registry "$REGISTRY"
 
 for image in "${IMAGES[@]}"; do
     target="$REGISTRY/$image"
