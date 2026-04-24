@@ -178,6 +178,8 @@ import {
   TrendCharts, Connection, Reading, Medal,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Refresh
 } from '@element-plus/icons-vue'
+import { getAuthHeader } from '@/utils/auth'
+import { getRecommendedTexts } from '@/api/texts'
 
 const router = useRouter()
 
