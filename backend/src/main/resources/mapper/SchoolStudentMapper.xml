@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.SchoolStudentMapper">
+
+    <!-- 学生主数据 UPSERT：按 student_id 唯一键 -->
+    <insert id="upsertByStudentId" parameterType="com.english.entity.SchoolStudent" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO school_student (
+            student_id, student_name, college_name, college_code,
+            class_code, class_name, grade, major_name,
+            source_course_codes, sync_time, last_exam_sync_time, last_schedule_sync_time,
+            sync_source
+        ) VALUES (
+            #{studentId}, #{studentName}, #{collegeName}, #{collegeCode},
+            #{classCode}, #{className}, #{grade}, #{majorName},
+            #{sourceCourseCodes}, #{syncTime}, #{lastExamSyncTime}, #{lastScheduleSyncTime},
+            #{syncSource}
+        )
+        ON DUPLICATE KEY UPDATE
+            student_name = COALESCE(#{studentName}, student_name),
+            college_name = #{collegeName},
+            college_code = COALESCE(#{collegeCode}, college_code),
+            class_code = COALESCE(#{classCode}, class_code),
+            class_name = COALESCE(#{className}, class_name),
+            grade = COALESCE(#{grade}, grade),
+            major_name = COALESCE(#{majorName}, major_name),
+            source_course_codes = #{sourceCourseCodes},
+            sync_time = #{syncTime},
+            last_exam_sync_time = COALESCE(#{lastExamSyncTime}, last_exam_sync_time),
+            last_schedule_sync_time = COALESCE(#{lastScheduleSyncTime}, last_schedule_sync_time),
+            sync_source = #{syncSource}
+    </insert>
+
+    <update id="updateLastExamSyncTime">
+        UPDATE school_student
+        SET last_exam_sync_time = #{lastExamSyncTime}
+        WHERE student_id = #{studentId}
+    </update>
+
+    <update id="updateLastScheduleSyncTime">
+        UPDATE school_student
+        SET last_schedule_sync_time = #{lastScheduleSyncTime}
+        WHERE student_id = #{studentId}
+    </update>
+
+    <!-- 仅当传入值非 NULL/非空时覆盖，不覆盖为 NULL -->
+    <update id="updateClassInfo">
+        UPDATE school_student
+        <set>
+            <if test="classCode != null and classCode != ''">class_code = #{classCode},</if>
+            <if test="className != null and className != ''">class_name = #{className},</if>
+            <if test="majorName != null and majorName != ''">major_name = #{majorName},</if>
+        </set>
+        WHERE student_id = #{studentId}
+    </update>
+
+    <select id="selectLastExamSyncTime" resultType="java.time.LocalDateTime">
+        SELECT last_exam_sync_time FROM school_student WHERE student_id = #{studentId}
+    </select>
+
+    <select id="selectLastScheduleSyncTime" resultType="java.time.LocalDateTime">
+        SELECT last_schedule_sync_time FROM school_student WHERE student_id = #{studentId}
+    </select>
+
+    <select id="selectByStudentId" resultType="com.english.entity.SchoolStudent">
+        SELECT * FROM school_student WHERE student_id = #{studentId} LIMIT 1
+    </select>
+
+</mapper>

@@ -282,9 +282,8 @@ const viewText = (text) => {
     return
   }
   router.push({
-    path: '/user/text-learning',
+    path: `/article/${text.id}`,
     query: {
-      textId: text.id,
       from: 'user-upload'
     }
   })
@@ -296,9 +295,8 @@ const studyText = (text) => {
     return
   }
   router.push({
-    path: '/user/text-learning',
+    path: `/article/${text.id}`,
     query: {
-      textId: text.id,
       unitId: text?.unitId || ''
     }
   })

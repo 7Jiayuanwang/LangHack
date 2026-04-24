@@ -61,9 +61,9 @@ class WebMvcConfigTest {
         @Test
         @DisplayName("should not register any handlers when env var is null")
         void addResourceHandlers_shouldSkipWhenEnvVarNull() {
-            // AUDIO_RESOURCE_PATH is not set in test environment (typically)
-            // This test verifies the null-check path
-            ResourceHandlerRegistry registry = mock(ResourceHandlerRegistry.class);
+            // 生产代码无条件注册 SPA 静态资源链（/assets/**、/js/**、/data/**、/favicon.ico），
+            // 因此 registry mock 必须对所有链式调用返回有效 registration，否则 NPE。
+            ResourceHandlerRegistry registry = mock(ResourceHandlerRegistry.class, RETURNS_DEEP_STUBS);
 
             // The method reads from System.getenv which we cannot easily mock
             // Instead, we verify it does not throw
@@ -73,7 +73,7 @@ class WebMvcConfigTest {
         @Test
         @DisplayName("should not throw when registry is provided but env var not set")
         void addResourceHandlers_shouldNotThrowWhenNoEnvVar() {
-            ResourceHandlerRegistry registry = mock(ResourceHandlerRegistry.class);
+            ResourceHandlerRegistry registry = mock(ResourceHandlerRegistry.class, RETURNS_DEEP_STUBS);
 
             // Just verify no exception is thrown
             assertDoesNotThrow(() -> config.addResourceHandlers(registry));

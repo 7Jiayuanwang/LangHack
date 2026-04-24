@@ -187,6 +187,9 @@ frontend/.env.local
 frontend/.env.*.local
 frontend/build_output.txt
 
+# 前端构建产物复制到后端静态目录（构建时生成，不入库）
+backend/src/main/resources/static/
+
 # Deployment state (each environment maintains its own)
 .last-deployed-commit
 

@@ -136,6 +136,7 @@ public class SecurityConfig {
                 // 允许访问的接口 - 无需认证
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/public/**").permitAll()
+                .antMatchers("/api/sso/**").permitAll() // SSO相关接口允许公开访问
                 .antMatchers(HttpMethod.POST, "/api/errors/report").permitAll()
                 .antMatchers("/api/wordnet/**").permitAll() // 允许公开访问单词查询接口
                 .antMatchers(HttpMethod.GET, "/api/media/**").permitAll() // 媒体文件仅 GET 公开
@@ -144,13 +145,19 @@ public class SecurityConfig {
                 // 管理员权限（部分只读端点允许 OPS 访问，须放在 /api/admin/** 之前）
                 .antMatchers("/api/admin/users/**", "/api/admin/users").hasAnyRole("ADMIN", "OPS")
                 .antMatchers(HttpMethod.GET, "/api/admin/stats").hasAnyRole("ADMIN", "OPS")
+                // 学校数据查询/同步：OPS 也可访问（Controller 层同样有 @PreAuthorize 双重校验）
+                .antMatchers("/api/admin/school-data/**").hasAnyRole("ADMIN", "OPS")
+                .antMatchers("/api/admin/sync/**").hasAnyRole("ADMIN", "OPS")
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
                 // 运维权限
                 .antMatchers("/api/ops/**").hasAnyRole("OPS", "ADMIN")
                 // 教师权限
                 .antMatchers("/api/teacher/**").hasAnyRole("TEACHER", "ADMIN")
                 // 学生权限
+                .antMatchers("/api/student/learning/**").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN", "OPS")
                 .antMatchers("/api/student/**").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN")
+                // 个性化功能开关：OPS 也需要访问，用于共享后台布局
+                .antMatchers("/api/user/feature-toggles").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN", "OPS")
                 // 普通用户权限
                 .antMatchers("/api/user/**").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN")
                 // 翻译 API — 已有 IP 限流保护，允许未登录用户使用

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import SsoCallback from '@/views/public/SsoCallback.vue'
+import PermissionDenied from '@/components/PermissionDenied.vue'
 import { useUserStore } from '@/store/user'
 import * as ssoApi from '@/api/sso'
 
@@ -46,20 +47,14 @@ describe('SsoCallback.vue', () => {
     userStore = useUserStore()
     mockPush.mockClear()
     vi.clearAllMocks()
-    // Reset mockRoute to default
     mockRoute.query = { code: 'test-one-time-code' }
   })
 
-  it('should handle successful SSO token exchange and redirect STUDENT', async () => {
-    const fakeJwt = createFakeJwt('STUDENT', '2023122066164')
-    const mockResponse = {
-      code: 200,
-      data: {
-        token: fakeJwt
-      }
-    }
+  // ===== 成功路径 =====
 
-    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
+  it('成功兑换 token 时，STUDENT 跳转 /student', async () => {
+    const fakeJwt = createFakeJwt('STUDENT', '2023122066164')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -70,16 +65,9 @@ describe('SsoCallback.vue', () => {
     expect(mockPush).toHaveBeenCalledWith('/student')
   })
 
-  it('should redirect to admin page for ADMIN role', async () => {
+  it('ADMIN 角色跳转 /admin', async () => {
     const fakeJwt = createFakeJwt('ADMIN', 'admin')
-    const mockResponse = {
-      code: 200,
-      data: {
-        token: fakeJwt
-      }
-    }
-
-    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -87,16 +75,9 @@ describe('SsoCallback.vue', () => {
     expect(mockPush).toHaveBeenCalledWith('/admin')
   })
 
-  it('should redirect to ops page for OPS role', async () => {
+  it('OPS 角色跳转 /ops', async () => {
     const fakeJwt = createFakeJwt('OPS', 'ops')
-    const mockResponse = {
-      code: 200,
-      data: {
-        token: fakeJwt
-      }
-    }
-
-    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -104,16 +85,9 @@ describe('SsoCallback.vue', () => {
     expect(mockPush).toHaveBeenCalledWith('/ops')
   })
 
-  it('should redirect to teacher page for TEACHER role', async () => {
+  it('TEACHER 角色跳转 /teacher', async () => {
     const fakeJwt = createFakeJwt('TEACHER', 'teacher')
-    const mockResponse = {
-      code: 200,
-      data: {
-        token: fakeJwt
-      }
-    }
-
-    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
 
     wrapper = mount(SsoCallback)
     await flushPromises()
@@ -121,82 +95,126 @@ describe('SsoCallback.vue', () => {
     expect(mockPush).toHaveBeenCalledWith('/teacher')
   })
 
-  it('should redirect to user page for USER role', async () => {
+  it('USER 角色在校园环境中跳转 /student', async () => {
     const fakeJwt = createFakeJwt('USER', 'user')
-    const mockResponse = {
-      code: 200,
-      data: {
-        token: fakeJwt
-      }
-    }
-
-    ssoApi.exchangeSsoToken.mockResolvedValue(mockResponse)
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
 
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockPush).toHaveBeenCalledWith('/user')
+    expect(mockPush).toHaveBeenCalledWith('/student')
   })
 
-  it('should display error message when token exchange fails (pending approval)', async () => {
-    const mockError = {
-      code: 400,
-      message: '您的账号正在审批中，请联系管理员'
-    }
+  // ===== 错误路径：统一走 PermissionDenied =====
 
-    ssoApi.exchangeSsoToken.mockResolvedValue(mockError)
-
-    wrapper = mount(SsoCallback)
-    await flushPromises()
-
-    expect(wrapper.find('.error').exists()).toBe(true)
-    expect(wrapper.find('.error p').text()).toBe('您的账号正在审批中，请联系管理员')
-  })
-
-  it('should display error when missing code parameter', async () => {
-    mockRoute.query = {}
-
-    wrapper = mount(SsoCallback)
-    await flushPromises()
-
-    expect(wrapper.find('.error').exists()).toBe(true)
-    expect(wrapper.find('.error p').text()).toContain('缺少授权码')
-  })
-
-  it('should display error from backend redirect (query.error)', async () => {
-    mockRoute.query = { error: 'SSO%20%E8%AE%A4%E8%AF%81%E5%A4%B1%E8%B4%A5' }
-
-    wrapper = mount(SsoCallback)
-    await flushPromises()
-
-    expect(wrapper.find('.error').exists()).toBe(true)
-  })
-
-  it('should handle network errors gracefully', async () => {
-    ssoApi.exchangeSsoToken.mockRejectedValue(new Error('Network error'))
-
-    wrapper = mount(SsoCallback)
-    await flushPromises()
-
-    expect(wrapper.find('.error').exists()).toBe(true)
-  })
-
-  it('should show loading spinner initially', () => {
+  it('加载中显示 spinner', () => {
     wrapper = mount(SsoCallback)
     expect(wrapper.find('.loading').exists()).toBe(true)
     expect(wrapper.find('.spinner').exists()).toBe(true)
   })
 
-  it('should allow user to return to login page on error', async () => {
+  it('后端 errorCode=USER_NOT_FOUND 时显示无权使用 + 联系方式', async () => {
+    mockRoute.query = {
+      error: encodeURIComponent('SSO 认证失败: 用户不存在'),
+      errorCode: 'USER_NOT_FOUND'
+    }
+
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    const denied = wrapper.findComponent(PermissionDenied)
+    expect(denied.exists()).toBe(true)
+    expect(denied.props('mainMessage')).toContain('无权使用')
+    expect(denied.props('contactPhone')).toBe('43019235')
+    expect(denied.props('contactDepartment')).toBe('计算机与信息工程学院')
+    expect(denied.props('theme')).toBe('warning')
+  })
+
+  it('后端 errorCode=PENDING_APPROVAL 时使用 info 主题', async () => {
+    mockRoute.query = { errorCode: 'PENDING_APPROVAL' }
+
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    const denied = wrapper.findComponent(PermissionDenied)
+    expect(denied.props('theme')).toBe('info')
+    expect(denied.props('mainMessage')).toContain('审批')
+  })
+
+  it('未提供 errorCode 时回退到关键字匹配', async () => {
+    mockRoute.query = {
+      error: encodeURIComponent('SSO 认证失败: 用户不存在')
+    }
+
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    const denied = wrapper.findComponent(PermissionDenied)
+    expect(denied.exists()).toBe(true)
+    // 关键字匹配到 USER_NOT_FOUND
+    expect(denied.props('mainMessage')).toContain('无权使用')
+  })
+
+  it('缺少 code 参数时显示 MISSING_PARAM 错误', async () => {
+    mockRoute.query = {}
+
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    const denied = wrapper.findComponent(PermissionDenied)
+    expect(denied.exists()).toBe(true)
+    expect(denied.props('theme')).toBe('error')
+  })
+
+  it('token 兑换返回业务错误时透传后端 errorCode', async () => {
+    ssoApi.exchangeSsoToken.mockResolvedValue({
+      code: 500,
+      message: '授权码无效或已过期，请重新登录',
+      data: { errorCode: 'CODE_EXPIRED' }
+    })
+
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    const denied = wrapper.findComponent(PermissionDenied)
+    expect(denied.exists()).toBe(true)
+    expect(denied.props('theme')).toBe('info')
+    expect(denied.props('mainMessage')).toContain('过期')
+  })
+
+  it('网络异常时显示 SYSTEM_ERROR 的友好提示', async () => {
+    ssoApi.exchangeSsoToken.mockRejectedValue(new Error('Network error'))
+
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    const denied = wrapper.findComponent(PermissionDenied)
+    expect(denied.exists()).toBe(true)
+    expect(denied.props('theme')).toBe('error')
+    expect(denied.props('contactPhone')).toBe('43019235')
+  })
+
+  it('登录成功但角色非法时显示系统错误', async () => {
+    const fakeJwt = createFakeJwt('NOT_A_ROLE', 'bob')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    const denied = wrapper.findComponent(PermissionDenied)
+    expect(denied.exists()).toBe(true)
+    expect(denied.props('theme')).toBe('error')
+  })
+
+  it('点击"返回登录"按钮跳转 /login', async () => {
     ssoApi.exchangeSsoToken.mockRejectedValue(new Error('Login failed'))
 
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    const button = wrapper.find('.error button')
-    expect(button.exists()).toBe(true)
-
-    await button.trigger('click')
+    const backBtn = wrapper.find('.btn-back')
+    expect(backBtn.exists()).toBe(true)
+    await backBtn.trigger('click')
     expect(mockPush).toHaveBeenCalledWith('/login')
   })
 })

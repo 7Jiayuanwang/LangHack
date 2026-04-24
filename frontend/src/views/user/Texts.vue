@@ -258,9 +258,8 @@ const loadTexts = async () => {
 
 const studyText = (text) => {
   router.push({
-    path: "/user/text-learning",
+    path: `/article/${text.id}`,
     query: {
-      textId: text.id,
       unitId: text.unitId,
       courseId: text.courseId,
     },

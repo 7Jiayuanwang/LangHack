@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.TeachingPlanMapper">
+
+    <!-- 教学计划 UPSERT：按 plan_id 唯一键 -->
+    <insert id="upsertByPlanId" parameterType="com.english.entity.TeachingPlan" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO teaching_plans (
+            plan_id, plan_name, major_code, major_name, grade,
+            schooling_length, degree_type, education_level,
+            college_code, college_name,
+            total_credits, required_credits, elective_credits,
+            practice_credits, general_education_credits,
+            major_core_credits, major_elective_credits,
+            training_objective, training_requirements,
+            main_disciplines, core_courses,
+            plan_status, effective_date, expiry_date,
+            creator, reviewer, review_date,
+            version, revision_notes, attachment_path,
+            sync_time, sync_source
+        ) VALUES (
+            #{planId}, #{planName}, #{majorCode}, #{majorName}, #{grade},
+            #{schoolingLength}, #{degreeType}, #{educationLevel},
+            #{collegeCode}, #{collegeName},
+            #{totalCredits}, #{requiredCredits}, #{electiveCredits},
+            #{practiceCredits}, #{generalEducationCredits},
+            #{majorCoreCredits}, #{majorElectiveCredits},
+            #{trainingObjective}, #{trainingRequirements},
+            #{mainDisciplines}, #{coreCourses},
+            #{planStatus}, #{effectiveDate}, #{expiryDate},
+            #{creator}, #{reviewer}, #{reviewDate},
+            #{version}, #{revisionNotes}, #{attachmentPath},
+            #{syncTime}, #{syncSource}
+        )
+        ON DUPLICATE KEY UPDATE
+            plan_name = #{planName},
+            major_name = #{majorName},
+            schooling_length = #{schoolingLength},
+            degree_type = #{degreeType},
+            education_level = #{educationLevel},
+            college_code = #{collegeCode},
+            college_name = #{collegeName},
+            total_credits = #{totalCredits},
+            required_credits = #{requiredCredits},
+            elective_credits = #{electiveCredits},
+            practice_credits = #{practiceCredits},
+            general_education_credits = #{generalEducationCredits},
+            major_core_credits = #{majorCoreCredits},
+            major_elective_credits = #{majorElectiveCredits},
+            training_objective = #{trainingObjective},
+            training_requirements = #{trainingRequirements},
+            main_disciplines = #{mainDisciplines},
+            core_courses = #{coreCourses},
+            plan_status = #{planStatus},
+            effective_date = #{effectiveDate},
+            expiry_date = #{expiryDate},
+            creator = #{creator},
+            reviewer = #{reviewer},
+            review_date = #{reviewDate},
+            version = #{version},
+            revision_notes = #{revisionNotes},
+            attachment_path = #{attachmentPath},
+            sync_time = #{syncTime},
+            sync_source = #{syncSource}
+    </insert>
+
+</mapper>

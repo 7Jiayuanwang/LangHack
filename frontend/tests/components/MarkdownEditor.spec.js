@@ -1,24 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 
-// Mock marked
-const mockMarked = vi.hoisted(() => vi.fn((input) => `<p>${input}</p>`))
-vi.mock('marked', () => ({
-  marked: mockMarked
-}))
-
-// Mock DOMPurify
-const mockSanitize = vi.hoisted(() => vi.fn((html) => html))
-vi.mock('dompurify', () => ({
-  default: {
-    sanitize: mockSanitize
-  }
-}))
-
 // Mock media API
 const mockUploadMedia = vi.hoisted(() => vi.fn())
 vi.mock('@/api/media', () => ({
-  uploadMedia: mockUploadMedia
+  uploadMedia: mockUploadMedia,
+  deleteMedia: vi.fn().mockResolvedValue({})
+}))
+
+// Mock MarkdownRenderer (child component)
+vi.mock('@/components/MarkdownRenderer.vue', () => ({
+  default: {
+    name: 'MarkdownRenderer',
+    template: '<div class="mock-markdown-renderer"></div>'
+  }
 }))
 
 // Mock ElMessage
@@ -38,8 +33,6 @@ describe('MarkdownEditor.vue', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockMarked.mockImplementation((input) => `<p>${input}</p>`)
-    mockSanitize.mockImplementation((html) => html)
   })
 
   afterEach(() => {
@@ -92,45 +85,23 @@ describe('MarkdownEditor.vue', () => {
   })
 
   // ============================================================
-  // Preview Mode Toggle
+  // Editor Layout (split-pane with live preview)
   // ============================================================
 
-  describe('preview mode toggle', () => {
-    it('starts in editor mode (previewMode is false)', () => {
-      wrapper = shallowMount(MarkdownEditor, {
-        props: { modelValue: 'test' }
-      })
-      expect(wrapper.vm.previewMode).toBe(false)
-      expect(wrapper.find('.editor-pane').exists()).toBe(true)
-      expect(wrapper.find('.preview-pane').exists()).toBe(false)
-    })
-
-    it('toggles to preview mode', async () => {
+  describe('editor layout', () => {
+    it('shows both editor and preview panes simultaneously', () => {
       wrapper = shallowMount(MarkdownEditor, {
         props: { modelValue: '# Test' }
       })
-      wrapper.vm.togglePreview()
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.vm.previewMode).toBe(true)
-      expect(wrapper.find('.editor-pane').exists()).toBe(false)
+      expect(wrapper.find('.editor-pane').exists()).toBe(true)
       expect(wrapper.find('.preview-pane').exists()).toBe(true)
     })
 
-    it('toggles back to editor mode', async () => {
+    it('has no previewMode ref (replaced by split-pane)', () => {
       wrapper = shallowMount(MarkdownEditor, {
         props: { modelValue: '# Test' }
       })
-      // Toggle ON
-      wrapper.vm.togglePreview()
-      await wrapper.vm.$nextTick()
-      expect(wrapper.vm.previewMode).toBe(true)
-
-      // Toggle OFF
-      wrapper.vm.togglePreview()
-      await wrapper.vm.$nextTick()
-      expect(wrapper.vm.previewMode).toBe(false)
-      expect(wrapper.find('.editor-pane').exists()).toBe(true)
+      expect(wrapper.vm.previewMode).toBeUndefined()
     })
   })
 
@@ -138,54 +109,14 @@ describe('MarkdownEditor.vue', () => {
   // Markdown Rendering with DOMPurify
   // ============================================================
 
-  describe('renderedMarkdown computed', () => {
-    it('returns empty string for empty content', () => {
-      wrapper = shallowMount(MarkdownEditor, {
-        props: { modelValue: '' }
-      })
-      expect(wrapper.vm.renderedMarkdown).toBe('')
-    })
-
-    it('calls marked() and DOMPurify.sanitize() for non-empty content', () => {
+  describe('markdown rendering', () => {
+    it('renders content via MarkdownRenderer component', () => {
       wrapper = shallowMount(MarkdownEditor, {
         props: { modelValue: '**bold text**' }
       })
-      // Access the computed to trigger it
-      wrapper.vm.renderedMarkdown
-
-      expect(mockMarked).toHaveBeenCalledWith('**bold text**')
-      expect(mockSanitize).toHaveBeenCalled()
-    })
-
-    it('passes DOMPurify config with allowed tags including video and source', () => {
-      wrapper = shallowMount(MarkdownEditor, {
-        props: { modelValue: 'test' }
-      })
-      // Trigger the computed
-      wrapper.vm.renderedMarkdown
-
-      // Verify DOMPurify.sanitize was called with the expected config
-      const sanitizeCall = mockSanitize.mock.calls[0]
-      const config = sanitizeCall[1]
-      expect(config.ALLOWED_TAGS).toContain('video')
-      expect(config.ALLOWED_TAGS).toContain('source')
-      expect(config.ALLOWED_ATTR).toContain('controls')
-      expect(config.ALLOWED_ATTR).toContain('type')
-    })
-
-    it('returns sanitized error message when marked throws', () => {
-      mockMarked.mockImplementation(() => {
-        throw new Error('Parse error')
-      })
-      mockSanitize.mockImplementation((html) => html)
-
-      wrapper = shallowMount(MarkdownEditor, {
-        props: { modelValue: 'broken markdown' }
-      })
-
-      const rendered = wrapper.vm.renderedMarkdown
-      // On error, it should have called sanitize with an error message HTML
-      expect(rendered).toContain('Markdown 渲染失败')
+      // Split-pane editor uses MarkdownRenderer, not renderedMarkdown computed
+      const renderer = wrapper.findComponent({ name: 'MarkdownRenderer' })
+      expect(renderer.exists()).toBe(true)
     })
   })
 
@@ -221,7 +152,7 @@ describe('MarkdownEditor.vue', () => {
       expect(text).toContain('表格')
       expect(text).toContain('图片')
       expect(text).toContain('视频')
-      expect(text).toContain('预览')
+      expect(text).toContain('全屏')
       expect(text).toContain('清空')
     })
   })
@@ -311,20 +242,14 @@ describe('MarkdownEditor.vue', () => {
   // v-html Preview Rendering
   // ============================================================
 
-  describe('preview pane v-html rendering', () => {
-    it('renders sanitized HTML in preview mode', async () => {
-      mockMarked.mockReturnValue('<h1>Title</h1>')
-      mockSanitize.mockReturnValue('<h1>Title</h1>')
-
+  describe('preview pane rendering', () => {
+    it('renders MarkdownRenderer in preview pane', async () => {
       wrapper = shallowMount(MarkdownEditor, {
         props: { modelValue: '# Title' }
       })
-      wrapper.vm.togglePreview()
-      await wrapper.vm.$nextTick()
-
-      const preview = wrapper.find('.markdown-preview')
-      expect(preview.exists()).toBe(true)
-      expect(preview.html()).toContain('<h1>Title</h1>')
+      // Split-pane layout always shows preview pane with MarkdownRenderer
+      const renderer = wrapper.findComponent({ name: 'MarkdownRenderer' })
+      expect(renderer.exists()).toBe(true)
     })
   })
 

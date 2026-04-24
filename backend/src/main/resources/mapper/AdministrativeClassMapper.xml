@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.AdministrativeClassMapper">
+
+    <!-- 行政班 UPSERT：按 class_code 唯一键 -->
+    <insert id="upsertByClassCode" parameterType="com.english.entity.AdministrativeClass" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO administrative_class (
+            class_code, class_name, class_short_name, college_code, college_name,
+            major_code, major_name, grade, class_type, head_teacher_code, head_teacher_name,
+            student_count, male_count, female_count, class_status,
+            establish_date, graduate_date, remark, sync_time, sync_source
+        ) VALUES (
+            #{classCode}, #{className}, #{classShortName}, #{collegeCode}, #{collegeName},
+            #{majorCode}, #{majorName}, #{grade}, #{classType}, #{headTeacherCode}, #{headTeacherName},
+            #{studentCount}, #{maleCount}, #{femaleCount}, #{classStatus},
+            #{establishDate}, #{graduateDate}, #{remark}, #{syncTime}, #{syncSource}
+        )
+        ON DUPLICATE KEY UPDATE
+            class_name = #{className},
+            class_short_name = #{classShortName},
+            college_code = #{collegeCode},
+            college_name = #{collegeName},
+            major_code = #{majorCode},
+            major_name = #{majorName},
+            grade = #{grade},
+            class_type = #{classType},
+            head_teacher_code = #{headTeacherCode},
+            head_teacher_name = #{headTeacherName},
+            student_count = #{studentCount},
+            male_count = #{maleCount},
+            female_count = #{femaleCount},
+            class_status = #{classStatus},
+            establish_date = #{establishDate},
+            graduate_date = #{graduateDate},
+            remark = #{remark},
+            sync_time = #{syncTime},
+            sync_source = #{syncSource}
+    </insert>
+
+</mapper>

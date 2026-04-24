@@ -54,7 +54,9 @@ done
 
 # ── 工具函数 ──────────────────────────────────────────
 ask_value() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local input
     if [ -n "$default" ]; then
         read -rp "  ${prompt} [${default}]: " input
@@ -68,7 +70,9 @@ ask_value() {
 }
 
 ask_secret() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local input masked=""
     if [ -n "$default" ]; then
         [ ${#default} -gt 6 ] && masked="${default:0:3}***${default: -3}" || masked="***"
@@ -101,7 +105,9 @@ ask_choice() {
 }
 
 ask_yn() {
-    local question="$1" default="$2" var_name="$3"
+    local question="$1"
+    local default="$2"
+    local var_name="$3"
     local hint; [ "$default" = "y" ] && hint="Y/n" || hint="y/N"
     while true; do
         read -rp "  ${question} [${hint}]: " answer
@@ -114,12 +120,99 @@ ask_yn() {
 }
 
 load_env_value() {
-    local key="$1" default="$2" file="${3:-$DOCKER_DIR/.env}"
+    local key="$1"
+    local default="$2"
+    local file="${3:-$DOCKER_DIR/.env}"
     if [ -f "$file" ]; then
         local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2- | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         [ -n "$val" ] && echo "$val" && return
     fi
     echo "$default"
+}
+
+set_env_value() {
+    local file="$1"
+    local key="$2"
+    local value="$3"
+    local tmp="${file}.tmp.$$"
+    local found=false
+    touch "$file"
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" == "$key="* ]] || [[ "$line" == "# $key="* ]] || [[ "$line" == "#$key="* ]]; then
+            printf '%s=%s\n' "$key" "$value" >> "$tmp"
+            found=true
+        else
+            printf '%s\n' "$line" >> "$tmp"
+        fi
+    done < "$file"
+    if [ "$found" = false ]; then
+        printf '%s=%s\n' "$key" "$value" >> "$tmp"
+    fi
+    mv "$tmp" "$file"
+}
+
+normalize_registry_prefix() {
+    local registry="$1"
+    registry="${registry#http://}"
+    registry="${registry#https://}"
+    registry="${registry%/}"
+    [ -n "$registry" ] && printf '%s/' "$registry"
+}
+
+probe_public_image() {
+    local image="$1"
+    echo "  [INFO] 探测公共镜像源: docker pull $image"
+    if docker pull "$image" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+resolve_image_registry_prefix() {
+    local mode="$1"
+    local local_registry="$2"
+    local probe_image="$3"
+    RESOLVED_IMAGE_REGISTRY_PREFIX=""
+    RESOLVED_IMAGE_SOURCE_LABEL="公共镜像"
+
+    case "${mode,,}" in
+        public)
+            RESOLVED_IMAGE_REGISTRY_PREFIX=""
+            RESOLVED_IMAGE_SOURCE_LABEL="公共镜像（强制）"
+            ;;
+        local)
+            RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
+            RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry})"
+            ;;
+        auto|"")
+            if probe_public_image "$probe_image"; then
+                echo "  [OK] 公共镜像源可用"
+                RESOLVED_IMAGE_REGISTRY_PREFIX=""
+                RESOLVED_IMAGE_SOURCE_LABEL="公共镜像（自动）"
+            else
+                RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
+                RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry}, 公共镜像不可达自动降级)"
+                echo "  [WARN] 公共镜像不可达，自动降级到本地 registry: $local_registry"
+                echo "  [提示] 如本地 registry 尚未同步，请先运行: bash scripts/sync-docker-images.sh --registry $local_registry"
+            fi
+            ;;
+        *)
+            echo "[ERROR] IMAGE_SOURCE_MODE 无效: $mode (有效值: auto/public/local)"
+            exit 1
+            ;;
+    esac
+
+    if [ -z "$RESOLVED_IMAGE_REGISTRY_PREFIX" ]; then
+        echo "  [INFO] Docker 镜像前缀: (空，使用公共镜像)"
+    else
+        echo "  [INFO] Docker 镜像前缀: $RESOLVED_IMAGE_REGISTRY_PREFIX"
+        if ! docker manifest inspect "${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}" >/dev/null 2>&1; then
+            echo "  [ERROR] 本地 registry 缺少探测镜像: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
+            echo "  [修复] 先同步镜像: bash scripts/sync-docker-images.sh --registry $local_registry"
+            exit 1
+        fi
+        echo "  [OK] 本地 registry 探测镜像可用: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
+    fi
 }
 
 is_placeholder() {
@@ -149,7 +242,9 @@ check_port() {
 
 # 端口选择（自动跳过占用端口）
 ask_port() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local port="$default"
     ask_value "$prompt" "$port" "$var_name"
     port="${!var_name}"
@@ -348,19 +443,33 @@ if [ "$SKIP_ENV" = false ]; then
     if [ -n "$CFG_AI_TRANSLATE_KEY" ]; then
         echo "  (可选) 配置更多服务商以启用负载均衡:"
         ask_secret "OpenRouter API Key (留空跳过)" "$(load_env_value "OPENROUTER_API_KEY" "")" CFG_OPENROUTER_KEY
-        echo "  HiAgent 用于文章改写和 AI 问答（专有协议，Key 共享，App ID 可分开）"
-        ask_secret "HiAgent API Key (留空跳过)"   "$(load_env_value "HIAGENT_API_KEY" "")"    CFG_HIAGENT_KEY
+        echo "  HiAgent 专有协议 — AI 改写与 AI 问答必须使用两套完全不同的应用凭证（Key+AppID 均独立）"
+        ask_secret "HiAgent 改写 API Key (留空跳过改写)"    "$(load_env_value "HIAGENT_API_KEY" "")"    CFG_HIAGENT_KEY
         if [ -n "$CFG_HIAGENT_KEY" ]; then
-            ask_value  "HiAgent 文章改写 App ID" "$(load_env_value "HIAGENT_APP_ID" "")"    CFG_HIAGENT_APP_ID
-            ask_value  "HiAgent AI问答 App ID (留空则与文章改写共用)" "$(load_env_value "HIAGENT_QA_APP_ID" "${CFG_HIAGENT_APP_ID}")" CFG_HIAGENT_QA_APP_ID
+            ask_value  "HiAgent 改写 App ID" "$(load_env_value "HIAGENT_APP_ID" "")"    CFG_HIAGENT_APP_ID
         else
             CFG_HIAGENT_APP_ID=""
+        fi
+        echo "  [提示] AI 问答需独立的 HiAgent 应用，不 fallback 到改写凭证；留空则禁用问答功能。"
+        ask_secret "HiAgent 问答 API Key (留空禁用问答)"    "$(load_env_value "HIAGENT_QA_API_KEY" "")" CFG_HIAGENT_QA_KEY
+        if [ -n "$CFG_HIAGENT_QA_KEY" ]; then
+            ask_value  "HiAgent 问答 App ID" "$(load_env_value "HIAGENT_QA_APP_ID" "")" CFG_HIAGENT_QA_APP_ID
+            # 校验：问答凭证必须与改写凭证完全不同
+            if [ -n "$CFG_HIAGENT_KEY" ] && [ "$CFG_HIAGENT_QA_KEY" = "$CFG_HIAGENT_KEY" ]; then
+                echo "  [WARN] 问答 API Key 与改写 API Key 相同，违反"两套完全不同"的应用隔离要求。"
+                echo "         请在 HiAgent 控制台创建独立的问答应用后重新填入。"
+            fi
+            if [ -n "$CFG_HIAGENT_APP_ID" ] && [ "$CFG_HIAGENT_QA_APP_ID" = "$CFG_HIAGENT_APP_ID" ]; then
+                echo "  [WARN] 问答 App ID 与改写 App ID 相同，违反应用隔离要求。"
+            fi
+        else
             CFG_HIAGENT_QA_APP_ID=""
         fi
     else
         CFG_OPENROUTER_KEY=""
         CFG_HIAGENT_KEY=""
         CFG_HIAGENT_APP_ID=""
+        CFG_HIAGENT_QA_KEY=""
         CFG_HIAGENT_QA_APP_ID=""
     fi
 
@@ -533,6 +642,16 @@ if [ "$SKIP_ENV" = false ]; then
         # 去除末尾斜杠
         CFG_APP_BASE_URL="${CFG_APP_BASE_URL%/}"
 
+        # SSO_CAS_SERVER_NAME：对应官方 web.xml 的 serverName（固定配置，不从请求头推断）
+        echo ""
+        echo "  [ CAS Server Name (应用服务器地址) ]"
+        echo "  对应官方 web.xml 的 serverName 参数"
+        echo "  格式: 协议://域名[:端口]  示例: https://langhack.imau.edu.cn"
+        echo "  service URL = serverName + /api/auth/sso/callback"
+        DEF_CAS_SERVER_NAME=$(load_env_value "SSO_CAS_SERVER_NAME" "$CFG_APP_BASE_URL")
+        ask_value "CAS Server Name" "$DEF_CAS_SERVER_NAME" CFG_CAS_SERVER_NAME
+        CFG_CAS_SERVER_NAME="${CFG_CAS_SERVER_NAME%/}"
+
         echo ""
         echo "  [ 管理员叩门入口 ]"
         echo "  SSO 启用后，管理员/运维需通过隐藏入口登录"
@@ -560,6 +679,75 @@ if [ "$SKIP_ENV" = false ]; then
         CFG_ADMIN_SECRET=""
         CFG_ADMIN_PATH=""
     fi
+
+    echo ""
+    echo "  [ 学校数据集成 ]"
+    echo "  (教务数据接入：行政班、课表、教学计划等)"
+    DEF_SCHOOL_SYNC=$(load_env_value "SCHOOL_SYNC_ENABLED" "false")
+    SCHOOL_DEFAULT="n"; [ "$DEF_SCHOOL_SYNC" = "true" ] && SCHOOL_DEFAULT="y"
+    ask_yn "启用学校数据集成？" "$SCHOOL_DEFAULT" CFG_SCHOOL_YN
+    # 初始化所有变量为空（禁用时清空）
+    CFG_SCHOOL_DATA_SOURCE=""
+    CFG_SCHOOL_APP_ID=""
+    CFG_SCHOOL_APP_SECRET=""
+    CFG_SCHOOL_ETL_JDBC_URL=""
+    CFG_SCHOOL_ETL_USERNAME=""
+    CFG_SCHOOL_ETL_PASSWORD=""
+    CFG_SCHOOL_SYNC_ENABLED="false"
+    CFG_SCHOOL_FEATURE_ENABLED="false"
+    if [ "$CFG_SCHOOL_YN" = true ]; then
+        DEF_SOURCE=$(load_env_value "SCHOOL_DATA_SOURCE" "api")
+        SOURCE_DEFAULT_IDX=1; [ "$DEF_SOURCE" = "etl" ] && SOURCE_DEFAULT_IDX=2
+        ask_choice "数据源类型:" "API 接口 (HTTPS+签名，推荐)|ETL 数据库 (JDBC 直连)" SCHOOL_SRC_MODE "$SOURCE_DEFAULT_IDX"
+        case $SCHOOL_SRC_MODE in
+            1)
+                CFG_SCHOOL_DATA_SOURCE="api"
+                echo "  [提示] 9 个数据接口 URL 已在代码中内置 (cdsp.imau.edu.cn)"
+                echo "         认证方式: sign = Base64(MD5(appId + appSecret + timestamp))"
+                DEF_APP_ID=$(load_env_value "SCHOOL_API_APP_ID" "")
+                ask_value "App ID" "$DEF_APP_ID" CFG_SCHOOL_APP_ID
+                DEF_APP_SECRET=$(load_env_value "SCHOOL_API_APP_SECRET" "")
+                ask_secret "App Secret" "$DEF_APP_SECRET" CFG_SCHOOL_APP_SECRET
+                ;;
+            2)
+                CFG_SCHOOL_DATA_SOURCE="etl"
+                echo "  [提示] 7 个查询 SQL 已在代码中内置，只需配置数据库连接"
+                DEF_JDBC_URL=$(load_env_value "SCHOOL_ETL_JDBC_URL" "jdbc:mysql://school-db.imau.edu.cn:3306/school_db")
+                ask_value "JDBC URL" "$DEF_JDBC_URL" CFG_SCHOOL_ETL_JDBC_URL
+                DEF_ETL_USER=$(load_env_value "SCHOOL_ETL_USERNAME" "")
+                ask_value "数据库用户名" "$DEF_ETL_USER" CFG_SCHOOL_ETL_USERNAME
+                DEF_ETL_PASS=$(load_env_value "SCHOOL_ETL_PASSWORD" "")
+                ask_secret "数据库密码" "$DEF_ETL_PASS" CFG_SCHOOL_ETL_PASSWORD
+                ;;
+        esac
+        echo ""
+        echo "  [提示] 定时同步计划（默认）: 全量 02:00 / 增量每小时 / 校验 04:00"
+        ask_yn "启用定时同步？" "y" SCHOOL_SYNC_YN
+        [ "$SCHOOL_SYNC_YN" = true ] && CFG_SCHOOL_SYNC_ENABLED="true"
+        echo ""
+        echo "  [提示] 启用功能开关后，运维端显示'数据浏览/数据配置'，学生端显示'课表'"
+        ask_yn "启用功能开关（运维端+学生端入口）？" "y" SCHOOL_FEATURE_YN
+        [ "$SCHOOL_FEATURE_YN" = true ] && CFG_SCHOOL_FEATURE_ENABLED="true"
+    fi
+
+    echo ""
+    echo "  [ Docker 镜像源 ]"
+    DEF_IMAGE_SOURCE_MODE=$(load_env_value "IMAGE_SOURCE_MODE" "auto")
+    case "${DEF_IMAGE_SOURCE_MODE,,}" in
+        auto) IMAGE_SOURCE_DEFAULT_IDX=1 ;;
+        public) IMAGE_SOURCE_DEFAULT_IDX=2 ;;
+        local) IMAGE_SOURCE_DEFAULT_IDX=3 ;;
+        *) IMAGE_SOURCE_DEFAULT_IDX=1 ;;
+    esac
+    ask_choice "镜像源模式:" "自动降级 (公共不可达时切换本地 registry)|强制公共镜像|强制本地 registry" IMAGE_SOURCE_CHOICE "$IMAGE_SOURCE_DEFAULT_IDX"
+    case "$IMAGE_SOURCE_CHOICE" in
+        1) CFG_IMAGE_SOURCE_MODE="auto" ;;
+        2) CFG_IMAGE_SOURCE_MODE="public" ;;
+        3) CFG_IMAGE_SOURCE_MODE="local" ;;
+    esac
+    ask_value "本地 registry 地址" "$(load_env_value "LOCAL_REGISTRY" "localhost:5000")" CFG_LOCAL_REGISTRY
+    ask_value "公共镜像探测镜像" "$(load_env_value "PUBLIC_IMAGE_PROBE" "node:20-alpine")" CFG_PUBLIC_IMAGE_PROBE
+    CFG_IMAGE_REGISTRY_PREFIX=""
 
     echo ""
     echo "  [ 备份 ]"
@@ -616,6 +804,7 @@ if [ "$SKIP_ENV" = false ]; then
         [ -n "$CFG_OPENROUTER_KEY" ] && printf 'OPENROUTER_API_KEY=%s\n' "$CFG_OPENROUTER_KEY" || printf '# OPENROUTER_API_KEY=\n'
         [ -n "$CFG_HIAGENT_KEY" ]    && printf 'HIAGENT_API_KEY=%s\n'    "$CFG_HIAGENT_KEY"    || printf '# HIAGENT_API_KEY=\n'
         [ -n "$CFG_HIAGENT_APP_ID" ] && printf 'HIAGENT_APP_ID=%s\n'    "$CFG_HIAGENT_APP_ID" || printf '# HIAGENT_APP_ID=\n'
+        [ -n "$CFG_HIAGENT_QA_KEY" ]    && printf 'HIAGENT_QA_API_KEY=%s\n' "$CFG_HIAGENT_QA_KEY"    || printf '# HIAGENT_QA_API_KEY=\n'
         [ -n "$CFG_HIAGENT_QA_APP_ID" ] && printf 'HIAGENT_QA_APP_ID=%s\n' "$CFG_HIAGENT_QA_APP_ID" || printf '# HIAGENT_QA_APP_ID=\n'
         printf 'MYSQL_ROOT_PASSWORD=%s\n'          "$CFG_DB_PASSWORD"
         printf 'MYSQL_DATABASE=english_learning\n'
@@ -634,6 +823,10 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'PORT_MYSQL=%s\n'         "$CFG_PORT_DB"
         printf 'PORT_MYSQL_SLAVE=%s\n'   "$CFG_PORT_SLAVE"
         printf 'PORT_REDIS=6379\n'
+        printf 'IMAGE_SOURCE_MODE=%s\n' "${CFG_IMAGE_SOURCE_MODE:-auto}"
+        printf 'LOCAL_REGISTRY=%s\n' "${CFG_LOCAL_REGISTRY:-localhost:5000}"
+        printf 'IMAGE_REGISTRY_PREFIX=%s\n' "${CFG_IMAGE_REGISTRY_PREFIX:-}"
+        printf 'PUBLIC_IMAGE_PROBE=%s\n' "${CFG_PUBLIC_IMAGE_PROBE:-node:20-alpine}"
         printf 'BACKUP_ENABLED=%s\n'     "$CFG_BACKUP_ENABLED"
         printf 'BACKUP_DIR=%s\n'         "$CFG_BACKUP_DIR"
         printf 'BACKUP_RETENTION_DAYS=%s\n' "$CFG_BACKUP_RETENTION"
@@ -655,9 +848,27 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'SSO_CAS_ENABLED=%s\n'      "$CFG_SSO_ENABLED"
         printf 'SSO_CAS_SERVER_URL=%s\n'   "$CFG_SSO_SERVER_URL"
         if [ "$CFG_SSO_ENABLED" = "true" ]; then
-            printf 'APP_BASE_URL=%s\n'        "${CFG_APP_BASE_URL:-}"
-            printf 'ADMIN_LOGIN_SECRET=%s\n'  "$CFG_ADMIN_SECRET"
+            printf 'APP_BASE_URL=%s\n'          "${CFG_APP_BASE_URL:-}"
+            printf 'SSO_CAS_SERVER_NAME=%s\n'   "${CFG_CAS_SERVER_NAME:-}"
+            printf 'ADMIN_LOGIN_SECRET=%s\n'     "$CFG_ADMIN_SECRET"
             printf 'ADMIN_PORTAL_PATH=%s\n'   "$CFG_ADMIN_PATH"
+        fi
+        # ── 学校数据集成 ──────────────────────────────────────
+        if [ "$CFG_SCHOOL_YN" = true ]; then
+            printf 'SCHOOL_DATA_SOURCE=%s\n'   "$CFG_SCHOOL_DATA_SOURCE"
+            if [ "$CFG_SCHOOL_DATA_SOURCE" = "api" ]; then
+                printf 'SCHOOL_API_APP_ID=%s\n'     "$CFG_SCHOOL_APP_ID"
+                printf 'SCHOOL_API_APP_SECRET=%s\n' "$CFG_SCHOOL_APP_SECRET"
+            fi
+            if [ "$CFG_SCHOOL_DATA_SOURCE" = "etl" ]; then
+                printf 'SCHOOL_ETL_JDBC_URL=%s\n'   "$CFG_SCHOOL_ETL_JDBC_URL"
+                printf 'SCHOOL_ETL_USERNAME=%s\n'   "$CFG_SCHOOL_ETL_USERNAME"
+                printf 'SCHOOL_ETL_PASSWORD=%s\n'   "$CFG_SCHOOL_ETL_PASSWORD"
+            fi
+            printf 'SCHOOL_SYNC_ENABLED=%s\n' "$CFG_SCHOOL_SYNC_ENABLED"
+        else
+            printf '# 学校数据集成未启用（可在运维面板 → 学校数据配置中手动启用）\n'
+            printf 'SCHOOL_SYNC_ENABLED=false\n'
         fi
     } > "$ENV_FILE"
     # 设置 .env 文件权限为 600（仅所有者可读写，保护敏感信息）
@@ -702,7 +913,15 @@ PORT_BACKEND=$(load_env_value  "PORT_BACKEND"  "8080" "$ENV_FILE")
 HTTPS_ENABLED_VAL=$(load_env_value "HTTPS_ENABLED" "false" "$ENV_FILE")
 PORT_HTTPS_VAL=$(load_env_value "PORT_HTTPS" "443" "$ENV_FILE")
 SSL_DOMAIN_VAL=$(load_env_value "SSL_DOMAIN" "" "$ENV_FILE")
+IMAGE_SOURCE_MODE_VAL="${IMAGE_SOURCE_MODE:-$(load_env_value "IMAGE_SOURCE_MODE" "auto" "$ENV_FILE")}"
+LOCAL_REGISTRY_VAL="${LOCAL_REGISTRY:-$(load_env_value "LOCAL_REGISTRY" "localhost:5000" "$ENV_FILE")}"
+PUBLIC_IMAGE_PROBE_VAL="${PUBLIC_IMAGE_PROBE:-$(load_env_value "PUBLIC_IMAGE_PROBE" "node:20-alpine" "$ENV_FILE")}"
 echo "  [OK] 环境变量检查通过"
+
+echo ""
+echo "  [ Docker 镜像源 ]"
+resolve_image_registry_prefix "$IMAGE_SOURCE_MODE_VAL" "$LOCAL_REGISTRY_VAL" "$PUBLIC_IMAGE_PROBE_VAL"
+set_env_value "$ENV_FILE" "IMAGE_REGISTRY_PREFIX" "$RESOLVED_IMAGE_REGISTRY_PREFIX"
 
 # ══════════════════════════════════════════════════════
 # 步骤 3: 构建选项
@@ -744,6 +963,7 @@ if [ "${CFG_AUTO_UPDATE_ENABLED:-false}" = "true" ]; then
 else
     echo "  自动更新: 未启用"
 fi
+echo "  Docker 镜像源: ${RESOLVED_IMAGE_SOURCE_LABEL:-$(load_env_value "IMAGE_REGISTRY_PREFIX" "" "$ENV_FILE")}"
 if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
     echo "  SSO: 已启用 (${CFG_SSO_SERVER_URL})"
     echo "  应用地址 (APP_BASE_URL): ${CFG_APP_BASE_URL}"
@@ -751,6 +971,19 @@ if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
     echo "  管理员入口: /${CFG_ADMIN_PATH}"
 else
     echo "  SSO: 未启用"
+fi
+if [ "${CFG_SCHOOL_YN:-false}" = true ]; then
+    echo "  学校数据: 已启用 (${CFG_SCHOOL_DATA_SOURCE})"
+    if [ "$CFG_SCHOOL_DATA_SOURCE" = "api" ]; then
+        echo "    认证方式: appId + appSecret 签名"
+        [ -n "$CFG_SCHOOL_APP_ID" ] && echo "    App ID: ${CFG_SCHOOL_APP_ID}" || echo "    App ID: (未配置)"
+    elif [ "$CFG_SCHOOL_DATA_SOURCE" = "etl" ]; then
+        echo "    JDBC: ${CFG_SCHOOL_ETL_JDBC_URL}"
+    fi
+    echo "    定时同步: ${CFG_SCHOOL_SYNC_ENABLED}"
+    echo "    功能开关: ${CFG_SCHOOL_FEATURE_ENABLED}"
+else
+    echo "  学校数据: 未启用"
 fi
 
 ask_yn "开始部署？" "y" GO
@@ -1047,6 +1280,128 @@ elif [ -n "$MIGRATE_ERRORS" ]; then
 fi
 echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
 
+# ── 数据导入检查与补全 ──────────────────────────────────────────
+# docker compose down -v 后重建时，Docker init 脚本可能未成功导入种子数据
+# 此步骤检测关键表数据量，为空时自动从 database/ 和 backups/ 导入
+echo "[INFO] 检查数据库种子数据..."
+
+# 检查关键表的数据量（texts=文章, ecdict_words=词典, article=课文）
+DB_NAME="${MYSQL_DATABASE:-english_learning}"
+TEXTS_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+    -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+ECDICT_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+    -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+ARTICLE_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+    -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+
+NEED_SEED=false
+[ "${TEXTS_COUNT:-0}" = "0" ] && NEED_SEED=true
+[ "${ECDICT_COUNT:-0}" = "0" ] && NEED_SEED=true
+
+if [ "$NEED_SEED" = true ]; then
+    echo "[WARN] 检测到空数据库（texts: ${TEXTS_COUNT}, ecdict_words: ${ECDICT_COUNT}, article: ${ARTICLE_COUNT}）"
+    echo "[INFO] 开始自动导入种子数据..."
+
+    # ① 导入全量备份（database/ 中最新的 .sql，优先全量备份）
+    SEED_DIR="$PROJECT_ROOT/database"
+    BACKUP_SEED_DIR="$PROJECT_ROOT/backups"
+    SEED_FILE=""
+    for dir in "$SEED_DIR" "$BACKUP_SEED_DIR"; do
+        if [ -d "$dir" ]; then
+            for file in "$dir"/*.sql "$dir"/*.sql.gz; do
+                [ -f "$file" ] || continue
+                # 跳过增量备份
+                basename "$file" | grep -q "_incr_" && continue
+                # 跳过过小文件
+                fsize=$(stat -c%s "$file" 2>/dev/null || echo "0")
+                [ "$fsize" -lt 1024 ] && continue
+                # 跳过非备份文件（schema_export, texts_full_export 等单独处理）
+                basename "$file" | grep -qi "schema_export" && continue
+                # 选修改时间最新的
+                if [ -z "$SEED_FILE" ]; then
+                    SEED_FILE="$file"
+                else
+                    cur_mtime=$(stat -c%Y "$file" 2>/dev/null || echo "0")
+                    best_mtime=$(stat -c%Y "$SEED_FILE" 2>/dev/null || echo "0")
+                    [ "$cur_mtime" -gt "$best_mtime" ] && SEED_FILE="$file"
+                fi
+            done
+        fi
+    done
+
+    if [ -n "$SEED_FILE" ] && [ -f "$SEED_FILE" ]; then
+        echo "[INFO] 导入全量备份: $(basename "$SEED_FILE")"
+        case "$SEED_FILE" in
+            *.sql.gz)
+                zcat "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" \
+                    mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password" || true
+                ;;
+            *.sql)
+                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                    < "$SEED_FILE" 2>&1 | grep -v "Using a password" || true
+                ;;
+        esac
+        echo "[OK] 全量备份导入完成"
+    else
+        echo "[WARN] 未找到全量备份文件，跳过数据导入"
+    fi
+
+    # ② 导入课文数据（3Blue1Brown 等）
+    ARTICLE_DIR="$PROJECT_ROOT/database/3Blue1Brown"
+    if [ -d "$ARTICLE_DIR" ]; then
+        ARTICLE_COUNT_AFTER=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+            -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+        if [ "${ARTICLE_COUNT_AFTER:-0}" = "0" ]; then
+            echo "[INFO] 导入课文数据 (3Blue1Brown)..."
+            for f in "$ARTICLE_DIR"/*.sql; do
+                [ -f "$f" ] || continue
+                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                    < "$f" 2>&1 | grep -v "Using a password" || true
+            done
+            echo "[OK] 课文数据导入完成"
+        fi
+    fi
+
+    # ③ 导入 ECDICT 词典（74万词）
+    ECDICT_COUNT_AFTER=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+        -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    if [ "${ECDICT_COUNT_AFTER:-0}" -lt 100000 ]; then
+        ECDICT_CSV_PATH="$PROJECT_ROOT/ECDICT-master/ecdict.csv"
+        if [ -f "$ECDICT_CSV_PATH" ]; then
+            echo "[INFO] 导入 ECDICT 词典（预计 1-3 分钟）..."
+            # 通过 docker cp + LOAD DATA 方式导入（比管道快得多）
+            docker cp "$ECDICT_CSV_PATH" "$MASTER_CONTAINER:/tmp/ecdict.csv"
+            docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
+            docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" --local-infile=1 "$DB_NAME" -e \
+                "TRUNCATE TABLE ecdict_words;
+                 LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
+                 INTO TABLE ecdict_words
+                 CHARACTER SET utf8mb4
+                 FIELDS TERMINATED BY ','
+                 OPTIONALLY ENCLOSED BY '\"'
+                 LINES TERMINATED BY '\n'
+                 IGNORE 1 LINES
+                 (word, phonetic, definition, translation, pos, collins, oxford, tag, bnc, frq, exchange, @detail, @audio);" 2>&1 \
+                | grep -v "Using a password" || true
+            docker exec "$MASTER_CONTAINER" rm -f /tmp/ecdict.csv
+            echo "[OK] ECDICT 词典导入完成"
+        else
+            echo "[WARN] ECDICT CSV 文件不存在: $ECDICT_CSV_PATH，跳过词典导入"
+        fi
+    fi
+
+    # 验证导入结果
+    TEXTS_FINAL=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+        -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    ECDICT_FINAL=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+        -sN -e "SELECT COUNT(*) FROM ecdict_words;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    ARTICLE_FINAL=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+        -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
+    echo "[OK] 种子数据导入完成（texts: ${TEXTS_FINAL}, ecdict_words: ${ECDICT_FINAL}, article: ${ARTICLE_FINAL}）"
+else
+    echo "[OK] 数据库已有种子数据（texts: ${TEXTS_COUNT}, ecdict_words: ${ECDICT_COUNT}, article: ${ARTICLE_COUNT}）"
+fi
+
 # Schema 验证：确认关键表存在（与 auto-update.sh 保持一致）
 echo "[INFO] 验证数据库 Schema 完整性..."
 SCHEMA_MISSING=""
@@ -1289,6 +1644,53 @@ fi
 # ── AI 密钥种子化：应用启动时 @PostConstruct 自动完成，无需外部触发 ──
 echo "[INFO] AI 服务商密钥将在后端启动时自动从环境变量种子化到数据库"
 echo "       如需手动管理，请访问运维面板 → AI服务管理"
+
+# ── 学校数据功能开关激活 ───────────────────────────────────────
+if [ "${CFG_SCHOOL_FEATURE_ENABLED:-false}" = "true" ]; then
+    echo "[INFO] 激活学校数据功能开关..."
+    docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" -e \
+        "UPDATE system_config SET config_value='true'
+         WHERE config_group='feature_toggle'
+           AND config_key IN ('ops.school_data_browser', 'ops.school_data_config', 'page_schedule');" \
+        2>&1 | grep -v "Using a password" || true
+    echo "[OK] 学校数据功能开关已启用（运维端入口 + 学生端课表）"
+fi
+
+# ── 学校数据 API 连通性验证（端到端保障）───────────────────────
+# 配置完成后主动验证 appId/appSecret 是否真能从学校 API 拉到数据。
+# 此步骤不阻塞部署（学校 API 可能暂时不可达），但会给出明确提示。
+SCHOOL_API_APP_ID_VAL=$(load_env_value "SCHOOL_API_APP_ID" "" "$ENV_FILE")
+SCHOOL_API_APP_SECRET_VAL=$(load_env_value "SCHOOL_API_APP_SECRET" "" "$ENV_FILE")
+if [ -n "$SCHOOL_API_APP_ID_VAL" ] && [ -n "$SCHOOL_API_APP_SECRET_VAL" ]; then
+    echo ""
+    echo "[INFO] 验证学校 API 连通性（appId=${SCHOOL_API_APP_ID_VAL:0:8}..., appSecret=***）..."
+    BACKEND_URL="http://localhost:${PORT_BACKEND:-8080}"
+    # 使用默认 admin 账号登录（部署后运维应立即修改）
+    LOGIN_RESP=$(curl -sS --max-time 10 \
+        -X POST "${BACKEND_URL}/api/auth/login" \
+        -H "Content-Type: application/json" \
+        -d '{"username":"admin","password":"admin123"}' 2>/dev/null || echo "{}")
+    ADMIN_JWT=$(echo "$LOGIN_RESP" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+    if [ -n "$ADMIN_JWT" ]; then
+        TEST_RESP=$(curl -sS --max-time 30 \
+            -X POST "${BACKEND_URL}/api/ops/school-data/test-connection" \
+            -H "Authorization: Bearer ${ADMIN_JWT}" 2>/dev/null || echo "{}")
+        if echo "$TEST_RESP" | grep -q '"success":true'; then
+            echo "[OK] ✅ 学校 API 连接测试通过 — 同步链路就绪"
+        else
+            echo "[WARN] ⚠️  学校 API 连接测试失败"
+            echo "       响应: $(echo "$TEST_RESP" | head -c 200)"
+            echo "       排查: 1) App ID/Secret 正确性  2) cdsp.imau.edu.cn 网络可达  3) 后端日志 docker logs langhack-backend | grep -i school"
+            echo "       修复后可运维面板 → 学校数据配置 → 测试连接 重新验证"
+        fi
+    else
+        echo "[WARN] 无法获取 admin JWT 自动验证连接（可能 admin 密码已修改）"
+        echo "       请登录运维面板 → 学校数据配置 → 测试连接 手动验证"
+    fi
+else
+    echo "[INFO] 学校 API 认证未配置（SCHOOL_API_APP_ID/SECRET 为空），跳过连通性验证"
+    echo "       如需启用，请在运维面板 → 学校数据配置 → 填入 App ID / App Secret → 保存 → 测试连接"
+fi
 
 # ── SSO 管理员叩门入口信息 ──
 SSO_ENABLED_VAL="${CFG_SSO_ENABLED:-$(load_env_value "SSO_ENABLED" "false" "$ENV_FILE")}"

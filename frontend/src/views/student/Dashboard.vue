@@ -87,8 +87,8 @@
 
     <!-- 主要内容区域 -->
     <div class="content-section">
-      <!-- 我的课程 - 现代卡片设计 -->
-      <div class="trend-section">
+      <!-- 我的课程 - 现代卡片设计（受 page_courses 开关控制） -->
+      <div v-if="isEnabled('page_courses')" class="trend-section">
         <div class="section-header">
           <h2 class="section-title">我的课程</h2>
           <button class="trend-btn secondary" @click="$router.push('/student/courses')">
@@ -145,13 +145,92 @@
               </svg>
             </div>
             <p class="empty-text">暂无课程</p>
-            <button class="trend-btn primary" @click="$router.push('/student/classes')">加入班级</button>
+            <button v-if="isEnabled('page_classes')" class="trend-btn primary" @click="$router.push('/student/classes')">加入班级</button>
           </div>
         </div>
       </div>
 
-      <!-- 待办任务 -->
-      <div class="trend-section">
+      <!-- 每日单词背诵任务（受 page_word_recite 开关控制） -->
+      <div v-if="isEnabled('page_word_recite')" class="trend-section">
+        <div class="section-header">
+          <h2 class="section-title">每日单词背诵</h2>
+          <button class="trend-btn secondary" @click="$router.push('/student/word-recite')">
+            <span>开始背诵</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9,18 15,12 9,6"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="daily-word-recite-card" @click="$router.push('/student/word-recite')">
+          <div class="recite-icon-wrapper">
+            <div class="recite-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                <line x1="8" y1="8" x2="16" y2="8"/>
+                <line x1="8" y1="12" x2="14" y2="12"/>
+              </svg>
+            </div>
+          </div>
+          <div class="recite-content">
+            <h3 class="recite-title">今日单词背诵任务</h3>
+            <p class="recite-desc">完成每日单词背诵和复习任务</p>
+            <div class="recite-progress">
+              <div class="progress-bar-mini">
+                <div class="progress-fill-mini" :style="{ width: wordReciteProgress + '%' }"></div>
+              </div>
+              <span class="progress-text-mini">已背诵 {{ todayReviewed }} 个</span>
+            </div>
+          </div>
+          <div class="recite-status">
+            <span class="status-badge" :class="{ 'completed': wordReciteCompleted }">
+              {{ wordReciteCompleted ? '已完成' : '进行中' }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 单词本背诵任务（受 page_vocabulary 开关控制） -->
+      <div v-if="isEnabled('page_vocabulary')" class="trend-section">
+        <div class="section-header">
+          <h2 class="section-title">单词本背诵</h2>
+          <button class="trend-btn secondary" @click="$router.push('/student/vocabulary')">
+            <span>开始复习</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9,18 15,12 9,6"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="daily-word-recite-card vocabulary-card" @click="$router.push('/student/vocabulary')">
+          <div class="recite-icon-wrapper vocabulary-icon">
+            <div class="recite-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+              </svg>
+            </div>
+          </div>
+          <div class="recite-content">
+            <h3 class="recite-title">生词本复习任务</h3>
+            <p class="recite-desc">复习单词本中收藏的单词</p>
+            <div class="recite-progress">
+              <div class="progress-bar-mini">
+                <div class="progress-fill-mini vocabulary-progress" :style="{ width: vocabularyProgress + '%' }"></div>
+              </div>
+              <span class="progress-text-mini">待复习 {{ vocabularyStats.reviewableCount }} 个</span>
+            </div>
+          </div>
+          <div class="recite-status">
+            <span class="status-badge" :class="{ 'completed': vocabularyStats.reviewableCount === 0 }">
+              {{ vocabularyStats.reviewableCount === 0 ? '已完成' : '进行中' }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 待办任务（受 page_assignments 开关控制） -->
+      <div v-if="isEnabled('page_assignments')" class="trend-section">
         <div class="section-header">
           <h2 class="section-title">待办任务</h2>
           <button class="trend-btn secondary" @click="$router.push('/student/assignments')">
@@ -272,15 +351,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from "vue"
+import { ref, reactive, onMounted, computed } from "vue"
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/store/user'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   getStudentDashboard,
-  getTodayLearningStats
+  getTodayLearningStats,
+  getVocabularyStats
 } from '@/api/student'
 
 const router = useRouter()
+
+// 功能开关：发现页的每个快捷入口 section 都受对应 page_* 开关控制
+// 开关关闭时，对应区块整体隐藏，并禁止推荐卡片跳转到该页面
+const { isEnabled, load: loadFeatureToggles, isLoaded } = useFeatureToggles()
 
 const loading = ref(false)
 const dashboardData = reactive({
@@ -301,6 +387,76 @@ const learningStats = reactive({
   studyTime: 0,
   accuracy: 0
 })
+
+// 每日单词背诵数据
+const dailyWordCount = ref(10)
+const todayReviewed = ref(0)
+const wordReciteCompleted = ref(false)
+const wordReciteProgress = computed(() => {
+  if (dailyWordCount.value === 0) return 0
+  return Math.min(Math.round((todayReviewed.value / dailyWordCount.value) * 100), 100)
+})
+
+// 单词本数据
+const vocabularyStats = reactive({
+  totalWords: 0,
+  reviewableCount: 0,
+  newWords: 0,
+  learningWords: 0,
+  masteredWords: 0
+})
+
+const vocabularyProgress = computed(() => {
+  if (vocabularyStats.totalWords === 0) return 0
+  const completed = vocabularyStats.masteredWords
+  return Math.min(Math.round((completed / vocabularyStats.totalWords) * 100), 100)
+})
+
+// 加载每日单词背诵进度
+const loadDailyWordReciteProgress = () => {
+  const userStore = useUserStore()
+  const currentUserId = userStore.userInfo?.id || 'anonymous'
+  
+  // 从 localStorage 读取今日背诵进度
+  const savedCount = localStorage.getItem(`todayReviewed_${currentUserId}`)
+  const savedDate = localStorage.getItem(`lastReviewDate_${currentUserId}`)
+  const today = new Date().toDateString()
+  
+  if (savedDate === today && savedCount) {
+    todayReviewed.value = parseInt(savedCount)
+    wordReciteCompleted.value = todayReviewed.value >= dailyWordCount.value
+  } else {
+    // 新的一天，重置进度
+    todayReviewed.value = 0
+    wordReciteCompleted.value = false
+    localStorage.setItem(`lastReviewDate_${currentUserId}`, today)
+    localStorage.setItem(`todayReviewed_${currentUserId}`, '0')
+  }
+  
+  // 读取每日背诵数量设置
+  const savedDailyCount = localStorage.getItem(`daily_count_${currentUserId}_cet4`)
+  if (savedDailyCount) {
+    dailyWordCount.value = parseInt(savedDailyCount)
+  }
+}
+
+// 加载单词本统计
+const loadVocabularyStats = async () => {
+  try {
+    const response = await getVocabularyStats()
+    if (response?.code === 200 && response?.data) {
+      Object.assign(vocabularyStats, {
+        totalWords: response.data.totalWords || 0,
+        reviewableCount: response.data.reviewableCount || response.data.learningWords || 0,
+        newWords: response.data.newWords || 0,
+        learningWords: response.data.learningWords || 0,
+        masteredWords: response.data.masteredWords || 0
+      })
+    }
+  } catch (error) {
+    console.error('加载单词本统计失败:', error)
+  }
+}
 
 // 加载仪表板数据
 const loadDashboardData = async () => {
@@ -365,6 +521,11 @@ const startAssignment = (assignment) => {
 // 处理推荐内容点击
 const handleRecommendationClick = (recommendation) => {
   if (!recommendation) return
+  // 防御：推荐默认跳转到课程页，若 page_courses 关闭则不响应点击，避免路由守卫重定向
+  if (!isEnabled('page_courses')) {
+    ElMessage.info('课程页已被管理员关闭')
+    return
+  }
   // 跳转到课程学习页面，定位到对应课程
   const query = {
     courseId: recommendation.courseId,
@@ -450,6 +611,16 @@ const formatScore = (score) => {
 onMounted(() => {
   loadDashboardData()
   loadLearningStats()
+  loadDailyWordReciteProgress()
+  loadVocabularyStats()
+  // 共享 feature-toggles 缓存（路由守卫与 Layout 已在加载；此处仅兜底）
+  try {
+    if (!isLoaded()) {
+      const userStore = useUserStore()
+      const usePersonal = !!userStore.token && (userStore.userRole === 'STUDENT' || userStore.userRole === 'USER')
+      loadFeatureToggles({ personal: usePersonal }).catch(() => {})
+    }
+  } catch { /* 测试环境或无 Pinia 时静默跳过 */ }
 })
 </script>
 
@@ -584,6 +755,122 @@ onMounted(() => {
 .trend-studytime .stat-icon,
 .trend-studytime .stat-glow {
   background: linear-gradient(135deg, var(--success-color), #20C997);
+}
+
+/* 每日单词背诵任务卡片 */
+.daily-word-recite-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(0, 102, 204, 0.05) 0%, rgba(0, 168, 204, 0.05) 100%);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.daily-word-recite-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-color);
+}
+
+.recite-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.recite-icon {
+  color: white;
+}
+
+.recite-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.recite-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 6px 0;
+}
+
+.recite-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 10px 0;
+}
+
+.recite-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-bar-mini {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill-mini {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text-mini {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.recite-status {
+  flex-shrink: 0;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(255, 159, 10, 0.1);
+  color: var(--warning-color);
+}
+
+.status-badge.completed {
+  background: rgba(0, 200, 150, 0.1);
+  color: var(--success-color);
+}
+
+/* 单词本卡片样式 */
+.vocabulary-card {
+  background: linear-gradient(135deg, rgba(255, 159, 10, 0.05) 0%, rgba(255, 127, 80, 0.05) 100%);
+}
+
+.vocabulary-card:hover {
+  border-color: var(--warning-color);
+}
+
+.vocabulary-icon {
+  background: linear-gradient(135deg, var(--warning-color), #FF7F50);
+}
+
+.vocabulary-progress {
+  background: linear-gradient(90deg, var(--warning-color), #FF7F50);
 }
 
 /* 内容区域 */

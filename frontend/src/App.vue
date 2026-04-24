@@ -62,9 +62,13 @@ router.onError((error) => {
 
   /* 现代功能色 */
   --success-color: #00C896;       /* 成功绿 */
+  --success-dark: #00A078;        /* 深成功绿 */
   --warning-color: #FFB347;       /* 警告金 */
+  --warning-dark: #E6A23C;        /* 深警告金 */
   --error-color: #FF5757;         /* 错误红 */
+  --error-dark: #E64242;          /* 深错误红 */
   --info-color: #4A90E2;          /* 信息蓝 */
+  --info-dark: #3A7AD2;           /* 深信息蓝 */
 
   /* 深色背景色系 */
   --bg-primary: #FFFFFF;          /* 纯白 */

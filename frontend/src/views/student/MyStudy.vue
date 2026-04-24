@@ -1,5 +1,24 @@
 <template>
   <div class="my-study-page">
+    <!-- Quick Entries Grid: 聚合被移出主导航的子页面 -->
+    <section v-if="visibleEntries.length > 0" class="quick-entries">
+      <h3 class="section-title">快捷入口</h3>
+      <div class="entries-grid">
+        <button
+          v-for="entry in visibleEntries"
+          :key="entry.key"
+          class="entry-card"
+          :style="{ '--entry-color': entry.color }"
+          @click="router.push(entry.path)"
+        >
+          <div class="entry-icon">
+            <el-icon :size="20"><component :is="entry.icon" /></el-icon>
+          </div>
+          <span class="entry-label">{{ entry.label }}</span>
+        </button>
+      </div>
+    </section>
+
     <!-- Tab Selector -->
     <div class="tab-bar">
       <button
@@ -109,14 +128,44 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { StarFilled, Clock, Timer, Reading, Loading } from '@element-plus/icons-vue'
+import {
+  StarFilled, Clock, Timer, Reading, Loading,
+  House, Calendar, Trophy, Tickets, Notebook,
+  VideoPlay, MessageBox, Edit
+} from '@element-plus/icons-vue'
 import { getFavoriteArticles, getReadingHistory } from '@/api/student'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 
 const router = useRouter()
 const activeTab = ref('favorites')
+
+// 聚合被移出主导航的子页面入口（按优先级排序）
+// 注：发现页已在底部导航栏首位强制显示，不再重复列出
+const QUICK_ENTRIES = [
+  { key: 'assignments',       path: '/student/assignments',       label: '任务',      icon: markRaw(Edit),      color: '#f97316', toggleKey: 'page_assignments' },
+  { key: 'classes',           path: '/student/classes',           label: '社区',      icon: markRaw(House),     color: '#14b8a6', toggleKey: 'page_classes' },
+  { key: 'schedule',          path: '/student/schedule',          label: '课表',      icon: markRaw(Calendar),  color: '#6366f1', toggleKey: 'page_schedule' },
+  { key: 'scores',            path: '/student/scores',            label: '成绩',      icon: markRaw(Trophy),    color: '#f59e0b', toggleKey: 'page_scores' },
+  { key: 'course_selections', path: '/student/course-selections', label: '选课',      icon: markRaw(Tickets),   color: '#8b5cf6', toggleKey: 'page_course_selections' },
+  { key: 'user_texts',        path: '/student/user-texts',        label: '我的创作',   icon: markRaw(Notebook),  color: '#ec4899', toggleKey: 'page_user_texts' },
+  { key: 'ai_video',          path: '/student/ai-video',          label: 'AI 视频',   icon: markRaw(VideoPlay), color: '#ef4444', toggleKey: 'page_ai_video' },
+  { key: 'ai_qa',             path: '/student/ai-qa',             label: 'AI 问答',   icon: markRaw(MessageBox),color: '#10b981', toggleKey: 'page_ai_qa' }
+]
+
+const { toggles: featureToggles, load: loadFeatureToggles, isLoaded } = useFeatureToggles()
+
+const isEntryEnabled = (key) => {
+  if (!key) return true
+  const v = featureToggles.value[key]
+  return v === undefined || v === true || v === 'true'
+}
+
+const visibleEntries = computed(() =>
+  QUICK_ENTRIES.filter(e => isEntryEnabled(e.toggleKey))
+)
 
 const tabs = ref([
   { key: 'favorites', label: '我的收藏', icon: StarFilled, count: undefined },
@@ -163,7 +212,7 @@ const loadHistory = async () => {
 }
 
 const readArticle = (textId) => {
-  router.push({ path: '/student/text-learning', query: { textId, from: 'my-study' } })
+  router.push({ path: `/article/${textId}`, query: { from: 'my-study' } })
 }
 
 const getDifficultyText = (diff) => {
@@ -193,6 +242,10 @@ watch(activeTab, (tab) => {
 onMounted(() => {
   loadFavorites()
   loadHistory()
+  // 共享 feature-toggles 缓存（路由守卫与 Layout 已在加载；此处仅兜底）
+  if (!isLoaded()) {
+    loadFeatureToggles({ personal: true }).catch(() => {})
+  }
 })
 </script>
 
@@ -202,6 +255,84 @@ onMounted(() => {
   margin: 0 auto;
   padding: 16px;
   min-height: 80vh;
+}
+
+.quick-entries {
+  margin-bottom: 20px;
+}
+
+.section-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.entries-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.entry-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 6px;
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.entry-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--entry-color, #cbd5e1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.entry-card:active {
+  transform: translateY(0);
+}
+
+.entry-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--entry-color, #64748b) 12%, transparent);
+  color: var(--entry-color, #64748b);
+}
+
+.entry-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
+}
+
+@media (max-width: 480px) {
+  .entries-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .entry-card {
+    padding: 12px 4px;
+  }
+  .entry-icon {
+    width: 36px;
+    height: 36px;
+  }
+  .entry-label {
+    font-size: 11px;
+  }
 }
 
 .tab-bar {

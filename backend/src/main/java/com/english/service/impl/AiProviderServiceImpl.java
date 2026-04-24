@@ -19,6 +19,7 @@ import org.springframework.web.client.RestTemplate;
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
@@ -34,8 +35,8 @@ public class AiProviderServiceImpl implements AiProviderService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** per-service round-robin counter */
-    private final Map<String, AtomicInteger> counters = new HashMap<>();
+    /** per-service round-robin counter；pick() 多线程调用，必须用 ConcurrentHashMap */
+    private final Map<String, AtomicInteger> counters = new ConcurrentHashMap<>();
 
     /**
      * 若数据库中 translate 服务无任何记录，尝试从环境变量读取初始服务商并插入。
@@ -65,7 +66,9 @@ public class AiProviderServiceImpl implements AiProviderService {
             }
 
             // HiAgent 走专有协议（非 OpenAI 兼容），不加入 ai_provider 负载均衡池
-            // 其配置通过 HIAGENT_API_KEY / HIAGENT_APP_ID / HIAGENT_QA_APP_ID 环境变量直接注入 HiAgentConfig
+            // AI 改写凭证: HIAGENT_API_KEY / HIAGENT_APP_ID
+            // AI 问答凭证: HIAGENT_QA_API_KEY / HIAGENT_QA_APP_ID（必须与改写凭证完全不同，不 fallback）
+            // 两套凭证直接注入 HiAgentConfig，运维面板不管理。
         } catch (Exception e) {
             log.warn("[AiProvider] 种子初始化失败（可忽略）: {}", e.getMessage());
         }
@@ -116,10 +119,13 @@ public class AiProviderServiceImpl implements AiProviderService {
 
     @Override
     public void create(AiProvider provider) {
+        if (provider.getProtocol() == null || provider.getProtocol().isEmpty())
+            provider.setProtocol("openai_compatible");
         if (provider.getWeight() == null) provider.setWeight(1);
         if (provider.getEnabled() == null) provider.setEnabled(1);
         if (provider.getTimeoutMs() == null) provider.setTimeoutMs(30000);
-        if (provider.getModel() == null || provider.getModel().isEmpty())
+        String protocol = provider.getProtocol();
+        if (!"hiagent".equals(protocol) && (provider.getModel() == null || provider.getModel().isEmpty()))
             throw new BusinessException("模型名称不能为空");
         provider.setCreatedTime(LocalDateTime.now());
         provider.setUpdatedTime(LocalDateTime.now());
@@ -192,6 +198,14 @@ public class AiProviderServiceImpl implements AiProviderService {
             throw new BusinessException("该服务商未配置 API Key");
         }
 
+        String protocol = p.getProtocol() != null ? p.getProtocol() : "openai_compatible";
+        if ("hiagent".equals(protocol)) {
+            return testHiAgent(p, testText);
+        }
+        return testOpenAiCompatible(p, testText);
+    }
+
+    private Map<String, Object> testOpenAiCompatible(AiProvider p, String testText) {
         String input = (testText != null && !testText.isEmpty()) ? testText : "Hello, please reply with OK.";
         int timeout = p.getTimeoutMs() != null ? p.getTimeoutMs() : 30000;
 
@@ -248,9 +262,104 @@ public class AiProviderServiceImpl implements AiProviderService {
             }
         } catch (Exception e) {
             long latency = System.currentTimeMillis() - start;
-            log.warn("AI provider test failed id={}: {}", id, e.getMessage());
+            log.error("AI 服务商连通性测试失败 id={} name={} url={} model={} err={}",
+                    p.getId(), p.getName(), testUrl, p.getModel(), e.getMessage(), e);
             result.put("success", false);
-            result.put("error", e.getMessage());
+            result.put("error", "测试调用失败，请查看服务端日志");
+            result.put("latencyMs", latency);
+        }
+        return result;
+    }
+
+    /**
+     * HiAgent 专有协议测试: create_conversation → chat_query_v2 (blocking)
+     */
+    private Map<String, Object> testHiAgent(AiProvider p, String testText) {
+        if (p.getAppId() == null || p.getAppId().isEmpty()) {
+            throw new BusinessException("HiAgent 协议需要配置 App ID");
+        }
+
+        String input = (testText != null && !testText.isEmpty()) ? testText : "Hello, please reply with OK.";
+        int timeout = p.getTimeoutMs() != null ? p.getTimeoutMs() : 30000;
+
+        org.springframework.http.client.HttpComponentsClientHttpRequestFactory factory =
+            new org.springframework.http.client.HttpComponentsClientHttpRequestFactory();
+        factory.setConnectTimeout(timeout);
+        factory.setReadTimeout(timeout);
+        RestTemplate rt = new RestTemplate(factory);
+
+        String baseUrl = p.getApiUrl() != null ? p.getApiUrl().stripTrailing() : "";
+        if (baseUrl.endsWith("/")) baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("input", input);
+        long start = System.currentTimeMillis();
+
+        try {
+            // Step 1: create_conversation
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Apikey", p.getApiKey());
+            headers.set("Appid", p.getAppId());
+            headers.set("X-App-Id", p.getAppId());
+            headers.set("X-Date", java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")));
+
+            Map<String, Object> createBody = new HashMap<>();
+            createBody.put("UserID", "test_user");
+            createBody.put("Inputs", new HashMap<String, String>());
+
+            ResponseEntity<String> createResp = rt.exchange(
+                    baseUrl + "/create_conversation", HttpMethod.POST,
+                    new HttpEntity<>(createBody, headers), String.class);
+
+            if (createResp.getStatusCode() != HttpStatus.OK || createResp.getBody() == null) {
+                result.put("success", false);
+                result.put("error", "create_conversation 失败: HTTP " + createResp.getStatusCodeValue());
+                result.put("latencyMs", System.currentTimeMillis() - start);
+                return result;
+            }
+
+            JsonNode createRoot = objectMapper.readTree(createResp.getBody());
+            JsonNode conversation = createRoot.get("Conversation");
+            if (conversation == null || conversation.get("AppConversationID") == null) {
+                result.put("success", false);
+                result.put("error", "create_conversation 返回格式异常");
+                result.put("latencyMs", System.currentTimeMillis() - start);
+                return result;
+            }
+            String conversationId = conversation.get("AppConversationID").asText();
+
+            // Step 2: chat_query_v2 (blocking)
+            Map<String, Object> chatBody = new HashMap<>();
+            chatBody.put("AppConversationID", conversationId);
+            chatBody.put("Query", input);
+            chatBody.put("UserID", "test_user");
+            chatBody.put("ResponseMode", "blocking");
+
+            ResponseEntity<String> chatResp = rt.exchange(
+                    baseUrl + "/chat_query_v2", HttpMethod.POST,
+                    new HttpEntity<>(chatBody, headers), String.class);
+
+            long latency = System.currentTimeMillis() - start;
+            if (chatResp.getStatusCode() == HttpStatus.OK && chatResp.getBody() != null) {
+                JsonNode chatRoot = objectMapper.readTree(chatResp.getBody());
+                String answer = chatRoot.path("answer").asText("");
+                if (answer.isEmpty()) answer = chatRoot.path("Answer").asText("");
+                result.put("success", true);
+                result.put("output", answer.trim());
+                result.put("latencyMs", latency);
+            } else {
+                result.put("success", false);
+                result.put("error", "chat_query_v2 失败: HTTP " + chatResp.getStatusCodeValue());
+                result.put("latencyMs", latency);
+            }
+        } catch (Exception e) {
+            long latency = System.currentTimeMillis() - start;
+            log.error("HiAgent 服务商测试失败 id={} name={} url={} appId={} err={}",
+                    p.getId(), p.getName(), p.getApiUrl(), p.getAppId(), e.getMessage(), e);
+            result.put("success", false);
+            result.put("error", "HiAgent 测试调用失败，请查看服务端日志");
             result.put("latencyMs", latency);
         }
         return result;

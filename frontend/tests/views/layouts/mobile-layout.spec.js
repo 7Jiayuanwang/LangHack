@@ -31,6 +31,11 @@ vi.mock('@/api/auth', () => ({
   logout: vi.fn().mockResolvedValue({ code: 200 }),
 }))
 
+vi.mock('@/api/sso', () => ({
+  getSsoStatus: vi.fn().mockResolvedValue({ code: 200, data: { enabled: false } }),
+  getSsoLogoutUrl: vi.fn().mockResolvedValue({ code: 200, data: { logoutUrl: '' } }),
+}))
+
 vi.mock('@/api/systemConfig', () => ({
   getFeatureToggles: vi.fn().mockResolvedValue({
     code: 200,
@@ -93,12 +98,13 @@ describe('MobileLayout — 导航项数量与路由', () => {
     mockRoute.meta = { title: '发现' }
   })
 
-  it('[STUDENT] navItems 包含 dashboard、articles、vocabulary', () => {
+  it('[STUDENT] navItems 包含 articles、courses、vocabulary', () => {
     mockUserStore({ userRole: 'STUDENT' })
     const wrapper = shallowMount(StudentLayout, mountOptions())
     const paths = wrapper.vm.navigationItems.map(i => i.path)
-    expect(paths.some(p => p.includes('dashboard'))).toBe(true)
+    // 精简后底部栏仅保留 5 个主入口：文章/课程/任务/单词/学习
     expect(paths.some(p => p.includes('articles'))).toBe(true)
+    expect(paths.some(p => p.includes('courses'))).toBe(true)
     expect(paths.some(p => p.includes('vocabulary'))).toBe(true)
   })
 

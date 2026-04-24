@@ -12,16 +12,21 @@ import com.english.service.UserService;
 import com.english.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.data.redis.core.StringRedisTemplate;
+
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
@@ -30,6 +35,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    /** JwtAuthenticationFilter 中 user:active 缓存的前缀，需保持一致 */
+    private static final String USER_ACTIVE_CACHE_PREFIX = "user:active:";
 
     @PostConstruct
     public void init() {
@@ -128,10 +139,36 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional
     public void createUser(User user) {
-        // 检查用户名是否已存在
+        // 检查用户名是否已存在（活跃用户）
         User existingUser = getUserByUsername(user.getUsername());
         if (existingUser != null) {
             throw new BusinessException("用户名已存在");
+        }
+
+        // 检查是否有同名的软删除用户 → 恢复并更新信息
+        User deletedUser = baseMapper.findDeletedByUsername(user.getUsername());
+        if (deletedUser != null) {
+            log.info("发现同名软删除用户 id={}，恢复并更新", deletedUser.getId());
+            // 先恢复（undeleteById 绕过 @TableLogic，设 deleted=0）
+            baseMapper.undeleteById(deletedUser.getId());
+            // 刷新 deletedUser 的 deleted 状态，使 updateById 的 WHERE deleted=0 能匹配
+            deletedUser.setDeleted(0);
+            // 用新信息覆盖旧数据
+            deletedUser.setPassword(passwordEncoder.encode(user.getPassword()));
+            deletedUser.setEmail(user.getEmail());
+            deletedUser.setNickname(user.getNickname());
+            deletedUser.setRealName(user.getRealName());
+            deletedUser.setRole(user.getRole());
+            deletedUser.setStatus(user.getStatus() != null ? user.getStatus() : "ACTIVE");
+            deletedUser.setAvatar(user.getAvatar());
+            deletedUser.setSsoBound(user.getSsoBound());
+            deletedUser.setSsoProvider(user.getSsoProvider());
+            deletedUser.setSsoSubject(user.getSsoSubject());
+            deletedUser.setUpdatedTime(LocalDateTime.now());
+            updateById(deletedUser);
+            // 将 ID 回写到入参 user，供调用方获取新建用户 ID
+            user.setId(deletedUser.getId());
+            return;
         }
 
         // 检查邮箱是否已存在（邮箱为空时跳过）
@@ -173,6 +210,26 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         user.setUpdatedTime(LocalDateTime.now());
         updateById(user);
+
+        // 角色或状态变更时，清除 user:active 缓存，使旧 JWT 立即失效
+        // 缓存 key 格式: user:active:{username}:{role}
+        boolean roleChanged = user.getRole() != null && !user.getRole().equals(existingUser.getRole());
+        boolean statusChanged = user.getStatus() != null && !user.getStatus().equals(existingUser.getStatus());
+        if (roleChanged || statusChanged) {
+            String reason = roleChanged ? String.format("角色变更: %s → %s", existingUser.getRole(), user.getRole())
+                    : String.format("状态变更: %s → %s", existingUser.getStatus(), user.getStatus());
+            log.info("用户 {} {}，清除 user:active 缓存", existingUser.getUsername(), reason);
+            try {
+                // 清除旧角色缓存（用户当前使用的 JWT 包含旧角色）
+                stringRedisTemplate.delete(USER_ACTIVE_CACHE_PREFIX + existingUser.getUsername() + ":" + existingUser.getRole());
+                // 清除新角色缓存（角色变更后新 JWT 可能已经缓存）
+                if (roleChanged) {
+                    stringRedisTemplate.delete(USER_ACTIVE_CACHE_PREFIX + existingUser.getUsername() + ":" + user.getRole());
+                }
+            } catch (Exception e) {
+                log.warn("清除 user:active 缓存失败（Redis 不可用），变更将在缓存过期后生效（最多5分钟）", e);
+            }
+        }
     }
 
     @Override

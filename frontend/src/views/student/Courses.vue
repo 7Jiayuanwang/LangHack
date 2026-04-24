@@ -13,7 +13,7 @@
               clearable
               @input="loadCourses"
             />
-            <el-button type="primary" @click="$router.push('/student/classes')">加入班级</el-button>
+            <el-button v-if="isEnabled('page_classes')" type="primary" @click="$router.push('/student/classes')">加入班级</el-button>
           </div>
         </div>
       </template>
@@ -77,7 +77,7 @@
 
       <!-- 空状态 -->
       <el-empty v-if="!loading && courses.length === 0" description="暂无课程">
-        <el-button type="primary" @click="$router.push('/student/classes')">加入班级</el-button>
+        <el-button v-if="isEnabled('page_classes')" type="primary" @click="$router.push('/student/classes')">加入班级</el-button>
       </el-empty>
     </el-card>
 
@@ -284,10 +284,10 @@
               <div class="learning-header">
                 <h3>单词学习 - {{ currentUnit?.name || '单元' }}</h3>
                 <div class="learning-actions">
-                  <el-button type="primary" @click="startWordLearning" :disabled="unitWords.length === 0">
+                  <el-button v-if="isEnabled('page_vocabulary')" type="primary" @click="startWordLearning" :disabled="unitWords.length === 0">
                     开始学习
                   </el-button>
-                  <el-button @click="startWordTest" :disabled="unitWords.length === 0">
+                  <el-button v-if="isEnabled('page_vocabulary')" @click="startWordTest" :disabled="unitWords.length === 0">
                     单词测试
                   </el-button>
                 </div>
@@ -425,6 +425,8 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/store/user'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   getStudentCourses,
   getCourseUnits,
@@ -436,6 +438,9 @@ import {
 } from '@/api/student'
 
 const router = useRouter()
+
+// 功能开关：加入班级 / 单词学习 / 单词测试 按钮受对应 page_* 开关控制
+const { isEnabled, load: loadFeatureToggles, isLoaded } = useFeatureToggles()
 const route = useRoute()
 
 const loading = ref(false)
@@ -684,9 +689,8 @@ const loadUnitContent = async (unitId) => {
 // 开始课文学习
 const startTextLearning = (text) => {
   router.push({
-    path: '/student/text-learning',
+    path: `/article/${text.id}`,
     query: {
-      textId: text.id,
       courseId: currentCourse.value.courseId,
       unitId: currentUnit.value.id,
       from: 'course'
@@ -932,7 +936,7 @@ const formatDate = (date) => {
 watch(() => route.path, (newPath, oldPath) => {
   if (newPath === '/student/courses') {
     // 如果是从课文学习页面返回，强制刷新
-    if (oldPath === '/student/text-learning') {
+    if (oldPath === '/student/text-learning' || oldPath.startsWith('/article/')) {
       loadCourses()
       // 如果打开了课程对话框，刷新单元数据
       if (unitDialogVisible.value && currentCourse.value.courseId) {
@@ -1056,6 +1060,15 @@ onMounted(async () => {
       enterCourse(course)
     }
   }
+
+  // 共享 feature-toggles 缓存（路由守卫与 Layout 已加载；此处仅兜底）
+  try {
+    if (!isLoaded()) {
+      const userStore = useUserStore()
+      const usePersonal = !!userStore.token && (userStore.userRole === 'STUDENT' || userStore.userRole === 'USER')
+      loadFeatureToggles({ personal: usePersonal }).catch(() => {})
+    }
+  } catch { /* 测试环境或无 Pinia 时静默跳过 */ }
 })
 </script>
 

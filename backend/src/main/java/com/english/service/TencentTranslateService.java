@@ -255,17 +255,24 @@ public class TencentTranslateService {
                 }
             }
 
-            logger.error("Translate API returned invalid response format");
+            // 记录原始响应片段和 HTTP 状态码，便于诊断上游返回格式变化 / 鉴权失败
+            String bodyPreview = truncateForLog(response.getBody());
+            logger.error("翻译上游返回格式无效 apiUrl={} model={} status={} bodyPreview={}",
+                    config.get("api_url"), config.get("model"),
+                    response.getStatusCode(), bodyPreview);
             if (aiCallMetricsService != null) {
                 aiCallMetricsService.recordFailure("TENCENT_TRANSLATE", "translate", startTime,
-                        "Invalid response format", user);
+                        "Invalid response format: status=" + response.getStatusCode(), user);
             }
             throw new BusinessException("翻译失败，请稍后重试");
 
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            logger.error("Translation error: {}", e.getMessage());
+            // 保留堆栈以诊断网络/超时/JSON 解析等问题
+            logger.error("翻译调用外部 API 异常 apiUrl={} model={} source={} target={} err={}",
+                    config.get("api_url"), config.get("model"), source, target,
+                    e.getMessage(), e);
             if (aiCallMetricsService != null) {
                 aiCallMetricsService.recordFailure("TENCENT_TRANSLATE", "translate", startTime,
                         e.getMessage(), user);
@@ -324,5 +331,13 @@ public class TencentTranslateService {
             testText = "Hello, world!";
         }
         return translate(testText, "en", "zh");
+    }
+
+    /**
+     * 截断响应体片段用于日志，避免泄漏过长内容或敏感 key 回显
+     */
+    private String truncateForLog(String body) {
+        if (body == null) return "null";
+        return body.length() > 200 ? body.substring(0, 200) + "...(truncated)" : body;
     }
 }

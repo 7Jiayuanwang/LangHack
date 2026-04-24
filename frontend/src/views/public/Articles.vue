@@ -1,6 +1,24 @@
 <template>
   <div class="articles-mobile-page">
 
+    <!-- Sticky Header -->
+    <header class="mobile-header" v-if="!isLoggedIn">
+      <div class="page-content-wrapper header-inner">
+        <div class="header-content">
+          <h1 class="header-title">发现文章</h1>
+          <p class="header-subtitle">Daily Picks</p>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" @click="handleLogin">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
     <!-- Main Content Area -->
     <main class="page-main">
       <div class="page-content-wrapper">
@@ -126,7 +144,7 @@
     </main>
 
     <!-- 底部导航栏 -->
-    <nav class="bottom-nav">
+    <nav class="bottom-nav" v-if="!isLoggedIn">
       <div class="nav-wrapper">
         <router-link
           to="/articles"
@@ -158,8 +176,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { getAuthHeader } from '@/utils/auth'
+import { useUserStore } from '@/store/user'
 
 const router = useRouter()
+const userStore = useUserStore()
+// 登录用户由外层 Layout (ArticlesHost) 提供顶/底栏，隐藏组件自带的游客 chrome
+const isLoggedIn = computed(() => !!userStore.token)
 const loading = ref(true)
 const allArticles = ref([])
 const selectedCategory = ref('')
@@ -225,7 +248,9 @@ const loadArticles = async () => {
   try {
     const params = { count: 12 }
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`)
+    const authHeader = getAuthHeader()
+    const headers = authHeader ? { Authorization: authHeader } : {}
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`, { headers })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -273,7 +298,9 @@ const readArticle = (article) => {
   }
   // 记录阅读，但不阻塞导航，同时正确处理错误
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-  fetch(`${baseUrl}/api/public/texts/${article.id}/read`, { method: 'POST' })
+  const authHeader = getAuthHeader()
+  const headers = authHeader ? { Authorization: authHeader } : {}
+  fetch(`${baseUrl}/api/public/texts/${article.id}/read`, { method: 'POST', headers })
     .then(response => {
       // 仅检查网络错误，不处理HTTP错误状态（后端已返回成功）
       if (!response.ok) {
@@ -388,6 +415,67 @@ onMounted(() => {
   }
 }
 
+
+/* --- Header --- */
+.mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  padding: 12px 20px;
+  padding-top: max(env(safe-area-inset-top, 12px), 12px);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-content {
+  flex: 1;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.header-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.icon-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
 
 /* --- Filter Bar --- */
 .filter-bar {

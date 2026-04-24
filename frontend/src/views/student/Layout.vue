@@ -7,7 +7,7 @@
     <!-- 主内容区域 -->
     <main class="main-content">
       <div class="content-wrapper">
-        <router-view />
+        <slot><router-view /></slot>
       </div>
     </main>
 
@@ -71,17 +71,15 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getFeatureToggles, getPersonalFeatureToggles } from '@/api/systemConfig'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   DataBoard,
   Reading,
-  House,
   Edit,
   Document,
   ChatLineRound,
-  MessageBox,
-  Notebook,
-  VideoPlay
+  School,
+  Clock
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -89,7 +87,15 @@ const route = useRoute()
 const userStore = useUserStore()
 const showUserMenu = ref(false)
 const screenWidth = ref(window.innerWidth)
-const featureToggles = ref({})
+// 功能开关：发现页的每个快捷入口 section 都受对应 page_* 开关控制
+// 开关关闭时，对应区块整体隐藏，并禁止推荐卡片跳转到该页面
+const { 
+  toggles: featureToggles, 
+  load: loadFeatureToggles,
+  onChange,
+  startAutoRefresh,
+  isWebSocketConnected
+} = useFeatureToggles()
 const ssoEnabled = ref(false)
 
 // 处理键盘事件关闭菜单
@@ -99,37 +105,45 @@ const handleKeyDown = (event) => {
   }
 }
 
-// 所有导航项配置（含 toggleKey 用于功能开关过滤）
+// 所有导航项配置（仅保留高频主入口；低频与子页面通过"我的学习"聚合跳转）
+// 完整可达性清单（feature toggle 关闭时隐藏对应入口，路由守卫兜底）：
+//   - 任务 / 社区 / 课表 / 成绩 / 选课 / 创作 / AI视频 / AI问答 → MyStudy 快捷入口
+//   - 课文学习 → Articles / Courses / Assignments / UserTexts / MyStudy 中点击课文卡片进入
+// "发现"作为首页入口始终显示（不受 toggle 影响），保证用户从任意位置可回到主入口
 const allNavigationItems = [
-  { path: '/student/dashboard', label: '发现', icon: markRaw(DataBoard), badge: null, toggleKey: 'page_dashboard' },
-  { path: '/student/classes', label: '社区', icon: markRaw(House), badge: null, toggleKey: 'page_classes' },
-  { path: '/student/assignments', label: '任务', icon: markRaw(Edit), badge: null, toggleKey: 'page_assignments' },
-  { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, toggleKey: 'page_articles' },
-  { path: '/student/vocabulary', label: '单词', icon: markRaw(Document), badge: null, toggleKey: 'page_vocabulary' },
-  { path: '/student/my-study', label: '学习', icon: markRaw(Reading), badge: null, toggleKey: 'page_my_study' },
-  { path: '/student/ai-video', label: '视频', icon: markRaw(VideoPlay), badge: null, toggleKey: 'page_ai_video' },
-  { path: '/student/ai-qa', label: 'AI问答', icon: markRaw(MessageBox), badge: null, toggleKey: 'page_ai_qa' },
-  { path: '/student/user-texts', label: '我的创作', icon: markRaw(Notebook), badge: null, toggleKey: 'page_user_texts' }
+  { path: '/student/dashboard', label: '发现', icon: markRaw(DataBoard), badge: null, featureKey: null },
+  { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, featureKey: 'page_articles' },
+  { path: '/student/courses', label: '课程', icon: markRaw(School), badge: null, featureKey: 'page_courses' },
+  { path: '/student/vocabulary', label: '单词', icon: markRaw(Document), badge: null, featureKey: 'page_vocabulary' },
+  { path: '/student/word-recite', label: '背单词', icon: markRaw(Clock), badge: null, featureKey: 'page_word_recite' },
+  { path: '/student/my-study', label: '学习', icon: markRaw(Edit), badge: null, featureKey: 'page_my_study' }
 ]
 
 // 根据功能开关过滤导航项
 const navigationItems = computed(() => {
   return allNavigationItems.filter(item => {
-    if (!item.toggleKey) return true  // 无 toggleKey 的项始终显示
-    const val = featureToggles.value[item.toggleKey]
+    if (!item.featureKey) return true  // 无 featureKey 的项始终显示
+    const val = featureToggles.value[item.featureKey]
     return val === undefined || val === true || val === 'true'  // 未配置或 true 时显示
   })
 })
 
 // 页面标题
 const pageTitle = computed(() => {
+  // 文章详情页自带 header，隐藏 Layout 顶部标题栏
+  if (route.path.startsWith('/article/')) return ''
   const routeMap = {
     '/student/dashboard': '发现',
     '/student/courses': '课程学习',
     '/student/classes': '学习社区',
     '/student/assignments': '学习任务',
+    '/student/schedule': '我的课表',
+    '/student/scores': '等级考试',
+    '/student/course-selections': '我的选课',
     '/student/articles': '',
+    '/articles': '',
     '/student/vocabulary': '单词本',
+    '/student/word-recite': '单词背诵',
     '/student/ai-video': 'AI 视频字幕',
     '/student/ai-qa': 'AI 问答',
     '/student/user-texts': '我的创作',
@@ -164,6 +178,10 @@ const isActiveRoute = (path) => {
   const currentPath = route.path
   // 完整匹配 或 当前路由是该路径的子路由
   if (currentPath === path || currentPath.startsWith(path + '/')) {
+    return true
+  }
+  // 文章列表与详情页共享"文章"导航项高亮
+  if (path === '/articles' && currentPath.startsWith('/article/')) {
     return true
   }
   // 处理 /student/courses?courseId=xxx 这样的带查询参数的情况
@@ -238,17 +256,45 @@ onMounted(() => {
       sessionStorage.setItem('sso_enabled', ssoEnabled.value ? 'true' : 'false')
     }
   }).catch(() => {})
-  // 加载功能开关配置（登录后优先使用个性化接口，失败时回退公开接口）
-  getPersonalFeatureToggles().then(res => {
-    if (res?.code === 200 && res?.data) {
-      featureToggles.value = res.data
-    }
-  }).catch(() => {
-    getFeatureToggles().then(res => {
-      if (res?.code === 200 && res?.data) {
-        featureToggles.value = res.data
+  // 加载功能开关配置 — 与路由守卫共享 useFeatureToggles 缓存（sessionStorage 5 min TTL）
+  // 任意已登录用户走 /api/user/feature-toggles（三层合并：全局→标签→用户级）
+  const authenticated = !!userStore.token
+  loadFeatureToggles({ authenticated }).then(() => {
+    // 启动自动刷新，每2分钟检查一次
+    startAutoRefresh({ authenticated, interval: 2 * 60 * 1000 })
+  }).catch(() => {})
+
+  // 监听功能开关变更，提供实时反馈
+  const cleanupListener = onChange((changes) => {
+    const changedKeys = Object.keys(changes)
+    if (changedKeys.length > 0) {
+      // 显示功能开关变更提示
+      const enabledChanges = changedKeys.filter(key => changes[key].new === true)
+      const disabledChanges = changedKeys.filter(key => changes[key].new === false)
+      
+      if (enabledChanges.length > 0 || disabledChanges.length > 0) {
+        let message = '功能已更新：'
+        if (enabledChanges.length > 0) {
+          message += ` 启用了 ${enabledChanges.length} 个功能`
+        }
+        if (disabledChanges.length > 0) {
+          message += ` 关闭了 ${disabledChanges.length} 个功能`
+        }
+        
+        // 显示友好的提示信息
+        ElMessage({
+          message,
+          type: 'info',
+          duration: 3000,
+          showClose: true
+        })
       }
-    }).catch(() => {})
+    }
+  })
+
+  // 组件卸载时清理监听器
+  onUnmounted(() => {
+    cleanupListener?.()
   })
 })
 

@@ -19,6 +19,7 @@ import com.english.service.UnitWordService;
 import com.english.service.TextExerciseService;
 import com.english.service.ArticleVersionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -43,6 +44,9 @@ import java.security.SecureRandom;
 public class AdminController {
 
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
+
+    @Value("${sso.enabled:false}")
+    private boolean ssoEnabled;
 
     @Autowired
     private UserService userService;
@@ -159,6 +163,8 @@ public class AdminController {
             // 不要把已编码的密码拷贝进来，否则Service层会二次编码导致用户无法登录
             if (user.getPassword() == null || user.getPassword().isEmpty()) {
                 user.setPassword(null);
+            } else if (ssoEnabled) {
+                return Result.error("已启用统一身份认证，默认禁用密码修改");
             } else if (user.getPassword().length() < 6) {
                 return Result.error("密码长度不能少于 6 位");
             } else if (user.getPassword().length() > 100) {

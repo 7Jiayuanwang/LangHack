@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.CourseScheduleMapper">
+
+    <!-- 课程安排批量删除（按 class_id + academic_year + semester） -->
+    <delete id="deleteByClassIdAndSemester">
+        DELETE FROM course_schedule
+        WHERE class_id = #{classId}
+          AND academic_year = #{academicYear}
+          AND semester = #{semester}
+    </delete>
+
+</mapper>

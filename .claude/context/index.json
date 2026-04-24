@@ -1,0 +1,28 @@
+{
+  "project": "LangHack",
+  "last_updated": "2026-04-14",
+  "current_state": "CAS SSO 认证流程已全部修复并验证通过，用户重复注册问题已修复待提交",
+  "verified_facts": [
+    "CAS 认证流程完整可用：登录→验证→用户映射→JWT生成→前端回调",
+    "RestTemplate.getForObject(String) 会双重编码已编码的 URL 参数，必须使用 URI.create() 变体",
+    "CAS serverName 必须使用固定配置值，不能依赖 X-Forwarded-Proto/Host 等请求头推断",
+    "MyBatis mapper-locations: classpath:mapper/*.xml 不扫描子目录，需要 classpath:mapper/**/*.xml",
+    "CAS 登出 service 参数应填应用页面 URL（前端登录页），不是 CAS 回调地址",
+    "CAS XML 同名属性需聚合处理：单值→String，多值→List<String>",
+    "SSO 首次登录需先检查 users 表是否已有同名用户再决定创建还是关联"
+  ],
+  "next_actions": [
+    "提交 SsoUserMappingService 重复用户名修复",
+    "部署到服务器验证完整 CAS 登录流程",
+    "验证登出后重定向到登录页行为"
+  ],
+  "detail_index": {
+    "resolutions": [
+      {
+        "id": "res-cas-001",
+        "file": "2026-04-14-cas-sso-fixes.ndjson",
+        "summary": "CAS SSO 认证6个问题排查与修复（双重编码/serverName/Mapper XML/重复用户名等）"
+      }
+    ]
+  }
+}

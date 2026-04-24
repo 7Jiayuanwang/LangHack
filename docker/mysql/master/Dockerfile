@@ -1,4 +1,5 @@
-FROM mysql:8.0
+ARG IMAGE_REGISTRY_PREFIX=
+FROM ${IMAGE_REGISTRY_PREFIX}mysql:8.0
 
 # Build context: docker/
 # 复制 init 脚本到镜像内，避免 Windows Docker Desktop bind-mount 缓存问题

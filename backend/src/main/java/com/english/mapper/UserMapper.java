@@ -3,7 +3,9 @@ package com.english.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.english.entity.User;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.Map;
 
@@ -20,4 +22,25 @@ public interface UserMapper extends BaseMapper<User> {
             "SUM(CASE WHEN status='ACTIVE' THEN 1 ELSE 0 END) AS activeCount " +
             "FROM users WHERE deleted=0")
     Map<String, Object> selectUserStats();
+
+    /**
+     * 查找已软删除的用户（绕过 @TableLogic 过滤）
+     */
+    @Select("SELECT * FROM users WHERE username = #{username} AND deleted = 1 LIMIT 1")
+    User findDeletedByUsername(String username);
+
+    /**
+     * 通过 ID 查找已软删除的用户（绕过 @TableLogic 过滤）
+     */
+    @Select("SELECT * FROM users WHERE id = #{id} AND deleted = 1 LIMIT 1")
+    User findDeletedById(Long id);
+
+    /**
+     * 恢复软删除用户（设置 deleted=0）
+     */
+    @Update("UPDATE users SET deleted = 0, updated_time = NOW() WHERE id = #{id} AND deleted = 1")
+    int undeleteById(Long id);
+
+    @Select("SELECT * FROM users WHERE username = #{username} AND deleted = 0 LIMIT 1")
+    User selectActiveByUsername(@Param("username") String username);
 }

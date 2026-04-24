@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.nio.file.Files;
@@ -39,7 +40,33 @@ public class WebMvcConfig implements WebMvcConfigurer {
     }
 
     @Override
+    public void addViewControllers(ViewControllerRegistry registry) {
+        // 前端路由回退到 index.html（SPA 支持）
+        registry.addViewController("/").setViewName("forward:/index.html");
+        registry.addViewController("/articles").setViewName("forward:/index.html");
+        registry.addViewController("/article/**").setViewName("forward:/index.html");
+        registry.addViewController("/student").setViewName("forward:/index.html");
+        registry.addViewController("/student/**").setViewName("forward:/index.html");
+        registry.addViewController("/login").setViewName("forward:/index.html");
+    }
+
+    @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // 前端构建产物：先注册，避免后续音频配置失败时 return 跳过静态资源
+        // SPA 路由（/、/articles、/article/**、/student/**、/login）由 addViewControllers 转发到 index.html
+        registry.addResourceHandler("/assets/**")
+                .addResourceLocations("classpath:/static/assets/")
+                .setCachePeriod(3600);
+        registry.addResourceHandler("/js/**")
+                .addResourceLocations("classpath:/static/js/")
+                .setCachePeriod(3600);
+        registry.addResourceHandler("/data/**")
+                .addResourceLocations("classpath:/static/data/")
+                .setCachePeriod(3600);
+        registry.addResourceHandler("/favicon.ico", "/index.html")
+                .addResourceLocations("classpath:/static/")
+                .setCachePeriod(3600);
+
         // 从环境变量读取音频资源目录（必须配置，无默认值以避免误配置）
         String audioResourcePath = System.getenv("AUDIO_RESOURCE_PATH");
         
@@ -91,13 +118,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
             registry.addResourceHandler("/audio/vocabulary/**")
                     .addResourceLocations(audioPathUri)
                     .setCachePeriod(3600); // 缓存1小时
-            
+        
             log.info("Audio resources configured: /audio/vocabulary/** -> {}", audioPathUri);
 
         } catch (Exception e) {
             log.error("Failed to configure audio resource handler: {}", e.getMessage(), e);
             // 不注册音频资源处理器，避免误配置
-            return;
         }
     }
 }

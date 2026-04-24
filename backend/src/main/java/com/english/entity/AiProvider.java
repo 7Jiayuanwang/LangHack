@@ -11,6 +11,8 @@ public class AiProvider {
 
     private String service;  // translate / article / chat
 
+    private String protocol;  // openai_compatible / hiagent
+
     private String name;
 
     @TableField("api_url")
@@ -47,6 +49,9 @@ public class AiProvider {
 
     public String getService() { return service; }
     public void setService(String service) { this.service = service; }
+
+    public String getProtocol() { return protocol; }
+    public void setProtocol(String protocol) { this.protocol = protocol; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

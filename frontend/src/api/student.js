@@ -375,6 +375,15 @@ export function addWordToVocabulary(data) {
   })
 }
 
+// 通过单词字符串添加到生词本（支持自动创建新词）
+export function addWordToVocabularyByWord(data) {
+  return request({
+    url: '/api/student/words/vocabulary/by-word',
+    method: 'post',
+    data
+  })
+}
+
 // 从生词本移除单词
 export function removeFromVocabulary(wordId) {
   return request({
@@ -452,6 +461,44 @@ export function completeReading(recordId) {
   return request({
     url: `/api/student/learning/records/${recordId}/complete`,
     method: 'post'
+  })
+}
+
+// ==================== 学生课表相关API ====================
+
+// 获取当前学生课表
+export function getStudentSchedule(params) {
+  return request({
+    url: '/api/student/schedule',
+    method: 'get',
+    params
+  })
+}
+
+// 从学校API刷新课表数据
+export function refreshStudentSchedule(params) {
+  return request({
+    url: '/api/student/schedule',
+    method: 'get',
+    params: { ...params, refresh: true }
+  })
+}
+
+// 获取当前学生等级考试成绩
+export function getMyScores(params) {
+  return request({
+    url: '/api/student/scores',
+    method: 'get',
+    params
+  })
+}
+
+// 获取当前学生选课记录
+export function getMyCourseSelections(params) {
+  return request({
+    url: '/api/student/course-selections',
+    method: 'get',
+    params
   })
 }
 
@@ -565,7 +612,13 @@ const studentApi = {
   toggleArticleFavorite,
   checkArticleFavorite,
   getFavoriteArticles,
-  getReadingHistory
+  getReadingHistory,
+  // 学生课表
+  getStudentSchedule,
+  refreshStudentSchedule,
+  // 学生成绩和选课
+  getMyScores,
+  getMyCourseSelections
 }
 
 export default studentApi

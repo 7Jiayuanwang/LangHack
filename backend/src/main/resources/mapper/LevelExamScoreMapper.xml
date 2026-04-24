@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.LevelExamScoreMapper">
+
+    <!-- 等级考试成绩 UPSERT：按 uk_student_exam 唯一键 -->
+    <insert id="upsertByStudentExam" parameterType="com.english.entity.LevelExamScore" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO level_exam_scores (
+            student_id, student_name, exam_type, exam_name, admission_ticket_no,
+            exam_date, score, grade, is_passed, passing_score,
+            listening_score, reading_score, writing_score, translation_score,
+            certificate_no, certificate_date, exam_location, exam_room_no, seat_no,
+            registration_date, score_release_date, data_source, remark,
+            sync_time, sync_source
+        ) VALUES (
+            #{studentId}, #{studentName}, #{examType}, #{examName}, #{admissionTicketNo},
+            #{examDate}, #{score}, #{grade}, #{isPassed}, #{passingScore},
+            #{listeningScore}, #{readingScore}, #{writingScore}, #{translationScore},
+            #{certificateNo}, #{certificateDate}, #{examLocation}, #{examRoomNo}, #{seatNo},
+            #{registrationDate}, #{scoreReleaseDate}, #{dataSource}, #{remark},
+            #{syncTime}, #{syncSource}
+        )
+        ON DUPLICATE KEY UPDATE
+            student_name = #{studentName},
+            exam_name = #{examName},
+            admission_ticket_no = #{admissionTicketNo},
+            score = #{score},
+            grade = #{grade},
+            is_passed = #{isPassed},
+            passing_score = #{passingScore},
+            listening_score = #{listeningScore},
+            reading_score = #{readingScore},
+            writing_score = #{writingScore},
+            translation_score = #{translationScore},
+            certificate_no = #{certificateNo},
+            certificate_date = #{certificateDate},
+            exam_location = #{examLocation},
+            exam_room_no = #{examRoomNo},
+            seat_no = #{seatNo},
+            registration_date = #{registrationDate},
+            score_release_date = #{scoreReleaseDate},
+            data_source = #{dataSource},
+            remark = #{remark},
+            sync_time = #{syncTime},
+            sync_source = #{syncSource}
+    </insert>
+
+</mapper>

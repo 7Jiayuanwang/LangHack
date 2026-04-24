@@ -62,6 +62,14 @@ config.global.stubs['MagicStick'] = true
 config.global.stubs['Checked'] = true
 config.global.stubs['ChatLineRound'] = true
 config.global.stubs['SelectionMenu'] = true
+config.global.stubs['Edit'] = true
+config.global.stubs['Picture'] = true
+config.global.stubs['ZoomIn'] = true
+config.global.stubs['Calendar'] = true
+config.global.stubs['Reading'] = true
+config.global.stubs['ElRow'] = { template: '<div><slot /></div>' }
+config.global.stubs['ElCol'] = { template: '<div><slot /></div>' }
+config.global.stubs['ElSkeleton'] = { template: '<div />' }
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {

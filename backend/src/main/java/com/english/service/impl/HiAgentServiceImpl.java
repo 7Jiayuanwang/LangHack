@@ -4,6 +4,7 @@ import com.english.config.HiAgentConfig;
 import com.english.exception.BusinessException;
 import com.english.service.AiProviderService;
 import com.english.service.HiAgentService;
+import com.english.service.SystemConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -32,10 +33,21 @@ import org.springframework.http.converter.StringHttpMessageConverter;
  * HiAgent API service implementation strictly following PDF documentation v2.0.1
  *
  * API flow: CreateConversation → ChatQueryV2 (blocking mode)
+ *
+ * 凭证读取优先级：system_config.ai_config.* （前端面板可编辑） → HiAgentConfig (@Value 环境变量)
+ * 前端在 ops 面板配置后 SystemConfigService 清缓存，下次调用自动生效（60s cache TTL）
  */
 @Slf4j
 @Service
 public class HiAgentServiceImpl implements HiAgentService {
+
+    /** DB system_config group — HiAgent 凭证覆盖来源 */
+    private static final String AI_CONFIG_GROUP = "ai_config";
+    private static final String KEY_API_URL     = "hiagent_api_url";
+    private static final String KEY_API_KEY     = "hiagent_api_key";
+    private static final String KEY_APP_ID      = "hiagent_app_id";
+    private static final String KEY_QA_API_KEY  = "hiagent_qa_api_key";
+    private static final String KEY_QA_APP_ID   = "hiagent_qa_app_id";
 
     @Autowired
     private HiAgentConfig config;
@@ -46,6 +58,9 @@ public class HiAgentServiceImpl implements HiAgentService {
     @Autowired(required = false)
     private AiCallMetricsService aiCallMetricsService;
 
+    @Autowired(required = false)
+    private SystemConfigService systemConfigService;
+
     private RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private CloseableHttpClient httpClient;
@@ -53,11 +68,12 @@ public class HiAgentServiceImpl implements HiAgentService {
 
     @PostConstruct
     public void init() {
+        // 启动期仅检查环境变量 fallback（DB 配置可运行时动态注入，不强依赖）
         if (config.getApiKey() == null || config.getApiKey().isBlank()) {
-            log.warn("HiAgent API key not configured. Set HIAGENT_API_KEY environment variable. Service will be unavailable.");
+            log.warn("HiAgent API key not configured in environment. 可通过运维面板「AI 服务管理」在运行时配置，或设置 HIAGENT_API_KEY。");
         }
         if (config.getApiUrl() == null || config.getApiUrl().isBlank()) {
-            log.warn("HiAgent API URL not configured. Set HIAGENT_API_URL environment variable.");
+            log.warn("HiAgent API URL not configured in environment. 可通过运维面板「AI 服务管理」在运行时配置，或设置 HIAGENT_API_URL。");
         }
 
         int timeoutMs = config.getTimeout() != null ? config.getTimeout() : 60000;
@@ -210,6 +226,14 @@ public class HiAgentServiceImpl implements HiAgentService {
     @Override
     @CircuitBreaker(name = "hiagent-qa", fallbackMethod = "fallback")
     public String chatQA(String userQuestion, String selectedText, String articleContext) {
+        // 预检查：QA 凭证必须独立配置（不 fallback 到改写凭证），未配置立即失败，不触发重试
+        String qaApiKey = effectiveQaApiKey();
+        String qaAppId  = effectiveQaAppId();
+        if (qaApiKey == null || qaApiKey.isBlank() || qaAppId == null || qaAppId.isBlank()) {
+            throw new BusinessException("AI 问答服务未配置独立凭证，请在运维面板「AI 服务管理」中配置 HiAgent 问答凭证，"
+                    + "或设置环境变量 HIAGENT_QA_API_KEY / HIAGENT_QA_APP_ID");
+        }
+
         String prompt = "你是一位专业的英语学习辅导老师。学生正在阅读一篇英语文章，并选中了一段文本。"
                 + "请根据选中的文本和文章上下文，用中文回答学生的问题。"
                 + "回答要详细、专业，帮助学生理解英语内容。\n\n"
@@ -257,7 +281,7 @@ public class HiAgentServiceImpl implements HiAgentService {
      * Internal implementation with retry logic + metrics monitoring (Two-step process per PDF v2.0.1)
      */
     private String callHiAgentInternal(String prompt) {
-        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+        if (effectiveApiKey() == null || effectiveApiKey().isBlank()) {
             throw new BusinessException("AI 服务未配置 API Key");
         }
 
@@ -310,7 +334,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     }
 
     private String createConversation() throws Exception {
-        String url = config.getApiUrl() + "/create_conversation";
+        String url = effectiveApiUrl() + "/create_conversation";
 
         HttpHeaders headers = createBaseHeaders();
 
@@ -324,6 +348,9 @@ public class HiAgentServiceImpl implements HiAgentService {
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            // 记录 URL + 状态码 + 响应体片段，便于定位 HiAgent 签名失败 / AppId 错误 / 服务故障
+            log.error("HiAgent create_conversation 非 200 响应 url={} status={} bodyPreview={}",
+                    url, response.getStatusCode(), truncateForLog(response.getBody()));
             throw new BusinessException("无法创建 AI 会话: " + response.getStatusCode());
         }
 
@@ -347,7 +374,7 @@ public class HiAgentServiceImpl implements HiAgentService {
      * ChatQueryV2 with blocking mode.
      */
     private String chatQuery(String conversationId, String prompt) throws Exception {
-        String url = config.getApiUrl() + "/chat_query_v2";
+        String url = effectiveApiUrl() + "/chat_query_v2";
 
         HttpHeaders headers = createBaseHeaders();
 
@@ -363,6 +390,9 @@ public class HiAgentServiceImpl implements HiAgentService {
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            // 记录 URL + conversationId + 状态码 + 响应体片段，便于定位配额超限 / 内容审查失败等
+            log.error("HiAgent chat_query_v2 非 200 响应 url={} conversationId={} status={} bodyPreview={}",
+                    url, conversationId, response.getStatusCode(), truncateForLog(response.getBody()));
             throw new BusinessException("AI 服务响应失败: " + response.getStatusCode());
         }
 
@@ -395,31 +425,26 @@ public class HiAgentServiceImpl implements HiAgentService {
     private HttpHeaders createBaseHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Apikey", config.getApiKey());
-        headers.set("Appid", config.getAppId());
-        headers.set("X-App-Id", config.getAppId());
+        headers.set("Apikey", effectiveApiKey());
+        headers.set("Appid", effectiveAppId());
+        headers.set("X-App-Id", effectiveAppId());
         headers.set("X-Date", currentXDate());
         return headers;
     }
 
     private HttpHeaders createQAHeaders() {
+        String qaApiKey = effectiveQaApiKey();
+        String qaAppId  = effectiveQaAppId();
+
+        // QA 凭证必须独立配置（与改写凭证完全不同的 HiAgent 应用）。
+        // 不允许 fallback 到改写凭证，否则违反"两套完全不同"的应用隔离要求。
+        if (qaApiKey == null || qaApiKey.isBlank() || qaAppId == null || qaAppId.isBlank()) {
+            throw new BusinessException("AI 问答服务未配置独立凭证，请在运维面板「AI 服务管理」中配置 HiAgent 问答凭证，"
+                    + "或设置环境变量 HIAGENT_QA_API_KEY / HIAGENT_QA_APP_ID");
+        }
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        String qaApiKey = config.getQaApiKey();
-        String qaAppId  = config.getQaAppId();
-
-        // Fallback: if qaApiKey is blank, use the main API key
-        if (qaApiKey == null || qaApiKey.isBlank()) {
-            qaApiKey = config.getApiKey();
-            log.debug("HiAgent QA API key not set, falling back to main API key");
-        }
-
-        // Fallback: if qaAppId is blank, use the main App ID
-        if (qaAppId == null || qaAppId.isBlank()) {
-            qaAppId = config.getAppId();
-            log.debug("HiAgent QA App ID not set, falling back to main App ID");
-        }
-
         headers.set("Apikey", qaApiKey);
         headers.set("Appid", qaAppId);
         headers.set("X-App-Id", qaAppId);
@@ -428,7 +453,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     }
 
     private String createConversationWithQACredentials() throws Exception {
-        String url = config.getApiUrl() + "/create_conversation";
+        String url = effectiveApiUrl() + "/create_conversation";
 
         HttpHeaders headers = createQAHeaders();
 
@@ -442,6 +467,8 @@ public class HiAgentServiceImpl implements HiAgentService {
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            log.error("HiAgent (QA) create_conversation 非 200 响应 url={} status={} bodyPreview={}",
+                    url, response.getStatusCode(), truncateForLog(response.getBody()));
             throw new BusinessException("无法创建 AI Q&A 会话: " + response.getStatusCode());
         }
 
@@ -465,7 +492,7 @@ public class HiAgentServiceImpl implements HiAgentService {
      * ChatQueryV2 with blocking mode for Q&A credentials.
      */
     private String chatQueryWithQACredentials(String conversationId, String prompt) throws Exception {
-        String url = config.getApiUrl() + "/chat_query_v2";
+        String url = effectiveApiUrl() + "/chat_query_v2";
 
         HttpHeaders headers = createQAHeaders();
 
@@ -481,6 +508,8 @@ public class HiAgentServiceImpl implements HiAgentService {
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
         if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            log.error("HiAgent (QA) chat_query_v2 非 200 响应 url={} conversationId={} status={} bodyPreview={}",
+                    url, conversationId, response.getStatusCode(), truncateForLog(response.getBody()));
             throw new BusinessException("AI Q&A 服务响应失败: " + response.getStatusCode());
         }
 
@@ -503,5 +532,50 @@ public class HiAgentServiceImpl implements HiAgentService {
     private String truncateForLog(String body) {
         if (body == null) return "null";
         return body.length() > 200 ? body.substring(0, 200) + "...(truncated)" : body;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // Effective credential accessors — 优先 system_config.ai_config，回退 HiAgentConfig（@Value 环境变量）
+    //
+    // SystemConfigService.getByGroup 自带 60s 缓存；前端面板调用 set/batchUpdate 会清缓存，
+    // 下次 HiAgent 调用自动取最新值（最长 60s 延迟生效，满足运维场景）
+    // ══════════════════════════════════════════════════════════════
+
+    private String effectiveApiUrl() {
+        return resolveWithFallback(KEY_API_URL, config.getApiUrl());
+    }
+
+    private String effectiveApiKey() {
+        return resolveWithFallback(KEY_API_KEY, config.getApiKey());
+    }
+
+    private String effectiveAppId() {
+        return resolveWithFallback(KEY_APP_ID, config.getAppId());
+    }
+
+    private String effectiveQaApiKey() {
+        return resolveWithFallback(KEY_QA_API_KEY, config.getQaApiKey());
+    }
+
+    private String effectiveQaAppId() {
+        return resolveWithFallback(KEY_QA_APP_ID, config.getQaAppId());
+    }
+
+    /**
+     * DB 值非空则取 DB，否则回退到 @Value 注入值（环境变量 / application.yml）
+     */
+    private String resolveWithFallback(String dbKey, String fallback) {
+        if (systemConfigService != null) {
+            try {
+                String dbValue = systemConfigService.get(AI_CONFIG_GROUP, dbKey);
+                if (dbValue != null && !dbValue.isBlank()) {
+                    return dbValue;
+                }
+            } catch (Exception e) {
+                // DB 读失败不阻塞调用，降级到环境变量
+                log.warn("读取 system_config.{}.{} 失败，回退环境变量: {}", AI_CONFIG_GROUP, dbKey, e.getMessage());
+            }
+        }
+        return fallback;
     }
 }

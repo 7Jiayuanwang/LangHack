@@ -214,9 +214,23 @@ services:
       SSO_PROTOCOL: ${SSO_PROTOCOL:-CAS}
       SSO_CAS_ENABLED: ${SSO_CAS_ENABLED:-true}
       SSO_CAS_SERVER_URL: ${SSO_CAS_SERVER_URL:-https://ids.imau.edu.cn/authserver}
+      # 应用服务器地址（对应官方 web.xml 的 serverName，格式: 协议://域名[:端口]）
+      SSO_CAS_SERVER_NAME: ${SSO_CAS_SERVER_NAME:-http://localhost:8080}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8088}
       APP_UPDATE_SUPPORTED: "false"
       APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
+      # 管理员叩门密钥（前后端必须一致）
+      ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
+      # School Data Integration
+      SCHOOL_DATA_SOURCE: ${SCHOOL_DATA_SOURCE:-api}
+      SCHOOL_API_BASE_URL: ${SCHOOL_API_BASE_URL:-}
+      # 官方认证: appId + appSecret 签名
+      SCHOOL_API_APP_ID: ${SCHOOL_API_APP_ID:-}
+      SCHOOL_API_APP_SECRET: ${SCHOOL_API_APP_SECRET:-}
+      SCHOOL_ETL_JDBC_URL: ${SCHOOL_ETL_JDBC_URL:-}
+      SCHOOL_ETL_USERNAME: ${SCHOOL_ETL_USERNAME:-}
+      SCHOOL_ETL_PASSWORD: ${SCHOOL_ETL_PASSWORD:-}
+      SCHOOL_SYNC_ENABLED: ${SCHOOL_SYNC_ENABLED:-false}
     ports:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:
@@ -250,6 +264,8 @@ services:
       args:
         VITE_API_BASE_URL: ""
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
+        VITE_ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
+        VITE_ADMIN_PORTAL_PATH: ${ADMIN_PORTAL_PATH:-admin-portal}
     container_name: langhack-frontend
     restart: unless-stopped
     logging: *default-logging
@@ -269,7 +285,7 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:80/ || exit 1"]
+      test: ["CMD-SHELL", "test -f /usr/share/nginx/html/maintenance.flag || curl -sf http://localhost:80/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

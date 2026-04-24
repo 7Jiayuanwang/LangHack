@@ -1,12 +1,19 @@
 package com.english.sso.controller;
 
+import com.alibaba.fastjson.JSON;
 import com.english.dto.Result;
+import com.english.entity.User;
+import com.english.sso.config.SsoProperties;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
+import com.english.sso.exception.SsoBusinessException;
+import com.english.sso.exception.SsoErrorCode;
 import com.english.sso.service.SsoLoginLogService;
 import com.english.sso.service.SsoProtocolType;
 import com.english.sso.service.SsoService;
 import com.english.sso.service.SsoUserMappingService;
+import com.english.service.UserService;
+import com.english.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,6 +56,9 @@ public class SsoAuthController {
     private SsoService ssoService;
 
     @Autowired
+    private SsoProperties ssoProperties;
+
+    @Autowired
     private SsoUserMappingService mappingService;
 
     @Autowired
@@ -57,8 +67,11 @@ public class SsoAuthController {
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
-    @Value("${app.base-url}")
-    private String appBaseUrl;
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private UserService userService;
 
     @Value("${app.frontend-url:${app.base-url}}")
     private String appFrontendUrl;
@@ -73,8 +86,8 @@ public class SsoAuthController {
                 return Result.error("SSO 功能未启用");
             }
 
-            String callbackUrl = buildCallbackUrl();
-            String loginUrl = ssoService.generateLoginUrl(callbackUrl);
+            String serviceUrl = buildServiceUrl();
+            String loginUrl = ssoService.generateLoginUrl(serviceUrl);
 
             Map<String, String> data = new HashMap<>();
             data.put("loginUrl", loginUrl);
@@ -93,6 +106,8 @@ public class SsoAuthController {
      *
      * CAS: /api/auth/sso/callback?ticket=ST-xxx
      * OAuth2: /api/auth/sso/callback?code=xxx&state=xxx
+     *
+     * state 的有效性校验由 SsoService.validateCallback(...) 负责。
      */
     @GetMapping("/callback")
     public void handleCallback(
@@ -104,7 +119,7 @@ public class SsoAuthController {
 
         try {
             if (!ssoService.isEnabled()) {
-                redirectToFrontendWithError(response, "SSO 功能未启用");
+                redirectToFrontendWithError(response, SsoErrorCode.SSO_DISABLED, "SSO 功能未启用");
                 return;
             }
 
@@ -118,14 +133,20 @@ public class SsoAuthController {
                     callbackParams.put("state", state);
                 }
             } else {
-                redirectToFrontendWithError(response, "缺少认证参数");
+                redirectToFrontendWithError(response, SsoErrorCode.MISSING_PARAM, "缺少认证参数");
                 return;
             }
 
-            String callbackUrl = buildCallbackUrl();
+            String serviceUrl = buildServiceUrl();
 
             // 1. 验证 SSO 回调
-            SsoUserInfo ssoUserInfo = ssoService.validateCallback(callbackParams, callbackUrl);
+            SsoUserInfo ssoUserInfo;
+            try {
+                ssoUserInfo = ssoService.validateCallback(callbackParams, serviceUrl);
+            } catch (Exception ex) {
+                // 票据/code 校验失败 — 归类到 AUTH_FAILED
+                throw new SsoBusinessException(SsoErrorCode.AUTH_FAILED, ex.getMessage(), ex);
+            }
 
             // 2. 处理用户映射/创建
             SsoLoginResult result = mappingService.processLogin(
@@ -139,23 +160,19 @@ public class SsoAuthController {
             // 4. 生成一次性 code，存入 Redis
             String oneTimeCode = UUID.randomUUID().toString();
 
-            if (result.isNeedsApproval()) {
-                // 待审批状态 — 仍然重定向到前端，但标记为待审批
-                stringRedisTemplate.opsForValue().set(
-                        SSO_CODE_PREFIX + oneTimeCode,
-                        "PENDING:" + result.getMessage(),
-                        SSO_CODE_TTL_MINUTES, TimeUnit.MINUTES
-                );
-                log.info("SSO 待审批用户，生成一次性 code: {}", oneTimeCode);
-            } else {
-                // 登录成功 — 存储 JWT token
-                stringRedisTemplate.opsForValue().set(
-                        SSO_CODE_PREFIX + oneTimeCode,
-                        result.getToken(),
-                        SSO_CODE_TTL_MINUTES, TimeUnit.MINUTES
-                );
-                log.info("SSO 登录成功，生成一次性 code: {}", oneTimeCode);
-            }
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("status", result.isNeedsApproval() ? "PENDING" : "SUCCESS");
+            payload.put("token", result.getToken());
+            payload.put("needsApproval", result.isNeedsApproval() || result.isApprovalPendingAfterLogin());
+            payload.put("approvalPendingAfterLogin", result.isApprovalPendingAfterLogin());
+            payload.put("bindingId", result.getBindingId());
+            payload.put("message", result.getMessage());
+            stringRedisTemplate.opsForValue().set(
+                    SSO_CODE_PREFIX + oneTimeCode,
+                    JSON.toJSONString(payload),
+                    SSO_CODE_TTL_MINUTES, TimeUnit.MINUTES
+            );
+            log.info("SSO 回调结果已写入一次性 code: code={}, status={}", oneTimeCode, payload.get("status"));
 
             // 5. 重定向到前端 SSO 回调页面
             String redirectUrl = appFrontendUrl + "/sso/callback?code=" + oneTimeCode;
@@ -177,7 +194,21 @@ public class SsoAuthController {
                 log.error("记录失败日志失败", logEx);
             }
 
-            redirectToFrontendWithError(response, "SSO 认证失败: " + e.getMessage());
+            // 分类错误：已知 SsoBusinessException 保留其 errorCode，其他归为 SYSTEM_ERROR
+            SsoErrorCode errorCode;
+            String message;
+            if (e instanceof SsoBusinessException) {
+                errorCode = ((SsoBusinessException) e).getErrorCode();
+                message = e.getMessage();
+            } else if (e instanceof com.english.exception.BusinessException) {
+                // 未知业务异常兜底到 UNKNOWN
+                errorCode = SsoErrorCode.UNKNOWN;
+                message = e.getMessage();
+            } else {
+                errorCode = SsoErrorCode.SYSTEM_ERROR;
+                message = "SSO 认证失败: " + e.getMessage();
+            }
+            redirectToFrontendWithError(response, errorCode, message);
         }
     }
 
@@ -190,7 +221,7 @@ public class SsoAuthController {
 
         String oneTimeCode = request.get("code");
         if (oneTimeCode == null || oneTimeCode.isEmpty()) {
-            return Result.error("缺少授权码");
+            return errorWithCode(SsoErrorCode.MISSING_PARAM, "缺少授权码");
         }
 
         // 从 Redis 获取并删除一次性 code（一次性使用）
@@ -199,24 +230,71 @@ public class SsoAuthController {
 
         if (value == null) {
             log.warn("一次性 code 无效或已过期: {}", oneTimeCode);
-            return Result.error("授权码无效或已过期，请重新登录");
+            return errorWithCode(SsoErrorCode.CODE_EXPIRED, "授权码无效或已过期，请重新登录");
         }
 
-        // 检查是否为待审批状态
-        if (value.startsWith("PENDING:")) {
-            String message = value.substring("PENDING:".length());
-            Map<String, Object> data = new HashMap<>();
-            data.put("pending", true);
-            data.put("message", message);
-            return Result.error(message);
+        Map<String, Object> payload;
+        try {
+            payload = JSON.parseObject(value);
+        } catch (Exception e) {
+            log.warn("一次性 code 数据格式非法: {}", value);
+            return errorWithCode(SsoErrorCode.CODE_EXPIRED, "授权码无效或已过期，请重新登录");
         }
 
-        // 登录成功 — value 就是 JWT token
+        String status = String.valueOf(payload.getOrDefault("status", "SUCCESS"));
+        if ("PENDING".equals(status)) {
+            return errorWithCode(SsoErrorCode.PENDING_APPROVAL, String.valueOf(payload.getOrDefault("message", "待审批")));
+        }
+
+        String token = payload.get("token") == null ? null : String.valueOf(payload.get("token"));
+        if (token == null || token.isBlank()) {
+            return errorWithCode(SsoErrorCode.CODE_EXPIRED, "授权码无效或已过期，请重新登录");
+        }
+        String pendingApprovalMessage = payload.get("message") == null ? null : String.valueOf(payload.get("message"));
+        Long pendingBindingId = null;
+        Object bindingIdValue = payload.get("bindingId");
+        if (bindingIdValue instanceof Number) {
+            pendingBindingId = ((Number) bindingIdValue).longValue();
+        }
+        Boolean approvalPendingAfterLogin = Boolean.TRUE.equals(payload.get("approvalPendingAfterLogin"));
+
         Map<String, Object> data = new HashMap<>();
-        data.put("token", value);
+        data.put("token", token);
+
+        // 从 JWT 中提取用户名，查询完整用户信息返回给前端
+        try {
+            String username = jwtUtil.getUsernameFromToken(token);
+            User user = userService.getUserByUsername(username);
+            if (user != null) {
+                user.setPassword(null); // 清除密码，避免返回给前端
+                data.put("user", user);
+            }
+            data.put("expiresIn", jwtUtil.getExpiration());
+            if (pendingApprovalMessage != null && approvalPendingAfterLogin) {
+                data.put("needsApproval", true);
+                data.put("approvalPendingAfterLogin", true);
+                data.put("approvalMessage", pendingApprovalMessage);
+                if (pendingBindingId != null) {
+                    data.put("bindingId", pendingBindingId);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("SSO token 交换时获取用户信息失败，仅返回 token", e);
+        }
 
         log.info("一次性 code 换取 token 成功");
         return Result.success("登录成功", data);
+    }
+
+    /**
+     * 构造带 errorCode 的错误响应
+     */
+    private Result<Map<String, Object>> errorWithCode(SsoErrorCode errorCode, String message) {
+        Result<Map<String, Object>> result = Result.error(message);
+        Map<String, Object> data = new HashMap<>();
+        data.put("errorCode", errorCode.getCode());
+        result.setData(data);
+        return result;
     }
 
     /**
@@ -234,35 +312,57 @@ public class SsoAuthController {
     /**
      * 获取 CAS 登出 URL（供前端退出登录后跳转，确保 CAS 侧也登出）
      *
-     * 统一身份认证对接要求：点击退出后返回统一身份认证页面，
-     * 否则用户在 CAS 侧仍处于登录状态，再次 SSO 登录会自动跳回而无法切换账号。
+     * 参照官方 caslogout.jsp：
+     *   casLogoutURL + "?service=" + URLEncoder.encode("http://app:port/login.jsp")
+     * service 参数是登出后跳转回的应用页面（前端登录页），不是 CAS 回调地址。
      */
     @GetMapping("/logout-url")
     public Result<Map<String, String>> getLogoutUrl() {
         Map<String, String> data = new HashMap<>();
-        String callbackUrl = buildCallbackUrl();
-        // CAS logout 协议：service 参数指定登出后跳转回的地址
-        String logoutUrl = ssoService.generateLogoutUrl(callbackUrl);
+        String logoutServiceUrl = appFrontendUrl + "/login";
+        String logoutUrl = ssoService.generateLogoutUrl(logoutServiceUrl);
         data.put("logoutUrl", logoutUrl);
         return Result.success(data);
     }
 
     /**
-     * 构建回调 URL，确保使用 HTTPS
+     * 构建 CAS service URL
+     *
+     * 与官方 cas-client-core-3.2.1 的 serverName 模式完全一致：
+     *   官方: service URL = serverName + request.getRequestURI()
+     *   本项目: service URL = serverName + "/api/auth/sso/callback"
+     *
+     * serverName 是固定配置值（对应官方 web.xml 的 serverName 参数），
+     * 不依赖任何 HTTP 请求头推断，保证登录和验证时 service URL 绝对一致。
+     *
+     * @see <a href="https://github.com/apereo/java-cas-client/blob/3.2.x/cas-client-core/src/main/java/org/jasig/cas/client/util/CommonUtils.java">CommonUtils.constructServiceUrl()</a>
      */
-    private String buildCallbackUrl() {
-        String callbackUrl = appBaseUrl + "/api/auth/sso/callback";
-        // 如果生产环境配置了 HTTPS 但 base-url 仍是 http，自动修正
-        // 实际部署时应通过 APP_BASE_URL 环境变量正确设置
-        return callbackUrl;
+    private String buildServiceUrl() {
+        String serverName = ssoProperties.getCas().getServerName();
+        if (serverName == null || serverName.isEmpty()) {
+            throw new IllegalStateException(
+                    "sso.cas.server-name (SSO_CAS_SERVER_NAME) 未配置。" +
+                    "此参数对应官方 web.xml 的 serverName，格式: 协议://域名[:端口]，" +
+                    "示例: https://langhack.imau.edu.cn");
+        }
+        // 去掉尾部斜杠（与官方 AbstractCasFilter.setServerName() 一致）
+        if (serverName.endsWith("/")) {
+            serverName = serverName.substring(0, serverName.length() - 1);
+        }
+        String serviceUrl = serverName + "/api/auth/sso/callback";
+        log.debug("CAS service URL: {}", serviceUrl);
+        return serviceUrl;
     }
 
     /**
-     * 重定向到前端并携带错误信息
+     * 重定向到前端并携带错误信息（附带 errorCode 供前端分类展示）
      */
-    private void redirectToFrontendWithError(HttpServletResponse response, String error) throws IOException {
-        String redirectUrl = appFrontendUrl + "/sso/callback?error=" +
-                java.net.URLEncoder.encode(error, java.nio.charset.StandardCharsets.UTF_8);
+    private void redirectToFrontendWithError(HttpServletResponse response, SsoErrorCode errorCode, String error)
+            throws IOException {
+        String safeMessage = error == null ? errorCode.getDefaultMessage() : error;
+        String redirectUrl = appFrontendUrl + "/sso/callback?error="
+                + java.net.URLEncoder.encode(safeMessage, java.nio.charset.StandardCharsets.UTF_8)
+                + "&errorCode=" + errorCode.getCode();
         response.sendRedirect(redirectUrl);
     }
 }

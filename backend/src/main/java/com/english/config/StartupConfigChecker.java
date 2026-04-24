@@ -40,6 +40,15 @@ public class StartupConfigChecker {
     @Value("${hiagent.api-key:}")
     private String hiagentApiKey;
 
+    @Value("${hiagent.app-id:}")
+    private String hiagentAppId;
+
+    @Value("${hiagent.qa-api-key:}")
+    private String hiagentQaApiKey;
+
+    @Value("${hiagent.qa-app-id:}")
+    private String hiagentQaAppId;
+
     @Value("${openrouter.api-key:}")
     private String openrouterApiKey;
 
@@ -102,6 +111,27 @@ public class StartupConfigChecker {
                     .append("[AI] Neither HiAgent nor OpenRouter API key is configured.\n")
                     .append("     HiAgent 和 OpenRouter 的 API Key 均未配置，AI 问答功能将不可用。\n")
                     .append("     Fix / 修复: export HIAGENT_API_KEY=... or export OPENROUTER_API_KEY=...\n\n");
+        }
+
+        // ── HiAgent QA vs Rewrite Isolation / HiAgent 问答与改写凭证隔离检查 ──
+        // 业务要求：AI 问答与 AI 改写必须使用两套完全不同的 HiAgent 应用凭证。
+        if (isBlank(hiagentQaApiKey) || isBlank(hiagentQaAppId)) {
+            if (!isBlank(hiagentApiKey)) {
+                // 仅当改写凭证已配置（意味着用户有意启用 HiAgent）时才警告 QA 未配置
+                warningCount++;
+                warnings.append(WARN_PREFIX)
+                        .append("[HiAgent QA] Q&A credentials not configured — AI 问答功能将不可用。\n")
+                        .append("             AI 问答要求独立的 HiAgent 应用凭证，不 fallback 到改写凭证。\n")
+                        .append("             Fix / 修复: export HIAGENT_QA_API_KEY=... HIAGENT_QA_APP_ID=...\n\n");
+            }
+        } else if (!isBlank(hiagentApiKey)
+                && (hiagentQaApiKey.equals(hiagentApiKey) || hiagentQaAppId.equals(hiagentAppId))) {
+            // 两套凭证被配置成相同值 — 违反"两套完全不同"的隔离要求
+            warningCount++;
+            warnings.append(WARN_PREFIX)
+                    .append("[HiAgent QA] Q&A and rewrite credentials share identical API key or App ID.\n")
+                    .append("             AI 问答与改写凭证存在重叠，违反应用隔离要求（两套应当完全不同）。\n")
+                    .append("             Fix / 修复: 在 HiAgent 控制台创建独立的问答应用，并使用其 Key/AppID。\n\n");
         }
 
         // ── Tencent Cloud Keys Check / 腾讯云密钥检查 ──

@@ -1,7 +1,8 @@
 app:
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
-    allowed-origin-patterns: http://192.168.*.*:3000,http://172.*.*.*:3000,http://10.*.*.*:3000 // 允许局域网IP访问（手机测试）
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080,http://127.0.0.1:*,http://localhost:*}
+    # 允许局域网IP访问（手机测试）
+    allowed-origin-patterns: http://192.168.*.*:3000,http://172.*.*.*:3000,http://10.*.*.*:3000
   update:
     supported: ${APP_UPDATE_SUPPORTED:true}
     unsupported-reason: ${APP_UPDATE_UNSUPPORTED_REASON:Self-update is not supported in the current deployment mode.}
@@ -146,18 +147,20 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
-  mapper-locations: classpath:mapper/*.xml
+  mapper-locations: classpath:mapper/**/*.xml
 
 hiagent:
   #此处禁止删除
-  # HiAgent Native API Settings
+  # HiAgent Native API Settings（AI 改写应用：CET-4/6/学术版/中英对照）
   api-key: ${HIAGENT_API_KEY:}
   api-url: ${HIAGENT_API_URL:https://agent.imau.edu.cn:32300/api/proxy/api/v1}
   app-id: ${HIAGENT_APP_ID:}
   user-id: ${HIAGENT_USER_ID:LangHack_System}
 
-  # HiAgent Q&A App (for article highlight AI Q&A)
-  qa-api-key: ${HIAGENT_QA_API_KEY:${HIAGENT_API_KEY:}}
+  # HiAgent Q&A App（AI 问答应用：文章划词 AI 问答）
+  # 必须与改写凭证（api-key/app-id）使用完全不同的 HiAgent 应用凭证
+  # 未配置时 AI 问答功能不可用（改写功能不受影响）
+  qa-api-key: ${HIAGENT_QA_API_KEY:}
   qa-app-id: ${HIAGENT_QA_APP_ID:}
 
   timeout: 60000
@@ -260,3 +263,36 @@ logging:
       max-file-size: 50MB
       max-history: 7
       total-size-cap: 200MB
+
+# School Data Integration Configuration
+# Supports two access modes: api (REST) or etl (JDBC)
+school:
+  data:
+    source: ${SCHOOL_DATA_SOURCE:api}
+    api:
+      base-url: ${SCHOOL_API_BASE_URL:https://api.imau.edu.cn}
+      # 官方认证方式: appId + appSecret 签名
+      # sign = Base64(MD5(appId + appSecret + timestamp))
+      # 请求头: appId / timestamp / sign
+      app-id: ${SCHOOL_API_APP_ID:}
+      app-secret: ${SCHOOL_API_APP_SECRET:}
+      connect-timeout: ${SCHOOL_API_CONNECT_TIMEOUT:5000}
+      read-timeout: ${SCHOOL_API_READ_TIMEOUT:30000}
+      retry-attempts: ${SCHOOL_API_RETRY_ATTEMPTS:3}
+    etl:
+      jdbc-url: ${SCHOOL_ETL_JDBC_URL:jdbc:mysql://school-db.imau.edu.cn:3306/school_db}
+      username: ${SCHOOL_ETL_USERNAME:}
+      password: ${SCHOOL_ETL_PASSWORD:}
+      driver-class-name: ${SCHOOL_ETL_DRIVER:com.mysql.cj.jdbc.Driver}
+      connection-timeout: ${SCHOOL_ETL_CONNECTION_TIMEOUT:30000}
+      query-timeout: ${SCHOOL_ETL_QUERY_TIMEOUT:60000}
+    sync:
+      enabled: ${SCHOOL_SYNC_ENABLED:false}
+      full-sync-cron: ${SCHOOL_SYNC_FULL_CRON:0 0 2 * * ?}
+      incremental-sync-cron: ${SCHOOL_SYNC_INCREMENTAL_CRON:0 0 * * * ?}
+      validation-cron: ${SCHOOL_SYNC_VALIDATION_CRON:0 0 4 * * ?}
+      batch-size: ${SCHOOL_SYNC_BATCH_SIZE:500}
+      sync-timeout-minutes: ${SCHOOL_SYNC_TIMEOUT_MINUTES:60}
+      full-sync-on-startup: ${SCHOOL_SYNC_FULL_ON_STARTUP:false}
+    cli:
+      enabled: ${SCHOOL_DATA_CLI_ENABLED:false}

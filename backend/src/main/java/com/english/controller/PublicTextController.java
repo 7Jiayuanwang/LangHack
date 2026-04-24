@@ -9,7 +9,6 @@ import com.english.mapper.UserTextReadMapper;
 import com.english.service.ArticleVersionService;
 import com.english.service.RecommendationService;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import com.english.service.TextService;
 import com.english.service.UserService;
 import org.slf4j.Logger;

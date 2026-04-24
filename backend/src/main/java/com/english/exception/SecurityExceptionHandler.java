@@ -58,7 +58,7 @@ public class SecurityExceptionHandler implements AuthenticationEntryPoint, Acces
         log.warn("Access denied to [{}]: {}", request.getRequestURI(), accessDeniedException.getMessage());
         String message;
         if (ssoEnabled) {
-            message = "温馨提示：对不起，您无权使用LangHack英语学习平台。如有疑问请致电：" + ssoAccessDeniedContact;
+            message = "对不起，您无权使用Langhack英语学习智能体平台。如有疑问请致电：" + ssoAccessDeniedContact;
         } else {
             message = "权限不足，无法执行该操作";
         }

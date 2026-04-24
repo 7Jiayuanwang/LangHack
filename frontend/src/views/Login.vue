@@ -497,6 +497,16 @@
         </div>
       </div>
     </div>
+
+    <!-- 权限拒绝提示 -->
+    <PermissionDenied 
+      v-if="showPermissionDenied" 
+      :main-message="permissionDeniedData.mainMessage"
+      :sub-message="permissionDeniedData.subMessage"
+      :contact-phone="permissionDeniedData.contactPhone"
+      :contact-department="permissionDeniedData.contactDepartment"
+      @close="showPermissionDenied = false"
+    />
   </div>
 </template>
 
@@ -507,6 +517,7 @@ import { ElMessage } from "element-plus";
 import { useUserStore } from "@/store/user";
 import request from "@/utils/request";
 import { useSsoLogin } from "@/composables/useSsoLogin";
+import PermissionDenied from "@/components/PermissionDenied.vue";
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -531,6 +542,15 @@ const showPassword = ref(false);
 const showRegPassword = ref(false);
 const showRegConfirmPassword = ref(false);
 const loginIdentity = ref("student");
+
+// 权限拒绝相关状态
+const showPermissionDenied = ref(false);
+const permissionDeniedData = ref({
+  mainMessage: '对不起，您无权使用Langhack英语学习智能体平台。',
+  subMessage: '您的账号正在审批中或权限不足',
+  contactPhone: '43019235',
+  contactDepartment: '计算机与信息工程学院'
+});
 
 const identityPlaceholder = computed(
   () =>
@@ -600,7 +620,7 @@ const handleLogin = async () => {
         router.push("/student");
         break;
       case "USER":
-        router.push("/user");
+        router.push("/student");  // USER 角色在校园环境中等同于学生，进入学生端
         break;
       default:
         router.push("/");
@@ -614,7 +634,23 @@ const handleLogin = async () => {
     } else if (error?.data?.message) {
       errorMsg = error.data.message;
     }
-    ElMessage.error(errorMsg);
+    
+    // 检查是否为权限拒绝错误
+    if (errorMsg.includes('无权使用') || errorMsg.includes('计算机与信息工程学院')) {
+      // 解析权限拒绝信息
+      const lines = errorMsg.split('\n')
+      showPermissionDenied.value = true
+      permissionDeniedData.value.mainMessage = lines[0] || '对不起，您无权使用Langhack英语学习智能体平台。'
+      permissionDeniedData.value.subMessage = lines.length > 1 ? '' : '您的账号正在审批中或权限不足'
+      
+      // 提取联系电话（如果有的话）
+      const phoneMatch = errorMsg.match(/(\d{5,8})/)
+      if (phoneMatch) {
+        permissionDeniedData.value.contactPhone = phoneMatch[1]
+      }
+    } else {
+      ElMessage.error(errorMsg);
+    }
   } finally {
     loginLoading.value = false;
   }

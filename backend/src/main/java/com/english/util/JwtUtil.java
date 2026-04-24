@@ -24,6 +24,18 @@ public class JwtUtil {
     private static final String DEFAULT_SECRET = "your_dummy_jwt_secret_for_local_development_at_least_32_chars_long";
     private static final Logger logger = LoggerFactory.getLogger(JwtUtil.class);
 
+    /** Access token 过期时间（2 小时），用于 refresh token 机制 */
+    public static final long ACCESS_TOKEN_EXPIRATION_MILLIS = 7200000L;
+    /** Refresh token 过期时间（7 天），用于 refresh token 机制 */
+    public static final long REFRESH_TOKEN_EXPIRATION_MILLIS = 604800000L;
+
+    /** Claim key: token 类型 */
+    private static final String CLAIM_TOKEN_TYPE = "type";
+    /** Token 类型: 访问令牌 */
+    public static final String TOKEN_TYPE_ACCESS = "access";
+    /** Token 类型: 刷新令牌 */
+    public static final String TOKEN_TYPE_REFRESH = "refresh";
+
     @Value("${spring.security.jwt.secret}")
     private String secret;
 
@@ -70,12 +82,47 @@ public class JwtUtil {
     public String generateToken(String username, String role) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", role);
-        return createToken(claims, username);
+        return createToken(claims, username, expiration);
+    }
+
+    /**
+     * 生成 access token（2 小时过期）。新登录建议同时返回 access + refresh token。
+     * 与 generateToken 的区别：过期时间更短 + claim 中标记 type=access。
+     */
+    public String generateAccessToken(String username, String role) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
+        claims.put(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ACCESS);
+        return createToken(claims, username, ACCESS_TOKEN_EXPIRATION_MILLIS);
+    }
+
+    /**
+     * 生成 refresh token（7 天过期），不含 role claim（避免权限随 refresh token 泄漏）。
+     * 用法：/api/auth/refresh 端点接收此 token，签发新的 access token。
+     */
+    public String generateRefreshToken(String username) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put(CLAIM_TOKEN_TYPE, TOKEN_TYPE_REFRESH);
+        return createToken(claims, username, REFRESH_TOKEN_EXPIRATION_MILLIS);
+    }
+
+    /**
+     * 读取 token 的 type claim。旧 token（无 type 字段）返回 null，调用方视同 access。
+     */
+    public String getTokenType(String token) {
+        return getClaimFromToken(token, claims -> claims.get(CLAIM_TOKEN_TYPE, String.class));
+    }
+
+    /** token 是否为 refresh 类型（旧 token 无 type 字段时返回 false） */
+    public boolean isRefreshToken(String token) {
+        return TOKEN_TYPE_REFRESH.equals(getTokenType(token));
     }
 
     private String createToken(Map<String, Object> claims, String subject) {
-        long expirationMillis = expiration; // expiration validated in init()
-        
+        return createToken(claims, subject, expiration);
+    }
+
+    private String createToken(Map<String, Object> claims, String subject, long expirationMillis) {
         // 防止时间溢出：检查时间加法是否会超过Long范围
         long now = System.currentTimeMillis();
         if (expirationMillis > Long.MAX_VALUE - now) {
@@ -83,7 +130,7 @@ public class JwtUtil {
             expirationMillis = Long.MAX_VALUE - now;
             logger.warn("JWT expiration milliseconds too large, capped to Long.MAX_VALUE");
         }
-        
+
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(subject)

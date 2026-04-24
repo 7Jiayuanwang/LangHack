@@ -52,8 +52,21 @@ public class SsoProperties {
     @Data
     public static class CasConfig {
         private boolean enabled = true;
+        /**
+         * CAS 服务端地址（不含 /login）
+         * 对应官方 web.xml 的 casServerUrlPrefix
+         * 示例: https://ids.imau.edu.cn/authserver
+         */
         private String serverUrl;
-        private String serviceUrl;
+        /**
+         * 应用服务器地址（协议+域名+端口）
+         * 对应官方 web.xml 的 serverName
+         * 示例: https://langhack.imau.edu.cn
+         *
+         * service URL = serverName + "/api/auth/sso/callback"
+         * 此值必须与 CAS 服务器注册的域名一致
+         */
+        private String serverName;
         private Map<String, String> attributes = new HashMap<>();
     }
 

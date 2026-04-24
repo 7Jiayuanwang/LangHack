@@ -84,7 +84,7 @@
         <el-table-column prop="content" label="内容预览" min-width="300" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="content-preview">
-              {{ getContentPreview(row.content) }}
+              {{ getContentPreview(row.contentType === 'MARKDOWN' ? (row.markdownContent || row.content) : row.content) }}
             </div>
           </template>
         </el-table-column>
@@ -196,7 +196,8 @@
           <span class="create-time">创建时间：{{ formatTime(currentText.createdTime) }}</span>
         </div>
         <div class="text-content">
-          <pre>{{ currentText.content }}</pre>
+          <MarkdownRenderer v-if="currentText.contentType === 'MARKDOWN'" :markdown="currentText.markdownContent || currentText.content || ''" />
+          <pre v-else>{{ currentText.content }}</pre>
         </div>
         <div v-if="currentText.audioUrl" class="text-audio">
           <h4>音频</h4>
@@ -218,10 +219,12 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshLeft, Refresh, VideoPlay } from '@element-plus/icons-vue'
 import * as adminApi from '@/api/admin'
 import TextEditDialog from '@/components/TextEditDialog.vue'
+import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 
 // 响应式数据
 const texts = ref([])
@@ -232,6 +235,7 @@ const currentText = ref({})
 const editDialogVisible = ref(false)
 const selectedText = ref(null)
 const selectedUnitId = ref(null)
+const router = useRouter()
 
 // 搜索表单
 const searchForm = reactive({
@@ -620,6 +624,11 @@ onMounted(() => {
 
 .text-content {
   margin-bottom: 20px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
 }
 
 .text-content pre {

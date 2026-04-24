@@ -6,9 +6,12 @@ import com.english.entity.AccessStatsDaily;
 import com.english.entity.AccessStatsHourly;
 import com.english.entity.AiCallLog;
 import com.english.entity.AiCallStatsDaily;
+import com.english.entity.User;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.mapper.*;
+import com.english.service.TokenBlacklistService;
+import com.english.service.UserService;
 import com.english.service.impl.AccessMetricsService;
 import com.english.service.impl.AiCallMetricsService;
 import com.english.service.impl.ElevationService;
@@ -70,6 +73,12 @@ public class MonitoringController {
     private ElevationService elevationService;
 
     @Autowired
+    private TokenBlacklistService tokenBlacklistService;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
     private InMemoryLogService inMemoryLogService;
 
     @GetMapping("/realtime")
@@ -86,37 +95,67 @@ public class MonitoringController {
     /**
      * SSE endpoint for real-time metrics push.
      * Uses token query parameter since EventSource doesn't support custom headers.
+     *
+     * 手工鉴权：SSE 跳过 Spring Security 过滤链，所以这里必须显式完成以下检查：
+     * 1. Token 签名与未过期（validateToken）
+     * 2. Token 是否在黑名单（已登出）
+     * 3. 用户仍活跃（存在、未删除、ACTIVE 状态）
+     * 4. Token 中的角色与 DB 当前角色一致（防止角色降级后旧 token 还能访问）
+     * 5. 角色具备访问权限（ADMIN/OPS 或已提权至 ADMIN/OPS）
      */
     @GetMapping("/realtime/stream")
     public SseEmitter streamRealTimeMetrics(@RequestParam String token) {
-        // Manual token validation for SSE endpoint (EventSource doesn't support custom headers)
         try {
+            // 1. 基础 token 校验
             String username = jwtUtil.getUsernameFromToken(token);
             if (username == null || !jwtUtil.validateToken(token, username)) {
-                SseEmitter emitter = new SseEmitter(0L);
-                emitter.completeWithError(new SecurityException("Invalid token"));
-                return emitter;
+                return errorEmitter("Invalid token");
             }
-            // 验证角色：仅 OPS 和 ADMIN 可访问实时监控流（含提权状态检查）
-            String role = jwtUtil.getRoleFromToken(token);
-            boolean hasAccess = "ADMIN".equals(role) || "OPS".equals(role);
+
+            // 2. 黑名单检查（已登出的 token 不能再订阅 SSE）
+            if (tokenBlacklistService.isBlacklisted(token)) {
+                logger.warn("Blacklisted token attempted SSE subscription: user={}", username);
+                return errorEmitter("Token revoked");
+            }
+
+            // 3. 用户状态检查 + 角色一致性检查
+            User user = userService.getUserByUsername(username);
+            if (user == null) {
+                logger.warn("SSE rejected: user '{}' not found (deleted?)", username);
+                return errorEmitter("User not found");
+            }
+            if (!"ACTIVE".equals(user.getStatus())) {
+                logger.warn("SSE rejected: user '{}' status is '{}'", username, user.getStatus());
+                return errorEmitter("User inactive");
+            }
+            String tokenRole = jwtUtil.getRoleFromToken(token);
+            if (tokenRole == null || !tokenRole.equals(user.getRole())) {
+                logger.warn("SSE rejected: user '{}' role changed from '{}' to '{}'",
+                        username, tokenRole, user.getRole());
+                return errorEmitter("Role changed");
+            }
+
+            // 4. 角色访问权限校验（含提权状态）
+            boolean hasAccess = "ADMIN".equals(tokenRole) || "OPS".equals(tokenRole);
             if (!hasAccess) {
-                // 检查 Redis 中的提权状态
                 String elevatedRole = elevationService.getElevatedRole(username);
                 hasAccess = "ADMIN".equals(elevatedRole) || "OPS".equals(elevatedRole);
             }
             if (!hasAccess) {
-                SseEmitter emitter = new SseEmitter(0L);
-                emitter.completeWithError(new SecurityException("Insufficient privileges"));
-                return emitter;
+                return errorEmitter("Insufficient privileges");
             }
         } catch (Exception e) {
-            SseEmitter emitter = new SseEmitter(0L);
-            emitter.completeWithError(new SecurityException("Token validation failed"));
-            return emitter;
+            logger.warn("SSE authentication exception: {}", e.getMessage());
+            return errorEmitter("Token validation failed");
         }
 
         return accessMetricsService.registerEmitter();
+    }
+
+    private SseEmitter errorEmitter(String message) {
+        SseEmitter emitter = new SseEmitter(0L);
+        emitter.completeWithError(new SecurityException(message));
+        return emitter;
     }
 
     @GetMapping("/system")

@@ -112,7 +112,7 @@
             <!-- Content Area -->
             <div class="article-content">
               <h2 class="article-title">{{ article.title }}</h2>
-              <p class="article-snippet">{{ getSnippet(article.content) }}</p>
+              <p class="article-snippet">{{ getSnippet(article) }}</p>
             </div>
 
             <!-- Footer Area -->
@@ -178,7 +178,6 @@ import {
   TrendCharts, Connection, Reading, Medal,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Refresh
 } from '@element-plus/icons-vue'
-import { getRecommendedTexts } from '@/api/texts'
 
 const router = useRouter()
 
@@ -343,7 +342,9 @@ const loadArticles = async () => {
   try {
     const params = { count: 10 }
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`)
+    const authHeader = getAuthHeader()
+    const headers = authHeader ? { Authorization: authHeader } : {}
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`, { headers })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -361,7 +362,9 @@ const loadArticles = async () => {
     if (data?.code === 200) {
       let fetched = (Array.isArray(data.data) ? data.data : []).map(text => {
         const cat = getRandomCategory()
-        const contentLength = typeof text.content === 'string' ? text.content.length : 0
+        const contentLength = typeof text.content === 'string' && text.content.length > 0
+          ? text.content.length
+          : (typeof text.markdownContent === 'string' ? text.markdownContent.length : 0)
         return {
           ...text,
           category: cat,
@@ -388,20 +391,39 @@ const readArticle = (article) => {
     return
   }
   // Fire-and-forget: 标记文章为已读
-  fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST' }).catch(() => {})
+  const authHeader = getAuthHeader()
+  const headers = authHeader ? { Authorization: authHeader } : {}
+  fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/${article.id}/read`, { method: 'POST', headers }).catch(() => {})
   router.push({
-    path: '/student/text-learning',
+    path: `/article/${article.id}`,
     query: {
-      textId: article.id,
       from: 'articles',
       _title: encodeURIComponent(article.title || '')
     }
   })
 }
 
-const getSnippet = (content) => {
-  if (typeof content !== 'string' || !content) return ''
-  return content.replace(/[\n\r]+/g, ' ').substring(0, 120) + (content.length > 120 ? '...' : '')
+const getSnippet = (article) => {
+  // 优先使用 content，若为空则尝试 markdownContent
+  let raw = article.content || article.markdownContent || ''
+  if (typeof raw !== 'string' || !raw) return ''
+
+  // 清理 Markdown 语法标记，提取纯文字
+  let clean = raw
+    .replace(/!\[.*?\]\(.*?\)/g, '')          // 删除图片 ![alt](url)
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')       // 链接保留文字 [text](url) → text
+    .replace(/^#{1,6}\s+/gm, '')              // 删除标题符 # ## ###
+    .replace(/[*_]{1,3}(.*?)[*_]{1,3}/g, '$1') // 加粗/斜体保留文字
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')        // 删除行内代码和代码块
+    .replace(/^>\s?/gm, '')                   // 删除引用 >
+    .replace(/^[-*+]\s+/gm, '')               // 删除无序列表标记
+    .replace(/^\d+\.\s+/gm, '')               // 删除有序列表标记
+    .replace(/---+|\*\*\*+|___+/g, '')        // 删除分割线
+    .replace(/[\n\r]+/g, ' ')                  // 换行转空格
+    .replace(/\s+/g, ' ')                      // 合并多余空格
+    .trim()
+
+  return clean.length > 120 ? clean.substring(0, 120) + '...' : clean
 }
 
 const getCategoryText = (val) => {

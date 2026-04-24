@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.TeacherStudentBindingMapper">
+
+    <!-- 绑定关系 UPSERT：唯一键 (teacher_id, student_id, course_code, academic_year, semester) -->
+    <insert id="upsertBinding" parameterType="com.english.entity.TeacherStudentBinding" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO teacher_student_binding (
+            teacher_id, student_id, course_code, course_class_code,
+            academic_year, semester, source_type, sync_time
+        ) VALUES (
+            #{teacherId}, #{studentId}, #{courseCode}, #{courseClassCode},
+            COALESCE(#{academicYear}, ''), COALESCE(#{semester}, ''),
+            #{sourceType}, #{syncTime}
+        )
+        ON DUPLICATE KEY UPDATE
+            course_class_code = COALESCE(#{courseClassCode}, course_class_code),
+            source_type = #{sourceType},
+            sync_time = #{syncTime}
+    </insert>
+
+    <select id="selectByTeacher" resultType="com.english.entity.TeacherStudentBinding">
+        SELECT * FROM teacher_student_binding
+        WHERE teacher_id = #{teacherId}
+        <if test="academicYear != null and academicYear != ''">
+            AND academic_year = #{academicYear}
+        </if>
+        <if test="semester != null and semester != ''">
+            AND semester = #{semester}
+        </if>
+        ORDER BY sync_time DESC
+    </select>
+
+    <select id="selectByStudent" resultType="com.english.entity.TeacherStudentBinding">
+        SELECT * FROM teacher_student_binding
+        WHERE student_id = #{studentId}
+        <if test="academicYear != null and academicYear != ''">
+            AND academic_year = #{academicYear}
+        </if>
+        <if test="semester != null and semester != ''">
+            AND semester = #{semester}
+        </if>
+        ORDER BY sync_time DESC
+    </select>
+
+</mapper>
