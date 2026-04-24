@@ -339,7 +339,7 @@ CREATE TABLE IF NOT EXISTS media (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '媒体ID',
     media_type ENUM('IMAGE','VIDEO') NOT NULL COMMENT '媒体类型',
     file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
-    file_content LONGBLOB NOT NULL COMMENT '文件内容',
+    file_content LONGBLOB DEFAULT NULL COMMENT '文件内容（图片使用，视频走文件系统）',
     file_size BIGINT DEFAULT 0 COMMENT '文件大小（字节）',
     mime_type VARCHAR(100) COMMENT 'MIME类型',
     width INT COMMENT '宽度（像素，仅图片）',
@@ -1872,5 +1872,43 @@ INSERT IGNORE INTO sso_config (config_key, config_value, config_type, descriptio
 ALTER TABLE level_exam_scores MODIFY COLUMN student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）';
 ALTER TABLE level_exam_scores MODIFY COLUMN exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）';
 ALTER TABLE level_exam_scores MODIFY COLUMN is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）';
+
+-- ══════════════════════════════════════════════════════════════
+-- V19: 视频管理表
+-- feat/video 分支新增：视频学习功能
+-- ══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS `videos` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `title` VARCHAR(200) NOT NULL COMMENT '视频标题',
+    `description` TEXT COMMENT '视频简介',
+    `media_id` BIGINT DEFAULT NULL COMMENT '关联的媒体记录ID',
+    `cover_media_id` BIGINT DEFAULT NULL COMMENT '封面媒体ID',
+    `video_url` VARCHAR(500) DEFAULT NULL COMMENT '视频URL（外部链接时使用）',
+    `cover_url` VARCHAR(500) DEFAULT NULL COMMENT '封面URL',
+    `subtitle_content` LONGTEXT COMMENT '字幕内容（SRT/VTT格式）',
+    `user_id` BIGINT DEFAULT NULL COMMENT '上传者用户ID',
+    `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
+    `is_featured` TINYINT(1) DEFAULT 0 COMMENT '是否推荐',
+    `featured_priority` INT DEFAULT 0 COMMENT '推荐优先级',
+    `tags` VARCHAR(500) DEFAULT NULL COMMENT '标签，逗号分隔',
+    `view_count` INT DEFAULT 0 COMMENT '浏览次数',
+    `like_count` INT DEFAULT 0 COMMENT '收藏/点赞次数',
+    `status` VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED',
+    `associated_text_id` BIGINT DEFAULT NULL COMMENT '关联的课文ID（用于收藏映射）',
+    `transcription_status` VARCHAR(20) DEFAULT NULL COMMENT '转录状态：PENDING/PROCESSING/COMPLETED/FAILED',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_media_id` (`media_id`),
+    KEY `idx_is_public` (`is_public`),
+    KEY `idx_is_featured` (`is_featured`),
+    KEY `idx_status` (`status`),
+    KEY `idx_deleted` (`deleted`),
+    KEY `idx_associated_text_id` (`associated_text_id`),
+    KEY `idx_created_time` (`created_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频表';
 
 -- ════════════════════════════════════════════════════════════════

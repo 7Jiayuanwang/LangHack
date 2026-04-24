@@ -482,8 +482,7 @@ const initPlayer = () => {
           color: '#fff',
           fontSize: '18px',
           textShadow: '0 2px 4px rgba(0,0,0,0.8)',
-          bottom: 'auto',
-          top: '20px',
+          bottom: '20px',
         },
         encoding: 'utf-8',
       }
