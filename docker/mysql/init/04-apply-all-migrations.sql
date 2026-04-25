@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
 -- LangHack 合并迁移脚本（MySQL 8.0 兼容）
--- 将 Flyway V0 ~ V21 的所有迁移合并为单个幂等脚本
+-- 将 Flyway V0 ~ V26 的所有迁移合并为单个幂等脚本
 --
 -- 对应 Flyway 迁移文件（整合后 - 2026-04-21 V12 瘦身 + V20 合入 + V17-V19 重编号）:
 --   V0__base_tables.sql                     (基础表)
@@ -17,14 +17,18 @@
 --   V11__role_mapping_cleanup.sql           (合并: 旧 V12 重命名)
 --   V12__school_data_integration.sql        (合并: 旧 V12.1/V13/V14/V16/V18/V19/V20 + V20-align
 --                                              2026-04-21 按 CDSP 官方 PDF 重建 9 数据源字段映射)
---   V13__access_log_covering_index.sql      (监控热点页查询索引优化)
+--   V13__access_log_covering_index.sql     (监控热点页查询索引优化)
 --   V14__expand_feature_toggles.sql         (学生页全覆盖 + admin.* 模块 toggle)
 --   V15__ImportECDICTData.java              (JDBC 迁移 - 导入 ECDICT 词典数据)
 --   V16__ai_qa_recovery_and_hiagent_config.sql (AI 问答开关恢复 + HiAgent 凭证迁 DB, 旧 V17)
 --   V17__add_page_word_recite_toggle.sql    (学生端-背单词页 feature_toggle seed, 旧 V18)
 --   V18__ai_provider_protocol.sql           (AI 服务商协议类型字段, 旧 V19)
---   V21__add_sso_binding_admin_remark.sql   (SSO 绑定表添加管理员备注字段)
---   V22__chain_fetch_schema.sql             (按学院链式拉取: school_student / school_teacher / teacher_student_binding)
+--   V21__add_sso_binding_admin_remark.sql  (SSO 绑定表添加管理员备注字段)
+--   V22__chain_fetch_schema.sql            (按学院链式拉取: school_student / school_teacher / teacher_student_binding)
+--   V23__sync_log_pagination_summary.sql   (sync_logs 分页扩展字段)
+--   V24__similarity_matrix.sql              (相似度矩阵表 Item-CF / User-CF)
+--   V25__add_similar_id_indexes.sql        (相似度矩阵补 similar_*_id 索引)
+--   V26__optimize_interaction_view.sql      (v_user_text_interaction_scores 视图)
 --
 -- 注意：旧 V20__align_field_mappings_with_pdf.sql 已于 2026-04-21 合并进 V12，
 --       V12 Part 3.1/3.2/3.3 的 camelCase/snake_case 冗余 field_mappings 已删除
@@ -1872,5 +1876,130 @@ INSERT IGNORE INTO sso_config (config_key, config_value, config_type, descriptio
 ALTER TABLE level_exam_scores MODIFY COLUMN student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）';
 ALTER TABLE level_exam_scores MODIFY COLUMN exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）';
 ALTER TABLE level_exam_scores MODIFY COLUMN is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）';
+
+-- ════════════════════════════════════════════════════════════════
+-- V23: sync_logs 分页扩展字段
+-- ════════════════════════════════════════════════════════════════
+
+ALTER TABLE sync_logs
+    ADD COLUMN pagination_complete TINYINT(1) NULL COMMENT '分页是否完整结束' AFTER operator,
+    ADD COLUMN pagination_stop_reason VARCHAR(64) NULL COMMENT '分页停止原因' AFTER pagination_complete,
+    ADD COLUMN pagination_pages_fetched INT NULL COMMENT '已拉取页数' AFTER pagination_stop_reason,
+    ADD COLUMN pagination_last_skip INT NULL COMMENT '最后一次skip值' AFTER pagination_pages_fetched,
+    ADD COLUMN pagination_page_size INT NULL COMMENT '分页pageSize' AFTER pagination_last_skip,
+    ADD COLUMN pagination_guard_hit TINYINT(1) NULL COMMENT '是否触发分页防护' AFTER pagination_page_size,
+    ADD COLUMN fetched_row_count INT NULL COMMENT '上游已拉取条数' AFTER pagination_guard_hit;
+
+-- ════════════════════════════════════════════════════════════════
+-- V24: 相似度矩阵表（Item-CF / User-CF 推荐算法核心数据）
+-- ════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
+    INDEX `idx_text_id` (`text_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵';
+
+CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
+    INDEX `idx_text_id` (`text_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
+
+CREATE TABLE IF NOT EXISTS `user_similarity_matrix` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
+    INDEX `idx_user_id` (`user_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵';
+
+CREATE TABLE IF NOT EXISTS `user_similarity_matrix_tmp` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
+    INDEX `idx_user_id` (`user_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵临时表';
+
+-- ════════════════════════════════════════════════════════════════
+-- V25: 相似度矩阵补 similar_*_id 索引（Item-CF / User-CF 双向查询优化）
+-- ════════════════════════════════════════════════════════════════
+
+ALTER TABLE `text_similarity_matrix`      ADD INDEX `idx_similar_text_id` (`similar_text_id`);
+ALTER TABLE `text_similarity_matrix_tmp`  ADD INDEX `idx_similar_text_id` (`similar_text_id`);
+ALTER TABLE `user_similarity_matrix`      ADD INDEX `idx_similar_user_id` (`similar_user_id`);
+ALTER TABLE `user_similarity_matrix_tmp`  ADD INDEX `idx_similar_user_id` (`similar_user_id`);
+
+-- ════════════════════════════════════════════════════════════════
+-- V26: v_user_text_interaction_scores 视图（原 CROSS JOIN 版本，保持不变）
+-- ════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
+SELECT
+    u.id                                          AS user_id,
+    t.id                                          AS text_id,
+    COALESCE(utr.read_at IS NOT NULL, 0)          AS w_read,
+    COALESCE(tlr.is_completed = 1, 0)             AS w_complete,
+    COALESCE(af.id IS NOT NULL, 0)                AS w_favorite,
+    LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) AS w_duration,
+    COALESCE(sr.correct_rate, 0.0)                 AS w_accuracy,
+    LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) AS w_underline,
+    LEAST(
+        COALESCE(utr.read_at IS NOT NULL, 0) * 0.2
+        + COALESCE(tlr.is_completed = 1, 0) * 0.2
+        + COALESCE(af.id IS NOT NULL, 0) * 0.3
+        + LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) * 0.1
+        + COALESCE(sr.correct_rate, 0.0) * 0.1
+        + LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) * 0.1,
+        1.0
+    )                                             AS interaction_score
+FROM `users` u
+CROSS JOIN `texts` t
+LEFT JOIN `user_text_reads` utr
+    ON utr.user_id = u.id AND utr.text_id = t.id
+LEFT JOIN `text_learning_records` tlr
+    ON tlr.student_id = u.id AND tlr.text_id = t.id
+LEFT JOIN `article_favorites` af
+    ON af.student_id = u.id AND af.text_id = t.id
+LEFT JOIN (
+    SELECT
+        sr.student_id,
+        lr.text_id,
+        CAST(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
+            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.correct_count'), 0) ELSE 0 END) AS DECIMAL(5,2))
+        / NULLIF(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
+            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.total_count'), 0) ELSE 0 END), 0) AS correct_rate
+    FROM score_records sr
+    LEFT JOIN learning_records lr ON lr.assignment_id = sr.assignment_id
+    WHERE sr.score_type = 'ASSIGNMENT'
+    GROUP BY sr.student_id, lr.text_id
+) sr ON sr.student_id = u.id AND sr.text_id = t.id
+LEFT JOIN (
+    SELECT user_id, text_id, COUNT(*) AS underline_count
+    FROM underlines
+    GROUP BY user_id, text_id
+) ul ON ul.user_id = u.id AND ul.text_id = t.id
+WHERE u.role IN ('STUDENT', 'USER');
 
 -- ════════════════════════════════════════════════════════════════
