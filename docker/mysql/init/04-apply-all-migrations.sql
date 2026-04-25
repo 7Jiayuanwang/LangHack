@@ -1911,4 +1911,31 @@ CREATE TABLE IF NOT EXISTS `videos` (
     KEY `idx_created_time` (`created_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频表';
 
+-- ═══════════════════════════════════════════════════════════════
+-- V23: 内容标签表（管理员预设）
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS `content_tags` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(50) NOT NULL COMMENT '标签名称',
+    `color` VARCHAR(20) DEFAULT NULL COMMENT '标签颜色（如 #409EFF）',
+    `sort_order` INT DEFAULT 0 COMMENT '排序号，值越小越靠前',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_name` (`name`),
+    KEY `idx_sort_order` (`sort_order`),
+    KEY `idx_deleted` (`deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='内容标签表（管理员预设）';
+
+-- 预置常用标签
+INSERT IGNORE INTO `content_tags` (`name`, `color`, `sort_order`) VALUES
+    ('日常对话', '#67C23A', 1),
+    ('商务英语', '#409EFF', 2),
+    ('学术英语', '#E6A23C', 3),
+    ('科技文章', '#909399', 4),
+    ('新闻资讯', '#F56C6C', 5),
+    ('文学小说', '#9B59B6', 6);
+
 -- ════════════════════════════════════════════════════════════════
