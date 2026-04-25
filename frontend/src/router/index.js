@@ -120,10 +120,22 @@ const routes = [
         meta: { title: "视频管理", roles: ["ADMIN"] },
       },
       {
+        path: "content",
+        name: "AdminContentManagement",
+        component: () => import("@/views/admin/ContentManagement.vue"),
+        meta: { title: "内容管理", roles: ["ADMIN"] },
+      },
+      {
         path: "sso-pending",
         name: "AdminSsoPending",
         component: () => import("@/views/admin/SsoPendingApprovals.vue"),
         meta: { title: "SSO 用户审批", roles: ["ADMIN"], featureKey: "admin.sso_approval" },
+      },
+      {
+        path: "content-review",
+        name: "AdminContentReview",
+        component: () => import("@/views/admin/ContentReview.vue"),
+        meta: { title: "内容审核", roles: ["ADMIN"] },
       },
     ],
   },

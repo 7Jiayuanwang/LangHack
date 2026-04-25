@@ -236,6 +236,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, View, Star, StarFilled, Reading, ChatLineSquare, Document, VideoPlay } from '@element-plus/icons-vue'
 import Artplayer from 'artplayer'
 import { getPublicVideoDetail } from '@/api/video'
+import { getAdminVideoDetail } from '@/api/admin'
 import { getMediaDetail } from '@/api/media'
 import { checkArticleFavorite, toggleArticleFavorite } from '@/api/student'
 import InteractiveText from '@/components/InteractiveText.vue'
@@ -342,16 +343,23 @@ function formatTimestamp(seconds) {
 
 // ─── Navigation ────────────────────────────────────────────────
 const goBack = () => {
-  if (window.history.length > 1) {
+  const isAdminPreview = route.query.preview === 'admin'
+  if (isAdminPreview) {
+    // 管理员预览模式（新标签页打开的）→ 关闭标签页或回管理页
+    window.close()
+    // 如果 window.close() 被浏览器阻止，则跳转到内容管理
+    setTimeout(() => { window.location.href = '/admin/content' }, 100)
+  } else if (window.history.length > 1) {
     router.back()
   } else {
     router.push('/student/articles')
   }
 }
 
-// ─── Video Loading ─────────────────────────────────────────────
+// ─── Video Loading ─────────────────────────────────────────────────────
 const loadVideo = async () => {
-  const videoId = route.query.videoId
+  const videoId = route.query.videoId || route.query.id
+  const isAdminPreview = route.query.preview === 'admin'
   if (!videoId) {
     error.value = true
     loading.value = false
@@ -361,7 +369,10 @@ const loadVideo = async () => {
   loading.value = true
   error.value = false
   try {
-    const res = await getPublicVideoDetail(videoId)
+    // 管理员预览模式使用管理员 API（不检查 isPublic）
+    const res = isAdminPreview
+      ? await getAdminVideoDetail(videoId)
+      : await getPublicVideoDetail(videoId)
     if (res.code === 200 && res.data) {
       video.value = res.data
 
@@ -386,7 +397,7 @@ const loadVideo = async () => {
         }
       }
 
-      if (video.value.associatedTextId) {
+      if (!isAdminPreview && video.value.associatedTextId) {
         try {
           const favRes = await checkArticleFavorite(video.value.associatedTextId)
           isFavorite.value = favRes.data.isFavorite

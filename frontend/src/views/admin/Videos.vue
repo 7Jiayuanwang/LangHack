@@ -164,7 +164,23 @@
             </template>
           </el-upload>
         </el-form-item>
+        <!-- 编辑时显示当前视频文件名 + 预览按钮 -->
+        <el-form-item label="当前视频" v-if="editingVideo && editingVideo.mediaId">
+          <div class="file-info-row">
+            <span class="file-name">{{ editingVideo.title || '视频文件' }}.mp4</span>
+            <el-button type="primary" text size="small" @click="previewVideo(editingVideo)">
+              预览
+            </el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="封面图">
+          <!-- 编辑时显示封面文件名 + 预览按钮 -->
+          <div v-if="editingVideo && editingVideo.coverMediaId && !coverFile" class="file-info-row" style="margin-bottom: 8px">
+            <span class="file-name">封面图片</span>
+            <el-button type="primary" text size="small" @click="previewCoverVisible = true">
+              预览
+            </el-button>
+          </div>
           <el-upload
             class="cover-uploader"
             :auto-upload="false"
@@ -173,7 +189,7 @@
             accept="image/jpeg,image/png,image/webp"
             :on-change="handleCoverFileChange"
           >
-            <el-button>选择封面图</el-button>
+            <el-button>{{ editingVideo ? '更换封面图' : '选择封面图' }}</el-button>
             <template #tip>
               <div class="el-upload__tip">支持 JPG/PNG/WebP，最大 10MB</div>
             </template>
@@ -208,15 +224,23 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 封面预览弹窗 -->
+    <el-dialog v-model="previewCoverVisible" title="封面预览" width="min(500px, 90vw)">
+      <img v-if="editingVideo && editingVideo.coverMediaId" :src="`/api/media/${editingVideo.coverMediaId}/download`" alt="封面" style="width: 100%; border-radius: 8px;" />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
 import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
+
+const router = useRouter()
 
 const videos = ref([])
 const stats = ref({})
@@ -225,6 +249,18 @@ const dialogVisible = ref(false)
 const editingVideo = ref(null)
 const submitLoading = ref(false)
 const formRef = ref()
+const previewCoverVisible = ref(false)
+
+// 视频预览 — 新标签页打开完整播放器
+const previewVideo = (row) => {
+  if (row && row.id) {
+    const routeData = router.resolve({
+      name: 'StudentVideoPlayer',
+      query: { id: row.id, preview: 'admin' }
+    })
+    window.open(routeData.href, '_blank')
+  }
+}
 
 const searchForm = reactive({ keyword: '' })
 const pagination = reactive({ current: 1, size: 20, total: 0 })
@@ -413,6 +449,8 @@ const getStatusText = (s) => ({ APPROVED: '已审核', PENDING: '待审核', REJ
 const formatTime = (t) => t ? new Date(t).toLocaleString('zh-CN') : ''
 
 onMounted(() => { loadStats(); loadVideos() })
+
+defineExpose({ loadVideos })
 </script>
 
 <style scoped>
@@ -429,6 +467,8 @@ onMounted(() => { loadStats(); loadVideos() })
 .videos-table { background: #fff; border-radius: 8px; overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 .pagination { margin-top: 20px; display: flex; justify-content: center; }
 .priority-na { color: #c0c4cc; font-size: 16px; }
+.file-info-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 6px; border: 1px solid #e4e7ed; }
+.file-name { font-size: 13px; color: #606266; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 768px) {
   .videos-management { padding: 16px; }
   .header { flex-direction: column; gap: 16px; align-items: flex-start; }

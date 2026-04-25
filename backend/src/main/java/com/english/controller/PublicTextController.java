@@ -9,6 +9,8 @@ import com.english.mapper.UserTextReadMapper;
 import com.english.service.ArticleVersionService;
 import com.english.service.TextService;
 import com.english.service.UserService;
+import com.english.service.ContentTagService;
+import com.english.entity.ContentTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +47,27 @@ public class PublicTextController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private ContentTagService contentTagService;
+
+    /**
+     * 获取所有内容标签（公开接口，学生上传时使用）
+     */
+    @GetMapping("/content-tags")
+    public Result<List<ContentTag>> getPublicContentTags() {
+        try {
+            List<ContentTag> tags = contentTagService.lambdaQuery()
+                    .eq(ContentTag::getDeleted, 0)
+                    .orderByAsc(ContentTag::getSortOrder)
+                    .orderByAsc(ContentTag::getId)
+                    .list();
+            return Result.success(tags);
+        } catch (Exception e) {
+            log.error("获取内容标签列表失败", e);
+            return Result.error("获取标签列表失败");
+        }
+    }
 
     /**
      * 获取首页推荐文章

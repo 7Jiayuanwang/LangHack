@@ -92,6 +92,14 @@
               <el-tag v-if="item.tags" size="small" type="info">
                 {{ item.tags.split(',')[0] }}
               </el-tag>
+              <el-tag
+                v-if="item.status"
+                :type="item.status === 'APPROVED' ? 'success' : item.status === 'REJECTED' ? 'danger' : 'warning'"
+                size="small"
+                effect="plain"
+              >
+                {{ item.status === 'APPROVED' ? '已通过' : item.status === 'REJECTED' ? '已驳回' : '待审核' }}
+              </el-tag>
             </div>
           </div>
 
@@ -213,10 +221,12 @@
           </el-select>
         </el-form-item>
 
-        <!-- 标签 -->
-        <el-form-item label="标签" prop="tags">
-          <el-input v-model="uploadForm.tags" placeholder="请输入标签，多个用逗号分隔" maxlength="100" />
-          <div class="form-tip">例如：日常对话, 商务英语, 科技文章</div>
+        <!-- 标签（必选） -->
+        <el-form-item label="标签" prop="tags" required>
+          <el-select v-model="uploadForm.tags" multiple placeholder="请选择标签（必选）" style="width: 100%" :disabled="availableTags.length === 0">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+          <div v-if="availableTags.length === 0" class="form-tip" style="color: #f56c6c">暂无可选标签，请联系管理员设置</div>
         </el-form-item>
 
         <!-- Task 3.4: 音频 URL -->
@@ -332,9 +342,12 @@
           </el-select>
         </el-form-item>
 
-        <!-- 标签 -->
-        <el-form-item label="标签" prop="tags">
-          <el-input v-model="editForm.tags" placeholder="请输入标签，多个用逗号分隔" maxlength="100" />
+        <!-- 标签（必选） -->
+        <el-form-item label="标签" prop="tags" required>
+          <el-select v-model="editForm.tags" multiple placeholder="请选择标签（必选）" style="width: 100%" :disabled="availableTags.length === 0">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+          <div v-if="availableTags.length === 0" class="form-tip" style="color: #f56c6c">暂无可选标签，请联系管理员设置</div>
         </el-form-item>
 
         <!-- 音频 URL -->
@@ -464,8 +477,11 @@
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="标签">
-          <el-input v-model="videoForm.tags" placeholder="多个标签用逗号分隔" />
+        <el-form-item label="标签" prop="tags" required>
+          <el-select v-model="videoForm.tags" multiple placeholder="请选择标签（必选）" style="width: 100%" :disabled="availableTags.length === 0">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+          <div v-if="availableTags.length === 0" class="form-tip" style="color: #f56c6c">暂无可选标签，请联系管理员设置</div>
         </el-form-item>
         <el-form-item label="公开">
           <el-switch v-model="videoForm.isPublicBool" />
@@ -496,6 +512,7 @@ import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { isCoverFileValid } from '@/utils/coverUpload'
 import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
+import { getPublicContentTags } from '@/api/admin'
 import { VideoPlay } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -535,11 +552,24 @@ const handleItemClick = (item) => {
 // 表单数据
 const uploadFormRef = ref()
 const editFormRef = ref()
+const availableTags = ref([])
+
+const loadContentTags = async () => {
+  try {
+    const res = await getPublicContentTags()
+    if (res.code === 200) {
+      availableTags.value = res.data || []
+    }
+  } catch (e) {
+    console.error('加载标签列表失败:', e)
+  }
+}
+
 const uploadForm = reactive({
   title: '',
   content: '',
   difficulty: 'MEDIUM',
-  tags: '',
+  tags: [],
   coverUrl: '',
   contentType: 'TEXT',
   audioUrl: '',
@@ -551,7 +581,7 @@ const editForm = reactive({
   title: '',
   content: '',
   difficulty: 'MEDIUM',
-  tags: '',
+  tags: [],
   coverUrl: '',
   contentType: 'TEXT',
   audioUrl: '',
@@ -823,13 +853,18 @@ const handleUpload = async () => {
 
       uploadLoading.value = true
       try {
+        // 验证标签必选
+        if (!uploadForm.tags || uploadForm.tags.length === 0) {
+          ElMessage.warning('请至少选择一个标签')
+          return
+        }
         const data = {
           title: uploadForm.title,
           content: uploadForm.contentType === 'TEXT' ? uploadForm.content : '',
           markdownContent: uploadForm.contentType === 'MARKDOWN' ? uploadMarkdownContent.value : '',
           contentType: uploadForm.contentType,
           difficulty: uploadForm.difficulty,
-          tags: uploadForm.tags,
+          tags: uploadForm.tags.join(','),
           coverUrl: uploadForm.coverUrl,
           audioUrl: uploadForm.audioUrl,
           isPublic: uploadForm.isPublic
@@ -864,7 +899,7 @@ const resetUploadForm = () => {
     content: '',
     contentType: 'TEXT',
     difficulty: 'MEDIUM',
-    tags: '',
+    tags: [],
     coverUrl: '',
     audioUrl: '',
     isPublic: true
@@ -882,7 +917,7 @@ const editText = (text) => {
     content: text.content || '',
     contentType: text.contentType || 'TEXT',
     difficulty: text.difficulty,
-    tags: text.tags || '',
+    tags: text.tags ? text.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     coverUrl: text.coverUrl || '',
     audioUrl: text.audioUrl || '',
     isPublic: text.isPublic != null ? text.isPublic : true
@@ -904,13 +939,18 @@ const handleEdit = async () => {
 
       editLoading.value = true
       try {
+        // 验证标签必选
+        if (!editForm.tags || editForm.tags.length === 0) {
+          ElMessage.warning('请至少选择一个标签')
+          return
+        }
         const data = {
           title: editForm.title,
           content: editForm.contentType === 'TEXT' ? editForm.content : '',
           markdownContent: editForm.contentType === 'MARKDOWN' ? editMarkdownContent.value : '',
           contentType: editForm.contentType,
           difficulty: editForm.difficulty,
-          tags: editForm.tags,
+          tags: editForm.tags.join(','),
           coverUrl: editForm.coverUrl,
           audioUrl: editForm.audioUrl,
           isPublic: editForm.isPublic
@@ -1069,7 +1109,7 @@ const videoForm = reactive({
   description: '',
   mediaId: null,
   coverMediaId: null,
-  tags: '',
+  tags: [],
   subtitleContent: '',
   isPublicBool: true,
   videoUrl: '',
@@ -1077,7 +1117,8 @@ const videoForm = reactive({
 })
 
 const videoFormRules = {
-  title: [{ required: true, message: '请输入视频标题', trigger: 'blur' }]
+  title: [{ required: true, message: '请输入视频标题', trigger: 'blur' }],
+  tags: [{ type: 'array', required: true, message: '请至少选择一个标签', trigger: 'change' }]
 }
 
 let selectedVideoFile = null
@@ -1095,7 +1136,7 @@ const handleSubtitleSelect = async (file) => {
 }
 
 const resetVideoForm = () => {
-  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
+  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: [], subtitleContent: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
   selectedVideoFile = null
   selectedVideoCoverFile = null
   editingVideo.value = null
@@ -1148,12 +1189,17 @@ const handleVideoSubmit = async () => {
       ElMessage.error('请选择视频文件'); return
     }
 
+    // 验证标签必选
+    if (!videoForm.tags || videoForm.tags.length === 0) {
+      ElMessage.warning('请至少选择一个标签')
+      return
+    }
     const data = {
       title: videoForm.title,
       description: videoForm.description,
       mediaId: videoForm.mediaId,
       coverMediaId: videoForm.coverMediaId,
-      tags: videoForm.tags,
+      tags: videoForm.tags.join(','),
       subtitleContent: videoForm.subtitleContent || null,
       isPublic: videoForm.isPublicBool ? 1 : 0,
       videoUrl: videoForm.videoUrl,
@@ -1194,7 +1240,7 @@ const editVideoItem = (video) => {
     description: video.description || '',
     mediaId: video.mediaId,
     coverMediaId: video.coverMediaId,
-    tags: video.tags || '',
+    tags: video.tags ? video.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     subtitleContent: video.subtitleContent || '',
     isPublicBool: video.isPublic === 1,
     videoUrl: video.videoUrl || '',
@@ -1224,6 +1270,7 @@ const playVideo = (video) => {
 onMounted(() => {
   loadMyUploads()
   loadMyVideos()
+  loadContentTags()
 })
 </script>
 

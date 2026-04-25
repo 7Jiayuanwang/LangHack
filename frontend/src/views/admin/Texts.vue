@@ -479,6 +479,8 @@ onMounted(() => {
   loadStats()
   loadTexts()
 })
+
+defineExpose({ loadTexts })
 </script>
 
 <style scoped>

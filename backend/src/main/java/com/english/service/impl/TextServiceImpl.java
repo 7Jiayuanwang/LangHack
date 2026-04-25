@@ -160,6 +160,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (text.getFeaturedPriority() != null) {
             updateWrapper.set("featured_priority", text.getFeaturedPriority());
         }
+        if (text.getStatus() != null) {
+            updateWrapper.set("status", text.getStatus());
+        }
 
         update(updateWrapper);
     }

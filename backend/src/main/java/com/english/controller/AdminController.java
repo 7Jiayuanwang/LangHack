@@ -8,6 +8,8 @@ import com.english.entity.Unit;
 import com.english.entity.User;
 import com.english.entity.Word;
 import com.english.entity.Text;
+import com.english.entity.Video;
+import com.english.entity.ContentTag;
 import com.english.exception.BusinessException;
 import com.english.service.UserService;
 import com.english.service.CourseService;
@@ -15,9 +17,11 @@ import com.english.service.WordService;
 import com.english.service.ClassService;
 import com.english.service.UnitService;
 import com.english.service.TextService;
+import com.english.service.VideoService;
 import com.english.service.UnitWordService;
 import com.english.service.TextExerciseService;
 import com.english.service.ArticleVersionService;
+import com.english.service.ContentTagService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -77,6 +81,12 @@ public class AdminController {
 
     @Autowired
     private ArticleVersionService articleVersionService;
+
+    @Autowired
+    private VideoService videoService;
+
+    @Autowired
+    private ContentTagService contentTagService;
 
     @GetMapping("/users")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
@@ -1395,6 +1405,435 @@ public class AdminController {
                 return "";
             default:
                 return "";
+        }
+    }
+
+    // ========== 内容审核相关 ==========
+
+    /**
+     * 获取用户上传的课文列表（内容审核）
+     */
+    @GetMapping("/content-review/texts")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> getReviewTexts(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String tag) {
+        try {
+            page = Math.max(1, page);
+            size = Math.max(1, Math.min(size, 100));
+            if (keyword != null && keyword.length() > 100) {
+                keyword = keyword.substring(0, 100);
+            }
+
+            final String finalKeyword = keyword;
+
+            QueryWrapper<Text> queryWrapper = new QueryWrapper<>();
+            queryWrapper.isNotNull("uploaded_by"); // 仅查用户上传的课文
+            queryWrapper.eq("deleted", 0);
+
+            if (status != null && !status.trim().isEmpty()) {
+                queryWrapper.eq("status", status);
+            }
+            if (finalKeyword != null && !finalKeyword.trim().isEmpty()) {
+                queryWrapper.and(w -> w.like("title", finalKeyword).or().like("content", finalKeyword));
+            }
+            if (tag != null && !tag.trim().isEmpty()) {
+                queryWrapper.like("tags", tag);
+            }
+            queryWrapper.orderByDesc("created_time");
+
+            Page<Text> pageParam = new Page<>(page, size);
+            IPage<Text> pageResult = textService.page(pageParam, queryWrapper);
+
+            // 附带作者信息
+            List<Map<String, Object>> records = new ArrayList<>();
+            for (Text text : pageResult.getRecords()) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("id", text.getId());
+                item.put("title", text.getTitle());
+                item.put("content", text.getContent());
+                item.put("markdownContent", text.getMarkdownContent());
+                item.put("contentType", text.getContentType());
+                item.put("difficulty", text.getDifficulty());
+                item.put("tags", text.getTags());
+                item.put("coverUrl", text.getCoverUrl());
+                item.put("audioUrl", text.getAudioUrl());
+                item.put("status", text.getStatus());
+                item.put("isPublic", text.getIsPublic());
+                item.put("viewCount", text.getViewCount());
+                item.put("likeCount", text.getLikeCount());
+                item.put("createdTime", text.getCreatedAt());
+                item.put("uploadedBy", text.getUploadedBy());
+
+                // 查询作者信息
+                if (text.getUploadedBy() != null) {
+                    User uploader = userService.getUserById(text.getUploadedBy());
+                    if (uploader != null) {
+                        item.put("uploaderName", uploader.getUsername());
+                        item.put("uploaderRealName", uploader.getRealName());
+                    }
+                }
+                records.add(item);
+            }
+
+            // 统计数量
+            long pendingCount = textService.lambdaQuery()
+                    .isNotNull(Text::getUploadedBy).eq(Text::getDeleted, 0)
+                    .eq(Text::getStatus, "PENDING").count();
+            long approvedCount = textService.lambdaQuery()
+                    .isNotNull(Text::getUploadedBy).eq(Text::getDeleted, 0)
+                    .eq(Text::getStatus, "APPROVED").count();
+            long rejectedCount = textService.lambdaQuery()
+                    .isNotNull(Text::getUploadedBy).eq(Text::getDeleted, 0)
+                    .eq(Text::getStatus, "REJECTED").count();
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", records);
+            result.put("total", pageResult.getTotal());
+            result.put("current", pageResult.getCurrent());
+            result.put("size", pageResult.getSize());
+            result.put("pendingCount", pendingCount);
+            result.put("approvedCount", approvedCount);
+            result.put("rejectedCount", rejectedCount);
+
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取待审核课文列表失败", e);
+            return Result.error("获取待审核课文列表失败");
+        }
+    }
+
+    /**
+     * 课文审核通过
+     */
+    @PutMapping("/content-review/texts/{id}/approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> approveText(@PathVariable Long id) {
+        try {
+            Text text = textService.getTextById(id);
+            if (text == null) {
+                return Result.error("课文不存在");
+            }
+            text.setStatus("APPROVED");
+            text.setIsPublic(1);
+            textService.updateText(text);
+            return Result.success("审核通过");
+        } catch (Exception e) {
+            logger.error("课文审核通过失败 id={}", id, e);
+            return Result.error("操作失败");
+        }
+    }
+
+    /**
+     * 课文审核驳回
+     */
+    @PutMapping("/content-review/texts/{id}/reject")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> rejectText(@PathVariable Long id) {
+        try {
+            Text text = textService.getTextById(id);
+            if (text == null) {
+                return Result.error("课文不存在");
+            }
+            text.setStatus("REJECTED");
+            text.setIsPublic(0);
+            textService.updateText(text);
+            return Result.success("已驳回");
+        } catch (Exception e) {
+            logger.error("课文审核驳回失败 id={}", id, e);
+            return Result.error("操作失败");
+        }
+    }
+
+    /**
+     * 获取用户上传的视频列表（内容审核）
+     */
+    @GetMapping("/content-review/videos")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> getReviewVideos(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String tag) {
+        try {
+            page = Math.max(1, page);
+            size = Math.max(1, Math.min(size, 100));
+            if (keyword != null && keyword.length() > 100) {
+                keyword = keyword.substring(0, 100);
+            }
+
+            final String finalKeyword = keyword;
+
+            QueryWrapper<Video> queryWrapper = new QueryWrapper<>();
+            queryWrapper.isNotNull("user_id"); // 仅查用户上传的视频
+            queryWrapper.eq("deleted", 0);
+
+            if (status != null && !status.trim().isEmpty()) {
+                queryWrapper.eq("status", status);
+            }
+            if (finalKeyword != null && !finalKeyword.trim().isEmpty()) {
+                queryWrapper.and(w -> w.like("title", finalKeyword).or().like("description", finalKeyword));
+            }
+            if (tag != null && !tag.trim().isEmpty()) {
+                queryWrapper.like("tags", tag);
+            }
+            queryWrapper.orderByDesc("created_time");
+
+            Page<Video> pageParam = new Page<>(page, size);
+            IPage<Video> pageResult = videoService.page(pageParam, queryWrapper);
+
+            // 附带作者信息
+            List<Map<String, Object>> records = new ArrayList<>();
+            for (Video video : pageResult.getRecords()) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("id", video.getId());
+                item.put("title", video.getTitle());
+                item.put("description", video.getDescription());
+                item.put("mediaId", video.getMediaId());
+                item.put("coverMediaId", video.getCoverMediaId());
+                item.put("videoUrl", video.getVideoUrl());
+                item.put("coverUrl", video.getCoverUrl());
+                item.put("tags", video.getTags());
+                item.put("status", video.getStatus());
+                item.put("isPublic", video.getIsPublic());
+                item.put("viewCount", video.getViewCount());
+                item.put("likeCount", video.getLikeCount());
+                item.put("createdTime", video.getCreatedTime());
+                item.put("userId", video.getUserId());
+
+                // 查询作者信息
+                if (video.getUserId() != null) {
+                    User uploader = userService.getUserById(video.getUserId());
+                    if (uploader != null) {
+                        item.put("uploaderName", uploader.getUsername());
+                        item.put("uploaderRealName", uploader.getRealName());
+                    }
+                }
+                records.add(item);
+            }
+
+            // 统计数量
+            long pendingCount = videoService.lambdaQuery()
+                    .isNotNull(Video::getUserId).eq(Video::getDeleted, 0)
+                    .eq(Video::getStatus, "PENDING").count();
+            long approvedCount = videoService.lambdaQuery()
+                    .isNotNull(Video::getUserId).eq(Video::getDeleted, 0)
+                    .eq(Video::getStatus, "APPROVED").count();
+            long rejectedCount = videoService.lambdaQuery()
+                    .isNotNull(Video::getUserId).eq(Video::getDeleted, 0)
+                    .eq(Video::getStatus, "REJECTED").count();
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", records);
+            result.put("total", pageResult.getTotal());
+            result.put("current", pageResult.getCurrent());
+            result.put("size", pageResult.getSize());
+            result.put("pendingCount", pendingCount);
+            result.put("approvedCount", approvedCount);
+            result.put("rejectedCount", rejectedCount);
+
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取待审核视频列表失败", e);
+            return Result.error("获取待审核视频列表失败");
+        }
+    }
+
+    /**
+     * 视频审核通过
+     */
+    @PutMapping("/content-review/videos/{id}/approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> approveVideo(@PathVariable Long id) {
+        try {
+            Video video = videoService.getVideoById(id);
+            if (video == null) {
+                return Result.error("视频不存在");
+            }
+            video.setStatus("APPROVED");
+            video.setIsPublic(1);
+            videoService.updateById(video);
+            return Result.success("审核通过");
+        } catch (Exception e) {
+            logger.error("视频审核通过失败 id={}", id, e);
+            return Result.error("操作失败");
+        }
+    }
+
+    /**
+     * 视频审核驳回
+     */
+    @PutMapping("/content-review/videos/{id}/reject")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> rejectVideo(@PathVariable Long id) {
+        try {
+            Video video = videoService.getVideoById(id);
+            if (video == null) {
+                return Result.error("视频不存在");
+            }
+            video.setStatus("REJECTED");
+            video.setIsPublic(0);
+            videoService.updateById(video);
+            return Result.success("已驳回");
+        } catch (Exception e) {
+            logger.error("视频审核驳回失败 id={}", id, e);
+            return Result.error("操作失败");
+        }
+    }
+
+    /**
+     * 管理员获取视频详情（不检查 isPublic，用于审核预览）
+     */
+    @GetMapping("/videos/{id}/detail")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Video> getVideoDetail(@PathVariable Long id) {
+        try {
+            Video video = videoService.getVideoById(id);
+            if (video == null) {
+                return Result.error("视频不存在");
+            }
+            return Result.success(video);
+        } catch (Exception e) {
+            logger.error("获取视频详情失败 id={}", id, e);
+            return Result.error("获取视频详情失败");
+        }
+    }
+
+    // ========== 内容标签管理 ==========
+
+    /**
+     * 获取所有内容标签
+     */
+    @GetMapping("/content-tags")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<List<ContentTag>> getContentTags() {
+        try {
+            List<ContentTag> tags = contentTagService.lambdaQuery()
+                    .eq(ContentTag::getDeleted, 0)
+                    .orderByAsc(ContentTag::getSortOrder)
+                    .orderByAsc(ContentTag::getId)
+                    .list();
+            return Result.success(tags);
+        } catch (Exception e) {
+            logger.error("获取内容标签列表失败", e);
+            return Result.error("获取标签列表失败");
+        }
+    }
+
+    /**
+     * 创建内容标签
+     */
+    @PostMapping("/content-tags")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<ContentTag> createContentTag(@RequestBody Map<String, Object> data) {
+        try {
+            String name = (String) data.get("name");
+            if (name == null || name.trim().isEmpty()) {
+                return Result.error("标签名称不能为空");
+            }
+            name = name.trim();
+            if (name.length() > 50) {
+                return Result.error("标签名称不能超过50个字符");
+            }
+
+            // 检查重名
+            long exists = contentTagService.lambdaQuery()
+                    .eq(ContentTag::getName, name)
+                    .eq(ContentTag::getDeleted, 0)
+                    .count();
+            if (exists > 0) {
+                return Result.error("标签名称已存在");
+            }
+
+            ContentTag tag = new ContentTag();
+            tag.setName(name);
+            tag.setColor(data.get("color") != null ? data.get("color").toString() : null);
+            try {
+                tag.setSortOrder(data.get("sortOrder") != null ? Integer.parseInt(data.get("sortOrder").toString()) : 0);
+            } catch (NumberFormatException e) {
+                tag.setSortOrder(0);
+            }
+            tag.setDeleted(0);
+
+            contentTagService.save(tag);
+            return Result.success("创建成功", tag);
+        } catch (Exception e) {
+            logger.error("创建内容标签失败", e);
+            return Result.error("创建标签失败");
+        }
+    }
+
+    /**
+     * 更新内容标签
+     */
+    @PutMapping("/content-tags/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> updateContentTag(@PathVariable Long id, @RequestBody Map<String, Object> data) {
+        try {
+            ContentTag tag = contentTagService.getById(id);
+            if (tag == null || (tag.getDeleted() != null && tag.getDeleted() == 1)) {
+                return Result.error("标签不存在");
+            }
+
+            if (data.containsKey("name")) {
+                String name = (String) data.get("name");
+                if (name == null || name.trim().isEmpty()) {
+                    return Result.error("标签名称不能为空");
+                }
+                name = name.trim();
+                if (name.length() > 50) {
+                    return Result.error("标签名称不能超过50个字符");
+                }
+                // 检查重名（排除自己）
+                long exists = contentTagService.lambdaQuery()
+                        .eq(ContentTag::getName, name)
+                        .ne(ContentTag::getId, id)
+                        .eq(ContentTag::getDeleted, 0)
+                        .count();
+                if (exists > 0) {
+                    return Result.error("标签名称已存在");
+                }
+                tag.setName(name);
+            }
+            if (data.containsKey("color")) {
+                tag.setColor(data.get("color") != null ? data.get("color").toString() : null);
+            }
+            if (data.containsKey("sortOrder")) {
+                try {
+                    tag.setSortOrder(data.get("sortOrder") != null ? Integer.parseInt(data.get("sortOrder").toString()) : 0);
+                } catch (NumberFormatException e) {
+                    tag.setSortOrder(0);
+                }
+            }
+
+            contentTagService.updateById(tag);
+            return Result.success("更新成功");
+        } catch (Exception e) {
+            logger.error("更新内容标签失败 id={}", id, e);
+            return Result.error("更新标签失败");
+        }
+    }
+
+    /**
+     * 删除内容标签
+     */
+    @DeleteMapping("/content-tags/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> deleteContentTag(@PathVariable Long id) {
+        try {
+            ContentTag tag = contentTagService.getById(id);
+            if (tag == null) {
+                return Result.error("标签不存在");
+            }
+            contentTagService.removeById(id);
+            return Result.success("删除成功");
+        } catch (Exception e) {
+            logger.error("删除内容标签失败 id={}", id, e);
+            return Result.error("删除标签失败");
         }
     }
 }

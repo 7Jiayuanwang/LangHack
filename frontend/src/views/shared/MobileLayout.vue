@@ -224,8 +224,7 @@ const MORE_ITEMS = {
   admin: [
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
-    { path: '/admin/texts',          label: '课文管理', icon: Document, featureKey: 'admin.texts' },
-    { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'admin.videos' },
+    { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
   ],
@@ -284,8 +283,11 @@ const ROUTE_MAP = {
     '/admin/units':       '单元管理',
     '/admin/words':       '单词管理',
     '/admin/texts':       '课文管理',
+    '/admin/videos':      '视频管理',
+    '/admin/content':     '内容管理',
     '/admin/assignments': '作业管理',
     '/admin/sso-pending': 'SSO 用户审批',
+    '/admin/content-review': '内容审核',
   },
 }
 
