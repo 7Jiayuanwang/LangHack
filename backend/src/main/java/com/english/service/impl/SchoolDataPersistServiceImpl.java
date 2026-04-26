@@ -281,7 +281,9 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         }
         entity.setSelectionId(selectionId);
         entity.setStudentId(studentId);
-        entity.setStudentName(getStringValue(data, "studentName"));
+        // 学生姓名：优先使用 API 返回值，若为空则从 school_student 或 users 表反查
+        String studentName = firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId));
+        entity.setStudentName(studentName);
         entity.setCourseCode(getCourseCodeValue(data));
         entity.setCourseName(getStringValue(data, "courseName"));
         entity.setClassId(classId);

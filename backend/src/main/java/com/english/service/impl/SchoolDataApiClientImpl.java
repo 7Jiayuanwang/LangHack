@@ -10,9 +10,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.ResourceAccessException;
@@ -123,7 +126,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             logger.warn("No endpoint mapping for teaching_plans");
             return Collections.emptyList();
         }
-        return rowsFromCompleteResult("teaching_plan_courses", fetchDataWithPath(basePath + "/" + planId + "/courses", null));
+        return rowsFromCompleteResult("teaching_plan_courses", fetchDataWithPath("teaching_plan_courses", basePath + "/" + planId + "/courses", null));
     }
 
     @Override
@@ -148,12 +151,12 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             params.put("xq", toSchoolSemester(semester));
         }
 
-        return rowsFromCompleteResult("student_schedule", fetchDataWithPath(basePath, params));
+        return rowsFromCompleteResult("student_schedule", fetchDataWithPath("student_schedule", basePath, params));
     }
 
     /**
      * 本地学年拆分为学校接口所需的单年份。
-     * 规则：2025-2026 = 2025秋 + 2026春。
+     * 规则：2025-2026 学年 = 2025秋（第一学期）+ 2026春（第二学期）。
      * 若 semester 未提供，默认取起始年；若已是单年份则原样返回。
      */
     private String splitAcademicYearToSingleYear(String academicYear, Integer semester) {
@@ -237,7 +240,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             logger.error("No API endpoint mapping configured for data source: {}", dataSource);
             return new SchoolDataFetchResult(Collections.emptyList(), SchoolDataFetchResult.PaginationSummary.empty());
         }
-        return fetchDataWithPath(endpointPath, params);
+        return fetchDataWithPath(dataSource, endpointPath, params);
     }
 
     private List<Map<String, Object>> fetchData(String dataSource, Map<String, String> params) {
@@ -272,8 +275,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      * 做中文→英文别名兜底查表，保证同步不被 key 不匹配拦截。
      * <p>
      * 当前按端点原生参数直接请求，不再自动追加 $top/$skip，避免触发 IY1103 customQuery。
+     * <p>
+     * <b>HTTP 方法自适应</b>：优先使用 GET 方法，如果返回 IY1103 错误则自动降级到 POST 方法。
+     * 这是因为 CDSP 不同端点对 HTTP 方法的支持不一致（文档统一标注 POST&GET，但实际行为不同）。
      */
-    private SchoolDataFetchResult fetchDataWithPath(String fullUrl, Map<String, String> params) {
+    private SchoolDataFetchResult fetchDataWithPath(String dataSource, String fullUrl, Map<String, String> params) {
         if (fullUrl == null || fullUrl.isEmpty()) {
             logger.error("学校数据 API URL 未配置（fetchDataWithPath 接收到空 URL），返回空集合");
             return new SchoolDataFetchResult(Collections.emptyList(), SchoolDataFetchResult.PaginationSummary.empty());
@@ -282,9 +288,24 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         Map<String, String> baseParams = params == null
                 ? new LinkedHashMap<>()
                 : new LinkedHashMap<>(params);
-        ParsedResponse parsed = fetchPage(buildUrl(fullUrl, baseParams));
-        SchoolDataFetchResult.PaginationSummary summary = buildPaginationSummary(parsed);
-        return new SchoolDataFetchResult(parsed.rows, summary);
+
+        // 优先尝试 GET 方法
+        try {
+            ParsedResponse parsed = fetchPage(buildUrl(fullUrl, baseParams));
+            SchoolDataFetchResult.PaginationSummary summary = buildPaginationSummary(parsed);
+            return new SchoolDataFetchResult(parsed.rows, summary);
+        } catch (BusinessException e) {
+            // 如果是 IY1103 错误（NOT SUPPORTED: URI: customQuery），降级到 POST 方法
+            if (e.getMessage() != null && e.getMessage().contains("IY1103")) {
+                logger.warn("学校数据 API GET 请求返回 IY1103 错误，降级到 POST 方法 dataSource={} url={}",
+                        dataSource, fullUrl);
+                ParsedResponse parsed = fetchPagePost(fullUrl, baseParams);
+                SchoolDataFetchResult.PaginationSummary summary = buildPaginationSummary(parsed);
+                return new SchoolDataFetchResult(parsed.rows, summary);
+            }
+            // 其他错误直接抛出
+            throw e;
+        }
     }
 
     private ParsedResponse fetchPage(String url) {
@@ -305,10 +326,84 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
                 return parseResponse(response.getBody(), url);
             } catch (HttpStatusCodeException e) {
+                String responseBody = e.getResponseBodyAsString();
                 logger.error("学校数据 API HTTP 错误 url={} status={} attempt={}/{} bodyPreview={}",
                         url, e.getStatusCode(), attempt, retryAttempts,
-                        truncateForLog(e.getResponseBodyAsString()));
+                        truncateForLog(responseBody));
                 if (attempt == retryAttempts) {
+                    // 如果响应体包含 IY1103 错误，抛出包含错误信息的异常以便上层降级到 POST
+                    if (responseBody != null && responseBody.contains("IY1103")) {
+                        throw new BusinessException("学校数据 API 请求失败: HTTP " + e.getStatusCode() + " [IY1103]");
+                    }
+                    throw new BusinessException("学校数据 API 请求失败: HTTP " + e.getStatusCode());
+                }
+            } catch (ResourceAccessException e) {
+                logger.warn("学校数据 API 网络异常 url={} attempt={}/{} err={}",
+                        url, attempt, retryAttempts, e.getMessage());
+                if (attempt == retryAttempts) {
+                    logger.error("学校数据 API 已重试 {} 次仍失败（网络） url={} err={}",
+                            retryAttempts, url, e.getMessage(), e);
+                    throw new BusinessException("学校数据 API 网络异常: " + e.getMessage());
+                }
+            } catch (RestClientException e) {
+                logger.warn("学校数据 API 调用失败 url={} attempt={}/{} err={}",
+                        url, attempt, retryAttempts, e.getMessage());
+                if (attempt == retryAttempts) {
+                    logger.error("学校数据 API 已重试 {} 次仍失败 url={} err={}",
+                            retryAttempts, url, e.getMessage(), e);
+                    throw new BusinessException("学校数据 API 调用失败: " + e.getMessage());
+                }
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.error("学校数据 API 未预期异常 url={} attempt={}/{} err={}",
+                        url, attempt, retryAttempts, e.getMessage(), e);
+                throw new BusinessException("学校数据 API 响应处理失败: " + e.getMessage());
+            }
+        }
+
+        throw new BusinessException("学校数据 API 请求失败");
+    }
+
+    /**
+     * 使用 POST 方法请求 CDSP API，参数放在请求体中（application/x-www-form-urlencoded）
+     * 用于学生课表等不支持 GET 查询参数的端点
+     */
+    private ParsedResponse fetchPagePost(String url, Map<String, String> params) {
+        int retryAttempts = properties.getApi().getRetryAttempts();
+        for (int attempt = 1; attempt <= retryAttempts; attempt++) {
+            try {
+                HttpHeaders headers = buildHeaders();
+                headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+                // 构建表单参数
+                MultiValueMap<String, String> formParams = new LinkedMultiValueMap<>();
+                if (params != null) {
+                    params.forEach(formParams::add);
+                }
+
+                HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(formParams, headers);
+
+                logger.info("学校数据 API POST 请求中 url={} params={} attempt={}/{}", url, params, attempt, retryAttempts);
+                ResponseEntity<String> response = restTemplate.exchange(
+                        url, HttpMethod.POST, entity, String.class);
+
+                if (response.getBody() == null || response.getBody().isEmpty()) {
+                    logger.warn("学校数据 API 响应体为空 url={} status={}", url, response.getStatusCode());
+                    return ParsedResponse.direct(Collections.emptyList());
+                }
+
+                return parseResponse(response.getBody(), url);
+            } catch (HttpStatusCodeException e) {
+                String responseBody = e.getResponseBodyAsString();
+                logger.error("学校数据 API HTTP 错误 url={} status={} attempt={}/{} bodyPreview={}",
+                        url, e.getStatusCode(), attempt, retryAttempts,
+                        truncateForLog(responseBody));
+                if (attempt == retryAttempts) {
+                    // 如果响应体包含 IY1103 错误，抛出包含错误信息的异常以便上层降级到 POST
+                    if (responseBody != null && responseBody.contains("IY1103")) {
+                        throw new BusinessException("学校数据 API 请求失败: HTTP " + e.getStatusCode() + " [IY1103]");
+                    }
                     throw new BusinessException("学校数据 API 请求失败: HTTP " + e.getStatusCode());
                 }
             } catch (ResourceAccessException e) {
@@ -493,8 +588,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         Boolean hasNext = firstBoolean(parsed.wrapper, "hasNext", "hasMore", "nextPage", "next");
         boolean nextValuePresent = hasMeaningfulValue(parsed.wrapper.get("next")) || hasMeaningfulValue(parsed.wrapper.get("nextPage"));
 
-        if ((total != null && total > rowCount)
-                || (pages != null && pages > 1)
+        if ((pages != null && pages > 1)
                 || Boolean.TRUE.equals(hasNext)
                 || nextValuePresent) {
             logger.error("学校 API 响应显示可能存在未拉取数据 total={} rows={} pages={} page={} hasNext={} nextPresent={}",
@@ -508,6 +602,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     true,
                     rowCount
             );
+        }
+
+        // total > rowCount 仅记录警告，不阻止同步（CDSP API 可能返回不准确的 total）
+        if (total != null && total > rowCount) {
+            logger.warn("学校 API 响应 total={} 大于实际返回行数 rows={}，但无明确分页标志，视为完整响应", total, rowCount);
         }
 
         return new SchoolDataFetchResult.PaginationSummary(
