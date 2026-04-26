@@ -31,6 +31,9 @@ public class Video {
     @TableField("subtitle_content")
     private String subtitleContent;
 
+    @TableField("subtitle_content_zh")
+    private String subtitleContentZh;
+
     @TableField("user_id")
     private Long userId;
 
@@ -135,6 +138,14 @@ public class Video {
 
     public void setSubtitleContent(String subtitleContent) {
         this.subtitleContent = subtitleContent;
+    }
+
+    public String getSubtitleContentZh() {
+        return subtitleContentZh;
+    }
+
+    public void setSubtitleContentZh(String subtitleContentZh) {
+        this.subtitleContentZh = subtitleContentZh;
     }
 
     public Long getUserId() {

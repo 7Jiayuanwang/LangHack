@@ -52,6 +52,7 @@ public class UserVideoController {
             String description = (String) videoData.getOrDefault("description", "");
             String tags = (String) videoData.getOrDefault("tags", "");
             String subtitleContent = (String) videoData.get("subtitleContent");
+            String subtitleContentZh = (String) videoData.get("subtitleContentZh");
             Object coverMediaIdObj = videoData.get("coverMediaId");
 
             if (title == null || title.trim().isEmpty()) {
@@ -71,6 +72,9 @@ public class UserVideoController {
             video.setStatus("PENDING"); // 默认待审核
             if (subtitleContent != null && !subtitleContent.trim().isEmpty()) {
                 video.setSubtitleContent(subtitleContent);
+            }
+            if (subtitleContentZh != null && !subtitleContentZh.trim().isEmpty()) {
+                video.setSubtitleContentZh(subtitleContentZh);
             }
             if (coverMediaIdObj != null) {
                 video.setCoverMediaId(Long.valueOf(coverMediaIdObj.toString()));
@@ -179,6 +183,10 @@ public class UserVideoController {
             if (videoData.containsKey("subtitleContent")) {
                 Object subVal = videoData.get("subtitleContent");
                 video.setSubtitleContent(subVal != null ? subVal.toString() : null);
+            }
+            if (videoData.containsKey("subtitleContentZh")) {
+                Object subZhVal = videoData.get("subtitleContentZh");
+                video.setSubtitleContentZh(subZhVal != null ? subZhVal.toString() : null);
             }
 
             videoService.updateById(video);

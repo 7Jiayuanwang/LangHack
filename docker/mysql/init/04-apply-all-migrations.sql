@@ -1912,3 +1912,17 @@ CREATE TABLE IF NOT EXISTS `videos` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频表';
 
 -- ════════════════════════════════════════════════════════════════
+
+-- ════════════════════════════════════════════════════════════════
+-- V23: 视频双语字幕支持 — 新增中文字幕列
+-- 原 subtitle_content 作为英文字幕，新增 subtitle_content_zh 作为中文字幕
+-- ════════════════════════════════════════════════════════════════
+
+SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'videos' AND COLUMN_NAME = 'subtitle_content_zh');
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE videos ADD COLUMN subtitle_content_zh LONGTEXT COMMENT ''中文字幕内容（SRT/VTT格式）'' AFTER subtitle_content',
+    'SELECT ''Column subtitle_content_zh already exists'' AS info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

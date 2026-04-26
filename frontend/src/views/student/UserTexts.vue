@@ -409,6 +409,7 @@
       v-model="showVideoUploadDialog"
       :title="editingVideo ? '编辑视频' : '上传视频'"
       width="min(600px, 94vw)"
+      class="custom-video-dialog"
       :close-on-click-modal="false"
       @close="resetVideoForm"
     >
@@ -449,7 +450,7 @@
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="字幕">
+        <el-form-item label="英文字幕">
           <el-upload
             class="subtitle-uploader"
             :auto-upload="false"
@@ -458,7 +459,22 @@
             accept=".vtt,.srt,.txt"
             :on-change="handleSubtitleSelect"
           >
-            <el-button>选择字幕文件</el-button>
+            <el-button>选择英文字幕</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="中文字幕">
+          <el-upload
+            class="subtitle-uploader"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept=".vtt,.srt,.txt"
+            :on-change="handleSubtitleZhSelect"
+          >
+            <el-button>选择中文字幕</el-button>
             <template #tip>
               <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
             </template>
@@ -1071,6 +1087,7 @@ const videoForm = reactive({
   coverMediaId: null,
   tags: '',
   subtitleContent: '',
+  subtitleContentZh: '',
   isPublicBool: true,
   videoUrl: '',
   coverUrl: ''
@@ -1090,12 +1107,20 @@ const handleSubtitleSelect = async (file) => {
     const text = await file.raw.text()
     videoForm.subtitleContent = text
   } catch (e) {
-    ElMessage.error('字幕文件读取失败')
+    ElMessage.error('英文字幕文件读取失败')
+  }
+}
+const handleSubtitleZhSelect = async (file) => {
+  try {
+    const text = await file.raw.text()
+    videoForm.subtitleContentZh = text
+  } catch (e) {
+    ElMessage.error('中文字幕文件读取失败')
   }
 }
 
 const resetVideoForm = () => {
-  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
+  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', subtitleContentZh: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
   selectedVideoFile = null
   selectedVideoCoverFile = null
   editingVideo.value = null
@@ -1155,6 +1180,7 @@ const handleVideoSubmit = async () => {
       coverMediaId: videoForm.coverMediaId,
       tags: videoForm.tags,
       subtitleContent: videoForm.subtitleContent || null,
+      subtitleContentZh: videoForm.subtitleContentZh || null,
       isPublic: videoForm.isPublicBool ? 1 : 0,
       videoUrl: videoForm.videoUrl,
       coverUrl: videoForm.coverUrl
@@ -1196,6 +1222,7 @@ const editVideoItem = (video) => {
     coverMediaId: video.coverMediaId,
     tags: video.tags || '',
     subtitleContent: video.subtitleContent || '',
+    subtitleContentZh: video.subtitleContentZh || '',
     isPublicBool: video.isPublic === 1,
     videoUrl: video.videoUrl || '',
     coverUrl: video.coverUrl || ''
@@ -1217,7 +1244,8 @@ const deleteVideoItem = (video) => {
 }
 
 const playVideo = (video) => {
-  router.push({ path: '/student/video-player', query: { videoId: video.id } })
+  // isOwner=true 告知 VideoPlayer 用用户端 API 加载（支持预览待审核的自己的视频）
+  router.push({ path: '/student/video-player', query: { videoId: video.id, isOwner: '1' } })
 }
 
 // 生命周期
@@ -1663,5 +1691,44 @@ onMounted(() => {
 .editor-dialog .el-dialog.is-fullscreen .text-form .markdown-editor {
   height: 100% !important;
   flex: 1;
+}
+
+/* 修复视频弹窗内上传列表内容溢出问题并允许多行完整显示 */
+.custom-video-dialog .el-form-item__content {
+  min-width: 0 !important; /* 关键修复：防止 flex 子项无限自适应文本宽度撑开弹窗 */
+}
+.custom-video-dialog .video-uploader,
+.custom-video-dialog .cover-uploader,
+.custom-video-dialog .subtitle-uploader {
+  width: 100%;
+  max-width: 100%;
+}
+.custom-video-dialog .el-upload-list {
+  width: 100%;
+}
+.custom-video-dialog .el-upload-list__item {
+  height: auto !important;
+  min-height: 32px;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+.custom-video-dialog .el-upload-list__item-info {
+  width: 100%;
+  min-width: 0 !important;
+}
+.custom-video-dialog .el-upload-list__item-name {
+  display: block !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  word-break: break-all !important;
+  line-height: 1.5 !important;
+  height: auto !important;
+  padding-right: 25px !important;
+  margin-bottom: 2px !important;
+}
+.custom-video-dialog .el-upload-list__item-file-name {
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  word-break: break-all !important;
 }
 </style>
