@@ -30,11 +30,25 @@ deploy_cleanup() {
     fi
     if [ $exit_code -ne 0 ] && [ -n "$OLD_BRANCH" ]; then
         echo "[提示] 原始分支: $OLD_BRANCH"
+        echo "[提示] 如需回退: git checkout $OLD_BRANCH"
     fi
     # 清理可能残留的 crontab 临时文件
     [ -n "$CRON_TMP" ] && rm -f "$CRON_TMP" 2>/dev/null || true
+    # 清理构建日志
+    rm -f /tmp/langhack-deploy-build-$$.log 2>/dev/null || true
 }
 trap deploy_cleanup EXIT
+
+# 捕获中断信号（Ctrl+C）并优雅退出
+trap_interrupt() {
+    echo ""
+    echo "[WARN] 收到中断信号 (Ctrl+C)，正在安全退出..."
+    echo "[INFO] 已执行的操作不会回滚，如需清理请手动执行:"
+    echo "  - 停止容器: cd $DOCKER_DIR && docker compose down"
+    echo "  - 回退代码: cd $PROJECT_ROOT && git checkout $OLD_BRANCH"
+    exit 130
+}
+trap trap_interrupt SIGINT SIGTERM
 
 # ── 参数解析 ──────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -150,9 +164,29 @@ normalize_registry_prefix() {
 
 probe_public_image() {
     local image="$1"
-    echo "  [INFO] 探测公共镜像源: docker pull $image"
-    if docker pull "$image" >/dev/null 2>&1; then
-        return 0
+    local timeout=30  # 探测超时 30 秒
+    echo "  [INFO] 探测公共镜像源: docker pull $image (超时 ${timeout}s)"
+
+    # 使用后台进程 + timeout 避免 docker pull 卡死
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout "$timeout" docker pull "$image" >/dev/null 2>&1; then
+            return 0
+        fi
+    else
+        # 无 timeout 命令时使用后台进程 + kill
+        docker pull "$image" >/dev/null 2>&1 &
+        local pull_pid=$!
+        local elapsed=0
+        while kill -0 "$pull_pid" 2>/dev/null && [ $elapsed -lt $timeout ]; do
+            sleep 2
+            elapsed=$((elapsed + 2))
+        done
+        if kill -0 "$pull_pid" 2>/dev/null; then
+            kill "$pull_pid" 2>/dev/null || true
+            wait "$pull_pid" 2>/dev/null || true
+            return 1
+        fi
+        wait "$pull_pid" 2>/dev/null && return 0 || return 1
     fi
     return 1
 }
@@ -193,9 +227,15 @@ resolve_image_registry_prefix() {
         echo "  [INFO] Docker 镜像前缀: (空，使用公共镜像)"
     else
         echo "  [INFO] Docker 镜像前缀: $RESOLVED_IMAGE_REGISTRY_PREFIX"
+        echo "  [INFO] 验证本地 registry 探测镜像..."
         if ! docker manifest inspect "${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}" >/dev/null 2>&1; then
             echo "  [ERROR] 本地 registry 缺少探测镜像: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
             echo "  [修复] 先同步镜像: bash scripts/sync-docker-images.sh --registry $local_registry"
+            echo ""
+            echo "  [提示] 如果本地 registry 不可用，可以："
+            echo "    1. 强制使用公共镜像: 在 .env 中设置 IMAGE_SOURCE_MODE=public"
+            echo "    2. 配置 Docker Hub 镜像加速器"
+            echo "    3. 使用代理访问公共镜像"
             exit 1
         fi
         echo "  [OK] 本地 registry 探测镜像可用: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
@@ -343,7 +383,26 @@ fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 echo "  当前分支: $CURRENT_BRANCH"
 
-git fetch --all --quiet 2>/dev/null || true
+# 尝试获取远程分支列表（带超时）
+FETCH_TIMEOUT=30
+FETCH_SUCCESS=false
+echo "  [INFO] 获取远程分支列表（超时 ${FETCH_TIMEOUT}s）..."
+
+if command -v timeout >/dev/null 2>&1; then
+    if timeout "$FETCH_TIMEOUT" git fetch --all --quiet 2>/dev/null; then
+        FETCH_SUCCESS=true
+    fi
+else
+    if git fetch --all --quiet 2>/dev/null; then
+        FETCH_SUCCESS=true
+    fi
+fi
+
+if [ "$FETCH_SUCCESS" = false ]; then
+    echo "  [WARN] 无法连接远程仓库（网络故障或超时），将使用本地分支列表"
+    echo "  [INFO] 离线部署模式：只能选择本地已有的分支"
+fi
+
 mapfile -t BRANCH_LIST < <({
     git branch -r --no-color 2>/dev/null | grep -v 'HEAD' | sed 's|origin/||;s|^[[:space:]]*||'
     git branch --no-color 2>/dev/null | sed 's|^\*||;s|^[[:space:]]*||'
@@ -1000,15 +1059,56 @@ if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
     fi
 fi
 
-# 始终拉取远程最新代码（无论是否切换分支）
+# 尝试拉取远程最新代码（带超时和离线降级）
 echo "[INFO] 拉取远程最新代码..."
-git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || \
-    echo "[WARN] 无法从远程拉取 $TARGET_BRANCH，使用本地版本"
+PULL_TIMEOUT=60
+PULL_SUCCESS=false
+
+if command -v timeout >/dev/null 2>&1; then
+    if timeout "$PULL_TIMEOUT" git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+        PULL_SUCCESS=true
+        echo "[OK] 远程代码拉取成功"
+    fi
+else
+    if git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+        PULL_SUCCESS=true
+        echo "[OK] 远程代码拉取成功"
+    fi
+fi
+
+if [ "$PULL_SUCCESS" = false ]; then
+    echo "[WARN] 无法从远程拉取 $TARGET_BRANCH（网络故障或超时）"
+
+    # 检查本地是否有 origin/$TARGET_BRANCH 引用
+    if git rev-parse "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
+        LOCAL_HEAD=$(git rev-parse HEAD)
+        CACHED_REMOTE=$(git rev-parse "origin/$TARGET_BRANCH")
+
+        if [ "$LOCAL_HEAD" != "$CACHED_REMOTE" ]; then
+            echo "[INFO] 检测到本地缓存的远程分支有更新，尝试合并..."
+            if git merge "origin/$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+                echo "[OK] 使用本地缓存的远程分支进行部署"
+                echo "[INFO]   本地 HEAD: ${LOCAL_HEAD:0:8}"
+                echo "[INFO]   缓存远程: ${CACHED_REMOTE:0:8}"
+            else
+                echo "[WARN] 无法快进合并缓存的远程分支，使用当前本地版本"
+            fi
+        else
+            echo "[INFO] 本地 HEAD 与缓存的远程分支一致，使用当前版本"
+        fi
+    else
+        echo "[WARN] 本地无远程分支引用，使用当前本地版本"
+    fi
+
+    echo "[INFO] 离线部署模式：使用本地代码进行部署"
+fi
 
 # 拉取 Git LFS 文件（database/*.sql 等大文件）
 if command -v git-lfs &>/dev/null || git lfs version &>/dev/null 2>&1; then
     echo "[INFO] 拉取 Git LFS 文件（database/*.sql）..."
-    git lfs pull 2>/dev/null || echo "[WARN] git lfs pull 失败，若需导入历史数据请手动执行"
+    if ! git lfs pull 2>/dev/null; then
+        echo "[WARN] git lfs pull 失败（可能网络故障），若需导入历史数据请稍后手动执行"
+    fi
 else
     echo "[WARN] git-lfs 未安装，跳过 LFS 文件拉取"
 fi
@@ -1036,12 +1136,47 @@ esac
 BUILD_ONLY=false
 case $BUILD_MODE in
     1)
-        echo "[INFO] 全量构建..."
+        echo "[INFO] 全量构建（可能需要 5-15 分钟，请耐心等待）..."
+        BUILD_LOG="/tmp/langhack-deploy-build-$$.log"
         if [ -n "$SVCS" ]; then
-            docker compose build --no-cache $SVCS
+            docker compose build --no-cache $SVCS > "$BUILD_LOG" 2>&1 &
         else
-            docker compose build --no-cache
+            docker compose build --no-cache > "$BUILD_LOG" 2>&1 &
         fi
+        BUILD_PID=$!
+
+        # 监控构建进程，每 30 秒输出心跳
+        BUILD_TIMEOUT=1800  # 30 分钟超时
+        BUILD_ELAPSED=0
+        while kill -0 "$BUILD_PID" 2>/dev/null; do
+            sleep 30
+            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
+            printf "  构建进行中... (已耗时 %dm%ds)\r" $((BUILD_ELAPSED / 60)) $((BUILD_ELAPSED % 60))
+
+            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
+                echo ""
+                echo "[ERROR] 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
+                kill "$BUILD_PID" 2>/dev/null || true
+                wait "$BUILD_PID" 2>/dev/null || true
+                echo "[ERROR] 构建日志（最后 100 行）："
+                tail -100 "$BUILD_LOG" | sed 's/^/         /'
+                rm -f "$BUILD_LOG"
+                exit 1
+            fi
+        done
+        echo ""
+
+        wait "$BUILD_PID"
+        BUILD_EXIT=$?
+        if [ $BUILD_EXIT -ne 0 ]; then
+            echo "[ERROR] 构建失败（退出码: $BUILD_EXIT）"
+            echo "[ERROR] 构建日志（最后 100 行）："
+            tail -100 "$BUILD_LOG" | sed 's/^/         /'
+            rm -f "$BUILD_LOG"
+            exit 1
+        fi
+        rm -f "$BUILD_LOG"
+        echo "[OK] 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
         ;;
     2)
         echo "[INFO] 增量构建..."

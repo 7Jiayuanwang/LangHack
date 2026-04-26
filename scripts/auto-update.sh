@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# LangHack 自动更新脚本 (v2.4)
+# LangHack 自动更新脚本 (v2.5)
 # 定时从 GitHub 拉取最新代码，检测变更后自动重新构建并部署
+#
+# v2.5 新增:
+#   - Git fetch/pull 超时保护（60s）
+#   - Docker 构建进度监控 + 超时保护（30min）
+#   - 离线更新能力（使用本地缓存的远程分支）
+#   - 增强错误诊断和恢复提示
+#   - 幂等性和原子性改进
 #
 # v2.4 新增:
 #   - 支持 UPDATE_MODE=auto|docker|local
@@ -43,6 +50,14 @@
 #   0 * * * * /path/to/LangHack/scripts/auto-update.sh >> /var/log/langhack-update.log 2>&1
 # ==============================================================================
 set -euo pipefail
+
+# ── 健壮性增强：错误处理和状态追踪 ──────────────────────
+# 全局状态变量
+SCRIPT_STATE="INIT"           # INIT -> CHECKING -> UPDATING -> BUILDING -> DEPLOYING -> SUCCESS/FAILED
+ROLLBACK_NEEDED=false
+MAINTENANCE_ACTIVE=false
+BUILD_PID=""
+CLEANUP_DONE=false
 
 # ── 配置 ──────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -971,9 +986,67 @@ rollback_to_old_version() {
 # ── 清理 ─────────────────────────────────────────────
 
 cleanup() {
+    local exit_code=$?
+
+    # 防止重复清理
+    if [ "$CLEANUP_DONE" = true ]; then
+        return 0
+    fi
+    CLEANUP_DONE=true
+
+    log "INFO: 执行清理操作（状态: $SCRIPT_STATE, 退出码: $exit_code）..."
+
+    # 清理构建进程
+    if [ -n "$BUILD_PID" ] && kill -0 "$BUILD_PID" 2>/dev/null; then
+        log "WARN: 终止残留的构建进程 (PID: $BUILD_PID)"
+        kill "$BUILD_PID" 2>/dev/null || true
+        wait "$BUILD_PID" 2>/dev/null || true
+    fi
+
+    # 清理临时文件
+    rm -f /tmp/langhack-build-$$.log 2>/dev/null || true
+
     # 保底: 无论脚本如何退出，都尝试关闭维护模式
-    disable_maintenance
-    rm -f "$LOCK_FILE"
+    if [ "$MAINTENANCE_ACTIVE" = true ]; then
+        log "WARN: 检测到维护模式未关闭，强制关闭"
+        disable_maintenance
+    fi
+
+    # 清理锁文件
+    rm -f "$LOCK_FILE" 2>/dev/null || true
+
+    # 非零退出时输出提示
+    if [ $exit_code -ne 0 ]; then
+        log "ERROR: 脚本异常退出（状态: $SCRIPT_STATE, 退出码: $exit_code）"
+        log "ERROR: 完整日志: tail -100 $LOG_FILE"
+
+        # 根据状态给出恢复建议
+        case "$SCRIPT_STATE" in
+            BUILDING)
+                log "ERROR: 构建阶段失败，旧服务应仍在运行"
+                log "ERROR: 检查构建日志: tail -100 /tmp/langhack-build-*.log"
+                ;;
+            DEPLOYING)
+                log "ERROR: 部署阶段失败，可能需要手动回滚"
+                log "ERROR: 检查容器状态: docker compose -f $COMPOSE_FILE ps"
+                log "ERROR: 查看容器日志: docker compose -f $COMPOSE_FILE logs --tail=50"
+                ;;
+            UPDATING)
+                log "ERROR: 更新阶段失败，代码可能处于不一致状态"
+                log "ERROR: 检查 git 状态: git status"
+                ;;
+        esac
+
+        # 回滚建议
+        if [ "$ROLLBACK_NEEDED" = true ] && [ -n "${PRE_PULL_COMMIT:-}" ]; then
+            log "ERROR: 建议手动回滚到上一个版本:"
+            log "ERROR:   cd $PROJECT_ROOT"
+            log "ERROR:   git checkout ${PRE_PULL_COMMIT:0:8}"
+            log "ERROR:   cd docker && docker compose up -d --force-recreate"
+        fi
+    else
+        log "INFO: 清理完成 ✓"
+    fi
 }
 
 # ══════════════════════════════════════════════════════
@@ -987,12 +1060,20 @@ if [ -f "$LOCK_FILE" ]; then
         log "SKIP: 另一个更新进程正在运行 (PID: $pid)"
         exit 0
     fi
-    log "WARN: 发现残留锁文件，清理中..."
+    log "WARN: 发现残留锁文件（进程 $pid 已不存在），清理中..."
     rm -f "$LOCK_FILE"
 fi
-echo $$ > "$LOCK_FILE"
+
+# 原子性创建锁文件（使用 noclobber 防止竞态条件）
+if ( set -o noclobber; echo $$ > "$LOCK_FILE" ) 2>/dev/null; then
+    log "INFO: 获取更新锁成功 (PID: $$)"
+else
+    log "SKIP: 无法获取更新锁，可能有并发进程"
+    exit 0
+fi
+
 trap cleanup EXIT
-trap 'log "WARN: 收到中断信号，正在安全退出..."; exit 130' SIGINT SIGTERM
+trap 'log "WARN: 收到中断信号，正在安全退出..."; SCRIPT_STATE="INTERRUPTED"; exit 130' SIGINT SIGTERM
 
 # ── 进入项目目录 ──────────────────────────────────────
 cd "$PROJECT_ROOT"
@@ -1021,13 +1102,29 @@ if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
 fi
 
 # ── 检查 Git 远程更新 ────────────────────────────────
+SCRIPT_STATE="CHECKING"
 log "INFO: 检查远程仓库更新 (branch: $BRANCH)..."
 
-# git fetch 带重试（网络断开时 set -e 会直接退出）
+# git fetch 带超时和重试（网络断开时 set -e 会直接退出）
 fetch_ok=false
 MAX_FETCH_ATTEMPTS=3
+FETCH_TIMEOUT=60  # 单次 fetch 超时时间（秒）
 for attempt in $(seq 1 $MAX_FETCH_ATTEMPTS); do
-    fetch_err=$(git fetch origin "$BRANCH" --quiet 2>&1) && { fetch_ok=true; break; }
+    log "INFO: git fetch 尝试 $attempt/$MAX_FETCH_ATTEMPTS (超时 ${FETCH_TIMEOUT}s)..."
+
+    # 使用 timeout 命令限制 git fetch 执行时间
+    if command -v timeout >/dev/null 2>&1; then
+        fetch_err=$(timeout "$FETCH_TIMEOUT" git fetch origin "$BRANCH" --quiet 2>&1) && { fetch_ok=true; break; }
+        fetch_exit=$?
+        # timeout 返回 124 表示超时
+        if [ $fetch_exit -eq 124 ]; then
+            fetch_err="git fetch 超时 (${FETCH_TIMEOUT}s)"
+        fi
+    else
+        # 无 timeout 命令时回退到原始方式
+        fetch_err=$(git fetch origin "$BRANCH" --quiet 2>&1) && { fetch_ok=true; break; }
+    fi
+
     if [ "$attempt" -lt "$MAX_FETCH_ATTEMPTS" ]; then
         log "WARN: git fetch 失败 (尝试 $attempt/$MAX_FETCH_ATTEMPTS)，10s 后重试... 错误: $fetch_err"
         sleep 10
@@ -1035,16 +1132,49 @@ for attempt in $(seq 1 $MAX_FETCH_ATTEMPTS); do
         log "WARN: git fetch 失败 (尝试 $attempt/$MAX_FETCH_ATTEMPTS)，错误: $fetch_err"
     fi
 done
+
+# fetch 失败后检查本地是否有已拉取但未应用的更新
 if [ "$fetch_ok" = false ]; then
-    log "WARN: git fetch 在 $MAX_FETCH_ATTEMPTS 次尝试后仍然失败，跳过本次更新"
+    log "WARN: git fetch 在 $MAX_FETCH_ATTEMPTS 次尝试后仍然失败"
     # 检测是否是 SSH 认证问题，给出修复建议
     if echo "$fetch_err" | grep -q "Permission denied (publickey)"; then
         log "HINT: SSH 认证失败。建议切换为 HTTPS 方式:"
         log "      git remote set-url origin https://<token>@github.com/<user>/<repo>.git"
         log "      或生成 SSH key: ssh-keygen -t ed25519 -C deploy && cat ~/.ssh/id_ed25519.pub"
+    elif echo "$fetch_err" | grep -qi "timeout\|timed out"; then
+        log "HINT: 网络超时。可能原因："
+        log "      1. GitHub 访问受限，考虑配置代理或使用镜像"
+        log "      2. DNS 解析慢，检查 /etc/resolv.conf"
+        log "      3. 防火墙阻止，检查 iptables/firewalld"
     fi
-    # 网络临时断开属于正常情况，exit 0 避免 cron 发送告警邮件
-    exit 0
+
+    # 检查本地是否有 origin/$BRANCH 引用（之前成功 fetch 过）
+    if git rev-parse "origin/$BRANCH" >/dev/null 2>&1; then
+        log "INFO: 检测到本地已有 origin/$BRANCH 引用，检查是否有未应用的更新..."
+        LOCAL_HASH=$(git rev-parse HEAD)
+        CACHED_REMOTE_HASH=$(git rev-parse "origin/$BRANCH")
+
+        if [ "$LOCAL_HASH" != "$CACHED_REMOTE_HASH" ]; then
+            log "INFO: 发现本地缓存的远程更新（上次 fetch 成功时拉取）"
+            log "INFO: 将使用本地缓存的 origin/$BRANCH 进行更新"
+            log "INFO:   本地 HEAD: ${LOCAL_HASH:0:8}"
+            log "INFO:   缓存远程: ${CACHED_REMOTE_HASH:0:8}"
+            notify "网络故障，使用本地缓存的远程分支进行更新 (${CACHED_REMOTE_HASH:0:8})"
+            # 继续执行更新流程，使用缓存的 origin/$BRANCH
+        else
+            log "INFO: 本地 HEAD 与缓存的 origin/$BRANCH 一致，无需更新"
+            SCRIPT_STATE="SUCCESS"
+            exit 0
+        fi
+    else
+        log "WARN: 本地无 origin/$BRANCH 引用（从未成功 fetch 过），无法使用缓存更新"
+        log "WARN: 跳过本次更新，等待网络恢复后重试"
+        # 网络临时断开属于正常情况，exit 0 避免 cron 发送告警邮件
+        SCRIPT_STATE="SKIPPED"
+        exit 0
+    fi
+else
+    log "INFO: git fetch 成功 ✓"
 fi
 
 LOCAL_HASH=$(git rev-parse HEAD)
@@ -1118,19 +1248,28 @@ pre_update_backup
 
 # ⑥ 拉取新代码（强制同步，清理本地修改/未跟踪文件冲突）
 log "INFO: 拉取最新代码..."
+SCRIPT_STATE="UPDATING"
+PRE_PULL_COMMIT=$(git rev-parse HEAD)
+
+# 保存本地修改（如果有）
 git stash --include-untracked 2>/dev/null || true
 git checkout --force "$BRANCH" --quiet 2>/dev/null || true
-if ! git pull origin "$BRANCH" --ff-only; then
-    # ff-only 失败时尝试 reset（应对本地历史与远程分叉的情况）
-    log "WARN: fast-forward 失败，尝试 reset 到远程版本..."
-    if git reset --hard "origin/$BRANCH" --quiet 2>/dev/null; then
-        log "INFO: 已强制同步到远程版本"
-    else
-        log "ERROR: git pull/reset 均失败，跳过本次更新"
-        notify "自动更新失败: git pull 出现冲突，需要手动处理"
-        disable_maintenance
-        exit 1
-    fi
+
+# 使用 git reset --hard 而非 git pull，确保原子性和幂等性
+if git reset --hard "origin/$BRANCH" --quiet 2>/dev/null; then
+    POST_PULL_COMMIT=$(git rev-parse HEAD)
+    log "INFO: 代码更新成功 ✓"
+    log "INFO:   更新前: ${PRE_PULL_COMMIT:0:8}"
+    log "INFO:   更新后: ${POST_PULL_COMMIT:0:8}"
+    ROLLBACK_NEEDED=true  # 从此刻起，失败需要回滚
+else
+    log "ERROR: git reset --hard 失败，可能是 Git 仓库损坏"
+    log "ERROR: 建议手动检查: git status && git fsck"
+    notify "自动更新失败: git reset 失败，仓库可能损坏"
+    ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git reset 失败，仓库可能损坏"
+    disable_maintenance
+    SCRIPT_STATE="FAILED"
+    exit 1
 fi
 
 # ⑥.5 确保 Git LFS 文件已下载（git pull 后 LFS 文件可能仍为指针）
@@ -1186,8 +1325,47 @@ if [ "$RUNTIME_MODE" = "docker" ]; then
 
         # ⑨ 构建新镜像（旧容器仍在运行）
         log "INFO: 构建新镜像... (服务: $SERVICES)"
-        if ! docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES; then
-            log "ERROR: 构建失败，回退代码"
+        log "INFO: 构建可能需要数分钟，请耐心等待..."
+        SCRIPT_STATE="BUILDING"
+
+        # 使用后台进程 + 进度监控，避免长时间无输出导致用户误以为卡死
+        BUILD_LOG="/tmp/langhack-build-$$.log"
+        docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES > "$BUILD_LOG" 2>&1 &
+        BUILD_PID=$!
+
+        # 监控构建进程，每 30 秒输出一次心跳
+        BUILD_TIMEOUT=1800  # 30 分钟超时
+        BUILD_ELAPSED=0
+        while kill -0 "$BUILD_PID" 2>/dev/null; do
+            sleep 30
+            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
+            log "INFO: 构建进行中... (已耗时 ${BUILD_ELAPSED}s)"
+
+            # 超时检测
+            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
+                log "ERROR: 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
+                kill "$BUILD_PID" 2>/dev/null || true
+                wait "$BUILD_PID" 2>/dev/null || true
+                rm -f "$BUILD_LOG"
+                git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+                disable_maintenance
+                notify "自动更新失败: Docker 构建超时，已回退代码"
+                ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建超时，已回退代码"
+                SCRIPT_STATE="FAILED"
+                exit 1
+            fi
+        done
+
+        # 等待构建进程结束并获取退出码
+        wait "$BUILD_PID"
+        BUILD_EXIT=$?
+        BUILD_PID=""  # 清空 PID，防止 cleanup 重复 kill
+
+        if [ $BUILD_EXIT -ne 0 ]; then
+            log "ERROR: 构建失败（退出码: $BUILD_EXIT），回退代码"
+            log "ERROR: 构建日志（最后 50 行）："
+            tail -50 "$BUILD_LOG" | while read -r line; do log "       $line"; done
+            rm -f "$BUILD_LOG"
             notify "自动更新失败: Docker 构建失败，正在回退代码..."
             # 构建失败 → 旧容器未受影响，只需 revert git
             git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
@@ -1195,8 +1373,12 @@ if [ "$RUNTIME_MODE" = "docker" ]; then
             disable_maintenance
             notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
             ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
+            SCRIPT_STATE="FAILED"
             exit 1
         fi
+
+        rm -f "$BUILD_LOG"
+        log "INFO: 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
 
         # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
         if [ "$RUN_MIGRATIONS" = true ]; then
@@ -1220,7 +1402,33 @@ if [ "$RUNTIME_MODE" = "docker" ]; then
 
         # ⑩.5 替换为新容器（Schema 已就绪，后端可安全启动）
         log "INFO: 启动新容器..."
-        docker compose -f "$COMPOSE_FILE" up -d $SERVICES
+        SCRIPT_STATE="DEPLOYING"
+
+        if docker compose -f "$COMPOSE_FILE" up -d $SERVICES; then
+            log "INFO: 容器启动成功 ✓"
+        else
+            log "ERROR: 容器启动失败，尝试回滚..."
+            notify "自动更新失败: 容器启动失败，正在回滚..."
+
+            # 回滚代码
+            git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
+
+            # 重建旧版本镜像并启动
+            log "INFO: 重建旧版本镜像..."
+            if docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES 2>&1 | tee -a "$LOG_FILE"; then
+                docker compose -f "$COMPOSE_FILE" up -d $SERVICES
+                notify "已回滚到 ${PRE_PULL_COMMIT:0:8}"
+                ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "容器启动失败，已回滚"
+            else
+                log "ERROR: 回滚构建失败，服务可能不可用"
+                notify "严重错误: 回滚失败，服务可能不可用，需要人工介入"
+                ops_log "CRITICAL" "${PRE_PULL_COMMIT:0:8}" "回滚失败，服务可能不可用"
+            fi
+
+            disable_maintenance
+            SCRIPT_STATE="FAILED"
+            exit 1
+        fi
 
         # ⑪ 健康检查
         if wait_for_health $HEALTH_CHECK_TIMEOUT; then
