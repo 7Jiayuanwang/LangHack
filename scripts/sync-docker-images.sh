@@ -181,12 +181,18 @@ for image in "${IMAGES[@]}"; do
     run_cmd docker tag "$image" "$target"
     run_cmd docker push "$target"
     if [ "$DRY_RUN" = false ]; then
-        docker manifest inspect "$target" >/dev/null 2>&1 || {
-            echo "[ERROR] 推送后无法从 registry 读取镜像清单: $target"
+        # 验证推送成功：检查 registry API 是否能列出该镜像
+        repo_name="${image%%:*}"
+        tag_name="${image##*:}"
+        if curl -sf "http://${REGISTRY}/v2/${repo_name}/tags/list" | grep -q "\"${tag_name}\""; then
+            echo "[OK] $target"
+        else
+            echo "[ERROR] 推送后无法从 registry 读取镜像: $target"
             exit 1
-        }
+        fi
+    else
+        echo "[OK] $target (dry-run)"
     fi
-    echo "[OK] $target"
     echo ""
 done
 
