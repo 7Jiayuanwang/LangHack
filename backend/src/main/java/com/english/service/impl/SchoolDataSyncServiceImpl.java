@@ -36,11 +36,18 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private static final Logger logger = LoggerFactory.getLogger(SchoolDataSyncServiceImpl.class);
 
-    /** 支持的数据源列表 */
+    /**
+     * 支持的数据源列表
+     *
+     * 重要：同步顺序必须遵循依赖关系，避免外键约束失败
+     * - teacher_courses 数据源 → 插入 teaching_class 表
+     * - course_schedule 依赖 teaching_class 表的 class_id
+     * 因此 teacher_courses 必须在 course_schedule 之前同步
+     */
     private static final List<String> DATA_SOURCES = List.of(
             "administrative_class", "school_course", "teaching_class",
-            "course_schedule", "course_selection", "level_exam_scores",
-            "teaching_plans", "teacher_courses", "student_schedule"
+            "teacher_courses", "course_schedule", "course_selection",
+            "level_exam_scores", "teaching_plans", "student_schedule"
     );
 
     /** 防止重入标志 */

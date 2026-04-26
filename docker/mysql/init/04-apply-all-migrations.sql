@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
 -- LangHack 合并迁移脚本（MySQL 8.0 兼容）
--- 将 Flyway V0 ~ V26 的所有迁移合并为单个幂等脚本
+-- 将 Flyway V0 ~ V30 的所有迁移合并为单个幂等脚本
 --
 -- 对应 Flyway 迁移文件（整合后 - 2026-04-21 V12 瘦身 + V20 合入 + V17-V19 重编号）:
 --   V0__base_tables.sql                     (基础表)
@@ -1880,15 +1880,8 @@ ALTER TABLE level_exam_scores MODIFY COLUMN is_passed BOOLEAN COMMENT '是否通
 -- ════════════════════════════════════════════════════════════════
 -- V23: sync_logs 分页扩展字段
 -- ════════════════════════════════════════════════════════════════
-
-ALTER TABLE sync_logs
-    ADD COLUMN pagination_complete TINYINT(1) NULL COMMENT '分页是否完整结束' AFTER operator,
-    ADD COLUMN pagination_stop_reason VARCHAR(64) NULL COMMENT '分页停止原因' AFTER pagination_complete,
-    ADD COLUMN pagination_pages_fetched INT NULL COMMENT '已拉取页数' AFTER pagination_stop_reason,
-    ADD COLUMN pagination_last_skip INT NULL COMMENT '最后一次skip值' AFTER pagination_pages_fetched,
-    ADD COLUMN pagination_page_size INT NULL COMMENT '分页pageSize' AFTER pagination_last_skip,
-    ADD COLUMN pagination_guard_hit TINYINT(1) NULL COMMENT '是否触发分页防护' AFTER pagination_page_size,
-    ADD COLUMN fetched_row_count INT NULL COMMENT '上游已拉取条数' AFTER pagination_guard_hit;
+-- V23 的列已在 V9 的 CREATE TABLE sync_logs 中定义
+-- 此迁移保留为空，确保版本号连续性
 
 -- ════════════════════════════════════════════════════════════════
 -- V24: 相似度矩阵表（Item-CF / User-CF 推荐算法核心数据）
@@ -1946,10 +1939,39 @@ CREATE TABLE IF NOT EXISTS `user_similarity_matrix_tmp` (
 -- V25: 相似度矩阵补 similar_*_id 索引（Item-CF / User-CF 双向查询优化）
 -- ════════════════════════════════════════════════════════════════
 
-ALTER TABLE `text_similarity_matrix`      ADD INDEX `idx_similar_text_id` (`similar_text_id`);
-ALTER TABLE `text_similarity_matrix_tmp`  ADD INDEX `idx_similar_text_id` (`similar_text_id`);
-ALTER TABLE `user_similarity_matrix`      ADD INDEX `idx_similar_user_id` (`similar_user_id`);
-ALTER TABLE `user_similarity_matrix_tmp`  ADD INDEX `idx_similar_user_id` (`similar_user_id`);
+-- 幂等添加索引（如果索引已存在则跳过）
+DELIMITER $$
+
+CREATE PROCEDURE add_index_if_not_exists(
+    IN p_table_name VARCHAR(64),
+    IN p_index_name VARCHAR(64),
+    IN p_column_name VARCHAR(64)
+)
+BEGIN
+    DECLARE index_exists INT DEFAULT 0;
+
+    SELECT COUNT(*) INTO index_exists
+    FROM information_schema.STATISTICS
+    WHERE table_schema = DATABASE()
+      AND table_name = p_table_name
+      AND index_name = p_index_name;
+
+    IF index_exists = 0 THEN
+        SET @sql = CONCAT('ALTER TABLE `', p_table_name, '` ADD INDEX `', p_index_name, '` (`', p_column_name, '`)');
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL add_index_if_not_exists('text_similarity_matrix', 'idx_similar_text_id', 'similar_text_id');
+CALL add_index_if_not_exists('text_similarity_matrix_tmp', 'idx_similar_text_id', 'similar_text_id');
+CALL add_index_if_not_exists('user_similarity_matrix', 'idx_similar_user_id', 'similar_user_id');
+CALL add_index_if_not_exists('user_similarity_matrix_tmp', 'idx_similar_user_id', 'similar_user_id');
+
+DROP PROCEDURE IF EXISTS add_index_if_not_exists;
 
 -- ════════════════════════════════════════════════════════════════
 -- V26: v_user_text_interaction_scores 视图（原 CROSS JOIN 版本，保持不变）
@@ -2003,3 +2025,104 @@ LEFT JOIN (
 WHERE u.role IN ('STUDENT', 'USER');
 
 -- ════════════════════════════════════════════════════════════════
+
+-- ════════════════════════════════════════════════════════════════
+-- V27: 修复学校数据表字段约束
+-- ════════════════════════════════════════════════════════════════
+-- 背景：CDSP API 不提供 student_name 等字段，但多个表定义为 NOT NULL
+-- 导致 student_schedule 和 course_selection 同步 100% 失败（各 1000 条）
+--
+-- 修复范围：
+--   - student_schedule: student_name, teacher_id, teacher_name, week_range, class_location
+--   - course_selection: student_name, teacher_id, teacher_name
+-- ════════════════════════════════════════════════════════════════
+
+-- 1. student_schedule 表字段约束修复
+ALTER TABLE student_schedule MODIFY COLUMN student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）';
+ALTER TABLE student_schedule MODIFY COLUMN teacher_id VARCHAR(50) COMMENT '教师工号（可为空）';
+ALTER TABLE student_schedule MODIFY COLUMN teacher_name VARCHAR(100) COMMENT '教师姓名（可为空）';
+ALTER TABLE student_schedule MODIFY COLUMN week_range VARCHAR(50) COMMENT '周次范围（可为空）';
+ALTER TABLE student_schedule MODIFY COLUMN class_location VARCHAR(200) COMMENT '上课地点（可为空）';
+
+-- 2. course_selection 表字段约束修复
+ALTER TABLE course_selection MODIFY COLUMN student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）';
+ALTER TABLE course_selection MODIFY COLUMN teacher_id VARCHAR(50) COMMENT '教师工号（可为空）';
+ALTER TABLE course_selection MODIFY COLUMN teacher_name VARCHAR(50) COMMENT '教师姓名（可为空）';
+
+-- ════════════════════════════════════════════════════════════════
+-- V28: 修复 course_code 字段约束
+-- ════════════════════════════════════════════════════════════════
+-- 背景：CDSP API 不稳定提供 kcbh（课程编号）字段
+-- 导致 student_schedule 和 course_selection 同步 100% 失败（各 1000/1000 条）
+-- 错误信息：
+--   - student_schedule: Field 'course_code' doesn't have a default value
+--   - course_selection: Column 'course_code' cannot be null
+-- ════════════════════════════════════════════════════════════════
+
+-- 1. student_schedule 表 course_code 字段修复
+ALTER TABLE student_schedule MODIFY COLUMN course_code VARCHAR(50) COMMENT '课程编号（CDSP 可能不提供，可为空）';
+
+-- 2. course_selection 表 course_code 字段修复（需要先删除外键约束）
+ALTER TABLE course_selection DROP FOREIGN KEY course_selection_ibfk_1;
+ALTER TABLE course_selection MODIFY COLUMN course_code VARCHAR(50) COMMENT '课程编号（CDSP 可能不提供，可为空）';
+ALTER TABLE course_selection ADD CONSTRAINT course_selection_ibfk_1 FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- ════════════════════════════════════════════════════════════════
+-- V29: 修复 course_schedule 字段映射错误
+-- ════════════════════════════════════════════════════════════════
+-- 问题：course_schedule 同步失败 903/1000 条，外键约束失败
+-- 根因：字段映射错误
+--   - 文档：course_schedule 接口返回 jxbid（教学班号）
+--   - 实际：V12 映射使用 xkkch（选课课号）
+--   - 结果：teaching_class 存储 kcbh（课程班号），course_schedule 存储 xkkch（选课课号）
+--          两者不匹配，导致外键约束失败
+-- 修复：更正 field_mappings 表中 course_schedule 的 classId 映射
+-- ════════════════════════════════════════════════════════════════
+
+UPDATE field_mappings
+SET source_field = 'jxbid',
+    remark = '教学班号（作 class_id，与 teaching_class.class_id 对应）'
+WHERE data_source = 'course_schedule'
+  AND target_field = 'classId'
+  AND source_field = 'xkkch';
+
+-- ════════════════════════════════════════════════════════════════
+-- V30: 修复 student_schedule 字段映射错误（全面修正）
+-- ════════════════════════════════════════════════════════════════
+-- 问题：student_schedule 的字段映射几乎全部错误
+-- 根因：V12 使用的字段名与 CDSP API 实际返回的字段名不匹配
+-- 修复：更正所有错误的字段映射（8个字段）
+-- ════════════════════════════════════════════════════════════════
+
+-- 1. 修复 class_id 映射
+UPDATE field_mappings SET source_field = 'jxbid', remark = '教学班号（作 class_id，与 teaching_class.class_id 对应）'
+WHERE data_source = 'student_schedule' AND target_field = 'classId' AND source_field = 'xkkh';
+
+-- 2. 添加缺失的 student_name 映射
+INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark)
+VALUES ('student_schedule', 'xm', 'studentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2, 1, '学生姓名')
+ON DUPLICATE KEY UPDATE source_field = 'xm', remark = '学生姓名';
+
+-- 3. 修复 teacher_id 映射
+UPDATE field_mappings SET source_field = 'jgh', remark = '教师工号'
+WHERE data_source = 'student_schedule' AND target_field = 'teacherId' AND source_field = 'skjszgh';
+
+-- 4. 修复 teacher_name 映射
+UPDATE field_mappings SET source_field = 'jsxm', remark = '教师姓名'
+WHERE data_source = 'student_schedule' AND target_field = 'teacherName' AND source_field = 'jsmc';
+
+-- 5. 修复 day_of_week 映射
+UPDATE field_mappings SET source_field = 'skxqj', remark = '上课星期几 (1-7)'
+WHERE data_source = 'student_schedule' AND target_field = 'dayOfWeek' AND source_field = 'xqj';
+
+-- 6. 修复 period 映射
+UPDATE field_mappings SET source_field = 'skjc', remark = '上课节次（如"1-2"）'
+WHERE data_source = 'student_schedule' AND target_field = 'period' AND source_field = 'djj';
+
+-- 7. 修复 week_range 映射
+UPDATE field_mappings SET source_field = 'zcd', remark = '周次（如"1-16周"）'
+WHERE data_source = 'student_schedule' AND target_field = 'weekRange' AND source_field = 'zcap';
+
+-- 8. 修复 class_location 映射
+UPDATE field_mappings SET source_field = 'cdmc', remark = '上课地点名称'
+WHERE data_source = 'student_schedule' AND target_field = 'classLocation' AND source_field = 'js';

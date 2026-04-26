@@ -23,6 +23,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -274,7 +275,8 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      * ({@link FieldMappingServiceImpl#applyMapping}) 通过 {@link SchoolDataFieldAlias}
      * 做中文→英文别名兜底查表，保证同步不被 key 不匹配拦截。
      * <p>
-     * 当前按端点原生参数直接请求，不再自动追加 $top/$skip，避免触发 IY1103 customQuery。
+     * <b>分页策略</b>：首次请求不带分页参数，如果响应显示存在分页（pages > 1 或 hasNext），
+     * 则使用 $top/$skip 循环拉取所有页。CDSP API 支持 OData 标准分页参数，但不支持 $filter。
      * <p>
      * <b>HTTP 方法自适应</b>：优先使用 GET 方法，如果返回 IY1103 错误则自动降级到 POST 方法。
      * 这是因为 CDSP 不同端点对 HTTP 方法的支持不一致（文档统一标注 POST&GET，但实际行为不同）。
@@ -289,23 +291,100 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 ? new LinkedHashMap<>()
                 : new LinkedHashMap<>(params);
 
-        // 优先尝试 GET 方法
+        // 首次请求：不带分页参数
+        ParsedResponse firstPage;
         try {
-            ParsedResponse parsed = fetchPage(buildUrl(fullUrl, baseParams));
-            SchoolDataFetchResult.PaginationSummary summary = buildPaginationSummary(parsed);
-            return new SchoolDataFetchResult(parsed.rows, summary);
+            firstPage = fetchPage(buildUrl(fullUrl, baseParams));
         } catch (BusinessException e) {
             // 如果是 IY1103 错误（NOT SUPPORTED: URI: customQuery），降级到 POST 方法
             if (e.getMessage() != null && e.getMessage().contains("IY1103")) {
                 logger.warn("学校数据 API GET 请求返回 IY1103 错误，降级到 POST 方法 dataSource={} url={}",
                         dataSource, fullUrl);
-                ParsedResponse parsed = fetchPagePost(fullUrl, baseParams);
-                SchoolDataFetchResult.PaginationSummary summary = buildPaginationSummary(parsed);
-                return new SchoolDataFetchResult(parsed.rows, summary);
+                firstPage = fetchPagePost(fullUrl, baseParams);
+            } else {
+                throw e;
             }
-            // 其他错误直接抛出
-            throw e;
         }
+
+        SchoolDataFetchResult.PaginationSummary firstSummary = buildPaginationSummary(firstPage);
+
+        // 如果首页已完整，直接返回
+        if (firstSummary.isComplete()) {
+            return new SchoolDataFetchResult(firstPage.rows, firstSummary);
+        }
+
+        // 检测到分页，尝试循环拉取
+        logger.info("检测到分页数据 dataSource={} firstPageRows={} 开始循环拉取", dataSource, firstPage.rows.size());
+
+        List<Map<String, Object>> allRows = new ArrayList<>(firstPage.rows);
+        int pageSize = firstPage.rows.size();
+        if (pageSize == 0) {
+            pageSize = 1000; // 默认每页 1000 条
+        }
+
+        int skip = pageSize;
+        int maxPages = 100; // 防止无限循环
+        int fetchedPages = 1;
+
+        try {
+            while (fetchedPages < maxPages) {
+                Map<String, String> pageParams = new LinkedHashMap<>(baseParams);
+                pageParams.put("$top", String.valueOf(pageSize));
+                pageParams.put("$skip", String.valueOf(skip));
+
+                ParsedResponse nextPage;
+                try {
+                    nextPage = fetchPage(buildUrl(fullUrl, pageParams));
+                } catch (BusinessException e) {
+                    if (e.getMessage() != null && e.getMessage().contains("IY1103")) {
+                        logger.warn("分页参数不支持，停止循环拉取 dataSource={} skip={}", dataSource, skip);
+                        break;
+                    }
+                    throw e;
+                }
+
+                if (nextPage.rows.isEmpty()) {
+                    logger.info("分页拉取完成（空页） dataSource={} totalPages={} totalRows={}",
+                            dataSource, fetchedPages, allRows.size());
+                    break;
+                }
+
+                allRows.addAll(nextPage.rows);
+                fetchedPages++;
+                skip += nextPage.rows.size();
+
+                logger.info("拉取第 {} 页 dataSource={} pageRows={} totalRows={}",
+                        fetchedPages, dataSource, nextPage.rows.size(), allRows.size());
+
+                // 如果本页数据少于 pageSize，说明已到最后一页
+                if (nextPage.rows.size() < pageSize) {
+                    logger.info("分页拉取完成（最后一页） dataSource={} totalPages={} totalRows=",
+                            dataSource, fetchedPages, allRows.size());
+                    break;
+                }
+            }
+
+            if (fetchedPages >= maxPages) {
+                logger.warn("分页拉取达到最大页数限制 dataSource={} maxPages={} totalRows={}",
+                        dataSource, maxPages, allRows.size());
+            }
+
+        } catch (Exception e) {
+            logger.error("分页拉取失败，返回已获取数据 dataSource={} fetchedPages={} totalRows={} err={}",
+                    dataSource, fetchedPages, allRows.size(), e.getMessage(), e);
+        }
+
+        SchoolDataFetchResult.PaginationSummary finalSummary = new SchoolDataFetchResult.PaginationSummary(
+                true,
+                "PAGINATED_COMPLETE",
+                fetchedPages,
+                skip,
+                pageSize,
+                false,
+                allRows.size()
+        );
+
+        return new SchoolDataFetchResult(allRows, finalSummary);
     }
 
     private ParsedResponse fetchPage(String url) {

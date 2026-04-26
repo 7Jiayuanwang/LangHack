@@ -245,20 +245,34 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         String classId = getStringValue(data, "classId");
         String academicYear = getStringValue(data, "academicYear");
         Integer semester = parseSchoolSemester(data, "semester");
-        if (classId != null && academicYear != null && semester != null) {
-            courseScheduleMapper.deleteByClassIdAndSemester(classId, academicYear, semester);
-            CourseSchedule entity = new CourseSchedule();
-            entity.setClassId(classId);
-            entity.setDayOfWeek(getIntegerValue(data, "dayOfWeek"));
-            entity.setPeriod(getStringValue(data, "period"));
-            entity.setWeekRange(getStringValue(data, "weekRange"));
-            entity.setClassLocation(getStringValue(data, "classLocation"));
-            entity.setAcademicYear(academicYear);
-            entity.setSemester(semester);
-            entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
-            entity.setSyncSource(getStringValue(data, "syncSource"));
-            courseScheduleMapper.insert(entity);
+        Integer dayOfWeek = getIntegerValue(data, "dayOfWeek");
+        String period = getStringValue(data, "period");
+        String weekRange = getStringValue(data, "weekRange");
+        String classLocation = getStringValue(data, "classLocation");
+
+        // 验证必填字段：classId, academicYear, semester, dayOfWeek, period, weekRange, classLocation
+        if (classId == null || academicYear == null || semester == null) {
+            logger.warn("课程安排缺少主键字段，跳过 classId={} academicYear={} semester={}", classId, academicYear, semester);
+            return;
         }
+        if (dayOfWeek == null || period == null || weekRange == null || classLocation == null) {
+            logger.warn("课程安排缺少必填字段，跳过 classId={} dayOfWeek={} period={} weekRange={} classLocation={}",
+                    classId, dayOfWeek, period, weekRange, classLocation);
+            return;
+        }
+
+        courseScheduleMapper.deleteByClassIdAndSemester(classId, academicYear, semester);
+        CourseSchedule entity = new CourseSchedule();
+        entity.setClassId(classId);
+        entity.setDayOfWeek(dayOfWeek);
+        entity.setPeriod(period);
+        entity.setWeekRange(weekRange);
+        entity.setClassLocation(classLocation);
+        entity.setAcademicYear(academicYear);
+        entity.setSemester(semester);
+        entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
+        entity.setSyncSource(getStringValue(data, "syncSource"));
+        courseScheduleMapper.insert(entity);
     }
 
     private void upsertCourseSelection(Map<String, Object> data) {
