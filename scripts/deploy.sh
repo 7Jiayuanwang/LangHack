@@ -20,10 +20,20 @@ STASHED=false
 OLD_BRANCH=""
 OLD_COMMIT=""
 CRON_TMP=""
+BUILD_PID=""
 
 # ── 信号处理 & 清理 ─────────────────────────────────
 deploy_cleanup() {
     local exit_code=$?
+
+    # 清理后台构建进程
+    if [ -n "$BUILD_PID" ] && kill -0 "$BUILD_PID" 2>/dev/null; then
+        echo ""
+        echo "[清理] 终止后台构建进程 (PID: $BUILD_PID)..."
+        kill "$BUILD_PID" 2>/dev/null || true
+        wait "$BUILD_PID" 2>/dev/null || true
+    fi
+
     if [ "$STASHED" = true ]; then
         echo ""
         echo "[提示] 部署前保存了本地修改，恢复命令: git stash pop"
@@ -44,6 +54,14 @@ trap deploy_cleanup EXIT
 trap_interrupt() {
     echo ""
     echo "[WARN] 收到中断信号 (Ctrl+C)，正在安全退出..."
+
+    # 立即终止后台构建进程
+    if [ -n "$BUILD_PID" ] && kill -0 "$BUILD_PID" 2>/dev/null; then
+        echo "[清理] 终止后台构建进程 (PID: $BUILD_PID)..."
+        kill "$BUILD_PID" 2>/dev/null || true
+        wait "$BUILD_PID" 2>/dev/null || true
+    fi
+
     echo "[INFO] 已执行的操作不会回滚，如需清理请手动执行:"
     echo "  - 停止容器: cd $DOCKER_DIR && docker compose down"
     echo "  - 回退代码: cd $PROJECT_ROOT && git checkout $OLD_BRANCH"
@@ -1320,6 +1338,26 @@ while [ $elapsed -lt $timeout ]; do
     printf "  等待中... %ds (healthy: %d/%d)\r" "$elapsed" "$healthy" "$expected_healthy"
 done
 echo ""
+
+# 容器健康检查通过后，验证后端 API 可用性
+if [ "$deploy_ok" = true ]; then
+    echo "[INFO] 验证后端 API 可用性..."
+    api_wait=0
+    api_ok=false
+    while [ $api_wait -lt 60 ]; do
+        if curl -sf "http://localhost:${PORT_BACKEND:-8080}/api/health" > /dev/null 2>&1; then
+            echo "[OK] 后端 API 健康检查通过"
+            api_ok=true
+            break
+        fi
+        sleep 3
+        api_wait=$((api_wait + 3))
+    done
+    if [ "$api_ok" = false ]; then
+        echo "[WARN] 后端 API 健康检查超时（60s），但容器状态正常"
+        echo "[WARN] 可能原因：应用启动慢、端口映射错误、或 /api/health 端点不可用"
+    fi
+fi
 
 if [ "$deploy_ok" = false ]; then
     if [ "$fail_reason" != "unhealthy" ]; then
