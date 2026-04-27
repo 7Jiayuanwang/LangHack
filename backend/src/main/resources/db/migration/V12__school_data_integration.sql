@@ -190,44 +190,72 @@ DELETE FROM field_mappings WHERE data_source IN (
 );
 
 -- 1. administrative_class (cdsp_1710949911983374368 / 行政班基本信息)
--- PDF fields (UPPERCASE): XZBH, BJMC, XSLB, SSXYBM, SSXYMC, SSNJ,
---                         BZRGH, BZRXM, ZY, JBNY
+-- PDF fields (UPPERCASE): XZBH, BJMC, XSLB, SSXYBM, SSXYMC, SSNJ, BZRGH, BZRXM, ZY, JBNY
+-- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('administrative_class', 'XZBH',   'classCode',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号'),
-('administrative_class', 'BJMC',   'className',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '班级名称'),
-('administrative_class', 'XSLB',   'classType',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '学生类别'),
-('administrative_class', 'SSXYBM', 'collegeCode',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4,  1, '所属学院编码'),
-('administrative_class', 'SSXYMC', 'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '所属学院名称'),
-('administrative_class', 'SSNJ',   'grade',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '所属年级'),
-('administrative_class', 'BZRGH',  'headTeacherCode',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '班主任工号'),
-('administrative_class', 'BZRXM',  'headTeacherName',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '班主任姓名'),
-('administrative_class', 'ZY',     'majorName',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '专业名称'),
-('administrative_class', 'JBNY',   'establishDate',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 10, 1, '建班年月（转 LocalDate）');
+('administrative_class', 'XZBH',         'classCode',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号（英文缩写）'),
+('administrative_class', '行政班编号',   'classCode',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号（中文）'),
+('administrative_class', 'BJMC',         'className',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '班级名称（英文缩写）'),
+('administrative_class', '班级名称',     'className',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '班级名称（中文）'),
+('administrative_class', 'XSLB',         'classType',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '学生类别（英文缩写）'),
+('administrative_class', '学生类别',     'classType',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '学生类别（中文）'),
+('administrative_class', 'SSXYBM',       'collegeCode',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4,  1, '所属学院编码（英文缩写）'),
+('administrative_class', '所属学院编码', 'collegeCode',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4,  1, '所属学院编码（中文）'),
+('administrative_class', 'SSXYMC',       'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '所属学院名称（英文缩写）'),
+('administrative_class', '所属学院名称', 'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '所属学院名称（中文）'),
+('administrative_class', 'SSNJ',         'grade',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '所属年级（英文缩写）'),
+('administrative_class', '所属年级',     'grade',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '所属年级（中文）'),
+('administrative_class', 'BZRGH',        'headTeacherCode',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '班主任工号（英文缩写）'),
+('administrative_class', '班主任工号',   'headTeacherCode',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '班主任工号（中文）'),
+('administrative_class', 'BZRXM',        'headTeacherName',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '班主任姓名（英文缩写）'),
+('administrative_class', '班主任姓名',   'headTeacherName',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '班主任姓名（中文）'),
+('administrative_class', 'ZY',           'majorName',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '专业名称（英文缩写）'),
+('administrative_class', '专业名称',     'majorName',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '专业名称（中文）'),
+('administrative_class', 'JBNY',         'establishDate',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 10, 1, '建班年月（英文缩写）'),
+('administrative_class', '建班年月',     'establishDate',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 10, 1, '建班年月（中文）');
 
 -- 2. school_course (cdsp_1715290945064353805 / 课程基本信息)
 -- PDF fields (lowercase): kcxs, kcdm, kcxf, kcywmc, kcjj, kslx, kkyx, kcmc
+-- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('school_course', 'kcdm',   'courseCode',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码'),
-('school_course', 'kcmc',   'courseName',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称'),
-('school_course', 'kcywmc', 'courseNameEn',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称'),
-('school_course', 'kcxf',   'credits',          'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分'),
-('school_course', 'kcxs',   'totalHours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时'),
-('school_course', 'kcjj',   'courseIntro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介'),
-('school_course', 'kslx',   'assessmentMethod', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型'),
-('school_course', 'kkyx',   'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系');
+('school_course', 'kcdm',       'courseCode',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码（英文缩写）'),
+('school_course', '课程代码',   'courseCode',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码（中文）'),
+('school_course', 'kcmc',       'courseName',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（英文缩写）'),
+('school_course', '课程名称',   'courseName',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（中文）'),
+('school_course', 'kcywmc',     'courseNameEn',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称（英文缩写）'),
+('school_course', '课程英文名称', 'courseNameEn',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称（中文）'),
+('school_course', 'kcxf',       'credits',          'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分（英文缩写）'),
+('school_course', '课程学分',   'credits',          'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分（中文）'),
+('school_course', 'kcxs',       'totalHours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时（英文缩写）'),
+('school_course', '课程学时',   'totalHours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时（中文）'),
+('school_course', 'kcjj',       'courseIntro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介（英文缩写）'),
+('school_course', '课程简介',   'courseIntro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介（中文）'),
+('school_course', 'kslx',       'assessmentMethod', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型（英文缩写）'),
+('school_course', '考试类型',   'assessmentMethod', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型（中文）'),
+('school_course', 'kkyx',       'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（英文缩写）'),
+('school_course', '开课院系',   'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（中文）');
 
 -- 3. teaching_class (cdsp_1721804030860152850 / 本专科生课程信息)
 -- 此端点实际返回课程信息（非教学班），代码已路由到 upsertSchoolCourse
 -- PDF fields (UPPERCASE): KCXS, KCXF, KKYX, KCJJ, KCYWMC, KCMC, KCH, KSLX
+-- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('teaching_class', 'KCH',    'courseCode',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（作课程代码）'),
-('teaching_class', 'KCMC',   'courseName',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称'),
-('teaching_class', 'KCYWMC', 'courseNameEn',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称'),
-('teaching_class', 'KCXF',   'credits',          'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分'),
-('teaching_class', 'KCXS',   'totalHours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时'),
-('teaching_class', 'KCJJ',   'courseIntro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介'),
-('teaching_class', 'KSLX',   'assessmentMethod', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型'),
-('teaching_class', 'KKYX',   'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系');
+('teaching_class', 'KCH',          'courseCode',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（英文缩写）'),
+('teaching_class', '课程号',       'courseCode',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（中文）'),
+('teaching_class', 'KCMC',         'courseName',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（英文缩写）'),
+('teaching_class', '课程名称',     'courseName',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（中文）'),
+('teaching_class', 'KCYWMC',       'courseNameEn',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称（英文缩写）'),
+('teaching_class', '课程英文名称', 'courseNameEn',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称（中文）'),
+('teaching_class', 'KCXF',         'credits',          'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分（英文缩写）'),
+('teaching_class', '课程学分',     'credits',          'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分（中文）'),
+('teaching_class', 'KCXS',         'totalHours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时（英文缩写）'),
+('teaching_class', '课程学时',     'totalHours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时（中文）'),
+('teaching_class', 'KCJJ',         'courseIntro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介（英文缩写）'),
+('teaching_class', '课程简介',     'courseIntro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介（中文）'),
+('teaching_class', 'KSLX',         'assessmentMethod', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型（英文缩写）'),
+('teaching_class', '考试类型',     'assessmentMethod', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型（中文）'),
+('teaching_class', 'KKYX',         'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（英文缩写）'),
+('teaching_class', '开课院系',     'collegeName',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（中文）');
 
 -- 4. course_schedule (cdsp_1715290377801515044 / 课程安排信息)
 -- PDF fields (lowercase): xkkch, xn, xq, skxqj, skjc, kczc, skdd
@@ -299,16 +327,30 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- PDF fields (lowercase): zcdm, skjszgh, jsmc, lsxykh, kcmc, js, skcd, djj, xqj,
 --   xkkh, xh, xq, xn, zcap, kcbh
 -- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
+-- 注意：CDSP API 实际返回中文字段名（非英文缩写），需同时支持两种格式
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('student_schedule', 'xh',      'studentId',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号'),
-('student_schedule', 'xkkh',    'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '选课课号（作 class_id）'),
-('student_schedule', 'kcbh',    'courseCode',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3,  1, '课程编号'),
-('student_schedule', 'kcmc',    'courseName',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4,  1, '课程名称'),
-('student_schedule', 'skjszgh', 'teacherId',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '上课教师职工号'),
-('student_schedule', 'jsmc',    'teacherName',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '教师名称'),
-('student_schedule', 'xqj',     'dayOfWeek',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7,  1, '星期几 1-7'),
-('student_schedule', 'djj',     'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '第几节'),
-('student_schedule', 'zcap',    'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '周次安排（如 "1-9"）'),
-('student_schedule', 'js',      'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室'),
-('student_schedule', 'xn',      'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"）'),
-('student_schedule', 'xq',      'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"，service 层转 Integer');
+('student_schedule', '学号',           'studentId',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号（中文字段名）'),
+('student_schedule', 'xh',            'studentId',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号（英文缩写）'),
+('student_schedule', '选课课号',       'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '选课课号（作 class_id，中文字段名）'),
+('student_schedule', 'xkkh',          'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '选课课号（作 class_id，英文缩写）'),
+('student_schedule', '课程班号',       'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '课程班号（作 class_id，中文字段名）'),
+('student_schedule', '课程编号',       'courseCode',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '课程编号（中文字段名，非必填）'),
+('student_schedule', 'kcbh',          'courseCode',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '课程编号（英文缩写，非必填）'),
+('student_schedule', '课程名称',       'courseName',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4,  1, '课程名称（中文字段名）'),
+('student_schedule', 'kcmc',          'courseName',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4,  1, '课程名称（英文缩写）'),
+('student_schedule', '上课教师职工号', 'teacherId',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '上课教师职工号（中文字段名）'),
+('student_schedule', 'skjszgh',       'teacherId',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '上课教师职工号（英文缩写）'),
+('student_schedule', '教师名称',       'teacherName',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '教师名称（中文字段名）'),
+('student_schedule', 'jsmc',          'teacherName',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '教师名称（英文缩写）'),
+('student_schedule', '星期几',         'dayOfWeek',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7,  1, '星期几 1-7（中文字段名）'),
+('student_schedule', 'xqj',           'dayOfWeek',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7,  1, '星期几 1-7（英文缩写）'),
+('student_schedule', '第几节',         'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '第几节（中文字段名）'),
+('student_schedule', 'djj',           'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '第几节（英文缩写）'),
+('student_schedule', '周次安排',       'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '周次安排（如 "1-9"，中文字段名）'),
+('student_schedule', 'zcap',          'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '周次安排（如 "1-9"，英文缩写）'),
+('student_schedule', '教室',           'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室（中文字段名）'),
+('student_schedule', 'js',            'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室（英文缩写）'),
+('student_schedule', '学年',           'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"，中文字段名）'),
+('student_schedule', 'xn',            'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"，英文缩写）'),
+('student_schedule', '学期',           'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"，service 层转 Integer（中文字段名）'),
+('student_schedule', 'xq',            'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"，service 层转 Integer（英文缩写）');

@@ -275,8 +275,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
      * ({@link FieldMappingServiceImpl#applyMapping}) 通过 {@link SchoolDataFieldAlias}
      * 做中文→英文别名兜底查表，保证同步不被 key 不匹配拦截。
      * <p>
-     * <b>分页策略</b>：首次请求不带分页参数，如果响应显示存在分页（pages > 1 或 hasNext），
-     * 则使用 $top/$skip 循环拉取所有页。CDSP API 支持 OData 标准分页参数，但不支持 $filter。
+     * <b>分页策略</b>：
+     * 1. 首次请求不带分页参数
+     * 2. 如果响应显示存在分页（pages > 1 或 hasNext）或首页数据量 >= 1000，则循环拉取
+     * 3. 使用 $top/$skip 参数（GET）或表单参数（POST）进行分页
+     * 4. 直到返回空页或数据量 < pageSize 为止
      * <p>
      * <b>HTTP 方法自适应</b>：优先使用 GET 方法，如果返回 IY1103 错误则自动降级到 POST 方法。
      * 这是因为 CDSP 不同端点对 HTTP 方法的支持不一致（文档统一标注 POST&GET，但实际行为不同）。
@@ -293,6 +296,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
         // 首次请求：不带分页参数
         ParsedResponse firstPage;
+        boolean usePostMethod = false;
         try {
             firstPage = fetchPage(buildUrl(fullUrl, baseParams));
         } catch (BusinessException e) {
@@ -301,6 +305,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 logger.warn("学校数据 API GET 请求返回 IY1103 错误，降级到 POST 方法 dataSource={} url={}",
                         dataSource, fullUrl);
                 firstPage = fetchPagePost(fullUrl, baseParams);
+                usePostMethod = true;
             } else {
                 throw e;
             }
@@ -308,13 +313,22 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
         SchoolDataFetchResult.PaginationSummary firstSummary = buildPaginationSummary(firstPage);
 
-        // 如果首页已完整，直接返回
-        if (firstSummary.isComplete()) {
+        // 启发式分页检测：如果首页数据量 >= 1000，大概率还有更多数据
+        boolean likelyHasMore = firstPage.rows.size() >= 1000;
+
+        // 如果首页已完整且数据量 < 1000，直接返回
+        if (firstSummary.isComplete() && !likelyHasMore) {
             return new SchoolDataFetchResult(firstPage.rows, firstSummary);
         }
 
-        // 检测到分页，尝试循环拉取
-        logger.info("检测到分页数据 dataSource={} firstPageRows={} 开始循环拉取", dataSource, firstPage.rows.size());
+        // 检测到分页或数据量达到阈值，尝试循环拉取
+        if (likelyHasMore) {
+            logger.info("检测到大量数据（>= 1000 条），启动分页拉取 dataSource={} firstPageRows={}",
+                    dataSource, firstPage.rows.size());
+        } else {
+            logger.info("检测到分页标志，启动分页拉取 dataSource={} firstPageRows={}",
+                    dataSource, firstPage.rows.size());
+        }
 
         List<Map<String, Object>> allRows = new ArrayList<>(firstPage.rows);
         int pageSize = firstPage.rows.size();
@@ -334,13 +348,30 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
                 ParsedResponse nextPage;
                 try {
-                    nextPage = fetchPage(buildUrl(fullUrl, pageParams));
+                    if (usePostMethod) {
+                        nextPage = fetchPagePost(fullUrl, pageParams);
+                    } else {
+                        nextPage = fetchPage(buildUrl(fullUrl, pageParams));
+                    }
                 } catch (BusinessException e) {
                     if (e.getMessage() != null && e.getMessage().contains("IY1103")) {
-                        logger.warn("分页参数不支持，停止循环拉取 dataSource={} skip={}", dataSource, skip);
-                        break;
+                        // 如果 GET 分页失败，尝试切换到 POST
+                        if (!usePostMethod) {
+                            logger.warn("分页参数 GET 不支持，切换到 POST 方法 dataSource={} skip={}", dataSource, skip);
+                            usePostMethod = true;
+                            try {
+                                nextPage = fetchPagePost(fullUrl, pageParams);
+                            } catch (BusinessException e2) {
+                                logger.warn("POST 分页也不支持，停止循环拉取 dataSource={} skip={}", dataSource, skip);
+                                break;
+                            }
+                        } else {
+                            logger.warn("POST 分页参数不支持，停止循环拉取 dataSource={} skip={}", dataSource, skip);
+                            break;
+                        }
+                    } else {
+                        throw e;
                     }
-                    throw e;
                 }
 
                 if (nextPage.rows.isEmpty()) {
@@ -358,7 +389,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
                 // 如果本页数据少于 pageSize，说明已到最后一页
                 if (nextPage.rows.size() < pageSize) {
-                    logger.info("分页拉取完成（最后一页） dataSource={} totalPages={} totalRows=",
+                    logger.info("分页拉取完成（最后一页） dataSource={} totalPages={} totalRows={}",
                             dataSource, fetchedPages, allRows.size());
                     break;
                 }
