@@ -348,30 +348,18 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
                 ParsedResponse nextPage;
                 try {
+                    // ✅ 修复：始终使用 GET 方法，参数放在 URL 查询字符串中（符合 PDF 文档规范）
+                    // 之前的 POST 降级逻辑是错误的，IY1103 错误是因为 buildUrl 对 $top/$skip 的 key 进行了编码
                     if (usePostMethod) {
                         nextPage = fetchPagePost(fullUrl, pageParams);
                     } else {
                         nextPage = fetchPage(buildUrl(fullUrl, pageParams));
                     }
                 } catch (BusinessException e) {
-                    if (e.getMessage() != null && e.getMessage().contains("IY1103")) {
-                        // 如果 GET 分页失败，尝试切换到 POST
-                        if (!usePostMethod) {
-                            logger.warn("分页参数 GET 不支持，切换到 POST 方法 dataSource={} skip={}", dataSource, skip);
-                            usePostMethod = true;
-                            try {
-                                nextPage = fetchPagePost(fullUrl, pageParams);
-                            } catch (BusinessException e2) {
-                                logger.warn("POST 分页也不支持，停止循环拉取 dataSource={} skip={}", dataSource, skip);
-                                break;
-                            }
-                        } else {
-                            logger.warn("POST 分页参数不支持，停止循环拉取 dataSource={} skip={}", dataSource, skip);
-                            break;
-                        }
-                    } else {
-                        throw e;
-                    }
+                    // 如果分页失败，记录错误并停止循环
+                    logger.warn("分页拉取失败，停止循环 dataSource={} skip={} error={}",
+                            dataSource, skip, e.getMessage());
+                    break;
                 }
 
                 if (nextPage.rows.isEmpty()) {
@@ -546,7 +534,8 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
 
     /**
      * Build full URL with query parameters.
-     * 对 key 和 value 做 URL 编码，防止含 &/=/空格/中文的值破坏 URL 结构。
+     * ⚠️ 关键修复：参数 key 不编码（保留 $ 等 OData 特殊字符），只对 value 编码。
+     * 原因：URLEncoder.encode("$top") → "%24top"，CDSP API 无法识别，返回 IY1103 错误。
      */
     private String buildUrl(String fullUrl, Map<String, String> params) {
         StringBuilder url = new StringBuilder(fullUrl);
@@ -555,7 +544,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             url.append("?");
             params.forEach((key, value) -> {
                 if (value != null && !value.isEmpty()) {
-                    url.append(URLEncoder.encode(key, StandardCharsets.UTF_8))
+                    url.append(key)  // ✅ key 不编码，保留 $top/$skip 等 OData 参数
                        .append("=")
                        .append(URLEncoder.encode(value, StandardCharsets.UTF_8))
                        .append("&");
