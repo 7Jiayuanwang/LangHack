@@ -69,6 +69,7 @@
       title="词汇详情"
       width="min(350px, 92vw)"
       class="word-dialog"
+      align-center
       :before-close="handleDialogClose"
     >
       <div class="word-content" v-if="selectedWordInfo">
@@ -664,6 +665,30 @@ onBeforeUnmount(() => {
 })
 </script>
 
+<style>
+/* 全局弹窗样式 - 不受 scoped 限制 */
+.word-dialog.el-dialog,
+.word-dialog.el-dialog__wrapper {
+  margin: 0 !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 85% !important;
+  max-width: 320px !important;
+  max-height: 60vh;
+}
+
+@media (max-width: 480px) {
+  .word-dialog.el-dialog,
+  .word-dialog.el-dialog__wrapper {
+    width: 90% !important;
+    max-width: 300px !important;
+    max-height: 50vh;
+  }
+}
+</style>
+
 <style scoped>
 .interactive-text {
   font-family: 'Georgia', serif;
@@ -842,11 +867,8 @@ onBeforeUnmount(() => {
     font-size: 11px;
   }
 
-  .word-dialog :deep(.el-dialog) {
-    width: 85% !important;
-    max-width: 320px !important;
-    margin: 15vh auto;
-    max-height: 60vh;
+  .pronunciation {
+    font-size: 11px;
   }
 
   .word-dialog :deep(.el-dialog__body) {
@@ -903,11 +925,8 @@ onBeforeUnmount(() => {
     font-size: 10px;
   }
 
-  .word-dialog :deep(.el-dialog) {
-    width: 90% !important;
-    max-width: 300px !important;
-    margin: 20vh auto;
-    max-height: 50vh;
+  .pronunciation {
+    font-size: 10px;
   }
 
   .word-dialog :deep(.el-dialog__body) {

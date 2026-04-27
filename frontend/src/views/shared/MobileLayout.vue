@@ -139,6 +139,7 @@ import {
   Upload, Document, House,
   User, EditPen, Setting,
   DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
+  VideoPlay,
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -224,6 +225,7 @@ const MORE_ITEMS = {
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
     { path: '/admin/texts',          label: '课文管理', icon: Document, featureKey: 'admin.texts' },
+    { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'admin.videos' },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
   ],

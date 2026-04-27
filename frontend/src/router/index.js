@@ -114,6 +114,12 @@ const routes = [
         meta: { title: "课文预览", roles: ["ADMIN"], featureKey: "admin.texts" },
       },
       {
+        path: "videos",
+        name: "AdminVideos",
+        component: () => import("@/views/admin/Videos.vue"),
+        meta: { title: "视频管理", roles: ["ADMIN"] },
+      },
+      {
         path: "sso-pending",
         name: "AdminSsoPending",
         component: () => import("@/views/admin/SsoPendingApprovals.vue"),
@@ -282,6 +288,18 @@ const routes = [
         name: "StudentAiVideo",
         component: () => import("@/views/student/VideoSubtitlePlayer.vue"),
         meta: { title: "AI视频字幕", roles: ["STUDENT", "USER"], featureKey: "page_ai_video" },
+      },
+      {
+        path: "videos",
+        name: "StudentVideos",
+        component: () => import("@/views/student/Videos.vue"),
+        meta: { title: "视频", roles: ["STUDENT", "USER"] },
+      },
+      {
+        path: "video-player",
+        name: "StudentVideoPlayer",
+        component: () => import("@/views/student/VideoPlayer.vue"),
+        meta: { title: "视频播放", roles: ["STUDENT", "USER"] },
       },
       {
         path: "user-texts",

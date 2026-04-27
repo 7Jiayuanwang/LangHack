@@ -7,6 +7,8 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.http.converter.HttpMessageConverter;
+import java.util.List;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,7 +41,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/admin/**", "/api/ops/**");
     }
 
-    @Override
     public void addViewControllers(ViewControllerRegistry registry) {
         // 前端路由回退到 index.html（SPA 支持）
         registry.addViewController("/").setViewName("forward:/index.html");
@@ -48,6 +49,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addViewController("/student").setViewName("forward:/index.html");
         registry.addViewController("/student/**").setViewName("forward:/index.html");
         registry.addViewController("/login").setViewName("forward:/index.html");
+    }
+
+    @Override
+    public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
     }
 
     @Override

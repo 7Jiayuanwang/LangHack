@@ -20,7 +20,7 @@ server:
     encoding:
       charset: UTF-8
       enabled: true
-      force: true
+      force: false
   tomcat:
     redirect-context-root: false
     remoteip:
@@ -33,7 +33,9 @@ server:
       min-spare: 50
     accept-count: 200
     max-connections: 8192
-    connection-timeout: 20000
+    connection-timeout: 600000
+    max-swallow-size: -1
+    max-http-post-size: -1
 
 spring:
   application:
@@ -41,8 +43,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 100MB
-      max-request-size: 100MB
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:512MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:512MB}
 
   datasource:
     master:
@@ -62,7 +64,7 @@ spring:
       max-lifetime: 1800000
       keepalive-time: 300000
       auto-commit: true
-      leak-detection-threshold: 60000
+      leak-detection-threshold: 300000
       # Connection pool security: enforce SSL in production
       ssl-mode: ${DB_SSL_MODE:}
     slave:
@@ -81,7 +83,7 @@ spring:
       keepalive-time: 300000
       auto-commit: true
       read-only: true
-      leak-detection-threshold: 60000
+      leak-detection-threshold: 300000
 
   redis:
     host: ${REDIS_HOST:localhost}
@@ -120,8 +122,9 @@ spring:
 
 media:
   upload:
-    max-image-size: 10485760   # 10 MB (bytes)
-    max-video-size: 104857600  # 100 MB (bytes)
+    max-image-size: ${MEDIA_UPLOAD_MAX_IMAGE_SIZE:10485760}   # 默认 10 MB
+    max-video-size: ${MEDIA_UPLOAD_MAX_VIDEO_SIZE:536870912}  # 默认 512 MB
+    storage-path: ${MEDIA_UPLOAD_STORAGE_PATH:/app/uploads}   # 视频文件存储路径
 
 recommendation:
   weight:

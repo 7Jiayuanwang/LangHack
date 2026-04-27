@@ -12,6 +12,10 @@
           <el-icon><Upload /></el-icon>
           上传课文
         </el-button>
+        <el-button type="warning" @click="showVideoUploadDialog = true">
+          <el-icon><VideoPlay /></el-icon>
+          上传视频
+        </el-button>
         <!-- 隐藏的文件选择器 -->
         <input type="file" ref="mdFileInputRef" multiple accept=".md,image/*" style="display: none" @change="handleMdFileChange" />
       </div>
@@ -53,62 +57,66 @@
       </el-row>
     </el-card>
 
-    <!-- 课文列表 -->
+    <!-- 内容列表（课文 + 视频混合） -->
     <el-card class="content-card">
-      <div v-if="loading" class="loading-container">
+      <div v-if="loading && videoLoading" class="loading-container">
         <el-skeleton :rows="3" animated />
       </div>
 
-      <div v-else-if="myTexts.length === 0" class="empty-container">
+      <div v-else-if="allItems.length === 0" class="empty-container">
         <el-empty description="暂无上传内容" />
-        <el-button type="primary" @click="showUploadDialog = true" style="margin-top: 20px">
-          立即上传
-        </el-button>
+        <div style="margin-top: 20px; display: flex; gap: 12px;">
+          <el-button type="primary" @click="showUploadDialog = true">上传课文</el-button>
+          <el-button type="warning" @click="showVideoUploadDialog = true">上传视频</el-button>
+        </div>
       </div>
 
       <div v-else class="text-grid">
         <div
-          v-for="text in myTexts"
-          :key="text.id"
+          v-for="item in allItems"
+          :key="item._type + '-' + item.id"
           class="text-item"
-          @click="studyText(text)"
+          :class="{ 'video-item': item._type === 'video' }"
+          @click="handleItemClick(item)"
         >
           <div class="text-header">
-            <h3 class="text-title">{{ text.title }}</h3>
+            <h3 class="text-title">
+              <el-icon v-if="item._type === 'video'" style="color: #e6a23c; margin-right: 4px"><VideoPlay /></el-icon>
+              {{ item.title }}
+            </h3>
             <div class="text-meta">
-              <el-tag :type="getDifficultyType(text.difficulty)" size="small">
-                {{ getDifficultyText(text.difficulty) }}
+              <el-tag v-if="item._type === 'video'" type="warning" size="small">视频</el-tag>
+              <el-tag v-else :type="getDifficultyType(item.difficulty)" size="small">
+                {{ getDifficultyText(item.difficulty) }}
               </el-tag>
-              <el-tag v-if="text.tags" size="small" type="info">
-                {{ text.tags }}
+              <el-tag v-if="item.tags" size="small" type="info">
+                {{ item.tags.split(',')[0] }}
               </el-tag>
             </div>
           </div>
 
           <div class="text-content">
-            <p>{{ getContentPreview(text.contentType === 'MARKDOWN' ? text.markdownContent : text.content) }}</p>
+            <p>{{ getContentPreview(item._type === 'video' ? item.description : (item.contentType === 'MARKDOWN' ? item.markdownContent : item.content)) }}</p>
           </div>
 
           <div class="text-footer">
             <div class="text-stats">
-              <span><el-icon><View /></el-icon> {{ text.viewCount || 0 }}</span>
-              <span><el-icon><Star /></el-icon> {{ text.likeCount || 0 }}</span>
+              <span><el-icon><View /></el-icon> {{ item.viewCount || 0 }}</span>
+              <span><el-icon><Star /></el-icon> {{ item.likeCount || 0 }}</span>
             </div>
 
             <div class="text-actions">
-              <el-button size="small" @click.stop="editText(text)">
-                <el-icon><Edit /></el-icon>
-                编辑
+              <el-button size="small" @click.stop="item._type === 'video' ? editVideoItem(item) : editText(item)">
+                <el-icon><Edit /></el-icon> 编辑
               </el-button>
-              <el-button size="small" type="danger" @click.stop="deleteText(text)">
-                <el-icon><Delete /></el-icon>
-                删除
+              <el-button size="small" type="danger" @click.stop="item._type === 'video' ? deleteVideoItem(item) : deleteText(item)">
+                <el-icon><Delete /></el-icon> 删除
               </el-button>
             </div>
           </div>
 
           <div class="text-time">
-            {{ formatDate(text.createdAt) }}
+            {{ formatDate(item._type === 'video' ? item.createdTime : item.createdAt) }}
           </div>
         </div>
       </div>
@@ -395,6 +403,99 @@
         <el-button type="primary" @click="closeImportDialog">确定并继续编辑</el-button>
       </template>
     </el-dialog>
+
+    <!-- 视频上传对话框 -->
+    <el-dialog
+      v-model="showVideoUploadDialog"
+      :title="editingVideo ? '编辑视频' : '上传视频'"
+      width="min(600px, 94vw)"
+      class="custom-video-dialog"
+      :close-on-click-modal="false"
+      @close="resetVideoForm"
+    >
+      <el-form ref="videoFormRef" :model="videoForm" :rules="videoFormRules" label-width="80px">
+        <el-form-item label="标题" prop="title">
+          <el-input v-model="videoForm.title" placeholder="请输入视频标题" maxlength="200" show-word-limit />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="videoForm.description" type="textarea" :rows="3" placeholder="请输入视频描述" />
+        </el-form-item>
+        <el-form-item label="视频文件" v-if="!editingVideo">
+          <el-upload
+            class="video-uploader"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept="video/mp4,video/webm,video/ogg"
+            :on-change="handleVideoFileSelect"
+          >
+            <el-button type="primary">选择视频文件</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 MP4/WebM/OGG，最大 512MB</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="封面图">
+          <el-upload
+            class="cover-uploader"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept="image/jpeg,image/png,image/webp"
+            :on-change="handleVideoCoverSelect"
+          >
+            <el-button>选择封面图</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 JPG/PNG/WebP，最大 10MB</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="英文字幕">
+          <el-upload
+            class="subtitle-uploader"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept=".vtt,.srt,.txt"
+            :on-change="handleSubtitleSelect"
+          >
+            <el-button>选择英文字幕</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="中文字幕">
+          <el-upload
+            class="subtitle-uploader"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept=".vtt,.srt,.txt"
+            :on-change="handleSubtitleZhSelect"
+          >
+            <el-button>选择中文字幕</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="标签">
+          <el-input v-model="videoForm.tags" placeholder="多个标签用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="公开">
+          <el-switch v-model="videoForm.isPublicBool" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showVideoUploadDialog = false">取消</el-button>
+        <el-button type="primary" :loading="videoSubmitLoading" @click="handleVideoSubmit">
+          {{ editingVideo ? '保存修改' : '确认上传' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -410,6 +511,8 @@ import MarkdownEditor from '@/components/MarkdownEditor.vue'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { isCoverFileValid } from '@/utils/coverUpload'
 import { uploadMedia } from '@/api/media'
+import * as videoApi from '@/api/video'
+import { VideoPlay } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
@@ -425,6 +528,25 @@ const searchKeyword = ref('')
 const selectedDifficulty = ref('')
 const myTexts = ref([])
 const currentText = ref(null)
+
+// 合并课文和视频到一个列表
+const allItems = computed(() => {
+  const textItems = myTexts.value.map(t => ({ ...t, _type: 'text', _sortTime: t.createdAt }))
+  const videoItems = myVideos.value.map(v => ({ ...v, _type: 'video', _sortTime: v.createdTime }))
+  return [...textItems, ...videoItems].sort((a, b) => {
+    const ta = a._sortTime ? new Date(a._sortTime).getTime() : 0
+    const tb = b._sortTime ? new Date(b._sortTime).getTime() : 0
+    return tb - ta // 新的在前
+  })
+})
+
+const handleItemClick = (item) => {
+  if (item._type === 'video') {
+    playVideo(item)
+  } else {
+    studyText(item)
+  }
+}
 
 // 表单数据
 const uploadFormRef = ref()
@@ -950,13 +1072,203 @@ const formatContent = (content) => {
   return DOMPurify.sanitize(marked(content))
 }
 
+// ─── 视频上传相关 ─────────────────────────────────────────
+const showVideoUploadDialog = ref(false)
+const videoSubmitLoading = ref(false)
+const videoLoading = ref(false)
+const myVideos = ref([])
+const editingVideo = ref(null)
+const videoFormRef = ref()
+
+const videoForm = reactive({
+  title: '',
+  description: '',
+  mediaId: null,
+  coverMediaId: null,
+  tags: '',
+  subtitleContent: '',
+  subtitleContentZh: '',
+  isPublicBool: true,
+  videoUrl: '',
+  coverUrl: ''
+})
+
+const videoFormRules = {
+  title: [{ required: true, message: '请输入视频标题', trigger: 'blur' }]
+}
+
+let selectedVideoFile = null
+let selectedVideoCoverFile = null
+
+const handleVideoFileSelect = (file) => { selectedVideoFile = file.raw }
+const handleVideoCoverSelect = (file) => { selectedVideoCoverFile = file.raw }
+const handleSubtitleSelect = async (file) => {
+  try {
+    const text = await file.raw.text()
+    videoForm.subtitleContent = text
+  } catch (e) {
+    ElMessage.error('英文字幕文件读取失败')
+  }
+}
+const handleSubtitleZhSelect = async (file) => {
+  try {
+    const text = await file.raw.text()
+    videoForm.subtitleContentZh = text
+  } catch (e) {
+    ElMessage.error('中文字幕文件读取失败')
+  }
+}
+
+const resetVideoForm = () => {
+  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', subtitleContentZh: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
+  selectedVideoFile = null
+  selectedVideoCoverFile = null
+  editingVideo.value = null
+  videoFormRef.value?.clearValidate()
+}
+
+const loadMyVideos = async () => {
+  videoLoading.value = true
+  try {
+    const res = await videoApi.getMyVideoUploads()
+    if (res.code === 200) {
+      myVideos.value = Array.isArray(res.data) ? res.data : []
+    }
+  } catch (e) {
+    console.error('加载视频列表失败:', e)
+  } finally {
+    videoLoading.value = false
+  }
+}
+
+const handleVideoSubmit = async () => {
+  if (!videoFormRef.value) return
+  try {
+    const valid = await videoFormRef.value.validate()
+    if (!valid) return
+  } catch { return }
+
+  videoSubmitLoading.value = true
+  try {
+    // 上传视频文件
+    if (selectedVideoFile) {
+      const uploadRes = await uploadMedia(selectedVideoFile, 'VIDEO')
+      if (uploadRes.code === 200 && uploadRes.data?.mediaId) {
+        videoForm.mediaId = uploadRes.data.mediaId
+        videoForm.videoUrl = uploadRes.data.url || `/api/media/${uploadRes.data.mediaId}/download`
+      } else {
+        ElMessage.error('视频上传失败'); return
+      }
+    }
+    // 上传封面
+    if (selectedVideoCoverFile) {
+      const coverRes = await uploadMedia(selectedVideoCoverFile, 'IMAGE')
+      if (coverRes.code === 200 && coverRes.data?.mediaId) {
+        videoForm.coverMediaId = coverRes.data.mediaId
+        videoForm.coverUrl = coverRes.data.url || `/api/media/${coverRes.data.mediaId}/download`
+      }
+    }
+
+    if (!editingVideo.value && !videoForm.mediaId) {
+      ElMessage.error('请选择视频文件'); return
+    }
+
+    const data = {
+      title: videoForm.title,
+      description: videoForm.description,
+      mediaId: videoForm.mediaId,
+      coverMediaId: videoForm.coverMediaId,
+      tags: videoForm.tags,
+      subtitleContent: videoForm.subtitleContent || null,
+      subtitleContentZh: videoForm.subtitleContentZh || null,
+      isPublic: videoForm.isPublicBool ? 1 : 0,
+      videoUrl: videoForm.videoUrl,
+      coverUrl: videoForm.coverUrl
+    }
+
+    if (editingVideo.value) {
+      const res = await videoApi.updateUserVideo(editingVideo.value.id, data)
+      if (res.code === 200) {
+        ElMessage.success('更新成功')
+        showVideoUploadDialog.value = false
+        loadMyVideos()
+      } else {
+        ElMessage.error(res.message || '更新失败')
+      }
+    } else {
+      const res = await videoApi.uploadUserVideo(data)
+      if (res.code === 200) {
+        ElMessage.success('上传成功')
+        showVideoUploadDialog.value = false
+        loadMyVideos()
+      } else {
+        ElMessage.error(res.message || '上传失败')
+      }
+    }
+  } catch (e) {
+    console.error('视频提交失败:', e)
+    ElMessage.error(e.message || '操作失败')
+  } finally {
+    videoSubmitLoading.value = false
+  }
+}
+
+const editVideoItem = (video) => {
+  editingVideo.value = video
+  Object.assign(videoForm, {
+    title: video.title,
+    description: video.description || '',
+    mediaId: video.mediaId,
+    coverMediaId: video.coverMediaId,
+    tags: video.tags || '',
+    subtitleContent: video.subtitleContent || '',
+    subtitleContentZh: video.subtitleContentZh || '',
+    isPublicBool: video.isPublic === 1,
+    videoUrl: video.videoUrl || '',
+    coverUrl: video.coverUrl || ''
+  })
+  showVideoUploadDialog.value = true
+}
+
+const deleteVideoItem = (video) => {
+  ElMessageBox.confirm(`确定要删除视频 "${video.title}" 吗？`, '删除确认', { type: 'warning' })
+    .then(async () => {
+      const res = await videoApi.deleteUserVideo(video.id)
+      if (res.code === 200) {
+        ElMessage.success('删除成功')
+        loadMyVideos()
+      } else {
+        ElMessage.error(res.message || '删除失败')
+      }
+    }).catch(() => {})
+}
+
+const playVideo = (video) => {
+  // isOwner=true 告知 VideoPlayer 用用户端 API 加载（支持预览待审核的自己的视频）
+  router.push({ path: '/student/video-player', query: { videoId: video.id, isOwner: '1' } })
+}
+
 // 生命周期
 onMounted(() => {
   loadMyUploads()
+  loadMyVideos()
 })
 </script>
 
 <style scoped>
+.video-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.video-item {
+  border-left: 3px solid #e6a23c !important;
+}
+
+.video-item:hover {
+  border-left-color: #f5a623 !important;
+}
 .user-texts-container {
   padding: 20px;
   background-color: #f5f5f5;
@@ -1379,5 +1691,44 @@ onMounted(() => {
 .editor-dialog .el-dialog.is-fullscreen .text-form .markdown-editor {
   height: 100% !important;
   flex: 1;
+}
+
+/* 修复视频弹窗内上传列表内容溢出问题并允许多行完整显示 */
+.custom-video-dialog .el-form-item__content {
+  min-width: 0 !important; /* 关键修复：防止 flex 子项无限自适应文本宽度撑开弹窗 */
+}
+.custom-video-dialog .video-uploader,
+.custom-video-dialog .cover-uploader,
+.custom-video-dialog .subtitle-uploader {
+  width: 100%;
+  max-width: 100%;
+}
+.custom-video-dialog .el-upload-list {
+  width: 100%;
+}
+.custom-video-dialog .el-upload-list__item {
+  height: auto !important;
+  min-height: 32px;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+.custom-video-dialog .el-upload-list__item-info {
+  width: 100%;
+  min-width: 0 !important;
+}
+.custom-video-dialog .el-upload-list__item-name {
+  display: block !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  word-break: break-all !important;
+  line-height: 1.5 !important;
+  height: auto !important;
+  padding-right: 25px !important;
+  margin-bottom: 2px !important;
+}
+.custom-video-dialog .el-upload-list__item-file-name {
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  word-break: break-all !important;
 }
 </style>

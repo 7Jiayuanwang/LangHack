@@ -9,7 +9,13 @@ import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpRange;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -17,7 +23,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -65,6 +77,7 @@ public class MediaController {
             result.put("fileName", media.getFileName());
             result.put("mediaType", media.getMediaType());
             result.put("fileSize", media.getFileSize());
+            result.put("url", "/api/media/" + media.getId() + "/download");
 
             return Result.success("上传成功", result);
         } catch (BusinessException e) {
@@ -105,42 +118,104 @@ public class MediaController {
     }
 
     @GetMapping("/{mediaId}/download")
-    public ResponseEntity<byte[]> downloadMedia(@PathVariable Long mediaId) {
+    public ResponseEntity<Resource> downloadMedia(
+            @PathVariable Long mediaId,
+            @RequestHeader HttpHeaders headers) {
         try {
-            // getMediaById already checks for deleted=0
             Media media = mediaService.getMediaById(mediaId);
             if (media == null) {
                 logger.warn("Media not found or deleted: {}", mediaId);
                 return ResponseEntity.notFound().build();
             }
 
-            if (media.getFileContent() == null || media.getFileContent().length == 0) {
-                logger.warn("Media content is empty: {}", mediaId);
-                return ResponseEntity.noContent().build();
-            }
-
-            logger.debug("Serving media: {}, size: {} bytes", mediaId, media.getFileContent().length);
-
-            // Sanitize filename to prevent HTTP header injection and path traversal
             String rawFileName = media.getFileName() != null ? media.getFileName() : "media_" + mediaId;
-            // 移除所有可能导致 HTTP header 注入的字符：CR、LF、引号、反斜杠、分号等
-            String safeFileName = rawFileName.replaceAll("[\r\n\"\\\\;]", "_");
-            // 额外防御：移除路径分隔符
-            safeFileName = safeFileName.replaceAll("[/\\\\]", "_");
-
-            // 对 mimeType 做白名单校验，防止数据库值被篡改为 text/html 触发 XSS
+            String safeFileName = rawFileName.replaceAll("[\r\n\"\\\\;]", "_").replaceAll("[/\\\\]", "_");
             String rawMime = media.getMimeType();
             String safeMime = (rawMime != null && ALLOWED_MIME_TYPES.contains(rawMime))
                     ? rawMime : "application/octet-stream";
 
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + safeFileName + "\"")
-                    .contentType(MediaType.parseMediaType(safeMime))
-                    .body(media.getFileContent());
+            if (media.getFilePath() != null && !media.getFilePath().isEmpty()) {
+                return serveFromFileSystem(media.getFilePath(), safeFileName, safeMime, headers);
+            }
+
+            return serveFromBlob(media, safeFileName, safeMime, headers);
         } catch (Exception e) {
             logger.error("Error serving media {}", mediaId, e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    private ResponseEntity<Resource> serveFromFileSystem(
+            String filePath, String fileName, String mimeType, HttpHeaders headers) throws IOException {
+        Path path = Paths.get(filePath);
+        if (!Files.exists(path)) {
+            logger.warn("File not found on disk: {}", filePath);
+            return ResponseEntity.notFound().build();
+        }
+
+        Resource resource = new FileSystemResource(path);
+        long fileLength = Files.size(path);
+
+        List<HttpRange> ranges = headers.getRange();
+        if (!ranges.isEmpty()) {
+            HttpRange range = ranges.get(0);
+            long start = range.getRangeStart(fileLength);
+            long end = range.getRangeEnd(fileLength);
+            long rangeLength = end - start + 1;
+
+            ResourceRegion region = new ResourceRegion(resource, start, rangeLength);
+            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                    .contentType(MediaType.parseMediaType(mimeType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE,
+                            "bytes " + start + "-" + end + "/" + fileLength)
+                    .contentLength(rangeLength)
+                    .body(resource);
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                .contentType(MediaType.parseMediaType(mimeType))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .contentLength(fileLength)
+                .body(resource);
+    }
+
+    private ResponseEntity<Resource> serveFromBlob(
+            Media media, String fileName, String mimeType, HttpHeaders headers) {
+        byte[] content = media.getFileContent();
+        if (content == null || content.length == 0) {
+            logger.warn("Media content is empty: {}", media.getId());
+            return ResponseEntity.noContent().build();
+        }
+
+        long fileLength = content.length;
+
+        List<HttpRange> ranges = headers.getRange();
+        if (!ranges.isEmpty()) {
+            HttpRange range = ranges.get(0);
+            long start = range.getRangeStart(fileLength);
+            long end = range.getRangeEnd(fileLength);
+            long rangeLength = end - start + 1;
+
+            byte[] rangeContent = Arrays.copyOfRange(content, (int) start, (int) end + 1);
+            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                    .contentType(MediaType.parseMediaType(mimeType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE,
+                            "bytes " + start + "-" + end + "/" + fileLength)
+                    .contentLength(rangeLength)
+                    .body(new ByteArrayResource(rangeContent));
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                .contentType(MediaType.parseMediaType(mimeType))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .contentLength(fileLength)
+                .body(new ByteArrayResource(content));
     }
 
     @DeleteMapping("/{mediaId}")
