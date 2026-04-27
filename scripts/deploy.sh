@@ -229,9 +229,10 @@ resolve_image_registry_prefix() {
         echo "  [INFO] Docker 镜像前缀: (空，使用公共镜像)"
     else
         echo "  [INFO] Docker 镜像前缀: $RESOLVED_IMAGE_REGISTRY_PREFIX"
-        echo "  [INFO] 验证本地 registry 探测镜像..."
-        if ! docker manifest inspect "${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}" >/dev/null 2>&1; then
-            echo "  [ERROR] 本地 registry 缺少探测镜像: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
+        echo "  [INFO] 验证本地镜像..."
+        # 使用 docker images 本地检查，避免 manifest inspect 需要联网
+        if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -qF "${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"; then
+            echo "  [ERROR] 本地缺少镜像: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
             echo "  [修复] 先同步镜像: bash scripts/sync-docker-images.sh --registry $local_registry"
             echo ""
             echo "  [提示] 如果本地 registry 不可用，可以："
@@ -240,7 +241,7 @@ resolve_image_registry_prefix() {
             echo "    3. 使用代理访问公共镜像"
             exit 1
         fi
-        echo "  [OK] 本地 registry 探测镜像可用: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
+        echo "  [OK] 本地镜像可用: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
     fi
 }
 

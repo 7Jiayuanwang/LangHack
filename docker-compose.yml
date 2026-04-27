@@ -18,6 +18,8 @@ services:
     build:
       context: ./docker
       dockerfile: mysql/master/Dockerfile
+      args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
     image: langhack-mysql-master:latest
     container_name: langhack-mysql-master
     restart: unless-stopped
@@ -76,6 +78,8 @@ services:
     build:
       context: ./docker
       dockerfile: mysql/slave/Dockerfile
+      args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
     image: langhack-mysql-slave:latest
     container_name: langhack-mysql-slave
     restart: unless-stopped
@@ -168,6 +172,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
     container_name: langhack-backend
     restart: unless-stopped
     logging: *default-logging
@@ -264,6 +270,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
         VITE_API_BASE_URL: ""
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
         VITE_ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
