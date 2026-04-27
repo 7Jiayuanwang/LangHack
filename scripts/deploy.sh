@@ -137,7 +137,9 @@ load_env_value() {
 }
 
 set_env_value() {
-    local file="$1" key="$2" value="$3" tmp="${file}.tmp.$$"
+    local file="${1:-}" key="${2:-}" value="${3:-}"
+    [ -z "$file" ] && { echo "[ERROR] set_env_value: file parameter required"; return 1; }
+    local tmp="${file}.tmp.$$"
     local found=false
     touch "$file"
     while IFS= read -r line || [ -n "$line" ]; do
