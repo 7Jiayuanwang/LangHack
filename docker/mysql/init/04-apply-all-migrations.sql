@@ -1032,12 +1032,12 @@ CREATE TABLE IF NOT EXISTS course_selection (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     selection_id VARCHAR(50) NOT NULL UNIQUE,
     student_id VARCHAR(50) NOT NULL,
-    student_name VARCHAR(100) NOT NULL,
-    course_code VARCHAR(50) NOT NULL,
+    student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）',
+    course_code VARCHAR(50) COMMENT '课程编号（CDSP 可能不提供，可为空）',
     course_name VARCHAR(200) NOT NULL,
     class_id VARCHAR(50) NOT NULL,
-    teacher_id VARCHAR(50) NOT NULL,
-    teacher_name VARCHAR(50) NOT NULL,
+    teacher_id VARCHAR(50) COMMENT '教师工号（可为空）',
+    teacher_name VARCHAR(50) COMMENT '教师姓名（可为空）',
     credits DECIMAL(3,1) NOT NULL,
     academic_year VARCHAR(20) NOT NULL,
     semester INT NOT NULL,
@@ -1056,7 +1056,6 @@ CREATE TABLE IF NOT EXISTS course_selection (
     sync_source VARCHAR(20) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_student (student_id),
     INDEX idx_course (course_code),
@@ -1444,16 +1443,16 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 CREATE TABLE IF NOT EXISTS student_schedule (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     student_id VARCHAR(50) NOT NULL,
-    student_name VARCHAR(100) NOT NULL,
+    student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）',
     class_id VARCHAR(50) NOT NULL,
-    course_code VARCHAR(50) NOT NULL,
+    course_code VARCHAR(50) COMMENT '课程编号（CDSP 可能不提供，可为空）',
     course_name VARCHAR(200) NOT NULL,
-    teacher_id VARCHAR(50) NOT NULL,
-    teacher_name VARCHAR(50) NOT NULL,
+    teacher_id VARCHAR(50) COMMENT '教师工号（可为空）',
+    teacher_name VARCHAR(100) COMMENT '教师姓名（可为空）',
     day_of_week INT NOT NULL,
     period VARCHAR(20) NOT NULL,
-    week_range VARCHAR(50) NOT NULL,
-    class_location VARCHAR(100) NOT NULL,
+    week_range VARCHAR(50) COMMENT '周次范围（可为空）',
+    class_location VARCHAR(200) COMMENT '上课地点（可为空）',
     academic_year VARCHAR(20) NOT NULL,
     semester INT NOT NULL,
     sync_time DATETIME NOT NULL,
@@ -1664,7 +1663,7 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- 4. course_schedule (cdsp_1715290377801515044 / 课程安排信息)
 -- PDF fields (lowercase): xkkch, xn, xq, skxqj, skjc, kczc, skdd
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('course_schedule', 'xkkch', 'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '选课课号'),
+('course_schedule', 'jxbid', 'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '教学班号（作 class_id，与 teaching_class.class_id 对应）'),
 ('course_schedule', 'skxqj', 'dayOfWeek',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '上课星期几 1-7'),
 ('course_schedule', 'skjc',  'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '上课节次'),
 ('course_schedule', 'kczc',  'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '课程周次'),
@@ -1724,21 +1723,21 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 ('teacher_courses', 'kcbbm',  'className',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '课程班别名（作班级展示名）');
 
 -- 9. student_schedule (cdsp_1715294397274341377 / 学生课表)
--- PDF fields (lowercase): xh, xkkh, kcbh, kcmc, skjszgh, jsmc, xqj, djj,
---                         zcap, js, xn, xq
+-- PDF fields (lowercase): xh, xm, jxbid, kcbh, kcmc, jgh, jsxm, skxqj, skjc, zcd, cdmc, xn, xq
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('student_schedule', 'xh',      'studentId',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号'),
-('student_schedule', 'xkkh',    'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '选课课号'),
-('student_schedule', 'kcbh',    'courseCode',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3,  1, '课程编号'),
-('student_schedule', 'kcmc',    'courseName',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4,  1, '课程名称'),
-('student_schedule', 'skjszgh', 'teacherId',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '上课教师职工号'),
-('student_schedule', 'jsmc',    'teacherName',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '教师名称'),
-('student_schedule', 'xqj',     'dayOfWeek',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7,  1, '星期几 1-7'),
-('student_schedule', 'djj',     'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '第几节'),
-('student_schedule', 'zcap',    'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '周次安排'),
-('student_schedule', 'js',      'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室'),
-('student_schedule', 'xn',      'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"）'),
-('student_schedule', 'xq',      'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"');
+('student_schedule', 'xm',      'studentName',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2,  1, '学生姓名'),
+('student_schedule', 'jxbid',   'classId',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3,  1, '教学班号（作 class_id）'),
+('student_schedule', 'kcbh',    'courseCode',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4,  1, '课程编号'),
+('student_schedule', 'kcmc',    'courseName',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5,  1, '课程名称'),
+('student_schedule', 'jgh',     'teacherId',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '教师工号'),
+('student_schedule', 'jsxm',    'teacherName',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '教师姓名'),
+('student_schedule', 'skxqj',   'dayOfWeek',     'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 8,  1, '上课星期几 (1-7)'),
+('student_schedule', 'skjc',    'period',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 9,  1, '上课节次（如"1-2"）'),
+('student_schedule', 'zcd',     'weekRange',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '周次（如"1-16周"）'),
+('student_schedule', 'cdmc',    'classLocation', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 11, 1, '上课地点名称'),
+('student_schedule', 'xn',      'academicYear',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学年（CDSP 单年如 "2024"）'),
+('student_schedule', 'xq',      'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 13, 1, '学期中文 "秋"/"春"');
 
 -- ════════════════════════════════════════════════════════════════
 
@@ -2005,103 +2004,3 @@ WHERE u.role IN ('STUDENT', 'USER');
 
 -- ════════════════════════════════════════════════════════════════
 
--- ════════════════════════════════════════════════════════════════
--- V27: 修复学校数据表字段约束
--- ════════════════════════════════════════════════════════════════
--- 背景：CDSP API 不提供 student_name 等字段，但多个表定义为 NOT NULL
--- 导致 student_schedule 和 course_selection 同步 100% 失败（各 1000 条）
---
--- 修复范围：
---   - student_schedule: student_name, teacher_id, teacher_name, week_range, class_location
---   - course_selection: student_name, teacher_id, teacher_name
--- ════════════════════════════════════════════════════════════════
-
--- 1. student_schedule 表字段约束修复
-ALTER TABLE student_schedule MODIFY COLUMN student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）';
-ALTER TABLE student_schedule MODIFY COLUMN teacher_id VARCHAR(50) COMMENT '教师工号（可为空）';
-ALTER TABLE student_schedule MODIFY COLUMN teacher_name VARCHAR(100) COMMENT '教师姓名（可为空）';
-ALTER TABLE student_schedule MODIFY COLUMN week_range VARCHAR(50) COMMENT '周次范围（可为空）';
-ALTER TABLE student_schedule MODIFY COLUMN class_location VARCHAR(200) COMMENT '上课地点（可为空）';
-
--- 2. course_selection 表字段约束修复
-ALTER TABLE course_selection MODIFY COLUMN student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）';
-ALTER TABLE course_selection MODIFY COLUMN teacher_id VARCHAR(50) COMMENT '教师工号（可为空）';
-ALTER TABLE course_selection MODIFY COLUMN teacher_name VARCHAR(50) COMMENT '教师姓名（可为空）';
-
--- ════════════════════════════════════════════════════════════════
--- V28: 修复 course_code 字段约束
--- ════════════════════════════════════════════════════════════════
--- 背景：CDSP API 不稳定提供 kcbh（课程编号）字段
--- 导致 student_schedule 和 course_selection 同步 100% 失败（各 1000/1000 条）
--- 错误信息：
---   - student_schedule: Field 'course_code' doesn't have a default value
---   - course_selection: Column 'course_code' cannot be null
--- ════════════════════════════════════════════════════════════════
-
--- 1. student_schedule 表 course_code 字段修复
-ALTER TABLE student_schedule MODIFY COLUMN course_code VARCHAR(50) COMMENT '课程编号（CDSP 可能不提供，可为空）';
-
--- 2. course_selection 表 course_code 字段修复（需要先删除外键约束）
-ALTER TABLE course_selection DROP FOREIGN KEY course_selection_ibfk_1;
-ALTER TABLE course_selection MODIFY COLUMN course_code VARCHAR(50) COMMENT '课程编号（CDSP 可能不提供，可为空）';
-ALTER TABLE course_selection ADD CONSTRAINT course_selection_ibfk_1 FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- ════════════════════════════════════════════════════════════════
--- V29: 修复 course_schedule 字段映射错误
--- ════════════════════════════════════════════════════════════════
--- 问题：course_schedule 同步失败 903/1000 条，外键约束失败
--- 根因：字段映射错误
---   - 文档：course_schedule 接口返回 jxbid（教学班号）
---   - 实际：V12 映射使用 xkkch（选课课号）
---   - 结果：teaching_class 存储 kcbh（课程班号），course_schedule 存储 xkkch（选课课号）
---          两者不匹配，导致外键约束失败
--- 修复：更正 field_mappings 表中 course_schedule 的 classId 映射
--- ════════════════════════════════════════════════════════════════
-
-UPDATE field_mappings
-SET source_field = 'jxbid',
-    remark = '教学班号（作 class_id，与 teaching_class.class_id 对应）'
-WHERE data_source = 'course_schedule'
-  AND target_field = 'classId'
-  AND source_field = 'xkkch';
-
--- ════════════════════════════════════════════════════════════════
--- V30: 修复 student_schedule 字段映射错误（全面修正）
--- ════════════════════════════════════════════════════════════════
--- 问题：student_schedule 的字段映射几乎全部错误
--- 根因：V12 使用的字段名与 CDSP API 实际返回的字段名不匹配
--- 修复：更正所有错误的字段映射（8个字段）
--- ════════════════════════════════════════════════════════════════
-
--- 1. 修复 class_id 映射
-UPDATE field_mappings SET source_field = 'jxbid', remark = '教学班号（作 class_id，与 teaching_class.class_id 对应）'
-WHERE data_source = 'student_schedule' AND target_field = 'classId' AND source_field = 'xkkh';
-
--- 2. 添加缺失的 student_name 映射
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark)
-VALUES ('student_schedule', 'xm', 'studentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2, 1, '学生姓名')
-ON DUPLICATE KEY UPDATE source_field = 'xm', remark = '学生姓名';
-
--- 3. 修复 teacher_id 映射
-UPDATE field_mappings SET source_field = 'jgh', remark = '教师工号'
-WHERE data_source = 'student_schedule' AND target_field = 'teacherId' AND source_field = 'skjszgh';
-
--- 4. 修复 teacher_name 映射
-UPDATE field_mappings SET source_field = 'jsxm', remark = '教师姓名'
-WHERE data_source = 'student_schedule' AND target_field = 'teacherName' AND source_field = 'jsmc';
-
--- 5. 修复 day_of_week 映射
-UPDATE field_mappings SET source_field = 'skxqj', remark = '上课星期几 (1-7)'
-WHERE data_source = 'student_schedule' AND target_field = 'dayOfWeek' AND source_field = 'xqj';
-
--- 6. 修复 period 映射
-UPDATE field_mappings SET source_field = 'skjc', remark = '上课节次（如"1-2"）'
-WHERE data_source = 'student_schedule' AND target_field = 'period' AND source_field = 'djj';
-
--- 7. 修复 week_range 映射
-UPDATE field_mappings SET source_field = 'zcd', remark = '周次（如"1-16周"）'
-WHERE data_source = 'student_schedule' AND target_field = 'weekRange' AND source_field = 'zcap';
-
--- 8. 修复 class_location 映射
-UPDATE field_mappings SET source_field = 'cdmc', remark = '上课地点名称'
-WHERE data_source = 'student_schedule' AND target_field = 'classLocation' AND source_field = 'js';
