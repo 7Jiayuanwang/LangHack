@@ -1591,21 +1591,16 @@ public class StudentLearningController {
             result.put("records", new ArrayList<>(textRecordMap.values()));
             result.put("total", recordPage.getTotal());
 
-            // 阅读统计概览
-            QueryWrapper<TextLearningRecord> statsWrapper = new QueryWrapper<>();
-            statsWrapper.eq("student_id", studentId);
-            long totalRecords = textLearningRecordMapper.selectCount(statsWrapper);
-
-            statsWrapper = new QueryWrapper<>();
-            statsWrapper.eq("student_id", studentId).eq("is_completed", 1);
-            long completedCount = textLearningRecordMapper.selectCount(statsWrapper);
+            // 阅读统计概览（使用 DISTINCT 来统计唯一文章数）
+            long totalArticlesRead = textLearningRecordMapper.countDistinctTexts(studentId);
+            long completedCount = textLearningRecordMapper.countDistinctCompletedTexts(studentId);
 
             QueryWrapper<ArticleFavorite> favWrapper = new QueryWrapper<>();
             favWrapper.eq("student_id", studentId);
             long favoriteCount = articleFavoriteMapper.selectCount(favWrapper);
 
             Map<String, Object> overview = new HashMap<>();
-            overview.put("totalArticlesRead", totalRecords);
+            overview.put("totalArticlesRead", totalArticlesRead);
             overview.put("completedArticles", completedCount);
             overview.put("favoriteCount", favoriteCount);
             result.put("overview", overview);
