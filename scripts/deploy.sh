@@ -15,6 +15,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
 
 QUICK_MODE=false
+OFFLINE_MODE=false
 STASHED=false
 OLD_BRANCH=""
 OLD_COMMIT=""
@@ -54,12 +55,14 @@ trap trap_interrupt SIGINT SIGTERM
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick|-q) QUICK_MODE=true; shift ;;
+        --offline|--local-only) OFFLINE_MODE=true; shift ;;
         --help|-h)
             echo "LangHack Docker Compose 交互式部署"
             echo ""
             echo "用法: $0 [选项]"
-            echo "  --quick, -q   快速模式（跳过已配置项）"
-            echo "  --help, -h    显示帮助"
+            echo "  --quick, -q          快速模式（跳过已配置项）"
+            echo "  --offline, --local-only  离线模式（跳过 git pull，使用本地代码）"
+            echo "  --help, -h           显示帮助"
             exit 0
             ;;
         *) echo "[ERROR] 未知参数: $1"; exit 1 ;;
@@ -1063,47 +1066,57 @@ if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
 fi
 
 # 尝试拉取远程最新代码（带超时和离线降级）
-echo "[INFO] 拉取远程最新代码..."
-PULL_TIMEOUT=60
-PULL_SUCCESS=false
+if [ "$OFFLINE_MODE" = true ]; then
+    echo "[INFO] 离线模式已启用，跳过 git pull"
+    echo "[INFO] 使用本地当前代码进行部署"
 
-if command -v timeout >/dev/null 2>&1; then
-    if timeout "$PULL_TIMEOUT" git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
-        PULL_SUCCESS=true
-        echo "[OK] 远程代码拉取成功"
+    # 检查是否有未提交的更改
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        echo "[WARN] 检测到未提交的本地更改，将包含在部署中"
     fi
 else
-    if git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
-        PULL_SUCCESS=true
-        echo "[OK] 远程代码拉取成功"
-    fi
-fi
+    echo "[INFO] 拉取远程最新代码..."
+    PULL_TIMEOUT=60
+    PULL_SUCCESS=false
 
-if [ "$PULL_SUCCESS" = false ]; then
-    echo "[WARN] 无法从远程拉取 $TARGET_BRANCH（网络故障或超时）"
-
-    # 检查本地是否有 origin/$TARGET_BRANCH 引用
-    if git rev-parse "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
-        LOCAL_HEAD=$(git rev-parse HEAD)
-        CACHED_REMOTE=$(git rev-parse "origin/$TARGET_BRANCH")
-
-        if [ "$LOCAL_HEAD" != "$CACHED_REMOTE" ]; then
-            echo "[INFO] 检测到本地缓存的远程分支有更新，尝试合并..."
-            if git merge "origin/$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
-                echo "[OK] 使用本地缓存的远程分支进行部署"
-                echo "[INFO]   本地 HEAD: ${LOCAL_HEAD:0:8}"
-                echo "[INFO]   缓存远程: ${CACHED_REMOTE:0:8}"
-            else
-                echo "[WARN] 无法快进合并缓存的远程分支，使用当前本地版本"
-            fi
-        else
-            echo "[INFO] 本地 HEAD 与缓存的远程分支一致，使用当前版本"
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout "$PULL_TIMEOUT" git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+            PULL_SUCCESS=true
+            echo "[OK] 远程代码拉取成功"
         fi
     else
-        echo "[WARN] 本地无远程分支引用，使用当前本地版本"
+        if git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+            PULL_SUCCESS=true
+            echo "[OK] 远程代码拉取成功"
+        fi
     fi
 
-    echo "[INFO] 离线部署模式：使用本地代码进行部署"
+    if [ "$PULL_SUCCESS" = false ]; then
+        echo "[WARN] 无法从远程拉取 $TARGET_BRANCH（网络故障或超时）"
+
+        # 检查本地是否有 origin/$TARGET_BRANCH 引用
+        if git rev-parse "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
+            LOCAL_HEAD=$(git rev-parse HEAD)
+            CACHED_REMOTE=$(git rev-parse "origin/$TARGET_BRANCH")
+
+            if [ "$LOCAL_HEAD" != "$CACHED_REMOTE" ]; then
+                echo "[INFO] 检测到本地缓存的远程分支有更新，尝试合并..."
+                if git merge "origin/$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+                    echo "[OK] 使用本地缓存的远程分支进行部署"
+                    echo "[INFO]   本地 HEAD: ${LOCAL_HEAD:0:8}"
+                    echo "[INFO]   缓存远程: ${CACHED_REMOTE:0:8}"
+                else
+                    echo "[WARN] 无法快进合并缓存的远程分支，使用当前本地版本"
+                fi
+            else
+                echo "[INFO] 本地 HEAD 与缓存的远程分支一致，使用当前版本"
+            fi
+        else
+            echo "[WARN] 本地无远程分支引用，使用当前本地版本"
+        fi
+
+        echo "[INFO] 离线部署模式：使用本地代码进行部署"
+    fi
 fi
 
 # 拉取 Git LFS 文件（database/*.sql 等大文件）
