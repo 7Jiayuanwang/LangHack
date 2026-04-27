@@ -121,18 +121,21 @@ ops_log() {
 }
 
 # ── 参数解析 ──────────────────────────────────────────
+OFFLINE_MODE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -b|--branch) BRANCH="$2"; shift 2 ;;
         -i|--interactive) INTERACTIVE=true; shift ;;
         --backup-before-update) PRE_BACKUP=true; shift ;;
         --no-backup) PRE_BACKUP=false; shift ;;
+        --offline|--local-only) OFFLINE_MODE=true; shift ;;
         -h|--help)
             echo "用法: $0 [选项]"
             echo ""
             echo "选项:"
             echo "  -b, --branch <分支名>   指定要跟踪的分支 (默认: 当前分支)"
             echo "  -i, --interactive       交互式选择分支"
+            echo "  --offline, --local-only 离线模式，跳过 git fetch，使用本地代码直接部署"
             echo "  -h, --help              显示帮助信息"
             echo ""
             echo "模式说明:"
@@ -1105,12 +1108,28 @@ fi
 SCRIPT_STATE="CHECKING"
 log "INFO: 检查远程仓库更新 (branch: $BRANCH)..."
 
-# git fetch 带超时和重试（网络断开时 set -e 会直接退出）
-fetch_ok=false
-MAX_FETCH_ATTEMPTS=3
-FETCH_TIMEOUT=60  # 单次 fetch 超时时间（秒）
-for attempt in $(seq 1 $MAX_FETCH_ATTEMPTS); do
-    log "INFO: git fetch 尝试 $attempt/$MAX_FETCH_ATTEMPTS (超时 ${FETCH_TIMEOUT}s)..."
+# 离线模式：跳过 git fetch，直接使用本地代码
+if [ "$OFFLINE_MODE" = true ]; then
+    log "INFO: 离线模式已启用，跳过 git fetch"
+    log "INFO: 将使用本地当前代码进行部署"
+    LOCAL_HASH=$(git rev-parse HEAD)
+    log "INFO:   本地 HEAD: ${LOCAL_HASH:0:8}"
+
+    # 检查是否有未提交的更改
+    if ! git diff-index --quiet HEAD --; then
+        log "WARN: 检测到未提交的本地更改，将包含在部署中"
+    fi
+
+    # 跳过远程检查，直接进入部署流程
+    REMOTE_HASH="$LOCAL_HASH"  # 设置为相同，触发"强制部署"逻辑
+else
+    # 在线模式：正常 git fetch
+    # git fetch 带超时和重试（网络断开时 set -e 会直接退出）
+    fetch_ok=false
+    MAX_FETCH_ATTEMPTS=3
+    FETCH_TIMEOUT=60  # 单次 fetch 超时时间（秒）
+    for attempt in $(seq 1 $MAX_FETCH_ATTEMPTS); do
+        log "INFO: git fetch 尝试 $attempt/$MAX_FETCH_ATTEMPTS (超时 ${FETCH_TIMEOUT}s)..."
 
     # 使用 timeout 命令限制 git fetch 执行时间
     if command -v timeout >/dev/null 2>&1; then
@@ -1175,10 +1194,15 @@ if [ "$fetch_ok" = false ]; then
     fi
 else
     log "INFO: git fetch 成功 ✓"
-fi
+fi  # 结束离线模式 if
 
 LOCAL_HASH=$(git rev-parse HEAD)
-REMOTE_HASH=$(git rev-parse "origin/$BRANCH")
+# 离线模式下直接使用本地 HEAD，否则使用 origin/$BRANCH
+if [ "$OFFLINE_MODE" = true ]; then
+    REMOTE_HASH="$LOCAL_HASH"
+else
+    REMOTE_HASH=$(git rev-parse "origin/$BRANCH")
+fi
 
 # 读取上次成功部署的 commit（部署记录文件）
 # 若文件不存在，则回退到 git HEAD 作为初始基准
