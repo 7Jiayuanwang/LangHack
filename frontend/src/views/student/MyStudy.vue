@@ -47,7 +47,7 @@
       </div>
       <div v-else class="article-list">
         <div
-          v-for="item in favorites"
+          v-for="item in paginatedFavorites"
           :key="item.id"
           class="article-card"
           @click="readArticle(item.textId)"
@@ -66,6 +66,22 @@
             </span>
           </div>
         </div>
+      </div>
+      <!-- 分页 -->
+      <div v-if="favTotalPages > 1" class="pagination">
+        <button class="page-btn" :disabled="favPage === 1" @click="favPage--">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+        </button>
+        <button
+          v-for="p in favTotalPages"
+          :key="p"
+          class="page-btn page-number"
+          :class="{ active: favPage === p }"
+          @click="favPage = p"
+        >{{ p }}</button>
+        <button class="page-btn" :disabled="favPage === favTotalPages" @click="favPage++">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>
+        </button>
       </div>
     </div>
 
@@ -98,7 +114,7 @@
       </div>
       <div v-else class="article-list">
         <div
-          v-for="item in history"
+          v-for="item in paginatedHistory"
           :key="item.textId"
           class="article-card"
           @click="readArticle(item.textId)"
@@ -122,6 +138,22 @@
             </span>
           </div>
         </div>
+      </div>
+      <!-- 分页 -->
+      <div v-if="historyTotalPages > 1" class="pagination">
+        <button class="page-btn" :disabled="historyPage === 1" @click="historyPage--">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+        </button>
+        <button
+          v-for="p in historyTotalPages"
+          :key="p"
+          class="page-btn page-number"
+          :class="{ active: historyPage === p }"
+          @click="historyPage = p"
+        >{{ p }}</button>
+        <button class="page-btn" :disabled="historyPage === historyTotalPages" @click="historyPage++">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>
+        </button>
       </div>
     </div>
   </div>
@@ -174,17 +206,30 @@ const tabs = ref([
 
 const favorites = ref([])
 const favLoading = ref(false)
+const favPage = ref(1)
+const favTotal = ref(0)
+const PAGE_SIZE = 5
+
 const history = ref([])
 const historyLoading = ref(false)
+const historyPage = ref(1)
+const historyTotal = ref(0)
 const overview = ref(null)
+
+const favTotalPages = computed(() => Math.ceil(favTotal.value / PAGE_SIZE) || 1)
+const historyTotalPages = computed(() => Math.ceil(historyTotal.value / PAGE_SIZE) || 1)
+
+const paginatedFavorites = computed(() => favorites.value)
+const paginatedHistory = computed(() => history.value)
 
 const loadFavorites = async () => {
   favLoading.value = true
   try {
-    const res = await getFavoriteArticles({ page: 1, size: 50 })
+    const res = await getFavoriteArticles({ page: favPage.value, size: PAGE_SIZE })
     if (res?.code === 200 && res?.data) {
       favorites.value = res.data.records || []
-      tabs.value[0].count = res.data.total || 0
+      favTotal.value = res.data.total || 0
+      tabs.value[0].count = favTotal.value
     }
   } catch (e) {
     console.error('加载收藏失败:', e)
@@ -196,9 +241,10 @@ const loadFavorites = async () => {
 const loadHistory = async () => {
   historyLoading.value = true
   try {
-    const res = await getReadingHistory({ page: 1, size: 50 })
+    const res = await getReadingHistory({ page: historyPage.value, size: PAGE_SIZE })
     if (res?.code === 200 && res?.data) {
       history.value = res.data.records || []
+      historyTotal.value = res.data.total || 0
       overview.value = res.data.overview || null
       if (overview.value) {
         tabs.value[1].count = overview.value.totalArticlesRead || 0
@@ -235,9 +281,12 @@ const formatDuration = (seconds) => {
 }
 
 watch(activeTab, (tab) => {
-  if (tab === 'favorites' && favorites.value.length === 0) loadFavorites()
-  if (tab === 'history' && history.value.length === 0) loadHistory()
+  if (tab === 'favorites') { favPage.value = 1; if (favorites.value.length === 0) loadFavorites() }
+  if (tab === 'history') { historyPage.value = 1; if (history.value.length === 0) loadHistory() }
 })
+
+watch(favPage, () => loadFavorites())
+watch(historyPage, () => loadHistory())
 
 onMounted(() => {
   loadFavorites()
@@ -502,4 +551,50 @@ onMounted(() => {
   font-size: 13px;
   color: #94a3b8;
 }
+
+/* 分页 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 0;
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 50px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-btn:not(:disabled):hover {
+  border-color: #1d4ed8;
+  color: #1d4ed8;
+}
+
+.page-btn.active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+}
+
+.page-number { font-weight: 600; }
 </style>

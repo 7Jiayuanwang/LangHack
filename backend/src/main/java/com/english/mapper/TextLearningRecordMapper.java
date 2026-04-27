@@ -6,6 +6,9 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * 文章学习记录Mapper接口
  */
@@ -23,4 +26,22 @@ public interface TextLearningRecordMapper extends BaseMapper<TextLearningRecord>
      */
     @Select("SELECT COUNT(DISTINCT text_id) FROM text_learning_records WHERE student_id = #{studentId} AND is_completed = 1")
     long countDistinctCompletedTexts(@Param("studentId") Long studentId);
+
+    /**
+     * 分页获取按文章去重的阅读记录（按最近阅读时间排序）
+     * 返回每篇文章的聚合统计：阅读次数、总时长、是否完成、最后阅读时间
+     */
+    @Select("SELECT text_id AS textId, " +
+            "COUNT(*) AS readCount, " +
+            "COALESCE(SUM(duration_seconds), 0) AS totalDuration, " +
+            "MAX(CASE WHEN is_completed = 1 THEN 1 ELSE 0 END) AS isCompleted, " +
+            "MAX(start_time) AS lastReadAt " +
+            "FROM text_learning_records " +
+            "WHERE student_id = #{studentId} " +
+            "GROUP BY text_id " +
+            "ORDER BY lastReadAt DESC " +
+            "LIMIT #{size} OFFSET #{offset}")
+    List<Map<String, Object>> getGroupedHistory(@Param("studentId") Long studentId,
+                                                 @Param("size") int size,
+                                                 @Param("offset") int offset);
 }
