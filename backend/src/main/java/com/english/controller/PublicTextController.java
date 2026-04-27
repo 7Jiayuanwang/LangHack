@@ -7,6 +7,8 @@ import com.english.entity.UserTextRead;
 import com.english.entity.User;
 import com.english.mapper.UserTextReadMapper;
 import com.english.service.ArticleVersionService;
+import com.english.service.RecommendationService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.english.service.TextService;
 import com.english.service.UserService;
 import org.slf4j.Logger;
@@ -45,6 +47,9 @@ public class PublicTextController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private RecommendationService recommendationService;
 
     /**
      * 获取首页推荐文章
@@ -389,6 +394,31 @@ public class PublicTextController {
         } catch (Exception e) {
             log.error("获取课文详情失败, textId={}", textId, e);
             return Result.error("获取课文详情失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 获取个性化推荐文章（需要登录）
+     * 混合推荐：Item-CF + User-CF + 精选/难度 兜底。详见 RecommendationServiceImpl。
+     *
+     * @param count   期望返回数量（夹紧到 [1, 50]）
+     * @param exclude 客户端已展示过的文章 ID 列表（逗号分隔），用于"换一批"时避免重复
+     */
+    @GetMapping("/recommended")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<List<Text>> getRecommendedTexts(
+            @RequestParam(defaultValue = "12") int count,
+            @RequestParam(value = "exclude", required = false) List<Long> exclude) {
+        try {
+            count = Math.min(Math.max(count, 1), 50);
+            Long userId = getCurrentUserId();
+            if (userId == null) {
+                return Result.success(new ArrayList<>());
+            }
+            return Result.success(recommendationService.recommend(userId, count, exclude));
+        } catch (Exception e) {
+            log.error("获取推荐文章失败", e);
+            return Result.error("获取推荐文章失败，请稍后重试");
         }
     }
 }
