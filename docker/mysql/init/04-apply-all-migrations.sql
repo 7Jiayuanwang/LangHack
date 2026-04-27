@@ -13,16 +13,16 @@
 --   V7__feature_toggles.sql                 (功能开关)
 --   V8__sso_integration.sql                 (CAS SSO)
 --   V9__school_data_sync.sql                (学校数据基础表)
---   V10__user_and_text_updates.sql          (合并: 旧 V10 + V11)
---   V11__role_mapping_cleanup.sql           (合并: 旧 V12 重命名)
---   V12__school_data_integration.sql        (合并: 旧 V12.1/V13/V14/V16/V18/V19/V20 + V20-align
+--   V10__user_and_text_updates.sql         
+--   V11__role_mapping_cleanup.sql          
+--   V12__school_data_integration.sql       
 --                                              2026-04-21 按 CDSP 官方 PDF 重建 9 数据源字段映射)
 --   V13__access_log_covering_index.sql     (监控热点页查询索引优化)
 --   V14__expand_feature_toggles.sql         (学生页全覆盖 + admin.* 模块 toggle)
 --   V15__ImportECDICTData.java              (JDBC 迁移 - 导入 ECDICT 词典数据)
---   V16__ai_qa_recovery_and_hiagent_config.sql (AI 问答开关恢复 + HiAgent 凭证迁 DB, 旧 V17)
---   V17__add_page_word_recite_toggle.sql    (学生端-背单词页 feature_toggle seed, 旧 V18)
---   V18__ai_provider_protocol.sql           (AI 服务商协议类型字段, 旧 V19)
+--   V16__ai_qa_recovery_and_hiagent_config.sql
+--   V17__add_page_word_recite_toggle.sql   
+--   V18__ai_provider_protocol.sql          
 --   V21__add_sso_binding_admin_remark.sql  (SSO 绑定表添加管理员备注字段)
 --   V22__chain_fetch_schema.sql            (按学院链式拉取: school_student / school_teacher / teacher_student_binding)
 --   V23__sync_log_pagination_summary.sql   (sync_logs 分页扩展字段)
@@ -30,10 +30,10 @@
 --   V25__add_similar_id_indexes.sql        (相似度矩阵补 similar_*_id 索引)
 --   V26__optimize_interaction_view.sql      (v_user_text_interaction_scores 视图)
 --
--- 注意：旧 V20__align_field_mappings_with_pdf.sql 已于 2026-04-21 合并进 V12，
+-- 注意：V20 字段映射对齐已合并进 V12，
 --       V12 Part 3.1/3.2/3.3 的 camelCase/snake_case 冗余 field_mappings 已删除
 --       （FieldMappingServiceImpl 自动将 target_field 转 camelCase, 两套等价重复）。
---       V19 列名修正 — 使用 `converter`/`remark`（原 V19 误写为
+--       V19 列名修正 — 使用 `converter`/`remark`（曾误写为
 --       `converter_type`/`description`/`created_by` 导致 INSERT IGNORE 静默失败）
 --
 -- 此脚本有两个用途：
@@ -53,12 +53,11 @@ SET CHARACTER SET utf8mb4;
 
 -- ═══════════════════════════════════════════════════════════════
 -- V1: 成绩记录表 + 任务扩展
--- 整合自: V1 (score_records), V1 (weight), V1 (ideal_study_time), V2 (unique constraint)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
 -- 1. 创建成绩记录表 [V1]
---    唯一约束 uk_student_assignment_type 已内联 [原 V1 + V17]
+--    唯一约束 uk_student_assignment_type 已内联
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS score_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -151,10 +150,7 @@ DROP PROCEDURE IF EXISTS _add_index_study_time;
 
 -- ═══════════════════════════════════════════════════════════════
 -- V2: 课文增强 + 学习记录
--- 整合自: 原 V2 (text_id, chinese_parallel, markdown, markdown versions, unit_id nullable,
 --         text_learning_records, user_text_reads, is_featured)
---         + 原 V10 (featured_priority + index)
---         + 原 V17 (cet4/6/academic_content, uploaded_by, tags, view/like_count, is_public, status)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -202,9 +198,9 @@ CALL _add_index_lr_text();
 DROP PROCEDURE IF EXISTS _add_index_lr_text;
 
 -- ────────────────────────────────────────
--- 2. 课文表扩展 [V2: 原 V2 + V10 + V17]
+-- 2. 课文表扩展 [V2]
 -- ────────────────────────────────────────
--- 中英对照内容 [V2: 原 V2]
+-- 中英对照内容 
 DROP PROCEDURE IF EXISTS _add_col_texts_batch;
 DELIMITER //
 CREATE PROCEDURE _add_col_texts_batch()
@@ -212,14 +208,14 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_content') THEN
         ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT '中英对照版本内容';
     END IF;
-    -- Markdown 支持 [V2: 原 V10]
+    -- Markdown 支持 
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='markdown_content') THEN
         ALTER TABLE texts ADD COLUMN markdown_content LONGTEXT COMMENT 'Markdown格式的课文内容' AFTER content;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='content_type') THEN
         ALTER TABLE texts ADD COLUMN content_type ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '内容类型：TEXT-纯文本，MARKDOWN-Markdown格式' AFTER markdown_content;
     END IF;
-    -- 多难度版本 Markdown [V2: 原 V12]
+    -- 多难度版本 Markdown 
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_markdown_content') THEN
         ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT COMMENT 'CET-4难度的Markdown版本' AFTER chinese_parallel_content;
     END IF;
@@ -236,7 +232,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_featured') THEN
         ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT '是否推荐';
     END IF;
-    -- 推荐优先级 [V2: 原 V10]
+    -- 推荐优先级 
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='featured_priority') THEN
         ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT '推荐优先级，值越大越靠前显示（0=默认随机）';
     END IF;
@@ -244,7 +240,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cover_url') THEN
         ALTER TABLE texts ADD COLUMN cover_url VARCHAR(500) DEFAULT NULL COMMENT '文章封面图 URL' AFTER audio_url;
     END IF;
-    -- 多难度版本内容（纯文本）[V2: 原 V17]
+    -- 多难度版本内容（纯文本）
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_content') THEN
         ALTER TABLE texts ADD COLUMN cet4_content LONGTEXT COMMENT 'CET-4难度版本内容' AFTER content;
     END IF;
@@ -254,22 +250,22 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_content') THEN
         ALTER TABLE texts ADD COLUMN academic_content LONGTEXT COMMENT '学术版版本内容' AFTER cet6_content;
     END IF;
-    -- 上传者 [V2: 原 V17]
+    -- 上传者 
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='uploaded_by') THEN
         ALTER TABLE texts ADD COLUMN uploaded_by BIGINT DEFAULT NULL COMMENT '上传者用户ID';
     END IF;
-    -- 标签 [V2: 原 V17]
+    -- 标签 
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='tags') THEN
         ALTER TABLE texts ADD COLUMN tags VARCHAR(500) DEFAULT NULL COMMENT '标签，逗号分隔';
     END IF;
-    -- 浏览/点赞 [V2: 原 V17]
+    -- 浏览/点赞 
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='view_count') THEN
         ALTER TABLE texts ADD COLUMN view_count INT DEFAULT 0 COMMENT '浏览次数';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='like_count') THEN
         ALTER TABLE texts ADD COLUMN like_count INT DEFAULT 0 COMMENT '点赞次数';
     END IF;
-    -- 公开状态 [V2: 原 V17]
+    -- 公开状态 
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_public') THEN
         ALTER TABLE texts ADD COLUMN is_public TINYINT(1) DEFAULT 1 COMMENT '是否公开（0=否，1=是）';
     END IF;
@@ -281,7 +277,7 @@ DELIMITER ;
 CALL _add_col_texts_batch();
 DROP PROCEDURE IF EXISTS _add_col_texts_batch;
 
--- 推荐优先级复合索引 [V2: 原 V10]
+-- 推荐优先级复合索引 
 DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
 DELIMITER //
 CREATE PROCEDURE _add_idx_featured_priority()
@@ -332,8 +328,6 @@ CREATE TABLE IF NOT EXISTS user_text_reads (
 
 -- ═══════════════════════════════════════════════════════════════
 -- V3: 媒体表 + 词汇SM-2 + 划线标注
--- 整合自: 原 V3 (media, SM-2, underlines)
---         + 原 V9 (media file_path/thumbnail_path)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -407,8 +401,6 @@ CREATE TABLE IF NOT EXISTS underlines (
 
 -- ═══════════════════════════════════════════════════════════════
 -- V4: 数据库备份系统 + 自动更新配置
--- 整合自: 原 V4 (backup_records, backup_operation_logs, backup_config)
---         + 原 V8 (update_config)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -479,7 +471,6 @@ VALUES (1, 1, '0 0 2 * * ?', 2, 0, 30, 50, 0, 7);
 
 -- ═══════════════════════════════════════════════════════════════
 -- V5: 访问监控 + AI调用统计 + 角色扩展 + 演示账号
--- 整合自: 原 V5 (monitoring tables), V5 (OPS role), V5 (demo accounts)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -607,7 +598,6 @@ WHERE username IN ('teacher', 'student');
 
 -- ─────────────────────────────────────────────────────────────
 -- V6: 系统配置表 + AI 提供商 + 多模型支持
--- 整合自: 原 V6 (system_config), 原 V7 (ai_provider), 原 V11 (app_id)
 -- ─────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS `system_config` (
@@ -631,7 +621,7 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('ai_translate', 'timeout', '30000', '超时时间(ms)', 0);
 
 -- V6: AI 提供商表（多模型加权路由）
--- app_id 字段已内联 [原 V11], qa_app_id 为扩展字段
+-- app_id 字段已内联, qa_app_id 为扩展字段
 
 CREATE TABLE IF NOT EXISTS `ai_provider` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -669,7 +659,7 @@ SELECT
     'migrated from system_config'
 WHERE NOT EXISTS (SELECT 1 FROM ai_provider WHERE service = 'translate');
 
--- V4: 自动更新配置表 [原 V8]
+-- V4: 自动更新配置表
 CREATE TABLE IF NOT EXISTS update_config (
     id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
     cron_expr            VARCHAR(64) NOT NULL DEFAULT '0 0 3 * * ?' COMMENT 'Spring cron expression',
@@ -683,7 +673,7 @@ CREATE TABLE IF NOT EXISTS update_config (
 INSERT IGNORE INTO update_config (id, cron_expr, enabled, git_branch, backup_before_update, last_run_status)
 VALUES (1, '0 0 3 * * ?', 0, 'master', 1, 'NEVER');
 
--- V3: 媒体路径列 [原 V9]
+-- V3: 媒体路径列
 DROP PROCEDURE IF EXISTS _add_col_media_paths;
 DELIMITER //
 CREATE PROCEDURE _add_col_media_paths()
@@ -701,9 +691,6 @@ DROP PROCEDURE IF EXISTS _add_col_media_paths;
 
 -- ══════════════════════════════════════════════════════════════
 -- V7: 文章收藏 + 功能开关 + 个性化开关
--- 整合自: 原 V12 (article_favorites + feature_toggle)
---         + 原 V13 (修复 system_config description 乱码)
---         + 原 V14 (user_tags + feature_override)
 -- ══════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS article_favorites (
@@ -920,7 +907,7 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- ────────────────────────────────────────
--- V9: 学校数据同步表结构 (原 V16)
+-- V9: 学校数据同步表结构
 -- ────────────────────────────────────────
 
 -- 1.1 行政班表
@@ -1336,7 +1323,6 @@ INSERT IGNORE INTO sso_config (config_key, config_value, config_type, descriptio
 
 -- ────────────────────────────────────────
 -- V12: 清理无效角色映射规则 + 修复误映射用户
--- 整合自: V12__fix_role_mapping_cleanup.sql
 --
 -- 问题：sso_config 表中可能存在 config_key='sso.role_mapping.ou' 的脏规则，
 -- strip 前缀后 key='ou'，旧版 RoleMappingService 使用 contains() 匹配，
@@ -1424,7 +1410,6 @@ CREATE TABLE IF NOT EXISTS field_mappings (
 
 -- ════════════════════════════════════════════════════════════════
 -- V13: 学校数据接入配置种子数据（system_config school_data 组）
--- 整合自: V13__school_data_system_config.sql
 -- ════════════════════════════════════════════════════════════════
 
 -- 数据源配置
@@ -1452,7 +1437,6 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 
 -- ════════════════════════════════════════════════════════════════
 -- V14: 学生课表表结构
--- 整合自: V14__student_schedule_and_teacher_courses_mapping.sql (表结构)
 --        field_mappings 见文件末尾 V12 Part 3
 -- ════════════════════════════════════════════════════════════════
 
@@ -1499,8 +1483,7 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- ════════════════════════════════════════════════════════════════
--- V12 (原 V18): 学校数据功能开关
--- 整合自: V18__school_data_feature_toggle.sql → 现属 V12 合并文件
+-- V12: 学校数据功能开关
 -- ════════════════════════════════════════════════════════════════
 
 -- 运维端：学校数据浏览和配置功能开关（默认关闭，仅运维和管理员可见）
@@ -1515,8 +1498,7 @@ VALUES
 ('feature_toggle', 'page_schedule', 'false', '学生端课表查看功能（从教务系统同步课表数据）', 0);
 
 -- ════════════════════════════════════════════════════════════════
--- V12 (原 V20): 学校数据 API 认证方式迁移 — token → appId + appSecret 签名
--- 整合自: V20__school_data_api_auth_appid.sql
+-- V12: 学校数据 API 认证方式迁移 — token → appId + appSecret 签名
 --
 -- 背景: 官方接口文档要求 appId + appSecret + timestamp 签名认证
 --       sign = Base64( MD5( appId + appSecret + timestamp ) )
@@ -1534,7 +1516,6 @@ WHERE `config_group` = 'school_data' AND `config_key` = 'api_token';
 
 -- ════════════════════════════════════════════════════════════════
 -- V13: access_log 覆盖索引 — 加速 top_pages 查询
--- 整合自: V13__access_log_covering_index.sql
 --
 -- 背景: MonitoringController.getTopPages → AccessLogMapper.topPagesByDateRange
 --       SQL: SELECT uri, COUNT(*) FROM access_log WHERE created_time BETWEEN ?
@@ -1557,8 +1538,7 @@ EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
 
 -- ════════════════════════════════════════════════════════════════
--- V16 (原 V17): AI 问答恢复 + HiAgent 凭证前端可配置化
--- 整合自: V17__ai_qa_recovery_and_hiagent_config.sql → 现 V16
+-- V16: AI 问答恢复 + HiAgent 凭证前端可配置化
 --
 -- 背景:
 --   1. 运维操作 / 缓存漂移 / 历史覆盖可能导致 page_ai_qa 被置为 'false'
@@ -1588,7 +1568,7 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
   ('ai_config', 'hiagent_qa_app_id',  '', 'HiAgent 问答应用 App ID（必须与改写凭证不同；留空则用 HIAGENT_QA_APP_ID）',  0);
 
 -- ════════════════════════════════════════════════════════════════
--- V18 (原 V19): AI 服务商协议类型字段
+-- V18: AI 服务商协议类型字段
 -- ════════════════════════════════════════════════════════════════
 
 -- 使用存储过程检查并添加列（兼容 MySQL 5.7+）
@@ -1612,8 +1592,7 @@ CALL AddProtocolColumn();
 DROP PROCEDURE IF EXISTS AddProtocolColumn;
 
 -- ════════════════════════════════════════════════════════════════
--- V12 Part 3 (原 V20-align): 按 CDSP 官方 PDF 原文对齐 field_mappings
--- 整合自: V20__align_field_mappings_with_pdf.sql → 现属 V12 合并文件
+-- V12 Part 3: 按 CDSP 官方 PDF 原文对齐 field_mappings
 --
 -- 背景:
 --   V12.1 seed 的 source_field 与 9 份官方 PDF 实际返回字段命名不匹配
