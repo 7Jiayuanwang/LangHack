@@ -1594,19 +1594,26 @@ public class StudentLearningController {
             // 阅读统计概览
             QueryWrapper<TextLearningRecord> statsWrapper = new QueryWrapper<>();
             statsWrapper.eq("student_id", studentId);
-            long totalRecords = textLearningRecordMapper.selectCount(statsWrapper);
+            long totalReadingTimes = textLearningRecordMapper.selectCount(statsWrapper);
 
+            // 阅读篇数（去重）：统计不同的 text_id 数量
             statsWrapper = new QueryWrapper<>();
-            statsWrapper.eq("student_id", studentId).eq("is_completed", 1);
-            long completedCount = textLearningRecordMapper.selectCount(statsWrapper);
+            statsWrapper.eq("student_id", studentId).select("DISTINCT text_id");
+            long uniqueArticlesRead = textLearningRecordMapper.selectCount(statsWrapper);
+
+            // 完成篇数（去重）：统计已完成的不同 text_id 数量
+            statsWrapper = new QueryWrapper<>();
+            statsWrapper.eq("student_id", studentId).eq("is_completed", 1).select("DISTINCT text_id");
+            long uniqueCompletedArticles = textLearningRecordMapper.selectCount(statsWrapper);
 
             QueryWrapper<ArticleFavorite> favWrapper = new QueryWrapper<>();
             favWrapper.eq("student_id", studentId);
             long favoriteCount = articleFavoriteMapper.selectCount(favWrapper);
 
             Map<String, Object> overview = new HashMap<>();
-            overview.put("totalArticlesRead", totalRecords);
-            overview.put("completedArticles", completedCount);
+            overview.put("totalArticlesRead", uniqueArticlesRead);  // 阅读篇数（去重）
+            overview.put("totalReadingTimes", totalReadingTimes);   // 阅读次数（累计）
+            overview.put("completedArticles", uniqueCompletedArticles);  // 完成篇数（去重）
             overview.put("favoriteCount", favoriteCount);
             result.put("overview", overview);
 

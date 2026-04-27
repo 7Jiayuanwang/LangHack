@@ -32,3 +32,44 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
   ('feature_toggle', 'admin.texts',        'true', '管理员-课文管理',   0),
   ('feature_toggle', 'admin.assignments',  'true', '管理员-作业管理',   0),
   ('feature_toggle', 'admin.sso_approval', 'true', '管理员-SSO 审批',   0);
+
+-- ─────────────────────────────────────────────
+-- 学生端补充页面 toggle
+-- ─────────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'page_videos',            'true',  '学生端-视频学习页',             0),
+  ('feature_toggle', 'page_video_player',      'true',  '学生端-视频播放器页',           0),
+  ('feature_toggle', 'page_interactive_text',  'true',  '学生端-交互式课文页',           0),
+  ('feature_toggle', 'page_vocabulary',        'true',  '学生端-词汇学习页',             0),
+  ('feature_toggle', 'page_ai_qa',             'true',  '学生端-AI问答页',               0),
+  ('feature_toggle', 'page_articles',          'true',  '学生端-文章阅读页',             0),
+  ('feature_toggle', 'page_user_texts',        'true',  '学生端-我的课文页',             0);
+
+-- ─────────────────────────────────────────────
+-- 教师端页面 toggle
+-- ─────────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'page_teacher_dashboard',   'true', '教师端-仪表盘',         0),
+  ('feature_toggle', 'page_teacher_courses',     'true', '教师端-课程管理',       0),
+  ('feature_toggle', 'page_teacher_my_courses',  'true', '教师端-我的课程',       0),
+  ('feature_toggle', 'page_teacher_classes',     'true', '教师端-班级管理',       0),
+  ('feature_toggle', 'page_teacher_assignments', 'true', '教师端-作业管理',       0);
+
+-- ─────────────────────────────────────────────
+-- 管理员端补充页面 toggle
+-- ─────────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'page_admin_videos',      'true', '管理员-视频管理',       0),
+  ('feature_toggle', 'page_admin_backups',     'true', '管理员-备份管理',       0),
+  ('feature_toggle', 'page_admin_monitoring',  'true', '管理员-系统监控',       0);
+
+-- ─────────────────────────────────────────────
+-- 运维端页面 toggle
+-- ─────────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'page_ops_monitoring',           'true', '运维端-系统监控',           0),
+  ('feature_toggle', 'page_ops_ai_providers',         'true', '运维端-AI提供商管理',       0),
+  ('feature_toggle', 'page_ops_feature_toggles',      'true', '运维端-功能开关管理',       0),
+  ('feature_toggle', 'page_ops_school_data_config',   'true', '运维端-学校数据配置',       0),
+  ('feature_toggle', 'page_ops_school_data_browser',  'true', '运维端-学校数据浏览器',     0),
+  ('feature_toggle', 'page_ops_update',               'true', '运维端-系统更新',           0);

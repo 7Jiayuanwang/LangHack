@@ -78,6 +78,10 @@
           <span class="stat-label">阅读篇数</span>
         </div>
         <div class="stat-item">
+          <span class="stat-value">{{ overview.totalReadingTimes || 0 }}</span>
+          <span class="stat-label">阅读次数</span>
+        </div>
+        <div class="stat-item">
           <span class="stat-value">{{ overview.completedArticles || 0 }}</span>
           <span class="stat-label">完成篇数</span>
         </div>
@@ -380,13 +384,19 @@ onMounted(() => {
 }
 
 .stats-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   margin-bottom: 20px;
 }
 
+@media (min-width: 640px) {
+  .stats-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
 .stat-item {
-  flex: 1;
   text-align: center;
   background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
   padding: 16px 8px;

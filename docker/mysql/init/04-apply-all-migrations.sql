@@ -2106,3 +2106,85 @@ WHERE u.role IN ('STUDENT', 'USER');
 
 -- ════════════════════════════════════════════════════════════════
 
+-- ═══════════════════════════════════════════════════════════════
+-- V27: 功能开关全覆盖 - 所有用户页面纳入管理
+-- 为所有角色（admin/teacher/student/user/ops）的所有页面添加功能开关
+-- ═══════════════════════════════════════════════════════════════
+
+-- ────────────────────────────────────────
+-- 管理员页面功能开关
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'page_admin_dashboard', 'true', '管理员-仪表板', 0),
+('feature_toggle', 'page_admin_users', 'true', '管理员-用户管理', 0),
+('feature_toggle', 'page_admin_courses', 'true', '管理员-课程管理', 0),
+('feature_toggle', 'page_admin_classes', 'true', '管理员-班级管理', 0),
+('feature_toggle', 'page_admin_units', 'true', '管理员-单元管理', 0),
+('feature_toggle', 'page_admin_texts', 'true', '管理员-课文管理', 0),
+('feature_toggle', 'page_admin_words', 'true', '管理员-单词管理', 0),
+('feature_toggle', 'page_admin_unit_texts', 'true', '管理员-单元课文关联', 0),
+('feature_toggle', 'page_admin_unit_words', 'true', '管理员-单元单词关联', 0),
+('feature_toggle', 'page_admin_assignments', 'true', '管理员-任务管理', 0),
+('feature_toggle', 'page_admin_videos', 'true', '管理员-视频管理', 0),
+('feature_toggle', 'page_admin_backups', 'true', '管理员-备份管理', 0),
+('feature_toggle', 'page_admin_monitoring', 'true', '管理员-系统监控', 0),
+('feature_toggle', 'page_admin_sso_approvals', 'true', '管理员-SSO审批', 0);
+
+-- ────────────────────────────────────────
+-- 教师页面功能开关
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'page_teacher_dashboard', 'true', '教师-仪表板', 0),
+('feature_toggle', 'page_teacher_courses', 'true', '教师-课程管理', 0),
+('feature_toggle', 'page_teacher_my_courses', 'true', '教师-我的课程', 0),
+('feature_toggle', 'page_teacher_classes', 'true', '教师-班级管理', 0),
+('feature_toggle', 'page_teacher_assignments', 'true', '教师-任务管理', 0);
+
+-- ────────────────────────────────────────
+-- 学生页面功能开关
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'page_student_dashboard', 'true', '学生-仪表板', 0),
+('feature_toggle', 'page_student_articles', 'true', '学生-文章发现', 0),
+('feature_toggle', 'page_student_courses', 'true', '学生-课程学习', 0),
+('feature_toggle', 'page_student_vocabulary', 'true', '学生-生词本', 0),
+('feature_toggle', 'page_student_my_study', 'true', '学生-我的学习', 0),
+('feature_toggle', 'page_student_videos', 'true', '学生-视频学习', 0),
+('feature_toggle', 'page_student_interactive_text', 'true', '学生-交互式阅读', 0),
+('feature_toggle', 'page_student_video_player', 'true', '学生-视频播放器', 0),
+('feature_toggle', 'page_student_video_subtitle_player', 'true', '学生-字幕视频播放器', 0);
+
+-- 注：以下功能开关已在之前的迁移中创建，这里仅作注释说明
+-- page_assignments (V16) - 学生-任务
+-- page_classes (已存在) - 学生-社区
+-- page_schedule (已存在) - 学生-课表
+-- page_scores (已存在) - 学生-成绩
+-- page_course_selections (已存在) - 学生-选课
+-- page_user_texts (已存在) - 学生-我的创作
+-- page_ai_video (已存在) - 学生-AI视频
+-- page_ai_qa (V16) - 学生-AI问答
+-- page_word_recite (V17) - 学生-背单词
+
+-- ────────────────────────────────────────
+-- 普通用户页面功能开关
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'page_user_home', 'true', '用户-首页', 0),
+('feature_toggle', 'page_user_dashboard', 'true', '用户-仪表板', 0),
+('feature_toggle', 'page_user_courses', 'true', '用户-课程浏览', 0),
+('feature_toggle', 'page_user_texts', 'true', '用户-课文浏览', 0),
+('feature_toggle', 'page_user_units', 'true', '用户-单元浏览', 0),
+('feature_toggle', 'page_user_vocabulary', 'true', '用户-生词本', 0),
+('feature_toggle', 'page_user_user_texts', 'true', '用户-我的创作', 0),
+('feature_toggle', 'page_user_interactive_text', 'true', '用户-交互式阅读', 0),
+('feature_toggle', 'page_user_simple_text_view', 'true', '用户-简单文本视图', 0);
+
+-- ────────────────────────────────────────
+-- 运维页面功能开关
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'page_ops_ai_providers', 'true', '运维-AI提供商配置', 0),
+('feature_toggle', 'page_ops_feature_toggles', 'true', '运维-功能开关管理', 0),
+('feature_toggle', 'page_ops_school_data_config', 'true', '运维-学校数据配置', 0),
+('feature_toggle', 'page_ops_school_data_browser', 'true', '运维-学校数据浏览', 0),
+('feature_toggle', 'page_ops_update', 'true', '运维-系统更新', 0);
