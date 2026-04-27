@@ -1,5 +1,6 @@
 package com.english.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.dto.SchoolDataSyncFilterRequest;
@@ -480,6 +481,21 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         return firstNonBlank(user.getRealName(), user.getNickname());
     }
 
+    private String resolveCourseName(String classId) {
+        if (classId == null || classId.trim().isEmpty()) {
+            return null;
+        }
+        TeachingClass teachingClass = teachingClassMapper.selectOne(
+            new LambdaQueryWrapper<TeachingClass>()
+                .eq(TeachingClass::getClassId, classId.trim())
+                .last("LIMIT 1")
+        );
+        if (teachingClass != null) {
+            return firstNonBlank(teachingClass.getCourseName());
+        }
+        return null;
+    }
+
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
     }
@@ -709,7 +725,13 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setStudentId(studentId);
         entity.setStudentName(getStringValue(data, "studentName"));
         entity.setCourseCode(getCourseCodeValue(data));
-        entity.setCourseName(getStringValue(data, "courseName"));
+
+        // courseName: CDSP API 不返回，通过 classId 查询 teaching_class 获取
+        String courseName = getStringValue(data, "courseName");
+        if (courseName == null || courseName.trim().isEmpty()) {
+            courseName = resolveCourseName(classId);
+        }
+        entity.setCourseName(courseName);
         entity.setClassId(classId);
         entity.setTeacherId(getStringValue(data, "teacherId"));
         entity.setTeacherName(getStringValue(data, "teacherName"));
