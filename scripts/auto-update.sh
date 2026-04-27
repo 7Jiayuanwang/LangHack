@@ -1194,6 +1194,7 @@ if [ "$fetch_ok" = false ]; then
     fi
 else
     log "INFO: git fetch 成功 ✓"
+fi  # 结束 fetch_ok 检查
 fi  # 结束离线模式 if
 
 LOCAL_HASH=$(git rev-parse HEAD)
