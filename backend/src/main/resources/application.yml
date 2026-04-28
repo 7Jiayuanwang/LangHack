@@ -141,21 +141,6 @@ recommendation:
   item-cf:
     per-seed-limit: 20
 
-recommendation:
-  weight:
-    item-cf: 0.6
-    user-cf: 0.4
-  similarity:
-    text-threshold: 0.2
-    user-threshold: 0.3
-  cold-start:
-    min-reads: 3
-  user-cf:
-    min-score: 0.5
-    per-user-limit: 10
-  item-cf:
-    per-seed-limit: 20
-
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true

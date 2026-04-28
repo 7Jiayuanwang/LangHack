@@ -8,6 +8,10 @@
 USE `english_learning`;
 SET NAMES utf8mb4;
 
+-- 禁用警告和 notes（ALTER TABLE IF NOT EXISTS 在 MySQL 8.0.29+ 才支持，旧版本会报错但不中断）
+SET SESSION sql_notes = 0;
+SET SESSION sql_mode = 'NO_AUTO_VALUE_ON_ZERO';
+
 -- ═══════════════════════════════════════════════════════════════
 -- V0__base_tables.sql
 -- ═══════════════════════════════════════════════════════════════
@@ -318,39 +322,34 @@ CREATE TABLE IF NOT EXISTS score_records (
 
 -- ────────────────────────────────────────
 -- 2. 任务表扩展 [原 V6 + V7]
---    使用存储过程 IF NOT EXISTS 防止重复添加列
---    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
+--    docker-entrypoint-initdb.d 不支持存储过程（即使无 DELIMITER），改用条件 ALTER
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
-CREATE PROCEDURE _add_col_assignments_weight()
-BEGIN
-    -- 任务权重（加权平均分）
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='weight') THEN
-        ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00
-            COMMENT '任务权重（用于计算加权平均分，默认1.00）' AFTER deadline;
-    END IF;
-    -- 理想学习时长
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='ideal_study_time_minutes') THEN
-        ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60
-            COMMENT '理想学习时长（分钟），默认60分钟' AFTER weight;
-    END IF;
-END;
-CALL _add_col_assignments_weight();
-DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
+-- 任务权重（加权平均分）
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='weight');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00 COMMENT ''任务权重（用于计算加权平均分，默认1.00）'' AFTER deadline', 'SELECT ''Column weight already exists'' AS Info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 理想学习时长
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='ideal_study_time_minutes');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60 COMMENT ''理想学习时长（分钟），默认60分钟'' AFTER weight', 'SELECT ''Column ideal_study_time_minutes already exists'' AS Info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- 索引（幂等：IF NOT EXISTS 检查）
-DROP PROCEDURE IF EXISTS _add_idx_assignments;
-CREATE PROCEDURE _add_idx_assignments()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_weight') THEN
-        CREATE INDEX idx_weight ON assignments (weight);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_ideal_study_time') THEN
-        CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes);
-    END IF;
-END;
-CALL _add_idx_assignments();
-DROP PROCEDURE IF EXISTS _add_idx_assignments;
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_weight');
+SET @sql = IF(@idx_exists = 0, 'CREATE INDEX idx_weight ON assignments (weight)', 'SELECT ''Index idx_weight already exists'' AS Info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_ideal_study_time');
+SET @sql = IF(@idx_exists = 0, 'CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes)', 'SELECT ''Index idx_ideal_study_time already exists'' AS Info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -367,132 +366,110 @@ DROP PROCEDURE IF EXISTS _add_idx_assignments;
 
 -- ────────────────────────────────────────
 -- 1. 学习记录添加课文关联 [原 V2]
---    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
+--    docker-entrypoint-initdb.d 不支持存储过程，改用动态 SQL
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_lr_text;
-CREATE PROCEDURE _add_col_lr_text()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id') THEN
-        ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT '关联的课文ID' AFTER word_id;
-    END IF;
-END;
-CALL _add_col_lr_text();
-DROP PROCEDURE IF EXISTS _add_col_lr_text;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT ''关联的课文ID'' AFTER word_id', 'SELECT ''Column text_id already exists'' AS Info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-DROP PROCEDURE IF EXISTS _add_fk_lr_text;
-CREATE PROCEDURE _add_fk_lr_text()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
-        WHERE table_schema = DATABASE() AND table_name = 'learning_records' AND constraint_name = 'fk_learning_record_text'
-    ) THEN
-        ALTER TABLE learning_records ADD CONSTRAINT fk_learning_record_text
-            FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE SET NULL;
-    END IF;
-END;
-CALL _add_fk_lr_text();
-DROP PROCEDURE IF EXISTS _add_fk_lr_text;
+SET @fk_exists = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE table_schema = DATABASE() AND table_name = 'learning_records' AND constraint_name = 'fk_learning_record_text');
+SET @sql = IF(@fk_exists = 0, 'ALTER TABLE learning_records ADD CONSTRAINT fk_learning_record_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE SET NULL', 'SELECT ''FK fk_learning_record_text already exists'' AS Info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-DROP PROCEDURE IF EXISTS _add_index_lr_text;
-CREATE PROCEDURE _add_index_lr_text()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.STATISTICS
-        WHERE table_schema = DATABASE() AND table_name = 'learning_records' AND index_name = 'idx_text_id'
-    ) THEN
-        CREATE INDEX idx_text_id ON learning_records (text_id);
-    END IF;
-END;
-CALL _add_index_lr_text();
-DROP PROCEDURE IF EXISTS _add_index_lr_text;
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'learning_records' AND index_name = 'idx_text_id');
+SET @sql = IF(@idx_exists = 0, 'CREATE INDEX idx_text_id ON learning_records (text_id)', 'SELECT ''Index idx_text_id already exists'' AS Info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- ────────────────────────────────────────
 -- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_texts_batch;
-CREATE PROCEDURE _add_col_texts_batch()
-BEGIN
-    -- 中英对照内容 [原 V2]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_content') THEN
-        ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT '中英对照版本内容';
-    END IF;
-    -- Markdown 支持 [原 V2]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN markdown_content LONGTEXT COMMENT 'Markdown格式的课文内容' AFTER content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='content_type') THEN
-        ALTER TABLE texts ADD COLUMN content_type ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '内容类型：TEXT-纯文本，MARKDOWN-Markdown格式' AFTER markdown_content;
-    END IF;
-    -- 多难度版本 Markdown [原 V2]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT COMMENT 'CET-4难度的Markdown版本' AFTER chinese_parallel_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN cet6_markdown_content LONGTEXT COMMENT 'CET-6难度的Markdown版本' AFTER cet4_markdown_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN academic_markdown_content LONGTEXT COMMENT '学术版的Markdown版本' AFTER cet6_markdown_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN chinese_parallel_markdown_content LONGTEXT COMMENT '中英对照的Markdown版本' AFTER academic_markdown_content;
-    END IF;
-    -- 推荐文章标识 [原 V2]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_featured') THEN
-        ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT '是否推荐';
-    END IF;
-    -- 推荐优先级 [原 V10]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='featured_priority') THEN
-        ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT '推荐优先级，值越大越靠前显示（0=默认）';
-    END IF;
-    -- 多难度版本内容（纯文本）[原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_content') THEN
-        ALTER TABLE texts ADD COLUMN cet4_content LONGTEXT COMMENT 'CET-4难度版本内容' AFTER content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_content') THEN
-        ALTER TABLE texts ADD COLUMN cet6_content LONGTEXT COMMENT 'CET-6难度版本内容' AFTER cet4_content;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_content') THEN
-        ALTER TABLE texts ADD COLUMN academic_content LONGTEXT COMMENT '学术版版本内容' AFTER cet6_content;
-    END IF;
-    -- 上传者 [原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='uploaded_by') THEN
-        ALTER TABLE texts ADD COLUMN uploaded_by BIGINT DEFAULT NULL COMMENT '上传者用户ID';
-    END IF;
-    -- 标签 [原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='tags') THEN
-        ALTER TABLE texts ADD COLUMN tags VARCHAR(500) DEFAULT NULL COMMENT '标签，逗号分隔';
-    END IF;
-    -- 浏览/点赞 [原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='view_count') THEN
-        ALTER TABLE texts ADD COLUMN view_count INT DEFAULT 0 COMMENT '浏览次数';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='like_count') THEN
-        ALTER TABLE texts ADD COLUMN like_count INT DEFAULT 0 COMMENT '点赞次数';
-    END IF;
-    -- 公开状态 [原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_public') THEN
-        ALTER TABLE texts ADD COLUMN is_public TINYINT(1) DEFAULT 1 COMMENT '是否公开（0=否，1=是）';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='status') THEN
-        ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED';
-    END IF;
-END;
-CALL _add_col_texts_batch();
-DROP PROCEDURE IF EXISTS _add_col_texts_batch;
+-- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
+-- 改为动态 SQL 以避免存储过程限制
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT ''中英对照版本内容''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='markdown_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN markdown_content LONGTEXT COMMENT ''Markdown格式的课文内容'' AFTER content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='content_type');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN content_type ENUM(''TEXT'',''MARKDOWN'') DEFAULT ''TEXT'' COMMENT ''内容类型：TEXT-纯文本，MARKDOWN-Markdown格式'' AFTER markdown_content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_markdown_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT COMMENT ''CET-4难度的Markdown版本'' AFTER chinese_parallel_content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_markdown_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN cet6_markdown_content LONGTEXT COMMENT ''CET-6难度的Markdown版本'' AFTER cet4_markdown_content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_markdown_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN academic_markdown_content LONGTEXT COMMENT ''学术版的Markdown版本'' AFTER cet6_markdown_content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_markdown_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN chinese_parallel_markdown_content LONGTEXT COMMENT ''中英对照的Markdown版本'' AFTER academic_markdown_content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_featured');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT ''是否推荐''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='featured_priority');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT ''推荐优先级，值越大越靠前显示（0=默认）''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN cet4_content LONGTEXT COMMENT ''CET-4难度版本内容'' AFTER content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN cet6_content LONGTEXT COMMENT ''CET-6难度版本内容'' AFTER cet4_content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_content');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN academic_content LONGTEXT COMMENT ''学术版版本内容'' AFTER cet6_content', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='uploaded_by');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN uploaded_by BIGINT DEFAULT NULL COMMENT ''上传者用户ID''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='tags');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN tags VARCHAR(500) DEFAULT NULL COMMENT ''标签，逗号分隔''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='view_count');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN view_count INT DEFAULT 0 COMMENT ''浏览次数''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='like_count');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN like_count INT DEFAULT 0 COMMENT ''点赞次数''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_public');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN is_public TINYINT(1) DEFAULT 1 COMMENT ''是否公开（0=否，1=是）''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='status');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT ''PUBLISHED'' COMMENT ''状态：DRAFT/PUBLISHED/ARCHIVED''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 
 -- 推荐优先级复合索引 [原 V10]
-DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
-CREATE PROCEDURE _add_idx_featured_priority()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.STATISTICS
-        WHERE table_schema = DATABASE() AND table_name = 'texts' AND index_name = 'idx_texts_featured_priority'
-    ) THEN
-        CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC);
-    END IF;
-END;
-CALL _add_idx_featured_priority();
-DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
+-- 推荐优先级复合索引 [原 V10]
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'texts' AND index_name = 'idx_texts_featured_priority');
+SET @sql = IF(@idx_exists = 0, 'CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 
 -- unit_id 改为可空（支持课文从单元中移除）[原 V2]
 ALTER TABLE texts MODIFY COLUMN unit_id BIGINT DEFAULT NULL
@@ -570,40 +547,36 @@ CREATE TABLE IF NOT EXISTS media (
 -- 2. 媒体路径列 [原 V9]
 --    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_media_paths;
-CREATE PROCEDURE _add_col_media_paths()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path') THEN
-        ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT 'stored media file path';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path') THEN
-        ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path';
-    END IF;
-END;
-CALL _add_col_media_paths();
-DROP PROCEDURE IF EXISTS _add_col_media_paths;
+-- 媒体表路径列 [原 V8]
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT ''stored media file path''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT ''stored thumbnail file path''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 
 -- ────────────────────────────────────────
 -- 3. 词汇本添加 SM-2 间隔重复字段 [原 V3]
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_sm2;
-CREATE PROCEDURE _add_col_sm2()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT 'SM-2 重复次数';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='interval_days') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 0 COMMENT 'SM-2 间隔天数';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='easiness_factor') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT 'SM-2 简易因子';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT 'SM-2 下次复习时间';
-    END IF;
-END;
-CALL _add_col_sm2();
-DROP PROCEDURE IF EXISTS _add_col_sm2;
+-- SM-2 算法列 [原 V11]
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT ''SM-2 重复次数''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='interval_days');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 0 COMMENT ''SM-2 间隔天数''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='easiness_factor');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT ''SM-2 简易因子''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT ''SM-2 下次复习时间''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 
 -- ────────────────────────────────────────
 -- 4. 创建划线标注表 [原 V3]
@@ -1060,13 +1033,26 @@ CREATE TABLE IF NOT EXISTS sso_config (
     INDEX idx_config_type (config_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO配置表';
 
--- 扩展 users 表字段
-ALTER TABLE users
-ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT '是否通过SSO绑定: 0=否, 1=是',
-ADD COLUMN sso_provider VARCHAR(50) COMMENT 'SSO提供商',
-ADD COLUMN sso_subject VARCHAR(255) COMMENT 'SSO唯一标识',
-ADD INDEX idx_sso_bound (sso_bound),
-ADD INDEX idx_sso_subject (sso_provider, sso_subject);
+-- 扩展 users 表字段（幂等模式）
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='users' AND column_name='sso_bound');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''是否通过SSO绑定: 0=否, 1=是''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='users' AND column_name='sso_provider');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO提供商''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='users' AND column_name='sso_subject');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO唯一标识''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='users' AND index_name='idx_sso_bound');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE users ADD INDEX idx_sso_bound (sso_bound)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='users' AND index_name='idx_sso_subject');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE users ADD INDEX idx_sso_subject (sso_provider, sso_subject)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 插入默认 SSO 配置
 INSERT INTO sso_config (config_key, config_value, config_type, description) VALUES
@@ -2202,9 +2188,9 @@ WHERE `config_group` = 'feature_toggle'
 -- ═══════════════════════════════════════════════════════════════
 
 
-ALTER TABLE `ai_provider`
-    ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
-        AFTER `service`;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='ai_provider' AND column_name='protocol');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT ''openai_compatible'' AFTER `service`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 ALTER TABLE `ai_provider`
     MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
@@ -2227,8 +2213,9 @@ ALTER TABLE `ai_provider`
 -- ─────────────────────────────────────────────
 -- Part 1: SSO 绑定表管理员备注字段
 -- ─────────────────────────────────────────────
-ALTER TABLE sso_user_bindings
-ADD COLUMN admin_remark TEXT COMMENT '管理员备注：记录特殊情况（如用户被删除后重新登录）' AFTER sso_member_of;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sso_user_bindings' AND column_name='admin_remark');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE sso_user_bindings ADD COLUMN admin_remark TEXT COMMENT ''管理员备注：记录特殊情况（如用户被删除后重新登录）'' AFTER sso_member_of', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ─────────────────────────────────────────────
 -- Part 2: 按学院链式拉取数据模型
@@ -2499,38 +2486,23 @@ WHERE u.role IN ('STUDENT', 'USER');
 USE `english_learning`;
 
 -- 幂等添加索引（如果索引已存在则跳过）
-DELIMITER $$
+-- 幂等添加索引（V25 相似度矩阵索引）
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'text_similarity_matrix' AND index_name = 'idx_similar_text_id');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE text_similarity_matrix ADD INDEX idx_similar_text_id (similar_text_id)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-CREATE PROCEDURE add_index_if_not_exists(
-    IN p_table_name VARCHAR(64),
-    IN p_index_name VARCHAR(64),
-    IN p_column_name VARCHAR(64)
-)
-BEGIN
-    DECLARE index_exists INT DEFAULT 0;
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'text_similarity_matrix_tmp' AND index_name = 'idx_similar_text_id');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE text_similarity_matrix_tmp ADD INDEX idx_similar_text_id (similar_text_id)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-    SELECT COUNT(*) INTO index_exists
-    FROM information_schema.STATISTICS
-    WHERE table_schema = DATABASE()
-      AND table_name = p_table_name
-      AND index_name = p_index_name;
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'user_similarity_matrix' AND index_name = 'idx_similar_user_id');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE user_similarity_matrix ADD INDEX idx_similar_user_id (similar_user_id)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-    IF index_exists = 0 THEN
-        SET @sql = CONCAT('ALTER TABLE `', p_table_name, '` ADD INDEX `', p_index_name, '` (`', p_column_name, '`)');
-        PREPARE stmt FROM @sql;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END IF;
-END$$
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'user_similarity_matrix_tmp' AND index_name = 'idx_similar_user_id');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE user_similarity_matrix_tmp ADD INDEX idx_similar_user_id (similar_user_id)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-DELIMITER ;
-
-CALL add_index_if_not_exists('text_similarity_matrix', 'idx_similar_text_id', 'similar_text_id');
-CALL add_index_if_not_exists('text_similarity_matrix_tmp', 'idx_similar_text_id', 'similar_text_id');
-CALL add_index_if_not_exists('user_similarity_matrix', 'idx_similar_user_id', 'similar_user_id');
-CALL add_index_if_not_exists('user_similarity_matrix_tmp', 'idx_similar_user_id', 'similar_user_id');
-
-DROP PROCEDURE IF EXISTS add_index_if_not_exists;
 
 -- ─────────────────────────────────────────────
 -- Part 6: 优化用户文本交互视图
@@ -2624,7 +2596,6 @@ WHERE data_source = 'student_schedule'
 -- ─────────────────────────────────────────────
 
 -- ════════════════════════════════════════════════════════════════
-<<<<<<< HEAD
 -- Part 1: 修复行政班学院字段映射
 -- ════════════════════════════════════════════════════════════════
 
@@ -2654,19 +2625,37 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 ('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
 ('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
 
-
-=======
+-- ════════════════════════════════════════════════════════════════
 -- V23: sync_logs 分页扩展字段
 -- ════════════════════════════════════════════════════════════════
 
-ALTER TABLE sync_logs
-    ADD COLUMN pagination_complete TINYINT(1) NULL COMMENT '分页是否完整结束' AFTER operator,
-    ADD COLUMN pagination_stop_reason VARCHAR(64) NULL COMMENT '分页停止原因' AFTER pagination_complete,
-    ADD COLUMN pagination_pages_fetched INT NULL COMMENT '已拉取页数' AFTER pagination_stop_reason,
-    ADD COLUMN pagination_last_skip INT NULL COMMENT '最后一次skip值' AFTER pagination_pages_fetched,
-    ADD COLUMN pagination_page_size INT NULL COMMENT '分页pageSize' AFTER pagination_last_skip,
-    ADD COLUMN pagination_guard_hit TINYINT(1) NULL COMMENT '是否触发分页防护' AFTER pagination_page_size,
-    ADD COLUMN fetched_row_count INT NULL COMMENT '上游已拉取条数' AFTER pagination_guard_hit;
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_complete');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_complete TINYINT(1) NULL COMMENT ''分页是否完整结束'' AFTER operator', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_stop_reason');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_stop_reason VARCHAR(64) NULL COMMENT ''分页停止原因'' AFTER pagination_complete', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_pages_fetched');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_pages_fetched INT NULL COMMENT ''已拉取页数'' AFTER pagination_stop_reason', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_last_skip');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_last_skip INT NULL COMMENT ''最后一次skip值'' AFTER pagination_pages_fetched', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_page_size');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_page_size INT NULL COMMENT ''分页pageSize'' AFTER pagination_last_skip', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_guard_hit');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_guard_hit TINYINT(1) NULL COMMENT ''是否触发分页防护'' AFTER pagination_page_size', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='fetched_row_count');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN fetched_row_count INT NULL COMMENT ''上游已拉取条数'' AFTER pagination_guard_hit', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ════════════════════════════════════════════════════════════════
 -- V24: 相似度矩阵表（Item-CF / User-CF 推荐算法核心数据）
@@ -2724,25 +2713,50 @@ CREATE TABLE IF NOT EXISTS `user_similarity_matrix_tmp` (
 -- V25: 相似度矩阵补 similar_*_id 索引（Item-CF / User-CF 双向查询优化）
 -- ════════════════════════════════════════════════════════════════
 
-ALTER TABLE `text_similarity_matrix`      ADD INDEX `idx_similar_text_id` (`similar_text_id`);
-ALTER TABLE `text_similarity_matrix_tmp`  ADD INDEX `idx_similar_text_id` (`similar_text_id`);
-ALTER TABLE `user_similarity_matrix`      ADD INDEX `idx_similar_user_id` (`similar_user_id`);
-ALTER TABLE `user_similarity_matrix_tmp`  ADD INDEX `idx_similar_user_id` (`similar_user_id`);
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='text_similarity_matrix' AND index_name='idx_similar_text_id');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `text_similarity_matrix` ADD INDEX `idx_similar_text_id` (`similar_text_id`)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='text_similarity_matrix_tmp' AND index_name='idx_similar_text_id');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `text_similarity_matrix_tmp` ADD INDEX `idx_similar_text_id` (`similar_text_id`)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='user_similarity_matrix' AND index_name='idx_similar_user_id');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `user_similarity_matrix` ADD INDEX `idx_similar_user_id` (`similar_user_id`)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='user_similarity_matrix_tmp' AND index_name='idx_similar_user_id');
+SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `user_similarity_matrix_tmp` ADD INDEX `idx_similar_user_id` (`similar_user_id`)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ════════════════════════════════════════════════════════════════
--- V26: v_user_text_interaction_scores 视图（原 CROSS JOIN 版本，保持不变）
+-- V26: 优化 v_user_text_interaction_scores 视图
 -- ════════════════════════════════════════════════════════════════
+-- 背景：V12 原视图使用 users CROSS JOIN texts（180 × 520 ≈ 9.3 万行全扫），
+-- 无交互的 (user, text) 对也会参与计算后被 WHERE score > 0 滤掉，浪费 I/O。
+-- 改为由四张交互源表 UNION 驱动，只对真实有过交互的 (user, text) 对生成行。
 
 CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
+WITH user_text_pairs AS (
+    SELECT user_id,    text_id FROM user_text_reads
+    UNION
+    SELECT student_id, text_id FROM text_learning_records
+    UNION
+    SELECT student_id, text_id FROM article_favorites
+    UNION
+    SELECT user_id,    text_id FROM underlines
+)
 SELECT
-    u.id                                          AS user_id,
-    t.id                                          AS text_id,
-    COALESCE(utr.read_at IS NOT NULL, 0)          AS w_read,
-    COALESCE(tlr.is_completed = 1, 0)             AS w_complete,
-    COALESCE(af.id IS NOT NULL, 0)                AS w_favorite,
+    utp.user_id                                    AS user_id,
+    utp.text_id                                    AS text_id,
+
+    COALESCE(utr.read_at IS NOT NULL, 0)           AS w_read,
+    COALESCE(tlr.is_completed = 1, 0)              AS w_complete,
+    COALESCE(af.id IS NOT NULL, 0)                 AS w_favorite,
     LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) AS w_duration,
     COALESCE(sr.correct_rate, 0.0)                 AS w_accuracy,
     LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) AS w_underline,
+
     LEAST(
         COALESCE(utr.read_at IS NOT NULL, 0) * 0.2
         + COALESCE(tlr.is_completed = 1, 0) * 0.2
@@ -2751,15 +2765,17 @@ SELECT
         + COALESCE(sr.correct_rate, 0.0) * 0.1
         + LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) * 0.1,
         1.0
-    )                                             AS interaction_score
-FROM `users` u
-CROSS JOIN `texts` t
+    )                                              AS interaction_score
+
+FROM user_text_pairs utp
+INNER JOIN `users` u ON u.id = utp.user_id AND u.role IN ('STUDENT', 'USER')
+INNER JOIN `texts` t ON t.id = utp.text_id AND t.deleted = 0
 LEFT JOIN `user_text_reads` utr
-    ON utr.user_id = u.id AND utr.text_id = t.id
+    ON utr.user_id = utp.user_id AND utr.text_id = utp.text_id
 LEFT JOIN `text_learning_records` tlr
-    ON tlr.student_id = u.id AND tlr.text_id = t.id
+    ON tlr.student_id = utp.user_id AND tlr.text_id = utp.text_id
 LEFT JOIN `article_favorites` af
-    ON af.student_id = u.id AND af.text_id = t.id
+    ON af.student_id = utp.user_id AND af.text_id = utp.text_id
 LEFT JOIN (
     SELECT
         sr.student_id,
@@ -2772,13 +2788,14 @@ LEFT JOIN (
     LEFT JOIN learning_records lr ON lr.assignment_id = sr.assignment_id
     WHERE sr.score_type = 'ASSIGNMENT'
     GROUP BY sr.student_id, lr.text_id
-) sr ON sr.student_id = u.id AND sr.text_id = t.id
+) sr ON sr.student_id = utp.user_id AND sr.text_id = utp.text_id
 LEFT JOIN (
     SELECT user_id, text_id, COUNT(*) AS underline_count
     FROM underlines
     GROUP BY user_id, text_id
-) ul ON ul.user_id = u.id AND ul.text_id = t.id
-WHERE u.role IN ('STUDENT', 'USER');
+) ul ON ul.user_id = utp.user_id AND ul.text_id = utp.text_id;
 
 -- ════════════════════════════════════════════════════════════════
->>>>>>> feature/5-fix-text
+
+-- 恢复 sql_notes
+SET SESSION sql_notes = 1;

@@ -143,8 +143,8 @@ services:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
       interval: 10s
       timeout: 5s
-      retries: 24
-      start_period: 300s  # 5 分钟，等待主库初始化 + mysqldump 数据同步 + 复制配置
+      retries: 36
+      start_period: 600s  # 10 分钟，给 188KB 04-apply-all-migrations.sql + ecdict 74w 行 mysqldump 留余量
 
   # ─────────────────────────────────────────────
   # Redis 缓存
