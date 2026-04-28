@@ -109,7 +109,7 @@
         </el-table>
       </el-tab-pane>
 
-      <el-tab-pane label="教学班 / 教师授课" name="teaching_class">
+      <el-tab-pane label="教学班 / 教师授课" name="teacher_courses">
         <div class="tab-note">
           <el-icon><InfoFilled /></el-icon>
           <span>官方 9 个数据源中「教师授课」(/api/jssk) 的字段并入教学班表存储，在此 Tab 统一展示。</span>
@@ -295,7 +295,7 @@ const OPERATOR_LABELS = {
 const dataSourceLabels = {
   administrative_class: '行政班',
   school_course: '课程',
-  teaching_class: '教学班 / 教师授课',
+  teacher_courses: '教学班 / 教师授课',
   course_schedule: '课程安排',
   course_selection: '选课记录',
   level_exam_scores: '等级考试',
