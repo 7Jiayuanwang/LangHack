@@ -545,8 +545,16 @@ async function handleSync() {
       ? fullSyncSchoolDataFiltered
       : incrementalSyncSchoolDataFiltered
 
-    await syncFn(activeTab.value, payload)
-    ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步成功`)
+    // 教学班 / 教师授课需要同步两个数据源
+    if (activeTab.value === 'teacher_courses') {
+      await syncFn('teaching_class', payload)
+      await syncFn('teacher_courses', payload)
+      ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步完成（teaching_class + teacher_courses）`)
+    } else {
+      await syncFn(activeTab.value, payload)
+      ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步成功`)
+    }
+
     await loadOverview()
     await loadData()
   } catch (e) {
