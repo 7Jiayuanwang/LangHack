@@ -114,11 +114,12 @@ public class TencentTranslateService {
             AiProvider provider = aiProviderService.pick("translate");
             if (provider != null) {
                 Map<String, String> resolved = new HashMap<>();
-                String rawUrl = provider.getApiUrl() != null ? provider.getApiUrl() : defaultApiUrl;
-                resolved.put("api_url", normalizeApiUrl(rawUrl));
+                String protocol = provider.getProtocol() != null ? provider.getProtocol() : "openai_compatible";
+                resolved.put("protocol", protocol);
+                resolved.put("api_url", provider.getApiUrl());
                 resolved.put("api_key", provider.getApiKey());
-                String model = provider.getModel();
-                resolved.put("model", (model != null && !model.isEmpty()) ? model : defaultModel);
+                resolved.put("app_id", provider.getAppId());
+                resolved.put("model", provider.getModel() != null ? provider.getModel() : defaultModel);
                 resolved.put("enabled", "true");
                 resolved.put("provider_name", provider.getName());
                 return resolved;
@@ -126,16 +127,12 @@ public class TencentTranslateService {
         }
         // 2. 回退：system_config 表 > application.yml 默认值
         Map<String, String> dbConfig = systemConfigService.getByGroup("ai_translate");
-        String apiUrl = getOrDefault(dbConfig, "api_url", defaultApiUrl);
-        String apiKey = getOrDefault(dbConfig, "api_key", defaultApiKey);
-        String model = getOrDefault(dbConfig, "model", defaultModel);
-        String enabled = getOrDefault(dbConfig, "enabled", "true");
-
         Map<String, String> resolved = new HashMap<>();
-        resolved.put("api_url", normalizeApiUrl(apiUrl));
-        resolved.put("api_key", apiKey);
-        resolved.put("model", model);
-        resolved.put("enabled", enabled);
+        resolved.put("protocol", "openai_compatible");
+        resolved.put("api_url", normalizeApiUrl(getOrDefault(dbConfig, "api_url", defaultApiUrl)));
+        resolved.put("api_key", getOrDefault(dbConfig, "api_key", defaultApiKey));
+        resolved.put("model", getOrDefault(dbConfig, "model", defaultModel));
+        resolved.put("enabled", getOrDefault(dbConfig, "enabled", "true"));
         return resolved;
     }
 
@@ -194,6 +191,11 @@ public class TencentTranslateService {
         long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
         String user = AiCallMetricsService.getCurrentUser();
 
+        String protocol = config.getOrDefault("protocol", "openai_compatible");
+        if ("hiagent".equals(protocol)) {
+            return translateViaHiAgent(config, text, source, target, startTime, user);
+        }
+
         try {
             if (source == null || source.isEmpty()) {
                 source = "auto";
@@ -228,11 +230,11 @@ public class TencentTranslateService {
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
-            logger.debug("Calling translate API - source: {}, target: {}, textLength: {}, model: {}",
+            logger.debug("Calling translate API - source: {}, target: {}, textLength: {}, model: ",
                     source, target, text.length(), config.get("model"));
 
             ResponseEntity<String> response = restTemplate.exchange(
-                    config.get("api_url"),
+                    normalizeApiUrl(config.get("api_url")),
                     HttpMethod.POST,
                     entity,
                     String.class
@@ -331,6 +333,71 @@ public class TencentTranslateService {
             testText = "Hello, world!";
         }
         return translate(testText, "en", "zh");
+    }
+
+    /**
+     * HiAgent 协议翻译实现
+     */
+    private String translateViaHiAgent(Map<String, String> config, String text, String source, String target,
+                                       long startTime, String user) {
+        String apiUrl = config.get("api_url");
+        String apiKey = config.get("api_key");
+        String appId = config.get("app_id");
+
+        if (appId == null || appId.isEmpty()) {
+            throw new BusinessException("HiAgent 协议需要配置 App ID");
+        }
+
+        try {
+            String sourceLang = mapLanguageCode(source);
+            String targetLang = mapLanguageCode(target);
+            String prompt = String.format("将以下%s翻译为%s，只返回翻译结果:\n%s", sourceLang, targetLang, text);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Apikey", apiKey);
+            headers.set("Appid", appId);
+
+            // Step 1: create_conversation
+            Map<String, Object> createBody = new HashMap<>();
+            createBody.put("UserID", user != null ? user : "system");
+            createBody.put("Inputs", new HashMap<>());
+
+            ResponseEntity<String> createResp = restTemplate.exchange(
+                    apiUrl + "/create_conversation", HttpMethod.POST,
+                    new HttpEntity<>(createBody, headers), String.class);
+
+            JsonNode createRoot = objectMapper.readTree(createResp.getBody());
+            String conversationId = createRoot.path("Conversation").path("AppConversationID").asText();
+
+            // Step 2: chat_query_v2
+            Map<String, Object> chatBody = new HashMap<>();
+            chatBody.put("AppConversationID", conversationId);
+            chatBody.put("Query", prompt);
+            chatBody.put("UserID", user != null ? user : "system");
+            chatBody.put("ResponseMode", "blocking");
+
+            ResponseEntity<String> chatResp = restTemplate.exchange(
+                    apiUrl + "/chat_query_v2", HttpMethod.POST,
+                    new HttpEntity<>(chatBody, headers), String.class);
+
+            JsonNode chatRoot = objectMapper.readTree(chatResp.getBody());
+            String answer = chatRoot.path("answer").asText("");
+            if (answer.isEmpty()) answer = chatRoot.path("Answer").asText("");
+
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordSuccess("HIAGENT_TRANSLATE", "translate", "hiagent", startTime, user);
+            }
+            return answer.trim();
+        } catch (Exception e) {
+            logger.error("HiAgent 翻译失败: {}", e.getMessage(), e);
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("HIAGENT_TRANSLATE", "translate", startTime, e.getMessage(), user);
+            }
+            throw new BusinessException("翻译失败，请稍后重试");
+        } finally {
+            semaphore.release();
+        }
     }
 
     /**

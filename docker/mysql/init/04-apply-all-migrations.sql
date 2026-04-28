@@ -1217,7 +1217,7 @@ CREATE TABLE IF NOT EXISTS course_selection (
     student_id VARCHAR(50) NOT NULL COMMENT '学号',
     student_name VARCHAR(100) NOT NULL COMMENT '学生姓名',
     course_code VARCHAR(50) NOT NULL COMMENT '课程代码',
-    course_name VARCHAR(200) NOT NULL COMMENT '课程名称',
+    course_name VARCHAR(200) COMMENT '课程名称（CDSP API不返回，可为空）',
     class_id VARCHAR(50) NOT NULL COMMENT '教学班号',
     teacher_id VARCHAR(50) NOT NULL COMMENT '授课教师工号',
     teacher_name VARCHAR(50) NOT NULL COMMENT '授课教师姓名',

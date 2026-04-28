@@ -160,6 +160,40 @@
 - ✅ 维护模式（部署时自动开关）
 - ✅ 数据库自动备份与恢复
 
+### 待实现功能 🚧
+
+#### 分类备份系统（优先级：中）
+- ❌ **按数据类型分类备份**
+  - 核心配置备份（system_config, feature_toggles, sso_config）
+  - 用户数据备份（users, roles, permissions）
+  - 业务数据备份（texts, courses, assignments, vocabulary_books）
+  - 学校数据备份（school_*, teaching_*, course_*）
+- ❌ **前端分类备份管理界面**
+  - 下拉菜单选择备份分类
+  - 表格显示备份分类标签
+  - 选择性恢复特定分类数据
+- ❌ **可配置备份目录**
+  - 支持指定宿主机备份目录
+  - Docker volume 持久化存储
+  - 项目重建后数据不丢失
+- ❌ **分类备份定时任务**
+  - 不同数据类型不同备份频率
+  - 不同数据类型不同保留期
+  - 配置化定时任务（YAML 配置）
+
+**实现要点**：
+- 数据库：backup_records 表添加 category 字段（V28 迁移）
+- 后端：BackupService 添加 backupByCategory() 方法
+- 前端：Backups.vue 添加分类选择和展示
+- 配置：application.yml 添加分类备份配置
+- Docker：docker-compose.yml 支持自定义备份目录挂载
+
+**优势**：
+- 恢复速度快（只恢复需要的部分）
+- 存储优化（不同数据保留期不同）
+- 风险隔离（业务数据损坏不影响用户数据）
+- 灵活性高（可单独恢复某类数据）
+
 ---
 
 ## 🚧 未实现功能清单 (降低优先级)

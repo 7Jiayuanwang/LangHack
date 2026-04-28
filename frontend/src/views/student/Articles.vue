@@ -350,6 +350,7 @@ const loadRecommended = async ({ resetExclusions = false } = {}) => {
   } catch (err) {
     console.error('加载推荐失败:', err)
     loadError.value = true
+    recommendedArticles.value = []
   } finally {
     loading.value = false
   }
@@ -409,7 +410,7 @@ const loadFeed = async () => {
     if (merged.length === 0) loadError.value = true
   } catch (error) {
     console.error('加载推荐内容失败:', error)
-    loadError.value = true
+    allItems.value = []
   } finally {
     loading.value = false
   }

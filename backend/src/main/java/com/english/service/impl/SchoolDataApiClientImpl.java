@@ -653,9 +653,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     }
                 }
 
-                logger.error("学校 API 响应 wrapper 不包含数据数组字段 url={} keys={} bodyPreview={}",
-                        url, wrapper.keySet(), truncateForLog(responseBody));
-                throw new BusinessException("学校 API 响应缺少数据数组字段");
+                logger.error("学校 API 响应 wrapper 不包含数据数组字段 url={} keys={} fullBody={}",
+                        url, wrapper.keySet(), responseBody.length() > 2000 ? responseBody.substring(0, 2000) + "..." : responseBody);
+                throw new BusinessException("学校 API 响应缺少数据数组字段，请检查 API 认证配置或联系管理员");
             } catch (BusinessException e2) {
                 throw e2;
             } catch (Exception e2) {

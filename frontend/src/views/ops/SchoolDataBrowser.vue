@@ -20,6 +20,9 @@
         <el-radio-button value="full">全量同步</el-radio-button>
         <el-radio-button value="incremental">增量同步</el-radio-button>
       </el-radio-group>
+      <el-checkbox v-if="activeTab === 'teacher_courses'" v-model="syncRelated" size="small" style="margin-left: 8px">
+        联合同步相关数据源
+      </el-checkbox>
       <el-button size="small" @click="openFilterDialog">设置筛选条件</el-button>
       <el-button type="primary" size="small" :loading="syncing" @click="handleSync">
         同步当前数据源
@@ -320,6 +323,7 @@ let progressTimer = null
 
 // 同步相关状态
 const syncMode = ref('full')
+const syncRelated = ref(true)
 const syncing = ref(false)
 const filterDialogVisible = ref(false)
 const filterGroups = ref([
@@ -545,8 +549,8 @@ async function handleSync() {
       ? fullSyncSchoolDataFiltered
       : incrementalSyncSchoolDataFiltered
 
-    // 教学班 / 教师授课需要同步两个数据源
-    if (activeTab.value === 'teacher_courses') {
+    // 教学班 / 教师授课：根据用户选择决定是否联合同步
+    if (activeTab.value === 'teacher_courses' && syncRelated.value) {
       await syncFn('teaching_class', payload)
       await syncFn('teacher_courses', payload)
       ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步完成（teaching_class + teacher_courses）`)
