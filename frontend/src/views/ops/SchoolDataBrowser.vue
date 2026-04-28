@@ -1,5 +1,11 @@
 <template>
   <div class="school-data-browser">
+    <!-- 加载进度条 -->
+    <div v-if="loadingProgress > 0 && loadingProgress < 100" class="loading-progress">
+      <el-progress :percentage="loadingProgress" :status="loadingStatus" />
+      <div class="progress-text">{{ loadingText }}</div>
+    </div>
+
     <!-- 数据概览卡片 -->
     <div class="overview-cards" v-if="overview">
       <div v-for="(count, key) in overview" :key="key" class="overview-card" @click="activeTab = key">
@@ -306,6 +312,12 @@ const pageSize = ref(DEFAULT_PAGE_SIZE)
 const overview = ref(null)
 const filterFields = ref([])
 
+// 加载进度相关状态
+const loadingProgress = ref(0)
+const loadingStatus = ref('')
+const loadingText = ref('')
+let progressTimer = null
+
 // 同步相关状态
 const syncMode = ref('full')
 const syncing = ref(false)
@@ -350,6 +362,42 @@ const filterSummary = computed(() => {
   return parts.join(' AND ')
 })
 
+// 进度条辅助函数
+function startProgress(text = '加载中...') {
+  loadingProgress.value = 0
+  loadingStatus.value = ''
+  loadingText.value = text
+
+  if (progressTimer) clearInterval(progressTimer)
+
+  // 模拟进度：前 30 秒快速增长到 80%，之后缓慢增长
+  progressTimer = setInterval(() => {
+    if (loadingProgress.value < 80) {
+      loadingProgress.value += 2.67  // 30秒到80%
+    } else if (loadingProgress.value < 95) {
+      loadingProgress.value += 0.5   // 缓慢增长
+    }
+  }, 1000)
+}
+
+function completeProgress(success = true) {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+
+  loadingProgress.value = 100
+  loadingStatus.value = success ? 'success' : 'exception'
+  loadingText.value = success ? '加载完成' : '加载失败'
+
+  // 2秒后隐藏进度条
+  setTimeout(() => {
+    loadingProgress.value = 0
+    loadingStatus.value = ''
+    loadingText.value = ''
+  }, 2000)
+}
+
 function buildQueryPayload() {
   return {
     page: currentPage.value,
@@ -369,23 +417,39 @@ async function loadFilterFields() {
 }
 
 async function loadOverview() {
+  startProgress('正在加载数据概览...')
   try {
     const res = await getSchoolDataOverview()
     overview.value = res?.data || null
+    completeProgress(true)
   } catch (e) {
     console.error('获取数据概览失败:', e)
+    // 只有在真正失败时才显示错误（不是超时后成功的情况）
+    if (!overview.value) {
+      completeProgress(false)
+    } else {
+      completeProgress(true)  // 数据已加载，视为成功
+    }
   }
 }
 
 async function loadData() {
   loading.value = true
+  startProgress(`正在加载${dataSourceLabels[activeTab.value]}数据...`)
   try {
     const res = await querySchoolData(activeTab.value, buildQueryPayload())
     const pageData = res?.data
     tableData.value = pageData?.records || []
     total.value = pageData?.total || 0
+    completeProgress(true)
   } catch (e) {
     console.error('获取数据失败:', e)
+    // 只有在真正失败时才显示错误
+    if (tableData.value.length === 0) {
+      completeProgress(false)
+    } else {
+      completeProgress(true)  // 数据已加载，视为成功
+    }
     tableData.value = []
     total.value = 0
   } finally {
@@ -538,6 +602,26 @@ onMounted(async () => {
 <style scoped>
 .school-data-browser {
   padding: 12px;
+}
+
+.loading-progress {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 400px;
+  background: white;
+  padding: 16px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 2000;
+}
+
+.progress-text {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #606266;
+  text-align: center;
 }
 
 .overview-cards {

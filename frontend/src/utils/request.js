@@ -6,7 +6,7 @@ import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
-  timeout: 15000
+  timeout: 60000  // 增加到 60 秒，适配学校数据 API 响应较慢的情况
 })
 
 // 防止并发 401 多次触发 logout
@@ -102,6 +102,10 @@ request.interceptors.response.use(
     // 超时 / 网络断连的友好提示
     if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
       message = '请求超时，请检查网络连接后重试'
+      // 如果配置了 skipErrorHandler，则不显示错误提示（用于数据已成功加载的场景）
+      if (error.config?.skipErrorHandler) {
+        return Promise.reject({ code: 408, message })
+      }
     } else if (!error.response && error.request) {
       // No response + request exists = network error or CORS block.
       // CORS blocks appear as network errors because the browser hides the response entirely.
@@ -121,7 +125,10 @@ request.interceptors.response.use(
     }
     if (!error.config?.skipErrorHandler) {
       const reqUrl = error.config?.url || 'unknown'
-      console.warn(`[HTTP ${error.response.status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
+      const status = error.response?.status
+      if (status) {
+        console.warn(`[HTTP ${status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
+      }
 
       ElMessage({
         message,
