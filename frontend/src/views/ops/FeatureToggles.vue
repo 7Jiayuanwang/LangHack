@@ -336,7 +336,7 @@
 <script setup>
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled } from '@element-plus/icons-vue'
+import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading } from '@element-plus/icons-vue'
 import {
   getSystemConfig, updateSystemConfig,
   listAllTags, getUsersByTag, deleteTag, getUserTags, setUserTags,
@@ -356,18 +356,31 @@ const toggles = ref([])
 
 // 角色分组定义（按 configKey 前缀分组）
 const groupDefs = [
-  { key: 'student', label: '学生端', desc: '学生端页面与导航可见性', prefix: 'page_', iconName: 'User' },
-  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',  prefix: 'admin.', iconName: 'Management' },
-  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',  prefix: 'ops.',   iconName: 'Monitor' },
-  { key: 'other',   label: '其他',    desc: '未归类的全局开关',        prefix: null,     iconName: 'MoreFilled' }
+  { key: 'student', label: '学生端', desc: '学生端页面与导航可见性', prefixes: ['page_'], excludePrefixes: ['page_teacher_', 'page_admin_', 'page_ops_'], iconName: 'User' },
+  { key: 'teacher', label: '教师端', desc: '教师端页面与功能',       prefixes: ['page_teacher_'], excludePrefixes: [], iconName: 'Reading' },
+  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',  prefixes: ['admin.', 'page_admin_'], excludePrefixes: [], iconName: 'Management' },
+  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',  prefixes: ['ops.', 'page_ops_'], excludePrefixes: [], iconName: 'Monitor' },
+  { key: 'other',   label: '其他',    desc: '未归类的全局开关',        prefixes: [], excludePrefixes: [], iconName: 'MoreFilled' }
 ]
 
 const roleFilter = ref('all')
-const activeGroupPanels = ref(['student', 'admin', 'ops', 'other'])
+const activeGroupPanels = ref(['student', 'teacher', 'admin', 'ops', 'other'])
 
 const categorize = (key) => {
-  const hit = groupDefs.find(g => g.prefix && key && key.startsWith(g.prefix))
-  return hit ? hit.key : 'other'
+  if (!key) return 'other'
+
+  // 按优先级匹配（更具体的前缀优先）
+  for (const g of groupDefs) {
+    if (g.key === 'other') continue
+
+    // 检查排除前缀
+    if (g.excludePrefixes.some(ex => key.startsWith(ex))) continue
+
+    // 检查匹配前缀
+    if (g.prefixes.some(p => key.startsWith(p))) return g.key
+  }
+
+  return 'other'
 }
 
 const groupedToggles = computed(() => {
@@ -395,6 +408,7 @@ const groupCounts = computed(() => {
 const countTagType = (key) => {
   switch (key) {
     case 'student': return 'info'
+    case 'teacher': return 'success'
     case 'admin':   return 'danger'
     case 'ops':     return 'warning'
     default:        return ''
@@ -746,6 +760,7 @@ onMounted(() => {
 }
 
 .group-icon--student { color: #2563eb; }
+.group-icon--teacher { color: #059669; }
 .group-icon--admin   { color: #dc2626; }
 .group-icon--ops     { color: #d97706; }
 .group-icon--other   { color: #64748b; }
