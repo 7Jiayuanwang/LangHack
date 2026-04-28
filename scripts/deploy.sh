@@ -89,7 +89,9 @@ done
 
 # ── 工具函数 ──────────────────────────────────────────
 ask_value() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local input
     if [ -n "$default" ]; then
         read -rp "  ${prompt} [${default}]: " input
@@ -103,7 +105,9 @@ ask_value() {
 }
 
 ask_secret() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local input masked=""
     if [ -n "$default" ]; then
         [ ${#default} -gt 6 ] && masked="${default:0:3}***${default: -3}" || masked="***"
@@ -136,7 +140,9 @@ ask_choice() {
 }
 
 ask_yn() {
-    local question="$1" default="$2" var_name="$3"
+    local question="$1"
+    local default="$2"
+    local var_name="$3"
     local hint; [ "$default" = "y" ] && hint="Y/n" || hint="y/N"
     while true; do
         read -rp "  ${question} [${hint}]: " answer
@@ -149,7 +155,9 @@ ask_yn() {
 }
 
 load_env_value() {
-    local key="$1" default="$2" file="${3:-$DOCKER_DIR/.env}"
+    local key="$1"
+    local default="$2"
+    local file="${3:-$DOCKER_DIR/.env}"
     if [ -f "$file" ]; then
         local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2- | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         [ -n "$val" ] && echo "$val" && return
@@ -215,7 +223,9 @@ probe_public_image() {
 }
 
 resolve_image_registry_prefix() {
-    local mode="$1" local_registry="$2" probe_image="$3"
+    local mode="$1"
+    local local_registry="$2"
+    local probe_image="$3"
     RESOLVED_IMAGE_REGISTRY_PREFIX=""
     RESOLVED_IMAGE_SOURCE_LABEL="公共镜像"
 
@@ -295,7 +305,9 @@ check_port() {
 
 # 端口选择（自动跳过占用端口）
 ask_port() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local port="$default"
     ask_value "$prompt" "$port" "$var_name"
     port="${!var_name}"

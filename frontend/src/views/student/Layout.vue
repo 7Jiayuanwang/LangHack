@@ -181,6 +181,10 @@ const isActiveRoute = (path) => {
     return true
   }
   // 文章列表与详情页共享"文章"导航项高亮
+  // /student/articles 导航项对应 /articles 路由（重定向后的实际路径）
+  if (path === '/student/articles' && (currentPath === '/articles' || currentPath.startsWith('/article/'))) {
+    return true
+  }
   if (path === '/articles' && currentPath.startsWith('/article/')) {
     return true
   }

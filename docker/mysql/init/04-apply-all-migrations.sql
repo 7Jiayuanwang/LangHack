@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════
 -- 04-apply-all-migrations.sql
 -- 整合所有 Flyway 迁移脚本 (V0-V15)
--- 
+--
 -- 注意：生产环境 Flyway 禁用，此文件用于 Docker 初始化
 -- ═══════════════════════════════════════════════════════════════
 
@@ -2624,6 +2624,7 @@ WHERE data_source = 'student_schedule'
 -- ─────────────────────────────────────────────
 
 -- ════════════════════════════════════════════════════════════════
+<<<<<<< HEAD
 -- Part 1: 修复行政班学院字段映射
 -- ════════════════════════════════════════════════════════════════
 
@@ -2654,3 +2655,130 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 ('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
 
 
+=======
+-- V23: sync_logs 分页扩展字段
+-- ════════════════════════════════════════════════════════════════
+
+ALTER TABLE sync_logs
+    ADD COLUMN pagination_complete TINYINT(1) NULL COMMENT '分页是否完整结束' AFTER operator,
+    ADD COLUMN pagination_stop_reason VARCHAR(64) NULL COMMENT '分页停止原因' AFTER pagination_complete,
+    ADD COLUMN pagination_pages_fetched INT NULL COMMENT '已拉取页数' AFTER pagination_stop_reason,
+    ADD COLUMN pagination_last_skip INT NULL COMMENT '最后一次skip值' AFTER pagination_pages_fetched,
+    ADD COLUMN pagination_page_size INT NULL COMMENT '分页pageSize' AFTER pagination_last_skip,
+    ADD COLUMN pagination_guard_hit TINYINT(1) NULL COMMENT '是否触发分页防护' AFTER pagination_page_size,
+    ADD COLUMN fetched_row_count INT NULL COMMENT '上游已拉取条数' AFTER pagination_guard_hit;
+
+-- ════════════════════════════════════════════════════════════════
+-- V24: 相似度矩阵表（Item-CF / User-CF 推荐算法核心数据）
+-- ════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
+    INDEX `idx_text_id` (`text_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵';
+
+CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
+    INDEX `idx_text_id` (`text_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
+
+CREATE TABLE IF NOT EXISTS `user_similarity_matrix` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
+    INDEX `idx_user_id` (`user_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵';
+
+CREATE TABLE IF NOT EXISTS `user_similarity_matrix_tmp` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
+    INDEX `idx_user_id` (`user_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵临时表';
+
+-- ════════════════════════════════════════════════════════════════
+-- V25: 相似度矩阵补 similar_*_id 索引（Item-CF / User-CF 双向查询优化）
+-- ════════════════════════════════════════════════════════════════
+
+ALTER TABLE `text_similarity_matrix`      ADD INDEX `idx_similar_text_id` (`similar_text_id`);
+ALTER TABLE `text_similarity_matrix_tmp`  ADD INDEX `idx_similar_text_id` (`similar_text_id`);
+ALTER TABLE `user_similarity_matrix`      ADD INDEX `idx_similar_user_id` (`similar_user_id`);
+ALTER TABLE `user_similarity_matrix_tmp`  ADD INDEX `idx_similar_user_id` (`similar_user_id`);
+
+-- ════════════════════════════════════════════════════════════════
+-- V26: v_user_text_interaction_scores 视图（原 CROSS JOIN 版本，保持不变）
+-- ════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
+SELECT
+    u.id                                          AS user_id,
+    t.id                                          AS text_id,
+    COALESCE(utr.read_at IS NOT NULL, 0)          AS w_read,
+    COALESCE(tlr.is_completed = 1, 0)             AS w_complete,
+    COALESCE(af.id IS NOT NULL, 0)                AS w_favorite,
+    LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) AS w_duration,
+    COALESCE(sr.correct_rate, 0.0)                 AS w_accuracy,
+    LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) AS w_underline,
+    LEAST(
+        COALESCE(utr.read_at IS NOT NULL, 0) * 0.2
+        + COALESCE(tlr.is_completed = 1, 0) * 0.2
+        + COALESCE(af.id IS NOT NULL, 0) * 0.3
+        + LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) * 0.1
+        + COALESCE(sr.correct_rate, 0.0) * 0.1
+        + LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) * 0.1,
+        1.0
+    )                                             AS interaction_score
+FROM `users` u
+CROSS JOIN `texts` t
+LEFT JOIN `user_text_reads` utr
+    ON utr.user_id = u.id AND utr.text_id = t.id
+LEFT JOIN `text_learning_records` tlr
+    ON tlr.student_id = u.id AND tlr.text_id = t.id
+LEFT JOIN `article_favorites` af
+    ON af.student_id = u.id AND af.text_id = t.id
+LEFT JOIN (
+    SELECT
+        sr.student_id,
+        lr.text_id,
+        CAST(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
+            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.correct_count'), 0) ELSE 0 END) AS DECIMAL(5,2))
+        / NULLIF(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
+            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.total_count'), 0) ELSE 0 END), 0) AS correct_rate
+    FROM score_records sr
+    LEFT JOIN learning_records lr ON lr.assignment_id = sr.assignment_id
+    WHERE sr.score_type = 'ASSIGNMENT'
+    GROUP BY sr.student_id, lr.text_id
+) sr ON sr.student_id = u.id AND sr.text_id = t.id
+LEFT JOIN (
+    SELECT user_id, text_id, COUNT(*) AS underline_count
+    FROM underlines
+    GROUP BY user_id, text_id
+) ul ON ul.user_id = u.id AND ul.text_id = t.id
+WHERE u.role IN ('STUDENT', 'USER');
+
+-- ════════════════════════════════════════════════════════════════
+>>>>>>> feature/5-fix-text

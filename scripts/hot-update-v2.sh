@@ -351,6 +351,14 @@ mode_db() {
 mode_backend() {
     log_section "重启后端"
     stop_backend
+<<<<<<< HEAD
+=======
+    log_info "等待端口 $BACKEND_PORT 释放..."
+    local waited=0
+    while port_in_use $BACKEND_PORT && [ $waited -lt 15 ]; do
+        sleep 1; waited=$((waited + 1))
+    done
+>>>>>>> feature/5-fix-text
     start_backend
     wait_backend_healthy
 }
@@ -358,6 +366,14 @@ mode_backend() {
 mode_frontend() {
     log_section "重启前端"
     stop_frontend
+<<<<<<< HEAD
+=======
+    log_info "等待端口 $FRONTEND_PORT 释放..."
+    local waited=0
+    while port_in_use $FRONTEND_PORT && [ $waited -lt 15 ]; do
+        sleep 1; waited=$((waited + 1))
+    done
+>>>>>>> feature/5-fix-text
     start_frontend
     wait_frontend_healthy
 }
@@ -366,8 +382,23 @@ mode_restart() {
     log_section "重启前后端（跳过迁移）"
     stop_backend
     stop_frontend
+<<<<<<< HEAD
     start_backend      # 后台启动（非阻塞）
     start_frontend     # 后台启动（非阻塞）
+=======
+    # 等待端口释放（最多15秒）
+    log_info "等待端口释放..."
+    local waited=0
+    while port_in_use $BACKEND_PORT && [ $waited -lt 15 ]; do
+        sleep 1; waited=$((waited + 1))
+    done
+    waited=0
+    while port_in_use $FRONTEND_PORT && [ $waited -lt 15 ]; do
+        sleep 1; waited=$((waited + 1))
+    done
+    start_backend
+    start_frontend
+>>>>>>> feature/5-fix-text
     # 并行等待两个健康检查
     wait_backend_healthy  & local bp=$!
     wait_frontend_healthy & local fp=$!
@@ -382,6 +413,18 @@ mode_full() {
     apply_migrations || return 1
     stop_backend
     stop_frontend
+<<<<<<< HEAD
+=======
+    log_info "等待端口释放..."
+    local waited=0
+    while port_in_use $BACKEND_PORT && [ $waited -lt 15 ]; do
+        sleep 1; waited=$((waited + 1))
+    done
+    waited=0
+    while port_in_use $FRONTEND_PORT && [ $waited -lt 15 ]; do
+        sleep 1; waited=$((waited + 1))
+    done
+>>>>>>> feature/5-fix-text
     start_backend
     start_frontend
     wait_backend_healthy  & local bp=$!
@@ -410,6 +453,14 @@ mode_quick() {
     $MIGRATION_CHANGED && { apply_migrations || return 1; }
     if $BACKEND_CHANGED; then
         stop_backend
+<<<<<<< HEAD
+=======
+        log_info "等待端口 $BACKEND_PORT 释放..."
+        local waited=0
+        while port_in_use $BACKEND_PORT && [ $waited -lt 15 ]; do
+            sleep 1; waited=$((waited + 1))
+        done
+>>>>>>> feature/5-fix-text
         start_backend
         wait_backend_healthy || return 1
     fi
