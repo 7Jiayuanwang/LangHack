@@ -687,8 +687,11 @@ run_incremental_migrations() {
     local flyway_dir="$PROJECT_ROOT/backend/src/main/resources/db/migration"
     if [ -d "$flyway_dir" ]; then
         local flyway_count merged_count
-        flyway_count=$(ls "$flyway_dir"/V*.sql 2>/dev/null | wc -l | tr -d '\r' || echo 0)
-        merged_count=$(grep -cE '^--   V[0-9]+(\.[0-9]+)?__' "$migration_sql" 2>/dev/null | tr -d '\r' || echo 0)
+        flyway_count=$(ls "$flyway_dir"/V*.sql 2>/dev/null | wc -l | tr -d '\r\n ' || echo 0)
+        merged_count=$(grep -cE '^-- V[0-9]+(\.[0-9]+)?__' "$migration_sql" 2>/dev/null | tr -d '\r\n ' || echo 0)
+        # 确保是整数（防止空字符串或换行符）
+        flyway_count=${flyway_count:-0}
+        merged_count=${merged_count:-0}
         if [ "$flyway_count" -gt "$merged_count" ]; then
             log "ERROR: MIGRATE: 迁移脚本版本不同步，阻塞部署"
             log "ERROR:   Flyway 文件数: ${flyway_count}"
