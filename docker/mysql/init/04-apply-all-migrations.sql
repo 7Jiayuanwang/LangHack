@@ -2954,6 +2954,14 @@ SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_s
 SET @sql = IF(@col_exists > 0, 'ALTER TABLE course_selection MODIFY COLUMN course_name VARCHAR(200) COMMENT ''课程名称（CDSP API不返回，可为空）''', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- ═══════════════════════════════════════════════════════════════
+-- V28__course_selection_nullable_credits.sql
+-- ═══════════════════════════════════════════════════════════════
+
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='course_selection' AND column_name='credits');
+SET @sql = IF(@col_exists > 0, 'ALTER TABLE course_selection MODIFY COLUMN credits DECIMAL(3,1) COMMENT ''学分（CDSP API不返回，可为空）''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 -- ════════════════════════════════════════════════════════════════
 
 -- 恢复 sql_notes
