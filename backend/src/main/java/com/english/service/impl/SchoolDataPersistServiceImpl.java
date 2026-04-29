@@ -261,6 +261,13 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
             return;
         }
 
+        // 外键检查：验证 teaching_class 表中是否存在该 classId
+        TeachingClass teachingClass = teachingClassMapper.selectById(classId);
+        if (teachingClass == null) {
+            logger.warn("课程安排外键检查失败，teaching_class 表中不存在 classId={}，跳过同步", classId);
+            return;
+        }
+
         courseScheduleMapper.deleteByClassIdAndSemester(classId, academicYear, semester);
         CourseSchedule entity = new CourseSchedule();
         entity.setClassId(classId);
