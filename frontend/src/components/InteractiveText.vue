@@ -77,7 +77,19 @@
     >
       <div class="word-content" v-if="selectedWordInfo">
         <div class="word-header">
-          <h2 class="word-title">{{ selectedWordInfo.word || '未知单词' }}</h2>
+          <div class="word-title-row">
+            <h2 class="word-title">{{ selectedWordInfo.word || '未知单词' }}</h2>
+            <el-button 
+              circle 
+              size="small" 
+              @click="speakText(selectedWordInfo.word)"
+              :disabled="ttsLoading"
+              class="word-speak-btn"
+            >
+              <el-icon v-if="ttsLoading && ttsCurrentText === (selectedWordInfo?.word || '')" class="is-loading"><Loading /></el-icon>
+              <el-icon v-else><Headset /></el-icon>
+            </el-button>
+          </div>
           <div class="pronunciation" v-if="selectedWordInfo.pronunciation || selectedWordInfo.phonetic">
             {{ selectedWordInfo.pronunciation || selectedWordInfo.phonetic }}
           </div>
@@ -183,6 +195,11 @@ const selectedText = ref('')
 const translatedText = ref('')
 const translating = ref(false)
 const isSelectingMode = ref(false)
+
+// TTS 语音合成相关
+const ttsLoading = ref(false)
+const ttsCurrentText = ref('')
+let ttsAudio = null
 
 // 浮动按钮位置和拖动（避免 SSR/初始化阶段访问 window 导致错误）
 const floatingBtnPosition = reactive({
@@ -422,6 +439,47 @@ const translateSelectedText = async () => {
   }
 }
 
+// TTS 语音合成
+const speakText = async (text) => {
+  if (!text || text.trim().length === 0) return
+  stopTtsPlayback()
+  ttsLoading.value = true
+  ttsCurrentText.value = text
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch('/api/tts/synthesize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ text: text.trim() })
+    })
+    if (response.ok) {
+      const result = await response.json()
+      if (result.code === 200 && result.data?.audioUrl) {
+        ttsAudio = new Audio(result.data.audioUrl)
+        ttsAudio.addEventListener('ended', () => { ttsCurrentText.value = '' })
+        ttsAudio.addEventListener('error', () => { ttsCurrentText.value = ''; ElMessage.error('音频播放失败') })
+        await ttsAudio.play()
+      } else {
+        ElMessage.error(result.message || '语音合成失败')
+      }
+    } else {
+      ElMessage.error('语音合成服务暂不可用')
+    }
+  } catch (error) {
+    console.error('TTS failed:', error)
+  } finally {
+    ttsLoading.value = false
+  }
+}
+
+const stopTtsPlayback = () => {
+  if (ttsAudio) { ttsAudio.pause(); ttsAudio = null }
+  ttsCurrentText.value = ''
+}
+
 // 处理单词点击
 const handleWordClick = async (word) => {
   if (!word || !word.clickable) {
@@ -606,6 +664,8 @@ onMounted(() => {
 
 // 清理事件监听器防止内存泄漏
 onBeforeUnmount(() => {
+  // 清理 TTS
+  stopTtsPlayback()
   // 保证所有拖动相关事件监听器被清理
   if (activeDragHandlers) {
     document.removeEventListener('mousemove', activeDragHandlers.move)
@@ -1125,5 +1185,46 @@ onBeforeUnmount(() => {
     word-break: break-word;
     margin: 0;
   }
+}
+
+/* TTS 内联按钮 */
+.text-with-tts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.text-with-tts h4 { margin: 0; }
+
+/* 单词弹窗标题行（单词 + 播放按钮） */
+.word-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.word-speak-btn {
+  flex-shrink: 0;
+}
+
+.tts-inline-btn {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.tts-inline-btn:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+.tts-inline-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

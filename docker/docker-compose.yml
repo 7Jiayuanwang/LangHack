@@ -258,6 +258,8 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8088}
       APP_UPDATE_SUPPORTED: "false"
       APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
+      # TTS 语音合成（硅基流动 CosyVoice2）
+      TTS_API_KEY: ${TTS_API_KEY:-${AI_TRANSLATE_API_KEY:-}}
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
       # 零停机热更新（HotDeployController 启动 deployer sidecar 容器时需要）
