@@ -158,11 +158,14 @@ export function deleteText(id) {
   })
 }
 
-export function toggleTextFeatured(id, featured) {
+export function toggleTextFeatured(id, featured, forcePublic = false) {
+  const params = {}
+  if (featured !== undefined) params.featured = featured
+  if (forcePublic) params.forcePublic = true
   return request({
     url: `/api/admin/texts/${id}/featured`,
     method: 'put',
-    params: featured === undefined ? undefined : { featured }
+    params
   })
 }
 
@@ -233,10 +236,11 @@ export function getReviewTexts(params) {
   })
 }
 
-export function approveText(id) {
+export function approveText(id, data) {
   return request({
     url: `/api/admin/content-review/texts/${id}/approve`,
-    method: 'put'
+    method: 'put',
+    data: data || {}
   })
 }
 

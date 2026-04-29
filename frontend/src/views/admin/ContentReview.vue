@@ -1,13 +1,5 @@
 <template>
   <div class="content-review">
-    <div class="header">
-      <h2>内容审核</h2>
-      <el-button @click="loadData">
-        <el-icon><Refresh /></el-icon>
-        刷新
-      </el-button>
-    </div>
-
     <!-- 内容类型切换 -->
     <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="review-tabs">
       <el-tab-pane label="课文审核" name="texts">
@@ -65,7 +57,7 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-select v-model="tagFilter" placeholder="标签筛选" clearable style="width: 140px" @change="handleSearch">
+          <el-select v-model="tagFilter" multiple collapse-tags placeholder="标签筛选" clearable style="width: 200px" @change="handleSearch">
             <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
           </el-select>
         </el-form-item>
@@ -76,6 +68,12 @@
           </el-button>
         </el-form-item>
       </el-form>
+      <div class="filter-actions">
+        <el-button @click="loadData">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
     </div>
 
     <!-- 批量操作 -->
@@ -250,6 +248,10 @@
 
       <template #footer>
         <el-button @click="textDetailVisible = false">关闭</el-button>
+        <el-button type="primary" @click="previewText(currentDetail)">
+          <el-icon><View /></el-icon>
+          预览文章
+        </el-button>
         <el-button type="success" @click="handleApprove(currentDetail)" :disabled="currentDetail?.status === 'APPROVED'">
           <el-icon><Select /></el-icon>
           通过
@@ -261,7 +263,6 @@
       </template>
     </el-dialog>
 
-    <!-- 视频详情弹窗 -->
     <el-dialog
       v-model="videoDetailVisible"
       title="视频详情"
@@ -280,17 +281,18 @@
             </el-descriptions-item>
             <el-descriptions-item label="上传时间">{{ formatTime(currentDetail.createdTime) }}</el-descriptions-item>
             <el-descriptions-item label="标签" :span="2">{{ currentDetail.tags || '无' }}</el-descriptions-item>
+            <el-descriptions-item label="字幕" :span="2">
+              <div class="subtitle-info">
+                <el-tag v-if="hasEnglishSubtitle(currentDetail.subtitleContent)" type="success" size="small" style="margin-right: 6px">英文字幕</el-tag>
+                <el-tag v-if="hasChineseSubtitle(currentDetail.subtitleContent)" type="warning" size="small" style="margin-right: 6px">中文字幕</el-tag>
+                <span v-if="!currentDetail.subtitleContent" style="color: #999">无字幕</span>
+              </div>
+            </el-descriptions-item>
           </el-descriptions>
         </div>
 
-        <div v-if="currentDetail.mediaId" class="detail-video">
-          <video
-            controls
-            :src="`/api/media/${currentDetail.mediaId}/download`"
-            style="width: 100%; max-height: 400px; border-radius: 8px; background: #000;"
-          >
-            您的浏览器不支持视频播放
-          </video>
+        <div v-if="currentDetail.coverUrl" class="detail-cover">
+          <img :src="currentDetail.coverUrl" alt="视频封面" style="max-width: 100%; border-radius: 8px; margin-top: 12px" />
         </div>
 
         <div v-if="currentDetail.description" class="detail-body">
@@ -301,6 +303,10 @@
 
       <template #footer>
         <el-button @click="videoDetailVisible = false">关闭</el-button>
+        <el-button type="primary" @click="previewVideo(currentDetail)">
+          <el-icon><VideoPlay /></el-icon>
+          预览视频
+        </el-button>
         <el-button type="success" @click="handleApprove(currentDetail)" :disabled="currentDetail?.status === 'APPROVED'">
           <el-icon><Select /></el-icon>
           通过
@@ -311,6 +317,8 @@
         </el-button>
       </template>
     </el-dialog>
+
+
   </div>
 </template>
 
@@ -318,7 +326,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Search, Select, CloseBold } from '@element-plus/icons-vue'
+import { Refresh, Search, Select, CloseBold, View, VideoPlay } from '@element-plus/icons-vue'
 import * as adminApi from '@/api/admin'
 import { getContentTags } from '@/api/admin'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
@@ -333,7 +341,7 @@ const records = ref([])
 const selectedRows = ref([])
 const searchKeyword = ref('')
 const statusFilter = ref('')
-const tagFilter = ref('')
+const tagFilter = ref([])
 const availableTags = ref([])
 const textDetailVisible = ref(false)
 const videoDetailVisible = ref(false)
@@ -360,7 +368,7 @@ const loadData = async () => {
     }
     if (statusFilter.value) params.status = statusFilter.value
     if (searchKeyword.value) params.keyword = searchKeyword.value
-    if (tagFilter.value) params.tag = tagFilter.value
+    if (tagFilter.value && tagFilter.value.length > 0) params.tag = tagFilter.value.join(',')
 
     let response
     if (activeTab.value === 'texts') {
@@ -444,13 +452,8 @@ const handleSelectionChange = (rows) => {
 // 审核操作
 const handleApprove = async (row) => {
   if (!row) return
-  try {
-    await ElMessageBox.confirm(`确定通过「${row.title}」的审核？通过后将公开展示。`, '审核确认', {
-      confirmButtonText: '确定通过',
-      cancelButtonText: '取消',
-      type: 'success'
-    })
 
+  try {
     let response
     if (activeTab.value === 'texts') {
       response = await adminApi.approveText(row.id)
@@ -467,9 +470,7 @@ const handleApprove = async (row) => {
       ElMessage.error(response.message || '操作失败')
     }
   } catch (e) {
-    if (e !== 'cancel' && e?.message !== 'Cancel') {
-      ElMessage.error('操作失败')
-    }
+    ElMessage.error('操作失败')
   }
 }
 
@@ -565,29 +566,41 @@ const batchReject = async () => {
 
 // 查看详情 — 已通过的内容跳转到展示页，未通过的用弹窗预览
 const viewDetail = (row) => {
-  if (row.status === 'APPROVED' && row.id) {
-    // 已通过的课文 → 文章详情页
-    const routeData = router.resolve({ name: 'ArticleDetail', params: { id: row.id } })
+  currentDetail.value = { ...row }
+  textDetailVisible.value = true
+}
+
+const viewVideoDetail = (row) => {
+  currentDetail.value = { ...row }
+  videoDetailVisible.value = true
+}
+
+const previewText = (row) => {
+  if (row?.id) {
+    const routeData = router.resolve({ name: 'ArticleDetail', params: { id: row.id }, query: { from: 'admin-review' } })
     window.open(routeData.href, '_blank')
-  } else {
-    // 待审核/已驳回 → 弹窗预览
-    currentDetail.value = { ...row }
-    textDetailVisible.value = true
   }
 }
 
-// 查看详情 — 视频始终跳转到完整视频播放页（管理员预览模式）
-const viewVideoDetail = (row) => {
-  if (row.id) {
+const previewVideo = (row) => {
+  if (row?.id) {
     const routeData = router.resolve({
       name: 'StudentVideoPlayer',
-      query: { id: row.id, preview: 'admin' }
+      query: { id: row.id, preview: 'admin', from: 'admin-review' }
     })
     window.open(routeData.href, '_blank')
-  } else {
-    currentDetail.value = { ...row }
-    videoDetailVisible.value = true
   }
+}
+
+// 字幕检测
+const hasChineseSubtitle = (content) => {
+  if (!content) return false
+  return /[\u4e00-\u9fff]/.test(content)
+}
+
+const hasEnglishSubtitle = (content) => {
+  if (!content) return false
+  return /[a-zA-Z]{2,}/.test(content)
 }
 
 // 工具方法
@@ -719,14 +732,25 @@ defineExpose({ loadData })
 }
 
 .filter-bar {
-  margin-bottom: 16px;
-  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px 20px;
   background: #f8f9fa;
   border-radius: 8px;
 }
 
 .filter-form {
   margin: 0;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .batch-actions {
@@ -854,5 +878,18 @@ defineExpose({ loadData })
     margin-right: 0;
     margin-bottom: 12px;
   }
+}
+
+/* 分配单元弹窗 */
+.assign-hint {
+  margin-bottom: 20px;
+}
+
+.assign-form {
+  padding: 0 10px;
+}
+
+.assign-form .el-form-item {
+  margin-bottom: 18px;
 }
 </style>

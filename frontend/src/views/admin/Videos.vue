@@ -1,20 +1,6 @@
 <template>
   <div class="videos-management">
-    <div class="header">
-      <h2>视频管理</h2>
-      <div class="actions">
-        <el-button type="primary" @click="showAddDialog">
-          <el-icon><Plus /></el-icon>
-          添加视频
-        </el-button>
-        <el-button @click="loadVideos">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
-    </div>
-
-    <!-- 搜索栏 -->
+    <!-- 搜索栏 + 操作按钮 -->
     <div class="search-bar">
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="关键词">
@@ -31,12 +17,18 @@
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
-          <el-button @click="resetSearch">
-            <el-icon><RefreshLeft /></el-icon>
-            重置
-          </el-button>
         </el-form-item>
       </el-form>
+      <div class="search-actions">
+        <el-button type="primary" @click="showAddDialog">
+          <el-icon><Plus /></el-icon>
+          添加视频
+        </el-button>
+        <el-button @click="loadVideos">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
     </div>
 
     <!-- 统计信息 -->
@@ -455,10 +447,9 @@ defineExpose({ loadVideos })
 
 <style scoped>
 .videos-management { padding: 20px; max-width: 1400px; margin: 0 auto; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e4e7ed; }
-.header h2 { margin: 0; color: #303133; font-weight: 500; }
-.actions { display: flex; gap: 12px; }
-.search-bar { margin-bottom: 20px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; }
+.search-bar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; }
+.search-form { margin: 0; }
+.search-actions { display: flex; gap: 12px; flex-shrink: 0; }
 .stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 20px; }
 .stat-card { text-align: center; padding: 20px; background: #fff; border: 1px solid #e4e7ed; border-radius: 8px; transition: all 0.3s; }
 .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }

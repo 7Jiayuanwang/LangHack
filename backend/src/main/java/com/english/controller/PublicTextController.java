@@ -84,6 +84,14 @@ public class PublicTextController {
             List<Text> featuredTexts = textService.lambdaQuery()
                     .eq(Text::getDeleted, 0)
                     .eq(Text::getIsFeatured, 1)
+                    .and(w -> w
+                        .isNull(Text::getUploadedBy)
+                        .or(sub -> sub
+                            .isNotNull(Text::getUploadedBy)
+                            .eq(Text::getIsPublic, 1)
+                            .eq(Text::getStatus, "APPROVED")
+                        )
+                    )
                     .orderByDesc(Text::getFeaturedPriority)
                     .orderByDesc(Text::getCreatedAt)
                     .list();

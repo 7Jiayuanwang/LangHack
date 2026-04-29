@@ -1099,7 +1099,13 @@ const goBack = () => {
     }
   }
   
-  if (from === 'assignment') {
+  if (from === 'admin-review') {
+    // 从管理员审核页来的，返回内容管理页
+    router.push('/admin/content')
+  } else if (from === 'user-texts') {
+    // 从学生上传页来的，返回上传页
+    router.push('/student/user-texts')
+  } else if (from === 'assignment') {
     // 从任务页面跳转来的，返回任务页面
     router.push('/student/assignments')
   } else if (from === 'articles') {

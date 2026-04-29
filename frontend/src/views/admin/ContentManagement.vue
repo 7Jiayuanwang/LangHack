@@ -1,11 +1,5 @@
 <template>
   <div class="content-management">
-    <!-- 顶部标题 -->
-    <div class="header">
-      <h2>内容管理</h2>
-      <el-button @click="refreshCurrent" :icon="Refresh">刷新</el-button>
-    </div>
-
     <!-- 一级 Tab：文章 / 视频 / 内容审核 -->
     <el-tabs v-model="activeTab" class="main-tabs" @tab-change="handleTabChange">
       <el-tab-pane name="texts">
@@ -146,10 +140,10 @@ onMounted(() => {
   min-height: 300px;
 }
 
-/* 去除子组件的重复 header */
-.tab-content :deep(.texts-management > .header),
-.tab-content :deep(.videos-management > .header),
-.tab-content :deep(.content-review > .header) {
+/* 去除子组件的重复 header - 但保留添加按钮 */
+.tab-content :deep(.texts-management > .header h2),
+.tab-content :deep(.videos-management > .header h2),
+.tab-content :deep(.content-review > .header h2) {
   display: none;
 }
 

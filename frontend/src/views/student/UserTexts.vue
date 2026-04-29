@@ -76,7 +76,7 @@
           v-for="item in allItems"
           :key="item._type + '-' + item.id"
           class="text-item"
-          :class="{ 'video-item': item._type === 'video' }"
+          :class="{ 'video-item': item._type === 'video', 'article-item': item._type !== 'video' }"
           @click="handleItemClick(item)"
         >
           <div class="text-header">
@@ -114,10 +114,18 @@
             </div>
 
             <div class="text-actions">
-              <el-button size="small" @click.stop="item._type === 'video' ? editVideoItem(item) : editText(item)">
+              <el-button size="small" type="primary" @click.stop="previewItem(item)">
+                <el-icon><View /></el-icon> 预览
+              </el-button>
+              <el-button v-if="item.status !== 'APPROVED'" size="small" @click.stop="item._type === 'video' ? editVideoItem(item) : editText(item)">
                 <el-icon><Edit /></el-icon> 编辑
               </el-button>
-              <el-button size="small" type="danger" @click.stop="item._type === 'video' ? deleteVideoItem(item) : deleteText(item)">
+              <el-button
+                v-if="item.status !== 'APPROVED'"
+                size="small"
+                type="danger"
+                @click.stop="item._type === 'video' ? deleteVideoItem(item) : deleteText(item)"
+              >
                 <el-icon><Delete /></el-icon> 删除
               </el-button>
             </div>
@@ -232,11 +240,6 @@
         <!-- Task 3.4: 音频 URL -->
         <el-form-item label="音频URL">
           <el-input v-model="uploadForm.audioUrl" placeholder="请输入音频URL（可选）" />
-        </el-form-item>
-
-        <!-- Task 3.5: 是否公开 -->
-        <el-form-item label="是否公开">
-          <el-switch v-model="uploadForm.isPublic" />
         </el-form-item>
       </el-form>
 
@@ -353,11 +356,6 @@
         <!-- 音频 URL -->
         <el-form-item label="音频URL">
           <el-input v-model="editForm.audioUrl" placeholder="请输入音频URL（可选）" />
-        </el-form-item>
-
-        <!-- 是否公开 -->
-        <el-form-item label="是否公开">
-          <el-switch v-model="editForm.isPublic" />
         </el-form-item>
       </el-form>
 
@@ -483,9 +481,6 @@
           </el-select>
           <div v-if="availableTags.length === 0" class="form-tip" style="color: #f56c6c">暂无可选标签，请联系管理员设置</div>
         </el-form-item>
-        <el-form-item label="公开">
-          <el-switch v-model="videoForm.isPublicBool" />
-        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -546,6 +541,25 @@ const handleItemClick = (item) => {
     playVideo(item)
   } else {
     studyText(item)
+  }
+}
+
+const previewItem = (item) => {
+  if (item._type === 'video') {
+    // 视频预览：新标签页打开视频播放器
+    const routeData = router.resolve({
+      name: 'StudentVideoPlayer',
+      query: { id: item.id, preview: 'user', from: 'user-texts' }
+    })
+    window.open(routeData.href, '_blank')
+  } else {
+    // 文章预览：新标签页打开文章详情页
+    const routeData = router.resolve({
+      name: 'ArticleDetail',
+      params: { id: item.id },
+      query: { from: 'user-texts' }
+    })
+    window.open(routeData.href, '_blank')
   }
 }
 
@@ -907,6 +921,12 @@ const resetUploadForm = () => {
   uploadMarkdownContent.value = ''
   if (uploadFormRef.value) {
     uploadFormRef.value.clearValidate()
+  }
+}
+
+const handlePublicChange = (val) => {
+  if (!val) {
+    ElMessage.warning('当前课文选择不公开，只有管理员可以看到')
   }
 }
 
@@ -1287,6 +1307,14 @@ onMounted(() => {
 
 .video-item:hover {
   border-left-color: #f5a623 !important;
+}
+
+.article-item {
+  border-left: 3px solid #67c23a !important;
+}
+
+.article-item:hover {
+  border-left-color: #85ce61 !important;
 }
 .user-texts-container {
   padding: 20px;

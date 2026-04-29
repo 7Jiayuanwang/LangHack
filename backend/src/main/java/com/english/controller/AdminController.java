@@ -940,7 +940,8 @@ public class AdminController {
     @PutMapping("/texts/{id}/featured")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<String> toggleFeatured(@PathVariable Long id,
-                                         @RequestParam(required = false) Integer featured) {
+                                         @RequestParam(required = false) Integer featured,
+                                         @RequestParam(required = false, defaultValue = "false") Boolean forcePublic) {
         try {
             Text text = textService.getTextById(id);
             if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
@@ -952,6 +953,18 @@ public class AdminController {
             } else {
                 newValue = (text.getIsFeatured() != null && text.getIsFeatured() == 1) ? 0 : 1;
             }
+
+            // 设为推荐时，确保文章已公开且已通过审核
+            if (newValue == 1 && text.getUploadedBy() != null) {
+                boolean isPublicAndApproved = (text.getIsPublic() != null && text.getIsPublic() == 1)
+                        && "APPROVED".equals(text.getStatus());
+                if (!isPublicAndApproved) {
+                    // 默认所有上传都是公开的，直接设为公开并通过
+                    text.setIsPublic(1);
+                    text.setStatus("APPROVED");
+                }
+            }
+
             text.setIsFeatured(newValue);
             textService.updateText(text);
             return Result.success(newValue == 1 ? "已设为推荐" : "已取消推荐");
@@ -1441,7 +1454,14 @@ public class AdminController {
                 queryWrapper.and(w -> w.like("title", finalKeyword).or().like("content", finalKeyword));
             }
             if (tag != null && !tag.trim().isEmpty()) {
-                queryWrapper.like("tags", tag);
+                // 支持多标签筛选（逗号分隔），每个标签都必须匹配
+                String[] tags = tag.split(",");
+                for (String t : tags) {
+                    String trimmed = t.trim();
+                    if (!trimmed.isEmpty()) {
+                        queryWrapper.like("tags", trimmed);
+                    }
+                }
             }
             queryWrapper.orderByDesc("created_time");
 
@@ -1507,11 +1527,12 @@ public class AdminController {
     }
 
     /**
-     * 课文审核通过
+     * 课文审核通过（可同时分配到指定单元）
      */
     @PutMapping("/content-review/texts/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<String> approveText(@PathVariable Long id) {
+    public Result<String> approveText(@PathVariable Long id,
+                                       @RequestBody(required = false) Map<String, Object> body) {
         try {
             Text text = textService.getTextById(id);
             if (text == null) {
@@ -1519,6 +1540,23 @@ public class AdminController {
             }
             text.setStatus("APPROVED");
             text.setIsPublic(1);
+
+            // 如果管理员指定了单元，将课文分配到该单元
+            if (body != null && body.get("unitId") != null) {
+                try {
+                    Long unitId = Long.valueOf(body.get("unitId").toString());
+                    // 验证单元存在
+                    Unit targetUnit = unitService.getUnitById(unitId);
+                    if (targetUnit == null) {
+                        return Result.error("目标单元不存在");
+                    }
+                    text.setUnitId(unitId);
+                    logger.info("课文审核通过并分配到单元: textId={}, unitId={}", id, unitId);
+                } catch (NumberFormatException e) {
+                    return Result.error("unitId 格式错误");
+                }
+            }
+
             textService.updateText(text);
             return Result.success("审核通过");
         } catch (Exception e) {
@@ -1579,7 +1617,13 @@ public class AdminController {
                 queryWrapper.and(w -> w.like("title", finalKeyword).or().like("description", finalKeyword));
             }
             if (tag != null && !tag.trim().isEmpty()) {
-                queryWrapper.like("tags", tag);
+                String[] tags = tag.split(",");
+                for (String t : tags) {
+                    String trimmed = t.trim();
+                    if (!trimmed.isEmpty()) {
+                        queryWrapper.like("tags", trimmed);
+                    }
+                }
             }
             queryWrapper.orderByDesc("created_time");
 
@@ -1604,6 +1648,7 @@ public class AdminController {
                 item.put("likeCount", video.getLikeCount());
                 item.put("createdTime", video.getCreatedTime());
                 item.put("userId", video.getUserId());
+                item.put("subtitleContent", video.getSubtitleContent());
 
                 // 查询作者信息
                 if (video.getUserId() != null) {

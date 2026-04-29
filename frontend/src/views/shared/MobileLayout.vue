@@ -53,6 +53,7 @@
                 <component :is="Setting" />
               </div>
               <span class="nav-label">管理</span>
+              <div class="nav-badge" v-if="pendingReviewCount > 0">{{ pendingReviewCount }}</div>
             </div>
             <template #dropdown>
               <el-dropdown-menu>
@@ -63,8 +64,13 @@
                   class="dropdown-link"
                 >
                   <el-dropdown-item>
-                    <component :is="item.icon" style="margin-right: 8px; width: 16px; height: 16px;" />
-                    <span>{{ item.label }}</span>
+                    <div class="dropdown-item-content">
+                      <div class="dropdown-item-left">
+                        <component :is="item.icon" style="margin-right: 8px; width: 16px; height: 16px;" />
+                        <span>{{ item.label }}</span>
+                      </div>
+                      <el-badge v-if="item.path === '/admin/content' && pendingReviewCount > 0" :value="pendingReviewCount" class="menu-badge" />
+                    </div>
                   </el-dropdown-item>
                 </router-link>
               </el-dropdown-menu>
@@ -141,6 +147,7 @@ import {
   DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
   VideoPlay,
 } from '@element-plus/icons-vue'
+import { getReviewTexts, getReviewVideos } from '@/api/admin'
 
 const props = defineProps({
   role: {
@@ -157,6 +164,10 @@ const userStore = useUserStore()
 // ops 专属状态
 const showElevationDialog = ref(false)
 const elevationTarget     = ref('ADMIN')
+
+// 待审核计数
+const pendingReviewCount = ref(0)
+let pendingPollTimer = null
 
 // 功能开关状态（与路由守卫 + 其他 layout 共享缓存）
 const { toggles: featureToggles, load: loadFeatureToggles } = useFeatureToggles()
@@ -435,6 +446,12 @@ onMounted(async () => {
     }
   }
 
+  // admin 角色：加载待审核计数并定时轮询
+  if (props.role === 'admin') {
+    loadPendingReviewCount()
+    pendingPollTimer = setInterval(loadPendingReviewCount, 60000)
+  }
+
   // 检查 SSO 是否启用（静默失败，不影响主流程）
   try {
     const ssoRes = await getSsoStatus()
@@ -447,8 +464,26 @@ onMounted(async () => {
   }
 })
 
+const loadPendingReviewCount = async () => {
+  try {
+    const [textRes, videoRes] = await Promise.all([
+      getReviewTexts({ page: 1, size: 1, status: 'PENDING' }),
+      getReviewVideos({ page: 1, size: 1, status: 'PENDING' })
+    ])
+    const tp = textRes?.data?.pendingCount || 0
+    const vp = videoRes?.data?.pendingCount || 0
+    pendingReviewCount.value = tp + vp
+  } catch (e) {
+    // 静默失败
+  }
+}
+
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown)
+  if (pendingPollTimer) {
+    clearInterval(pendingPollTimer)
+    pendingPollTimer = null
+  }
 })
 </script>
 
@@ -681,6 +716,26 @@ onUnmounted(() => {
   display: block;
   text-decoration: none;
   color: inherit;
+}
+
+.dropdown-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.dropdown-item-left {
+  display: flex;
+  align-items: center;
+}
+
+.menu-badge {
+  margin-left: 8px;
+}
+
+.management-menu-item {
+  position: relative;
 }
 
 /* 触摸体验 */

@@ -1,20 +1,6 @@
 <template>
   <div class="texts-management">
-    <div class="header">
-      <h2>课文管理</h2>
-      <div class="actions">
-        <el-button type="primary" @click="showAddDialog">
-          <el-icon><Plus /></el-icon>
-          添加课文
-        </el-button>
-        <el-button @click="loadTexts">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
-    </div>
-
-    <!-- 搜索栏 -->
+    <!-- 搜索栏 + 操作按钮 -->
     <div class="search-bar">
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="关键词">
@@ -38,12 +24,18 @@
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
-          <el-button @click="resetSearch">
-            <el-icon><RefreshLeft /></el-icon>
-            重置
-          </el-button>
         </el-form-item>
       </el-form>
+      <div class="search-actions">
+        <el-button type="primary" @click="showAddDialog">
+          <el-icon><Plus /></el-icon>
+          添加课文
+        </el-button>
+        <el-button @click="loadTexts">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
     </div>
 
     <!-- 统计信息 -->
@@ -342,12 +334,16 @@ const toggleFeatured = async (row, nextValue) => {
   const targetFeatured = nextValue === true || nextValue === 1 ? 1 : 0
   row._featuredLoading = true
   try {
-    await adminApi.toggleTextFeatured(row.id, targetFeatured)
-    row.isFeatured = targetFeatured
-    ElMessage.success(targetFeatured === 1 ? '已设为推荐' : '已取消推荐')
-    loadStats()
+    const response = await adminApi.toggleTextFeatured(row.id, targetFeatured)
+    if (response.code === 200) {
+      row.isFeatured = targetFeatured
+      ElMessage.success(targetFeatured === 1 ? '已设为推荐' : '已取消推荐')
+      loadStats()
+    } else {
+      row.isFeatured = 1 - targetFeatured
+      ElMessage.error(response.message || '操作失败')
+    }
   } catch (error) {
-    // 拦截器已展示错误弹窗，此处回滚 UI 状态
     row.isFeatured = 1 - targetFeatured
   } finally {
     row._featuredLoading = false
@@ -511,6 +507,11 @@ defineExpose({ loadTexts })
 }
 
 .search-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 20px;
   padding: 20px;
   background-color: #f8f9fa;
@@ -519,6 +520,12 @@ defineExpose({ loadTexts })
 
 .search-form {
   margin: 0;
+}
+
+.search-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .stats-cards {
