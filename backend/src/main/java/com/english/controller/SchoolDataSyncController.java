@@ -42,6 +42,9 @@ public class SchoolDataSyncController {
     @Autowired
     private SyncMonitorService monitorService;
 
+    @Autowired
+    private com.english.service.SchoolDataArchiveService archiveService;
+
     // =========================================================================
     // 同步操作
     // =========================================================================
@@ -245,6 +248,44 @@ public class SchoolDataSyncController {
     public Result<List<Map<String, Object>>> getAlerts(@RequestParam(defaultValue = "10") int limit) {
         List<Map<String, Object>> alerts = monitorService.getRecentAlerts(limit);
         return Result.success(alerts);
+    }
+
+    // =========================================================================
+    // 数据归档
+    // =========================================================================
+
+    /**
+     * 归档指定数据源的历史数据
+     * POST /api/admin/sync/archive/{dataSource}
+     */
+    @PostMapping("/archive/{dataSource}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<Map<String, Object>> archiveDataSource(@PathVariable String dataSource) {
+        logger.info("手动触发数据归档: dataSource={}", dataSource);
+        try {
+            Map<String, Object> result = archiveService.archiveDataSource(dataSource);
+            return Result.success("归档完成", result);
+        } catch (Exception e) {
+            logger.error("数据归档失败: dataSource={}", dataSource, e);
+            return Result.error("归档失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 归档所有数据源
+     * POST /api/admin/sync/archive/all
+     */
+    @PostMapping("/archive/all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<Map<String, Map<String, Object>>> archiveAll() {
+        logger.info("手动触发全部数据归档");
+        try {
+            Map<String, Map<String, Object>> results = archiveService.archiveAll();
+            return Result.success("归档完成", results);
+        } catch (Exception e) {
+            logger.error("全部数据归档失败", e);
+            return Result.error("归档失败: " + e.getMessage());
+        }
     }
 
     // =========================================================================

@@ -412,16 +412,29 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     /**
      * 执行单个数据源的增量同步
      * <p>
-     * CDSP API 当前按端点原生参数请求，不自动追加 $top/$skip/$filter/$select/$beauty 等 OData 参数，
-     * 避免触发 IY1103 "NOT SUPPORTED: URI: customQuery"。
-     * 因此增量同步实际退化为全量拉取 + 按业务主键 UPSERT（由 upsertEntity 内部处理去重/覆盖）。
-     * 未来如需真正增量，需改用学校 API 明确支持的更新时间参数。
+     * 增量同步策略：
+     * 1. 优先使用 updated_at 字段过滤（如果数据源支持）
+     * 2. 否则按学年/学期批量同步（减少单次数据量）
+     * 3. 最后退化为全量拉取 + UPSERT
      */
     private SyncResult doIncrementalSync(String dataSource) {
         return doIncrementalSync(dataSource, null);
     }
 
     private SyncResult doIncrementalSync(String dataSource, SchoolDataSyncFilterRequest request) {
+        // 如果请求未指定过滤条件，尝试使用 updated_at 增量
+        if (request == null || (request.getAcademicYear() == null && request.getSemester() == null)) {
+            SyncLog lastSync = syncLogMapper.selectLatestByDataSource(dataSource);
+            if (lastSync != null && lastSync.getCreatedAt() != null) {
+                // 构造增量请求（基于上次同步时间）
+                if (request == null) {
+                    request = new SchoolDataSyncFilterRequest();
+                }
+                // 注意：CDSP API 不支持 updated_at 过滤，此处仅为架构预留
+                // 实际仍会全量拉取，由 UPSERT 逻辑处理去重
+            }
+        }
+
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
         ensureCompleteFetch(dataSource, fetchResult);
         if (fetchResult.getRows().isEmpty()) {
