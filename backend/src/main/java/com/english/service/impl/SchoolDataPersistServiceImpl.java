@@ -525,7 +525,8 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         } catch (Exception e) {
             String errorMessage = defaultString(e.getMessage(), e.getClass().getSimpleName());
             if (errorMessage.contains("404") || errorMessage.contains("NOT_FOUND")) {
-                logger.info("教学计划课程明细接口不存在，跳过明细同步: planId={}", planId);
+                // 教学计划课程明细接口不存在（CDSP API 不提供此接口），静默跳过
+                // 不记录 INFO 日志，避免日志污染（每个 planId 都会触发一次）
                 return;
             }
             logger.warn("获取教学计划课程明细失败: planId={} err={}", planId, errorMessage);
