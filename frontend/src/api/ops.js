@@ -85,6 +85,14 @@ export function getBackupOperationLogs(params) {
   });
 }
 
+export function createCategoryBackupApi(category) {
+  return request({
+    url: "/api/ops/backup/category",
+    method: "post",
+    params: { category },
+  });
+}
+
 // ========== 系统监控 ==========
 
 export function getRealTimeMetrics() {

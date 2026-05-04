@@ -128,6 +128,8 @@ request.interceptors.response.use(
       const status = error.response?.status
       if (status) {
         console.warn(`[HTTP ${status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
+        // Map HTTP status codes to friendly messages
+        message = getHttpErrorMessage(status, error.response?.data)
       }
 
       ElMessage({
@@ -146,6 +148,33 @@ request.interceptors.response.use(
     return Promise.reject(errorResponse)
   }
 )
+
+
+/**
+ * 将 HTTP 状态码映射为用户友好的错误信息
+ * OPS/ADMIN 用户可看到 500 的详细信息（detail 字段）
+ */
+function getHttpErrorMessage(status, responseData) {
+  if (status === 500) {
+    try {
+      const store = useUserStore()
+      const isOps = store.userRole === 'OPS' || store.userRole === 'ADMIN' ||
+        (store.elevatedRole === 'OPS' && store.elevationExpiresAt && new Date(store.elevationExpiresAt) > new Date())
+      if (isOps && responseData?.detail) {
+        return `服务器错误: ${responseData.detail}`
+      }
+    } catch (e) { /* store not available */ }
+    return '服务器内部错误'
+  }
+  const httpErrorMap = {
+    400: '请求参数错误',
+    401: '未授权，请重新登录',
+    403: '拒绝访问',
+    404: '请求地址不存在',
+    409: '请求冲突',
+  }
+  return httpErrorMap[status] || '请求失败，请稍后重试'
+}
 
 
 /**

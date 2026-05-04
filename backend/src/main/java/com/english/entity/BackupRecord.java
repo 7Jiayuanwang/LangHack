@@ -22,6 +22,9 @@ public class BackupRecord {
     @TableField("backup_mode")
     private String backupMode;
 
+    @TableField("category")
+    private String category;
+
     @TableField("base_backup_id")
     private Long baseBackupId;
 
@@ -62,6 +65,9 @@ public class BackupRecord {
 
     public String getBackupMode() { return backupMode; }
     public void setBackupMode(String backupMode) { this.backupMode = backupMode; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 
     public Long getBaseBackupId() { return baseBackupId; }
     public void setBaseBackupId(Long baseBackupId) { this.baseBackupId = baseBackupId; }

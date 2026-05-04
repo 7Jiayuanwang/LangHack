@@ -501,9 +501,9 @@ class SchoolDataSyncServiceTest {
             List<Map<String, Object>> rawTc2 = new ArrayList<>();
             rawTc2.add(new HashMap<>(Map.of("rkjsh", "T002", "rkjsxm", "李老师", "kcdm", "ENG102", "kcbh", "ENG102-01", "xn", "2025-2026", "xq", "1")));
             when(apiClient.fetchTeacherCourses(argThat(params ->
-                    "ENG101".equals(params.get("kcdm"))))).thenReturn(rawTc1);
+                    params != null && "ENG101".equals(params.get("kcdm"))))).thenReturn(rawTc1);
             when(apiClient.fetchTeacherCourses(argThat(params ->
-                    "ENG102".equals(params.get("kcdm"))))).thenReturn(rawTc2);
+                    params != null && "ENG102".equals(params.get("kcdm"))))).thenReturn(rawTc2);
 
             Map<String, Object> mappedTc1 = new HashMap<>(Map.of(
                     "teacherId", "T001", "teacherName", "张老师", "courseCode", "ENG101",
@@ -520,9 +520,9 @@ class SchoolDataSyncServiceTest {
             rawSel2.add(new HashMap<>(Map.of("xh", "2023001", "kcbh", "ENG102-01")));
             rawSel2.add(new HashMap<>(Map.of("xh", "2023003", "kcbh", "ENG102-01")));
             when(apiClient.fetchCourseSelections(argThat(params ->
-                    "ENG101-01".equals(params.get("KCBH"))))).thenReturn(rawSel1);
+                    params != null && "ENG101-01".equals(params.get("KCBH"))))).thenReturn(rawSel1);
             when(apiClient.fetchCourseSelections(argThat(params ->
-                    "ENG102-01".equals(params.get("KCBH"))))).thenReturn(rawSel2);
+                    params != null && "ENG102-01".equals(params.get("KCBH"))))).thenReturn(rawSel2);
 
             Map<String, Object> mappedSel1 = new HashMap<>(Map.of("studentId", "2023001", "classId", "ENG101-01"));
             Map<String, Object> mappedSel2 = new HashMap<>(Map.of("studentId", "2023002", "classId", "ENG101-01"));

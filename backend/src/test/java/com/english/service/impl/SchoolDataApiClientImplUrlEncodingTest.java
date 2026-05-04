@@ -1,8 +1,9 @@
 package com.english.service.impl;
 
+import com.english.config.SchoolDataProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.LinkedHashMap;
@@ -22,11 +23,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @see <a href="file:///G:/GitHub_local/project/英语学习平台/LangHack/docs/CDSP_PAGINATION_FIX_2026-04-27.md">CDSP_PAGINATION_FIX_2026-04-27.md</a>
  * @see <a href="file:///C:/Users/ASUS/.claude/projects/G--GitHub-local-project--------LangHack/memory/feedback_url_encoding_critical.md">feedback_url_encoding_critical.md</a>
  */
-@SpringBootTest
 class SchoolDataApiClientImplUrlEncodingTest {
 
-    @Autowired
     private SchoolDataApiClientImpl client;
+
+    @BeforeEach
+    void setUp() {
+        client = new SchoolDataApiClientImpl(new ObjectMapper(), new SchoolDataProperties());
+    }
 
     /**
      * 测试 OData 分页参数不被编码

@@ -423,7 +423,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private SyncResult doIncrementalSync(String dataSource, SchoolDataSyncFilterRequest request) {
         // 如果请求未指定过滤条件，尝试使用 updated_at 增量
-        if (request == null || (request.getAcademicYear() == null && request.getSemester() == null)) {
+        if (!hasFilterConditions(request)) {
             SyncLog lastSync = syncLogMapper.selectLatestByDataSource(dataSource);
             if (lastSync != null && lastSync.getCreatedAt() != null) {
                 // 构造增量请求（基于上次同步时间）
@@ -442,6 +442,27 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         }
 
         return toSyncResult(persistService.persistRawData(dataSource, fetchResult.getRows(), "SCHOOL_API"), fetchResult.getPaginationSummary());
+    }
+
+    private boolean hasFilterConditions(SchoolDataSyncFilterRequest request) {
+        if (request == null || request.getFilterGroups() == null) {
+            return false;
+        }
+        for (SchoolDataSyncFilterRequest.FilterGroup group : request.getFilterGroups()) {
+            if (group == null || group.getConditions() == null) {
+                continue;
+            }
+            for (SchoolDataSyncFilterRequest.FilterCondition condition : group.getConditions()) {
+                if (condition != null
+                        && condition.getField() != null
+                        && !condition.getField().trim().isEmpty()
+                        && condition.getValue() != null
+                        && !condition.getValue().trim().isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void ensureCompleteFetch(String dataSource, SchoolDataFetchResult fetchResult) {
@@ -737,7 +758,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         entity.setSelectionId(selectionId);
         entity.setStudentId(studentId);
         entity.setStudentName(getStringValue(data, "studentName"));
-        entity.setCourseCode(getCourseCodeValue(data));
+        entity.setCourseCode(getCourseCodeForSelection(data, classId));
 
         // courseName: CDSP API 不返回，通过 classId 查询 teaching_class 获取
         String courseName = getStringValue(data, "courseName");
@@ -1134,20 +1155,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             return getStudentSchedule(studentId, academicYear, semester);
         }
 
-        // 2. 应用字段映射并持久化（会自动执行 delete-then-insert）
-        LocalDateTime syncTime = LocalDateTime.now();
-        for (Map<String, Object> sourceRecord : fetchData) {
-            try {
-                Map<String, Object> mappedData = fieldMappingService.applyMapping("student_schedule", sourceRecord);
-                mappedData.put("syncTime", syncTime);
-                mappedData.put("syncSource", "SCHOOL_API");
-                persistService.persistMappedRecord("student_schedule", mappedData);
-            } catch (Exception e) {
-                // 保留堆栈以定位排课 delete-then-insert 过程中的约束冲突或类型转换问题
-                logger.warn("同步学生课表单条数据失败 studentId={} recordPreview={} err={}",
-                        studentId, truncateRecordForLog(sourceRecord), e.getMessage(), e);
-            }
-        }
+        persistService.persistRawData("student_schedule", fetchData, "SCHOOL_API");
 
         logger.info("学生课表同步完成: studentId={}, 拉取{}条", studentId, fetchData.size());
 
@@ -1441,6 +1449,52 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         return getStudentSchedule(studentId, academicYear, semester);
     }
 
+    @Override
+    public List<CourseSelection> getOrSyncCourseSelections(String studentId, String academicYear,
+                                                           Integer semester, Duration staleness) {
+        if (studentId == null || studentId.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        Duration effectiveStaleness = staleness == null ? Duration.ofDays(1) : staleness;
+
+        // 用 MAX(sync_time) 判断陈旧度，无需额外列
+        QueryWrapper<CourseSelection> staleCheck = new QueryWrapper<>();
+        staleCheck.select("MAX(sync_time) as lastSync").eq("student_id", studentId);
+        List<Map<String, Object>> rows = courseSelectionMapper.selectMaps(staleCheck);
+        LocalDateTime last = null;
+        if (rows != null && !rows.isEmpty() && rows.get(0) != null && rows.get(0).get("lastSync") != null) {
+            Object val = rows.get(0).get("lastSync");
+            if (val instanceof LocalDateTime) {
+                last = (LocalDateTime) val;
+            } else if (val instanceof java.sql.Timestamp) {
+                last = ((java.sql.Timestamp) val).toLocalDateTime();
+            }
+        }
+
+        boolean stale = last == null || last.isBefore(LocalDateTime.now().minus(effectiveStaleness));
+        if (stale) {
+            try {
+                List<Map<String, Object>> raw = apiClient.fetchCourseSelections(Map.of("XH", studentId));
+                if (raw != null) {
+                    persistService.persistRawData("course_selection", raw, "LAZY_SYNC");
+                }
+            } catch (Exception e) {
+                logger.warn("Lazy 选课记录同步失败 xh={}，降级返回本地数据: {}", studentId, e.getMessage());
+            }
+        }
+
+        QueryWrapper<CourseSelection> wrapper = new QueryWrapper<>();
+        wrapper.eq("student_id", studentId);
+        if (academicYear != null && !academicYear.isEmpty()) {
+            wrapper.eq("academic_year", academicYear);
+        }
+        if (semester != null) {
+            wrapper.eq("semester", semester);
+        }
+        wrapper.orderByDesc("academic_year", "semester");
+        return courseSelectionMapper.selectList(wrapper);
+    }
+
     // ---- 链式拉取辅助方法 ----
 
     private List<Map<String, Object>> filterCoursesByCollege(List<Map<String, Object>> rawCourses,
@@ -1514,6 +1568,17 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private String getCourseCodeValue(Map<String, Object> data) {
         return getStringValue(data, "courseCode");
+    }
+
+    private String getCourseCodeForSelection(Map<String, Object> data, String classId) {
+        String explicitClassId = getStringValue(data, "classId");
+        String courseCode = getCourseCodeValue(data);
+        if ((explicitClassId == null || explicitClassId.trim().isEmpty())
+                && courseCode != null
+                && courseCode.equals(classId)) {
+            return null;
+        }
+        return courseCode;
     }
 
     private Integer getIntegerValue(Map<String, Object> data, String key) {

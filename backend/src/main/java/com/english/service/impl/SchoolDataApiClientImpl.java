@@ -156,9 +156,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     /**
-     * 本地学年拆分为学校接口所需的单年份。
-     * 规则：2025-2026 学年 = 2025秋（第一学期）+ 2026春（第二学期）。
-     * 若 semester 未提供，默认取起始年；若已是单年份则原样返回。
+     * 将学年参数规范化为 CDSP 接口所需的单年份字符串（xn 参数）。
+     * 新格式（单年份）：直接返回，如 "2025" → "2025"，"2026" → "2026"。
+     * 旧格式（兼容）：若传入 "2025-2026"，按学期拆分：秋(1)→"2025"，春(2)→"2026"。
      */
     private String splitAcademicYearToSingleYear(String academicYear, Integer semester) {
         if (academicYear == null || academicYear.isEmpty()) {

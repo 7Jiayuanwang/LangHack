@@ -10,6 +10,11 @@
             <el-dropdown-menu>
               <el-dropdown-item command="FULL">全量备份</el-dropdown-item>
               <el-dropdown-item command="INCREMENTAL">增量备份</el-dropdown-item>
+              <el-dropdown-item divided disabled>分类备份</el-dropdown-item>
+              <el-dropdown-item command="category:system_config">系统配置</el-dropdown-item>
+              <el-dropdown-item command="category:user_data">用户数据</el-dropdown-item>
+              <el-dropdown-item command="category:business_data">业务数据</el-dropdown-item>
+              <el-dropdown-item command="category:school_data">学校数据</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -121,6 +126,14 @@
             <el-tag :type="row.backupMode === 'INCREMENTAL' ? 'warning' : 'primary'" size="small">
               {{ row.backupMode === 'INCREMENTAL' ? '增量' : '全量' }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="category" label="分类" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="row.category" type="info" size="small">
+              {{ getCategoryLabel(row.category) }}
+            </el-tag>
+            <span v-else style="color: var(--text-tertiary, #909399); font-size: 12px;">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -497,6 +510,7 @@ import { Upload, Refresh, Delete, RefreshLeft, Document, Setting, Timer, Clock, 
 import {
   getBackupList,
   createBackupApi,
+  createCategoryBackupApi,
   downloadBackupApi,
   deleteBackupApi,
   restoreBackupApi,
@@ -594,6 +608,11 @@ const loadStats = async () => {
 
 // Create backup
 const handleCreateBackup = async (mode) => {
+  if (typeof mode === 'string' && mode.startsWith('category:')) {
+    const category = mode.slice('category:'.length)
+    await handleCreateCategoryBackup(category)
+    return
+  }
   if (!['FULL', 'INCREMENTAL'].includes(mode)) return
   const modeLabel = mode === 'INCREMENTAL' ? '增量' : '全量'
   try {
@@ -621,6 +640,47 @@ const handleCreateBackup = async (mode) => {
     }
   } catch (error) {
     ElMessage.error('创建备份失败')
+  } finally {
+    creating.value = false
+  }
+}
+
+const CATEGORY_LABELS = {
+  system_config: '系统配置',
+  user_data: '用户数据',
+  business_data: '业务数据',
+  school_data: '学校数据'
+}
+
+const getCategoryLabel = (cat) => CATEGORY_LABELS[cat] || cat
+
+const handleCreateCategoryBackup = async (category) => {
+  const label = getCategoryLabel(category)
+  try {
+    await ElMessageBox.confirm(`确认创建「${label}」分类备份？`, '分类备份', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'info'
+    })
+  } catch {
+    return
+  }
+
+  creating.value = true
+  try {
+    const response = await createCategoryBackupApi(category)
+    if (response.code === 200) {
+      ElMessage.success(`「${label}」分类备份任务已创建，请稍候刷新查看结果`)
+      if (pollTimer) clearTimeout(pollTimer)
+      pollTimer = setTimeout(() => {
+        loadBackups()
+        loadStats()
+      }, 3000)
+    } else {
+      ElMessage.error(response.message || '创建分类备份失败')
+    }
+  } catch (error) {
+    ElMessage.error('创建分类备份失败')
   } finally {
     creating.value = false
   }
@@ -952,476 +1012,215 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+
+/* 备份管理样式 */
 .backups-management {
-  padding: 0;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
+  gap: 16px;
   flex-wrap: wrap;
-  gap: 12px;
-}
-
-.header h2 {
-  margin: 0;
-  font-size: 20px;
-  color: var(--text-primary);
 }
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .stat-card {
-  background: var(--surface-color, #fff);
-  border-radius: 12px;
-  padding: 16px;
-  text-align: center;
-  border: 1px solid var(--border-light, #ebeef5);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
 }
 
 .stat-value {
   font-size: 20px;
-  font-weight: 700;
-  color: var(--accent-color, #409eff);
-  margin-bottom: 4px;
+  font-weight: 800;
+  color: #1e293b;
   word-break: break-all;
 }
 
 .stat-label {
-  font-size: 12px;
-  color: var(--text-tertiary, #909399);
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
 }
 
 .search-bar {
-  margin-bottom: 16px;
-  background: var(--surface-color, #fff);
-  padding: 12px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--border-light, #ebeef5);
+  background: #f8fafc;
+  padding: 16px 20px;
+  border-radius: 16px;
+  margin-bottom: 20px;
+  border: 1px solid #e2e8f0;
 }
 
 .search-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
+}
+
+.search-form :deep(.el-form-item) {
+  margin-bottom: 0;
+  margin-right: 0;
 }
 
 .backups-table {
-  background: var(--surface-color, #fff);
-  border-radius: 8px;
+  background: white;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid var(--border-light, #ebeef5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+  border: 1px solid #e2e8f0;
+}
+
+:deep(.el-table) {
+  --el-table-header-bg-color: #f8fafc;
 }
 
 .pagination {
+  margin-top: 20px;
   display: flex;
-  justify-content: center;
-  padding: 16px;
+  justify-content: flex-end;
+  padding: 0 16px 16px;
 }
 
-.restore-warning {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.confirm-input {
-  margin-top: 8px;
-}
-
-.confirm-input p {
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: var(--text-primary, #303133);
-}
-
+/* 响应式适配 */
 @media (max-width: 768px) {
-  .stats-cards {
-    grid-template-columns: repeat(2, 1fr);
+  .backups-management {
+    padding: 16px;
   }
 
   .header {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions .el-button,
+  .actions .el-dropdown {
+    flex: 1;
+    min-width: 100px;
+  }
+
+  .stats-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .search-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-form :deep(.el-form-item__content) {
+    width: 100%;
+  }
+
+  .search-form :deep(.el-select) {
+    width: 100% !important;
+  }
 }
 
-.logs-filter {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+@media (max-width: 480px) {
+  .stats-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .actions .el-dropdown,
+  .actions .el-button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
 }
 
-/* 备份策略配置面板 */
+/* 配置面板样式 */
 .config-panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 4px 0;
 }
 
 .config-card {
-  background: var(--surface-color, #fff);
-  border: 1px solid var(--border-light, #ebeef5);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: box-shadow 0.2s;
-}
-
-.config-card:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .card-header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
-  flex: 1;
-  min-width: 0;
+  gap: 12px;
 }
 
 .card-icon {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
-.auto-icon {
-  background: linear-gradient(135deg, #e0f2fe, #bae6fd);
-  color: #0284c7;
-}
-
-.time-icon {
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
-  color: #d97706;
-}
-
-.full-icon {
-  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
-  color: #16a34a;
-}
-
-.incr-icon {
-  background: linear-gradient(135deg, #fce7f3, #fbcfe8);
-  color: #db2777;
-}
-
-.storage-icon {
-  background: linear-gradient(135deg, #f3e8ff, #e9d5ff);
-  color: #9333ea;
-}
-
-.card-title-group {
-  min-width: 0;
-}
-
-.card-title-group h4 {
-  margin: 0 0 2px 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary, #303133);
-  line-height: 1.4;
-}
-
-.card-desc {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-tertiary, #909399);
-  line-height: 1.4;
-}
-
-.card-body {
-  padding: 0 20px 16px;
-}
-
-/* 时间选择器 */
 .time-picker-row {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.time-picker-item {
-  flex: 1;
-}
-
-.time-picker-item label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-secondary, #606266);
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.time-separator {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-tertiary, #909399);
-  padding-bottom: 4px;
-}
-
-.time-preview {
-  display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: #f0f9ff;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #0369a1;
-}
-
-/* 信息横幅 */
-.info-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.info-banner.success {
-  background: #f0fdf4;
-  color: #166534;
-}
-
-/* 增量备份间隔设置 */
-.interval-setting {
-  margin-bottom: 20px;
-}
-
-.interval-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.interval-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary, #303133);
-}
-
-.interval-value {
-  font-size: 14px;
-  font-weight: 700;
-  color: #db2777;
-  background: #fce7f3;
-  padding: 2px 10px;
-  border-radius: 12px;
-}
-
-.interval-desc {
-  font-size: 12px;
-  color: var(--text-tertiary, #909399);
-  margin: 0 0 16px 0;
-  line-height: 1.4;
-}
-
-/* 备份计划预览 */
-.schedule-preview {
-  background: var(--bg-secondary, #f8fafc);
-  border: 1px solid var(--border-light, #e2e8f0);
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-
-.schedule-preview h5 {
-  margin: 0 0 12px 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary, #606266);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 12px;
 }
 
 .preview-days {
   display: flex;
   justify-content: space-between;
-  gap: 4px;
-  margin-bottom: 12px;
+  margin-top: 12px;
 }
 
 .preview-day {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  text-align: center;
   flex: 1;
-  padding: 8px 2px;
-  border-radius: 8px;
-  transition: background 0.2s;
 }
 
-.preview-day .day-label {
-  font-size: 11px;
-  color: var(--text-tertiary, #909399);
-  font-weight: 500;
-}
-
-.preview-day .day-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  transition: all 0.2s;
-}
-
-.preview-day.is-full .day-dot {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.4);
-}
-
-.preview-day.is-incremental .day-dot {
-  background: linear-gradient(135deg, #f472b6, #db2777);
-  box-shadow: 0 2px 6px rgba(219, 39, 119, 0.3);
-}
-
-.preview-day .day-type {
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.preview-day.is-full .day-type {
-  color: #16a34a;
-}
-
-.preview-day.is-incremental .day-type {
-  color: #db2777;
-}
-
-.preview-legend {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-tertiary, #909399);
-}
-
-.legend-dot {
+.day-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  margin: 4px auto;
 }
 
-.legend-dot.full-dot {
-  background: #22c55e;
-}
-
-.legend-dot.incr-dot {
-  background: #db2777;
-}
-
-/* 存储策略 */
-.storage-items {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.storage-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}
-
-.storage-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.label-main {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary, #303133);
-}
-
-.label-hint {
-  font-size: 12px;
-  color: var(--text-tertiary, #909399);
-}
-
-/* 配置保存按钮 */
-.config-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-light, #ebeef5);
-}
-
-/* 动画 */
-.config-fade-enter-active,
-.config-fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.config-fade-enter-from,
-.config-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
-@media (max-width: 600px) {
-  .time-picker-row {
-    flex-direction: column;
-  }
-
-  .time-separator {
-    display: none;
-  }
-
-  .preview-days {
-    gap: 2px;
-  }
-
-  .preview-day .day-label {
-    font-size: 10px;
-  }
-
-  .storage-item {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
+.is-full .day-dot { background: #10b981; }
+.is-incremental .day-dot { background: #f59e0b; }
 </style>

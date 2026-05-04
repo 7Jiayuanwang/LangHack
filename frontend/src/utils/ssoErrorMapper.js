@@ -35,8 +35,8 @@ export const SSO_ERROR_THEMES = Object.freeze({
  */
 const ERROR_MAP = {
   USER_NOT_FOUND: {
-    mainMessage: '对不起，您无权使用Langhack英语学习智能体平台。',
-    subMessage: '您的账号尚未在本系统开通使用权限',
+    mainMessage: '对不起，您无权使用LangHack英语学习智能体平台。',
+    subMessage: '您的账号尚未在本系统开通使用权限，请联系管理员核实',
     theme: SSO_ERROR_THEMES.WARNING
   },
   PENDING_APPROVAL: {
@@ -65,8 +65,8 @@ const ERROR_MAP = {
     theme: SSO_ERROR_THEMES.ERROR
   },
   SYSTEM_ERROR: {
-    mainMessage: '对不起，您无权使用Langhack英语学习智能体平台。',
-    subMessage: '',
+    mainMessage: '登录系统暂时出现偏差',
+    subMessage: '我们正在努力修复中，请稍后再试或联系技术支持',
     theme: SSO_ERROR_THEMES.ERROR
   },
   UNKNOWN: {

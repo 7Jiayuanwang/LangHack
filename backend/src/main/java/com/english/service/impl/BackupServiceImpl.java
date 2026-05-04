@@ -219,6 +219,191 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         return record;
     }
 
+    // 分类备份表映射
+    private static final Map<String, List<String>> CATEGORY_TABLES = new LinkedHashMap<>();
+    static {
+        CATEGORY_TABLES.put("system_config", Arrays.asList(
+                "system_config", "sso_config", "ai_provider", "backup_config", "update_config"));
+        CATEGORY_TABLES.put("user_data", Arrays.asList(
+                "users", "student_classes", "user_tags", "article_favorites",
+                "learning_records", "text_learning_records", "user_text_reads",
+                "vocabulary_books", "underlines"));
+        CATEGORY_TABLES.put("business_data", Arrays.asList(
+                "courses", "units", "texts", "classes", "assignments",
+                "words", "media", "videos", "score_records"));
+        CATEGORY_TABLES.put("school_data", Arrays.asList(
+                "school_student", "school_teacher", "school_course", "teaching_class",
+                "course_schedule", "course_selection", "level_exam_scores",
+                "teacher_student_binding", "administrative_class", "teaching_plans",
+                "teaching_plan_courses", "sync_logs"));
+    }
+
+    @Override
+    public BackupRecord createCategoryBackup(String createdBy, String category) {
+        if (!backupEnabled) {
+            throw new BusinessException("备份功能已禁用");
+        }
+        if (!CATEGORY_TABLES.containsKey(category)) {
+            throw new BusinessException("不支持的备份分类: " + category
+                    + "，可选: " + String.join(", ", CATEGORY_TABLES.keySet()));
+        }
+        long usableSpace = Paths.get(backupDir).toFile().getUsableSpace();
+        if (usableSpace < 100 * 1024 * 1024) {
+            throw new BusinessException("磁盘空间不足，请先清理旧备份或扩展存储");
+        }
+        if (!backupInProgress.compareAndSet(false, true)) {
+            throw new BusinessException("已有备份任务正在执行，请稍后再试");
+        }
+
+        BackupRecord record;
+        try {
+            String timestamp = LocalDateTime.now().format(FILENAME_FORMATTER);
+            String filename = "english_learning_" + category + "_" + timestamp + ".sql";
+            record = new BackupRecord();
+            record.setFilename(filename);
+            record.setBackupType("MANUAL");
+            record.setBackupMode("FULL");
+            record.setCategory(category);
+            record.setStatus("IN_PROGRESS");
+            record.setCreatedBy(createdBy);
+            record.setCreatedTime(LocalDateTime.now());
+            record.setStoragePath(Paths.get(backupDir, filename).toAbsolutePath().toString());
+            save(record);
+        } catch (Exception e) {
+            backupInProgress.set(false);
+            logger.error("Failed to create category backup record", e);
+            throw new BusinessException("创建备份记录失败，请稍后重试");
+        }
+
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    executeCategoryBackup(record, CATEGORY_TABLES.get(category));
+                    String logDetail = "SUCCESS".equals(record.getStatus())
+                            ? "分类备份[" + category + "]完成，文件大小: " + formatFileSizeInternal(record.getFileSize())
+                            : "分类备份[" + category + "]失败: " + record.getErrorMessage();
+                    operationLogService.log(record.getCreatedBy(), "BACKUP_CREATE", record.getId(),
+                            record.getFilename(), logDetail, record.getStatus(), null);
+                } catch (Exception e) {
+                    logger.error("Category backup task failed unexpectedly", e);
+                    try {
+                        record.setStatus("FAILED");
+                        record.setErrorMessage("备份执行异常");
+                        record.setCompletedTime(LocalDateTime.now());
+                        updateById(record);
+                    } catch (Exception updateEx) {
+                        logger.error("Failed to update backup record after failure", updateEx);
+                    }
+                    operationLogService.log(record.getCreatedBy(), "BACKUP_CREATE", record.getId(),
+                            record.getFilename(), "分类备份执行异常", "FAILED", null);
+                } finally {
+                    backupInProgress.set(false);
+                }
+            }, executor);
+        } catch (Throwable t) {
+            backupInProgress.set(false);
+            logger.error("Failed to submit category backup task to executor", t);
+            record.setStatus("FAILED");
+            record.setErrorMessage("提交备份任务失败");
+            record.setCompletedTime(LocalDateTime.now());
+            updateById(record);
+            if (t instanceof Error) throw (Error) t;
+            throw new BusinessException("备份任务提交失败，请稍后重试");
+        }
+
+        return record;
+    }
+
+    private void executeCategoryBackup(BackupRecord record, List<String> tables) {
+        Path outputPath = Paths.get(record.getStoragePath()).toAbsolutePath().normalize();
+        Path allowedDir = Paths.get(backupDir).toAbsolutePath().normalize();
+        if (!outputPath.startsWith(allowedDir)) {
+            logger.error("Path traversal detected in category backup output: {}", record.getFilename());
+            record.setStatus("FAILED");
+            record.setErrorMessage("备份输出路径异常");
+            record.setCompletedTime(LocalDateTime.now());
+            updateById(record);
+            return;
+        }
+
+        try {
+            DbConnectionInfo connInfo = parseJdbcUrl();
+            String databaseName = extractDatabaseName();
+
+            List<String> cmd = new ArrayList<>(Arrays.asList(
+                    mysqldumpPath,
+                    "-h", connInfo.host,
+                    "-P", String.valueOf(connInfo.port),
+                    "-u", dbUsername,
+                    "--single-transaction",
+                    "--routines",
+                    "--triggers",
+                    "--result-file=" + record.getStoragePath(),
+                    databaseName
+            ));
+            cmd.addAll(tables);
+
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.environment().put("MYSQL_PWD", dbPassword);
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            try {
+                StringBuilder output = new StringBuilder();
+                Thread outputReader = new Thread(() -> {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            output.append(line).append("\n");
+                        }
+                    } catch (IOException ignored) {}
+                });
+                outputReader.setDaemon(true);
+                outputReader.start();
+
+                boolean finished = process.waitFor(10, TimeUnit.MINUTES);
+                outputReader.join(5000);
+
+                if (!finished) {
+                    process.destroyForcibly();
+                    record.setStatus("FAILED");
+                    record.setErrorMessage("备份超时（10分钟）");
+                    record.setCompletedTime(LocalDateTime.now());
+                    updateById(record);
+                    return;
+                }
+
+                int exitCode = process.exitValue();
+                if (exitCode != 0) {
+                    String errMsg = output.toString().trim();
+                    logger.error("mysqldump category backup failed (exit {}): {}", exitCode, errMsg);
+                    record.setStatus("FAILED");
+                    record.setErrorMessage("mysqldump 退出码: " + exitCode);
+                    record.setCompletedTime(LocalDateTime.now());
+                    updateById(record);
+                    return;
+                }
+            } finally {
+                process.destroy();
+            }
+
+            Path filePath = Paths.get(record.getStoragePath());
+            long fileSize = Files.exists(filePath) ? Files.size(filePath) : 0;
+            record.setFileSize(fileSize);
+            record.setStatus("SUCCESS");
+            record.setCompletedTime(LocalDateTime.now());
+            updateById(record);
+            logger.info("Category backup [{}] completed: {} ({} bytes)", record.getCategory(), record.getFilename(), fileSize);
+
+        } catch (Exception e) {
+            logger.error("Category backup execution failed", e);
+            record.setStatus("FAILED");
+            record.setErrorMessage("备份执行失败: " + e.getMessage());
+            record.setCompletedTime(LocalDateTime.now());
+            updateById(record);
+        }
+    }
+
     @Override
     public void executeScheduledBackup() {
         BackupConfig effectiveConfig = getEffectiveConfig();

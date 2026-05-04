@@ -518,7 +518,15 @@ const refreshAll = async () => {
 
 // Formatters
 const formatServiceName = (name) => {
-  const map = { HIAGENT: 'HiAgent', OPENROUTER: 'OpenRouter', TENCENT_TRANSLATE: '腾讯翻译', TENCENT_ASR: '腾讯ASR', BILIBILI: 'Bilibili' }
+  const map = {
+    HIAGENT: 'HiAgent',
+    OPENAI_COMPATIBLE: 'OpenAI兼容',
+    OPENROUTER: 'OpenRouter',
+    TENCENT_TRANSLATE: '腾讯翻译',
+    HIAGENT_TRANSLATE: 'HiAgent翻译',
+    TENCENT_ASR: '腾讯ASR',
+    BILIBILI: 'Bilibili'
+  }
   return map[name] || name
 }
 

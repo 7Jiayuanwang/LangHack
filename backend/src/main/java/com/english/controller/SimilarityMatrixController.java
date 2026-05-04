@@ -30,7 +30,7 @@ public class SimilarityMatrixController {
         try {
             scheduleTask.recomputeTextSimilarityMatrix();
             long cost = System.currentTimeMillis() - start;
-            return Result.success("文章相似度矩阵重算完成，耗时 " + cost + "ms");
+            return Result.success("文章相似度矩阵重算完成", "耗时 " + cost + "ms");
         } catch (Exception e) {
             log.error("文章相似度矩阵重算失败", e);
             return Result.error("文章相似度矩阵重算失败: " + e.getMessage());
@@ -46,7 +46,7 @@ public class SimilarityMatrixController {
         try {
             scheduleTask.recomputeUserSimilarityMatrix();
             long cost = System.currentTimeMillis() - start;
-            return Result.success("用户相似度矩阵重算完成，耗时 " + cost + "ms");
+            return Result.success("用户相似度矩阵重算完成", "耗时 " + cost + "ms");
         } catch (Exception e) {
             log.error("用户相似度矩阵重算失败", e);
             return Result.error("用户相似度矩阵重算失败: " + e.getMessage());
@@ -62,7 +62,7 @@ public class SimilarityMatrixController {
         try {
             scheduleTask.recomputeAll();
             long cost = System.currentTimeMillis() - start;
-            return Result.success("全部相似度矩阵重算完成，耗时 " + cost + "ms");
+            return Result.success("全部相似度矩阵重算完成", "耗时 " + cost + "ms");
         } catch (Exception e) {
             log.error("全部相似度矩阵重算失败", e);
             return Result.error("全部相似度矩阵重算失败: " + e.getMessage());

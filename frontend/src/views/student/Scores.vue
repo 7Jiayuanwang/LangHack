@@ -2,7 +2,7 @@
   <div class="student-scores">
     <!-- 筛选 -->
     <div class="filter-bar">
-      <el-select v-model="examType" placeholder="考试类型" size="small" clearable style="width: 120px" @change="loadScores">
+      <el-select v-model="examType" placeholder="考试类型" size="small" clearable style="width: 120px">
         <el-option value="CET4" label="CET-4" />
         <el-option value="CET6" label="CET-6" />
       </el-select>
@@ -51,23 +51,26 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getMyScores } from '@/api/student'
+import { ref, computed, onMounted } from 'vue'
+import { getMyLevelExamScores } from '@/api/student'
 
 const loading = ref(false)
-const scores = ref([])
+const allScores = ref([])
 const examType = ref('')
+
+const scores = computed(() => {
+  if (!examType.value) return allScores.value
+  return allScores.value.filter(s => s.examType === examType.value)
+})
 
 async function loadScores() {
   loading.value = true
   try {
-    const params = {}
-    if (examType.value) params.examType = examType.value
-    const res = await getMyScores(params)
-    scores.value = res?.data || []
+    const res = await getMyLevelExamScores()
+    allScores.value = res?.data || []
   } catch (e) {
     console.error('获取成绩失败:', e)
-    scores.value = []
+    allScores.value = []
   } finally {
     loading.value = false
   }

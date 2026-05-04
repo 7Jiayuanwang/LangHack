@@ -206,7 +206,7 @@ public class SchoolDataQueryController {
     @GetMapping("/teaching-plans/{planId}/courses")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<java.util.List<TeachingPlanCourse>> listTeachingPlanCourses(
-            @PathVariable String planId) {
+            @PathVariable("planId") String planId) {
         QueryWrapper<TeachingPlanCourse> wrapper = new QueryWrapper<>();
         wrapper.eq("plan_id", planId).orderByAsc("semester", "sort_order");
         return Result.success(teachingPlanCourseMapper.selectList(wrapper));
@@ -249,7 +249,7 @@ public class SchoolDataQueryController {
         Map<String, Long> overview = new LinkedHashMap<>();
         overview.put("administrative_class", administrativeClassMapper.selectCount(null));
         overview.put("school_course", schoolCourseMapper.selectCount(null));
-        overview.put("teaching_class", teachingClassMapper.selectCount(null));
+        overview.put("teacher_courses", teachingClassMapper.selectCount(null));
         overview.put("course_schedule", courseScheduleMapper.selectCount(null));
         overview.put("course_selection", courseSelectionMapper.selectCount(null));
         overview.put("level_exam_scores", levelExamScoreMapper.selectCount(null));
@@ -260,13 +260,13 @@ public class SchoolDataQueryController {
 
     @GetMapping("/{dataSource}/filter-fields")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
-    public Result<java.util.List<SchoolDataFilterFieldDto>> getFilterFields(@PathVariable String dataSource) {
+    public Result<java.util.List<SchoolDataFilterFieldDto>> getFilterFields(@PathVariable("dataSource") String dataSource) {
         return Result.success(fieldMetadataService.getFilterFields(dataSource));
     }
 
     @PostMapping("/{dataSource}/query")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
-    public Result<?> querySchoolData(@PathVariable String dataSource,
+    public Result<?> querySchoolData(@PathVariable("dataSource") String dataSource,
                                      @RequestBody(required = false) SchoolDataQueryRequest request) {
         SchoolDataQueryRequest queryRequest = request == null ? new SchoolDataQueryRequest() : request;
         switch (dataSource) {
@@ -284,7 +284,8 @@ public class SchoolDataQueryController {
                 wrapper.orderByDesc("updated_at");
                 return Result.success(schoolCourseMapper.selectPage(pageReq, wrapper));
             }
-            case "teaching_class": {
+            case "teaching_class":
+            case "teacher_courses": {
                 Page<TeachingClass> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
                 QueryWrapper<TeachingClass> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());

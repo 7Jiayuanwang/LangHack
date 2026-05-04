@@ -3,6 +3,7 @@ package com.english.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.dto.SchoolDataFilterFieldDto;
+import com.english.exception.GlobalExceptionHandler;
 import com.english.mapper.*;
 import com.english.service.SchoolDataFieldMetadataService;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +51,21 @@ class SchoolDataQueryControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
+
+    @Test
+    @DisplayName("概览应使用 teacher_courses 键对齐前端官方数据源 Tab")
+    void getOverview_usesTeacherCoursesKey_success() throws Exception {
+        when(teachingClassMapper.selectCount(null)).thenReturn(5L);
+
+        mockMvc.perform(get("/api/admin/school-data/overview"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.teacher_courses").value(5))
+                .andExpect(jsonPath("$.data.teaching_class").doesNotExist());
     }
 
     @Test
@@ -103,6 +118,32 @@ class SchoolDataQueryControllerTest {
     }
 
     @Test
+    @DisplayName("teacher_courses 通用查询应落到教学班表")
+    void querySchoolData_teacherCoursesAlias_success() throws Exception {
+        SchoolDataFilterFieldDto field = stringField("teacherId", "teacher_id", true);
+        when(fieldMetadataService.getFilterFieldMap("teacher_courses")).thenReturn(Map.of("teacherId", field));
+        when(teachingClassMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 20));
+
+        mockMvc.perform(post("/api/admin/school-data/teacher_courses/query")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "filterGroups": [
+                                    {
+                                      "conditions": [
+                                        {"field": "teacherId", "operator": "eq", "value": "T001"}
+                                      ]
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(teachingClassMapper).selectPage(any(), any());
+    }
+
+    @Test
     @DisplayName("学期筛选应支持中文春并归一化")
     void querySchoolData_semesterChineseValue_success() throws Exception {
         SchoolDataFilterFieldDto field = numberField("semester", "semester", true);
@@ -144,7 +185,8 @@ class SchoolDataQueryControllerTest {
                                   ]
                                 }
                                 """))
-                .andExpect(status().is5xxServerError());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
     }
 
     @Test
@@ -164,7 +206,8 @@ class SchoolDataQueryControllerTest {
                                         ))
                                 ))
                         ))))
-                .andExpect(status().is5xxServerError());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
     }
 
     private SchoolDataFilterFieldDto stringField(String name, String column, boolean listQuery) {

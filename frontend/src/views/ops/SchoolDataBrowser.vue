@@ -1,16 +1,33 @@
 <template>
   <div class="school-data-browser">
     <!-- 加载进度条 -->
-    <div v-if="loadingProgress > 0 && loadingProgress < 100" class="loading-progress">
-      <el-progress :percentage="loadingProgress" :status="loadingStatus" />
-      <div class="progress-text">{{ loadingText }}</div>
+    <div v-if="loadingProgress > 0 && loadingProgress < 100" class="loading-progress-overlay">
+      <div class="progress-card">
+        <el-progress type="circle" :percentage="Math.round(loadingProgress)" :status="loadingStatus" :width="80" />
+        <div class="progress-info">
+          <div class="progress-title">数据加载中</div>
+          <div class="progress-text">{{ loadingText }}</div>
+        </div>
+      </div>
     </div>
 
     <!-- 数据概览卡片 -->
-    <div class="overview-cards" v-if="overview">
-      <div v-for="(count, key) in overview" :key="key" class="overview-card" @click="activeTab = key">
-        <div class="card-count">{{ count }}</div>
-        <div class="card-label">{{ dataSourceLabels[key] || key }}</div>
+    <div class="stats-grid" v-if="overview">
+      <div 
+        v-for="(count, key) in overview" 
+        :key="key" 
+        class="stat-card" 
+        :class="{ active: activeTab === key }"
+        @click="activeTab = key"
+      >
+        <div class="stat-icon-bg">
+          <el-icon><DataLine /></el-icon>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ count.toLocaleString() }}</div>
+          <div class="stat-label">{{ dataSourceLabels[key] || key }}</div>
+        </div>
+        <div class="stat-indicator"></div>
       </div>
     </div>
 
@@ -273,7 +290,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { InfoFilled } from '@element-plus/icons-vue'
+import { InfoFilled, DataLine, Refresh, Filter, Connection, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   getSchoolDataOverview,
@@ -613,207 +630,246 @@ onMounted(async () => {
 
 <style scoped>
 .school-data-browser {
-  padding: 12px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
-.loading-progress {
+.loading-progress-overlay {
   position: fixed;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 400px;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-card {
   background: white;
-  padding: 16px 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 2000;
+  padding: 24px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 360px;
+}
+
+@media (max-width: 480px) {
+  .school-data-browser {
+    padding: 12px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 12px;
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .stat-icon-bg {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .stat-value {
+    font-size: 18px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+
+  .sync-controls {
+    padding: 12px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chain-fetch-card {
+    padding: 16px;
+  }
+
+  .input-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .input-row :deep(.el-input),
+  .input-row :deep(.el-select),
+  .input-row .el-button {
+    width: 100% !important;
+  }
+}
+
+.progress-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
 }
 
 .progress-text {
-  margin-top: 8px;
-  font-size: 13px;
-  color: #606266;
-  text-align: center;
+  font-size: 14px;
+  color: #64748b;
 }
 
-.overview-cards {
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 20px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.overview-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 12px 16px;
-  min-width: 100px;
+  align-items: center;
+  gap: 16px;
   cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
-.overview-card:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.1);
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
+  border-color: #4f46e5;
 }
 
-.card-count {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--primary-color);
+.stat-card.active {
+  background: #f8fafc;
+  border-color: #4f46e5;
+  box-shadow: inset 0 2px 4px rgba(79, 70, 229, 0.05);
 }
 
-.card-label {
-  font-size: 12px;
-  color: var(--text-tertiary);
+.stat-icon-bg {
+  width: 48px;
+  height: 48px;
+  background: #f1f5f9;
+  color: #64748b;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: all 0.3s;
+}
+
+.stat-card:hover .stat-icon-bg,
+.stat-card.active .stat-icon-bg {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
   margin-top: 4px;
 }
 
+.stat-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: #4f46e5;
+  transform: scaleX(0);
+  transition: transform 0.3s;
+}
+
+.stat-card.active .stat-indicator {
+  transform: scaleX(1);
+}
+
 .sync-controls {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 12px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  flex-wrap: wrap;
-}
-
-.filter-summary {
-  font-size: 12px;
-  color: var(--text-secondary);
-  padding: 4px 8px;
-  background: var(--bg-primary);
-  border-radius: 4px;
-  border: 1px solid var(--border-light);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pagination-wrapper {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-.tab-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-tertiary, #888);
-  background: var(--bg-secondary, #f7f8fa);
-  border-left: 3px solid var(--primary-color, #0066cc);
-  padding: 8px 12px;
-  margin-bottom: 8px;
-  border-radius: 4px;
-}
-
-.filter-builder {
-  display: flex;
-  flex-direction: column;
   gap: 16px;
-}
-
-.filter-group {
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--bg-secondary);
-}
-
-.group-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
   flex-wrap: wrap;
-}
-
-.group-label {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 14px;
-}
-
-.filter-condition {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
 }
 
 .chain-fetch-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 12px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  border-radius: 24px;
+  padding: 24px;
+  margin-bottom: 32px;
+  color: white;
+  box-shadow: 0 10px 25px rgba(79, 70, 229, 0.2);
 }
 
 .card-title {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
 
 .card-subtitle {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  font-size: 13px;
+  opacity: 0.8;
 }
 
 .result-summary {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 8px 12px;
-  background: var(--bg-primary);
-  border-radius: 4px;
-  border: 1px solid var(--border-light);
-  flex-wrap: wrap;
-}
-
-.result-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.result-label {
-  font-size: 12px;
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 16px;
 }
 
 .result-value {
-  font-size: 14px;
+  color: white;
+  font-weight: 800;
+}
+
+:deep(.el-tabs__item) {
   font-weight: 600;
-  color: var(--primary-color);
+  font-size: 15px;
+}
+
+:deep(.el-table) {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+}
+
+.pagination-wrapper {
+  margin-top: 24px;
+  background: white;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
 }
 
 </style>

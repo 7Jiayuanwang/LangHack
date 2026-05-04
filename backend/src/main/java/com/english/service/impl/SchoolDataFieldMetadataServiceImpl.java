@@ -34,6 +34,7 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
             "course_selection", CourseSelection.class,
             "level_exam_scores", LevelExamScore.class,
             "teaching_plans", TeachingPlan.class,
+            "teacher_courses", TeachingClass.class,
             "student_schedule", StudentSchedule.class
     );
 
@@ -185,7 +186,11 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
     }
 
     private String resolveLabel(String dataSource, String field) {
-        return FIELD_LABELS.getOrDefault(dataSource + "." + field, field);
+        String label = FIELD_LABELS.get(dataSource + "." + field);
+        if (label == null && "teacher_courses".equals(dataSource)) {
+            label = FIELD_LABELS.get("teaching_class." + field);
+        }
+        return label == null ? field : label;
     }
 
     private static Map<String, String> createFieldLabels() {

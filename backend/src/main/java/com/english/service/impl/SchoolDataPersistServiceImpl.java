@@ -15,8 +15,10 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
@@ -36,7 +38,11 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
     private final StudentScheduleMapper studentScheduleMapper;
     private final SchoolStudentMapper schoolStudentMapper;
     private final SchoolTeacherMapper schoolTeacherMapper;
+    private final TeacherStudentBindingMapper teacherStudentBindingMapper;
     private final UserMapper userMapper;
+    private final ThreadLocal<Boolean> batchPersisting = ThreadLocal.withInitial(() -> false);
+    private final ThreadLocal<Set<String>> courseScheduleDeletedKeys = ThreadLocal.withInitial(() -> new HashSet<>());
+    private final ThreadLocal<Set<String>> studentScheduleDeletedKeys = ThreadLocal.withInitial(() -> new HashSet<>());
 
     public SchoolDataPersistServiceImpl(FieldMappingService fieldMappingService,
                                         @Qualifier("schoolDataApiClientDelegate") SchoolDataApiClient apiClient,
@@ -51,6 +57,7 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
                                         StudentScheduleMapper studentScheduleMapper,
                                         SchoolStudentMapper schoolStudentMapper,
                                         SchoolTeacherMapper schoolTeacherMapper,
+                                        TeacherStudentBindingMapper teacherStudentBindingMapper,
                                         UserMapper userMapper) {
         this.fieldMappingService = fieldMappingService;
         this.apiClient = apiClient;
@@ -65,6 +72,7 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         this.studentScheduleMapper = studentScheduleMapper;
         this.schoolStudentMapper = schoolStudentMapper;
         this.schoolTeacherMapper = schoolTeacherMapper;
+        this.teacherStudentBindingMapper = teacherStudentBindingMapper;
         this.userMapper = userMapper;
     }
 
@@ -77,17 +85,31 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         if (rawData == null) {
             return new PersistResult(0, 0, 0, 0);
         }
-        for (Map<String, Object> sourceRecord : rawData) {
-            try {
-                Map<String, Object> mappedData = fieldMappingService.applyMapping(dataSource, sourceRecord);
-                mappedData.put("syncTime", syncTime);
-                mappedData.put("syncSource", syncSource);
-                persistMappedRecord(dataSource, mappedData);
-                success++;
-            } catch (Exception e) {
-                fail++;
-                logger.warn("同步单条数据失败 dataSource={} recordPreview={} err={}",
-                        dataSource, truncateRecordForLog(sourceRecord), e.getMessage(), e);
+        boolean scheduleBatch = "course_schedule".equals(dataSource) || "student_schedule".equals(dataSource);
+        if (scheduleBatch) {
+            batchPersisting.set(true);
+            courseScheduleDeletedKeys.get().clear();
+            studentScheduleDeletedKeys.get().clear();
+        }
+        try {
+            for (Map<String, Object> sourceRecord : rawData) {
+                try {
+                    Map<String, Object> mappedData = fieldMappingService.applyMapping(dataSource, sourceRecord);
+                    mappedData.put("syncTime", syncTime);
+                    mappedData.put("syncSource", syncSource);
+                    persistMappedRecord(dataSource, mappedData);
+                    success++;
+                } catch (Exception e) {
+                    fail++;
+                    logger.warn("同步单条数据失败 dataSource={} recordPreview={} err={}",
+                            dataSource, truncateRecordForLog(sourceRecord), e.getMessage(), e);
+                }
+            }
+        } finally {
+            if (scheduleBatch) {
+                batchPersisting.remove();
+                courseScheduleDeletedKeys.remove();
+                studentScheduleDeletedKeys.remove();
             }
         }
         return new PersistResult(total, success, fail, total - success - fail);
@@ -239,36 +261,41 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
         entity.setSyncSource(getStringValue(data, "syncSource"));
         teachingClassMapper.upsertByClassId(entity);
+        upsertSchoolTeacherDirectory(entity);
     }
 
     private void upsertCourseSchedule(Map<String, Object> data) {
         String classId = getStringValue(data, "classId");
-        String academicYear = getStringValue(data, "academicYear");
+        TeachingClass teachingClass = resolveTeachingClass(classId);
+        String academicYear = firstNonBlank(getStringValue(data, "academicYear"),
+                teachingClass == null ? null : teachingClass.getAcademicYear());
         Integer semester = parseSchoolSemester(data, "semester");
+        if (semester == null && teachingClass != null) {
+            semester = teachingClass.getSemester();
+        }
         Integer dayOfWeek = getIntegerValue(data, "dayOfWeek");
         String period = getStringValue(data, "period");
-        String weekRange = getStringValue(data, "weekRange");
-        String classLocation = getStringValue(data, "classLocation");
+        String weekRange = defaultIfBlank(getStringValue(data, "weekRange"), "");
+        String classLocation = defaultIfBlank(getStringValue(data, "classLocation"), "");
 
         // 验证必填字段：classId, academicYear, semester, dayOfWeek, period, weekRange, classLocation
         if (classId == null || academicYear == null || semester == null) {
             logger.warn("课程安排缺少主键字段，跳过 classId={} academicYear={} semester={}", classId, academicYear, semester);
             return;
         }
-        if (dayOfWeek == null || period == null || weekRange == null || classLocation == null) {
+        if (dayOfWeek == null || period == null) {
             logger.warn("课程安排缺少必填字段，跳过 classId={} dayOfWeek={} period={} weekRange={} classLocation={}",
                     classId, dayOfWeek, period, weekRange, classLocation);
             return;
         }
 
         // 外键检查：验证 teaching_class 表中是否存在该 classId
-        TeachingClass teachingClass = teachingClassMapper.selectById(classId);
         if (teachingClass == null) {
             logger.warn("课程安排外键检查失败，teaching_class 表中不存在 classId={}，跳过同步", classId);
             return;
         }
 
-        courseScheduleMapper.deleteByClassIdAndSemester(classId, academicYear, semester);
+        deleteCourseScheduleOnce(classId, academicYear, semester);
         CourseSchedule entity = new CourseSchedule();
         entity.setClassId(classId);
         entity.setDayOfWeek(dayOfWeek);
@@ -286,8 +313,13 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         CourseSelection entity = new CourseSelection();
         String studentId = getStringValue(data, "studentId");
         String classId = getClassIdValue(data);
-        String academicYear = defaultIfBlank(getStringValue(data, "academicYear"), "UNKNOWN");
+        TeachingClass teachingClass = resolveTeachingClass(classId);
+        String academicYear = defaultIfBlank(firstNonBlank(getStringValue(data, "academicYear"),
+                teachingClass == null ? null : teachingClass.getAcademicYear()), "UNKNOWN");
         Integer semester = parseSchoolSemester(data, "semester");
+        if (semester == null && teachingClass != null) {
+            semester = teachingClass.getSemester();
+        }
         if (semester == null) {
             semester = 0;
         }
@@ -303,20 +335,26 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         entity.setSelectionId(selectionId);
         entity.setStudentId(studentId);
         // 学生姓名：优先使用 API 返回值，若为空则从 school_student 或 users 表反查
-        String studentName = firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId));
+        String studentName = firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId), studentId);
         entity.setStudentName(studentName);
-        entity.setCourseCode(getCourseCodeValue(data));
-        entity.setCourseName(getStringValue(data, "courseName"));
+        entity.setCourseCode(firstNonBlank(getCourseCodeForSelection(data, classId),
+                teachingClass == null ? null : teachingClass.getCourseCode(),
+                classId));
+        entity.setCourseName(firstNonBlank(getStringValue(data, "courseName"),
+                teachingClass == null ? null : teachingClass.getCourseName()));
         entity.setClassId(classId);
-        entity.setTeacherId(getStringValue(data, "teacherId"));
-        entity.setTeacherName(getStringValue(data, "teacherName"));
+        entity.setTeacherId(firstNonBlank(getStringValue(data, "teacherId"),
+                teachingClass == null ? null : teachingClass.getTeacherId()));
+        entity.setTeacherName(firstNonBlank(getStringValue(data, "teacherName"),
+                teachingClass == null ? null : teachingClass.getTeacherName()));
         entity.setCredits(getBigDecimalValue(data, "credits"));
         entity.setAcademicYear(academicYear);
         entity.setSemester(semester);
         entity.setClassTime(getStringValue(data, "classTime"));
         entity.setClassLocation(getStringValue(data, "classLocation"));
-        entity.setSelectionTime(getLocalDateTimeValue(data, "selectionTime"));
-        entity.setSelectionStatus(getStringValue(data, "selectionStatus"));
+        entity.setSelectionTime(defaultIfNull(getLocalDateTimeValue(data, "selectionTime"),
+                getLocalDateTimeValue(data, "syncTime"), LocalDateTime.now()));
+        entity.setSelectionStatus(defaultIfBlank(getStringValue(data, "selectionStatus"), "SELECTED"));
         entity.setRegularGrade(getBigDecimalValue(data, "regularGrade"));
         entity.setFinalGrade(getBigDecimalValue(data, "finalGrade"));
         entity.setTotalGrade(getBigDecimalValue(data, "totalGrade"));
@@ -327,6 +365,10 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
         entity.setSyncSource(getStringValue(data, "syncSource"));
         courseSelectionMapper.upsertBySelectionId(entity);
+        upsertSchoolStudentDirectory(entity.getStudentId(), entity.getStudentName(),
+                null, null, entity.getSyncTime(), entity.getSyncSource());
+        upsertSchoolTeacherDirectory(teachingClass);
+        upsertTeacherStudentBinding(entity);
     }
 
     private void upsertLevelExamScore(Map<String, Object> data) {
@@ -428,21 +470,31 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
 
     private void upsertStudentSchedule(Map<String, Object> data) {
         String studentId = getStringValue(data, "studentId");
-        String academicYear = getStringValue(data, "academicYear");
+        String classId = getClassIdValue(data);
+        TeachingClass teachingClass = resolveTeachingClass(classId);
+        String academicYear = firstNonBlank(getStringValue(data, "academicYear"),
+                teachingClass == null ? null : teachingClass.getAcademicYear());
         Integer semester = parseSchoolSemester(data, "semester");
+        if (semester == null && teachingClass != null) {
+            semester = teachingClass.getSemester();
+        }
         if (studentId != null && academicYear != null && semester != null) {
-            QueryWrapper<StudentSchedule> deleteWrapper = new QueryWrapper<>();
-            deleteWrapper.eq("student_id", studentId).eq("academic_year", academicYear).eq("semester", semester);
-            studentScheduleMapper.delete(deleteWrapper);
+            deleteStudentScheduleOnce(studentId, academicYear, semester);
         }
         StudentSchedule entity = new StudentSchedule();
         entity.setStudentId(studentId);
-        entity.setStudentName(getStringValue(data, "studentName"));
-        entity.setClassId(getClassIdValue(data));
-        entity.setCourseCode(getCourseCodeValue(data));
-        entity.setCourseName(getStringValue(data, "courseName"));
-        entity.setTeacherId(getStringValue(data, "teacherId"));
-        entity.setTeacherName(getStringValue(data, "teacherName"));
+        entity.setStudentName(firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId), studentId));
+        entity.setClassId(classId);
+        entity.setCourseCode(firstNonBlank(getCourseCodeValue(data),
+                teachingClass == null ? null : teachingClass.getCourseCode(),
+                classId));
+        entity.setCourseName(firstNonBlank(getStringValue(data, "courseName"),
+                teachingClass == null ? null : teachingClass.getCourseName(),
+                entity.getCourseCode()));
+        entity.setTeacherId(firstNonBlank(getStringValue(data, "teacherId"),
+                teachingClass == null ? null : teachingClass.getTeacherId()));
+        entity.setTeacherName(firstNonBlank(getStringValue(data, "teacherName"),
+                teachingClass == null ? null : teachingClass.getTeacherName()));
         entity.setDayOfWeek(getIntegerValue(data, "dayOfWeek"));
         entity.setPeriod(getStringValue(data, "period"));
         entity.setWeekRange(getStringValue(data, "weekRange"));
@@ -452,6 +504,8 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         entity.setSyncTime((LocalDateTime) data.getOrDefault("syncTime", LocalDateTime.now()));
         entity.setSyncSource((String) data.getOrDefault("syncSource", "SCHOOL_API"));
         studentScheduleMapper.insert(entity);
+        upsertSchoolStudentDirectory(entity.getStudentId(), entity.getStudentName(),
+                null, entity.getSyncTime(), entity.getSyncTime(), entity.getSyncSource());
     }
 
     private void upsertSchoolStudent(Map<String, Object> data) {
@@ -533,6 +587,84 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         }
     }
 
+    private TeachingClass resolveTeachingClass(String classId) {
+        if (classId == null || classId.trim().isEmpty()) {
+            return null;
+        }
+        return teachingClassMapper.selectOne(new QueryWrapper<TeachingClass>()
+                .eq("class_id", classId.trim())
+                .last("LIMIT 1"));
+    }
+
+    private void deleteCourseScheduleOnce(String classId, String academicYear, Integer semester) {
+        String key = classId + "|" + academicYear + "|" + semester;
+        if (!Boolean.TRUE.equals(batchPersisting.get()) || courseScheduleDeletedKeys.get().add(key)) {
+            courseScheduleMapper.deleteByClassIdAndSemester(classId, academicYear, semester);
+        }
+    }
+
+    private void deleteStudentScheduleOnce(String studentId, String academicYear, Integer semester) {
+        String key = studentId + "|" + academicYear + "|" + semester;
+        if (Boolean.TRUE.equals(batchPersisting.get()) && !studentScheduleDeletedKeys.get().add(key)) {
+            return;
+        }
+        QueryWrapper<StudentSchedule> deleteWrapper = new QueryWrapper<>();
+        deleteWrapper.eq("student_id", studentId).eq("academic_year", academicYear).eq("semester", semester);
+        studentScheduleMapper.delete(deleteWrapper);
+    }
+
+    private void upsertTeacherStudentBinding(CourseSelection selection) {
+        if (selection == null
+                || selection.getTeacherId() == null || selection.getTeacherId().trim().isEmpty()
+                || selection.getStudentId() == null || selection.getStudentId().trim().isEmpty()
+                || selection.getCourseCode() == null || selection.getCourseCode().trim().isEmpty()) {
+            return;
+        }
+        TeacherStudentBinding binding = new TeacherStudentBinding();
+        binding.setTeacherId(selection.getTeacherId());
+        binding.setStudentId(selection.getStudentId());
+        binding.setCourseCode(selection.getCourseCode());
+        binding.setCourseClassCode(selection.getClassId());
+        binding.setAcademicYear(defaultIfBlank(selection.getAcademicYear(), ""));
+        binding.setSemester(selection.getSemester() == null ? "" : String.valueOf(selection.getSemester()));
+        binding.setSourceType(defaultIfBlank(selection.getSyncSource(), "SCHOOL_API"));
+        binding.setSyncTime(defaultIfNull(selection.getSyncTime(), LocalDateTime.now()));
+        teacherStudentBindingMapper.upsertBinding(binding);
+    }
+
+    private void upsertSchoolStudentDirectory(String studentId,
+                                              String studentName,
+                                              LocalDateTime lastExamSyncTime,
+                                              LocalDateTime lastScheduleSyncTime,
+                                              LocalDateTime syncTime,
+                                              String syncSource) {
+        if (studentId == null || studentId.trim().isEmpty()) {
+            return;
+        }
+        SchoolStudent student = new SchoolStudent();
+        student.setStudentId(studentId.trim());
+        student.setStudentName(firstNonBlank(studentName, studentId));
+        student.setLastExamSyncTime(lastExamSyncTime);
+        student.setLastScheduleSyncTime(lastScheduleSyncTime);
+        student.setSyncTime(defaultIfNull(syncTime, LocalDateTime.now()));
+        student.setSyncSource(defaultIfBlank(syncSource, "SCHOOL_API"));
+        schoolStudentMapper.upsertByStudentId(student);
+    }
+
+    private void upsertSchoolTeacherDirectory(TeachingClass teachingClass) {
+        if (teachingClass == null
+                || teachingClass.getTeacherId() == null
+                || teachingClass.getTeacherId().trim().isEmpty()) {
+            return;
+        }
+        SchoolTeacher teacher = new SchoolTeacher();
+        teacher.setTeacherId(teachingClass.getTeacherId().trim());
+        teacher.setTeacherName(teachingClass.getTeacherName());
+        teacher.setSyncTime(defaultIfNull(teachingClass.getSyncTime(), LocalDateTime.now()));
+        teacher.setSyncSource(defaultIfBlank(teachingClass.getSyncSource(), "SCHOOL_API"));
+        schoolTeacherMapper.upsertByTeacherId(teacher);
+    }
+
     private String resolveStudentName(String studentId) {
         if (studentId == null || studentId.trim().isEmpty()) {
             return null;
@@ -574,6 +706,17 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
 
     private String getCourseCodeValue(Map<String, Object> data) {
         return getStringValue(data, "courseCode");
+    }
+
+    private String getCourseCodeForSelection(Map<String, Object> data, String classId) {
+        String explicitClassId = getStringValue(data, "classId");
+        String courseCode = getCourseCodeValue(data);
+        if ((explicitClassId == null || explicitClassId.trim().isEmpty())
+                && courseCode != null
+                && courseCode.equals(classId)) {
+            return null;
+        }
+        return courseCode;
     }
 
     private Integer getIntegerValue(Map<String, Object> data, String key) {
@@ -643,6 +786,18 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
 
     private String defaultIfBlank(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private LocalDateTime defaultIfNull(LocalDateTime... values) {
+        if (values == null) {
+            return null;
+        }
+        for (LocalDateTime value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private String defaultString(String value, String fallback) {

@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,6 +40,11 @@ import java.util.UUID;
 @Service
 @Profile("sso")
 public class SsoUserMappingService {
+
+    private static final String DEFAULT_PENDING_USER_MESSAGE =
+            "当前已授予普通用户权限，您仍可正常登录；如需学生/教师等更高权限，请等待管理员审核。";
+    private static final String PRIVILEGED_REVIEW_MESSAGE =
+            "当前 SSO 身份尚未通过学校目录或角色映射确认，不能自动授予本地高权限角色，请等待管理员审核。";
 
     @Autowired
     private SsoUserBindingMapper bindingMapper;
@@ -90,7 +96,8 @@ public class SsoUserMappingService {
         );
 
         // 尝试从 SSO 信息映射角色
-        String ssoMappedRole = roleMappingService.mapRole(ssoUserInfo.getMemberOf());
+        List<String> memberOf = ssoUserInfo.getMemberOf() == null ? Collections.emptyList() : ssoUserInfo.getMemberOf();
+        String ssoMappedRole = roleMappingService.mapRole(memberOf);
 
         if (binding != null) {
             // 已绑定用户
@@ -102,6 +109,9 @@ public class SsoUserMappingService {
                     throw new SsoBusinessException(SsoErrorCode.USER_NOT_FOUND,
                             "SSO 绑定存在但本地用户不存在，请联系管理员");
                 }
+                if (isDisabledStatus(pendingUser.getStatus())) {
+                    throw new SsoBusinessException(SsoErrorCode.AUTH_FAILED, "账号已被禁用，请联系管理员");
+                }
 
                 RoleUpgradeResult upgradeResult = tryUpgradeFromSchoolDirectory(pendingUser, ssoUserInfo, binding);
                 if (upgradeResult.upgraded()) {
@@ -110,7 +120,7 @@ public class SsoUserMappingService {
                     return SsoLoginResult.success(token, pendingUser);
                 }
 
-                if (ssoMappedRole != null && !roleMappingService.requiresManualConfirmation(ssoMappedRole, ssoUserInfo.getMemberOf())) {
+                if (ssoMappedRole != null && !roleMappingService.requiresManualConfirmation(ssoMappedRole, memberOf)) {
                     log.info("待审批用户角色可自动映射，自动审批: bindingId={}, role={}", binding.getId(), ssoMappedRole);
                     binding.setAutoApproved(1);
                     binding.setLastLoginTime(LocalDateTime.now());
@@ -123,8 +133,16 @@ public class SsoUserMappingService {
                     return SsoLoginResult.success(token, pendingUser);
                 }
 
+                if (isElevatedRole(pendingUser.getRole())) {
+                    binding.setLastLoginTime(LocalDateTime.now());
+                    bindingMapper.updateById(binding);
+                    log.warn("待审批 SSO 绑定未通过目录/映射确认，不授予本地高权限角色: username={}, role={}, bindingId={}",
+                            pendingUser.getUsername(), pendingUser.getRole(), binding.getId());
+                    return SsoLoginResult.pendingApproval(binding.getId(), PRIVILEGED_REVIEW_MESSAGE);
+                }
+
                 pendingUser.setStatus("ACTIVE");
-                pendingUser.setRole(firstNonBlank(pendingUser.getRole(), "USER"));
+                pendingUser.setRole("USER");
                 userService.updateUser(pendingUser);
                 binding.setLastLoginTime(LocalDateTime.now());
                 bindingMapper.updateById(binding);
@@ -134,7 +152,7 @@ public class SsoUserMappingService {
                         token,
                         pendingUser,
                         binding.getId(),
-                        "当前已授予普通用户权限，您仍可正常登录；如需学生/教师等更高权限，请等待管理员审核。"
+                        DEFAULT_PENDING_USER_MESSAGE
                 );
             }
 
@@ -218,7 +236,7 @@ public class SsoUserMappingService {
                 if (shouldSyncRole) {
                     // 安全护栏：升权到 ADMIN/OPS 等高权限角色必须走人工确认，
                     // 不允许 SSO 组变更直接改写 DB 角色（防止 LDAP 配置被误改或劫持导致权限提升）
-                    if (roleMappingService.requiresManualConfirmation(ssoMappedRole, ssoUserInfo.getMemberOf())) {
+                    if (roleMappingService.requiresManualConfirmation(ssoMappedRole, memberOf)) {
                         log.warn("SSO 升权到 {} 需人工审批，保留数据库角色: username={}, dbRole={}",
                                 ssoMappedRole, user.getUsername(), user.getRole());
                     } else {
@@ -244,6 +262,9 @@ public class SsoUserMappingService {
         User existingUser = userService.getUserByUsername(ssoUserInfo.getSsoUsername());
         if (existingUser != null) {
             log.info("用户已存在但无绑定，自动关联: userId={}, username={}", existingUser.getId(), existingUser.getUsername());
+            if (isDisabledStatus(existingUser.getStatus())) {
+                throw new SsoBusinessException(SsoErrorCode.AUTH_FAILED, "账号已被禁用，请联系管理员");
+            }
 
             existingUser.setSsoBound(1);
             existingUser.setSsoProvider(ssoUserInfo.getProvider());
@@ -259,7 +280,7 @@ public class SsoUserMappingService {
             }
 
             if (ssoMappedRole != null && isRoleUpgrade(existingUser.getRole(), ssoMappedRole)
-                    && !roleMappingService.requiresManualConfirmation(ssoMappedRole, ssoUserInfo.getMemberOf())) {
+                    && !roleMappingService.requiresManualConfirmation(ssoMappedRole, memberOf)) {
                 existingUser.setRole(ssoMappedRole);
                 SsoUserBinding newBinding = createBinding(existingUser.getId(), ssoUserInfo, protocol, true);
                 userService.updateUser(existingUser);
@@ -268,9 +289,15 @@ public class SsoUserMappingService {
                 return SsoLoginResult.success(token, existingUser);
             }
 
-            existingUser.setStatus("ACTIVE");
-            existingUser.setRole(firstNonBlank(existingUser.getRole(), "USER"));
             SsoUserBinding newBinding = createBinding(existingUser.getId(), ssoUserInfo, protocol, false);
+            if (isElevatedRole(existingUser.getRole())) {
+                log.warn("已有本地高权限账号缺少可验证的 SSO/学校目录角色证据，转入人工审核: username={}, role={}, bindingId={}",
+                        existingUser.getUsername(), existingUser.getRole(), newBinding.getId());
+                return SsoLoginResult.pendingApproval(newBinding.getId(), PRIVILEGED_REVIEW_MESSAGE);
+            }
+
+            existingUser.setStatus("ACTIVE");
+            existingUser.setRole("USER");
             userService.updateUser(existingUser);
             String token = jwtUtil.generateToken(existingUser.getUsername(), existingUser.getRole());
             log.info("SSO 登录成功（关联已有用户为 USER 待审批）: username={}, role={}, bindingId={}", existingUser.getUsername(), existingUser.getRole(), newBinding.getId());
@@ -278,7 +305,7 @@ public class SsoUserMappingService {
                     token,
                     existingUser,
                     newBinding.getId(),
-                    "当前已授予普通用户权限，您仍可正常登录；如需学生/教师等更高权限，请等待管理员审核。"
+                    DEFAULT_PENDING_USER_MESSAGE
             );
         }
 
@@ -305,7 +332,7 @@ public class SsoUserMappingService {
         }
 
         // 4. 检查是否需要人工确认
-        if (roleMappingService.requiresManualConfirmation(ssoMappedRole, ssoUserInfo.getMemberOf())) {
+        if (roleMappingService.requiresManualConfirmation(ssoMappedRole, memberOf)) {
             log.info("角色 {} 需要人工确认，先授予 USER 并保留待审批", ssoMappedRole);
             User newUser = createUserFromSso(ssoUserInfo, "USER");
             SsoUserBinding pendingBinding = createBinding(newUser.getId(), ssoUserInfo, protocol, false);
@@ -346,7 +373,7 @@ public class SsoUserMappingService {
      */
     private User createUserFromSso(SsoUserInfo ssoInfo, String role) {
         User user = new User();
-        user.setUsername(ssoInfo.getSsoUsername());
+        user.setUsername(normalizeIdentifier(ssoInfo.getSsoUsername()));
         user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString())); // 随机密码
         user.setEmail(ssoInfo.getEmail());
         user.setRealName(ssoInfo.getRealName());
@@ -389,15 +416,15 @@ public class SsoUserMappingService {
         if (user == null) {
             return new RoleUpgradeResult(false);
         }
-        String username = user.getUsername();
-        if (username == null || username.trim().isEmpty()) {
+        String username = normalizeIdentifier(user.getUsername());
+        if (username == null) {
             return new RoleUpgradeResult(false);
         }
 
         if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
-            SchoolStudent student = schoolStudentMapper.selectByStudentId(username.trim());
+            SchoolStudent student = schoolStudentMapper.selectByStudentId(username);
             if (student != null && isRoleUpgrade(user.getRole(), "STUDENT")) {
-                backfillStudentClassInfo(username.trim(), ssoUserInfo.getAttributes());
+                backfillStudentClassInfo(username, ssoUserInfo.getAttributes());
                 if ((user.getRealName() == null || user.getRealName().isEmpty()) && student.getStudentName() != null) {
                     user.setRealName(student.getStudentName());
                 }
@@ -414,7 +441,7 @@ public class SsoUserMappingService {
         }
 
         if (schoolTeacherMapper != null && isFeatureEnabled("sso.auto_grant_teacher")) {
-            SchoolTeacher teacher = schoolTeacherMapper.selectByTeacherId(username.trim());
+            SchoolTeacher teacher = schoolTeacherMapper.selectByTeacherId(username);
             if (teacher != null && isRoleUpgrade(user.getRole(), "TEACHER")) {
                 if ((user.getRealName() == null || user.getRealName().isEmpty()) && teacher.getTeacherName() != null) {
                     user.setRealName(teacher.getTeacherName());
@@ -450,6 +477,22 @@ public class SsoUserMappingService {
         return newIndex > currentIndex;
     }
 
+    private boolean isElevatedRole(String role) {
+        String normalizedRole = firstNonBlank(role);
+        return normalizedRole != null && !"USER".equals(normalizedRole);
+    }
+
+    private boolean isDisabledStatus(String status) {
+        String normalizedStatus = firstNonBlank(status);
+        return normalizedStatus != null
+                && !"ACTIVE".equals(normalizedStatus)
+                && !"PENDING_APPROVAL".equals(normalizedStatus);
+    }
+
+    private String normalizeIdentifier(String value) {
+        return firstNonBlank(value);
+    }
+
     // =========================================================================
     // 链式主数据自动授权（school_student / school_teacher）
     // =========================================================================
@@ -466,8 +509,8 @@ public class SsoUserMappingService {
         if (schoolStudentMapper == null && schoolTeacherMapper == null) {
             return null;
         }
-        String uid = ssoUserInfo.getSsoUsername();
-        if (uid == null || uid.trim().isEmpty()) {
+        String uid = normalizeIdentifier(ssoUserInfo.getSsoUsername());
+        if (uid == null) {
             return null;
         }
 

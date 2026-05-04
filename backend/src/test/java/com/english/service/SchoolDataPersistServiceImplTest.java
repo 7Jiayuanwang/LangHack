@@ -1,8 +1,6 @@
 package com.english.service;
 
-import com.english.entity.SchoolStudent;
-import com.english.entity.SchoolTeacher;
-import com.english.entity.User;
+import com.english.entity.*;
 import com.english.mapper.*;
 import com.english.service.impl.SchoolDataPersistServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,10 +12,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,6 +55,8 @@ class SchoolDataPersistServiceImplTest {
     @Mock
     private SchoolTeacherMapper schoolTeacherMapper;
     @Mock
+    private TeacherStudentBindingMapper teacherStudentBindingMapper;
+    @Mock
     private UserMapper userMapper;
 
     @BeforeEach
@@ -71,6 +75,7 @@ class SchoolDataPersistServiceImplTest {
                 studentScheduleMapper,
                 schoolStudentMapper,
                 schoolTeacherMapper,
+                teacherStudentBindingMapper,
                 userMapper
         );
     }
@@ -134,6 +139,112 @@ class SchoolDataPersistServiceImplTest {
         assertEquals("T001", entity.getTeacherId());
         assertEquals(lastScheduleSyncTime, entity.getLastScheduleSyncTime());
         assertEquals("CHAIN_SYNC", entity.getSyncSource());
+    }
+
+    @Test
+    @DisplayName("course_schedule batch keeps all rows for the same class semester")
+    void persistRawData_courseScheduleDeletesOncePerBatchKey() {
+        TeachingClass teachingClass = new TeachingClass();
+        teachingClass.setClassId("CLS1");
+        teachingClass.setAcademicYear("2025");
+        teachingClass.setSemester(1);
+        when(teachingClassMapper.selectOne(any())).thenReturn(teachingClass);
+
+        Map<String, Object> mapped1 = new HashMap<>();
+        mapped1.put("classId", "CLS1");
+        mapped1.put("academicYear", "2025");
+        mapped1.put("semester", 1);
+        mapped1.put("dayOfWeek", 1);
+        mapped1.put("period", "1-2");
+        mapped1.put("weekRange", "1-16");
+        mapped1.put("classLocation", "A101");
+
+        Map<String, Object> mapped2 = new HashMap<>(mapped1);
+        mapped2.put("dayOfWeek", 3);
+        mapped2.put("period", "3-4");
+
+        Map<String, Object> raw1 = Map.of("row", 1);
+        Map<String, Object> raw2 = Map.of("row", 2);
+        when(fieldMappingService.applyMapping(eq("course_schedule"), eq(raw1))).thenReturn(mapped1);
+        when(fieldMappingService.applyMapping(eq("course_schedule"), eq(raw2))).thenReturn(mapped2);
+
+        persistService.persistRawData("course_schedule", List.of(raw1, raw2), "SCHOOL_API");
+
+        verify(courseScheduleMapper, times(1)).deleteByClassIdAndSemester("CLS1", "2025", 1);
+        verify(courseScheduleMapper, times(2)).insert(any(CourseSchedule.class));
+    }
+
+    @Test
+    @DisplayName("course_selection enriches teaching class fields and binds teacher to student")
+    void persistMappedRecord_courseSelection_enrichesAndCreatesBinding() {
+        TeachingClass teachingClass = new TeachingClass();
+        teachingClass.setClassId("CLS1");
+        teachingClass.setCourseCode("ENG101");
+        teachingClass.setCourseName("College English");
+        teachingClass.setTeacherId("T001");
+        teachingClass.setTeacherName("Teacher Li");
+        teachingClass.setAcademicYear("2025");
+        teachingClass.setSemester(1);
+        when(teachingClassMapper.selectOne(any())).thenReturn(teachingClass);
+
+        LocalDateTime syncTime = LocalDateTime.of(2026, 4, 22, 13, 0);
+        Map<String, Object> mapped = new HashMap<>();
+        mapped.put("studentId", "2023001");
+        mapped.put("classId", "CLS1");
+        mapped.put("syncTime", syncTime);
+        mapped.put("syncSource", "SCHOOL_API");
+
+        persistService.persistMappedRecord("course_selection", mapped);
+
+        ArgumentCaptor<CourseSelection> selectionCaptor = ArgumentCaptor.forClass(CourseSelection.class);
+        verify(courseSelectionMapper).upsertBySelectionId(selectionCaptor.capture());
+        CourseSelection selection = selectionCaptor.getValue();
+        assertEquals("2023001_CLS1_2025_1", selection.getSelectionId());
+        assertEquals("ENG101", selection.getCourseCode());
+        assertEquals("College English", selection.getCourseName());
+        assertEquals("T001", selection.getTeacherId());
+        assertEquals("2025", selection.getAcademicYear());
+        assertEquals(1, selection.getSemester());
+        assertEquals("SELECTED", selection.getSelectionStatus());
+
+        ArgumentCaptor<TeacherStudentBinding> bindingCaptor = ArgumentCaptor.forClass(TeacherStudentBinding.class);
+        verify(teacherStudentBindingMapper).upsertBinding(bindingCaptor.capture());
+        TeacherStudentBinding binding = bindingCaptor.getValue();
+        assertEquals("T001", binding.getTeacherId());
+        assertEquals("2023001", binding.getStudentId());
+        assertEquals("ENG101", binding.getCourseCode());
+        assertEquals("CLS1", binding.getCourseClassCode());
+        assertEquals("2025", binding.getAcademicYear());
+        assertEquals("1", binding.getSemester());
+    }
+
+    @Test
+    @DisplayName("student_schedule batch keeps all rows for the same student semester")
+    void persistRawData_studentScheduleDeletesOncePerBatchKey() {
+        Map<String, Object> mapped1 = new HashMap<>();
+        mapped1.put("studentId", "2023001");
+        mapped1.put("studentName", "Student Zhang");
+        mapped1.put("classId", "CLS1");
+        mapped1.put("courseCode", "ENG101");
+        mapped1.put("courseName", "College English");
+        mapped1.put("academicYear", "2025");
+        mapped1.put("semester", 1);
+        mapped1.put("dayOfWeek", 1);
+        mapped1.put("period", "1-2");
+
+        Map<String, Object> mapped2 = new HashMap<>(mapped1);
+        mapped2.put("dayOfWeek", 4);
+        mapped2.put("period", "5-6");
+
+        Map<String, Object> raw1 = Map.of("row", 1);
+        Map<String, Object> raw2 = Map.of("row", 2);
+        when(fieldMappingService.applyMapping(eq("student_schedule"), eq(raw1))).thenReturn(mapped1);
+        when(fieldMappingService.applyMapping(eq("student_schedule"), eq(raw2))).thenReturn(mapped2);
+
+        persistService.persistRawData("student_schedule", List.of(raw1, raw2), "SCHOOL_API");
+
+        verify(studentScheduleMapper, times(1)).delete(any());
+        verify(studentScheduleMapper, times(2)).insert(any(StudentSchedule.class));
     }
 
     @Test

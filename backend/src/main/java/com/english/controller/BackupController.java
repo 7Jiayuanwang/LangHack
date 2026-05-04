@@ -251,6 +251,35 @@ public class BackupController {
         }
     }
 
+    @PostMapping("/category")
+    public Result<?> createCategoryBackup(
+            @RequestParam String category,
+            Authentication authentication,
+            HttpServletRequest request) {
+        String username = authentication.getName();
+        String ip = getClientIp(request);
+        java.util.Set<String> validCategories = java.util.Set.of(
+                "system_config", "user_data", "business_data", "school_data");
+        if (!validCategories.contains(category)) {
+            return Result.error("无效的备份分类，支持: system_config / user_data / business_data / school_data");
+        }
+        try {
+            BackupRecord record = backupService.createCategoryBackup(username, category);
+            operationLogService.log(username, "BACKUP_CREATE", record.getId(),
+                    record.getFilename(), "手动创建分类备份: " + category, "SUCCESS", ip);
+            return Result.success("分类备份任务已创建", record);
+        } catch (BusinessException e) {
+            operationLogService.log(username, "BACKUP_CREATE", null,
+                    null, "创建分类备份失败: " + e.getMessage(), "FAILED", ip);
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("创建分类备份失败 category={}", category, e);
+            operationLogService.log(username, "BACKUP_CREATE", null,
+                    null, "创建分类备份失败: 系统内部错误", "FAILED", ip);
+            return Result.error("创建分类备份失败，请稍后重试");
+        }
+    }
+
     @PostMapping("/cleanup")
     public Result<?> triggerCleanup(Authentication authentication,
                                      HttpServletRequest request) {

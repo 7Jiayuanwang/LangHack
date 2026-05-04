@@ -57,6 +57,10 @@ public class MediaServiceTest {
         if (maxVideoSizeValue != null) {
             maxVideoSizeField.set(mediaService, maxVideoSizeValue);
         }
+
+        java.lang.reflect.Field storagePathField = MediaServiceImpl.class.getDeclaredField("storagePath");
+        storagePathField.setAccessible(true);
+        storagePathField.set(mediaService, java.nio.file.Files.createTempDirectory("media-service-test").toString());
     }
 
     // ==================== 文件上传测试 ====================

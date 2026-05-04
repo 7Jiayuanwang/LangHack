@@ -34,9 +34,9 @@ describe('Request Utility', () => {
     expect(request.interceptors.response.handlers.length).toBeGreaterThan(0)
   })
 
-  it('has default timeout of 15000ms', async () => {
+  it('has default timeout of 60000ms', async () => {
     const { default: request } = await import('@/utils/request')
-    expect(request.defaults.timeout).toBe(15000)
+    expect(request.defaults.timeout).toBe(60000)
   })
 
   it('request interceptor adds Bearer token when available', async () => {

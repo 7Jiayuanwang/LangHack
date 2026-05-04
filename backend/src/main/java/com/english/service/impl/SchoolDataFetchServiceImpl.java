@@ -45,17 +45,19 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
                     }
                     String field = condition.getField();
                     String value = defaultString(condition.getValue(), "").trim();
-                    if ("studentId".equals(field)) studentId = value;
-                    if ("academicYear".equals(field)) academicYear = value;
-                    if ("semester".equals(field) && !value.isEmpty()) semester = normalizeSemesterValue(value);
+                    if (matchesAnyField(field, "studentId", "student_id", "xh", "XH", "学号")) studentId = value;
+                    if (matchesAnyField(field, "academicYear", "academic_year", "xn", "XN", "学年")) academicYear = value;
+                    if (matchesAnyField(field, "semester", "xq", "XQ", "学期") && !value.isEmpty()) semester = normalizeSemesterValue(value);
                 }
             }
             if (studentId == null || studentId.isEmpty()) {
                 throw new BusinessException("student_schedule 手动同步必须提供学号");
             }
+            List<Map<String, Object>> rows = fetchStudentScheduleRaw(studentId, academicYear, semester);
+            List<Map<String, Object>> filtered = applyFilterGroups(dataSource, rows, request);
             return new SchoolDataFetchResult(
-                    fetchStudentScheduleRaw(studentId, academicYear, semester),
-                    new SchoolDataFetchResult.PaginationSummary(true, "STUDENT_SCHEDULE_DIRECT", 1, 0, 0, false, 0)
+                    filtered,
+                    new SchoolDataFetchResult.PaginationSummary(true, "STUDENT_SCHEDULE_DIRECT", rows.isEmpty() ? 0 : 1, 0, 0, false, rows.size())
             );
         }
 
@@ -119,7 +121,11 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
             case "teacher_courses":
                 return apiClient.fetchTeacherCourses(params);
             case "student_schedule":
-                return Collections.emptyList();
+                return apiClient.fetchStudentSchedules(
+                        firstNonBlank(params, "studentId", "student_id", "xh", "XH"),
+                        firstNonBlank(params, "academicYear", "academic_year", "xn", "XN"),
+                        normalizeNullableSemester(firstNonBlank(params, "semester", "xq", "XQ"))
+                );
             default:
                 return Collections.emptyList();
         }
@@ -176,6 +182,11 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
                         else if (matchesAnyField(field, "courseCode", "kcdm")) params.put("kcdm", value);
                         else if (matchesAnyField(field, "academicYear", "xn")) params.put("xn", value);
                         else if (matchesAnyField(field, "semester", "xq")) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
+                        break;
+                    case "student_schedule":
+                        if (matchesAnyField(field, "studentId", "student_id", "xh", "XH", "学号")) params.put("xh", value);
+                        else if (matchesAnyField(field, "academicYear", "academic_year", "xn", "XN", "学年")) params.put("xn", value);
+                        else if (matchesAnyField(field, "semester", "xq", "XQ", "学期")) params.put("xq", "1".equals(value) ? "秋" : "2".equals(value) ? "春" : value);
                         break;
                     default:
                         break;
@@ -247,6 +258,10 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
         String operator = defaultString(condition.getOperator(), "eq").toLowerCase(Locale.ROOT);
         String actual = resolveFilterValue(dataSource, row, condition.getField());
         String expected = defaultString(condition.getValue(), "").trim();
+        if (isSemesterFilterField(dataSource, condition.getField())) {
+            actual = normalizeSemesterComparable(actual);
+            expected = normalizeSemesterComparable(expected);
+        }
         switch (operator) {
             case "contains":
                 return actual.contains(expected);
@@ -272,7 +287,89 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
         if (mappedValue != null) {
             return stringValue(mappedValue);
         }
+        String targetField = resolveTargetFieldAlias(dataSource, field);
+        if (targetField != null) {
+            Object aliasValue = getValueIgnoreCase(mapped, targetField);
+            if (aliasValue != null) {
+                return stringValue(aliasValue);
+            }
+        }
         return "";
+    }
+
+    private boolean isSemesterFilterField(String dataSource, String field) {
+        if (matchesAnyField(field, "semester")) {
+            return true;
+        }
+        return "semester".equals(resolveTargetFieldAlias(dataSource, field));
+    }
+
+    private String normalizeSemesterComparable(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "";
+        }
+        try {
+            Integer normalized = normalizeNullableSemester(value);
+            return normalized == null ? value.trim() : String.valueOf(normalized);
+        } catch (BusinessException ignored) {
+            return value.trim();
+        }
+    }
+
+    private String resolveTargetFieldAlias(String dataSource, String field) {
+        if (dataSource == null || field == null) {
+            return null;
+        }
+        String normalized = field.trim().toLowerCase(Locale.ROOT);
+        switch (dataSource) {
+            case "administrative_class":
+                if (matchesAnyField(normalized, "xsh", "ssxybm")) return "collegeCode";
+                if (matchesAnyField(normalized, "nj", "ssnj")) return "grade";
+                break;
+            case "school_course":
+                if (matchesAnyField(normalized, "kkyx")) return "collegeName";
+                if (matchesAnyField(normalized, "kcdm", "课程代码")) return "courseCode";
+                break;
+            case "course_schedule":
+                if (matchesAnyField(normalized, "xkkch")) return "classId";
+                if (matchesAnyField(normalized, "skxqj")) return "dayOfWeek";
+                if (matchesAnyField(normalized, "skjc")) return "period";
+                break;
+            case "course_selection":
+                if (matchesAnyField(normalized, "xh")) return "studentId";
+                if (matchesAnyField(normalized, "kcbh", "courseclasscode")) return "classId";
+                break;
+            case "level_exam_scores":
+                if (matchesAnyField(normalized, "xh")) return "studentId";
+                break;
+            case "teaching_plans":
+                if (matchesAnyField(normalized, "nj")) return "grade";
+                break;
+            case "teacher_courses":
+                if (matchesAnyField(normalized, "rkjsh")) return "teacherId";
+                if (matchesAnyField(normalized, "kcdm")) return "courseCode";
+                if (matchesAnyField(normalized, "kcbh")) return "classId";
+                if (matchesAnyField(normalized, "xn")) return "academicYear";
+                if (matchesAnyField(normalized, "xq")) return "semester";
+                break;
+            case "student_schedule":
+                if (matchesAnyField(normalized, "xh", "student_id", "学号")) return "studentId";
+                if (matchesAnyField(normalized, "xkkh", "xkkch", "classid", "教学班id", "选课课号")) return "classId";
+                if (matchesAnyField(normalized, "kcbh", "course_code", "课程编号")) return "courseCode";
+                if (matchesAnyField(normalized, "kcmc", "课程名称")) return "courseName";
+                if (matchesAnyField(normalized, "skjszgh", "teacher_id", "上课教师职工号")) return "teacherId";
+                if (matchesAnyField(normalized, "jsmc", "teacher_name", "教师名称")) return "teacherName";
+                if (matchesAnyField(normalized, "xqj", "星期几")) return "dayOfWeek";
+                if (matchesAnyField(normalized, "djj", "skjc", "第几节")) return "period";
+                if (matchesAnyField(normalized, "zcap", "zcdm", "周次安排", "周次代码")) return "weekRange";
+                if (matchesAnyField(normalized, "js", "skdd", "教室")) return "classLocation";
+                if (matchesAnyField(normalized, "xn", "academic_year", "学年")) return "academicYear";
+                if (matchesAnyField(normalized, "xq", "学期")) return "semester";
+                break;
+            default:
+                break;
+        }
+        return null;
     }
 
     private Object getValueIgnoreCase(Map<String, Object> row, String field) {
@@ -305,6 +402,26 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
 
     private String defaultString(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private String firstNonBlank(Map<String, String> params, String... keys) {
+        if (params == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String value = params.get(key);
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private Integer normalizeNullableSemester(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return normalizeSemesterValue(value);
     }
 
     private Integer normalizeSemesterValue(String value) {

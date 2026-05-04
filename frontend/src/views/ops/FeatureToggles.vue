@@ -1,11 +1,20 @@
 <template>
   <div class="feature-toggles-page">
     <div class="page-header">
-      <h2>功能开关管理</h2>
-      <p class="subtitle">三层优先级：用户级 &gt; 标签级 &gt; 全局默认</p>
+      <div class="header-left">
+        <h2>功能开关管理</h2>
+        <div class="priority-badges">
+          <span class="priority-label">三层优先级策略：</span>
+          <el-tag size="small" effect="light" type="danger">1. 用户级</el-tag>
+          <el-icon><ArrowRight /></el-icon>
+          <el-tag size="small" effect="light" type="warning">2. 标签级</el-tag>
+          <el-icon><ArrowRight /></el-icon>
+          <el-tag size="small" effect="light" type="info">3. 全局默认</el-tag>
+        </div>
+      </div>
     </div>
 
-    <el-tabs v-model="activeTab" class="main-tabs">
+    <el-tabs v-model="activeTab" class="main-tabs premium-tabs">
 
       <!-- ── Tab 1：全局开关 ──────────────────────────────────────── -->
       <el-tab-pane label="全局开关" name="global">
@@ -336,7 +345,7 @@
 <script setup>
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading } from '@element-plus/icons-vue'
+import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight } from '@element-plus/icons-vue'
 import {
   getSystemConfig, updateSystemConfig,
   listAllTags, getUsersByTag, deleteTag, getUserTags, setUserTags,
@@ -683,110 +692,62 @@ onMounted(() => {
 
 <style scoped>
 .feature-toggles-page {
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 24px;
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 32px;
 }
 
 .page-header h2 {
-  margin: 0 0 6px;
-  font-size: 20px;
-  font-weight: 700;
+  margin: 0 0 12px;
+  font-size: 24px;
+  font-weight: 800;
+  color: #1e293b;
 }
 
-.subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #64748b;
-}
-
-.main-tabs {
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #e2e8f0;
-}
-
-.toggles-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.role-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  flex-wrap: wrap;
-}
-
-.role-filter-label {
-  font-size: 13px;
-  color: #475569;
-  font-weight: 500;
-}
-
-.role-filter-row :deep(.el-radio-button__inner) {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.group-collapse {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.group-title {
+.priority-badges {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding-right: 8px;
 }
 
-.group-icon {
-  font-size: 16px;
-}
-
-.group-icon--student { color: #2563eb; }
-.group-icon--teacher { color: #059669; }
-.group-icon--admin   { color: #dc2626; }
-.group-icon--ops     { color: #d97706; }
-.group-icon--other   { color: #64748b; }
-
-.group-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.group-count {
-  margin-left: 2px;
-}
-
-.group-desc {
-  margin-left: 8px;
-  font-size: 12px;
-  color: #94a3b8;
-  font-weight: normal;
-}
-
-.empty-filter {
-  padding: 40px;
-  text-align: center;
-  color: #94a3b8;
+.priority-label {
   font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.premium-tabs {
+  background: white;
+  border-radius: 24px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+}
+
+:deep(.el-tabs__header) {
+  margin-bottom: 24px;
+  padding: 0 16px;
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+:deep(.el-tabs__item) {
+  font-size: 15px;
+  font-weight: 600;
+  height: 44px;
+}
+
+.toggles-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
 }
 
 .toggle-card {
@@ -795,167 +756,89 @@ onMounted(() => {
   justify-content: space-between;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 14px 18px;
+  border-radius: 16px;
+  padding: 16px 20px;
+  transition: all 0.2s;
 }
 
-.toggle-info { flex: 1; }
+.toggle-card:hover {
+  background: white;
+  border-color: #4f46e5;
+  box-shadow: 0 8px 16px rgba(79, 70, 229, 0.05);
+}
 
 .toggle-name {
-  margin: 0 0 3px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
 }
 
-.toggle-key {
-  font-size: 12px;
-  color: #94a3b8;
-  font-family: monospace;
-}
-
-.save-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 16px;
-  padding: 10px 14px;
-  background: #f0f9ff;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #0369a1;
-}
-
-.section-toolbar {
+.role-filter-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: #f1f5f9;
+  border-radius: 16px;
 }
 
-.user-tag-section {
-  margin-top: 8px;
+.group-collapse {
+  border: none;
 }
 
-.user-search-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.selected-user-tags {
-  margin-top: 12px;
-  padding: 12px;
-  background: #f8fafc;
-  border-radius: 8px;
+:deep(.group-collapse .el-collapse-item) {
   border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  margin-bottom: 12px;
+  overflow: hidden;
 }
 
-.selected-user-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  font-size: 13px;
-  color: #475569;
+:deep(.group-collapse .el-collapse-item__header) {
+  border-bottom: none;
+  background: white;
+  padding: 12px 20px;
 }
 
-.user-tag-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+:deep(.group-collapse .el-collapse-item__wrap) {
+  border-bottom: none;
+  background: #f8fafc;
 }
 
-.user-tag-chip {
-  cursor: default;
-}
-
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px;
-  color: #94a3b8;
-}
-
-/* ── 标签管理两栏布局 ───────────────────────────────────────────── */
 .tags-two-col {
   display: flex;
-  gap: 16px;
-  margin-bottom: 8px;
-  min-height: 200px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .tag-list-panel {
-  width: 200px;
-  flex-shrink: 0;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px;
+  width: 240px;
   background: #f8fafc;
-  display: flex;
-  flex-direction: column;
-}
-
-.tag-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.tag-list-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.empty-tags {
-  font-size: 12px;
-  color: #94a3b8;
-  text-align: center;
-  padding: 20px 0;
-}
-
-.tag-chip-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-}
-
-.tag-chip {
-  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
   border-radius: 20px;
-  background: #e2e8f0;
-  color: #475569;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tag-chip:hover {
-  background: #bfdbfe;
-  color: #1d4ed8;
-}
-
-.tag-chip--active {
-  background: #3b82f6;
-  color: #fff;
+  padding: 20px;
 }
 
 .tag-members-panel {
   flex: 1;
-  min-width: 0;
+  background: white;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px;
-  background: #fff;
+  border-radius: 20px;
+  padding: 20px;
+}
+
+.tag-chip {
+  padding: 8px 16px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.tag-chip--active {
+  background: #4f46e5;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
 }
 
 .members-placeholder {

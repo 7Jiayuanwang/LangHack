@@ -11,6 +11,8 @@ public interface BackupService extends IService<BackupRecord> {
 
     BackupRecord createManualBackup(String createdBy, String mode);
 
+    BackupRecord createCategoryBackup(String createdBy, String category);
+
     void executeScheduledBackup();
 
     IPage<BackupRecord> getBackupsByPage(int page, int size, String backupType, String status);

@@ -139,7 +139,7 @@ import {
   Upload, Document, House,
   User, EditPen, Setting,
   DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
-  VideoPlay,
+  VideoPlay, Calendar,
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -176,11 +176,11 @@ const theme = computed(() => THEME[props.role])
 
 const NAV_ITEMS = {
   teacher: [
-    { path: '/teacher/dashboard',   label: '首页', icon: DataBoard, badge: null },
-    { path: '/teacher/classes',     label: '班级', icon: School,    badge: null },
-    { path: '/teacher/assignments', label: '任务', icon: Edit,      badge: null },
-    { path: '/teacher/my-courses',  label: '授课', icon: Notebook,  badge: null },
-    { path: '/teacher/courses',     label: '课程', icon: Reading,   badge: null },
+    { path: '/teacher/dashboard',            label: '首页', icon: DataBoard, badge: null },
+    { path: '/teacher/my-courses',           label: '授课', icon: Notebook,  badge: null },
+    { path: '/teacher/my-students',          label: '学生', icon: User,      badge: null, featureKey: 'teacher.school_data_enabled' },
+    { path: '/teacher/my-schedule',          label: '课表', icon: Calendar,  badge: null, featureKey: 'teacher.school_data_enabled' },
+    { path: '/teacher/my-course-selections', label: '选课', icon: Document,  badge: null, featureKey: 'teacher.school_data_enabled' },
   ],
   user: [
     { path: '/user',            label: '首页', icon: House,    badge: null },
@@ -208,15 +208,11 @@ const NAV_ITEMS = {
 
 const navItems = computed(() => {
   const items = NAV_ITEMS[props.role] || []
-  // ops / admin 均需根据功能开关过滤导航项（teacher / user 暂无 featureKey）
-  if (props.role === 'ops' || props.role === 'admin') {
-    return items.filter(item => {
-      if (!item.featureKey) return true
-      const val = featureToggles.value[item.featureKey]
-      return val === undefined || val === true || val === 'true'
-    })
-  }
-  return items
+  return items.filter(item => {
+    if (!item.featureKey) return true
+    const val = featureToggles.value[item.featureKey]
+    return val === undefined || val === true || val === 'true'
+  })
 })
 
 // admin 专属：二级管理菜单
@@ -241,6 +237,14 @@ const moreItems = computed(() => {
     })
   }
   return items
+})
+
+const hasFeatureControlledItems = computed(() => {
+  const items = [
+    ...(NAV_ITEMS[props.role] || []),
+    ...(MORE_ITEMS[props.role] || []),
+  ]
+  return items.some(item => item.featureKey)
 })
 
 const isManagementRouteActive = computed(() => {
@@ -424,8 +428,8 @@ onMounted(async () => {
     router.replace('/login')
   }
 
-  // 加载功能开关（admin/ops 走新的 /api/user/feature-toggles，能享受用户级覆盖）
-  if (props.role === 'ops' || props.role === 'admin') {
+  // 加载功能开关（含 admin/ops/teacher 的导航过滤，登录时使用用户级覆盖）
+  if (hasFeatureControlledItems.value) {
     try {
       await loadFeatureToggles({ authenticated: userStore.isLoggedIn })
     } catch (e) {

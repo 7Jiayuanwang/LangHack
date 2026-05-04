@@ -2297,11 +2297,30 @@ CREATE TABLE IF NOT EXISTS teacher_student_binding (
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('feature_toggle', 'ops.school_data_chain_fetch', 'false', '运维端按学院链式拉取功能开关', 0),
 ('feature_toggle', 'student.lazy_data_sync', 'true', '学生端按需 Lazy 同步四六级/课表', 0),
+('feature_toggle', 'student.lazy_course_selections', 'true', '学生端按需 Lazy 同步选课记录（陈旧度阈值 1 天）', 0),
+('feature_toggle', 'teacher.school_data_enabled', 'true', '教师端学校数据功能（我的学生/课表/选课记录）', 0),
 ('feature_toggle', 'sso.auto_grant_student', 'false', 'SSO 学号匹配 school_student 自动授权 STUDENT', 0),
 ('feature_toggle', 'sso.auto_grant_teacher', 'false', 'SSO 工号匹配 school_teacher 自动授权 TEACHER', 0),
 ('school_data', 'sync_college_chain_cron', '0 30 3 * * ?', '按学院链式刷新 cron 表达式', 0),
 ('school_data', 'sync_college_chain_colleges', '外国语学院', '链式刷新白名单（逗号分隔学院名）', 0),
 ('school_data', 'sync_college_chain_match_mode', 'eq', '学院名匹配模式（eq=精确 / contains=包含）', 0);
+
+-- V29: backup_records 添加 category 字段（分类备份）
+SET @add_backup_records_category_sql = (
+    SELECT IF(
+        EXISTS (
+            SELECT 1 FROM information_schema.COLUMNS
+            WHERE table_schema = DATABASE()
+              AND table_name = 'backup_records'
+              AND column_name = 'category'
+        ),
+        'SELECT 1',
+        'ALTER TABLE `backup_records` ADD COLUMN `category` VARCHAR(50) NULL COMMENT ''备份分类: system_config/user_data/business_data/school_data/full'' AFTER `backup_mode`'
+    )
+);
+PREPARE add_backup_records_category_stmt FROM @add_backup_records_category_sql;
+EXECUTE add_backup_records_category_stmt;
+DEALLOCATE PREPARE add_backup_records_category_stmt;
 
 -- ============================================================================
 -- 5. SSO 角色映射补充：ou=People（IMAU CAS 回退 containerId 格式）

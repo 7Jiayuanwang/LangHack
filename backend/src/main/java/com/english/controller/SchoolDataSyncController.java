@@ -261,13 +261,23 @@ public class SchoolDataSyncController {
     @PostMapping("/archive/{dataSource}")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Object>> archiveDataSource(@PathVariable String dataSource) {
+        // 白名单校验：防止路径参数被用于 SQL 标识符注入
+        java.util.Set<String> allowed = java.util.Set.of(
+            "school_student", "school_teacher", "school_course",
+            "teaching_class", "course_schedule", "course_selection",
+            "level_exam_scores", "teacher_student_binding",
+            "administrative_class", "teaching_plan", "teaching_plan_courses"
+        );
+        if (!allowed.contains(dataSource)) {
+            return Result.error("不支持的数据源: " + dataSource);
+        }
         logger.info("手动触发数据归档: dataSource={}", dataSource);
         try {
             Map<String, Object> result = archiveService.archiveDataSource(dataSource);
             return Result.success("归档完成", result);
         } catch (Exception e) {
             logger.error("数据归档失败: dataSource={}", dataSource, e);
-            return Result.error("归档失败: " + e.getMessage());
+            return Result.error("归档失败，请稍后重试");
         }
     }
 

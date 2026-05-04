@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
@@ -93,6 +94,47 @@ class SchoolDataFetchServiceImplTest {
     }
 
     @Test
+    @DisplayName("student_schedule 手动同步应支持学校原字段筛选并二次过滤生效")
+    void fetchRawData_studentScheduleSourceFieldFilters_success() {
+        SchoolDataSyncFilterRequest request = request(
+                condition("xh", "eq", "2023001"),
+                condition("xn", "eq", "2025"),
+                condition("xq", "eq", "秋"),
+                condition("kcmc", "eq", "大学英语")
+        );
+        Map<String, Object> rawMatched = Map.of("学号", "2023001", "学年", "2025", "学期", "秋", "课程名称", "大学英语");
+        Map<String, Object> rawOtherCourse = Map.of("学号", "2023001", "学年", "2025", "学期", "秋", "课程名称", "高等数学");
+        Map<String, Object> mappedMatched = Map.of("studentId", "2023001", "academicYear", "2025", "semester", "秋", "courseName", "大学英语");
+        Map<String, Object> mappedOtherCourse = Map.of("studentId", "2023001", "academicYear", "2025", "semester", "秋", "courseName", "高等数学");
+
+        when(apiClient.fetchStudentSchedules("2023001", "2025", 1)).thenReturn(List.of(rawMatched, rawOtherCourse));
+        when(fieldMappingService.applyMapping("student_schedule", rawMatched)).thenReturn(mappedMatched);
+        when(fieldMappingService.applyMapping("student_schedule", rawOtherCourse)).thenReturn(mappedOtherCourse);
+
+        List<Map<String, Object>> rows = service.fetchRawData("student_schedule", request);
+
+        assertEquals(1, rows.size());
+        assertEquals("大学英语", rows.get(0).get("课程名称"));
+        verify(apiClient).fetchStudentSchedules("2023001", "2025", 1);
+    }
+
+    @Test
+    @DisplayName("student_schedule 手动同步摘要应记录真实拉取行数")
+    void fetchRawDataWithSummary_studentScheduleFetchedCount_success() {
+        SchoolDataSyncFilterRequest request = request("xh", "eq", "2023001");
+        Map<String, Object> raw1 = Map.of("xh", "2023001", "课程名称", "大学英语");
+        Map<String, Object> raw2 = Map.of("xh", "2023001", "课程名称", "高等数学");
+
+        when(apiClient.fetchStudentSchedules("2023001", null, null)).thenReturn(List.of(raw1, raw2));
+
+        SchoolDataFetchResult result = service.fetchRawDataWithSummary("student_schedule", request);
+
+        assertEquals(2, result.getRows().size());
+        assertEquals(2, result.getPaginationSummary().getFetchedRowCount());
+        verify(apiClient).fetchStudentSchedules("2023001", null, null);
+    }
+
+    @Test
     @DisplayName("旧 fetchRawData 接口应拒绝不完整的上游结果")
     void fetchRawData_incompleteSummary_throwsException() {
         SchoolDataFetchServiceImpl spyService = spy(service);
@@ -109,15 +151,23 @@ class SchoolDataFetchServiceImplTest {
     }
 
     private SchoolDataSyncFilterRequest request(String field, String operator, String value) {
+        return request(condition(field, operator, value));
+    }
+
+    private SchoolDataSyncFilterRequest request(SchoolDataSyncFilterRequest.FilterCondition... conditions) {
         SchoolDataSyncFilterRequest request = new SchoolDataSyncFilterRequest();
+
+        SchoolDataSyncFilterRequest.FilterGroup group = new SchoolDataSyncFilterRequest.FilterGroup();
+        group.setConditions(List.of(conditions));
+        request.setFilterGroups(List.of(group));
+        return request;
+    }
+
+    private SchoolDataSyncFilterRequest.FilterCondition condition(String field, String operator, String value) {
         SchoolDataSyncFilterRequest.FilterCondition condition = new SchoolDataSyncFilterRequest.FilterCondition();
         condition.setField(field);
         condition.setOperator(operator);
         condition.setValue(value);
-
-        SchoolDataSyncFilterRequest.FilterGroup group = new SchoolDataSyncFilterRequest.FilterGroup();
-        group.setConditions(List.of(condition));
-        request.setFilterGroups(List.of(group));
-        return request;
+        return condition;
     }
 }

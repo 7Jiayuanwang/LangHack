@@ -1,70 +1,85 @@
 <template>
   <div class="school-data-config">
     <div class="page-header">
-      <h2>学校数据配置</h2>
-      <el-button @click="loadAll" :loading="loading">
-        <el-icon><Refresh /></el-icon> 刷新
+      <div class="header-left">
+        <h2>学校数据集成配置</h2>
+        <p class="subtitle">管理学校数据源 API 或 ETL 数据库连接与同步任务</p>
+      </div>
+      <el-button @click="loadAll" :loading="loading" plain round>
+        <el-icon><Refresh /></el-icon> 刷新状态
       </el-button>
     </div>
 
     <!-- 配置状态警告横幅 -->
-    <el-alert
-      v-if="showAuthWarning"
-      type="error"
-      :closable="false"
-      show-icon
-      class="status-banner"
-    >
-      <template #title>
-        <strong>学校 API 认证未配置 — 数据同步当前全部失败</strong>
-      </template>
-      <template #default>
-        <div>
-          缺失项:
-          <el-tag
-            v-for="k in status.missingKeys"
-            :key="k"
-            type="danger"
-            size="small"
-            class="missing-tag"
-          >{{ k }}</el-tag>
-        </div>
-        <div class="banner-hint">
-          请在下方 "API 接口配置" 区填入 <strong>App ID</strong> 与 <strong>App Secret</strong>，保存后点击"测试连接"验证。
-        </div>
-      </template>
-    </el-alert>
-    <el-alert
-      v-else-if="showEtlWarning"
-      type="error"
-      :closable="false"
-      show-icon
-      class="status-banner"
-    >
-      <template #title>
-        <strong>ETL 数据库配置未完成 — JDBC 直连当前不可用</strong>
-      </template>
-      <template #default>
-        <div>
-          缺失项:
-          <el-tag
-            v-for="k in status.missingKeys"
-            :key="k"
-            type="danger"
-            size="small"
-            class="missing-tag"
-          >{{ k }}</el-tag>
-        </div>
-      </template>
-    </el-alert>
-    <el-alert
-      v-else-if="status.authConfigured || status.etlConfigured"
-      type="success"
-      :closable="false"
-      show-icon
-      class="status-banner"
-      :title="`${status.source === 'api' ? 'API' : 'ETL'} 配置已完成，可点击下方 '测试连接' 验证`"
-    />
+    <div class="banners-area">
+      <el-alert
+        v-if="showAuthWarning"
+        type="error"
+        :closable="false"
+        show-icon
+        class="status-banner premium-alert"
+      >
+        <template #title>
+          <span class="banner-title">学校 API 认证未配置</span>
+        </template>
+        <template #default>
+          <div class="banner-content">
+            <p>数据同步当前全部失败。缺失项:
+              <el-tag
+                v-for="k in status.missingKeys"
+                :key="k"
+                type="danger"
+                size="small"
+                effect="dark"
+                class="missing-tag"
+              >{{ k }}</el-tag>
+            </p>
+            <div class="banner-hint">
+              请在下方 "API 接口配置" 区填入 <strong>App ID</strong> 与 <strong>App Secret</strong>，保存后点击"测试连接"验证。
+            </div>
+          </div>
+        </template>
+      </el-alert>
+      <el-alert
+        v-else-if="showEtlWarning"
+        type="error"
+        :closable="false"
+        show-icon
+        class="status-banner premium-alert"
+      >
+        <template #title>
+          <span class="banner-title">ETL 数据库配置未完成</span>
+        </template>
+        <template #default>
+          <div class="banner-content">
+            <p>JDBC 直连当前不可用。缺失项:
+              <el-tag
+                v-for="k in status.missingKeys"
+                :key="k"
+                type="danger"
+                size="small"
+                effect="dark"
+                class="missing-tag"
+              >{{ k }}</el-tag>
+            </p>
+          </div>
+        </template>
+      </el-alert>
+      <el-alert
+        v-else-if="status.authConfigured || status.etlConfigured"
+        type="success"
+        :closable="false"
+        show-icon
+        class="status-banner premium-alert success-alert"
+      >
+        <template #title>
+          <span class="banner-title">{{ status.source === 'api' ? 'REST API' : 'JDBC ETL' }} 模式已就绪</span>
+        </template>
+        <template #default>
+          <p>集成配置已完成，同步服务正常运行中。您可以点击下方按钮测试实时连接。</p>
+        </template>
+      </el-alert>
+    </div>
 
     <div v-if="loading" class="loading-state">
       <el-icon class="is-loading" :size="32"><Loading /></el-icon>
@@ -734,7 +749,7 @@ onMounted(loadAll)
 
 <style scoped>
 .school-data-config {
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -742,215 +757,171 @@ onMounted(loadAll)
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  margin-bottom: 24px;
 }
 
-.page-header h2 {
+.header-left h2 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 800;
+  color: #1e293b;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
   margin: 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 14px;
+  color: #64748b;
 }
 
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px;
-  color: #94a3b8;
+.banners-area {
+  margin-bottom: 24px;
+}
+
+.premium-alert {
+  border-radius: 16px;
+  padding: 16px 20px;
+  border: 1px solid rgba(239, 68, 68, 0.1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.05);
+}
+
+.success-alert {
+  border-color: rgba(34, 197, 94, 0.1);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.05);
+}
+
+.banner-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.banner-content p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.banner-hint {
+  font-size: 13px;
+  opacity: 0.9;
 }
 
 .config-collapse {
-  background: #fff;
-  border-radius: 12px;
+  background: white;
+  border-radius: 20px;
   border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.02);
+}
+
+:deep(.el-collapse-item__header) {
+  padding: 16px 24px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+  background: white;
+  transition: all 0.2s;
+}
+
+:deep(.el-collapse-item__header.is-active) {
+  background: #f8fafc;
+  color: #4f46e5;
+}
+
+:deep(.el-collapse-item__content) {
+  padding: 24px;
+  background: white;
 }
 
 .form-hint {
   margin-left: 12px;
   font-size: 12px;
   color: #94a3b8;
+  font-weight: normal;
 }
 
-.form-subhint {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #64748b;
-  font-family: ui-monospace, monospace;
-  line-height: 1.4;
+.endpoints-panel {
+  background: #f1f5f9;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
 }
 
-.cron-hint {
+.endpoints-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
-  background: #f0f9ff;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #0369a1;
-  margin-top: 8px;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 700;
+  color: #475569;
 }
 
-.cron-hint code {
-  background: #e0f2fe;
-  padding: 1px 5px;
-  border-radius: 3px;
+.endpoints-table {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+
+.ds-name {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  color: #4f46e5;
+  background: #eef2ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ds-url {
   font-size: 12px;
+  color: #64748b;
 }
 
 .action-row {
   display: flex;
-  gap: 12px;
-  padding: 4px 0;
-  flex-wrap: wrap;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 24px;
 }
 
 .quick-actions-panel {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
   background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 20px;
+  padding: 24px;
 }
 
-.quick-actions-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
-  color: #334155;
-}
-
-.quick-actions-header span {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.quick-actions-alert {
-  margin-bottom: 12px;
+.quick-actions-header strong {
+  font-size: 16px;
+  color: #1e293b;
 }
 
 .quick-actions-grid {
-  display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
 }
 
 .quick-card {
-  background: #fff;
+  border-radius: 16px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 12px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+  transition: transform 0.2s;
 }
 
-.quick-card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-  margin-bottom: 10px;
-}
-
-.quick-card-form,
-.quick-card-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.quick-card-actions {
-  margin-top: 10px;
+.quick-card:hover {
+  transform: translateY(-2px);
+  border-color: #4f46e5;
 }
 
 .quick-result-card {
-  margin-top: 12px;
-  background: #fff;
-  border: 1px solid #dbeafe;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 16px;
+  border-left: 4px solid #4f46e5;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.04);
 }
 
+.quick-card-title,
 .quick-result-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1d4ed8;
-  margin-bottom: 8px;
-}
-
-.quick-result-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  font-size: 13px;
-  color: #334155;
-}
-
-.quick-result-grid span {
-  color: #64748b;
-}
-
-.quick-result-error {
-  margin-top: 8px;
-  color: #dc2626;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.test-result {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.test-success {
-  background: #f0fdf4;
-  color: #16a34a;
-}
-
-.test-fail {
-  background: #fef2f2;
-  color: #dc2626;
-}
-
-.status-banner {
-  margin-bottom: 16px;
-}
-
-.missing-tag {
-  margin: 0 4px 0 4px;
-}
-
-.banner-hint {
-  margin-top: 6px;
-  font-size: 13px;
-  color: #991b1b;
-}
-
-.field-missing :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px #dc2626 inset !important;
-}
-
-.field-warning {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #dc2626;
-  font-weight: 500;
-}
-
-.endpoints-panel {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin: 8px 0 16px 0;
-}
-
-.endpoints-title {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -994,5 +965,47 @@ onMounted(loadAll)
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 11px;
+}
+
+@media (max-width: 768px) {
+  .school-data-config {
+    padding: 16px;
+  }
+
+  .config-collapse :deep(.el-collapse-item__header) {
+    padding: 12px 16px;
+  }
+
+  .config-collapse :deep(.el-collapse-item__content) {
+    padding: 16px;
+  }
+
+  .action-row {
+    flex-direction: column;
+  }
+
+  .action-row .el-button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  .quick-actions-panel {
+    padding: 16px;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-card-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .quick-card-form :deep(.el-select),
+  .quick-card-form :deep(.el-input),
+  .quick-card-form .el-button {
+    width: 100% !important;
+  }
 }
 </style>

@@ -221,6 +221,24 @@ const routes = [
         component: () => import("@/views/teacher/MyCourses.vue"),
         meta: { title: "我的授课", roles: ["TEACHER"] },
       },
+      {
+        path: "my-students",
+        name: "TeacherMyStudents",
+        component: () => import("@/views/teacher/MyStudents.vue"),
+        meta: { title: "我的学生", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
+      },
+      {
+        path: "my-schedule",
+        name: "TeacherMySchedule",
+        component: () => import("@/views/teacher/MySchedule.vue"),
+        meta: { title: "我的课表", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
+      },
+      {
+        path: "my-course-selections",
+        name: "TeacherMyCourseSelections",
+        component: () => import("@/views/teacher/MyCourseSelections.vue"),
+        meta: { title: "选课记录", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
+      },
     ],
   },
   {

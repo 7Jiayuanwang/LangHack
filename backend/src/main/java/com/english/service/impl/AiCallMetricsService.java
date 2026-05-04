@@ -26,7 +26,8 @@ public class AiCallMetricsService {
     private static final DateTimeFormatter DATE_KEY = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private static final List<String> KNOWN_SERVICES = Arrays.asList(
-            "HIAGENT", "OPENROUTER", "TENCENT_TRANSLATE", "TENCENT_ASR", "BILIBILI"
+            "HIAGENT", "OPENAI_COMPATIBLE", "OPENROUTER",
+            "TENCENT_TRANSLATE", "HIAGENT_TRANSLATE", "TENCENT_ASR", "BILIBILI"
     );
 
     private final ConcurrentLinkedQueue<AiCallLog> buffer = new ConcurrentLinkedQueue<>();

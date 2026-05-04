@@ -1,8 +1,22 @@
 <template>
   <div class="sso-callback">
-    <div v-if="loading" class="loading">
-      <div class="spinner"></div>
-      <p>正在处理登录...</p>
+    <div v-if="loading" class="loading loading-container">
+      <div class="loader-content">
+        <div class="loader-visual">
+          <div class="spinner orbit"></div>
+          <div class="core">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+        </div>
+        <h2 class="loader-title">正在安全校验</h2>
+        <p class="loader-subtitle">请稍候，我们正在验证您的身份凭证</p>
+        <div class="loader-status">
+          <span class="status-dot"></span>
+          正在与统一身份认证平台通信...
+        </div>
+      </div>
     </div>
 
     <!-- 任何错误统一以温馨提示展示，始终包含主管部门联系方式 -->
@@ -160,35 +174,102 @@ onMounted(async () => {
 
 <style scoped>
 .sso-callback {
-  display: flex;
-  justify-content: center;
-  align-items: center;
   min-height: 100vh;
-  background: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
-.loading {
+.loading-container {
+  width: 100%;
+  max-width: 400px;
+  padding: 40px;
   text-align: center;
+  animation: fadeIn 0.8s ease-out;
 }
 
-.spinner {
-  width: 44px;
-  height: 44px;
-  border: 3px solid rgba(255, 255, 255, 0.25);
-  border-top: 3px solid white;
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.loader-visual {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 32px;
+}
+
+.orbit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 2px solid rgba(99, 102, 241, 0.1);
+  border-top-color: #6366f1;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 16px;
+  animation: spin 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 
-p {
-  color: rgba(255, 255, 255, 0.85);
+.core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px;
+  height: 64px;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6366f1;
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
+}
+
+.loader-title {
+  color: white;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  letter-spacing: 1px;
+}
+
+.loader-subtitle {
+  color: rgba(255, 255, 255, 0.5);
   font-size: 15px;
-  letter-spacing: 0.5px;
+  margin: 0 0 40px;
+  line-height: 1.6;
+}
+
+.loader-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 10px 20px;
+  border-radius: 100px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  background: #6366f1;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
 }
 </style>

@@ -539,66 +539,66 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.header-buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: flex-start;
-}
-
-.action-buttons .el-button {
-  margin: 0;
-  padding: 5px 12px;
-  font-size: 13px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.action-buttons .el-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.action-buttons .el-button--circle {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-buttons .el-dropdown {
-  margin-left: 2px;
-}
-
 .users-management {
-  padding: 20px;
-}
-
-.table-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.card-header span {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 10px;
 }
 
 .search-bar {
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 12px;
   margin-bottom: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.search-form :deep(.el-form-item) {
+  margin-bottom: 0;
+  margin-right: 0;
+}
+
+.table-wrapper {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
 }
 
 .pagination {
   margin-top: 20px;
-  text-align: right;
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media (max-width: 768px) {
@@ -606,18 +606,27 @@ onMounted(() => {
     padding: 12px;
   }
 
-  .search-bar .el-form {
-    display: block;
-  }
-
-  .search-bar .el-form-item {
-    margin-right: 0;
-    margin-bottom: 12px;
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .header-buttons {
+    width: 100%;
+  }
+
+  .header-buttons .el-button {
+    flex: 1;
+  }
+
+  .search-form {
     flex-direction: column;
-    gap: 8px;
+    align-items: stretch;
+  }
+
+  .search-form :deep(.el-input),
+  .search-form :deep(.el-select) {
+    width: 100% !important;
   }
 }
 </style>
