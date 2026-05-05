@@ -224,6 +224,38 @@ probe_public_image() {
     return 1
 }
 
+probe_local_registry() {
+    local registry="$1"
+    local image="$2"
+    local timeout=30
+    local full_image="${registry}/${image}"
+
+    echo "  [INFO] 探测本地 registry: docker pull $full_image (超时 ${timeout}s)"
+
+    # 使用后台进程 + timeout 避免 docker pull 卡死
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout "$timeout" docker pull "$full_image" >/dev/null 2>&1; then
+            return 0
+        fi
+    else
+        # 无 timeout 命令时使用后台进程 + kill
+        docker pull "$full_image" >/dev/null 2>&1 &
+        local pull_pid=$!
+        local elapsed=0
+        while kill -0 "$pull_pid" 2>/dev/null && [ $elapsed -lt $timeout ]; do
+            sleep 2
+            elapsed=$((elapsed + 2))
+        done
+        if kill -0 "$pull_pid" 2>/dev/null; then
+            kill "$pull_pid" 2>/dev/null || true
+            wait "$pull_pid" 2>/dev/null || true
+            return 1
+        fi
+        wait "$pull_pid" 2>/dev/null && return 0 || return 1
+    fi
+    return 1
+}
+
 resolve_image_registry_prefix() {
     local mode="$1"
     local local_registry="$2"
@@ -246,10 +278,23 @@ resolve_image_registry_prefix() {
                 RESOLVED_IMAGE_REGISTRY_PREFIX=""
                 RESOLVED_IMAGE_SOURCE_LABEL="公共镜像（自动）"
             else
-                RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
-                RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry}, 公共镜像不可达自动降级)"
-                echo "  [WARN] 公共镜像不可达，自动降级到本地 registry: $local_registry"
-                echo "  [提示] 如本地 registry 尚未同步，请先运行: bash scripts/sync-docker-images.sh --registry $local_registry"
+                echo "  [WARN] 公共镜像不可达，尝试本地 registry: $local_registry"
+                # 验证本地 registry 是否可达
+                if probe_local_registry "$local_registry" "$probe_image"; then
+                    echo "  [OK] 本地 registry 可用"
+                    RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
+                    RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry}, 公共镜像不可达自动降级)"
+                else
+                    echo "  [ERROR] 公共镜像和本地 registry 都不可用"
+                    echo "  [ERROR] 公共镜像: 不可达"
+                    echo "  [ERROR] 本地 registry ($local_registry): 不可达或镜像不存在"
+                    echo ""
+                    echo "  [修复建议]:"
+                    echo "    1. 检查网络连接"
+                    echo "    2. 同步镜像到本地 registry: bash scripts/sync-docker-images.sh --registry $local_registry"
+                    echo "    3. 或强制使用公共镜像: 在 .env 中设置 IMAGE_SOURCE_MODE=public"
+                    exit 1
+                fi
             fi
             ;;
         *)
@@ -262,21 +307,6 @@ resolve_image_registry_prefix() {
         echo "  [INFO] Docker 镜像前缀: (空，使用公共镜像)"
     else
         echo "  [INFO] Docker 镜像前缀: $RESOLVED_IMAGE_REGISTRY_PREFIX"
-        echo "  [INFO] 验证本地镜像..."
-        # 使用 docker images 本地检查，避免 manifest inspect 需要联网
-        # 使用更宽松的匹配：检查是否存在包含 registry 前缀和镜像名的镜像
-        local expected_image="${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
-        if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "${local_registry}.*${probe_image}"; then
-            echo "  [ERROR] 本地缺少镜像: ${expected_image}"
-            echo "  [修复] 先同步镜像: bash scripts/sync-docker-images.sh --registry $local_registry"
-            echo ""
-            echo "  [提示] 如果本地 registry 不可用，可以："
-            echo "    1. 强制使用公共镜像: 在 .env 中设置 IMAGE_SOURCE_MODE=public"
-            echo "    2. 配置 Docker Hub 镜像加速器"
-            echo "    3. 使用代理访问公共镜像"
-            exit 1
-        fi
-        echo "  [OK] 本地镜像可用: ${expected_image}"
     fi
 }
 
@@ -1190,8 +1220,25 @@ fi
 # 拉取 Git LFS 文件（database/*.sql 等大文件）
 if command -v git-lfs &>/dev/null || git lfs version &>/dev/null 2>&1; then
     echo "[INFO] 拉取 Git LFS 文件（database/*.sql）..."
-    if ! git lfs pull 2>/dev/null; then
-        echo "[WARN] git lfs pull 失败（可能网络故障），若需导入历史数据请稍后手动执行"
+    # 添加 30 秒超时，避免网络故障时长时间卡顿
+    if command -v timeout &>/dev/null; then
+        if ! timeout 30 git lfs pull 2>/dev/null; then
+            echo "[WARN] git lfs pull 失败或超时（可能网络故障或无 LFS 文件），继续部署"
+        fi
+    else
+        # 无 timeout 命令时，后台执行并等待最多 30 秒
+        git lfs pull 2>/dev/null &
+        LFS_PID=$!
+        for i in {1..30}; do
+            if ! kill -0 $LFS_PID 2>/dev/null; then
+                break
+            fi
+            sleep 1
+        done
+        if kill -0 $LFS_PID 2>/dev/null; then
+            kill $LFS_PID 2>/dev/null
+            echo "[WARN] git lfs pull 超时（30s），继续部署"
+        fi
     fi
 else
     echo "[WARN] git-lfs 未安装，跳过 LFS 文件拉取"
