@@ -513,8 +513,17 @@ const difficultyText = computed(() => {
 })
 
 
+// 缓存字数计算结果，避免频繁重新计算
+const cachedWordCount = ref(0)
 const wordCount = computed(() => {
   if (!textContent.value) return 0
+
+  // 如果内容未变化，返回缓存值
+  const contentKey = `${currentVersion.value}-${textContent.value.length}`
+  if (cachedWordCount.value > 0 && lastContentKey === contentKey) {
+    return cachedWordCount.value
+  }
+
   let text = textContent.value
   // Markdown 模式下 textContent 含 HTML 标签，需要先用原始文本或去掉标签再计算
   if (isMarkdown.value) {
@@ -527,8 +536,14 @@ const wordCount = computed(() => {
       text = textContent.value.replace(/<[^>]*>/g, ' ')
     }
   }
-  return text.split(/\s+/).filter(word => word.length > 0).length
+
+  const count = text.split(/\s+/).filter(word => word.length > 0).length
+  cachedWordCount.value = count
+  lastContentKey = contentKey
+  return count
 })
+
+let lastContentKey = ''
 
 const estimatedTime = computed(() => {
   // 预计每分钟阅读100个单词
@@ -1323,14 +1338,14 @@ const closeImagePreview = () => {
   }, 300)
 }
 
-// 监听内容变化重新应用划线
+// 监听内容变化重新应用划线（防抖优化：延长到 800ms，减少频繁触发）
 import { watch } from 'vue'
 watch(textContent, () => {
   if (textContentWatchTimerId) clearTimeout(textContentWatchTimerId)
   textContentWatchTimerId = setTimeout(() => {
     applySharedUnderlines()
     textContentWatchTimerId = null
-  }, 500)
+  }, 800) // 从 500ms 延长到 800ms，减少重复渲染
 })
 
 // 处理 Markdown 中的单词点击
@@ -1381,21 +1396,32 @@ const handleMarkdownWordClick = async (word) => {
   }
 }
 
-// 版本管理方法
+// 版本管理方法（优化：缓存渲染结果）
+const renderedVersionCache = new Map()
+
 const switchVersion = (version) => {
   currentVersion.value = version
   const versionContent = textVersions.value[version] || ''
-  
-  if (isMarkdown.value) {
-    // Markdown 格式，需要渲染
-    let renderedHtml = DOMPurify.sanitize(marked(versionContent), SANITIZE_CONFIG)
-    renderedHtml = addClickableWordsToHtml(renderedHtml)
-    textContent.value = renderedHtml
+
+  // 检查缓存
+  const cacheKey = `${version}-${isMarkdown.value}`
+  if (renderedVersionCache.has(cacheKey)) {
+    textContent.value = renderedVersionCache.get(cacheKey)
   } else {
-    // 纯文本格式，直接显示（应用规范化去除转义残留）
-    textContent.value = normalizeTextContent(versionContent)
+    if (isMarkdown.value) {
+      // Markdown 格式，需要渲染
+      let renderedHtml = DOMPurify.sanitize(marked(versionContent), SANITIZE_CONFIG)
+      renderedHtml = addClickableWordsToHtml(renderedHtml)
+      textContent.value = renderedHtml
+      renderedVersionCache.set(cacheKey, renderedHtml)
+    } else {
+      // 纯文本格式，直接显示（应用规范化去除转义残留）
+      const normalized = normalizeTextContent(versionContent)
+      textContent.value = normalized
+      renderedVersionCache.set(cacheKey, normalized)
+    }
   }
-  
+
   // 切换版本后重新加载划线
   if (versionSwitchTimerId) clearTimeout(versionSwitchTimerId)
   versionSwitchTimerId = setTimeout(() => {
@@ -1417,20 +1443,27 @@ const getVersionLabel = (version) => {
   return labels[version] || version
 }
 
-// 滚动处理函数
+// 滚动处理函数（节流优化：使用 requestAnimationFrame）
+let scrollTicking = false
 const handleScroll = () => {
-  const currentScrollY = window.scrollY
-  
-  // 向下滚动超过100px时隐藏头部
-  if (currentScrollY > lastScrollY.value && currentScrollY > 100) {
-    headerHidden.value = true
+  if (!scrollTicking) {
+    window.requestAnimationFrame(() => {
+      const currentScrollY = window.scrollY
+
+      // 向下滚动超过100px时隐藏头部
+      if (currentScrollY > lastScrollY.value && currentScrollY > 100) {
+        headerHidden.value = true
+      }
+      // 向上滚动时显示头部，或者滚动到顶部时也显示
+      else if (currentScrollY < lastScrollY.value || currentScrollY <= 50) {
+        headerHidden.value = false
+      }
+
+      lastScrollY.value = currentScrollY
+      scrollTicking = false
+    })
+    scrollTicking = true
   }
-  // 向上滚动时显示头部，或者滚动到顶部时也显示
-  else if (currentScrollY < lastScrollY.value || currentScrollY <= 50) {
-    headerHidden.value = false
-  }
-  
-  lastScrollY.value = currentScrollY
 }
 
 // 生命周期
@@ -1482,31 +1515,30 @@ onBeforeUnmount(() => {
     isDragging.value = false;
   }
 
-  // 清理定时器
-  if (autoStartTimerId) {
-    clearTimeout(autoStartTimerId)
-    autoStartTimerId = null
-  }
-  if (textContentWatchTimerId) {
-    clearTimeout(textContentWatchTimerId)
-    textContentWatchTimerId = null
-  }
-  if (imagePreviewCleanupTimerId) {
-    clearTimeout(imagePreviewCleanupTimerId)
-    imagePreviewCleanupTimerId = null
-  }
-  if (versionSwitchTimerId) {
-    clearTimeout(versionSwitchTimerId)
-    versionSwitchTimerId = null
-  }
-  if (selectionMenuHideTimerId) {
-    clearTimeout(selectionMenuHideTimerId)
-    selectionMenuHideTimerId = null
-  }
-  if (fetchUnderlineTimerId) {
-    clearTimeout(fetchUnderlineTimerId)
-    fetchUnderlineTimerId = null
-  }
+  // 清理所有定时器（统一清理）
+  const timers = [
+    autoStartTimerId,
+    textContentWatchTimerId,
+    imagePreviewCleanupTimerId,
+    versionSwitchTimerId,
+    selectionMenuHideTimerId,
+    fetchUnderlineTimerId
+  ]
+  timers.forEach(timer => {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  })
+  // 重置所有定时器变量
+  autoStartTimerId = null
+  textContentWatchTimerId = null
+  imagePreviewCleanupTimerId = null
+  versionSwitchTimerId = null
+  selectionMenuHideTimerId = null
+  fetchUnderlineTimerId = null
+
+  // 清理学习计时器
+  stopStudyTimer()
 
   // 退出全屏模式
   document.body.classList.remove('fullscreen-reading')
@@ -1541,7 +1573,7 @@ onBeforeUnmount(() => {
       keepalive: true
     }).catch(() => {})
   }
-  stopStudyTimer()
+
   // 清理音频资源
   if (currentAudio) {
     currentAudio.pause()
@@ -1549,6 +1581,11 @@ onBeforeUnmount(() => {
     currentAudio.onerror = null
     currentAudio = null
   }
+
+  // 清理缓存
+  renderedVersionCache.clear()
+  cachedWordCount.value = 0
+  lastContentKey = ''
 })
 
 // 处理页面可见性变化（切换标签页时自动暂停）

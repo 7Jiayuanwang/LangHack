@@ -103,6 +103,16 @@
       </div>
     </div>
 
+    <!-- 数据导出按钮 -->
+    <div class="export-controls" v-if="tableData.length > 0">
+      <el-button @click="handleExport" :loading="exporting" type="success" size="small">
+        <el-icon><Download /></el-icon> 导出当前数据 ({{ tableData.length }} 条)
+      </el-button>
+      <el-button @click="handleExportAll" :loading="exportingAll" type="primary" size="small">
+        <el-icon><Download /></el-icon> 导出全部数据 ({{ total }} 条)
+      </el-button>
+    </div>
+
     <!-- 数据源Tab -->
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="行政班" name="administrative_class">
@@ -290,7 +300,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { InfoFilled, DataLine, Refresh, Filter, Connection, ArrowRight } from '@element-plus/icons-vue'
+import { InfoFilled, DataLine, Refresh, Filter, Connection, ArrowRight, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   getSchoolDataOverview,
@@ -359,6 +369,13 @@ const chainFetching = ref(false)
 const chainCollegeName = ref('外国语学院')
 const chainMatchMode = ref('eq')
 const chainResult = ref(null)
+
+// 导出相关状态
+const exporting = ref(false)
+const exportingAll = ref(false)
+
+// 分页选项
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 200]
 
 const availableFields = computed(() => {
   return filterFields.value
@@ -620,6 +637,181 @@ async function loadFeatureToggles() {
   }
 }
 
+// 导出当前页数据为 CSV
+async function handleExport() {
+  if (!tableData.value.length) {
+    ElMessage.warning('没有可导出的数据')
+    return
+  }
+
+  exporting.value = true
+  try {
+    const csvContent = generateCSV(tableData.value)
+    downloadCSV(csvContent, `${dataSourceLabels[activeTab.value]}_当前页_${new Date().toISOString().slice(0, 10)}.csv`)
+    ElMessage.success(`成功导出 ${tableData.value.length} 条数据`)
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+// 导出全部数据为 CSV
+async function handleExportAll() {
+  if (total.value === 0) {
+    ElMessage.warning('没有可导出的数据')
+    return
+  }
+
+  exportingAll.value = true
+  try {
+    // 分批获取所有数据
+    const allData = []
+    const batchSize = 100
+    const totalPages = Math.ceil(total.value / batchSize)
+
+    ElMessage.info(`开始导出全部 ${total.value} 条数据，共 ${totalPages} 页...`)
+
+    for (let page = 1; page <= totalPages; page++) {
+      const res = await querySchoolData(activeTab.value, {
+        page: page,
+        size: batchSize,
+        filterGroups: currentFilters.value
+      })
+
+      if (res?.code === 200 && res.data?.records) {
+        allData.push(...res.data.records)
+      }
+
+      // 显示进度
+      if (page % 5 === 0 || page === totalPages) {
+        ElMessage.info(`已加载 ${allData.length} / ${total.value} 条数据...`)
+      }
+    }
+
+    const csvContent = generateCSV(allData)
+    downloadCSV(csvContent, `${dataSourceLabels[activeTab.value]}_全部数据_${new Date().toISOString().slice(0, 10)}.csv`)
+    ElMessage.success(`成功导出 ${allData.length} 条数据`)
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  } finally {
+    exportingAll.value = false
+  }
+}
+
+// 生成 CSV 内容
+function generateCSV(data) {
+  if (!data || data.length === 0) {
+    return ''
+  }
+
+  // 获取所有列名
+  const columns = Object.keys(data[0]).filter(key => key !== 'deleted')
+
+  // 列名映射
+  const columnLabels = {
+    id: 'ID',
+    classCode: '班级代码',
+    className: '班级名称',
+    collegeCode: '学院代码',
+    collegeName: '学院名称',
+    majorCode: '专业代码',
+    majorName: '专业名称',
+    grade: '年级',
+    studentCount: '学生人数',
+    classStatus: '班级状态',
+    courseCode: '课程代码',
+    courseName: '课程名称',
+    courseNature: '课程性质',
+    courseCategory: '课程类别',
+    credits: '学分',
+    totalHours: '总学时',
+    hours: '学时',
+    classId: '教学班ID',
+    teacherName: '教师姓名',
+    teacherCode: '教师工号',
+    academicYear: '学年',
+    semester: '学期',
+    enrolledCount: '选课人数',
+    dayOfWeek: '星期',
+    period: '节次',
+    weekRange: '周次',
+    classLocation: '上课地点',
+    location: '地点',
+    studentId: '学号',
+    studentName: '学生姓名',
+    totalGrade: '总成绩',
+    selectionStatus: '选课状态',
+    examType: '考试类型',
+    score: '成绩',
+    isPassed: '是否通过',
+    examDate: '考试日期',
+    planId: '计划编号',
+    planName: '计划名称',
+    totalCredits: '总学分',
+    planStatus: '计划状态',
+    updatedAt: '更新时间',
+    createdAt: '创建时间'
+  }
+
+  // 生成表头
+  const headers = columns.map(col => columnLabels[col] || col).join(',')
+
+  // 生成数据行
+  const rows = data.map(row => {
+    return columns.map(col => {
+      let value = row[col]
+
+      // 格式化特殊字段
+      if (col === 'semester') {
+        value = value === 1 ? '秋' : value === 2 ? '春' : value
+      } else if (col === 'dayOfWeek') {
+        value = ['日', '一', '二', '三', '四', '五', '六'][value] || value
+      } else if (col === 'isPassed') {
+        value = value ? '通过' : '未通过'
+      }
+
+      // 处理 null/undefined
+      if (value === null || value === undefined) {
+        value = ''
+      }
+
+      // 转换为字符串
+      value = String(value)
+
+      // 处理包含逗号、引号或换行的值
+      if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+        value = `"${value.replace(/"/g, '""')}"`
+      }
+
+      return value
+    }).join(',')
+  })
+
+  return [headers, ...rows].join('\n')
+}
+
+// 下载 CSV 文件
+function downloadCSV(csvContent, filename) {
+  // 添加 BOM 以支持中文
+  const BOM = '﻿'
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+
+  // 创建下载链接
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+
+  link.setAttribute('href', url)
+  link.setAttribute('download', filename)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 onMounted(async () => {
   await loadFeatureToggles()
   await loadOverview()
@@ -820,6 +1012,28 @@ onMounted(async () => {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
 }
 
+.export-controls {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+}
+
+.filter-summary {
+  font-size: 13px;
+  color: #64748b;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
 .chain-fetch-card {
   background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
   border-radius: 24px;
@@ -870,6 +1084,102 @@ onMounted(async () => {
   padding: 16px;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: center;
+}
+
+.filter-builder {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.filter-group {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.group-label {
+  font-weight: 700;
+  color: #334155;
+  font-size: 15px;
+}
+
+.filter-condition {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.card-body {
+  padding: 0;
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.result-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-label {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.result-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.tab-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #1e40af;
 }
 
 </style>

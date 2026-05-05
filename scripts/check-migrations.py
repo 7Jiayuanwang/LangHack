@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_DIR = ROOT / "backend" / "src" / "main" / "resources" / "db" / "migration"
 MERGED_SQL = ROOT / "docker" / "mysql" / "init" / "04-apply-all-migrations.sql"
-EXPECTED_VERSIONS = [f"V{i}" for i in range(15)]
+EXPECTED_VERSIONS = [f"V{i}" for i in range(16)]
 FORBIDDEN_PATTERNS = [
     r"\bUSE\b",
     r"\bDELIMITER\b",
@@ -100,7 +100,7 @@ def check_merged_sql(files: list[Path], issues: list[str]) -> None:
         issues.append(f"Merged SQL file not found: {MERGED_SQL}")
         return
     merged = MERGED_SQL.read_text(encoding="utf-8", errors="replace")
-    listed = re.findall(r"^--\s+(V\d+__[^\r\n]+\.sql)$", merged, re.M)
+    listed = re.findall(r"^-- (V\d+__[^\r\n]+\.sql)$", merged, re.M)
     expected = [file.name for file in files]
     if listed != expected:
         issues.append(f"Merged SQL header is not synchronized. expected={expected}, got={listed}")

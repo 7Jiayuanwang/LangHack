@@ -14,7 +14,16 @@ vi.mock('element-plus', () => ({
 vi.mock('@/api/student', () => ({
   getStudentDashboard: vi.fn().mockResolvedValue({ data: {} }),
   getTodayLearningStats: vi.fn().mockResolvedValue({ data: {} }),
-  getVocabularyStats: vi.fn().mockResolvedValue({ data: {} })
+  getVocabularyStats: vi.fn().mockResolvedValue({ data: {} }),
+  getReadingHistory: vi.fn().mockResolvedValue({
+    code: 200,
+    data: {
+      overview: {
+        totalReadingTimes: 0,
+        totalArticlesRead: 0
+      }
+    }
+  })
 }))
 
 import Dashboard from '@/views/student/Dashboard.vue'

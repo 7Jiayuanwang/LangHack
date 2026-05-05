@@ -646,6 +646,15 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     throw new BusinessException("学校 API 返回错误: " + code + " " + wrapper.get("msg"));
                 }
 
+                // Enhanced logging: show wrapper structure
+                logger.info("学校 API 响应 wrapper 结构 url={} keys={} types={}",
+                        url, wrapper.keySet(),
+                        wrapper.entrySet().stream()
+                                .collect(java.util.stream.Collectors.toMap(
+                                        Map.Entry::getKey,
+                                        e -> e.getValue() == null ? "null" : e.getValue().getClass().getSimpleName()
+                                )));
+
                 for (String key : List.of("value", "data", "result", "records", "list", "items")) {
                     Object data = wrapper.get(key);
                     if (data instanceof List) {
@@ -659,9 +668,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             } catch (BusinessException e2) {
                 throw e2;
             } catch (Exception e2) {
-                logger.error("学校 API 响应体无法解析为 JSON url={} bodyPreview={} err={}",
-                        url, truncateForLog(responseBody), e2.getMessage(), e2);
-                throw new BusinessException("学校 API 响应体无法解析为 JSON");
+                // Enhanced error logging: distinguish error types
+                String errorType = e2.getClass().getSimpleName();
+                logger.error("学校 API 响应体解析失败 url={} errorType={} bodyPreview={} err={}",
+                        url, errorType, truncateForLog(responseBody), e2.getMessage(), e2);
+                throw new BusinessException("学校 API 响应体无法解析为 JSON (错误类型: " + errorType + ")");
             }
         }
     }
