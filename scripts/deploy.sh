@@ -95,11 +95,13 @@ ask_value() {
     local input
     if [ -n "$default" ]; then
         read -rp "  ${prompt} [${default}]: " input
-        input=$(echo "${input:-$default}" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
+        # 清理 ANSI 转义序列、控制字符和 shell 元字符
+        input=$(echo "${input:-$default}" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g' | sed 's/[$`!\\]/\\&/g')
         printf -v "$var_name" '%s' "$input"
     else
         read -rp "  ${prompt}: " input
-        input=$(echo "$input" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
+        # 清理 ANSI 转义序列、控制字符和 shell 元字符
+        input=$(echo "$input" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g' | sed 's/[$`!\\]/\\&/g')
         printf -v "$var_name" '%s' "$input"
     fi
 }
@@ -309,22 +311,49 @@ ask_port() {
     local default="$2"
     local var_name="$3"
     local port="$default"
-    ask_value "$prompt" "$port" "$var_name"
-    port="${!var_name}"
+
+    # 首次检查：如果默认端口被占用，自动寻找可用端口
     if ! check_port "$port"; then
-        echo "  [WARN] 端口 ${port} 已被占用，自动寻找可用端口..."
+        echo "  [WARN] 默认端口 ${port} 已被占用，自动寻找可用端口..."
         local suggest=$((port + 1))
         local max_suggest=$((port + 100))
         [ "$max_suggest" -gt 65535 ] && max_suggest=65535
         while ! check_port "$suggest" && [ "$suggest" -le "$max_suggest" ]; do suggest=$((suggest + 1)); done
-        if [ "$suggest" -gt "$max_suggest" ]; then
-            echo "  [ERROR] 在 ${port}-${max_suggest} 范围内未找到可用端口"
-            suggest="$port"
-        else
+        if [ "$suggest" -le "$max_suggest" ]; then
             echo "  [建议] 可用端口: ${suggest}"
+            port="$suggest"
         fi
-        ask_value "$prompt (换一个)" "$suggest" "$var_name"
     fi
+
+    # 循环验证用户输入
+    while true; do
+        ask_value "$prompt" "$port" "$var_name"
+        port="${!var_name}"
+
+        # 验证端口号范围
+        if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+            echo "  [ERROR] 端口号必须在 1-65535 范围内，请重新输入"
+            continue
+        fi
+
+        # 检查端口占用
+        if ! check_port "$port"; then
+            echo "  [WARN] 端口 ${port} 已被占用，请换一个端口"
+            # 自动寻找下一个可用端口作为建议
+            local suggest=$((port + 1))
+            local max_suggest=$((port + 100))
+            [ "$max_suggest" -gt 65535 ] && max_suggest=65535
+            while ! check_port "$suggest" && [ "$suggest" -le "$max_suggest" ]; do suggest=$((suggest + 1)); done
+            if [ "$suggest" -le "$max_suggest" ]; then
+                echo "  [建议] 可用端口: ${suggest}"
+                port="$suggest"
+            fi
+            continue
+        fi
+
+        # 端口有效且可用
+        break
+    done
 }
 
 # ── 部署验证函数 ──────────────────────────────────────
@@ -535,7 +564,14 @@ if [ "$SKIP_ENV" = false ]; then
         echo "  [提示] AI 问答需独立的 HiAgent 应用，不 fallback 到改写凭证；留空则禁用问答功能。"
         ask_secret "HiAgent 问答 API Key (留空禁用问答)"    "$(load_env_value "HIAGENT_QA_API_KEY" "")" CFG_HIAGENT_QA_KEY
         if [ -n "$CFG_HIAGENT_QA_KEY" ]; then
-            ask_value  "HiAgent 问答 App ID" "$(load_env_value "HIAGENT_QA_APP_ID" "")" CFG_HIAGENT_QA_APP_ID
+            # App ID 必填校验
+            while true; do
+                ask_value  "HiAgent 问答 App ID" "$(load_env_value "HIAGENT_QA_APP_ID" "")" CFG_HIAGENT_QA_APP_ID
+                if [ -n "$CFG_HIAGENT_QA_APP_ID" ]; then
+                    break
+                fi
+                echo "  [ERROR] HiAgent 问答 App ID 不能为空（已提供 API Key）"
+            done
             # 校验：问答凭证必须与改写凭证完全不同
             if [ -n "$CFG_HIAGENT_KEY" ] && [ "$CFG_HIAGENT_QA_KEY" = "$CFG_HIAGENT_KEY" ]; then
                 echo "  [WARN] 问答 API Key 与改写 API Key 相同，违反"两套完全不同"的应用隔离要求。"
@@ -1521,12 +1557,20 @@ if [ "$NEED_SEED" = true ]; then
         echo "[INFO] 导入全量备份: $(basename "$SEED_FILE")"
         case "$SEED_FILE" in
             *.sql.gz)
-                zcat "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" \
-                    mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password" || true
+                if ! zcat "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" \
+                    mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password"; then
+                    echo "[ERROR] 全量备份导入失败: $(basename "$SEED_FILE")"
+                    echo "[ERROR] 请检查备份文件完整性或数据库连接"
+                    exit 1
+                fi
                 ;;
             *.sql)
-                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
-                    < "$SEED_FILE" 2>&1 | grep -v "Using a password" || true
+                if ! docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                    < "$SEED_FILE" 2>&1 | grep -v "Using a password"; then
+                    echo "[ERROR] 全量备份导入失败: $(basename "$SEED_FILE")"
+                    echo "[ERROR] 请检查备份文件完整性或数据库连接"
+                    exit 1
+                fi
                 ;;
         esac
         echo "[OK] 全量备份导入完成"

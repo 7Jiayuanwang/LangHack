@@ -536,21 +536,27 @@ pre_update_backup() {
     fi
 
     log "BACKUP: 正在备份数据库..."
-    # 使用子 shell 隔离 pipefail，避免 mysqldump 失败导致整个脚本崩溃
-    if (docker compose -f "$COMPOSE_FILE" exec -T "$mysql_svc" \
+    # 使用临时文件捕获 mysqldump 输出，检查 PIPESTATUS 确保 mysqldump 成功
+    local dump_tmp="${backup_file}.tmp"
+    docker compose -f "$COMPOSE_FILE" exec -T "$mysql_svc" \
         mysqldump -u root -p"$db_password" --single-transaction \
-        --routines --triggers english_learning 2>/dev/null \
-        | gzip > "$backup_file"); then
-        :  # 管道成功
-    else
-        log "WARN: mysqldump 管道返回非零退出码，备份可能不完整"
+        --routines --triggers english_learning 2>/dev/null > "$dump_tmp"
+
+    local dump_exit=$?
+    if [ $dump_exit -ne 0 ]; then
+        log "ERROR: mysqldump 失败 (exit code: $dump_exit)，备份无效"
+        rm -f "$dump_tmp"
+        return 1
     fi
 
-    if [ -s "$backup_file" ]; then
+    # mysqldump 成功，压缩备份文件
+    if gzip < "$dump_tmp" > "$backup_file"; then
+        rm -f "$dump_tmp"
         log "BACKUP: 数据库已备份 → $backup_file ($(du -h "$backup_file" | cut -f1))"
     else
-        log "WARN: 备份文件为空（数据库可能为空或连接失败），继续更新"
-        rm -f "$backup_file"
+        log "ERROR: gzip 压缩失败"
+        rm -f "$dump_tmp" "$backup_file"
+        return 1
     fi
 }
 
