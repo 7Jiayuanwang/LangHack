@@ -1,4 +1,4 @@
-﻿-- =============================================================
+-- =============================================================
 -- LangHack consolidated initial stable database migration
 -- Generated from backend/src/main/resources/db/migration V0-V15
 -- This file is used by scripts/auto-update.sh and scripts/hot-update.sh.
