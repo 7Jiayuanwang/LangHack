@@ -1,66 +1,33 @@
--- =============================================================
--- LangHack consolidated initial stable database migration
--- Generated from backend/src/main/resources/db/migration V0-V15
--- This file is used by scripts/auto-update.sh and scripts/hot-update.sh.
--- Last updated: 2026-05-05 (V15 added: fix schema issues)
--- =============================================================
-
-USE english_learning;
-SET NAMES utf8mb4;
-
--- Included Flyway migrations:
---   V0__base_tables.sql
---   V1__scoring_and_assignments.sql
---   V2__text_and_learning.sql
---   V3__media_and_annotations.sql
---   V4__backup_and_update_system.sql
---   V5__monitoring_and_access.sql
---   V6__system_config_and_ai_providers.sql
---   V7__feature_toggles.sql
---   V8__sso_integration.sql
---   V9__school_data_sync.sql
---   V10__user_and_text_updates.sql
---   V11__role_mapping_cleanup.sql
---   V12__school_data_and_videos.sql
---   V13__feature_toggles_and_ai_config.sql
---   V14__enhancements.sql
---   V15__fix_schema_issues.sql
-
-
--- =============================================================
--- V0__base_tables.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V0: 鏍稿績鍩虹琛紙瀹屾暣鐗堬級
--- Description: 鍒涘缓鎵€鏈夋牳蹇冭〃鐨勬渶缁堢姸鎬侊紝鍖呭惈鎵€鏈夊瓧娈?
+-- ═══════════════════════════════════════════════════════════════════════
+-- V0: 核心基础表（完整版）
+-- Description: 创建所有核心表的最终状态，包含所有字段
 --
--- 娉ㄦ剰: 姝ゆ枃浠朵笌 docker/mysql/init/00-base-tables.sql 淇濇寔鍚屾
---       鍚庣画杩佺Щ鑴氭湰锛圴1, V2, V10 绛夛級浣跨敤 IF NOT EXISTS 妫€鏌ヤ繚璇佸箓绛夋€?
+-- 注意: 此文件与 docker/mysql/init/00-base-tables.sql 保持同步
+--       后续迁移脚本（V1, V2, V10 等）使用 IF NOT EXISTS 检查保证幂等性
 --
--- 鍚屾鏃ユ湡: 2026-05-05
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- 同步日期: 2026-05-05
+-- ═══════════════════════════════════════════════════════════════════════
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 鐢ㄦ埛琛紙鏍稿績琛紝琚涓〃寮曠敤锛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 用户表（核心表，被多个表引用）
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `users` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `username` VARCHAR(50) NOT NULL COMMENT '鐢ㄦ埛鍚?,
-    `password` VARCHAR(255) NOT NULL COMMENT '瀵嗙爜',
-    `email` VARCHAR(100) DEFAULT NULL COMMENT '閭',
-    `phone` VARCHAR(20) DEFAULT NULL COMMENT '鎵嬫満鍙?,
+    `username` VARCHAR(50) NOT NULL COMMENT '用户名',
+    `password` VARCHAR(255) NOT NULL COMMENT '密码',
+    `email` VARCHAR(100) DEFAULT NULL COMMENT '邮箱',
+    `phone` VARCHAR(20) DEFAULT NULL COMMENT '手机号',
     `role` ENUM('USER','STUDENT','TEACHER','ADMIN','OPS') NOT NULL DEFAULT 'USER',
-    `real_name` VARCHAR(50) DEFAULT NULL COMMENT '鐪熷疄濮撳悕',
-    `nickname` VARCHAR(50) DEFAULT NULL COMMENT '鏄电О',
-    `avatar` VARCHAR(255) DEFAULT NULL COMMENT '澶村儚URL',
-    `status` VARCHAR(20) DEFAULT 'ACTIVE' COMMENT '鐘舵€?,
-    `inner_uid` VARCHAR(100) DEFAULT NULL COMMENT '鐢ㄦ埛鍐呴儴鍞竴鏍囪瘑绗?,
-    `hobby` VARCHAR(100) DEFAULT NULL COMMENT '鐢ㄦ埛鍏磋叮鐖卞ソ',
-    `level` VARCHAR(50) DEFAULT NULL COMMENT '鑻辫姘村钩绛夌骇',
-    `deleted` TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `real_name` VARCHAR(50) DEFAULT NULL COMMENT '真实姓名',
+    `nickname` VARCHAR(50) DEFAULT NULL COMMENT '昵称',
+    `avatar` VARCHAR(255) DEFAULT NULL COMMENT '头像URL',
+    `status` VARCHAR(20) DEFAULT 'ACTIVE' COMMENT '状态',
+    `inner_uid` VARCHAR(100) DEFAULT NULL COMMENT '用户内部唯一标识符',
+    `hobby` VARCHAR(100) DEFAULT NULL COMMENT '用户兴趣爱好',
+    `level` VARCHAR(50) DEFAULT NULL COMMENT '英语水平等级',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `username` (`username`),
     KEY `idx_username` (`username`),
@@ -68,86 +35,86 @@ CREATE TABLE IF NOT EXISTS `users` (
     KEY `idx_status` (`status`),
     KEY `idx_deleted` (`deleted`),
     KEY `idx_inner_uid` (`inner_uid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鐢ㄦ埛琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 璇剧▼琛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 课程表
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `courses` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `name` VARCHAR(100) NOT NULL COMMENT '璇剧▼鍚嶇О',
-    `description` TEXT COMMENT '璇剧▼鎻忚堪',
-    `cover_image` VARCHAR(255) DEFAULT NULL COMMENT '灏侀潰鍥剧墖',
-    `created_by` BIGINT DEFAULT NULL COMMENT '鍒涘缓鑰匢D',
-    `status` ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE' COMMENT '鐘舵€?,
-    `deleted` TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `name` VARCHAR(100) NOT NULL COMMENT '课程名称',
+    `description` TEXT COMMENT '课程描述',
+    `cover_image` VARCHAR(255) DEFAULT NULL COMMENT '封面图片',
+    `created_by` BIGINT DEFAULT NULL COMMENT '创建者ID',
+    `status` ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE' COMMENT '状态',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     KEY `idx_status` (`status`),
     KEY `idx_created_by` (`created_by`),
     KEY `idx_deleted` (`deleted`),
     CONSTRAINT `courses_ibfk_1` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='璇剧▼琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课程表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 鍗曞厓琛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 单元表
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `units` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `course_id` BIGINT NOT NULL COMMENT '璇剧▼ID',
-    `name` VARCHAR(100) NOT NULL COMMENT '鍗曞厓鍚嶇О',
-    `description` TEXT COMMENT '鍗曞厓鎻忚堪',
-    `order_num` INT DEFAULT 0 COMMENT '鎺掑簭鍙?,
-    `deleted` TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `course_id` BIGINT NOT NULL COMMENT '课程ID',
+    `name` VARCHAR(100) NOT NULL COMMENT '单元名称',
+    `description` TEXT COMMENT '单元描述',
+    `order_num` INT DEFAULT 0 COMMENT '排序号',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     KEY `idx_course_id` (`course_id`),
     KEY `idx_order_num` (`order_num`),
     KEY `idx_deleted` (`deleted`),
     CONSTRAINT `units_ibfk_1` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鍗曞厓琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='单元表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 璇炬枃琛紙瀹屾暣鐗堬紝鍖呭惈鎵€鏈夊瓧娈碉級
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 课文表（完整版，包含所有字段）
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `texts` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `unit_id` BIGINT DEFAULT NULL COMMENT '鍗曞厓ID锛堝彲涓虹┖锛岃〃绀烘湭鍒嗛厤鍒板崟鍏冿級',
-    `title` VARCHAR(200) NOT NULL COMMENT '璇炬枃鏍囬',
-    `content` TEXT NOT NULL COMMENT '璇炬枃鍐呭',
-    `markdown_content` LONGTEXT COMMENT 'Markdown鏍煎紡鐨勮鏂囧唴瀹?,
-    `content_type` ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '鍐呭绫诲瀷锛歍EXT-绾枃鏈紝MARKDOWN-Markdown鏍煎紡',
-    `cet4_content` TEXT COMMENT 'CET-4鐗堟湰鍐呭',
-    `cet6_content` TEXT COMMENT 'CET-6鐗堟湰鍐呭',
-    `academic_content` TEXT COMMENT '瀛︽湳鐗堟湰鍐呭',
-    `ielts_content` TEXT COMMENT '闆呮€濈増鏈唴瀹?,
-    `audio_url` VARCHAR(255) DEFAULT NULL COMMENT '闊抽URL',
-    `difficulty` ENUM('EASY','MEDIUM','HARD') DEFAULT 'MEDIUM' COMMENT '闅惧害',
-    `order_num` INT DEFAULT 0 COMMENT '鎺掑簭鍙?,
-    `uploaded_by` BIGINT DEFAULT NULL COMMENT '涓婁紶鑰匢D锛圢ULL琛ㄧず绯荤粺鍐呭锛?,
-    `tags` VARCHAR(255) DEFAULT NULL COMMENT '鏍囩锛屽涓敤閫楀彿鍒嗛殧',
-    `view_count` INT DEFAULT 0 COMMENT '鏌ョ湅娆℃暟',
-    `like_count` INT DEFAULT 0 COMMENT '鐐硅禐娆℃暟',
-    `is_public` TINYINT DEFAULT 1 COMMENT '鏄惁鍏紑 0-绉佹湁 1-鍏紑',
-    `status` ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '瀹℃牳鐘舵€?,
-    `deleted` TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
-    `chinese_parallel_content` TEXT COMMENT '涓嫳瀵圭収鐗堟湰鍐呭',
-    `cet4_markdown_content` LONGTEXT COMMENT 'CET-4闅惧害鐨凪arkdown鐗堟湰鍐呭',
-    `cet6_markdown_content` LONGTEXT COMMENT 'CET-6闅惧害鐨凪arkdown鐗堟湰鍐呭',
-    `academic_markdown_content` LONGTEXT COMMENT '瀛︽湳鐗堢殑Markdown鐗堟湰鍐呭',
-    `chinese_parallel_markdown_content` LONGTEXT COMMENT '涓嫳瀵圭収鐨凪arkdown鐗堟湰鍐呭',
-    `cover_url` VARCHAR(255) DEFAULT NULL COMMENT '灏侀潰鍥綰RL',
-    `is_featured` TINYINT(1) DEFAULT 0 COMMENT '鏄惁鎺ㄨ崘',
-    `featured_priority` INT DEFAULT 0 COMMENT '鎺ㄨ崘浼樺厛绾?,
-    `content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '鍐呭鏍煎紡锛歅LAIN_TEXT-绾枃鏈紝MARKDOWN-Markdown鏍煎紡',
-    `cet4_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT 'CET4鍐呭鏍煎紡',
-    `cet6_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT 'CET6鍐呭鏍煎紡',
-    `academic_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '瀛︽湳鍐呭鏍煎紡',
-    `chinese_parallel_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '涓嫳瀵圭収鍐呭鏍煎紡',
+    `unit_id` BIGINT DEFAULT NULL COMMENT '单元ID（可为空，表示未分配到单元）',
+    `title` VARCHAR(200) NOT NULL COMMENT '课文标题',
+    `content` TEXT NOT NULL COMMENT '课文内容',
+    `markdown_content` LONGTEXT COMMENT 'Markdown格式的课文内容',
+    `content_type` ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '内容类型：TEXT-纯文本，MARKDOWN-Markdown格式',
+    `cet4_content` TEXT COMMENT 'CET-4版本内容',
+    `cet6_content` TEXT COMMENT 'CET-6版本内容',
+    `academic_content` TEXT COMMENT '学术版本内容',
+    `ielts_content` TEXT COMMENT '雅思版本内容',
+    `audio_url` VARCHAR(255) DEFAULT NULL COMMENT '音频URL',
+    `difficulty` ENUM('EASY','MEDIUM','HARD') DEFAULT 'MEDIUM' COMMENT '难度',
+    `order_num` INT DEFAULT 0 COMMENT '排序号',
+    `uploaded_by` BIGINT DEFAULT NULL COMMENT '上传者ID（NULL表示系统内容）',
+    `tags` VARCHAR(255) DEFAULT NULL COMMENT '标签，多个用逗号分隔',
+    `view_count` INT DEFAULT 0 COMMENT '查看次数',
+    `like_count` INT DEFAULT 0 COMMENT '点赞次数',
+    `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
+    `status` ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '审核状态',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `chinese_parallel_content` TEXT COMMENT '中英对照版本内容',
+    `cet4_markdown_content` LONGTEXT COMMENT 'CET-4难度的Markdown版本内容',
+    `cet6_markdown_content` LONGTEXT COMMENT 'CET-6难度的Markdown版本内容',
+    `academic_markdown_content` LONGTEXT COMMENT '学术版的Markdown版本内容',
+    `chinese_parallel_markdown_content` LONGTEXT COMMENT '中英对照的Markdown版本内容',
+    `cover_url` VARCHAR(255) DEFAULT NULL COMMENT '封面图URL',
+    `is_featured` TINYINT(1) DEFAULT 0 COMMENT '是否推荐',
+    `featured_priority` INT DEFAULT 0 COMMENT '推荐优先级',
+    `content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '内容格式：PLAIN_TEXT-纯文本，MARKDOWN-Markdown格式',
+    `cet4_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT 'CET4内容格式',
+    `cet6_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT 'CET6内容格式',
+    `academic_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '学术内容格式',
+    `chinese_parallel_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '中英对照内容格式',
     PRIMARY KEY (`id`),
     KEY `idx_unit_id` (`unit_id`),
     KEY `idx_uploaded_by` (`uploaded_by`),
@@ -160,23 +127,23 @@ CREATE TABLE IF NOT EXISTS `texts` (
     KEY `idx_is_featured` (`is_featured`),
     CONSTRAINT `texts_ibfk_1` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`) ON DELETE CASCADE,
     CONSTRAINT `texts_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='璇炬枃琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课文表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 鐝骇琛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 班级表
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `classes` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `name` VARCHAR(100) NOT NULL COMMENT '鐝骇鍚嶇О',
-    `description` TEXT COMMENT '鐝骇鎻忚堪',
-    `course_id` BIGINT DEFAULT NULL COMMENT '鍏宠仈璇剧▼ID',
-    `teacher_id` BIGINT DEFAULT NULL COMMENT '鏁欏笀ID',
-    `join_code` VARCHAR(10) DEFAULT NULL COMMENT '鍔犲叆鐮?鍙负绌?',
-    `max_students` INT DEFAULT 50 COMMENT '鏈€澶у鐢熸暟',
-    `status` ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE' COMMENT '鐘舵€?,
-    `deleted` TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `name` VARCHAR(100) NOT NULL COMMENT '班级名称',
+    `description` TEXT COMMENT '班级描述',
+    `course_id` BIGINT DEFAULT NULL COMMENT '关联课程ID',
+    `teacher_id` BIGINT DEFAULT NULL COMMENT '教师ID',
+    `join_code` VARCHAR(10) DEFAULT NULL COMMENT '加入码(可为空)',
+    `max_students` INT DEFAULT 50 COMMENT '最大学生数',
+    `status` ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE' COMMENT '状态',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `join_code` (`join_code`),
     KEY `idx_course_id` (`course_id`),
@@ -185,28 +152,28 @@ CREATE TABLE IF NOT EXISTS `classes` (
     KEY `idx_deleted` (`deleted`),
     CONSTRAINT `classes_ibfk_1` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`),
     CONSTRAINT `classes_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鐝骇琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='班级表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 浠诲姟琛紙瀹屾暣鐗堬紝鍖呭惈 weight 鍜?ideal_study_time_minutes锛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 任务表（完整版，包含 weight 和 ideal_study_time_minutes）
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `assignments` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `title` VARCHAR(200) NOT NULL COMMENT '浠诲姟鏍囬',
-    `description` TEXT COMMENT '浠诲姟鎻忚堪',
-    `class_id` BIGINT DEFAULT NULL COMMENT '鐝骇ID',
-    `unit_id` BIGINT DEFAULT NULL COMMENT '鍗曞厓ID',
-    `text_id` BIGINT DEFAULT NULL COMMENT '璇炬枃ID',
-    `type` ENUM('READING','VOCABULARY','COMPREHENSION') NOT NULL COMMENT '浠诲姟绫诲瀷',
-    `difficulty` ENUM('EASY','MEDIUM','HARD') DEFAULT 'MEDIUM' COMMENT '闅惧害',
-    `deadline` DATETIME DEFAULT NULL COMMENT '鎴鏃堕棿',
-    `weight` DECIMAL(5,2) DEFAULT 1.00 COMMENT '浠诲姟鏉冮噸锛堢敤浜庤绠楀姞鏉冨钩鍧囧垎锛岄粯璁?.00锛?,
-    `ideal_study_time_minutes` INT DEFAULT 60 COMMENT '鐞嗘兂瀛︿範鏃堕暱锛堝垎閽燂級锛岀敤浜庤绠楀垎鏁帮紝榛樿60鍒嗛挓',
-    `status` ENUM('DRAFT','PUBLISHED','CLOSED') DEFAULT 'DRAFT' COMMENT '鐘舵€?,
-    `created_by` BIGINT DEFAULT NULL COMMENT '鍒涘缓鑰匢D',
-    `deleted` TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `title` VARCHAR(200) NOT NULL COMMENT '任务标题',
+    `description` TEXT COMMENT '任务描述',
+    `class_id` BIGINT DEFAULT NULL COMMENT '班级ID',
+    `unit_id` BIGINT DEFAULT NULL COMMENT '单元ID',
+    `text_id` BIGINT DEFAULT NULL COMMENT '课文ID',
+    `type` ENUM('READING','VOCABULARY','COMPREHENSION') NOT NULL COMMENT '任务类型',
+    `difficulty` ENUM('EASY','MEDIUM','HARD') DEFAULT 'MEDIUM' COMMENT '难度',
+    `deadline` DATETIME DEFAULT NULL COMMENT '截止时间',
+    `weight` DECIMAL(5,2) DEFAULT 1.00 COMMENT '任务权重（用于计算加权平均分，默认1.00）',
+    `ideal_study_time_minutes` INT DEFAULT 60 COMMENT '理想学习时长（分钟），用于计算分数，默认60分钟',
+    `status` ENUM('DRAFT','PUBLISHED','CLOSED') DEFAULT 'DRAFT' COMMENT '状态',
+    `created_by` BIGINT DEFAULT NULL COMMENT '创建者ID',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     KEY `idx_class_id` (`class_id`),
     KEY `idx_unit_id` (`unit_id`),
@@ -222,49 +189,49 @@ CREATE TABLE IF NOT EXISTS `assignments` (
     CONSTRAINT `assignments_ibfk_2` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`),
     CONSTRAINT `assignments_ibfk_3` FOREIGN KEY (`text_id`) REFERENCES `texts` (`id`),
     CONSTRAINT `assignments_ibfk_4` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='浠诲姟琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 鍗曡瘝琛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 单词表
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `words` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `word` VARCHAR(100) NOT NULL COMMENT '鍗曡瘝',
-    `pronunciation` VARCHAR(200) DEFAULT NULL COMMENT '鍙戦煶',
-    `definition` TEXT COMMENT '涓枃閲婁箟',
-    `example_sentence` TEXT COMMENT '渚嬪彞',
-    `audio_url` VARCHAR(255) DEFAULT NULL COMMENT '闊抽URL',
-    `part_of_speech` VARCHAR(50) DEFAULT NULL COMMENT '璇嶆€?,
-    `difficulty` ENUM('EASY','MEDIUM','HARD') DEFAULT 'MEDIUM' COMMENT '闅惧害',
-    `synonyms` TEXT COMMENT '鍚屼箟璇?,
-    `antonyms` TEXT COMMENT '鍙嶄箟璇?,
+    `word` VARCHAR(100) NOT NULL COMMENT '单词',
+    `pronunciation` VARCHAR(200) DEFAULT NULL COMMENT '发音',
+    `definition` TEXT COMMENT '中文释义',
+    `example_sentence` TEXT COMMENT '例句',
+    `audio_url` VARCHAR(255) DEFAULT NULL COMMENT '音频URL',
+    `part_of_speech` VARCHAR(50) DEFAULT NULL COMMENT '词性',
+    `difficulty` ENUM('EASY','MEDIUM','HARD') DEFAULT 'MEDIUM' COMMENT '难度',
+    `synonyms` TEXT COMMENT '同义词',
+    `antonyms` TEXT COMMENT '反义词',
     `wordnet_id` VARCHAR(100) DEFAULT NULL COMMENT 'WordNet ID',
-    `multiple_definitions` TEXT COMMENT '澶氫釜閲婁箟',
-    `source` VARCHAR(100) DEFAULT NULL COMMENT '鏉ユ簮',
-    `deleted` TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `multiple_definitions` TEXT COMMENT '多个释义',
+    `source` VARCHAR(100) DEFAULT NULL COMMENT '来源',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     KEY `idx_word` (`word`),
     KEY `idx_difficulty` (`difficulty`),
     KEY `idx_deleted` (`deleted`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鍗曡瘝琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='单词表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 鐢熻瘝鏈〃锛堝畬鏁寸増锛屽寘鍚?SM-2 绠楁硶瀛楁锛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 生词本表（完整版，包含 SM-2 算法字段）
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `vocabulary_books` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `student_id` BIGINT NOT NULL COMMENT '瀛︾敓ID',
-    `word_id` BIGINT NOT NULL COMMENT '鍗曡瘝ID',
-    `added_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '娣诲姞鏃堕棿',
-    `review_count` INT DEFAULT 0 COMMENT '澶嶄範娆℃暟',
-    `last_reviewed` DATETIME DEFAULT NULL COMMENT '鏈€鍚庡涔犳椂闂?,
-    `mastery_level` ENUM('NEW','LEARNING','FAMILIAR','MASTERED') DEFAULT 'NEW' COMMENT '鎺屾彙绋嬪害锛歂EW-鏂拌瘝锛孡EARNING-瀛︿範涓紝FAMILIAR-鐔熸倝锛孧ASTERED-宸叉帉鎻?,
-    `repetition` INT DEFAULT 0 COMMENT 'SM2閲嶅娆℃暟',
-    `interval_days` INT DEFAULT 1 COMMENT 'SM2闂撮殧澶╂暟',
-    `easiness_factor` DOUBLE DEFAULT 2.5 COMMENT 'SM2闅惧害鍥犲瓙',
-    `next_review_time` DATETIME DEFAULT NULL COMMENT '涓嬫澶嶄範鏃堕棿',
+    `student_id` BIGINT NOT NULL COMMENT '学生ID',
+    `word_id` BIGINT NOT NULL COMMENT '单词ID',
+    `added_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '添加时间',
+    `review_count` INT DEFAULT 0 COMMENT '复习次数',
+    `last_reviewed` DATETIME DEFAULT NULL COMMENT '最后复习时间',
+    `mastery_level` ENUM('NEW','LEARNING','FAMILIAR','MASTERED') DEFAULT 'NEW' COMMENT '掌握程度：NEW-新词，LEARNING-学习中，FAMILIAR-熟悉，MASTERED-已掌握',
+    `repetition` INT DEFAULT 0 COMMENT 'SM2重复次数',
+    `interval_days` INT DEFAULT 1 COMMENT 'SM2间隔天数',
+    `easiness_factor` DOUBLE DEFAULT 2.5 COMMENT 'SM2难度因子',
+    `next_review_time` DATETIME DEFAULT NULL COMMENT '下次复习时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_student_word` (`student_id`, `word_id`),
     KEY `idx_student_id` (`student_id`),
@@ -272,22 +239,22 @@ CREATE TABLE IF NOT EXISTS `vocabulary_books` (
     KEY `idx_mastery_level` (`mastery_level`),
     CONSTRAINT `vocabulary_books_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
     CONSTRAINT `vocabulary_books_ibfk_2` FOREIGN KEY (`word_id`) REFERENCES `words` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鐢熻瘝鏈〃';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='生词本表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 瀛︿範璁板綍琛紙瀹屾暣鐗堬紝鍖呭惈 text_id锛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 学习记录表（完整版，包含 text_id）
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `learning_records` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `student_id` BIGINT NOT NULL COMMENT '瀛︾敓ID',
-    `word_id` BIGINT DEFAULT NULL COMMENT '鍗曡瘝ID',
-    `text_id` BIGINT DEFAULT NULL COMMENT '鍏宠仈鐨勮鏂嘔D',
-    `assignment_id` BIGINT DEFAULT NULL COMMENT '浠诲姟ID',
-    `record_type` VARCHAR(50) DEFAULT NULL COMMENT '璁板綍绫诲瀷锛歏IEW-娴忚锛孯EVIEW-澶嶄範锛孴EST-娴嬭瘯',
-    `duration_seconds` INT DEFAULT 0 COMMENT '瀛︿範鏃堕暱锛堢锛?,
-    `correct_count` INT DEFAULT 0 COMMENT '姝ｇ‘娆℃暟',
-    `total_count` INT DEFAULT 0 COMMENT '鎬绘鏁?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    `student_id` BIGINT NOT NULL COMMENT '学生ID',
+    `word_id` BIGINT DEFAULT NULL COMMENT '单词ID',
+    `text_id` BIGINT DEFAULT NULL COMMENT '关联的课文ID',
+    `assignment_id` BIGINT DEFAULT NULL COMMENT '任务ID',
+    `record_type` VARCHAR(50) DEFAULT NULL COMMENT '记录类型：VIEW-浏览，REVIEW-复习，TEST-测试',
+    `duration_seconds` INT DEFAULT 0 COMMENT '学习时长（秒）',
+    `correct_count` INT DEFAULT 0 COMMENT '正确次数',
+    `total_count` INT DEFAULT 0 COMMENT '总次数',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     KEY `idx_student_id` (`student_id`),
     KEY `idx_word_id` (`word_id`),
@@ -296,77 +263,71 @@ CREATE TABLE IF NOT EXISTS `learning_records` (
     KEY `idx_created_time` (`created_time`),
     KEY `idx_text_id` (`text_id`),
     CONSTRAINT `learning_records_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='瀛︿範璁板綍琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习记录表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 瀛︾敓-鐝骇鍏宠仈琛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 学生-班级关联表
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `student_classes` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `student_id` BIGINT NOT NULL COMMENT '瀛︾敓ID',
-    `class_id` BIGINT NOT NULL COMMENT '鐝骇ID',
-    `join_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍔犲叆鏃堕棿',
-    `status` ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE' COMMENT '鐘舵€?,
+    `student_id` BIGINT NOT NULL COMMENT '学生ID',
+    `class_id` BIGINT NOT NULL COMMENT '班级ID',
+    `join_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+    `status` ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE' COMMENT '状态',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_student_class` (`student_id`, `class_id`),
     KEY `idx_student_id` (`student_id`),
     KEY `idx_class_id` (`class_id`),
     CONSTRAINT `student_classes_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
     CONSTRAINT `student_classes_ibfk_2` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='瀛︾敓-鐝骇鍏宠仈琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生-班级关联表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 榛樿娴嬭瘯璐﹀彿锛堝瘑鐮佸潎涓?admin123锛孊Crypt hash锛?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 默认测试账号（密码均为 admin123，BCrypt hash）
+-- ────────────────────────────────────────
 INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `deleted`, `created_time`, `updated_time`)
-SELECT 'admin', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'ADMIN', '绯荤粺绠＄悊鍛?, 'ACTIVE', 0, NOW(), NOW()
+SELECT 'admin', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'ADMIN', '系统管理员', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'admin');
 
 INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `deleted`, `created_time`, `updated_time`)
-SELECT 'ops', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'OPS', '杩愮淮浜哄憳', 'ACTIVE', 0, NOW(), NOW()
+SELECT 'ops', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'OPS', '运维人员', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'ops');
 
 INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `deleted`, `created_time`, `updated_time`)
-SELECT 'teacher', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'TEACHER', '婕旂ず鏁欏笀', 'ACTIVE', 0, NOW(), NOW()
+SELECT 'teacher', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'TEACHER', '演示教师', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'teacher');
 
 INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `deleted`, `created_time`, `updated_time`)
-SELECT 'student', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'STUDENT', '婕旂ず瀛︾敓', 'ACTIVE', 0, NOW(), NOW()
+SELECT 'student', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'STUDENT', '演示学生', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'student');
+-- ═══════════════════════════════════════════════════════════════
+-- V1: 成绩记录表 + 任务扩展
+-- 整合自: V5 (score_records), V6 (weight), V7 (ideal_study_time), V17 (unique constraint)
+-- ═══════════════════════════════════════════════════════════════
 
-
--- =============================================================
--- V1__scoring_and_assignments.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V1: 鎴愮哗璁板綍琛?+ 浠诲姟鎵╁睍
--- 鏁村悎鑷? V5 (score_records), V6 (weight), V7 (ideal_study_time), V17 (unique constraint)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
-
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 1. 鍒涘缓鎴愮哗璁板綍琛?[鍘?V5]
---    鍞竴绾︽潫 uk_student_assignment_type 宸插唴鑱?[鍘?V17]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 1. 创建成绩记录表 [原 V5]
+--    唯一约束 uk_student_assignment_type 已内联 [原 V17]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS score_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id BIGINT NOT NULL COMMENT '瀛︾敓ID',
-    assignment_id BIGINT COMMENT '浠诲姟ID',
-    course_id BIGINT COMMENT '璇剧▼ID',
-    unit_id BIGINT COMMENT '鍗曞厓ID',
-    score_type VARCHAR(50) NOT NULL COMMENT '鍒嗘暟绫诲瀷: ASSIGNMENT/COURSE/UNIT/EXAM',
-    score INT NOT NULL COMMENT '鍒嗘暟鍊?0-100)',
-    full_score INT NOT NULL DEFAULT 100 COMMENT '婊″垎鍊?,
-    score_details TEXT COMMENT 'JSON鏍煎紡鐨勫緱鍒嗚鎯?,
-    remark VARCHAR(500) COMMENT '澶囨敞',
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    student_id BIGINT NOT NULL COMMENT '学生ID',
+    assignment_id BIGINT COMMENT '任务ID',
+    course_id BIGINT COMMENT '课程ID',
+    unit_id BIGINT COMMENT '单元ID',
+    score_type VARCHAR(50) NOT NULL COMMENT '分数类型: ASSIGNMENT/COURSE/UNIT/EXAM',
+    score INT NOT NULL COMMENT '分数值(0-100)',
+    full_score INT NOT NULL DEFAULT 100 COMMENT '满分值',
+    score_details TEXT COMMENT 'JSON格式的得分详情',
+    remark VARCHAR(500) COMMENT '备注',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     CONSTRAINT fk_score_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
-    -- 闃叉鍚屼竴瀛︾敓鍚屼竴浠诲姟閲嶅璇勫垎 (assignment_id 涓?NULL 鏃朵笉鐢熸晥锛岃繖鏄鏈熻涓?
+    -- 防止同一学生同一任务重复评分 (assignment_id 为 NULL 时不生效，这是预期行为)
     UNIQUE KEY uk_student_assignment_type (student_id, assignment_id, score_type),
     INDEX idx_student_id (student_id),
     INDEX idx_assignment_id (assignment_id),
@@ -374,31 +335,31 @@ CREATE TABLE IF NOT EXISTS score_records (
     INDEX idx_unit_id (unit_id),
     INDEX idx_score_type (score_type),
     INDEX idx_created_time (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鎴愮哗璁板綍琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成绩记录表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 2. 浠诲姟琛ㄦ墿灞?[鍘?V6 + V7]
---    浣跨敤瀛樺偍杩囩▼ IF NOT EXISTS 闃叉閲嶅娣诲姞鍒?
---    娉ㄦ剰: Flyway 涓嶆敮鎸?DELIMITER 鍛戒护锛岀洿鎺ュ畾涔夊瓨鍌ㄨ繃绋?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 2. 任务表扩展 [原 V6 + V7]
+--    使用存储过程 IF NOT EXISTS 防止重复添加列
+--    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
+-- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
 CREATE PROCEDURE _add_col_assignments_weight()
 BEGIN
-    -- 浠诲姟鏉冮噸锛堝姞鏉冨钩鍧囧垎锛?
+    -- 任务权重（加权平均分）
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='weight') THEN
         ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00
-            COMMENT '浠诲姟鏉冮噸锛堢敤浜庤绠楀姞鏉冨钩鍧囧垎锛岄粯璁?.00锛? AFTER deadline;
+            COMMENT '任务权重（用于计算加权平均分，默认1.00）' AFTER deadline;
     END IF;
-    -- 鐞嗘兂瀛︿範鏃堕暱
+    -- 理想学习时长
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='ideal_study_time_minutes') THEN
         ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60
-            COMMENT '鐞嗘兂瀛︿範鏃堕暱锛堝垎閽燂級锛岄粯璁?0鍒嗛挓' AFTER weight;
+            COMMENT '理想学习时长（分钟），默认60分钟' AFTER weight;
     END IF;
 END;
 CALL _add_col_assignments_weight();
 DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
 
--- 绱㈠紩锛堝箓绛夛細IF NOT EXISTS 妫€鏌ワ級
+-- 索引（幂等：IF NOT EXISTS 检查）
 DROP PROCEDURE IF EXISTS _add_idx_assignments;
 CREATE PROCEDURE _add_idx_assignments()
 BEGIN
@@ -411,29 +372,23 @@ BEGIN
 END;
 CALL _add_idx_assignments();
 DROP PROCEDURE IF EXISTS _add_idx_assignments;
-
-
--- =============================================================
--- V2__text_and_learning.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V2: 璇炬枃澧炲己 + 瀛︿範璁板綍
--- 鏁村悎鑷? 鍘?V2 (text_id, chinese_parallel, markdown, markdown versions, unit_id nullable,
+-- ═══════════════════════════════════════════════════════════════
+-- V2: 课文增强 + 学习记录
+-- 整合自: 原 V2 (text_id, chinese_parallel, markdown, markdown versions, unit_id nullable,
 --         text_learning_records, user_text_reads, is_featured)
 --         + V10 (featured_priority + index)
 --         + V17 (cet4/6/academic_content, uploaded_by, tags, view/like_count, is_public, status)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 1. 瀛︿範璁板綍娣诲姞璇炬枃鍏宠仈 [鍘?V2]
---    娉ㄦ剰: Flyway 涓嶆敮鎸?DELIMITER 鍛戒护锛岀洿鎺ュ畾涔夊瓨鍌ㄨ繃绋?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 1. 学习记录添加课文关联 [原 V2]
+--    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
+-- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_lr_text;
 CREATE PROCEDURE _add_col_lr_text()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id') THEN
-        ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT '鍏宠仈鐨勮鏂嘔D' AFTER word_id;
+        ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT '关联的课文ID' AFTER word_id;
     END IF;
 END;
 CALL _add_col_lr_text();
@@ -466,81 +421,81 @@ END;
 CALL _add_index_lr_text();
 DROP PROCEDURE IF EXISTS _add_index_lr_text;
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 2. 璇炬枃琛ㄦ墿灞?鈥?缁熶竴鎵归噺娣诲姞鎵€鏈夊垪 [鍘?V2 + V10 + V17]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
+-- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_texts_batch;
 CREATE PROCEDURE _add_col_texts_batch()
 BEGIN
-    -- 涓嫳瀵圭収鍐呭 [鍘?V2]
+    -- 中英对照内容 [原 V2]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_content') THEN
-        ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT '涓嫳瀵圭収鐗堟湰鍐呭';
+        ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT '中英对照版本内容';
     END IF;
-    -- Markdown 鏀寔 [鍘?V2]
+    -- Markdown 支持 [原 V2]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN markdown_content LONGTEXT COMMENT 'Markdown鏍煎紡鐨勮鏂囧唴瀹? AFTER content;
+        ALTER TABLE texts ADD COLUMN markdown_content LONGTEXT COMMENT 'Markdown格式的课文内容' AFTER content;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='content_type') THEN
-        ALTER TABLE texts ADD COLUMN content_type ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '鍐呭绫诲瀷锛歍EXT-绾枃鏈紝MARKDOWN-Markdown鏍煎紡' AFTER markdown_content;
+        ALTER TABLE texts ADD COLUMN content_type ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '内容类型：TEXT-纯文本，MARKDOWN-Markdown格式' AFTER markdown_content;
     END IF;
-    -- 澶氶毦搴︾増鏈?Markdown [鍘?V2]
+    -- 多难度版本 Markdown [原 V2]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT COMMENT 'CET-4闅惧害鐨凪arkdown鐗堟湰' AFTER chinese_parallel_content;
+        ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT COMMENT 'CET-4难度的Markdown版本' AFTER chinese_parallel_content;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN cet6_markdown_content LONGTEXT COMMENT 'CET-6闅惧害鐨凪arkdown鐗堟湰' AFTER cet4_markdown_content;
+        ALTER TABLE texts ADD COLUMN cet6_markdown_content LONGTEXT COMMENT 'CET-6难度的Markdown版本' AFTER cet4_markdown_content;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN academic_markdown_content LONGTEXT COMMENT '瀛︽湳鐗堢殑Markdown鐗堟湰' AFTER cet6_markdown_content;
+        ALTER TABLE texts ADD COLUMN academic_markdown_content LONGTEXT COMMENT '学术版的Markdown版本' AFTER cet6_markdown_content;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN chinese_parallel_markdown_content LONGTEXT COMMENT '涓嫳瀵圭収鐨凪arkdown鐗堟湰' AFTER academic_markdown_content;
+        ALTER TABLE texts ADD COLUMN chinese_parallel_markdown_content LONGTEXT COMMENT '中英对照的Markdown版本' AFTER academic_markdown_content;
     END IF;
-    -- 鎺ㄨ崘鏂囩珷鏍囪瘑 [鍘?V2]
+    -- 推荐文章标识 [原 V2]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_featured') THEN
-        ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT '鏄惁鎺ㄨ崘';
+        ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT '是否推荐';
     END IF;
-    -- 鎺ㄨ崘浼樺厛绾?[鍘?V10]
+    -- 推荐优先级 [原 V10]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='featured_priority') THEN
-        ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT '鎺ㄨ崘浼樺厛绾э紝鍊艰秺澶ц秺闈犲墠鏄剧ず锛?=榛樿锛?;
+        ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT '推荐优先级，值越大越靠前显示（0=默认）';
     END IF;
-    -- 澶氶毦搴︾増鏈唴瀹癸紙绾枃鏈級[鍘?V17]
+    -- 多难度版本内容（纯文本）[原 V17]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_content') THEN
-        ALTER TABLE texts ADD COLUMN cet4_content LONGTEXT COMMENT 'CET-4闅惧害鐗堟湰鍐呭' AFTER content;
+        ALTER TABLE texts ADD COLUMN cet4_content LONGTEXT COMMENT 'CET-4难度版本内容' AFTER content;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_content') THEN
-        ALTER TABLE texts ADD COLUMN cet6_content LONGTEXT COMMENT 'CET-6闅惧害鐗堟湰鍐呭' AFTER cet4_content;
+        ALTER TABLE texts ADD COLUMN cet6_content LONGTEXT COMMENT 'CET-6难度版本内容' AFTER cet4_content;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_content') THEN
-        ALTER TABLE texts ADD COLUMN academic_content LONGTEXT COMMENT '瀛︽湳鐗堢増鏈唴瀹? AFTER cet6_content;
+        ALTER TABLE texts ADD COLUMN academic_content LONGTEXT COMMENT '学术版版本内容' AFTER cet6_content;
     END IF;
-    -- 涓婁紶鑰?[鍘?V17]
+    -- 上传者 [原 V17]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='uploaded_by') THEN
-        ALTER TABLE texts ADD COLUMN uploaded_by BIGINT DEFAULT NULL COMMENT '涓婁紶鑰呯敤鎴稩D';
+        ALTER TABLE texts ADD COLUMN uploaded_by BIGINT DEFAULT NULL COMMENT '上传者用户ID';
     END IF;
-    -- 鏍囩 [鍘?V17]
+    -- 标签 [原 V17]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='tags') THEN
-        ALTER TABLE texts ADD COLUMN tags VARCHAR(500) DEFAULT NULL COMMENT '鏍囩锛岄€楀彿鍒嗛殧';
+        ALTER TABLE texts ADD COLUMN tags VARCHAR(500) DEFAULT NULL COMMENT '标签，逗号分隔';
     END IF;
-    -- 娴忚/鐐硅禐 [鍘?V17]
+    -- 浏览/点赞 [原 V17]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='view_count') THEN
-        ALTER TABLE texts ADD COLUMN view_count INT DEFAULT 0 COMMENT '娴忚娆℃暟';
+        ALTER TABLE texts ADD COLUMN view_count INT DEFAULT 0 COMMENT '浏览次数';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='like_count') THEN
-        ALTER TABLE texts ADD COLUMN like_count INT DEFAULT 0 COMMENT '鐐硅禐娆℃暟';
+        ALTER TABLE texts ADD COLUMN like_count INT DEFAULT 0 COMMENT '点赞次数';
     END IF;
-    -- 鍏紑鐘舵€?[鍘?V17]
+    -- 公开状态 [原 V17]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_public') THEN
-        ALTER TABLE texts ADD COLUMN is_public TINYINT(1) DEFAULT 1 COMMENT '鏄惁鍏紑锛?=鍚︼紝1=鏄級';
+        ALTER TABLE texts ADD COLUMN is_public TINYINT(1) DEFAULT 1 COMMENT '是否公开（0=否，1=是）';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='status') THEN
-        ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '鐘舵€侊細DRAFT/PUBLISHED/ARCHIVED';
+        ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED';
     END IF;
 END;
 CALL _add_col_texts_batch();
 DROP PROCEDURE IF EXISTS _add_col_texts_batch;
 
--- 鎺ㄨ崘浼樺厛绾у鍚堢储寮?[鍘?V10]
+-- 推荐优先级复合索引 [原 V10]
 DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
 CREATE PROCEDURE _add_idx_featured_priority()
 BEGIN
@@ -554,82 +509,76 @@ END;
 CALL _add_idx_featured_priority();
 DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
 
--- unit_id 鏀逛负鍙┖锛堟敮鎸佽鏂囦粠鍗曞厓涓Щ闄わ級[鍘?V2]
+-- unit_id 改为可空（支持课文从单元中移除）[原 V2]
 ALTER TABLE texts MODIFY COLUMN unit_id BIGINT DEFAULT NULL
-    COMMENT '鍗曞厓ID锛堝彲涓虹┖锛岃〃绀烘湭鍒嗛厤鍒板崟鍏冿級';
+    COMMENT '单元ID（可为空，表示未分配到单元）';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 3. 鍒涘缓鏂囩珷瀛︿範璁板綍琛?[鍘?V2]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 3. 创建文章学习记录表 [原 V2]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS text_learning_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id BIGINT NOT NULL COMMENT '瀛︾敓ID',
-    text_id BIGINT NOT NULL COMMENT '璇炬枃ID',
-    assignment_id BIGINT COMMENT '鍏宠仈鐨勪换鍔D',
-    start_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '闃呰寮€濮嬫椂闂?,
-    end_time DATETIME COMMENT '闃呰缁撴潫鏃堕棿',
-    duration_seconds INT DEFAULT 0 COMMENT '闃呰鏃堕暱(绉?',
-    is_completed TINYINT(1) DEFAULT 0 COMMENT '鏄惁宸插畬鎴愰槄璇?,
+    student_id BIGINT NOT NULL COMMENT '学生ID',
+    text_id BIGINT NOT NULL COMMENT '课文ID',
+    assignment_id BIGINT COMMENT '关联的任务ID',
+    start_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '阅读开始时间',
+    end_time DATETIME COMMENT '阅读结束时间',
+    duration_seconds INT DEFAULT 0 COMMENT '阅读时长(秒)',
+    is_completed TINYINT(1) DEFAULT 0 COMMENT '是否已完成阅读',
     created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_student_text (student_id, text_id),
     INDEX idx_assignment (assignment_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鏂囩珷瀛︿範璁板綍琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章学习记录表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 4. 鍒涘缓鐢ㄦ埛鏂囩珷宸茶璁板綍琛?[鍘?V2]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 4. 创建用户文章已读记录表 [原 V2]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_text_reads (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     text_id BIGINT NOT NULL,
     read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_user_text (user_id, text_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鐢ㄦ埛鏂囩珷宸茶璁板綍琛?;
-
-
--- =============================================================
--- V3__media_and_annotations.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V3: 濯掍綋琛?+ 璇嶆眹SM-2 + 鍒掔嚎鏍囨敞 + 濯掍綋璺緞鍒?
--- 鏁村悎鑷? 鍘?V3 (media, SM-2, underlines)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户文章已读记录表';
+-- ═══════════════════════════════════════════════════════════════
+-- V3: 媒体表 + 词汇SM-2 + 划线标注 + 媒体路径列
+-- 整合自: 原 V3 (media, SM-2, underlines)
 --         + V9 (media file_path/thumbnail_path)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 1. 鍒涘缓濯掍綋琛?[鍘?V3]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 1. 创建媒体表 [原 V3]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS media (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '濯掍綋ID',
-    media_type ENUM('IMAGE','VIDEO') NOT NULL COMMENT '濯掍綋绫诲瀷',
-    file_name VARCHAR(255) NOT NULL COMMENT '鍘熷鏂囦欢鍚?,
-    file_content LONGBLOB NOT NULL COMMENT '鏂囦欢鍐呭',
-    file_size BIGINT DEFAULT 0 COMMENT '鏂囦欢澶у皬锛堝瓧鑺傦級',
-    mime_type VARCHAR(100) COMMENT 'MIME绫诲瀷',
-    width INT COMMENT '瀹藉害锛堝儚绱狅紝浠呭浘鐗囷級',
-    height INT COMMENT '楂樺害锛堝儚绱狅紝浠呭浘鐗囷級',
-    duration INT COMMENT '鏃堕暱锛堢锛屼粎瑙嗛锛?,
-    uploaded_by BIGINT COMMENT '涓婁紶鑰匢D',
-    text_id BIGINT COMMENT '鍏宠仈鐨勮鏂嘔D',
-    description VARCHAR(500) COMMENT '濯掍綋鎻忚堪',
-    status ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '瀹℃牳鐘舵€?,
-    deleted TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '媒体ID',
+    media_type ENUM('IMAGE','VIDEO') NOT NULL COMMENT '媒体类型',
+    file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
+    file_content LONGBLOB NOT NULL COMMENT '文件内容',
+    file_size BIGINT DEFAULT 0 COMMENT '文件大小（字节）',
+    mime_type VARCHAR(100) COMMENT 'MIME类型',
+    width INT COMMENT '宽度（像素，仅图片）',
+    height INT COMMENT '高度（像素，仅图片）',
+    duration INT COMMENT '时长（秒，仅视频）',
+    uploaded_by BIGINT COMMENT '上传者ID',
+    text_id BIGINT COMMENT '关联的课文ID',
+    description VARCHAR(500) COMMENT '媒体描述',
+    status ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '审核状态',
+    deleted TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_media_type (media_type),
     INDEX idx_uploaded_by (uploaded_by),
     INDEX idx_text_id (text_id),
     INDEX idx_status (status),
     INDEX idx_deleted (deleted),
     INDEX idx_created_time (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='濯掍綋琛紙鍥剧墖鍜岃棰戯級';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='媒体表（图片和视频）';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 2. 濯掍綋璺緞鍒?[鍘?V9]
---    娉ㄦ剰: Flyway 涓嶆敮鎸?DELIMITER 鍛戒护锛岀洿鎺ュ畾涔夊瓨鍌ㄨ繃绋?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 2. 媒体路径列 [原 V9]
+--    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
+-- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_media_paths;
 CREATE PROCEDURE _add_col_media_paths()
 BEGIN
@@ -643,122 +592,116 @@ END;
 CALL _add_col_media_paths();
 DROP PROCEDURE IF EXISTS _add_col_media_paths;
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 3. 璇嶆眹鏈坊鍔?SM-2 闂撮殧閲嶅瀛楁 [鍘?V3]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 3. 词汇本添加 SM-2 间隔重复字段 [原 V3]
+-- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_sm2;
 CREATE PROCEDURE _add_col_sm2()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT 'SM-2 閲嶅娆℃暟';
+        ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT 'SM-2 重复次数';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='interval_days') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 0 COMMENT 'SM-2 闂撮殧澶╂暟';
+        ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 0 COMMENT 'SM-2 间隔天数';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='easiness_factor') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT 'SM-2 绠€鏄撳洜瀛?;
+        ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT 'SM-2 简易因子';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time') THEN
-        ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT 'SM-2 涓嬫澶嶄範鏃堕棿';
+        ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT 'SM-2 下次复习时间';
     END IF;
 END;
 CALL _add_col_sm2();
 DROP PROCEDURE IF EXISTS _add_col_sm2;
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 4. 鍒涘缓鍒掔嚎鏍囨敞琛?[鍘?V3]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 4. 创建划线标注表 [原 V3]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS underlines (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     text_id BIGINT NOT NULL,
-    selected_text TEXT COMMENT '鐢ㄦ埛閫変腑鐨勬枃鏈唴瀹?,
-    start_index INT COMMENT '璧峰浣嶇疆',
-    end_index INT COMMENT '缁撴潫浣嶇疆',
+    selected_text TEXT COMMENT '用户选中的文本内容',
+    start_index INT COMMENT '起始位置',
+    end_index INT COMMENT '结束位置',
     serialized_range TEXT COMMENT 'Serialized DOM range for robust highlighting',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_text_id (text_id),
     INDEX idx_user_id (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鐢ㄦ埛鍒掔嚎鏍囨敞琛?;
-
-
--- =============================================================
--- V4__backup_and_update_system.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V4: 鏁版嵁搴撳浠界郴缁?+ 鑷姩鏇存柊閰嶇疆
--- 鏁村悎鑷? 鍘?V4 (backup_records, backup_operation_logs, backup_config)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户划线标注表';
+-- ═══════════════════════════════════════════════════════════════
+-- V4: 数据库备份系统 + 自动更新配置
+-- 整合自: 原 V4 (backup_records, backup_operation_logs, backup_config)
 --         + V8 (update_config)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 1. 鍒涘缓澶囦唤璁板綍琛?[鍘?V4]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 1. 创建备份记录表 [原 V4]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS backup_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    filename VARCHAR(255) NOT NULL COMMENT '澶囦唤鏂囦欢鍚?,
-    file_size BIGINT DEFAULT 0 COMMENT '鏂囦欢澶у皬(瀛楄妭)',
-    backup_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL' COMMENT '澶囦唤绫诲瀷: MANUAL/SCHEDULED',
-    backup_mode VARCHAR(20) NOT NULL DEFAULT 'FULL' COMMENT '澶囦唤妯″紡: FULL/INCREMENTAL',
-    base_backup_id BIGINT DEFAULT NULL COMMENT '澧為噺澶囦唤鐨勫熀鍑嗗叏閲忓浠絀D',
-    status VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS' COMMENT '鐘舵€? IN_PROGRESS/SUCCESS/FAILED',
-    storage_path VARCHAR(500) NOT NULL COMMENT '瀛樺偍璺緞',
-    created_by VARCHAR(100) COMMENT '鍒涘缓鑰?,
-    error_message TEXT COMMENT '閿欒淇℃伅',
-    database_size BIGINT DEFAULT 0 COMMENT '鏁版嵁搴撳ぇ灏?瀛楄妭)',
-    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    completed_time DATETIME COMMENT '瀹屾垚鏃堕棿',
+    filename VARCHAR(255) NOT NULL COMMENT '备份文件名',
+    file_size BIGINT DEFAULT 0 COMMENT '文件大小(字节)',
+    backup_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL' COMMENT '备份类型: MANUAL/SCHEDULED',
+    backup_mode VARCHAR(20) NOT NULL DEFAULT 'FULL' COMMENT '备份模式: FULL/INCREMENTAL',
+    base_backup_id BIGINT DEFAULT NULL COMMENT '增量备份的基准全量备份ID',
+    status VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS' COMMENT '状态: IN_PROGRESS/SUCCESS/FAILED',
+    storage_path VARCHAR(500) NOT NULL COMMENT '存储路径',
+    created_by VARCHAR(100) COMMENT '创建者',
+    error_message TEXT COMMENT '错误信息',
+    database_size BIGINT DEFAULT 0 COMMENT '数据库大小(字节)',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    completed_time DATETIME COMMENT '完成时间',
     INDEX idx_backup_type (backup_type),
     INDEX idx_backup_mode (backup_mode),
     INDEX idx_status (status),
     INDEX idx_created_time (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鏁版嵁搴撳浠借褰曡〃';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数据库备份记录表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 2. 鍒涘缓澶囦唤鎿嶄綔鏃ュ織琛?[鍘?V4]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 2. 创建备份操作日志表 [原 V4]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS backup_operation_logs (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    operator VARCHAR(100) NOT NULL COMMENT '鎿嶄綔浜?,
-    operation_type VARCHAR(50) NOT NULL COMMENT '鎿嶄綔绫诲瀷: BACKUP_CREATE/DELETE/RESTORE/DOWNLOAD/CLEANUP/SCHEDULED',
-    target_id BIGINT COMMENT '鐩爣澶囦唤璁板綍ID',
-    target_name VARCHAR(255) COMMENT '鐩爣澶囦唤鏂囦欢鍚?,
-    detail VARCHAR(1000) COMMENT '鎿嶄綔璇︽儏',
-    status VARCHAR(20) NOT NULL DEFAULT 'SUCCESS' COMMENT '鎿嶄綔缁撴灉: SUCCESS/FAILED',
-    ip_address VARCHAR(50) COMMENT '鎿嶄綔IP鍦板潃',
-    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鎿嶄綔鏃堕棿',
+    operator VARCHAR(100) NOT NULL COMMENT '操作人',
+    operation_type VARCHAR(50) NOT NULL COMMENT '操作类型: BACKUP_CREATE/DELETE/RESTORE/DOWNLOAD/CLEANUP/SCHEDULED',
+    target_id BIGINT COMMENT '目标备份记录ID',
+    target_name VARCHAR(255) COMMENT '目标备份文件名',
+    detail VARCHAR(1000) COMMENT '操作详情',
+    status VARCHAR(20) NOT NULL DEFAULT 'SUCCESS' COMMENT '操作结果: SUCCESS/FAILED',
+    ip_address VARCHAR(50) COMMENT '操作IP地址',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
     INDEX idx_operator (operator),
     INDEX idx_operation_type (operation_type),
     INDEX idx_created_time (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='澶囦唤鎿嶄綔鏃ュ織琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='备份操作日志表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 3. 鍒涘缓澶囦唤閰嶇疆琛紙鍗曡閰嶇疆妯″紡锛塠鍘?V4]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 3. 创建备份配置表（单行配置模式）[原 V4]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS backup_config (
     id INT NOT NULL DEFAULT 1,
-    auto_backup_enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '鑷姩澶囦唤寮€鍏?,
-    backup_cron VARCHAR(100) NOT NULL DEFAULT '0 0 2 * * ?' COMMENT 'cron琛ㄨ揪寮?,
-    backup_hour INT NOT NULL DEFAULT 2 COMMENT '澶囦唤灏忔椂(0-23)',
-    backup_minute INT NOT NULL DEFAULT 0 COMMENT '澶囦唤鍒嗛挓(0-59)',
-    retention_days INT NOT NULL DEFAULT 30 COMMENT '淇濈暀澶╂暟',
-    max_count INT NOT NULL DEFAULT 50 COMMENT '鏈€澶у浠芥暟閲?,
-    incremental_enabled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '澧為噺澶囦唤寮€鍏?,
-    full_backup_interval_days INT NOT NULL DEFAULT 7 COMMENT '鍏ㄩ噺澶囦唤闂撮殧澶╂暟',
-    updated_by VARCHAR(50) DEFAULT NULL COMMENT '鏈€鍚庢洿鏂颁汉',
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏈€鍚庢洿鏂版椂闂?,
+    auto_backup_enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '自动备份开关',
+    backup_cron VARCHAR(100) NOT NULL DEFAULT '0 0 2 * * ?' COMMENT 'cron表达式',
+    backup_hour INT NOT NULL DEFAULT 2 COMMENT '备份小时(0-23)',
+    backup_minute INT NOT NULL DEFAULT 0 COMMENT '备份分钟(0-59)',
+    retention_days INT NOT NULL DEFAULT 30 COMMENT '保留天数',
+    max_count INT NOT NULL DEFAULT 50 COMMENT '最大备份数量',
+    incremental_enabled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '增量备份开关',
+    full_backup_interval_days INT NOT NULL DEFAULT 7 COMMENT '全量备份间隔天数',
+    updated_by VARCHAR(50) DEFAULT NULL COMMENT '最后更新人',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
     PRIMARY KEY (id),
     CONSTRAINT chk_single_row CHECK (id = 1)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='澶囦唤閰嶇疆琛?鍗曡)';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='备份配置表(单行)';
 
 INSERT IGNORE INTO backup_config (id, auto_backup_enabled, backup_cron, backup_hour, backup_minute,
     retention_days, max_count, incremental_enabled, full_backup_interval_days)
 VALUES (1, 1, '0 0 2 * * ?', 2, 0, 30, 50, 0, 7);
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 4. 鑷姩鏇存柊閰嶇疆琛?[鍘?V8]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 4. 自动更新配置表 [原 V8]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS update_config (
     id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
     cron_expr            VARCHAR(64) NOT NULL DEFAULT '0 0 3 * * ?' COMMENT 'Spring cron expression',
@@ -771,185 +714,173 @@ CREATE TABLE IF NOT EXISTS update_config (
 
 INSERT IGNORE INTO update_config (id, cron_expr, enabled, git_branch, backup_before_update, last_run_status)
 VALUES (1, '0 0 3 * * ?', 0, 'master', 1, 'NEVER');
+-- ═══════════════════════════════════════════════════════════════
+-- V23: 访问监控 + AI调用统计 + 角色扩展 + 演示账号
+-- 整合自: V23 (monitoring tables), V24 (OPS role), V25 (demo accounts)
+-- ═══════════════════════════════════════════════════════════════
 
-
--- =============================================================
--- V5__monitoring_and_access.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V23: 璁块棶鐩戞帶 + AI璋冪敤缁熻 + 瑙掕壊鎵╁睍 + 婕旂ず璐﹀彿
--- 鏁村悎鑷? V23 (monitoring tables), V24 (OPS role), V25 (demo accounts)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
-
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 1. 璁块棶鏃ュ織琛紙鍘熷鏁版嵁锛屼繚鐣?澶╋級[鍘?V23]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 1. 访问日志表（原始数据，保留7天）[原 V23]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS access_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT DEFAULT NULL COMMENT '鐢ㄦ埛ID',
-    username VARCHAR(50) DEFAULT NULL COMMENT '鐢ㄦ埛鍚?,
-    method VARCHAR(10) NOT NULL COMMENT 'HTTP鏂规硶',
-    uri VARCHAR(500) NOT NULL COMMENT '璇锋眰URI',
-    query_string VARCHAR(1000) DEFAULT NULL COMMENT '鏌ヨ鍙傛暟',
-    status_code INT NOT NULL COMMENT 'HTTP鐘舵€佺爜',
-    response_time_ms BIGINT NOT NULL DEFAULT 0 COMMENT '鍝嶅簲鏃堕棿(姣)',
-    ip_address VARCHAR(45) DEFAULT NULL COMMENT 'IP鍦板潃',
+    user_id BIGINT DEFAULT NULL COMMENT '用户ID',
+    username VARCHAR(50) DEFAULT NULL COMMENT '用户名',
+    method VARCHAR(10) NOT NULL COMMENT 'HTTP方法',
+    uri VARCHAR(500) NOT NULL COMMENT '请求URI',
+    query_string VARCHAR(1000) DEFAULT NULL COMMENT '查询参数',
+    status_code INT NOT NULL COMMENT 'HTTP状态码',
+    response_time_ms BIGINT NOT NULL DEFAULT 0 COMMENT '响应时间(毫秒)',
+    ip_address VARCHAR(45) DEFAULT NULL COMMENT 'IP地址',
     user_agent VARCHAR(500) DEFAULT NULL COMMENT 'User-Agent',
-    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_created_time (created_time),
     INDEX idx_username (username),
     INDEX idx_uri (uri(191)),
     INDEX idx_status_code (status_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='璁块棶鏃ュ織琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='访问日志表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 2. 姣忓皬鏃惰仛鍚堢粺璁¤〃锛堜繚鐣?0澶╋級[鍘?V23]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 2. 每小时聚合统计表（保留90天）[原 V23]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS access_stats_hourly (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    stat_hour DATETIME NOT NULL COMMENT '缁熻灏忔椂(鏁寸偣)',
-    total_requests INT NOT NULL DEFAULT 0 COMMENT '鎬昏姹傛暟',
-    unique_users INT NOT NULL DEFAULT 0 COMMENT '鐙珛鐢ㄦ埛鏁?,
-    avg_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '骞冲潎鍝嶅簲鏃堕棿(姣)',
-    max_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '鏈€澶у搷搴旀椂闂?姣)',
-    error_count INT NOT NULL DEFAULT 0 COMMENT '閿欒鏁?4xx+5xx)',
-    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    stat_hour DATETIME NOT NULL COMMENT '统计小时(整点)',
+    total_requests INT NOT NULL DEFAULT 0 COMMENT '总请求数',
+    unique_users INT NOT NULL DEFAULT 0 COMMENT '独立用户数',
+    avg_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '平均响应时间(毫秒)',
+    max_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '最大响应时间(毫秒)',
+    error_count INT NOT NULL DEFAULT 0 COMMENT '错误数(4xx+5xx)',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     UNIQUE KEY uk_stat_hour (stat_hour)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='姣忓皬鏃惰闂粺璁?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='每小时访问统计';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 3. 姣忔棩鑱氬悎缁熻琛紙闀挎湡淇濈暀锛塠鍘?V23]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 3. 每日聚合统计表（长期保留）[原 V23]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS access_stats_daily (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    stat_date DATE NOT NULL COMMENT '缁熻鏃ユ湡',
-    total_requests INT NOT NULL DEFAULT 0 COMMENT '鎬昏姹傛暟',
-    unique_users INT NOT NULL DEFAULT 0 COMMENT '鐙珛鐢ㄦ埛鏁?,
-    peak_concurrent INT NOT NULL DEFAULT 0 COMMENT '宄板€煎苟鍙戞暟',
-    avg_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '骞冲潎鍝嶅簲鏃堕棿(姣)',
-    max_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '鏈€澶у搷搴旀椂闂?姣)',
-    error_count INT NOT NULL DEFAULT 0 COMMENT '閿欒鏁?,
-    top_pages TEXT DEFAULT NULL COMMENT '鐑棬椤甸潰JSON',
-    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    stat_date DATE NOT NULL COMMENT '统计日期',
+    total_requests INT NOT NULL DEFAULT 0 COMMENT '总请求数',
+    unique_users INT NOT NULL DEFAULT 0 COMMENT '独立用户数',
+    peak_concurrent INT NOT NULL DEFAULT 0 COMMENT '峰值并发数',
+    avg_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '平均响应时间(毫秒)',
+    max_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '最大响应时间(毫秒)',
+    error_count INT NOT NULL DEFAULT 0 COMMENT '错误数',
+    top_pages TEXT DEFAULT NULL COMMENT '热门页面JSON',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     UNIQUE KEY uk_stat_date (stat_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='姣忔棩璁块棶缁熻';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='每日访问统计';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 4. AI/澶栭儴鏈嶅姟璋冪敤鏃ュ織琛紙淇濈暀30澶╋級[鍘?V23]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 4. AI/外部服务调用日志表（保留30天）[原 V23]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS ai_call_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    service_name VARCHAR(50) NOT NULL COMMENT '鏈嶅姟鍚嶇О: HIAGENT/OPENROUTER/TENCENT_TRANSLATE/TENCENT_ASR/BILIBILI',
-    method_name VARCHAR(100) DEFAULT NULL COMMENT '璋冪敤鏂规硶鍚?,
-    success TINYINT(1) NOT NULL DEFAULT 1 COMMENT '鏄惁鎴愬姛',
-    response_time_ms BIGINT NOT NULL DEFAULT 0 COMMENT '鍝嶅簲鏃堕棿(姣)',
-    error_message VARCHAR(500) DEFAULT NULL COMMENT '閿欒淇℃伅',
-    input_tokens INT DEFAULT NULL COMMENT '杈撳叆token鏁?,
-    output_tokens INT DEFAULT NULL COMMENT '杈撳嚭token鏁?,
-    model_name VARCHAR(100) DEFAULT NULL COMMENT '妯″瀷鍚嶇О',
-    triggered_by VARCHAR(100) DEFAULT NULL COMMENT '瑙﹀彂鐢ㄦ埛',
-    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    service_name VARCHAR(50) NOT NULL COMMENT '服务名称: HIAGENT/OPENROUTER/TENCENT_TRANSLATE/TENCENT_ASR/BILIBILI',
+    method_name VARCHAR(100) DEFAULT NULL COMMENT '调用方法名',
+    success TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否成功',
+    response_time_ms BIGINT NOT NULL DEFAULT 0 COMMENT '响应时间(毫秒)',
+    error_message VARCHAR(500) DEFAULT NULL COMMENT '错误信息',
+    input_tokens INT DEFAULT NULL COMMENT '输入token数',
+    output_tokens INT DEFAULT NULL COMMENT '输出token数',
+    model_name VARCHAR(100) DEFAULT NULL COMMENT '模型名称',
+    triggered_by VARCHAR(100) DEFAULT NULL COMMENT '触发用户',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_service_name (service_name),
     INDEX idx_created_time (created_time),
     INDEX idx_success (success)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI璋冪敤鏃ュ織琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI调用日志表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 5. AI璋冪敤鏃ョ粺璁¤〃锛堥暱鏈熶繚鐣欙級[鍘?V23]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 5. AI调用日统计表（长期保留）[原 V23]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS ai_call_stats_daily (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    stat_date DATE NOT NULL COMMENT '缁熻鏃ユ湡',
-    service_name VARCHAR(50) NOT NULL COMMENT '鏈嶅姟鍚嶇О',
-    total_calls INT NOT NULL DEFAULT 0 COMMENT '鎬昏皟鐢ㄦ鏁?,
-    success_calls INT NOT NULL DEFAULT 0 COMMENT '鎴愬姛娆℃暟',
-    failed_calls INT NOT NULL DEFAULT 0 COMMENT '澶辫触娆℃暟',
-    avg_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '骞冲潎鍝嶅簲鏃堕棿',
-    max_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '鏈€澶у搷搴旀椂闂?,
-    total_input_tokens BIGINT NOT NULL DEFAULT 0 COMMENT '鎬昏緭鍏oken',
-    total_output_tokens BIGINT NOT NULL DEFAULT 0 COMMENT '鎬昏緭鍑簍oken',
-    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    stat_date DATE NOT NULL COMMENT '统计日期',
+    service_name VARCHAR(50) NOT NULL COMMENT '服务名称',
+    total_calls INT NOT NULL DEFAULT 0 COMMENT '总调用次数',
+    success_calls INT NOT NULL DEFAULT 0 COMMENT '成功次数',
+    failed_calls INT NOT NULL DEFAULT 0 COMMENT '失败次数',
+    avg_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '平均响应时间',
+    max_response_time_ms INT NOT NULL DEFAULT 0 COMMENT '最大响应时间',
+    total_input_tokens BIGINT NOT NULL DEFAULT 0 COMMENT '总输入token',
+    total_output_tokens BIGINT NOT NULL DEFAULT 0 COMMENT '总输出token',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     UNIQUE KEY uk_date_service (stat_date, service_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI璋冪敤鏃ョ粺璁?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI调用日统计';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 6. 鐢ㄦ埛瑙掕壊鎵╁睍 鈥?鏂板 OPS 杩愮淮瑙掕壊 [鍘?V24]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 6. 用户角色扩展 — 新增 OPS 运维角色 [原 V24]
+-- ────────────────────────────────────────
 ALTER TABLE users MODIFY COLUMN role ENUM('USER','STUDENT','TEACHER','ADMIN','OPS') NOT NULL DEFAULT 'USER';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 7. 纭繚婕旂ず璐﹀彿瀛樺湪涓斿彲姝ｅ父鐧诲綍 [鍘?V25]
---    瀵嗙爜: admin123 (澶嶇敤 admin 璐﹀彿鐨?BCrypt hash)
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 纭繚 teacher 璐﹀彿瀛樺湪
+-- ────────────────────────────────────────
+-- 7. 确保演示账号存在且可正常登录 [原 V25]
+--    密码: admin123 (复用 admin 账号的 BCrypt hash)
+-- ────────────────────────────────────────
+-- 确保 teacher 账号存在
 INSERT INTO users (username, password, role, real_name, status, deleted, created_time, updated_time)
 SELECT 'teacher',
        (SELECT password FROM users WHERE username = 'admin' LIMIT 1),
-       'TEACHER', '婕旂ず鏁欏笀', 'ACTIVE', 0, NOW(), NOW()
+       'TEACHER', '演示教师', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'teacher');
 
--- 纭繚 student 璐﹀彿瀛樺湪
+-- 确保 student 账号存在
 INSERT INTO users (username, password, role, real_name, status, deleted, created_time, updated_time)
 SELECT 'student',
        (SELECT password FROM users WHERE username = 'admin' LIMIT 1),
-       'STUDENT', '婕旂ず瀛︾敓', 'ACTIVE', 0, NOW(), NOW()
+       'STUDENT', '演示学生', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'student');
 
--- 鍚屾瀵嗙爜 + 纭繚 ACTIVE 鐘舵€?+ 鏈杞垹闄?
+-- 同步密码 + 确保 ACTIVE 状态 + 未被软删除
 UPDATE users SET
     password = (SELECT pw FROM (SELECT password AS pw FROM users WHERE username = 'admin' LIMIT 1) tmp),
     status = 'ACTIVE',
     deleted = 0
 WHERE username IN ('teacher', 'student');
-
-
--- =============================================================
--- V6__system_config_and_ai_providers.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V6: 绯荤粺閰嶇疆 + AI鎻愪緵鍟?+ 澶氭ā鍨嬫敮鎸?
--- 鏁村悎鑷? 鍘?V6 (system_config + 榛樿閰嶇疆)
---         + V7 (ai_provider 琛?+ 鏁版嵁杩佺Щ)
+-- ═══════════════════════════════════════════════════════════════
+-- V6: 系统配置 + AI提供商 + 多模型支持
+-- 整合自: 原 V6 (system_config + 默认配置)
+--         + V7 (ai_provider 表 + 数据迁移)
 --         + V11 (ai_provider.app_id)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 1. 鍒涘缓绯荤粺閰嶇疆琛?+ 榛樿閰嶇疆 [鍘?V6]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 1. 创建系统配置表 + 默认配置 [原 V6]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `system_config` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
-    `config_group` VARCHAR(50) NOT NULL COMMENT '閰嶇疆鍒嗙粍: ai_translate, ai_article, ai_chat',
-    `config_key` VARCHAR(100) NOT NULL COMMENT '閰嶇疆閿?,
-    `config_value` TEXT COMMENT '閰嶇疆鍊?,
-    `description` VARCHAR(255) COMMENT '閰嶇疆璇存槑锛堣繍缁撮潰鏉挎樉绀猴級',
-    `is_secret` TINYINT DEFAULT 0 COMMENT '鏄惁鏁忔劅锛堝墠绔劚鏁忔樉绀猴級',
+    `config_group` VARCHAR(50) NOT NULL COMMENT '配置分组: ai_translate, ai_article, ai_chat',
+    `config_key` VARCHAR(100) NOT NULL COMMENT '配置键',
+    `config_value` TEXT COMMENT '配置值',
+    `description` VARCHAR(255) COMMENT '配置说明（运维面板显示）',
+    `is_secret` TINYINT DEFAULT 0 COMMENT '是否敏感（前端脱敏显示）',
     `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `updated_by` VARCHAR(50),
     UNIQUE KEY `uk_group_key` (`config_group`, `config_key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='绯荤粺閰嶇疆琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统配置表';
 
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('ai_translate', 'api_url', 'https://api.siliconflow.cn/v1/chat/completions', 'API 鍦板潃锛圤penAI 鍏煎锛?, 0),
-('ai_translate', 'api_key', '', 'API 瀵嗛挜', 1),
-('ai_translate', 'model', 'Qwen/Qwen2.5-7B-Instruct', '妯″瀷鍚嶇О', 0),
-('ai_translate', 'enabled', 'true', '鏄惁鍚敤', 0),
-('ai_translate', 'timeout', '30000', '瓒呮椂鏃堕棿(ms)', 0);
+('ai_translate', 'api_url', 'https://api.siliconflow.cn/v1/chat/completions', 'API 地址（OpenAI 兼容）', 0),
+('ai_translate', 'api_key', '', 'API 密钥', 1),
+('ai_translate', 'model', 'Qwen/Qwen2.5-7B-Instruct', '模型名称', 0),
+('ai_translate', 'enabled', 'true', '是否启用', 0),
+('ai_translate', 'timeout', '30000', '超时时间(ms)', 0);
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 2. AI 鎻愪緵鍟嗚〃 + 鏁版嵁杩佺Щ [鍘?V7]
---    app_id 瀛楁宸插唴鑱?[鍘?V11]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 2. AI 提供商表 + 数据迁移 [原 V7]
+--    app_id 字段已内联 [原 V11]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `ai_provider` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
     `service` VARCHAR(50) NOT NULL COMMENT 'translate / article / chat',
     `name` VARCHAR(100) NOT NULL COMMENT 'display name',
     `api_url` VARCHAR(500) NOT NULL COMMENT 'provider endpoint',
     `api_key` TEXT NOT NULL COMMENT 'provider api key',
-    `app_id` VARCHAR(200) NULL COMMENT 'App ID锛圚iAgent 绛夋湇鍔″晢蹇呭～锛?,
+    `app_id` VARCHAR(200) NULL COMMENT 'App ID（HiAgent 等服务商必填）',
     `model` VARCHAR(200) NOT NULL COMMENT 'default model',
     `weight` INT NOT NULL DEFAULT 1 COMMENT 'weighted routing priority',
     `enabled` TINYINT NOT NULL DEFAULT 1 COMMENT 'whether provider is enabled',
@@ -977,66 +908,60 @@ SELECT
              30000),
     'migrated from system_config'
 WHERE NOT EXISTS (SELECT 1 FROM ai_provider WHERE service = 'translate');
-
-
--- =============================================================
--- V7__feature_toggles.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V7: 鏂囩珷鏀惰棌 + 鍔熻兘寮€鍏?+ 涓€у寲寮€鍏?
--- 鏁村悎鑷? 鍘?V12 (article_favorites + feature_toggle 閰嶇疆)
---         + V13 (淇 system_config description 涔辩爜)
+-- ═══════════════════════════════════════════════════════════════
+-- V7: 文章收藏 + 功能开关 + 个性化开关
+-- 整合自: 原 V12 (article_favorites + feature_toggle 配置)
+--         + V13 (修复 system_config description 乱码)
 --         + V14 (user_tags + feature_override)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 1. 鏂囩珷鏀惰棌琛?[鍘?V12]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 1. 文章收藏表 [原 V12]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS article_favorites (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id BIGINT NOT NULL COMMENT '瀛︾敓ID',
-    text_id BIGINT NOT NULL COMMENT '璇炬枃/鏂囩珷ID',
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鏀惰棌鏃堕棿',
+    student_id BIGINT NOT NULL COMMENT '学生ID',
+    text_id BIGINT NOT NULL COMMENT '课文/文章ID',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
     UNIQUE KEY uk_student_text (student_id, text_id),
     INDEX idx_student_id (student_id),
     INDEX idx_text_id (text_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鏂囩珷鏀惰棌琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章收藏表';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 2. 鍔熻兘寮€鍏抽厤缃?[鍘?V12 + V13]
---    V13 鐨?UPDATE 璇彞绱ц窡 INSERT IGNORE锛岀‘淇?description 姝ｇ‘
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 2. 功能开关配置 [原 V12 + V13]
+--    V13 的 UPDATE 语句紧跟 INSERT IGNORE，确保 description 正确
+-- ────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('feature_toggle', 'page_dashboard', 'true', '瀛︾敓绔?鍙戠幇椤?, 0),
-('feature_toggle', 'page_courses', 'false', '瀛︾敓绔?璇剧▼椤碉紙寮€鍙戜腑锛?, 0),
-('feature_toggle', 'page_classes', 'true', '瀛︾敓绔?鐝骇/绀惧尯椤?, 0),
-('feature_toggle', 'page_assignments', 'true', '瀛︾敓绔?浠诲姟椤?, 0),
-('feature_toggle', 'page_articles', 'true', '瀛︾敓绔?鏂囩珷椤?, 0),
-('feature_toggle', 'page_vocabulary', 'true', '瀛︾敓绔?鐢熻瘝鏈〉', 0),
-('feature_toggle', 'page_my_study', 'true', '瀛︾敓绔?鎴戠殑瀛︿範椤?, 0),
-('feature_toggle', 'page_ai_video', 'false', '瀛︾敓绔?AI瑙嗛瀛楀箷椤碉紙鏈畬鍠勶級', 0),
-('feature_toggle', 'page_ai_qa', 'true', '瀛︾敓绔?AI闂瓟椤?, 0),
-('feature_toggle', 'page_user_texts', 'true', '瀛︾敓绔?鎴戠殑涓婁紶椤?, 0);
+('feature_toggle', 'page_dashboard', 'true', '学生端-发现页', 0),
+('feature_toggle', 'page_courses', 'false', '学生端-课程页（开发中）', 0),
+('feature_toggle', 'page_classes', 'true', '学生端-班级/社区页', 0),
+('feature_toggle', 'page_assignments', 'true', '学生端-任务页', 0),
+('feature_toggle', 'page_articles', 'true', '学生端-文章页', 0),
+('feature_toggle', 'page_vocabulary', 'true', '学生端-生词本页', 0),
+('feature_toggle', 'page_my_study', 'true', '学生端-我的学习页', 0),
+('feature_toggle', 'page_ai_video', 'false', '学生端-AI视频字幕页（未完善）', 0),
+('feature_toggle', 'page_ai_qa', 'true', '学生端-AI问答页', 0),
+('feature_toggle', 'page_user_texts', 'true', '学生端-我的上传页', 0);
 
--- 淇 description 涔辩爜 [鍘?V13]
-UPDATE `system_config` SET `description` = '瀛︾敓绔?鍙戠幇椤?              WHERE `config_key` = 'page_dashboard'   AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?璇剧▼椤碉紙寮€鍙戜腑锛?    WHERE `config_key` = 'page_courses'     AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?鐝骇/绀惧尯椤?         WHERE `config_key` = 'page_classes'     AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?浠诲姟椤?              WHERE `config_key` = 'page_assignments' AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?鏂囩珷椤?              WHERE `config_key` = 'page_articles'   AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?鐢熻瘝鏈〉'            WHERE `config_key` = 'page_vocabulary' AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?鎴戠殑瀛︿範椤?          WHERE `config_key` = 'page_my_study'   AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?AI瑙嗛瀛楀箷椤碉紙鏈畬鍠勶級' WHERE `config_key` = 'page_ai_video'  AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?AI闂瓟椤?            WHERE `config_key` = 'page_ai_qa'      AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '瀛︾敓绔?鎴戠殑涓婁紶椤?          WHERE `config_key` = 'page_user_texts' AND `config_group` = 'feature_toggle';
-UPDATE `system_config` SET `description` = '鏄惁浣跨敤 OpenRouter 浣滀负 AI 鏈嶅姟鍟? WHERE `config_key` = 'use_openrouter'     AND `config_group` = 'ai_config';
+-- 修复 description 乱码 [原 V13]
+UPDATE `system_config` SET `description` = '学生端-发现页'              WHERE `config_key` = 'page_dashboard'   AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-课程页（开发中）'    WHERE `config_key` = 'page_courses'     AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-班级/社区页'         WHERE `config_key` = 'page_classes'     AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-任务页'              WHERE `config_key` = 'page_assignments' AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-文章页'              WHERE `config_key` = 'page_articles'   AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-生词本页'            WHERE `config_key` = 'page_vocabulary' AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-我的学习页'          WHERE `config_key` = 'page_my_study'   AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-AI视频字幕页（未完善）' WHERE `config_key` = 'page_ai_video'  AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-AI问答页'            WHERE `config_key` = 'page_ai_qa'      AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '学生端-我的上传页'          WHERE `config_key` = 'page_user_texts' AND `config_group` = 'feature_toggle';
+UPDATE `system_config` SET `description` = '是否使用 OpenRouter 作为 AI 服务商' WHERE `config_key` = 'use_openrouter'     AND `config_group` = 'ai_config';
 UPDATE `system_config` SET `description` = 'OpenRouter API Key'                   WHERE `config_key` = 'openrouter_api_key' AND `config_group` = 'ai_config';
-UPDATE `system_config` SET `description` = 'OpenRouter 妯″瀷 ID'                  WHERE `config_key` = 'openrouter_model'   AND `config_group` = 'ai_config';
+UPDATE `system_config` SET `description` = 'OpenRouter 模型 ID'                  WHERE `config_key` = 'openrouter_model'   AND `config_group` = 'ai_config';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 3. 涓€у寲鍔熻兘寮€鍏?[鍘?V14]
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 3. 个性化功能开关 [原 V14]
+-- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_tags (
     id           BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id      BIGINT      NOT NULL,
@@ -1050,8 +975,8 @@ CREATE TABLE IF NOT EXISTS user_tags (
 
 CREATE TABLE IF NOT EXISTS feature_override (
     id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-    scope        VARCHAR(16)  NOT NULL COMMENT 'tag 鎴?user',
-    scope_value  VARCHAR(128) NOT NULL COMMENT 'tag鍚嶇О 鎴?userId瀛楃涓?,
+    scope        VARCHAR(16)  NOT NULL COMMENT 'tag 或 user',
+    scope_value  VARCHAR(128) NOT NULL COMMENT 'tag名称 或 userId字符串',
     feature_key  VARCHAR(128) NOT NULL,
     enabled      TINYINT(1)   NOT NULL DEFAULT 1,
     description  VARCHAR(255) DEFAULT NULL,
@@ -1060,74 +985,68 @@ CREATE TABLE IF NOT EXISTS feature_override (
     UNIQUE KEY uk_scope_key (scope, scope_value, feature_key),
     INDEX idx_scope_value (scope, scope_value)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- V15: 统一身份认证 (SSO) 集成
 
-
--- =============================================================
--- V8__sso_integration.sql
--- =============================================================
-
--- V15: 缁熶竴韬唤璁よ瘉 (SSO) 闆嗘垚
-
--- SSO 鐢ㄦ埛缁戝畾琛?
+-- SSO 用户绑定表
 CREATE TABLE IF NOT EXISTS sso_user_bindings (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '涓婚敭ID',
-    user_id BIGINT NOT NULL COMMENT '鏈湴鐢ㄦ埛ID',
-    sso_provider VARCHAR(50) NOT NULL COMMENT 'SSO鎻愪緵鍟? CAS, OAUTH2',
-    sso_user_id VARCHAR(255) NOT NULL COMMENT 'SSO鐢ㄦ埛鍞竴鏍囪瘑',
-    sso_username VARCHAR(255) NOT NULL COMMENT 'SSO鐢ㄦ埛鍚?,
-    sso_email VARCHAR(255) COMMENT 'SSO閭',
-    sso_real_name VARCHAR(255) COMMENT 'SSO鐪熷疄濮撳悕',
-    sso_member_of TEXT COMMENT 'SSO缁勭粐鍗曚綅 (JSON鏁扮粍)',
-    auto_approved TINYINT(1) DEFAULT 0 COMMENT '鏄惁鑷姩瀹℃壒: 0=寰呭鎵? 1=宸插鎵?,
-    last_login_time DATETIME COMMENT '鏈€鍚庣櫥褰曟椂闂?,
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
-    deleted TINYINT(1) DEFAULT 0 COMMENT '閫昏緫鍒犻櫎: 0=姝ｅ父, 1=宸插垹闄?,
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    user_id BIGINT NOT NULL COMMENT '本地用户ID',
+    sso_provider VARCHAR(50) NOT NULL COMMENT 'SSO提供商: CAS, OAUTH2',
+    sso_user_id VARCHAR(255) NOT NULL COMMENT 'SSO用户唯一标识',
+    sso_username VARCHAR(255) NOT NULL COMMENT 'SSO用户名',
+    sso_email VARCHAR(255) COMMENT 'SSO邮箱',
+    sso_real_name VARCHAR(255) COMMENT 'SSO真实姓名',
+    sso_member_of TEXT COMMENT 'SSO组织单位 (JSON数组)',
+    auto_approved TINYINT(1) DEFAULT 0 COMMENT '是否自动审批: 0=待审批, 1=已审批',
+    last_login_time DATETIME COMMENT '最后登录时间',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT(1) DEFAULT 0 COMMENT '逻辑删除: 0=正常, 1=已删除',
     UNIQUE KEY uk_sso_provider_user (sso_provider, sso_user_id, deleted),
     INDEX idx_user_id (user_id),
     INDEX idx_sso_username (sso_username),
     INDEX idx_auto_approved (auto_approved),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO鐢ㄦ埛缁戝畾琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO用户绑定表';
 
--- SSO 鐧诲綍鏃ュ織琛?
+-- SSO 登录日志表
 CREATE TABLE IF NOT EXISTS sso_login_logs (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '涓婚敭ID',
-    sso_provider VARCHAR(50) NOT NULL COMMENT 'SSO鎻愪緵鍟?,
-    sso_user_id VARCHAR(255) NOT NULL COMMENT 'SSO鐢ㄦ埛ID',
-    sso_username VARCHAR(255) NOT NULL COMMENT 'SSO鐢ㄦ埛鍚?,
-    login_result VARCHAR(50) NOT NULL COMMENT '鐧诲綍缁撴灉: SUCCESS, PENDING_APPROVAL, FAILED',
-    failure_reason VARCHAR(500) COMMENT '澶辫触鍘熷洜',
-    ip_address VARCHAR(50) COMMENT 'IP鍦板潃',
-    user_agent VARCHAR(500) COMMENT '鐢ㄦ埛浠ｇ悊',
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    sso_provider VARCHAR(50) NOT NULL COMMENT 'SSO提供商',
+    sso_user_id VARCHAR(255) NOT NULL COMMENT 'SSO用户ID',
+    sso_username VARCHAR(255) NOT NULL COMMENT 'SSO用户名',
+    login_result VARCHAR(50) NOT NULL COMMENT '登录结果: SUCCESS, PENDING_APPROVAL, FAILED',
+    failure_reason VARCHAR(500) COMMENT '失败原因',
+    ip_address VARCHAR(50) COMMENT 'IP地址',
+    user_agent VARCHAR(500) COMMENT '用户代理',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_sso_user (sso_provider, sso_user_id),
     INDEX idx_login_time (created_time),
     INDEX idx_login_result (login_result)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO鐧诲綍鏃ュ織';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO登录日志';
 
--- SSO 閰嶇疆琛?
+-- SSO 配置表
 CREATE TABLE IF NOT EXISTS sso_config (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '涓婚敭ID',
-    config_key VARCHAR(100) NOT NULL COMMENT '閰嶇疆閿?,
-    config_value TEXT COMMENT '閰嶇疆鍊?,
-    config_type VARCHAR(50) NOT NULL COMMENT '閰嶇疆绫诲瀷: SYSTEM, CAS, OAUTH2, ROLE_MAPPING',
-    description VARCHAR(500) COMMENT '閰嶇疆鎻忚堪',
-    is_encrypted TINYINT(1) DEFAULT 0 COMMENT '鏄惁鍔犲瘑瀛樺偍',
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    config_key VARCHAR(100) NOT NULL COMMENT '配置键',
+    config_value TEXT COMMENT '配置值',
+    config_type VARCHAR(50) NOT NULL COMMENT '配置类型: SYSTEM, CAS, OAUTH2, ROLE_MAPPING',
+    description VARCHAR(500) COMMENT '配置描述',
+    is_encrypted TINYINT(1) DEFAULT 0 COMMENT '是否加密存储',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_config_key (config_key),
     INDEX idx_config_type (config_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO閰嶇疆琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO配置表';
 
--- 鎵╁睍 users 琛ㄥ瓧娈?
+-- 扩展 users 表字段
 SET @sso_bound_exists = (
     SELECT COUNT(*) FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_bound'
 );
 SET @sso_bound_sql = IF(
     @sso_bound_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''鏄惁閫氳繃SSO缁戝畾: 0=鍚? 1=鏄?'',
+    'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''是否通过SSO绑定: 0=否, 1=是''',
     'SELECT 1'
 );
 PREPARE stmt FROM @sso_bound_sql;
@@ -1140,7 +1059,7 @@ SET @sso_provider_exists = (
 );
 SET @sso_provider_sql = IF(
     @sso_provider_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO鎻愪緵鍟?'',
+    'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO提供商''',
     'SELECT 1'
 );
 PREPARE stmt FROM @sso_provider_sql;
@@ -1153,7 +1072,7 @@ SET @sso_subject_exists = (
 );
 SET @sso_subject_sql = IF(
     @sso_subject_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO鍞竴鏍囪瘑''',
+    'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO唯一标识''',
     'SELECT 1'
 );
 PREPARE stmt FROM @sso_subject_sql;
@@ -1186,192 +1105,186 @@ PREPARE stmt FROM @idx_sso_subject_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- 鎻掑叆榛樿 SSO 閰嶇疆
+-- 插入默认 SSO 配置
 INSERT IGNORE INTO sso_config (config_key, config_value, config_type, description) VALUES
-('sso.enabled', 'false', 'SYSTEM', 'SSO鍔熻兘鎬诲紑鍏?),
-('sso.protocol', 'CAS', 'SYSTEM', 'SSO鍗忚绫诲瀷: CAS 鎴?OAUTH2'),
-('sso.auto_approval.enabled', 'true', 'SYSTEM', '鏄惁鍚敤鑷姩瀹℃壒'),
-('sso.role_mapping.ou=绠＄悊鍛?, 'ADMIN', 'ROLE_MAPPING', '绠＄悊鍛樿鑹叉槧灏?),
-('sso.role_mapping.ou=杩愮淮', 'OPS', 'ROLE_MAPPING', '杩愮淮瑙掕壊鏄犲皠'),
-('sso.role_mapping.ou=鏁欏笀', 'TEACHER', 'ROLE_MAPPING', '鏁欏笀瑙掕壊鏄犲皠'),
-('sso.role_mapping.ou=瀛︾敓', 'STUDENT', 'ROLE_MAPPING', '瀛︾敓瑙掕壊鏄犲皠'),
-('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId 涓?People 鐨勭敤鎴锋槧灏勪负 STUDENT 瑙掕壊');
-
-
--- =============================================================
--- V9__school_data_sync.sql
--- =============================================================
-
+('sso.enabled', 'false', 'SYSTEM', 'SSO功能总开关'),
+('sso.protocol', 'CAS', 'SYSTEM', 'SSO协议类型: CAS 或 OAUTH2'),
+('sso.auto_approval.enabled', 'true', 'SYSTEM', '是否启用自动审批'),
+('sso.role_mapping.ou=管理员', 'ADMIN', 'ROLE_MAPPING', '管理员角色映射'),
+('sso.role_mapping.ou=运维', 'OPS', 'ROLE_MAPPING', '运维角色映射'),
+('sso.role_mapping.ou=教师', 'TEACHER', 'ROLE_MAPPING', '教师角色映射'),
+('sso.role_mapping.ou=学生', 'STUDENT', 'ROLE_MAPPING', '学生角色映射'),
+('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId 为 People 的用户映射为 STUDENT 角色');
 -- ============================================================================
--- Flyway Migration Script: 瀛︽牎鏁版嵁鍚屾琛ㄧ粨鏋?
+-- Flyway Migration Script: 学校数据同步表结构
 -- Version: V100
--- Description: 鍒涘缓瀛︽牎鏁版嵁鎺ュ叆鐩稿叧鐨勬墍鏈夎〃
+-- Description: 创建学校数据接入相关的所有表
 -- Author: System
 -- Date: 2026-04-09
 -- ============================================================================
 
 -- ============================================================================
--- 1. 鍩虹鏁版嵁灞?(Foundation Layer)
+-- 1. 基础数据层 (Foundation Layer)
 -- ============================================================================
 
--- 1.1 琛屾斂鐝〃
+-- 1.1 行政班表
 CREATE TABLE IF NOT EXISTS administrative_class (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    class_code VARCHAR(50) NOT NULL UNIQUE COMMENT '琛屾斂鐝紪鍙?(XZBH)',
-    class_name VARCHAR(100) NOT NULL COMMENT '琛屾斂鐝悕绉?(XZBMC)',
-    class_short_name VARCHAR(50) COMMENT '琛屾斂鐝畝绉?(XZBJC)',
-    college_code VARCHAR(50) NOT NULL COMMENT '瀛﹂櫌缂栧彿 (YXBH)',
-    college_name VARCHAR(100) NOT NULL COMMENT '瀛﹂櫌鍚嶇О (YXMC)',
-    major_code VARCHAR(50) NOT NULL COMMENT '涓撲笟缂栧彿 (ZYBH)',
-    major_name VARCHAR(100) NOT NULL COMMENT '涓撲笟鍚嶇О (ZYMC)',
-    grade VARCHAR(10) NOT NULL COMMENT '骞寸骇 (NJ)',
-    class_type VARCHAR(20) COMMENT '鐝骇绫诲瀷 (BJLX)',
-    head_teacher_code VARCHAR(50) COMMENT '鐝富浠诲伐鍙?(BZRGH)',
-    head_teacher_name VARCHAR(50) COMMENT '鐝富浠诲鍚?(BZRXM)',
-    student_count INT DEFAULT 0 COMMENT '瀛︾敓浜烘暟 (XSRS)',
-    male_count INT DEFAULT 0 COMMENT '鐢风敓浜烘暟 (NSRS)',
-    female_count INT DEFAULT 0 COMMENT '濂崇敓浜烘暟 (NSRS_NV)',
-    class_status VARCHAR(20) NOT NULL COMMENT '鐝骇鐘舵€?(BJZT)',
-    establish_date DATE COMMENT '鎴愮珛鏃ユ湡 (CLRQ)',
-    graduate_date DATE COMMENT '姣曚笟鏃ユ湡 (BYRQ)',
-    remark VARCHAR(500) COMMENT '澶囨敞 (BZ)',
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL COMMENT '鍚屾鏉ユ簮 (api/etl)',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    class_code VARCHAR(50) NOT NULL UNIQUE COMMENT '行政班编号 (XZBH)',
+    class_name VARCHAR(100) NOT NULL COMMENT '行政班名称 (XZBMC)',
+    class_short_name VARCHAR(50) COMMENT '行政班简称 (XZBJC)',
+    college_code VARCHAR(50) NOT NULL COMMENT '学院编号 (YXBH)',
+    college_name VARCHAR(100) NOT NULL COMMENT '学院名称 (YXMC)',
+    major_code VARCHAR(50) NOT NULL COMMENT '专业编号 (ZYBH)',
+    major_name VARCHAR(100) NOT NULL COMMENT '专业名称 (ZYMC)',
+    grade VARCHAR(10) NOT NULL COMMENT '年级 (NJ)',
+    class_type VARCHAR(20) COMMENT '班级类型 (BJLX)',
+    head_teacher_code VARCHAR(50) COMMENT '班主任工号 (BZRGH)',
+    head_teacher_name VARCHAR(50) COMMENT '班主任姓名 (BZRXM)',
+    student_count INT DEFAULT 0 COMMENT '学生人数 (XSRS)',
+    male_count INT DEFAULT 0 COMMENT '男生人数 (NSRS)',
+    female_count INT DEFAULT 0 COMMENT '女生人数 (NSRS_NV)',
+    class_status VARCHAR(20) NOT NULL COMMENT '班级状态 (BJZT)',
+    establish_date DATE COMMENT '成立日期 (CLRQ)',
+    graduate_date DATE COMMENT '毕业日期 (BYRQ)',
+    remark VARCHAR(500) COMMENT '备注 (BZ)',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    sync_source VARCHAR(20) NOT NULL COMMENT '同步来源 (api/etl)',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
     INDEX idx_college (college_code),
     INDEX idx_major (major_code),
     INDEX idx_grade (grade),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='琛屾斂鐝熀鏈俊鎭〃';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行政班基本信息表';
 
--- 1.2 瀛︽牎璇剧▼琛?
+-- 1.2 学校课程表
 CREATE TABLE IF NOT EXISTS school_course (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    course_code VARCHAR(50) NOT NULL UNIQUE COMMENT '璇剧▼缂栧彿 (KCBH)',
-    course_name VARCHAR(200) NOT NULL COMMENT '璇剧▼鍚嶇О (KCMC)',
-    course_name_en VARCHAR(200) COMMENT '璇剧▼鑻辨枃鍚嶇О (KCYWMC)',
-    course_short_name VARCHAR(100) COMMENT '璇剧▼绠€绉?(KCJC)',
-    course_nature VARCHAR(50) NOT NULL COMMENT '璇剧▼鎬ц川 (KCXZ)',
-    course_category VARCHAR(50) NOT NULL COMMENT '璇剧▼绫诲埆 (KCLB)',
-    credits DECIMAL(3,1) NOT NULL COMMENT '瀛﹀垎 (XF)',
-    total_hours INT NOT NULL COMMENT '鎬诲鏃?(ZXS)',
-    theory_hours INT COMMENT '鐞嗚瀛︽椂 (LLXS)',
-    experiment_hours INT COMMENT '瀹為獙瀛︽椂 (SYXS)',
-    practice_hours INT COMMENT '瀹炶返瀛︽椂 (SJXS)',
-    computer_hours INT COMMENT '涓婃満瀛︽椂 (SJXS_PC)',
-    college_code VARCHAR(50) NOT NULL COMMENT '寮€璇惧闄㈢紪鍙?(KKYXBH)',
-    college_name VARCHAR(100) NOT NULL COMMENT '寮€璇惧闄㈠悕绉?(KKYXMC)',
-    department_code VARCHAR(50) COMMENT '寮€璇剧郴閮ㄧ紪鍙?(KKXBBH)',
-    department_name VARCHAR(100) COMMENT '寮€璇剧郴閮ㄥ悕绉?(KKXBMC)',
-    leader_code VARCHAR(50) COMMENT '璇剧▼璐熻矗浜哄伐鍙?(KCFZRGH)',
-    leader_name VARCHAR(50) COMMENT '璇剧▼璐熻矗浜哄鍚?(KCFZRXM)',
-    assessment_method VARCHAR(50) NOT NULL COMMENT '鑰冩牳鏂瑰紡 (KHFS)',
-    is_bilingual VARCHAR(10) COMMENT '鏄惁鍙岃鏁欏 (SFSYJX)',
-    is_online VARCHAR(10) COMMENT '鏄惁缃戠粶璇剧▼ (SFWLKC)',
-    applicable_majors VARCHAR(500) COMMENT '閫傜敤涓撲笟 (SYZY)',
-    prerequisite_codes VARCHAR(500) COMMENT '鍏堜慨璇剧▼缂栧彿 (XXKCBH)',
-    prerequisite_names VARCHAR(500) COMMENT '鍏堜慨璇剧▼鍚嶇О (XXKCMC)',
-    course_intro TEXT COMMENT '璇剧▼绠€浠?(KCJJ)',
-    teaching_objectives TEXT COMMENT '鏁欏鐩爣 (JXMB)',
-    course_status VARCHAR(20) NOT NULL COMMENT '璇剧▼鐘舵€?(KCZT)',
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL COMMENT '鍚屾鏉ユ簮',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    course_code VARCHAR(50) NOT NULL UNIQUE COMMENT '课程编号 (KCBH)',
+    course_name VARCHAR(200) NOT NULL COMMENT '课程名称 (KCMC)',
+    course_name_en VARCHAR(200) COMMENT '课程英文名称 (KCYWMC)',
+    course_short_name VARCHAR(100) COMMENT '课程简称 (KCJC)',
+    course_nature VARCHAR(50) NOT NULL COMMENT '课程性质 (KCXZ)',
+    course_category VARCHAR(50) NOT NULL COMMENT '课程类别 (KCLB)',
+    credits DECIMAL(3,1) NOT NULL COMMENT '学分 (XF)',
+    total_hours INT NOT NULL COMMENT '总学时 (ZXS)',
+    theory_hours INT COMMENT '理论学时 (LLXS)',
+    experiment_hours INT COMMENT '实验学时 (SYXS)',
+    practice_hours INT COMMENT '实践学时 (SJXS)',
+    computer_hours INT COMMENT '上机学时 (SJXS_PC)',
+    college_code VARCHAR(50) NOT NULL COMMENT '开课学院编号 (KKYXBH)',
+    college_name VARCHAR(100) NOT NULL COMMENT '开课学院名称 (KKYXMC)',
+    department_code VARCHAR(50) COMMENT '开课系部编号 (KKXBBH)',
+    department_name VARCHAR(100) COMMENT '开课系部名称 (KKXBMC)',
+    leader_code VARCHAR(50) COMMENT '课程负责人工号 (KCFZRGH)',
+    leader_name VARCHAR(50) COMMENT '课程负责人姓名 (KCFZRXM)',
+    assessment_method VARCHAR(50) NOT NULL COMMENT '考核方式 (KHFS)',
+    is_bilingual VARCHAR(10) COMMENT '是否双语教学 (SFSYJX)',
+    is_online VARCHAR(10) COMMENT '是否网络课程 (SFWLKC)',
+    applicable_majors VARCHAR(500) COMMENT '适用专业 (SYZY)',
+    prerequisite_codes VARCHAR(500) COMMENT '先修课程编号 (XXKCBH)',
+    prerequisite_names VARCHAR(500) COMMENT '先修课程名称 (XXKCMC)',
+    course_intro TEXT COMMENT '课程简介 (KCJJ)',
+    teaching_objectives TEXT COMMENT '教学目标 (JXMB)',
+    course_status VARCHAR(20) NOT NULL COMMENT '课程状态 (KCZT)',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    sync_source VARCHAR(20) NOT NULL COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
     INDEX idx_college (college_code),
     INDEX idx_nature (course_nature),
     INDEX idx_category (course_category),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='瀛︽牎璇剧▼鍩烘湰淇℃伅琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学校课程基本信息表';
 
 -- ============================================================================
--- 2. 鏁欏缁勭粐灞?(Teaching Organization Layer)
+-- 2. 教学组织层 (Teaching Organization Layer)
 -- ============================================================================
 
--- 2.1 鏁欏鐝〃
+-- 2.1 教学班表
 CREATE TABLE IF NOT EXISTS teaching_class (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    class_id VARCHAR(50) NOT NULL UNIQUE COMMENT '鏁欏鐝彿 (JXBID)',
-    class_name VARCHAR(100) COMMENT '鏁欏鐝悕绉?(JXBMC)',
-    course_code VARCHAR(50) NOT NULL COMMENT '璇剧▼缂栧彿 (KCBH)',
-    course_name VARCHAR(200) NOT NULL COMMENT '璇剧▼鍚嶇О (KCMC)',
-    teacher_id VARCHAR(50) NOT NULL COMMENT '鎺堣鏁欏笀宸ュ彿 (JGH)',
-    teacher_name VARCHAR(50) NOT NULL COMMENT '鎺堣鏁欏笀濮撳悕 (XM)',
-    academic_year VARCHAR(20) NOT NULL COMMENT '瀛﹀勾 (XNM)',
-    semester INT NOT NULL COMMENT '瀛︽湡 (XQM)',
-    capacity INT NOT NULL COMMENT '鐝骇瀹归噺',
-    enrolled_count INT DEFAULT 0 COMMENT '宸查€変汉鏁?,
-    class_status VARCHAR(20) NOT NULL COMMENT '璇剧▼鐘舵€?,
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL COMMENT '鍚屾鏉ユ簮',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    class_id VARCHAR(50) NOT NULL UNIQUE COMMENT '教学班号 (JXBID)',
+    class_name VARCHAR(100) COMMENT '教学班名称 (JXBMC)',
+    course_code VARCHAR(50) NOT NULL COMMENT '课程编号 (KCBH)',
+    course_name VARCHAR(200) NOT NULL COMMENT '课程名称 (KCMC)',
+    teacher_id VARCHAR(50) NOT NULL COMMENT '授课教师工号 (JGH)',
+    teacher_name VARCHAR(50) NOT NULL COMMENT '授课教师姓名 (XM)',
+    academic_year VARCHAR(20) NOT NULL COMMENT '学年 (XNM)',
+    semester INT NOT NULL COMMENT '学期 (XQM)',
+    capacity INT NOT NULL COMMENT '班级容量',
+    enrolled_count INT DEFAULT 0 COMMENT '已选人数',
+    class_status VARCHAR(20) NOT NULL COMMENT '课程状态',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    sync_source VARCHAR(20) NOT NULL COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
     FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_course (course_code),
     INDEX idx_teacher (teacher_id),
     INDEX idx_academic_year_semester (academic_year, semester),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鏁欏鐝俊鎭〃';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教学班信息表';
 
--- 2.2 璇剧▼瀹夋帓琛?
+-- 2.2 课程安排表
 CREATE TABLE IF NOT EXISTS course_schedule (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    class_id VARCHAR(50) NOT NULL COMMENT '鏁欏鐝彿 (JXBID)',
-    day_of_week INT NOT NULL COMMENT '鏄熸湡鍑?(XQJ) 1-7',
-    period VARCHAR(20) NOT NULL COMMENT '鑺傛 (JCS) 濡?1-2"',
-    week_range VARCHAR(50) NOT NULL COMMENT '鍛ㄦ (ZCD) 濡?1-16鍛?',
-    class_location VARCHAR(100) NOT NULL COMMENT '涓婅鍦扮偣 (CDMC)',
-    academic_year VARCHAR(20) NOT NULL COMMENT '瀛﹀勾 (XNM)',
-    semester INT NOT NULL COMMENT '瀛︽湡 (XQM)',
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL COMMENT '鍚屾鏉ユ簮',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    class_id VARCHAR(50) NOT NULL COMMENT '教学班号 (JXBID)',
+    day_of_week INT NOT NULL COMMENT '星期几 (XQJ) 1-7',
+    period VARCHAR(20) NOT NULL COMMENT '节次 (JCS) 如"1-2"',
+    week_range VARCHAR(50) NOT NULL COMMENT '周次 (ZCD) 如"1-16周"',
+    class_location VARCHAR(100) NOT NULL COMMENT '上课地点 (CDMC)',
+    academic_year VARCHAR(20) NOT NULL COMMENT '学年 (XNM)',
+    semester INT NOT NULL COMMENT '学期 (XQM)',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    sync_source VARCHAR(20) NOT NULL COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE CASCADE ON UPDATE CASCADE,
     INDEX idx_class_id (class_id),
     INDEX idx_day_period (day_of_week, period),
     INDEX idx_academic_year_semester (academic_year, semester),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='璇剧▼瀹夋帓淇℃伅琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程安排信息表';
 
 -- ============================================================================
--- 3. 閫夎涓庢垚缁╁眰 (Enrollment & Grade Layer)
+-- 3. 选课与成绩层 (Enrollment & Grade Layer)
 -- ============================================================================
 
--- 3.1 閫夎璁板綍琛?
+-- 3.1 选课记录表
 CREATE TABLE IF NOT EXISTS course_selection (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    selection_id VARCHAR(50) NOT NULL UNIQUE COMMENT '閫夎璁板綍ID',
-    student_id VARCHAR(50) NOT NULL COMMENT '瀛﹀彿',
-    student_name VARCHAR(100) NOT NULL COMMENT '瀛︾敓濮撳悕',
-    course_code VARCHAR(50) NOT NULL COMMENT '璇剧▼浠ｇ爜',
-    course_name VARCHAR(200) COMMENT '璇剧▼鍚嶇О锛圕DSP API涓嶈繑鍥烇紝鍙负绌猴級',
-    class_id VARCHAR(50) NOT NULL COMMENT '鏁欏鐝彿',
-    teacher_id VARCHAR(50) NOT NULL COMMENT '鎺堣鏁欏笀宸ュ彿',
-    teacher_name VARCHAR(50) NOT NULL COMMENT '鎺堣鏁欏笀濮撳悕',
-    credits DECIMAL(3,1) COMMENT '瀛﹀垎锛圕DSP API涓嶈繑鍥烇紝鍙负绌猴級',
-    academic_year VARCHAR(20) NOT NULL COMMENT '瀛﹀勾',
-    semester INT NOT NULL COMMENT '瀛︽湡',
-    class_time VARCHAR(100) COMMENT '涓婅鏃堕棿',
-    class_location VARCHAR(100) COMMENT '涓婅鍦扮偣',
-    selection_time DATETIME NOT NULL COMMENT '閫夎鏃堕棿',
-    selection_status VARCHAR(20) NOT NULL COMMENT '閫夎鐘舵€?SELECTED/DROPPED/COMPLETED',
-    regular_grade DECIMAL(5,2) COMMENT '骞虫椂鎴愮哗',
-    final_grade DECIMAL(5,2) COMMENT '鏈熸湯鎴愮哗',
-    total_grade DECIMAL(5,2) COMMENT '鎬昏瘎鎴愮哗',
-    grade_point DECIMAL(3,2) COMMENT '缁╃偣',
-    attendance_count INT DEFAULT 0 COMMENT '鍑哄嫟娆℃暟',
-    absence_count INT DEFAULT 0 COMMENT '缂哄嫟娆℃暟',
-    grade_remark VARCHAR(500) COMMENT '鎴愮哗澶囨敞',
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL COMMENT '鍚屾鏉ユ簮',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    selection_id VARCHAR(50) NOT NULL UNIQUE COMMENT '选课记录ID',
+    student_id VARCHAR(50) NOT NULL COMMENT '学号',
+    student_name VARCHAR(100) NOT NULL COMMENT '学生姓名',
+    course_code VARCHAR(50) NOT NULL COMMENT '课程代码',
+    course_name VARCHAR(200) COMMENT '课程名称（CDSP API不返回，可为空）',
+    class_id VARCHAR(50) NOT NULL COMMENT '教学班号',
+    teacher_id VARCHAR(50) NOT NULL COMMENT '授课教师工号',
+    teacher_name VARCHAR(50) NOT NULL COMMENT '授课教师姓名',
+    credits DECIMAL(3,1) COMMENT '学分（CDSP API不返回，可为空）',
+    academic_year VARCHAR(20) NOT NULL COMMENT '学年',
+    semester INT NOT NULL COMMENT '学期',
+    class_time VARCHAR(100) COMMENT '上课时间',
+    class_location VARCHAR(100) COMMENT '上课地点',
+    selection_time DATETIME NOT NULL COMMENT '选课时间',
+    selection_status VARCHAR(20) NOT NULL COMMENT '选课状态 SELECTED/DROPPED/COMPLETED',
+    regular_grade DECIMAL(5,2) COMMENT '平时成绩',
+    final_grade DECIMAL(5,2) COMMENT '期末成绩',
+    total_grade DECIMAL(5,2) COMMENT '总评成绩',
+    grade_point DECIMAL(3,2) COMMENT '绩点',
+    attendance_count INT DEFAULT 0 COMMENT '出勤次数',
+    absence_count INT DEFAULT 0 COMMENT '缺勤次数',
+    grade_remark VARCHAR(500) COMMENT '成绩备注',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    sync_source VARCHAR(20) NOT NULL COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
     FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -1381,38 +1294,38 @@ CREATE TABLE IF NOT EXISTS course_selection (
     INDEX idx_academic_year_semester (academic_year, semester),
     INDEX idx_selection_status (selection_status),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='閫夎璁板綍琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='选课记录表';
 
--- 3.2 绛夌骇鑰冭瘯鎴愮哗琛?
+-- 3.2 等级考试成绩表
 CREATE TABLE IF NOT EXISTS level_exam_scores (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    student_id VARCHAR(50) NOT NULL COMMENT '瀛﹀彿',
-    student_name VARCHAR(100) COMMENT '瀛︾敓濮撳悕锛圕DSP 涓嶆彁渚涳紝鍙负绌猴級',
-    exam_type VARCHAR(50) COMMENT '鑰冭瘯绫诲瀷锛圕DSP 涓嶆彁渚涳紝浠?examName 鎺ㄦ柇锛?,
-    exam_name VARCHAR(100) NOT NULL COMMENT '鑰冭瘯鍚嶇О',
-    admission_ticket_no VARCHAR(30) COMMENT '鍑嗚€冭瘉鍙?,
-    exam_date DATE NOT NULL COMMENT '鑰冭瘯鏃堕棿',
-    score DECIMAL(5,2) NOT NULL COMMENT '鎴愮哗',
-    grade VARCHAR(20) COMMENT '绛夌骇',
-    is_passed BOOLEAN COMMENT '鏄惁閫氳繃锛圕DSP 涓嶆彁渚涳紝浠?score 鎺ㄦ柇锛?,
-    passing_score DECIMAL(5,2) COMMENT '鍚堟牸鍒嗘暟绾?,
-    listening_score DECIMAL(5,2) COMMENT '鍚姏鎴愮哗',
-    reading_score DECIMAL(5,2) COMMENT '闃呰鎴愮哗',
-    writing_score DECIMAL(5,2) COMMENT '鍐欎綔鎴愮哗',
-    translation_score DECIMAL(5,2) COMMENT '缈昏瘧鎴愮哗',
-    certificate_no VARCHAR(50) COMMENT '璇佷功缂栧彿',
-    certificate_date DATE COMMENT '鍙戣瘉鏃ユ湡',
-    exam_location VARCHAR(100) COMMENT '鑰冭瘯鍦扮偣',
-    exam_room_no VARCHAR(20) COMMENT '鑰冨満鍙?,
-    seat_no VARCHAR(10) COMMENT '搴т綅鍙?,
-    registration_date DATE COMMENT '鎶ュ悕鏃堕棿',
-    score_release_date DATE COMMENT '鎴愮哗鍙戝竷鏃堕棿',
-    data_source VARCHAR(50) COMMENT '鏁版嵁鏉ユ簮',
-    remark VARCHAR(500) COMMENT '澶囨敞',
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL COMMENT '鍚屾鏉ユ簮',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    student_id VARCHAR(50) NOT NULL COMMENT '学号',
+    student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）',
+    exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）',
+    exam_name VARCHAR(100) NOT NULL COMMENT '考试名称',
+    admission_ticket_no VARCHAR(30) COMMENT '准考证号',
+    exam_date DATE NOT NULL COMMENT '考试时间',
+    score DECIMAL(5,2) NOT NULL COMMENT '成绩',
+    grade VARCHAR(20) COMMENT '等级',
+    is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）',
+    passing_score DECIMAL(5,2) COMMENT '合格分数线',
+    listening_score DECIMAL(5,2) COMMENT '听力成绩',
+    reading_score DECIMAL(5,2) COMMENT '阅读成绩',
+    writing_score DECIMAL(5,2) COMMENT '写作成绩',
+    translation_score DECIMAL(5,2) COMMENT '翻译成绩',
+    certificate_no VARCHAR(50) COMMENT '证书编号',
+    certificate_date DATE COMMENT '发证日期',
+    exam_location VARCHAR(100) COMMENT '考试地点',
+    exam_room_no VARCHAR(20) COMMENT '考场号',
+    seat_no VARCHAR(10) COMMENT '座位号',
+    registration_date DATE COMMENT '报名时间',
+    score_release_date DATE COMMENT '成绩发布时间',
+    data_source VARCHAR(50) COMMENT '数据来源',
+    remark VARCHAR(500) COMMENT '备注',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    sync_source VARCHAR(20) NOT NULL COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
     UNIQUE KEY uk_student_exam (student_id, exam_type, exam_date),
     INDEX idx_student_id (student_id),
@@ -1420,144 +1333,138 @@ CREATE TABLE IF NOT EXISTS level_exam_scores (
     INDEX idx_exam_date (exam_date),
     INDEX idx_is_passed (is_passed),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='绛夌骇鑰冭瘯鎴愮哗琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='等级考试成绩表';
 
--- 4. 鏁欏璁″垝灞?
+-- 4. 教学计划层
 CREATE TABLE IF NOT EXISTS teaching_plans (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    plan_id VARCHAR(30) NOT NULL UNIQUE COMMENT '璁″垝缂栧彿',
-    plan_name VARCHAR(200) NOT NULL COMMENT '璁″垝鍚嶇О',
-    major_code VARCHAR(20) NOT NULL COMMENT '涓撲笟浠ｇ爜',
-    major_name VARCHAR(100) NOT NULL COMMENT '涓撲笟鍚嶇О',
-    grade VARCHAR(10) NOT NULL COMMENT '骞寸骇',
-    schooling_length INT NOT NULL COMMENT '瀛﹀埗',
-    degree_type VARCHAR(20) NOT NULL COMMENT '瀛︿綅绫诲瀷',
-    education_level VARCHAR(20) NOT NULL COMMENT '鍩瑰吇灞傛',
-    college_code VARCHAR(20) NOT NULL COMMENT '瀛﹂櫌浠ｇ爜',
-    college_name VARCHAR(100) NOT NULL COMMENT '瀛﹂櫌鍚嶇О',
-    total_credits DECIMAL(5,2) NOT NULL COMMENT '鎬诲鍒嗚姹?,
-    required_credits DECIMAL(5,2) NOT NULL COMMENT '蹇呬慨瀛﹀垎',
-    elective_credits DECIMAL(5,2) NOT NULL COMMENT '閫変慨瀛﹀垎',
-    practice_credits DECIMAL(5,2) COMMENT '瀹炶返瀛﹀垎',
-    general_education_credits DECIMAL(5,2) COMMENT '閫氳瘑鏁欒偛瀛﹀垎',
-    major_core_credits DECIMAL(5,2) COMMENT '涓撲笟鏍稿績瀛﹀垎',
-    major_elective_credits DECIMAL(5,2) COMMENT '涓撲笟閫変慨瀛﹀垎',
-    training_objective TEXT COMMENT '鍩瑰吇鐩爣',
-    training_requirements TEXT COMMENT '鍩瑰吇瑕佹眰',
-    main_disciplines VARCHAR(200) COMMENT '涓诲共瀛︾',
-    core_courses TEXT COMMENT '鏍稿績璇剧▼',
-    plan_status VARCHAR(20) NOT NULL COMMENT '璁″垝鐘舵€?,
-    effective_date DATE NOT NULL COMMENT '鐢熸晥鏃ユ湡',
-    expiry_date DATE COMMENT '澶辨晥鏃ユ湡',
-    creator VARCHAR(50) COMMENT '鍒跺畾浜?,
-    reviewer VARCHAR(50) COMMENT '瀹℃牳浜?,
-    review_date DATE COMMENT '瀹℃牳鏃堕棿',
-    version VARCHAR(20) COMMENT '鐗堟湰鍙?,
-    revision_notes TEXT COMMENT '淇璇存槑',
-    attachment_path VARCHAR(500) COMMENT '闄勪欢璺緞',
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL COMMENT '鍚屾鏉ユ簮',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    plan_id VARCHAR(30) NOT NULL UNIQUE COMMENT '计划编号',
+    plan_name VARCHAR(200) NOT NULL COMMENT '计划名称',
+    major_code VARCHAR(20) NOT NULL COMMENT '专业代码',
+    major_name VARCHAR(100) NOT NULL COMMENT '专业名称',
+    grade VARCHAR(10) NOT NULL COMMENT '年级',
+    schooling_length INT NOT NULL COMMENT '学制',
+    degree_type VARCHAR(20) NOT NULL COMMENT '学位类型',
+    education_level VARCHAR(20) NOT NULL COMMENT '培养层次',
+    college_code VARCHAR(20) NOT NULL COMMENT '学院代码',
+    college_name VARCHAR(100) NOT NULL COMMENT '学院名称',
+    total_credits DECIMAL(5,2) NOT NULL COMMENT '总学分要求',
+    required_credits DECIMAL(5,2) NOT NULL COMMENT '必修学分',
+    elective_credits DECIMAL(5,2) NOT NULL COMMENT '选修学分',
+    practice_credits DECIMAL(5,2) COMMENT '实践学分',
+    general_education_credits DECIMAL(5,2) COMMENT '通识教育学分',
+    major_core_credits DECIMAL(5,2) COMMENT '专业核心学分',
+    major_elective_credits DECIMAL(5,2) COMMENT '专业选修学分',
+    training_objective TEXT COMMENT '培养目标',
+    training_requirements TEXT COMMENT '培养要求',
+    main_disciplines VARCHAR(200) COMMENT '主干学科',
+    core_courses TEXT COMMENT '核心课程',
+    plan_status VARCHAR(20) NOT NULL COMMENT '计划状态',
+    effective_date DATE NOT NULL COMMENT '生效日期',
+    expiry_date DATE COMMENT '失效日期',
+    creator VARCHAR(50) COMMENT '制定人',
+    reviewer VARCHAR(50) COMMENT '审核人',
+    review_date DATE COMMENT '审核时间',
+    version VARCHAR(20) COMMENT '版本号',
+    revision_notes TEXT COMMENT '修订说明',
+    attachment_path VARCHAR(500) COMMENT '附件路径',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    sync_source VARCHAR(20) NOT NULL COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
     INDEX idx_major_grade (major_code, grade),
     INDEX idx_plan_status (plan_status),
     INDEX idx_effective_date (effective_date),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鏁欏璁″垝涓昏〃';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教学计划主表';
 
 CREATE TABLE IF NOT EXISTS teaching_plan_courses (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    detail_id VARCHAR(30) NOT NULL UNIQUE COMMENT '鏄庣粏缂栧彿',
-    plan_id VARCHAR(30) NOT NULL COMMENT '璁″垝缂栧彿',
-    course_code VARCHAR(20) NOT NULL COMMENT '璇剧▼浠ｇ爜',
-    course_name VARCHAR(100) NOT NULL COMMENT '璇剧▼鍚嶇О',
-    course_type VARCHAR(20) NOT NULL COMMENT '璇剧▼绫诲瀷',
-    course_category VARCHAR(50) COMMENT '璇剧▼绫诲埆',
-    credits DECIMAL(4,2) NOT NULL COMMENT '瀛﹀垎',
-    hours INT NOT NULL COMMENT '瀛︽椂',
-    theory_hours INT COMMENT '鐞嗚瀛︽椂',
-    lab_hours INT COMMENT '瀹為獙瀛︽椂',
-    semester INT NOT NULL COMMENT '寮€璇惧鏈?,
-    assessment_method VARCHAR(20) COMMENT '鑰冩牳鏂瑰紡',
-    prerequisite_courses VARCHAR(200) COMMENT '鍏堜慨璇剧▼',
-    sort_order INT COMMENT '鎺掑簭鍙?,
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL COMMENT '鍚屾鏉ユ簮',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    detail_id VARCHAR(30) NOT NULL UNIQUE COMMENT '明细编号',
+    plan_id VARCHAR(30) NOT NULL COMMENT '计划编号',
+    course_code VARCHAR(20) NOT NULL COMMENT '课程代码',
+    course_name VARCHAR(100) NOT NULL COMMENT '课程名称',
+    course_type VARCHAR(20) NOT NULL COMMENT '课程类型',
+    course_category VARCHAR(50) COMMENT '课程类别',
+    credits DECIMAL(4,2) NOT NULL COMMENT '学分',
+    hours INT NOT NULL COMMENT '学时',
+    theory_hours INT COMMENT '理论学时',
+    lab_hours INT COMMENT '实验学时',
+    semester INT NOT NULL COMMENT '开课学期',
+    assessment_method VARCHAR(20) COMMENT '考核方式',
+    prerequisite_courses VARCHAR(200) COMMENT '先修课程',
+    sort_order INT COMMENT '排序号',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    sync_source VARCHAR(20) NOT NULL COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
 
     INDEX idx_plan_id (plan_id),
     INDEX idx_course_code (course_code),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鏁欏璁″垝璇剧▼鏄庣粏琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教学计划课程明细表';
 
 -- ============================================================================
--- 6. 杈呭姪琛?
+-- 6. 辅助表
 -- ============================================================================
 
--- 6.1 鍚屾鏃ュ織琛?
+-- 6.1 同步日志表
 CREATE TABLE IF NOT EXISTS sync_logs (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `sync_type` VARCHAR(50) NOT NULL COMMENT '鍚屾绫诲瀷: FULL/INCREMENTAL',
-    `data_source` VARCHAR(50) NOT NULL COMMENT '鏁版嵁婧?,
-    `sync_method` VARCHAR(50) NOT NULL COMMENT '鍚屾鏂规硶: REPLACE_ALL/UPSERT',
-    `status` VARCHAR(50) NOT NULL COMMENT '鐘舵€? RUNNING/SUCCESS/FAILED',
-    `total_count` INT DEFAULT 0 COMMENT '鎬昏褰曟暟',
-    `success_count` INT DEFAULT 0 COMMENT '鎴愬姛鏁?,
-    `fail_count` INT DEFAULT 0 COMMENT '澶辫触鏁?,
-    `skip_count` INT DEFAULT 0 COMMENT '璺宠繃鏁?,
-    `start_time` DATETIME COMMENT '寮€濮嬫椂闂?,
-    `end_time` DATETIME COMMENT '缁撴潫鏃堕棿',
-    `duration_ms` BIGINT COMMENT '鑰楁椂锛堟绉掞級',
-    `error_message` TEXT COMMENT '閿欒淇℃伅',
-    `trigger_type` VARCHAR(50) COMMENT '瑙﹀彂绫诲瀷: MANUAL/SCHEDULED',
-    `operator` VARCHAR(50) COMMENT '鎿嶄綔浜?,
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    `sync_type` VARCHAR(50) NOT NULL COMMENT '同步类型: FULL/INCREMENTAL',
+    `data_source` VARCHAR(50) NOT NULL COMMENT '数据源',
+    `sync_method` VARCHAR(50) NOT NULL COMMENT '同步方法: REPLACE_ALL/UPSERT',
+    `status` VARCHAR(50) NOT NULL COMMENT '状态: RUNNING/SUCCESS/FAILED',
+    `total_count` INT DEFAULT 0 COMMENT '总记录数',
+    `success_count` INT DEFAULT 0 COMMENT '成功数',
+    `fail_count` INT DEFAULT 0 COMMENT '失败数',
+    `skip_count` INT DEFAULT 0 COMMENT '跳过数',
+    `start_time` DATETIME COMMENT '开始时间',
+    `end_time` DATETIME COMMENT '结束时间',
+    `duration_ms` BIGINT COMMENT '耗时（毫秒）',
+    `error_message` TEXT COMMENT '错误信息',
+    `trigger_type` VARCHAR(50) COMMENT '触发类型: MANUAL/SCHEDULED',
+    `operator` VARCHAR(50) COMMENT '操作人',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     INDEX idx_data_source (`data_source`),
     INDEX idx_status (`status`),
     INDEX idx_sync_type (`sync_type`),
     INDEX idx_start_time (`start_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鍚屾鏃ュ織琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='同步日志表';
 
--- 6.2 瀛楁鏄犲皠閰嶇疆琛?
+-- 6.2 字段映射配置表
 CREATE TABLE IF NOT EXISTS field_mappings (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `data_source` VARCHAR(50) NOT NULL COMMENT '鏁版嵁婧愭爣璇?,
-    `source_field` VARCHAR(100) NOT NULL COMMENT '婧愬瓧娈靛悕锛圓PI杩斿洖鐨凧SON閿悕锛?,
-    `target_field` VARCHAR(100) NOT NULL COMMENT '鐩爣瀛楁鍚嶏紙Java瀹炰綋灞炴€у悕锛?,
-    `source_type` VARCHAR(20) NOT NULL DEFAULT 'STRING' COMMENT '婧愬瓧娈电被鍨?,
-    `target_type` VARCHAR(20) NOT NULL DEFAULT 'STRING' COMMENT '鐩爣瀛楁绫诲瀷',
-    `converter` VARCHAR(50) NOT NULL DEFAULT 'NONE' COMMENT '杞崲鍣? NONE/SPLIT/BOOLEAN/DATE',
-    `converter_config` JSON COMMENT '杞崲鍣ㄩ厤缃紙JSON鏍煎紡锛?,
-    `default_value` VARCHAR(500) COMMENT '榛樿鍊硷紙婧愭暟鎹负绌烘椂浣跨敤锛?,
-    `is_required` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '鏄惁蹇呭～',
-    `sort_order` INT NOT NULL DEFAULT 0 COMMENT '鎺掑簭椤哄簭',
-    `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤',
-    `remark` VARCHAR(500) COMMENT '瀛楁鏄犲皠璇存槑',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `data_source` VARCHAR(50) NOT NULL COMMENT '数据源标识',
+    `source_field` VARCHAR(100) NOT NULL COMMENT '源字段名（API返回的JSON键名）',
+    `target_field` VARCHAR(100) NOT NULL COMMENT '目标字段名（Java实体属性名）',
+    `source_type` VARCHAR(20) NOT NULL DEFAULT 'STRING' COMMENT '源字段类型',
+    `target_type` VARCHAR(20) NOT NULL DEFAULT 'STRING' COMMENT '目标字段类型',
+    `converter` VARCHAR(50) NOT NULL DEFAULT 'NONE' COMMENT '转换器: NONE/SPLIT/BOOLEAN/DATE',
+    `converter_config` JSON COMMENT '转换器配置（JSON格式）',
+    `default_value` VARCHAR(500) COMMENT '默认值（源数据为空时使用）',
+    `is_required` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否必填',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序顺序',
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+    `remark` VARCHAR(500) COMMENT '字段映射说明',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     INDEX idx_data_source (`data_source`),
     INDEX idx_target_field (`target_field`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='瀛楁鏄犲皠閰嶇疆琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='字段映射配置表';
+-- ═══════════════════════════════════════════════════════════════
+-- V10: 用户 + 文本 + 词汇表字段补丁（整合）
+-- 整合自: 原 V10 (users nickname+avatar) + 原 V11 (texts featured + vocabulary_books SM-2)
+-- 注意: Flyway 在本项目禁用 (application.yml flyway.enabled=false)，
+--       实际生产部署走 docker/mysql/init/04-apply-all-migrations.sql
+-- ═══════════════════════════════════════════════════════════════
 
-
--- =============================================================
--- V10__user_and_text_updates.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V10: 鐢ㄦ埛 + 鏂囨湰 + 璇嶆眹琛ㄥ瓧娈佃ˉ涓侊紙鏁村悎锛?
--- 鏁村悎鑷? 鍘?V10 (users nickname+avatar) + 鍘?V11 (texts featured + vocabulary_books SM-2)
--- 娉ㄦ剰: Flyway 鍦ㄦ湰椤圭洰绂佺敤 (application.yml flyway.enabled=false)锛?
---       瀹為檯鐢熶骇閮ㄧ讲璧?docker/mysql/init/04-apply-all-migrations.sql
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
-
--- 鈹€鈹€ Part 1: users 琛?nickname 鍒?+ avatar_url 閲嶅懡鍚?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 鍘?V10: 娣诲姞 users.nickname 鍒楋紝閲嶅懡鍚?users.avatar_url 鈫?avatar
--- 鍘熷洜: User 瀹炰綋浣跨敤 nickname 鍜?avatar 瀛楁
+-- ── Part 1: users 表 nickname 列 + avatar_url 重命名 ────────────
+-- 原 V10: 添加 users.nickname 列，重命名 users.avatar_url → avatar
+-- 原因: User 实体使用 nickname 和 avatar 字段
 
 SET @dbname = DATABASE();
 SET @tablename = 'users';
@@ -1568,13 +1475,13 @@ SET @preparedStatement = (SELECT IF(
     (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = @tablename AND COLUMN_NAME = @colname) > 0,
     'SELECT 1',
-    'ALTER TABLE users ADD COLUMN nickname VARCHAR(50) DEFAULT NULL COMMENT ''鏄电О'' AFTER role'
+    'ALTER TABLE users ADD COLUMN nickname VARCHAR(50) DEFAULT NULL COMMENT ''昵称'' AFTER role'
 ));
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
 
--- 閲嶅懡鍚?avatar_url 鈫?avatar锛堝箓绛夛級
+-- 重命名 avatar_url → avatar（幂等）
 SET @colname = 'avatar';
 SET @preparedStatement = (SELECT IF(
     (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
@@ -1586,9 +1493,9 @@ PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
 
--- 鈹€鈹€ Part 2: texts 琛?featured 瀛楁 + vocabulary_books 琛?SM-2 瀛楁 鈹€鈹€
--- 鍘?V11: 鍘熷洜: Text 瀹炰綋鏈?cover_url/is_featured/featured_priority 瀛楁锛?
---        VocabularyBook 瀹炰綋鏈?repetition/interval_days/easiness_factor/next_review_time
+-- ── Part 2: texts 表 featured 字段 + vocabulary_books 表 SM-2 字段 ──
+-- 原 V11: 原因: Text 实体有 cover_url/is_featured/featured_priority 字段，
+--        VocabularyBook 实体有 repetition/interval_days/easiness_factor/next_review_time
 
 -- texts.cover_url
 SET @colname = 'cover_url';
@@ -1596,35 +1503,29 @@ SET @preparedStatement = (SELECT IF(
     (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'texts' AND COLUMN_NAME = @colname) > 0,
     'SELECT 1',
-    'ALTER TABLE texts ADD COLUMN cover_url VARCHAR(255) DEFAULT NULL COMMENT ''灏侀潰鍥綰RL'' AFTER chinese_parallel_markdown_content'
+    'ALTER TABLE texts ADD COLUMN cover_url VARCHAR(255) DEFAULT NULL COMMENT ''封面图URL'' AFTER chinese_parallel_markdown_content'
 ));
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
--- =============================================================
--- V11__role_mapping_cleanup.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V11: 娓呯悊 sso_config 琛ㄤ腑鏃犳晥鐨勮鑹叉槧灏勮鍒欙紝淇琚鏄犲皠鐨勭敤鎴疯鑹?
--- 鍘熷悕: V12__fix_role_mapping_cleanup.sql锛堥噸鍛藉悕涓?V11锛屼富棰樼嫭绔嬶級
+-- ═══════════════════════════════════════════════════════════════
+-- V11: 清理 sso_config 表中无效的角色映射规则，修复被误映射的用户角色
+-- 原名: V12__fix_role_mapping_cleanup.sql（重命名为 V11，主题独立）
 --
--- 闂锛歴so_config 琛ㄤ腑鍙兘瀛樺湪 config_key='sso.role_mapping.ou' 鐨勮剰瑙勫垯锛?
--- strip 鍓嶇紑鍚?key='ou'锛岀敱浜庢棫鐗?RoleMappingService 浣跨敤 contains() 鍖归厤锛?
--- 'ou' 鍖归厤鎵€鏈?LDAP DN锛堥兘鍖呭惈 'ou'锛夛紝瀵艰嚧鎵€鏈夌敤鎴疯鏄犲皠涓哄悓涓€瑙掕壊銆?
--- 鏂扮増鏀圭敤 DN 缁勪欢绮剧‘鍖归厤锛屽悓鏃舵杩佺Щ娓呯悊鏁版嵁搴撲腑鐨勮剰瑙勫垯銆?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- 问题：sso_config 表中可能存在 config_key='sso.role_mapping.ou' 的脏规则，
+-- strip 前缀后 key='ou'，由于旧版 RoleMappingService 使用 contains() 匹配，
+-- 'ou' 匹配所有 LDAP DN（都包含 'ou'），导致所有用户被映射为同一角色。
+-- 新版改用 DN 组件精确匹配，同时此迁移清理数据库中的脏规则。
+-- ═══════════════════════════════════════════════════════════════
 
--- 1. 鍒犻櫎鏃犳晥鐨勭煭 key 瑙勫垯锛坘ey strip 鍚庝笉鍚?'='锛屽 'ou'銆?dc' 绛夛級
+-- 1. 删除无效的短 key 规则（key strip 后不含 '='，如 'ou'、'dc' 等）
 DELETE FROM sso_config
 WHERE config_type = 'ROLE_MAPPING'
   AND REPLACE(config_key, 'sso.role_mapping.', '') NOT LIKE '%=%';
 
--- 2. 淇琚鏄犲皠鐨勭敤鎴疯鑹?
---    鏃т唬鐮佸洜 'ou' 瑙勫垯鎶婃墍鏈?CAS 鐢ㄦ埛鏄犲皠涓?TEACHER
---    淇绛栫暐锛氬皢琚?SSO 閿欒鏄犲皠涓?TEACHER 浣嗗疄闄呮槸瀛︾敓鐨勭敤鎴锋仮澶嶄负 STUDENT
+-- 2. 修复被误映射的用户角色
+--    旧代码因 'ou' 规则把所有 CAS 用户映射为 TEACHER
+--    修复策略：将被 SSO 错误映射为 TEACHER 但实际是学生的用户恢复为 STUDENT
 UPDATE users u
 INNER JOIN sso_user_bindings b ON u.id = b.user_id AND b.deleted = 0
 SET u.role = 'STUDENT', u.updated_time = NOW()
@@ -1633,47 +1534,41 @@ WHERE u.role = 'TEACHER'
   AND u.deleted = 0
   AND b.auto_approved = 1
   AND b.sso_member_of IS NOT NULL
-  AND b.sso_member_of NOT LIKE '%ou=鏁欏笀%'
+  AND b.sso_member_of NOT LIKE '%ou=教师%'
   AND b.sso_member_of NOT LIKE '%ou=teacher%';
-
-
--- =============================================================
--- V12__school_data_and_videos.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V12: 瀛︽牎鏁版嵁闆嗘垚 + 瑙嗛绠＄悊琛?
--- 鏁村悎鑷? V12__school_data_integration.sql + V12__add_videos_table.sql
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V12: 瀛︽牎鏁版嵁闆嗘垚鏁村悎
--- 鏁村悎鑷? V12.1 (瀛楁鏄犲皠) + V13 (system_config seed)
---       + V14 (student_schedule 琛? + V18 (鍔熻兘寮€鍏?seed)
---       + V19 (瀛楁鏄犲皠) + V20 (API 璁よ瘉 appId+appSecret)
---       + V20-align (2026-04-21 鎸?CDSP 瀹樻柟 PDF 瀵归綈 field_mappings)
+-- ═══════════════════════════════════════════════════════════════
+-- V12: 学校数据集成 + 视频管理表
+-- 整合自: V12__school_data_integration.sql + V12__add_videos_table.sql
+-- ═══════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════
+-- V12: 学校数据集成整合
+-- 整合自: V12.1 (字段映射) + V13 (system_config seed)
+--       + V14 (student_schedule 表) + V18 (功能开关 seed)
+--       + V19 (字段映射) + V20 (API 认证 appId+appSecret)
+--       + V20-align (2026-04-21 按 CDSP 官方 PDF 对齐 field_mappings)
 --
--- 鍘嗗彶鍚堝苟璇存槑:
---   - 2026-04-19: 涔濅釜琛ヤ竵 (V12.1/V13/V14/V16/V18/V19/V20) 棣栨鍚堝苟鍏?V12
---   - 2026-04-21: 鎸夊畼鏂?PDF 鍘熸枃淇 field_mappings, 鍓旈櫎 V12.1/V19 閬楃暀
---     snake_case 鍐椾綑鏄犲皠锛團ieldMappingServiceImpl 浼氳嚜鍔ㄥ皢 target_field
---     杞?camelCase, snake_case/camelCase 涓ゅ鏄瓑浠烽噸澶嶏級, 鍚堝苟 V20-align
---   - 2026-05-05: 绉婚櫎 V16 (course鈫抯chool_course 閲嶅懡鍚? 鍐椾綑浠ｇ爜锛?
---     V9 宸叉纭垱寤?school_course 琛紝鏃犻渶鍏煎鎬у鐞?
+-- 历史合并说明:
+--   - 2026-04-19: 九个补丁 (V12.1/V13/V14/V16/V18/V19/V20) 首次合并入 V12
+--   - 2026-04-21: 按官方 PDF 原文修正 field_mappings, 剔除 V12.1/V19 遗留
+--     snake_case 冗余映射（FieldMappingServiceImpl 会自动将 target_field
+--     转 camelCase, snake_case/camelCase 两套是等价重复）, 合并 V20-align
+--   - 2026-05-05: 移除 V16 (course→school_course 重命名) 冗余代码，
+--     V9 已正确创建 school_course 表，无需兼容性处理
 --
--- 娉ㄦ剰: Flyway 鍦ㄦ湰椤圭洰鐢熶骇鐜绂佺敤 (application.yml flyway.enabled=false),
---       瀹為檯鐢熶骇閮ㄧ讲璧?docker/mysql/init/04-apply-all-migrations.sql
---       CI test profile 鍚敤 Flyway (application-test.yml)
+-- 注意: Flyway 在本项目生产环境禁用 (application.yml flyway.enabled=false),
+--       实际生产部署走 docker/mysql/init/04-apply-all-migrations.sql
+--       CI test profile 启用 Flyway (application-test.yml)
 --
--- 鎵ц椤哄簭:
---   Part 1: Schema 鍙樻洿
+-- 执行顺序:
+--   Part 1: Schema 变更
 --   Part 2: system_config seed
---   Part 3: field_mappings 鏁版嵁锛堟寜 PDF 鍘熸枃锛?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+--   Part 3: field_mappings 数据（按 PDF 原文）
+-- ═══════════════════════════════════════════════════════════════
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 1.1: 鍒涘缓 student_schedule 琛?(鍘?V14 Part 1)
--- 瀛樺偍瀛︾敓涓汉璇捐〃鏁版嵁 (/api/xskb)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 1.1: 创建 student_schedule 表 (原 V14 Part 1)
+-- 存储学生个人课表数据 (/api/xskb)
+-- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS student_schedule (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     student_id VARCHAR(50) NOT NULL,
@@ -1700,285 +1595,285 @@ CREATE TABLE IF NOT EXISTS student_schedule (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Student schedule info';
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 2.1: 鏁版嵁婧愰厤缃瀛?(鍘?V13)
--- NOTE: api_app_id / api_app_secret 鍦?Part 2.3 娣诲姞锛圴20锛?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 2.1: 数据源配置种子 (原 V13)
+-- NOTE: api_app_id / api_app_secret 在 Part 2.3 添加（V20）
+-- ═══════════════════════════════════════════════════════════════
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('school_data', 'source', 'api', '鏁版嵁婧愮被鍨? api 鎴?etl', 0),
-('school_data', 'api_base_url', 'https://api.imau.edu.cn', 'API鍩虹URL', 0),
-('school_data', 'api_connect_timeout', '5000', 'API杩炴帴瓒呮椂(ms)', 0),
-('school_data', 'api_read_timeout', '30000', 'API璇诲彇瓒呮椂(ms)', 0),
-('school_data', 'api_retry_attempts', '3', 'API閲嶈瘯娆℃暟', 0),
-('school_data', 'etl_jdbc_url', '', 'ETL JDBC杩炴帴URL', 0),
-('school_data', 'etl_username', '', 'ETL鏁版嵁搴撶敤鎴峰悕', 0),
-('school_data', 'etl_password', '', 'ETL鏁版嵁搴撳瘑鐮?, 1),
-('school_data', 'etl_connection_timeout', '30000', 'ETL杩炴帴瓒呮椂(ms)', 0),
-('school_data', 'etl_query_timeout', '60000', 'ETL鏌ヨ瓒呮椂(ms)', 0);
+('school_data', 'source', 'api', '数据源类型: api 或 etl', 0),
+('school_data', 'api_base_url', 'https://api.imau.edu.cn', 'API基础URL', 0),
+('school_data', 'api_connect_timeout', '5000', 'API连接超时(ms)', 0),
+('school_data', 'api_read_timeout', '30000', 'API读取超时(ms)', 0),
+('school_data', 'api_retry_attempts', '3', 'API重试次数', 0),
+('school_data', 'etl_jdbc_url', '', 'ETL JDBC连接URL', 0),
+('school_data', 'etl_username', '', 'ETL数据库用户名', 0),
+('school_data', 'etl_password', '', 'ETL数据库密码', 1),
+('school_data', 'etl_connection_timeout', '30000', 'ETL连接超时(ms)', 0),
+('school_data', 'etl_query_timeout', '60000', 'ETL查询超时(ms)', 0);
 
--- 鍚屾璋冨害閰嶇疆
+-- 同步调度配置
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('school_data', 'sync_enabled', 'false', '鏄惁鍚敤鍚屾璋冨害', 0),
-('school_data', 'sync_full_cron', '0 0 2 * * ?', '鍏ㄩ噺鍚屾cron', 0),
-('school_data', 'sync_incremental_cron', '0 0 * * * ?', '澧為噺鍚屾cron', 0),
-('school_data', 'sync_validation_cron', '0 0 4 * * ?', '鏁版嵁鏍￠獙cron', 0),
-('school_data', 'sync_batch_size', '500', '鎵归噺澶у皬', 0),
-('school_data', 'sync_timeout_minutes', '60', '鍚屾瓒呮椂(鍒嗛挓)', 0);
+('school_data', 'sync_enabled', 'false', '是否启用同步调度', 0),
+('school_data', 'sync_full_cron', '0 0 2 * * ?', '全量同步cron', 0),
+('school_data', 'sync_incremental_cron', '0 0 * * * ?', '增量同步cron', 0),
+('school_data', 'sync_validation_cron', '0 0 4 * * ?', '数据校验cron', 0),
+('school_data', 'sync_batch_size', '500', '批量大小', 0),
+('school_data', 'sync_timeout_minutes', '60', '同步超时(分钟)', 0);
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 2.2: 鍔熻兘寮€鍏?seed (鍘?V18)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 2.2: 功能开关 seed (原 V18)
+-- ═══════════════════════════════════════════════════════════════
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('feature_toggle', 'ops.school_data_browser', 'false', '杩愮淮绔鏍℃暟鎹祻瑙堝姛鑳斤紙琛屾斂鐝€佽绋嬨€佹暀瀛︾彮绛夛級', 0),
-('feature_toggle', 'ops.school_data_config', 'false', '杩愮淮绔鏍℃暟鎹簮閰嶇疆鍔熻兘锛圓PI/ETL鍒囨崲銆佽繛鎺ユ祴璇曪級', 0),
-('feature_toggle', 'page_schedule', 'false', '瀛︾敓绔琛ㄦ煡鐪嬪姛鑳斤紙浠庢暀鍔＄郴缁熷悓姝ヨ琛ㄦ暟鎹級', 0);
+('feature_toggle', 'ops.school_data_browser', 'false', '运维端学校数据浏览功能（行政班、课程、教学班等）', 0),
+('feature_toggle', 'ops.school_data_config', 'false', '运维端学校数据源配置功能（API/ETL切换、连接测试）', 0),
+('feature_toggle', 'page_schedule', 'false', '学生端课表查看功能（从教务系统同步课表数据）', 0);
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 2.3: API 璁よ瘉 appId + appSecret 绛惧悕 (鍘?V20)
--- 瀹樻柟鎺ュ彛鏂囨。: sign = Base64( MD5( appId + appSecret + timestamp ) )
--- 璇锋眰澶? appId / timestamp / sign
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 2.3: API 认证 appId + appSecret 签名 (原 V20)
+-- 官方接口文档: sign = Base64( MD5( appId + appSecret + timestamp ) )
+-- 请求头: appId / timestamp / sign
+-- ═══════════════════════════════════════════════════════════════
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('school_data', 'api_app_id', '', 'API 搴旂敤 ID锛堢敱瀛︽牎鏁版嵁骞冲彴鍒嗛厤锛岀敤浜庣鍚嶈璇侊級', 1),
-('school_data', 'api_app_secret', '', 'API 搴旂敤 Secret锛堢敱瀛︽牎鏁版嵁骞冲彴鍒嗛厤锛屼笌 appId + timestamp 缁勫悎鐢熸垚绛惧悕锛?, 1);
+('school_data', 'api_app_id', '', 'API 应用 ID（由学校数据平台分配，用于签名认证）', 1),
+('school_data', 'api_app_secret', '', 'API 应用 Secret（由学校数据平台分配，与 appId + timestamp 组合生成签名）', 1);
 
--- 娓呯悊鏃ч儴缃查仐鐣欑殑 api_token锛圔earer Token 璁よ瘉宸插簾寮冿紱鍏ㄦ柊閮ㄧ讲涓嶄細鏈夋璁板綍锛?
+-- 清理旧部署遗留的 api_token（Bearer Token 认证已废弃；全新部署不会有此记录）
 DELETE FROM `system_config`
 WHERE `config_group` = 'school_data' AND `config_key` = 'api_token';
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 3: field_mappings 鎸?CDSP 瀹樻柟 PDF 瀵归綈 (鍘?V20-align)
+-- ═══════════════════════════════════════════════════════════════
+-- Part 3: field_mappings 按 CDSP 官方 PDF 对齐 (原 V20-align)
 --
--- 鍩轰簬 9 浠?cdsp.imau.edu.cn data-api/v2 瀹樻柟鎺ュ彛鏂囨。鍘熸枃澶嶆牳锛?026-04-21锛夛細
---   琛屾斂鐝熀鏈俊鎭?/ 璇剧▼鍩烘湰淇℃伅 / 鏈笓绉戠敓璇剧▼淇℃伅 / 璇剧▼瀹夋帓淇℃伅 /
---   瀛︾敓閫夎 / 鏈笓绉戠敓绛夌骇鑰冭瘯鎴愮哗 / 鏁欏璁″垝淇℃伅 / 鏁欏笀鎺堣 / 瀛︾敓璇捐〃
+-- 基于 9 份 cdsp.imau.edu.cn data-api/v2 官方接口文档原文复核（2026-04-21）：
+--   行政班基本信息 / 课程基本信息 / 本专科生课程信息 / 课程安排信息 /
+--   学生选课 / 本专科生等级考试成绩 / 教学计划信息 / 教师授课 / 学生课表
 --
--- 閰嶅浠ｇ爜:
---   - FieldMappingServiceImpl.applyMapping 澶у皬鍐欎笉鏁忔劅鏌ヨ〃
---     (PDF 杩斿洖瀛楁 3 涓鐐?UPPERCASE + 6 涓?lowercase)
---   - SchoolDataSyncServiceImpl.upsertEntity: teaching_class 鏁版嵁婧?
---     璺敱鍒?upsertSchoolCourse (bzkcxx 绔偣瀹為檯杩斿洖璇剧▼淇℃伅锛岄潪鏁欏鐝?
---   - target_field 缁熶竴 camelCase, 鍖归厤 Java 瀹炰綋灞炴€?
+-- 配套代码:
+--   - FieldMappingServiceImpl.applyMapping 大小写不敏感查表
+--     (PDF 返回字段 3 个端点 UPPERCASE + 6 个 lowercase)
+--   - SchoolDataSyncServiceImpl.upsertEntity: teaching_class 数据源
+--     路由到 upsertSchoolCourse (bzkcxx 端点实际返回课程信息，非教学班)
+--   - target_field 统一 camelCase, 匹配 Java 实体属性
 --
--- 宸茬煡闄愬埗锛堥潪鏈?part 鑱岃矗锛?
---   - course_selection PDF 浠呰繑鍥?XH/KSXZDM/KSXZMC/KCBH 4 涓瓧娈碉紝
---     杩滃皯浜?CourseSelection 瀹炰綋 NOT NULL 鍒楁暟锛寀psert 鍙兘澶辫触銆?
---   - teaching_plans 杩斿洖鐨勬槸鏁欏璁″垝涓殑璇剧▼鏉＄洰锛岄儴鍒嗗疄浣撳繀濉?
---     瀛楁 (planName/planStatus) PDF 涓嶆彁渚涖€?
---   - 涓婅堪闇€閫氳繃 DDL 鏀惧鎴栭粯璁ゅ€肩瓥鐣ヨВ鍐筹紝鏈?part 浠呯‘淇濆瓧娈垫槧灏勬湰韬纭€?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- 已知限制（非本 part 职责）:
+--   - course_selection PDF 仅返回 XH/KSXZDM/KSXZMC/KCBH 4 个字段，
+--     远少于 CourseSelection 实体 NOT NULL 列数，upsert 可能失败。
+--   - teaching_plans 返回的是教学计划中的课程条目，部分实体必填
+--     字段 (planName/planStatus) PDF 不提供。
+--   - 上述需通过 DDL 放宽或默认值策略解决，本 part 仅确保字段映射本身正确。
+-- ═══════════════════════════════════════════════════════════════
 
--- Step 3.0: 娓呯┖ V12 鍘嗗彶閬楃暀鐨勯敊璇?mappings锛堝箓绛夛級
+-- Step 3.0: 清空 V12 历史遗留的错误 mappings（幂等）
 DELETE FROM field_mappings WHERE data_source IN (
     'administrative_class', 'school_course', 'teaching_class',
     'course_schedule', 'course_selection', 'level_exam_scores',
     'teaching_plans', 'teacher_courses', 'student_schedule'
 );
 
--- 1. administrative_class (cdsp_1710949911983374368 / 琛屾斂鐝熀鏈俊鎭?
+-- 1. administrative_class (cdsp_1710949911983374368 / 行政班基本信息)
 -- PDF fields (UPPERCASE): XZBH, BJMC, XSLB, SSXYBM, SSXYMC, SSNJ, BZRGH, BZRXM, ZY, JBNY
--- 娉ㄦ剰锛欳DSP API 鍙兘杩斿洖涓枃瀛楁鍚嶏紝闇€鍚屾椂鏀寔鑻辨枃缂╁啓鍜屼腑鏂囧瓧娈靛悕
+-- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('administrative_class', 'XZBH',         'class_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '琛屾斂鐝紪鍙凤紙鑻辨枃缂╁啓锛?),
-('administrative_class', '琛屾斂鐝紪鍙?,   'class_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '琛屾斂鐝紪鍙凤紙涓枃锛?),
-('administrative_class', 'BJMC',         'class_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '鐝骇鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('administrative_class', '鐝骇鍚嶇О',     'class_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '鐝骇鍚嶇О锛堜腑鏂囷級'),
-('administrative_class', 'XSLB',         'class_type',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '瀛︾敓绫诲埆锛堣嫳鏂囩缉鍐欙級'),
-('administrative_class', '瀛︾敓绫诲埆',     'class_type',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '瀛︾敓绫诲埆锛堜腑鏂囷級'),
-('administrative_class', 'SSXYBM',       'college_code',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4,  1, '鎵€灞炲闄㈢紪鐮侊紙鑻辨枃缂╁啓锛?),
-('administrative_class', '鎵€灞炲闄㈢紪鐮?, 'college_code',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4,  1, '鎵€灞炲闄㈢紪鐮侊紙涓枃锛?),
-('administrative_class', 'SSXYMC',       'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '鎵€灞炲闄㈠悕绉帮紙鑻辨枃缂╁啓锛?),
-('administrative_class', '鎵€灞炲闄㈠悕绉?, 'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '鎵€灞炲闄㈠悕绉帮紙涓枃锛?),
-('administrative_class', 'SSNJ',         'grade',             'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '鎵€灞炲勾绾э紙鑻辨枃缂╁啓锛?),
-('administrative_class', '鎵€灞炲勾绾?,     'grade',             'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '鎵€灞炲勾绾э紙涓枃锛?),
-('administrative_class', 'BZRGH',        'head_teacher_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '鐝富浠诲伐鍙凤紙鑻辨枃缂╁啓锛?),
-('administrative_class', '鐝富浠诲伐鍙?,   'head_teacher_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '鐝富浠诲伐鍙凤紙涓枃锛?),
-('administrative_class', 'BZRXM',        'head_teacher_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '鐝富浠诲鍚嶏紙鑻辨枃缂╁啓锛?),
-('administrative_class', '鐝富浠诲鍚?,   'head_teacher_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '鐝富浠诲鍚嶏紙涓枃锛?),
-('administrative_class', 'ZY',           'major_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '涓撲笟鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('administrative_class', '涓撲笟鍚嶇О',     'major_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '涓撲笟鍚嶇О锛堜腑鏂囷級'),
-('administrative_class', 'JBNY',         'establish_date',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 10, 1, '寤虹彮骞存湀锛堣嫳鏂囩缉鍐欙級'),
-('administrative_class', '寤虹彮骞存湀',     'establish_date',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 10, 1, '寤虹彮骞存湀锛堜腑鏂囷級');
+('administrative_class', 'XZBH',         'class_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号（英文缩写）'),
+('administrative_class', '行政班编号',   'class_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号（中文）'),
+('administrative_class', 'BJMC',         'class_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '班级名称（英文缩写）'),
+('administrative_class', '班级名称',     'class_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '班级名称（中文）'),
+('administrative_class', 'XSLB',         'class_type',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '学生类别（英文缩写）'),
+('administrative_class', '学生类别',     'class_type',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '学生类别（中文）'),
+('administrative_class', 'SSXYBM',       'college_code',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4,  1, '所属学院编码（英文缩写）'),
+('administrative_class', '所属学院编码', 'college_code',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4,  1, '所属学院编码（中文）'),
+('administrative_class', 'SSXYMC',       'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '所属学院名称（英文缩写）'),
+('administrative_class', '所属学院名称', 'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '所属学院名称（中文）'),
+('administrative_class', 'SSNJ',         'grade',             'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '所属年级（英文缩写）'),
+('administrative_class', '所属年级',     'grade',             'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '所属年级（中文）'),
+('administrative_class', 'BZRGH',        'head_teacher_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '班主任工号（英文缩写）'),
+('administrative_class', '班主任工号',   'head_teacher_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '班主任工号（中文）'),
+('administrative_class', 'BZRXM',        'head_teacher_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '班主任姓名（英文缩写）'),
+('administrative_class', '班主任姓名',   'head_teacher_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '班主任姓名（中文）'),
+('administrative_class', 'ZY',           'major_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '专业名称（英文缩写）'),
+('administrative_class', '专业名称',     'major_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '专业名称（中文）'),
+('administrative_class', 'JBNY',         'establish_date',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 10, 1, '建班年月（英文缩写）'),
+('administrative_class', '建班年月',     'establish_date',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 0, 10, 1, '建班年月（中文）');
 
--- 2. school_course (cdsp_1715290945064353805 / 璇剧▼鍩烘湰淇℃伅)
+-- 2. school_course (cdsp_1715290945064353805 / 课程基本信息)
 -- PDF fields (lowercase): kcxs, kcdm, kcxf, kcywmc, kcjj, kslx, kkyx, kcmc
--- 娉ㄦ剰锛欳DSP API 鍙兘杩斿洖涓枃瀛楁鍚嶏紝闇€鍚屾椂鏀寔鑻辨枃缂╁啓鍜屼腑鏂囧瓧娈靛悕
+-- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('school_course', 'kcdm',       'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '璇剧▼浠ｇ爜锛堣嫳鏂囩缉鍐欙級'),
-('school_course', '璇剧▼浠ｇ爜',   'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '璇剧▼浠ｇ爜锛堜腑鏂囷級'),
-('school_course', 'kcmc',       'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '璇剧▼鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('school_course', '璇剧▼鍚嶇О',   'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '璇剧▼鍚嶇О锛堜腑鏂囷級'),
-('school_course', 'kcywmc',     'course_name_en',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '璇剧▼鑻辨枃鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('school_course', '璇剧▼鑻辨枃鍚嶇О', 'course_name_en',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '璇剧▼鑻辨枃鍚嶇О锛堜腑鏂囷級'),
-('school_course', 'kcxf',       'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '璇剧▼瀛﹀垎锛堣嫳鏂囩缉鍐欙級'),
-('school_course', '璇剧▼瀛﹀垎',   'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '璇剧▼瀛﹀垎锛堜腑鏂囷級'),
-('school_course', 'kcxs',       'total_hours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '璇剧▼瀛︽椂锛堣嫳鏂囩缉鍐欙級'),
-('school_course', '璇剧▼瀛︽椂',   'total_hours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '璇剧▼瀛︽椂锛堜腑鏂囷級'),
-('school_course', 'kcjj',       'course_intro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '璇剧▼绠€浠嬶紙鑻辨枃缂╁啓锛?),
-('school_course', '璇剧▼绠€浠?,   'course_intro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '璇剧▼绠€浠嬶紙涓枃锛?),
-('school_course', 'kslx',       'assessment_method', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '鑰冭瘯绫诲瀷锛堣嫳鏂囩缉鍐欙級'),
-('school_course', '鑰冭瘯绫诲瀷',   'assessment_method', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '鑰冭瘯绫诲瀷锛堜腑鏂囷級'),
-('school_course', 'kkyx',       'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '寮€璇鹃櫌绯伙紙鑻辨枃缂╁啓锛?),
-('school_course', '寮€璇鹃櫌绯?,   'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '寮€璇鹃櫌绯伙紙涓枃锛?);
+('school_course', 'kcdm',       'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码（英文缩写）'),
+('school_course', '课程代码',   'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码（中文）'),
+('school_course', 'kcmc',       'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（英文缩写）'),
+('school_course', '课程名称',   'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（中文）'),
+('school_course', 'kcywmc',     'course_name_en',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称（英文缩写）'),
+('school_course', '课程英文名称', 'course_name_en',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称（中文）'),
+('school_course', 'kcxf',       'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分（英文缩写）'),
+('school_course', '课程学分',   'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分（中文）'),
+('school_course', 'kcxs',       'total_hours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时（英文缩写）'),
+('school_course', '课程学时',   'total_hours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时（中文）'),
+('school_course', 'kcjj',       'course_intro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介（英文缩写）'),
+('school_course', '课程简介',   'course_intro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介（中文）'),
+('school_course', 'kslx',       'assessment_method', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型（英文缩写）'),
+('school_course', '考试类型',   'assessment_method', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型（中文）'),
+('school_course', 'kkyx',       'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（英文缩写）'),
+('school_course', '开课院系',   'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（中文）');
 
--- 3. teaching_class (cdsp_1721804030860152850 / 鏈笓绉戠敓璇剧▼淇℃伅)
--- 姝ょ鐐瑰疄闄呰繑鍥炶绋嬩俊鎭紙闈炴暀瀛︾彮锛夛紝浠ｇ爜宸茶矾鐢卞埌 upsertSchoolCourse
+-- 3. teaching_class (cdsp_1721804030860152850 / 本专科生课程信息)
+-- 此端点实际返回课程信息（非教学班），代码已路由到 upsertSchoolCourse
 -- PDF fields (UPPERCASE): KCXS, KCXF, KKYX, KCJJ, KCYWMC, KCMC, KCH, KSLX
--- 娉ㄦ剰锛欳DSP API 鍙兘杩斿洖涓枃瀛楁鍚嶏紝闇€鍚屾椂鏀寔鑻辨枃缂╁啓鍜屼腑鏂囧瓧娈靛悕
+-- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('teaching_class', 'KCH',          'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '璇剧▼鍙凤紙鑻辨枃缂╁啓锛?),
-('teaching_class', '璇剧▼鍙?,       'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '璇剧▼鍙凤紙涓枃锛?),
-('teaching_class', 'KCMC',         'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '璇剧▼鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('teaching_class', '璇剧▼鍚嶇О',     'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '璇剧▼鍚嶇О锛堜腑鏂囷級'),
-('teaching_class', 'KCYWMC',       'course_name_en',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '璇剧▼鑻辨枃鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('teaching_class', '璇剧▼鑻辨枃鍚嶇О', 'course_name_en',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '璇剧▼鑻辨枃鍚嶇О锛堜腑鏂囷級'),
-('teaching_class', 'KCXF',         'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '璇剧▼瀛﹀垎锛堣嫳鏂囩缉鍐欙級'),
-('teaching_class', '璇剧▼瀛﹀垎',     'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '璇剧▼瀛﹀垎锛堜腑鏂囷級'),
-('teaching_class', 'KCXS',         'total_hours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '璇剧▼瀛︽椂锛堣嫳鏂囩缉鍐欙級'),
-('teaching_class', '璇剧▼瀛︽椂',     'total_hours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '璇剧▼瀛︽椂锛堜腑鏂囷級'),
-('teaching_class', 'KCJJ',         'course_intro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '璇剧▼绠€浠嬶紙鑻辨枃缂╁啓锛?),
-('teaching_class', '璇剧▼绠€浠?,     'course_intro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '璇剧▼绠€浠嬶紙涓枃锛?),
-('teaching_class', 'KSLX',         'assessment_method', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '鑰冭瘯绫诲瀷锛堣嫳鏂囩缉鍐欙級'),
-('teaching_class', '鑰冭瘯绫诲瀷',     'assessment_method', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '鑰冭瘯绫诲瀷锛堜腑鏂囷級'),
-('teaching_class', 'KKYX',         'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '寮€璇鹃櫌绯伙紙鑻辨枃缂╁啓锛?),
-('teaching_class', '寮€璇鹃櫌绯?,     'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '寮€璇鹃櫌绯伙紙涓枃锛?);
+('teaching_class', 'KCH',          'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（英文缩写）'),
+('teaching_class', '课程号',       'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（中文）'),
+('teaching_class', 'KCMC',         'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（英文缩写）'),
+('teaching_class', '课程名称',     'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（中文）'),
+('teaching_class', 'KCYWMC',       'course_name_en',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称（英文缩写）'),
+('teaching_class', '课程英文名称', 'course_name_en',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '课程英文名称（中文）'),
+('teaching_class', 'KCXF',         'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分（英文缩写）'),
+('teaching_class', '课程学分',     'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4, 1, '课程学分（中文）'),
+('teaching_class', 'KCXS',         'total_hours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时（英文缩写）'),
+('teaching_class', '课程学时',     'total_hours',       'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '课程学时（中文）'),
+('teaching_class', 'KCJJ',         'course_intro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介（英文缩写）'),
+('teaching_class', '课程简介',     'course_intro',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '课程简介（中文）'),
+('teaching_class', 'KSLX',         'assessment_method', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型（英文缩写）'),
+('teaching_class', '考试类型',     'assessment_method', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7, 1, '考试类型（中文）'),
+('teaching_class', 'KKYX',         'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（英文缩写）'),
+('teaching_class', '开课院系',     'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（中文）');
 
--- 4. course_schedule (cdsp_1715290377801515044 / 璇剧▼瀹夋帓淇℃伅)
+-- 4. course_schedule (cdsp_1715290377801515044 / 课程安排信息)
 -- PDF fields (lowercase): xkkch, xn, xq, skxqj, skjc, kczc, skdd
--- xq 杩斿洖涓枃 "绉?/"鏄? varchar锛宼arget_type=STRING锛宻ervice 灞傚仛涓枃鈫扞nteger 杞崲
+-- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('course_schedule', 'xkkch',        'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '閫夎璇惧彿锛堜綔 class_id锛?),
-('course_schedule', '閫夎璇惧彿',     'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '閫夎璇惧彿锛堜腑鏂囧瓧娈靛悕锛?),
-('course_schedule', 'skxqj',        'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '涓婅鏄熸湡鍑?1-7锛堣嫳鏂囩缉鍐欙級'),
-('course_schedule', '涓婅鏄熸湡鍑?,   'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '涓婅鏄熸湡鍑?1-7锛堜腑鏂囧瓧娈靛悕锛?),
-('course_schedule', 'skjc',         'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '涓婅鑺傛锛堣嫳鏂囩缉鍐欙級'),
-('course_schedule', '涓婅鑺傛',     'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '涓婅鑺傛锛堜腑鏂囧瓧娈靛悕锛?),
-('course_schedule', 'kczc',         'week_range',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '璇剧▼鍛ㄦ锛堟弿杩版€э紝鑻辨枃缂╁啓锛?),
-('course_schedule', '璇剧▼鍛ㄦ',     'week_range',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '璇剧▼鍛ㄦ锛堟弿杩版€э紝涓枃瀛楁鍚嶏級'),
-('course_schedule', 'skdd',         'class_location', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '涓婅鍦扮偣锛堣嫳鏂囩缉鍐欙級'),
-('course_schedule', '涓婅鍦扮偣',     'class_location', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '涓婅鍦扮偣锛堜腑鏂囧瓧娈靛悕锛?),
-('course_schedule', 'xn',           'academic_year',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '瀛﹀勾锛圕DSP 鍗曞勾濡?"2024"锛岃嫳鏂囩缉鍐欙級'),
-('course_schedule', '瀛﹀勾',         'academic_year',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '瀛﹀勾锛堜腑鏂囧瓧娈靛悕锛?),
-('course_schedule', 'xq',           'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '瀛︽湡涓枃 "绉?/"鏄?锛宻ervice 灞傝浆 Integer锛堣嫳鏂囩缉鍐欙級'),
-('course_schedule', '瀛︽湡',         'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '瀛︽湡锛堜腑鏂囧瓧娈靛悕锛?);
+('course_schedule', 'xkkch',        'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '选课课号（作 class_id）'),
+('course_schedule', '选课课号',     'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '选课课号（中文字段名）'),
+('course_schedule', 'skxqj',        'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '上课星期几 1-7（英文缩写）'),
+('course_schedule', '上课星期几',   'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '上课星期几 1-7（中文字段名）'),
+('course_schedule', 'skjc',         'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '上课节次（英文缩写）'),
+('course_schedule', '上课节次',     'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '上课节次（中文字段名）'),
+('course_schedule', 'kczc',         'week_range',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '课程周次（描述性，英文缩写）'),
+('course_schedule', '课程周次',     'week_range',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '课程周次（描述性，中文字段名）'),
+('course_schedule', 'skdd',         'class_location', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '上课地点（英文缩写）'),
+('course_schedule', '上课地点',     'class_location', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '上课地点（中文字段名）'),
+('course_schedule', 'xn',           'academic_year',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年（CDSP 单年如 "2024"，英文缩写）'),
+('course_schedule', '学年',         'academic_year',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年（中文字段名）'),
+('course_schedule', 'xq',           'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学期中文 "秋"/"春"，service 层转 Integer（英文缩写）'),
+('course_schedule', '学期',         'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学期（中文字段名）');
 
--- 5. course_selection (cdsp_1715294802871926794 / 瀛︾敓閫夎)
+-- 5. course_selection (cdsp_1715294802871926794 / 学生选课)
 -- PDF fields (UPPERCASE): XH, KSXZDM, KSXZMC, KCBH
--- 娉ㄦ剰锛歅DF 鍙繑鍥?4 涓瓧娈碉紝杩滃皯浜?CourseSelection 瀹炰綋 NOT NULL 鍒楁暟銆?
--- KCBH 鍦ㄩ摼寮忔媺鍙栦笌鍘嗗彶鍏煎涓寜鈥濊绋嬬彮鍙封€濅娇鐢紝搴旂粺涓€钀藉埌 classId銆?
+-- 注意：PDF 只返回 4 个字段，远少于 CourseSelection 实体 NOT NULL 列数。
+-- KCBH 在链式拉取与历史兼容中按”课程班号”使用，应统一落到 classId。
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('course_selection', 'XH',     'student_id',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '瀛﹀彿'),
-('course_selection', 'KCBH',   'class_id',          'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '璇剧▼鐝彿锛堜綔 class_id锛?),
-('course_selection', 'KSXZDM', 'selection_status',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '鑰冭瘯鎬ц川浠ｇ爜锛堜綔閫夎鐘舵€侊級'),
-('course_selection', 'KSXZMC', 'class_time',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '鑰冭瘯鎬ц川鍚嶇О锛堟殏瀛?classTime锛?);
+('course_selection', 'XH',     'student_id',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
+('course_selection', 'KCBH',   'class_id',          'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程班号（作 class_id）'),
+('course_selection', 'KSXZDM', 'selection_status',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '考试性质代码（作选课状态）'),
+('course_selection', 'KSXZMC', 'class_time',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '考试性质名称（暂存 classTime）');
 
--- 6. level_exam_scores (DS0076 / 鏈笓绉戠敓绛夌骇鑰冭瘯鎴愮哗)
+-- 6. level_exam_scores (DS0076 / 本专科生等级考试成绩)
 -- PDF fields (lowercase): xh, xhxm, xm, kskm, ksrq, fskscj
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('level_exam_scores', 'xh',     'student_id',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '瀛﹀彿'),
-('level_exam_scores', 'xm',     'student_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2, 1, '濮撳悕'),
-('level_exam_scores', 'kskm',   'exam_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '鑰冭瘯绉戠洰锛堜綔鑰冭瘯鍚嶇О锛?),
-('level_exam_scores', 'ksrq',   'exam_date',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 1, 4, 1, '鑰冭瘯鏃ユ湡'),
-('level_exam_scores', 'fskscj', 'score',        'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 5, 1, '鑰冭瘯鎴愮哗锛堝垎鏁帮級');
+('level_exam_scores', 'xh',     'student_id',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
+('level_exam_scores', 'xm',     'student_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2, 1, '姓名'),
+('level_exam_scores', 'kskm',   'exam_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '考试科目（作考试名称）'),
+('level_exam_scores', 'ksrq',   'exam_date',    'STRING', 'DATE',   'DATE', '{"pattern":"yyyy-MM-dd"}', NULL, 1, 4, 1, '考试日期'),
+('level_exam_scores', 'fskscj', 'score',        'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 5, 1, '考试成绩（分数）');
 
--- 7. teaching_plans (cdsp_1715289655026466836 / 鏁欏璁″垝淇℃伅)
+-- 7. teaching_plans (cdsp_1715289655026466836 / 教学计划信息)
 -- PDF fields (lowercase): zxs, skjszgh, kkdwdm, kkxq, cksm, ksfsdm, kkjhid, kkxn,
 --   kcdm, kkxq_name, kkdwdm_name, ksfsmc
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('teaching_plans', 'kkjhid',      'plan_id',            'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '寮€璇捐鍒?ID锛坧lan_id 涓婚敭锛?),
-('teaching_plans', 'kcdm',        'course_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2,  1, '璇剧▼浠ｇ爜'),
-('teaching_plans', 'cksm',        'training_objective', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '鍙傝€冧功鐩紙浣滃煿鍏荤洰鏍囷級'),
-('teaching_plans', 'zxs',         'total_credits',      'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4,  1, '鎬诲鏃讹紙杩戜技鎬诲鍒嗭級'),
-('teaching_plans', 'skjszgh',     'creator',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '鎺堣鏁欏笀鑱屽伐鍙凤紙浣滃垱寤鸿€咃級'),
-('teaching_plans', 'kkdwdm',      'college_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '寮€璇惧崟浣嶄唬鐮?),
-('teaching_plans', 'kkdwdm_name', 'college_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '寮€璇惧崟浣嶅悕绉?),
-('teaching_plans', 'kkxn',        'grade',              'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '寮€璇惧骞达紙浣滃勾绾э級'),
-('teaching_plans', 'kkxq_name',   'plan_name',          'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '寮€璇惧鏈熷悕绉帮紙浣滆鍒掑悕绉帮級'),
-('teaching_plans', 'ksfsdm',      'plan_status',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '鑰冭瘯鏂瑰紡浠ｇ爜锛堜綔璁″垝鐘舵€侊級'),
-('teaching_plans', 'ksfsmc',      'version',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 11, 1, '鑰冭瘯鏂瑰紡鍚嶇О锛堜綔鐗堟湰锛?);
+('teaching_plans', 'kkjhid',      'plan_id',            'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '开课计划 ID（plan_id 主键）'),
+('teaching_plans', 'kcdm',        'course_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2,  1, '课程代码'),
+('teaching_plans', 'cksm',        'training_objective', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '参考书目（作培养目标）'),
+('teaching_plans', 'zxs',         'total_credits',      'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 4,  1, '总学时（近似总学分）'),
+('teaching_plans', 'skjszgh',     'creator',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '授课教师职工号（作创建者）'),
+('teaching_plans', 'kkdwdm',      'college_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '开课单位代码'),
+('teaching_plans', 'kkdwdm_name', 'college_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 0, 7,  1, '开课单位名称'),
+('teaching_plans', 'kkxn',        'grade',              'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8,  1, '开课学年（作年级）'),
+('teaching_plans', 'kkxq_name',   'plan_name',          'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '开课学期名称（作计划名称）'),
+('teaching_plans', 'ksfsdm',      'plan_status',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '考试方式代码（作计划状态）'),
+('teaching_plans', 'ksfsmc',      'version',            'STRING', 'STRING', 'NONE', NULL, NULL, 0, 11, 1, '考试方式名称（作版本）');
 
--- 8. teacher_courses (cdsp_1715294645677801497 / 鏁欏笀鎺堣)
+-- 8. teacher_courses (cdsp_1715294645677801497 / 教师授课)
 -- PDF fields (lowercase): rkjs, xn, xq, kcdm, kxh, rkjsh, kcmc, kcbh, sfzj, kcbbm, rkjsxm
--- 鏁欏笀鎺堣鏁版嵁 upsert 鍒?TeachingClass 瀹炰綋锛坰ervice 浠ｇ爜鏃㈡湁閫昏緫锛?
--- 璇箟锛堟寜 PDF 杩斿洖绀轰緥鏍稿 2026-04-21锛?
---   kcdm = 璇剧▼浠ｇ爜锛堝 "594625"锛岃绋嬫湰韬紪鐮侊級鈫?courseCode
---   kcbh = 璇剧▼鐝彿锛堝 "51425977"锛屾煇娆″紑鐝殑鍏ㄥ眬鍞竴 ID锛夆啋 classId (TeachingClass 涓婚敭)
---   kxh  = 璇惧簭鍙凤紙鐝唴搴忓彿锛岄€氬父涓?kcdm 鐩稿悓锛夆啋 涓嶅叆搴?
---   xq   = 瀛︽湡锛孉PI 杩斿洖涓枃 "绉?/"鏄? varchar 鈫?target_type=STRING 鍏堜繚鐣欏師鍊硷紝
---          SchoolDataSyncServiceImpl.upsertTeachingClass 璇诲彇鏃跺啀鍋氫腑鏂団啋Integer 杞崲
+-- 教师授课数据 upsert 到 TeachingClass 实体（service 代码既有逻辑）
+-- 语义（按 PDF 返回示例核对 2026-04-21）:
+--   kcdm = 课程代码（如 "594625"，课程本身编码）→ courseCode
+--   kcbh = 课程班号（如 "51425977"，某次开班的全局唯一 ID）→ classId (TeachingClass 主键)
+--   kxh  = 课序号（班内序号，通常与 kcdm 相同）→ 不入库
+--   xq   = 学期，API 返回中文 "秋"/"春" varchar → target_type=STRING 先保留原值，
+--          SchoolDataSyncServiceImpl.upsertTeachingClass 读取时再做中文→Integer 转换
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('teacher_courses', 'kcbh',   'class_id',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '璇剧▼鐝彿锛堜綔 class_id锛屽叏灞€鍞竴寮€鐝?ID锛?),
-('teacher_courses', 'kcdm',   'course_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '璇剧▼浠ｇ爜'),
-('teacher_courses', 'kcmc',   'course_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '璇剧▼鍚嶇О'),
-('teacher_courses', 'rkjsh',  'teacher_id',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '浠昏鏁欏笀宸ュ彿'),
-('teacher_courses', 'rkjsxm', 'teacher_name',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '浠昏鏁欏笀濮撳悕'),
-('teacher_courses', 'xn',     'academic_year', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '瀛﹀勾锛圕DSP 鍗曞勾鏍煎紡濡?"2024"锛?),
-('teacher_courses', 'xq',     'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '瀛︽湡 varchar 涓枃 "绉?/"鏄?锛宻ervice 灞傝浆 Integer'),
-('teacher_courses', 'kcbbm',  'class_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '璇剧▼鐝埆鍚嶏紙浣滅彮绾у睍绀哄悕锛?);
+('teacher_courses', 'kcbh',   'class_id',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程班号（作 class_id，全局唯一开班 ID）'),
+('teacher_courses', 'kcdm',   'course_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程代码'),
+('teacher_courses', 'kcmc',   'course_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '课程名称'),
+('teacher_courses', 'rkjsh',  'teacher_id',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4, 1, '任课教师工号'),
+('teacher_courses', 'rkjsxm', 'teacher_name',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 5, 1, '任课教师姓名'),
+('teacher_courses', 'xn',     'academic_year', 'STRING', 'STRING', 'NONE', NULL, NULL, 1, 6, 1, '学年（CDSP 单年格式如 "2024"）'),
+('teacher_courses', 'xq',     'semester',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 7, 1, '学期 varchar 中文 "秋"/"春"，service 层转 Integer'),
+('teacher_courses', 'kcbbm',  'class_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '课程班别名（作班级展示名）');
 
--- 9. student_schedule (cdsp_1715294397274341377 / 瀛︾敓璇捐〃)
+-- 9. student_schedule (cdsp_1715294397274341377 / 学生课表)
 -- PDF fields (lowercase): zcdm, skjszgh, jsmc, lsxykh, kcmc, js, skcd, djj, xqj,
 --   xkkh, xh, xq, xn, zcap, kcbh
--- xq 杩斿洖涓枃 "绉?/"鏄? varchar锛宼arget_type=STRING锛宻ervice 灞傚仛涓枃鈫扞nteger 杞崲
--- 娉ㄦ剰锛欳DSP API 瀹為檯杩斿洖涓枃瀛楁鍚嶏紙闈炶嫳鏂囩缉鍐欙級锛岄渶鍚屾椂鏀寔涓ょ鏍煎紡
+-- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
+-- 注意：CDSP API 实际返回中文字段名（非英文缩写），需同时支持两种格式
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('student_schedule', '瀛﹀彿',           'student_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '瀛﹀彿锛堜腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'xh',            'student_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '瀛﹀彿锛堣嫳鏂囩缉鍐欙級'),
-('student_schedule', '閫夎璇惧彿',       'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '閫夎璇惧彿锛堜綔 class_id锛屼腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'xkkh',          'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '閫夎璇惧彿锛堜綔 class_id锛岃嫳鏂囩缉鍐欙級'),
-('student_schedule', '璇剧▼鐝彿',       'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '璇剧▼鐝彿锛堜綔 class_id锛屼腑鏂囧瓧娈靛悕锛?),
-('student_schedule', '璇剧▼缂栧彿',       'course_code',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '璇剧▼缂栧彿锛堜腑鏂囧瓧娈靛悕锛岄潪蹇呭～锛?),
-('student_schedule', 'kcbh',          'course_code',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '璇剧▼缂栧彿锛堣嫳鏂囩缉鍐欙紝闈炲繀濉級'),
-('student_schedule', '璇剧▼鍚嶇О',       'course_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4,  1, '璇剧▼鍚嶇О锛堜腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'kcmc',          'course_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4,  1, '璇剧▼鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('student_schedule', '涓婅鏁欏笀鑱屽伐鍙?, 'teacher_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '涓婅鏁欏笀鑱屽伐鍙凤紙涓枃瀛楁鍚嶏級'),
-('student_schedule', 'skjszgh',       'teacher_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '涓婅鏁欏笀鑱屽伐鍙凤紙鑻辨枃缂╁啓锛?),
-('student_schedule', '鏁欏笀鍚嶇О',       'teacher_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '鏁欏笀鍚嶇О锛堜腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'jsmc',          'teacher_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '鏁欏笀鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('student_schedule', '鏄熸湡鍑?,         'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7,  1, '鏄熸湡鍑?1-7锛堜腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'xqj',           'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7,  1, '鏄熸湡鍑?1-7锛堣嫳鏂囩缉鍐欙級'),
-('student_schedule', '绗嚑鑺?,         'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '绗嚑鑺傦紙涓枃瀛楁鍚嶏級'),
-('student_schedule', 'djj',           'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '绗嚑鑺傦紙鑻辨枃缂╁啓锛?),
-('student_schedule', '鍛ㄦ瀹夋帓',       'week_range',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '鍛ㄦ瀹夋帓锛堝 "1-9"锛屼腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'zcap',          'week_range',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '鍛ㄦ瀹夋帓锛堝 "1-9"锛岃嫳鏂囩缉鍐欙級'),
-('student_schedule', '鏁欏',           'class_location', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '鏁欏锛堜腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'js',            'class_location', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '鏁欏锛堣嫳鏂囩缉鍐欙級'),
-('student_schedule', '瀛﹀勾',           'academic_year',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '瀛﹀勾锛圕DSP 鍗曞勾濡?"2024"锛屼腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'xn',            'academic_year',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '瀛﹀勾锛圕DSP 鍗曞勾濡?"2024"锛岃嫳鏂囩缉鍐欙級'),
-('student_schedule', '瀛︽湡',           'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '瀛︽湡涓枃 "绉?/"鏄?锛宻ervice 灞傝浆 Integer锛堜腑鏂囧瓧娈靛悕锛?),
-('student_schedule', 'xq',            'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '瀛︽湡涓枃 "绉?/"鏄?锛宻ervice 灞傝浆 Integer锛堣嫳鏂囩缉鍐欙級');
+('student_schedule', '学号',           'student_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号（中文字段名）'),
+('student_schedule', 'xh',            'student_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号（英文缩写）'),
+('student_schedule', '选课课号',       'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '选课课号（作 class_id，中文字段名）'),
+('student_schedule', 'xkkh',          'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '选课课号（作 class_id，英文缩写）'),
+('student_schedule', '课程班号',       'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '课程班号（作 class_id，中文字段名）'),
+('student_schedule', '课程编号',       'course_code',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '课程编号（中文字段名，非必填）'),
+('student_schedule', 'kcbh',          'course_code',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '课程编号（英文缩写，非必填）'),
+('student_schedule', '课程名称',       'course_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4,  1, '课程名称（中文字段名）'),
+('student_schedule', 'kcmc',          'course_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 4,  1, '课程名称（英文缩写）'),
+('student_schedule', '上课教师职工号', 'teacher_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '上课教师职工号（中文字段名）'),
+('student_schedule', 'skjszgh',       'teacher_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5,  1, '上课教师职工号（英文缩写）'),
+('student_schedule', '教师名称',       'teacher_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '教师名称（中文字段名）'),
+('student_schedule', 'jsmc',          'teacher_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6,  1, '教师名称（英文缩写）'),
+('student_schedule', '星期几',         'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7,  1, '星期几 1-7（中文字段名）'),
+('student_schedule', 'xqj',           'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 7,  1, '星期几 1-7（英文缩写）'),
+('student_schedule', '第几节',         'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '第几节（中文字段名）'),
+('student_schedule', 'djj',           'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 8,  1, '第几节（英文缩写）'),
+('student_schedule', '周次安排',       'week_range',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '周次安排（如 "1-9"，中文字段名）'),
+('student_schedule', 'zcap',          'week_range',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9,  1, '周次安排（如 "1-9"，英文缩写）'),
+('student_schedule', '教室',           'class_location', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室（中文字段名）'),
+('student_schedule', 'js',            'class_location', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 10, 1, '教室（英文缩写）'),
+('student_schedule', '学年',           'academic_year',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"，中文字段名）'),
+('student_schedule', 'xn',            'academic_year',  'STRING', 'STRING', 'NONE', NULL, NULL, 1, 11, 1, '学年（CDSP 单年如 "2024"，英文缩写）'),
+('student_schedule', '学期',           'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"，service 层转 Integer（中文字段名）'),
+('student_schedule', 'xq',            'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"，service 层转 Integer（英文缩写）');
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 4: 瑙嗛绠＄悊琛?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 4: 视频管理表
+-- ═══════════════════════════════════════════════════════════════
 
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 4: 瑙嗛绠＄悊琛?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 4: 视频管理表
+-- ═══════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS `videos` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `title` VARCHAR(200) NOT NULL COMMENT '瑙嗛鏍囬',
-    `description` TEXT COMMENT '瑙嗛绠€浠?,
-    `media_id` BIGINT DEFAULT NULL COMMENT '鍏宠仈鐨勫獟浣撹褰旾D',
-    `cover_media_id` BIGINT DEFAULT NULL COMMENT '灏侀潰濯掍綋ID',
-    `video_url` VARCHAR(500) DEFAULT NULL COMMENT '瑙嗛URL锛堝閮ㄩ摼鎺ユ椂浣跨敤锛?,
-    `cover_url` VARCHAR(500) DEFAULT NULL COMMENT '灏侀潰URL',
-    `subtitle_content` LONGTEXT COMMENT '瀛楀箷鍐呭锛圫RT/VTT鏍煎紡锛?,
-    `user_id` BIGINT DEFAULT NULL COMMENT '涓婁紶鑰呯敤鎴稩D',
-    `is_public` TINYINT DEFAULT 1 COMMENT '鏄惁鍏紑 0-绉佹湁 1-鍏紑',
-    `is_featured` TINYINT(1) DEFAULT 0 COMMENT '鏄惁鎺ㄨ崘',
-    `featured_priority` INT DEFAULT 0 COMMENT '鎺ㄨ崘浼樺厛绾?,
-    `tags` VARCHAR(500) DEFAULT NULL COMMENT '鏍囩锛岄€楀彿鍒嗛殧',
-    `view_count` INT DEFAULT 0 COMMENT '娴忚娆℃暟',
-    `like_count` INT DEFAULT 0 COMMENT '鏀惰棌/鐐硅禐娆℃暟',
-    `status` VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '鐘舵€侊細DRAFT/PUBLISHED/ARCHIVED',
-    `associated_text_id` BIGINT DEFAULT NULL COMMENT '鍏宠仈鐨勮鏂嘔D锛堢敤浜庢敹钘忔槧灏勶級',
-    `transcription_status` VARCHAR(20) DEFAULT NULL COMMENT '杞綍鐘舵€侊細PENDING/PROCESSING/COMPLETED/FAILED',
-    `deleted` TINYINT DEFAULT 0 COMMENT '鏄惁鍒犻櫎 0-鏈垹闄?1-宸插垹闄?,
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `title` VARCHAR(200) NOT NULL COMMENT '视频标题',
+    `description` TEXT COMMENT '视频简介',
+    `media_id` BIGINT DEFAULT NULL COMMENT '关联的媒体记录ID',
+    `cover_media_id` BIGINT DEFAULT NULL COMMENT '封面媒体ID',
+    `video_url` VARCHAR(500) DEFAULT NULL COMMENT '视频URL（外部链接时使用）',
+    `cover_url` VARCHAR(500) DEFAULT NULL COMMENT '封面URL',
+    `subtitle_content` LONGTEXT COMMENT '字幕内容（SRT/VTT格式）',
+    `user_id` BIGINT DEFAULT NULL COMMENT '上传者用户ID',
+    `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
+    `is_featured` TINYINT(1) DEFAULT 0 COMMENT '是否推荐',
+    `featured_priority` INT DEFAULT 0 COMMENT '推荐优先级',
+    `tags` VARCHAR(500) DEFAULT NULL COMMENT '标签，逗号分隔',
+    `view_count` INT DEFAULT 0 COMMENT '浏览次数',
+    `like_count` INT DEFAULT 0 COMMENT '收藏/点赞次数',
+    `status` VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED',
+    `associated_text_id` BIGINT DEFAULT NULL COMMENT '关联的课文ID（用于收藏映射）',
+    `transcription_status` VARCHAR(20) DEFAULT NULL COMMENT '转录状态：PENDING/PROCESSING/COMPLETED/FAILED',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     KEY `idx_user_id` (`user_id`),
     KEY `idx_media_id` (`media_id`),
@@ -1988,174 +1883,168 @@ CREATE TABLE IF NOT EXISTS `videos` (
     KEY `idx_deleted` (`deleted`),
     KEY `idx_associated_text_id` (`associated_text_id`),
     KEY `idx_created_time` (`created_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='瑙嗛琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频表';
 
 
 UPDATE field_mappings
 SET is_active = 0
 WHERE data_source = 'administrative_class'
-  AND source_field IN ('SSXYBM', 'SSXYMC', '鎵€灞炲闄㈢紪鐮?, '鎵€灞炲闄㈠悕绉?);
+  AND source_field IN ('SSXYBM', 'SSXYMC', '所属学院编码', '所属学院名称');
 
 INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('administrative_class', 'YXDM',       'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '瀛﹂櫌浠ｇ爜锛堣嫳鏂囩缉鍐欙級'),
-('administrative_class', '瀛﹂櫌浠ｇ爜',   'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '瀛﹂櫌浠ｇ爜锛堜腑鏂囷級'),
-('administrative_class', 'YXMC',       'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '瀛﹂櫌鍚嶇О锛堣嫳鏂囩缉鍐欙級'),
-('administrative_class', '瀛﹂櫌鍚嶇О',   'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '瀛﹂櫌鍚嶇О锛堜腑鏂囷級'),
-('administrative_class', 'ZYDM',       'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '涓撲笟浠ｇ爜锛堣嫳鏂囩缉鍐欙級'),
-('administrative_class', '涓撲笟浠ｇ爜',   'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '涓撲笟浠ｇ爜锛堜腑鏂囷級'),
-('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '涓撲笟缂栧彿'),
-('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '涓撲笟鍚嶇О');
-
-
--- =============================================================
--- V13__feature_toggles_and_ai_config.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V13: 鍔熻兘寮€鍏虫墿灞?+ AI 閰嶇疆澧炲己
--- 鏁村悎鑷? V14 (expand_feature_toggles) + V16 (ai_qa_recovery_and_hiagent_config)
+('administrative_class', 'YXDM',       'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（英文缩写）'),
+('administrative_class', '学院代码',   'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（中文）'),
+('administrative_class', 'YXMC',       'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（英文缩写）'),
+('administrative_class', '学院名称',   'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（中文）'),
+('administrative_class', 'ZYDM',       'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（英文缩写）'),
+('administrative_class', '专业代码',   'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（中文）'),
+('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
+('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
+-- ═══════════════════════════════════════════════════════════════
+-- V13: 功能开关扩展 + AI 配置增强
+-- 整合自: V14 (expand_feature_toggles) + V16 (ai_qa_recovery_and_hiagent_config)
 --       + V17 (add_page_word_recite_toggle) + V18 (ai_provider_protocol)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
 
--- V13: 鎵╁睍 feature_toggle 瑕嗙洊瀛︾敓绔叏閲忛〉闈?+ 绠＄悊鍛樻ā鍧楀垎绾?
--- 鑳屾櫙锛?
---   1. 鍘?V7 鍙?seed 浜?11 涓鐢熼〉 toggle锛宲age_scores / page_course_selections 鍦ㄤ唬鐮佷腑寮曠敤
---      浣?DB 鏈?seed锛屽鑷?toggle 澶辨晥锛堥粯璁ゅ睍绀猴級
---   2. 鏂板 page_courses / page_text_learning 浠ユ敮鎸佸鐢熺 Layout 鍏ㄨ鐩?
---   3. 鏂板 9 涓?admin.* toggle 鏀寔绠＄悊鍛樻ā鍧楃骇绮掑害鎺у埗
--- 涓?V7/V12 鍏崇郴锛歏7 鍙鐩栭儴鍒嗗鐢熼〉锛沄12 娣诲姞瀛︽牎鏁版嵁鐩稿叧锛沄14 琛ラ綈鍓╀綑
+-- V13: 扩展 feature_toggle 覆盖学生端全量页面 + 管理员模块分级
+-- 背景：
+--   1. 原 V7 只 seed 了 11 个学生页 toggle，page_scores / page_course_selections 在代码中引用
+--      但 DB 未 seed，导致 toggle 失效（默认展示）
+--   2. 新增 page_courses / page_text_learning 以支持学生端 Layout 全覆盖
+--   3. 新增 9 个 admin.* toggle 支持管理员模块级粒度控制
+-- 与 V7/V12 关系：V7 只覆盖部分学生页；V12 添加学校数据相关；V14 补齐剩余
 
 SET NAMES utf8mb4;
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 瀛︾敓绔?4 涓己澶?toggle锛堣ˉ榻愬叏 15 椤佃鐩栵級
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ─────────────────────────────────────────────
+-- 学生端 4 个缺失 toggle（补齐全 15 页覆盖）
+-- ─────────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_courses',           'false', '瀛︾敓绔?璇剧▼瀛︿範椤碉紙寮€鍙戜腑锛?,   0),
-  ('feature_toggle', 'page_scores',            'true',  '瀛︾敓绔?绛夌骇鑰冭瘯鎴愮哗椤?,         0),
-  ('feature_toggle', 'page_course_selections', 'true',  '瀛︾敓绔?鎴戠殑閫夎椤?,             0),
-  ('feature_toggle', 'page_text_learning',     'true',  '瀛︾敓绔?璇炬枃瀛︿範瀛愰〉',           0),
-  ('feature_toggle', 'page_schedule',          'true',  '瀛︾敓绔?鎴戠殑璇捐〃椤?,             0);
+  ('feature_toggle', 'page_courses',           'false', '学生端-课程学习页（开发中）',   0),
+  ('feature_toggle', 'page_scores',            'true',  '学生端-等级考试成绩页',         0),
+  ('feature_toggle', 'page_course_selections', 'true',  '学生端-我的选课页',             0),
+  ('feature_toggle', 'page_text_learning',     'true',  '学生端-课文学习子页',           0),
+  ('feature_toggle', 'page_schedule',          'true',  '学生端-我的课表页',             0);
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 绠＄悊鍛?9 涓ā鍧?toggle锛堝垎绾ф帶鍒讹級
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ─────────────────────────────────────────────
+-- 管理员 9 个模块 toggle（分级控制）
+-- ─────────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'admin.dashboard',    'true', '绠＄悊鍛?浠〃鐩?,     0),
-  ('feature_toggle', 'admin.courses',      'true', '绠＄悊鍛?璇剧▼绠＄悊',   0),
-  ('feature_toggle', 'admin.classes',      'true', '绠＄悊鍛?鐝骇绠＄悊',   0),
-  ('feature_toggle', 'admin.users',        'true', '绠＄悊鍛?鐢ㄦ埛绠＄悊',   0),
-  ('feature_toggle', 'admin.units',        'true', '绠＄悊鍛?鍗曞厓绠＄悊',   0),
-  ('feature_toggle', 'admin.words',        'true', '绠＄悊鍛?鍗曡瘝绠＄悊',   0),
-  ('feature_toggle', 'admin.texts',        'true', '绠＄悊鍛?璇炬枃绠＄悊',   0),
-  ('feature_toggle', 'admin.assignments',  'true', '绠＄悊鍛?浣滀笟绠＄悊',   0),
-  ('feature_toggle', 'admin.sso_approval', 'true', '绠＄悊鍛?SSO 瀹℃壒',   0);
+  ('feature_toggle', 'admin.dashboard',    'true', '管理员-仪表盘',     0),
+  ('feature_toggle', 'admin.courses',      'true', '管理员-课程管理',   0),
+  ('feature_toggle', 'admin.classes',      'true', '管理员-班级管理',   0),
+  ('feature_toggle', 'admin.users',        'true', '管理员-用户管理',   0),
+  ('feature_toggle', 'admin.units',        'true', '管理员-单元管理',   0),
+  ('feature_toggle', 'admin.words',        'true', '管理员-单词管理',   0),
+  ('feature_toggle', 'admin.texts',        'true', '管理员-课文管理',   0),
+  ('feature_toggle', 'admin.assignments',  'true', '管理员-作业管理',   0),
+  ('feature_toggle', 'admin.sso_approval', 'true', '管理员-SSO 审批',   0);
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 瀛︾敓绔ˉ鍏呴〉闈?toggle
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ─────────────────────────────────────────────
+-- 学生端补充页面 toggle
+-- ─────────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_videos',            'true',  '瀛︾敓绔?瑙嗛瀛︿範椤?,             0),
-  ('feature_toggle', 'page_video_player',      'true',  '瀛︾敓绔?瑙嗛鎾斁鍣ㄩ〉',           0),
-  ('feature_toggle', 'page_interactive_text',  'true',  '瀛︾敓绔?浜や簰寮忚鏂囬〉',           0),
-  ('feature_toggle', 'page_vocabulary',        'true',  '瀛︾敓绔?璇嶆眹瀛︿範椤?,             0),
-  ('feature_toggle', 'page_ai_qa',             'true',  '瀛︾敓绔?AI闂瓟椤?,               0),
-  ('feature_toggle', 'page_articles',          'true',  '瀛︾敓绔?鏂囩珷闃呰椤?,             0),
-  ('feature_toggle', 'page_user_texts',        'true',  '瀛︾敓绔?鎴戠殑璇炬枃椤?,             0);
+  ('feature_toggle', 'page_videos',            'true',  '学生端-视频学习页',             0),
+  ('feature_toggle', 'page_video_player',      'true',  '学生端-视频播放器页',           0),
+  ('feature_toggle', 'page_interactive_text',  'true',  '学生端-交互式课文页',           0),
+  ('feature_toggle', 'page_vocabulary',        'true',  '学生端-词汇学习页',             0),
+  ('feature_toggle', 'page_ai_qa',             'true',  '学生端-AI问答页',               0),
+  ('feature_toggle', 'page_articles',          'true',  '学生端-文章阅读页',             0),
+  ('feature_toggle', 'page_user_texts',        'true',  '学生端-我的课文页',             0);
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 鏁欏笀绔〉闈?toggle
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ─────────────────────────────────────────────
+-- 教师端页面 toggle
+-- ─────────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_teacher_dashboard',   'true', '鏁欏笀绔?浠〃鐩?,         0),
-  ('feature_toggle', 'page_teacher_courses',     'true', '鏁欏笀绔?璇剧▼绠＄悊',       0),
-  ('feature_toggle', 'page_teacher_my_courses',  'true', '鏁欏笀绔?鎴戠殑璇剧▼',       0),
-  ('feature_toggle', 'page_teacher_classes',     'true', '鏁欏笀绔?鐝骇绠＄悊',       0),
-  ('feature_toggle', 'page_teacher_assignments', 'true', '鏁欏笀绔?浣滀笟绠＄悊',       0);
+  ('feature_toggle', 'page_teacher_dashboard',   'true', '教师端-仪表盘',         0),
+  ('feature_toggle', 'page_teacher_courses',     'true', '教师端-课程管理',       0),
+  ('feature_toggle', 'page_teacher_my_courses',  'true', '教师端-我的课程',       0),
+  ('feature_toggle', 'page_teacher_classes',     'true', '教师端-班级管理',       0),
+  ('feature_toggle', 'page_teacher_assignments', 'true', '教师端-作业管理',       0);
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 绠＄悊鍛樼琛ュ厖椤甸潰 toggle
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ─────────────────────────────────────────────
+-- 管理员端补充页面 toggle
+-- ─────────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_admin_videos',      'true', '绠＄悊鍛?瑙嗛绠＄悊',       0),
-  ('feature_toggle', 'page_admin_backups',     'true', '绠＄悊鍛?澶囦唤绠＄悊',       0),
-  ('feature_toggle', 'page_admin_monitoring',  'true', '绠＄悊鍛?绯荤粺鐩戞帶',       0);
+  ('feature_toggle', 'page_admin_videos',      'true', '管理员-视频管理',       0),
+  ('feature_toggle', 'page_admin_backups',     'true', '管理员-备份管理',       0),
+  ('feature_toggle', 'page_admin_monitoring',  'true', '管理员-系统监控',       0);
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 杩愮淮绔〉闈?toggle
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ─────────────────────────────────────────────
+-- 运维端页面 toggle
+-- ─────────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_ops_monitoring',           'true', '杩愮淮绔?绯荤粺鐩戞帶',           0),
-  ('feature_toggle', 'page_ops_ai_providers',         'true', '杩愮淮绔?AI鎻愪緵鍟嗙鐞?,       0),
-  ('feature_toggle', 'page_ops_feature_toggles',      'true', '杩愮淮绔?鍔熻兘寮€鍏崇鐞?,       0),
-  ('feature_toggle', 'page_ops_school_data_config',   'true', '杩愮淮绔?瀛︽牎鏁版嵁閰嶇疆',       0),
-  ('feature_toggle', 'page_ops_school_data_browser',  'true', '杩愮淮绔?瀛︽牎鏁版嵁娴忚鍣?,     0),
-  ('feature_toggle', 'page_ops_update',               'true', '杩愮淮绔?绯荤粺鏇存柊',           0);
+  ('feature_toggle', 'page_ops_monitoring',           'true', '运维端-系统监控',           0),
+  ('feature_toggle', 'page_ops_ai_providers',         'true', '运维端-AI提供商管理',       0),
+  ('feature_toggle', 'page_ops_feature_toggles',      'true', '运维端-功能开关管理',       0),
+  ('feature_toggle', 'page_ops_school_data_config',   'true', '运维端-学校数据配置',       0),
+  ('feature_toggle', 'page_ops_school_data_browser',  'true', '运维端-学校数据浏览器',     0),
+  ('feature_toggle', 'page_ops_update',               'true', '运维端-系统更新',           0);
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 2: AI 闂瓟鎭㈠ + HiAgent 鍑瘉閰嶇疆
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 2: AI 问答恢复 + HiAgent 凭证配置
+-- ═══════════════════════════════════════════════════════════════
 
---      鎴?feature_override 閲屾湁瀵?page_ai_qa 鐨勭鐢ㄨ鍒?鈫?璺敱瀹堝崼鎷︽埅 鈫?"杩涗笉鍘?
---   2. HiAgent 鏀瑰啓/闂瓟鍑瘉鍘熸湰鍙€氳繃 application.yml + 鐜鍙橀噺娉ㄥ叆锛?
---      杩濆弽"鎵€鏈夐厤缃墠绔彲閰?鐨勮繍缁磋瘔姹?鈫?鎶?4+1 涓?HiAgent 鍑瘉杩佸埌 system_config.ai_config
---      鍚庣 HiAgentServiceImpl 璇诲€间紭鍏?DB锛屽洖閫€鍒?@Value锛堢幆澧冨彉閲忥級
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+--      或 feature_override 里有对 page_ai_qa 的禁用规则 → 路由守卫拦截 → "进不去"
+--   2. HiAgent 改写/问答凭证原本只通过 application.yml + 环境变量注入，
+--      违反"所有配置前端可配"的运维诉求 → 把 4+1 个 HiAgent 凭证迁到 system_config.ai_config
+--      后端 HiAgentServiceImpl 读值优先 DB，回退到 @Value（环境变量）
+-- ═══════════════════════════════════════════════════════════════
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 1. 鎭㈠ page_ai_qa 寮€鍏充负 true锛堟棤璁轰箣鍓嶆槸浣曞€硷級
---    骞舵竻闄?feature_override 閲岀殑绂佺敤瑕嗙洊
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 1. 恢复 page_ai_qa 开关为 true（无论之前是何值）
+--    并清除 feature_override 里的禁用覆盖
+-- ────────────────────────────────────────
 UPDATE `system_config`
 SET `config_value` = 'true'
 WHERE `config_group` = 'feature_toggle'
   AND `config_key`   = 'page_ai_qa';
 
--- 鑻ュ巻鍙叉湭 seed锛岃ˉ seed锛圛NSERT IGNORE 淇濇寔骞傜瓑锛?
+-- 若历史未 seed，补 seed（INSERT IGNORE 保持幂等）
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`)
-VALUES ('feature_toggle', 'page_ai_qa', 'true', '瀛︾敓绔?AI闂瓟椤?, 0);
+VALUES ('feature_toggle', 'page_ai_qa', 'true', '学生端-AI问答页', 0);
 
--- 娓呴櫎鎵€鏈夊 page_ai_qa 鐨勭鐢ㄨ鐩栵紙tag/user scope锛?
+-- 清除所有对 page_ai_qa 的禁用覆盖（tag/user scope）
 DELETE FROM `feature_override` WHERE `feature_key` = 'page_ai_qa';
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 2. HiAgent 鍑瘉 seed 鍒?ai_config group锛坕s_secret=1 for keys锛?
---    鍊奸粯璁や负绌哄瓧绗︿覆锛岃〃绀?灏氭湭浠庡墠绔厤缃紝浣跨敤 application.yml 鐜鍙橀噺"
---    鍓嶇闈㈡澘鍐欏叆 DB 鍚庯紝HiAgentServiceImpl 浼氫紭鍏堣 DB 鍊?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ────────────────────────────────────────
+-- 2. HiAgent 凭证 seed 到 ai_config group（is_secret=1 for keys）
+--    值默认为空字符串，表示"尚未从前端配置，使用 application.yml 环境变量"
+--    前端面板写入 DB 后，HiAgentServiceImpl 会优先读 DB 值
+-- ────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('ai_config', 'hiagent_api_url',    '', 'HiAgent API Base URL锛堢暀绌哄垯浣跨敤鐜鍙橀噺 HIAGENT_API_URL锛?,         0),
-  ('ai_config', 'hiagent_api_key',    '', 'HiAgent 鏀瑰啓搴旂敤 API Key锛堢暀绌哄垯浣跨敤鐜鍙橀噺 HIAGENT_API_KEY锛?,      1),
-  ('ai_config', 'hiagent_app_id',     '', 'HiAgent 鏀瑰啓搴旂敤 App ID锛堢暀绌哄垯浣跨敤鐜鍙橀噺 HIAGENT_APP_ID锛?,        0),
-  ('ai_config', 'hiagent_qa_api_key', '', 'HiAgent 闂瓟搴旂敤 API Key锛堝繀椤讳笌鏀瑰啓鍑瘉涓嶅悓锛涚暀绌哄垯鐢?HIAGENT_QA_API_KEY锛?, 1),
-  ('ai_config', 'hiagent_qa_app_id',  '', 'HiAgent 闂瓟搴旂敤 App ID锛堝繀椤讳笌鏀瑰啓鍑瘉涓嶅悓锛涚暀绌哄垯鐢?HIAGENT_QA_APP_ID锛?,  0);
+  ('ai_config', 'hiagent_api_url',    '', 'HiAgent API Base URL（留空则使用环境变量 HIAGENT_API_URL）',         0),
+  ('ai_config', 'hiagent_api_key',    '', 'HiAgent 改写应用 API Key（留空则使用环境变量 HIAGENT_API_KEY）',      1),
+  ('ai_config', 'hiagent_app_id',     '', 'HiAgent 改写应用 App ID（留空则使用环境变量 HIAGENT_APP_ID）',        0),
+  ('ai_config', 'hiagent_qa_api_key', '', 'HiAgent 问答应用 API Key（必须与改写凭证不同；留空则用 HIAGENT_QA_API_KEY）', 1),
+  ('ai_config', 'hiagent_qa_app_id',  '', 'HiAgent 问答应用 App ID（必须与改写凭证不同；留空则用 HIAGENT_QA_APP_ID）',  0);
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 3: 琛ラ綈鑳屽崟璇嶉〉 toggle
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 3: 补齐背单词页 toggle
+-- ═══════════════════════════════════════════════════════════════
 
---   toggleKey = 'page_word_recite'锛屼絾璇ラ敭浠庢湭 seed 鍒?
---   system_config.feature_toggle锛屽鑷磋繍缁撮潰鏉?鍏ㄥ眬寮€鍏?鍒楄〃缂哄皯
---   "鑳屽崟璇?鏉＄洰 鈥斺€?寮€鍏充笌椤甸潰鏃犳硶涓€涓€瀵瑰簲銆?
+--   toggleKey = 'page_word_recite'，但该键从未 seed 到
+--   system_config.feature_toggle，导致运维面板"全局开关"列表缺少
+--   "背单词"条目 —— 开关与页面无法一一对应。
 --
---   鍚屾椂 router/index.js 涓?/student/word-recite 璺敱瀹堝崼缂哄け
---   featureKey锛屾湰杩佺Щ閰嶅悎鍓嶇琛ラ綈鍚庯紝杈炬垚"寮€鍏冲叧闂?鈫?瀵艰埅闅愯棌 +
---   蹇嵎鍏ュ彛闅愯棌 + 鐩存帴璁块棶琚嫤鎴?涓夊眰鑱斿姩銆?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+--   同时 router/index.js 中 /student/word-recite 路由守卫缺失
+--   featureKey，本迁移配合前端补齐后，达成"开关关闭 → 导航隐藏 +
+--   快捷入口隐藏 + 直接访问被拦截"三层联动。
+-- ═══════════════════════════════════════════════════════════════
 
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`)
-VALUES ('feature_toggle', 'page_word_recite', 'true', '瀛︾敓绔?鑳屽崟璇嶉〉', 0);
+VALUES ('feature_toggle', 'page_word_recite', 'true', '学生端-背单词页', 0);
 
--- 鑻ュ巻鍙蹭腑瀛樺湪浣嗘弿杩颁负绌猴紝缁熶竴瑙勮寖鍖栨弿杩?
+-- 若历史中存在但描述为空，统一规范化描述
 UPDATE `system_config`
-SET `description` = '瀛︾敓绔?鑳屽崟璇嶉〉'
+SET `description` = '学生端-背单词页'
 WHERE `config_group` = 'feature_toggle'
   AND `config_key` = 'page_word_recite'
   AND (`description` IS NULL OR `description` = '');
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- Part 4: AI 鏈嶅姟鍟嗗崗璁被鍨嬪瓧娈?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- Part 4: AI 服务商协议类型字段
+-- ═══════════════════════════════════════════════════════════════
 
 
 SET @ai_provider_protocol_exists = (
@@ -2173,50 +2062,44 @@ DEALLOCATE PREPARE stmt;
 
 ALTER TABLE `ai_provider`
     MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
-        COMMENT '鍗忚绫诲瀷: openai_compatible | hiagent';
+        COMMENT '协议类型: openai_compatible | hiagent';
 
 
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'student.lazy_course_selections', 'true', '瀛︾敓绔?Lazy 閫夎璁板綍鍚屾锛堥檲鏃у害闃堝€?1 澶╋級', 0),
-  ('feature_toggle', 'teacher.school_data_enabled', 'true', '鏁欏笀绔鏍℃暟鎹姛鑳斤紙璇捐〃/閫夎/鎴愮哗锛?, 0);
-
-
--- =============================================================
--- V14__enhancements.sql
--- =============================================================
-
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- V14: 澧炲己鍔熻兘
--- 鏁村悎鑷? V22 (chain_fetch_schema) + V24 (similarity_matrix)
+  ('feature_toggle', 'student.lazy_course_selections', 'true', '学生端 Lazy 选课记录同步（陈旧度阈值 1 天）', 0),
+  ('feature_toggle', 'teacher.school_data_enabled', 'true', '教师端学校数据功能（课表/选课/成绩）', 0);
+-- ═══════════════════════════════════════════════════════════════
+-- V14: 增强功能
+-- 整合自: V22 (chain_fetch_schema) + V24 (similarity_matrix)
 --       + V25 (similar_id_indexes) + V26 (optimize_interaction_view)
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
 
--- Part 1: 鎸夊闄㈤摼寮忔媺鍙栨暟鎹ā鍨?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- 鐢ㄩ€? 鏀寔鎸夊闄㈤摼寮忔媺鍙栧鐢?鏁欏笀鏁版嵁锛岄厤鍚?SSO 鑷姩鎺堟潈銆?
---       鏁欏笀-瀛︾敓缁戝畾鏌ヨ绛変笅娓稿満鏅?
+-- Part 1: 按学院链式拉取数据模型
+-- ─────────────────────────────────────────────
+-- 用途: 支持按学院链式拉取学生/教师数据，配合 SSO 自动授权、
+--       教师-学生绑定查询等下游场景
 -- Author: System
 -- Date: 2026-04-22
 -- ============================================================================
 
 -- ============================================================================
--- 1. 瀛︾敓涓绘暟鎹紙CDSP 閾惧紡鎷夊彇浜х墿锛?
+-- 1. 学生主数据（CDSP 链式拉取产物）
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS school_student (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    student_id VARCHAR(50) NOT NULL UNIQUE COMMENT '瀛﹀彿锛堝搴?CDSP xh / XH锛?,
-    student_name VARCHAR(100) COMMENT '瀛︾敓濮撳悕锛圫SO attributes 鎴栨墜宸ヨˉ鍏級',
-    college_name VARCHAR(100) NOT NULL COMMENT '瀛﹂櫌鍚嶇О锛圕DSP kkyx锛?,
-    college_code VARCHAR(50) COMMENT '瀛﹂櫌浠ｇ爜锛圕DSP 鏈彁渚涳紝棰勭暀锛?,
-    class_code VARCHAR(50) COMMENT '琛屾斂鐝彿锛圕AS attributes 琛ュ叏锛岄娆?NULL锛?,
-    class_name VARCHAR(100) COMMENT '鐝骇鍚嶇О锛圕AS attributes 琛ュ叏锛?,
-    grade VARCHAR(20) COMMENT '骞寸骇锛堝彲鐢ㄥ鍙峰墠 4 浣嶆帹鏂級',
-    major_name VARCHAR(100) COMMENT '涓撲笟锛圕AS attributes 琛ュ叏锛?,
-    source_course_codes TEXT COMMENT '鍙戠幇璇ュ鐢熺殑璇剧▼浠ｇ爜鍒楄〃锛圝SON 鏁扮粍锛夛紝璇婃柇鐢?,
-    sync_time DATETIME NOT NULL COMMENT '棣栨鍚屾鏃堕棿',
-    last_exam_sync_time DATETIME COMMENT '涓婃鍥涘叚绾ф垚缁╁悓姝ユ椂闂?,
-    last_schedule_sync_time DATETIME COMMENT '涓婃璇捐〃鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL DEFAULT 'SCHOOL_API' COMMENT '鍚屾鏉ユ簮',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    student_id VARCHAR(50) NOT NULL UNIQUE COMMENT '学号（对应 CDSP xh / XH）',
+    student_name VARCHAR(100) COMMENT '学生姓名（SSO attributes 或手工补全）',
+    college_name VARCHAR(100) NOT NULL COMMENT '学院名称（CDSP kkyx）',
+    college_code VARCHAR(50) COMMENT '学院代码（CDSP 未提供，预留）',
+    class_code VARCHAR(50) COMMENT '行政班号（CAS attributes 补全，首次 NULL）',
+    class_name VARCHAR(100) COMMENT '班级名称（CAS attributes 补全）',
+    grade VARCHAR(20) COMMENT '年级（可用学号前 4 位推断）',
+    major_name VARCHAR(100) COMMENT '专业（CAS attributes 补全）',
+    source_course_codes TEXT COMMENT '发现该学生的课程代码列表（JSON 数组），诊断用',
+    sync_time DATETIME NOT NULL COMMENT '首次同步时间',
+    last_exam_sync_time DATETIME COMMENT '上次四六级成绩同步时间',
+    last_schedule_sync_time DATETIME COMMENT '上次课表同步时间',
+    sync_source VARCHAR(20) NOT NULL DEFAULT 'SCHOOL_API' COMMENT '同步来源',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_college (college_name),
@@ -2224,166 +2107,166 @@ CREATE TABLE IF NOT EXISTS school_student (
     INDEX idx_class_code (class_code),
     INDEX idx_last_exam (last_exam_sync_time),
     INDEX idx_last_schedule (last_schedule_sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 鍚屾鐨勫鐢熶富鏁版嵁锛堥摼寮忔媺鍙栦骇鐗╋級';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 同步的学生主数据（链式拉取产物）';
 
 -- ============================================================================
--- 2. 鏁欏笀涓绘暟鎹紙CDSP 閾惧紡鎷夊彇浜х墿锛?
+-- 2. 教师主数据（CDSP 链式拉取产物）
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS school_teacher (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    teacher_id VARCHAR(50) NOT NULL UNIQUE COMMENT '宸ュ彿锛圕DSP rkjsh / skjszgh锛?,
-    teacher_name VARCHAR(100) COMMENT '鏁欏笀濮撳悕锛圕DSP rkjsxm锛?,
-    college_name VARCHAR(100) NOT NULL COMMENT '瀛﹂櫌锛堟潵鑷摼寮忚Е鍙戝闄級',
-    college_code VARCHAR(50) COMMENT '瀛﹂櫌浠ｇ爜锛堥鐣欙級',
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
-    last_schedule_sync_time DATETIME COMMENT '涓婃璇捐〃鍚屾鏃堕棿',
-    sync_source VARCHAR(20) NOT NULL DEFAULT 'SCHOOL_API' COMMENT '鍚屾鏉ユ簮',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    teacher_id VARCHAR(50) NOT NULL UNIQUE COMMENT '工号（CDSP rkjsh / skjszgh）',
+    teacher_name VARCHAR(100) COMMENT '教师姓名（CDSP rkjsxm）',
+    college_name VARCHAR(100) NOT NULL COMMENT '学院（来自链式触发学院）',
+    college_code VARCHAR(50) COMMENT '学院代码（预留）',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    last_schedule_sync_time DATETIME COMMENT '上次课表同步时间',
+    sync_source VARCHAR(20) NOT NULL DEFAULT 'SCHOOL_API' COMMENT '同步来源',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_college (college_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 鍚屾鐨勬暀甯堜富鏁版嵁';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 同步的教师主数据';
 
 -- ============================================================================
--- 3. 鏁欏笀-瀛︾敓缁戝畾锛堥摼寮忔媺鍙栬鐢熷叧鑱旓級
+-- 3. 教师-学生绑定（链式拉取衍生关联）
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS teacher_student_binding (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '涓婚敭',
-    teacher_id VARCHAR(50) NOT NULL COMMENT '宸ュ彿',
-    student_id VARCHAR(50) NOT NULL COMMENT '瀛﹀彿',
-    course_code VARCHAR(50) NOT NULL COMMENT '璇剧▼浠ｇ爜 kcdm',
-    course_class_code VARCHAR(50) COMMENT '璇剧▼鐝彿 kcbh',
-    academic_year VARCHAR(20) NOT NULL DEFAULT '' COMMENT '瀛﹀勾锛圢ULL 鏇挎崲涓虹┖涓蹭互閰嶅悎 UNIQUE 绱㈠紩锛?,
-    semester VARCHAR(10) NOT NULL DEFAULT '' COMMENT '瀛︽湡锛堢/鏄ワ級锛孨ULL 鏇挎崲涓虹┖涓?,
-    source_type VARCHAR(20) NOT NULL DEFAULT 'CHAIN_SYNC' COMMENT '鏉ユ簮: CHAIN_SYNC / MANUAL',
-    sync_time DATETIME NOT NULL COMMENT '鍚屾鏃堕棿',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    teacher_id VARCHAR(50) NOT NULL COMMENT '工号',
+    student_id VARCHAR(50) NOT NULL COMMENT '学号',
+    course_code VARCHAR(50) NOT NULL COMMENT '课程代码 kcdm',
+    course_class_code VARCHAR(50) COMMENT '课程班号 kcbh',
+    academic_year VARCHAR(20) NOT NULL DEFAULT '' COMMENT '学年（NULL 替换为空串以配合 UNIQUE 索引）',
+    semester VARCHAR(10) NOT NULL DEFAULT '' COMMENT '学期（秋/春），NULL 替换为空串',
+    source_type VARCHAR(20) NOT NULL DEFAULT 'CHAIN_SYNC' COMMENT '来源: CHAIN_SYNC / MANUAL',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_teacher_student_course (teacher_id, student_id, course_code, academic_year, semester),
     INDEX idx_teacher (teacher_id),
     INDEX idx_student (student_id),
     INDEX idx_course (course_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鏁欏笀-瀛︾敓缁戝畾鍏崇郴琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教师-学生绑定关系表';
 
 -- ============================================================================
--- 4. Feature Toggle / 瀛﹂櫌閾惧紡閰嶇疆 seed
+-- 4. Feature Toggle / 学院链式配置 seed
 -- ============================================================================
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('feature_toggle', 'ops.school_data_chain_fetch', 'false', '杩愮淮绔寜瀛﹂櫌閾惧紡鎷夊彇鍔熻兘寮€鍏?, 0),
-('feature_toggle', 'student.lazy_data_sync', 'true', '瀛︾敓绔寜闇€ Lazy 鍚屾鍥涘叚绾?璇捐〃', 0),
-('feature_toggle', 'sso.auto_grant_student', 'false', 'SSO 瀛﹀彿鍖归厤 school_student 鑷姩鎺堟潈 STUDENT', 0),
-('feature_toggle', 'sso.auto_grant_teacher', 'false', 'SSO 宸ュ彿鍖归厤 school_teacher 鑷姩鎺堟潈 TEACHER', 0),
-('school_data', 'sync_college_chain_cron', '0 30 3 * * ?', '鎸夊闄㈤摼寮忓埛鏂?cron 琛ㄨ揪寮?, 0),
-('school_data', 'sync_college_chain_colleges', '澶栧浗璇闄?, '閾惧紡鍒锋柊鐧藉悕鍗曪紙閫楀彿鍒嗛殧瀛﹂櫌鍚嶏級', 0),
-('school_data', 'sync_college_chain_match_mode', 'eq', '瀛﹂櫌鍚嶅尮閰嶆ā寮忥紙eq=绮剧‘ / contains=鍖呭惈锛?, 0);
+('feature_toggle', 'ops.school_data_chain_fetch', 'false', '运维端按学院链式拉取功能开关', 0),
+('feature_toggle', 'student.lazy_data_sync', 'true', '学生端按需 Lazy 同步四六级/课表', 0),
+('feature_toggle', 'sso.auto_grant_student', 'false', 'SSO 学号匹配 school_student 自动授权 STUDENT', 0),
+('feature_toggle', 'sso.auto_grant_teacher', 'false', 'SSO 工号匹配 school_teacher 自动授权 TEACHER', 0),
+('school_data', 'sync_college_chain_cron', '0 30 3 * * ?', '按学院链式刷新 cron 表达式', 0),
+('school_data', 'sync_college_chain_colleges', '外国语学院', '链式刷新白名单（逗号分隔学院名）', 0),
+('school_data', 'sync_college_chain_match_mode', 'eq', '学院名匹配模式（eq=精确 / contains=包含）', 0);
 
--- Part 4: 鐩镐技搴︾煩闃佃〃
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- Part 4: 相似度矩阵表
+-- ─────────────────────────────────────────────
 
 SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- 1. text_similarity_matrix 鈥?鏂囩珷鐩镐技搴︾煩闃?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- 1. text_similarity_matrix — 文章相似度矩阵
+-- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '涓婚敭',
-    `text_id` BIGINT NOT NULL COMMENT '鏂囩珷ID',
-    `similar_text_id` BIGINT NOT NULL COMMENT '鐩镐技鏂囩珷ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '鐩镐技搴?0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
     INDEX `idx_text_id` (`text_id`),
     INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鏂囩珷鐩镐技搴︾煩闃?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵';
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- 2. text_similarity_matrix_tmp 鈥?鏂囩珷鐩镐技搴︾煩闃典复鏃惰〃
---    琛ㄧ粨鏋勪笌 text_similarity_matrix 瀹屽叏涓€鑷?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- 2. text_similarity_matrix_tmp — 文章相似度矩阵临时表
+--    表结构与 text_similarity_matrix 完全一致
+-- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '涓婚敭',
-    `text_id` BIGINT NOT NULL COMMENT '鏂囩珷ID',
-    `similar_text_id` BIGINT NOT NULL COMMENT '鐩镐技鏂囩珷ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '鐩镐技搴?0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
     INDEX `idx_text_id` (`text_id`),
     INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鏂囩珷鐩镐技搴︾煩闃典复鏃惰〃';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- 3. user_similarity_matrix 鈥?鐢ㄦ埛鐩镐技搴︾煩闃?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- 3. user_similarity_matrix — 用户相似度矩阵
+-- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS `user_similarity_matrix` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '涓婚敭',
-    `user_id` BIGINT NOT NULL COMMENT '鐢ㄦ埛ID',
-    `similar_user_id` BIGINT NOT NULL COMMENT '鐩镐技鐢ㄦ埛ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '鐩镐技搴?0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
     INDEX `idx_user_id` (`user_id`),
     INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鐢ㄦ埛鐩镐技搴︾煩闃?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵';
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- 4. user_similarity_matrix_tmp 鈥?鐢ㄦ埛鐩镐技搴︾煩闃典复鏃惰〃
---    琛ㄧ粨鏋勪笌 user_similarity_matrix 瀹屽叏涓€鑷?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+-- ═══════════════════════════════════════════════════════════════
+-- 4. user_similarity_matrix_tmp — 用户相似度矩阵临时表
+--    表结构与 user_similarity_matrix 完全一致
+-- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS `user_similarity_matrix_tmp` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '涓婚敭',
-    `user_id` BIGINT NOT NULL COMMENT '鐢ㄦ埛ID',
-    `similar_user_id` BIGINT NOT NULL COMMENT '鐩镐技鐢ㄦ埛ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '鐩镐技搴?0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
     INDEX `idx_user_id` (`user_id`),
     INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='鐢ㄦ埛鐩镐技搴︾煩闃典复鏃惰〃';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵临时表';
 
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
--- 5. v_user_text_interaction_scores 鈥?鐢ㄦ埛-鏂囩珷浜や簰璇勫垎瑙嗗浘
+-- ═══════════════════════════════════════════════════════════════
+-- 5. v_user_text_interaction_scores — 用户-文章交互评分视图
 --
--- 鏍稿績鍏紡锛?
---   w_read(0.2)       鈥?鏄惁璇昏繃锛?/1锛?
---   w_complete(0.2)   鈥?鏄惁瀹屾垚闃呰锛?/1锛?
---   w_favorite(0.3)   鈥?鏄惁鏀惰棌锛?/1锛?
---   w_duration(0.1)   鈥?闃呰鏃堕暱寰楀垎锛堟弧鍒?00绉掞級
---   w_accuracy(0.1)    鈥?涔犻姝ｇ‘鐜?
---   w_underline(0.1)   鈥?鍒掔嚎娆℃暟寰楀垎锛堟弧鍒?0娆★級
+-- 核心公式：
+--   w_read(0.2)       — 是否读过（0/1）
+--   w_complete(0.2)   — 是否完成阅读（0/1）
+--   w_favorite(0.3)   — 是否收藏（0/1）
+--   w_duration(0.1)   — 阅读时长得分（满分600秒）
+--   w_accuracy(0.1)    — 习题正确率
+--   w_underline(0.1)   — 划线次数得分（满分10次）
 --
---   鏈€缁堝垎鏁?= LEAST(1.0, 鎬诲垎)锛屽彧鑰冭檻 role 涓?'STUDENT' 鎴?'USER' 鐨勭敤鎴?
--- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+--   最终分数 = LEAST(1.0, 总分)，只考虑 role 为 'STUDENT' 或 'USER' 的用户
+-- ═══════════════════════════════════════════════════════════════
 CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
 SELECT
     u.id                                          AS user_id,
     t.id                                          AS text_id,
 
-    -- w_read(0.2): 鏄惁宸茶
+    -- w_read(0.2): 是否已读
     COALESCE(utr.read_at IS NOT NULL, 0)          AS w_read,
 
-    -- w_complete(0.2): 鏄惁瀹屾垚闃呰
+    -- w_complete(0.2): 是否完成阅读
     COALESCE(tlr.is_completed = 1, 0)             AS w_complete,
 
-    -- w_favorite(0.3): 鏄惁鏀惰棌
+    -- w_favorite(0.3): 是否收藏
     COALESCE(af.id IS NOT NULL, 0)                AS w_favorite,
 
-    -- w_duration(0.1): 闃呰鏃堕暱寰楀垎锛堟弧鍒?00绉掞級
+    -- w_duration(0.1): 阅读时长得分（满分600秒）
     LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) AS w_duration,
 
-    -- w_accuracy(0.1): 涔犻姝ｇ‘鐜?
+    -- w_accuracy(0.1): 习题正确率
     COALESCE(
         sr.correct_rate,
         0.0
     )                                             AS w_accuracy,
 
-    -- w_underline(0.1): 鍒掔嚎娆℃暟寰楀垎锛堟弧鍒?0娆★級
+    -- w_underline(0.1): 划线次数得分（满分10次）
     LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) AS w_underline,
 
-    -- 鏈€缁堝姞鏉冩€诲垎锛堝皝椤?.0锛?
+    -- 最终加权总分（封顶1.0）
     LEAST(
         COALESCE(utr.read_at IS NOT NULL, 0) * 0.2
         + COALESCE(tlr.is_completed = 1, 0) * 0.2
@@ -2416,16 +2299,16 @@ LEFT JOIN (
     GROUP BY sr.student_id, lr.text_id
 ) sr ON sr.student_id = u.id AND sr.text_id = t.id
 LEFT JOIN (
-    -- 姣忕敤鎴锋瘡鏂囩珷鐨勫垝绾挎鏁?
+    -- 每用户每文章的划线次数
     SELECT user_id, text_id, COUNT(*) AS underline_count
     FROM underlines
     GROUP BY user_id, text_id
 ) ul ON ul.user_id = u.id AND ul.text_id = t.id
 WHERE u.role IN ('STUDENT', 'USER');
 
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
--- Part 5: 鐩镐技搴︾煩闃佃ˉ鍏呯储寮?
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- ─────────────────────────────────────────────
+-- Part 5: 相似度矩阵补充索引
+-- ─────────────────────────────────────────────
 
 SET @idx_text_similarity_exists = (
     SELECT COUNT(*) FROM information_schema.STATISTICS
@@ -2479,13 +2362,13 @@ PREPARE stmt FROM @idx_user_similarity_tmp_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- Part 6: 浼樺寲鐢ㄦ埛鏂囨湰浜や簰瑙嗗浘
--- 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+-- Part 6: 优化用户文本交互视图
+-- ─────────────────────────────────────────────
 
--- 婧愯〃锛?
+-- 源表：
 --   - user_text_reads       (user_id,   text_id)
---   - text_learning_records (student_id,text_id)  student_id 瀵瑰簲 user_id
---   - article_favorites     (student_id,text_id)  鍚屼笂
+--   - text_learning_records (student_id,text_id)  student_id 对应 user_id
+--   - article_favorites     (student_id,text_id)  同上
 --   - underlines            (user_id,   text_id)
 -- ============================================================================
 
@@ -2549,12 +2432,6 @@ LEFT JOIN (
     FROM underlines
     GROUP BY user_id, text_id
 ) ul ON ul.user_id = utp.user_id AND ul.text_id = utp.text_id;
-
-
--- =============================================================
--- V15__fix_schema_issues.sql
--- =============================================================
-
 -- V15: Fix runtime schema mismatches found in production
 
 -- 1. backup_records.category
@@ -2685,14 +2562,14 @@ INSERT IGNORE INTO field_mappings (
     converter, converter_config, default_value, is_required, sort_order, is_active, remark
 ) VALUES
     ('course_selection', 'XF', 'credits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, 'Credits from upstream if present'),
-    ('course_selection', '瀛﹀垎', 'credits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, 'Credits from upstream if present');
+    ('course_selection', '学分', 'credits', 'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, 'Credits from upstream if present');
 
 INSERT IGNORE INTO field_mappings (
     data_source, source_field, target_field, source_type, target_type,
     converter, converter_config, default_value, is_required, sort_order, is_active, remark
 ) VALUES
     ('course_selection', 'XM', 'student_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, 'Student name if present'),
-    ('course_selection', '濮撳悕', 'student_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, 'Student name if present');
+    ('course_selection', '姓名', 'student_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, 'Student name if present');
 
 -- 7. Add composite indexes used by list queries.
 SET @idx_exists = (
