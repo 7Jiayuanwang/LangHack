@@ -106,6 +106,7 @@ fi
 # 维护模式 & 备份配置（可通过 .env 中 AUTO_UPDATE_* 覆盖）
 MAINTENANCE_MODE="${AUTO_UPDATE_MAINTENANCE:-true}"
 PRE_BACKUP="${AUTO_UPDATE_PRE_BACKUP:-true}"
+RUN_DB_MIGRATIONS="${AUTO_UPDATE_RUN_MIGRATIONS:-true}"
 BACKUP_DIR="${BACKUP_DIR:-$PROJECT_ROOT/backups}"
 HEALTH_CHECK_TIMEOUT=120
 ENV_BACKUP_KEEP=10
@@ -150,6 +151,7 @@ while [[ $# -gt 0 ]]; do
             echo "  WEBHOOK_URL                通知 Webhook URL"
             echo "  AUTO_UPDATE_MAINTENANCE    更新时启用维护模式 (true/false)"
             echo "  AUTO_UPDATE_PRE_BACKUP     更新前备份数据库 (true/false)"
+            echo "  AUTO_UPDATE_RUN_MIGRATIONS 自动执行数据库迁移 (true/false，默认 true)"
             echo "  BACKUP_DIR                 备份存储目录"
             exit 0
             ;;
@@ -1338,6 +1340,12 @@ fi
 if echo "$CHANGED_FILES" | grep -qE '(docker/mysql/init/04-apply-all-migrations\.sql|backend/src/main/resources/db/migration/)'; then
     RUN_MIGRATIONS=true
     log "INFO: 检测到数据库迁移脚本变更，将执行增量迁移"
+fi
+
+if [ "$RUN_MIGRATIONS" = true ] && [ "$RUN_DB_MIGRATIONS" != "true" ]; then
+    log "WARN: 检测到可能需要数据库迁移，但 AUTO_UPDATE_RUN_MIGRATIONS=false，已按配置跳过自动迁移。"
+    log "WARN: 整合版迁移链适合作为全新数据库初始稳定版；如需执行请先确认数据库策略并备份。"
+    RUN_MIGRATIONS=false
 fi
 
 if [ "$RUNTIME_MODE" = "local" ] && [ "$RUN_MIGRATIONS" = true ]; then

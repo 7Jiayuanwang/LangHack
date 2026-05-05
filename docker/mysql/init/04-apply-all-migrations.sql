@@ -1,27 +1,34 @@
--- ═══════════════════════════════════════════════════════════════
--- 04-apply-all-migrations.sql
--- 整合所有 Flyway 迁移脚本 (V0-V15)
---
--- 注意：生产环境 Flyway 禁用，此文件用于 Docker 初始化
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
+-- LangHack consolidated initial stable database migration
+-- Generated from backend/src/main/resources/db/migration V0-V14
+-- This file is used by scripts/auto-update.sh and scripts/hot-update.sh.
+-- Last updated: 2026-05-05 (V0 synchronized with 00-base-tables.sql)
+-- =============================================================
 
-USE `english_learning`;
+USE english_learning;
 SET NAMES utf8mb4;
 
--- 禁用警告和 notes（ALTER TABLE IF NOT EXISTS 在 MySQL 8.0.29+ 才支持，旧版本会报错但不中断）
-SET SESSION sql_notes = 0;
-SET SESSION sql_mode = 'NO_AUTO_VALUE_ON_ZERO';
+-- Included Flyway migrations:
+--   V0__base_tables.sql
+--   V1__scoring_and_assignments.sql
+--   V2__text_and_learning.sql
+--   V3__media_and_annotations.sql
+--   V4__backup_and_update_system.sql
+--   V5__monitoring_and_access.sql
+--   V6__system_config_and_ai_providers.sql
+--   V7__feature_toggles.sql
+--   V8__sso_integration.sql
+--   V9__school_data_sync.sql
+--   V10__user_and_text_updates.sql
+--   V11__role_mapping_cleanup.sql
+--   V12__school_data_and_videos.sql
+--   V13__feature_toggles_and_ai_config.sql
+--   V14__enhancements.sql
 
--- ═══════════════════════════════════════════════════════════════
+
+-- =============================================================
 -- V0__base_tables.sql
--- ═══════════════════════════════════════════════════════════════
-
--- ═══════════════════════════════════════════════════════════════════════
--- V0: 核心基础表
--- Description: 创建所有被后续迁移脚本引用的核心表
--- 这些表之前只存在于 Docker init 脚本 (00-base-tables.sql) 中，
--- 导致 CI 环境（空数据库 + Flyway）无法运行迁移链。
--- ═══════════════════════════════════════════════════════════════════════
+-- =============================================================
 
 -- ────────────────────────────────────────
 -- 用户表（核心表，被多个表引用）
@@ -92,25 +99,56 @@ CREATE TABLE IF NOT EXISTS `units` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='单元表';
 
 -- ────────────────────────────────────────
--- 课文表
--- 注意: 不包含 V2+ 后续迁移添加的列（chinese_parallel_content, markdown_content 等）
+-- 课文表（完整版，包含所有字段）
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `texts` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `unit_id` BIGINT NOT NULL COMMENT '单元ID',
+    `unit_id` BIGINT DEFAULT NULL COMMENT '单元ID（可为空，表示未分配到单元）',
     `title` VARCHAR(200) NOT NULL COMMENT '课文标题',
     `content` TEXT NOT NULL COMMENT '课文内容',
+    `markdown_content` LONGTEXT COMMENT 'Markdown格式的课文内容',
+    `content_type` ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '内容类型：TEXT-纯文本，MARKDOWN-Markdown格式',
+    `cet4_content` TEXT COMMENT 'CET-4版本内容',
+    `cet6_content` TEXT COMMENT 'CET-6版本内容',
+    `academic_content` TEXT COMMENT '学术版本内容',
+    `ielts_content` TEXT COMMENT '雅思版本内容',
+    `audio_url` VARCHAR(255) DEFAULT NULL COMMENT '音频URL',
     `difficulty` ENUM('EASY','MEDIUM','HARD') DEFAULT 'MEDIUM' COMMENT '难度',
     `order_num` INT DEFAULT 0 COMMENT '排序号',
+    `uploaded_by` BIGINT DEFAULT NULL COMMENT '上传者ID（NULL表示系统内容）',
+    `tags` VARCHAR(255) DEFAULT NULL COMMENT '标签，多个用逗号分隔',
+    `view_count` INT DEFAULT 0 COMMENT '查看次数',
+    `like_count` INT DEFAULT 0 COMMENT '点赞次数',
+    `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
+    `status` ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '审核状态',
     `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
     `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `chinese_parallel_content` TEXT COMMENT '中英对照版本内容',
+    `cet4_markdown_content` LONGTEXT COMMENT 'CET-4难度的Markdown版本内容',
+    `cet6_markdown_content` LONGTEXT COMMENT 'CET-6难度的Markdown版本内容',
+    `academic_markdown_content` LONGTEXT COMMENT '学术版的Markdown版本内容',
+    `chinese_parallel_markdown_content` LONGTEXT COMMENT '中英对照的Markdown版本内容',
+    `cover_url` VARCHAR(255) DEFAULT NULL COMMENT '封面图URL',
+    `is_featured` TINYINT(1) DEFAULT 0 COMMENT '是否推荐',
+    `featured_priority` INT DEFAULT 0 COMMENT '推荐优先级',
+    `content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '内容格式：PLAIN_TEXT-纯文本，MARKDOWN-Markdown格式',
+    `cet4_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT 'CET4内容格式',
+    `cet6_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT 'CET6内容格式',
+    `academic_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '学术内容格式',
+    `chinese_parallel_content_format` VARCHAR(20) DEFAULT 'PLAIN_TEXT' COMMENT '中英对照内容格式',
     PRIMARY KEY (`id`),
     KEY `idx_unit_id` (`unit_id`),
+    KEY `idx_uploaded_by` (`uploaded_by`),
     KEY `idx_difficulty` (`difficulty`),
     KEY `idx_order_num` (`order_num`),
     KEY `idx_deleted` (`deleted`),
-    CONSTRAINT `texts_ibfk_1` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`) ON DELETE CASCADE
+    KEY `idx_status` (`status`),
+    KEY `idx_is_public` (`is_public`),
+    KEY `idx_content_format` (`content_format`),
+    KEY `idx_is_featured` (`is_featured`),
+    CONSTRAINT `texts_ibfk_1` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `texts_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课文表';
 
 -- ────────────────────────────────────────
@@ -139,8 +177,7 @@ CREATE TABLE IF NOT EXISTS `classes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='班级表';
 
 -- ────────────────────────────────────────
--- 任务表
--- 注意: 不包含 V1 添加的 weight 和 ideal_study_time_minutes 列
+-- 任务表（完整版，包含 weight 和 ideal_study_time_minutes）
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `assignments` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -152,6 +189,8 @@ CREATE TABLE IF NOT EXISTS `assignments` (
     `type` ENUM('READING','VOCABULARY','COMPREHENSION') NOT NULL COMMENT '任务类型',
     `difficulty` ENUM('EASY','MEDIUM','HARD') DEFAULT 'MEDIUM' COMMENT '难度',
     `deadline` DATETIME DEFAULT NULL COMMENT '截止时间',
+    `weight` DECIMAL(5,2) DEFAULT 1.00 COMMENT '任务权重（用于计算加权平均分，默认1.00）',
+    `ideal_study_time_minutes` INT DEFAULT 60 COMMENT '理想学习时长（分钟），用于计算分数，默认60分钟',
     `status` ENUM('DRAFT','PUBLISHED','CLOSED') DEFAULT 'DRAFT' COMMENT '状态',
     `created_by` BIGINT DEFAULT NULL COMMENT '创建者ID',
     `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
@@ -166,6 +205,8 @@ CREATE TABLE IF NOT EXISTS `assignments` (
     KEY `idx_created_by` (`created_by`),
     KEY `idx_deadline` (`deadline`),
     KEY `idx_deleted` (`deleted`),
+    KEY `idx_weight` (`weight`),
+    KEY `idx_ideal_study_time` (`ideal_study_time_minutes`),
     CONSTRAINT `assignments_ibfk_1` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`),
     CONSTRAINT `assignments_ibfk_2` FOREIGN KEY (`unit_id`) REFERENCES `units` (`id`),
     CONSTRAINT `assignments_ibfk_3` FOREIGN KEY (`text_id`) REFERENCES `texts` (`id`),
@@ -199,8 +240,7 @@ CREATE TABLE IF NOT EXISTS `words` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='单词表';
 
 -- ────────────────────────────────────────
--- 生词本表
--- 注意: 不包含 V3 添加的 SM-2 字段（repetition, interval_days, easiness_factor, next_review_time）
+-- 生词本表（完整版，包含 SM-2 算法字段）
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `vocabulary_books` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -209,7 +249,11 @@ CREATE TABLE IF NOT EXISTS `vocabulary_books` (
     `added_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '添加时间',
     `review_count` INT DEFAULT 0 COMMENT '复习次数',
     `last_reviewed` DATETIME DEFAULT NULL COMMENT '最后复习时间',
-    `mastery_level` ENUM('NEW','LEARNING','FAMILIAR','MASTERED') DEFAULT 'NEW' COMMENT '掌握程度',
+    `mastery_level` ENUM('NEW','LEARNING','FAMILIAR','MASTERED') DEFAULT 'NEW' COMMENT '掌握程度：NEW-新词，LEARNING-学习中，FAMILIAR-熟悉，MASTERED-已掌握',
+    `repetition` INT DEFAULT 0 COMMENT 'SM2重复次数',
+    `interval_days` INT DEFAULT 1 COMMENT 'SM2间隔天数',
+    `easiness_factor` DOUBLE DEFAULT 2.5 COMMENT 'SM2难度因子',
+    `next_review_time` DATETIME DEFAULT NULL COMMENT '下次复习时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_student_word` (`student_id`, `word_id`),
     KEY `idx_student_id` (`student_id`),
@@ -220,15 +264,15 @@ CREATE TABLE IF NOT EXISTS `vocabulary_books` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='生词本表';
 
 -- ────────────────────────────────────────
--- 学习记录表
--- 注意: 不包含 V2 添加的 text_id 列
+-- 学习记录表（完整版，包含 text_id）
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `learning_records` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `student_id` BIGINT NOT NULL COMMENT '学生ID',
     `word_id` BIGINT DEFAULT NULL COMMENT '单词ID',
+    `text_id` BIGINT DEFAULT NULL COMMENT '关联的课文ID',
     `assignment_id` BIGINT DEFAULT NULL COMMENT '任务ID',
-    `record_type` VARCHAR(50) DEFAULT NULL COMMENT '记录类型',
+    `record_type` VARCHAR(50) DEFAULT NULL COMMENT '记录类型：VIEW-浏览，REVIEW-复习，TEST-测试',
     `duration_seconds` INT DEFAULT 0 COMMENT '学习时长（秒）',
     `correct_count` INT DEFAULT 0 COMMENT '正确次数',
     `total_count` INT DEFAULT 0 COMMENT '总次数',
@@ -239,6 +283,7 @@ CREATE TABLE IF NOT EXISTS `learning_records` (
     KEY `idx_assignment_id` (`assignment_id`),
     KEY `idx_record_type` (`record_type`),
     KEY `idx_created_time` (`created_time`),
+    KEY `idx_text_id` (`text_id`),
     CONSTRAINT `learning_records_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习记录表';
 
@@ -263,54 +308,47 @@ CREATE TABLE IF NOT EXISTS `student_classes` (
 -- 默认测试账号（密码均为 admin123，BCrypt hash）
 -- ────────────────────────────────────────
 INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `deleted`, `created_time`, `updated_time`)
-SELECT 'admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'ADMIN', '系统管理员', 'ACTIVE', 0, NOW(), NOW()
+SELECT 'admin', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'ADMIN', '系统管理员', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'admin');
 
 INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `deleted`, `created_time`, `updated_time`)
-SELECT 'ops', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'OPS', '运维人员', 'ACTIVE', 0, NOW(), NOW()
+SELECT 'ops', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'OPS', '运维人员', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'ops');
 
 INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `deleted`, `created_time`, `updated_time`)
-SELECT 'teacher', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'TEACHER', '演示教师', 'ACTIVE', 0, NOW(), NOW()
+SELECT 'teacher', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'TEACHER', '演示教师', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'teacher');
 
 INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `deleted`, `created_time`, `updated_time`)
-SELECT 'student', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'STUDENT', '演示学生', 'ACTIVE', 0, NOW(), NOW()
+SELECT 'student', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'STUDENT', '演示学生', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'student');
 
-
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V1__scoring_and_assignments.sql
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
+-- ???????????????????????????????????????????????????????????????
+-- V1: ????? + ????
+-- ???: V5 (score_records), V6 (weight), V7 (ideal_study_time), V17 (unique constraint)
+-- ???????????????????????????????????????????????????????????????
 
--- ═══════════════════════════════════════════════════════════════
--- V1: 成绩记录表 + 任务扩展
--- 整合自: V5 (score_records), V6 (weight), V7 (ideal_study_time), V17 (unique constraint)
--- ═══════════════════════════════════════════════════════════════
-
--- ────────────────────────────────────────
--- 1. 创建成绩记录表 [原 V5]
---    唯一约束 uk_student_assignment_type 已内联 [原 V17]
--- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS score_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id BIGINT NOT NULL COMMENT '学生ID',
-    assignment_id BIGINT COMMENT '任务ID',
-    course_id BIGINT COMMENT '课程ID',
-    unit_id BIGINT COMMENT '单元ID',
-    score_type VARCHAR(50) NOT NULL COMMENT '分数类型: ASSIGNMENT/COURSE/UNIT/EXAM',
-    score INT NOT NULL COMMENT '分数值(0-100)',
-    full_score INT NOT NULL DEFAULT 100 COMMENT '满分值',
-    score_details TEXT COMMENT 'JSON格式的得分详情',
-    remark VARCHAR(500) COMMENT '备注',
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    student_id BIGINT NOT NULL COMMENT '??ID',
+    assignment_id BIGINT COMMENT '??ID',
+    course_id BIGINT COMMENT '??ID',
+    unit_id BIGINT COMMENT '??ID',
+    score_type VARCHAR(50) NOT NULL COMMENT '????: ASSIGNMENT/COURSE/UNIT/EXAM',
+    score INT NOT NULL COMMENT '???(0-100)',
+    full_score INT NOT NULL DEFAULT 100 COMMENT '???',
+    score_details TEXT COMMENT 'JSON???????',
+    remark VARCHAR(500) COMMENT '??',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '????',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '????',
     CONSTRAINT fk_score_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
-    -- 防止同一学生同一任务重复评分 (assignment_id 为 NULL 时不生效，这是预期行为)
     UNIQUE KEY uk_student_assignment_type (student_id, assignment_id, score_type),
     INDEX idx_student_id (student_id),
     INDEX idx_assignment_id (assignment_id),
@@ -318,287 +356,224 @@ CREATE TABLE IF NOT EXISTS score_records (
     INDEX idx_unit_id (unit_id),
     INDEX idx_score_type (score_type),
     INDEX idx_created_time (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成绩记录表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='?????';
 
--- ────────────────────────────────────────
--- 2. 任务表扩展 [原 V6 + V7]
---    docker-entrypoint-initdb.d 不支持存储过程（即使无 DELIMITER），改用条件 ALTER
--- ────────────────────────────────────────
--- 任务权重（加权平均分）
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='weight');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00 COMMENT ''任务权重（用于计算加权平均分，默认1.00）'' AFTER deadline', 'SELECT ''Column weight already exists'' AS Info');
-PREPARE stmt FROM @sql;
+SET @weight_col_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assignments' AND COLUMN_NAME = 'weight'
+);
+SET @weight_sql = IF(
+    @weight_col_exists = 0,
+    'ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00 COMMENT ''?????????????????1.00?'' AFTER deadline',
+    'SELECT 1'
+);
+PREPARE stmt FROM @weight_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- 理想学习时长
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='ideal_study_time_minutes');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60 COMMENT ''理想学习时长（分钟），默认60分钟'' AFTER weight', 'SELECT ''Column ideal_study_time_minutes already exists'' AS Info');
-PREPARE stmt FROM @sql;
+SET @ideal_col_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assignments' AND COLUMN_NAME = 'ideal_study_time_minutes'
+);
+SET @ideal_sql = IF(
+    @ideal_col_exists = 0,
+    'ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60 COMMENT ''?????????????60??'' AFTER weight',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ideal_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- 索引（幂等：IF NOT EXISTS 检查）
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_weight');
-SET @sql = IF(@idx_exists = 0, 'CREATE INDEX idx_weight ON assignments (weight)', 'SELECT ''Index idx_weight already exists'' AS Info');
-PREPARE stmt FROM @sql;
+SET @idx_weight_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assignments' AND INDEX_NAME = 'idx_weight'
+);
+SET @idx_weight_sql = IF(
+    @idx_weight_exists = 0,
+    'CREATE INDEX idx_weight ON assignments (weight)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_weight_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_ideal_study_time');
-SET @sql = IF(@idx_exists = 0, 'CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes)', 'SELECT ''Index idx_ideal_study_time already exists'' AS Info');
-PREPARE stmt FROM @sql;
+SET @idx_ideal_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assignments' AND INDEX_NAME = 'idx_ideal_study_time'
+);
+SET @idx_ideal_sql = IF(
+    @idx_ideal_exists = 0,
+    'CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_ideal_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V2__text_and_learning.sql
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
+-- ???????????????????????????????????????????????????????????????
+-- V2: ???? + ????
+-- ???: ? V2 + V10 + V17
+-- ???????????????????????????????????????????????????????????????
 
--- ═══════════════════════════════════════════════════════════════
--- V2: 课文增强 + 学习记录
--- 整合自: 原 V2 (text_id, chinese_parallel, markdown, markdown versions, unit_id nullable,
---         text_learning_records, user_text_reads, is_featured)
---         + V10 (featured_priority + index)
---         + V17 (cet4/6/academic_content, uploaded_by, tags, view/like_count, is_public, status)
--- ═══════════════════════════════════════════════════════════════
-
--- ────────────────────────────────────────
--- 1. 学习记录添加课文关联 [原 V2]
---    docker-entrypoint-initdb.d 不支持存储过程，改用动态 SQL
--- ────────────────────────────────────────
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT ''关联的课文ID'' AFTER word_id', 'SELECT ''Column text_id already exists'' AS Info');
-PREPARE stmt FROM @sql;
+SET @learning_record_text_id_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'learning_records' AND COLUMN_NAME = 'text_id'
+);
+SET @learning_record_text_id_sql = IF(
+    @learning_record_text_id_exists = 0,
+    'ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT ''?????ID'' AFTER word_id, ADD CONSTRAINT fk_learning_record_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE SET NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @learning_record_text_id_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SET @fk_exists = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE table_schema = DATABASE() AND table_name = 'learning_records' AND constraint_name = 'fk_learning_record_text');
-SET @sql = IF(@fk_exists = 0, 'ALTER TABLE learning_records ADD CONSTRAINT fk_learning_record_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE SET NULL', 'SELECT ''FK fk_learning_record_text already exists'' AS Info');
-PREPARE stmt FROM @sql;
+SET @learning_record_text_idx_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'learning_records' AND INDEX_NAME = 'idx_text_id'
+);
+SET @learning_record_text_idx_sql = IF(
+    @learning_record_text_idx_exists = 0,
+    'CREATE INDEX idx_text_id ON learning_records (text_id)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @learning_record_text_idx_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'learning_records' AND index_name = 'idx_text_id');
-SET @sql = IF(@idx_exists = 0, 'CREATE INDEX idx_text_id ON learning_records (text_id)', 'SELECT ''Index idx_text_id already exists'' AS Info');
-PREPARE stmt FROM @sql;
+SET @texts_extended_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'chinese_parallel_content'
+);
+SET @texts_extended_sql = IF(
+    @texts_extended_exists = 0,
+    'ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT ''????????'', ADD COLUMN markdown_content LONGTEXT COMMENT ''Markdown???????'' AFTER content, ADD COLUMN content_type ENUM(''TEXT'',''MARKDOWN'') DEFAULT ''TEXT'' COMMENT ''?????TEXT-????MARKDOWN-Markdown??'' AFTER markdown_content, ADD COLUMN cet4_markdown_content LONGTEXT COMMENT ''CET-4???Markdown??'' AFTER chinese_parallel_content, ADD COLUMN cet6_markdown_content LONGTEXT COMMENT ''CET-6???Markdown??'' AFTER cet4_markdown_content, ADD COLUMN academic_markdown_content LONGTEXT COMMENT ''????Markdown??'' AFTER cet6_markdown_content, ADD COLUMN chinese_parallel_markdown_content LONGTEXT COMMENT ''?????Markdown??'' AFTER academic_markdown_content, ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT ''????'', ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT ''???????????????0=???'', ADD COLUMN cet4_content LONGTEXT COMMENT ''CET-4??????'' AFTER content, ADD COLUMN cet6_content LONGTEXT COMMENT ''CET-6??????'' AFTER cet4_content, ADD COLUMN academic_content LONGTEXT COMMENT ''???????'' AFTER cet6_content, ADD COLUMN uploaded_by BIGINT DEFAULT NULL COMMENT ''?????ID'', ADD COLUMN tags VARCHAR(500) DEFAULT NULL COMMENT ''???????'', ADD COLUMN view_count INT DEFAULT 0 COMMENT ''????'', ADD COLUMN like_count INT DEFAULT 0 COMMENT ''????'', ADD COLUMN is_public TINYINT(1) DEFAULT 1 COMMENT ''?????0=??1=??'', ADD COLUMN status VARCHAR(20) DEFAULT ''PUBLISHED'' COMMENT ''???DRAFT/PUBLISHED/ARCHIVED''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @texts_extended_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- ────────────────────────────────────────
--- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
--- ────────────────────────────────────────
--- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
--- 改为动态 SQL 以避免存储过程限制
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT ''中英对照版本内容''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @texts_featured_idx_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND INDEX_NAME = 'idx_texts_featured_priority'
+);
+SET @texts_featured_idx_sql = IF(
+    @texts_featured_idx_exists = 0,
+    'CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @texts_featured_idx_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='markdown_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN markdown_content LONGTEXT COMMENT ''Markdown格式的课文内容'' AFTER content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='content_type');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN content_type ENUM(''TEXT'',''MARKDOWN'') DEFAULT ''TEXT'' COMMENT ''内容类型：TEXT-纯文本，MARKDOWN-Markdown格式'' AFTER markdown_content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_markdown_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT COMMENT ''CET-4难度的Markdown版本'' AFTER chinese_parallel_content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_markdown_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN cet6_markdown_content LONGTEXT COMMENT ''CET-6难度的Markdown版本'' AFTER cet4_markdown_content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_markdown_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN academic_markdown_content LONGTEXT COMMENT ''学术版的Markdown版本'' AFTER cet6_markdown_content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_markdown_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN chinese_parallel_markdown_content LONGTEXT COMMENT ''中英对照的Markdown版本'' AFTER academic_markdown_content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_featured');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT ''是否推荐''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='featured_priority');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT ''推荐优先级，值越大越靠前显示（0=默认）''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN cet4_content LONGTEXT COMMENT ''CET-4难度版本内容'' AFTER content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN cet6_content LONGTEXT COMMENT ''CET-6难度版本内容'' AFTER cet4_content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_content');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN academic_content LONGTEXT COMMENT ''学术版版本内容'' AFTER cet6_content', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='uploaded_by');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN uploaded_by BIGINT DEFAULT NULL COMMENT ''上传者用户ID''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='tags');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN tags VARCHAR(500) DEFAULT NULL COMMENT ''标签，逗号分隔''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='view_count');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN view_count INT DEFAULT 0 COMMENT ''浏览次数''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='like_count');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN like_count INT DEFAULT 0 COMMENT ''点赞次数''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_public');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN is_public TINYINT(1) DEFAULT 1 COMMENT ''是否公开（0=否，1=是）''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='status');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT ''PUBLISHED'' COMMENT ''状态：DRAFT/PUBLISHED/ARCHIVED''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-
--- 推荐优先级复合索引 [原 V10]
--- 推荐优先级复合索引 [原 V10]
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'texts' AND index_name = 'idx_texts_featured_priority');
-SET @sql = IF(@idx_exists = 0, 'CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-
--- unit_id 改为可空（支持课文从单元中移除）[原 V2]
 ALTER TABLE texts MODIFY COLUMN unit_id BIGINT DEFAULT NULL
-    COMMENT '单元ID（可为空，表示未分配到单元）';
+    COMMENT '??ID??????????????';
 
--- ────────────────────────────────────────
--- 3. 创建文章学习记录表 [原 V2]
--- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS text_learning_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    student_id BIGINT NOT NULL COMMENT '学生ID',
-    text_id BIGINT NOT NULL COMMENT '课文ID',
-    assignment_id BIGINT COMMENT '关联的任务ID',
-    start_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '阅读开始时间',
-    end_time DATETIME COMMENT '阅读结束时间',
-    duration_seconds INT DEFAULT 0 COMMENT '阅读时长(秒)',
-    is_completed TINYINT(1) DEFAULT 0 COMMENT '是否已完成阅读',
+    student_id BIGINT NOT NULL COMMENT '??ID',
+    text_id BIGINT NOT NULL COMMENT '??ID',
+    assignment_id BIGINT COMMENT '?????ID',
+    start_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '??????',
+    end_time DATETIME COMMENT '??????',
+    duration_seconds INT DEFAULT 0 COMMENT '????(?)',
+    is_completed TINYINT(1) DEFAULT 0 COMMENT '???????',
     created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_student_text (student_id, text_id),
     INDEX idx_assignment (assignment_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章学习记录表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='???????';
 
--- ────────────────────────────────────────
--- 4. 创建用户文章已读记录表 [原 V2]
--- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_text_reads (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     text_id BIGINT NOT NULL,
     read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_user_text (user_id, text_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户文章已读记录表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='?????????';
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V3__media_and_annotations.sql
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
+-- ???????????????????????????????????????????????????????????????
+-- V3: ??? + ??SM-2 + ???? + ?????
+-- ???: ? V3 + V9
+-- ???????????????????????????????????????????????????????????????
 
--- ═══════════════════════════════════════════════════════════════
--- V3: 媒体表 + 词汇SM-2 + 划线标注 + 媒体路径列
--- 整合自: 原 V3 (media, SM-2, underlines)
---         + V9 (media file_path/thumbnail_path)
--- ═══════════════════════════════════════════════════════════════
-
--- ────────────────────────────────────────
--- 1. 创建媒体表 [原 V3]
--- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS media (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '媒体ID',
-    media_type ENUM('IMAGE','VIDEO') NOT NULL COMMENT '媒体类型',
-    file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
-    file_content LONGBLOB NOT NULL COMMENT '文件内容',
-    file_size BIGINT DEFAULT 0 COMMENT '文件大小（字节）',
-    mime_type VARCHAR(100) COMMENT 'MIME类型',
-    width INT COMMENT '宽度（像素，仅图片）',
-    height INT COMMENT '高度（像素，仅图片）',
-    duration INT COMMENT '时长（秒，仅视频）',
-    uploaded_by BIGINT COMMENT '上传者ID',
-    text_id BIGINT COMMENT '关联的课文ID',
-    description VARCHAR(500) COMMENT '媒体描述',
-    status ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '审核状态',
-    deleted TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '??ID',
+    media_type ENUM('IMAGE','VIDEO') NOT NULL COMMENT '????',
+    file_name VARCHAR(255) NOT NULL COMMENT '?????',
+    file_content LONGBLOB NOT NULL COMMENT '????',
+    file_size BIGINT DEFAULT 0 COMMENT '????????',
+    mime_type VARCHAR(100) COMMENT 'MIME??',
+    width INT COMMENT '??????????',
+    height INT COMMENT '??????????',
+    duration INT COMMENT '?????????',
+    uploaded_by BIGINT COMMENT '???ID',
+    text_id BIGINT COMMENT '?????ID',
+    description VARCHAR(500) COMMENT '????',
+    status ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '????',
+    deleted TINYINT DEFAULT 0 COMMENT '???? 0-??? 1-???',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '????',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '????',
     INDEX idx_media_type (media_type),
     INDEX idx_uploaded_by (uploaded_by),
     INDEX idx_text_id (text_id),
     INDEX idx_status (status),
     INDEX idx_deleted (deleted),
     INDEX idx_created_time (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='媒体表（图片和视频）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='??????????';
 
--- ────────────────────────────────────────
--- 2. 媒体路径列 [原 V9]
---    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
--- ────────────────────────────────────────
--- 媒体表路径列 [原 V8]
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT ''stored media file path''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @media_file_path_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'media' AND COLUMN_NAME = 'file_path'
+);
+SET @media_file_path_sql = IF(
+    @media_file_path_exists = 0,
+    'ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT ''stored media file path'', ADD COLUMN thumbnail_path VARCHAR(500) COMMENT ''stored thumbnail file path''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @media_file_path_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT ''stored thumbnail file path''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @vb_repetition_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = 'repetition'
+);
+SET @vb_repetition_sql = IF(
+    @vb_repetition_exists = 0,
+    'ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT ''SM-2 ????'', ADD COLUMN interval_days INT DEFAULT 0 COMMENT ''SM-2 ????'', ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT ''SM-2 ????'', ADD COLUMN next_review_time DATETIME COMMENT ''SM-2 ??????''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @vb_repetition_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-
--- ────────────────────────────────────────
--- 3. 词汇本添加 SM-2 间隔重复字段 [原 V3]
--- ────────────────────────────────────────
--- SM-2 算法列 [原 V11]
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT ''SM-2 重复次数''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='interval_days');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 0 COMMENT ''SM-2 间隔天数''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='easiness_factor');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT ''SM-2 简易因子''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT ''SM-2 下次复习时间''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-
--- ────────────────────────────────────────
--- 4. 创建划线标注表 [原 V3]
--- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS underlines (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     text_id BIGINT NOT NULL,
-    selected_text TEXT COMMENT '用户选中的文本内容',
-    start_index INT COMMENT '起始位置',
-    end_index INT COMMENT '结束位置',
+    selected_text TEXT COMMENT '?????????',
+    start_index INT COMMENT '????',
+    end_index INT COMMENT '????',
     serialized_range TEXT COMMENT 'Serialized DOM range for robust highlighting',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_text_id (text_id),
     INDEX idx_user_id (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户划线标注表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='???????';
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V4__backup_and_update_system.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
 -- V4: 数据库备份系统 + 自动更新配置
 -- 整合自: 原 V4 (backup_records, backup_operation_logs, backup_config)
@@ -686,10 +661,9 @@ INSERT IGNORE INTO update_config (id, cron_expr, enabled, git_branch, backup_bef
 VALUES (1, '0 0 3 * * ?', 0, 'master', 1, 'NEVER');
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V5__monitoring_and_access.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
 -- V23: 访问监控 + AI调用统计 + 角色扩展 + 演示账号
 -- 整合自: V23 (monitoring tables), V24 (OPS role), V25 (demo accounts)
@@ -711,6 +685,7 @@ CREATE TABLE IF NOT EXISTS access_log (
     user_agent VARCHAR(500) DEFAULT NULL COMMENT 'User-Agent',
     created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_created_time (created_time),
+    INDEX idx_created_time_uri (created_time, uri(191)),
     INDEX idx_username (username),
     INDEX idx_uri (uri(191)),
     INDEX idx_status_code (status_code)
@@ -765,6 +740,7 @@ CREATE TABLE IF NOT EXISTS ai_call_log (
     created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_service_name (service_name),
     INDEX idx_created_time (created_time),
+    INDEX idx_created_time_uri (created_time, uri(191)),
     INDEX idx_success (success)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI调用日志表';
 
@@ -819,10 +795,9 @@ UPDATE users SET
 WHERE username IN ('teacher', 'student');
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V6__system_config_and_ai_providers.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
 -- V6: 系统配置 + AI提供商 + 多模型支持
 -- 整合自: 原 V6 (system_config + 默认配置)
@@ -892,10 +867,9 @@ SELECT
 WHERE NOT EXISTS (SELECT 1 FROM ai_provider WHERE service = 'translate');
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V7__feature_toggles.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
 -- V7: 文章收藏 + 功能开关 + 个性化开关
 -- 整合自: 原 V12 (article_favorites + feature_toggle 配置)
@@ -975,10 +949,9 @@ CREATE TABLE IF NOT EXISTS feature_override (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V8__sso_integration.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- V15: 统一身份认证 (SSO) 集成
 
 -- SSO 用户绑定表
@@ -1033,28 +1006,73 @@ CREATE TABLE IF NOT EXISTS sso_config (
     INDEX idx_config_type (config_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO配置表';
 
--- 扩展 users 表字段（幂等模式）
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='users' AND column_name='sso_bound');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''是否通过SSO绑定: 0=否, 1=是''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+-- 扩展 users 表字段
+SET @sso_bound_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_bound'
+);
+SET @sso_bound_sql = IF(
+    @sso_bound_exists = 0,
+    'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''是否通过SSO绑定: 0=否, 1=是''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sso_bound_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='users' AND column_name='sso_provider');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO提供商''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @sso_provider_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_provider'
+);
+SET @sso_provider_sql = IF(
+    @sso_provider_exists = 0,
+    'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO提供商''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sso_provider_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='users' AND column_name='sso_subject');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO唯一标识''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @sso_subject_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_subject'
+);
+SET @sso_subject_sql = IF(
+    @sso_subject_exists = 0,
+    'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO唯一标识''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sso_subject_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='users' AND index_name='idx_sso_bound');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE users ADD INDEX idx_sso_bound (sso_bound)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @idx_sso_bound_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_bound'
+);
+SET @idx_sso_bound_sql = IF(
+    @idx_sso_bound_exists = 0,
+    'CREATE INDEX idx_sso_bound ON users (sso_bound)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_sso_bound_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='users' AND index_name='idx_sso_subject');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE users ADD INDEX idx_sso_subject (sso_provider, sso_subject)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @idx_sso_subject_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_subject'
+);
+SET @idx_sso_subject_sql = IF(
+    @idx_sso_subject_exists = 0,
+    'CREATE INDEX idx_sso_subject ON users (sso_provider, sso_subject)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_sso_subject_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- 插入默认 SSO 配置（幂等：忽略重复键）
+-- 插入默认 SSO 配置
 INSERT IGNORE INTO sso_config (config_key, config_value, config_type, description) VALUES
 ('sso.enabled', 'false', 'SYSTEM', 'SSO功能总开关'),
 ('sso.protocol', 'CAS', 'SYSTEM', 'SSO协议类型: CAS 或 OAUTH2'),
@@ -1062,13 +1080,13 @@ INSERT IGNORE INTO sso_config (config_key, config_value, config_type, descriptio
 ('sso.role_mapping.ou=管理员', 'ADMIN', 'ROLE_MAPPING', '管理员角色映射'),
 ('sso.role_mapping.ou=运维', 'OPS', 'ROLE_MAPPING', '运维角色映射'),
 ('sso.role_mapping.ou=教师', 'TEACHER', 'ROLE_MAPPING', '教师角色映射'),
-('sso.role_mapping.ou=学生', 'STUDENT', 'ROLE_MAPPING', '学生角色映射');
+('sso.role_mapping.ou=学生', 'STUDENT', 'ROLE_MAPPING', '学生角色映射'),
+('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId ??? ? STUDENT?????????');
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V9__school_data_sync.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- ============================================================================
 -- Flyway Migration Script: 学校数据同步表结构
 -- Version: V100
@@ -1113,8 +1131,8 @@ CREATE TABLE IF NOT EXISTS administrative_class (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行政班基本信息表';
 
--- 1.2 课程表
-CREATE TABLE IF NOT EXISTS course (
+-- 1.2 学校课程表
+CREATE TABLE IF NOT EXISTS school_course (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     course_code VARCHAR(50) NOT NULL UNIQUE COMMENT '课程编号 (KCBH)',
     course_name VARCHAR(200) NOT NULL COMMENT '课程名称 (KCMC)',
@@ -1152,7 +1170,7 @@ CREATE TABLE IF NOT EXISTS course (
     INDEX idx_nature (course_nature),
     INDEX idx_category (course_category),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程基本信息表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学校课程基本信息表';
 
 -- ============================================================================
 -- 2. 教学组织层 (Teaching Organization Layer)
@@ -1177,7 +1195,7 @@ CREATE TABLE IF NOT EXISTS teaching_class (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
-    FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_course (course_code),
     INDEX idx_teacher (teacher_id),
     INDEX idx_academic_year_semester (academic_year, semester),
@@ -1221,7 +1239,7 @@ CREATE TABLE IF NOT EXISTS course_selection (
     class_id VARCHAR(50) NOT NULL COMMENT '教学班号',
     teacher_id VARCHAR(50) NOT NULL COMMENT '授课教师工号',
     teacher_name VARCHAR(50) NOT NULL COMMENT '授课教师姓名',
-    credits DECIMAL(3,1) NOT NULL COMMENT '学分',
+    credits DECIMAL(3,1) COMMENT '学分（CDSP API不返回，可为空）',
     academic_year VARCHAR(20) NOT NULL COMMENT '学年',
     semester INT NOT NULL COMMENT '学期',
     class_time VARCHAR(100) COMMENT '上课时间',
@@ -1240,7 +1258,7 @@ CREATE TABLE IF NOT EXISTS course_selection (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
-    FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_student (student_id),
     INDEX idx_course (course_code),
@@ -1254,14 +1272,14 @@ CREATE TABLE IF NOT EXISTS course_selection (
 CREATE TABLE IF NOT EXISTS level_exam_scores (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     student_id VARCHAR(50) NOT NULL COMMENT '学号',
-    student_name VARCHAR(100) NOT NULL COMMENT '姓名',
-    exam_type VARCHAR(50) NOT NULL COMMENT '考试类型',
+    student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）',
+    exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）',
     exam_name VARCHAR(100) NOT NULL COMMENT '考试名称',
     admission_ticket_no VARCHAR(30) COMMENT '准考证号',
     exam_date DATE NOT NULL COMMENT '考试时间',
     score DECIMAL(5,2) NOT NULL COMMENT '成绩',
     grade VARCHAR(20) COMMENT '等级',
-    is_passed BOOLEAN NOT NULL COMMENT '是否通过',
+    is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）',
     passing_score DECIMAL(5,2) COMMENT '合格分数线',
     listening_score DECIMAL(5,2) COMMENT '听力成绩',
     reading_score DECIMAL(5,2) COMMENT '阅读成绩',
@@ -1411,10 +1429,9 @@ CREATE TABLE IF NOT EXISTS field_mappings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='字段映射配置表';
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V10__user_and_text_updates.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
 -- V10: 用户 + 文本 + 词汇表字段补丁（整合）
 -- 整合自: 原 V10 (users nickname+avatar) + 原 V11 (texts featured + vocabulary_books SM-2)
@@ -1469,94 +1486,10 @@ PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
 
--- texts.is_featured
-SET @colname = 'is_featured';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'texts' AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT ''是否推荐'''
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
 
--- texts.featured_priority
-SET @colname = 'featured_priority';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'texts' AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE texts ADD COLUMN featured_priority INT DEFAULT 0 COMMENT ''推荐优先级'''
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
--- texts.idx_is_featured
-SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-    WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'texts' AND INDEX_NAME = 'idx_is_featured');
-SET @preparedStatement = (SELECT IF(@idx_exists > 0,
-    'SELECT 1',
-    'ALTER TABLE texts ADD INDEX idx_is_featured (is_featured)'
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
--- vocabulary_books.repetition
-SET @colname = 'repetition';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE vocabulary_books ADD COLUMN repetition INT DEFAULT 0 COMMENT ''SM2重复次数'' AFTER mastery_level'
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
--- vocabulary_books.interval_days
-SET @colname = 'interval_days';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE vocabulary_books ADD COLUMN interval_days INT DEFAULT 1 COMMENT ''SM2间隔天数'' AFTER repetition'
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
--- vocabulary_books.easiness_factor
-SET @colname = 'easiness_factor';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE vocabulary_books ADD COLUMN easiness_factor DOUBLE DEFAULT 2.5 COMMENT ''SM2难度因子'' AFTER interval_days'
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
--- vocabulary_books.next_review_time
-SET @colname = 'next_review_time';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'vocabulary_books' AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME DEFAULT NULL COMMENT ''下次复习时间'' AFTER easiness_factor'
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
-
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V11__role_mapping_cleanup.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
 -- V11: 清理 sso_config 表中无效的角色映射规则，修复被误映射的用户角色
 -- 原名: V12__fix_role_mapping_cleanup.sql（重命名为 V11，主题独立）
@@ -1587,10 +1520,9 @@ WHERE u.role = 'TEACHER'
   AND b.sso_member_of NOT LIKE '%ou=teacher%';
 
 
--- ═══════════════════════════════════════════════════════════════
+-- =============================================================
 -- V12__school_data_and_videos.sql
--- ═══════════════════════════════════════════════════════════════
-
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
 -- V12: 学校数据集成 + 视频管理表
 -- 整合自: V12__school_data_integration.sql + V12__add_videos_table.sql
@@ -1598,8 +1530,8 @@ WHERE u.role = 'TEACHER'
 -- ═══════════════════════════════════════════════════════════════
 -- V12: 学校数据集成整合
 -- 整合自: V12.1 (字段映射) + V13 (system_config seed)
---       + V14 (student_schedule 表) + V16 (course→school_course 重命名)
---       + V18 (功能开关 seed) + V19 (字段映射) + V20 (API 认证 appId+appSecret)
+--       + V14 (student_schedule 表) + V18 (功能开关 seed)
+--       + V19 (字段映射) + V20 (API 认证 appId+appSecret)
 --       + V20-align (2026-04-21 按 CDSP 官方 PDF 对齐 field_mappings)
 --
 -- 历史合并说明:
@@ -1607,6 +1539,8 @@ WHERE u.role = 'TEACHER'
 --   - 2026-04-21: 按官方 PDF 原文修正 field_mappings, 剔除 V12.1/V19 遗留
 --     snake_case 冗余映射（FieldMappingServiceImpl 会自动将 target_field
 --     转 camelCase, snake_case/camelCase 两套是等价重复）, 合并 V20-align
+--   - 2026-05-05: 移除 V16 (course→school_course 重命名) 冗余代码，
+--     V9 已正确创建 school_course 表，无需兼容性处理
 --
 -- 注意: Flyway 在本项目生产环境禁用 (application.yml flyway.enabled=false),
 --       实际生产部署走 docker/mysql/init/04-apply-all-migrations.sql
@@ -1619,70 +1553,7 @@ WHERE u.role = 'TEACHER'
 -- ═══════════════════════════════════════════════════════════════
 
 -- ═══════════════════════════════════════════════════════════════
--- Part 1.1: 重命名 course → school_course (原 V16)
--- SchoolCourse 实体 @TableName("school_course"), 修正 V9 遗留的 course 表名
--- ═══════════════════════════════════════════════════════════════
-
-SET @course_exists = (SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'course');
-SET @school_course_exists = (SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'school_course');
-
--- 如果 course 存在且 school_course 不存在 → 重命名
-SET @rename_sql = IF(@course_exists = 1 AND @school_course_exists = 0,
-    'RENAME TABLE `course` TO `school_course`',
-    'SELECT 1');
-PREPARE stmt FROM @rename_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- 如果都不存在（全新环境）→ 创建 school_course
-SET @create_sql = IF(@course_exists = 0 AND @school_course_exists = 0,
-    'CREATE TABLE IF NOT EXISTS school_course (
-        id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT ''主键'',
-        course_code VARCHAR(50) NOT NULL UNIQUE COMMENT ''课程编号 (KCBH)'',
-        course_name VARCHAR(200) NOT NULL COMMENT ''课程名称 (KCMC)'',
-        course_name_en VARCHAR(200) COMMENT ''课程英文名称 (KCYWMC)'',
-        course_short_name VARCHAR(100) COMMENT ''课程简称 (KCJC)'',
-        course_nature VARCHAR(50) NOT NULL COMMENT ''课程性质 (KCXZ)'',
-        course_category VARCHAR(50) NOT NULL COMMENT ''课程类别 (KCLB)'',
-        credits DECIMAL(3,1) NOT NULL COMMENT ''学分 (XF)'',
-        total_hours INT NOT NULL COMMENT ''总学时 (ZXS)'',
-        theory_hours INT COMMENT ''理论学时 (LLXS)'',
-        experiment_hours INT COMMENT ''实验学时 (SYXS)'',
-        practice_hours INT COMMENT ''实践学时 (SJXS)'',
-        computer_hours INT COMMENT ''上机学时 (SJXS_PC)'',
-        college_code VARCHAR(50) NOT NULL COMMENT ''开课学院编号 (KKYXBH)'',
-        college_name VARCHAR(100) NOT NULL COMMENT ''开课学院名称 (KKYXMC)'',
-        department_code VARCHAR(50) COMMENT ''开课系部编号 (KKXBBH)'',
-        department_name VARCHAR(100) COMMENT ''开课系部名称 (KKXBMC)'',
-        leader_code VARCHAR(50) COMMENT ''课程负责人工号 (KCFZRGH)'',
-        leader_name VARCHAR(50) COMMENT ''课程负责人姓名 (KCFZRXM)'',
-        assessment_method VARCHAR(50) NOT NULL COMMENT ''考核方式 (KHFS)'',
-        is_bilingual VARCHAR(10) COMMENT ''是否双语教学 (SFSYJX)'',
-        is_online VARCHAR(10) COMMENT ''是否网络课程 (SFWLKC)'',
-        applicable_majors VARCHAR(500) COMMENT ''适用专业 (SYZY)'',
-        prerequisite_codes VARCHAR(500) COMMENT ''先修课程编号 (XXKCBH)'',
-        prerequisite_names VARCHAR(500) COMMENT ''先修课程名称 (XXKCMC)'',
-        course_intro TEXT COMMENT ''课程简介 (KCJJ)'',
-        teaching_objectives TEXT COMMENT ''教学目标 (JXMB)'',
-        course_status VARCHAR(20) NOT NULL COMMENT ''课程状态 (KCZT)'',
-        sync_time DATETIME NOT NULL COMMENT ''同步时间'',
-        sync_source VARCHAR(20) NOT NULL COMMENT ''同步来源'',
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT ''创建时间'',
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT ''更新时间'',
-        INDEX idx_college (college_code),
-        INDEX idx_nature (course_nature),
-        INDEX idx_category (course_category),
-        INDEX idx_sync_time (sync_time)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT=''学校课程基本信息表''',
-    'SELECT 1');
-PREPARE stmt FROM @create_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- ═══════════════════════════════════════════════════════════════
--- Part 1.2: 创建 student_schedule 表 (原 V14 Part 1)
+-- Part 1.1: 创建 student_schedule 表 (原 V14 Part 1)
 -- 存储学生个人课表数据 (/api/xskb)
 -- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS student_schedule (
@@ -1694,8 +1565,8 @@ CREATE TABLE IF NOT EXISTS student_schedule (
     course_name VARCHAR(200) NOT NULL,
     teacher_id VARCHAR(50),
     teacher_name VARCHAR(100),
-    day_of_week TINYINT NOT NULL,
-    period VARCHAR(20) NOT NULL,
+    day_of_week TINYINT NULL,
+    period VARCHAR(20) NULL,
     week_range VARCHAR(50),
     class_location VARCHAR(200),
     academic_year VARCHAR(20) NOT NULL,
@@ -2002,51 +1873,32 @@ CREATE TABLE IF NOT EXISTS `videos` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频表';
 
 
--- ═══════════════════════════════════════════════════════════════
--- V13__access_log_covering_index.sql
--- ═══════════════════════════════════════════════════════════════
+UPDATE field_mappings
+SET is_active = 0
+WHERE data_source = 'administrative_class'
+  AND source_field IN ('SSXYBM', 'SSXYMC', '所属学院编码', '所属学院名称');
 
--- ═══════════════════════════════════════════════════════════════
--- V13: access_log 覆盖索引 — 加速 top_pages 查询
---
--- 背景: MonitoringController.getTopPages 调用 AccessLogMapper.topPagesByDateRange
---       SQL: SELECT uri, COUNT(*) FROM access_log
---            WHERE created_time >= ? AND created_time < ?
---            GROUP BY uri ORDER BY count DESC LIMIT ?
---       原表仅有 (created_time) 索引，GROUP BY uri 需要文件排序，
---       在每日日志量大时响应延迟显著。
---
--- 方案: 增加 (created_time, uri(191)) 复合索引 → 查询走索引范围扫描 + 索引内 GROUP BY
--- ═══════════════════════════════════════════════════════════════
-
-SET @dbname = DATABASE();
-
--- 幂等检查：索引已存在则跳过
-SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-    WHERE TABLE_SCHEMA = @dbname
-      AND TABLE_NAME = 'access_log'
-      AND INDEX_NAME = 'idx_created_time_uri');
-
-SET @stmt = IF(@idx_exists > 0,
-    'SELECT 1',
-    'ALTER TABLE access_log ADD INDEX idx_created_time_uri (created_time, uri(191))'
-);
-PREPARE alterIfNotExists FROM @stmt;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
+INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('administrative_class', 'YXDM',       'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（英文缩写）'),
+('administrative_class', '学院代码',   'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（中文）'),
+('administrative_class', 'YXMC',       'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（英文缩写）'),
+('administrative_class', '学院名称',   'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（中文）'),
+('administrative_class', 'ZYDM',       'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（英文缩写）'),
+('administrative_class', '专业代码',   'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（中文）'),
+('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
+('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
 
 
+-- =============================================================
+-- V13__feature_toggles_and_ai_config.sql
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
--- V14__feature_toggles_and_ai_config.sql
--- ═══════════════════════════════════════════════════════════════
-
--- ═══════════════════════════════════════════════════════════════
--- V14: 功能开关扩展 + AI 配置增强
+-- V13: 功能开关扩展 + AI 配置增强
 -- 整合自: V14 (expand_feature_toggles) + V16 (ai_qa_recovery_and_hiagent_config)
 --       + V17 (add_page_word_recite_toggle) + V18 (ai_provider_protocol)
 -- ═══════════════════════════════════════════════════════════════
 
--- V14: 扩展 feature_toggle 覆盖学生端全量页面 + 管理员模块分级
+-- V13: 扩展 feature_toggle 覆盖学生端全量页面 + 管理员模块分级
 -- 背景：
 --   1. 原 V7 只 seed 了 11 个学生页 toggle，page_scores / page_course_selections 在代码中引用
 --      但 DB 未 seed，导致 toggle 失效（默认展示）
@@ -2054,7 +1906,6 @@ DEALLOCATE PREPARE alterIfNotExists;
 --   3. 新增 9 个 admin.* toggle 支持管理员模块级粒度控制
 -- 与 V7/V12 关系：V7 只覆盖部分学生页；V12 添加学校数据相关；V14 补齐剩余
 
-USE english_learning;
 SET NAMES utf8mb4;
 
 -- ─────────────────────────────────────────────
@@ -2188,36 +2039,42 @@ WHERE `config_group` = 'feature_toggle'
 -- ═══════════════════════════════════════════════════════════════
 
 
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='ai_provider' AND column_name='protocol');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT ''openai_compatible'' AFTER `service`', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @ai_provider_protocol_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol'
+);
+SET @ai_provider_protocol_sql = IF(
+    @ai_provider_protocol_exists = 0,
+    'ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT ''openai_compatible'' AFTER `service`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ai_provider_protocol_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 ALTER TABLE `ai_provider`
     MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
         COMMENT '协议类型: openai_compatible | hiagent';
 
 
--- ═══════════════════════════════════════════════════════════════
--- V15__enhancements_and_fixes.sql
--- ═══════════════════════════════════════════════════════════════
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'student.lazy_course_selections', 'true', '学生端 Lazy 选课记录同步（陈旧度阈值 1 天）', 0),
+  ('feature_toggle', 'teacher.school_data_enabled', 'true', '教师端学校数据功能（课表/选课/成绩）', 0);
 
+
+-- =============================================================
+-- V14__enhancements.sql
+-- =============================================================
 -- ═══════════════════════════════════════════════════════════════
--- V15: 功能增强与问题修复
--- 整合自: V21 (sso_binding_admin_remark) + V22 (chain_fetch_schema)
---       + V23 (sync_log_pagination_summary) + V24 (similarity_matrix)
+-- V14: 增强功能
+-- 整合自: V22 (chain_fetch_schema) + V24 (similarity_matrix)
 --       + V25 (similar_id_indexes) + V26 (optimize_interaction_view)
---       + V28 (fix_student_schedule_nullable_fields)
---       + V29 (fix_field_mappings_administrative_class_teaching_plans)
 -- ═══════════════════════════════════════════════════════════════
+-- V14: ?????????
+-- ???: V22 (chain_fetch_schema) + V24 (similarity_matrix)
+--       + V25 (similar_id_indexes) + V26 (optimize_interaction_view)
+-- ???????????????????????????????????????????????????????????????
 
--- ─────────────────────────────────────────────
--- Part 1: SSO 绑定表管理员备注字段
--- ─────────────────────────────────────────────
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sso_user_bindings' AND column_name='admin_remark');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE sso_user_bindings ADD COLUMN admin_remark TEXT COMMENT ''管理员备注：记录特殊情况（如用户被删除后重新登录）'' AFTER sso_member_of', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
--- ─────────────────────────────────────────────
 -- Part 2: 按学院链式拉取数据模型
 -- ─────────────────────────────────────────────
 
@@ -2297,59 +2154,12 @@ CREATE TABLE IF NOT EXISTS teacher_student_binding (
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('feature_toggle', 'ops.school_data_chain_fetch', 'false', '运维端按学院链式拉取功能开关', 0),
 ('feature_toggle', 'student.lazy_data_sync', 'true', '学生端按需 Lazy 同步四六级/课表', 0),
-('feature_toggle', 'student.lazy_course_selections', 'true', '学生端按需 Lazy 同步选课记录（陈旧度阈值 1 天）', 0),
-('feature_toggle', 'teacher.school_data_enabled', 'true', '教师端学校数据功能（我的学生/课表/选课记录）', 0),
 ('feature_toggle', 'sso.auto_grant_student', 'false', 'SSO 学号匹配 school_student 自动授权 STUDENT', 0),
 ('feature_toggle', 'sso.auto_grant_teacher', 'false', 'SSO 工号匹配 school_teacher 自动授权 TEACHER', 0),
 ('school_data', 'sync_college_chain_cron', '0 30 3 * * ?', '按学院链式刷新 cron 表达式', 0),
 ('school_data', 'sync_college_chain_colleges', '外国语学院', '链式刷新白名单（逗号分隔学院名）', 0),
 ('school_data', 'sync_college_chain_match_mode', 'eq', '学院名匹配模式（eq=精确 / contains=包含）', 0);
 
--- V29: backup_records 添加 category 字段（分类备份）
-SET @add_backup_records_category_sql = (
-    SELECT IF(
-        EXISTS (
-            SELECT 1 FROM information_schema.COLUMNS
-            WHERE table_schema = DATABASE()
-              AND table_name = 'backup_records'
-              AND column_name = 'category'
-        ),
-        'SELECT 1',
-        'ALTER TABLE `backup_records` ADD COLUMN `category` VARCHAR(50) NULL COMMENT ''备份分类: system_config/user_data/business_data/school_data/full'' AFTER `backup_mode`'
-    )
-);
-PREPARE add_backup_records_category_stmt FROM @add_backup_records_category_sql;
-EXECUTE add_backup_records_category_stmt;
-DEALLOCATE PREPARE add_backup_records_category_stmt;
-
--- ============================================================================
--- 5. SSO 角色映射补充：ou=People（IMAU CAS 回退 containerId 格式）
---   CAS 不返回 memberOf 时回退使用 containerId，值如 ou=2000001,ou=People
---   ou=People 是全校师生通用组，默认映射为 STUDENT（校园环境大多数人是学生）
---   英文 key 含 '=' 无法写入 YAML default-rules（Spring Boot 吞 '='），故用数据库
--- ============================================================================
-INSERT IGNORE INTO sso_config (config_key, config_value, config_type, description) VALUES
-('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId 通用组 → STUDENT（大多数人是学生）');
-
--- ============================================================================
--- 6. level_exam_scores 修复：student_name 可为空 + 字段映射补全
---   CDSP 等级考试成绩端点不返回学生姓名，仅返回 学号/考试科目/考试日期/分数
---   原 student_id NOT NULL + student_name NOT NULL 导致 100% INSERT 失败
--- ============================================================================
-ALTER TABLE level_exam_scores MODIFY COLUMN student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）';
-ALTER TABLE level_exam_scores MODIFY COLUMN exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）';
-ALTER TABLE level_exam_scores MODIFY COLUMN is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）';
-
--- 补充 xm → studentName 字段映射（CDSP 未来可能返回姓名字段时自动生效）
-INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('level_exam_scores', 'xm', 'studentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学生姓名（CDSP 可能不返回）');
-
--- ─────────────────────────────────────────────
--- Part 3: 同步日志分页字段（V9 已包含，此处保留版本连续性）
--- ─────────────────────────────────────────────
--- V23 的列已在 V9 的 CREATE TABLE sync_logs 中定义
-
--- ─────────────────────────────────────────────
 -- Part 4: 相似度矩阵表
 -- ─────────────────────────────────────────────
 
@@ -2501,29 +2311,58 @@ WHERE u.role IN ('STUDENT', 'USER');
 -- Part 5: 相似度矩阵补充索引
 -- ─────────────────────────────────────────────
 
+SET @idx_text_similarity_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_similarity_matrix' AND INDEX_NAME = 'idx_similar_text_id'
+);
+SET @idx_text_similarity_sql = IF(
+    @idx_text_similarity_exists = 0,
+    'ALTER TABLE `text_similarity_matrix` ADD INDEX `idx_similar_text_id` (`similar_text_id`)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_text_similarity_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-USE `english_learning`;
+SET @idx_text_similarity_tmp_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_similarity_matrix_tmp' AND INDEX_NAME = 'idx_similar_text_id'
+);
+SET @idx_text_similarity_tmp_sql = IF(
+    @idx_text_similarity_tmp_exists = 0,
+    'ALTER TABLE `text_similarity_matrix_tmp` ADD INDEX `idx_similar_text_id` (`similar_text_id`)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_text_similarity_tmp_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- 幂等添加索引（如果索引已存在则跳过）
--- 幂等添加索引（V25 相似度矩阵索引）
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'text_similarity_matrix' AND index_name = 'idx_similar_text_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE text_similarity_matrix ADD INDEX idx_similar_text_id (similar_text_id)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @idx_user_similarity_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_similarity_matrix' AND INDEX_NAME = 'idx_similar_user_id'
+);
+SET @idx_user_similarity_sql = IF(
+    @idx_user_similarity_exists = 0,
+    'ALTER TABLE `user_similarity_matrix` ADD INDEX `idx_similar_user_id` (`similar_user_id`)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_user_similarity_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'text_similarity_matrix_tmp' AND index_name = 'idx_similar_text_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE text_similarity_matrix_tmp ADD INDEX idx_similar_text_id (similar_text_id)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @idx_user_similarity_tmp_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_similarity_matrix_tmp' AND INDEX_NAME = 'idx_similar_user_id'
+);
+SET @idx_user_similarity_tmp_sql = IF(
+    @idx_user_similarity_tmp_exists = 0,
+    'ALTER TABLE `user_similarity_matrix_tmp` ADD INDEX `idx_similar_user_id` (`similar_user_id`)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_user_similarity_tmp_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'user_similarity_matrix' AND index_name = 'idx_similar_user_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE user_similarity_matrix ADD INDEX idx_similar_user_id (similar_user_id)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema = DATABASE() AND table_name = 'user_similarity_matrix_tmp' AND index_name = 'idx_similar_user_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE user_similarity_matrix_tmp ADD INDEX idx_similar_user_id (similar_user_id)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-
--- ─────────────────────────────────────────────
 -- Part 6: 优化用户文本交互视图
 -- ─────────────────────────────────────────────
 
@@ -2534,7 +2373,6 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 --   - underlines            (user_id,   text_id)
 -- ============================================================================
 
-USE `english_learning`;
 SET NAMES utf8mb4;
 
 CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
@@ -2595,393 +2433,3 @@ LEFT JOIN (
     FROM underlines
     GROUP BY user_id, text_id
 ) ul ON ul.user_id = utp.user_id AND ul.text_id = utp.text_id;
-
--- ─────────────────────────────────────────────
--- Part 7: 修复学生课表必填字段问题
--- ─────────────────────────────────────────────
-
-ALTER TABLE student_schedule
-    MODIFY COLUMN day_of_week TINYINT NULL COMMENT '星期几 1-7，NULL 表示无固定时间',
-    MODIFY COLUMN period VARCHAR(20) NULL COMMENT '第几节，NULL 表示无固定时间';
-
--- 更新字段映射配置：将这两个字段标记为非必填
-UPDATE field_mappings
-SET is_required = 0
-WHERE data_source = 'student_schedule'
-  AND target_field IN ('day_of_week', 'period');
-
--- ─────────────────────────────────────────────
--- Part 8: 修复学校数据字段映射问题
--- ─────────────────────────────────────────────
-
--- ════════════════════════════════════════════════════════════════
--- Part 1: 修复行政班学院字段映射
--- ════════════════════════════════════════════════════════════════
-
--- 禁用错误的学院字段映射
-UPDATE field_mappings
-SET is_active = 0
-WHERE data_source = 'administrative_class'
-  AND source_field IN ('SSXYBM', 'SSXYMC', '所属学院编码', '所属学院名称');
-
--- 添加正确的学院字段映射（YXDM/YXMC）
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('administrative_class', 'YXDM',     'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '院系代码（英文缩写）'),
-('administrative_class', '院系代码', 'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '院系代码（中文）'),
-('administrative_class', 'YXMC',     'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '院系名称（英文缩写）'),
-('administrative_class', '院系名称', 'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '院系名称（中文）');
-
--- 添加专业代码字段映射（ZYDM）
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('administrative_class', 'ZYDM',     'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（英文缩写）'),
-('administrative_class', '专业代码', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（中文）');
-
--- ════════════════════════════════════════════════════════════════
--- Part 2: 添加教学计划专业字段映射
--- ════════════════════════════════════════════════════════════════
-
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
-('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
-
--- ════════════════════════════════════════════════════════════════
--- V23: sync_logs 分页扩展字段
--- ════════════════════════════════════════════════════════════════
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_complete');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_complete TINYINT(1) NULL COMMENT ''分页是否完整结束'' AFTER operator', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_stop_reason');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_stop_reason VARCHAR(64) NULL COMMENT ''分页停止原因'' AFTER pagination_complete', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_pages_fetched');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_pages_fetched INT NULL COMMENT ''已拉取页数'' AFTER pagination_stop_reason', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_last_skip');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_last_skip INT NULL COMMENT ''最后一次skip值'' AFTER pagination_pages_fetched', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_page_size');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_page_size INT NULL COMMENT ''分页pageSize'' AFTER pagination_last_skip', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='pagination_guard_hit');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN pagination_guard_hit TINYINT(1) NULL COMMENT ''是否触发分页防护'' AFTER pagination_page_size', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='sync_logs' AND column_name='fetched_row_count');
-SET @sql = IF(@col_exists = 0, 'ALTER TABLE sync_logs ADD COLUMN fetched_row_count INT NULL COMMENT ''上游已拉取条数'' AFTER pagination_guard_hit', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
--- ════════════════════════════════════════════════════════════════
--- V24: 相似度矩阵表（Item-CF / User-CF 推荐算法核心数据）
--- ════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `text_id` BIGINT NOT NULL COMMENT '文章ID',
-    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
-    INDEX `idx_text_id` (`text_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵';
-
-CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `text_id` BIGINT NOT NULL COMMENT '文章ID',
-    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
-    INDEX `idx_text_id` (`text_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
-
-CREATE TABLE IF NOT EXISTS `user_similarity_matrix` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `user_id` BIGINT NOT NULL COMMENT '用户ID',
-    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵';
-
-CREATE TABLE IF NOT EXISTS `user_similarity_matrix_tmp` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `user_id` BIGINT NOT NULL COMMENT '用户ID',
-    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵临时表';
-
--- ════════════════════════════════════════════════════════════════
--- V25: 相似度矩阵补 similar_*_id 索引（Item-CF / User-CF 双向查询优化）
--- ════════════════════════════════════════════════════════════════
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='text_similarity_matrix' AND index_name='idx_similar_text_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `text_similarity_matrix` ADD INDEX `idx_similar_text_id` (`similar_text_id`)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='text_similarity_matrix_tmp' AND index_name='idx_similar_text_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `text_similarity_matrix_tmp` ADD INDEX `idx_similar_text_id` (`similar_text_id`)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='user_similarity_matrix' AND index_name='idx_similar_user_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `user_similarity_matrix` ADD INDEX `idx_similar_user_id` (`similar_user_id`)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='user_similarity_matrix_tmp' AND index_name='idx_similar_user_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `user_similarity_matrix_tmp` ADD INDEX `idx_similar_user_id` (`similar_user_id`)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
--- ════════════════════════════════════════════════════════════════
--- V26: 优化 v_user_text_interaction_scores 视图
--- ════════════════════════════════════════════════════════════════
--- 背景：V12 原视图使用 users CROSS JOIN texts（180 × 520 ≈ 9.3 万行全扫），
--- 无交互的 (user, text) 对也会参与计算后被 WHERE score > 0 滤掉，浪费 I/O。
--- 改为由四张交互源表 UNION 驱动，只对真实有过交互的 (user, text) 对生成行。
-
-CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
-WITH user_text_pairs AS (
-    SELECT user_id,    text_id FROM user_text_reads
-    UNION
-    SELECT student_id, text_id FROM text_learning_records
-    UNION
-    SELECT student_id, text_id FROM article_favorites
-    UNION
-    SELECT user_id,    text_id FROM underlines
-)
-SELECT
-    utp.user_id                                    AS user_id,
-    utp.text_id                                    AS text_id,
-
-    COALESCE(utr.read_at IS NOT NULL, 0)           AS w_read,
-    COALESCE(tlr.is_completed = 1, 0)              AS w_complete,
-    COALESCE(af.id IS NOT NULL, 0)                 AS w_favorite,
-    LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) AS w_duration,
-    COALESCE(sr.correct_rate, 0.0)                 AS w_accuracy,
-    LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) AS w_underline,
-
-    LEAST(
-        COALESCE(utr.read_at IS NOT NULL, 0) * 0.2
-        + COALESCE(tlr.is_completed = 1, 0) * 0.2
-        + COALESCE(af.id IS NOT NULL, 0) * 0.3
-        + LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) * 0.1
-        + COALESCE(sr.correct_rate, 0.0) * 0.1
-        + LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) * 0.1,
-        1.0
-    )                                              AS interaction_score
-
-FROM user_text_pairs utp
-INNER JOIN `users` u ON u.id = utp.user_id AND u.role IN ('STUDENT', 'USER')
-INNER JOIN `texts` t ON t.id = utp.text_id AND t.deleted = 0
-LEFT JOIN `user_text_reads` utr
-    ON utr.user_id = utp.user_id AND utr.text_id = utp.text_id
-LEFT JOIN `text_learning_records` tlr
-    ON tlr.student_id = utp.user_id AND tlr.text_id = utp.text_id
-LEFT JOIN `article_favorites` af
-    ON af.student_id = utp.user_id AND af.text_id = utp.text_id
-LEFT JOIN (
-    SELECT
-        sr.student_id,
-        lr.text_id,
-        CAST(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
-            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.correct_count'), 0) ELSE 0 END) AS DECIMAL(5,2))
-        / NULLIF(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
-            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.total_count'), 0) ELSE 0 END), 0) AS correct_rate
-    FROM score_records sr
-    LEFT JOIN learning_records lr ON lr.assignment_id = sr.assignment_id
-    WHERE sr.score_type = 'ASSIGNMENT'
-    GROUP BY sr.student_id, lr.text_id
-) sr ON sr.student_id = utp.user_id AND sr.text_id = utp.text_id
-LEFT JOIN (
-    SELECT user_id, text_id, COUNT(*) AS underline_count
-    FROM underlines
-    GROUP BY user_id, text_id
-) ul ON ul.user_id = utp.user_id AND ul.text_id = utp.text_id;
-
--- ════════════════════════════════════════════════════════════════
-
--- ═══════════════════════════════════════════════════════════════
--- V24__similarity_matrix.sql
--- ═══════════════════════════════════════════════════════════════
-
--- ═══════════════════════════════════════════════════════════════
--- 1. text_similarity_matrix — 文章相似度矩阵
--- ═══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `text_id` BIGINT NOT NULL COMMENT '文章ID',
-    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
-    INDEX `idx_text_id` (`text_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵';
-
--- ═══════════════════════════════════════════════════════════════
--- 2. text_similarity_matrix_tmp — 文章相似度矩阵临时表
--- ═══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `text_id` BIGINT NOT NULL COMMENT '文章ID',
-    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
-    INDEX `idx_text_id` (`text_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
-
--- ═══════════════════════════════════════════════════════════════
--- 3. user_similarity_matrix — 用户相似度矩阵
--- ═══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS `user_similarity_matrix` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `user_id` BIGINT NOT NULL COMMENT '用户ID',
-    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵';
-
--- ═══════════════════════════════════════════════════════════════
--- 4. user_similarity_matrix_tmp — 用户相似度矩阵临时表
--- ═══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS `user_similarity_matrix_tmp` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `user_id` BIGINT NOT NULL COMMENT '用户ID',
-    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵临时表';
-
--- ═══════════════════════════════════════════════════════════════
--- V25__add_similar_id_indexes.sql
--- ═══════════════════════════════════════════════════════════════
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='text_similarity_matrix' AND index_name='idx_similar_text_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `text_similarity_matrix` ADD INDEX `idx_similar_text_id` (`similar_text_id`)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='text_similarity_matrix_tmp' AND index_name='idx_similar_text_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `text_similarity_matrix_tmp` ADD INDEX `idx_similar_text_id` (`similar_text_id`)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='user_similarity_matrix' AND index_name='idx_similar_user_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `user_similarity_matrix` ADD INDEX `idx_similar_user_id` (`similar_user_id`)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
-SET @idx_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='user_similarity_matrix_tmp' AND index_name='idx_similar_user_id');
-SET @sql = IF(@idx_exists = 0, 'ALTER TABLE `user_similarity_matrix_tmp` ADD INDEX `idx_similar_user_id` (`similar_user_id`)', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
--- ═══════════════════════════════════════════════════════════════
--- V26__optimize_interaction_view.sql
--- ═══════════════════════════════════════════════════════════════
-
--- 注意：V24 已创建 v_user_text_interaction_scores 视图（CROSS JOIN 版本）
--- V26 优化为 UNION 驱动版本，使用 CREATE OR REPLACE VIEW 覆盖
-CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
-WITH user_text_pairs AS (
-    SELECT user_id,    text_id FROM user_text_reads
-    UNION
-    SELECT student_id, text_id FROM text_learning_records
-    UNION
-    SELECT student_id, text_id FROM article_favorites
-    UNION
-    SELECT user_id,    text_id FROM underlines
-)
-SELECT
-    utp.user_id                                    AS user_id,
-    utp.text_id                                    AS text_id,
-
-    COALESCE(utr.read_at IS NOT NULL, 0)           AS w_read,
-    COALESCE(tlr.is_completed = 1, 0)              AS w_complete,
-    COALESCE(af.id IS NOT NULL, 0)                 AS w_favorite,
-    LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) AS w_duration,
-    COALESCE(sr.correct_rate, 0.0)                 AS w_accuracy,
-    LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) AS w_underline,
-
-    LEAST(
-        COALESCE(utr.read_at IS NOT NULL, 0) * 0.2
-        + COALESCE(tlr.is_completed = 1, 0) * 0.2
-        + COALESCE(af.id IS NOT NULL, 0) * 0.3
-        + LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) * 0.1
-        + COALESCE(sr.correct_rate, 0.0) * 0.1
-        + LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) * 0.1,
-        1.0
-    )                                              AS interaction_score
-
-FROM user_text_pairs utp
-INNER JOIN `users` u ON u.id = utp.user_id AND u.role IN ('STUDENT', 'USER')
-INNER JOIN `texts` t ON t.id = utp.text_id AND t.deleted = 0
-LEFT JOIN `user_text_reads` utr
-    ON utr.user_id = utp.user_id AND utr.text_id = utp.text_id
-LEFT JOIN `text_learning_records` tlr
-    ON tlr.student_id = utp.user_id AND tlr.text_id = utp.text_id
-LEFT JOIN `article_favorites` af
-    ON af.student_id = utp.user_id AND af.text_id = utp.text_id
-LEFT JOIN (
-    SELECT
-        sr.student_id,
-        lr.text_id,
-        CAST(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
-            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.correct_count'), 0) ELSE 0 END) AS DECIMAL(5,2))
-        / NULLIF(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
-            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.total_count'), 0) ELSE 0 END), 0) AS correct_rate
-    FROM score_records sr
-    LEFT JOIN learning_records lr ON lr.assignment_id = sr.assignment_id
-    WHERE sr.score_type = 'ASSIGNMENT'
-    GROUP BY sr.student_id, lr.text_id
-) sr ON sr.student_id = utp.user_id AND sr.text_id = utp.text_id
-LEFT JOIN (
-    SELECT user_id, text_id, COUNT(*) AS underline_count
-    FROM underlines
-    GROUP BY user_id, text_id
-) ul ON ul.user_id = utp.user_id AND ul.text_id = utp.text_id;
-
--- ═══════════════════════════════════════════════════════════════
--- V27__course_selection_nullable_course_name.sql
--- ═══════════════════════════════════════════════════════════════
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='course_selection' AND column_name='course_name');
-SET @sql = IF(@col_exists > 0, 'ALTER TABLE course_selection MODIFY COLUMN course_name VARCHAR(200) COMMENT ''课程名称（CDSP API不返回，可为空）''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
--- ═══════════════════════════════════════════════════════════════
--- V28__course_selection_nullable_credits.sql
--- ═══════════════════════════════════════════════════════════════
-
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='course_selection' AND column_name='credits');
-SET @sql = IF(@col_exists > 0, 'ALTER TABLE course_selection MODIFY COLUMN credits DECIMAL(3,1) COMMENT ''学分（CDSP API不返回，可为空）''', 'SELECT 1');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
--- ════════════════════════════════════════════════════════════════
-
--- 恢复 sql_notes
-SET SESSION sql_notes = 1;

@@ -20,6 +20,7 @@ fi
 
 DB_USER=${DB_USERNAME:-root}
 DB_PW=${DB_PASSWORD:-}
+RUN_DB_MIGRATIONS=${HOT_UPDATE_RUN_MIGRATIONS:-true}
 
 # 创建日志目录
 mkdir -p "$PROJECT_ROOT/logs"
@@ -49,6 +50,12 @@ read_choice() {
 # 数据库迁移（公共函数）
 # ─────────────────────────────────────────────
 run_db_migration() {
+    if [ "$RUN_DB_MIGRATIONS" != "true" ]; then
+        echo "⚠️  HOT_UPDATE_RUN_MIGRATIONS=false，已按配置跳过数据库迁移。"
+        echo "   整合版迁移链适合作为全新数据库初始稳定版；如需执行请先确认数据库策略并备份。"
+        return 0
+    fi
+
     echo "🗄️ 应用数据库增量迁移..."
     FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
     MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"

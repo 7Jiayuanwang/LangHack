@@ -42,8 +42,8 @@ CREATE TABLE IF NOT EXISTS administrative_class (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行政班基本信息表';
 
--- 1.2 课程表
-CREATE TABLE IF NOT EXISTS course (
+-- 1.2 学校课程表
+CREATE TABLE IF NOT EXISTS school_course (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     course_code VARCHAR(50) NOT NULL UNIQUE COMMENT '课程编号 (KCBH)',
     course_name VARCHAR(200) NOT NULL COMMENT '课程名称 (KCMC)',
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS course (
     INDEX idx_nature (course_nature),
     INDEX idx_category (course_category),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程基本信息表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学校课程基本信息表';
 
 -- ============================================================================
 -- 2. 教学组织层 (Teaching Organization Layer)
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS teaching_class (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
-    FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_course (course_code),
     INDEX idx_teacher (teacher_id),
     INDEX idx_academic_year_semester (academic_year, semester),
@@ -146,11 +146,11 @@ CREATE TABLE IF NOT EXISTS course_selection (
     student_id VARCHAR(50) NOT NULL COMMENT '学号',
     student_name VARCHAR(100) NOT NULL COMMENT '学生姓名',
     course_code VARCHAR(50) NOT NULL COMMENT '课程代码',
-    course_name VARCHAR(200) NOT NULL COMMENT '课程名称',
+    course_name VARCHAR(200) COMMENT '课程名称（CDSP API不返回，可为空）',
     class_id VARCHAR(50) NOT NULL COMMENT '教学班号',
     teacher_id VARCHAR(50) NOT NULL COMMENT '授课教师工号',
     teacher_name VARCHAR(50) NOT NULL COMMENT '授课教师姓名',
-    credits DECIMAL(3,1) NOT NULL COMMENT '学分',
+    credits DECIMAL(3,1) COMMENT '学分（CDSP API不返回，可为空）',
     academic_year VARCHAR(20) NOT NULL COMMENT '学年',
     semester INT NOT NULL COMMENT '学期',
     class_time VARCHAR(100) COMMENT '上课时间',
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS course_selection (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
-    FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_student (student_id),
     INDEX idx_course (course_code),
@@ -183,14 +183,14 @@ CREATE TABLE IF NOT EXISTS course_selection (
 CREATE TABLE IF NOT EXISTS level_exam_scores (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     student_id VARCHAR(50) NOT NULL COMMENT '学号',
-    student_name VARCHAR(100) NOT NULL COMMENT '姓名',
-    exam_type VARCHAR(50) NOT NULL COMMENT '考试类型',
+    student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）',
+    exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）',
     exam_name VARCHAR(100) NOT NULL COMMENT '考试名称',
     admission_ticket_no VARCHAR(30) COMMENT '准考证号',
     exam_date DATE NOT NULL COMMENT '考试时间',
     score DECIMAL(5,2) NOT NULL COMMENT '成绩',
     grade VARCHAR(20) COMMENT '等级',
-    is_passed BOOLEAN NOT NULL COMMENT '是否通过',
+    is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）',
     passing_score DECIMAL(5,2) COMMENT '合格分数线',
     listening_score DECIMAL(5,2) COMMENT '听力成绩',
     reading_score DECIMAL(5,2) COMMENT '阅读成绩',

@@ -1,23 +1,13 @@
 -- ═══════════════════════════════════════════════════════════════
--- V15: 功能增强与问题修复
--- 整合自: V21 (sso_binding_admin_remark) + V22 (chain_fetch_schema)
---       + V23 (sync_log_pagination_summary) + V24 (similarity_matrix)
+-- V14: 增强功能
+-- 整合自: V22 (chain_fetch_schema) + V24 (similarity_matrix)
 --       + V25 (similar_id_indexes) + V26 (optimize_interaction_view)
---       + V28 (fix_student_schedule_nullable_fields)
---       + V29 (fix_field_mappings_administrative_class_teaching_plans)
 -- ═══════════════════════════════════════════════════════════════
 
+-- Part 1: 按学院链式拉取数据模型
 -- ─────────────────────────────────────────────
--- Part 1: SSO 绑定表管理员备注字段
--- ─────────────────────────────────────────────
-ALTER TABLE sso_user_bindings
-ADD COLUMN admin_remark TEXT COMMENT '管理员备注：记录特殊情况（如用户被删除后重新登录）' AFTER sso_member_of;
-
--- ─────────────────────────────────────────────
--- Part 2: 按学院链式拉取数据模型
--- ─────────────────────────────────────────────
-
---              与 SSO 自动授权、教师-学生绑定查询等下游场景
+-- 用途: 支持按学院链式拉取学生/教师数据，配合 SSO 自动授权、
+--       教师-学生绑定查询等下游场景
 -- Author: System
 -- Date: 2026-04-22
 -- ============================================================================
@@ -99,34 +89,6 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('school_data', 'sync_college_chain_colleges', '外国语学院', '链式刷新白名单（逗号分隔学院名）', 0),
 ('school_data', 'sync_college_chain_match_mode', 'eq', '学院名匹配模式（eq=精确 / contains=包含）', 0);
 
--- ============================================================================
--- 5. SSO 角色映射补充：ou=People（IMAU CAS 回退 containerId 格式）
---   CAS 不返回 memberOf 时回退使用 containerId，值如 ou=2000001,ou=People
---   ou=People 是全校师生通用组，默认映射为 STUDENT（校园环境大多数人是学生）
---   英文 key 含 '=' 无法写入 YAML default-rules（Spring Boot 吞 '='），故用数据库
--- ============================================================================
-INSERT IGNORE INTO sso_config (config_key, config_value, config_type, description) VALUES
-('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId 通用组 → STUDENT（大多数人是学生）');
-
--- ============================================================================
--- 6. level_exam_scores 修复：student_name 可为空 + 字段映射补全
---   CDSP 等级考试成绩端点不返回学生姓名，仅返回 学号/考试科目/考试日期/分数
---   原 student_id NOT NULL + student_name NOT NULL 导致 100% INSERT 失败
--- ============================================================================
-ALTER TABLE level_exam_scores MODIFY COLUMN student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）';
-ALTER TABLE level_exam_scores MODIFY COLUMN exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）';
-ALTER TABLE level_exam_scores MODIFY COLUMN is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）';
-
--- 补充 xm → studentName 字段映射（CDSP 未来可能返回姓名字段时自动生效）
-INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('level_exam_scores', 'xm', 'studentName', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学生姓名（CDSP 可能不返回）');
-
--- ─────────────────────────────────────────────
--- Part 3: 同步日志分页字段（V9 已包含，此处保留版本连续性）
--- ─────────────────────────────────────────────
--- V23 的列已在 V9 的 CREATE TABLE sync_logs 中定义
-
--- ─────────────────────────────────────────────
 -- Part 4: 相似度矩阵表
 -- ─────────────────────────────────────────────
 
@@ -278,44 +240,58 @@ WHERE u.role IN ('STUDENT', 'USER');
 -- Part 5: 相似度矩阵补充索引
 -- ─────────────────────────────────────────────
 
+SET @idx_text_similarity_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_similarity_matrix' AND INDEX_NAME = 'idx_similar_text_id'
+);
+SET @idx_text_similarity_sql = IF(
+    @idx_text_similarity_exists = 0,
+    'ALTER TABLE `text_similarity_matrix` ADD INDEX `idx_similar_text_id` (`similar_text_id`)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_text_similarity_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-USE `english_learning`;
+SET @idx_text_similarity_tmp_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_similarity_matrix_tmp' AND INDEX_NAME = 'idx_similar_text_id'
+);
+SET @idx_text_similarity_tmp_sql = IF(
+    @idx_text_similarity_tmp_exists = 0,
+    'ALTER TABLE `text_similarity_matrix_tmp` ADD INDEX `idx_similar_text_id` (`similar_text_id`)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_text_similarity_tmp_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- 幂等添加索引（如果索引已存在则跳过）
-DELIMITER $$
+SET @idx_user_similarity_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_similarity_matrix' AND INDEX_NAME = 'idx_similar_user_id'
+);
+SET @idx_user_similarity_sql = IF(
+    @idx_user_similarity_exists = 0,
+    'ALTER TABLE `user_similarity_matrix` ADD INDEX `idx_similar_user_id` (`similar_user_id`)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_user_similarity_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-CREATE PROCEDURE add_index_if_not_exists(
-    IN p_table_name VARCHAR(64),
-    IN p_index_name VARCHAR(64),
-    IN p_column_name VARCHAR(64)
-)
-BEGIN
-    DECLARE index_exists INT DEFAULT 0;
+SET @idx_user_similarity_tmp_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_similarity_matrix_tmp' AND INDEX_NAME = 'idx_similar_user_id'
+);
+SET @idx_user_similarity_tmp_sql = IF(
+    @idx_user_similarity_tmp_exists = 0,
+    'ALTER TABLE `user_similarity_matrix_tmp` ADD INDEX `idx_similar_user_id` (`similar_user_id`)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_user_similarity_tmp_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-    SELECT COUNT(*) INTO index_exists
-    FROM information_schema.STATISTICS
-    WHERE table_schema = DATABASE()
-      AND table_name = p_table_name
-      AND index_name = p_index_name;
-
-    IF index_exists = 0 THEN
-        SET @sql = CONCAT('ALTER TABLE `', p_table_name, '` ADD INDEX `', p_index_name, '` (`', p_column_name, '`)');
-        PREPARE stmt FROM @sql;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END IF;
-END$$
-
-DELIMITER ;
-
-CALL add_index_if_not_exists('text_similarity_matrix', 'idx_similar_text_id', 'similar_text_id');
-CALL add_index_if_not_exists('text_similarity_matrix_tmp', 'idx_similar_text_id', 'similar_text_id');
-CALL add_index_if_not_exists('user_similarity_matrix', 'idx_similar_user_id', 'similar_user_id');
-CALL add_index_if_not_exists('user_similarity_matrix_tmp', 'idx_similar_user_id', 'similar_user_id');
-
-DROP PROCEDURE IF EXISTS add_index_if_not_exists;
-
--- ─────────────────────────────────────────────
 -- Part 6: 优化用户文本交互视图
 -- ─────────────────────────────────────────────
 
@@ -326,7 +302,6 @@ DROP PROCEDURE IF EXISTS add_index_if_not_exists;
 --   - underlines            (user_id,   text_id)
 -- ============================================================================
 
-USE `english_learning`;
 SET NAMES utf8mb4;
 
 CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
@@ -387,51 +362,3 @@ LEFT JOIN (
     FROM underlines
     GROUP BY user_id, text_id
 ) ul ON ul.user_id = utp.user_id AND ul.text_id = utp.text_id;
-
--- ─────────────────────────────────────────────
--- Part 7: 修复学生课表必填字段问题
--- ─────────────────────────────────────────────
-
-ALTER TABLE student_schedule
-    MODIFY COLUMN day_of_week TINYINT NULL COMMENT '星期几 1-7，NULL 表示无固定时间',
-    MODIFY COLUMN period VARCHAR(20) NULL COMMENT '第几节，NULL 表示无固定时间';
-
--- 更新字段映射配置：将这两个字段标记为非必填
-UPDATE field_mappings
-SET is_required = 0
-WHERE data_source = 'student_schedule'
-  AND target_field IN ('day_of_week', 'period');
-
--- ─────────────────────────────────────────────
--- Part 8: 修复学校数据字段映射问题
--- ─────────────────────────────────────────────
-
--- ════════════════════════════════════════════════════════════════
--- Part 1: 修复行政班学院字段映射
--- ════════════════════════════════════════════════════════════════
-
--- 禁用错误的学院字段映射
-UPDATE field_mappings
-SET is_active = 0
-WHERE data_source = 'administrative_class'
-  AND source_field IN ('SSXYBM', 'SSXYMC', '所属学院编码', '所属学院名称');
-
--- 添加正确的学院字段映射（YXDM/YXMC）
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('administrative_class', 'YXDM',     'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '院系代码（英文缩写）'),
-('administrative_class', '院系代码', 'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '院系代码（中文）'),
-('administrative_class', 'YXMC',     'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '院系名称（英文缩写）'),
-('administrative_class', '院系名称', 'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '院系名称（中文）');
-
--- 添加专业代码字段映射（ZYDM）
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('administrative_class', 'ZYDM',     'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（英文缩写）'),
-('administrative_class', '专业代码', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（中文）');
-
--- ════════════════════════════════════════════════════════════════
--- Part 2: 添加教学计划专业字段映射
--- ════════════════════════════════════════════════════════════════
-
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
-('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');

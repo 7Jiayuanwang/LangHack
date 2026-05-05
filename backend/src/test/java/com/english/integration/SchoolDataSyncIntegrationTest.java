@@ -64,7 +64,10 @@ class SchoolDataSyncIntegrationTest {
                             .dataSource(url, user, password)
                             .baselineOnMigrate(true)
                             .validateOnMigrate(false)
+                            .cleanDisabled(false)  // 允许 clean 操作
                             .load();
+                    // 清理数据库并重新执行所有迁移，确保测试环境干净
+                    flyway.clean();
                     flyway.migrate();
                 }
             });

@@ -237,6 +237,14 @@ git push origin hotfix/critical-bug
 
 **前端**：使用 Vue 3 Composition API (`<script setup>`) + Scoped SCSS，组件命名采用 PascalCase。
 
+### 数据库迁移基线原则
+
+- 当前 `backend/src/main/resources/db/migration/` 采用整合版迁移链，作为全新数据库的初始稳定版。
+- 正式迁移编号为 `V0` 到 `V14`，旧补丁脚本已合并到对应主迁移或最终增强迁移中。
+- 该迁移链不兼容已经执行过旧版 `V24/V25/V26/V27/V28/V29/V30` 等历史脚本的 Flyway 数据库。
+- 若已有生产数据需要切换到整合版，应先完整备份，再新建空库执行整合链，最后按业务数据迁移方案导入数据。
+- 执行任何数据库迁移前必须先备份数据库。
+
 **提交信息**：遵循 [Conventional Commits](https://www.conventionalcommits.org/)：
 ```
 feat: 新功能

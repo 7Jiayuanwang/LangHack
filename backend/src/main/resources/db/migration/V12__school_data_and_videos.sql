@@ -5,8 +5,8 @@
 -- ═══════════════════════════════════════════════════════════════
 -- V12: 学校数据集成整合
 -- 整合自: V12.1 (字段映射) + V13 (system_config seed)
---       + V14 (student_schedule 表) + V16 (course→school_course 重命名)
---       + V18 (功能开关 seed) + V19 (字段映射) + V20 (API 认证 appId+appSecret)
+--       + V14 (student_schedule 表) + V18 (功能开关 seed)
+--       + V19 (字段映射) + V20 (API 认证 appId+appSecret)
 --       + V20-align (2026-04-21 按 CDSP 官方 PDF 对齐 field_mappings)
 --
 -- 历史合并说明:
@@ -14,6 +14,8 @@
 --   - 2026-04-21: 按官方 PDF 原文修正 field_mappings, 剔除 V12.1/V19 遗留
 --     snake_case 冗余映射（FieldMappingServiceImpl 会自动将 target_field
 --     转 camelCase, snake_case/camelCase 两套是等价重复）, 合并 V20-align
+--   - 2026-05-05: 移除 V16 (course→school_course 重命名) 冗余代码，
+--     V9 已正确创建 school_course 表，无需兼容性处理
 --
 -- 注意: Flyway 在本项目生产环境禁用 (application.yml flyway.enabled=false),
 --       实际生产部署走 docker/mysql/init/04-apply-all-migrations.sql
@@ -26,70 +28,7 @@
 -- ═══════════════════════════════════════════════════════════════
 
 -- ═══════════════════════════════════════════════════════════════
--- Part 1.1: 重命名 course → school_course (原 V16)
--- SchoolCourse 实体 @TableName("school_course"), 修正 V9 遗留的 course 表名
--- ═══════════════════════════════════════════════════════════════
-
-SET @course_exists = (SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'course');
-SET @school_course_exists = (SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'school_course');
-
--- 如果 course 存在且 school_course 不存在 → 重命名
-SET @rename_sql = IF(@course_exists = 1 AND @school_course_exists = 0,
-    'RENAME TABLE `course` TO `school_course`',
-    'SELECT 1');
-PREPARE stmt FROM @rename_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- 如果都不存在（全新环境）→ 创建 school_course
-SET @create_sql = IF(@course_exists = 0 AND @school_course_exists = 0,
-    'CREATE TABLE IF NOT EXISTS school_course (
-        id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT ''主键'',
-        course_code VARCHAR(50) NOT NULL UNIQUE COMMENT ''课程编号 (KCBH)'',
-        course_name VARCHAR(200) NOT NULL COMMENT ''课程名称 (KCMC)'',
-        course_name_en VARCHAR(200) COMMENT ''课程英文名称 (KCYWMC)'',
-        course_short_name VARCHAR(100) COMMENT ''课程简称 (KCJC)'',
-        course_nature VARCHAR(50) NOT NULL COMMENT ''课程性质 (KCXZ)'',
-        course_category VARCHAR(50) NOT NULL COMMENT ''课程类别 (KCLB)'',
-        credits DECIMAL(3,1) NOT NULL COMMENT ''学分 (XF)'',
-        total_hours INT NOT NULL COMMENT ''总学时 (ZXS)'',
-        theory_hours INT COMMENT ''理论学时 (LLXS)'',
-        experiment_hours INT COMMENT ''实验学时 (SYXS)'',
-        practice_hours INT COMMENT ''实践学时 (SJXS)'',
-        computer_hours INT COMMENT ''上机学时 (SJXS_PC)'',
-        college_code VARCHAR(50) NOT NULL COMMENT ''开课学院编号 (KKYXBH)'',
-        college_name VARCHAR(100) NOT NULL COMMENT ''开课学院名称 (KKYXMC)'',
-        department_code VARCHAR(50) COMMENT ''开课系部编号 (KKXBBH)'',
-        department_name VARCHAR(100) COMMENT ''开课系部名称 (KKXBMC)'',
-        leader_code VARCHAR(50) COMMENT ''课程负责人工号 (KCFZRGH)'',
-        leader_name VARCHAR(50) COMMENT ''课程负责人姓名 (KCFZRXM)'',
-        assessment_method VARCHAR(50) NOT NULL COMMENT ''考核方式 (KHFS)'',
-        is_bilingual VARCHAR(10) COMMENT ''是否双语教学 (SFSYJX)'',
-        is_online VARCHAR(10) COMMENT ''是否网络课程 (SFWLKC)'',
-        applicable_majors VARCHAR(500) COMMENT ''适用专业 (SYZY)'',
-        prerequisite_codes VARCHAR(500) COMMENT ''先修课程编号 (XXKCBH)'',
-        prerequisite_names VARCHAR(500) COMMENT ''先修课程名称 (XXKCMC)'',
-        course_intro TEXT COMMENT ''课程简介 (KCJJ)'',
-        teaching_objectives TEXT COMMENT ''教学目标 (JXMB)'',
-        course_status VARCHAR(20) NOT NULL COMMENT ''课程状态 (KCZT)'',
-        sync_time DATETIME NOT NULL COMMENT ''同步时间'',
-        sync_source VARCHAR(20) NOT NULL COMMENT ''同步来源'',
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT ''创建时间'',
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT ''更新时间'',
-        INDEX idx_college (college_code),
-        INDEX idx_nature (course_nature),
-        INDEX idx_category (course_category),
-        INDEX idx_sync_time (sync_time)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT=''学校课程基本信息表''',
-    'SELECT 1');
-PREPARE stmt FROM @create_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- ═══════════════════════════════════════════════════════════════
--- Part 1.2: 创建 student_schedule 表 (原 V14 Part 1)
+-- Part 1.1: 创建 student_schedule 表 (原 V14 Part 1)
 -- 存储学生个人课表数据 (/api/xskb)
 -- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS student_schedule (
@@ -101,8 +40,8 @@ CREATE TABLE IF NOT EXISTS student_schedule (
     course_name VARCHAR(200) NOT NULL,
     teacher_id VARCHAR(50),
     teacher_name VARCHAR(100),
-    day_of_week TINYINT NOT NULL,
-    period VARCHAR(20) NOT NULL,
+    day_of_week TINYINT NULL,
+    period VARCHAR(20) NULL,
     week_range VARCHAR(50),
     class_location VARCHAR(200),
     academic_year VARCHAR(20) NOT NULL,
@@ -407,3 +346,19 @@ CREATE TABLE IF NOT EXISTS `videos` (
     KEY `idx_associated_text_id` (`associated_text_id`),
     KEY `idx_created_time` (`created_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频表';
+
+
+UPDATE field_mappings
+SET is_active = 0
+WHERE data_source = 'administrative_class'
+  AND source_field IN ('SSXYBM', 'SSXYMC', '所属学院编码', '所属学院名称');
+
+INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('administrative_class', 'YXDM',       'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（英文缩写）'),
+('administrative_class', '学院代码',   'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（中文）'),
+('administrative_class', 'YXMC',       'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（英文缩写）'),
+('administrative_class', '学院名称',   'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（中文）'),
+('administrative_class', 'ZYDM',       'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（英文缩写）'),
+('administrative_class', '专业代码',   'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（中文）'),
+('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
+('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
