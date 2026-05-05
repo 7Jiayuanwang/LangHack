@@ -740,7 +740,6 @@ CREATE TABLE IF NOT EXISTS ai_call_log (
     created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_service_name (service_name),
     INDEX idx_created_time (created_time),
-    INDEX idx_created_time_uri (created_time, uri(191)),
     INDEX idx_success (success)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI调用日志表';
 

@@ -125,13 +125,13 @@ services:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 检查 MySQL 进程存活 + 复制线程运行状态
+      # 检查 MySQL 进程存活 + 复制线程运行状态（IO + SQL 线程都必须运行）
       # 复制未配置或线程未运行时 healthcheck 失败 → backend 无法启动 → 部署阻塞
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' | grep -q 'Replica_IO_Running: Yes' && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' | grep -q 'Replica_SQL_Running: Yes'"]
       interval: 10s
-      timeout: 5s
-      retries: 18
-      start_period: 240s  # 增加到 4 分钟，等待主库初始化完成 + 从库初始化 + 复制配置
+      timeout: 10s
+      retries: 30
+      start_period: 360s  # 增加到 6 分钟，给主库和从库足够时间完成初始化（包括大量数据导入和复制配置）
 
   # ─────────────────────────────────────────────
   # Redis 缓存
