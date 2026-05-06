@@ -135,7 +135,7 @@ describe('Dashboard.vue', () => {
   it('renders the dashboard root element', () => {
     mockRequest.mockResolvedValue({ code: 200, data: {} })
     const wrapper = shallowMount(Dashboard)
-    expect(wrapper.find('.dashboard').exists()).toBe(true)
+    expect(wrapper.find('.dashboard-container').exists()).toBe(true)
   })
 
   it('recentActivities is an array', () => {
