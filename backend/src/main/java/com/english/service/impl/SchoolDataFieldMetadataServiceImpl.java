@@ -8,7 +8,10 @@ import com.english.entity.CourseSelection;
 import com.english.entity.FieldMapping;
 import com.english.entity.LevelExamScore;
 import com.english.entity.SchoolCourse;
+import com.english.entity.SchoolStudent;
+import com.english.entity.SchoolTeacher;
 import com.english.entity.StudentSchedule;
+import com.english.entity.TeacherStudentBinding;
 import com.english.entity.TeachingClass;
 import com.english.entity.TeachingPlan;
 import com.english.service.FieldMappingService;
@@ -35,7 +38,10 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
             "level_exam_scores", LevelExamScore.class,
             "teaching_plans", TeachingPlan.class,
             "teacher_courses", TeachingClass.class,
-            "student_schedule", StudentSchedule.class
+            "student_schedule", StudentSchedule.class,
+            "school_student", SchoolStudent.class,
+            "school_teacher", SchoolTeacher.class,
+            "teacher_student_binding", TeacherStudentBinding.class
     );
 
     private static final Map<String, String> FIELD_LABELS = createFieldLabels();
@@ -353,6 +359,32 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
         labels.put("student_schedule.classLocation", "教室");
         labels.put("student_schedule.academicYear", "学年");
         labels.put("student_schedule.semester", "学期");
+
+        labels.put("school_student.studentId", "学号");
+        labels.put("school_student.studentName", "姓名");
+        labels.put("school_student.collegeName", "学院名称");
+        labels.put("school_student.collegeCode", "学院代码");
+        labels.put("school_student.classCode", "行政班编码");
+        labels.put("school_student.className", "行政班名称");
+        labels.put("school_student.grade", "年级");
+        labels.put("school_student.majorName", "专业名称");
+        labels.put("school_student.sourceCourseCodes", "来源课程代码");
+        labels.put("school_student.lastExamSyncTime", "最近成绩同步");
+        labels.put("school_student.lastScheduleSyncTime", "最近课表同步");
+
+        labels.put("school_teacher.teacherId", "教师工号");
+        labels.put("school_teacher.teacherName", "教师姓名");
+        labels.put("school_teacher.collegeName", "学院名称");
+        labels.put("school_teacher.collegeCode", "学院代码");
+        labels.put("school_teacher.lastScheduleSyncTime", "最近课表同步");
+
+        labels.put("teacher_student_binding.teacherId", "教师工号");
+        labels.put("teacher_student_binding.studentId", "学号");
+        labels.put("teacher_student_binding.courseCode", "课程代码");
+        labels.put("teacher_student_binding.courseClassCode", "教学班号");
+        labels.put("teacher_student_binding.academicYear", "学年");
+        labels.put("teacher_student_binding.semester", "学期");
+        labels.put("teacher_student_binding.sourceType", "来源类型");
         return labels;
     }
 

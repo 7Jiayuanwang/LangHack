@@ -18,7 +18,7 @@
         :key="key" 
         class="stat-card" 
         :class="{ active: activeTab === key }"
-        @click="activeTab = key"
+        @click="activateOverviewTab(key)"
       >
         <div class="stat-icon-bg">
           <el-icon><DataLine /></el-icon>
@@ -41,7 +41,7 @@
         联合同步相关数据源
       </el-checkbox>
       <el-button size="small" @click="openFilterDialog">设置筛选条件</el-button>
-      <el-button type="primary" size="small" :loading="syncing" @click="handleSync">
+      <el-button type="primary" size="small" :loading="syncing" :disabled="isDerivedLocalTab" @click="handleSync">
         同步当前数据源
       </el-button>
       <div v-if="currentFilters.length > 0" class="filter-summary">
@@ -49,8 +49,13 @@
       </div>
     </div>
 
+    <div v-if="isDerivedLocalTab" class="tab-note derived-note">
+      <el-icon><InfoFilled /></el-icon>
+      <span>当前为链式拉取派生的本地表，只支持本地筛选查看。请使用下方“按学院链式拉取”更新数据。</span>
+    </div>
+
     <!-- 链式拉取卡片 -->
-    <div v-if="chainFetchEnabled" class="chain-fetch-card">
+    <div class="chain-fetch-card">
       <div class="card-header">
         <span class="card-title">按学院链式拉取</span>
         <span class="card-subtitle">课程 → 教师 → 学生 → 绑定关系</span>
@@ -234,6 +239,48 @@
           <el-table-column prop="classLocation" label="教室" width="120" />
         </el-table>
       </el-tab-pane>
+
+      <el-tab-pane label="链式学生目录" name="school_student">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+          <el-table-column prop="studentId" label="学号" width="130" />
+          <el-table-column prop="studentName" label="姓名" width="100" />
+          <el-table-column label="学院" min-width="130">
+            <template #default="{ row }">
+              {{ row.collegeName || row.collegeCode || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="grade" label="年级" width="80" />
+          <el-table-column prop="majorName" label="专业" min-width="140" />
+          <el-table-column prop="className" label="行政班" min-width="140" />
+          <el-table-column prop="sourceCourseCodes" label="来源课程" min-width="180" show-overflow-tooltip />
+        </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane label="链式教师目录" name="school_teacher">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+          <el-table-column prop="teacherId" label="教师工号" width="130" />
+          <el-table-column prop="teacherName" label="教师姓名" width="110" />
+          <el-table-column label="学院" min-width="140">
+            <template #default="{ row }">
+              {{ row.collegeName || row.collegeCode || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="syncSource" label="来源" width="110" />
+          <el-table-column prop="lastScheduleSyncTime" label="最近课表同步" min-width="170" />
+        </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane label="师生绑定" name="teacher_student_binding">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+          <el-table-column prop="teacherId" label="教师工号" width="130" />
+          <el-table-column prop="studentId" label="学号" width="130" />
+          <el-table-column prop="courseCode" label="课程代码" width="120" />
+          <el-table-column prop="courseClassCode" label="教学班号" width="130" />
+          <el-table-column prop="academicYear" label="学年" width="120" />
+          <el-table-column prop="semester" label="学期" width="90" />
+          <el-table-column prop="sourceType" label="来源" width="120" />
+        </el-table>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 分页 -->
@@ -315,7 +362,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { InfoFilled, DataLine, Refresh, Filter, Connection, ArrowRight, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
@@ -326,9 +374,15 @@ import {
   incrementalSyncSchoolDataFiltered,
   chainFetchStudentsByCollege
 } from '@/api/schoolData'
-import { getFeatureToggles } from '@/api/systemConfig'
 
 const DEFAULT_PAGE_SIZE = 20
+const DERIVED_LOCAL_TABS = new Set(['school_student', 'school_teacher', 'teacher_student_binding'])
+const CHAIN_COLLEGE_FILTER_FIELDS = {
+  school_student: { field: 'collegeName', label: '学院名称' },
+  school_teacher: { field: 'collegeName', label: '学院名称' },
+  school_course: { field: 'collegeName', label: '学院名称' },
+  administrative_class: { field: 'collegeName', label: '学院名称' }
+}
 
 const OPERATOR_LABELS = {
   eq: '等于',
@@ -346,9 +400,13 @@ const dataSourceLabels = {
   course_selection: '选课记录',
   level_exam_scores: '等级考试',
   teaching_plans: '教学计划',
-  student_schedule: '学生课表'
+  student_schedule: '学生课表',
+  school_student: '链式学生目录',
+  school_teacher: '链式教师目录',
+  teacher_student_binding: '师生绑定'
 }
 
+const route = useRoute()
 const activeTab = ref('administrative_class')
 const loading = ref(false)
 const tableData = ref([])
@@ -380,11 +438,11 @@ const filterGroups = ref([
 const currentFilters = ref([])
 
 // 链式拉取相关状态
-const chainFetchEnabled = ref(false)
 const chainFetching = ref(false)
 const chainCollegeName = ref('外国语学院')
 const chainMatchMode = ref('eq')
 const chainResult = ref(null)
+const suppressTabReload = ref(false)
 
 // 导出相关状态
 const exporting = ref(false)
@@ -396,6 +454,8 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 200]
 const availableFields = computed(() => {
   return filterFields.value
 })
+
+const isDerivedLocalTab = computed(() => DERIVED_LOCAL_TABS.has(activeTab.value))
 
 function availableOperators(fieldName) {
   const fieldDef = availableFields.value.find(field => field.field === fieldName)
@@ -512,11 +572,96 @@ async function loadData() {
 }
 
 async function handleTabChange() {
+  if (suppressTabReload.value) {
+    return
+  }
   currentPage.value = 1
   pageSize.value = DEFAULT_PAGE_SIZE
   currentFilters.value = []
   await loadFilterFields()
   loadData()
+}
+
+function buildCollegeFilterGroup(field, label, value) {
+  if (!field || !value) {
+    return []
+  }
+  return [{
+    relation: 'AND',
+    conditions: [{
+      field,
+      label,
+      operator: 'eq',
+      value
+    }]
+  }]
+}
+
+function resolveChainResultTab(result) {
+  if ((result?.studentCount || 0) > 0) return 'school_student'
+  if ((result?.teacherCount || 0) > 0) return 'school_teacher'
+  if ((result?.bindingCount || 0) > 0) return 'teacher_student_binding'
+  if ((result?.courseCount || 0) > 0) return 'school_course'
+  return activeTab.value
+}
+
+function buildChainLocalFilters(tabName, result) {
+  const collegeName = result?.collegeName?.trim?.() || ''
+  const filterConfig = CHAIN_COLLEGE_FILTER_FIELDS[tabName]
+  if (collegeName && filterConfig) {
+    return buildCollegeFilterGroup(filterConfig.field, filterConfig.label, collegeName)
+  }
+  if (tabName === 'teacher_student_binding' && Array.isArray(result?.matchedCourseCodes) && result.matchedCourseCodes.length > 0) {
+    return [{
+      relation: 'AND',
+      conditions: [{
+        field: 'courseCode',
+        label: '课程代码',
+        operator: 'in',
+        value: result.matchedCourseCodes.join(',')
+      }]
+    }]
+  }
+  return []
+}
+
+async function switchToTab(tabName, filters = []) {
+  if (!Object.prototype.hasOwnProperty.call(dataSourceLabels, tabName)) {
+    return
+  }
+  suppressTabReload.value = true
+  try {
+    activeTab.value = tabName
+    currentPage.value = 1
+    pageSize.value = DEFAULT_PAGE_SIZE
+    currentFilters.value = filters
+    await nextTick()
+    await loadFilterFields()
+    await loadData()
+  } finally {
+    suppressTabReload.value = false
+  }
+}
+
+async function activateOverviewTab(tabName) {
+  await switchToTab(tabName, [])
+}
+
+async function focusChainResultLocally(result) {
+  const targetTab = resolveChainResultTab(result)
+  const filters = buildChainLocalFilters(targetTab, result)
+  await switchToTab(targetTab, filters)
+}
+
+async function applyRouteContext() {
+  const targetTab = typeof route.query.tab === 'string' ? route.query.tab.trim() : ''
+  if (!targetTab || !Object.prototype.hasOwnProperty.call(dataSourceLabels, targetTab)) {
+    return false
+  }
+  const collegeName = typeof route.query.collegeName === 'string' ? route.query.collegeName.trim() : ''
+  const filters = collegeName ? buildChainLocalFilters(targetTab, { collegeName }) : []
+  await switchToTab(targetTab, filters)
+  return true
 }
 
 function openFilterDialog() {
@@ -588,6 +733,10 @@ function saveFilters() {
 }
 
 async function handleSync() {
+  if (isDerivedLocalTab.value) {
+    ElMessage.warning('该本地表由按学院链式拉取生成，请使用下方链式拉取更新数据')
+    return
+  }
   syncing.value = true
   try {
     const payload = {
@@ -634,22 +783,14 @@ async function handleChainFetch() {
     })
 
     chainResult.value = res?.data || null
-    ElMessage.success('链式拉取完成')
     await loadOverview()
+    await focusChainResultLocally(chainResult.value)
+    ElMessage.success('链式拉取完成，已切换到本地结果')
   } catch (e) {
     console.error('链式拉取失败:', e)
+    ElMessage.error(e?.message || '链式拉取失败')
   } finally {
     chainFetching.value = false
-  }
-}
-
-async function loadFeatureToggles() {
-  try {
-    const res = await getFeatureToggles()
-    const toggles = res?.data || {}
-    chainFetchEnabled.value = toggles['ops.school_data_chain_fetch'] === true || toggles['ops.school_data_chain_fetch'] === 'true'
-  } catch (e) {
-    console.error('获取功能开关失败:', e)
   }
 }
 
@@ -746,8 +887,10 @@ function generateCSV(data) {
     totalHours: '总学时',
     hours: '学时',
     classId: '教学班ID',
+    courseClassCode: '教学班号',
     teacherName: '教师姓名',
     teacherCode: '教师工号',
+    teacherId: '教师工号',
     academicYear: '学年',
     semester: '学期',
     enrolledCount: '选课人数',
@@ -768,6 +911,11 @@ function generateCSV(data) {
     planName: '计划名称',
     totalCredits: '总学分',
     planStatus: '计划状态',
+    sourceCourseCodes: '来源课程代码',
+    sourceType: '来源类型',
+    syncSource: '同步来源',
+    lastExamSyncTime: '最近成绩同步',
+    lastScheduleSyncTime: '最近课表同步',
     updatedAt: '更新时间',
     createdAt: '创建时间'
   }
@@ -829,10 +977,12 @@ function downloadCSV(csvContent, filename) {
 }
 
 onMounted(async () => {
-  await loadFeatureToggles()
   await loadOverview()
-  await loadFilterFields()
-  await loadData()
+  const handledByRoute = await applyRouteContext()
+  if (!handledByRoute) {
+    await loadFilterFields()
+    await loadData()
+  }
 })
 </script>
 

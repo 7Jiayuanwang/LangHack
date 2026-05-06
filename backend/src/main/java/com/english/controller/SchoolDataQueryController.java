@@ -38,6 +38,9 @@ public class SchoolDataQueryController {
     @Autowired private TeachingPlanMapper teachingPlanMapper;
     @Autowired private TeachingPlanCourseMapper teachingPlanCourseMapper;
     @Autowired private StudentScheduleMapper studentScheduleMapper;
+    @Autowired private SchoolStudentMapper schoolStudentMapper;
+    @Autowired private SchoolTeacherMapper schoolTeacherMapper;
+    @Autowired private TeacherStudentBindingMapper teacherStudentBindingMapper;
     @Autowired private SchoolDataFieldMetadataService fieldMetadataService;
 
     // =========================================================================
@@ -255,6 +258,9 @@ public class SchoolDataQueryController {
         overview.put("level_exam_scores", levelExamScoreMapper.selectCount(null));
         overview.put("teaching_plans", teachingPlanMapper.selectCount(null));
         overview.put("student_schedule", studentScheduleMapper.selectCount(null));
+        overview.put("school_student", schoolStudentMapper.selectCount(null));
+        overview.put("school_teacher", schoolTeacherMapper.selectCount(null));
+        overview.put("teacher_student_binding", teacherStudentBindingMapper.selectCount(null));
         return Result.success(overview);
     }
 
@@ -326,6 +332,27 @@ public class SchoolDataQueryController {
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
                 wrapper.orderByAsc("day_of_week", "period");
                 return Result.success(studentScheduleMapper.selectPage(pageReq, wrapper));
+            }
+            case "school_student": {
+                Page<SchoolStudent> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
+                QueryWrapper<SchoolStudent> wrapper = new QueryWrapper<>();
+                applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
+                wrapper.orderByDesc("updated_at");
+                return Result.success(schoolStudentMapper.selectPage(pageReq, wrapper));
+            }
+            case "school_teacher": {
+                Page<SchoolTeacher> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
+                QueryWrapper<SchoolTeacher> wrapper = new QueryWrapper<>();
+                applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
+                wrapper.orderByDesc("updated_at");
+                return Result.success(schoolTeacherMapper.selectPage(pageReq, wrapper));
+            }
+            case "teacher_student_binding": {
+                Page<TeacherStudentBinding> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
+                QueryWrapper<TeacherStudentBinding> wrapper = new QueryWrapper<>();
+                applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
+                wrapper.orderByDesc("sync_time");
+                return Result.success(teacherStudentBindingMapper.selectPage(pageReq, wrapper));
             }
             default:
                 throw new IllegalArgumentException("不支持的数据源: " + dataSource);

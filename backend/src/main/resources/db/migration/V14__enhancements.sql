@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS teacher_student_binding (
 -- 4. Feature Toggle / 学院链式配置 seed
 -- ============================================================================
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('feature_toggle', 'ops.school_data_chain_fetch', 'false', '运维端按学院链式拉取功能开关', 0),
+('feature_toggle', 'ops.school_data_chain_fetch', 'true', '运维端按学院链式拉取功能开关', 0),
 ('feature_toggle', 'student.lazy_data_sync', 'true', '学生端按需 Lazy 同步四六级/课表', 0),
 ('feature_toggle', 'sso.auto_grant_student', 'false', 'SSO 学号匹配 school_student 自动授权 STUDENT', 0),
 ('feature_toggle', 'sso.auto_grant_teacher', 'false', 'SSO 工号匹配 school_teacher 自动授权 TEACHER', 0),
@@ -121,6 +121,7 @@ SET `description` = CASE `config_key`
         WHEN 'ops.school_data_browser' THEN 'true'
         WHEN 'ops.school_data_config' THEN 'true'
         WHEN 'page_schedule' THEN 'true'
+        WHEN 'ops.school_data_chain_fetch' THEN 'true'
         ELSE `config_value`
     END
 WHERE `config_group` = 'feature_toggle'

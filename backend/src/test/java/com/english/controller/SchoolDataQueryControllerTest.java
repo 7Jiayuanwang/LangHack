@@ -47,6 +47,9 @@ class SchoolDataQueryControllerTest {
     @Mock private TeachingPlanMapper teachingPlanMapper;
     @Mock private TeachingPlanCourseMapper teachingPlanCourseMapper;
     @Mock private StudentScheduleMapper studentScheduleMapper;
+    @Mock private SchoolStudentMapper schoolStudentMapper;
+    @Mock private SchoolTeacherMapper schoolTeacherMapper;
+    @Mock private TeacherStudentBindingMapper teacherStudentBindingMapper;
     @Mock private SchoolDataFieldMetadataService fieldMetadataService;
 
     @BeforeEach
@@ -60,12 +63,18 @@ class SchoolDataQueryControllerTest {
     @DisplayName("概览应使用 teacher_courses 键对齐前端官方数据源 Tab")
     void getOverview_usesTeacherCoursesKey_success() throws Exception {
         when(teachingClassMapper.selectCount(null)).thenReturn(5L);
+        when(schoolStudentMapper.selectCount(null)).thenReturn(12L);
+        when(schoolTeacherMapper.selectCount(null)).thenReturn(3L);
+        when(teacherStudentBindingMapper.selectCount(null)).thenReturn(20L);
 
         mockMvc.perform(get("/api/admin/school-data/overview"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.teacher_courses").value(5))
-                .andExpect(jsonPath("$.data.teaching_class").doesNotExist());
+                .andExpect(jsonPath("$.data.teaching_class").doesNotExist())
+                .andExpect(jsonPath("$.data.school_student").value(12))
+                .andExpect(jsonPath("$.data.school_teacher").value(3))
+                .andExpect(jsonPath("$.data.teacher_student_binding").value(20));
     }
 
     @Test
@@ -165,6 +174,32 @@ class SchoolDataQueryControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    @DisplayName("school_student 通用查询应命中链式拉取本地表")
+    void querySchoolData_schoolStudent_success() throws Exception {
+        SchoolDataFilterFieldDto field = stringField("collegeName", "college_name", true);
+        when(fieldMetadataService.getFilterFieldMap("school_student")).thenReturn(Map.of("collegeName", field));
+        when(schoolStudentMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 20));
+
+        mockMvc.perform(post("/api/admin/school-data/school_student/query")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "filterGroups": [
+                                    {
+                                      "conditions": [
+                                        {"field": "collegeName", "operator": "eq", "value": "外国语学院"}
+                                      ]
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(schoolStudentMapper).selectPage(any(), any());
     }
 
     @Test
