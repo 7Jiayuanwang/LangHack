@@ -14,8 +14,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.ResourceAccessException;
@@ -464,23 +462,28 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     /**
-     * 使用 POST 方法请求 CDSP API，参数放在请求体中（application/x-www-form-urlencoded）
+     * 使用 POST 方法请求 CDSP API，参数放在请求体中（application/json）
      * 用于学生课表等不支持 GET 查询参数的端点
+     *
+     * 注意：CDSP API 要求 POST 请求使用 application/json 格式，
+     * 使用 application/x-www-form-urlencoded 会返回 errcode=999 错误
      */
     private ParsedResponse fetchPagePost(String url, Map<String, String> params) {
         int retryAttempts = properties.getApi().getRetryAttempts();
         for (int attempt = 1; attempt <= retryAttempts; attempt++) {
             try {
                 HttpHeaders headers = buildHeaders();
-                headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+                // 修复：使用 application/json 而非 application/x-www-form-urlencoded
+                // CDSP API 文档明确要求 Content-Type: application/json
+                headers.setContentType(MediaType.APPLICATION_JSON);
 
-                // 构建表单参数
-                MultiValueMap<String, String> formParams = new LinkedMultiValueMap<>();
+                // 构建 JSON 请求体（将 Map 转为 JSON 对象）
+                Map<String, Object> jsonBody = new HashMap<>();
                 if (params != null) {
-                    params.forEach(formParams::add);
+                    params.forEach(jsonBody::put);
                 }
 
-                HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(formParams, headers);
+                HttpEntity<Map<String, Object>> entity = new HttpEntity<>(jsonBody, headers);
 
                 logger.info("学校数据 API POST 请求中 url={} params={} attempt={}/{}", url, params, attempt, retryAttempts);
                 ResponseEntity<String> response = restTemplate.exchange(
