@@ -1494,6 +1494,7 @@ fi
 echo "[INFO] 应用增量数据库迁移..."
 DB_ROOT_PW=$(load_env_value "MYSQL_ROOT_PASSWORD" "" "$ENV_FILE")
 [ -z "$DB_ROOT_PW" ] && DB_ROOT_PW=$(load_env_value "DB_PASSWORD" "" "$ENV_FILE")
+DB_NAME="${MYSQL_DATABASE:-english_learning}"
 MASTER_CONTAINER="langhack-mysql-master"
 SLAVE_CONTAINER="langhack-mysql-slave"
 MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
@@ -1537,8 +1538,8 @@ fi
 
 # 从头部列表提取最高版本号用于日志
 max_ver=$(grep -oE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
-echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver})"
-MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 < "$MIGRATION_SQL")
+echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${DB_NAME})"
+MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 < "$MIGRATION_SQL")
 MIGRATE_EXIT=$?
 MIGRATE_ERRORS=$(echo "$MIGRATE_OUTPUT" | grep -v "Using a password on the command line interface can be insecure" | grep -v "^$" || true)
 if [ $MIGRATE_EXIT -ne 0 ]; then
@@ -1557,7 +1558,6 @@ echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
 echo "[INFO] 检查数据库种子数据..."
 
 # 检查关键表的数据量（texts=文章, ecdict_words=词典, article=课文）
-DB_NAME="${MYSQL_DATABASE:-english_learning}"
 TEXTS_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
     -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
 ECDICT_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \

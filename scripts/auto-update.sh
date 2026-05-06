@@ -47,17 +47,20 @@
 #   ./scripts/auto-update.sh -b main            # 指定分支
 #   ./scripts/auto-update.sh -i                 # 交互式选择分支
 #   # crontab (每小时检查)
-#   0 * * * * /path/to/LangHack/scripts/auto-update.sh >> /var/log/langhack-update.log 2>&1
+#   0 * * * * LOG_FILE=/var/log/langhack-update.log /path/to/LangHack/scripts/auto-update.sh
 # ==============================================================================
 set -euo pipefail
 
 # ── 健壮性增强：错误处理和状态追踪 ──────────────────────
 # 全局状态变量
-SCRIPT_STATE="INIT"           # INIT -> CHECKING -> UPDATING -> BUILDING -> DEPLOYING -> SUCCESS/FAILED
+SCRIPT_STATE="INIT"           # INIT -> CHECKING -> UPDATING -> BUILDING -> MIGRATING -> DEPLOYING -> SUCCESS/FAILED
 ROLLBACK_NEEDED=false
 MAINTENANCE_ACTIVE=false
 BUILD_PID=""
 CLEANUP_DONE=false
+AUTO_STASH_CREATED=false
+AUTO_STASH_NAME=""
+PRE_PULL_COMMIT=""
 
 # ── 配置 ──────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -204,7 +207,85 @@ fi
 # ══════════════════════════════════════════════════════
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    echo "$message"
+    if [ -n "${LOG_FILE:-}" ]; then
+        printf '%s\n' "$message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+
+setup_log_destination() {
+    local preferred_log="$LOG_FILE"
+    local fallback_log="$PROJECT_ROOT/logs/langhack-update.log"
+
+    if mkdir -p "$(dirname "$preferred_log")" 2>/dev/null && touch "$preferred_log" 2>/dev/null; then
+        LOG_FILE="$preferred_log"
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$fallback_log")" 2>/dev/null || true
+    if touch "$fallback_log" 2>/dev/null; then
+        LOG_FILE="$fallback_log"
+        log "WARN: 无法写入日志文件 $preferred_log，回退到 $LOG_FILE"
+        return 0
+    fi
+
+    LOG_FILE=""
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN: 无法写入独立日志文件，将仅输出到当前终端"
+}
+
+restore_auto_stash_if_needed() {
+    [ "$AUTO_STASH_CREATED" = true ] || return 0
+
+    local stash_ref
+    stash_ref=$(git stash list | awk -v marker="$AUTO_STASH_NAME" '$0 ~ marker {print $1; exit}' | tr -d ':')
+    if [ -z "$stash_ref" ]; then
+        log "WARN: 未找到自动保存的 stash: $AUTO_STASH_NAME"
+        AUTO_STASH_CREATED=false
+        return 1
+    fi
+
+    if git stash pop --index --quiet "$stash_ref" >/dev/null 2>&1; then
+        log "INFO: 已恢复更新前的本地修改 ($AUTO_STASH_NAME)"
+        AUTO_STASH_CREATED=false
+        AUTO_STASH_NAME=""
+        return 0
+    fi
+
+    log "WARN: 自动恢复本地修改失败，请手动执行: git stash list | grep \"$AUTO_STASH_NAME\""
+    return 1
+}
+
+verify_changed_paths_writable() {
+    local from_commit="$1"
+    local to_commit="$2"
+    local issue_count=0
+    local changed_path=""
+    local parent_dir=""
+
+    while IFS= read -r changed_path; do
+        [ -z "$changed_path" ] && continue
+
+        parent_dir=$(dirname "$PROJECT_ROOT/$changed_path")
+        if [ -d "$parent_dir" ] && [ ! -w "$parent_dir" ]; then
+            log "ERROR: 更新目标目录不可写: ${parent_dir#$PROJECT_ROOT/}"
+            issue_count=$((issue_count + 1))
+        fi
+
+        if [ "$issue_count" -ge 10 ]; then
+            log "ERROR: 不可写路径超过 10 个，停止继续检查"
+            break
+        fi
+    done < <(git diff --name-only "$from_commit" "$to_commit" 2>/dev/null || true)
+
+    if [ "$issue_count" -gt 0 ]; then
+        log "ERROR: 检测到工作区权限异常，当前用户 $(id -un) 无法写入上述路径"
+        log "ERROR: 建议修复: sudo chown -R $(id -un):$(id -gn) \"$PROJECT_ROOT\""
+        log "ERROR: 可先排查: find \"$PROJECT_ROOT\" ! -user \"$(id -un)\" -ls | head"
+        return 1
+    fi
+
+    return 0
 }
 
 is_pid_running() {
@@ -746,10 +827,11 @@ run_incremental_migrations() {
     # 提取最高版本号用于日志
     local max_ver
     max_ver=$(grep -oE '^--   V[0-9]+__' "$migration_sql" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
-    log "MIGRATE: 执行 04-apply-all-migrations.sql (V1~V${max_ver})..."
+    local db_name="${MYSQL_DATABASE:-english_learning}"
+    log "MIGRATE: 执行 04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${db_name})..."
 
     local migrate_output migrate_exit migrate_errors
-    migrate_output=$(docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" 2>&1 < "$migration_sql")
+    migrate_output=$(docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 < "$migration_sql")
     migrate_exit=$?
     migrate_errors=$(echo "$migrate_output" \
         | grep -v "Using a password on the command line interface can be insecure" \
@@ -780,8 +862,6 @@ run_incremental_migrations() {
 
     if [ "$need_seed" = true ]; then
         log "SEED: 检测到空数据库（texts: ${texts_count}, ecdict_words: ${ecdict_count}, article: ${article_count}），开始自动导入..."
-
-        local db_name="${MYSQL_DATABASE:-english_learning}"
 
         # ① 全量备份
         local seed_file=""
@@ -1033,19 +1113,37 @@ cleanup() {
         disable_maintenance
     fi
 
+    # 若更新失败且代码已回到更新前版本，则尝试恢复自动 stash 的本地修改
+    if [ $exit_code -ne 0 ] && [ "$AUTO_STASH_CREATED" = true ] && [ -n "$PRE_PULL_COMMIT" ]; then
+        local current_head
+        current_head=$(git rev-parse HEAD 2>/dev/null || echo "")
+        if [ "$current_head" = "$PRE_PULL_COMMIT" ]; then
+            restore_auto_stash_if_needed || true
+        fi
+    fi
+
     # 清理锁文件
     rm -f "$LOCK_FILE" 2>/dev/null || true
 
     # 非零退出时输出提示
     if [ $exit_code -ne 0 ]; then
         log "ERROR: 脚本异常退出（状态: $SCRIPT_STATE, 退出码: $exit_code）"
-        log "ERROR: 完整日志: tail -100 $LOG_FILE"
+        if [ -n "$LOG_FILE" ] && [ -f "$LOG_FILE" ]; then
+            log "ERROR: 完整日志: tail -100 $LOG_FILE"
+        else
+            log "ERROR: 当前终端输出即为完整日志（未写入独立日志文件）"
+        fi
 
         # 根据状态给出恢复建议
         case "$SCRIPT_STATE" in
             BUILDING)
                 log "ERROR: 构建阶段失败，旧服务应仍在运行"
                 log "ERROR: 检查构建日志: tail -100 /tmp/langhack-build-*.log"
+                ;;
+            MIGRATING)
+                log "ERROR: 数据库迁移阶段失败，旧服务应仍在运行"
+                log "ERROR: 检查数据库容器: docker compose -f $COMPOSE_FILE ps"
+                log "ERROR: 查看 MySQL 日志: docker compose -f $COMPOSE_FILE logs --tail=100 mysql-master"
                 ;;
             DEPLOYING)
                 log "ERROR: 部署阶段失败，可能需要手动回滚"
@@ -1073,6 +1171,8 @@ cleanup() {
 # ══════════════════════════════════════════════════════
 # 主流程
 # ══════════════════════════════════════════════════════
+
+setup_log_destination
 
 # ── 防止并发执行 ──────────────────────────────────────
 if [ -f "$LOCK_FILE" ]; then
@@ -1271,6 +1371,15 @@ log "────────────────────"
 PRE_PULL_COMMIT="$LOCAL_HASH"   # 保存 pull 前的 HEAD，用于 git checkout 回滚
 OLD_COMMIT="$DEPLOYED_HASH"     # 用已部署 commit 作为 diff 基准，检测本次变更范围
 
+# ①.5 更新前预检工作区写权限（避免进入维护模式后才因权限失败）
+if ! verify_changed_paths_writable "$LOCAL_HASH" "$REMOTE_HASH"; then
+    log "ERROR: 工作区写权限预检失败，中止更新"
+    notify "自动更新中止: 工作区存在不可写文件，请修复仓库属主/权限后重试"
+    ops_log "ERROR" "${LOCAL_HASH:0:8}" "工作区权限异常，无法更新到 ${REMOTE_HASH:0:8}"
+    SCRIPT_STATE="FAILED"
+    exit 1
+fi
+
 # ② 开启维护模式
 clear_stale_maintenance
 enable_maintenance
@@ -1295,21 +1404,48 @@ SCRIPT_STATE="UPDATING"
 PRE_PULL_COMMIT=$(git rev-parse HEAD)
 
 # 保存本地修改（如果有）
-git stash --include-untracked 2>/dev/null || true
+if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
+    AUTO_STASH_NAME="auto-update-$(date +%Y%m%d_%H%M%S)"
+    if git stash push --include-untracked -m "$AUTO_STASH_NAME" --quiet >/dev/null 2>&1; then
+        AUTO_STASH_CREATED=true
+        log "INFO: 已临时保存本地修改到 stash: $AUTO_STASH_NAME"
+    else
+        log "ERROR: git stash 失败，无法安全继续更新"
+        notify "自动更新失败: git stash 失败，请先手动处理本地修改"
+        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git stash 失败，更新中止"
+        disable_maintenance
+        SCRIPT_STATE="FAILED"
+        exit 1
+    fi
+fi
 git checkout --force "$BRANCH" --quiet 2>/dev/null || true
 
 # 使用 git reset --hard 而非 git pull，确保原子性和幂等性
-if git reset --hard "origin/$BRANCH" --quiet 2>/dev/null; then
+if reset_err=$(git reset --hard "origin/$BRANCH" --quiet 2>&1); then
     POST_PULL_COMMIT=$(git rev-parse HEAD)
     log "INFO: 代码更新成功 ✓"
     log "INFO:   更新前: ${PRE_PULL_COMMIT:0:8}"
     log "INFO:   更新后: ${POST_PULL_COMMIT:0:8}"
+    if [ "$AUTO_STASH_CREATED" = true ]; then
+        log "INFO: 本地修改已保存在 stash，可按需恢复: git stash list | grep \"$AUTO_STASH_NAME\""
+    fi
     ROLLBACK_NEEDED=true  # 从此刻起，失败需要回滚
 else
-    log "ERROR: git reset --hard 失败，可能是 Git 仓库损坏"
-    log "ERROR: 建议手动检查: git status && git fsck"
-    notify "自动更新失败: git reset 失败，仓库可能损坏"
-    ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git reset 失败，仓库可能损坏"
+    if echo "$reset_err" | grep -qi "Permission denied"; then
+        log "ERROR: git reset --hard 失败：检测到工作区文件权限问题"
+        log "ERROR: 原始错误: $reset_err"
+        log "ERROR: 建议修复: sudo chown -R $(id -un):$(id -gn) \"$PROJECT_ROOT\""
+        log "ERROR: 可先排查: find \"$PROJECT_ROOT\" ! -user \"$(id -un)\" -ls | head"
+        notify "自动更新失败: Git 工作区存在权限问题，请修复仓库属主/权限"
+        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git reset 失败：工作区文件权限异常"
+    else
+        log "ERROR: git reset --hard 失败"
+        [ -n "$reset_err" ] && log "ERROR: 原始错误: $reset_err"
+        log "ERROR: 建议手动检查: git status && git fsck"
+        notify "自动更新失败: git reset 失败，请检查 Git 工作区"
+        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git reset 失败，请检查 Git 工作区"
+    fi
+    restore_auto_stash_if_needed || true
     disable_maintenance
     SCRIPT_STATE="FAILED"
     exit 1
@@ -1431,6 +1567,7 @@ if [ "$RUNTIME_MODE" = "docker" ]; then
 
         # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
         if [ "$RUN_MIGRATIONS" = true ]; then
+            SCRIPT_STATE="MIGRATING"
             run_incremental_migrations || {
                 log "ERROR: 增量迁移失败，回退代码（旧容器未受影响）"
                 git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
@@ -1464,7 +1601,7 @@ if [ "$RUNTIME_MODE" = "docker" ]; then
 
             # 重建旧版本镜像并启动
             log "INFO: 重建旧版本镜像..."
-            if docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES 2>&1 | tee -a "$LOG_FILE"; then
+            if { if [ -n "$LOG_FILE" ]; then docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES 2>&1 | tee -a "$LOG_FILE"; else docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES; fi; }; then
                 docker compose -f "$COMPOSE_FILE" up -d $SERVICES
                 notify "已回滚到 ${PRE_PULL_COMMIT:0:8}"
                 ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "容器启动失败，已回滚"
@@ -1506,6 +1643,7 @@ if [ "$RUNTIME_MODE" = "docker" ]; then
     else
         log "INFO: 变更不涉及前后端代码（可能是文档/脚本/迁移），跳过重建"
         if [ "$RUN_MIGRATIONS" = true ]; then
+            SCRIPT_STATE="MIGRATING"
             run_incremental_migrations || {
                 log "ERROR: 迁移执行失败，启动自动回滚..."
                 rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"
