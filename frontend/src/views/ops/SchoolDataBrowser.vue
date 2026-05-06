@@ -119,8 +119,16 @@
         <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
           <el-table-column prop="classCode" label="班级编码" width="120" />
           <el-table-column prop="className" label="班级名称" min-width="150" />
-          <el-table-column prop="collegeName" label="学院" min-width="120" />
-          <el-table-column prop="majorName" label="专业" min-width="120" />
+          <el-table-column label="学院" min-width="120">
+            <template #default="{ row }">
+              {{ row.collegeName || row.collegeCode || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="专业" min-width="120">
+            <template #default="{ row }">
+              {{ row.majorName || row.majorCode || '-' }}
+            </template>
+          </el-table-column>
           <el-table-column prop="grade" label="年级" width="80" />
           <el-table-column prop="studentCount" label="人数" width="70" />
           <el-table-column prop="classStatus" label="状态" width="80" />
@@ -135,7 +143,11 @@
           <el-table-column prop="courseCategory" label="类别" width="80" />
           <el-table-column prop="credits" label="学分" width="70" />
           <el-table-column prop="totalHours" label="学时" width="70" />
-          <el-table-column prop="collegeName" label="学院" min-width="120" />
+          <el-table-column label="学院" min-width="120">
+            <template #default="{ row }">
+              {{ row.collegeName || row.collegeCode || '-' }}
+            </template>
+          </el-table-column>
         </el-table>
       </el-tab-pane>
 
@@ -200,7 +212,11 @@
         <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
           <el-table-column prop="planId" label="计划编号" width="120" />
           <el-table-column prop="planName" label="计划名称" min-width="200" />
-          <el-table-column prop="majorName" label="专业" width="120" />
+          <el-table-column label="专业" width="120">
+            <template #default="{ row }">
+              {{ row.majorName || row.majorCode || '-' }}
+            </template>
+          </el-table-column>
           <el-table-column prop="grade" label="年级" width="80" />
           <el-table-column prop="totalCredits" label="总学分" width="80" />
           <el-table-column prop="planStatus" label="状态" width="80" />
@@ -822,9 +838,37 @@ onMounted(async () => {
 
 <style scoped>
 .school-data-browser {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .school-data-browser {
+    padding: 30px;
+  }
+  
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .stat-label {
+    font-size: 15px;
+  }
+
+  .card-title {
+    font-size: 22px;
+  }
+
+  :deep(.el-tabs__item) {
+    font-size: 16px;
+    height: 48px;
+  }
+
+  :deep(.el-table) {
+    font-size: 14px;
+  }
 }
 
 .loading-progress-overlay {

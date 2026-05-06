@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════
 -- V11: 清理 sso_config 表中无效的角色映射规则，修复被误映射的用户角色
--- 原名: V12__fix_role_mapping_cleanup.sql（重命名为 V11，主题独立）
+-- 原先曾放在更后的版本号中，现前移并并入正式迁移链
 --
 -- 问题：sso_config 表中可能存在 config_key='sso.role_mapping.ou' 的脏规则，
 -- strip 前缀后 key='ou'，由于旧版 RoleMappingService 使用 contains() 匹配，

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -291,6 +292,9 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
 
         // 外键检查：验证 teaching_class 表中是否存在该 classId
         if (teachingClass == null) {
+            teachingClass = hydrateTeachingClassFromScheduleData(data, classId, academicYear, semester);
+        }
+        if (teachingClass == null) {
             logger.warn("课程安排外键检查失败，teaching_class 表中不存在 classId={}，跳过同步", classId);
             return;
         }
@@ -314,10 +318,20 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         String studentId = getStringValue(data, "studentId");
         String classId = getClassIdValue(data);
         TeachingClass teachingClass = resolveTeachingClass(classId);
+
+        // 外键检查：验证 teaching_class 表中是否存在该 classId
+        if (teachingClass == null) {
+            teachingClass = resolveTeachingClassFromStudentSchedule(studentId, classId, data);
+        }
+        if (teachingClass == null) {
+            logger.warn("选课记录外键检查失败，teaching_class 表中不存在 classId={}，跳过同步", classId);
+            return;
+        }
+
         String academicYear = defaultIfBlank(firstNonBlank(getStringValue(data, "academicYear"),
-                teachingClass == null ? null : teachingClass.getAcademicYear()), "UNKNOWN");
+                teachingClass.getAcademicYear()), "UNKNOWN");
         Integer semester = parseSchoolSemester(data, "semester");
-        if (semester == null && teachingClass != null) {
+        if (semester == null) {
             semester = teachingClass.getSemester();
         }
         if (semester == null) {
@@ -337,16 +351,35 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         // 学生姓名：优先使用 API 返回值，若为空则从 school_student 或 users 表反查
         String studentName = firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId), studentId);
         entity.setStudentName(studentName);
-        entity.setCourseCode(firstNonBlank(getCourseCodeForSelection(data, classId),
-                teachingClass == null ? null : teachingClass.getCourseCode(),
-                classId));
+        String courseCode = firstNonBlank(getCourseCodeForSelection(data, classId),
+                teachingClass.getCourseCode(),
+                classId);
+        entity.setCourseCode(courseCode);
+
+        // 外键检查：验证 school_course 表中是否存在该 courseCode
+        if (courseCode != null) {
+            Long courseCount = schoolCourseMapper.selectCount(
+                new QueryWrapper<SchoolCourse>().eq("course_code", courseCode)
+            );
+            if (courseCount == null || courseCount == 0) {
+                ensureSchoolCourseSkeleton(
+                        courseCode,
+                        firstNonBlank(getStringValue(data, "courseName"), teachingClass.getCourseName(), courseCode),
+                        "UNKNOWN",
+                        null,
+                        defaultIfNull(getLocalDateTimeValue(data, "syncTime"), LocalDateTime.now()),
+                        defaultIfBlank(getStringValue(data, "syncSource"), "SCHOOL_API")
+                );
+            }
+        }
+
         entity.setCourseName(firstNonBlank(getStringValue(data, "courseName"),
-                teachingClass == null ? null : teachingClass.getCourseName()));
+                teachingClass.getCourseName()));
         entity.setClassId(classId);
         entity.setTeacherId(firstNonBlank(getStringValue(data, "teacherId"),
-                teachingClass == null ? null : teachingClass.getTeacherId()));
+                teachingClass.getTeacherId()));
         entity.setTeacherName(firstNonBlank(getStringValue(data, "teacherName"),
-                teachingClass == null ? null : teachingClass.getTeacherName()));
+                teachingClass.getTeacherName()));
         entity.setCredits(getBigDecimalValue(data, "credits"));
         entity.setAcademicYear(academicYear);
         entity.setSemester(semester);
@@ -504,6 +537,9 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         entity.setSyncTime((LocalDateTime) data.getOrDefault("syncTime", LocalDateTime.now()));
         entity.setSyncSource((String) data.getOrDefault("syncSource", "SCHOOL_API"));
         studentScheduleMapper.insert(entity);
+        if (teachingClass == null) {
+            hydrateTeachingClassFromScheduleData(data, classId, academicYear, semester);
+        }
         upsertSchoolStudentDirectory(entity.getStudentId(), entity.getStudentName(),
                 null, entity.getSyncTime(), entity.getSyncTime(), entity.getSyncSource());
     }
@@ -594,6 +630,110 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         return teachingClassMapper.selectOne(new QueryWrapper<TeachingClass>()
                 .eq("class_id", classId.trim())
                 .last("LIMIT 1"));
+    }
+
+    private TeachingClass hydrateTeachingClassFromScheduleData(Map<String, Object> data,
+                                                               String classId,
+                                                               String academicYear,
+                                                               Integer semester) {
+        if (classId == null || classId.trim().isEmpty()) {
+            return null;
+        }
+        String courseCode = firstNonBlank(getStringValue(data, "courseCode"));
+        String teacherId = firstNonBlank(getStringValue(data, "teacherId"));
+        if (courseCode == null || academicYear == null || semester == null || teacherId == null) {
+            return null;
+        }
+
+        LocalDateTime syncTime = defaultIfNull(getLocalDateTimeValue(data, "syncTime"), LocalDateTime.now());
+        String syncSource = defaultIfBlank(getStringValue(data, "syncSource"), "SCHOOL_API");
+
+        ensureSchoolCourseSkeleton(
+                courseCode,
+                firstNonBlank(getStringValue(data, "courseName"), courseCode),
+                firstNonBlank(getStringValue(data, "collegeCode"), "UNKNOWN"),
+                getStringValue(data, "collegeName"),
+                syncTime,
+                syncSource
+        );
+
+        Map<String, Object> teachingClassData = new HashMap<>();
+        teachingClassData.put("classId", classId);
+        teachingClassData.put("className", firstNonBlank(getStringValue(data, "className"), getStringValue(data, "courseName"), classId));
+        teachingClassData.put("courseCode", courseCode);
+        teachingClassData.put("courseName", firstNonBlank(getStringValue(data, "courseName"), courseCode));
+        teachingClassData.put("teacherId", teacherId);
+        teachingClassData.put("teacherName", firstNonBlank(getStringValue(data, "teacherName"), teacherId));
+        teachingClassData.put("academicYear", academicYear);
+        teachingClassData.put("semester", semester);
+        teachingClassData.put("syncTime", syncTime);
+        teachingClassData.put("syncSource", syncSource);
+        upsertTeachingClass(teachingClassData);
+        return resolveTeachingClass(classId);
+    }
+
+    private TeachingClass resolveTeachingClassFromStudentSchedule(String studentId,
+                                                                  String classId,
+                                                                  Map<String, Object> courseSelectionData) {
+        if (studentId == null || studentId.trim().isEmpty() || classId == null || classId.trim().isEmpty()) {
+            return null;
+        }
+        QueryWrapper<StudentSchedule> wrapper = new QueryWrapper<>();
+        wrapper.eq("student_id", studentId.trim())
+                .eq("class_id", classId.trim())
+                .orderByDesc("sync_time")
+                .last("LIMIT 1");
+        StudentSchedule schedule = studentScheduleMapper.selectOne(wrapper);
+        if (schedule == null) {
+            return null;
+        }
+        Map<String, Object> scheduleData = new HashMap<>();
+        scheduleData.put("classId", schedule.getClassId());
+        scheduleData.put("className", schedule.getCourseName());
+        scheduleData.put("courseCode", schedule.getCourseCode());
+        scheduleData.put("courseName", schedule.getCourseName());
+        scheduleData.put("teacherId", schedule.getTeacherId());
+        scheduleData.put("teacherName", schedule.getTeacherName());
+        String academicYear = firstNonBlank(getStringValue(courseSelectionData, "academicYear"), schedule.getAcademicYear());
+        Integer semester = parseSchoolSemesterWithFallback(courseSelectionData.get("semester"), schedule.getSemester());
+        scheduleData.put("academicYear", academicYear);
+        scheduleData.put("semester", semester);
+        scheduleData.put("syncTime", defaultIfNull(schedule.getSyncTime(), LocalDateTime.now()));
+        scheduleData.put("syncSource", defaultIfBlank(schedule.getSyncSource(), "STUDENT_SCHEDULE_FALLBACK"));
+        return hydrateTeachingClassFromScheduleData(
+                scheduleData,
+                schedule.getClassId(),
+                academicYear,
+                semester
+        );
+    }
+
+    private void ensureSchoolCourseSkeleton(String courseCode,
+                                            String courseName,
+                                            String collegeCode,
+                                            String collegeName,
+                                            LocalDateTime syncTime,
+                                            String syncSource) {
+        if (courseCode == null || courseCode.trim().isEmpty()) {
+            return;
+        }
+        Long existing = schoolCourseMapper.selectCount(new QueryWrapper<SchoolCourse>()
+                .eq("course_code", courseCode.trim()));
+        if (existing != null && existing > 0) {
+            return;
+        }
+        Map<String, Object> courseData = new HashMap<>();
+        courseData.put("courseCode", courseCode.trim());
+        courseData.put("courseName", firstNonBlank(courseName, courseCode.trim()));
+        courseData.put("collegeCode", defaultIfBlank(collegeCode, "UNKNOWN"));
+        courseData.put("collegeName", collegeName);
+        courseData.put("assessmentMethod", "未知");
+        courseData.put("courseNature", "未知");
+        courseData.put("courseCategory", "未知");
+        courseData.put("courseStatus", "ACTIVE");
+        courseData.put("syncTime", syncTime);
+        courseData.put("syncSource", syncSource);
+        upsertSchoolCourse(courseData);
     }
 
     private void deleteCourseScheduleOnce(String classId, String academicYear, Integer semester) {
@@ -741,6 +881,23 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
             return Integer.parseInt(normalized);
         } catch (NumberFormatException e) {
             throw new BusinessException("无法解析学期: " + value);
+        }
+    }
+
+    private Integer parseSchoolSemesterWithFallback(Object rawValue, Integer fallback) {
+        if (rawValue == null) {
+            return fallback;
+        }
+        if (rawValue instanceof Number) {
+            return ((Number) rawValue).intValue();
+        }
+        String normalized = String.valueOf(rawValue).trim();
+        if ("1".equals(normalized) || "秋".equals(normalized)) return 1;
+        if ("2".equals(normalized) || "春".equals(normalized)) return 2;
+        try {
+            return Integer.parseInt(normalized);
+        } catch (NumberFormatException e) {
+            return fallback;
         }
     }
 

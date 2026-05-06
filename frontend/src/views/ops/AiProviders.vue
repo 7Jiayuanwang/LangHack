@@ -700,16 +700,45 @@ const runHiAgentTest = async (mode) => {
 
 <style scoped>
 .ai-providers {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px;
 }
 
-.page-header h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #1e293b;
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .ai-providers {
+    padding: 30px;
+  }
+  
+  .page-header h2 {
+    font-size: 28px;
+  }
+
+  :deep(.el-tabs__item) {
+    font-size: 16px;
+    height: 48px;
+  }
+
+  .name-text {
+    font-size: 18px;
+  }
+
+  .meta-item {
+    font-size: 14px;
+  }
+
+  .stat-pill {
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
 }
 
 .hiagent-card {

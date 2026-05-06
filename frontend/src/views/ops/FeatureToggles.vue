@@ -692,20 +692,41 @@ onMounted(() => {
 
 <style scoped>
 .feature-toggles-page {
-  max-width: 1000px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .feature-toggles-page {
+    padding: 30px;
+  }
+  
+  .page-header h2 {
+    font-size: 28px;
+  }
+
+  :deep(.el-tabs__item) {
+    font-size: 16px;
+    height: 48px;
+  }
+
+  .toggle-name {
+    font-size: 16px;
+  }
+
+  .group-label {
+    font-size: 18px;
+  }
+
+  :deep(.el-table) {
+    font-size: 14px;
+  }
 }
 
 .page-header {
   margin-bottom: 32px;
-}
-
-.page-header h2 {
-  margin: 0 0 12px;
-  font-size: 24px;
-  font-weight: 800;
-  color: #1e293b;
 }
 
 .priority-badges {

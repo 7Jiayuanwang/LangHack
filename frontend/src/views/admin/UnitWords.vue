@@ -380,11 +380,42 @@ onMounted(() => {
 <style scoped>
 .unit-words-management {
   padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .unit-words-management {
+    padding: 30px;
+  }
+  
+  :deep(.el-card__header) {
+    padding: 20px 24px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  :deep(.el-table) {
+    font-size: 15px;
+  }
+
+  :deep(.el-table .cell) {
+    line-height: 1.6;
+    padding: 12px 0;
+  }
+
+  .search-bar {
+    margin-bottom: 25px;
+    padding: 24px;
+  }
 }
 
 .table-wrapper {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
 }
 
 .card-header {
@@ -395,16 +426,26 @@ onMounted(() => {
 
 .search-bar {
   margin-bottom: 20px;
+  padding: 20px;
+  background-color: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
 }
 
 .pagination {
-  margin-top: 20px;
-  text-align: right;
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
 }
 
 @media (max-width: 768px) {
   .unit-words-management {
     padding: 12px;
+  }
+
+  .card-header {
+    flex-direction: row;
+    align-items: center;
   }
 
   .search-bar .el-form {

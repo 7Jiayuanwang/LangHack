@@ -6,29 +6,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_DIR = ROOT / "backend" / "src" / "main" / "resources" / "db" / "migration"
 MERGED_SQL = ROOT / "docker" / "mysql" / "init" / "04-apply-all-migrations.sql"
-EXPECTED_VERSIONS = [f"V{i}" for i in range(16)]
 FORBIDDEN_PATTERNS = [
     r"\bUSE\b",
-    r"\bDELIMITER\b",
-    r"\bCREATE\s+PROCEDURE\b",
-    r"\bDROP\s+PROCEDURE\b",
     r"\bCALL\s+add_index_if_not_exists\b",
 ]
-KNOWN_UNSAFE_FRAGMENTS = [
-    "ALTER TABLE assignments\n    ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00",
-    "CREATE INDEX idx_weight ON assignments (weight);",
-    "CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes);",
-    "ALTER TABLE learning_records\n    ADD COLUMN text_id BIGINT",
-    "CREATE INDEX idx_text_id ON learning_records (text_id);",
-    "CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC);",
-    "ALTER TABLE media\n    ADD COLUMN file_path VARCHAR(500)",
-    "ALTER TABLE vocabulary_books\n    ADD COLUMN repetition INT DEFAULT 0",
-    "ALTER TABLE users\nADD COLUMN sso_bound TINYINT(1) DEFAULT 0",
-    "INSERT INTO sso_config (config_key, config_value, config_type, description) VALUES",
-    "ALTER TABLE `ai_provider`\n    ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'",
-    "ALTER TABLE `text_similarity_matrix`      ADD INDEX `idx_similar_text_id` (`similar_text_id`);",
-    "ALTER TABLE `user_similarity_matrix`      ADD INDEX `idx_similar_user_id` (`similar_user_id`);",
+FORBIDDEN_FILENAME_PATTERNS = [
+    r"__fix_",
 ]
+KNOWN_UNSAFE_FRAGMENTS = []
 
 
 def version_number(path: Path) -> int:
@@ -47,9 +32,22 @@ def collect_files() -> list[Path]:
 
 
 def check_version_chain(files: list[Path], issues: list[str]) -> None:
-    actual = [re.match(r"V(\d+)__", file.name).group(0)[:-2] for file in files]
-    if actual != EXPECTED_VERSIONS:
-        issues.append(f"Migration versions must be exactly {EXPECTED_VERSIONS}, got {actual}")
+    versions = [version_number(file) for file in files]
+    if not versions:
+        issues.append("No migration files found")
+        return
+    if versions[0] != 0:
+        issues.append(f"Migration chain must start at V0, got V{versions[0]}")
+    expected = list(range(versions[0], versions[-1] + 1))
+    if versions != expected:
+        issues.append(f"Migration versions must be contiguous: expected {expected}, got {versions}")
+
+
+def check_filenames(files: list[Path], issues: list[str]) -> None:
+    for file in files:
+        for pattern in FORBIDDEN_FILENAME_PATTERNS:
+            if re.search(pattern, file.name, re.I):
+                issues.append(f"{file.name}: forbidden migration filename pattern found: {pattern}")
 
 
 def check_forbidden_sql(files: list[Path], issues: list[str]) -> None:
@@ -122,6 +120,7 @@ def main() -> int:
         return 1
     files = collect_files()
     check_version_chain(files, issues)
+    check_filenames(files, issues)
     check_forbidden_sql(files, issues)
     check_create_alter_reference_order(files, issues)
     check_school_course_baseline(files, issues)

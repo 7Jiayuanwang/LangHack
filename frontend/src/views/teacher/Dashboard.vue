@@ -223,18 +223,48 @@ onMounted(() => {
 
 <style scoped>
 .dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
   padding: 20px;
-  background: linear-gradient(to bottom, #f5f7fa 0%, #ffffff 100%);
+  background: linear-gradient(to bottom, #f8fafc 0%, #ffffff 100%);
   min-height: calc(100vh - 56px);
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .dashboard {
+    padding: 30px;
+  }
+  
+  .stat-info h3 {
+    font-size: 42px !important;
+  }
+
+  .stat-info p {
+    font-size: 16px !important;
+  }
+
+  .card-header span {
+    font-size: 18px;
+  }
+
+  .class-info h4, .assignment-info h4 {
+    font-size: 20px !important;
+  }
+
+  .class-info p, .assignment-info p {
+    font-size: 15px !important;
+  }
 }
 
 .stat-card {
   margin-bottom: 20px;
   border: none;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
+  border: 1px solid #f1f5f9;
 }
 
 .stat-card:hover {

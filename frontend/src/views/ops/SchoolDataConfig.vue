@@ -749,9 +749,38 @@ onMounted(loadAll)
 
 <style scoped>
 .school-data-config {
-  max-width: 1000px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 24px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .school-data-config {
+    padding: 30px;
+  }
+  
+  :deep(.el-collapse-item__header) {
+    font-size: 18px;
+    height: 56px;
+  }
+
+  .quick-actions-header strong {
+    font-size: 20px;
+  }
+
+  .quick-card-title,
+  .quick-result-title {
+    font-size: 15px;
+  }
+
+  :deep(.el-form-item__label) {
+    font-size: 15px;
+  }
+
+  :deep(.el-table) {
+    font-size: 14px;
+  }
 }
 
 .page-header {

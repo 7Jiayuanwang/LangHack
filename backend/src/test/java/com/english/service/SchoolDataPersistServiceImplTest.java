@@ -219,6 +219,86 @@ class SchoolDataPersistServiceImplTest {
     }
 
     @Test
+    @DisplayName("course_schedule 缺少 teaching_class 时会根据课表数据补齐后再落库")
+    void persistMappedRecord_courseSchedule_hydratesTeachingClassFromScheduleData() {
+        TeachingClass hydrated = new TeachingClass();
+        hydrated.setClassId("CLS2");
+        hydrated.setCourseCode("ENG201");
+        hydrated.setCourseName("Integrated English");
+        hydrated.setTeacherId("T200");
+        hydrated.setTeacherName("Teacher Wang");
+        hydrated.setAcademicYear("2025-2026");
+        hydrated.setSemester(1);
+        when(teachingClassMapper.selectOne(any())).thenReturn(null, hydrated);
+        when(schoolCourseMapper.selectCount(any())).thenReturn(0L);
+
+        Map<String, Object> mapped = new HashMap<>();
+        mapped.put("classId", "CLS2");
+        mapped.put("courseCode", "ENG201");
+        mapped.put("courseName", "Integrated English");
+        mapped.put("teacherId", "T200");
+        mapped.put("teacherName", "Teacher Wang");
+        mapped.put("academicYear", "2025-2026");
+        mapped.put("semester", 1);
+        mapped.put("dayOfWeek", 2);
+        mapped.put("period", "3-4");
+        mapped.put("weekRange", "1-16");
+        mapped.put("classLocation", "B201");
+        mapped.put("syncTime", LocalDateTime.of(2026, 5, 6, 9, 0));
+        mapped.put("syncSource", "SCHOOL_API");
+
+        persistService.persistMappedRecord("course_schedule", mapped);
+
+        verify(schoolCourseMapper).upsertByCourseCode(any(SchoolCourse.class));
+        verify(teachingClassMapper).upsertByClassId(any(TeachingClass.class));
+        verify(courseScheduleMapper).insert(any(CourseSchedule.class));
+    }
+
+    @Test
+    @DisplayName("course_selection 可通过 student_schedule 反推 teaching_class 并完成绑定")
+    void persistMappedRecord_courseSelection_recoversTeachingClassFromStudentSchedule() {
+        TeachingClass hydrated = new TeachingClass();
+        hydrated.setClassId("CLS3");
+        hydrated.setCourseCode("ENG301");
+        hydrated.setCourseName("Advanced English");
+        hydrated.setTeacherId("T300");
+        hydrated.setTeacherName("Teacher Zhao");
+        hydrated.setAcademicYear("2025-2026");
+        hydrated.setSemester(2);
+        when(teachingClassMapper.selectOne(any())).thenReturn(null, hydrated);
+        when(schoolCourseMapper.selectCount(any())).thenReturn(0L, 1L);
+
+        StudentSchedule schedule = new StudentSchedule();
+        schedule.setStudentId("2023002");
+        schedule.setClassId("CLS3");
+        schedule.setCourseCode("ENG301");
+        schedule.setCourseName("Advanced English");
+        schedule.setTeacherId("T300");
+        schedule.setTeacherName("Teacher Zhao");
+        schedule.setAcademicYear("2025-2026");
+        schedule.setSemester(2);
+        schedule.setSyncTime(LocalDateTime.of(2026, 5, 6, 8, 30));
+        schedule.setSyncSource("STUDENT_SCHEDULE");
+        when(studentScheduleMapper.selectOne(any())).thenReturn(schedule);
+
+        Map<String, Object> mapped = new HashMap<>();
+        mapped.put("studentId", "2023002");
+        mapped.put("classId", "CLS3");
+        mapped.put("academicYear", "2025-2026");
+        mapped.put("semester", "春");
+        mapped.put("courseName", "Advanced English");
+        mapped.put("syncTime", LocalDateTime.of(2026, 5, 6, 9, 30));
+        mapped.put("syncSource", "SCHOOL_API");
+
+        persistService.persistMappedRecord("course_selection", mapped);
+
+        verify(schoolCourseMapper).upsertByCourseCode(any(SchoolCourse.class));
+        verify(teachingClassMapper).upsertByClassId(any(TeachingClass.class));
+        verify(courseSelectionMapper).upsertBySelectionId(any(CourseSelection.class));
+        verify(teacherStudentBindingMapper).upsertBinding(any(TeacherStudentBinding.class));
+    }
+
+    @Test
     @DisplayName("student_schedule batch keeps all rows for the same student semester")
     void persistRawData_studentScheduleDeletesOncePerBatchKey() {
         Map<String, Object> mapped1 = new HashMap<>();

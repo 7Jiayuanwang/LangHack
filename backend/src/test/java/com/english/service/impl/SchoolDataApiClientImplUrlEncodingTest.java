@@ -1,6 +1,7 @@
 package com.english.service.impl;
 
 import com.english.config.SchoolDataProperties;
+import com.english.exception.BusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * URL 参数编码测试 - 防止 URLEncoder.encode(key) 错误再次发生
@@ -152,6 +154,28 @@ class SchoolDataApiClientImplUrlEncodingTest {
         assertThat(url).doesNotContain("key3");
     }
 
+    @Test
+    void parseResponse_shouldReportErrcodeWrapperClearly() {
+        String body = "{\"errcode\":\"999\",\"errmsg\":\"系统内部错误，请联系管理员\"}";
+
+        assertThatThrownBy(() -> invokeParseResponse(body))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("学校 API 返回错误")
+                .hasMessageContaining("999")
+                .hasMessageContaining("系统内部错误");
+    }
+
+    @Test
+    void parseResponse_shouldReportNestedErrorClearly() {
+        String body = "{\"error\":{\"code\":\"10016\",\"message\":\"接口鉴权失败,接口签名(sign)无效\"}}";
+
+        assertThatThrownBy(() -> invokeParseResponse(body))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("学校 API 返回错误")
+                .hasMessageContaining("10016")
+                .hasMessageContaining("接口鉴权失败");
+    }
+
     /**
      * 使用反射调用 private buildUrl 方法
      */
@@ -160,6 +184,18 @@ class SchoolDataApiClientImplUrlEncodingTest {
             return (String) ReflectionTestUtils.invokeMethod(client, "buildUrl", fullUrl, params);
         } catch (Exception e) {
             throw new RuntimeException("Failed to invoke buildUrl method", e);
+        }
+    }
+
+    private Object invokeParseResponse(String responseBody) {
+        try {
+            return ReflectionTestUtils.invokeMethod(client, "parseResponse", responseBody, "https://api.example.com/data");
+        } catch (Exception e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw e;
         }
     }
 }

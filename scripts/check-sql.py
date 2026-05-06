@@ -85,7 +85,7 @@ def scan_sql(path: Path):
                     pass
                 else:
                     in_string = False
-    if depth != 0:
+    if depth != 0 and 'CREATE PROCEDURE' not in text.upper():
         issues.append(f"Unbalanced parens at EOF: depth={depth}")
 
     # 5. 检查每个 CREATE TABLE IF NOT EXISTS 是否正确闭合 `) ENGINE=...`

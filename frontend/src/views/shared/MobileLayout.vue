@@ -221,7 +221,7 @@ const MORE_ITEMS = {
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
     { path: '/admin/texts',          label: '课文管理', icon: Document, featureKey: 'admin.texts' },
-    { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'admin.videos' },
+    { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'page_admin_videos' },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
   ],
@@ -719,6 +719,56 @@ onUnmounted(() => {
 }
 
 /* 响应式 */
+/* 响应式适配 - 针对大屏 PC 端优化 */
+@media (min-width: 1025px) {
+  .mobile-header {
+    height: 72px;
+    padding: 0 40px;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+
+  .mobile-main {
+    padding-bottom: 84px;
+  }
+
+  .mobile-nav {
+    padding-bottom: 12px;
+  }
+
+  .nav-container {
+    padding: 12px 40px;
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+
+  .nav-item {
+    min-width: 100px;
+    padding: 12px;
+  }
+
+  .nav-icon {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 6px;
+  }
+
+  .nav-label {
+    font-size: 13px;
+  }
+
+  .nav-item.active .nav-label {
+    font-size: 14px;
+  }
+
+  .avatar-img {
+    width: 32px;
+    height: 32px;
+  }
+}
+
 @media (max-width: 480px) {
   .mobile-header     { padding: 0 12px; height: 52px; }
   .page-title        { font-size: 16px; }

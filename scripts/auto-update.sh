@@ -110,6 +110,8 @@ RUN_DB_MIGRATIONS="${AUTO_UPDATE_RUN_MIGRATIONS:-true}"
 BACKUP_DIR="${BACKUP_DIR:-$PROJECT_ROOT/backups}"
 HEALTH_CHECK_TIMEOUT=120
 ENV_BACKUP_KEEP=10
+BACKEND_PORT="${PORT_BACKEND:-8080}"
+FRONTEND_PORT="${PORT_FRONTEND:-3000}"
 
 # ── 运维结构化日志函数 ────────────────────────────────
 # 写入 deploy-history.log，格式：时间戳|事件类型|commit|描述
@@ -345,13 +347,15 @@ local_start_frontend() {
 local_wait_for_health() {
     local timeout="${1:-120}"
     local elapsed=0
+    local local_backend_port=8080
+    local local_frontend_port=3000
     log "LOCAL: 等待本地服务健康检查通过 (超时 ${timeout}s)..."
 
     while [ "$elapsed" -lt "$timeout" ]; do
         local backend_ok=false
         local frontend_ok=false
-        curl -sf http://localhost:8080/api/health >/dev/null 2>&1 && backend_ok=true || true
-        curl -sf -I http://localhost:3000 >/dev/null 2>&1 && frontend_ok=true || true
+        curl -sf "http://localhost:${local_backend_port}/api/health" >/dev/null 2>&1 && backend_ok=true || true
+        curl -sf -I "http://localhost:${local_frontend_port}" >/dev/null 2>&1 && frontend_ok=true || true
 
         if [ "$backend_ok" = true ] && [ "$frontend_ok" = true ]; then
             log "LOCAL: 本地服务健康检查通过 ✓ (${elapsed}s)"
@@ -590,7 +594,7 @@ wait_for_health() {
         fi
 
         # 2. 检查后端 HTTP 健康端点（确认应用层就绪）
-        if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
+        if curl -sf "http://localhost:${BACKEND_PORT}/api/health" > /dev/null 2>&1; then
             log "HEALTH: 所有服务正常 ✓ (${elapsed}s)"
             return 0
         fi
@@ -924,7 +928,10 @@ verify_flyway_migrations() {
     local missing_tables=""
     for tbl in score_records text_learning_records media backup_records access_log \
                system_config ai_provider article_favorites user_tags feature_override \
-               sso_user_bindings administrative_class; do
+               sso_user_bindings administrative_class school_course teaching_class \
+               course_schedule course_selection level_exam_scores teaching_plans \
+               teaching_plan_courses student_schedule sync_logs field_mappings \
+               school_student school_teacher teacher_student_binding; do
         local exists
         exists=$(docker exec "$mysql_container" \
             mysql -uroot -p"$db_root_pw" english_learning \

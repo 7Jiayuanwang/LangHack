@@ -341,41 +341,86 @@ onUnmounted(() => {
 <style scoped>
 .update-container {
   padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.support-alert,
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .update-container {
+    padding: 30px;
+  }
+  
+  :deep(.el-card__header) {
+    padding: 18px 24px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  :deep(.el-form-item__label) {
+    font-size: 15px;
+  }
+
+  .cron-hint {
+    font-size: 14px;
+  }
+
+  .status-label {
+    font-size: 15px;
+  }
+
+  .last-time {
+    font-size: 14px;
+  }
+}
+
+.support-alert {
+  margin-bottom: 24px;
+  border-radius: 12px;
+}
+
 .config-card,
 .trigger-card,
-.log-card {
-  margin-bottom: 20px;
+.log-card,
+.history-card {
+  margin-bottom: 24px;
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
 .cron-hint {
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: 12px;
-  color: #909399;
+  color: #94a3b8;
+  display: block;
 }
 
 .trigger-row {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
   flex-wrap: wrap;
+  padding: 8px 0;
 }
 
 .status-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  background: #f8fafc;
+  padding: 8px 16px;
+  border-radius: 8px;
 }
 
 .status-label {
-  color: #606266;
+  color: #64748b;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .last-time {
-  color: #909399;
+  color: #94a3b8;
   font-size: 13px;
 }
 
@@ -386,25 +431,64 @@ onUnmounted(() => {
 }
 
 .log-area {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 12px;
-  border-radius: 4px;
-  font-family: "Courier New", Courier, monospace;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 20px;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
-  line-height: 1.6;
-  max-height: 400px;
+  line-height: 1.7;
+  max-height: 500px;
   overflow-y: auto;
-  min-height: 80px;
+  min-height: 120px;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
 }
 
 .log-placeholder {
-  color: #606060;
+  color: #64748b;
   font-style: italic;
+  text-align: center;
+  padding: 40px 0;
 }
 
 .log-line {
   white-space: pre-wrap;
   word-break: break-all;
+  border-left: 2px solid transparent;
+  padding-left: 8px;
+  margin-bottom: 2px;
+}
+
+.log-line:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-left-color: #38bdf8;
+}
+
+:deep(.el-table) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .update-container {
+    padding: 12px;
+  }
+
+  .trigger-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .status-info {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .log-area {
+    padding: 12px;
+    font-size: 12px;
+  }
 }
 </style>

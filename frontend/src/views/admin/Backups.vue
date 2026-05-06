@@ -1015,9 +1015,42 @@ onBeforeUnmount(() => {
 
 /* 备份管理样式 */
 .backups-management {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .backups-management {
+    padding: 30px;
+  }
+  
+  .header h2 {
+    font-size: 28px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .stat-label {
+    font-size: 15px;
+  }
+
+  :deep(.el-table) {
+    font-size: 16px;
+  }
+
+  :deep(.el-table .cell) {
+    line-height: 1.6;
+    padding: 12px 0;
+  }
+
+  .search-bar {
+    margin-bottom: 25px;
+    padding: 24px;
+  }
 }
 
 .header {
@@ -1029,15 +1062,21 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.header h2 {
+  margin: 0;
+  color: #1e293b;
+  font-weight: 700;
+}
+
 .actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -1046,12 +1085,19 @@ onBeforeUnmount(() => {
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
-  padding: 16px 20px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 6px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.05);
+  border-color: #6366f1;
 }
 
 .stat-value {
@@ -1069,16 +1115,16 @@ onBeforeUnmount(() => {
 
 .search-bar {
   background: #f8fafc;
-  padding: 16px 20px;
+  padding: 20px;
   border-radius: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   border: 1px solid #e2e8f0;
 }
 
 .search-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
 }
 
 .search-form :deep(.el-form-item) {
@@ -1090,7 +1136,7 @@ onBeforeUnmount(() => {
   background: white;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
   border: 1px solid #e2e8f0;
 }
 
@@ -1099,10 +1145,10 @@ onBeforeUnmount(() => {
 }
 
 .pagination {
-  margin-top: 20px;
+  margin-top: 24px;
   display: flex;
-  justify-content: flex-end;
-  padding: 0 16px 16px;
+  justify-content: center;
+  padding-bottom: 16px;
 }
 
 /* 响应式适配 */

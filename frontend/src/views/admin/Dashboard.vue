@@ -1,109 +1,110 @@
 <template>
-  <div class="dashboard">
-    <el-row :gutter="20">
-      <el-col :xs="12" :sm="12" :md="6">
-        <el-card class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon users">
-              <el-icon><User /></el-icon>
-            </div>
-            <div class="stat-info">
-              <h3>{{ stats.totalUsers }}</h3>
-              <p>总用户数</p>
-            </div>
+  <div class="dashboard-container">
+    <div class="stats-grid">
+      <div class="modern-stat-card users">
+        <div class="card-bg-icon"><el-icon><User /></el-icon></div>
+        <div class="card-body">
+          <div class="label">总用户数</div>
+          <div class="value">{{ stats.totalUsers }}</div>
+          <div class="card-footer">
+            <span class="trend up">活跃状态</span>
           </div>
-        </el-card>
-      </el-col>
+        </div>
+      </div>
 
-      <el-col :xs="12" :sm="12" :md="6">
-        <el-card class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon courses">
-              <el-icon><Reading /></el-icon>
-            </div>
-            <div class="stat-info">
-              <h3>{{ stats.totalCourses }}</h3>
-              <p>课程数量</p>
-            </div>
+      <div class="modern-stat-card courses">
+        <div class="card-bg-icon"><el-icon><Reading /></el-icon></div>
+        <div class="card-body">
+          <div class="label">课程数量</div>
+          <div class="value">{{ stats.totalCourses }}</div>
+          <div class="card-footer">
+            <span class="trend">精品内容</span>
           </div>
-        </el-card>
-      </el-col>
+        </div>
+      </div>
 
-      <el-col :xs="12" :sm="12" :md="6">
-        <el-card class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon classes">
-              <el-icon><School /></el-icon>
-            </div>
-            <div class="stat-info">
-              <h3>{{ stats.totalClasses }}</h3>
-              <p>班级数量</p>
-            </div>
+      <div class="modern-stat-card classes">
+        <div class="card-bg-icon"><el-icon><School /></el-icon></div>
+        <div class="card-body">
+          <div class="label">班级数量</div>
+          <div class="value">{{ stats.totalClasses }}</div>
+          <div class="card-footer">
+            <span class="trend">教学单元</span>
           </div>
-        </el-card>
-      </el-col>
+        </div>
+      </div>
 
-      <el-col :xs="12" :sm="12" :md="6">
-        <el-card class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon words">
-              <el-icon><Document /></el-icon>
-            </div>
-            <div class="stat-info">
-              <h3>{{ stats.totalWords }}</h3>
-              <p>单词数量</p>
-            </div>
+      <div class="modern-stat-card words">
+        <div class="card-bg-icon"><el-icon><Document /></el-icon></div>
+        <div class="card-body">
+          <div class="label">单词数量</div>
+          <div class="value">{{ stats.totalWords }}</div>
+          <div class="card-footer">
+            <span class="trend">核心词库</span>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </div>
 
-    <el-row :gutter="20" class="mt-20">
-      <el-col :xs="24" :sm="24" :md="12">
-        <el-card>
+    <el-row :gutter="24" class="mt-32">
+      <el-col :xs="24" :lg="10">
+        <el-card class="glass-card shadow-sm">
           <template #header>
             <div class="card-header">
-              <span>用户分布</span>
+              <span class="title-with-dot">用户分布</span>
             </div>
           </template>
-          <div class="chart-container">
-            <div class="user-stats">
-              <div class="user-stat-item">
-                <span class="label">管理员：</span>
-                <span class="value">{{ userStats.admin }}人</span>
+          <div class="dist-container">
+            <div class="dist-chart">
+              <div class="dist-item">
+                <div class="dist-info">
+                  <span class="name">管理员</span>
+                  <span class="val">{{ userStats.admin }}</span>
+                </div>
+                <el-progress :percentage="calcPercent(userStats.admin)" status="exception" :show-text="false" :stroke-width="8" />
               </div>
-              <div class="user-stat-item">
-                <span class="label">教师：</span>
-                <span class="value">{{ userStats.teacher }}人</span>
+              <div class="dist-item">
+                <div class="dist-info">
+                  <span class="name">教师</span>
+                  <span class="val">{{ userStats.teacher }}</span>
+                </div>
+                <el-progress :percentage="calcPercent(userStats.teacher)" status="warning" :show-text="false" :stroke-width="8" />
               </div>
-              <div class="user-stat-item">
-                <span class="label">学生：</span>
-                <span class="value">{{ userStats.student }}人</span>
+              <div class="dist-item">
+                <div class="dist-info">
+                  <span class="name">学生</span>
+                  <span class="val">{{ userStats.student }}</span>
+                </div>
+                <el-progress :percentage="calcPercent(userStats.student)" status="success" :show-text="false" :stroke-width="8" />
               </div>
             </div>
           </div>
         </el-card>
       </el-col>
 
-      <el-col :xs="24" :sm="24" :md="12">
-        <el-card>
+      <el-col :xs="24" :lg="14">
+        <el-card class="glass-card shadow-sm">
           <template #header>
             <div class="card-header">
-              <span>最新活动</span>
+              <span class="title-with-dot">最新活动</span>
             </div>
           </template>
-          <div class="activity-list">
+          <div class="timeline-container">
             <template v-if="recentActivities.length">
-            <div v-for="activity in recentActivities" :key="activity.id" class="activity-item">
-              <div class="activity-content">
-                <p>{{ activity.description }}</p>
-                <span class="activity-time">{{ activity.time }}</span>
-              </div>
-            </div>
+              <el-timeline>
+                <el-timeline-item
+                  v-for="activity in recentActivities"
+                  :key="activity.id"
+                  :timestamp="activity.time"
+                  placement="top"
+                >
+                  <div class="activity-box">
+                    <p>{{ activity.description }}</p>
+                  </div>
+                </el-timeline-item>
+              </el-timeline>
             </template>
-            <div v-else class="empty-activity">
-              <p style="color: #999; text-align: center; padding: 20px 0;">暂无活动数据</p>
-            </div>
+            <el-empty v-else description="暂无活动数据" :image-size="100" />
           </div>
         </el-card>
       </el-col>
@@ -132,6 +133,11 @@ const userStats = reactive({
 
 const recentActivities = ref([])
 
+const calcPercent = (val) => {
+  if (!stats.totalUsers) return 0
+  return Math.round((val / stats.totalUsers) * 100)
+}
+
 const loadDashboardData = async () => {
   try {
     const res = await request({ url: '/api/admin/stats', method: 'get' })
@@ -156,137 +162,204 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.dashboard {
-  padding: 20px;
+.dashboard-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 32px;
 }
 
-.stat-card {
-  margin-bottom: 20px;
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
 }
 
-.stat-content {
+.modern-stat-card {
+  height: 160px;
+  background: white;
+  border-radius: 24px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.stat-icon {
-  width: 60px;
-  height: 60px;
+.modern-stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.card-bg-icon {
+  position: absolute;
+  right: -20px;
+  top: -10px;
+  font-size: 120px;
+  opacity: 0.05;
+  transform: rotate(15deg);
+  transition: all 0.5s;
+}
+
+.modern-stat-card:hover .card-bg-icon {
+  transform: rotate(0deg) scale(1.1);
+  opacity: 0.1;
+}
+
+.modern-stat-card .label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.modern-stat-card .value {
+  font-size: 36px;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1;
+}
+
+.card-footer {
+  margin-top: 16px;
+}
+
+.trend {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* 颜色变体 */
+.users { border-bottom: 4px solid #6366f1; }
+.courses { border-bottom: 4px solid #ec4899; }
+.classes { border-bottom: 4px solid #06b6d4; }
+.words { border-bottom: 4px solid #10b981; }
+
+.glass-card {
+  border-radius: 24px;
+  border: 1px solid #e2e8f0;
+}
+
+.title-with-dot {
+  font-size: 18px;
+  font-weight: 700;
+  position: relative;
+  padding-left: 16px;
+}
+
+.title-with-dot::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
+  background: #6366f1;
+}
+
+.dist-container {
+  height: 280px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-right: 20px;
-  font-size: 24px;
-  color: white;
 }
 
-.stat-icon.users {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.stat-icon.courses {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-}
-
-.stat-icon.classes {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.stat-icon.words {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-}
-
-.stat-info h3 {
-  margin: 0;
-  font-size: 28px;
-  font-weight: bold;
-  color: #333;
-}
-
-.stat-info p {
-  margin: 5px 0 0;
-  color: #666;
-  font-size: 14px;
-}
-
-.mt-20 {
-  margin-top: 20px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.chart-container {
-  height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.user-stats {
+.dist-chart {
   width: 100%;
 }
 
-.user-stat-item {
+.dist-item {
+  margin-bottom: 24px;
+}
+
+.dist-info {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 8px;
 }
 
-.user-stat-item:last-child {
-  border-bottom: none;
+.dist-info .name {
+  font-weight: 600;
+  color: #475569;
 }
 
-.label {
-  color: #666;
+.dist-info .val {
+  font-weight: 800;
+  color: #1e293b;
 }
 
-.value {
-  font-weight: bold;
-  color: #333;
-}
-
-.activity-list {
-  max-height: 200px;
+.timeline-container {
+  height: 280px;
   overflow-y: auto;
+  padding-right: 12px;
 }
 
-.activity-item {
-  padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
+.activity-box {
+  background: #f8fafc;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
 }
 
-.activity-item:last-child {
-  border-bottom: none;
+.activity-box p {
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-.activity-content p {
-  margin: 0 0 5px;
-  color: #333;
-}
+.mt-32 { margin-top: 32px; }
 
-.activity-time {
-  font-size: 12px;
-  color: #999;
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .dashboard-container {
+    padding: 40px;
+  }
+  
+  .modern-stat-card {
+    height: 180px;
+    padding: 32px;
+  }
+
+  .modern-stat-card .label {
+    font-size: 18px;
+  }
+
+  .modern-stat-card .value {
+    font-size: 42px;
+  }
+
+  .title-with-dot {
+    font-size: 22px;
+  }
+
+  .dist-info .name, .dist-info .val {
+    font-size: 16px;
+  }
+
+  .activity-box p {
+    font-size: 15px;
+  }
 }
 
 @media (max-width: 768px) {
-  .dashboard {
-    padding: 12px;
+  .dashboard-container {
+    padding: 16px;
   }
-
-  .stat-card {
-    margin-bottom: 12px;
+  
+  .modern-stat-card {
+    height: 140px;
+    padding: 20px;
   }
-
-  .mt-20 {
-    margin-top: 12px;
+  
+  .modern-stat-card .value {
+    font-size: 28px;
   }
 }
 </style>

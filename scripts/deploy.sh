@@ -958,8 +958,8 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'
         printf 'MYSQL_REPLICATION_PASSWORD=%s_repl\n' "$CFG_DB_PASSWORD"
-        printf 'DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
-        printf 'DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
+        printf 'DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
+        printf 'DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
         printf 'DB_SLAVE_USERNAME=%s\n'  "$CFG_DB_USERNAME"
         printf 'DB_SLAVE_PASSWORD=%s\n'  "$CFG_DB_PASSWORD"
         printf 'REDIS_HOST=redis\n'
@@ -1684,7 +1684,11 @@ fi
 # Schema 验证：确认关键表存在（与 auto-update.sh 保持一致）
 echo "[INFO] 验证数据库 Schema 完整性..."
 SCHEMA_MISSING=""
-for tbl in users system_config article_favorites user_tags feature_override; do
+for tbl in users system_config article_favorites user_tags feature_override \
+           administrative_class school_course teaching_class course_schedule \
+           course_selection level_exam_scores teaching_plans teaching_plan_courses \
+           student_schedule sync_logs field_mappings school_student school_teacher \
+           teacher_student_binding; do
     exists=$(docker exec "$MASTER_CONTAINER" \
         mysql -uroot -p"$DB_ROOT_PW" english_learning \
         -sN -e "SELECT COUNT(*) FROM information_schema.TABLES
@@ -1697,7 +1701,7 @@ if [ -n "$SCHEMA_MISSING" ]; then
     echo "[ERROR] 迁移可能未完整执行，请检查迁移脚本后重新部署"
     exit 1
 fi
-echo "[OK] Schema 验证通过（users / system_config / article_favorites / user_tags / feature_override）"
+echo "[OK] Schema 验证通过（含学校数据关键表）"
 
 # ── 验证并修复从库复制 ────────────────────────────────────────────
 echo "[INFO] 验证从库复制状态..."
@@ -1928,7 +1932,12 @@ echo "       如需手动管理，请访问运维面板 → AI服务管理"
 if [ "${CFG_SCHOOL_FEATURE_ENABLED:-false}" = "true" ]; then
     echo "[INFO] 激活学校数据功能开关..."
     docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" -e \
-        "UPDATE system_config SET config_value='true'
+        "INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret)
+         VALUES
+           ('feature_toggle', 'ops.school_data_browser', 'true', '运维端学校数据浏览功能（行政班、课程、教学班等）', 0),
+           ('feature_toggle', 'ops.school_data_config', 'true', '运维端学校数据源配置功能（API/ETL切换、连接测试）', 0),
+           ('feature_toggle', 'page_schedule', 'true', '学生端课表查看功能（从教务系统同步课表数据）', 0);
+         UPDATE system_config SET config_value='true'
          WHERE config_group='feature_toggle'
            AND config_key IN ('ops.school_data_browser', 'ops.school_data_config', 'page_schedule');" \
         2>&1 | grep -v "Using a password" || true

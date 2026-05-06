@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS school_student (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     student_id VARCHAR(50) NOT NULL UNIQUE COMMENT '学号（对应 CDSP xh / XH）',
     student_name VARCHAR(100) COMMENT '学生姓名（SSO attributes 或手工补全）',
-    college_name VARCHAR(100) NOT NULL COMMENT '学院名称（CDSP kkyx）',
+    college_name VARCHAR(100) NULL COMMENT '学院名称（CDSP kkyx）',
     college_code VARCHAR(50) COMMENT '学院代码（CDSP 未提供，预留）',
     class_code VARCHAR(50) COMMENT '行政班号（CAS attributes 补全，首次 NULL）',
     class_name VARCHAR(100) COMMENT '班级名称（CAS attributes 补全）',
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS school_teacher (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     teacher_id VARCHAR(50) NOT NULL UNIQUE COMMENT '工号（CDSP rkjsh / skjszgh）',
     teacher_name VARCHAR(100) COMMENT '教师姓名（CDSP rkjsxm）',
-    college_name VARCHAR(100) NOT NULL COMMENT '学院（来自链式触发学院）',
+    college_name VARCHAR(100) NULL COMMENT '学院（来自链式触发学院）',
     college_code VARCHAR(50) COMMENT '学院代码（预留）',
     sync_time DATETIME NOT NULL COMMENT '同步时间',
     last_schedule_sync_time DATETIME COMMENT '上次课表同步时间',
@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS school_teacher (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_college (college_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 同步的教师主数据';
+
+ALTER TABLE school_student
+    MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称（CDSP kkyx）';
+
+ALTER TABLE school_teacher
+    MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院（来自链式触发学院）';
 
 -- ============================================================================
 -- 3. 教师-学生绑定（链式拉取衍生关联）
@@ -88,6 +94,46 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('school_data', 'sync_college_chain_cron', '0 30 3 * * ?', '按学院链式刷新 cron 表达式', 0),
 ('school_data', 'sync_college_chain_colleges', '外国语学院', '链式刷新白名单（逗号分隔学院名）', 0),
 ('school_data', 'sync_college_chain_match_mode', 'eq', '学院名匹配模式（eq=精确 / contains=包含）', 0);
+
+DELETE FROM `system_config`
+WHERE `config_group` = 'feature_toggle'
+  AND `config_key` IN (
+      'ops_school_data_chain_fetch',
+      'sso_auto_grant_student',
+      'sso_auto_grant_teacher',
+      'student_lazy_data_sync',
+      'page_user_tests'
+  );
+
+UPDATE `system_config`
+SET `description` = CASE `config_key`
+        WHEN 'ops.school_data_browser' THEN '运维端学校数据浏览功能（行政班、课程、教学班等）'
+        WHEN 'ops.school_data_config' THEN '运维端学校数据源配置功能（API/ETL切换、连接测试）'
+        WHEN 'page_schedule' THEN '学生端-我的课表页'
+        WHEN 'teacher.school_data_enabled' THEN '教师端学校数据功能（课表/选课/成绩）'
+        WHEN 'ops.school_data_chain_fetch' THEN '运维端按学院链式拉取功能开关'
+        WHEN 'student.lazy_data_sync' THEN '学生端按需 Lazy 同步四六级/课表'
+        WHEN 'sso.auto_grant_student' THEN 'SSO 学号匹配 school_student 自动授权 STUDENT'
+        WHEN 'sso.auto_grant_teacher' THEN 'SSO 工号匹配 school_teacher 自动授权 TEACHER'
+        ELSE `description`
+    END,
+    `config_value` = CASE `config_key`
+        WHEN 'ops.school_data_browser' THEN 'true'
+        WHEN 'ops.school_data_config' THEN 'true'
+        WHEN 'page_schedule' THEN 'true'
+        ELSE `config_value`
+    END
+WHERE `config_group` = 'feature_toggle'
+  AND `config_key` IN (
+      'ops.school_data_browser',
+      'ops.school_data_config',
+      'page_schedule',
+      'teacher.school_data_enabled',
+      'ops.school_data_chain_fetch',
+      'student.lazy_data_sync',
+      'sso.auto_grant_student',
+      'sso.auto_grant_teacher'
+  );
 
 -- Part 4: 相似度矩阵表
 -- ─────────────────────────────────────────────

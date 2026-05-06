@@ -23,6 +23,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -647,6 +648,29 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     logger.error("学校 API 返回非 200 业务错误 url={} code={} msg={} bodyPreview={}",
                             url, code, wrapper.get("msg"), truncateForLog(responseBody));
                     throw new BusinessException("学校 API 返回错误: " + code + " " + wrapper.get("msg"));
+                }
+                Object errCode = wrapper.get("errcode");
+                Object errMsg = wrapper.get("errmsg");
+                if (errCode != null || errMsg != null) {
+                    String codeText = errCode == null ? "" : String.valueOf(errCode).trim();
+                    String msgText = errMsg == null ? "" : String.valueOf(errMsg).trim();
+                    if (!codeText.isEmpty() && !"0".equals(codeText) && !"200".equals(codeText)) {
+                        logger.error("学校 API 返回 errcode/errmsg 错误 url={} errcode={} errmsg={} bodyPreview={}",
+                                url, codeText, msgText, truncateForLog(responseBody));
+                        throw new BusinessException("学校 API 返回错误: " + codeText + " " + msgText);
+                    }
+                }
+                Object error = wrapper.get("error");
+                if (error instanceof Map) {
+                    Object nestedCode = ((Map<?, ?>) error).get("code");
+                    Object nestedMessage = ((Map<?, ?>) error).get("message");
+                    if (nestedMessage != null) {
+                        logger.error("学校 API 返回 error 对象 url={} code={} message={} bodyPreview={}",
+                                url, nestedCode, nestedMessage, truncateForLog(responseBody));
+                        throw new BusinessException("学校 API 返回错误: "
+                                + (nestedCode == null ? "" : String.valueOf(nestedCode) + " ")
+                                + String.valueOf(nestedMessage));
+                    }
                 }
 
                 // Enhanced logging: show wrapper structure

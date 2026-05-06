@@ -386,46 +386,68 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.units-management {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .units-management {
+    padding: 30px;
+  }
+  
+  :deep(.el-card__header) {
+    padding: 20px 24px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  :deep(.el-table) {
+    font-size: 15px;
+  }
+
+  :deep(.el-table .cell) {
+    line-height: 1.6;
+    padding: 12px 0;
+  }
+
+  :deep(.el-button--small) {
+    font-size: 13px;
+    padding: 8px 15px;
+  }
+
+  .course-selector {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: #f8fafc;
+    border-radius: 12px;
+  }
+}
+
 .action-buttons {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   justify-content: flex-start;
 }
 
 .action-buttons .el-button {
   margin: 0;
-  padding: 5px 12px;
-  font-size: 13px;
-  border-radius: 4px;
   transition: all 0.2s ease;
 }
 
 .action-buttons .el-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.action-buttons .el-button--circle {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-buttons .el-dropdown {
-  margin-left: 2px;
-}
-
-.units-management {
-  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .table-wrapper {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
 }
 
 .card-header {
@@ -439,8 +461,9 @@ onMounted(() => {
 }
 
 .pagination {
-  margin-top: 20px;
-  text-align: right;
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
 }
 
 @media (max-width: 768px) {
@@ -448,12 +471,18 @@ onMounted(() => {
     padding: 12px;
   }
 
-  .course-selector {
-    margin-bottom: 12px;
+  .card-header {
+    flex-direction: row;
+    align-items: center;
   }
 
   .course-selector .el-select {
     width: 100% !important;
+  }
+
+  .action-buttons {
+    flex-wrap: wrap;
+    gap: 6px;
   }
 }
 </style>
