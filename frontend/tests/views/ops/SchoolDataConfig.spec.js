@@ -135,4 +135,27 @@ describe('SchoolDataConfig quick actions', () => {
     })
     expect(wrapper.vm.chainResult.courseCount).toBe(3)
   })
+
+  it('opens browser with local chain result query', async () => {
+    const wrapper = shallowMount(SchoolDataConfig)
+    await flushPromises()
+
+    wrapper.vm.chainResult = {
+      collegeName: '外国语学院',
+      studentCount: 60,
+      teacherCount: 5,
+      bindingCount: 120,
+      courseCount: 3
+    }
+
+    wrapper.vm.openChainResultInBrowser()
+
+    expect(pushMock).toHaveBeenCalledWith({
+      path: '/ops/school-data-browser',
+      query: {
+        tab: 'school_student',
+        collegeName: '外国语学院'
+      }
+    })
+  })
 })

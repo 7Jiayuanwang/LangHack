@@ -20,14 +20,12 @@ const {
   mockGetSchoolDataOverview,
   mockGetSchoolDataFilterFields,
   mockQuerySchoolData,
-  mockChainFetchStudentsByCollege,
-  mockGetFeatureToggles
+  mockChainFetchStudentsByCollege
 } = vi.hoisted(() => ({
   mockGetSchoolDataOverview: vi.fn(),
   mockGetSchoolDataFilterFields: vi.fn(),
   mockQuerySchoolData: vi.fn(),
-  mockChainFetchStudentsByCollege: vi.fn(),
-  mockGetFeatureToggles: vi.fn()
+  mockChainFetchStudentsByCollege: vi.fn()
 }))
 
 vi.mock('@/api/schoolData', () => ({
@@ -37,10 +35,6 @@ vi.mock('@/api/schoolData', () => ({
   fullSyncSchoolDataFiltered: vi.fn(),
   incrementalSyncSchoolDataFiltered: vi.fn(),
   chainFetchStudentsByCollege: mockChainFetchStudentsByCollege
-}))
-
-vi.mock('@/api/systemConfig', () => ({
-  getFeatureToggles: mockGetFeatureToggles
 }))
 
 import SchoolDataBrowser from '@/views/ops/SchoolDataBrowser.vue'
@@ -67,6 +61,7 @@ describe('SchoolDataBrowser.vue', () => {
     mockChainFetchStudentsByCollege.mockResolvedValue({
       code: 200,
       data: {
+        collegeName: '外国语学院',
         courseCount: 5,
         studentCount: 120,
         teacherCount: 8,
@@ -74,7 +69,6 @@ describe('SchoolDataBrowser.vue', () => {
         upstreamKcbhSupported: true
       }
     })
-    mockGetFeatureToggles.mockResolvedValue({ code: 200, data: {} })
   })
 
   it('mounts and loads filter metadata plus the first page', async () => {
@@ -90,39 +84,20 @@ describe('SchoolDataBrowser.vue', () => {
     })
   })
 
-  it('chain fetch card is hidden when feature toggle is disabled', async () => {
-    mockGetFeatureToggles.mockResolvedValue({
-      code: 200,
-      data: { 'ops.school_data_chain_fetch': false }
-    })
-
-    const wrapper = shallowMount(SchoolDataBrowser)
-    await flushPromises()
-
-    expect(wrapper.find('.chain-fetch-card').exists()).toBe(false)
-  })
-
-  it('chain fetch card is visible when feature toggle is enabled', async () => {
-    mockGetFeatureToggles.mockResolvedValue({
-      code: 200,
-      data: { 'ops.school_data_chain_fetch': true }
-    })
-
+  it('chain fetch card remains visible in the ops browser', async () => {
     const wrapper = shallowMount(SchoolDataBrowser)
     await flushPromises()
 
     expect(wrapper.find('.chain-fetch-card').exists()).toBe(true)
   })
 
-  it('handleChainFetch trims collegeName and calls the current API', async () => {
-    mockGetFeatureToggles.mockResolvedValue({
-      code: 200,
-      data: { 'ops.school_data_chain_fetch': true }
-    })
-
+  it('handleChainFetch trims collegeName, refreshes overview, and switches to local student results', async () => {
     const wrapper = shallowMount(SchoolDataBrowser)
     await flushPromises()
 
+    mockGetSchoolDataOverview.mockClear()
+    mockGetSchoolDataFilterFields.mockClear()
+    mockQuerySchoolData.mockClear()
     wrapper.vm.chainCollegeName = '  外国语学院  '
     wrapper.vm.chainMatchMode = 'eq'
     await wrapper.vm.handleChainFetch()
@@ -132,7 +107,28 @@ describe('SchoolDataBrowser.vue', () => {
       matchMode: 'eq',
       persist: true
     })
+    expect(mockGetSchoolDataOverview).toHaveBeenCalledTimes(1)
+    expect(mockGetSchoolDataFilterFields).toHaveBeenCalledWith('school_student')
+    expect(mockQuerySchoolData).toHaveBeenCalledWith('school_student', {
+      page: 1,
+      size: 20,
+      filterGroups: [
+        {
+          relation: 'AND',
+          conditions: [
+            {
+              field: 'collegeName',
+              label: '学院名称',
+              operator: 'eq',
+              value: '外国语学院'
+            }
+          ]
+        }
+      ]
+    })
+    expect(wrapper.vm.activeTab).toBe('school_student')
     expect(wrapper.vm.chainResult).toEqual({
+      collegeName: '外国语学院',
       courseCount: 5,
       studentCount: 120,
       teacherCount: 8,

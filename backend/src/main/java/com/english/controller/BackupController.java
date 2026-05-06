@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
@@ -90,6 +91,31 @@ public class BackupController {
         }
     }
 
+    @PostMapping("/import")
+    public Result<?> importBackup(@RequestParam("file") MultipartFile file,
+                                  @RequestParam(defaultValue = "AUTO") String mode,
+                                  @RequestParam(required = false) String category,
+                                  Authentication authentication,
+                                  HttpServletRequest request) {
+        String username = authentication.getName();
+        String ip = getClientIp(request);
+        try {
+            BackupRecord record = backupService.importBackup(username, file, mode, category);
+            operationLogService.log(username, "BACKUP_IMPORT", record.getId(),
+                    record.getFilename(), "导入备份文件", "SUCCESS", ip);
+            return Result.success("备份文件已导入", record);
+        } catch (BusinessException e) {
+            operationLogService.log(username, "BACKUP_IMPORT", null,
+                    file != null ? file.getOriginalFilename() : null, "导入失败: " + e.getMessage(), "FAILED", ip);
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("导入备份文件失败", e);
+            operationLogService.log(username, "BACKUP_IMPORT", null,
+                    file != null ? file.getOriginalFilename() : null, "导入失败: 系统内部错误", "FAILED", ip);
+            return Result.error("导入备份文件失败，请稍后重试");
+        }
+    }
+
     @GetMapping("/{id}")
     public Result<?> getBackupDetail(@PathVariable Long id) {
         try {
@@ -100,6 +126,20 @@ public class BackupController {
         } catch (Exception e) {
             logger.error("获取备份详情失败", e);
             return Result.error("获取备份详情失败，请稍后重试");
+        }
+    }
+
+    @GetMapping("/{id}/preview")
+    public Result<?> getBackupPreview(@PathVariable Long id,
+                                      @RequestParam(defaultValue = "80") int maxLines,
+                                      @RequestParam(defaultValue = "12000") int maxChars) {
+        try {
+            return Result.success(backupService.getBackupPreview(id, maxLines, maxChars));
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取备份预览失败", e);
+            return Result.error("获取备份预览失败，请稍后重试");
         }
     }
 

@@ -349,6 +349,9 @@
                 <div><span>绑定数：</span>{{ chainResult.bindingCount || 0 }}</div>
                 <div v-if="chainResult.upstreamKcbhSupported !== undefined"><span>KCBH支持：</span>{{ chainResult.upstreamKcbhSupported ? '是' : '否（客户端过滤）' }}</div>
               </div>
+              <div v-if="!chainResult.errorMessage" class="quick-result-actions">
+                <el-button size="small" @click="openChainResultInBrowser">查看本地数据</el-button>
+              </div>
             </div>
           </div>
         </el-collapse-item>
@@ -744,6 +747,28 @@ const handleQuickChainFetch = async () => {
   }
 }
 
+const resolveChainResultTab = (result) => {
+  if ((result?.studentCount || 0) > 0) return 'school_student'
+  if ((result?.teacherCount || 0) > 0) return 'school_teacher'
+  if ((result?.bindingCount || 0) > 0) return 'teacher_student_binding'
+  if ((result?.courseCount || 0) > 0) return 'school_course'
+  return 'school_student'
+}
+
+const openChainResultInBrowser = () => {
+  const result = chainResult.value
+  if (!result || result.errorMessage) {
+    return
+  }
+  router.push({
+    path: '/ops/school-data-browser',
+    query: {
+      tab: resolveChainResultTab(result),
+      collegeName: result.collegeName || chainFetchForm.collegeName.trim()
+    }
+  })
+}
+
 onMounted(loadAll)
 </script>
 
@@ -958,6 +983,10 @@ onMounted(loadAll)
   font-weight: 600;
   color: #334155;
   margin-bottom: 8px;
+}
+
+.quick-result-actions {
+  margin-top: 12px;
 }
 
 .endpoints-table {

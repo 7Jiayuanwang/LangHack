@@ -50,6 +50,15 @@ public class BackupRecord {
     @TableField("completed_time")
     private LocalDateTime completedTime;
 
+    @TableField(exist = false)
+    private Boolean fileAvailable;
+
+    @TableField(exist = false)
+    private Boolean readable;
+
+    @TableField(exist = false)
+    private String availabilityMessage;
+
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -92,4 +101,13 @@ public class BackupRecord {
 
     public LocalDateTime getCompletedTime() { return completedTime; }
     public void setCompletedTime(LocalDateTime completedTime) { this.completedTime = completedTime; }
+
+    public Boolean getFileAvailable() { return fileAvailable; }
+    public void setFileAvailable(Boolean fileAvailable) { this.fileAvailable = fileAvailable; }
+
+    public Boolean getReadable() { return readable; }
+    public void setReadable(Boolean readable) { this.readable = readable; }
+
+    public String getAvailabilityMessage() { return availabilityMessage; }
+    public void setAvailabilityMessage(String availabilityMessage) { this.availabilityMessage = availabilityMessage; }
 }

@@ -18,6 +18,10 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <el-button type="primary" plain @click="openImportDialog">
+          <el-icon><Upload /></el-icon>
+          导入备份
+        </el-button>
         <el-button @click="loadBackups">
           <el-icon><Refresh /></el-icon>
           刷新
@@ -56,6 +60,10 @@
         <div class="stat-label">最近备份</div>
       </div>
       <div class="stat-card">
+        <div class="stat-value">{{ stats.missingFileCount || 0 }}</div>
+        <div class="stat-label">异常文件</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-value">
           <el-tag :type="stats.backupEnabled ? 'success' : 'danger'" size="small">
             {{ stats.backupEnabled ? '已启用' : '已禁用' }}
@@ -80,6 +88,7 @@
           <el-select v-model="filterType" placeholder="全部类型" clearable style="width: 130px" @change="handleFilter">
             <el-option label="手动备份" value="MANUAL" />
             <el-option label="定时备份" value="SCHEDULED" />
+            <el-option label="导入备份" value="IMPORTED" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -116,8 +125,8 @@
         </el-table-column>
         <el-table-column prop="backupType" label="类型" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.backupType === 'MANUAL' ? '' : 'success'" size="small">
-              {{ row.backupType === 'MANUAL' ? '手动' : '定时' }}
+            <el-tag :type="getBackupTypeTag(row.backupType)" size="small">
+              {{ getBackupTypeText(row.backupType) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -143,26 +152,41 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="文件" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="canReadBackup(row)" type="success" size="small">可读取</el-tag>
+            <el-tag v-else-if="isSuccessfulBackup(row)" type="danger" size="small">缺失/损坏</el-tag>
+            <span v-else style="color: var(--text-tertiary, #909399); font-size: 12px;">-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="createdBy" label="创建者" width="100" show-overflow-tooltip />
         <el-table-column prop="createdTime" label="创建时间" width="170">
           <template #default="{ row }">
             {{ formatTime(row.createdTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-if="row.status === 'SUCCESS'"
+              size="small"
+              @click="handleView(row)"
+            >
+              查看
+            </el-button>
+            <el-button
+              v-if="isSuccessfulBackup(row)"
               type="primary"
               size="small"
+              :disabled="!canReadBackup(row)"
               @click="handleDownload(row)"
             >
               下载
             </el-button>
             <el-button
-              v-if="row.status === 'SUCCESS'"
+              v-if="isSuccessfulBackup(row)"
               type="warning"
               size="small"
+              :disabled="!canReadBackup(row)"
               @click="handleRestore(row)"
             >
               恢复
@@ -237,6 +261,94 @@
       </template>
     </el-dialog>
 
+    <!-- 导入备份对话框 -->
+    <el-dialog
+      v-model="importDialogVisible"
+      title="导入备份"
+      width="min(560px, 92%)"
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="100px" class="import-form">
+        <el-form-item label="备份文件">
+          <div class="import-file-field">
+            <el-upload
+              :auto-upload="false"
+              :show-file-list="false"
+              accept=".sql,.gz"
+              :limit="1"
+              @change="handleImportFileChange"
+            >
+              <el-button>选择文件</el-button>
+            </el-upload>
+            <div class="selected-file-name">{{ importForm.fileName || '未选择文件' }}</div>
+          </div>
+        </el-form-item>
+        <el-form-item label="导入模式">
+          <el-select v-model="importForm.mode" style="width: 180px">
+            <el-option label="自动识别" value="AUTO" />
+            <el-option label="全量" value="FULL" />
+            <el-option label="增量" value="INCREMENTAL" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-select v-model="importForm.category" clearable placeholder="自动识别 / 留空" style="width: 220px">
+            <el-option label="系统配置" value="system_config" />
+            <el-option label="用户数据" value="user_data" />
+            <el-option label="业务数据" value="business_data" />
+            <el-option label="学校数据" value="school_data" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importForm.file" @click="confirmImportBackup">
+          导入
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 备份详情抽屉 -->
+    <el-drawer
+      v-model="detailDrawerVisible"
+      title="备份详情"
+      direction="rtl"
+      size="720px"
+    >
+      <div v-loading="detailLoading" class="backup-detail">
+        <div v-if="currentDetail" class="detail-section">
+          <div class="detail-grid">
+            <div><span>文件名：</span>{{ currentDetail.filename }}</div>
+            <div><span>状态：</span>{{ getStatusText(currentDetail.status) }}</div>
+            <div><span>模式：</span>{{ currentDetail.backupMode === 'INCREMENTAL' ? '增量' : '全量' }}</div>
+            <div><span>类型：</span>{{ getBackupTypeText(currentDetail.backupType) }}</div>
+            <div><span>分类：</span>{{ currentDetail.category ? getCategoryLabel(currentDetail.category) : '-' }}</div>
+            <div><span>文件大小：</span>{{ formatFileSize(currentDetail.fileSize || 0) }}</div>
+            <div><span>创建者：</span>{{ currentDetail.createdBy || '-' }}</div>
+            <div><span>创建时间：</span>{{ formatTime(currentDetail.createdTime) }}</div>
+            <div><span>完成时间：</span>{{ formatTime(currentDetail.completedTime) }}</div>
+            <div><span>文件状态：</span>{{ currentDetail.availabilityMessage || (canReadBackup(currentDetail) ? '文件可读' : '-') }}</div>
+            <div v-if="currentDetail.baseBackupId"><span>基准备份ID：</span>{{ currentDetail.baseBackupId }}</div>
+            <div v-if="currentDetail.errorMessage" class="detail-error"><span>错误信息：</span>{{ currentDetail.errorMessage }}</div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="section-header">
+            <strong>内容预览</strong>
+            <span v-if="previewMeta.truncated" class="preview-hint">已截断显示</span>
+          </div>
+          <el-alert
+            v-if="previewError"
+            type="warning"
+            :closable="false"
+            show-icon
+            :title="previewError"
+          />
+          <pre v-else class="preview-block">{{ backupPreview || '暂无预览内容' }}</pre>
+        </div>
+      </div>
+    </el-drawer>
+
     <!-- 操作日志抽屉 -->
     <el-drawer
       v-model="logsDrawerVisible"
@@ -247,6 +359,7 @@
       <div class="logs-filter">
         <el-select v-model="logFilterType" placeholder="全部类型" clearable style="width: 160px" @change="handleLogFilter">
           <el-option label="创建备份" value="BACKUP_CREATE" />
+          <el-option label="导入备份" value="BACKUP_IMPORT" />
           <el-option label="删除备份" value="BACKUP_DELETE" />
           <el-option label="恢复备份" value="BACKUP_RESTORE" />
           <el-option label="下载备份" value="BACKUP_DOWNLOAD" />
@@ -511,6 +624,9 @@ import {
   getBackupList,
   createBackupApi,
   createCategoryBackupApi,
+  importBackupApi,
+  getBackupDetail,
+  getBackupPreview,
   downloadBackupApi,
   deleteBackupApi,
   restoreBackupApi,
@@ -527,11 +643,28 @@ const stats = ref({})
 const loading = ref(false)
 const creating = ref(false)
 const restoring = ref(false)
+const importing = ref(false)
 const filterType = ref('')
 const filterStatus = ref('')
 const restoreDialogVisible = ref(false)
 const restoreRecord = ref(null)
 const confirmDbName = ref('')
+const importDialogVisible = ref(false)
+const detailDrawerVisible = ref(false)
+const detailLoading = ref(false)
+const currentDetail = ref(null)
+const backupPreview = ref('')
+const previewError = ref('')
+const previewMeta = reactive({
+  truncated: false,
+  lineCount: 0
+})
+const importForm = reactive({
+  file: null,
+  fileName: '',
+  mode: 'AUTO',
+  category: ''
+})
 let pollTimer = null
 
 // Config drawer state
@@ -606,6 +739,55 @@ const loadStats = async () => {
   }
 }
 
+const normalizeBackupStatus = (status) => {
+  if (!status) return 'UNKNOWN'
+  const normalized = String(status).toUpperCase()
+  if (normalized === 'COMPLETED') return 'SUCCESS'
+  if (normalized === 'RUNNING') return 'IN_PROGRESS'
+  return normalized
+}
+
+const isSuccessfulBackup = (row) => normalizeBackupStatus(row?.status) === 'SUCCESS'
+
+const canReadBackup = (row) => isSuccessfulBackup(row) && row?.readable !== false && row?.fileAvailable !== false
+
+const handleView = async (row) => {
+  detailDrawerVisible.value = true
+  detailLoading.value = true
+  currentDetail.value = null
+  backupPreview.value = ''
+  previewError.value = ''
+  previewMeta.truncated = false
+  previewMeta.lineCount = 0
+
+  try {
+    const [detailRes, previewRes] = await Promise.allSettled([
+      getBackupDetail(row.id),
+      getBackupPreview(row.id, { maxLines: 80, maxChars: 12000 })
+    ])
+
+    if (detailRes.status === 'fulfilled' && detailRes.value?.code === 200) {
+      currentDetail.value = detailRes.value.data
+    } else {
+      previewError.value = detailRes.status === 'fulfilled'
+        ? (detailRes.value?.message || '读取备份详情失败')
+        : (detailRes.reason?.message || '读取备份详情失败')
+    }
+
+    if (previewRes.status === 'fulfilled' && previewRes.value?.code === 200) {
+      backupPreview.value = previewRes.value.data?.preview || ''
+      previewMeta.truncated = previewRes.value.data?.truncated === true
+      previewMeta.lineCount = previewRes.value.data?.lineCount || 0
+    } else {
+      previewError.value = previewRes.status === 'fulfilled'
+        ? (previewRes.value?.message || '读取备份预览失败')
+        : (previewRes.reason?.message || '读取备份预览失败')
+    }
+  } finally {
+    detailLoading.value = false
+  }
+}
+
 // Create backup
 const handleCreateBackup = async (mode) => {
   if (typeof mode === 'string' && mode.startsWith('category:')) {
@@ -653,6 +835,68 @@ const CATEGORY_LABELS = {
 }
 
 const getCategoryLabel = (cat) => CATEGORY_LABELS[cat] || cat
+
+const getBackupTypeText = (type) => {
+  const map = {
+    MANUAL: '手动',
+    SCHEDULED: '定时',
+    IMPORTED: '导入'
+  }
+  return map[type] || type || '-'
+}
+
+const getBackupTypeTag = (type) => {
+  const map = {
+    MANUAL: '',
+    SCHEDULED: 'success',
+    IMPORTED: 'info'
+  }
+  return map[type] ?? 'info'
+}
+
+const openImportDialog = () => {
+  importDialogVisible.value = true
+  importForm.file = null
+  importForm.fileName = ''
+  importForm.mode = 'AUTO'
+  importForm.category = ''
+}
+
+const handleImportFileChange = (file) => {
+  importForm.file = file.raw || file
+  importForm.fileName = file.name || file.raw?.name || ''
+}
+
+const confirmImportBackup = async () => {
+  if (!importForm.file) {
+    ElMessage.warning('请选择要导入的备份文件')
+    return
+  }
+
+  const formData = new FormData()
+  formData.append('file', importForm.file)
+  formData.append('mode', importForm.mode)
+  if (importForm.category) {
+    formData.append('category', importForm.category)
+  }
+
+  importing.value = true
+  try {
+    const response = await importBackupApi(formData)
+    if (response.code === 200) {
+      ElMessage.success('备份文件已导入')
+      importDialogVisible.value = false
+      await loadBackups()
+      await loadStats()
+    } else {
+      ElMessage.error(response.message || '导入备份失败')
+    }
+  } catch (error) {
+    ElMessage.error('导入备份失败')
+  } finally {
+    importing.value = false
+  }
+}
 
 const handleCreateCategoryBackup = async (category) => {
   const label = getCategoryLabel(category)
@@ -871,12 +1115,13 @@ const formatLastTime = (time) => {
 
 const getStatusType = (status) => {
   const map = { SUCCESS: 'success', FAILED: 'danger', IN_PROGRESS: 'warning' }
-  return map[status] || 'info'
+  return map[normalizeBackupStatus(status)] || 'info'
 }
 
 const getStatusText = (status) => {
   const map = { SUCCESS: '成功', FAILED: '失败', IN_PROGRESS: '进行中' }
-  return map[status] || status
+  const normalized = normalizeBackupStatus(status)
+  return map[normalized] || normalized
 }
 
 // Operation Logs
@@ -936,6 +1181,7 @@ const handleLogPageChange = (page) => {
 const getLogTypeText = (type) => {
   const map = {
     BACKUP_CREATE: '创建备份',
+    BACKUP_IMPORT: '导入备份',
     BACKUP_DELETE: '删除备份',
     BACKUP_RESTORE: '恢复备份',
     BACKUP_DOWNLOAD: '下载备份',
@@ -949,6 +1195,7 @@ const getLogTypeText = (type) => {
 const getLogTypeTag = (type) => {
   const map = {
     BACKUP_CREATE: 'success',
+    BACKUP_IMPORT: 'info',
     BACKUP_DELETE: 'danger',
     BACKUP_RESTORE: 'warning',
     BACKUP_DOWNLOAD: '',
@@ -1132,12 +1379,85 @@ onBeforeUnmount(() => {
   margin-right: 0;
 }
 
+.import-form {
+  padding-top: 8px;
+}
+
+.import-file-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.selected-file-name {
+  font-size: 13px;
+  color: #64748b;
+  word-break: break-all;
+}
+
 .backups-table {
   background: white;
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
   border: 1px solid #e2e8f0;
+}
+
+.backup-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detail-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  background: #fff;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
+  font-size: 14px;
+  color: #334155;
+}
+
+.detail-grid span {
+  color: #64748b;
+}
+
+.detail-error {
+  grid-column: 1 / -1;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.preview-hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.preview-block {
+  margin: 0;
+  padding: 14px;
+  min-height: 220px;
+  max-height: 460px;
+  overflow: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 :deep(.el-table) {

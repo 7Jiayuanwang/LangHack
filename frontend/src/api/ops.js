@@ -18,10 +18,26 @@ export function createBackupApi(mode = "FULL") {
   });
 }
 
+export function importBackupApi(data) {
+  return request({
+    url: "/api/ops/backup/import",
+    method: "post",
+    data,
+  });
+}
+
 export function getBackupDetail(id) {
   return request({
     url: `/api/ops/backup/${id}`,
     method: "get",
+  });
+}
+
+export function getBackupPreview(id, params) {
+  return request({
+    url: `/api/ops/backup/${id}/preview`,
+    method: "get",
+    params,
   });
 }
 

@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -34,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Covers:
  * - GET    /api/ops/backup/list       (paginated backup list)
  * - POST   /api/ops/backup/create     (create manual backup)
+ * - POST   /api/ops/backup/import     (import backup file)
  * - GET    /api/ops/backup/{id}       (backup detail)
  * - DELETE /api/ops/backup/{id}       (delete backup)
  * - POST   /api/ops/backup/{id}/restore (restore from backup)
@@ -214,6 +216,45 @@ class BackupControllerTest {
                 .andExpect(jsonPath("$.message").value("创建备份失败，请稍后重试"));
     }
 
+    @Test
+    @DisplayName("POST /api/ops/backup/import - success")
+    void importBackup_success() throws Exception {
+        BackupRecord record = createMockBackupRecord(3L, "imported_backup.sql");
+        record.setBackupType("IMPORTED");
+        MockMultipartFile file = new MockMultipartFile("file", "backup.sql", "application/sql", "SELECT 1;".getBytes());
+        when(backupService.importBackup(eq("admin1"), any(), eq("AUTO"), eq("school_data"))).thenReturn(record);
+
+        mockMvc.perform(multipart("/api/ops/backup/import")
+                        .file(file)
+                        .param("mode", "AUTO")
+                        .param("category", "school_data"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("备份文件已导入"));
+
+        verify(operationLogService).log(eq("admin1"), eq("BACKUP_IMPORT"), eq(3L),
+                eq("imported_backup.sql"), eq("导入备份文件"), eq("SUCCESS"), anyString());
+    }
+
+    @Test
+    @DisplayName("POST /api/ops/backup/import - BusinessException returns error")
+    void importBackup_businessException_returnsError() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "backup.txt", "text/plain", "bad".getBytes());
+        when(backupService.importBackup(eq("admin1"), any(), eq("AUTO"), eq("")))
+                .thenThrow(new BusinessException("仅支持导入 .sql 或 .gz 备份文件"));
+
+        mockMvc.perform(multipart("/api/ops/backup/import")
+                        .file(file)
+                        .param("mode", "AUTO")
+                        .param("category", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("仅支持导入 .sql 或 .gz 备份文件"));
+
+        verify(operationLogService).log(eq("admin1"), eq("BACKUP_IMPORT"), isNull(),
+                eq("backup.txt"), contains("失败"), eq("FAILED"), anyString());
+    }
+
     // ========== GET /api/ops/backup/{id} ==========
 
     @Test
@@ -249,6 +290,32 @@ class BackupControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.message").value("获取备份详情失败，请稍后重试"));
+    }
+
+    @Test
+    @DisplayName("GET /api/ops/backup/{id}/preview - success")
+    void getBackupPreview_success() throws Exception {
+        Map<String, Object> preview = new HashMap<>();
+        preview.put("preview", "-- backup\nSELECT 1;");
+        preview.put("truncated", false);
+        when(backupService.getBackupPreview(1L, 80, 12000)).thenReturn(preview);
+
+        mockMvc.perform(get("/api/ops/backup/1/preview"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.preview").value("-- backup\nSELECT 1;"))
+                .andExpect(jsonPath("$.data.truncated").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/ops/backup/{id}/preview - BusinessException returns error")
+    void getBackupPreview_businessException_returnsError() throws Exception {
+        when(backupService.getBackupPreview(1L, 80, 12000)).thenThrow(new BusinessException("备份文件不存在"));
+
+        mockMvc.perform(get("/api/ops/backup/1/preview"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("备份文件不存在"));
     }
 
     // ========== DELETE /api/ops/backup/{id} ==========

@@ -364,7 +364,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { InfoFilled, DataLine, Refresh, Filter, Connection, ArrowRight, Download } from '@element-plus/icons-vue'
+import { InfoFilled, DataLine, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   getSchoolDataOverview,

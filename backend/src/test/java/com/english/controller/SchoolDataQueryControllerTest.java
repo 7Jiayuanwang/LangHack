@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -124,6 +125,37 @@ class SchoolDataQueryControllerTest {
         verify(administrativeClassMapper).selectPage(pageCaptor.capture(), any());
         assertTrue(pageCaptor.getValue().getCurrent() == 2L);
         assertTrue(pageCaptor.getValue().getSize() == 5L);
+    }
+
+    @Test
+    @DisplayName("通用查询应限制分页参数，避免超大页查询")
+    void querySchoolData_clampsPageAndSize() throws Exception {
+        SchoolDataFilterFieldDto field = stringField("className", "class_name", true);
+        when(fieldMetadataService.getFilterFieldMap("administrative_class")).thenReturn(Map.of("className", field));
+        when(administrativeClassMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 200));
+
+        mockMvc.perform(post("/api/admin/school-data/administrative_class/query")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "page": -3,
+                                  "size": 5000,
+                                  "filterGroups": [
+                                    {
+                                      "conditions": [
+                                        {"field": "className", "operator": "eq", "value": "A"}
+                                      ]
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        verify(administrativeClassMapper).selectPage(pageCaptor.capture(), any());
+        assertEquals(1L, pageCaptor.getValue().getCurrent());
+        assertEquals(200L, pageCaptor.getValue().getSize());
     }
 
     @Test

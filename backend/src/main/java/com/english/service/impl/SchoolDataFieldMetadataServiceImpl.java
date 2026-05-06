@@ -29,19 +29,19 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
 
     private static final Set<String> HIDDEN_FIELDS = Set.of("id", "createdAt", "updatedAt", "syncTime", "syncSource");
 
-    private static final Map<String, Class<?>> ENTITY_TYPES = Map.of(
-            "administrative_class", AdministrativeClass.class,
-            "school_course", SchoolCourse.class,
-            "teaching_class", TeachingClass.class,
-            "course_schedule", CourseSchedule.class,
-            "course_selection", CourseSelection.class,
-            "level_exam_scores", LevelExamScore.class,
-            "teaching_plans", TeachingPlan.class,
-            "teacher_courses", TeachingClass.class,
-            "student_schedule", StudentSchedule.class,
-            "school_student", SchoolStudent.class,
-            "school_teacher", SchoolTeacher.class,
-            "teacher_student_binding", TeacherStudentBinding.class
+    private static final Map<String, Class<?>> ENTITY_TYPES = Map.ofEntries(
+            Map.entry("administrative_class", AdministrativeClass.class),
+            Map.entry("school_course", SchoolCourse.class),
+            Map.entry("teaching_class", TeachingClass.class),
+            Map.entry("course_schedule", CourseSchedule.class),
+            Map.entry("course_selection", CourseSelection.class),
+            Map.entry("level_exam_scores", LevelExamScore.class),
+            Map.entry("teaching_plans", TeachingPlan.class),
+            Map.entry("teacher_courses", TeachingClass.class),
+            Map.entry("student_schedule", StudentSchedule.class),
+            Map.entry("school_student", SchoolStudent.class),
+            Map.entry("school_teacher", SchoolTeacher.class),
+            Map.entry("teacher_student_binding", TeacherStudentBinding.class)
     );
 
     private static final Map<String, String> FIELD_LABELS = createFieldLabels();
