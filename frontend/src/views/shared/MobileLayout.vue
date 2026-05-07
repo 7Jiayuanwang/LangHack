@@ -207,6 +207,7 @@ const NAV_ITEMS = {
     { path: '/ops/feature-toggles', label: '开关', icon: Switch      },
     { path: '/ops/school-data',         label: '数据', icon: Coin,        featureKey: 'ops.school_data_config' },
     { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine,    featureKey: 'ops.school_data_browser' },
+    { path: '/ops/logs',            label: '日志', icon: Document    },
     { path: '/ops/update',          label: '更新', icon: Refresh     },
   ],
   admin: [

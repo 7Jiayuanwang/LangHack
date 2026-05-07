@@ -194,6 +194,12 @@ const routes = [
         component: () => import("@/views/ops/SchoolDataBrowser.vue"),
         meta: { title: "数据浏览", roles: ["OPS", "ADMIN"], featureKey: "ops.school_data_browser" },
       },
+      {
+        path: "logs",
+        name: "OpsLogs",
+        component: () => import("@/views/ops/Logs.vue"),
+        meta: { title: "日志管理", roles: ["OPS", "ADMIN"] },
+      },
     ],
   },
   {
