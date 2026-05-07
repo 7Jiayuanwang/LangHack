@@ -176,4 +176,24 @@ public class User {
     public void setSsoSubject(String ssoSubject) {
         this.ssoSubject = ssoSubject;
     }
+    @TableField("read_article_count")
+    private Integer readArticleCount = 0;
+
+    @TableField("read_total_times")
+    private Integer readTotalTimes = 0;
+    public Integer getReadArticleCount() {
+        return readArticleCount;
+    }
+
+    public void setReadArticleCount(Integer readArticleCount) {
+        this.readArticleCount = readArticleCount;
+    }
+
+    public Integer getReadTotalTimes() {
+        return readTotalTimes;
+    }
+
+    public void setReadTotalTimes(Integer readTotalTimes) {
+        this.readTotalTimes = readTotalTimes;
+    }
 }

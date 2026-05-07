@@ -18,6 +18,12 @@ public class UserTextRead {
     @TableField("read_at")
     private LocalDateTime readAt;
 
+    @TableField("read_count")
+    private Integer readCount;
+
+    @TableField("last_read_at")
+    private LocalDateTime lastReadAt;
+
     public Long getId() {
         return id;
     }
@@ -48,5 +54,21 @@ public class UserTextRead {
 
     public void setReadAt(LocalDateTime readAt) {
         this.readAt = readAt;
+    }
+
+    public Integer getReadCount() {
+        return readCount;
+    }
+
+    public void setReadCount(Integer readCount) {
+        this.readCount = readCount;
+    }
+
+    public LocalDateTime getLastReadAt() {
+        return lastReadAt;
+    }
+
+    public void setLastReadAt(LocalDateTime lastReadAt) {
+        this.lastReadAt = lastReadAt;
     }
 }

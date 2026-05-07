@@ -27,6 +27,35 @@ import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 /**
+ * 用户阅读统计DTO
+ */
+class UserReadingStats {
+    private Integer readArticlesCount;  // 阅读篇数
+    private Integer totalReadCount;      // 阅读次数
+    
+    public UserReadingStats(Integer readArticlesCount, Integer totalReadCount) {
+        this.readArticlesCount = readArticlesCount;
+        this.totalReadCount = totalReadCount;
+    }
+    
+    public Integer getReadArticlesCount() {
+        return readArticlesCount;
+    }
+    
+    public void setReadArticlesCount(Integer readArticlesCount) {
+        this.readArticlesCount = readArticlesCount;
+    }
+    
+    public Integer getTotalReadCount() {
+        return totalReadCount;
+    }
+    
+    public void setTotalReadCount(Integer totalReadCount) {
+        this.totalReadCount = totalReadCount;
+    }
+}
+
+/**
  * 公开课文控制器
  * 为普通用户提供随机课文访问
  */
@@ -162,6 +191,7 @@ public class PublicTextController {
     }
 
     /**
+<<<<<<< HEAD
      * 个性化推荐文章
      */
     @GetMapping("/recommended")
@@ -194,10 +224,12 @@ public class PublicTextController {
     }
 
     /**
-     * 标记文章为已读
+     * 记录用户阅读行为
+     * 阅读次数：每次调用都+1
+     * 阅读篇数：同一用户同一篇文章仅第一次+1
      */
     @PostMapping("/{textId}/read")
-    public Result<Void> markTextAsRead(@PathVariable Long textId) {
+    public Result<Void> recordReading(@PathVariable Long textId) {
         try {
             Long userId = getCurrentUserId();
             if (userId == null) {
@@ -208,18 +240,46 @@ public class PublicTextController {
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<UserTextRead>()
                             .eq(UserTextRead::getUserId, userId)
                             .eq(UserTextRead::getTextId, textId));
+                            
             if (existing == null) {
+                // 首次阅读：创建新记录，阅读篇数+1，阅读次数=1
                 UserTextRead record = new UserTextRead();
                 record.setUserId(userId);
                 record.setTextId(textId);
                 record.setReadAt(LocalDateTime.now());
+                record.setLastReadAt(LocalDateTime.now());
+                record.setReadCount(1);
                 userTextReadMapper.insert(record);
+            } else {
+                // 重复阅读：仅增加阅读次数，不增加阅读篇数
+                userTextReadMapper.incrementReadCount(userId, textId);
             }
 
             return Result.success(null);
         } catch (Exception e) {
-            log.error("标记已读失败, textId={}", textId, e);
-            return Result.error("标记已读失败");
+            log.error("记录阅读行为失败, textId={}", textId, e);
+            return Result.error("记录阅读行为失败");
+        }
+    }
+
+    /**
+     * 获取用户阅读统计
+     */
+    @GetMapping("/reading-stats")
+    public Result<UserReadingStats> getReadingStats() {
+        try {
+            Long userId = getCurrentUserId();
+            if (userId == null) {
+                return Result.success(new UserReadingStats(0, 0));
+            }
+
+            int readArticlesCount = userTextReadMapper.countReadArticles(userId);
+            int totalReadCount = userTextReadMapper.sumReadCounts(userId);
+            
+            return Result.success(new UserReadingStats(readArticlesCount, totalReadCount));
+        } catch (Exception e) {
+            log.error("获取阅读统计失败", e);
+            return Result.error("获取阅读统计失败");
         }
     }
 
@@ -403,6 +463,9 @@ public class PublicTextController {
                 return Result.error("课文不存在或未公开");
             }
 
+            // 记录用户阅读行为
+            recordReading(textId);
+            
             // 原子递增查看次数
             textService.incrementViewCount(textId);
 
