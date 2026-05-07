@@ -761,6 +761,7 @@ verify_ai_providers() {
 
 run_incremental_migrations() {
     local migration_sql="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+    local prepared_sql=""
 
     if [ ! -f "$migration_sql" ]; then
         log "ERROR: MIGRATE: 迁移脚本不存在: $migration_sql"
@@ -830,12 +831,20 @@ run_incremental_migrations() {
     local db_name="${MYSQL_DATABASE:-english_learning}"
     log "MIGRATE: 执行 04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${db_name})..."
 
+    prepared_sql=$(mktemp /tmp/langhack-migrate.XXXXXX.sql)
+    if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$migration_sql" "$prepared_sql"; then
+        log "ERROR: MIGRATE: 迁移脚本预处理失败"
+        rm -f "$prepared_sql" 2>/dev/null || true
+        return 1
+    fi
+
     local migrate_output migrate_exit migrate_errors
-    migrate_output=$(docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 < "$migration_sql")
+    migrate_output=$(docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 < "$prepared_sql")
     migrate_exit=$?
     migrate_errors=$(echo "$migrate_output" \
         | grep -v "Using a password on the command line interface can be insecure" \
         | grep -v "^$" || true)
+    rm -f "$prepared_sql" 2>/dev/null || true
 
     if [ $migrate_exit -ne 0 ]; then
         log "ERROR: MIGRATE: 增量迁移失败，退出码: $migrate_exit"

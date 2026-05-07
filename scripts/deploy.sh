@@ -1498,6 +1498,7 @@ DB_NAME="${MYSQL_DATABASE:-english_learning}"
 MASTER_CONTAINER="langhack-mysql-master"
 SLAVE_CONTAINER="langhack-mysql-slave"
 MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+PREPARED_MIGRATION_SQL=""
 FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
 
 # 等待 mysql-master 容器可用（最多 60s）
@@ -1539,8 +1540,15 @@ fi
 # 从头部列表提取最高版本号用于日志
 max_ver=$(grep -oE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
 echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${DB_NAME})"
-MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 < "$MIGRATION_SQL")
+PREPARED_MIGRATION_SQL=$(mktemp /tmp/langhack-deploy-migrate.XXXXXX.sql)
+if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$PREPARED_MIGRATION_SQL"; then
+    echo "[ERROR] 迁移脚本预处理失败"
+    rm -f "$PREPARED_MIGRATION_SQL" 2>/dev/null || true
+    exit 1
+fi
+MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 < "$PREPARED_MIGRATION_SQL")
 MIGRATE_EXIT=$?
+rm -f "$PREPARED_MIGRATION_SQL" 2>/dev/null || true
 MIGRATE_ERRORS=$(echo "$MIGRATE_OUTPUT" | grep -v "Using a password on the command line interface can be insecure" | grep -v "^$" || true)
 if [ $MIGRATE_EXIT -ne 0 ]; then
     echo "[ERROR] 数据库增量迁移失败，退出码: $MIGRATE_EXIT"

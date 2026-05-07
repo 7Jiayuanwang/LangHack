@@ -155,32 +155,45 @@ apply_migrations() {
     check_migration_sync || return 1
 
     local stderr_log="$LOG_DIR/migration.stderr.log"
+    local prepared_sql=""
     : > "$stderr_log"
+
+    prepared_sql=$(mktemp /tmp/langhack-hotv2-migrate.XXXXXX.sql)
+    if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$prepared_sql"; then
+        log_error "迁移脚本预处理失败"
+        rm -f "$prepared_sql" 2>/dev/null || true
+        return 1
+    fi
 
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "langhack-mysql-master"; then
         log_info "使用 Docker MySQL 容器 (langhack-mysql-master)"
         if MYSQL_PWD="$DB_PW" docker exec -i -e MYSQL_PWD langhack-mysql-master \
-               mysql -u"$DB_USER" "$DB_NAME" < "$MIGRATION_SQL" 2>"$stderr_log"; then
+               mysql -u"$DB_USER" "$DB_NAME" < "$prepared_sql" 2>"$stderr_log"; then
             log_ok "迁移完成（Docker 模式）"
         else
             log_error "迁移失败，错误输出："
             sed 's/^/    /' "$stderr_log" >&2
+            rm -f "$prepared_sql" 2>/dev/null || true
             return 1
         fi
     elif command -v mysql >/dev/null 2>&1; then
         log_info "使用本地 mysql 客户端 → $DB_HOST"
         if MYSQL_PWD="$DB_PW" mysql -h "$DB_HOST" -u"$DB_USER" "$DB_NAME" \
-               < "$MIGRATION_SQL" 2>"$stderr_log"; then
+               < "$prepared_sql" 2>"$stderr_log"; then
             log_ok "迁移完成（本地模式）"
         else
             log_error "迁移失败，错误输出："
             sed 's/^/    /' "$stderr_log" >&2
+            rm -f "$prepared_sql" 2>/dev/null || true
             return 1
         fi
     else
         log_warn "未检测到 Docker MySQL 或本地 mysql 客户端，跳过迁移"
+        rm -f "$prepared_sql" 2>/dev/null || true
         return 1
     fi
+
+    rm -f "$prepared_sql" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────
