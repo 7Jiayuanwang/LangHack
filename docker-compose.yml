@@ -125,9 +125,8 @@ services:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 检查 MySQL 进程存活 + 复制线程运行状态（IO + SQL 线程都必须运行）
-      # 复制未配置或线程未运行时 healthcheck 失败 → backend 无法启动 → 部署阻塞
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' | grep -q 'Replica_IO_Running: Yes' && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' | grep -q 'Replica_SQL_Running: Yes'"]
+      # 仅检查 MySQL 进程存活；复制状态由部署脚本后置初始化与运行时降级共同处理
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -252,7 +251,7 @@ services:
       mysql-master:
         condition: service_healthy   # 主库进程必须存活（阻塞）
       mysql-slave:
-        condition: service_healthy   # 从库进程必须存活（阻塞）；复制状态由 DynamicDataSource 运行时降级处理
+        condition: service_started   # 从库容器启动即可；复制状态由后置复制初始化与运行时降级共同处理
       redis:
         condition: service_healthy
     healthcheck:

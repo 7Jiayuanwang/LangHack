@@ -130,17 +130,16 @@ services:
       - ./mysql/init/08-v16-school-tables.sql:/docker-entrypoint-initdb.d/08-v16-school-tables.sql:ro
       # 复制初始化标记 + 实际初始化脚本
       - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/07-create-replication-marker.sh:ro
-      - ./mysql/slave/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
+      - ./mysql/slave/init-replication.sh:/opt/langhack/init-replication.sh:ro
     networks:
       - langhack-network
     depends_on:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 检查 MySQL 进程存活 + 复制 IO 线程运行状态
-      # init-replication.sh 包含 mysqldump 数据同步，启动时间较长
-      # 复制 SQL 线程未运行时由 DynamicDataSource 运行时降级处理
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
+      # 仅检查 MySQL 进程存活；复制状态由 deploy.sh / auto-update.sh 后置检查
+      # 与 DynamicDataSource 运行时降级共同处理，避免从库初始化较慢时阻塞应用启动
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 36
@@ -256,7 +255,7 @@ services:
       mysql-master:
         condition: service_healthy   # 主库进程必须存活（阻塞）
       mysql-slave:
-        condition: service_healthy   # 从库进程必须存活（阻塞）；复制状态由 DynamicDataSource 运行时降级处理
+        condition: service_started   # 从库容器启动即可；复制状态由后置复制初始化与运行时降级共同处理
       redis:
         condition: service_healthy
     healthcheck:

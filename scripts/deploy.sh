@@ -1750,10 +1750,34 @@ LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_S
 
 replication_ok=false
 
+if [ "$IO_RUNNING" != "Yes" ] || [ "$SQL_RUNNING" != "Yes" ]; then
+    if docker exec "$SLAVE_CONTAINER" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null \
+       && docker exec "$SLAVE_CONTAINER" test -x /var/lib/mysql/init-replication.sh 2>/dev/null; then
+        echo "[INFO] 检测到从库为首次初始化，执行完整复制初始化脚本..."
+        REPL_INIT_LOG="/tmp/langhack-slave-init-$$.log"
+        if docker exec "$SLAVE_CONTAINER" bash /var/lib/mysql/init-replication.sh > "$REPL_INIT_LOG" 2>&1; then
+            echo "[OK] 从库完整复制初始化完成"
+            docker exec "$SLAVE_CONTAINER" rm -f /var/lib/mysql/.replication-init-pending /var/lib/mysql/init-replication.sh 2>/dev/null || true
+            REPLICA_STATUS=$(get_replica_status)
+            IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
+            SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
+            LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+            if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
+                echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
+                replication_ok=true
+            fi
+        else
+            echo "[WARN] 从库完整复制初始化脚本执行失败，回退到轻量修复流程"
+            tail -50 "$REPL_INIT_LOG" 2>/dev/null | sed 's/^/         /' || true
+        fi
+        rm -f "$REPL_INIT_LOG" 2>/dev/null || true
+    fi
+fi
+
 if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
     echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
     replication_ok=true
-else
+elif [ "$replication_ok" = false ]; then
     # 复制未配置或线程未运行 → 尝试自动修复
     if [ "$IO_RUNNING" = "NULL" ]; then
         echo "[WARN] 从库复制未配置（SHOW REPLICA STATUS 为空），尝试自动初始化..."

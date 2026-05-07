@@ -998,6 +998,22 @@ run_incremental_migrations() {
                 log "MIGRATE: 从库同步完成 ✓ (延迟: 0s)"
                 break
             elif [ "$lag" = "NULL" ]; then
+                if docker exec "$slave_container" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null \
+                   && docker exec "$slave_container" test -x /var/lib/mysql/init-replication.sh 2>/dev/null; then
+                    log "MIGRATE: 检测到从库首次初始化，执行完整复制初始化脚本..."
+                    local repl_init_log
+                    repl_init_log=$(mktemp /tmp/langhack-auto-slave-init.XXXXXX.log)
+                    if docker exec "$slave_container" bash /var/lib/mysql/init-replication.sh > "$repl_init_log" 2>&1; then
+                        log "MIGRATE: 从库完整复制初始化完成"
+                        docker exec "$slave_container" rm -f /var/lib/mysql/.replication-init-pending /var/lib/mysql/init-replication.sh 2>/dev/null || true
+                        rm -f "$repl_init_log" 2>/dev/null || true
+                        slave_lag_wait=0
+                        continue
+                    fi
+                    log "ERROR: MIGRATE: 从库完整复制初始化失败"
+                    tail -50 "$repl_init_log" 2>/dev/null | while read -r line; do log "         $line"; done
+                    rm -f "$repl_init_log" 2>/dev/null || true
+                fi
                 log "ERROR: MIGRATE: 从库复制未配置（SHOW REPLICA STATUS 为空），迁移后数据无法同步到从库"
                 log "ERROR:          请先运行 deploy.sh 完成主从复制初始化，再执行自动更新"
                 return 1
