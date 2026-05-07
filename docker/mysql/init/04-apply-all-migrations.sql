@@ -1,6 +1,7 @@
 -- Auto-generated from backend/src/main/resources/db/migration/V*.sql
 -- Do not edit by hand; update Flyway migrations and regenerate.
 
+DELIMITER $$
 
 -- V0__base_tables.sql
 
@@ -351,7 +352,7 @@ CREATE TABLE IF NOT EXISTS score_records (
 --    使用存储过程 IF NOT EXISTS 防止重复添加列
 --    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
+DROP PROCEDURE IF EXISTS _add_col_assignments_weight$$
 CREATE PROCEDURE _add_col_assignments_weight()
 BEGIN
     -- 任务权重（加权平均分）
@@ -364,12 +365,12 @@ BEGIN
         ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60
             COMMENT '理想学习时长（分钟），默认60分钟' AFTER weight;
     END IF;
-END;
-CALL _add_col_assignments_weight();
-DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
+END$$
+CALL _add_col_assignments_weight()$$
+DROP PROCEDURE IF EXISTS _add_col_assignments_weight$$
 
 -- 索引（幂等：IF NOT EXISTS 检查）
-DROP PROCEDURE IF EXISTS _add_idx_assignments;
+DROP PROCEDURE IF EXISTS _add_idx_assignments$$
 CREATE PROCEDURE _add_idx_assignments()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_weight') THEN
@@ -378,9 +379,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_ideal_study_time') THEN
         CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes);
     END IF;
-END;
-CALL _add_idx_assignments();
-DROP PROCEDURE IF EXISTS _add_idx_assignments;
+END$$
+CALL _add_idx_assignments()$$
+DROP PROCEDURE IF EXISTS _add_idx_assignments$$
 
 -- V2__text_and_learning.sql
 
@@ -396,17 +397,17 @@ DROP PROCEDURE IF EXISTS _add_idx_assignments;
 -- 1. 学习记录添加课文关联 [原 V2]
 --    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_lr_text;
+DROP PROCEDURE IF EXISTS _add_col_lr_text$$
 CREATE PROCEDURE _add_col_lr_text()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id') THEN
         ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT '关联的课文ID' AFTER word_id;
     END IF;
-END;
-CALL _add_col_lr_text();
-DROP PROCEDURE IF EXISTS _add_col_lr_text;
+END$$
+CALL _add_col_lr_text()$$
+DROP PROCEDURE IF EXISTS _add_col_lr_text$$
 
-DROP PROCEDURE IF EXISTS _add_fk_lr_text;
+DROP PROCEDURE IF EXISTS _add_fk_lr_text$$
 CREATE PROCEDURE _add_fk_lr_text()
 BEGIN
     IF NOT EXISTS (
@@ -416,11 +417,11 @@ BEGIN
         ALTER TABLE learning_records ADD CONSTRAINT fk_learning_record_text
             FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE SET NULL;
     END IF;
-END;
-CALL _add_fk_lr_text();
-DROP PROCEDURE IF EXISTS _add_fk_lr_text;
+END$$
+CALL _add_fk_lr_text()$$
+DROP PROCEDURE IF EXISTS _add_fk_lr_text$$
 
-DROP PROCEDURE IF EXISTS _add_index_lr_text;
+DROP PROCEDURE IF EXISTS _add_index_lr_text$$
 CREATE PROCEDURE _add_index_lr_text()
 BEGIN
     IF NOT EXISTS (
@@ -429,14 +430,14 @@ BEGIN
     ) THEN
         CREATE INDEX idx_text_id ON learning_records (text_id);
     END IF;
-END;
-CALL _add_index_lr_text();
-DROP PROCEDURE IF EXISTS _add_index_lr_text;
+END$$
+CALL _add_index_lr_text()$$
+DROP PROCEDURE IF EXISTS _add_index_lr_text$$
 
 -- ────────────────────────────────────────
 -- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_texts_batch;
+DROP PROCEDURE IF EXISTS _add_col_texts_batch$$
 CREATE PROCEDURE _add_col_texts_batch()
 BEGIN
     -- 中英对照内容 [原 V2]
@@ -503,12 +504,12 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='status') THEN
         ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED';
     END IF;
-END;
-CALL _add_col_texts_batch();
-DROP PROCEDURE IF EXISTS _add_col_texts_batch;
+END$$
+CALL _add_col_texts_batch()$$
+DROP PROCEDURE IF EXISTS _add_col_texts_batch$$
 
 -- 推荐优先级复合索引 [原 V10]
-DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
+DROP PROCEDURE IF EXISTS _add_idx_featured_priority$$
 CREATE PROCEDURE _add_idx_featured_priority()
 BEGIN
     IF NOT EXISTS (
@@ -517,9 +518,9 @@ BEGIN
     ) THEN
         CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC);
     END IF;
-END;
-CALL _add_idx_featured_priority();
-DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
+END$$
+CALL _add_idx_featured_priority()$$
+DROP PROCEDURE IF EXISTS _add_idx_featured_priority$$
 
 -- unit_id 改为可空（支持课文从单元中移除）[原 V2]
 ALTER TABLE texts MODIFY COLUMN unit_id BIGINT DEFAULT NULL
@@ -594,7 +595,7 @@ CREATE TABLE IF NOT EXISTS media (
 -- 2. 媒体路径列 [原 V9]
 --    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_media_paths;
+DROP PROCEDURE IF EXISTS _add_col_media_paths$$
 CREATE PROCEDURE _add_col_media_paths()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path') THEN
@@ -603,14 +604,14 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path') THEN
         ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path';
     END IF;
-END;
-CALL _add_col_media_paths();
-DROP PROCEDURE IF EXISTS _add_col_media_paths;
+END$$
+CALL _add_col_media_paths()$$
+DROP PROCEDURE IF EXISTS _add_col_media_paths$$
 
 -- ────────────────────────────────────────
 -- 3. 词汇本添加 SM-2 间隔重复字段 [原 V3]
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_sm2;
+DROP PROCEDURE IF EXISTS _add_col_sm2$$
 CREATE PROCEDURE _add_col_sm2()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition') THEN
@@ -625,9 +626,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time') THEN
         ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT 'SM-2 下次复习时间';
     END IF;
-END;
-CALL _add_col_sm2();
-DROP PROCEDURE IF EXISTS _add_col_sm2;
+END$$
+CALL _add_col_sm2()$$
+DROP PROCEDURE IF EXISTS _add_col_sm2$$
 
 -- ────────────────────────────────────────
 -- 4. 创建划线标注表 [原 V3]
@@ -2651,3 +2652,5 @@ INSERT IGNORE INTO `content_tags` (`name`, `color`, `sort_order`) VALUES
     ('文学小说', '#9B59B6', 6);
 
 -- ════════════════════════════════════════════════════════════════
+
+DELIMITER ;
