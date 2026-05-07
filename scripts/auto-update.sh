@@ -839,11 +839,35 @@ run_incremental_migrations() {
     fi
 
     local migrate_output migrate_exit migrate_errors
-    migrate_output=$(docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 < "$prepared_sql")
-    migrate_exit=$?
+    local migrate_log migrate_pid migrate_elapsed activity
+    migrate_log=$(mktemp /tmp/langhack-migrate-output.XXXXXX.log)
+    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$prepared_sql" > "$migrate_log" 2>&1 &
+    migrate_pid=$!
+    migrate_elapsed=0
+
+    while kill -0 "$migrate_pid" 2>/dev/null; do
+        sleep 15
+        if kill -0 "$migrate_pid" 2>/dev/null; then
+            migrate_elapsed=$((migrate_elapsed + 15))
+            activity=$(bash "$PROJECT_ROOT/scripts/describe-mysql-activity.sh" "$mysql_container" "$db_root_pw" "$db_name" || true)
+            if [ -n "$activity" ]; then
+                log "MIGRATE: ${activity} (已耗时 ${migrate_elapsed}s)"
+            else
+                log "MIGRATE: 正在执行数据库迁移 (已耗时 ${migrate_elapsed}s)"
+            fi
+        fi
+    done
+
+    if wait "$migrate_pid"; then
+        migrate_exit=0
+    else
+        migrate_exit=$?
+    fi
+    migrate_output=$(cat "$migrate_log")
     migrate_errors=$(echo "$migrate_output" \
         | grep -v "Using a password on the command line interface can be insecure" \
         | grep -v "^$" || true)
+    rm -f "$migrate_log" 2>/dev/null || true
     rm -f "$prepared_sql" 2>/dev/null || true
 
     if [ $migrate_exit -ne 0 ]; then

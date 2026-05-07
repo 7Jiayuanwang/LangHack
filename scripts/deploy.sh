@@ -1546,8 +1546,29 @@ if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$PR
     rm -f "$PREPARED_MIGRATION_SQL" 2>/dev/null || true
     exit 1
 fi
-MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 < "$PREPARED_MIGRATION_SQL")
-MIGRATE_EXIT=$?
+MIGRATE_LOG=$(mktemp /tmp/langhack-deploy-migrate-output.XXXXXX.log)
+docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" < "$PREPARED_MIGRATION_SQL" > "$MIGRATE_LOG" 2>&1 &
+MIGRATE_PID=$!
+MIGRATE_ELAPSED=0
+while kill -0 "$MIGRATE_PID" 2>/dev/null; do
+    sleep 15
+    if kill -0 "$MIGRATE_PID" 2>/dev/null; then
+        MIGRATE_ELAPSED=$((MIGRATE_ELAPSED + 15))
+        MIGRATE_ACTIVITY=$(bash "$PROJECT_ROOT/scripts/describe-mysql-activity.sh" "$MASTER_CONTAINER" "$DB_ROOT_PW" "$DB_NAME" || true)
+        if [ -n "$MIGRATE_ACTIVITY" ]; then
+            echo "[INFO] MIGRATE: ${MIGRATE_ACTIVITY} (已耗时 ${MIGRATE_ELAPSED}s)"
+        else
+            echo "[INFO] MIGRATE: 正在执行数据库迁移 (已耗时 ${MIGRATE_ELAPSED}s)"
+        fi
+    fi
+done
+if wait "$MIGRATE_PID"; then
+    MIGRATE_EXIT=0
+else
+    MIGRATE_EXIT=$?
+fi
+MIGRATE_OUTPUT=$(cat "$MIGRATE_LOG")
+rm -f "$MIGRATE_LOG" 2>/dev/null || true
 rm -f "$PREPARED_MIGRATION_SQL" 2>/dev/null || true
 MIGRATE_ERRORS=$(echo "$MIGRATE_OUTPUT" | grep -v "Using a password on the command line interface can be insecure" | grep -v "^$" || true)
 if [ $MIGRATE_EXIT -ne 0 ]; then
