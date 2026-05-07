@@ -425,12 +425,19 @@ const handleItemClick = (item) => {
     console.warn('readArticle: 文章ID不存在', item)
     return
   }
+  // 验证 ID 是否为有效数字
+  const numericId = typeof item.id === 'number' ? item.id : parseInt(item.id, 10)
+  if (isNaN(numericId) || numericId <= 0) {
+    console.error('readArticle: 无效的文章ID', item.id, item)
+    ElMessage.error('文章ID无效，无法打开')
+    return
+  }
   // Fire-and-forget: 标记文章为已读
   const authHeader = getAuthHeader()
   const headers = authHeader ? { Authorization: authHeader } : {}
-  fetch(`${apiBase}/api/public/texts/${item.id}/read`, { method: 'POST', headers }).catch(() => {})
+  fetch(`${apiBase}/api/public/texts/${numericId}/read`, { method: 'POST', headers }).catch(() => {})
   router.push({
-    path: `/article/${item.id}`,
+    path: `/article/${numericId}`,
     query: {
       from: 'articles',
       _title: encodeURIComponent(item.title || '')
