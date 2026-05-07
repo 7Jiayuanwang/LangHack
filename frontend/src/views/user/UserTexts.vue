@@ -62,7 +62,7 @@
         <div
           v-for="text in myTexts"
           :key="text.id"
-          class="text-item"
+          class="text-item article-item"
           @click="viewText(text)"
         >
           <div class="text-header">
@@ -87,11 +87,20 @@
             </div>
 
             <div class="text-actions">
-              <el-button size="small" @click.stop="editText(text)">
+              <el-button size="small" type="primary" @click.stop="previewText(text)">
+                <el-icon><View /></el-icon>
+                预览
+              </el-button>
+              <el-button v-if="text.status !== 'APPROVED'" size="small" @click.stop="editText(text)">
                 <el-icon><Edit /></el-icon>
                 编辑
               </el-button>
-              <el-button size="small" type="danger" @click.stop="deleteText(text)">
+              <el-button
+                v-if="text.status !== 'APPROVED'"
+                size="small"
+                type="danger"
+                @click.stop="deleteText(text)"
+              >
                 <el-icon><Delete /></el-icon>
                 删除
               </el-button>
@@ -147,14 +156,10 @@
         </el-form-item>
 
         <el-form-item label="标签" prop="tags">
-          <el-input
-            v-model="uploadForm.tags"
-            placeholder="请输入标签，多个用逗号分隔"
-            maxlength="100"
-          />
-          <div class="form-tip">
-            例如：日常对话, 商务英语, 科技文章
-          </div>
+          <el-select v-model="uploadForm.tags" multiple placeholder="请选择标签" style="width: 100%" :disabled="availableTags.length === 0">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+          <div v-if="availableTags.length === 0" class="form-tip" style="color: #f56c6c">暂无可选标签，请联系管理员设置</div>
         </el-form-item>
       </el-form>
 
@@ -212,11 +217,9 @@
         </el-form-item>
 
         <el-form-item label="标签" prop="tags">
-          <el-input
-            v-model="editForm.tags"
-            placeholder="请输入标签，多个用逗号分隔"
-            maxlength="100"
-          />
+          <el-select v-model="editForm.tags" multiple placeholder="请选择标签" style="width: 100%" :disabled="availableTags.length === 0">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
         </el-form-item>
       </el-form>
 
@@ -275,6 +278,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { getContentTags } from '@/api/admin'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 
@@ -291,6 +295,7 @@ const searchKeyword = ref('')
 const selectedDifficulty = ref('')
 const myTexts = ref([])
 const currentText = ref({})
+const availableTags = ref([])
 
 // 表单数据
 const uploadFormRef = ref()
@@ -299,7 +304,7 @@ const uploadForm = reactive({
   title: '',
   content: '',
   difficulty: 'MEDIUM',
-  tags: ''
+  tags: []
 })
 
 const editForm = reactive({
@@ -307,7 +312,7 @@ const editForm = reactive({
   title: '',
   content: '',
   difficulty: 'MEDIUM',
-  tags: ''
+  tags: []
 })
 
 // 表单验证规则
@@ -388,7 +393,7 @@ const resetUploadForm = () => {
     title: '',
     content: '',
     difficulty: 'MEDIUM',
-    tags: ''
+    tags: []
   })
   if (uploadFormRef.value) {
     uploadFormRef.value.clearValidate()
@@ -401,7 +406,7 @@ const resetEditForm = () => {
     title: '',
     content: '',
     difficulty: 'MEDIUM',
-    tags: ''
+    tags: []
   })
   if (editFormRef.value) {
     editFormRef.value.clearValidate()
@@ -409,12 +414,13 @@ const resetEditForm = () => {
 }
 
 const editText = (text) => {
+  const tags = text.tags ? text.tags.split(',').map(t => t.trim()).filter(Boolean) : []
   Object.assign(editForm, {
     id: text.id,
     title: text.title,
     content: text.content,
     difficulty: text.difficulty,
-    tags: text.tags || ''
+    tags: tags
   })
   showEditDialog.value = true
 }
@@ -494,6 +500,16 @@ const studyText = (text) => {
   })
 }
 
+const previewText = (text) => {
+  if (!text?.id) return
+  const routeData = router.resolve({
+    name: 'ArticleDetail',
+    params: { id: text.id },
+    query: { from: 'user-texts' }
+  })
+  window.open(routeData.href, '_blank')
+}
+
 // 工具方法
 const getContentPreview = (content) => {
   if (!content) return ''
@@ -529,8 +545,20 @@ const formatContent = (content) => {
 }
 
 // 生命周期
+const loadAvailableTags = async () => {
+  try {
+    const res = await getContentTags()
+    if (res.code === 200) {
+      availableTags.value = res.data || []
+    }
+  } catch (e) {
+    console.error('Failed to load tags:', e)
+  }
+}
+
 onMounted(() => {
   loadMyUploads()
+  loadAvailableTags()
 })
 </script>
 
@@ -588,6 +616,14 @@ onMounted(() => {
 .text-item:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transform: translateY(-2px);
+}
+
+.article-item {
+  border-left: 3px solid #67c23a !important;
+}
+
+.article-item:hover {
+  border-left-color: #85ce61 !important;
 }
 
 .text-header {

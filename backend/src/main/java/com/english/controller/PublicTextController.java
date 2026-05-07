@@ -7,10 +7,10 @@ import com.english.entity.UserTextRead;
 import com.english.entity.User;
 import com.english.mapper.UserTextReadMapper;
 import com.english.service.ArticleVersionService;
-import com.english.service.RecommendationService;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.english.service.TextService;
 import com.english.service.UserService;
+import com.english.service.ContentTagService;
+import com.english.entity.ContentTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +49,25 @@ public class PublicTextController {
     private UserService userService;
 
     @Autowired
-    private RecommendationService recommendationService;
+    private ContentTagService contentTagService;
+
+    /**
+     * 获取所有内容标签（公开接口，学生上传时使用）
+     */
+    @GetMapping("/content-tags")
+    public Result<List<ContentTag>> getPublicContentTags() {
+        try {
+            List<ContentTag> tags = contentTagService.lambdaQuery()
+                    .eq(ContentTag::getDeleted, 0)
+                    .orderByAsc(ContentTag::getSortOrder)
+                    .orderByAsc(ContentTag::getId)
+                    .list();
+            return Result.success(tags);
+        } catch (Exception e) {
+            log.error("获取内容标签列表失败", e);
+            return Result.error("获取标签列表失败");
+        }
+    }
 
     /**
      * 获取首页推荐文章
@@ -66,6 +84,14 @@ public class PublicTextController {
             List<Text> featuredTexts = textService.lambdaQuery()
                     .eq(Text::getDeleted, 0)
                     .eq(Text::getIsFeatured, 1)
+                    .and(w -> w
+                        .isNull(Text::getUploadedBy)
+                        .or(sub -> sub
+                            .isNotNull(Text::getUploadedBy)
+                            .eq(Text::getIsPublic, 1)
+                            .eq(Text::getStatus, "APPROVED")
+                        )
+                    )
                     .orderByDesc(Text::getFeaturedPriority)
                     .orderByDesc(Text::getCreatedAt)
                     .list();
@@ -394,31 +420,6 @@ public class PublicTextController {
         } catch (Exception e) {
             log.error("获取课文详情失败, textId={}", textId, e);
             return Result.error("获取课文详情失败，请稍后重试");
-        }
-    }
-
-    /**
-     * 获取个性化推荐文章（需要登录）
-     * 混合推荐：Item-CF + User-CF + 精选/难度 兜底。详见 RecommendationServiceImpl。
-     *
-     * @param count   期望返回数量（夹紧到 [1, 50]）
-     * @param exclude 客户端已展示过的文章 ID 列表（逗号分隔），用于"换一批"时避免重复
-     */
-    @GetMapping("/recommended")
-    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
-    public Result<List<Text>> getRecommendedTexts(
-            @RequestParam(defaultValue = "12") int count,
-            @RequestParam(value = "exclude", required = false) List<Long> exclude) {
-        try {
-            count = Math.min(Math.max(count, 1), 50);
-            Long userId = getCurrentUserId();
-            if (userId == null) {
-                return Result.success(new ArrayList<>());
-            }
-            return Result.success(recommendationService.recommend(userId, count, exclude));
-        } catch (Exception e) {
-            log.error("获取推荐文章失败", e);
-            return Result.error("获取推荐文章失败，请稍后重试");
         }
     }
 }

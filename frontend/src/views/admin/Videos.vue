@@ -1,20 +1,6 @@
 <template>
   <div class="videos-management">
-    <div class="header">
-      <h2>视频管理</h2>
-      <div class="actions">
-        <el-button type="primary" @click="showAddDialog">
-          <el-icon><Plus /></el-icon>
-          添加视频
-        </el-button>
-        <el-button @click="loadVideos">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
-    </div>
-
-    <!-- 搜索栏 -->
+    <!-- 搜索栏 + 操作按钮 -->
     <div class="search-bar">
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="关键词">
@@ -31,12 +17,18 @@
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
-          <el-button @click="resetSearch">
-            <el-icon><RefreshLeft /></el-icon>
-            重置
-          </el-button>
         </el-form-item>
       </el-form>
+      <div class="search-actions">
+        <el-button type="primary" @click="showAddDialog">
+          <el-icon><Plus /></el-icon>
+          添加视频
+        </el-button>
+        <el-button @click="loadVideos">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
     </div>
 
     <!-- 统计信息 -->
@@ -140,7 +132,6 @@
       v-model="dialogVisible"
       :title="editingVideo ? '编辑视频' : '添加视频'"
       width="min(600px, 94vw)"
-      class="custom-video-dialog"
       @close="resetForm"
     >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="80px">
@@ -165,7 +156,23 @@
             </template>
           </el-upload>
         </el-form-item>
+        <!-- 编辑时显示当前视频文件名 + 预览按钮 -->
+        <el-form-item label="当前视频" v-if="editingVideo && editingVideo.mediaId">
+          <div class="file-info-row">
+            <span class="file-name">{{ editingVideo.title || '视频文件' }}.mp4</span>
+            <el-button type="primary" text size="small" @click="previewVideo(editingVideo)">
+              预览
+            </el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="封面图">
+          <!-- 编辑时显示封面文件名 + 预览按钮 -->
+          <div v-if="editingVideo && editingVideo.coverMediaId && !coverFile" class="file-info-row" style="margin-bottom: 8px">
+            <span class="file-name">封面图片</span>
+            <el-button type="primary" text size="small" @click="previewCoverVisible = true">
+              预览
+            </el-button>
+          </div>
           <el-upload
             class="cover-uploader"
             :auto-upload="false"
@@ -174,13 +181,13 @@
             accept="image/jpeg,image/png,image/webp"
             :on-change="handleCoverFileChange"
           >
-            <el-button>选择封面图</el-button>
+            <el-button>{{ editingVideo ? '更换封面图' : '选择封面图' }}</el-button>
             <template #tip>
               <div class="el-upload__tip">支持 JPG/PNG/WebP，最大 10MB</div>
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="英文字幕">
+        <el-form-item label="字幕">
           <el-upload
             class="subtitle-uploader"
             :auto-upload="false"
@@ -189,22 +196,7 @@
             accept=".vtt,.srt,.txt"
             :on-change="handleSubtitleFileChange"
           >
-            <el-button>选择英文字幕</el-button>
-            <template #tip>
-              <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
-            </template>
-          </el-upload>
-        </el-form-item>
-        <el-form-item label="中文字幕">
-          <el-upload
-            class="subtitle-uploader"
-            :auto-upload="false"
-            :show-file-list="true"
-            :limit="1"
-            accept=".vtt,.srt,.txt"
-            :on-change="handleSubtitleZhFileChange"
-          >
-            <el-button>选择中文字幕</el-button>
+            <el-button>选择字幕文件</el-button>
             <template #tip>
               <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
             </template>
@@ -224,15 +216,23 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 封面预览弹窗 -->
+    <el-dialog v-model="previewCoverVisible" title="封面预览" width="min(500px, 90vw)">
+      <img v-if="editingVideo && editingVideo.coverMediaId" :src="`/api/media/${editingVideo.coverMediaId}/download`" alt="封面" style="width: 100%; border-radius: 8px;" />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
 import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
+
+const router = useRouter()
 
 const videos = ref([])
 const stats = ref({})
@@ -241,6 +241,18 @@ const dialogVisible = ref(false)
 const editingVideo = ref(null)
 const submitLoading = ref(false)
 const formRef = ref()
+const previewCoverVisible = ref(false)
+
+// 视频预览 — 新标签页打开完整播放器
+const previewVideo = (row) => {
+  if (row && row.id) {
+    const routeData = router.resolve({
+      name: 'StudentVideoPlayer',
+      query: { id: row.id, preview: 'admin' }
+    })
+    window.open(routeData.href, '_blank')
+  }
+}
 
 const searchForm = reactive({ keyword: '' })
 const pagination = reactive({ current: 1, size: 20, total: 0 })
@@ -252,7 +264,6 @@ const form = reactive({
   coverMediaId: null,
   tags: '',
   subtitleContent: '',
-  subtitleContentZh: '',
   isPublicBool: true,
   videoUrl: '',
   coverUrl: ''
@@ -273,15 +284,7 @@ const handleSubtitleFileChange = async (file) => {
     const text = await file.raw.text()
     form.subtitleContent = text
   } catch (e) {
-    ElMessage.error('英文字幕文件读取失败')
-  }
-}
-const handleSubtitleZhFileChange = async (file) => {
-  try {
-    const text = await file.raw.text()
-    form.subtitleContentZh = text
-  } catch (e) {
-    ElMessage.error('中文字幕文件读取失败')
+    ElMessage.error('字幕文件读取失败')
   }
 }
 
@@ -327,7 +330,6 @@ const editVideo = (row) => {
     coverMediaId: row.coverMediaId,
     tags: row.tags || '',
     subtitleContent: row.subtitleContent || '',
-    subtitleContentZh: row.subtitleContentZh || '',
     isPublicBool: row.isPublic === 1,
     videoUrl: row.videoUrl || '',
     coverUrl: row.coverUrl || ''
@@ -336,7 +338,7 @@ const editVideo = (row) => {
 }
 
 const resetForm = () => {
-  Object.assign(form, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', subtitleContentZh: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
+  Object.assign(form, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
   videoFile = null; coverFile = null
   formRef.value?.clearValidate()
 }
@@ -381,7 +383,6 @@ const handleSubmit = async () => {
       coverMediaId: form.coverMediaId,
       tags: form.tags,
       subtitleContent: form.subtitleContent || null,
-      subtitleContentZh: form.subtitleContentZh || null,
       isPublic: form.isPublicBool ? 1 : 0,
       status: 'APPROVED',
       videoUrl: form.videoUrl,
@@ -440,193 +441,28 @@ const getStatusText = (s) => ({ APPROVED: '已审核', PENDING: '待审核', REJ
 const formatTime = (t) => t ? new Date(t).toLocaleString('zh-CN') : ''
 
 onMounted(() => { loadStats(); loadVideos() })
+
+defineExpose({ loadVideos })
 </script>
 
 <style scoped>
-.videos-management {
-  padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-/* PC端大字号适配 */
-@media (min-width: 1200px) {
-  .videos-management {
-    padding: 30px;
-  }
-  
-  .header h2 {
-    font-size: 28px;
-  }
-
-  .stat-value {
-    font-size: 36px;
-  }
-
-  .stat-label {
-    font-size: 16px;
-  }
-
-  :deep(.el-table) {
-    font-size: 15px;
-  }
-
-  :deep(.el-table .cell) {
-    line-height: 1.6;
-    padding: 12px 0;
-  }
-
-  .search-bar {
-    margin-bottom: 25px;
-    padding: 24px;
-  }
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.header h2 {
-  margin: 0;
-  color: #1e293b;
-  font-weight: 700;
-}
-
-.actions {
-  display: flex;
-  gap: 12px;
-}
-
-.search-bar {
-  margin-bottom: 24px;
-  padding: 20px;
-  background-color: #f8fafc;
-  border-radius: 12px;
-  border: 1px solid #f1f5f9;
-}
-
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.stat-card {
-  text-align: center;
-  padding: 24px;
-  background: #fff;
-  border: none;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  transition: all 0.3s;
-  border: 1px solid #f1f5f9;
-}
-
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-}
-
-.stat-value {
-  font-size: 32px;
-  font-weight: 800;
-  color: #3b82f6;
-  margin-bottom: 8px;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #64748b;
-  font-weight: 500;
-}
-
-.videos-table {
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-}
-
-.pagination {
-  margin-top: 30px;
-  display: flex;
-  justify-content: center;
-}
-
-.priority-na {
-  color: #cbd5e1;
-  font-size: 14px;
-}
-
+.videos-management { padding: 20px; max-width: 1400px; margin: 0 auto; }
+.search-bar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; }
+.search-form { margin: 0; }
+.search-actions { display: flex; gap: 12px; flex-shrink: 0; }
+.stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 20px; }
+.stat-card { text-align: center; padding: 20px; background: #fff; border: 1px solid #e4e7ed; border-radius: 8px; transition: all 0.3s; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.stat-value { font-size: 32px; font-weight: bold; color: #409eff; margin-bottom: 8px; }
+.stat-label { font-size: 14px; color: #909399; }
+.videos-table { background: #fff; border-radius: 8px; overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.pagination { margin-top: 20px; display: flex; justify-content: center; }
+.priority-na { color: #c0c4cc; font-size: 16px; }
+.file-info-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 6px; border: 1px solid #e4e7ed; }
+.file-name { font-size: 13px; color: #606266; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 768px) {
-  .videos-management {
-    padding: 12px;
-  }
-
-  .header {
-    flex-direction: column;
-    gap: 16px;
-    align-items: flex-start;
-  }
-
-  .stats-cards {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-
-  .stat-card {
-    padding: 16px;
-  }
-
-  .stat-value {
-    font-size: 24px;
-  }
-}
-</style>
-
-<style>
-/* 修复视频弹窗内上传列表内容溢出问题并允许多行完整显示 */
-.custom-video-dialog .el-form-item__content {
-  min-width: 0 !important; /* 关键修复：防止 flex 子项无限自适应文本宽度撑开弹窗 */
-}
-.custom-video-dialog .video-uploader,
-.custom-video-dialog .cover-uploader,
-.custom-video-dialog .subtitle-uploader {
-  width: 100%;
-  max-width: 100%;
-}
-.custom-video-dialog .el-upload-list {
-  width: 100%;
-}
-.custom-video-dialog .el-upload-list__item {
-  height: auto !important;
-  min-height: 32px;
-  max-width: 100% !important;
-  box-sizing: border-box;
-}
-.custom-video-dialog .el-upload-list__item-info {
-  width: 100%;
-  min-width: 0 !important;
-}
-.custom-video-dialog .el-upload-list__item-name {
-  display: block !important;
-  white-space: normal !important;
-  word-wrap: break-word !important;
-  word-break: break-all !important;
-  line-height: 1.5 !important;
-  height: auto !important;
-  padding-right: 25px !important;
-  margin-bottom: 2px !important;
-}
-.custom-video-dialog .el-upload-list__item-file-name {
-  white-space: normal !important;
-  word-wrap: break-word !important;
-  word-break: break-all !important;
+  .videos-management { padding: 16px; }
+  .header { flex-direction: column; gap: 16px; align-items: flex-start; }
+  .stats-cards { grid-template-columns: repeat(2, 1fr); gap: 12px; }
 }
 </style>

@@ -82,6 +82,11 @@ request.interceptors.response.use(
         return Promise.reject({ code: 401, message: '未授权，请重新登录' })
       }
 
+      // 4001: 需要前端确认的业务提示（如"文章未公开，是否同时公开？"），直接放行让调用方处理
+      if (res.code === 4001) {
+        return res
+      }
+
       // 非 401 的业务错误：仅展示预定义的错误信息，防止后端敏感信息泄露
       const errorMessage = getBusinessErrorMessage(res.code, res.message)
       ElMessage({
