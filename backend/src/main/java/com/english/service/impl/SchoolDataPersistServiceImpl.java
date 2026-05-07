@@ -20,11 +20,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
 
     private static final Logger logger = LoggerFactory.getLogger(SchoolDataPersistServiceImpl.class);
+    private static final ConcurrentHashMap<String, AtomicInteger> COURSE_SCHEDULE_SKIP_WARNINGS = new ConcurrentHashMap<>();
 
     private final FieldMappingService fieldMappingService;
     private final SchoolDataApiClient apiClient;
@@ -285,8 +288,7 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
             return;
         }
         if (dayOfWeek == null || period == null) {
-            logger.warn("课程安排缺少必填字段，跳过 classId={} dayOfWeek={} period={} weekRange={} classLocation={}",
-                    classId, dayOfWeek, period, weekRange, classLocation);
+            logCourseScheduleMissingFields(classId, dayOfWeek, period, weekRange, classLocation);
             return;
         }
 
@@ -857,6 +859,16 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
             return null;
         }
         return courseCode;
+    }
+
+    private void logCourseScheduleMissingFields(String classId, Integer dayOfWeek, String period,
+                                                String weekRange, String classLocation) {
+        String key = "course_schedule:missing-time-fields";
+        int count = COURSE_SCHEDULE_SKIP_WARNINGS.computeIfAbsent(key, ignored -> new AtomicInteger()).incrementAndGet();
+        if (count <= 5 || count % 500 == 0) {
+            logger.warn("课程安排缺少必填字段，跳过 classId={} dayOfWeek={} period={} weekRange={} classLocation={} (suppressedCount={})",
+                    classId, dayOfWeek, period, weekRange, classLocation, count - 1);
+        }
     }
 
     private Integer getIntegerValue(Map<String, Object> data, String key) {

@@ -176,6 +176,13 @@ class SchoolDataApiClientImplUrlEncodingTest {
                 .hasMessageContaining("接口鉴权失败");
     }
 
+    @Test
+    void resolveMaxPages_shouldAllowLargerTeacherCoursePagination() {
+        assertThat(invokeResolveMaxPages("teacher_courses")).isEqualTo(300);
+        assertThat(invokeResolveMaxPages("course_schedule")).isEqualTo(200);
+        assertThat(invokeResolveMaxPages("administrative_class")).isEqualTo(100);
+    }
+
     /**
      * 使用反射调用 private buildUrl 方法
      */
@@ -197,5 +204,10 @@ class SchoolDataApiClientImplUrlEncodingTest {
             }
             throw e;
         }
+    }
+
+    private int invokeResolveMaxPages(String dataSource) {
+        Object value = ReflectionTestUtils.invokeMethod(client, "resolveMaxPages", dataSource);
+        return value == null ? -1 : (Integer) value;
     }
 }

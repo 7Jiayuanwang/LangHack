@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -104,11 +106,13 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     @Override
     public List<SystemConfig> listByGroup(String group) {
-        return mapper.selectList(
+        List<SystemConfig> configs = mapper.selectList(
                 new LambdaQueryWrapper<SystemConfig>()
                         .eq(SystemConfig::getConfigGroup, group)
                         .orderByAsc(SystemConfig::getId)
         );
+        normalizeDescriptions(configs);
+        return configs;
     }
 
     @Override
@@ -164,5 +168,69 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         boolean isExpired() {
             return System.currentTimeMillis() - createdAt > CACHE_TTL_MS;
         }
+    }
+
+    private void normalizeDescriptions(List<SystemConfig> configs) {
+        if (configs == null || configs.isEmpty()) {
+            return;
+        }
+        for (SystemConfig config : configs) {
+            if (config == null) {
+                continue;
+            }
+            config.setDescription(repairMojibake(config.getDescription()));
+        }
+    }
+
+    private String repairMojibake(String text) {
+        if (text == null || text.isBlank() || !looksLikeMojibake(text)) {
+            return text;
+        }
+        String latin1Candidate = tryRepair(text, StandardCharsets.ISO_8859_1);
+        String windowsCandidate = tryRepair(text, Charset.forName("windows-1252"));
+        String repaired = betterCandidate(latin1Candidate, windowsCandidate);
+        return containsCjk(repaired) ? repaired : text;
+    }
+
+    private boolean looksLikeMojibake(String text) {
+        return text.contains("Ã")
+                || text.contains("Â")
+                || text.contains("å")
+                || text.contains("ä")
+                || text.contains("ç")
+                || text.contains("ï")
+                || text.contains("ð");
+    }
+
+    private boolean containsCjk(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        return text.codePoints().anyMatch(cp ->
+                Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN);
+    }
+
+    private String tryRepair(String text, Charset sourceCharset) {
+        try {
+            return new String(text.getBytes(sourceCharset), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return text;
+        }
+    }
+
+    private String betterCandidate(String first, String second) {
+        int firstScore = scoreCandidate(first);
+        int secondScore = scoreCandidate(second);
+        return secondScore > firstScore ? second : first;
+    }
+
+    private int scoreCandidate(String text) {
+        if (text == null || text.isBlank()) {
+            return Integer.MIN_VALUE;
+        }
+        int cjkCount = (int) text.codePoints().filter(cp ->
+                Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN).count();
+        int replacementPenalty = text.contains("�") ? 10 : 0;
+        return cjkCount * 10 - replacementPenalty;
     }
 }

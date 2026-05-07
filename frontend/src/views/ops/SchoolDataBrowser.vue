@@ -520,6 +520,10 @@ function buildQueryPayload() {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 async function loadFilterFields() {
   try {
     const res = await getSchoolDataFilterFields(activeTab.value)
@@ -547,27 +551,47 @@ async function loadOverview() {
   }
 }
 
-async function loadData() {
+async function loadData(showProgress = true) {
   loading.value = true
-  startProgress(`正在加载${dataSourceLabels[activeTab.value]}数据...`)
+  if (showProgress) {
+    startProgress(`正在加载${dataSourceLabels[activeTab.value]}数据...`)
+  }
   try {
     const res = await querySchoolData(activeTab.value, buildQueryPayload())
     const pageData = res?.data
     tableData.value = pageData?.records || []
     total.value = pageData?.total || 0
-    completeProgress(true)
+    if (showProgress) {
+      completeProgress(true)
+    }
   } catch (e) {
     console.error('获取数据失败:', e)
-    // 只有在真正失败时才显示错误
-    if (tableData.value.length === 0) {
-      completeProgress(false)
-    } else {
-      completeProgress(true)  // 数据已加载，视为成功
+    if (showProgress) {
+      // 只有在真正失败时才显示错误
+      if (tableData.value.length === 0) {
+        completeProgress(false)
+      } else {
+        completeProgress(true)  // 数据已加载，视为成功
+      }
     }
     tableData.value = []
     total.value = 0
   } finally {
     loading.value = false
+  }
+}
+
+async function refreshAfterSync() {
+  const previousOverviewCount = overview.value?.[activeTab.value] ?? null
+  const previousTotal = total.value
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await loadOverview()
+    await loadData(false)
+    const currentOverviewCount = overview.value?.[activeTab.value] ?? null
+    if (currentOverviewCount !== previousOverviewCount || total.value !== previousTotal || attempt === 2) {
+      return
+    }
+    await sleep(800 * (attempt + 1))
   }
 }
 
@@ -758,8 +782,7 @@ async function handleSync() {
       ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步成功`)
     }
 
-    await loadOverview()
-    await loadData()
+    await refreshAfterSync()
   } catch (e) {
     console.error('同步失败:', e)
   } finally {
