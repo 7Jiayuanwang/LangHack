@@ -59,6 +59,7 @@ run_db_migration() {
     echo "🗄️ 应用数据库增量迁移..."
     FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
     MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+    REPAIR_SQL="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
     PREPARED_SQL=""
 
     if [ -f "$MIGRATION_SQL" ] && [ -d "$FLYWAY_DIR" ]; then
@@ -81,11 +82,17 @@ run_db_migration() {
 
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "langhack-mysql-master"; then
             echo "   🐳 检测到本地 Docker MySQL，正在注入合并脚本..."
-            docker exec -i langhack-mysql-master mysql -u"$DB_USER" -p"$DB_PW" english_learning < "$PREPARED_SQL" 2>/dev/null
+            docker exec -i langhack-mysql-master mysql --default-character-set=utf8mb4 -u"$DB_USER" -p"$DB_PW" english_learning < "$PREPARED_SQL" 2>/dev/null
+            if [ -f "$REPAIR_SQL" ]; then
+                docker exec -i langhack-mysql-master mysql --default-character-set=utf8mb4 -u"$DB_USER" -p"$DB_PW" english_learning < "$REPAIR_SQL" 2>/dev/null || true
+            fi
             echo "✅ 数据库更新完成 (Docker 模式)。"
         elif command -v mysql &>/dev/null; then
             echo "   💻 检测到本地 mysql 客户端，正在连接 127.0.0.1 注入脚本..."
-            mysql -h 127.0.0.1 -u"$DB_USER" -p"$DB_PW" english_learning < "$PREPARED_SQL" 2>/dev/null
+            mysql --default-character-set=utf8mb4 -h 127.0.0.1 -u"$DB_USER" -p"$DB_PW" english_learning < "$PREPARED_SQL" 2>/dev/null
+            if [ -f "$REPAIR_SQL" ]; then
+                mysql --default-character-set=utf8mb4 -h 127.0.0.1 -u"$DB_USER" -p"$DB_PW" english_learning < "$REPAIR_SQL" 2>/dev/null || true
+            fi
             echo "✅ 数据库更新完成 (本地模式)。"
         else
             echo "⚠️  未检测到运行中的 Docker MySQL 或本地 mysql 客户端，跳过手动 SQL 注入。"

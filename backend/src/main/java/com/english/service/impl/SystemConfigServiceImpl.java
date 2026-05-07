@@ -23,6 +23,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     private static final Logger logger = LoggerFactory.getLogger(SystemConfigServiceImpl.class);
     private static final long CACHE_TTL_MS = 60_000; // 60 seconds
+    private static final Map<String, String> FEATURE_TOGGLE_DESCRIPTIONS = createFeatureToggleDescriptions();
 
     @Autowired
     private SystemConfigMapper mapper;
@@ -178,8 +179,23 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             if (config == null) {
                 continue;
             }
+            String canonical = resolveCanonicalDescription(config);
+            if (canonical != null) {
+                config.setDescription(canonical);
+                continue;
+            }
             config.setDescription(repairMojibake(config.getDescription()));
         }
+    }
+
+    private String resolveCanonicalDescription(SystemConfig config) {
+        if (config == null) {
+            return null;
+        }
+        if (!"feature_toggle".equals(config.getConfigGroup())) {
+            return null;
+        }
+        return FEATURE_TOGGLE_DESCRIPTIONS.get(config.getConfigKey());
     }
 
     private String repairMojibake(String text) {
@@ -232,5 +248,59 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN).count();
         int replacementPenalty = text.contains("�") ? 10 : 0;
         return cjkCount * 10 - replacementPenalty;
+    }
+
+    private static Map<String, String> createFeatureToggleDescriptions() {
+        Map<String, String> labels = new HashMap<>();
+        labels.put("page_dashboard", "学生端-发现页");
+        labels.put("page_courses", "学生端-课程页（开发中）");
+        labels.put("page_classes", "学生端-班级/社区页");
+        labels.put("page_assignments", "学生端-任务页");
+        labels.put("page_articles", "学生端-文章页");
+        labels.put("page_vocabulary", "学生端-生词本页");
+        labels.put("page_my_study", "学生端-我的学习页");
+        labels.put("page_ai_video", "学生端-AI视频字幕页（未完善）");
+        labels.put("page_ai_qa", "学生端-AI问答页");
+        labels.put("page_user_texts", "学生端-我的上传页");
+        labels.put("page_scores", "学生端-等级考试成绩页");
+        labels.put("page_course_selections", "学生端-我的选课页");
+        labels.put("page_text_learning", "学生端-课文学习子页");
+        labels.put("page_schedule", "学生端-我的课表页");
+        labels.put("page_videos", "学生端-视频学习页");
+        labels.put("page_video_player", "学生端-视频播放器页");
+        labels.put("page_interactive_text", "学生端-交互式课文页");
+        labels.put("page_word_recite", "学生端-背单词页");
+        labels.put("page_teacher_dashboard", "教师端-仪表盘");
+        labels.put("page_teacher_courses", "教师端-课程管理");
+        labels.put("page_teacher_my_courses", "教师端-我的课程");
+        labels.put("page_teacher_classes", "教师端-班级管理");
+        labels.put("page_teacher_assignments", "教师端-作业管理");
+        labels.put("page_admin_videos", "管理员-视频管理");
+        labels.put("page_admin_backups", "管理员-备份管理");
+        labels.put("page_admin_monitoring", "管理员-系统监控");
+        labels.put("page_ops_monitoring", "运维端-系统监控");
+        labels.put("page_ops_ai_providers", "运维端-AI提供商管理");
+        labels.put("page_ops_feature_toggles", "运维端-功能开关管理");
+        labels.put("page_ops_school_data_config", "运维端-学校数据配置");
+        labels.put("page_ops_school_data_browser", "运维端-学校数据浏览器");
+        labels.put("page_ops_update", "运维端-系统更新");
+        labels.put("admin.dashboard", "管理员-仪表盘");
+        labels.put("admin.courses", "管理员-课程管理");
+        labels.put("admin.classes", "管理员-班级管理");
+        labels.put("admin.users", "管理员-用户管理");
+        labels.put("admin.units", "管理员-单元管理");
+        labels.put("admin.words", "管理员-单词管理");
+        labels.put("admin.texts", "管理员-课文管理");
+        labels.put("admin.assignments", "管理员-作业管理");
+        labels.put("admin.sso_approval", "管理员-SSO 审批");
+        labels.put("ops.school_data_browser", "运维端学校数据浏览功能（行政班、课程、教学班等）");
+        labels.put("ops.school_data_config", "运维端学校数据源配置功能（API/ETL切换、连接测试）");
+        labels.put("ops.school_data_chain_fetch", "运维端按学院链式拉取功能开关");
+        labels.put("student.lazy_data_sync", "学生端按需 Lazy 同步四六级/课表");
+        labels.put("student.lazy_course_selections", "学生端 Lazy 选课记录同步（陈旧度阈值 1 天）");
+        labels.put("teacher.school_data_enabled", "教师端学校数据功能（课表/选课/成绩）");
+        labels.put("sso.auto_grant_student", "SSO 学号匹配 school_student 自动授权 STUDENT");
+        labels.put("sso.auto_grant_teacher", "SSO 工号匹配 school_teacher 自动授权 TEACHER");
+        return Collections.unmodifiableMap(labels);
     }
 }

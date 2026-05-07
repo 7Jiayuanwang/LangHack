@@ -761,6 +761,7 @@ verify_ai_providers() {
 
 run_incremental_migrations() {
     local migration_sql="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+    local feature_toggle_repair_sql="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
     local prepared_sql=""
 
     if [ ! -f "$migration_sql" ]; then
@@ -920,8 +921,8 @@ run_incremental_migrations() {
         if [ -n "$seed_file" ] && [ -f "$seed_file" ]; then
             log "SEED: 导入全量备份: $(basename "$seed_file")"
             case "$seed_file" in
-                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
-                *.sql)    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql)    docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
             esac
             log "SEED: 全量备份导入完成 ✓"
         else
@@ -937,7 +938,7 @@ run_incremental_migrations() {
                 log "SEED: 导入课文数据 (3Blue1Brown)..."
                 for f in "$article_dir"/*.sql; do
                     [ -f "$f" ] || continue
-                    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
+                    docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
                 done
                 log "SEED: 课文数据导入完成 ✓"
             fi
@@ -952,7 +953,7 @@ run_incremental_migrations() {
                 log "SEED: 导入 ECDICT 词典（预计 1-3 分钟）..."
                 docker cp "$ecdict_csv" "$mysql_container:/tmp/ecdict.csv"
                 docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
-                docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" --local-infile=1 "$db_name" -e \
+                docker exec "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" --local-infile=1 "$db_name" -e \
                     "TRUNCATE TABLE ecdict_words;
                      LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
                      INTO TABLE ecdict_words
@@ -979,6 +980,15 @@ run_incremental_migrations() {
         article_final=$(docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
             -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
         log "SEED: 种子数据导入完成 ✓ (texts: ${texts_final}, ecdict_words: ${ecdict_final}, article: ${article_final})"
+    fi
+
+    if [ -f "$feature_toggle_repair_sql" ]; then
+        log "MIGRATE: 修复功能开关描述文本..."
+        if docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$feature_toggle_repair_sql" >/dev/null 2>&1; then
+            log "MIGRATE: 功能开关描述修复完成 ✓"
+        else
+            log "WARN: MIGRATE: 功能开关描述修复失败，继续部署"
+        fi
     fi
 
     # 验证从库复制延迟

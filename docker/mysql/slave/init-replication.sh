@@ -146,7 +146,7 @@ if [ -n "$DUMP_FILE" ] && [ -f "$DUMP_FILE" ]; then
     if [ "$DUMP_SIZE" -gt "1024" ]; then
         echo "[replication] 导入数据到从库..."
         IMPORT_START=$(date +%s)
-        mysql -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$DUMP_FILE" 2>/dev/null
+        mysql --default-character-set=utf8mb4 -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$DUMP_FILE" 2>/dev/null
         IMPORT_EXIT=$?
         IMPORT_END=$(date +%s)
         IMPORT_DURATION=$((IMPORT_END - IMPORT_START))
@@ -192,7 +192,7 @@ if [ -n "$DUMP_FILE" ] && [ -f "$DUMP_FILE" ]; then
             echo "[replication] 导入 ecdict_words 数据到从库..."
             ECDICT_IMPORT_START=$(date +%s)
             # 使用 -f 强制模式，跳过重复键错误（表结构可能已由 04 脚本创建）
-            mysql -f -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$ECDICT_DUMP_FILE" 2>/dev/null
+            mysql --default-character-set=utf8mb4 -f -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$ECDICT_DUMP_FILE" 2>/dev/null
             ECDICT_IMPORT_EXIT=$?
             ECDICT_IMPORT_END=$(date +%s)
             ECDICT_IMPORT_DURATION=$((ECDICT_IMPORT_END - ECDICT_IMPORT_START))

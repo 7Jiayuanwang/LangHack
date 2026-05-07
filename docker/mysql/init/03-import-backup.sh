@@ -174,14 +174,14 @@ case "$SEED_FILE" in
             echo "[seed] [ERROR] 未找到 gunzip 或 zcat，无法解压 .sql.gz"
             exit 1
         fi
-        zcat "$SEED_FILE" | mysql -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME"
+        zcat "$SEED_FILE" | mysql --default-character-set=utf8mb4 -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME"
         ;;
     *.sql)
-        mysql -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$SEED_FILE"
+        mysql --default-character-set=utf8mb4 -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$SEED_FILE"
         ;;
     *)
         echo "[seed] [WARN] 未知文件扩展名: $SEED_FILE，尝试直接导入"
-        mysql -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$SEED_FILE"
+        mysql --default-character-set=utf8mb4 -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$SEED_FILE"
         ;;
 esac
 

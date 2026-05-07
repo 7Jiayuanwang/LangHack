@@ -1498,6 +1498,7 @@ DB_NAME="${MYSQL_DATABASE:-english_learning}"
 MASTER_CONTAINER="langhack-mysql-master"
 SLAVE_CONTAINER="langhack-mysql-slave"
 MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+FEATURE_TOGGLE_REPAIR_SQL="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
 PREPARED_MIGRATION_SQL=""
 FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
 
@@ -1581,6 +1582,15 @@ elif [ -n "$MIGRATE_ERRORS" ]; then
 fi
 echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
 
+if [ -f "$FEATURE_TOGGLE_REPAIR_SQL" ]; then
+    echo "[INFO] 修复功能开关描述文本..."
+    if docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" < "$FEATURE_TOGGLE_REPAIR_SQL" >/dev/null 2>&1; then
+        echo "[OK] 功能开关描述修复完成"
+    else
+        echo "[WARN] 功能开关描述修复失败，继续部署"
+    fi
+fi
+
 # ── 数据导入检查与补全 ──────────────────────────────────────────
 # docker compose down -v 后重建时，Docker init 脚本可能未成功导入种子数据
 # 此步骤检测关键表数据量，为空时自动从 database/ 和 backups/ 导入
@@ -1634,14 +1644,14 @@ if [ "$NEED_SEED" = true ]; then
         case "$SEED_FILE" in
             *.sql.gz)
                 if ! zcat "$SEED_FILE" | sed '/^\/\*!50013 DEFINER/d; /^\/\*!50003 CREATE.*DEFINER/d; /SET @@GLOBAL.GTID_PURGED/d; /SET @@SESSION.SQL_LOG_BIN/d' | docker exec -i "$MASTER_CONTAINER" \
-                    mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password"; then
+                    mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password"; then
                     echo "[ERROR] 全量备份导入失败: $(basename "$SEED_FILE")"
                     echo "[ERROR] 请检查备份文件完整性或数据库连接"
                     exit 1
                 fi
                 ;;
             *.sql)
-                if ! sed '/^\/\*!50013 DEFINER/d; /^\/\*!50003 CREATE.*DEFINER/d; /SET @@GLOBAL.GTID_PURGED/d; /SET @@SESSION.SQL_LOG_BIN/d' "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                if ! sed '/^\/\*!50013 DEFINER/d; /^\/\*!50003 CREATE.*DEFINER/d; /SET @@GLOBAL.GTID_PURGED/d; /SET @@SESSION.SQL_LOG_BIN/d' "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
                     2>&1 | grep -v "Using a password"; then
                     echo "[ERROR] 全量备份导入失败: $(basename "$SEED_FILE")"
                     echo "[ERROR] 请检查备份文件完整性或数据库连接"
@@ -1663,7 +1673,7 @@ if [ "$NEED_SEED" = true ]; then
             echo "[INFO] 导入课文数据 (3Blue1Brown)..."
             for f in "$ARTICLE_DIR"/*.sql; do
                 [ -f "$f" ] || continue
-                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
                     < "$f" 2>&1 | grep -v "Using a password" || true
             done
             echo "[OK] 课文数据导入完成"
@@ -1680,7 +1690,7 @@ if [ "$NEED_SEED" = true ]; then
             # 通过 docker cp + LOAD DATA 方式导入（比管道快得多）
             docker cp "$ECDICT_CSV_PATH" "$MASTER_CONTAINER:/tmp/ecdict.csv"
             docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
-            docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" --local-infile=1 "$DB_NAME" -e \
+            docker exec "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" --local-infile=1 "$DB_NAME" -e \
                 "TRUNCATE TABLE ecdict_words;
                  LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
                  INTO TABLE ecdict_words

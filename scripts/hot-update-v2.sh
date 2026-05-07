@@ -27,6 +27,7 @@ readonly ENV_FILE="$PROJECT_ROOT/.env"
 readonly LOG_DIR="$PROJECT_ROOT/logs"
 readonly CACHE_FILE="$LOG_DIR/.hot-update.cache"
 readonly MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+readonly REPAIR_SQL="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
 readonly FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
 readonly BACKEND_PORT=8080
 readonly FRONTEND_PORT=3000
@@ -168,7 +169,11 @@ apply_migrations() {
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "langhack-mysql-master"; then
         log_info "使用 Docker MySQL 容器 (langhack-mysql-master)"
         if MYSQL_PWD="$DB_PW" docker exec -i -e MYSQL_PWD langhack-mysql-master \
-               mysql -u"$DB_USER" "$DB_NAME" < "$prepared_sql" 2>"$stderr_log"; then
+               mysql --default-character-set=utf8mb4 -u"$DB_USER" "$DB_NAME" < "$prepared_sql" 2>"$stderr_log"; then
+            if [ -f "$REPAIR_SQL" ]; then
+                MYSQL_PWD="$DB_PW" docker exec -i -e MYSQL_PWD langhack-mysql-master \
+                    mysql --default-character-set=utf8mb4 -u"$DB_USER" "$DB_NAME" < "$REPAIR_SQL" >/dev/null 2>&1 || true
+            fi
             log_ok "迁移完成（Docker 模式）"
         else
             log_error "迁移失败，错误输出："
@@ -178,8 +183,12 @@ apply_migrations() {
         fi
     elif command -v mysql >/dev/null 2>&1; then
         log_info "使用本地 mysql 客户端 → $DB_HOST"
-        if MYSQL_PWD="$DB_PW" mysql -h "$DB_HOST" -u"$DB_USER" "$DB_NAME" \
+        if MYSQL_PWD="$DB_PW" mysql --default-character-set=utf8mb4 -h "$DB_HOST" -u"$DB_USER" "$DB_NAME" \
                < "$prepared_sql" 2>"$stderr_log"; then
+            if [ -f "$REPAIR_SQL" ]; then
+                MYSQL_PWD="$DB_PW" mysql --default-character-set=utf8mb4 -h "$DB_HOST" -u"$DB_USER" "$DB_NAME" \
+                    < "$REPAIR_SQL" >/dev/null 2>&1 || true
+            fi
             log_ok "迁移完成（本地模式）"
         else
             log_error "迁移失败，错误输出："

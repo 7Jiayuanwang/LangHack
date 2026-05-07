@@ -17,6 +17,7 @@ fi
 awk '
 BEGIN {
     in_proc = 0
+    print "SET NAMES utf8mb4;"
 }
 /^[[:space:]]*CREATE[[:space:]]+PROCEDURE[[:space:]]+/ && in_proc == 0 {
     print "DELIMITER $$"

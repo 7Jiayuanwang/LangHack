@@ -57,4 +57,19 @@ class SystemConfigServiceImplTest {
 
         assertEquals("学生端-仪表盘页", result.get(0).getDescription());
     }
+
+    @Test
+    void listByGroup_rebuildsCorruptedFeatureToggleDescriptionFromCanonicalKey() {
+        SystemConfig config = new SystemConfig();
+        config.setConfigGroup("feature_toggle");
+        config.setConfigKey("page_courses");
+        config.setConfigValue("false");
+        config.setDescription("学生端-课�?�页");
+
+        when(mapper.selectList(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(config));
+
+        List<SystemConfig> result = service.listByGroup("feature_toggle");
+
+        assertEquals("学生端-课程页（开发中）", result.get(0).getDescription());
+    }
 }
