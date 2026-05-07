@@ -1519,8 +1519,8 @@ if [ ! -f "$MIGRATION_SQL" ]; then
 fi
 
 # 版本同步强制检查：Flyway 文件数必须与合并脚本一致，否则阻塞部署
-flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' \n' || echo 0)
-merged_count=$(grep -cE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | tr -d ' \n' || echo 0)
+flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' \n\r' || echo 0)
+merged_count=$(grep -cE '^-- V[0-9]+__.*\.sql$' "$MIGRATION_SQL" 2>/dev/null | tr -d ' \n\r' || echo 0)
 if [ "$flyway_count" -gt "$merged_count" ]; then
     echo "[ERROR] ══════════════════════════════════════════════════════"
     echo "[ERROR] 迁移脚本版本不同步，部署终止"
@@ -1539,7 +1539,7 @@ else
 fi
 
 # 从头部列表提取最高版本号用于日志
-max_ver=$(grep -oE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 | tr -d ' \n' || echo "?")
+max_ver=$(grep -oE '^-- V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 | tr -d ' \n\r' || echo "?")
 echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${DB_NAME})"
 PREPARED_MIGRATION_SQL=$(mktemp /tmp/langhack-deploy-migrate.XXXXXX.sql)
 if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$PREPARED_MIGRATION_SQL"; then
