@@ -20,19 +20,19 @@
       <div class="stats-grid">
         <div class="stat-item">
           <div class="stat-label">总行数</div>
-          <div class="stat-value">{{ stats.total || 0 }}</div>
+          <div class="stat-value">{{ filteredEntries.length }}</div>
         </div>
         <div class="stat-item error">
           <div class="stat-label">错误</div>
-          <div class="stat-value">{{ stats.error || 0 }}</div>
+          <div class="stat-value">{{ levelCounts.ERROR || 0 }}</div>
         </div>
         <div class="stat-item warn">
           <div class="stat-label">警告</div>
-          <div class="stat-value">{{ stats.warn || 0 }}</div>
+          <div class="stat-value">{{ levelCounts.WARN || 0 }}</div>
         </div>
         <div class="stat-item info">
           <div class="stat-label">信息</div>
-          <div class="stat-value">{{ stats.info || 0 }}</div>
+          <div class="stat-value">{{ levelCounts.INFO || 0 }}</div>
         </div>
       </div>
     </el-card>
@@ -40,28 +40,38 @@
     <el-card class="filter-card">
       <el-form :inline="true">
         <el-form-item label="日志级别">
-          <el-select v-model="filterLevel" @change="refreshLogs" placeholder="全部">
+          <el-select v-model="filterLevel" @change="refreshLogs" placeholder="全部" style="width: 100px">
             <el-option label="全部" value=""></el-option>
             <el-option label="ERROR" value="ERROR"></el-option>
             <el-option label="WARN" value="WARN"></el-option>
             <el-option label="INFO" value="INFO"></el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="显示行数">
-          <el-select v-model="lines" @change="refreshLogs">
-            <el-option label="100 行" :value="100"></el-option>
-            <el-option label="500 行" :value="500"></el-option>
-            <el-option label="1000 行" :value="1000"></el-option>
-            <el-option label="2000 行" :value="2000"></el-option>
-            <el-option label="5000 行" :value="5000"></el-option>
+        <el-form-item label="显示条数">
+          <el-select v-model="limit" @change="refreshLogs" style="width: 100px">
+            <el-option label="100 条" :value="100"></el-option>
+            <el-option label="500 条" :value="500"></el-option>
+            <el-option label="1000 条" :value="1000"></el-option>
+            <el-option label="2000 条" :value="2000"></el-option>
           </el-select>
+        </el-form-item>
+        <el-form-item label="日期范围">
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            style="width: 240px"
+          />
         </el-form-item>
         <el-form-item label="搜索">
           <el-input
             v-model="searchText"
             placeholder="输入关键词过滤"
             clearable
-            style="width: 300px"
+            style="width: 240px"
           />
         </el-form-item>
         <el-form-item>
@@ -72,146 +82,118 @@
 
     <el-card class="logs-card">
       <div class="logs-header">
-        <span>日志内容 ({{ filteredLogs.length }} 行)</span>
-        <span class="timestamp" v-if="lastUpdate">
-          最后更新: {{ lastUpdate }}
-        </span>
+        <span>日志内容 ({{ filteredEntries.length }} 条)</span>
+        <span class="timestamp" v-if="lastUpdate">最后更新: {{ lastUpdate }}</span>
       </div>
       <div class="logs-content" ref="logsContent">
         <div
-          v-for="(line, index) in filteredLogs"
+          v-for="(entry, index) in filteredEntries"
           :key="index"
-          :class="getLogLineClass(line)"
-          class="log-line"
+          class="log-entry"
+          :class="'log-' + (entry.level || '').toLowerCase()"
         >
-          <span class="line-number">{{ index + 1 }}</span>
-          <span class="line-content">{{ line }}</span>
+          <span class="log-time">{{ entry.timestamp }}</span>
+          <span class="log-level-tag" :class="'level-' + (entry.level || '').toLowerCase()">{{ entry.level }}</span>
+          <span class="log-logger">{{ entry.logger }}</span>
+          <span class="log-msg">{{ entry.message }}</span>
+          <div v-if="entry.exception" class="log-exception">{{ entry.exception }}</div>
         </div>
-        <div v-if="filteredLogs.length === 0" class="empty-logs">
-          暂无日志数据
-        </div>
+        <div v-if="filteredEntries.length === 0" class="empty-logs">暂无日志数据</div>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Download } from '@element-plus/icons-vue'
-import axios from 'axios'
+import { getApplicationLogs, downloadApplicationLogs } from '@/api/ops'
 
 const loading = ref(false)
 const downloading = ref(false)
-const logs = ref([])
-const stats = ref({})
+const entries = ref([])
+const levelCounts = ref({})
 const filterLevel = ref('')
-const lines = ref(500)
+const limit = ref(500)
 const searchText = ref('')
+const dateRange = ref(null)
 const autoScroll = ref(true)
 const lastUpdate = ref('')
 const logsContent = ref(null)
 
-const filteredLogs = computed(() => {
-  if (!searchText.value) return logs.value
-  const keyword = searchText.value.toLowerCase()
-  return logs.value.filter(line => line.toLowerCase().includes(keyword))
+const filteredEntries = computed(() => {
+  let list = entries.value
+  if (searchText.value) {
+    const kw = searchText.value.toLowerCase()
+    list = list.filter(e =>
+      (e.message || '').toLowerCase().includes(kw) ||
+      (e.logger || '').toLowerCase().includes(kw)
+    )
+  }
+  if (dateRange.value && dateRange.value[0]) {
+    const [start, end] = dateRange.value
+    list = list.filter(e => {
+      if (!e.timestamp) return true
+      const d = e.timestamp.slice(0, 10)
+      return d >= start && d <= end
+    })
+  }
+  return list
 })
-
-const getLogLineClass = (line) => {
-  if (line.includes('ERROR')) return 'log-error'
-  if (line.includes('WARN')) return 'log-warn'
-  if (line.includes('INFO')) return 'log-info'
-  return ''
-}
 
 const refreshLogs = async () => {
   loading.value = true
   try {
-    const params = { lines: lines.value }
-    if (filterLevel.value) {
-      params.level = filterLevel.value
-    }
-
-    const response = await axios.get('/api/ops/logs/recent', { params })
-    if (response.data.code === 200) {
-      logs.value = response.data.data.lines || []
-      lastUpdate.value = response.data.data.timestamp
-
+    const params = { limit: limit.value }
+    if (filterLevel.value) params.level = filterLevel.value
+    const res = await getApplicationLogs(params)
+    if (res.code === 200) {
+      entries.value = res.data.entries || []
+      levelCounts.value = res.data.levelCounts || {}
+      lastUpdate.value = new Date().toLocaleTimeString()
       if (autoScroll.value) {
         await nextTick()
-        scrollToBottom()
+        if (logsContent.value) logsContent.value.scrollTop = logsContent.value.scrollHeight
       }
     } else {
-      ElMessage.error(response.data.message || '获取日志失败')
+      ElMessage.error(res.message || '获取日志失败')
     }
-  } catch (error) {
-    console.error('获取日志失败:', error)
+  } catch {
     ElMessage.error('获取日志失败')
   } finally {
     loading.value = false
   }
 }
 
-const loadStats = async () => {
-  try {
-    const response = await axios.get('/api/ops/logs/stats', {
-      params: { lines: lines.value }
-    })
-    if (response.data.code === 200) {
-      stats.value = response.data.data
-    }
-  } catch (error) {
-    console.error('获取日志统计失败:', error)
-  }
-}
-
 const downloadLogs = async () => {
   downloading.value = true
   try {
-    const response = await axios.get('/api/ops/logs/download', {
-      params: { lines: 5000 },
-      responseType: 'blob'
-    })
-
-    const blob = new Blob([response.data], { type: 'text/plain' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-
-    const filename = response.headers['content-disposition']
-      ?.split('filename=')[1]
-      ?.replace(/"/g, '') || 'langhack-backend.log'
-
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-
+    const params = { limit: 2000 }
+    if (filterLevel.value) params.level = filterLevel.value
+    if (dateRange.value && dateRange.value[0]) {
+      params.startDate = dateRange.value[0]
+      params.endDate = dateRange.value[1]
+    }
+    const res = await downloadApplicationLogs(params)
+    const blob = new Blob([res], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `langhack-${new Date().toISOString().slice(0, 10)}.log`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
     ElMessage.success('日志下载成功')
-  } catch (error) {
-    console.error('下载日志失败:', error)
+  } catch {
     ElMessage.error('下载日志失败')
   } finally {
     downloading.value = false
   }
 }
 
-const scrollToBottom = () => {
-  if (logsContent.value) {
-    logsContent.value.scrollTop = logsContent.value.scrollHeight
-  }
-}
-
-watch(lines, () => {
-  loadStats()
-})
-
-onMounted(() => {
-  refreshLogs()
-  loadStats()
-})
+onMounted(refreshLogs)
 </script>
 
 <style scoped>
@@ -221,9 +203,7 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.header-card {
-  margin-bottom: 20px;
-}
+.header-card { margin-bottom: 20px; }
 
 .header-content {
   display: flex;
@@ -231,19 +211,11 @@ onMounted(() => {
   align-items: center;
 }
 
-.header-content h2 {
-  margin: 0;
-  font-size: 24px;
-}
+.header-content h2 { margin: 0; font-size: 24px; }
 
-.actions {
-  display: flex;
-  gap: 10px;
-}
+.actions { display: flex; gap: 10px; }
 
-.stats-card {
-  margin-bottom: 20px;
-}
+.stats-card { margin-bottom: 20px; }
 
 .stats-grid {
   display: grid;
@@ -258,49 +230,19 @@ onMounted(() => {
   background: #f5f7fa;
 }
 
-.stat-item.error {
-  background: #fef0f0;
-}
+.stat-item.error { background: #fef0f0; }
+.stat-item.warn  { background: #fdf6ec; }
+.stat-item.info  { background: #f0f9ff; }
 
-.stat-item.warn {
-  background: #fdf6ec;
-}
+.stat-label { font-size: 14px; color: #909399; margin-bottom: 8px; }
 
-.stat-item.info {
-  background: #f0f9ff;
-}
+.stat-value { font-size: 28px; font-weight: bold; color: #303133; }
+.stat-item.error .stat-value { color: #f56c6c; }
+.stat-item.warn  .stat-value { color: #e6a23c; }
+.stat-item.info  .stat-value { color: #409eff; }
 
-.stat-label {
-  font-size: 14px;
-  color: #909399;
-  margin-bottom: 8px;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: bold;
-  color: #303133;
-}
-
-.stat-item.error .stat-value {
-  color: #f56c6c;
-}
-
-.stat-item.warn .stat-value {
-  color: #e6a23c;
-}
-
-.stat-item.info .stat-value {
-  color: #409eff;
-}
-
-.filter-card {
-  margin-bottom: 20px;
-}
-
-.logs-card {
-  margin-bottom: 20px;
-}
+.filter-card { margin-bottom: 20px; }
+.logs-card   { margin-bottom: 20px; }
 
 .logs-header {
   display: flex;
@@ -312,80 +254,66 @@ onMounted(() => {
   font-weight: bold;
 }
 
-.timestamp {
-  font-size: 12px;
-  color: #909399;
-  font-weight: normal;
-}
+.timestamp { font-size: 12px; color: #909399; font-weight: normal; }
 
 .logs-content {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 15px;
-  border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.7;
   max-height: 600px;
   overflow-y: auto;
 }
 
-.log-line {
-  display: flex;
-  padding: 2px 0;
+.log-entry {
+  padding: 3px 6px;
+  border-radius: 4px;
+  margin-bottom: 2px;
   word-break: break-all;
 }
 
-.line-number {
-  color: #858585;
-  min-width: 50px;
-  text-align: right;
-  padding-right: 15px;
-  user-select: none;
+.log-entry:hover { background: rgba(255,255,255,0.05); }
+
+.log-time {
+  color: #6366f1;
+  margin-right: 10px;
+  opacity: 0.85;
   flex-shrink: 0;
 }
 
-.line-content {
-  flex: 1;
-}
-
-.log-error {
-  color: #f48771;
-  background: rgba(244, 135, 113, 0.1);
-}
-
-.log-warn {
-  color: #dcdcaa;
-  background: rgba(220, 220, 170, 0.1);
-}
-
-.log-info {
-  color: #4ec9b0;
-}
-
-.empty-logs {
+.log-level-tag {
+  display: inline-block;
+  min-width: 48px;
   text-align: center;
-  color: #858585;
-  padding: 40px;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 0 4px;
+  border-radius: 3px;
+  margin-right: 10px;
 }
+
+.level-error { color: #fca5a5; border: 1px solid rgba(248,113,113,0.3); background: rgba(248,113,113,0.1); }
+.level-warn  { color: #fde68a; border: 1px solid rgba(251,191,36,0.3);  background: rgba(251,191,36,0.1);  }
+.level-info  { color: #93c5fd; border: 1px solid rgba(59,130,246,0.3);  background: rgba(59,130,246,0.1);  }
+
+.log-logger { color: #38bdf8; margin-right: 10px; opacity: 0.9; }
+.log-msg    { color: #e2e8f0; }
+
+.log-exception {
+  color: #fca5a5;
+  padding-left: 130px;
+  font-size: 12px;
+  margin-top: 2px;
+  opacity: 0.9;
+}
+
+.empty-logs { text-align: center; color: #64748b; padding: 40px; }
 
 @media (max-width: 768px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .header-content {
-    flex-direction: column;
-    gap: 15px;
-    align-items: flex-start;
-  }
-
-  .actions {
-    width: 100%;
-  }
-
-  .actions button {
-    flex: 1;
-  }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .header-content { flex-direction: column; gap: 15px; align-items: flex-start; }
+  .actions { width: 100%; }
 }
 </style>
