@@ -16,7 +16,10 @@
 
       <div v-for="item in scores" :key="item.id" class="score-card">
         <div class="score-header">
-          <span class="exam-type">{{ item.examType }}</span>
+          <div class="exam-type-group">
+            <span class="exam-type">{{ item.examType }}</span>
+            <span v-if="item.examName" class="exam-name">{{ item.examName }}</span>
+          </div>
           <el-tag :type="item.isPassed ? 'success' : 'danger'" size="small">
             {{ item.isPassed ? '通过' : '未通过' }}
           </el-tag>
@@ -38,6 +41,10 @@
             <div v-if="item.writingScore != null" class="detail-item">
               <span class="detail-label">写作</span>
               <span class="detail-value">{{ item.writingScore }}</span>
+            </div>
+            <div v-if="item.translationScore != null" class="detail-item">
+              <span class="detail-label">翻译</span>
+              <span class="detail-value">{{ item.translationScore }}</span>
             </div>
           </div>
         </div>
@@ -110,14 +117,25 @@ onMounted(() => {
 .score-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 12px;
+}
+
+.exam-type-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .exam-type {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.exam-name {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .score-body {
