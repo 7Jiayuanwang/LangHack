@@ -27,7 +27,7 @@ ARG IMAGE_REGISTRY_PREFIX=
 FROM ${IMAGE_REGISTRY_PREFIX}eclipse-temurin:17-jre-alpine
 
 # Alpine 内网镜像源（留空=使用官方源；内网填入 Nexus Alpine 代理地址）
-# 示例: http://172.20.14.249:8081/repository/alpine-proxy/
+# 示例: http://172.20.14.249:8081/repository/alpine-mirror/
 ARG ALPINE_MIRROR=
 
 WORKDIR /app
@@ -35,7 +35,7 @@ WORKDIR /app
 # 安装 curl（healthcheck）、tzdata（时区）、mysql-client + mariadb-connector-c（mysqldump 备份/恢复）
 # mariadb-connector-c 提供 caching_sha2_password 插件，使 MariaDB 客户端兼容 MySQL 8.0
 # 内网构建时通过 ALPINE_MIRROR 参数替换 Alpine 包源为内网 Nexus 代理
-RUN if [ -n "$ALPINE_MIRROR" ]; then MIRROR_HOST=$(echo "$ALPINE_MIRROR" | sed 's|https\?://||;s|/.*||'); ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2); printf '%s\n' "${ALPINE_MIRROR%/}/alpine/v${ALPINE_VER}/main" "${ALPINE_MIRROR%/}/alpine/v${ALPINE_VER}/community" > /etc/apk/repositories; fi && apk add --no-cache curl tzdata mysql-client mariadb-connector-c && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
+RUN if [ -n "$ALPINE_MIRROR" ]; then ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2); printf '%s\n' "${ALPINE_MIRROR%/}/v${ALPINE_VER}/main" "${ALPINE_MIRROR%/}/v${ALPINE_VER}/community" > /etc/apk/repositories; fi && apk add --no-cache curl tzdata mysql-client mariadb-connector-c && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
 
 # 从构建阶段复制可执行 jar
 COPY --from=builder /app/target/*.jar app.jar

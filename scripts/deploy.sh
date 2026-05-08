@@ -926,7 +926,7 @@ if [ "$SKIP_ENV" = false ]; then
         fi
         ask_value "npm 内网镜像源 URL (留空跳过)" "$(load_env_value "NPM_REGISTRY" "${DEF_NPM:-http://172.20.14.249:8081/repository/npm-proxy/}")" CFG_NPM_REGISTRY
         ask_value "Maven 内网镜像源 URL (留空跳过)" "$(load_env_value "MAVEN_MIRROR_URL" "http://172.20.14.249:8081/repository/maven-public/")" CFG_MAVEN_MIRROR_URL
-        ask_value "Alpine apk 内网镜像源 URL (留空跳过)" "$(load_env_value "ALPINE_MIRROR" "http://172.20.14.249:8081/repository/alpine-proxy/")" CFG_ALPINE_MIRROR
+        ask_value "Alpine apk 内网镜像源 URL (留空跳过)" "$(load_env_value "ALPINE_MIRROR" "http://172.20.14.249:8081/repository/alpine-mirror/")" CFG_ALPINE_MIRROR
         echo ""
         echo "  [配置汇总]"
         [ -n "$CFG_NPM_REGISTRY" ]     && echo "    npm      → $CFG_NPM_REGISTRY"     || echo "    npm      → (跳过，使用公网)"
