@@ -503,9 +503,9 @@ fi
 mapfile -t BRANCH_LIST < <({
     git branch -r --no-color 2>/dev/null | grep -v 'HEAD' | sed 's|origin/||;s|^[[:space:]]*||'
     git branch --no-color 2>/dev/null | sed 's|^\*||;s|^[[:space:]]*||'
-} | sort -u)
+} | grep -v 'HEAD detached' | grep -v '^$' | sort -u)
 
-[ ${#BRANCH_LIST[@]} -eq 0 ] && BRANCH_LIST=("$CURRENT_BRANCH")
+[ ${#BRANCH_LIST[@]} -eq 0 ] && BRANCH_LIST=("master")
 
 default_idx=1
 for i in "${!BRANCH_LIST[@]}"; do
@@ -1162,6 +1162,13 @@ fi
 
 if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
     echo "[INFO] 切换分支 $CURRENT → $TARGET_BRANCH..."
+    if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
+        echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
+        exit 1
+    fi
+elif [ "$CURRENT" = "HEAD" ]; then
+    # 游离 HEAD 状态：直接切换到目标分支
+    echo "[INFO] 当前处于游离 HEAD 状态，切换到分支 $TARGET_BRANCH..."
     if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
         echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
         exit 1
