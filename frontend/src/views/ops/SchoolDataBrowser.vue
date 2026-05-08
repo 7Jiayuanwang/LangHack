@@ -49,9 +49,14 @@
       </div>
     </div>
 
-    <div v-if="isDerivedLocalTab" class="tab-note derived-note">
+    <div v-if=”isDerivedLocalTab” class=”tab-note derived-note”>
       <el-icon><InfoFilled /></el-icon>
-      <span>当前为链式拉取派生的本地表，只支持本地筛选查看。请使用下方“按学院链式拉取”更新数据。</span>
+      <span>当前为链式拉取派生的本地表，只支持本地筛选查看。请使用下方”按学院链式拉取”更新数据。</span>
+    </div>
+
+    <div v-if=”activeTab === 'student_schedule'” class=”tab-note”>
+      <el-icon><InfoFilled /></el-icon>
+      <span>学生课表需要提供学号才能同步。请在”设置筛选条件”中填写学号（studentId），再点击”同步当前数据源”。</span>
     </div>
 
     <!-- 链式拉取卡片 -->

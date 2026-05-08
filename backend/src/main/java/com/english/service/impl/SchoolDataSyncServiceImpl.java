@@ -159,6 +159,18 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         List<SyncLog> logs = new ArrayList<>();
         try {
             for (String dataSource : DATA_SOURCES) {
+                if ("student_schedule".equals(dataSource)) {
+                    SyncLog skipLog = createSyncLog("FULL", dataSource, "REPLACE_ALL", triggerType, operator, LocalDateTime.now());
+                    skipLog.setStatus("SKIPPED");
+                    skipLog.setErrorMessage("student_schedule 需要提供学号才能同步，请在数据浏览器中按学号单独同步");
+                    skipLog.setTotalCount(0);
+                    skipLog.setSuccessCount(0);
+                    skipLog.setFailCount(0);
+                    skipLog.setEndTime(LocalDateTime.now());
+                    syncLogMapper.updateById(skipLog);
+                    logs.add(skipLog);
+                    continue;
+                }
                 try {
                     logger.info("开始全量同步数据源: {}", dataSource);
                     LocalDateTime startTime = LocalDateTime.now();
@@ -228,6 +240,18 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         List<SyncLog> logs = new ArrayList<>();
         try {
             for (String dataSource : DATA_SOURCES) {
+                if ("student_schedule".equals(dataSource)) {
+                    SyncLog skipLog = createSyncLog("INCREMENTAL", dataSource, "UPSERT", triggerType, operator, LocalDateTime.now());
+                    skipLog.setStatus("SKIPPED");
+                    skipLog.setErrorMessage("student_schedule 需要提供学号才能同步，请在数据浏览器中按学号单独同步");
+                    skipLog.setTotalCount(0);
+                    skipLog.setSuccessCount(0);
+                    skipLog.setFailCount(0);
+                    skipLog.setEndTime(LocalDateTime.now());
+                    syncLogMapper.updateById(skipLog);
+                    logs.add(skipLog);
+                    continue;
+                }
                 try {
                     logger.info("开始增量同步数据源: {}", dataSource);
                     LocalDateTime startTime = LocalDateTime.now();
