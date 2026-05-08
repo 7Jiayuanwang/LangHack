@@ -54,10 +54,21 @@ log_section() { printf '\n\033[1;34m══ %s ══\033[0m\n' "$*" >&2; }
 # ─────────────────────────────────────────────
 load_env() {
     if [ -f "$ENV_FILE" ]; then
-        set -a
-        # shellcheck disable=SC1090
-        source "$ENV_FILE"
-        set +a
+        # Read .env line-by-line to avoid bash interpreting '&' in values
+        # (e.g. JDBC URLs) as background operators, which truncates the value.
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty lines and comments
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            # Only process lines that look like KEY=VALUE
+            if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*) ]]; then
+                local key="${BASH_REMATCH[1]}"
+                local val="${BASH_REMATCH[2]}"
+                # Strip surrounding quotes if present
+                val="${val%\"}" ; val="${val#\"}"
+                val="${val%\'}" ; val="${val#\'}"
+                export "$key=$val"
+            fi
+        done < "$ENV_FILE"
     fi
     DB_USER="${DB_USERNAME:-root}"
     DB_PW="${DB_PASSWORD:-}"

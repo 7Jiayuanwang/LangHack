@@ -388,7 +388,7 @@ onUnmounted(() => {
 .content-wrapper {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: scroll;
   -webkit-overflow-scrolling: touch;
   background: var(--bg-secondary);
 }

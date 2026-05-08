@@ -116,7 +116,7 @@
       </div>
 
         <!-- Pagination -->
-        <div v-if="totalPages > 1" class="pagination">
+        <div class="pagination" :style="{ visibility: totalPages > 1 ? 'visible' : 'hidden' }">
           <button class="page-btn" :disabled="currentPage === 1" @click="prevPage">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="15,18 9,12 15,6"/>
@@ -189,6 +189,7 @@ const selectedCategory = ref('')
 const loadError = ref(false)
 const currentPage = ref(1)
 const pageSize = 5
+
 
 const totalPages = computed(() => Math.ceil(allArticles.value.length / pageSize))
 const articles = computed(() => {
@@ -346,12 +347,13 @@ onMounted(() => {
 .articles-mobile-page {
   height: 100vh;
   height: 100dvh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   background-color: var(--app-bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--app-text);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 /* PC layout */
@@ -526,6 +528,11 @@ onMounted(() => {
 .page-main {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 
 .articles-feed {
@@ -622,6 +629,8 @@ onMounted(() => {
   overflow: hidden;
   word-break: break-word;
   overflow-wrap: break-word;
+  /* Always occupy 2 lines of space for consistent card height */
+  min-height: calc(2 * 1.3em);
 }
 
 .article-snippet {
@@ -636,6 +645,8 @@ onMounted(() => {
   overflow: hidden;
   word-break: break-word;
   overflow-wrap: break-word;
+  /* Always occupy 2 lines of space for consistent card height */
+  min-height: calc(2 * 1.5em);
 }
 
 /* Footer */
