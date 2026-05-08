@@ -16,19 +16,17 @@ COPY pom.xml .
 # 内网构建时动态注入 Nexus mirror 到 Maven settings，再下载依赖
 RUN if [ -n "$MAVEN_MIRROR_URL" ]; then \
         mkdir -p /root/.m2 && \
-        cat > /root/.m2/settings.xml <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<settings>
-  <mirrors>
-    <mirror>
-      <id>nexus-intranet</id>
-      <mirrorOf>*</mirrorOf>
-      <name>Intranet Nexus Mirror</name>
-      <url>${MAVEN_MIRROR_URL}</url>
-    </mirror>
-  </mirrors>
-</settings>
-EOF
+        echo '<?xml version="1.0" encoding="UTF-8"?>' > /root/.m2/settings.xml && \
+        echo '<settings>' >> /root/.m2/settings.xml && \
+        echo '  <mirrors>' >> /root/.m2/settings.xml && \
+        echo '    <mirror>' >> /root/.m2/settings.xml && \
+        echo '      <id>nexus-intranet</id>' >> /root/.m2/settings.xml && \
+        echo '      <mirrorOf>*</mirrorOf>' >> /root/.m2/settings.xml && \
+        echo '      <name>Intranet Nexus Mirror</name>' >> /root/.m2/settings.xml && \
+        echo "      <url>${MAVEN_MIRROR_URL}</url>" >> /root/.m2/settings.xml && \
+        echo '    </mirror>' >> /root/.m2/settings.xml && \
+        echo '  </mirrors>' >> /root/.m2/settings.xml && \
+        echo '</settings>' >> /root/.m2/settings.xml; \
     fi && \
     mvn dependency:go-offline -B
 
