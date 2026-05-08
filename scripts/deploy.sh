@@ -917,7 +917,13 @@ if [ "$SKIP_ENV" = false ]; then
         echo "  [提示] 留空则该依赖类型仍走公网（可按需只配其中几项）"
         echo ""
         DEF_NPM=$(load_env_value "NPM_REGISTRY" "")
-        [ -z "$DEF_NPM" ] && DEF_NPM=$(load_env_value "LOCAL_REGISTRY" "" | sed 's/:[0-9]*//' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1 | awk '{print "http://"$1":8081/repository/npm-proxy/"}')
+        if [ -z "$DEF_NPM" ]; then
+            _local_reg=$(load_env_value "LOCAL_REGISTRY" "")
+            _extracted_ip=$(echo "$_local_reg" | sed 's/:[0-9]*//' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
+            if [ -n "$_extracted_ip" ]; then
+                DEF_NPM="http://${_extracted_ip}:8081/repository/npm-proxy/"
+            fi
+        fi
         ask_value "npm 内网镜像源 URL (留空跳过)" "$(load_env_value "NPM_REGISTRY" "${DEF_NPM:-http://172.20.14.249:8081/repository/npm-proxy/}")" CFG_NPM_REGISTRY
         ask_value "Maven 内网镜像源 URL (留空跳过)" "$(load_env_value "MAVEN_MIRROR_URL" "http://172.20.14.249:8081/repository/maven-public/")" CFG_MAVEN_MIRROR_URL
         ask_value "Alpine apk 内网镜像源 URL (留空跳过)" "$(load_env_value "ALPINE_MIRROR" "http://172.20.14.249:8081/repository/alpine-proxy/")" CFG_ALPINE_MIRROR
