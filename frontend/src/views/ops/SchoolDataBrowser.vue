@@ -60,7 +60,7 @@
     </div>
 
     <!-- 链式拉取卡片 -->
-    <div class="chain-fetch-card">
+    <div v-if="chainFetchEnabled" class="chain-fetch-card">
       <div class="card-header">
         <span class="card-title">按学院链式拉取</span>
         <span class="card-subtitle">课程 → 教师 → 学生 → 绑定关系</span>
@@ -88,6 +88,12 @@
         </div>
         <div v-if="chainResult" class="result-summary">
           <div class="result-item">
+            <span class="result-label">状态:</span>
+            <el-tag :type="chainStatusType(chainResult.status)" size="small">
+              {{ chainStatusText(chainResult.status) }}
+            </el-tag>
+          </div>
+          <div class="result-item">
             <span class="result-label">课程数:</span>
             <span class="result-value">{{ chainResult.courseCount || 0 }}</span>
           </div>
@@ -110,7 +116,30 @@
             </el-tag>
           </div>
         </div>
+        <div v-if="chainResult?.errorMessage" class="result-error">{{ chainResult.errorMessage }}</div>
+        <div v-if="chainErrors(chainResult).length > 0" class="result-issues">
+          <div class="result-issue-title">错误</div>
+          <div v-for="item in chainErrors(chainResult)" :key="`error-${item}`" class="result-issue-item">
+            {{ item }}
+          </div>
+        </div>
+        <div v-if="chainWarnings(chainResult).length > 0" class="result-issues warnings">
+          <div class="result-issue-title">警告</div>
+          <div v-for="item in chainWarnings(chainResult)" :key="`warning-${item}`" class="result-issue-item">
+            {{ item }}
+          </div>
+        </div>
+        <div v-if="chainStepEntries(chainResult).length > 0" class="result-steps">
+          <div v-for="[stepName, stats] in chainStepEntries(chainResult)" :key="stepName" class="result-step-card">
+            <div class="result-step-title">{{ chainStepLabel(stepName) }}</div>
+            <div class="result-step-values">{{ formatChainStepStats(stats) }}</div>
+          </div>
+        </div>
       </div>
+    </div>
+    <div v-else class="tab-note">
+      <el-icon><InfoFilled /></el-icon>
+      <span>按学院链式拉取功能当前已被管理员关闭。</span>
     </div>
 
     <!-- 数据导出按钮 -->
@@ -556,6 +585,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { InfoFilled, DataLine, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   getSchoolDataOverview,
   getSchoolDataFilterFields,
@@ -596,6 +626,19 @@ const dataSourceLabels = {
   teacher_student_binding: '师生绑定'
 }
 
+const CHAIN_STATUS_LABELS = {
+  SUCCESS: '成功',
+  PARTIAL: '部分异常',
+  FAILED: '失败'
+}
+
+const CHAIN_STEP_LABELS = {
+  schoolCourse: '课程阶段',
+  teacherCourses: '授课阶段',
+  courseSelection: '选课阶段',
+  persist: '落库阶段'
+}
+
 const route = useRoute()
 const activeTab = ref('administrative_class')
 const loading = ref(false)
@@ -633,6 +676,8 @@ const chainCollegeName = ref('外国语学院')
 const chainMatchMode = ref('eq')
 const chainResult = ref(null)
 const suppressTabReload = ref(false)
+const { isEnabled: isFeatureEnabled, load: loadFeatureToggles } = useFeatureToggles()
+const chainFetchEnabled = computed(() => isFeatureEnabled('ops.school_data_chain_fetch'))
 
 // 导出相关状态
 const exporting = ref(false)
@@ -865,6 +910,40 @@ async function focusChainResultLocally(result) {
   await switchToTab(targetTab, filters)
 }
 
+function chainStatusType(status) {
+  if (status === 'FAILED') return 'danger'
+  if (status === 'PARTIAL') return 'warning'
+  return 'success'
+}
+
+function chainStatusText(status) {
+  return CHAIN_STATUS_LABELS[status] || '未知'
+}
+
+function chainErrors(result) {
+  return Array.isArray(result?.errors) ? result.errors : []
+}
+
+function chainWarnings(result) {
+  return Array.isArray(result?.warnings) ? result.warnings : []
+}
+
+function chainStepEntries(result) {
+  return Object.entries(result?.stepStats || {})
+}
+
+function chainStepLabel(stepName) {
+  return CHAIN_STEP_LABELS[stepName] || stepName
+}
+
+function formatChainStepStats(stats) {
+  if (!stats || typeof stats !== 'object') return ''
+  return Object.entries(stats)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '' && (!Array.isArray(value) || value.length > 0))
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(',') : value}`)
+    .join(' | ')
+}
+
 async function applyRouteContext() {
   const targetTab = typeof route.query.tab === 'string' ? route.query.tab.trim() : ''
   if (!targetTab || !Object.prototype.hasOwnProperty.call(dataSourceLabels, targetTab)) {
@@ -979,6 +1058,10 @@ async function handleSync() {
 }
 
 async function handleChainFetch() {
+  if (!chainFetchEnabled.value) {
+    ElMessage.warning('按学院链式拉取功能已关闭')
+    return
+  }
   if (!chainCollegeName.value.trim()) {
     ElMessage.warning('请输入学院名称')
     return
@@ -995,8 +1078,16 @@ async function handleChainFetch() {
 
     chainResult.value = res?.data || null
     await loadOverview()
-    await focusChainResultLocally(chainResult.value)
-    ElMessage.success('链式拉取完成，已切换到本地结果')
+    if ((chainResult.value?.status || 'SUCCESS') !== 'FAILED') {
+      await focusChainResultLocally(chainResult.value)
+    }
+    if (chainResult.value?.status === 'FAILED') {
+      ElMessage.error(chainResult.value?.errorMessage || '链式拉取失败，请查看诊断信息')
+    } else if (chainResult.value?.status === 'PARTIAL') {
+      ElMessage.warning(chainResult.value?.errorMessage || '链式拉取已完成，但存在异常')
+    } else {
+      ElMessage.success('链式拉取完成，已切换到本地结果')
+    }
   } catch (e) {
     console.error('链式拉取失败:', e)
     ElMessage.error(e?.message || '链式拉取失败')
@@ -1258,6 +1349,11 @@ function downloadCSV(csvContent, filename) {
 }
 
 onMounted(async () => {
+  try {
+    await loadFeatureToggles({ authenticated: true })
+  } catch {
+    // ignore toggle preload failure; route guard/cache will retry
+  }
   // overview 和首屏数据并行加载，减少等待时间
   const handledByRoute = await applyRouteContext()
   if (!handledByRoute) {
@@ -1646,6 +1742,72 @@ onMounted(async () => {
 .result-value {
   font-size: 16px;
   font-weight: 700;
+}
+
+.result-error {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.28);
+  border: 1px solid rgba(254, 202, 202, 0.28);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.result-issues {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.result-issues.warnings {
+  background: rgba(146, 64, 14, 0.22);
+  border-color: rgba(253, 186, 116, 0.22);
+}
+
+.result-issue-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.result-issue-item {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.result-issue-item + .result-issue-item {
+  margin-top: 6px;
+}
+
+.result-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.result-step-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.result-step-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.result-step-values {
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.95;
+  word-break: break-word;
 }
 
 .tab-note {

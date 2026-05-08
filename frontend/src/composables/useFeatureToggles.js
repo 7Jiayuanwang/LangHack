@@ -3,6 +3,7 @@ import { getFeatureToggles, getUserFeatureToggles, getPersonalFeatureToggles } f
 import featureToggleWS from '@/utils/featureToggleWebSocket'
 
 const CACHE_KEY = 'feature_toggles_cache_v1'
+const INVALIDATE_KEY = 'feature_toggles_cache_invalidate_v1'
 const TTL_MS = 2 * 60 * 1000 // 缩短缓存时间到2分钟，提高响应性
 
 const toggles = ref({})
@@ -10,6 +11,7 @@ let loaded = false
 let inflight = null
 let refreshTimer = null
 let changeListeners = new Set()
+let globalListenersBound = false
 
 const readCache = () => {
   try {
@@ -31,7 +33,58 @@ const writeCache = (data) => {
   }
 }
 
+const clearRuntimeState = () => {
+  try {
+    sessionStorage.removeItem(CACHE_KEY)
+  } catch {
+    // ignore storage failures
+  }
+  loaded = false
+  inflight = null
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+const broadcastInvalidation = (reason = 'manual') => {
+  if (typeof window === 'undefined') return
+  try {
+    const payload = JSON.stringify({ reason, ts: Date.now() })
+    localStorage.setItem(INVALIDATE_KEY, payload)
+    localStorage.removeItem(INVALIDATE_KEY)
+  } catch {
+    // ignore storage failures
+  }
+  window.dispatchEvent(new CustomEvent('feature-toggle-cache-invalidated', {
+    detail: { reason }
+  }))
+}
+
+const ensureGlobalListeners = () => {
+  if (globalListenersBound || typeof window === 'undefined') return
+  globalListenersBound = true
+
+  window.addEventListener('storage', (event) => {
+    if (event.key === INVALIDATE_KEY && event.newValue) {
+      clearRuntimeState()
+    }
+  })
+
+  window.addEventListener('feature-toggle-cache-invalidated', () => {
+    clearRuntimeState()
+  })
+}
+
+export function invalidateFeatureToggleCache(reason = 'manual', { broadcast = true } = {}) {
+  clearRuntimeState()
+  if (broadcast) {
+    broadcastInvalidation(reason)
+  }
+}
+
 export function useFeatureToggles() {
+  ensureGlobalListeners()
   // WebSocket监听器清理函数
   let wsCleanup = null
 
@@ -153,14 +206,7 @@ export function useFeatureToggles() {
   }
 
   const invalidate = () => {
-    try { sessionStorage.removeItem(CACHE_KEY) } catch { /* noop */ }
-    loaded = false
-    inflight = null
-    // 清除自动刷新定时器
-    if (refreshTimer) {
-      clearInterval(refreshTimer)
-      refreshTimer = null
-    }
+    invalidateFeatureToggleCache('local_invalidate', { broadcast: false })
   }
 
   // 启动自动刷新机制

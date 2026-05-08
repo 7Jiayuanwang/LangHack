@@ -346,6 +346,7 @@
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight } from '@element-plus/icons-vue'
+import { useFeatureToggles, invalidateFeatureToggleCache } from '@/composables/useFeatureToggles'
 import {
   getSystemConfig, updateSystemConfig,
   listAllTags, getUsersByTag, deleteTag, getUserTags, setUserTags,
@@ -354,6 +355,7 @@ import {
 } from '@/api/systemConfig'
 
 const activeTab = ref('global')
+const { load: loadFeatureToggleRuntime } = useFeatureToggles()
 
 watch(activeTab, (val) => {
   if (val === 'tags') loadAllTags()
@@ -446,6 +448,7 @@ const handleToggle = async (toggle, enabled) => {
   toggle.saving = true
   try {
     await updateSystemConfig([{ ...toggle, configValue: enabled ? 'true' : 'false' }])
+    await refreshFeatureToggleRuntime('global_toggle_updated')
     ElMessage.success(`${toggle.description} 已${enabled ? '启用' : '关闭'}`)
   } catch (e) {
     ElMessage.error('更新失败')
@@ -507,6 +510,7 @@ const removeUserFromTag = async (user) => {
     const currentTags = tagsRes?.code === 200 ? (tagsRes.data || []) : []
     const newTags = currentTags.filter(t => t !== selectedTag.value)
     await setUserTags(user.id, newTags)
+    await refreshFeatureToggleRuntime('user_removed_from_tag')
     ElMessage.success('已移除')
     await loadTagMembers(selectedTag.value)
   } catch (e) {
@@ -595,6 +599,7 @@ const saveUserTags = async () => {
   if (!tagUserId.value) return
   try {
     await setUserTags(tagUserId.value, currentUserTags.value)
+    await refreshFeatureToggleRuntime('user_tags_updated')
     ElMessage.success('标签已保存')
   } catch (e) {
     ElMessage.error('保存标签失败')
@@ -659,6 +664,7 @@ const saveOverride = async () => {
       enabled: f.enabled,
       description: f.description
     })
+    await refreshFeatureToggleRuntime('feature_override_upserted')
     ElMessage.success('保存成功')
     overrideDialogVisible.value = false
     if (f.scope === 'tag') loadTagOverrides()
@@ -674,11 +680,21 @@ const removeOverride = async (scope, row) => {
   try {
     await ElMessageBox.confirm(`确认删除该覆盖规则？`, '提示', { type: 'warning' })
     await deleteFeatureOverride(scope, row.scopeValue, row.featureKey)
+    await refreshFeatureToggleRuntime('feature_override_deleted')
     ElMessage.success('已删除')
     if (scope === 'tag') loadTagOverrides()
     else loadUserOverrides()
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('删除失败')
+  }
+}
+
+const refreshFeatureToggleRuntime = async (reason) => {
+  invalidateFeatureToggleCache(reason)
+  try {
+    await loadFeatureToggleRuntime({ authenticated: true, force: true })
+  } catch {
+    // fall back to lazy reload on next guarded navigation
   }
 }
 

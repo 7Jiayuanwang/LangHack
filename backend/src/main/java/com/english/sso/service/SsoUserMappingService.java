@@ -87,7 +87,7 @@ public class SsoUserMappingService {
      */
     @Transactional(rollbackFor = Exception.class)
     public SsoLoginResult processLogin(SsoUserInfo ssoUserInfo, SsoProtocolType protocol) {
-        String uid = normalizeIdentifier(ssoUserInfo.getSsoUsername());
+        String uid = resolveDirectoryUserId(ssoUserInfo);
         log.info("[SSO全链路] ① 登录入口: provider={}, ssoUserId={}, ssoUsername={}, realName={}",
                 ssoUserInfo.getProvider(), ssoUserInfo.getSsoUserId(), uid, ssoUserInfo.getRealName());
 
@@ -262,7 +262,8 @@ public class SsoUserMappingService {
         }
 
         // 2. 首次登录：检查 users 表是否已有同名用户（可能是之前注册或绑定丢失）
-        User existingUser = userService.getUserByUsername(ssoUserInfo.getSsoUsername());
+        String localUsername = resolveLocalUsername(ssoUserInfo);
+        User existingUser = userService.getUserByUsername(localUsername);
         if (existingUser != null) {
             log.info("用户已存在但无绑定，自动关联: userId={}, username={}", existingUser.getId(), existingUser.getUsername());
             if (isDisabledStatus(existingUser.getStatus())) {
@@ -318,7 +319,7 @@ public class SsoUserMappingService {
         if (autoGrantResult != null) {
             return autoGrantResult;
         }
-        log.info("[SSO全链路] ④ 自动授权未命中，进入原有流程: uid={}", normalizeIdentifier(ssoUserInfo.getSsoUsername()));
+        log.info("[SSO全链路] ④ 自动授权未命中，进入原有流程: uid={}", resolveDirectoryUserId(ssoUserInfo));
 
         // 3. 全新用户：自动识别角色
         if (ssoMappedRole == null) {
@@ -350,7 +351,7 @@ public class SsoUserMappingService {
         }
 
         // 5. 自动创建用户并绑定
-        log.info("自动创建用户: username={}, role={}", ssoUserInfo.getSsoUsername(), ssoMappedRole);
+        log.info("自动创建用户: username={}, role={}", localUsername, ssoMappedRole);
         User newUser = createUserFromSso(ssoUserInfo, ssoMappedRole);
         createBinding(newUser.getId(), ssoUserInfo, protocol, true);
 
@@ -377,7 +378,11 @@ public class SsoUserMappingService {
      */
     private User createUserFromSso(SsoUserInfo ssoInfo, String role) {
         User user = new User();
-        user.setUsername(normalizeIdentifier(ssoInfo.getSsoUsername()));
+        String localUsername = resolveLocalUsername(ssoInfo);
+        if (localUsername == null) {
+            throw new SsoBusinessException(SsoErrorCode.AUTH_FAILED, "无法解析可用于本地账户匹配的 userId");
+        }
+        user.setUsername(localUsername);
         user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString())); // 随机密码
         user.setEmail(ssoInfo.getEmail());
         user.setRealName(ssoInfo.getRealName());
@@ -400,7 +405,7 @@ public class SsoUserMappingService {
         binding.setUserId(userId);
         binding.setSsoProvider(ssoInfo.getProvider());
         binding.setSsoUserId(ssoInfo.getSsoUserId());
-        binding.setSsoUsername(ssoInfo.getSsoUsername());
+        binding.setSsoUsername(resolveLocalUsername(ssoInfo));
         binding.setSsoEmail(ssoInfo.getEmail());
         binding.setSsoRealName(ssoInfo.getRealName());
         binding.setSsoMemberOf(JSON.toJSONString(ssoInfo.getMemberOf()));
@@ -498,6 +503,31 @@ public class SsoUserMappingService {
         return firstNonBlank(value);
     }
 
+    private String resolveLocalUsername(SsoUserInfo ssoUserInfo) {
+        if (ssoUserInfo == null) {
+            return null;
+        }
+        return firstNonBlank(
+                resolveDirectoryUserId(ssoUserInfo),
+                normalizeIdentifier(ssoUserInfo.getSsoUsername()),
+                normalizeIdentifier(ssoUserInfo.getSsoUserId())
+        );
+    }
+
+    private String resolveDirectoryUserId(SsoUserInfo ssoUserInfo) {
+        if (ssoUserInfo == null) {
+            return null;
+        }
+        Map<String, Object> attrs = ssoUserInfo.getAttributes();
+        return firstNonBlank(
+                firstNonEmpty(attrs, "userId", "user_id", "uid", "username"),
+                firstNonEmpty(attrs, "employeeId", "employee_id", "teacherId", "teacher_id", "jobNumber", "job_number"),
+                firstNonEmpty(attrs, "studentId", "student_id"),
+                normalizeIdentifier(ssoUserInfo.getSsoUsername()),
+                normalizeIdentifier(ssoUserInfo.getSsoUserId())
+        );
+    }
+
     // =========================================================================
     // 链式主数据自动授权（school_student / school_teacher）
     // =========================================================================
@@ -510,13 +540,14 @@ public class SsoUserMappingService {
      *
      * 返回 SsoLoginResult 表示已处理；返回 null 表示跳过自动授权。
      */
+/*
     private SsoLoginResult tryAutoGrantFromSchoolDirectory(SsoUserInfo ssoUserInfo, SsoProtocolType protocol) {
         if (schoolStudentMapper == null && schoolTeacherMapper == null) {
             log.info("[SSO全链路] ③ 自动授权跳过: schoolStudentMapper={}, schoolTeacherMapper={}",
                     schoolStudentMapper != null, schoolTeacherMapper != null);
             return null;
         }
-        String uid = normalizeIdentifier(ssoUserInfo.getSsoUsername());
+        String uid = resolveDirectoryUserId(ssoUserInfo);
         if (uid == null) {
             log.warn("[SSO全链路] ③ 自动授权跳过: ssoUsername 为空");
             return null;
@@ -577,6 +608,79 @@ public class SsoUserMappingService {
         log.info("[SSO全链路] ③ 自动授权未命中: uid={}, 走原有流程", uid);
         return null;
     }
+     * 兼容常见字段名：class / className / classCode / major / majorName / department。
+     */
+    private SsoLoginResult tryAutoGrantFromSchoolDirectory(SsoUserInfo ssoUserInfo, SsoProtocolType protocol) {
+        if (schoolStudentMapper == null && schoolTeacherMapper == null) {
+            log.info("[SSO全链路] ③ 自动授权跳过: schoolStudentMapper={}, schoolTeacherMapper={}",
+                    schoolStudentMapper != null, schoolTeacherMapper != null);
+            return null;
+        }
+        String uid = resolveDirectoryUserId(ssoUserInfo);
+        if (uid == null) {
+            log.warn("[SSO全链路] ③ 自动授权跳过: 未解析到可用于目录匹配的 userId");
+            return null;
+        }
+
+        boolean teacherToggle = isFeatureEnabled("sso.auto_grant_teacher");
+        boolean studentToggle = isFeatureEnabled("sso.auto_grant_student");
+        log.info("[SSO全链路] ③ 自动授权检查: uid={}, teacherToggle={}, studentToggle={}",
+                uid, teacherToggle, studentToggle);
+
+        if (schoolTeacherMapper != null && teacherToggle) {
+            SchoolTeacher teacherDirectory = null;
+            try {
+                teacherDirectory = schoolTeacherMapper.selectByTeacherId(uid);
+            } catch (Exception e) {
+                log.warn("查询 school_teacher 失败 uid={}: {}", uid, e.getMessage());
+            }
+            log.info("[SSO全链路] ③ school_teacher 查询: uid={}, matched={}", uid, teacherDirectory != null);
+            if (teacherDirectory != null) {
+                log.info("school_teacher 命中，自动授权 TEACHER: uid={}, college={}",
+                        uid, teacherDirectory.getCollegeName());
+                if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
+                        && teacherDirectory.getTeacherName() != null) {
+                    ssoUserInfo.setRealName(teacherDirectory.getTeacherName());
+                }
+                User teacher = createUserFromSso(ssoUserInfo, "TEACHER");
+                SsoUserBinding binding = createBinding(teacher.getId(), ssoUserInfo, protocol, true);
+                String token = jwtUtil.generateToken(teacher.getUsername(), teacher.getRole());
+                log.info("SSO 自动授权 TEACHER 成功: username={}, bindingId={}",
+                        teacher.getUsername(), binding.getId());
+                return SsoLoginResult.success(token, teacher);
+            }
+        }
+
+        if (schoolStudentMapper != null && studentToggle) {
+            SchoolStudent studentDirectory = null;
+            try {
+                studentDirectory = schoolStudentMapper.selectByStudentId(uid);
+            } catch (Exception e) {
+                log.warn("查询 school_student 失败 uid={}: {}", uid, e.getMessage());
+            }
+            log.info("[SSO全链路] ③ school_student 查询: uid={}, matched={}", uid, studentDirectory != null);
+            if (studentDirectory != null) {
+                log.info("school_student 命中，自动授权 STUDENT: uid={}, college={}",
+                        uid, studentDirectory.getCollegeName());
+                backfillStudentClassInfo(uid, ssoUserInfo.getAttributes());
+                if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
+                        && studentDirectory.getStudentName() != null) {
+                    ssoUserInfo.setRealName(studentDirectory.getStudentName());
+                }
+                User student = createUserFromSso(ssoUserInfo, "STUDENT");
+                SsoUserBinding binding = createBinding(student.getId(), ssoUserInfo, protocol, true);
+                String token = jwtUtil.generateToken(student.getUsername(), student.getRole());
+                log.info("SSO 自动授权 STUDENT 成功: username={}, bindingId={}",
+                        student.getUsername(), binding.getId());
+                return SsoLoginResult.success(token, student);
+            }
+        }
+
+        log.info("[SSO全链路] ③ 自动授权未命中: uid={}, fallback=original-flow", uid);
+        return null;
+    }
+
+    /**
      * 兼容常见字段名：class / className / classCode / major / majorName / department。
      */
     private void backfillStudentClassInfo(String studentId, Map<String, Object> attributes) {

@@ -620,6 +620,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Refresh, Delete, RefreshLeft, Document, Setting, Timer, Clock, FolderOpened, CopyDocument, Coin, InfoFilled, Check } from '@element-plus/icons-vue'
+import { normalizeDownloadResponse, extractBlobErrorMessage, triggerBlobDownload } from '@/utils/blobDownload'
 import {
   getBackupList,
   createBackupApi,

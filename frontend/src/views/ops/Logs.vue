@@ -112,6 +112,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Download } from '@element-plus/icons-vue'
 import { getApplicationLogs, downloadApplicationLogs } from '@/api/ops'
+import { normalizeDownloadResponse, extractBlobErrorMessage, triggerBlobDownload } from '@/utils/blobDownload'
 
 const loading = ref(false)
 const downloading = ref(false)
@@ -151,6 +152,7 @@ const refreshLogs = async () => {
   try {
     const params = { limit: limit.value }
     if (filterLevel.value) params.level = filterLevel.value
+    if (searchText.value) params.keyword = searchText.value
     const res = await getApplicationLogs(params)
     if (res.code === 200) {
       entries.value = res.data.entries || []
@@ -191,6 +193,23 @@ const downloadLogs = async () => {
       params.startDate = dateRange.value[0]
       params.endDate = dateRange.value[1]
     }
+    const response = await downloadApplicationLogs(params)
+    const normalized = await normalizeDownloadResponse(
+      response,
+      `langhack-${new Date().toISOString().slice(0, 10)}.log`,
+      'text/plain;charset=utf-8'
+    )
+    if ((normalized.blob.type || '').includes('application/json')) {
+      ElMessage.error(await extractBlobErrorMessage(normalized.blob, '下载日志失败'))
+      return
+    }
+    if (normalized.blob.size === 0) {
+      ElMessage.error('下载日志失败：日志内容为空')
+      return
+    }
+    triggerBlobDownload(normalized.blob, normalized.filename)
+    ElMessage.success('日志下载成功')
+    return
     const res = await downloadApplicationLogs(params)
     const blob = new Blob([res.data], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)

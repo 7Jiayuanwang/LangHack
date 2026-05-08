@@ -388,10 +388,11 @@ public class MonitoringController {
     public ResponseEntity<ByteArrayResource> downloadAppLogs(
             @RequestParam(defaultValue = "2000") int limit,
             @RequestParam(required = false) String level,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate) {
         try {
-            List<Map<String, Object>> entries = inMemoryLogService.getRecentLogs(limit, level, null);
+            List<Map<String, Object>> entries = inMemoryLogService.getRecentLogs(limit, level, keyword);
             StringBuilder sb = new StringBuilder();
             for (Map<String, Object> entry : entries) {
                 String ts = (String) entry.get("timestamp");
@@ -410,7 +411,7 @@ public class MonitoringController {
             byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
             return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .contentType(MediaType.TEXT_PLAIN)
+                .contentType(MediaType.parseMediaType("text/plain;charset=UTF-8"))
                 .contentLength(bytes.length)
                 .body(new ByteArrayResource(bytes));
         } catch (Exception e) {

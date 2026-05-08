@@ -7,6 +7,7 @@ import com.english.entity.SyncLog;
 import com.english.service.FieldMappingService;
 import com.english.service.SchoolDataApiClient;
 import com.english.service.SchoolDataSyncService;
+import com.english.service.SystemConfigService;
 import com.english.service.SyncMonitorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,9 @@ public class SchoolDataSyncController {
 
     @Autowired
     private SyncMonitorService monitorService;
+
+    @Autowired(required = false)
+    private SystemConfigService systemConfigService;
 
     @Autowired
     private com.english.service.SchoolDataArchiveService archiveService;
@@ -164,6 +168,9 @@ public class SchoolDataSyncController {
             @RequestParam String collegeName,
             @RequestParam(defaultValue = "eq") String matchMode,
             @RequestParam(defaultValue = "true") boolean persist) {
+        if (!isChainFetchEnabled()) {
+            return Result.error("按学院链式拉取功能当前已关闭");
+        }
         logger.info("手动触发链式拉取: collegeName={}, matchMode={}, persist={}",
                 collegeName, matchMode, persist);
         try {
@@ -336,6 +343,19 @@ public class SchoolDataSyncController {
     /**
      * 获取当前操作人（简化实现，从Security上下文获取）
      */
+    private boolean isChainFetchEnabled() {
+        if (systemConfigService == null) {
+            return true;
+        }
+        try {
+            String value = systemConfigService.get("feature_toggle", "ops.school_data_chain_fetch", "true");
+            return "true".equalsIgnoreCase(value) || "1".equals(value);
+        } catch (Exception e) {
+            logger.warn("读取 ops.school_data_chain_fetch 失败，默认允许执行: {}", e.getMessage());
+            return true;
+        }
+    }
+
     private String getCurrentOperator() {
         try {
             org.springframework.security.core.Authentication auth =
