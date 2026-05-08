@@ -958,6 +958,11 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'
         printf 'MYSQL_REPLICATION_PASSWORD=%s_repl\n' "$CFG_DB_PASSWORD"
+        # 若应用用户不是 root，写入 MYSQL_APP_USER/PASSWORD 供 init-db.sh 自动创建
+        if [ "$CFG_DB_USERNAME" != "root" ]; then
+            printf 'MYSQL_APP_USER=%s\n'     "$CFG_DB_USERNAME"
+            printf 'MYSQL_APP_PASSWORD=%s\n' "$CFG_DB_PASSWORD"
+        fi
         printf 'DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
         printf 'DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
         printf 'DB_SLAVE_USERNAME=%s\n'  "$CFG_DB_USERNAME"

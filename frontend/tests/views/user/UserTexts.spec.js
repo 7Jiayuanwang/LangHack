@@ -74,7 +74,7 @@ describe('UserTexts.vue', () => {
     expect(wrapper.vm.uploadForm.title).toBe('')
     expect(wrapper.vm.uploadForm.content).toBe('')
     expect(wrapper.vm.uploadForm.difficulty).toBe('MEDIUM')
-    expect(wrapper.vm.uploadForm.tags).toBe('')
+    expect(wrapper.vm.uploadForm.tags).toEqual([])
   })
 
   it('initializes editForm with default values', () => {
@@ -83,7 +83,7 @@ describe('UserTexts.vue', () => {
     expect(wrapper.vm.editForm.title).toBe('')
     expect(wrapper.vm.editForm.content).toBe('')
     expect(wrapper.vm.editForm.difficulty).toBe('MEDIUM')
-    expect(wrapper.vm.editForm.tags).toBe('')
+    expect(wrapper.vm.editForm.tags).toEqual([])
   })
 
   it('initializes searchKeyword as empty string', () => {
@@ -175,7 +175,7 @@ describe('UserTexts.vue', () => {
     expect(wrapper.vm.editForm.title).toBe('Test Text')
     expect(wrapper.vm.editForm.content).toBe('Test content')
     expect(wrapper.vm.editForm.difficulty).toBe('HARD')
-    expect(wrapper.vm.editForm.tags).toBe('test, tag')
+    expect(wrapper.vm.editForm.tags).toEqual(['test', 'tag'])
   })
 
   it('editText opens edit dialog', () => {

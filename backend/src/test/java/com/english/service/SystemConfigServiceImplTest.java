@@ -40,7 +40,7 @@ class SystemConfigServiceImplTest {
 
         List<SystemConfig> result = service.listByGroup("feature_toggle");
 
-        assertEquals("学生端-仪表盘页", result.get(0).getDescription());
+        assertEquals("学生端-发现页", result.get(0).getDescription());
     }
 
     @Test
@@ -49,13 +49,13 @@ class SystemConfigServiceImplTest {
         config.setConfigGroup("feature_toggle");
         config.setConfigKey("page_dashboard");
         config.setConfigValue("true");
-        config.setDescription("学生端-仪表盘页");
+        config.setDescription("学生端-发现页");
 
         when(mapper.selectList(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(config));
 
         List<SystemConfig> result = service.listByGroup("feature_toggle");
 
-        assertEquals("学生端-仪表盘页", result.get(0).getDescription());
+        assertEquals("学生端-发现页", result.get(0).getDescription());
     }
 
     @Test

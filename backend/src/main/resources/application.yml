@@ -78,6 +78,8 @@ spring:
       maximum-pool-size: 120
       minimum-idle: 30
       connection-timeout: 30000
+      # -1 = do not fail startup if slave is unreachable; DynamicDataSource handles fallback
+      initialization-fail-timeout: -1
       idle-timeout: 600000
       max-lifetime: 1800000
       keepalive-time: 300000

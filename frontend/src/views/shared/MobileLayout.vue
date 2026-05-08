@@ -187,11 +187,13 @@ const theme = computed(() => THEME[props.role])
 
 const NAV_ITEMS = {
   teacher: [
-    { path: '/teacher/dashboard',   label: '首页', icon: DataBoard, badge: null },
-    { path: '/teacher/classes',     label: '班级', icon: School,    badge: null },
-    { path: '/teacher/assignments', label: '任务', icon: Edit,      badge: null },
-    { path: '/teacher/my-courses',  label: '授课', icon: Notebook,  badge: null },
-    { path: '/teacher/courses',     label: '课程', icon: Reading,   badge: null },
+    { path: '/teacher/dashboard',        label: '首页', icon: DataBoard, badge: null },
+    { path: '/teacher/classes',          label: '班级', icon: School,    badge: null },
+    { path: '/teacher/assignments',      label: '任务', icon: Edit,      badge: null },
+    { path: '/teacher/my-courses',       label: '授课', icon: Notebook,  badge: null },
+    { path: '/teacher/courses',          label: '课程', icon: Reading,   badge: null },
+    { path: '/teacher/my-students',      label: '学生', icon: User,      badge: null, featureKey: 'teacher.school_data_enabled' },
+    { path: '/teacher/my-schedule',      label: '课表', icon: DataBoard, badge: null, featureKey: 'teacher.school_data_enabled' },
   ],
   user: [
     { path: '/user',            label: '首页', icon: House,    badge: null },
@@ -220,8 +222,7 @@ const NAV_ITEMS = {
 
 const navItems = computed(() => {
   const items = NAV_ITEMS[props.role] || []
-  // ops / admin 均需根据功能开关过滤导航项（teacher / user 暂无 featureKey）
-  if (props.role === 'ops' || props.role === 'admin') {
+  if (props.role === 'ops' || props.role === 'admin' || props.role === 'teacher') {
     return items.filter(item => {
       if (!item.featureKey) return true
       const val = featureToggles.value[item.featureKey]
@@ -236,6 +237,7 @@ const MORE_ITEMS = {
   admin: [
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
+    { path: '/admin/texts',          label: '课文管理', icon: Document, featureKey: 'admin.texts' },
     { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },

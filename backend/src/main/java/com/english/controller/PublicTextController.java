@@ -51,6 +51,9 @@ public class PublicTextController {
     @Autowired
     private ContentTagService contentTagService;
 
+    @Autowired
+    private com.english.service.RecommendationService recommendationService;
+
     /**
      * 获取所有内容标签（公开接口，学生上传时使用）
      */
@@ -152,6 +155,38 @@ public class PublicTextController {
             }
 
             return Result.success(result);
+        } catch (Exception e) {
+            log.error("获取推荐文章失败", e);
+            return Result.error("获取推荐文章失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 个性化推荐文章
+     */
+    @GetMapping("/recommended")
+    public Result<List<Text>> getRecommendedTexts(
+            @RequestParam(defaultValue = "12") int count,
+            @RequestParam(required = false) String exclude) {
+        try {
+            count = Math.min(Math.max(count, 1), 50);
+
+            Long userId = getCurrentUserId();
+            if (userId == null) {
+                return Result.success(Collections.emptyList());
+            }
+
+            List<Long> excludeIds = new ArrayList<>();
+            if (exclude != null && !exclude.trim().isEmpty()) {
+                for (String s : exclude.split(",")) {
+                    try {
+                        excludeIds.add(Long.parseLong(s.trim()));
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+
+            List<Text> result = recommendationService.recommend(userId, count, excludeIds);
+            return Result.success(result != null ? result : Collections.emptyList());
         } catch (Exception e) {
             log.error("获取推荐文章失败", e);
             return Result.error("获取推荐文章失败，请稍后重试");

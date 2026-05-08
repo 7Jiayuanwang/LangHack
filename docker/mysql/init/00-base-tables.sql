@@ -307,3 +307,26 @@ INSERT INTO `users` (`username`, `password`, `role`, `real_name`, `status`, `del
 SELECT 'student', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.', 'STUDENT', '演示学生', 'ACTIVE', 0, NOW(), NOW()
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'student');
+
+-- ────────────────────────────────────────
+-- ECDICT 词典表（06-import-ecdict.sh 导入前必须存在）
+-- ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `ecdict_words` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `word` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '单词',
+  `phonetic` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '音标',
+  `definition` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '英文定义',
+  `translation` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '中文翻译',
+  `pos` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '词性',
+  `collins` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '柯林斯星级',
+  `oxford` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '牛津3000核心词汇标记',
+  `tag` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '标签',
+  `bnc` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'BNC词频',
+  `frq` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '当代语料库词频',
+  `exchange` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '时态复数等变换',
+  `created_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_word` (`word`),
+  KEY `idx_pos` (`pos`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='ECDICT词汇表';
