@@ -87,7 +87,9 @@ public class SsoUserMappingService {
      */
     @Transactional(rollbackFor = Exception.class)
     public SsoLoginResult processLogin(SsoUserInfo ssoUserInfo, SsoProtocolType protocol) {
-        log.info("处理 SSO 登录: provider={}, userId={}", ssoUserInfo.getProvider(), ssoUserInfo.getSsoUserId());
+        String uid = normalizeIdentifier(ssoUserInfo.getSsoUsername());
+        log.info("[SSO全链路] ① 登录入口: provider={}, ssoUserId={}, ssoUsername={}, realName={}",
+                ssoUserInfo.getProvider(), ssoUserInfo.getSsoUserId(), uid, ssoUserInfo.getRealName());
 
         // 1. 查找是否已有绑定
         SsoUserBinding binding = bindingMapper.findByProviderAndSsoUserId(
@@ -98,6 +100,7 @@ public class SsoUserMappingService {
         // 尝试从 SSO 信息映射角色
         List<String> memberOf = ssoUserInfo.getMemberOf() == null ? Collections.emptyList() : ssoUserInfo.getMemberOf();
         String ssoMappedRole = roleMappingService.mapRole(memberOf);
+        log.info("[SSO全链路] ② 角色映射: memberOf={}, ssoMappedRole={}", memberOf, ssoMappedRole);
 
         if (binding != null) {
             // 已绑定用户
@@ -315,6 +318,7 @@ public class SsoUserMappingService {
         if (autoGrantResult != null) {
             return autoGrantResult;
         }
+        log.info("[SSO全链路] ④ 自动授权未命中，进入原有流程: uid={}", normalizeIdentifier(ssoUserInfo.getSsoUsername()));
 
         // 3. 全新用户：自动识别角色
         if (ssoMappedRole == null) {
@@ -508,21 +512,30 @@ public class SsoUserMappingService {
      */
     private SsoLoginResult tryAutoGrantFromSchoolDirectory(SsoUserInfo ssoUserInfo, SsoProtocolType protocol) {
         if (schoolStudentMapper == null && schoolTeacherMapper == null) {
+            log.info("[SSO全链路] ③ 自动授权跳过: schoolStudentMapper={}, schoolTeacherMapper={}",
+                    schoolStudentMapper != null, schoolTeacherMapper != null);
             return null;
         }
         String uid = normalizeIdentifier(ssoUserInfo.getSsoUsername());
         if (uid == null) {
+            log.warn("[SSO全链路] ③ 自动授权跳过: ssoUsername 为空");
             return null;
         }
 
+        boolean teacherToggle = isFeatureEnabled("sso.auto_grant_teacher");
+        boolean studentToggle = isFeatureEnabled("sso.auto_grant_student");
+        log.info("[SSO全链路] ③ 自动授权检查: uid={}, teacher_toggle={}, student_toggle={}",
+                uid, teacherToggle, studentToggle);
+
         // 教师优先：工号查 school_teacher，避免教师被误判为学生
-        if (schoolTeacherMapper != null && isFeatureEnabled("sso.auto_grant_teacher")) {
+        if (schoolTeacherMapper != null && teacherToggle) {
             SchoolTeacher st = null;
             try {
                 st = schoolTeacherMapper.selectByTeacherId(uid);
             } catch (Exception e) {
                 log.warn("查询 school_teacher 失败 uid={}: {}", uid, e.getMessage());
             }
+            log.info("[SSO全链路] ③ school_teacher 查询: uid={}, 命中={}", uid, st != null);
             if (st != null) {
                 log.info("school_teacher 命中，自动授权 TEACHER: uid={}, college={}", uid, st.getCollegeName());
                 if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
@@ -538,13 +551,14 @@ public class SsoUserMappingService {
         }
 
         // 学生次之：学号查 school_student
-        if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
+        if (schoolStudentMapper != null && studentToggle) {
             SchoolStudent ss = null;
             try {
                 ss = schoolStudentMapper.selectByStudentId(uid);
             } catch (Exception e) {
                 log.warn("查询 school_student 失败 uid={}: {}", uid, e.getMessage());
             }
+            log.info("[SSO全链路] ③ school_student 查询: uid={}, 命中={}", uid, ss != null);
             if (ss != null) {
                 log.info("school_student 命中，自动授权 STUDENT: uid={}, college={}", uid, ss.getCollegeName());
                 backfillStudentClassInfo(uid, ssoUserInfo.getAttributes());
@@ -560,11 +574,9 @@ public class SsoUserMappingService {
             }
         }
 
+        log.info("[SSO全链路] ③ 自动授权未命中: uid={}, 走原有流程", uid);
         return null;
     }
-
-    /**
-     * 从 CAS attributes 中提取班级/专业并回填 school_student。
      * 兼容常见字段名：class / className / classCode / major / majorName / department。
      */
     private void backfillStudentClassInfo(String studentId, Map<String, Object> attributes) {

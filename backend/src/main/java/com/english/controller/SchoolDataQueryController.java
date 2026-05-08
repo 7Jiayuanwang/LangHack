@@ -12,10 +12,12 @@ import com.english.service.SchoolDataFieldMetadataService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,6 +44,7 @@ public class SchoolDataQueryController {
     @Autowired private SchoolTeacherMapper schoolTeacherMapper;
     @Autowired private TeacherStudentBindingMapper teacherStudentBindingMapper;
     @Autowired private SchoolDataFieldMetadataService fieldMetadataService;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     // =========================================================================
     // 行政班
@@ -245,22 +248,59 @@ public class SchoolDataQueryController {
 
     /**
      * GET /api/admin/school-data/overview
+     * 使用 information_schema 近似行数，毫秒级返回，避免全表 COUNT 阻塞页面。
      */
     @GetMapping("/overview")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Long>> getOverview() {
+        // 目标表名 → 前端 key 映射
+        Map<String, String> tableToKey = new LinkedHashMap<>();
+        tableToKey.put("administrative_class",    "administrative_class");
+        tableToKey.put("school_course",           "school_course");
+        tableToKey.put("teaching_class",          "teacher_courses");
+        tableToKey.put("course_schedule",         "course_schedule");
+        tableToKey.put("course_selection",        "course_selection");
+        tableToKey.put("level_exam_scores",       "level_exam_scores");
+        tableToKey.put("teaching_plans",          "teaching_plans");
+        tableToKey.put("student_schedule",        "student_schedule");
+        tableToKey.put("school_student",          "school_student");
+        tableToKey.put("school_teacher",          "school_teacher");
+        tableToKey.put("teacher_student_binding", "teacher_student_binding");
+
         Map<String, Long> overview = new LinkedHashMap<>();
-        overview.put("administrative_class", administrativeClassMapper.selectCount(null));
-        overview.put("school_course", schoolCourseMapper.selectCount(null));
-        overview.put("teacher_courses", teachingClassMapper.selectCount(null));
-        overview.put("course_schedule", courseScheduleMapper.selectCount(null));
-        overview.put("course_selection", courseSelectionMapper.selectCount(null));
-        overview.put("level_exam_scores", levelExamScoreMapper.selectCount(null));
-        overview.put("teaching_plans", teachingPlanMapper.selectCount(null));
-        overview.put("student_schedule", studentScheduleMapper.selectCount(null));
-        overview.put("school_student", schoolStudentMapper.selectCount(null));
-        overview.put("school_teacher", schoolTeacherMapper.selectCount(null));
-        overview.put("teacher_student_binding", teacherStudentBindingMapper.selectCount(null));
+        // 初始化为 0，防止某张表查不到时缺失 key
+        tableToKey.values().forEach(k -> overview.put(k, 0L));
+
+        try {
+            String inClause = tableToKey.keySet().stream()
+                    .map(t -> "'" + t + "'")
+                    .collect(java.util.stream.Collectors.joining(","));
+            String sql = "SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES " +
+                         "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (" + inClause + ")";
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+            for (Map<String, Object> row : rows) {
+                String tableName = (String) row.get("TABLE_NAME");
+                Object rowsObj = row.get("TABLE_ROWS");
+                long count = rowsObj == null ? 0L : ((Number) rowsObj).longValue();
+                String key = tableToKey.get(tableName);
+                if (key != null) {
+                    overview.put(key, count);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("information_schema 查询失败，降级为精确 COUNT: {}", e.getMessage());
+            overview.put("administrative_class",    administrativeClassMapper.selectCount(null));
+            overview.put("school_course",           schoolCourseMapper.selectCount(null));
+            overview.put("teacher_courses",         teachingClassMapper.selectCount(null));
+            overview.put("course_schedule",         courseScheduleMapper.selectCount(null));
+            overview.put("course_selection",        courseSelectionMapper.selectCount(null));
+            overview.put("level_exam_scores",       levelExamScoreMapper.selectCount(null));
+            overview.put("teaching_plans",          teachingPlanMapper.selectCount(null));
+            overview.put("student_schedule",        studentScheduleMapper.selectCount(null));
+            overview.put("school_student",          schoolStudentMapper.selectCount(null));
+            overview.put("school_teacher",          schoolTeacherMapper.selectCount(null));
+            overview.put("teacher_student_binding", teacherStudentBindingMapper.selectCount(null));
+        }
         return Result.success(overview);
     }
 

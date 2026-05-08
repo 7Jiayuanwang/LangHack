@@ -192,7 +192,7 @@ const downloadLogs = async () => {
       params.endDate = dateRange.value[1]
     }
     const res = await downloadApplicationLogs(params)
-    const blob = new Blob([res], { type: 'text/plain' })
+    const blob = new Blob([res.data], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

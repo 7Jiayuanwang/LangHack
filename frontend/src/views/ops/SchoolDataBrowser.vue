@@ -1258,11 +1258,15 @@ function downloadCSV(csvContent, filename) {
 }
 
 onMounted(async () => {
-  await loadOverview()
+  // overview 和首屏数据并行加载，减少等待时间
   const handledByRoute = await applyRouteContext()
   if (!handledByRoute) {
-    await loadFilterFields()
-    await loadData()
+    await Promise.all([
+      loadOverview(),
+      loadFilterFields().then(() => loadData())
+    ])
+  } else {
+    loadOverview()
   }
 })
 </script>
