@@ -7,6 +7,12 @@ ARG VITE_API_BASE_URL
 ARG VITE_TUTOR_API_BASE_URL
 ARG VITE_ADMIN_LOGIN_SECRET
 ARG VITE_ADMIN_PORTAL_PATH
+# 内网构建镜像源（留空=使用官方源；内网填入 Nexus npm 代理地址）
+# 示例: http://172.20.14.249:8081/repository/npm-proxy/
+ARG NPM_REGISTRY=
+# Alpine 内网镜像源（留空=使用官方源；内网填入 Nexus Alpine 代理地址）
+# 示例: http://172.20.14.249:8081/repository/alpine-proxy/
+ARG ALPINE_MIRROR=
 
 # Set environment variables for the build process
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
@@ -20,7 +26,11 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies (including devDependencies for vite build)
-RUN npm ci --include=dev
+# 内网构建时通过 NPM_REGISTRY 参数指向内网 Nexus npm 代理仓库
+RUN if [ -n "$NPM_REGISTRY" ]; then \
+        npm config set registry "$NPM_REGISTRY"; \
+    fi && \
+    npm ci --include=dev
 
 # Copy source code
 COPY . .

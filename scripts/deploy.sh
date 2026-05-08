@@ -898,6 +898,37 @@ if [ "$SKIP_ENV" = false ]; then
     CFG_IMAGE_REGISTRY_PREFIX=""
 
     echo ""
+    echo "  [ 构建网络环境 ]"
+    echo "  决定 Docker 构建阶段如何下载依赖（npm 包、Maven 包、Alpine apk）"
+    DEF_BUILD_ENV=$(load_env_value "BUILD_NETWORK_ENV" "public")
+    case "${DEF_BUILD_ENV,,}" in
+        intranet|local) BUILD_ENV_DEFAULT_IDX=2 ;;
+        *) BUILD_ENV_DEFAULT_IDX=1 ;;
+    esac
+    ask_choice "构建网络环境:" "公网构建 (依赖从公网 npm/Maven Central 下载)|内网构建 (依赖从内网 Nexus 代理下载)" BUILD_ENV_CHOICE "$BUILD_ENV_DEFAULT_IDX"
+    CFG_NPM_REGISTRY=""
+    CFG_MAVEN_MIRROR_URL=""
+    CFG_ALPINE_MIRROR=""
+    CFG_BUILD_NETWORK_ENV="public"
+    if [ "$BUILD_ENV_CHOICE" = "2" ]; then
+        CFG_BUILD_NETWORK_ENV="intranet"
+        echo ""
+        echo "  [提示] 内网 Nexus 通常为 http://172.20.14.249:8081（或实际内网地址）"
+        echo "  [提示] 留空则该依赖类型仍走公网（可按需只配其中几项）"
+        echo ""
+        DEF_NPM=$(load_env_value "NPM_REGISTRY" "")
+        [ -z "$DEF_NPM" ] && DEF_NPM=$(load_env_value "LOCAL_REGISTRY" "" | sed 's/:[0-9]*//' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1 | awk '{print "http://"$1":8081/repository/npm-proxy/"}')
+        ask_value "npm 内网镜像源 URL (留空跳过)" "$(load_env_value "NPM_REGISTRY" "${DEF_NPM:-http://172.20.14.249:8081/repository/npm-proxy/}")" CFG_NPM_REGISTRY
+        ask_value "Maven 内网镜像源 URL (留空跳过)" "$(load_env_value "MAVEN_MIRROR_URL" "http://172.20.14.249:8081/repository/maven-public/")" CFG_MAVEN_MIRROR_URL
+        ask_value "Alpine apk 内网镜像源 URL (留空跳过)" "$(load_env_value "ALPINE_MIRROR" "http://172.20.14.249:8081/repository/alpine-proxy/")" CFG_ALPINE_MIRROR
+        echo ""
+        echo "  [配置汇总]"
+        [ -n "$CFG_NPM_REGISTRY" ]     && echo "    npm      → $CFG_NPM_REGISTRY"     || echo "    npm      → (跳过，使用公网)"
+        [ -n "$CFG_MAVEN_MIRROR_URL" ] && echo "    Maven    → $CFG_MAVEN_MIRROR_URL" || echo "    Maven    → (跳过，使用公网)"
+        [ -n "$CFG_ALPINE_MIRROR" ]    && echo "    Alpine   → $CFG_ALPINE_MIRROR"    || echo "    Alpine   → (跳过，使用公网)"
+    fi
+
+    echo ""
     echo "  [ 备份 ]"
     ask_yn "启用自动备份？" "y" CFG_BACKUP_YN
     CFG_BACKUP_ENABLED="false"
@@ -975,6 +1006,10 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'LOCAL_REGISTRY=%s\n' "${CFG_LOCAL_REGISTRY:-localhost:5000}"
         printf 'IMAGE_REGISTRY_PREFIX=%s\n' "${CFG_IMAGE_REGISTRY_PREFIX:-}"
         printf 'PUBLIC_IMAGE_PROBE=%s\n' "${CFG_PUBLIC_IMAGE_PROBE:-node:20-alpine}"
+        printf 'BUILD_NETWORK_ENV=%s\n' "${CFG_BUILD_NETWORK_ENV:-public}"
+        [ -n "${CFG_NPM_REGISTRY:-}" ]     && printf 'NPM_REGISTRY=%s\n'     "$CFG_NPM_REGISTRY"     || printf '# NPM_REGISTRY=\n'
+        [ -n "${CFG_MAVEN_MIRROR_URL:-}" ] && printf 'MAVEN_MIRROR_URL=%s\n' "$CFG_MAVEN_MIRROR_URL" || printf '# MAVEN_MIRROR_URL=\n'
+        [ -n "${CFG_ALPINE_MIRROR:-}" ]    && printf 'ALPINE_MIRROR=%s\n'    "$CFG_ALPINE_MIRROR"    || printf '# ALPINE_MIRROR=\n'
         printf 'BACKUP_ENABLED=%s\n'     "$CFG_BACKUP_ENABLED"
         printf 'BACKUP_DIR=%s\n'         "$CFG_BACKUP_DIR"
         printf 'BACKUP_RETENTION_DAYS=%s\n' "$CFG_BACKUP_RETENTION"
@@ -1112,6 +1147,18 @@ else
     echo "  自动更新: 未启用"
 fi
 echo "  Docker 镜像源: ${RESOLVED_IMAGE_SOURCE_LABEL:-$(load_env_value "IMAGE_REGISTRY_PREFIX" "" "$ENV_FILE")}"
+_build_env_label="${CFG_BUILD_NETWORK_ENV:-$(load_env_value "BUILD_NETWORK_ENV" "public" "$ENV_FILE")}"
+if [ "${_build_env_label}" = "intranet" ]; then
+    echo "  构建网络: 内网 (Nexus 代理)"
+    _npm=$([ -n "${CFG_NPM_REGISTRY:-}" ] && echo "$CFG_NPM_REGISTRY" || load_env_value "NPM_REGISTRY" "" "$ENV_FILE")
+    _mvn=$([ -n "${CFG_MAVEN_MIRROR_URL:-}" ] && echo "$CFG_MAVEN_MIRROR_URL" || load_env_value "MAVEN_MIRROR_URL" "" "$ENV_FILE")
+    _apk=$([ -n "${CFG_ALPINE_MIRROR:-}" ] && echo "$CFG_ALPINE_MIRROR" || load_env_value "ALPINE_MIRROR" "" "$ENV_FILE")
+    [ -n "$_npm" ] && echo "    npm    → $_npm" || echo "    npm    → (公网)"
+    [ -n "$_mvn" ] && echo "    Maven  → $_mvn" || echo "    Maven  → (公网)"
+    [ -n "$_apk" ] && echo "    Alpine → $_apk" || echo "    Alpine → (公网)"
+else
+    echo "  构建网络: 公网"
+fi
 if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
     echo "  SSO: 已启用 (${CFG_SSO_SERVER_URL})"
     echo "  应用地址 (APP_BASE_URL): ${CFG_APP_BASE_URL}"
