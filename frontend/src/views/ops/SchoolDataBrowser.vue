@@ -752,15 +752,13 @@ async function loadData(showProgress = true) {
   } catch (e) {
     console.error('获取数据失败:', e)
     if (showProgress) {
-      // 只有在真正失败时才显示错误
       if (tableData.value.length === 0) {
         completeProgress(false)
       } else {
-        completeProgress(true)  // 数据已加载，视为成功
+        completeProgress(true)
       }
     }
-    tableData.value = []
-    total.value = 0
+    // 保留已有数据，不清空，避免网络抖动导致表格闪空
   } finally {
     loading.value = false
   }

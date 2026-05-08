@@ -4,6 +4,9 @@
       <div class="header-content">
         <h2>日志管理</h2>
         <div class="actions">
+          <el-tag v-if="autoRefresh" type="success" size="small" class="poll-tag">
+            实时刷新 (5s)
+          </el-tag>
           <el-button type="primary" @click="refreshLogs" :loading="loading">
             <el-icon><Refresh /></el-icon>
             刷新
@@ -75,17 +78,17 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-checkbox v-model="autoScroll">自动滚动到底部</el-checkbox>
+          <el-checkbox v-model="autoRefresh" @change="toggleAutoRefresh">自动刷新 (5s)</el-checkbox>
         </el-form-item>
       </el-form>
     </el-card>
 
     <el-card class="logs-card">
       <div class="logs-header">
-        <span>日志内容 ({{ filteredEntries.length }} 条)</span>
+        <span>日志内容 ({{ filteredEntries.length }} 条，最新在前)</span>
         <span class="timestamp" v-if="lastUpdate">最后更新: {{ lastUpdate }}</span>
       </div>
-      <div class="logs-content" ref="logsContent">
+      <div class="logs-content">
         <div
           v-for="(entry, index) in filteredEntries"
           :key="index"
@@ -105,7 +108,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Download } from '@element-plus/icons-vue'
 import { getApplicationLogs, downloadApplicationLogs } from '@/api/ops'
@@ -118,10 +121,11 @@ const filterLevel = ref('')
 const limit = ref(500)
 const searchText = ref('')
 const dateRange = ref(null)
-const autoScroll = ref(true)
+const autoRefresh = ref(true)
 const lastUpdate = ref('')
-const logsContent = ref(null)
+let pollTimer = null
 
+// 后端已按 descendingIterator 返回（最新在前），前端直接渲染即可
 const filteredEntries = computed(() => {
   let list = entries.value
   if (searchText.value) {
@@ -152,10 +156,6 @@ const refreshLogs = async () => {
       entries.value = res.data.entries || []
       levelCounts.value = res.data.levelCounts || {}
       lastUpdate.value = new Date().toLocaleTimeString()
-      if (autoScroll.value) {
-        await nextTick()
-        if (logsContent.value) logsContent.value.scrollTop = logsContent.value.scrollHeight
-      }
     } else {
       ElMessage.error(res.message || '获取日志失败')
     }
@@ -164,6 +164,22 @@ const refreshLogs = async () => {
   } finally {
     loading.value = false
   }
+}
+
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(() => {
+    if (autoRefresh.value && !loading.value) refreshLogs()
+  }, 5000)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+
+function toggleAutoRefresh() {
+  if (autoRefresh.value) startPolling()
+  else stopPolling()
 }
 
 const downloadLogs = async () => {
@@ -193,7 +209,12 @@ const downloadLogs = async () => {
   }
 }
 
-onMounted(refreshLogs)
+onMounted(async () => {
+  await refreshLogs()
+  startPolling()
+})
+
+onUnmounted(stopPolling)
 </script>
 
 <style scoped>
@@ -213,7 +234,9 @@ onMounted(refreshLogs)
 
 .header-content h2 { margin: 0; font-size: 24px; }
 
-.actions { display: flex; gap: 10px; }
+.actions { display: flex; gap: 10px; align-items: center; }
+
+.poll-tag { font-size: 11px; }
 
 .stats-card { margin-bottom: 20px; }
 
