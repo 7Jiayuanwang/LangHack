@@ -11,7 +11,7 @@ ARG VITE_ADMIN_PORTAL_PATH
 # 示例: http://172.20.14.249:8081/repository/npm-proxy/
 ARG NPM_REGISTRY=
 # Alpine 内网镜像源（留空=使用官方源；内网填入 Nexus Alpine 代理地址）
-# 示例: http://172.20.14.249:8081/repository/alpine-proxy/
+# 示例: http://172.20.14.249:8081/repository/alpine-mirror/
 ARG ALPINE_MIRROR=
 
 # Set environment variables for the build process
@@ -27,10 +27,7 @@ COPY package*.json ./
 
 # Install all dependencies (including devDependencies for vite build)
 # 内网构建时通过 NPM_REGISTRY 参数指向内网 Nexus npm 代理仓库
-RUN if [ -n "$NPM_REGISTRY" ]; then \
-        npm config set registry "$NPM_REGISTRY"; \
-    fi && \
-    npm ci --include=dev
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi && npm ci --include=dev
 
 # Copy source code
 COPY . .
