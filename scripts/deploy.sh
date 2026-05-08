@@ -1321,46 +1321,16 @@ BUILD_ONLY=false
 case $BUILD_MODE in
     1)
         echo "[INFO] 全量构建（可能需要 5-15 分钟，请耐心等待）..."
-        BUILD_LOG="/tmp/langhack-deploy-build-$$.log"
         if [ -n "$SVCS" ]; then
-            docker compose build --no-cache $SVCS > "$BUILD_LOG" 2>&1 &
+            docker compose build --no-cache $SVCS
         else
-            docker compose build --no-cache > "$BUILD_LOG" 2>&1 &
+            docker compose build --no-cache
         fi
-        BUILD_PID=$!
-
-        # 监控构建进程，每 30 秒输出心跳
-        BUILD_TIMEOUT=1800  # 30 分钟超时
-        BUILD_ELAPSED=0
-        while kill -0 "$BUILD_PID" 2>/dev/null; do
-            sleep 30
-            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
-            printf "  构建进行中... (已耗时 %dm%ds)\r" $((BUILD_ELAPSED / 60)) $((BUILD_ELAPSED % 60))
-
-            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
-                echo ""
-                echo "[ERROR] 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
-                kill "$BUILD_PID" 2>/dev/null || true
-                wait "$BUILD_PID" 2>/dev/null || true
-                echo "[ERROR] 构建日志（最后 100 行）："
-                tail -100 "$BUILD_LOG" | sed 's/^/         /'
-                rm -f "$BUILD_LOG"
-                exit 1
-            fi
-        done
-        echo ""
-
-        wait "$BUILD_PID"
-        BUILD_EXIT=$?
-        if [ $BUILD_EXIT -ne 0 ]; then
-            echo "[ERROR] 构建失败（退出码: $BUILD_EXIT）"
-            echo "[ERROR] 构建日志（最后 100 行）："
-            tail -100 "$BUILD_LOG" | sed 's/^/         /'
-            rm -f "$BUILD_LOG"
+        if [ $? -ne 0 ]; then
+            echo "[ERROR] 构建失败"
             exit 1
         fi
-        rm -f "$BUILD_LOG"
-        echo "[OK] 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
+        echo "[OK] 构建完成 ✓"
         ;;
     2)
         echo "[INFO] 增量构建..."
