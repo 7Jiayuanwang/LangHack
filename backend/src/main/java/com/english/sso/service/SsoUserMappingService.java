@@ -421,14 +421,14 @@ public class SsoUserMappingService {
             return new RoleUpgradeResult(false);
         }
 
-        if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
-            SchoolStudent student = schoolStudentMapper.selectByStudentId(username);
-            if (student != null && isRoleUpgrade(user.getRole(), "STUDENT")) {
-                backfillStudentClassInfo(username, ssoUserInfo.getAttributes());
-                if ((user.getRealName() == null || user.getRealName().isEmpty()) && student.getStudentName() != null) {
-                    user.setRealName(student.getStudentName());
+        // 教师优先：工号查 school_teacher，避免教师被误判为学生
+        if (schoolTeacherMapper != null && isFeatureEnabled("sso.auto_grant_teacher")) {
+            SchoolTeacher teacher = schoolTeacherMapper.selectByTeacherId(username);
+            if (teacher != null && isRoleUpgrade(user.getRole(), "TEACHER")) {
+                if ((user.getRealName() == null || user.getRealName().isEmpty()) && teacher.getTeacherName() != null) {
+                    user.setRealName(teacher.getTeacherName());
                 }
-                user.setRole("STUDENT");
+                user.setRole("TEACHER");
                 user.setStatus("ACTIVE");
                 userService.updateUser(user);
                 if (binding != null) {
@@ -440,13 +440,14 @@ public class SsoUserMappingService {
             }
         }
 
-        if (schoolTeacherMapper != null && isFeatureEnabled("sso.auto_grant_teacher")) {
-            SchoolTeacher teacher = schoolTeacherMapper.selectByTeacherId(username);
-            if (teacher != null && isRoleUpgrade(user.getRole(), "TEACHER")) {
-                if ((user.getRealName() == null || user.getRealName().isEmpty()) && teacher.getTeacherName() != null) {
-                    user.setRealName(teacher.getTeacherName());
+        if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
+            SchoolStudent student = schoolStudentMapper.selectByStudentId(username);
+            if (student != null && isRoleUpgrade(user.getRole(), "STUDENT")) {
+                backfillStudentClassInfo(username, ssoUserInfo.getAttributes());
+                if ((user.getRealName() == null || user.getRealName().isEmpty()) && student.getStudentName() != null) {
+                    user.setRealName(student.getStudentName());
                 }
-                user.setRole("TEACHER");
+                user.setRole("STUDENT");
                 user.setStatus("ACTIVE");
                 userService.updateUser(user);
                 if (binding != null) {
@@ -514,32 +515,7 @@ public class SsoUserMappingService {
             return null;
         }
 
-        // student 优先
-        if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
-            SchoolStudent ss = null;
-            try {
-                ss = schoolStudentMapper.selectByStudentId(uid);
-            } catch (Exception e) {
-                log.warn("查询 school_student 失败 uid={}: {}", uid, e.getMessage());
-            }
-            if (ss != null) {
-                log.info("school_student 命中，自动授权 STUDENT: uid={}, college={}", uid, ss.getCollegeName());
-                // 回填 class 信息（若 CAS attributes 提供）
-                backfillStudentClassInfo(uid, ssoUserInfo.getAttributes());
-                // 学生姓名优先使用 school_student，其次 CAS realName
-                if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
-                        && ss.getStudentName() != null) {
-                    ssoUserInfo.setRealName(ss.getStudentName());
-                }
-                User student = createUserFromSso(ssoUserInfo, "STUDENT");
-                SsoUserBinding binding = createBinding(student.getId(), ssoUserInfo, protocol, true);
-                String token = jwtUtil.generateToken(student.getUsername(), student.getRole());
-                log.info("SSO 自动授权 STUDENT 成功: username={}, bindingId={}", student.getUsername(), binding.getId());
-                return SsoLoginResult.success(token, student);
-            }
-        }
-
-        // teacher 次之
+        // 教师优先：工号查 school_teacher，避免教师被误判为学生
         if (schoolTeacherMapper != null && isFeatureEnabled("sso.auto_grant_teacher")) {
             SchoolTeacher st = null;
             try {
@@ -558,6 +534,29 @@ public class SsoUserMappingService {
                 String token = jwtUtil.generateToken(teacher.getUsername(), teacher.getRole());
                 log.info("SSO 自动授权 TEACHER 成功: username={}, bindingId={}", teacher.getUsername(), binding.getId());
                 return SsoLoginResult.success(token, teacher);
+            }
+        }
+
+        // 学生次之：学号查 school_student
+        if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
+            SchoolStudent ss = null;
+            try {
+                ss = schoolStudentMapper.selectByStudentId(uid);
+            } catch (Exception e) {
+                log.warn("查询 school_student 失败 uid={}: {}", uid, e.getMessage());
+            }
+            if (ss != null) {
+                log.info("school_student 命中，自动授权 STUDENT: uid={}, college={}", uid, ss.getCollegeName());
+                backfillStudentClassInfo(uid, ssoUserInfo.getAttributes());
+                if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
+                        && ss.getStudentName() != null) {
+                    ssoUserInfo.setRealName(ss.getStudentName());
+                }
+                User student = createUserFromSso(ssoUserInfo, "STUDENT");
+                SsoUserBinding binding = createBinding(student.getId(), ssoUserInfo, protocol, true);
+                String token = jwtUtil.generateToken(student.getUsername(), student.getRole());
+                log.info("SSO 自动授权 STUDENT 成功: username={}, bindingId={}", student.getUsername(), binding.getId());
+                return SsoLoginResult.success(token, student);
             }
         }
 
