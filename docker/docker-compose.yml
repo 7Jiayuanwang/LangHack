@@ -66,7 +66,8 @@ services:
       # 03-import-backup.sh 自动选取最新全量备份（排除 pre-update_* 增量文件）
       - ../database:/docker-entrypoint-initdb.d/seed:ro
       - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
-      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/opt/langhack/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sh:/docker-entrypoint-initdb.d/04-apply-all-migrations.sh:ro
       - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
       - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
       - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
@@ -130,7 +131,8 @@ services:
       # 不需要 seed/seed-backups/ecdict.csv（数据来自主库 mysqldump）
       - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
-      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/opt/langhack/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sh:/docker-entrypoint-initdb.d/04-apply-all-migrations.sh:ro
       - ./mysql/init/08-v16-school-tables.sql:/docker-entrypoint-initdb.d/08-v16-school-tables.sql:ro
       # 复制初始化标记 + 实际初始化脚本
       - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/07-create-replication-marker.sh:ro

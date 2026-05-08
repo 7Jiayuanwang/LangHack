@@ -1,7 +1,7 @@
 -- Auto-generated from backend/src/main/resources/db/migration/V*.sql
 -- Do not edit by hand; update Flyway migrations and regenerate.
-
-DELIMITER $$
+-- NOTE: 此文件使用 $$ 作为存储过程分隔符，必须通过 04-apply-all-migrations.sh 执行
+--       不可直接 source，否则 DELIMITER 命令报错
 
 -- V0__base_tables.sql
 
@@ -2652,5 +2652,3 @@ INSERT IGNORE INTO `content_tags` (`name`, `color`, `sort_order`) VALUES
     ('文学小说', '#9B59B6', 6);
 
 -- ════════════════════════════════════════════════════════════════
-
-DELIMITER ;
