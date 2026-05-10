@@ -38,40 +38,68 @@ public class InMemoryLogService {
         context.getLogger(Logger.ROOT_LOGGER_NAME).addAppender(appender);
     }
 
-    /**
-     * Get recent log entries.
-     *
-     * @param limit     max entries to return (default 200)
-     * @param level     filter by level (INFO, WARN, ERROR), null for all
-     * @param keyword   filter by message keyword, null for all
-     * @return list of log entries (newest first)
-     */
-    public List<Map<String, Object>> getRecentLogs(int limit, String level, String keyword) {
-        if (limit <= 0 || limit > MAX_ENTRIES) limit = 200;
-
-        List<Map<String, Object>> result = new ArrayList<>();
-        Iterator<Map<String, Object>> it = buffer.descendingIterator();
-        while (it.hasNext() && result.size() < limit) {
-            Map<String, Object> entry = it.next();
-            if (level != null && !level.isEmpty()) {
-                if (!level.equalsIgnoreCase((String) entry.get("level"))) continue;
-            }
-            if (keyword != null && !keyword.isEmpty()) {
-                String msg = (String) entry.get("message");
-                String logger = (String) entry.get("logger");
-                if ((msg == null || !msg.toLowerCase().contains(keyword.toLowerCase()))
-                        && (logger == null || !logger.toLowerCase().contains(keyword.toLowerCase()))) {
-                    continue;
-                }
-            }
-            result.add(entry);
+    public static class LogQueryResult {
+        public final List<Map<String, Object>> entries;
+        public final Map<String, Long> levelCounts;
+        LogQueryResult(List<Map<String, Object>> entries, Map<String, Long> levelCounts) {
+            this.entries = entries;
+            this.levelCounts = levelCounts;
         }
-        return result;
     }
 
     /**
-     * Get log level distribution summary.
+     * Single-pass query: returns filtered entries (newest first) and full-buffer
+     * level counts in one iteration, avoiding two separate traversals.
+     *
+     * @param limit   max entries to return (capped at MAX_ENTRIES)
+     * @param level   filter by level (INFO/WARN/ERROR), null for all
+     * @param keyword filter by message/logger keyword, null for all
      */
+    public LogQueryResult query(int limit, String level, String keyword) {
+        if (limit <= 0 || limit > MAX_ENTRIES) limit = 200;
+
+        // Snapshot the deque once to avoid concurrent modification during iteration
+        Object[] snapshot = buffer.toArray();
+
+        Map<String, Long> counts = new LinkedHashMap<>();
+        counts.put("ERROR", 0L);
+        counts.put("WARN", 0L);
+        counts.put("INFO", 0L);
+        counts.put("DEBUG", 0L);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        String levelUpper = (level != null && !level.isEmpty()) ? level.toUpperCase() : null;
+        String kwLower = (keyword != null && !keyword.isEmpty()) ? keyword.toLowerCase() : null;
+
+        // Traverse newest-first (reverse of insertion order)
+        for (int i = snapshot.length - 1; i >= 0; i--) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> entry = (Map<String, Object>) snapshot[i];
+            String lvl = (String) entry.get("level");
+            counts.merge(lvl, 1L, Long::sum);
+
+            if (result.size() < limit) {
+                if (levelUpper != null && !levelUpper.equalsIgnoreCase(lvl)) continue;
+                if (kwLower != null) {
+                    String msg = (String) entry.get("message");
+                    String logger = (String) entry.get("logger");
+                    if ((msg == null || !msg.toLowerCase().contains(kwLower))
+                            && (logger == null || !logger.toLowerCase().contains(kwLower))) {
+                        continue;
+                    }
+                }
+                result.add(entry);
+            }
+        }
+        return new LogQueryResult(result, counts);
+    }
+
+    /** @deprecated Use {@link #query} instead to avoid double traversal. */
+    public List<Map<String, Object>> getRecentLogs(int limit, String level, String keyword) {
+        return query(limit, level, keyword).entries;
+    }
+
+    /** @deprecated Use {@link #query} instead to avoid double traversal. */
     public Map<String, Long> getLevelCounts() {
         Map<String, Long> counts = new LinkedHashMap<>();
         counts.put("ERROR", 0L);

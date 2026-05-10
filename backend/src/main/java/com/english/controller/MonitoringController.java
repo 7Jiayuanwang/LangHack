@@ -374,9 +374,10 @@ public class MonitoringController {
             @RequestParam(required = false) String level,
             @RequestParam(required = false) String keyword) {
         try {
+            InMemoryLogService.LogQueryResult result = inMemoryLogService.query(limit, level, keyword);
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("entries", inMemoryLogService.getRecentLogs(limit, level, keyword));
-            data.put("levelCounts", inMemoryLogService.getLevelCounts());
+            data.put("entries", result.entries);
+            data.put("levelCounts", result.levelCounts);
             return Result.success(data);
         } catch (Exception e) {
             logger.error("获取应用日志失败", e);
