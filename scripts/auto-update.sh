@@ -106,6 +106,42 @@ if [ -f "$ENV_FILE" ]; then
     done < "$ENV_FILE"
 fi
 
+# ── .env 配置校验与自动修复 ────────────────────────────
+# 代码更新后，部分配置项的默认值可能已变更（如镜像源地址重命名）
+# 此函数自动修正 .env 中的过时值，无需用户手动干预
+fix_env_outdated_values() {
+    [ ! -f "$ENV_FILE" ] && return 0
+    local changed=false
+
+    # 已知的过时值修正表：旧值 → 新值
+    # 格式: "KEY|旧值模式|新值"
+    local -a FIXES=(
+        "ALPINE_MIRROR|alpine-proxy|alpine-mirror"
+        "NPM_REGISTRY|alpine-proxy|alpine-mirror"  # 防止误配
+    )
+
+    for fix in "${FIXES[@]}"; do
+        IFS='|' read -r key old_pattern new_value <<< "$fix"
+        # 检查 .env 中是否有该 key 且包含旧值
+        local current_val
+        current_val=$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+        if [ -n "$current_val" ] && echo "$current_val" | grep -q "$old_pattern"; then
+            local new_val="${current_val//$old_pattern/$new_value}"
+            sed -i "s|^${key}=.*|${key}=${new_val}|" "$ENV_FILE"
+            export "$key=$new_val"
+            log "INFO: 自动修正 .env: $key ($old_pattern → $new_value)"
+            changed=true
+        fi
+    done
+
+    if [ "$changed" = true ]; then
+        log "INFO: .env 配置已自动更新，使用修正后的值继续部署"
+    fi
+}
+
+# 加载 .env 后立即执行校验
+fix_env_outdated_values
+
 # 维护模式 & 备份配置（可通过 .env 中 AUTO_UPDATE_* 覆盖）
 MAINTENANCE_MODE="${AUTO_UPDATE_MAINTENANCE:-true}"
 PRE_BACKUP="${AUTO_UPDATE_PRE_BACKUP:-true}"
