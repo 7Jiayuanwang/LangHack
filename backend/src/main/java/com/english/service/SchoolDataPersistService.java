@@ -19,6 +19,13 @@ public interface SchoolDataPersistService {
 
     List<LevelExamScore> queryLevelExamScores(String studentId);
 
+    /**
+     * 从 school_student 表或 users 表反查学生姓名
+     * @param studentId 学号
+     * @return 学生姓名，未找到返回 null
+     */
+    String resolveStudentName(String studentId);
+
     class PersistResult {
         private final int total;
         private final int success;

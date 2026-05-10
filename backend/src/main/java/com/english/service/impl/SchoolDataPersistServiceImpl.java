@@ -839,7 +839,8 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         schoolTeacherMapper.upsertByTeacherId(teacher);
     }
 
-    private String resolveStudentName(String studentId) {
+    @Override
+    public String resolveStudentName(String studentId) {
         if (studentId == null || studentId.trim().isEmpty()) {
             return null;
         }

@@ -30,6 +30,8 @@ public interface BackupService extends IService<BackupRecord> {
 
     void restoreFromBackup(Long id, String confirmDatabaseName);
 
+    void restoreFromBackupIncremental(Long id, String confirmDatabaseName);
+
     Map<String, Object> getBackupStats();
 
     Map<String, Object> getBackupConfig();

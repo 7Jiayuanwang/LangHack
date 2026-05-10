@@ -2653,6 +2653,76 @@ INSERT IGNORE INTO `content_tags` (`name`, `color`, `sort_order`) VALUES
 
 -- ════════════════════════════════════════════════════════════════
 
+-- V21__add_display_fields_to_teacher_student_binding.sql
+-- 为 teacher_student_binding 表添加显示字段（教师姓名、学生姓名、学院名称、课程名称）
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields$$
+CREATE PROCEDURE add_teacher_student_binding_display_fields()
+BEGIN
+    -- Add teacher_name column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND COLUMN_NAME = 'teacher_name'
+    ) THEN
+        ALTER TABLE teacher_student_binding
+            ADD COLUMN teacher_name VARCHAR(100) NULL COMMENT '教师姓名' AFTER teacher_id;
+    END IF;
+
+    -- Add student_name column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND COLUMN_NAME = 'student_name'
+    ) THEN
+        ALTER TABLE teacher_student_binding
+            ADD COLUMN student_name VARCHAR(100) NULL COMMENT '学生姓名' AFTER student_id;
+    END IF;
+
+    -- Add college_name column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND COLUMN_NAME = 'college_name'
+    ) THEN
+        ALTER TABLE teacher_student_binding
+            ADD COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称' AFTER student_id;
+    END IF;
+
+    -- Add course_name column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND COLUMN_NAME = 'course_name'
+    ) THEN
+        ALTER TABLE teacher_student_binding
+            ADD COLUMN course_name VARCHAR(200) NULL COMMENT '课程名称' AFTER course_code;
+    END IF;
+
+    -- Add index on college_name
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND INDEX_NAME = 'idx_college_name'
+    ) THEN
+        CREATE INDEX idx_college_name ON teacher_student_binding(college_name);
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL add_teacher_student_binding_display_fields();
+DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields;
+
+-- ════════════════════════════════════════════════════════════════
+
 -- V16__enable_sso_auto_grant.sql
 -- 默认开启 SSO 自动授权功能开关
 

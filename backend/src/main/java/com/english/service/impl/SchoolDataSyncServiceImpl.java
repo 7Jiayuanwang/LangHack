@@ -1232,6 +1232,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         if (rawCourses == null) rawCourses = Collections.emptyList();
         List<Map<String, Object>> matchedCourses = new ArrayList<>();
         List<String> matchedCourseCodes = new ArrayList<>();
+        Map<String, String> courseCodeToName = new LinkedHashMap<>();  // 课程代码 → 课程名称映射
         Set<String> seenCourseCodes = new LinkedHashSet<>();
         Set<String> sampleCourseColleges = new LinkedHashSet<>();
         int blankCourseCollegeCount = 0;
@@ -1264,6 +1265,11 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 continue;
             }
             matchedCourseCodes.add(kcdm);
+            // 保存课程名称映射
+            String courseName = stringValue(mapped.get("courseName"));
+            if (courseName != null && !courseName.isEmpty()) {
+                courseCodeToName.put(kcdm, courseName);
+            }
             if (persist) {
                 mapped.put("syncTime", syncTime);
                 mapped.put("syncSource", "CHAIN_SYNC");
@@ -1433,11 +1439,16 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                     });
                     String xn = stringValue(tc.get("academicYear"));
                     String xq = stringValue(tc.get("semester"));
+                    String teacherName = stringValue(tc.get("teacherName"));
                     for (String sid : courseStudentIds) {
                         TeacherStudentBinding b = new TeacherStudentBinding();
                         b.setTeacherId(tid);
+                        b.setTeacherName(teacherName);
                         b.setStudentId(sid);
+                        // 学生姓名稍后在持久化时通过 resolveStudentName 填充
+                        b.setCollegeName(normalizedCollege);
                         b.setCourseCode(kcdm);
+                        b.setCourseName(courseCodeToName.get(kcdm));
                         b.setCourseClassCode(kcbh);
                         b.setAcademicYear(xn == null ? "" : xn);
                         b.setSemester(xq == null ? "" : xq);
@@ -1504,6 +1515,11 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                     Set<String> courses = studentToCourses.getOrDefault(xh, Collections.emptySet());
                     Map<String, Object> mappedStudent = new HashMap<>();
                     mappedStudent.put("studentId", xh);
+                    // 尝试从现有数据源获取学生姓名（school_student 表或 users 表）
+                    String studentName = persistService.resolveStudentName(xh);
+                    if (studentName != null && !studentName.isEmpty()) {
+                        mappedStudent.put("studentName", studentName);
+                    }
                     mappedStudent.put("collegeName", normalizedCollege);
                     if (xh != null && xh.length() >= 4) {
                         String gradePrefix = xh.substring(0, 4);
@@ -1544,6 +1560,13 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             }
             for (TeacherStudentBinding b : bindings) {
                 try {
+                    // 填充学生姓名（从 school_student 或 users 表反查）
+                    if (b.getStudentName() == null || b.getStudentName().isEmpty()) {
+                        String studentName = persistService.resolveStudentName(b.getStudentId());
+                        if (studentName != null && !studentName.isEmpty()) {
+                            b.setStudentName(studentName);
+                        }
+                    }
                     teacherStudentBindingMapper.upsertBinding(b);
                     bindingInserted++;
                 } catch (Exception e) {

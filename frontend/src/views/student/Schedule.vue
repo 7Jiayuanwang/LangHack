@@ -42,6 +42,7 @@
               :style="{ background: getCourseColor(item.courseCode) }"
             >
               <div class="cell-course">{{ item.courseName }}</div>
+              <div class="cell-teacher">{{ item.teacherName }}</div>
               <div class="cell-location">{{ item.classLocation }}</div>
             </div>
           </div>
@@ -307,6 +308,14 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
+.cell-teacher {
+  font-size: 9px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .cell-location {
   font-size: 9px;
   color: var(--text-tertiary);
@@ -363,6 +372,10 @@ onMounted(() => {
 
   .cell-course {
     font-size: 9px;
+  }
+
+  .cell-teacher {
+    font-size: 8px;
   }
 
   .cell-location {

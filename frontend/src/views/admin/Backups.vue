@@ -232,13 +232,27 @@
           show-icon
         >
           <template #default>
-            <p>恢复数据库将覆盖当前所有数据，此操作不可撤销！</p>
+            <p v-if="restoreMode === 'full'">恢复数据库将覆盖当前所有数据，此操作不可撤销！</p>
+            <p v-else>增量恢复将导入备份数据，已存在的数据将被保留（跳过重复键冲突）。</p>
             <p>备份文件：<strong>{{ restoreRecord?.filename }}</strong></p>
             <p v-if="restoreRecord?.backupMode === 'INCREMENTAL'" style="color: #E6A23C; font-weight: bold;">
               ⚠ 这是增量备份，请确保已先恢复其基准全量备份（ID: {{ restoreRecord?.baseBackupId || '未知' }}）
             </p>
           </template>
         </el-alert>
+        <div class="restore-mode-selector">
+          <p style="margin-bottom: 8px; font-weight: 600;">恢复模式：</p>
+          <el-radio-group v-model="restoreMode">
+            <el-radio label="full">
+              <span style="font-weight: 600;">全量恢复</span>
+              <span style="color: var(--text-tertiary); font-size: 12px; margin-left: 4px;">（覆盖所有数据）</span>
+            </el-radio>
+            <el-radio label="incremental">
+              <span style="font-weight: 600;">增量恢复</span>
+              <span style="color: var(--text-tertiary); font-size: 12px; margin-left: 4px;">（保留新增数据）</span>
+            </el-radio>
+          </el-radio-group>
+        </div>
         <div class="confirm-input">
           <p>请输入数据库名称以确认恢复操作：</p>
           <el-input
@@ -649,6 +663,7 @@ const filterType = ref('')
 const filterStatus = ref('')
 const restoreDialogVisible = ref(false)
 const restoreRecord = ref(null)
+const restoreMode = ref('full')
 const confirmDbName = ref('')
 const importDialogVisible = ref(false)
 const detailDrawerVisible = ref(false)
@@ -1014,6 +1029,7 @@ const handleDelete = async (row) => {
 // Restore backup
 const handleRestore = (row) => {
   restoreRecord.value = row
+  restoreMode.value = 'full'
   confirmDbName.value = ''
   restoreDialogVisible.value = true
 }
@@ -1027,10 +1043,11 @@ const confirmRestore = async () => {
   restoring.value = true
   try {
     const response = await restoreBackupApi(restoreRecord.value.id, {
-      confirmDatabaseName: confirmDbName.value.trim()
+      confirmDatabaseName: confirmDbName.value.trim(),
+      mode: restoreMode.value
     })
     if (response.code === 200) {
-      ElMessage.success('数据库恢复成功')
+      ElMessage.success(response.data || '数据库恢复成功')
       restoreDialogVisible.value = false
       loadBackups()
       loadStats()
@@ -1602,4 +1619,25 @@ onBeforeUnmount(() => {
 
 .is-full .day-dot { background: #10b981; }
 .is-incremental .day-dot { background: #f59e0b; }
+
+.restore-mode-selector {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.restore-mode-selector .el-radio {
+  display: block;
+  margin: 8px 0;
+}
+
+.confirm-input {
+  margin-top: 16px;
+}
+
+.confirm-input p {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
 </style>

@@ -779,6 +779,174 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
     }
 
     @Override
+    public void restoreFromBackupIncremental(Long id, String confirmDatabaseName) {
+        String databaseName = extractDatabaseName();
+        if (!databaseName.equals(confirmDatabaseName)) {
+            throw new BusinessException("数据库名称确认不匹配，请确认后重新输入");
+        }
+
+        if (!backupInProgress.compareAndSet(false, true)) {
+            throw new BusinessException("已有备份或恢复任务正在执行，请稍后再试");
+        }
+
+        try {
+            BackupRecord record = getBackupById(id);
+            if (!isSuccessfulStatus(record.getStatus())) {
+                throw new BusinessException("仅可从成功的备份中恢复");
+            }
+
+            Path filePath = resolveValidatedBackupPath(record, true);
+
+            // Convert backup SQL to incremental restore format (INSERT -> INSERT IGNORE INTO)
+            Path convertedPath = convertToIncrementalRestore(filePath);
+
+            DbConnectionInfo connInfo = parseJdbcUrl();
+            String mysqlPath;
+            int lastIdx = mysqldumpPath.lastIndexOf("mysqldump");
+            if (lastIdx >= 0) {
+                mysqlPath = mysqldumpPath.substring(0, lastIdx) + "mysql" + mysqldumpPath.substring(lastIdx + "mysqldump".length());
+            } else {
+                mysqlPath = "mysql";
+            }
+
+            try {
+                ProcessBuilder pb = new ProcessBuilder(
+                        mysqlPath,
+                        "-h", connInfo.host,
+                        "-P", String.valueOf(connInfo.port),
+                        "-u", dbUsername,
+                        databaseName
+                );
+                pb.environment().put("MYSQL_PWD", dbPassword);
+                pb.redirectErrorStream(true);
+
+                Process process = pb.start();
+                try {
+                    AtomicReference<IOException> inputError = new AtomicReference<>();
+                    Thread inputWriter = new Thread(() -> {
+                        try (OutputStream processInput = process.getOutputStream();
+                             InputStream backupInput = openBackupInputStream(convertedPath)) {
+                            backupInput.transferTo(processInput);
+                        } catch (IOException e) {
+                            inputError.set(e);
+                            logger.error("Error streaming converted backup into mysql process", e);
+                        }
+                    });
+                    inputWriter.setDaemon(true);
+                    inputWriter.start();
+
+                    StringBuilder output = new StringBuilder();
+                    Thread outputReader = new Thread(() -> {
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                output.append(line).append("\n");
+                            }
+                        } catch (IOException e) {
+                            logger.warn("Error reading mysql restore output", e);
+                        }
+                    });
+                    outputReader.setDaemon(true);
+                    outputReader.start();
+
+                    boolean completed = process.waitFor(60, TimeUnit.MINUTES);
+                    if (!completed) {
+                        process.destroyForcibly();
+                        inputWriter.join(5000);
+                        outputReader.join(5000);
+                        logger.error("Incremental restore timed out after 60 minutes");
+                        throw new BusinessException("增量恢复超时，已中止");
+                    }
+
+                    inputWriter.join(5000);
+                    outputReader.join(5000);
+                    if (inputWriter.isAlive()) {
+                        process.destroyForcibly();
+                        logger.error("Timed out waiting for backup input writer thread to finish");
+                        throw new BusinessException("增量恢复失败，备份输入未完成");
+                    }
+                    int exitCode = process.exitValue();
+                    if (exitCode != 0) {
+                        logger.error("Incremental restore failed with exit code {}: {}", exitCode, output);
+                        throw new BusinessException("增量恢复失败，请检查日志");
+                    }
+                    if (inputError.get() != null) {
+                        throw new BusinessException("增量恢复失败，备份文件读取或输入异常");
+                    }
+
+                    logger.info("Database incrementally restored from backup: {}. New data preserved.", record.getFilename());
+                } finally {
+                    if (process.isAlive()) {
+                        process.destroyForcibly();
+                    }
+                    // Clean up temporary converted file
+                    try {
+                        Files.deleteIfExists(convertedPath);
+                    } catch (IOException e) {
+                        logger.warn("Failed to delete temporary converted backup file: {}", convertedPath, e);
+                    }
+                }
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.error("Incremental restore failed", e);
+                throw new BusinessException("增量恢复失败");
+            }
+        } finally {
+            backupInProgress.set(false);
+        }
+    }
+
+    /**
+     * Convert backup SQL to incremental restore format:
+     * - Comment out DROP TABLE / TRUNCATE TABLE statements
+     * - Convert INSERT INTO to INSERT IGNORE INTO
+     * - Preserve existing data by skipping duplicate key conflicts
+     */
+    private Path convertToIncrementalRestore(Path originalPath) throws IOException {
+        Path tempDir = Paths.get(System.getProperty("java.io.tmpdir"));
+        Path convertedPath = tempDir.resolve("incremental_restore_" + System.currentTimeMillis() + ".sql");
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(openBackupInputStream(originalPath), StandardCharsets.UTF_8));
+             BufferedWriter writer = Files.newBufferedWriter(convertedPath, StandardCharsets.UTF_8)) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                // Comment out DROP TABLE statements
+                if (line.trim().toUpperCase().startsWith("DROP TABLE")) {
+                    writer.write("-- [INCREMENTAL RESTORE] ");
+                    writer.write(line);
+                    writer.newLine();
+                    continue;
+                }
+
+                // Comment out TRUNCATE TABLE statements
+                if (line.trim().toUpperCase().startsWith("TRUNCATE TABLE")) {
+                    writer.write("-- [INCREMENTAL RESTORE] ");
+                    writer.write(line);
+                    writer.newLine();
+                    continue;
+                }
+
+                // Convert INSERT INTO to INSERT IGNORE INTO
+                if (line.trim().toUpperCase().startsWith("INSERT INTO")) {
+                    String converted = line.replaceFirst("(?i)INSERT INTO", "INSERT IGNORE INTO");
+                    writer.write(converted);
+                    writer.newLine();
+                    continue;
+                }
+
+                // Write other lines as-is
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+
+        logger.info("Converted backup to incremental restore format: {} -> {}", originalPath, convertedPath);
+        return convertedPath;
+    }
+
+    @Override
     public Map<String, Object> getBackupStats() {
         Map<String, Object> stats = new HashMap<>();
 
