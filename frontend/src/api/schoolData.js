@@ -115,19 +115,19 @@ export function querySchoolData(dataSource, data) {
 }
 
 export function fullSyncSchoolDataFiltered(dataSource, data) {
-  return request({ url: `/api/admin/sync/full/${dataSource}/filtered`, method: 'post', data })
+  return request({ url: `/api/admin/sync/full/${dataSource}/filtered`, method: 'post', data, timeout: 3600000 })
 }
 
 export function incrementalSyncSchoolDataFiltered(dataSource, data) {
-  return request({ url: `/api/admin/sync/incremental/${dataSource}/filtered`, method: 'post', data })
+  return request({ url: `/api/admin/sync/incremental/${dataSource}/filtered`, method: 'post', data, timeout: 3600000 })
 }
 
 export function fullSyncAllSchoolData(params) {
-  return request({ url: '/api/admin/sync/full-all', method: 'post', params })
+  return request({ url: '/api/admin/sync/full-all', method: 'post', params, timeout: 3600000 })
 }
 
 export function incrementalSyncAllSchoolData(params) {
-  return request({ url: '/api/admin/sync/incremental-all', method: 'post', params })
+  return request({ url: '/api/admin/sync/incremental-all', method: 'post', params, timeout: 3600000 })
 }
 
 /**
@@ -135,5 +135,5 @@ export function incrementalSyncAllSchoolData(params) {
  * POST /api/admin/sync/chain/students-by-college?collegeName=外国语学院&matchMode=eq&persist=true
  */
 export function chainFetchStudentsByCollege(params) {
-  return request({ url: '/api/admin/sync/chain/students-by-college', method: 'post', params })
+  return request({ url: '/api/admin/sync/chain/students-by-college', method: 'post', params, timeout: 1800000 })
 }

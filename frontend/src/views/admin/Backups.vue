@@ -147,8 +147,8 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">
-              {{ getStatusText(row.status) }}
+            <el-tag :type="getStatusType(row.status, row)" size="small">
+              {{ getStatusText(row.status, row) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -192,7 +192,7 @@
               恢复
             </el-button>
             <el-button
-              v-if="row.status !== 'IN_PROGRESS'"
+              v-if="row.status !== 'IN_PROGRESS' || isStaleInProgress(row)"
               type="danger"
               size="small"
               @click="handleDelete(row)"
@@ -752,6 +752,16 @@ const isSuccessfulBackup = (row) => normalizeBackupStatus(row?.status) === 'SUCC
 
 const canReadBackup = (row) => isSuccessfulBackup(row) && row?.readable !== false && row?.fileAvailable !== false
 
+// IN_PROGRESS records older than 2 hours are considered stale (container not restarted)
+const isStaleInProgress = (row) => {
+  if (normalizeBackupStatus(row?.status) !== 'IN_PROGRESS') return false
+  if (!row?.createdTime) return false
+  const created = Array.isArray(row.createdTime)
+    ? new Date(row.createdTime[0], row.createdTime[1] - 1, row.createdTime[2], row.createdTime[3] || 0, row.createdTime[4] || 0)
+    : new Date(row.createdTime)
+  return Date.now() - created.getTime() > 2 * 60 * 60 * 1000
+}
+
 const handleView = async (row) => {
   detailDrawerVisible.value = true
   detailLoading.value = true
@@ -1114,12 +1124,14 @@ const formatLastTime = (time) => {
   return formatted.substring(5, 16)
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status, row) => {
+  if (normalizeBackupStatus(status) === 'IN_PROGRESS' && row && isStaleInProgress(row)) return 'danger'
   const map = { SUCCESS: 'success', FAILED: 'danger', IN_PROGRESS: 'warning' }
   return map[normalizeBackupStatus(status)] || 'info'
 }
 
-const getStatusText = (status) => {
+const getStatusText = (status, row) => {
+  if (normalizeBackupStatus(status) === 'IN_PROGRESS' && row && isStaleInProgress(row)) return '超时'
   const map = { SUCCESS: '成功', FAILED: '失败', IN_PROGRESS: '进行中' }
   const normalized = normalizeBackupStatus(status)
   return map[normalized] || normalized

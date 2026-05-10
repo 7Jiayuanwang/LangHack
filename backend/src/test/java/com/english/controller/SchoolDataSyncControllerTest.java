@@ -204,7 +204,6 @@ class SchoolDataSyncControllerTest {
                     .andExpect(jsonPath("$.code").value(500))
                     .andExpect(jsonPath("$.message").value("分页异常"));
         }
-    }
 
         @Test
         @DisplayName("链式拉取功能开关关闭时直接拒绝执行")
@@ -213,7 +212,7 @@ class SchoolDataSyncControllerTest {
                     .thenReturn("false");
 
             mockMvc.perform(post("/api/admin/sync/chain/students-by-college")
-                            .param("collegeName", "澶栧浗璇闄?)
+                            .param("collegeName", "外国语学院")
                             .param("matchMode", "eq")
                             .param("persist", "true"))
                     .andExpect(status().isOk())

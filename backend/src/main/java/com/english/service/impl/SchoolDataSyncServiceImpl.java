@@ -425,11 +425,10 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private SyncResult doFullSync(String dataSource, SchoolDataSyncFilterRequest request) {
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
-        ensureCompleteFetch(dataSource, fetchResult);
-        if (fetchResult.getRows().isEmpty()) {
-            return new SyncResult(0, 0, 0, 0, fetchResult.getPaginationSummary());
+        warnIfIncomplete(dataSource, fetchResult);
+        if (fetchResult == null || fetchResult.getRows().isEmpty()) {
+            return new SyncResult(0, 0, 0, 0, fetchResult == null ? null : fetchResult.getPaginationSummary());
         }
-
         return toSyncResult(persistService.persistRawData(dataSource, fetchResult.getRows(), "SCHOOL_API"), fetchResult.getPaginationSummary());
     }
 
@@ -460,9 +459,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         }
 
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
-        ensureCompleteFetch(dataSource, fetchResult);
-        if (fetchResult.getRows().isEmpty()) {
-            return new SyncResult(0, 0, 0, 0, fetchResult.getPaginationSummary());
+        warnIfIncomplete(dataSource, fetchResult);
+        if (fetchResult == null || fetchResult.getRows().isEmpty()) {
+            return new SyncResult(0, 0, 0, 0, fetchResult == null ? null : fetchResult.getPaginationSummary());
         }
 
         return toSyncResult(persistService.persistRawData(dataSource, fetchResult.getRows(), "SCHOOL_API"), fetchResult.getPaginationSummary());
@@ -489,16 +488,15 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         return false;
     }
 
-    private void ensureCompleteFetch(String dataSource, SchoolDataFetchResult fetchResult) {
+    private void warnIfIncomplete(String dataSource, SchoolDataFetchResult fetchResult) {
         if (fetchResult == null) {
-            throw new BusinessException("学校数据拉取结果为空，已终止同步: dataSource=" + dataSource);
+            logger.error("学校数据拉取结果为空 dataSource={}", dataSource);
+            return;
         }
         SchoolDataFetchResult.PaginationSummary summary = fetchResult.getPaginationSummary();
         if (summary != null && !summary.isComplete()) {
-            throw new BusinessException("学校数据未完整拉取，已终止同步: dataSource="
-                    + dataSource
-                    + ", reason=" + summary.getStopReason()
-                    + ", fetchedRows=" + summary.getFetchedRowCount());
+            logger.warn("⚠️ 学校数据未完整拉取，已保存已获取部分 dataSource={} reason={} fetchedRows={}",
+                    dataSource, summary.getStopReason(), summary.getFetchedRowCount());
         }
     }
 
@@ -1105,7 +1103,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
      * 完成同步日志（成功）
      */
     private void completeSyncLog(SyncLog syncLog, SyncResult result, LocalDateTime startTime) {
-        syncLog.setStatus("SUCCESS");
+        boolean incomplete = result.paginationSummary != null && !result.paginationSummary.isComplete();
+        syncLog.setStatus(incomplete ? "PARTIAL" : "SUCCESS");
         syncLog.setTotalCount(result.total);
         syncLog.setSuccessCount(result.success);
         syncLog.setFailCount(result.fail);

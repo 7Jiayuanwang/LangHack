@@ -605,16 +605,7 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     private int resolveMaxPages(String dataSource) {
-        if ("teacher_courses".equals(dataSource)) {
-            return 300;
-        }
-        if ("teaching_class".equals(dataSource) || "course_schedule".equals(dataSource)) {
-            return 200;
-        }
-        if ("course_selection".equals(dataSource)) {
-            return 500; // 选课记录数据量大（已知超过 10 万条），需要更高上限
-        }
-        return 100;
+        return 1000;
     }
 
     private String fingerprintRecord(Map<String, Object> record) {

@@ -56,7 +56,7 @@ services:
     ports:
       - "${PORT_MYSQL:-3306}:3306"
     volumes:
-      - mysql_master_data:/var/lib/mysql
+      - ./data/mysql-master:/var/lib/mysql
       # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
       # 仅挂载动态数据：历史备份目录 + ECDICT 词典 CSV（体积大且非 git 追踪）
       - ./database:/docker-entrypoint-initdb.d/seed:ro
@@ -116,7 +116,7 @@ services:
     ports:
       - "${PORT_MYSQL_SLAVE:-3307}:3306"
     volumes:
-      - mysql_slave_data:/var/lib/mysql
+      - ./data/mysql-slave:/var/lib/mysql
       # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
       # 从库通过 MYSQL_ROLE=slave 跳过所有数据导入（数据由主从复制同步）
     networks:
@@ -154,7 +154,7 @@ services:
     ports:
       - "${PORT_REDIS:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
     networks:
       - langhack-network
     healthcheck:
@@ -241,8 +241,8 @@ services:
     ports:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:
-      - app_logs:/app/logs
-      - app_uploads:/app/uploads
+      - ./data/app-logs:/app/logs
+      - ./data/app-uploads:/app/uploads
       # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
       - ./backups:/app/backups
     networks:
@@ -309,14 +309,4 @@ networks:
 # ─────────────────────────────────────────────
 # 持久化卷
 # ─────────────────────────────────────────────
-volumes:
-  mysql_master_data:
-    driver: local
-  mysql_slave_data:
-    driver: local
-  redis_data:
-    driver: local
-  app_logs:
-    driver: local
-  app_uploads:
-    driver: local
+volumes: {}

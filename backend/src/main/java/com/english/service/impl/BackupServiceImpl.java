@@ -535,6 +535,24 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         if (size < 1) size = 10;
         if (size > 100) size = 100;
 
+        // Lazily clean up IN_PROGRESS records older than 2 hours (handles cases where
+        // @PostConstruct cleanup was skipped because the container was not restarted)
+        try {
+            LocalDateTime twoHoursAgo = LocalDateTime.now().minus(2, ChronoUnit.HOURS);
+            QueryWrapper<BackupRecord> staleWrapper = new QueryWrapper<>();
+            staleWrapper.eq("status", "IN_PROGRESS").lt("created_time", twoHoursAgo);
+            List<BackupRecord> staleRecords = list(staleWrapper);
+            for (BackupRecord stale : staleRecords) {
+                stale.setStatus("FAILED");
+                stale.setErrorMessage("备份超时（超过2小时未完成）");
+                stale.setCompletedTime(LocalDateTime.now());
+                updateById(stale);
+                logger.warn("Marked timed-out IN_PROGRESS backup as FAILED: id={}, file={}", stale.getId(), stale.getFilename());
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to cleanup timed-out backup records: {}", e.getMessage());
+        }
+
         QueryWrapper<BackupRecord> wrapper = new QueryWrapper<>();
         if (backupType != null && !backupType.isEmpty()) {
             wrapper.eq("backup_type", backupType);
