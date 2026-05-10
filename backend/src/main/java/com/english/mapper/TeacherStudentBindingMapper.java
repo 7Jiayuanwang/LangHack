@@ -31,4 +31,9 @@ public interface TeacherStudentBindingMapper extends BaseMapper<TeacherStudentBi
     List<TeacherStudentBinding> selectByStudent(@Param("studentId") String studentId,
                                                 @Param("academicYear") String academicYear,
                                                 @Param("semester") String semester);
+
+    /**
+     * 查询所有不重复的学院名称（用于筛选下拉）。
+     */
+    List<String> selectDistinctColleges();
 }

@@ -241,7 +241,8 @@ class SchoolDataSyncServiceTest {
             List<SyncLog> results = syncService.fullSyncAll("SCHEDULED", "SYSTEM");
 
             assertEquals(9, results.size());
-            verify(fetchService, times(9)).fetchRawDataWithSummary(anyString(), isNull());
+            // student_schedule is skipped (requires student ID), so fetchService is called 8 times
+            verify(fetchService, times(8)).fetchRawDataWithSummary(anyString(), isNull());
         }
 
         @Test
@@ -255,7 +256,7 @@ class SchoolDataSyncServiceTest {
             when(fetchService.fetchRawDataWithSummary(eq("level_exam_scores"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(fetchService.fetchRawDataWithSummary(eq("teaching_plans"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(fetchService.fetchRawDataWithSummary(eq("teacher_courses"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
-            when(fetchService.fetchRawDataWithSummary(eq("student_schedule"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            // student_schedule is skipped by fullSyncAll — no stub needed
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 

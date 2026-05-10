@@ -209,18 +209,6 @@ const downloadLogs = async () => {
     }
     triggerBlobDownload(normalized.blob, normalized.filename)
     ElMessage.success('日志下载成功')
-    return
-    const res = await downloadApplicationLogs(params)
-    const blob = new Blob([res.data], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `langhack-${new Date().toISOString().slice(0, 10)}.log`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    ElMessage.success('日志下载成功')
   } catch {
     ElMessage.error('下载日志失败')
   } finally {

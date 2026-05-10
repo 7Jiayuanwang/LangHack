@@ -425,7 +425,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private SyncResult doFullSync(String dataSource, SchoolDataSyncFilterRequest request) {
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
-        warnIfIncomplete(dataSource, fetchResult);
+        failIfIncomplete(dataSource, fetchResult);
         if (fetchResult == null || fetchResult.getRows().isEmpty()) {
             return new SyncResult(0, 0, 0, 0, fetchResult == null ? null : fetchResult.getPaginationSummary());
         }
@@ -459,7 +459,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         }
 
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
-        warnIfIncomplete(dataSource, fetchResult);
+        failIfIncomplete(dataSource, fetchResult);
         if (fetchResult == null || fetchResult.getRows().isEmpty()) {
             return new SyncResult(0, 0, 0, 0, fetchResult == null ? null : fetchResult.getPaginationSummary());
         }
@@ -488,15 +488,16 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         return false;
     }
 
-    private void warnIfIncomplete(String dataSource, SchoolDataFetchResult fetchResult) {
+    private void failIfIncomplete(String dataSource, SchoolDataFetchResult fetchResult) {
         if (fetchResult == null) {
             logger.error("学校数据拉取结果为空 dataSource={}", dataSource);
             return;
         }
         SchoolDataFetchResult.PaginationSummary summary = fetchResult.getPaginationSummary();
         if (summary != null && !summary.isComplete()) {
-            logger.warn("⚠️ 学校数据未完整拉取，已保存已获取部分 dataSource={} reason={} fetchedRows={}",
-                    dataSource, summary.getStopReason(), summary.getFetchedRowCount());
+            throw new BusinessException("学校数据未完整拉取 dataSource=" + dataSource
+                    + " reason=" + summary.getStopReason()
+                    + " fetchedRows=" + summary.getFetchedRowCount());
         }
     }
 

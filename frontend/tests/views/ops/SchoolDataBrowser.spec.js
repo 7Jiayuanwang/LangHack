@@ -16,6 +16,24 @@ vi.mock('element-plus', () => ({
   ElMessageBox: { confirm: vi.fn() }
 }))
 
+vi.mock('@/composables/useFeatureToggles', () => ({
+  useFeatureToggles: () => ({
+    toggles: { value: {} },
+    isEnabled: () => true,
+    load: vi.fn().mockResolvedValue({}),
+    invalidate: vi.fn(),
+    isLoaded: () => true,
+    startAutoRefresh: vi.fn(),
+    stopAutoRefresh: vi.fn(),
+    onChange: vi.fn(),
+    watchToggle: vi.fn(),
+    connectWebSocket: vi.fn(),
+    disconnectWebSocket: vi.fn(),
+    isWebSocketConnected: () => false
+  }),
+  invalidateFeatureToggleCache: vi.fn()
+}))
+
 const {
   mockGetSchoolDataOverview,
   mockGetSchoolDataFilterFields,

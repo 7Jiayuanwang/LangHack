@@ -335,8 +335,6 @@ public class Text {
     public void setCoverUrl(String coverUrl) {
         this.coverUrl = coverUrl;
     }
-    @TableField("uploaded_by")
-    private Long uploadedBy;
 
     @TableField("read_count")
     private Integer readCount = 0;

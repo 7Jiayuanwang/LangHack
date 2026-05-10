@@ -797,9 +797,6 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
 
             Path filePath = resolveValidatedBackupPath(record, true);
 
-            // Convert backup SQL to incremental restore format (INSERT -> INSERT IGNORE INTO)
-            Path convertedPath = convertToIncrementalRestore(filePath);
-
             DbConnectionInfo connInfo = parseJdbcUrl();
             String mysqlPath;
             int lastIdx = mysqldumpPath.lastIndexOf("mysqldump");
@@ -810,6 +807,8 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
             }
 
             try {
+                // Convert backup SQL to incremental restore format (INSERT -> INSERT IGNORE INTO)
+                Path convertedPath = convertToIncrementalRestore(filePath);
                 ProcessBuilder pb = new ProcessBuilder(
                         mysqlPath,
                         "-h", connInfo.host,

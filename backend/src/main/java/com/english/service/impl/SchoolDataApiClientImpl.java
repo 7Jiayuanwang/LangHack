@@ -605,7 +605,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     private int resolveMaxPages(String dataSource) {
-        return 1000;
+        if ("teacher_courses".equals(dataSource)) return 300;
+        if ("course_schedule".equals(dataSource)) return 200;
+        return 100;
     }
 
     private String fingerprintRecord(Map<String, Object> record) {

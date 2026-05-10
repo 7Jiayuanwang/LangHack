@@ -48,4 +48,11 @@
         ORDER BY sync_time DESC
     </select>
 
+    <select id="selectDistinctColleges" resultType="java.lang.String">
+        SELECT DISTINCT college_name
+        FROM teacher_student_binding
+        WHERE college_name IS NOT NULL AND college_name != ''
+        ORDER BY college_name
+    </select>
+
 </mapper>

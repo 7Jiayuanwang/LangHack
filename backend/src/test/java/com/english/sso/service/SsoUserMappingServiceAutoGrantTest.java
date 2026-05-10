@@ -275,7 +275,6 @@ class SsoUserMappingServiceAutoGrantTest {
             mockNoBindingNoExistingUser("T001");
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
                     .thenReturn("true");
-            when(schoolStudentMapper.selectByStudentId("T001")).thenReturn(null);
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
                     .thenReturn("true");
 

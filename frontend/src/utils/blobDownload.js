@@ -21,7 +21,7 @@ export function parseDownloadFilename(contentDisposition, fallbackName = 'downlo
     }
   }
 
-  const plainMatch = /filename\s*=\s*"?([^\";]+)"?/i.exec(contentDisposition)
+  const plainMatch = /filename\s*=\s*"?([^";]+)"?/i.exec(contentDisposition)
   if (plainMatch?.[1]) {
     return plainMatch[1].trim()
   }

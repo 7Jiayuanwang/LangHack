@@ -701,6 +701,7 @@ public class SsoUserMappingService {
     }
 
     private String firstNonEmpty(Map<String, Object> attrs, String... keys) {
+        if (attrs == null) return null;
         for (String key : keys) {
             Object v = attrs.get(key);
             if (v != null) {
