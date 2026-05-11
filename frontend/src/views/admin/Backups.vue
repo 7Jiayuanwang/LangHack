@@ -349,7 +349,12 @@
         <div class="detail-section">
           <div class="section-header">
             <strong>内容预览</strong>
-            <span v-if="previewMeta.truncated" class="preview-hint">已截断显示</span>
+            <span v-if="previewMeta.skippedLines > 0" class="preview-hint">
+              已跳过前 {{ previewMeta.skippedLines }} 行注释和配置
+            </span>
+            <span v-if="previewMeta.truncated" class="preview-hint">
+              已截断显示（共读取 {{ previewMeta.totalLinesRead }} 行，显示 {{ previewMeta.lineCount }} 行）
+            </span>
           </div>
           <el-alert
             v-if="previewError"
@@ -673,7 +678,9 @@ const backupPreview = ref('')
 const previewError = ref('')
 const previewMeta = reactive({
   truncated: false,
-  lineCount: 0
+  lineCount: 0,
+  totalLinesRead: 0,
+  skippedLines: 0
 })
 const importForm = reactive({
   file: null,
@@ -785,11 +792,13 @@ const handleView = async (row) => {
   previewError.value = ''
   previewMeta.truncated = false
   previewMeta.lineCount = 0
+  previewMeta.totalLinesRead = 0
+  previewMeta.skippedLines = 0
 
   try {
     const [detailRes, previewRes] = await Promise.allSettled([
       getBackupDetail(row.id),
-      getBackupPreview(row.id, { maxLines: 80, maxChars: 12000 })
+      getBackupPreview(row.id, { maxLines: 200, maxChars: 50000 })
     ])
 
     if (detailRes.status === 'fulfilled' && detailRes.value?.code === 200) {
@@ -804,6 +813,8 @@ const handleView = async (row) => {
       backupPreview.value = previewRes.value.data?.preview || ''
       previewMeta.truncated = previewRes.value.data?.truncated === true
       previewMeta.lineCount = previewRes.value.data?.lineCount || 0
+      previewMeta.totalLinesRead = previewRes.value.data?.totalLinesRead || 0
+      previewMeta.skippedLines = previewRes.value.data?.skippedLines || 0
     } else {
       previewError.value = previewRes.status === 'fulfilled'
         ? (previewRes.value?.message || '读取备份预览失败')

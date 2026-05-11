@@ -136,39 +136,53 @@
             <template v-else>
               <div class="members-header">
                 <span class="members-title">标签「{{ selectedTag }}」的成员</span>
-                <el-button
-                  link
-                  size="small"
-                  :loading="loadingTagMembers"
-                  @click="loadTagMembers(selectedTag)"
-                >
-                  <el-icon><Refresh /></el-icon> 刷新
-                </el-button>
+                <div class="members-actions">
+                  <el-button
+                    type="primary"
+                    size="small"
+                    @click="openAddUsersDialog"
+                  >
+                    <el-icon><Plus /></el-icon> 添加用户
+                  </el-button>
+                  <el-button
+                    link
+                    size="small"
+                    :loading="loadingTagMembers"
+                    @click="loadTagMembers(selectedTag)"
+                  >
+                    <el-icon><Refresh /></el-icon>
+                  </el-button>
+                </div>
               </div>
               <div v-if="loadingTagMembers" class="loading-state">
                 <el-icon class="is-loading" :size="28"><Loading /></el-icon>
                 <p>加载中...</p>
               </div>
-              <el-table v-else :data="tagMembers" border stripe size="small">
-                <el-table-column prop="id" label="ID" width="80" />
-                <el-table-column prop="username" label="用户名" />
-                <el-table-column label="昵称">
-                  <template #default="{ row }">
-                    {{ row.nickname || row.realName || '-' }}
-                  </template>
-                </el-table-column>
-                <el-table-column label="角色" width="100">
-                  <template #default="{ row }">
-                    <el-tag :type="roleTagType(row.role)" size="small">{{ row.role }}</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="80" fixed="right">
-                  <template #default="{ row }">
-                    <el-button link type="danger" size="small" @click="removeUserFromTag(row)">移除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-              <div v-if="!loadingTagMembers && tagMembers.length === 0" class="members-empty">该标签下暂无用户</div>
+              <template v-else>
+                <el-table :data="tagMembers" border stripe size="small">
+                  <el-table-column type="selection" width="55" />
+                  <el-table-column prop="id" label="ID" width="80" />
+                  <el-table-column prop="username" label="用户名" />
+                  <el-table-column label="昵称">
+                    <template #default="{ row }">
+                      {{ row.nickname || row.realName || '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="角色" width="100">
+                    <template #default="{ row }">
+                      <el-tag :type="roleTagType(row.role)" size="small">{{ row.role }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="80" fixed="right">
+                    <template #default="{ row }">
+                      <el-button link type="danger" size="small" @click="removeUserFromTag(row)">移除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <div v-if="tagMembers.length === 0" class="members-empty">
+                  该标签下暂无用户，点击上方"添加用户"按钮添加
+                </div>
+              </template>
             </template>
           </div>
         </div>
@@ -307,6 +321,97 @@
 
     </el-tabs>
 
+    <!-- ── 添加用户到标签对话框 ──────────────────────────────────────── -->
+    <el-dialog v-model="addUsersDialogVisible" title="添加用户到标签" width="600px">
+      <div class="add-users-dialog-content">
+        <div class="dialog-tag-info">
+          <el-icon><Collection /></el-icon>
+          <span>目标标签：<strong>{{ selectedTag }}</strong></span>
+        </div>
+
+        <el-divider />
+
+        <div class="user-search-section">
+          <el-input
+            v-model="addUsersSearch"
+            placeholder="搜索用户名、ID 或昵称"
+            clearable
+            @keyup.enter="searchUsersForAdd"
+          >
+            <template #append>
+              <el-button :icon="Search" @click="searchUsersForAdd" :loading="searchingUsersForAdd" />
+            </template>
+          </el-input>
+        </div>
+
+        <div v-if="searchingUsersForAdd" class="loading-state">
+          <el-icon class="is-loading" :size="24"><Loading /></el-icon>
+          <p>搜索中...</p>
+        </div>
+
+        <el-table
+          v-else-if="addUsersResults.length > 0"
+          ref="addUsersTableRef"
+          :data="addUsersResults"
+          @selection-change="handleAddUsersSelectionChange"
+          max-height="400px"
+          style="margin-top: 16px"
+        >
+          <el-table-column type="selection" width="55" />
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="username" label="用户名" min-width="120" />
+          <el-table-column label="昵称" min-width="120">
+            <template #default="{ row }">
+              {{ row.nickname || row.realName || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="角色" width="100">
+            <template #default="{ row }">
+              <el-tag :type="roleTagType(row.role)" size="small">{{ row.role }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="当前标签" min-width="150">
+            <template #default="{ row }">
+              <el-tag
+                v-for="tag in (row.tags || [])"
+                :key="tag"
+                size="small"
+                style="margin-right: 4px"
+              >{{ tag }}</el-tag>
+              <span v-if="!row.tags || row.tags.length === 0" style="color: #94a3b8">无</span>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-else-if="addUsersSearch && !searchingUsersForAdd" class="empty-search-result">
+          <el-icon :size="48" color="#94a3b8"><Search /></el-icon>
+          <p>未找到匹配的用户</p>
+        </div>
+
+        <div v-else class="search-hint">
+          <el-icon :size="48" color="#cbd5e1"><Search /></el-icon>
+          <p>请输入关键词搜索用户</p>
+        </div>
+
+        <div v-if="selectedUsersForAdd.length > 0" class="selected-users-summary">
+          <el-icon><Select /></el-icon>
+          <span>已选择 <strong>{{ selectedUsersForAdd.length }}</strong> 个用户</span>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="addUsersDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="selectedUsersForAdd.length === 0"
+          :loading="addingUsers"
+          @click="confirmAddUsersToTag"
+        >
+          添加到标签
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- ── 覆盖规则编辑对话框 ──────────────────────────────────────── -->
     <el-dialog v-model="overrideDialogVisible" :title="overrideForm.isNew ? '新建覆盖规则' : '编辑覆盖规则'" width="420px">
       <el-form :model="overrideForm" label-width="90px">
@@ -345,7 +450,7 @@
 <script setup>
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight } from '@element-plus/icons-vue'
+import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight, Search, Collection, Select } from '@element-plus/icons-vue'
 import { useFeatureToggles, invalidateFeatureToggleCache } from '@/composables/useFeatureToggles'
 import {
   getSystemConfig, updateSystemConfig,
@@ -515,6 +620,107 @@ const removeUserFromTag = async (user) => {
     await loadTagMembers(selectedTag.value)
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('操作失败')
+  }
+}
+
+// 添加用户到标签对话框
+const addUsersDialogVisible = ref(false)
+const addUsersSearch = ref('')
+const addUsersResults = ref([])
+const searchingUsersForAdd = ref(false)
+const selectedUsersForAdd = ref([])
+const addingUsers = ref(false)
+const addUsersTableRef = ref(null)
+
+const openAddUsersDialog = () => {
+  if (!selectedTag.value) {
+    ElMessage.warning('请先选择一个标签')
+    return
+  }
+  addUsersDialogVisible.value = true
+  addUsersSearch.value = ''
+  addUsersResults.value = []
+  selectedUsersForAdd.value = []
+}
+
+const searchUsersForAdd = async () => {
+  if (!addUsersSearch.value.trim()) {
+    ElMessage.warning('请输入搜索关键词')
+    return
+  }
+  searchingUsersForAdd.value = true
+  try {
+    const res = await searchUsers({ keyword: addUsersSearch.value, page: 1, size: 50 })
+    if (res?.code === 200) {
+      const users = res.data?.records || res.data || []
+      // 为每个用户加载当前标签
+      const usersWithTags = await Promise.all(
+        users.map(async (user) => {
+          try {
+            const tagsRes = await getUserTags(user.id)
+            return { ...user, tags: tagsRes?.code === 200 ? (tagsRes.data || []) : [] }
+          } catch {
+            return { ...user, tags: [] }
+          }
+        })
+      )
+      addUsersResults.value = usersWithTags
+    }
+  } catch (e) {
+    ElMessage.error('搜索用户失败')
+  } finally {
+    searchingUsersForAdd.value = false
+  }
+}
+
+const handleAddUsersSelectionChange = (selection) => {
+  selectedUsersForAdd.value = selection
+}
+
+const confirmAddUsersToTag = async () => {
+  if (selectedUsersForAdd.value.length === 0) {
+    ElMessage.warning('请至少选择一个用户')
+    return
+  }
+
+  addingUsers.value = true
+  let successCount = 0
+  let failCount = 0
+
+  try {
+    for (const user of selectedUsersForAdd.value) {
+      try {
+        const tagsRes = await getUserTags(user.id)
+        const currentTags = tagsRes?.code === 200 ? (tagsRes.data || []) : []
+
+        // 如果用户已经有这个标签，跳过
+        if (currentTags.includes(selectedTag.value)) {
+          continue
+        }
+
+        // 添加新标签
+        const newTags = [...currentTags, selectedTag.value]
+        await setUserTags(user.id, newTags)
+        successCount++
+      } catch {
+        failCount++
+      }
+    }
+
+    await refreshFeatureToggleRuntime('users_added_to_tag')
+
+    if (failCount === 0) {
+      ElMessage.success(`成功添加 ${successCount} 个用户到标签「${selectedTag.value}」`)
+    } else {
+      ElMessage.warning(`添加完成：成功 ${successCount} 个，失败 ${failCount} 个`)
+    }
+
+    addUsersDialogVisible.value = false
+    await loadTagMembers(selectedTag.value)
+  } catch (e) {
+    ElMessage.error('批量添加失败')
+  } finally {
+    addingUsers.value = false
   }
 }
 
@@ -907,4 +1113,69 @@ onMounted(() => {
   font-size: 13px;
   padding: 16px 0;
 }
+
+.add-users-dialog-content {
+  min-height: 300px;
+}
+
+.dialog-tag-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.dialog-tag-info strong {
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+.user-search-section {
+  margin-bottom: 16px;
+}
+
+.empty-search-result,
+.search-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+.empty-search-result p,
+.search-hint p {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.selected-users-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #1e40af;
+}
+
+.selected-users-summary strong {
+  color: #1e3a8a;
+  font-weight: 700;
+}
+
+.members-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 </style>
