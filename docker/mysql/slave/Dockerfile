@@ -16,5 +16,9 @@ COPY mysql/init/08-v16-school-tables.sql /docker-entrypoint-initdb.d/08-v16-scho
 COPY mysql/slave/06-create-replication-marker.sh /docker-entrypoint-initdb.d/07-create-replication-marker.sh
 COPY mysql/slave/init-replication.sh /docker-entrypoint-initdb.d/init-replication.sh
 COPY mysql/slave/my.cnf /etc/mysql/conf.d/slave.cnf
+COPY mysql/slave/entrypoint-wrapper.sh /usr/local/bin/slave-wrapper.sh
 
-RUN chmod +x /docker-entrypoint-initdb.d/*.sh
+RUN chmod +x /docker-entrypoint-initdb.d/*.sh /usr/local/bin/slave-wrapper.sh
+
+# 使用自定义 entrypoint wrapper 确保每次容器启动时都检查/修复复制
+ENTRYPOINT ["/usr/local/bin/slave-wrapper.sh"]

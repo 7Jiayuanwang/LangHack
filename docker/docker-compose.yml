@@ -84,6 +84,9 @@ services:
     image: ${IMAGE_REGISTRY_PREFIX:-}mysql:8.0
     container_name: langhack-mysql-slave
     restart: unless-stopped
+    # 使用自定义 entrypoint wrapper 确保每次容器启动时都检查/修复复制
+    # 解决重部署时 docker-entrypoint-initdb.d 被跳过导致复制未配置的问题
+    entrypoint: /usr/local/bin/slave-wrapper.sh
     logging: *default-logging
     deploy:
       resources:
@@ -131,20 +134,22 @@ services:
       # 复制初始化标记 + 实际初始化脚本
       - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/07-create-replication-marker.sh:ro
       - ./mysql/slave/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
+      # Entrypoint wrapper（每次容器启动时检查/修复复制）
+      - ./mysql/slave/entrypoint-wrapper.sh:/usr/local/bin/slave-wrapper.sh:ro
     networks:
       - langhack-network
     depends_on:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 检查 MySQL 进程存活 + 复制 IO 线程运行状态
-      # init-replication.sh 包含 mysqldump 数据同步，启动时间较长
-      # 复制 SQL 线程未运行时由 DynamicDataSource 运行时降级处理
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
+      # 仅检查 MySQL 进程存活，不强制要求复制运行
+      # 复制状态由 entrypoint-wrapper.sh 自动管理（每次容器启动时检查/修复）
+      # 复制不可用时由 DynamicDataSource 运行时降级处理（回退主库）
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
-      retries: 36
-      start_period: 600s  # 10 分钟，给 188KB 04-apply-all-migrations.sql + ecdict 74w 行 mysqldump 留余量
+      retries: 12
+      start_period: 120s  # MySQL 正常启动 2 分钟内可完成
 
   # ─────────────────────────────────────────────
   # Redis 缓存

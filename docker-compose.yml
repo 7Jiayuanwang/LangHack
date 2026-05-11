@@ -125,13 +125,14 @@ services:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 检查 MySQL 进程存活 + 复制线程运行状态（IO + SQL 线程都必须运行）
-      # 复制未配置或线程未运行时 healthcheck 失败 → backend 无法启动 → 部署阻塞
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' | grep -q 'Replica_IO_Running: Yes' && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' | grep -q 'Replica_SQL_Running: Yes'"]
+      # 仅检查 MySQL 进程存活，不强制要求复制运行
+      # 复制状态由 entrypoint-wrapper.sh 自动管理（每次容器启动时检查/修复）
+      # 复制不可用时由 DynamicDataSource 运行时降级处理（回退主库）
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 10s
-      retries: 30
-      start_period: 360s  # 增加到 6 分钟，给主库和从库足够时间完成初始化（包括大量数据导入和复制配置）
+      retries: 12
+      start_period: 360s  # entrypoint-wrapper 会等待 MySQL 就绪 + 复制初始化，给足够时间
 
   # ─────────────────────────────────────────────
   # Redis 缓存
