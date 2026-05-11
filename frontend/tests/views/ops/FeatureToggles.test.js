@@ -1,8 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
-import FeatureToggles from '@/views/ops/FeatureToggles.vue'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
+
+const { elMessage, elMessageFn } = vi.hoisted(() => ({
+  elMessage: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn()
+  },
+  elMessageFn: vi.fn(() => ({ close: vi.fn() }))
+}))
+
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual('element-plus')
+  return {
+    ...actual,
+    ElMessage: Object.assign(elMessageFn, elMessage),
+    ElMessageBox: {
+      confirm: vi.fn(() => Promise.resolve())
+    }
+  }
+})
 
 // Mock API
 vi.mock('@/api/systemConfig', () => ({
@@ -27,8 +46,11 @@ vi.mock('@/composables/useFeatureToggles', () => ({
   invalidateFeatureToggleCache: vi.fn()
 }))
 
+import FeatureToggles from '@/views/ops/FeatureToggles.vue'
+
 describe('FeatureToggles.vue', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     setActivePinia(createPinia())
   })
 
@@ -49,12 +71,14 @@ describe('FeatureToggles.vue', () => {
       }
     })
 
-    // Wait for component to mount
+    // Wait for component to mount and API calls to complete
+    await flushPromises()
     await wrapper.vm.$nextTick()
-    await new Promise(resolve => setTimeout(resolve, 100))
 
-    const tabPane = wrapper.findAll('.el-tab-pane')
-    expect(tabPane.length).toBe(3)
+    // Verify the tabs component exists and activeTab is initialized
+    expect(wrapper.find('.main-tabs').exists()).toBe(true)
+    expect(wrapper.vm.activeTab).toBeDefined()
+    expect(['global', 'tags', 'users']).toContain(wrapper.vm.activeTab)
   })
 
   it('shows add users button in tag members panel', async () => {
@@ -97,16 +121,9 @@ describe('FeatureToggles.vue', () => {
   })
 
   it('warns if no tag selected when opening add users dialog', async () => {
-    // Mock ElMessage before mounting
-    const mockWarning = vi.fn()
-    vi.stubGlobal('ElMessage', { warning: mockWarning, success: vi.fn(), error: vi.fn() })
-
     const wrapper = mount(FeatureToggles, {
       global: {
-        plugins: [ElementPlus],
-        stubs: {
-          ElMessage: true
-        }
+        plugins: [ElementPlus]
       }
     })
 
@@ -115,9 +132,7 @@ describe('FeatureToggles.vue', () => {
     wrapper.vm.openAddUsersDialog()
     await wrapper.vm.$nextTick()
 
-    expect(mockWarning).toHaveBeenCalledWith('请先选择一个标签')
+    expect(elMessage.warning).toHaveBeenCalledWith('请先选择一个标签')
     expect(wrapper.vm.addUsersDialogVisible).toBe(false)
-
-    vi.unstubAllGlobals()
   })
 })

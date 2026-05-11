@@ -98,7 +98,7 @@ describe('Backups.vue', () => {
     await flushPromises()
 
     expect(opsApi.getBackupDetail).toHaveBeenCalledWith(1)
-    expect(opsApi.getBackupPreview).toHaveBeenCalledWith(1, { maxLines: 80, maxChars: 12000 })
+    expect(opsApi.getBackupPreview).toHaveBeenCalledWith(1, { maxLines: 200, maxChars: 50000 })
     expect(wrapper.vm.currentDetail.filename).toBe('backup.sql')
     expect(wrapper.vm.backupPreview).toContain('SELECT 1;')
     expect(wrapper.vm.detailDrawerVisible).toBe(true)

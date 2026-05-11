@@ -969,8 +969,31 @@ const handleCreateCategoryBackup = async (category) => {
 
 // Download backup
 const handleDownload = async (row) => {
+  let loadingInstance = null
   try {
-    const response = await downloadBackupApi(row.id)
+    // 显示下载进度提示
+    loadingInstance = ElMessage({
+      message: '正在下载备份文件，请稍候...',
+      type: 'info',
+      duration: 0,
+      showClose: false,
+    })
+
+    const response = await downloadBackupApi(row.id, (progressEvent) => {
+      if (progressEvent.total) {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        if (loadingInstance) {
+          loadingInstance.close()
+        }
+        loadingInstance = ElMessage({
+          message: `下载中: ${percentCompleted}% (${(progressEvent.loaded / 1024 / 1024).toFixed(2)}MB / ${(progressEvent.total / 1024 / 1024).toFixed(2)}MB)`,
+          type: 'info',
+          duration: 0,
+          showClose: false,
+        })
+      }
+    })
+
     const blobData = response.data || response
     const blob = blobData instanceof Blob
       ? blobData
@@ -1000,10 +1023,14 @@ const handleDownload = async (row) => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    ElMessage.success('下载开始')
+    ElMessage.success('下载完成')
   } catch (error) {
     console.error('Download backup failed:', error)
     ElMessage.error('下载备份文件失败')
+  } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
   }
 }
 

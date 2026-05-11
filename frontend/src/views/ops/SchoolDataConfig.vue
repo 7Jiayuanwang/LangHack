@@ -670,6 +670,14 @@ const handleQuickSync = async () => {
   }
   quickSyncing.value = true
   quickResult.value = null
+
+  let loadingInstance = ElMessage({
+    message: `正在同步 ${quickSyncForm.dataSource}，请稍候...`,
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
+
   try {
     const syncFn = quickSyncForm.mode === 'full'
       ? fullSyncSchoolDataFiltered
@@ -695,6 +703,9 @@ const handleQuickSync = async () => {
     }
     ElMessage.error(quickResult.value.errorMessage)
   } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
     quickSyncing.value = false
   }
 }
@@ -706,6 +717,14 @@ const handleQuickSyncAll = async (mode) => {
   }
   quickSyncing.value = true
   quickResult.value = null
+
+  let loadingInstance = ElMessage({
+    message: `正在${mode === 'full' ? '全量' : '增量'}同步全部数据源，请稍候...`,
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
+
   try {
     const syncFn = mode === 'full' ? fullSyncAllSchoolData : incrementalSyncAllSchoolData
     const res = await syncFn({ triggerType: 'MANUAL' })
@@ -743,6 +762,9 @@ const handleQuickSyncAll = async (mode) => {
     }
     ElMessage.error(quickResult.value.errorMessage)
   } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
     quickSyncing.value = false
   }
 }
@@ -762,6 +784,14 @@ const handleQuickChainFetch = async () => {
   }
   chainFetching.value = true
   chainResult.value = null
+
+  let loadingInstance = ElMessage({
+    message: `正在按学院链式拉取数据（${chainFetchForm.collegeName}），请稍候...`,
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
+
   try {
     const res = await chainFetchStudentsByCollege({
       collegeName: chainFetchForm.collegeName.trim(),
@@ -784,6 +814,9 @@ const handleQuickChainFetch = async () => {
     chainResult.value = { errorMessage: error.message || '按学院链式拉取失败' }
     ElMessage.error(chainResult.value.errorMessage)
   } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
     chainFetching.value = false
   }
 }

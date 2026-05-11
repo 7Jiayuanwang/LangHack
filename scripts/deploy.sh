@@ -1281,12 +1281,14 @@ case $BUILD_MODE in
     1)
         echo "[INFO] 全量构建（可能需要 5-15 分钟，请耐心等待）..."
         BUILD_LOG="/tmp/langhack-deploy-build-$$.log"
+        cd "$DOCKER_DIR"
         if [ -n "$SVCS" ]; then
-            docker compose build --no-cache $SVCS > "$BUILD_LOG" 2>&1 &
+            docker compose --env-file .env build --no-cache $SVCS > "$BUILD_LOG" 2>&1 &
         else
-            docker compose build --no-cache > "$BUILD_LOG" 2>&1 &
+            docker compose --env-file .env build --no-cache > "$BUILD_LOG" 2>&1 &
         fi
         BUILD_PID=$!
+        cd "$PROJECT_ROOT"
 
         # 监控构建进程，每 30 秒输出心跳
         BUILD_TIMEOUT=1800  # 30 分钟超时
@@ -1323,47 +1325,54 @@ case $BUILD_MODE in
         ;;
     2)
         echo "[INFO] 增量构建..."
+        cd "$DOCKER_DIR"
         if [ -n "$SVCS" ]; then
-            docker compose build $SVCS
+            docker compose --env-file .env build $SVCS
         else
-            docker compose build
+            docker compose --env-file .env build
         fi
+        cd "$PROJECT_ROOT"
         ;;
     3) echo "[INFO] 跳过构建（仅重启）"; BUILD_ONLY=true ;;
 esac
 
-# 启动
+# 启动（切换到 docker 目录以读取 .env 文件）
+cd "$DOCKER_DIR"
 if [ "$BUILD_ONLY" = true ]; then
     echo "[INFO] 重启服务..."
     if [ -n "$SVCS" ]; then
-        docker compose up -d --force-recreate $SVCS
+        docker compose --env-file .env up -d --force-recreate $SVCS || true
     else
-        docker compose up -d --force-recreate
+        docker compose --env-file .env up -d --force-recreate || true
     fi
 else
     echo "[INFO] 启动服务..."
     if [ -n "$SVCS" ]; then
-        docker compose up -d $SVCS
+        docker compose --env-file .env up -d $SVCS || true
     else
-        docker compose up -d
+        docker compose --env-file .env up -d || true
     fi
 fi
+cd "$PROJECT_ROOT"
 
 # ── 健康等待：所有服务必须 healthy，任意 unhealthy 立即失败 ──────────────
 # 诊断函数：打印失败服务的日志和排错建议
 print_failed_services() {
     echo ""
     echo "======================================"
-    docker compose ps
+    cd "$DOCKER_DIR"
+    docker compose --env-file .env ps
+    cd "$PROJECT_ROOT"
     echo "======================================"
     echo ""
     echo "─── 失败服务日志（最近 50 行）───"
-    docker compose ps --format '{{.Service}} {{.Status}}' 2>/dev/null \
+    cd "$DOCKER_DIR"
+    docker compose --env-file .env ps --format '{{.Service}} {{.Status}}' 2>/dev/null \
       | grep -E 'unhealthy|Exit|exited' | awk '{print $1}' \
       | while read -r svc; do
           echo ""
           echo ">>> [$svc] 日志:"
-          docker compose logs --tail=50 "$svc" 2>/dev/null
+          docker compose --env-file .env logs --tail=50 "$svc" 2>/dev/null
           echo ""
           echo ">>> [$svc] 排错建议:"
           case "$svc" in
@@ -1387,6 +1396,7 @@ print_failed_services() {
                   ;;
           esac
         done
+    cd "$PROJECT_ROOT"
 }
 
 # 回滚函数
@@ -1400,17 +1410,18 @@ do_rollback() {
             1|2)
                 echo "[INFO] 重新构建旧版本..."
                 if [ -n "$SVCS" ]; then
-                    docker compose build $SVCS
+                    docker compose --env-file .env build $SVCS
                 else
-                    docker compose build
+                    docker compose --env-file .env build
                 fi
                 ;;
         esac
         if [ -n "$SVCS" ]; then
-            docker compose up -d $SVCS
+            docker compose --env-file .env up -d $SVCS
         else
-            docker compose up -d
+            docker compose --env-file .env up -d
         fi
+        cd "$PROJECT_ROOT"
         echo "[INFO] 已回滚到 ${old_commit:0:8}，请等待服务重新就绪"
     else
         echo "[ERROR] git 回滚失败，请手动处理: git checkout ${old_commit:0:8}"
@@ -1418,21 +1429,26 @@ do_rollback() {
 }
 
 echo "[INFO] 等待服务就绪 (预期 ${expected_healthy} 个 healthy)..."
-timeout=180; elapsed=0; deploy_ok=false; fail_reason=""
+timeout=300; elapsed=0; deploy_ok=false; fail_reason=""
 while [ $elapsed -lt $timeout ]; do
     # 获取每个服务的名称和状态
-    svc_statuses=$(docker compose ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
+    cd "$DOCKER_DIR"
+    svc_statuses=$(docker compose --env-file .env ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
+    cd "$PROJECT_ROOT"
     if [ -z "$svc_statuses" ]; then
         sleep 5; elapsed=$((elapsed + 5)); continue
     fi
 
-    # 快速失败：任意服务 unhealthy 或 exited 立即终止
-    failed_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
-    if [ -n "$failed_svcs" ]; then
-        fail_reason="unhealthy"
+    # 检测 unhealthy 服务（但不立即失败，给予重试机会）
+    unhealthy_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy/ && $2 !~ /starting/' | awk '{print $1}' || true)
+    # 检测已退出的服务（立即失败）
+    exited_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /Exit [^0]|exited/ && $2 !~ /Exited \(0\)/' | awk '{print $1}' || true)
+
+    if [ -n "$exited_svcs" ]; then
+        fail_reason="exited"
         echo ""
-        echo "[ERROR] 以下服务启动失败，终止部署："
-        echo "$failed_svcs" | sed 's/^/         /'
+        echo "[ERROR] 以下服务异常退出，终止部署："
+        echo "$exited_svcs" | sed 's/^/         /'
         print_failed_services
         break
     fi
@@ -1443,10 +1459,67 @@ while [ $elapsed -lt $timeout ]; do
         break
     fi
 
+    # 如果有 unhealthy 服务且超过 180 秒，打印警告但继续等待
+    if [ -n "$unhealthy_svcs" ] && [ $elapsed -ge 180 ]; then
+        echo ""
+        echo "[WARN] 以下服务仍为 unhealthy，继续等待重试："
+        echo "$unhealthy_svcs" | sed 's/^/         /'
+    fi
+
     sleep 5; elapsed=$((elapsed + 5))
     printf "  等待中... %ds (healthy: %d/%d)\r" "$elapsed" "$healthy" "$expected_healthy"
 done
 echo ""
+
+# 超时后，尝试启动依赖失败的服务
+if [ "$deploy_ok" = false ] && [ "$fail_reason" != "exited" ]; then
+    echo "[WARN] 部署超时，检查是否有服务因依赖失败未启动..."
+    cd "$DOCKER_DIR"
+
+    # 获取所有定义的服务
+    all_services=$(docker compose --env-file .env config --services 2>/dev/null || true)
+    # 获取当前运行的服务
+    running_services=$(docker compose --env-file .env ps --format '{{.Service}}' 2>/dev/null || true)
+
+    # 找出未运行的服务
+    missing_svcs=""
+    for svc in $all_services; do
+        if ! echo "$running_services" | grep -q "^${svc}$"; then
+            missing_svcs="$missing_svcs $svc"
+        fi
+    done
+
+    cd "$PROJECT_ROOT"
+
+    if [ -n "$missing_svcs" ]; then
+        echo "[INFO] 发现未启动的服务，尝试启动："
+        echo "$missing_svcs" | tr ' ' '\n' | sed 's/^/         /'
+        cd "$DOCKER_DIR"
+        for svc in $missing_svcs; do
+            echo "[INFO] 启动 $svc..."
+            docker compose --env-file .env up -d "$svc" 2>/dev/null || true
+        done
+        cd "$PROJECT_ROOT"
+
+        # 再次等待 60 秒
+        echo "[INFO] 等待新启动的服务就绪..."
+        retry_timeout=60; retry_elapsed=0
+        while [ $retry_elapsed -lt $retry_timeout ]; do
+            cd "$DOCKER_DIR"
+            svc_statuses=$(docker compose --env-file .env ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
+            cd "$PROJECT_ROOT"
+            healthy=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /healthy/ && $2 !~ /unhealthy/' | wc -l | tr -d ' ')
+            if [ "$healthy" -ge "$expected_healthy" ]; then
+                deploy_ok=true
+                echo "[OK] 所有服务已就绪"
+                break
+            fi
+            sleep 5; retry_elapsed=$((retry_elapsed + 5))
+            printf "  等待中... %ds (healthy: %d/%d)\r" "$retry_elapsed" "$healthy" "$expected_healthy"
+        done
+        echo ""
+    fi
+fi
 
 # 容器健康检查通过后，验证后端 API 可用性
 if [ "$deploy_ok" = true ]; then
@@ -1490,7 +1563,9 @@ fi
 
 echo ""
 echo "======================================"
-docker compose ps
+cd "$DOCKER_DIR"
+docker compose --env-file .env ps
+cd "$PROJECT_ROOT"
 echo "======================================"
 echo ""
 

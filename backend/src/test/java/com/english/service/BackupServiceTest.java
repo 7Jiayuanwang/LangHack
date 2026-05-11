@@ -525,7 +525,8 @@ class BackupServiceTest {
     @Test
     void getBackupPreview_readsPreviewContent() throws Exception {
         Path backupFile = testBackupDir.resolve("preview_backup.sql");
-        Files.writeString(backupFile, "-- line1\nSELECT 1;\nSELECT 2;\n");
+        // Use valid SQL statements that match the smart skip logic (CREATE/INSERT)
+        Files.writeString(backupFile, "-- header comment\nCREATE TABLE test (id INT);\nINSERT INTO test VALUES (1);\nINSERT INTO test VALUES (2);\n");
 
         BackupRecord record = new BackupRecord();
         record.setId(2L);
@@ -537,7 +538,9 @@ class BackupServiceTest {
         Map<String, Object> preview = backupService.getBackupPreview(2L, 2, 200);
 
         assertEquals(Boolean.TRUE, ((BackupRecord) preview.get("record")).getReadable());
-        assertTrue(String.valueOf(preview.get("preview")).contains("SELECT 1;"));
+        String previewContent = String.valueOf(preview.get("preview"));
+        assertTrue(previewContent.contains("CREATE TABLE test"));
+        // With maxLines=2, we get CREATE + INSERT (first 2 lines after skipping header)
         assertEquals(2, preview.get("lineCount"));
         assertEquals(Boolean.TRUE, preview.get("truncated"));
     }
