@@ -145,7 +145,7 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="pagination">
+      <div class="pagination" :style="{ visibility: totalPages > 1 ? 'visible' : 'hidden' }">
         <button class="page-btn" :disabled="currentPage === 1" @click="prevPage">
           <el-icon><ArrowLeft /></el-icon>
         </button>
@@ -211,6 +211,7 @@ const searchQuery = ref('')
 const searchVisible = ref(false)
 // 本会话中已展示过的推荐文章 ID — 传给后端用于"换一批"时排除
 const shownRecommendedIds = ref([])
+
 
 const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize))
 const filteredItems = computed(() => {
@@ -425,12 +426,19 @@ const handleItemClick = (item) => {
     console.warn('readArticle: 文章ID不存在', item)
     return
   }
+  // 验证 ID 是否为有效数字
+  const numericId = typeof item.id === 'number' ? item.id : parseInt(item.id, 10)
+  if (isNaN(numericId) || numericId <= 0) {
+    console.error('readArticle: 无效的文章ID', item.id, item)
+    ElMessage.error('文章ID无效，无法打开')
+    return
+  }
   // Fire-and-forget: 标记文章为已读
   const authHeader = getAuthHeader()
   const headers = authHeader ? { Authorization: authHeader } : {}
-  fetch(`${apiBase}/api/public/texts/${item.id}/read`, { method: 'POST', headers }).catch(() => {})
+  fetch(`${apiBase}/api/public/texts/${numericId}/read`, { method: 'POST', headers }).catch(() => {})
   router.push({
-    path: `/article/${item.id}`,
+    path: `/article/${numericId}`,
     query: {
       from: 'articles',
       _title: encodeURIComponent(item.title || '')
@@ -506,12 +514,13 @@ onMounted(() => {
 .articles-mobile-page {
   height: 100vh;
   height: 100dvh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   background-color: var(--app-bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--app-text);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 /* --- Responsive Layout for Desktop --- */
@@ -530,8 +539,10 @@ onMounted(() => {
   .articles-feed {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, 320px);
     gap: 24px;
     padding: 0;
+    align-content: start;
   }
 
   .bottom-spacer,
@@ -544,7 +555,7 @@ onMounted(() => {
   }
 
   .article-card {
-    min-height: 280px;
+    height: 320px;
   }
 
   .article-cover {
@@ -563,6 +574,7 @@ onMounted(() => {
 @media (min-width: 1200px) {
   .articles-feed {
     grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 320px);
   }
 }
 
@@ -635,7 +647,7 @@ onMounted(() => {
 /* --- Filter Bar --- */
 .filter-bar {
   position: sticky;
-  top: 60px; /* Header height only — safe-area is consumed by Layout's .status-bar */
+  top: 0; /* Header is outside the scroll container, so stick to top of .page-main */
   z-index: 40;
   background: rgba(246, 247, 248, 0.95);
   backdrop-filter: blur(8px);
@@ -659,6 +671,10 @@ onMounted(() => {
   padding: 0 20px;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+}
+@media (min-width: 768px) {
+  .filter-scroll { justify-content: center; gap: 16px; }
+  .filter-pill { padding: 12px 36px; font-size: 16px; font-weight: 600; }
 }
 .filter-scroll::-webkit-scrollbar { display: none; }
 
@@ -696,6 +712,16 @@ onMounted(() => {
 .page-main {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;      /* Critical for flex scroll — see AGENTS.md */
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .articles-feed {
@@ -703,6 +729,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  flex: 1;
 }
 
 /* --- Article Card --- */
@@ -716,6 +743,9 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   border: 1px solid #f1f5f9;
+  width: 100%;
+  min-width: 0;
+  height: 340px;
 }
 
 @media (hover: hover) {
@@ -780,6 +810,7 @@ onMounted(() => {
 /* Content */
 .article-content {
   padding: 16px 16px 12px;
+  flex: 1;
 }
 
 .article-title {
@@ -795,6 +826,8 @@ onMounted(() => {
   overflow: hidden;
   word-break: break-word;
   overflow-wrap: break-word;
+  /* Fixed 2-line height for consistent card size */
+  height: calc(2 * 1.3em);
 }
 
 .article-snippet {
@@ -809,6 +842,8 @@ onMounted(() => {
   overflow: hidden;
   word-break: break-word;
   overflow-wrap: break-word;
+  /* Fixed 2-line height for consistent card size */
+  height: calc(2 * 1.5em);
 }
 
 /* Footer Insights */

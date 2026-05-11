@@ -241,7 +241,8 @@ class SchoolDataSyncServiceTest {
             List<SyncLog> results = syncService.fullSyncAll("SCHEDULED", "SYSTEM");
 
             assertEquals(9, results.size());
-            verify(fetchService, times(9)).fetchRawDataWithSummary(anyString(), isNull());
+            // student_schedule is skipped (requires student ID), so fetchService is called 8 times
+            verify(fetchService, times(8)).fetchRawDataWithSummary(anyString(), isNull());
         }
 
         @Test
@@ -255,7 +256,7 @@ class SchoolDataSyncServiceTest {
             when(fetchService.fetchRawDataWithSummary(eq("level_exam_scores"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(fetchService.fetchRawDataWithSummary(eq("teaching_plans"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(fetchService.fetchRawDataWithSummary(eq("teacher_courses"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
-            when(fetchService.fetchRawDataWithSummary(eq("student_schedule"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            // student_schedule is skipped by fullSyncAll — no stub needed
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
@@ -702,6 +703,33 @@ class SchoolDataSyncServiceTest {
             verify(schoolCourseMapper, never()).upsertByCourseCode(any());
             verify(persistService, never()).persistMappedRecord(eq("school_student"), any());
             verify(persistService, never()).persistMappedRecord(eq("school_teacher"), any());
+        }
+
+        @Test
+        @DisplayName("school_course 映射缺少 collegeName 时返回可定位的失败诊断")
+        void chainFetch_missingCollegeMapping_returnsDiagnosableFailure() {
+            List<Map<String, Object>> courses = new ArrayList<>();
+            courses.add(new HashMap<>(Map.of("课程代码", "ENG101", "课程名称", "大学英语")));
+            when(apiClient.fetchSchoolCourses(any())).thenReturn(courses);
+            when(fieldMappingService.applyMapping(eq("school_course"), any()))
+                    .thenReturn(new HashMap<>(Map.of("courseCode", "ENG101")));
+
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
+
+            assertNotNull(result);
+            assertEquals("FAILED", result.get("status"));
+            assertEquals(0, result.get("courseCount"));
+            assertTrue(((Integer) result.get("errorCount")) > 0);
+            assertTrue(String.valueOf(result.get("errorMessage")).contains("collegeName"));
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> stepStats = (Map<String, Object>) result.get("stepStats");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> schoolCourseStats = (Map<String, Object>) stepStats.get("schoolCourse");
+            assertEquals(1, schoolCourseStats.get("upstreamCount"));
+            assertEquals(1, schoolCourseStats.get("blankCollegeCount"));
+            verify(apiClient, never()).fetchTeacherCourses(any());
+            verify(apiClient, never()).fetchCourseSelections(any());
         }
     }
     private SchoolDataFetchResult fetchResult(List<Map<String, Object>> rows) {

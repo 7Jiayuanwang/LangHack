@@ -51,11 +51,16 @@
 
     <div v-if="isDerivedLocalTab" class="tab-note derived-note">
       <el-icon><InfoFilled /></el-icon>
-      <span>当前为链式拉取派生的本地表，只支持本地筛选查看。请使用下方“按学院链式拉取”更新数据。</span>
+      <span>当前为链式拉取派生的本地表，只支持本地筛选查看。请使用下方"按学院链式拉取"更新数据。</span>
+    </div>
+
+    <div v-if="activeTab === 'student_schedule'" class="tab-note">
+      <el-icon><InfoFilled /></el-icon>
+      <span>学生课表需要提供学号才能同步。请在"设置筛选条件"中填写学号（studentId），再点击"同步当前数据源"。</span>
     </div>
 
     <!-- 链式拉取卡片 -->
-    <div class="chain-fetch-card">
+    <div v-if="chainFetchEnabled" class="chain-fetch-card">
       <div class="card-header">
         <span class="card-title">按学院链式拉取</span>
         <span class="card-subtitle">课程 → 教师 → 学生 → 绑定关系</span>
@@ -83,6 +88,12 @@
         </div>
         <div v-if="chainResult" class="result-summary">
           <div class="result-item">
+            <span class="result-label">状态:</span>
+            <el-tag :type="chainStatusType(chainResult.status)" size="small">
+              {{ chainStatusText(chainResult.status) }}
+            </el-tag>
+          </div>
+          <div class="result-item">
             <span class="result-label">课程数:</span>
             <span class="result-value">{{ chainResult.courseCount || 0 }}</span>
           </div>
@@ -105,7 +116,30 @@
             </el-tag>
           </div>
         </div>
+        <div v-if="chainResult?.errorMessage" class="result-error">{{ chainResult.errorMessage }}</div>
+        <div v-if="chainErrors(chainResult).length > 0" class="result-issues">
+          <div class="result-issue-title">错误</div>
+          <div v-for="item in chainErrors(chainResult)" :key="`error-${item}`" class="result-issue-item">
+            {{ item }}
+          </div>
+        </div>
+        <div v-if="chainWarnings(chainResult).length > 0" class="result-issues warnings">
+          <div class="result-issue-title">警告</div>
+          <div v-for="item in chainWarnings(chainResult)" :key="`warning-${item}`" class="result-issue-item">
+            {{ item }}
+          </div>
+        </div>
+        <div v-if="chainStepEntries(chainResult).length > 0" class="result-steps">
+          <div v-for="[stepName, stats] in chainStepEntries(chainResult)" :key="stepName" class="result-step-card">
+            <div class="result-step-title">{{ chainStepLabel(stepName) }}</div>
+            <div class="result-step-values">{{ formatChainStepStats(stats) }}</div>
+          </div>
+        </div>
       </div>
+    </div>
+    <div v-else class="tab-note">
+      <el-icon><InfoFilled /></el-icon>
+      <span>按学院链式拉取功能当前已被管理员关闭。</span>
     </div>
 
     <!-- 数据导出按钮 -->
@@ -121,7 +155,24 @@
     <!-- 数据源Tab -->
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="行政班" name="administrative_class">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="班级简称">{{ row.classShortName || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="班级类型">{{ row.classType || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="班主任">{{ row.headTeacherName || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="男生人数">{{ row.maleCount ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="女生人数">{{ row.femaleCount ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="成立日期">{{ row.establishDate || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="毕业日期">{{ row.graduateDate || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="备注" :span="2">{{ row.remark || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="同步时间">{{ row.syncTime || row.updatedAt || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="classCode" label="班级编码" width="120" />
           <el-table-column prop="className" label="班级名称" min-width="150" />
           <el-table-column label="学院" min-width="120">
@@ -141,7 +192,31 @@
       </el-tab-pane>
 
       <el-tab-pane label="课程" name="school_course">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="英文名称">{{ row.courseNameEn || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="理论学时">{{ row.theoryHours ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="实验学时">{{ row.experimentHours ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="实践学时">{{ row.practiceHours ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="上机学时">{{ row.computerHours ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="开课院系">{{ row.departmentName || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="负责人">{{ row.leaderName || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="考核方式">{{ row.assessmentMethod || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="双语课程">{{ row.isBilingual ? '是' : (row.isBilingual === false ? '否' : '-') }}</el-descriptions-item>
+                  <el-descriptions-item label="在线课程">{{ row.isOnline ? '是' : (row.isOnline === false ? '否' : '-') }}</el-descriptions-item>
+                  <el-descriptions-item label="适用专业" :span="2">{{ row.applicableMajors || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="先修课程" :span="2">{{ row.prerequisiteNames || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="课程简称">{{ row.courseShortName || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="课程状态">{{ row.courseStatus || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="课程简介" :span="3">{{ row.courseIntro || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="教学目标" :span="3">{{ row.teachingObjectives || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="courseCode" label="课程编码" width="120" />
           <el-table-column prop="courseName" label="课程名称" min-width="180" />
           <el-table-column prop="courseNature" label="性质" width="80" />
@@ -161,7 +236,20 @@
           <el-icon><InfoFilled /></el-icon>
           <span>官方 9 个数据源中「教师授课」(/api/jssk) 的字段并入教学班表存储，在此 Tab 统一展示。</span>
         </div>
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="班级名称">{{ row.className || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="课程代码">{{ row.courseCode || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="教师工号">{{ row.teacherId || row.teacherCode || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="容量">{{ row.capacity ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="更新时间">{{ row.updatedAt || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="classId" label="教学班ID" width="120" />
           <el-table-column prop="courseName" label="课程" min-width="180" />
           <el-table-column prop="teacherName" label="教师" width="100" />
@@ -173,7 +261,18 @@
       </el-tab-pane>
 
       <el-tab-pane label="课程安排" name="course_schedule">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="同步来源">{{ row.syncSource || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="同步时间">{{ row.syncTime || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="更新时间">{{ row.updatedAt || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="classId" label="教学班ID" width="120" />
           <el-table-column prop="dayOfWeek" label="星期" width="70" />
           <el-table-column prop="period" label="节次" width="80" />
@@ -185,7 +284,28 @@
       </el-tab-pane>
 
       <el-tab-pane label="选课记录" name="course_selection">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="课程代码">{{ row.courseCode || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="教学班号">{{ row.classId || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="学年">{{ row.academicYear || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="学期">{{ row.semester === 1 ? '秋' : row.semester === 2 ? '春' : (row.semester ?? '-') }}</el-descriptions-item>
+                  <el-descriptions-item label="上课时间">{{ row.classTime || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="上课地点">{{ row.classLocation || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="选课时间">{{ row.selectionTime || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="平时成绩">{{ row.regularGrade ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="期末成绩">{{ row.finalGrade ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="绩点">{{ row.gradePoint ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="出勤次数">{{ row.attendanceCount ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="缺勤次数">{{ row.absenceCount ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="成绩备注" :span="3">{{ row.gradeRemark || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
           <el-table-column prop="studentName" label="姓名" width="90" />
           <el-table-column prop="courseName" label="课程" min-width="180" />
@@ -197,7 +317,32 @@
       </el-tab-pane>
 
       <el-tab-pane label="等级考试" name="level_exam_scores">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="考试名称">{{ row.examName || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="准考证号">{{ row.admissionTicketNo || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="等级">{{ row.grade || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="通过分数线">{{ row.passingScore ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="听力">{{ row.listeningScore ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="阅读">{{ row.readingScore ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="写作">{{ row.writingScore ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="翻译">{{ row.translationScore ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="证书编号">{{ row.certificateNo || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="证书日期">{{ row.certificateDate || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="考试地点">{{ row.examLocation || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="考场号">{{ row.examRoomNo || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="座位号">{{ row.seatNo || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="报名日期">{{ row.registrationDate || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="成绩发布日期">{{ row.scoreReleaseDate || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="数据来源">{{ row.dataSource || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="备注" :span="3">{{ row.remark || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
           <el-table-column prop="studentName" label="姓名" width="90" />
           <el-table-column prop="examType" label="类型" width="80" />
@@ -214,7 +359,36 @@
       </el-tab-pane>
 
       <el-tab-pane label="教学计划" name="teaching_plans">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="学制">{{ row.schoolingLength || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="学位类型">{{ row.degreeType || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="教育层次">{{ row.educationLevel || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="学院">{{ row.collegeName || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="必修学分">{{ row.requiredCredits ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="选修学分">{{ row.electiveCredits ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="实践学分">{{ row.practiceCredits ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="通识学分">{{ row.generalEducationCredits ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="专业核心学分">{{ row.majorCoreCredits ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="专业选修学分">{{ row.majorElectiveCredits ?? '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="生效日期">{{ row.effectiveDate || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="失效日期">{{ row.expiryDate || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="版本">{{ row.version || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="制定人">{{ row.creator || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="审核人">{{ row.reviewer || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="审核日期">{{ row.reviewDate || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="培养目标" :span="3">{{ row.trainingObjective || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="培养要求" :span="3">{{ row.trainingRequirements || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="主干学科" :span="3">{{ row.mainDisciplines || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="核心课程" :span="3">{{ row.coreCourses || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="修订说明" :span="3">{{ row.revisionNotes || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="planId" label="计划编号" width="120" />
           <el-table-column prop="planName" label="计划名称" min-width="200" />
           <el-table-column label="专业" width="120">
@@ -229,7 +403,21 @@
       </el-tab-pane>
 
       <el-tab-pane label="学生课表" name="student_schedule">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="课程代码">{{ row.courseCode || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="教学班ID">{{ row.classId || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="学年">{{ row.academicYear || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="学期">{{ row.semester === 1 ? '秋' : row.semester === 2 ? '春' : (row.semester ?? '-') }}</el-descriptions-item>
+                  <el-descriptions-item label="周次">{{ row.weekRange || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="更新时间">{{ row.updatedAt || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
           <el-table-column prop="studentName" label="姓名" width="90" />
           <el-table-column prop="courseName" label="课程" min-width="180" />
@@ -241,7 +429,19 @@
       </el-tab-pane>
 
       <el-tab-pane label="链式学生目录" name="school_student">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="最近成绩同步">{{ row.lastExamSyncTime || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="最近课表同步">{{ row.lastScheduleSyncTime || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="同步来源">{{ row.syncSource || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="同步时间">{{ row.syncTime || row.updatedAt || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
           <el-table-column prop="studentName" label="姓名" width="100" />
           <el-table-column label="学院" min-width="130">
@@ -257,7 +457,17 @@
       </el-tab-pane>
 
       <el-tab-pane label="链式教师目录" name="school_teacher">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="学院代码">{{ row.collegeCode || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="同步时间">{{ row.syncTime || row.updatedAt || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="teacherId" label="教师工号" width="130" />
           <el-table-column prop="teacherName" label="教师姓名" width="110" />
           <el-table-column label="学院" min-width="140">
@@ -271,7 +481,16 @@
       </el-tab-pane>
 
       <el-tab-pane label="师生绑定" name="teacher_student_binding">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500">
+        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="expand-detail">
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="同步时间">{{ row.syncTime || row.updatedAt || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="teacherId" label="教师工号" width="130" />
           <el-table-column prop="studentId" label="学号" width="130" />
           <el-table-column prop="courseCode" label="课程代码" width="120" />
@@ -366,6 +585,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { InfoFilled, DataLine, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   getSchoolDataOverview,
   getSchoolDataFilterFields,
@@ -406,6 +626,19 @@ const dataSourceLabels = {
   teacher_student_binding: '师生绑定'
 }
 
+const CHAIN_STATUS_LABELS = {
+  SUCCESS: '成功',
+  PARTIAL: '部分异常',
+  FAILED: '失败'
+}
+
+const CHAIN_STEP_LABELS = {
+  schoolCourse: '课程阶段',
+  teacherCourses: '授课阶段',
+  courseSelection: '选课阶段',
+  persist: '落库阶段'
+}
+
 const route = useRoute()
 const activeTab = ref('administrative_class')
 const loading = ref(false)
@@ -443,6 +676,8 @@ const chainCollegeName = ref('外国语学院')
 const chainMatchMode = ref('eq')
 const chainResult = ref(null)
 const suppressTabReload = ref(false)
+const { isEnabled: isFeatureEnabled, load: loadFeatureToggles } = useFeatureToggles()
+const chainFetchEnabled = computed(() => isFeatureEnabled('ops.school_data_chain_fetch'))
 
 // 导出相关状态
 const exporting = ref(false)
@@ -520,6 +755,10 @@ function buildQueryPayload() {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 async function loadFilterFields() {
   try {
     const res = await getSchoolDataFilterFields(activeTab.value)
@@ -547,27 +786,45 @@ async function loadOverview() {
   }
 }
 
-async function loadData() {
+async function loadData(showProgress = true) {
   loading.value = true
-  startProgress(`正在加载${dataSourceLabels[activeTab.value]}数据...`)
+  if (showProgress) {
+    startProgress(`正在加载${dataSourceLabels[activeTab.value]}数据...`)
+  }
   try {
     const res = await querySchoolData(activeTab.value, buildQueryPayload())
     const pageData = res?.data
     tableData.value = pageData?.records || []
     total.value = pageData?.total || 0
-    completeProgress(true)
+    if (showProgress) {
+      completeProgress(true)
+    }
   } catch (e) {
     console.error('获取数据失败:', e)
-    // 只有在真正失败时才显示错误
-    if (tableData.value.length === 0) {
-      completeProgress(false)
-    } else {
-      completeProgress(true)  // 数据已加载，视为成功
+    if (showProgress) {
+      if (tableData.value.length === 0) {
+        completeProgress(false)
+      } else {
+        completeProgress(true)
+      }
     }
-    tableData.value = []
-    total.value = 0
+    // 保留已有数据，不清空，避免网络抖动导致表格闪空
   } finally {
     loading.value = false
+  }
+}
+
+async function refreshAfterSync() {
+  const previousOverviewCount = overview.value?.[activeTab.value] ?? null
+  const previousTotal = total.value
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await loadOverview()
+    await loadData(false)
+    const currentOverviewCount = overview.value?.[activeTab.value] ?? null
+    if (currentOverviewCount !== previousOverviewCount || total.value !== previousTotal || attempt === 2) {
+      return
+    }
+    await sleep(800 * (attempt + 1))
   }
 }
 
@@ -651,6 +908,40 @@ async function focusChainResultLocally(result) {
   const targetTab = resolveChainResultTab(result)
   const filters = buildChainLocalFilters(targetTab, result)
   await switchToTab(targetTab, filters)
+}
+
+function chainStatusType(status) {
+  if (status === 'FAILED') return 'danger'
+  if (status === 'PARTIAL') return 'warning'
+  return 'success'
+}
+
+function chainStatusText(status) {
+  return CHAIN_STATUS_LABELS[status] || '未知'
+}
+
+function chainErrors(result) {
+  return Array.isArray(result?.errors) ? result.errors : []
+}
+
+function chainWarnings(result) {
+  return Array.isArray(result?.warnings) ? result.warnings : []
+}
+
+function chainStepEntries(result) {
+  return Object.entries(result?.stepStats || {})
+}
+
+function chainStepLabel(stepName) {
+  return CHAIN_STEP_LABELS[stepName] || stepName
+}
+
+function formatChainStepStats(stats) {
+  if (!stats || typeof stats !== 'object') return ''
+  return Object.entries(stats)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '' && (!Array.isArray(value) || value.length > 0))
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(',') : value}`)
+    .join(' | ')
 }
 
 async function applyRouteContext() {
@@ -758,8 +1049,7 @@ async function handleSync() {
       ElMessage.success(`${syncMode.value === 'full' ? '全量' : '增量'}同步成功`)
     }
 
-    await loadOverview()
-    await loadData()
+    await refreshAfterSync()
   } catch (e) {
     console.error('同步失败:', e)
   } finally {
@@ -768,6 +1058,10 @@ async function handleSync() {
 }
 
 async function handleChainFetch() {
+  if (!chainFetchEnabled.value) {
+    ElMessage.warning('按学院链式拉取功能已关闭')
+    return
+  }
   if (!chainCollegeName.value.trim()) {
     ElMessage.warning('请输入学院名称')
     return
@@ -784,8 +1078,16 @@ async function handleChainFetch() {
 
     chainResult.value = res?.data || null
     await loadOverview()
-    await focusChainResultLocally(chainResult.value)
-    ElMessage.success('链式拉取完成，已切换到本地结果')
+    if ((chainResult.value?.status || 'SUCCESS') !== 'FAILED') {
+      await focusChainResultLocally(chainResult.value)
+    }
+    if (chainResult.value?.status === 'FAILED') {
+      ElMessage.error(chainResult.value?.errorMessage || '链式拉取失败，请查看诊断信息')
+    } else if (chainResult.value?.status === 'PARTIAL') {
+      ElMessage.warning(chainResult.value?.errorMessage || '链式拉取已完成，但存在异常')
+    } else {
+      ElMessage.success('链式拉取完成，已切换到本地结果')
+    }
   } catch (e) {
     console.error('链式拉取失败:', e)
     ElMessage.error(e?.message || '链式拉取失败')
@@ -872,6 +1174,13 @@ function generateCSV(data) {
     id: 'ID',
     classCode: '班级代码',
     className: '班级名称',
+    classShortName: '班级简称',
+    classType: '班级类型',
+    headTeacherName: '班主任',
+    maleCount: '男生人数',
+    femaleCount: '女生人数',
+    establishDate: '成立日期',
+    graduateDate: '毕业日期',
     collegeCode: '学院代码',
     collegeName: '学院名称',
     majorCode: '专业代码',
@@ -881,13 +1190,28 @@ function generateCSV(data) {
     classStatus: '班级状态',
     courseCode: '课程代码',
     courseName: '课程名称',
+    courseNameEn: '课程英文名',
     courseNature: '课程性质',
     courseCategory: '课程类别',
+    courseStatus: '课程状态',
+    courseIntro: '课程简介',
     credits: '学分',
     totalHours: '总学时',
+    theoryHours: '理论学时',
+    experimentHours: '实验学时',
+    practiceHours: '实践学时',
+    computerHours: '上机学时',
     hours: '学时',
+    departmentName: '开课院系',
+    leaderName: '负责人',
+    assessmentMethod: '考核方式',
+    isBilingual: '双语课程',
+    isOnline: '在线课程',
+    applicableMajors: '适用专业',
+    prerequisiteNames: '先修课程',
     classId: '教学班ID',
     courseClassCode: '教学班号',
+    capacity: '容量',
     teacherName: '教师姓名',
     teacherCode: '教师工号',
     teacherId: '教师工号',
@@ -898,24 +1222,72 @@ function generateCSV(data) {
     period: '节次',
     weekRange: '周次',
     classLocation: '上课地点',
+    classTime: '上课时间',
     location: '地点',
     studentId: '学号',
     studentName: '学生姓名',
     totalGrade: '总成绩',
+    regularGrade: '平时成绩',
+    finalGrade: '期末成绩',
+    gradePoint: '绩点',
+    attendanceCount: '出勤次数',
+    absenceCount: '缺勤次数',
+    gradeRemark: '成绩备注',
     selectionStatus: '选课状态',
+    selectionTime: '选课时间',
     examType: '考试类型',
+    examName: '考试名称',
+    admissionTicketNo: '准考证号',
     score: '成绩',
     isPassed: '是否通过',
     examDate: '考试日期',
+    passingScore: '通过分数线',
+    listeningScore: '听力',
+    readingScore: '阅读',
+    writingScore: '写作',
+    translationScore: '翻译',
+    certificateNo: '证书编号',
+    certificateDate: '证书日期',
+    examLocation: '考试地点',
+    examRoomNo: '考场号',
+    seatNo: '座位号',
+    registrationDate: '报名日期',
+    scoreReleaseDate: '成绩发布日期',
+    dataSource: '数据来源',
     planId: '计划编号',
     planName: '计划名称',
+    schoolingLength: '学制',
+    degreeType: '学位类型',
+    educationLevel: '教育层次',
+    requiredCredits: '必修学分',
+    electiveCredits: '选修学分',
+    practiceCredits: '实践学分',
+    generalEducationCredits: '通识学分',
+    majorCoreCredits: '专业核心学分',
+    majorElectiveCredits: '专业选修学分',
     totalCredits: '总学分',
+    trainingObjective: '培养目标',
+    effectiveDate: '生效日期',
+    expiryDate: '失效日期',
+    creator: '制定人',
+    reviewer: '审核人',
+    version: '版本',
+    courseShortName: '课程简称',
+    teachingObjectives: '教学目标',
+    trainingRequirements: '培养要求',
+    mainDisciplines: '主干学科',
+    coreCourses: '核心课程',
+    reviewDate: '审核日期',
+    revisionNotes: '修订说明',
+    attachmentPath: '附件路径',
     planStatus: '计划状态',
     sourceCourseCodes: '来源课程代码',
     sourceType: '来源类型',
     syncSource: '同步来源',
+    syncTime: '同步时间',
     lastExamSyncTime: '最近成绩同步',
     lastScheduleSyncTime: '最近课表同步',
+    remark: '备注',
     updatedAt: '更新时间',
     createdAt: '创建时间'
   }
@@ -977,11 +1349,20 @@ function downloadCSV(csvContent, filename) {
 }
 
 onMounted(async () => {
-  await loadOverview()
+  try {
+    await loadFeatureToggles({ authenticated: true })
+  } catch {
+    // ignore toggle preload failure; route guard/cache will retry
+  }
+  // overview 和首屏数据并行加载，减少等待时间
   const handledByRoute = await applyRouteContext()
   if (!handledByRoute) {
-    await loadFilterFields()
-    await loadData()
+    await Promise.all([
+      loadOverview(),
+      loadFilterFields().then(() => loadData())
+    ])
+  } else {
+    loadOverview()
   }
 })
 </script>
@@ -1363,6 +1744,72 @@ onMounted(async () => {
   font-weight: 700;
 }
 
+.result-error {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.28);
+  border: 1px solid rgba(254, 202, 202, 0.28);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.result-issues {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.result-issues.warnings {
+  background: rgba(146, 64, 14, 0.22);
+  border-color: rgba(253, 186, 116, 0.22);
+}
+
+.result-issue-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.result-issue-item {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.result-issue-item + .result-issue-item {
+  margin-top: 6px;
+}
+
+.result-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.result-step-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.result-step-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.result-step-values {
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.95;
+  word-break: break-word;
+}
+
 .tab-note {
   display: flex;
   align-items: center;
@@ -1374,6 +1821,11 @@ onMounted(async () => {
   margin-bottom: 16px;
   font-size: 13px;
   color: #1e40af;
+}
+
+.expand-detail {
+  padding: 12px 20px;
+  background: #f8fafc;
 }
 
 </style>

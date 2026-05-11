@@ -166,7 +166,7 @@ class PublicTextControllerTest {
         mockMvc.perform(post("/api/public/texts/1/read"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(500))
-                .andExpect(jsonPath("$.message").value("标记已读失败"));
+                .andExpect(jsonPath("$.message").value("记录阅读行为失败"));
     }
 
     // ========== GET /api/public/texts/random ==========

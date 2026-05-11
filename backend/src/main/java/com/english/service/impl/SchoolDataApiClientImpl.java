@@ -24,9 +24,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 学校数据API客户端实现 - 通过REST API对接学校数据源
@@ -336,8 +338,13 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         }
 
         int skip = pageSize;
-        int maxPages = 100; // 防止无限循环
+        int maxPages = resolveMaxPages(dataSource);
         int fetchedPages = 1;
+        boolean complete = true;
+        boolean guardHit = false;
+        String stopReason = "PAGINATED_COMPLETE";
+        Set<String> seenFingerprints = new HashSet<>();
+        seenFingerprints.add(fingerprintPage(firstPage.rows));
 
         try {
             while (fetchedPages < maxPages) {
@@ -367,6 +374,16 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     break;
                 }
 
+                String pageFingerprint = fingerprintPage(nextPage.rows);
+                if (!seenFingerprints.add(pageFingerprint)) {
+                    logger.warn("分页拉取检测到重复页，提前停止 dataSource={} skip={} pageFingerprint={}",
+                            dataSource, skip, pageFingerprint);
+                    complete = false;
+                    guardHit = true;
+                    stopReason = "DUPLICATE_PAGE_GUARD";
+                    break;
+                }
+
                 allRows.addAll(nextPage.rows);
                 fetchedPages++;
                 skip += nextPage.rows.size();
@@ -385,20 +402,26 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             if (fetchedPages >= maxPages) {
                 logger.warn("分页拉取达到最大页数限制 dataSource={} maxPages={} totalRows={}",
                         dataSource, maxPages, allRows.size());
+                complete = false;
+                guardHit = true;
+                stopReason = "MAX_PAGES_GUARD";
             }
 
         } catch (Exception e) {
             logger.error("分页拉取失败，返回已获取数据 dataSource={} fetchedPages={} totalRows={} err={}",
                     dataSource, fetchedPages, allRows.size(), e.getMessage(), e);
+            complete = false;
+            guardHit = true;
+            stopReason = "PAGINATION_EXCEPTION";
         }
 
         SchoolDataFetchResult.PaginationSummary finalSummary = new SchoolDataFetchResult.PaginationSummary(
-                true,
-                "PAGINATED_COMPLETE",
+                complete,
+                stopReason,
                 fetchedPages,
                 skip,
                 pageSize,
-                false,
+                guardHit,
                 allRows.size()
         );
 
@@ -579,6 +602,12 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             }
         }
         return null;
+    }
+
+    private int resolveMaxPages(String dataSource) {
+        if ("teacher_courses".equals(dataSource)) return 300;
+        if ("course_schedule".equals(dataSource)) return 200;
+        return 100;
     }
 
     private String fingerprintRecord(Map<String, Object> record) {

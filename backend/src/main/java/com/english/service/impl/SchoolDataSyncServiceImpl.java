@@ -159,6 +159,18 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         List<SyncLog> logs = new ArrayList<>();
         try {
             for (String dataSource : DATA_SOURCES) {
+                if ("student_schedule".equals(dataSource)) {
+                    SyncLog skipLog = createSyncLog("FULL", dataSource, "REPLACE_ALL", triggerType, operator, LocalDateTime.now());
+                    skipLog.setStatus("SKIPPED");
+                    skipLog.setErrorMessage("student_schedule 需要提供学号才能同步，请在数据浏览器中按学号单独同步");
+                    skipLog.setTotalCount(0);
+                    skipLog.setSuccessCount(0);
+                    skipLog.setFailCount(0);
+                    skipLog.setEndTime(LocalDateTime.now());
+                    syncLogMapper.updateById(skipLog);
+                    logs.add(skipLog);
+                    continue;
+                }
                 try {
                     logger.info("开始全量同步数据源: {}", dataSource);
                     LocalDateTime startTime = LocalDateTime.now();
@@ -228,6 +240,18 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         List<SyncLog> logs = new ArrayList<>();
         try {
             for (String dataSource : DATA_SOURCES) {
+                if ("student_schedule".equals(dataSource)) {
+                    SyncLog skipLog = createSyncLog("INCREMENTAL", dataSource, "UPSERT", triggerType, operator, LocalDateTime.now());
+                    skipLog.setStatus("SKIPPED");
+                    skipLog.setErrorMessage("student_schedule 需要提供学号才能同步，请在数据浏览器中按学号单独同步");
+                    skipLog.setTotalCount(0);
+                    skipLog.setSuccessCount(0);
+                    skipLog.setFailCount(0);
+                    skipLog.setEndTime(LocalDateTime.now());
+                    syncLogMapper.updateById(skipLog);
+                    logs.add(skipLog);
+                    continue;
+                }
                 try {
                     logger.info("开始增量同步数据源: {}", dataSource);
                     LocalDateTime startTime = LocalDateTime.now();
@@ -401,11 +425,10 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     private SyncResult doFullSync(String dataSource, SchoolDataSyncFilterRequest request) {
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
-        ensureCompleteFetch(dataSource, fetchResult);
-        if (fetchResult.getRows().isEmpty()) {
-            return new SyncResult(0, 0, 0, 0, fetchResult.getPaginationSummary());
+        failIfIncomplete(dataSource, fetchResult);
+        if (fetchResult == null || fetchResult.getRows().isEmpty()) {
+            return new SyncResult(0, 0, 0, 0, fetchResult == null ? null : fetchResult.getPaginationSummary());
         }
-
         return toSyncResult(persistService.persistRawData(dataSource, fetchResult.getRows(), "SCHOOL_API"), fetchResult.getPaginationSummary());
     }
 
@@ -436,9 +459,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         }
 
         SchoolDataFetchResult fetchResult = fetchService.fetchRawDataWithSummary(dataSource, request);
-        ensureCompleteFetch(dataSource, fetchResult);
-        if (fetchResult.getRows().isEmpty()) {
-            return new SyncResult(0, 0, 0, 0, fetchResult.getPaginationSummary());
+        failIfIncomplete(dataSource, fetchResult);
+        if (fetchResult == null || fetchResult.getRows().isEmpty()) {
+            return new SyncResult(0, 0, 0, 0, fetchResult == null ? null : fetchResult.getPaginationSummary());
         }
 
         return toSyncResult(persistService.persistRawData(dataSource, fetchResult.getRows(), "SCHOOL_API"), fetchResult.getPaginationSummary());
@@ -465,16 +488,16 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         return false;
     }
 
-    private void ensureCompleteFetch(String dataSource, SchoolDataFetchResult fetchResult) {
+    private void failIfIncomplete(String dataSource, SchoolDataFetchResult fetchResult) {
         if (fetchResult == null) {
-            throw new BusinessException("学校数据拉取结果为空，已终止同步: dataSource=" + dataSource);
+            logger.error("学校数据拉取结果为空 dataSource={}", dataSource);
+            return;
         }
         SchoolDataFetchResult.PaginationSummary summary = fetchResult.getPaginationSummary();
         if (summary != null && !summary.isComplete()) {
-            throw new BusinessException("学校数据未完整拉取，已终止同步: dataSource="
-                    + dataSource
-                    + ", reason=" + summary.getStopReason()
-                    + ", fetchedRows=" + summary.getFetchedRowCount());
+            throw new BusinessException("学校数据未完整拉取 dataSource=" + dataSource
+                    + " reason=" + summary.getStopReason()
+                    + " fetchedRows=" + summary.getFetchedRowCount());
         }
     }
 
@@ -1081,7 +1104,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
      * 完成同步日志（成功）
      */
     private void completeSyncLog(SyncLog syncLog, SyncResult result, LocalDateTime startTime) {
-        syncLog.setStatus("SUCCESS");
+        boolean incomplete = result.paginationSummary != null && !result.paginationSummary.isComplete();
+        syncLog.setStatus(incomplete ? "PARTIAL" : "SUCCESS");
         syncLog.setTotalCount(result.total);
         syncLog.setSuccessCount(result.success);
         syncLog.setFailCount(result.fail);
@@ -1192,6 +1216,9 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         String mode = defaultString(matchMode, "eq").toLowerCase(Locale.ROOT);
         LocalDateTime syncTime = LocalDateTime.now();
         logger.info("[chainFetch] 开始: collegeName={}, matchMode={}, persist={}", normalizedCollege, mode, persist);
+        List<String> warnings = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        Map<String, Object> stepStats = new LinkedHashMap<>();
 
         // Step 1: 按 KKYX 拉 school_course + 客户端过滤
         Map<String, String> courseParams = new LinkedHashMap<>();
@@ -1204,24 +1231,85 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             throw new BusinessException("拉取学校课程失败: " + e.getMessage());
         }
         if (rawCourses == null) rawCourses = Collections.emptyList();
-        List<Map<String, Object>> matchedCourses = filterCoursesByCollege(rawCourses, normalizedCollege, mode);
-        logger.info("[chainFetch] Step1 课程: upstream={}, matched={}", rawCourses.size(), matchedCourses.size());
-
+        List<Map<String, Object>> matchedCourses = new ArrayList<>();
         List<String> matchedCourseCodes = new ArrayList<>();
-        for (Map<String, Object> course : matchedCourses) {
+        Map<String, String> courseCodeToName = new LinkedHashMap<>();  // 课程代码 → 课程名称映射
+        Set<String> seenCourseCodes = new LinkedHashSet<>();
+        Set<String> sampleCourseColleges = new LinkedHashSet<>();
+        int blankCourseCollegeCount = 0;
+        int courseMissingCodeCount = 0;
+        int coursePersisted = 0;
+        int coursePersistErrors = 0;
+        for (Map<String, Object> course : rawCourses) {
             Map<String, Object> mapped = fieldMappingService.applyMapping("school_course", course);
+            String actualCollege = stringValue(mapped.get("collegeName"));
             String kcdm = stringValue(mapped.get("courseCode"));
-            if (kcdm == null || kcdm.isEmpty()) continue;
+            if (!actualCollege.isEmpty()) {
+                sampleCourseColleges.add(actualCollege);
+            }
+            if (actualCollege.isEmpty()) {
+                blankCourseCollegeCount++;
+                continue;
+            }
+            boolean matches = "contains".equalsIgnoreCase(mode)
+                    ? actualCollege.contains(normalizedCollege)
+                    : actualCollege.equals(normalizedCollege);
+            if (!matches) {
+                continue;
+            }
+            matchedCourses.add(course);
+            if (kcdm.isEmpty()) {
+                courseMissingCodeCount++;
+                continue;
+            }
+            if (!seenCourseCodes.add(kcdm)) {
+                continue;
+            }
             matchedCourseCodes.add(kcdm);
+            // 保存课程名称映射
+            String courseName = stringValue(mapped.get("courseName"));
+            if (courseName != null && !courseName.isEmpty()) {
+                courseCodeToName.put(kcdm, courseName);
+            }
             if (persist) {
                 mapped.put("syncTime", syncTime);
                 mapped.put("syncSource", "CHAIN_SYNC");
                 try {
                     upsertSchoolCourse(mapped);
+                    coursePersisted++;
                 } catch (Exception e) {
+                    coursePersistErrors++;
                     logger.warn("[chainFetch] upsert school_course 失败 kcdm={} err={}", kcdm, e.getMessage());
                 }
             }
+        }
+        logger.info("[chainFetch] Step1 课程: upstream={}, matched={}, usableCodes={}",
+                rawCourses.size(), matchedCourses.size(), matchedCourseCodes.size());
+        stepStats.put("schoolCourse", linkedStats(
+                "upstreamCount", rawCourses.size(),
+                "matchedCount", matchedCourses.size(),
+                "matchedCourseCodeCount", matchedCourseCodes.size(),
+                "blankCollegeCount", blankCourseCollegeCount,
+                "missingCourseCodeCount", courseMissingCodeCount,
+                "persistedCount", coursePersisted,
+                "persistErrorCount", coursePersistErrors,
+                "sampleColleges", firstItems(sampleCourseColleges, 5)
+        ));
+        if (!rawCourses.isEmpty() && matchedCourses.isEmpty()) {
+            if (blankCourseCollegeCount == rawCourses.size()) {
+                appendIssue(errors, String.format(
+                        "school_course 上游返回 %d 条，但映射后的 collegeName 全为空，无法按学院“%s”筛选，请检查 school_course 字段映射",
+                        rawCourses.size(), normalizedCollege));
+            } else {
+                appendIssue(warnings, String.format(
+                        "school_course 上游返回 %d 条，但按学院“%s”未匹配到课程，示例学院值=%s",
+                        rawCourses.size(), normalizedCollege, joinSamples(sampleCourseColleges)));
+            }
+        }
+        if (!matchedCourses.isEmpty() && matchedCourseCodes.isEmpty()) {
+            appendIssue(errors, String.format(
+                    "已命中 %d 条 school_course，但全部缺少 courseCode，无法继续 teacher_courses / course_selection 链路",
+                    matchedCourses.size()));
         }
 
         // Step 2 & 2.5: 每门课拉 teacher_courses（按 kcdm）→ 得到 kcbh + 教师
@@ -1231,6 +1319,20 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         Map<String, SchoolTeacher> teacherMap = new LinkedHashMap<>();
         List<TeacherStudentBinding> bindings = new ArrayList<>();
         Boolean kcbhSupported = null;
+        Set<String> matchedClassCodes = new LinkedHashSet<>();
+        Set<String> failedTeacherCourses = new LinkedHashSet<>();
+        Set<String> failedSelectionClasses = new LinkedHashSet<>();
+        int teacherFetchFailureCount = 0;
+        int teacherFetchRowCount = 0;
+        int teacherCourseMismatchCount = 0;
+        int teacherMissingClassIdCount = 0;
+        int teacherMissingTeacherIdCount = 0;
+        int selectionFetchFailureCount = 0;
+        int selectionFetchRowCount = 0;
+        int selectionAcceptedRowCount = 0;
+        int selectionFilteredOutCount = 0;
+        int selectionMissingStudentIdCount = 0;
+        int courseSelectionPersistErrors = 0;
 
         for (String kcdm : matchedCourseCodes) {
             // 2.5: teacher_courses 按 kcdm 拉 → 得到 (kcbh, rkjsh, rkjsxm, xn, xq)
@@ -1238,20 +1340,31 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             try {
                 rawTcs = apiClient.fetchTeacherCourses(Map.of("kcdm", kcdm));
             } catch (Exception e) {
+                teacherFetchFailureCount++;
+                failedTeacherCourses.add(kcdm);
+                appendIssue(errors, String.format("teacher_courses 拉取失败: courseCode=%s, err=%s", kcdm, defaultString(e.getMessage(), e.getClass().getSimpleName())));
                 logger.warn("[chainFetch] 拉取 teacher_courses 失败 kcdm={} err={}", kcdm, e.getMessage());
                 continue;
             }
             if (rawTcs == null) rawTcs = Collections.emptyList();
+            teacherFetchRowCount += rawTcs.size();
 
             // 客户端过滤：CDSP 可能忽略 kcdm 过滤，确保只保留当前课程记录
             Map<String, List<Map<String, Object>>> tcByClassCode = new LinkedHashMap<>();
             for (Map<String, Object> tc : rawTcs) {
                 Map<String, Object> mapped = fieldMappingService.applyMapping("teacher_courses", tc);
-                if (!kcdm.equals(getCourseCodeValue(mapped))) continue;
+                if (!kcdm.equals(getCourseCodeValue(mapped))) {
+                    teacherCourseMismatchCount++;
+                    continue;
+                }
                 String kcbh = getClassIdValue(mapped);
-                if (kcbh == null || kcbh.isEmpty()) continue;
+                if (kcbh == null || kcbh.isEmpty()) {
+                    teacherMissingClassIdCount++;
+                    continue;
+                }
                 tcByClassCode.computeIfAbsent(kcbh, k -> new ArrayList<>()).add(mapped);
             }
+            matchedClassCodes.addAll(tcByClassCode.keySet());
 
             // 2: 对每个 kcbh 拉 course_selection
             for (Map.Entry<String, List<Map<String, Object>>> entry : tcByClassCode.entrySet()) {
@@ -1262,15 +1375,20 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 try {
                     rawSels = apiClient.fetchCourseSelections(Map.of("KCBH", kcbh));
                 } catch (Exception e) {
+                    selectionFetchFailureCount++;
+                    failedSelectionClasses.add(kcbh);
+                    appendIssue(errors, String.format("course_selection 拉取失败: classId=%s, err=%s", kcbh, defaultString(e.getMessage(), e.getClass().getSimpleName())));
                     logger.warn("[chainFetch] 拉取 course_selection 失败 kcbh={} err={}", kcbh, e.getMessage());
                     continue;
                 }
                 if (rawSels == null) rawSels = Collections.emptyList();
+                selectionFetchRowCount += rawSels.size();
 
                 // 首次探测 KCBH 支持：若第一批返回记录的 classId 不全匹配 kcbh → 降级客户端过滤
                 if (kcbhSupported == null && !rawSels.isEmpty()) {
                     kcbhSupported = probeKcbhSupport(rawSels, kcbh);
                     if (Boolean.FALSE.equals(kcbhSupported)) {
+                        appendIssue(warnings, "CDSP 忽略 KCBH 参数，已降级为客户端过滤 course_selection");
                         logger.warn("[chainFetch] CDSP 忽略 KCBH 参数，切换客户端过滤");
                     }
                 }
@@ -1280,19 +1398,25 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                     Map<String, Object> mapped = fieldMappingService.applyMapping("course_selection", sel);
                     if (Boolean.FALSE.equals(kcbhSupported)
                             && !kcbh.equals(getClassIdValue(mapped))) {
+                        selectionFilteredOutCount++;
                         continue;
                     }
                     String xh = stringValue(mapped.get("studentId"));
-                    if (xh == null || xh.isEmpty()) continue;
+                    if (xh == null || xh.isEmpty()) {
+                        selectionMissingStudentIdCount++;
+                        continue;
+                    }
                     studentIds.add(xh);
                     studentToCourses.computeIfAbsent(xh, k -> new LinkedHashSet<>()).add(kcdm);
                     courseStudentIds.add(xh);
+                    selectionAcceptedRowCount++;
                     if (persist) {
                         mapped.put("syncTime", syncTime);
                         mapped.put("syncSource", "CHAIN_SYNC");
                         try {
                             upsertCourseSelection(mapped);
                         } catch (Exception e) {
+                            courseSelectionPersistErrors++;
                             logger.warn("[chainFetch] upsert course_selection 失败 xh={} err={}", xh, e.getMessage());
                         }
                     }
@@ -1301,7 +1425,10 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 // 教师去重 + 绑定关系构建（teacher × student 笛卡尔积，限定于 kcbh）
                 for (Map<String, Object> tc : tcs) {
                     String tid = stringValue(tc.get("teacherId"));
-                    if (tid == null || tid.isEmpty()) continue;
+                    if (tid == null || tid.isEmpty()) {
+                        teacherMissingTeacherIdCount++;
+                        continue;
+                    }
                     teacherMap.computeIfAbsent(tid, k -> {
                         SchoolTeacher t = new SchoolTeacher();
                         t.setTeacherId(tid);
@@ -1313,11 +1440,16 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                     });
                     String xn = stringValue(tc.get("academicYear"));
                     String xq = stringValue(tc.get("semester"));
+                    String teacherName = stringValue(tc.get("teacherName"));
                     for (String sid : courseStudentIds) {
                         TeacherStudentBinding b = new TeacherStudentBinding();
                         b.setTeacherId(tid);
+                        b.setTeacherName(teacherName);
                         b.setStudentId(sid);
+                        // 学生姓名稍后在持久化时通过 resolveStudentName 填充
+                        b.setCollegeName(normalizedCollege);
                         b.setCourseCode(kcdm);
+                        b.setCourseName(courseCodeToName.get(kcdm));
                         b.setCourseClassCode(kcbh);
                         b.setAcademicYear(xn == null ? "" : xn);
                         b.setSemester(xq == null ? "" : xq);
@@ -1328,17 +1460,67 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 }
             }
         }
+        stepStats.put("teacherCourses", linkedStats(
+                "requestedCourseCount", matchedCourseCodes.size(),
+                "upstreamRowCount", teacherFetchRowCount,
+                "failedCourseCount", teacherFetchFailureCount,
+                "matchedClassCount", matchedClassCodes.size(),
+                "courseMismatchCount", teacherCourseMismatchCount,
+                "missingClassIdCount", teacherMissingClassIdCount,
+                "missingTeacherIdCount", teacherMissingTeacherIdCount,
+                "failedCourseCodes", firstItems(failedTeacherCourses, 6)
+        ));
+        stepStats.put("courseSelection", linkedStats(
+                "requestedClassCount", matchedClassCodes.size(),
+                "upstreamRowCount", selectionFetchRowCount,
+                "failedClassCount", selectionFetchFailureCount,
+                "acceptedRowCount", selectionAcceptedRowCount,
+                "filteredOutCount", selectionFilteredOutCount,
+                "missingStudentIdCount", selectionMissingStudentIdCount,
+                "persistErrorCount", courseSelectionPersistErrors,
+                "failedClassCodes", firstItems(failedSelectionClasses, 6)
+        ));
+        if (!matchedCourseCodes.isEmpty()) {
+            if (teacherFetchFailureCount == matchedCourseCodes.size()) {
+                appendIssue(errors, String.format(
+                        "teacher_courses 对 %d 门命中课程全部拉取失败，链路无法继续到 course_selection",
+                        matchedCourseCodes.size()));
+            } else if (matchedClassCodes.isEmpty()) {
+                appendIssue(errors, String.format(
+                        "teacher_courses 未返回任何可用 classId，已命中 %d 门课程但无法继续 course_selection 链路",
+                        matchedCourseCodes.size()));
+            }
+        }
+        if (!matchedClassCodes.isEmpty()) {
+            if (selectionFetchFailureCount == matchedClassCodes.size()) {
+                appendIssue(errors, String.format(
+                        "course_selection 对 %d 个课程班号全部拉取失败，无法生成学生目录与师生绑定",
+                        matchedClassCodes.size()));
+            } else if (selectionAcceptedRowCount == 0) {
+                appendIssue(errors, String.format(
+                        "course_selection 已请求 %d 个课程班号，但没有返回任何可用 studentId",
+                        matchedClassCodes.size()));
+            }
+        }
 
         // Step 3 & 3.5: 主数据落库
         int studentInserted = 0;
         int teacherInserted = 0;
         int bindingInserted = 0;
+        int studentPersistErrors = 0;
+        int teacherPersistErrors = 0;
+        int bindingPersistErrors = 0;
         if (persist) {
             for (String xh : studentIds) {
                 try {
                     Set<String> courses = studentToCourses.getOrDefault(xh, Collections.emptySet());
                     Map<String, Object> mappedStudent = new HashMap<>();
                     mappedStudent.put("studentId", xh);
+                    // 尝试从现有数据源获取学生姓名（school_student 表或 users 表）
+                    String studentName = persistService.resolveStudentName(xh);
+                    if (studentName != null && !studentName.isEmpty()) {
+                        mappedStudent.put("studentName", studentName);
+                    }
                     mappedStudent.put("collegeName", normalizedCollege);
                     if (xh != null && xh.length() >= 4) {
                         String gradePrefix = xh.substring(0, 4);
@@ -1358,6 +1540,7 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                     persistService.persistMappedRecord("school_student", mappedStudent);
                     studentInserted++;
                 } catch (Exception e) {
+                    studentPersistErrors++;
                     logger.warn("[chainFetch] upsert school_student 失败 xh={} err={}", xh, e.getMessage());
                 }
             }
@@ -1372,21 +1555,70 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                     persistService.persistMappedRecord("school_teacher", mappedTeacher);
                     teacherInserted++;
                 } catch (Exception e) {
+                    teacherPersistErrors++;
                     logger.warn("[chainFetch] upsert school_teacher 失败 tid={} err={}", t.getTeacherId(), e.getMessage());
                 }
             }
             for (TeacherStudentBinding b : bindings) {
                 try {
+                    // 填充学生姓名（从 school_student 或 users 表反查）
+                    if (b.getStudentName() == null || b.getStudentName().isEmpty()) {
+                        String studentName = persistService.resolveStudentName(b.getStudentId());
+                        if (studentName != null && !studentName.isEmpty()) {
+                            b.setStudentName(studentName);
+                        }
+                    }
                     teacherStudentBindingMapper.upsertBinding(b);
                     bindingInserted++;
                 } catch (Exception e) {
+                    bindingPersistErrors++;
                     logger.warn("[chainFetch] upsert binding 失败 tid={} sid={} kcdm={} err={}",
                             b.getTeacherId(), b.getStudentId(), b.getCourseCode(), e.getMessage());
                 }
             }
         }
+        stepStats.put("persist", linkedStats(
+                "persistEnabled", persist,
+                "coursePersistedCount", coursePersisted,
+                "coursePersistErrorCount", coursePersistErrors,
+                "studentPersistedCount", studentInserted,
+                "studentPersistErrorCount", studentPersistErrors,
+                "teacherPersistedCount", teacherInserted,
+                "teacherPersistErrorCount", teacherPersistErrors,
+                "bindingPersistedCount", bindingInserted,
+                "bindingPersistErrorCount", bindingPersistErrors
+        ));
+        if (persist) {
+            if (!matchedCourseCodes.isEmpty() && coursePersisted == 0 && coursePersistErrors > 0) {
+                appendIssue(errors, "school_course 落库全部失败，链式拉取结果无法在本地复用");
+            } else if (coursePersistErrors > 0) {
+                appendIssue(warnings, String.format("school_course 落库部分失败: success=%d, fail=%d", coursePersisted, coursePersistErrors));
+            }
+            if (!studentIds.isEmpty() && studentInserted == 0) {
+                appendIssue(errors, "school_student 落库全部失败，SSO 自动授权无法命中学生目录");
+            } else if (studentPersistErrors > 0) {
+                appendIssue(warnings, String.format("school_student 落库部分失败: success=%d, fail=%d", studentInserted, studentPersistErrors));
+            }
+            if (!teacherMap.isEmpty() && teacherInserted == 0) {
+                appendIssue(errors, "school_teacher 落库全部失败，SSO 自动授权无法命中教师目录");
+            } else if (teacherPersistErrors > 0) {
+                appendIssue(warnings, String.format("school_teacher 落库部分失败: success=%d, fail=%d", teacherInserted, teacherPersistErrors));
+            }
+            if (!bindings.isEmpty() && bindingInserted == 0) {
+                appendIssue(errors, "teacher_student_binding 落库全部失败，师生关系无法在本地复用");
+            } else if (bindingPersistErrors > 0) {
+                appendIssue(warnings, String.format("teacher_student_binding 落库部分失败: success=%d, fail=%d", bindingInserted, bindingPersistErrors));
+            }
+        }
+
+        String status = errors.isEmpty()
+                ? (warnings.isEmpty() ? "SUCCESS" : "PARTIAL")
+                : ((studentIds.isEmpty() && teacherMap.isEmpty() && bindings.isEmpty()) ? "FAILED" : "PARTIAL");
+        String errorMessage = resolveChainIssueMessage(status, errors, warnings);
 
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", status);
+        result.put("errorMessage", errorMessage);
         result.put("collegeName", normalizedCollege);
         result.put("matchMode", mode);
         result.put("persist", persist);
@@ -1399,8 +1631,17 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         result.put("bindingInserted", bindingInserted);
         result.put("upstreamKcbhSupported", kcbhSupported);
         result.put("matchedCourseCodes", matchedCourseCodes);
+        result.put("warningCount", warnings.size());
+        result.put("errorCount", errors.size());
+        result.put("warnings", warnings);
+        result.put("errors", errors);
+        result.put("stepStats", stepStats);
         result.put("syncTime", syncTime);
-        logger.info("[chainFetch] 完成: {}", result);
+        if (!"SUCCESS".equals(status)) {
+            logger.warn("[chainFetch] 完成 status={} errors={} warnings={} result={}", status, errors, warnings, result);
+        } else {
+            logger.info("[chainFetch] 完成: {}", result);
+        }
         return result;
     }
 
@@ -1527,6 +1768,63 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             if (!kcbh.equals(classId)) return false;
         }
         return true;
+    }
+
+    private Map<String, Object> linkedStats(Object... keyValues) {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        if (keyValues == null) {
+            return stats;
+        }
+        for (int i = 0; i + 1 < keyValues.length; i += 2) {
+            stats.put(String.valueOf(keyValues[i]), keyValues[i + 1]);
+        }
+        return stats;
+    }
+
+    private void appendIssue(List<String> issues, String message) {
+        if (issues == null || message == null || message.trim().isEmpty()) {
+            return;
+        }
+        if (issues.contains(message)) {
+            return;
+        }
+        if (issues.size() < 12) {
+            issues.add(message);
+        }
+    }
+
+    private List<String> firstItems(Collection<String> values, int limit) {
+        if (values == null || values.isEmpty() || limit <= 0) {
+            return Collections.emptyList();
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    private String joinSamples(Collection<String> values) {
+        List<String> samples = firstItems(values, 3);
+        return samples.isEmpty() ? "[]" : String.join(", ", samples);
+    }
+
+    private String resolveChainIssueMessage(String status, List<String> errors, List<String> warnings) {
+        if ("FAILED".equals(status)) {
+            return errors != null && !errors.isEmpty()
+                    ? errors.get(0)
+                    : "链式拉取失败，请检查诊断信息";
+        }
+        if ("PARTIAL".equals(status)) {
+            if (errors != null && !errors.isEmpty()) {
+                return errors.get(0);
+            }
+            if (warnings != null && !warnings.isEmpty()) {
+                return warnings.get(0);
+            }
+        }
+        return null;
     }
 
     private SyncResult toSyncResult(SchoolDataPersistService.PersistResult result,

@@ -887,6 +887,8 @@ verify_ai_providers() {
 
 run_incremental_migrations() {
     local migration_sql="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+    local feature_toggle_repair_sql="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
+    local prepared_sql=""
 
     if [ ! -f "$migration_sql" ]; then
         log "ERROR: MIGRATE: 迁移脚本不存在: $migration_sql"
@@ -956,12 +958,44 @@ run_incremental_migrations() {
     local db_name="${MYSQL_DATABASE:-english_learning}"
     log "MIGRATE: 执行 04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${db_name})..."
 
+    prepared_sql=$(mktemp /tmp/langhack-migrate.XXXXXX.sql)
+    if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$migration_sql" "$prepared_sql"; then
+        log "ERROR: MIGRATE: 迁移脚本预处理失败"
+        rm -f "$prepared_sql" 2>/dev/null || true
+        return 1
+    fi
+
     local migrate_output migrate_exit migrate_errors
-    migrate_output=$(docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 < "$migration_sql")
-    migrate_exit=$?
+    local migrate_log migrate_pid migrate_elapsed activity
+    migrate_log=$(mktemp /tmp/langhack-migrate-output.XXXXXX.log)
+    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$prepared_sql" > "$migrate_log" 2>&1 &
+    migrate_pid=$!
+    migrate_elapsed=0
+
+    while kill -0 "$migrate_pid" 2>/dev/null; do
+        sleep 15
+        if kill -0 "$migrate_pid" 2>/dev/null; then
+            migrate_elapsed=$((migrate_elapsed + 15))
+            activity=$(bash "$PROJECT_ROOT/scripts/describe-mysql-activity.sh" "$mysql_container" "$db_root_pw" "$db_name" || true)
+            if [ -n "$activity" ]; then
+                log "MIGRATE: ${activity} (已耗时 ${migrate_elapsed}s)"
+            else
+                log "MIGRATE: 正在执行数据库迁移 (已耗时 ${migrate_elapsed}s)"
+            fi
+        fi
+    done
+
+    if wait "$migrate_pid"; then
+        migrate_exit=0
+    else
+        migrate_exit=$?
+    fi
+    migrate_output=$(cat "$migrate_log")
     migrate_errors=$(echo "$migrate_output" \
         | grep -v "Using a password on the command line interface can be insecure" \
         | grep -v "^$" || true)
+    rm -f "$migrate_log" 2>/dev/null || true
+    rm -f "$prepared_sql" 2>/dev/null || true
 
     if [ $migrate_exit -ne 0 ]; then
         log "ERROR: MIGRATE: 增量迁移失败，退出码: $migrate_exit"
@@ -1013,8 +1047,8 @@ run_incremental_migrations() {
         if [ -n "$seed_file" ] && [ -f "$seed_file" ]; then
             log "SEED: 导入全量备份: $(basename "$seed_file")"
             case "$seed_file" in
-                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
-                *.sql)    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql)    docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
             esac
             log "SEED: 全量备份导入完成 ✓"
         else
@@ -1030,7 +1064,7 @@ run_incremental_migrations() {
                 log "SEED: 导入课文数据 (3Blue1Brown)..."
                 for f in "$article_dir"/*.sql; do
                     [ -f "$f" ] || continue
-                    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
+                    docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
                 done
                 log "SEED: 课文数据导入完成 ✓"
             fi
@@ -1045,7 +1079,7 @@ run_incremental_migrations() {
                 log "SEED: 导入 ECDICT 词典（预计 1-3 分钟）..."
                 docker cp "$ecdict_csv" "$mysql_container:/tmp/ecdict.csv"
                 docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
-                docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" --local-infile=1 "$db_name" -e \
+                docker exec "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" --local-infile=1 "$db_name" -e \
                     "TRUNCATE TABLE ecdict_words;
                      LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
                      INTO TABLE ecdict_words
@@ -1074,6 +1108,15 @@ run_incremental_migrations() {
         log "SEED: 种子数据导入完成 ✓ (texts: ${texts_final}, ecdict_words: ${ecdict_final}, article: ${article_final})"
     fi
 
+    if [ -f "$feature_toggle_repair_sql" ]; then
+        log "MIGRATE: 修复功能开关描述文本..."
+        if docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$feature_toggle_repair_sql" >/dev/null 2>&1; then
+            log "MIGRATE: 功能开关描述修复完成 ✓"
+        else
+            log "WARN: MIGRATE: 功能开关描述修复失败，继续部署"
+        fi
+    fi
+
     # 验证从库复制延迟
     local slave_container slave_lag_wait=0
     slave_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.slave|mysql-slave' | head -1 || echo "")
@@ -1091,6 +1134,22 @@ run_incremental_migrations() {
                 log "MIGRATE: 从库同步完成 ✓ (延迟: 0s)"
                 break
             elif [ "$lag" = "NULL" ]; then
+                if docker exec "$slave_container" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null \
+                   && docker exec "$slave_container" test -x /var/lib/mysql/init-replication.sh 2>/dev/null; then
+                    log "MIGRATE: 检测到从库首次初始化，执行完整复制初始化脚本..."
+                    local repl_init_log
+                    repl_init_log=$(mktemp /tmp/langhack-auto-slave-init.XXXXXX.log)
+                    if docker exec "$slave_container" bash /var/lib/mysql/init-replication.sh > "$repl_init_log" 2>&1; then
+                        log "MIGRATE: 从库完整复制初始化完成"
+                        docker exec "$slave_container" rm -f /var/lib/mysql/.replication-init-pending /var/lib/mysql/init-replication.sh 2>/dev/null || true
+                        rm -f "$repl_init_log" 2>/dev/null || true
+                        slave_lag_wait=0
+                        continue
+                    fi
+                    log "ERROR: MIGRATE: 从库完整复制初始化失败"
+                    tail -50 "$repl_init_log" 2>/dev/null | while read -r line; do log "         $line"; done
+                    rm -f "$repl_init_log" 2>/dev/null || true
+                fi
                 log "ERROR: MIGRATE: 从库复制未配置（SHOW REPLICA STATUS 为空），迁移后数据无法同步到从库"
                 log "ERROR:          请先运行 deploy.sh 完成主从复制初始化，再执行自动更新"
                 return 1

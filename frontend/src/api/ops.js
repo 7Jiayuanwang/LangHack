@@ -180,6 +180,15 @@ export function getApplicationLogs(params = {}) {
   });
 }
 
+export function downloadApplicationLogs(params = {}) {
+  return request({
+    url: "/api/ops/monitoring/app-logs/download",
+    method: "get",
+    params,
+    responseType: "blob",
+  });
+}
+
 // ========== 数据运维 ==========
 
 export function cleanupData() {

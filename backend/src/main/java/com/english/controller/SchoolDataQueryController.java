@@ -16,6 +16,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -245,21 +246,24 @@ public class SchoolDataQueryController {
 
     /**
      * GET /api/admin/school-data/overview
+     * 使用 information_schema 近似行数，毫秒级返回，避免全表 COUNT 阻塞页面。
      */
     @GetMapping("/overview")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Long>> getOverview() {
+        // InnoDB 的 information_schema.TABLE_ROWS 是估算值，刚同步完数据时统计信息未刷新会返回 0。
+        // 直接用 COUNT(*) 保证准确性；11 张表串行查询通常在 1s 内完成。
         Map<String, Long> overview = new LinkedHashMap<>();
-        overview.put("administrative_class", administrativeClassMapper.selectCount(null));
-        overview.put("school_course", schoolCourseMapper.selectCount(null));
-        overview.put("teacher_courses", teachingClassMapper.selectCount(null));
-        overview.put("course_schedule", courseScheduleMapper.selectCount(null));
-        overview.put("course_selection", courseSelectionMapper.selectCount(null));
-        overview.put("level_exam_scores", levelExamScoreMapper.selectCount(null));
-        overview.put("teaching_plans", teachingPlanMapper.selectCount(null));
-        overview.put("student_schedule", studentScheduleMapper.selectCount(null));
-        overview.put("school_student", schoolStudentMapper.selectCount(null));
-        overview.put("school_teacher", schoolTeacherMapper.selectCount(null));
+        overview.put("administrative_class",    administrativeClassMapper.selectCount(null));
+        overview.put("school_course",           schoolCourseMapper.selectCount(null));
+        overview.put("teacher_courses",         teachingClassMapper.selectCount(null));
+        overview.put("course_schedule",         courseScheduleMapper.selectCount(null));
+        overview.put("course_selection",        courseSelectionMapper.selectCount(null));
+        overview.put("level_exam_scores",       levelExamScoreMapper.selectCount(null));
+        overview.put("teaching_plans",          teachingPlanMapper.selectCount(null));
+        overview.put("student_schedule",        studentScheduleMapper.selectCount(null));
+        overview.put("school_student",          schoolStudentMapper.selectCount(null));
+        overview.put("school_teacher",          schoolTeacherMapper.selectCount(null));
         overview.put("teacher_student_binding", teacherStudentBindingMapper.selectCount(null));
         return Result.success(overview);
     }

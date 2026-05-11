@@ -20,11 +20,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
 
     private static final Logger logger = LoggerFactory.getLogger(SchoolDataPersistServiceImpl.class);
+    private static final ConcurrentHashMap<String, AtomicInteger> COURSE_SCHEDULE_SKIP_WARNINGS = new ConcurrentHashMap<>();
 
     private final FieldMappingService fieldMappingService;
     private final SchoolDataApiClient apiClient;
@@ -123,8 +126,10 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
                 upsertAdministrativeClass(mappedData);
                 break;
             case "school_course":
-            case "teaching_class":
                 upsertSchoolCourse(mappedData);
+                break;
+            case "teaching_class":
+                upsertTeachingClass(mappedData);
                 break;
             case "course_schedule":
                 upsertCourseSchedule(mappedData);
@@ -285,8 +290,7 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
             return;
         }
         if (dayOfWeek == null || period == null) {
-            logger.warn("课程安排缺少必填字段，跳过 classId={} dayOfWeek={} period={} weekRange={} classLocation={}",
-                    classId, dayOfWeek, period, weekRange, classLocation);
+            logCourseScheduleMissingFields(classId, dayOfWeek, period, weekRange, classLocation);
             return;
         }
 
@@ -319,13 +323,13 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         String classId = getClassIdValue(data);
         TeachingClass teachingClass = resolveTeachingClass(classId);
 
-        // 外键检查：验证 teaching_class 表中是否存在该 classId
+        // 外键检查：验证 teaching_class 表中是否存在该 classId，不存在则创建骨架记录
         if (teachingClass == null) {
             teachingClass = resolveTeachingClassFromStudentSchedule(studentId, classId, data);
         }
         if (teachingClass == null) {
-            logger.warn("选课记录外键检查失败，teaching_class 表中不存在 classId={}，跳过同步", classId);
-            return;
+            logger.warn("选课记录 teaching_class 不存在 classId={}，自动创建骨架记录", classId);
+            teachingClass = ensureTeachingClassSkeleton(classId, data);
         }
 
         String academicYear = defaultIfBlank(firstNonBlank(getStringValue(data, "academicYear"),
@@ -736,6 +740,36 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         upsertSchoolCourse(courseData);
     }
 
+    private TeachingClass ensureTeachingClassSkeleton(String classId, Map<String, Object> data) {
+        if (classId == null || classId.trim().isEmpty()) {
+            return null;
+        }
+        LocalDateTime syncTime = defaultIfNull(getLocalDateTimeValue(data, "syncTime"), LocalDateTime.now());
+        String syncSource = defaultIfBlank(getStringValue(data, "syncSource"), "SCHOOL_API");
+        String courseCode = firstNonBlank(getStringValue(data, "courseCode"), classId);
+        ensureSchoolCourseSkeleton(
+                courseCode,
+                firstNonBlank(getStringValue(data, "courseName"), courseCode),
+                "UNKNOWN",
+                null,
+                syncTime,
+                syncSource
+        );
+        Map<String, Object> tcData = new HashMap<>();
+        tcData.put("classId", classId.trim());
+        tcData.put("className", firstNonBlank(getStringValue(data, "className"), getStringValue(data, "courseName"), classId));
+        tcData.put("courseCode", courseCode);
+        tcData.put("courseName", firstNonBlank(getStringValue(data, "courseName"), courseCode));
+        tcData.put("teacherId", firstNonBlank(getStringValue(data, "teacherId"), "UNKNOWN"));
+        tcData.put("teacherName", firstNonBlank(getStringValue(data, "teacherName"), "未知教师"));
+        tcData.put("academicYear", firstNonBlank(getStringValue(data, "academicYear"), "UNKNOWN"));
+        tcData.put("semester", parseSchoolSemester(data, "semester"));
+        tcData.put("syncTime", syncTime);
+        tcData.put("syncSource", syncSource);
+        upsertTeachingClass(tcData);
+        return resolveTeachingClass(classId.trim());
+    }
+
     private void deleteCourseScheduleOnce(String classId, String academicYear, Integer semester) {
         String key = classId + "|" + academicYear + "|" + semester;
         if (!Boolean.TRUE.equals(batchPersisting.get()) || courseScheduleDeletedKeys.get().add(key)) {
@@ -805,7 +839,8 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         schoolTeacherMapper.upsertByTeacherId(teacher);
     }
 
-    private String resolveStudentName(String studentId) {
+    @Override
+    public String resolveStudentName(String studentId) {
         if (studentId == null || studentId.trim().isEmpty()) {
             return null;
         }
@@ -857,6 +892,16 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
             return null;
         }
         return courseCode;
+    }
+
+    private void logCourseScheduleMissingFields(String classId, Integer dayOfWeek, String period,
+                                                String weekRange, String classLocation) {
+        String key = "course_schedule:missing-time-fields";
+        int count = COURSE_SCHEDULE_SKIP_WARNINGS.computeIfAbsent(key, ignored -> new AtomicInteger()).incrementAndGet();
+        if (count <= 5 || count % 500 == 0) {
+            logger.warn("课程安排缺少必填字段，跳过 classId={} dayOfWeek={} period={} weekRange={} classLocation={} (suppressedCount={})",
+                    classId, dayOfWeek, period, weekRange, classLocation, count - 1);
+        }
     }
 
     private Integer getIntegerValue(Map<String, Object> data, String key) {

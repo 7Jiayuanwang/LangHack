@@ -224,12 +224,22 @@ public class BackupController {
             if (confirmDatabaseName == null || confirmDatabaseName.trim().isEmpty()) {
                 return Result.error("请输入数据库名称以确认恢复操作");
             }
+
+            String mode = body.get("mode"); // "full" or "incremental"
             BackupRecord record = backupService.getBackupById(id);
             filename = record.getFilename();
-            backupService.restoreFromBackup(id, confirmDatabaseName.trim());
-            operationLogService.log(username, "BACKUP_RESTORE", id,
-                    filename, "从备份恢复数据库 [" + confirmDatabaseName.trim() + "]", "SUCCESS", ip);
-            return Result.success("数据库恢复成功");
+
+            if ("incremental".equals(mode)) {
+                backupService.restoreFromBackupIncremental(id, confirmDatabaseName.trim());
+                operationLogService.log(username, "BACKUP_RESTORE_INCREMENTAL", id,
+                        filename, "增量恢复数据库 [" + confirmDatabaseName.trim() + "]，保留新增数据", "SUCCESS", ip);
+                return Result.success("数据库增量恢复成功，新增数据已保留");
+            } else {
+                backupService.restoreFromBackup(id, confirmDatabaseName.trim());
+                operationLogService.log(username, "BACKUP_RESTORE", id,
+                        filename, "从备份恢复数据库 [" + confirmDatabaseName.trim() + "]", "SUCCESS", ip);
+                return Result.success("数据库恢复成功");
+            }
         } catch (BusinessException e) {
             operationLogService.log(username, "BACKUP_RESTORE", id,
                     filename, "恢复失败: " + e.getMessage(), "FAILED", ip);

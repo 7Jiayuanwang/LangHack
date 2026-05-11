@@ -309,7 +309,7 @@
                     <el-option value="eq" label="精确匹配" />
                     <el-option value="contains" label="模糊匹配" />
                   </el-select>
-                  <el-button type="primary" size="small" :loading="chainFetching" @click="handleQuickChainFetch">
+                  <el-button type="primary" size="small" :loading="chainFetching" :disabled="!chainFetchEnabled" @click="handleQuickChainFetch">
                     执行链式拉取
                   </el-button>
                 </div>
@@ -339,8 +339,8 @@
 
             <div v-if="chainResult" class="quick-result-card">
               <div class="quick-result-title">链式拉取结果</div>
-              <div v-if="chainResult.errorMessage" class="quick-result-error">{{ chainResult.errorMessage }}</div>
-              <div v-else class="quick-result-grid">
+              <div class="quick-result-grid">
+                <div><span>状态：</span>{{ chainStatusText(chainResult.status) }}</div>
                 <div><span>学院：</span>{{ chainResult.collegeName }}</div>
                 <div><span>匹配：</span>{{ chainResult.matchMode }}</div>
                 <div><span>课程数：</span>{{ chainResult.courseCount || 0 }}</div>
@@ -349,7 +349,22 @@
                 <div><span>绑定数：</span>{{ chainResult.bindingCount || 0 }}</div>
                 <div v-if="chainResult.upstreamKcbhSupported !== undefined"><span>KCBH支持：</span>{{ chainResult.upstreamKcbhSupported ? '是' : '否（客户端过滤）' }}</div>
               </div>
-              <div v-if="!chainResult.errorMessage" class="quick-result-actions">
+              <div v-if="chainResult.errorMessage" class="quick-result-error">{{ chainResult.errorMessage }}</div>
+              <div v-if="chainErrors(chainResult).length > 0" class="quick-result-issues">
+                <div class="quick-result-issues-title">错误</div>
+                <div v-for="item in chainErrors(chainResult)" :key="`error-${item}`" class="quick-result-issue-item">{{ item }}</div>
+              </div>
+              <div v-if="chainWarnings(chainResult).length > 0" class="quick-result-issues warnings">
+                <div class="quick-result-issues-title">警告</div>
+                <div v-for="item in chainWarnings(chainResult)" :key="`warning-${item}`" class="quick-result-issue-item">{{ item }}</div>
+              </div>
+              <div v-if="chainStepEntries(chainResult).length > 0" class="quick-result-steps">
+                <div v-for="[stepName, stats] in chainStepEntries(chainResult)" :key="stepName" class="quick-result-step">
+                  <strong>{{ chainStepLabel(stepName) }}</strong>
+                  <span>{{ formatChainStepStats(stats) }}</span>
+                </div>
+              </div>
+              <div v-if="chainResult.status !== 'FAILED'" class="quick-result-actions">
                 <el-button size="small" @click="openChainResultInBrowser">查看本地数据</el-button>
               </div>
             </div>
@@ -365,6 +380,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   Refresh, Loading, QuestionFilled, InfoFilled,
   Connection, Check, CircleCheckFilled, CircleCloseFilled
@@ -463,6 +479,21 @@ const chainFetchForm = reactive({
 })
 const quickResult = ref(null)
 const chainResult = ref(null)
+const { isEnabled: isFeatureEnabled, load: loadFeatureToggles } = useFeatureToggles()
+const chainFetchEnabled = computed(() => isFeatureEnabled('ops.school_data_chain_fetch'))
+
+const CHAIN_STATUS_LABELS = {
+  SUCCESS: '成功',
+  PARTIAL: '部分异常',
+  FAILED: '失败'
+}
+
+const CHAIN_STEP_LABELS = {
+  schoolCourse: '课程阶段',
+  teacherCourses: '授课阶段',
+  courseSelection: '选课阶段',
+  persist: '落库阶段'
+}
 
 const canRunQuickActions = computed(() => {
   if (form.source === 'api') {
@@ -721,6 +752,10 @@ const handleQuickChainFetch = async () => {
     ElMessage.warning('请先完成配置并测试连接')
     return
   }
+  if (!chainFetchEnabled.value) {
+    ElMessage.warning('按学院链式拉取功能已关闭')
+    return
+  }
   if (!chainFetchForm.collegeName.trim()) {
     ElMessage.warning('请输入学院名称')
     return
@@ -735,7 +770,13 @@ const handleQuickChainFetch = async () => {
     })
     if (res?.code === 200 && res.data) {
       chainResult.value = res.data
-      ElMessage.success('按学院链式拉取完成')
+      if (chainResult.value?.status === 'FAILED') {
+        ElMessage.error(chainResult.value.errorMessage || '按学院链式拉取失败，请查看诊断信息')
+      } else if (chainResult.value?.status === 'PARTIAL') {
+        ElMessage.warning(chainResult.value.errorMessage || '按学院链式拉取已完成，但存在异常')
+      } else {
+        ElMessage.success('按学院链式拉取完成')
+      }
     } else {
       throw new Error(res?.message || '按学院链式拉取失败')
     }
@@ -745,6 +786,24 @@ const handleQuickChainFetch = async () => {
   } finally {
     chainFetching.value = false
   }
+}
+
+const chainStatusText = (status) => CHAIN_STATUS_LABELS[status] || '未知'
+
+const chainErrors = (result) => (Array.isArray(result?.errors) ? result.errors : [])
+
+const chainWarnings = (result) => (Array.isArray(result?.warnings) ? result.warnings : [])
+
+const chainStepEntries = (result) => Object.entries(result?.stepStats || {})
+
+const chainStepLabel = (stepName) => CHAIN_STEP_LABELS[stepName] || stepName
+
+const formatChainStepStats = (stats) => {
+  if (!stats || typeof stats !== 'object') return ''
+  return Object.entries(stats)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '' && (!Array.isArray(value) || value.length > 0))
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(',') : value}`)
+    .join(' | ')
 }
 
 const resolveChainResultTab = (result) => {
@@ -757,7 +816,7 @@ const resolveChainResultTab = (result) => {
 
 const openChainResultInBrowser = () => {
   const result = chainResult.value
-  if (!result || result.errorMessage) {
+  if (!result || result.status === 'FAILED') {
     return
   }
   router.push({
@@ -769,7 +828,14 @@ const openChainResultInBrowser = () => {
   })
 }
 
-onMounted(loadAll)
+onMounted(async () => {
+  try {
+    await loadFeatureToggles({ authenticated: true })
+  } catch {
+    // ignore toggle preload failure; route guard/cache will retry
+  }
+  await loadAll()
+})
 </script>
 
 <style scoped>
@@ -987,6 +1053,77 @@ onMounted(loadAll)
 
 .quick-result-actions {
   margin-top: 12px;
+}
+
+.quick-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.quick-result-error {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.quick-result-issues {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+}
+
+.quick-result-issues.warnings {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #9a3412;
+}
+
+.quick-result-issues-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.quick-result-issue-item {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.quick-result-issue-item + .quick-result-issue-item {
+  margin-top: 6px;
+}
+
+.quick-result-steps {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.quick-result-step {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #334155;
+}
+
+.quick-result-step strong {
+  font-size: 12px;
+  color: #0f172a;
 }
 
 .endpoints-table {

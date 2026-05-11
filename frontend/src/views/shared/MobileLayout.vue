@@ -53,6 +53,7 @@
                 <component :is="Setting" />
               </div>
               <span class="nav-label">管理</span>
+              <div class="nav-badge" v-if="pendingReviewCount > 0">{{ pendingReviewCount }}</div>
             </div>
             <template #dropdown>
               <el-dropdown-menu>
@@ -63,8 +64,13 @@
                   class="dropdown-link"
                 >
                   <el-dropdown-item>
-                    <component :is="item.icon" style="margin-right: 8px; width: 16px; height: 16px;" />
-                    <span>{{ item.label }}</span>
+                    <div class="dropdown-item-content">
+                      <div class="dropdown-item-left">
+                        <component :is="item.icon" style="margin-right: 8px; width: 16px; height: 16px;" />
+                        <span>{{ item.label }}</span>
+                      </div>
+                      <el-badge v-if="item.path === '/admin/content' && pendingReviewCount > 0" :value="pendingReviewCount" class="menu-badge" />
+                    </div>
                   </el-dropdown-item>
                 </router-link>
               </el-dropdown-menu>
@@ -139,8 +145,9 @@ import {
   Upload, Document, House,
   User, EditPen, Setting,
   DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
-  VideoPlay, Calendar,
+  VideoPlay,
 } from '@element-plus/icons-vue'
+import { getReviewTexts, getReviewVideos } from '@/api/admin'
 
 const props = defineProps({
   role: {
@@ -157,6 +164,10 @@ const userStore = useUserStore()
 // ops 专属状态
 const showElevationDialog = ref(false)
 const elevationTarget     = ref('ADMIN')
+
+// 待审核计数
+const pendingReviewCount = ref(0)
+let pendingPollTimer = null
 
 // 功能开关状态（与路由守卫 + 其他 layout 共享缓存）
 const { toggles: featureToggles, load: loadFeatureToggles } = useFeatureToggles()
@@ -176,11 +187,13 @@ const theme = computed(() => THEME[props.role])
 
 const NAV_ITEMS = {
   teacher: [
-    { path: '/teacher/dashboard',            label: '首页', icon: DataBoard, badge: null },
-    { path: '/teacher/my-courses',           label: '授课', icon: Notebook,  badge: null },
-    { path: '/teacher/my-students',          label: '学生', icon: User,      badge: null, featureKey: 'teacher.school_data_enabled' },
-    { path: '/teacher/my-schedule',          label: '课表', icon: Calendar,  badge: null, featureKey: 'teacher.school_data_enabled' },
-    { path: '/teacher/my-course-selections', label: '选课', icon: Document,  badge: null, featureKey: 'teacher.school_data_enabled' },
+    { path: '/teacher/dashboard',        label: '首页', icon: DataBoard, badge: null },
+    { path: '/teacher/classes',          label: '班级', icon: School,    badge: null },
+    { path: '/teacher/assignments',      label: '任务', icon: Edit,      badge: null },
+    { path: '/teacher/my-courses',       label: '授课', icon: Notebook,  badge: null },
+    { path: '/teacher/courses',          label: '课程', icon: Reading,   badge: null },
+    { path: '/teacher/my-students',      label: '学生', icon: User,      badge: null, featureKey: 'teacher.school_data_enabled' },
+    { path: '/teacher/my-schedule',      label: '课表', icon: DataBoard, badge: null, featureKey: 'teacher.school_data_enabled' },
   ],
   user: [
     { path: '/user',            label: '首页', icon: House,    badge: null },
@@ -196,6 +209,7 @@ const NAV_ITEMS = {
     { path: '/ops/feature-toggles', label: '开关', icon: Switch      },
     { path: '/ops/school-data',         label: '数据', icon: Coin,        featureKey: 'ops.school_data_config' },
     { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine,    featureKey: 'ops.school_data_browser' },
+    { path: '/ops/logs',            label: '日志', icon: Document    },
     { path: '/ops/update',          label: '更新', icon: Refresh     },
   ],
   admin: [
@@ -208,11 +222,14 @@ const NAV_ITEMS = {
 
 const navItems = computed(() => {
   const items = NAV_ITEMS[props.role] || []
-  return items.filter(item => {
-    if (!item.featureKey) return true
-    const val = featureToggles.value[item.featureKey]
-    return val === undefined || val === true || val === 'true'
-  })
+  if (props.role === 'ops' || props.role === 'admin' || props.role === 'teacher') {
+    return items.filter(item => {
+      if (!item.featureKey) return true
+      const val = featureToggles.value[item.featureKey]
+      return val === undefined || val === true || val === 'true'
+    })
+  }
+  return items
 })
 
 // admin 专属：二级管理菜单
@@ -221,7 +238,7 @@ const MORE_ITEMS = {
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
     { path: '/admin/texts',          label: '课文管理', icon: Document, featureKey: 'admin.texts' },
-    { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'page_admin_videos' },
+    { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
   ],
@@ -237,14 +254,6 @@ const moreItems = computed(() => {
     })
   }
   return items
-})
-
-const hasFeatureControlledItems = computed(() => {
-  const items = [
-    ...(NAV_ITEMS[props.role] || []),
-    ...(MORE_ITEMS[props.role] || []),
-  ]
-  return items.some(item => item.featureKey)
 })
 
 const isManagementRouteActive = computed(() => {
@@ -288,8 +297,11 @@ const ROUTE_MAP = {
     '/admin/units':       '单元管理',
     '/admin/words':       '单词管理',
     '/admin/texts':       '课文管理',
+    '/admin/videos':      '视频管理',
+    '/admin/content':     '内容管理',
     '/admin/assignments': '作业管理',
     '/admin/sso-pending': 'SSO 用户审批',
+    '/admin/content-review': '内容审核',
   },
 }
 
@@ -428,13 +440,19 @@ onMounted(async () => {
     router.replace('/login')
   }
 
-  // 加载功能开关（含 admin/ops/teacher 的导航过滤，登录时使用用户级覆盖）
-  if (hasFeatureControlledItems.value) {
+  // 加载功能开关（admin/ops 走新的 /api/user/feature-toggles，能享受用户级覆盖）
+  if (props.role === 'ops' || props.role === 'admin') {
     try {
       await loadFeatureToggles({ authenticated: userStore.isLoggedIn })
     } catch (e) {
       console.error('Failed to load feature toggles:', e)
     }
+  }
+
+  // admin 角色：加载待审核计数并定时轮询
+  if (props.role === 'admin') {
+    loadPendingReviewCount()
+    pendingPollTimer = setInterval(loadPendingReviewCount, 60000)
   }
 
   // 检查 SSO 是否启用（静默失败，不影响主流程）
@@ -449,8 +467,26 @@ onMounted(async () => {
   }
 })
 
+const loadPendingReviewCount = async () => {
+  try {
+    const [textRes, videoRes] = await Promise.all([
+      getReviewTexts({ page: 1, size: 1, status: 'PENDING' }),
+      getReviewVideos({ page: 1, size: 1, status: 'PENDING' })
+    ])
+    const tp = textRes?.data?.pendingCount || 0
+    const vp = videoRes?.data?.pendingCount || 0
+    pendingReviewCount.value = tp + vp
+  } catch (e) {
+    // 静默失败
+  }
+}
+
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown)
+  if (pendingPollTimer) {
+    clearInterval(pendingPollTimer)
+    pendingPollTimer = null
+  }
 })
 </script>
 
@@ -685,6 +721,26 @@ onUnmounted(() => {
   color: inherit;
 }
 
+.dropdown-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.dropdown-item-left {
+  display: flex;
+  align-items: center;
+}
+
+.menu-badge {
+  margin-left: 8px;
+}
+
+.management-menu-item {
+  position: relative;
+}
+
 /* 触摸体验 */
 .nav-item,
 .user-menu-item,
@@ -719,56 +775,6 @@ onUnmounted(() => {
 }
 
 /* 响应式 */
-/* 响应式适配 - 针对大屏 PC 端优化 */
-@media (min-width: 1025px) {
-  .mobile-header {
-    height: 72px;
-    padding: 0 40px;
-  }
-
-  .page-title {
-    font-size: 24px;
-  }
-
-  .mobile-main {
-    padding-bottom: 84px;
-  }
-
-  .mobile-nav {
-    padding-bottom: 12px;
-  }
-
-  .nav-container {
-    padding: 12px 40px;
-    max-width: 1440px;
-    margin: 0 auto;
-  }
-
-  .nav-item {
-    min-width: 100px;
-    padding: 12px;
-  }
-
-  .nav-icon {
-    width: 28px;
-    height: 28px;
-    margin-bottom: 6px;
-  }
-
-  .nav-label {
-    font-size: 13px;
-  }
-
-  .nav-item.active .nav-label {
-    font-size: 14px;
-  }
-
-  .avatar-img {
-    width: 32px;
-    height: 32px;
-  }
-}
-
 @media (max-width: 480px) {
   .mobile-header     { padding: 0 12px; height: 52px; }
   .page-title        { font-size: 16px; }

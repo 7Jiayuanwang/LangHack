@@ -4,6 +4,7 @@ import com.english.test.TestUtils;
 import com.english.entity.Text;
 import com.english.entity.User;
 import com.english.service.TextService;
+import com.english.service.UnitService;
 import com.english.service.UserService;
 import com.english.util.TestHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,6 +30,9 @@ class UserTextControllerTest {
     private TextService textService;
 
     @Mock
+    private UnitService unitService;
+
+    @Mock
     private UserService userService;
 
     @InjectMocks
@@ -37,6 +41,7 @@ class UserTextControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        doNothing().when(unitService).ensureUserUploadUnitExists(anyLong());
         mockMvc = MockMvcBuilders.standaloneSetup(userTextController).addFilters(TestUtils.authenticationFilter()).build();
     }
 
@@ -148,7 +153,7 @@ class UserTextControllerTest {
         ArgumentCaptor<Text> textCaptor = ArgumentCaptor.forClass(Text.class);
         verify(textService).save(textCaptor.capture());
         Assertions.assertEquals("MEDIUM", textCaptor.getValue().getDifficulty());
-        Assertions.assertEquals(0, textCaptor.getValue().getIsPublic());
+        Assertions.assertEquals(1, textCaptor.getValue().getIsPublic());
         Assertions.assertEquals("PENDING", textCaptor.getValue().getStatus());
     }
 

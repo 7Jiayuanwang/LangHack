@@ -49,6 +49,8 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
       MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
+      MYSQL_APP_USER: ${MYSQL_APP_USER:-}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-}
       TZ: Asia/Shanghai
     ports:
       - "${PORT_MYSQL:-3306}:3306"
@@ -64,7 +66,8 @@ services:
       # 03-import-backup.sh 自动选取最新全量备份（排除 pre-update_* 增量文件）
       - ../database:/docker-entrypoint-initdb.d/seed:ro
       - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
-      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/opt/langhack/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sh:/docker-entrypoint-initdb.d/04-apply-all-migrations.sh:ro
       - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
       - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
       - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
@@ -119,6 +122,8 @@ services:
       MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
       MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
       MYSQL_ROLE: slave
+      MYSQL_APP_USER: ${MYSQL_APP_USER:-}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-}
       TZ: Asia/Shanghai
     ports:
       - "${PORT_MYSQL_SLAVE:-3307}:3306"
@@ -129,12 +134,13 @@ services:
       # 不需要 seed/seed-backups/ecdict.csv（数据来自主库 mysqldump）
       - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
-      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/opt/langhack/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sh:/docker-entrypoint-initdb.d/04-apply-all-migrations.sh:ro
       - ./mysql/init/08-v16-school-tables.sql:/docker-entrypoint-initdb.d/08-v16-school-tables.sql:ro
       # 复制初始化标记 + 实际初始化脚本
       - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/07-create-replication-marker.sh:ro
-      - ./mysql/slave/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
-      # Entrypoint wrapper（每次容器启动时检查/修复复制）
+      - ./mysql/slave/init-replication.sh:/opt/langhack/init-replication.sh:ro
+      # Entrypoint wrapper（每次容器启动时主动检查/修复复制）
       - ./mysql/slave/entrypoint-wrapper.sh:/usr/local/bin/slave-wrapper.sh:ro
     networks:
       - langhack-network
@@ -143,8 +149,10 @@ services:
         condition: service_healthy
     healthcheck:
       # 仅检查 MySQL 进程存活，不强制要求复制运行
-      # 复制状态由 entrypoint-wrapper.sh 自动管理（每次容器启动时检查/修复）
-      # 复制不可用时由 DynamicDataSource 运行时降级处理（回退主库）
+      # 复制状态三层保障：
+      #   1) entrypoint-wrapper.sh 每次启动时主动检查/修复
+      #   2) deploy.sh / auto-update.sh 后置兜底
+      #   3) DynamicDataSource 运行时降级（回退主库）
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
@@ -263,7 +271,7 @@ services:
       mysql-master:
         condition: service_healthy   # 主库进程必须存活（阻塞）
       mysql-slave:
-        condition: service_healthy   # 从库进程必须存活（阻塞）；复制状态由 DynamicDataSource 运行时降级处理
+        condition: service_started   # 从库容器启动即可；复制状态由后置复制初始化与运行时降级共同处理
       redis:
         condition: service_healthy
     healthcheck:

@@ -27,6 +27,7 @@ readonly ENV_FILE="$PROJECT_ROOT/.env"
 readonly LOG_DIR="$PROJECT_ROOT/logs"
 readonly CACHE_FILE="$LOG_DIR/.hot-update.cache"
 readonly MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+readonly REPAIR_SQL="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
 readonly FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
 readonly BACKEND_PORT=8080
 readonly FRONTEND_PORT=3000
@@ -53,10 +54,21 @@ log_section() { printf '\n\033[1;34m══ %s ══\033[0m\n' "$*" >&2; }
 # ─────────────────────────────────────────────
 load_env() {
     if [ -f "$ENV_FILE" ]; then
-        set -a
-        # shellcheck disable=SC1090
-        source "$ENV_FILE"
-        set +a
+        # Read .env line-by-line to avoid bash interpreting '&' in values
+        # (e.g. JDBC URLs) as background operators, which truncates the value.
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty lines and comments
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            # Only process lines that look like KEY=VALUE
+            if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*) ]]; then
+                local key="${BASH_REMATCH[1]}"
+                local val="${BASH_REMATCH[2]}"
+                # Strip surrounding quotes if present
+                val="${val%\"}" ; val="${val#\"}"
+                val="${val%\'}" ; val="${val#\'}"
+                export "$key=$val"
+            fi
+        done < "$ENV_FILE"
     fi
     DB_USER="${DB_USERNAME:-root}"
     DB_PW="${DB_PASSWORD:-}"
@@ -155,32 +167,53 @@ apply_migrations() {
     check_migration_sync || return 1
 
     local stderr_log="$LOG_DIR/migration.stderr.log"
+    local prepared_sql=""
     : > "$stderr_log"
+
+    prepared_sql=$(mktemp /tmp/langhack-hotv2-migrate.XXXXXX.sql)
+    if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$prepared_sql"; then
+        log_error "迁移脚本预处理失败"
+        rm -f "$prepared_sql" 2>/dev/null || true
+        return 1
+    fi
 
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "langhack-mysql-master"; then
         log_info "使用 Docker MySQL 容器 (langhack-mysql-master)"
         if MYSQL_PWD="$DB_PW" docker exec -i -e MYSQL_PWD langhack-mysql-master \
-               mysql -u"$DB_USER" "$DB_NAME" < "$MIGRATION_SQL" 2>"$stderr_log"; then
+               mysql --default-character-set=utf8mb4 -u"$DB_USER" "$DB_NAME" < "$prepared_sql" 2>"$stderr_log"; then
+            if [ -f "$REPAIR_SQL" ]; then
+                MYSQL_PWD="$DB_PW" docker exec -i -e MYSQL_PWD langhack-mysql-master \
+                    mysql --default-character-set=utf8mb4 -u"$DB_USER" "$DB_NAME" < "$REPAIR_SQL" >/dev/null 2>&1 || true
+            fi
             log_ok "迁移完成（Docker 模式）"
         else
             log_error "迁移失败，错误输出："
             sed 's/^/    /' "$stderr_log" >&2
+            rm -f "$prepared_sql" 2>/dev/null || true
             return 1
         fi
     elif command -v mysql >/dev/null 2>&1; then
         log_info "使用本地 mysql 客户端 → $DB_HOST"
-        if MYSQL_PWD="$DB_PW" mysql -h "$DB_HOST" -u"$DB_USER" "$DB_NAME" \
-               < "$MIGRATION_SQL" 2>"$stderr_log"; then
+        if MYSQL_PWD="$DB_PW" mysql --default-character-set=utf8mb4 -h "$DB_HOST" -u"$DB_USER" "$DB_NAME" \
+               < "$prepared_sql" 2>"$stderr_log"; then
+            if [ -f "$REPAIR_SQL" ]; then
+                MYSQL_PWD="$DB_PW" mysql --default-character-set=utf8mb4 -h "$DB_HOST" -u"$DB_USER" "$DB_NAME" \
+                    < "$REPAIR_SQL" >/dev/null 2>&1 || true
+            fi
             log_ok "迁移完成（本地模式）"
         else
             log_error "迁移失败，错误输出："
             sed 's/^/    /' "$stderr_log" >&2
+            rm -f "$prepared_sql" 2>/dev/null || true
             return 1
         fi
     else
         log_warn "未检测到 Docker MySQL 或本地 mysql 客户端，跳过迁移"
+        rm -f "$prepared_sql" 2>/dev/null || true
         return 1
     fi
+
+    rm -f "$prepared_sql" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────

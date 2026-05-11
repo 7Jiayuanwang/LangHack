@@ -275,7 +275,6 @@ class SsoUserMappingServiceAutoGrantTest {
             mockNoBindingNoExistingUser("T001");
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
                     .thenReturn("true");
-            when(schoolStudentMapper.selectByStudentId("T001")).thenReturn(null);
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
                     .thenReturn("true");
 
@@ -302,6 +301,45 @@ class SsoUserMappingServiceAutoGrantTest {
                     "T001".equals(user.getUsername()) &&
                     "TEACHER".equals(user.getRole()) &&
                     "ACTIVE".equals(user.getStatus())
+            ));
+        }
+
+        @Test
+        @DisplayName("优先使用解析出的userId完成本地用户与学校教师目录配对")
+        void autoGrant_teacherMatch_usesParsedUserIdForDatabasePairing() {
+            ssoUserInfo.setSsoUserId("opaque-subject");
+            ssoUserInfo.setSsoUsername("display-name");
+            ssoUserInfo.setRealName("李老师");
+            ssoUserInfo.getAttributes().put("userId", "T001");
+
+            when(bindingMapper.findByProviderAndSsoUserId("CAS", "opaque-subject")).thenReturn(null);
+            when(userService.getUserByUsername("T001")).thenReturn(null);
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
+                    .thenReturn("true");
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
+                    .thenReturn("true");
+
+            SchoolTeacher teacher = new SchoolTeacher();
+            teacher.setTeacherId("T001");
+            teacher.setTeacherName("李老师");
+            teacher.setCollegeName("外国语学院");
+            when(schoolTeacherMapper.selectByTeacherId("T001")).thenReturn(teacher);
+
+            mockCreateUser(105L);
+            mockCreateBinding(205L);
+            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+
+            SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
+
+            assertNotNull(result);
+            assertEquals("TEACHER", result.getUser().getRole());
+            assertEquals("T001", result.getUser().getUsername());
+            verify(userService).getUserByUsername("T001");
+            verify(schoolTeacherMapper).selectByTeacherId("T001");
+            verify(bindingMapper).insert(argThat(binding ->
+                    "opaque-subject".equals(binding.getSsoUserId())
+                            && "T001".equals(binding.getSsoUsername())
+                            && binding.getAutoApproved() == 1
             ));
         }
 

@@ -177,39 +177,6 @@
       <el-table-column prop="count" label="访问次数" width="120" />
     </el-table>
 
-    <!-- 区域6: 后端应用日志 -->
-    <div class="section-title" style="margin-top: 16px;">
-      后端日志
-      <div class="log-toolbar">
-        <div class="log-level-badges">
-          <el-badge :value="appLogLevelCounts.ERROR || 0" :type="appLogLevelCounts.ERROR > 0 ? 'danger' : 'info'" :hidden="!appLogLevelCounts.ERROR">
-            <el-button size="small" :type="appLogLevelFilter === 'ERROR' ? 'danger' : ''"
-                       @click="appLogLevelFilter = appLogLevelFilter === 'ERROR' ? '' : 'ERROR'">ERROR</el-button>
-          </el-badge>
-          <el-badge :value="appLogLevelCounts.WARN || 0" :type="appLogLevelCounts.WARN > 0 ? 'warning' : 'info'" :hidden="!appLogLevelCounts.WARN">
-            <el-button size="small" :type="appLogLevelFilter === 'WARN' ? 'warning' : ''"
-                       @click="appLogLevelFilter = appLogLevelFilter === 'WARN' ? '' : 'WARN'">WARN</el-button>
-          </el-badge>
-          <el-button size="small" :type="appLogLevelFilter === 'INFO' ? 'primary' : ''"
-                     @click="appLogLevelFilter = appLogLevelFilter === 'INFO' ? '' : 'INFO'">INFO</el-button>
-        </div>
-        <el-input v-model="appLogKeyword" placeholder="搜索关键词" clearable size="small"
-                  style="width: 200px;" @keyup.enter="loadAppLogs" @clear="loadAppLogs" />
-        <el-button size="small" @click="loadAppLogs" :loading="appLogsLoading">
-          <el-icon><Refresh /></el-icon>
-        </el-button>
-      </div>
-    </div>
-    <div class="app-log-container" v-loading="appLogsLoading">
-      <div v-if="appLogEntries.length === 0" class="log-empty">暂无日志</div>
-      <div v-for="(entry, idx) in appLogEntries" :key="idx" class="log-entry" :class="'log-' + (entry.level || '').toLowerCase()">
-        <span class="log-time">{{ entry.timestamp }}</span>
-        <span class="log-level-tag" :class="'level-' + (entry.level || '').toLowerCase()">{{ entry.level }}</span>
-        <span class="log-logger">{{ entry.logger }}</span>
-        <span class="log-msg">{{ entry.message }}</span>
-        <div v-if="entry.exception" class="log-exception">{{ entry.exception }}</div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -229,8 +196,7 @@ import { getToken } from '@/utils/auth'
 import { environment } from '@/utils/environment'
 import {
   getRealTimeMetrics, getSystemMetrics, getHourlyStats, getDailyStats,
-  getTopPages, getAiCallsRealtime, getAiCallsDaily, getAiCallsRecent,
-  getApplicationLogs
+  getTopPages, getAiCallsRealtime, getAiCallsDaily, getAiCallsRecent
 } from '@/api/monitoring'
 
 use([
@@ -251,11 +217,6 @@ const chartTimeRange = ref('24h')
 const hourlyData = ref([])
 const dailyData = ref([])
 const topPages = ref([])
-const appLogEntries = ref([])
-const appLogLevelCounts = ref({})
-const appLogLevelFilter = ref('')
-const appLogKeyword = ref('')
-const appLogsLoading = ref(false)
 let eventSource = null
 let reconnectTimer = null
 
@@ -471,24 +432,6 @@ const loadAiCallsRecent = async () => {
   } catch { /* ignore */ }
 }
 
-const loadAppLogs = async () => {
-  appLogsLoading.value = true
-  try {
-    const params = { limit: 100 }
-    if (appLogLevelFilter.value) params.level = appLogLevelFilter.value
-    if (appLogKeyword.value) params.keyword = appLogKeyword.value
-    const res = await getApplicationLogs(params)
-    if (res.code === 200 && res.data) {
-      appLogEntries.value = res.data.entries || []
-      appLogLevelCounts.value = res.data.levelCounts || {}
-    }
-  } catch { /* ignore */ }
-  finally { appLogsLoading.value = false }
-}
-
-// 切换日志级别过滤时重新加载
-watch(appLogLevelFilter, () => loadAppLogs())
-
 const refreshAll = async () => {
   refreshing.value = true
   try {
@@ -504,7 +447,7 @@ const refreshAll = async () => {
     // 次要数据错峰加载（图表/日志/AI），避免 9 个请求同时打后端
     const secondaryPromise = Promise.all([
       loadChartData(), loadTopPages(), loadAiStats(),
-      loadAiDailyData(), loadAiCallsRecent(), loadAppLogs()
+      loadAiDailyData(), loadAiCallsRecent()
     ])
 
     await snapshotPromise
@@ -858,81 +801,6 @@ onBeforeUnmount(() => {
   margin-bottom: 16px;
 }
 
-.log-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
-}
-
-.log-level-badges {
-  display: flex;
-  gap: 8px;
-}
-
-.app-log-container {
-  background: #0f172a;
-  border-radius: 12px;
-  padding: 16px;
-  max-height: 600px;
-  overflow-y: auto;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 13px;
-  line-height: 1.7;
-  margin-bottom: 24px;
-  box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
-}
-
-.log-entry {
-  padding: 4px 8px;
-  border-radius: 4px;
-  margin-bottom: 2px;
-  transition: background 0.2s;
-}
-
-.log-entry:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.log-time {
-  color: #6366f1;
-  margin-right: 12px;
-  opacity: 0.8;
-}
-
-.log-level-tag {
-  display: inline-block;
-  min-width: 50px;
-  text-align: center;
-  font-weight: 800;
-  margin-right: 12px;
-  font-size: 11px;
-  padding: 0 4px;
-  border-radius: 3px;
-}
-
-.level-error { color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1); }
-.level-warn { color: #fde68a; border: 1px solid rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.1); }
-.level-info { color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.1); }
-
-.log-logger {
-  color: #38bdf8;
-  margin-right: 12px;
-  opacity: 0.9;
-}
-
-.log-msg {
-  color: #e2e8f0;
-}
-
-.log-exception {
-  color: #fca5a5;
-  padding-left: 130px;
-  font-size: 12px;
-  margin-top: 4px;
-  opacity: 0.9;
-}
-
 @media (max-width: 768px) {
   .monitoring-dashboard {
     padding: 12px;
@@ -945,11 +813,6 @@ onBeforeUnmount(() => {
   }
   .ai-service-cards {
     grid-template-columns: 1fr;
-  }
-  .log-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-    margin-top: 10px;
   }
 }
 </style>

@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
 public class FieldMappingServiceImpl implements FieldMappingService {
 
     private static final Logger logger = LoggerFactory.getLogger(FieldMappingServiceImpl.class);
+    private static final ConcurrentHashMap<String, AtomicInteger> REQUIRED_NULL_WARNINGS = new ConcurrentHashMap<>();
 
     private final FieldMappingMapper fieldMappingMapper;
     private final ObjectMapper objectMapper;
@@ -150,7 +153,7 @@ public class FieldMappingServiceImpl implements FieldMappingService {
                 if (mapping.getDefaultValue() != null && !mapping.getDefaultValue().isEmpty()) {
                     convertedValue = convertType(mapping.getDefaultValue(), mapping.getTargetType(), mapping.getConverterConfig());
                 } else if (Boolean.TRUE.equals(mapping.getIsRequired())) {
-                    logger.warn("Required field '{}' is null for data source: {}", sourceField, dataSource);
+                    logRequiredFieldNull(dataSource, sourceField, mapping.getTargetField());
                     continue;
                 } else {
                     continue;
@@ -259,6 +262,21 @@ public class FieldMappingServiceImpl implements FieldMappingService {
 
     private String normalizeFieldKey(String key) {
         return key == null ? "" : key.toLowerCase(Locale.ROOT);
+    }
+
+    private void logRequiredFieldNull(String dataSource, String sourceField, String targetField) {
+        String normalizedTarget = toCamelCase(targetField);
+        if ("course_schedule".equals(dataSource)
+                && ("dayOfWeek".equals(normalizedTarget) || "period".equals(normalizedTarget))) {
+            String key = dataSource + ":" + normalizedTarget;
+            int count = REQUIRED_NULL_WARNINGS.computeIfAbsent(key, ignored -> new AtomicInteger()).incrementAndGet();
+            if (count <= 3 || count % 500 == 0) {
+                logger.warn("Required field '{}' is null for data source: {} (suppressedCount={})",
+                        sourceField, dataSource, count - 1);
+            }
+            return;
+        }
+        logger.warn("Required field '{}' is null for data source: {}", sourceField, dataSource);
     }
 
     // =========================================================================

@@ -221,3 +221,27 @@ backups/.env.pre-update.*
 
 # ── 上传文件目录（视频/图片存储）──
 uploads/
+
+# ── 持久化数据目录（bind mount，不入库）──
+# 先允许 .gitkeep，再排除目录内容
+!data/
+!data/mysql-master/
+!data/mysql-slave/
+!data/redis/
+!data/app-logs/
+!data/app-uploads/
+!data/mysql-master/.gitkeep
+!data/mysql-slave/.gitkeep
+!data/redis/.gitkeep
+!data/app-logs/.gitkeep
+!data/app-uploads/.gitkeep
+data/mysql-master/*
+data/mysql-slave/*
+data/redis/*
+data/app-logs/*
+data/app-uploads/*
+!data/mysql-master/.gitkeep
+!data/mysql-slave/.gitkeep
+!data/redis/.gitkeep
+!data/app-logs/.gitkeep
+!data/app-uploads/.gitkeep

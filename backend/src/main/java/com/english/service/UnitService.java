@@ -37,4 +37,10 @@ public interface UnitService extends IService<Unit> {
      * 删除单元
      */
     void deleteUnit(Long id);
+
+    /**
+     * 确保用户上传专用单元存在（如果不存在则自动创建）
+     * 防止外键约束导致用户上传失败
+     */
+    void ensureUserUploadUnitExists(Long unitId);
 }

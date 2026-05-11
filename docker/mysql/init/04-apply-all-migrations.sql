@@ -1,6 +1,7 @@
 -- Auto-generated from backend/src/main/resources/db/migration/V*.sql
 -- Do not edit by hand; update Flyway migrations and regenerate.
-
+-- NOTE: 此文件使用 $$ 作为存储过程分隔符，必须通过 04-apply-all-migrations.sh 执行
+--       不可直接 source，否则 DELIMITER 命令报错
 
 -- V0__base_tables.sql
 
@@ -351,8 +352,7 @@ CREATE TABLE IF NOT EXISTS score_records (
 --    使用存储过程 IF NOT EXISTS 防止重复添加列
 --    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_col_assignments_weight$$
 CREATE PROCEDURE _add_col_assignments_weight()
 BEGIN
     -- 任务权重（加权平均分）
@@ -365,14 +365,12 @@ BEGIN
         ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60
             COMMENT '理想学习时长（分钟），默认60分钟' AFTER weight;
     END IF;
-END//
-DELIMITER ;
-CALL _add_col_assignments_weight();
-DROP PROCEDURE IF EXISTS _add_col_assignments_weight;
+END$$
+CALL _add_col_assignments_weight()$$
+DROP PROCEDURE IF EXISTS _add_col_assignments_weight$$
 
 -- 索引（幂等：IF NOT EXISTS 检查）
-DROP PROCEDURE IF EXISTS _add_idx_assignments;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_idx_assignments$$
 CREATE PROCEDURE _add_idx_assignments()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_weight') THEN
@@ -381,10 +379,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_ideal_study_time') THEN
         CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes);
     END IF;
-END//
-DELIMITER ;
-CALL _add_idx_assignments();
-DROP PROCEDURE IF EXISTS _add_idx_assignments;
+END$$
+CALL _add_idx_assignments()$$
+DROP PROCEDURE IF EXISTS _add_idx_assignments$$
 
 -- V2__text_and_learning.sql
 
@@ -400,20 +397,17 @@ DROP PROCEDURE IF EXISTS _add_idx_assignments;
 -- 1. 学习记录添加课文关联 [原 V2]
 --    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_lr_text;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_col_lr_text$$
 CREATE PROCEDURE _add_col_lr_text()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id') THEN
         ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT '关联的课文ID' AFTER word_id;
     END IF;
-END//
-DELIMITER ;
-CALL _add_col_lr_text();
-DROP PROCEDURE IF EXISTS _add_col_lr_text;
+END$$
+CALL _add_col_lr_text()$$
+DROP PROCEDURE IF EXISTS _add_col_lr_text$$
 
-DROP PROCEDURE IF EXISTS _add_fk_lr_text;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_fk_lr_text$$
 CREATE PROCEDURE _add_fk_lr_text()
 BEGIN
     IF NOT EXISTS (
@@ -423,13 +417,11 @@ BEGIN
         ALTER TABLE learning_records ADD CONSTRAINT fk_learning_record_text
             FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE SET NULL;
     END IF;
-END//
-DELIMITER ;
-CALL _add_fk_lr_text();
-DROP PROCEDURE IF EXISTS _add_fk_lr_text;
+END$$
+CALL _add_fk_lr_text()$$
+DROP PROCEDURE IF EXISTS _add_fk_lr_text$$
 
-DROP PROCEDURE IF EXISTS _add_index_lr_text;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_index_lr_text$$
 CREATE PROCEDURE _add_index_lr_text()
 BEGIN
     IF NOT EXISTS (
@@ -438,16 +430,14 @@ BEGIN
     ) THEN
         CREATE INDEX idx_text_id ON learning_records (text_id);
     END IF;
-END//
-DELIMITER ;
-CALL _add_index_lr_text();
-DROP PROCEDURE IF EXISTS _add_index_lr_text;
+END$$
+CALL _add_index_lr_text()$$
+DROP PROCEDURE IF EXISTS _add_index_lr_text$$
 
 -- ────────────────────────────────────────
 -- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_texts_batch;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_col_texts_batch$$
 CREATE PROCEDURE _add_col_texts_batch()
 BEGIN
     -- 中英对照内容 [原 V2]
@@ -514,14 +504,12 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='status') THEN
         ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED';
     END IF;
-END//
-DELIMITER ;
-CALL _add_col_texts_batch();
-DROP PROCEDURE IF EXISTS _add_col_texts_batch;
+END$$
+CALL _add_col_texts_batch()$$
+DROP PROCEDURE IF EXISTS _add_col_texts_batch$$
 
 -- 推荐优先级复合索引 [原 V10]
-DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_idx_featured_priority$$
 CREATE PROCEDURE _add_idx_featured_priority()
 BEGIN
     IF NOT EXISTS (
@@ -530,10 +518,9 @@ BEGIN
     ) THEN
         CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC);
     END IF;
-END//
-DELIMITER ;
-CALL _add_idx_featured_priority();
-DROP PROCEDURE IF EXISTS _add_idx_featured_priority;
+END$$
+CALL _add_idx_featured_priority()$$
+DROP PROCEDURE IF EXISTS _add_idx_featured_priority$$
 
 -- unit_id 改为可空（支持课文从单元中移除）[原 V2]
 ALTER TABLE texts MODIFY COLUMN unit_id BIGINT DEFAULT NULL
@@ -608,8 +595,7 @@ CREATE TABLE IF NOT EXISTS media (
 -- 2. 媒体路径列 [原 V9]
 --    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_media_paths;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_col_media_paths$$
 CREATE PROCEDURE _add_col_media_paths()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path') THEN
@@ -618,16 +604,14 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path') THEN
         ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path';
     END IF;
-END//
-DELIMITER ;
-CALL _add_col_media_paths();
-DROP PROCEDURE IF EXISTS _add_col_media_paths;
+END$$
+CALL _add_col_media_paths()$$
+DROP PROCEDURE IF EXISTS _add_col_media_paths$$
 
 -- ────────────────────────────────────────
 -- 3. 词汇本添加 SM-2 间隔重复字段 [原 V3]
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_sm2;
-DELIMITER //
+DROP PROCEDURE IF EXISTS _add_col_sm2$$
 CREATE PROCEDURE _add_col_sm2()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition') THEN
@@ -642,10 +626,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time') THEN
         ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT 'SM-2 下次复习时间';
     END IF;
-END//
-DELIMITER ;
-CALL _add_col_sm2();
-DROP PROCEDURE IF EXISTS _add_col_sm2;
+END$$
+CALL _add_col_sm2()$$
+DROP PROCEDURE IF EXISTS _add_col_sm2$$
 
 -- ────────────────────────────────────────
 -- 4. 创建划线标注表 [原 V3]
@@ -2640,3 +2623,162 @@ LEFT JOIN (
     FROM underlines
     GROUP BY user_id, text_id
 ) ul ON ul.user_id = utp.user_id AND ul.text_id = utp.text_id;
+
+-- ═══════════════════════════════════════════════════════════════
+-- V23: 内容标签表（管理员预设）
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS `content_tags` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(50) NOT NULL COMMENT '标签名称',
+    `color` VARCHAR(20) DEFAULT NULL COMMENT '标签颜色（如 #409EFF）',
+    `sort_order` INT DEFAULT 0 COMMENT '排序号，值越小越靠前',
+    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_name` (`name`),
+    KEY `idx_sort_order` (`sort_order`),
+    KEY `idx_deleted` (`deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='内容标签表（管理员预设）';
+
+-- 预置常用标签
+INSERT IGNORE INTO `content_tags` (`name`, `color`, `sort_order`) VALUES
+    ('日常对话', '#67C23A', 1),
+    ('商务英语', '#409EFF', 2),
+    ('学术英语', '#E6A23C', 3),
+    ('科技文章', '#909399', 4),
+    ('新闻资讯', '#F56C6C', 5),
+    ('文学小说', '#9B59B6', 6);
+
+-- ════════════════════════════════════════════════════════════════
+
+-- V21__add_display_fields_to_teacher_student_binding.sql
+-- 为 teacher_student_binding 表添加显示字段（教师姓名、学生姓名、学院名称、课程名称）
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields$$
+CREATE PROCEDURE add_teacher_student_binding_display_fields()
+BEGIN
+    -- Add teacher_name column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND COLUMN_NAME = 'teacher_name'
+    ) THEN
+        ALTER TABLE teacher_student_binding
+            ADD COLUMN teacher_name VARCHAR(100) NULL COMMENT '教师姓名' AFTER teacher_id;
+    END IF;
+
+    -- Add student_name column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND COLUMN_NAME = 'student_name'
+    ) THEN
+        ALTER TABLE teacher_student_binding
+            ADD COLUMN student_name VARCHAR(100) NULL COMMENT '学生姓名' AFTER student_id;
+    END IF;
+
+    -- Add college_name column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND COLUMN_NAME = 'college_name'
+    ) THEN
+        ALTER TABLE teacher_student_binding
+            ADD COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称' AFTER student_id;
+    END IF;
+
+    -- Add course_name column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND COLUMN_NAME = 'course_name'
+    ) THEN
+        ALTER TABLE teacher_student_binding
+            ADD COLUMN course_name VARCHAR(200) NULL COMMENT '课程名称' AFTER course_code;
+    END IF;
+
+    -- Add index on college_name
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'teacher_student_binding'
+          AND INDEX_NAME = 'idx_college_name'
+    ) THEN
+        CREATE INDEX idx_college_name ON teacher_student_binding(college_name);
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL add_teacher_student_binding_display_fields();
+DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields;
+
+-- ════════════════════════════════════════════════════════════════
+
+-- V16__enable_sso_auto_grant.sql
+-- 默认开启 SSO 自动授权功能开关
+
+UPDATE `system_config`
+SET `config_value` = 'true'
+WHERE `config_group` = 'feature_toggle'
+  AND `config_key` IN ('sso.auto_grant_student', 'sso.auto_grant_teacher');
+
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'sso.auto_grant_student', 'true', 'SSO 学号匹配 school_student 自动授权 STUDENT', 0),
+('feature_toggle', 'sso.auto_grant_teacher', 'true', 'SSO 工号匹配 school_teacher 自动授权 TEACHER', 0);
+
+-- ════════════════════════════════════════════════════════════════
+
+-- V17__add_reading_count.sql
+-- 为 user_text_reads 表添加阅读次数字段，为 users 表添加阅读统计字段
+
+DROP PROCEDURE IF EXISTS _add_reading_count_cols;
+CREATE PROCEDURE _add_reading_count_cols()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'user_text_reads'
+          AND COLUMN_NAME = 'read_count'
+    ) THEN
+        ALTER TABLE user_text_reads ADD COLUMN read_count INT NOT NULL DEFAULT 1 COMMENT '阅读次数';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'user_text_reads'
+          AND COLUMN_NAME = 'last_read_at'
+    ) THEN
+        ALTER TABLE user_text_reads ADD COLUMN last_read_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '最后阅读时间';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'users'
+          AND COLUMN_NAME = 'read_article_count'
+    ) THEN
+        ALTER TABLE users ADD COLUMN read_article_count INT NOT NULL DEFAULT 0 COMMENT '已读文章数';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'users'
+          AND COLUMN_NAME = 'read_total_times'
+    ) THEN
+        ALTER TABLE users ADD COLUMN read_total_times INT NOT NULL DEFAULT 0 COMMENT '累计阅读次数';
+    END IF;
+END;
+
+CALL _add_reading_count_cols();
+DROP PROCEDURE IF EXISTS _add_reading_count_cols;
+
+-- ════════════════════════════════════════════════════════════════
+

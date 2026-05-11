@@ -513,37 +513,21 @@ const difficultyText = computed(() => {
 })
 
 
-// 缓存字数计算结果，避免频繁重新计算
-const cachedWordCount = ref(0)
 const wordCount = computed(() => {
   if (!textContent.value) return 0
 
-  // 如果内容未变化，返回缓存值
-  const contentKey = `${currentVersion.value}-${textContent.value.length}`
-  if (cachedWordCount.value > 0 && lastContentKey === contentKey) {
-    return cachedWordCount.value
-  }
-
   let text = textContent.value
-  // Markdown 模式下 textContent 含 HTML 标签，需要先用原始文本或去掉标签再计算
   if (isMarkdown.value) {
-    // 优先使用原始版本的纯文本
     const rawText = textVersions.value?.[currentVersion.value] || ''
     if (rawText) {
       text = rawText
     } else {
-      // fallback: 去除 HTML 标签
       text = textContent.value.replace(/<[^>]*>/g, ' ')
     }
   }
 
-  const count = text.split(/\s+/).filter(word => word.length > 0).length
-  cachedWordCount.value = count
-  lastContentKey = contentKey
-  return count
+  return text.split(/\s+/).filter(word => word.length > 0).length
 })
-
-let lastContentKey = ''
 
 const estimatedTime = computed(() => {
   // 预计每分钟阅读100个单词
@@ -1114,7 +1098,13 @@ const goBack = () => {
     }
   }
   
-  if (from === 'assignment') {
+  if (from === 'admin-review') {
+    // 从管理员审核页来的，返回内容管理页
+    router.push('/admin/content')
+  } else if (from === 'user-texts') {
+    // 从学生上传页来的，返回上传页
+    router.push('/student/user-texts')
+  } else if (from === 'assignment') {
     // 从任务页面跳转来的，返回任务页面
     router.push('/student/assignments')
   } else if (from === 'articles') {
@@ -1584,8 +1574,6 @@ onBeforeUnmount(() => {
 
   // 清理缓存
   renderedVersionCache.clear()
-  cachedWordCount.value = 0
-  lastContentKey = ''
 })
 
 // 处理页面可见性变化（切换标签页时自动暂停）
@@ -1736,7 +1724,9 @@ const handleUnderline = async () => {
       await fetchSharedUnderlines()
       ElMessage.success('划线成功')
     } else {
-      ElMessage.success('划线成功')
+      removeAllHighlights()
+      applySharedUnderlines()
+      ElMessage.error(res?.message || '划线失败，请重试')
     }
     showSelectionMenu.value = false
     window.getSelection().removeAllRanges()

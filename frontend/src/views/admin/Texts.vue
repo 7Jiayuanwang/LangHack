@@ -1,20 +1,6 @@
 <template>
   <div class="texts-management">
-    <div class="header">
-      <h2>课文管理</h2>
-      <div class="actions">
-        <el-button type="primary" @click="showAddDialog">
-          <el-icon><Plus /></el-icon>
-          添加课文
-        </el-button>
-        <el-button @click="loadTexts">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
-    </div>
-
-    <!-- 搜索栏 -->
+    <!-- 搜索栏 + 操作按钮 -->
     <div class="search-bar">
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="关键词">
@@ -38,12 +24,18 @@
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
-          <el-button @click="resetSearch">
-            <el-icon><RefreshLeft /></el-icon>
-            重置
-          </el-button>
         </el-form-item>
       </el-form>
+      <div class="search-actions">
+        <el-button type="primary" @click="showAddDialog">
+          <el-icon><Plus /></el-icon>
+          添加课文
+        </el-button>
+        <el-button @click="loadTexts">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
     </div>
 
     <!-- 统计信息 -->
@@ -342,12 +334,16 @@ const toggleFeatured = async (row, nextValue) => {
   const targetFeatured = nextValue === true || nextValue === 1 ? 1 : 0
   row._featuredLoading = true
   try {
-    await adminApi.toggleTextFeatured(row.id, targetFeatured)
-    row.isFeatured = targetFeatured
-    ElMessage.success(targetFeatured === 1 ? '已设为推荐' : '已取消推荐')
-    loadStats()
+    const response = await adminApi.toggleTextFeatured(row.id, targetFeatured)
+    if (response.code === 200) {
+      row.isFeatured = targetFeatured
+      ElMessage.success(targetFeatured === 1 ? '已设为推荐' : '已取消推荐')
+      loadStats()
+    } else {
+      row.isFeatured = 1 - targetFeatured
+      ElMessage.error(response.message || '操作失败')
+    }
   } catch (error) {
-    // 拦截器已展示错误弹窗，此处回滚 UI 状态
     row.isFeatured = 1 - targetFeatured
   } finally {
     row._featuredLoading = false
@@ -479,139 +475,114 @@ onMounted(() => {
   loadStats()
   loadTexts()
 })
+
+defineExpose({ loadTexts })
 </script>
 
 <style scoped>
 .texts-management {
+  padding: 20px;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 20px;
-}
-
-/* PC端大字号适配 */
-@media (min-width: 1200px) {
-  .texts-management {
-    padding: 30px;
-  }
-  
-  .header h2 {
-    font-size: 28px;
-  }
-
-  .stat-value {
-    font-size: 42px;
-  }
-
-  .stat-label {
-    font-size: 16px;
-  }
-
-  :deep(.el-table) {
-    font-size: 16px;
-  }
-
-  :deep(.el-table .cell) {
-    line-height: 1.6;
-    padding: 12px 0;
-  }
-
-  .search-bar {
-    margin-bottom: 25px;
-    padding: 24px;
-  }
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e4e7ed;
 }
 
 .header h2 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #1e293b;
+  color: #303133;
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
 }
 
 .search-bar {
-  background: #f8fafc;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
   padding: 20px;
-  border-radius: 16px;
-  margin-bottom: 24px;
-  border: 1px solid #f1f5f9;
+  background-color: #f8f9fa;
+  border-radius: 8px;
 }
 
-.search-form :deep(.el-form-item) {
-  margin-bottom: 0;
-  margin-right: 16px;
+.search-form {
+  margin: 0;
+}
+
+.search-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 20px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 
 .stat-card {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 20px;
-  padding: 24px;
   text-align: center;
-  transition: all 0.3s;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  background-color: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  transition: all 0.3s ease;
 }
 
 .stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  border-color: #6366f1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .stat-value {
-  font-size: 36px;
-  font-weight: 800;
-  color: #1e293b;
+  font-size: 32px;
+  font-weight: bold;
+  color: #409eff;
   margin-bottom: 8px;
-  line-height: 1;
 }
 
 .stat-label {
   font-size: 14px;
-  font-weight: 600;
-  color: #64748b;
+  color: #909399;
 }
 
 .texts-table {
-  background: white;
-  border-radius: 16px;
-  border: 1px solid #f1f5f9;
-  overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
-}
-
-:deep(.el-table) {
-  --el-table-header-bg-color: #f8fafc;
-  font-size: 15px;
+  background-color: #fff;
+  border-radius: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .content-preview {
-  font-size: 14px;
-  color: #64748b;
-  line-height: 1.6;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.4;
 }
 
 .pagination {
-  margin-top: 24px;
+  margin-top: 20px;
   display: flex;
   justify-content: center;
 }
 
 .no-audio {
-  color: #94a3b8;
+  color: #909399;
   font-size: 12px;
 }
 
@@ -622,25 +593,23 @@ onMounted(() => {
 }
 
 .text-detail {
-  padding: 10px 0;
+  padding: 20px 0;
 }
 
 .text-detail h3 {
   margin: 0 0 16px 0;
-  color: #1e293b;
-  font-size: 22px;
-  font-weight: 700;
-  text-align: center;
+  color: #303133;
+  font-size: 18px;
+  font-weight: 500;
 }
 
 .text-meta {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f1f5f9;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e4e7ed;
 }
 
 .create-time {
@@ -650,11 +619,10 @@ onMounted(() => {
 
 .text-cover-preview {
   width: 100%;
-  max-height: 300px;
+  max-height: 200px;
   overflow: hidden;
-  border-radius: 12px;
-  margin-bottom: 24px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  margin-bottom: 16px;
 }
 
 .text-cover-preview img {
@@ -664,72 +632,53 @@ onMounted(() => {
 }
 
 .text-content {
-  margin-bottom: 24px;
-  max-height: 60vh;
+  margin-bottom: 20px;
+  max-height: 50vh;
   overflow-y: auto;
-  padding: 24px;
-  background-color: #f8fafc;
-  border-radius: 12px;
-  border: 1px solid #f1f5f9;
-  line-height: 1.8;
-  font-size: 16px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
 }
 
 .text-content pre {
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.8;
+  line-height: 1.6;
   font-family: inherit;
-  color: #334155;
+  color: #303133;
   margin: 0;
-}
-
-.text-audio {
-  background: #f1f5f9;
-  padding: 16px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
 }
 
 .text-audio h4 {
-  margin: 0;
-  color: #475569;
+  margin: 0 0 12px 0;
+  color: #606266;
   font-size: 14px;
-  font-weight: 600;
-}
-
-.priority-na {
-  color: #cbd5e1;
-  font-size: 14px;
+  font-weight: normal;
 }
 
 @media (max-width: 768px) {
   .texts-management {
-    padding: 12px;
+    padding: 16px;
   }
 
   .header {
     flex-direction: column;
-    align-items: flex-start;
     gap: 16px;
+    align-items: flex-start;
   }
 
   .actions {
     width: 100%;
-    display: flex;
-    gap: 8px;
+    justify-content: flex-start;
   }
 
   .search-form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    display: block;
   }
 
-  .search-form :deep(.el-form-item) {
+  .search-form .el-form-item {
     margin-right: 0;
+    margin-bottom: 16px;
   }
 
   .stats-cards {
@@ -744,10 +693,18 @@ onMounted(() => {
   .stat-value {
     font-size: 24px;
   }
+}
 
-  .text-content {
-    padding: 16px;
-    font-size: 14px;
-  }
+.exercise-section {
+  margin-top: 20px;
+}
+
+.section-title {
+  font-weight: bold;
+  color: #333;
+}
+.priority-na {
+  color: #c0c4cc;
+  font-size: 16px;
 }
 </style>

@@ -5,6 +5,7 @@ import com.english.entity.Text;
 import com.english.entity.User;
 import com.english.service.UserService;
 import com.english.service.TextService;
+import com.english.service.UnitService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,9 +36,15 @@ public class UserTextController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private UnitService unitService;
+
     /**
      * 用户上传课文
      */
+    /** 用户上传内容的专用单元ID */
+    private static final Long USER_UPLOAD_UNIT_ID = 999L;
+
     @PostMapping("/upload")
     public Result<Map<String, Object>> uploadText(@RequestBody Map<String, Object> textData) {
         try {
@@ -48,8 +55,11 @@ public class UserTextController {
                 return Result.error("用户不存在");
             }
 
+            // 确保用户上传专用单元存在（防止外键约束失败）
+            unitService.ensureUserUploadUnitExists(USER_UPLOAD_UNIT_ID);
+
             Text text = new Text();
-            text.setUnitId(999L); // 用户上传内容的专用单元
+            text.setUnitId(USER_UPLOAD_UNIT_ID);
 
             // 安全地获取和设置字段
             String title = (String) textData.get("title");
@@ -58,6 +68,8 @@ public class UserTextController {
             String contentType = (String) textData.getOrDefault("contentType", "TEXT");
             String difficulty = (String) textData.getOrDefault("difficulty", "MEDIUM");
             String tags = (String) textData.getOrDefault("tags", "");
+            String coverUrl = (String) textData.get("coverUrl");
+            String audioUrl = (String) textData.get("audioUrl");
 
             if (title == null || title.trim().isEmpty()) {
                 return Result.error("课文标题不能为空");
@@ -67,6 +79,10 @@ public class UserTextController {
             if ("MARKDOWN".equalsIgnoreCase(contentType)) {
                 if (markdownContent == null || markdownContent.trim().isEmpty()) {
                     return Result.error("Markdown内容不能为空");
+                }
+                // 数据库 content 列为 NOT NULL，MARKDOWN 类型时用空字符串填充
+                if (content == null) {
+                    content = "";
                 }
             } else {
                 if (content == null || content.trim().isEmpty()) {
@@ -80,15 +96,19 @@ public class UserTextController {
             text.setContentType(contentType);
             text.setDifficulty(difficulty);
             text.setTags(tags != null ? tags : "");
+            text.setCoverUrl(coverUrl);
+            text.setAudioUrl(audioUrl);
             text.setUploadedBy(user.getId());
-            text.setIsPublic(0); // 默认不公开，审核通过后再公开
+
+            // 学生上传默认公开
+            text.setIsPublic(1);
             text.setStatus("PENDING"); // 默认待审核
             text.setViewCount(0);
             text.setLikeCount(0);
 
             // 设置排序号，简化逻辑
             try {
-                Integer maxOrder = textService.getMaxOrderInUnit(999L);
+                Integer maxOrder = textService.getMaxOrderInUnit(USER_UPLOAD_UNIT_ID);
                 if (maxOrder != null && maxOrder >= Integer.MAX_VALUE - 1) {
                     return Result.error("单元课文数量已满，请联系管理员");
                 }
@@ -105,7 +125,9 @@ public class UserTextController {
 
             return Result.success("上传成功", result);
         } catch (Exception e) {
-            log.error("上传课文失败", e);
+            log.error("上传课文失败, 用户: {}, 数据: {}", 
+                SecurityContextHolder.getContext().getAuthentication().getName(), 
+                textData.keySet(), e);
             return Result.error("上传失败，请稍后重试");
         }
     }
@@ -146,10 +168,11 @@ public class UserTextController {
                 return Result.error("课文不存在");
             }
 
-            // 检查权限：只有上传者可以查看自己的课文，否则仅能查看公开课文
+            // 检查权限：上传者本人、管理员可查看所有文章；其他角色只能查看公开文章
             boolean isOwner = user.getId().equals(text.getUploadedBy());
-            boolean isPublic = (text.getIsPublic() != null && text.getIsPublic() == 1);
-            if (!isOwner && !isPublic) {
+            boolean isAdmin = "ADMIN".equals(user.getRole());
+            boolean isPublicText = (text.getIsPublic() != null && text.getIsPublic() == 1);
+            if (!isOwner && !isAdmin && !isPublicText) {
                 return Result.error("没有权限查看此课文");
             }
 
@@ -218,6 +241,14 @@ public class UserTextController {
             if (textData.containsKey("contentType")) text.setContentType(contentTypeVal != null ? contentTypeVal.toString() : "TEXT");
             if (textData.containsKey("difficulty")) text.setDifficulty(difficultyVal != null ? difficultyVal.toString() : "MEDIUM");
             if (textData.containsKey("tags")) text.setTags(tagsVal != null ? tagsVal.toString() : "");
+            if (textData.containsKey("coverUrl")) {
+                Object coverUrlVal = textData.get("coverUrl");
+                text.setCoverUrl(coverUrlVal != null ? coverUrlVal.toString() : "");
+            }
+            if (textData.containsKey("audioUrl")) {
+                Object audioUrlVal = textData.get("audioUrl");
+                text.setAudioUrl(audioUrlVal != null ? audioUrlVal.toString() : "");
+            }
 
             textService.updateById(text);
             return Result.success("更新成功");

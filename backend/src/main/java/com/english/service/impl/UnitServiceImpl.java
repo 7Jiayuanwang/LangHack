@@ -146,4 +146,30 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements Un
 
         logger.info("单元删除完成: unitId={}, 关联数据已安全清理", id);
     }
+
+    /** 用户上传专用课程ID */
+    private static final Long USER_UPLOAD_COURSE_ID = 999L;
+
+    @Override
+    public void ensureUserUploadUnitExists(Long unitId) {
+        // 先快速检查是否已存在，避免每次上传都执行 SQL
+        Unit existing = getById(unitId);
+        if (existing != null) {
+            return;
+        }
+
+        // 不存在时，使用 INSERT IGNORE 原子创建（并发安全）
+        // 先确保占位课程存在（units.course_id 有外键约束到 courses）
+        try {
+            baseMapper.ensurePlaceholderCourseExists(USER_UPLOAD_COURSE_ID);
+            baseMapper.ensurePlaceholderUnitExists(unitId, USER_UPLOAD_COURSE_ID);
+            logger.info("用户上传专用单元已自动创建: unitId={}", unitId);
+        } catch (Exception e) {
+            logger.warn("创建用户上传专用单元时出现异常（可能已被并发创建）: {}", e.getMessage());
+            // 再次检查是否已存在
+            if (getById(unitId) == null) {
+                throw new BusinessException("系统初始化失败，请联系管理员");
+            }
+        }
+    }
 }

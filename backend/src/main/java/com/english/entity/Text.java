@@ -335,4 +335,15 @@ public class Text {
     public void setCoverUrl(String coverUrl) {
         this.coverUrl = coverUrl;
     }
-}
+
+    @TableField("read_count")
+    private Integer readCount = 0;
+
+    public Integer getReadCount() {
+    return readCount;
+    }
+
+    public void setReadCount(Integer readCount) {
+    this.readCount = readCount;
+        }
+    }

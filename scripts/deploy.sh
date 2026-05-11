@@ -503,9 +503,9 @@ fi
 mapfile -t BRANCH_LIST < <({
     git branch -r --no-color 2>/dev/null | grep -v 'HEAD' | sed 's|origin/||;s|^[[:space:]]*||'
     git branch --no-color 2>/dev/null | sed 's|^\*||;s|^[[:space:]]*||'
-} | sort -u)
+} | grep -v 'HEAD detached' | grep -v '^$' | sort -u)
 
-[ ${#BRANCH_LIST[@]} -eq 0 ] && BRANCH_LIST=("$CURRENT_BRANCH")
+[ ${#BRANCH_LIST[@]} -eq 0 ] && BRANCH_LIST=("master")
 
 default_idx=1
 for i in "${!BRANCH_LIST[@]}"; do
@@ -995,6 +995,11 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'
         printf 'MYSQL_REPLICATION_PASSWORD=%s_repl\n' "$CFG_DB_PASSWORD"
+        # 若应用用户不是 root，写入 MYSQL_APP_USER/PASSWORD 供 init-db.sh 自动创建
+        if [ "$CFG_DB_USERNAME" != "root" ]; then
+            printf 'MYSQL_APP_USER=%s\n'     "$CFG_DB_USERNAME"
+            printf 'MYSQL_APP_PASSWORD=%s\n' "$CFG_DB_PASSWORD"
+        fi
         printf 'DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
         printf 'DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
         printf 'DB_SLAVE_USERNAME=%s\n'  "$CFG_DB_USERNAME"
@@ -1210,6 +1215,13 @@ fi
 
 if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
     echo "[INFO] 切换分支 $CURRENT → $TARGET_BRANCH..."
+    if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
+        echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
+        exit 1
+    fi
+elif [ "$CURRENT" = "HEAD" ]; then
+    # 游离 HEAD 状态：直接切换到目标分支
+    echo "[INFO] 当前处于游离 HEAD 状态，切换到分支 $TARGET_BRANCH..."
     if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
         echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
         exit 1
@@ -1521,6 +1533,8 @@ DB_NAME="${MYSQL_DATABASE:-english_learning}"
 MASTER_CONTAINER="langhack-mysql-master"
 SLAVE_CONTAINER="langhack-mysql-slave"
 MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+FEATURE_TOGGLE_REPAIR_SQL="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
+PREPARED_MIGRATION_SQL=""
 FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
 
 # 等待 mysql-master 容器可用（最多 60s）
@@ -1540,8 +1554,8 @@ if [ ! -f "$MIGRATION_SQL" ]; then
 fi
 
 # 版本同步强制检查：Flyway 文件数必须与合并脚本一致，否则阻塞部署
-flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' ' || echo 0)
-merged_count=$(grep -cE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | tr -d ' ' || echo 0)
+flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' \n\r' || echo 0)
+merged_count=$(grep -cE '^-- V[0-9]+__.*\.sql$' "$MIGRATION_SQL" 2>/dev/null | tr -d ' \n\r' || echo 0)
 if [ "$flyway_count" -gt "$merged_count" ]; then
     echo "[ERROR] ══════════════════════════════════════════════════════"
     echo "[ERROR] 迁移脚本版本不同步，部署终止"
@@ -1560,10 +1574,38 @@ else
 fi
 
 # 从头部列表提取最高版本号用于日志
-max_ver=$(grep -oE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
+max_ver=$(grep -oE '^-- V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 | tr -d ' \n\r' || echo "?")
 echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${DB_NAME})"
-MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 < "$MIGRATION_SQL")
-MIGRATE_EXIT=$?
+PREPARED_MIGRATION_SQL=$(mktemp /tmp/langhack-deploy-migrate.XXXXXX.sql)
+if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$PREPARED_MIGRATION_SQL"; then
+    echo "[ERROR] 迁移脚本预处理失败"
+    rm -f "$PREPARED_MIGRATION_SQL" 2>/dev/null || true
+    exit 1
+fi
+MIGRATE_LOG=$(mktemp /tmp/langhack-deploy-migrate-output.XXXXXX.log)
+docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" < "$PREPARED_MIGRATION_SQL" > "$MIGRATE_LOG" 2>&1 &
+MIGRATE_PID=$!
+MIGRATE_ELAPSED=0
+while kill -0 "$MIGRATE_PID" 2>/dev/null; do
+    sleep 15
+    if kill -0 "$MIGRATE_PID" 2>/dev/null; then
+        MIGRATE_ELAPSED=$((MIGRATE_ELAPSED + 15))
+        MIGRATE_ACTIVITY=$(bash "$PROJECT_ROOT/scripts/describe-mysql-activity.sh" "$MASTER_CONTAINER" "$DB_ROOT_PW" "$DB_NAME" || true)
+        if [ -n "$MIGRATE_ACTIVITY" ]; then
+            echo "[INFO] MIGRATE: ${MIGRATE_ACTIVITY} (已耗时 ${MIGRATE_ELAPSED}s)"
+        else
+            echo "[INFO] MIGRATE: 正在执行数据库迁移 (已耗时 ${MIGRATE_ELAPSED}s)"
+        fi
+    fi
+done
+if wait "$MIGRATE_PID"; then
+    MIGRATE_EXIT=0
+else
+    MIGRATE_EXIT=$?
+fi
+MIGRATE_OUTPUT=$(cat "$MIGRATE_LOG")
+rm -f "$MIGRATE_LOG" 2>/dev/null || true
+rm -f "$PREPARED_MIGRATION_SQL" 2>/dev/null || true
 MIGRATE_ERRORS=$(echo "$MIGRATE_OUTPUT" | grep -v "Using a password on the command line interface can be insecure" | grep -v "^$" || true)
 if [ $MIGRATE_EXIT -ne 0 ]; then
     echo "[ERROR] 数据库增量迁移失败，退出码: $MIGRATE_EXIT"
@@ -1574,6 +1616,15 @@ elif [ -n "$MIGRATE_ERRORS" ]; then
     echo "$MIGRATE_ERRORS"
 fi
 echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
+
+if [ -f "$FEATURE_TOGGLE_REPAIR_SQL" ]; then
+    echo "[INFO] 修复功能开关描述文本..."
+    if docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" < "$FEATURE_TOGGLE_REPAIR_SQL" >/dev/null 2>&1; then
+        echo "[OK] 功能开关描述修复完成"
+    else
+        echo "[WARN] 功能开关描述修复失败，继续部署"
+    fi
+fi
 
 # ── 数据导入检查与补全 ──────────────────────────────────────────
 # docker compose down -v 后重建时，Docker init 脚本可能未成功导入种子数据
@@ -1627,16 +1678,16 @@ if [ "$NEED_SEED" = true ]; then
         echo "[INFO] 导入全量备份: $(basename "$SEED_FILE")"
         case "$SEED_FILE" in
             *.sql.gz)
-                if ! zcat "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" \
-                    mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password"; then
+                if ! zcat "$SEED_FILE" | sed '/^\/\*!50013 DEFINER/d; /^\/\*!50003 CREATE.*DEFINER/d; /SET @@GLOBAL.GTID_PURGED/d; /SET @@SESSION.SQL_LOG_BIN/d' | docker exec -i "$MASTER_CONTAINER" \
+                    mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password"; then
                     echo "[ERROR] 全量备份导入失败: $(basename "$SEED_FILE")"
                     echo "[ERROR] 请检查备份文件完整性或数据库连接"
                     exit 1
                 fi
                 ;;
             *.sql)
-                if ! docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
-                    < "$SEED_FILE" 2>&1 | grep -v "Using a password"; then
+                if ! sed '/^\/\*!50013 DEFINER/d; /^\/\*!50003 CREATE.*DEFINER/d; /SET @@GLOBAL.GTID_PURGED/d; /SET @@SESSION.SQL_LOG_BIN/d' "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                    2>&1 | grep -v "Using a password"; then
                     echo "[ERROR] 全量备份导入失败: $(basename "$SEED_FILE")"
                     echo "[ERROR] 请检查备份文件完整性或数据库连接"
                     exit 1
@@ -1657,7 +1708,7 @@ if [ "$NEED_SEED" = true ]; then
             echo "[INFO] 导入课文数据 (3Blue1Brown)..."
             for f in "$ARTICLE_DIR"/*.sql; do
                 [ -f "$f" ] || continue
-                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
                     < "$f" 2>&1 | grep -v "Using a password" || true
             done
             echo "[OK] 课文数据导入完成"
@@ -1674,7 +1725,7 @@ if [ "$NEED_SEED" = true ]; then
             # 通过 docker cp + LOAD DATA 方式导入（比管道快得多）
             docker cp "$ECDICT_CSV_PATH" "$MASTER_CONTAINER:/tmp/ecdict.csv"
             docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
-            docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" --local-infile=1 "$DB_NAME" -e \
+            docker exec "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" --local-infile=1 "$DB_NAME" -e \
                 "TRUNCATE TABLE ecdict_words;
                  LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
                  INTO TABLE ecdict_words
@@ -1744,10 +1795,34 @@ LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_S
 
 replication_ok=false
 
+if [ "$IO_RUNNING" != "Yes" ] || [ "$SQL_RUNNING" != "Yes" ]; then
+    if docker exec "$SLAVE_CONTAINER" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null \
+       && docker exec "$SLAVE_CONTAINER" test -x /var/lib/mysql/init-replication.sh 2>/dev/null; then
+        echo "[INFO] 检测到从库为首次初始化，执行完整复制初始化脚本..."
+        REPL_INIT_LOG="/tmp/langhack-slave-init-$$.log"
+        if docker exec "$SLAVE_CONTAINER" bash /var/lib/mysql/init-replication.sh > "$REPL_INIT_LOG" 2>&1; then
+            echo "[OK] 从库完整复制初始化完成"
+            docker exec "$SLAVE_CONTAINER" rm -f /var/lib/mysql/.replication-init-pending /var/lib/mysql/init-replication.sh 2>/dev/null || true
+            REPLICA_STATUS=$(get_replica_status)
+            IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
+            SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
+            LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+            if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
+                echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
+                replication_ok=true
+            fi
+        else
+            echo "[WARN] 从库完整复制初始化脚本执行失败，回退到轻量修复流程"
+            tail -50 "$REPL_INIT_LOG" 2>/dev/null | sed 's/^/         /' || true
+        fi
+        rm -f "$REPL_INIT_LOG" 2>/dev/null || true
+    fi
+fi
+
 if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
     echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
     replication_ok=true
-else
+elif [ "$replication_ok" = false ]; then
     # 复制未配置或线程未运行 → 尝试自动修复
     if [ "$IO_RUNNING" = "NULL" ]; then
         echo "[WARN] 从库复制未配置（SHOW REPLICA STATUS 为空），尝试自动初始化..."

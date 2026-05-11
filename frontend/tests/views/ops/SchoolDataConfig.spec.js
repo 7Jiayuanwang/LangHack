@@ -31,6 +31,24 @@ vi.mock('element-plus', () => ({
 
 vi.mock('@/api/schoolData', () => schoolDataApi)
 
+vi.mock('@/composables/useFeatureToggles', () => ({
+  useFeatureToggles: () => ({
+    toggles: { value: {} },
+    isEnabled: () => true,
+    load: vi.fn().mockResolvedValue({}),
+    invalidate: vi.fn(),
+    isLoaded: () => true,
+    startAutoRefresh: vi.fn(),
+    stopAutoRefresh: vi.fn(),
+    onChange: vi.fn(),
+    watchToggle: vi.fn(),
+    connectWebSocket: vi.fn(),
+    disconnectWebSocket: vi.fn(),
+    isWebSocketConnected: () => false
+  }),
+  invalidateFeatureToggleCache: vi.fn()
+}))
+
 import SchoolDataConfig from '@/views/ops/SchoolDataConfig.vue'
 
 describe('SchoolDataConfig quick actions', () => {
