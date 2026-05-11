@@ -19,7 +19,7 @@ mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<-EOSQL
         IDENTIFIED WITH mysql_native_password
         BY '${REPL_PASS}';
 
-    GRANT REPLICATION SLAVE ON *.* TO '${REPL_USER}'@'%';
+    GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO '${REPL_USER}'@'%';
 
     -- 清理旧的 @'172.%' 用户（如存在）
     DROP USER IF EXISTS '${REPL_USER}'@'172.%';

@@ -88,18 +88,24 @@
         <span>日志内容 ({{ filteredEntries.length }} 条，最新在前)</span>
         <span class="timestamp" v-if="lastUpdate">最后更新: {{ lastUpdate }}</span>
       </div>
-      <div class="logs-content">
-        <div
-          v-for="(entry, index) in filteredEntries"
-          :key="index"
-          class="log-entry"
-          :class="'log-' + (entry.level || '').toLowerCase()"
-        >
-          <span class="log-time">{{ entry.timestamp }}</span>
-          <span class="log-level-tag" :class="'level-' + (entry.level || '').toLowerCase()">{{ entry.level }}</span>
-          <span class="log-logger">{{ entry.logger }}</span>
-          <span class="log-msg">{{ entry.message }}</span>
-          <div v-if="entry.exception" class="log-exception">{{ entry.exception }}</div>
+      <!-- 虚拟滚动容器：只渲染可见窗口内的行 -->
+      <div class="logs-content" ref="scrollEl" @scroll.passive="onScroll">
+        <!-- 撑开总高度，使滚动条正确 -->
+        <div :style="{ height: totalHeight + 'px', position: 'relative' }">
+          <div :style="{ transform: `translateY(${offsetY}px)`, position: 'absolute', width: '100%' }">
+            <div
+              v-for="entry in visibleEntries"
+              :key="entry._id"
+              class="log-entry"
+              :class="'log-' + (entry.level || '').toLowerCase()"
+            >
+              <span class="log-time">{{ entry.timestamp }}</span>
+              <span class="log-level-tag" :class="'level-' + (entry.level || '').toLowerCase()">{{ entry.level }}</span>
+              <span class="log-logger">{{ entry.logger }}</span>
+              <span class="log-msg">{{ entry.message }}</span>
+              <div v-if="entry.exception" class="log-exception">{{ entry.exception }}</div>
+            </div>
+          </div>
         </div>
         <div v-if="filteredEntries.length === 0" class="empty-logs">暂无日志数据</div>
       </div>
@@ -108,12 +114,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Download } from '@element-plus/icons-vue'
 import { getApplicationLogs, downloadApplicationLogs } from '@/api/ops'
 import { normalizeDownloadResponse, extractBlobErrorMessage, triggerBlobDownload } from '@/utils/blobDownload'
 
+// ── 状态 ──────────────────────────────────────────────────────────────────────
 const loading = ref(false)
 const downloading = ref(false)
 const entries = ref([])
@@ -126,36 +133,115 @@ const autoRefresh = ref(true)
 const lastUpdate = ref('')
 let pollTimer = null
 
-// 后端已按 descendingIterator 返回（最新在前），前端直接渲染即可
+// ── 搜索防抖 ──────────────────────────────────────────────────────────────────
+let searchDebounceTimer = null
+watch(searchText, () => {
+  clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => { scrollTop.value = 0 }, 300)
+})
+watch(dateRange, () => { scrollTop.value = 0 })
+
+// ── 过滤（纯计算，不触发 API）────────────────────────────────────────────────
 const filteredEntries = computed(() => {
   let list = entries.value
-  if (searchText.value) {
-    const kw = searchText.value.toLowerCase()
-    list = list.filter(e =>
-      (e.message || '').toLowerCase().includes(kw) ||
-      (e.logger || '').toLowerCase().includes(kw)
-    )
-  }
-  if (dateRange.value && dateRange.value[0]) {
-    const [start, end] = dateRange.value
-    list = list.filter(e => {
-      if (!e.timestamp) return true
-      const d = e.timestamp.slice(0, 10)
-      return d >= start && d <= end
-    })
-  }
-  return list
+  const kw = searchText.value.toLowerCase()
+  const dr = dateRange.value
+  if (!kw && (!dr || !dr[0])) return list
+
+  const [start, end] = dr || []
+  return list.filter(e => {
+    if (kw && !(e.message || '').toLowerCase().includes(kw) && !(e.logger || '').toLowerCase().includes(kw)) return false
+    if (start) {
+      const d = (e.timestamp || '').slice(0, 10)
+      if (d < start || d > end) return false
+    }
+    return true
+  })
 })
 
+// ── 虚拟滚动 ─────────────────────────────────────────────────────────────────
+const ROW_HEIGHT = 28        // 普通行高 px（含 margin）
+const EXCEPTION_EXTRA = 20   // exception 行额外高度
+const VIEWPORT_HEIGHT = 600  // 与 CSS max-height 保持一致
+const OVERSCAN = 5           // 上下各多渲染几行，防止快速滚动白屏
+
+const scrollEl = ref(null)
+const scrollTop = ref(0)
+
+function onScroll() {
+  scrollTop.value = scrollEl.value?.scrollTop ?? 0
+}
+
+// 每行高度（有 exception 的行更高）
+function rowHeight(entry) {
+  return entry.exception ? ROW_HEIGHT + EXCEPTION_EXTRA : ROW_HEIGHT
+}
+
+// 累计高度数组（懒计算）
+const rowTops = computed(() => {
+  const list = filteredEntries.value
+  const tops = new Array(list.length)
+  let acc = 0
+  for (let i = 0; i < list.length; i++) {
+    tops[i] = acc
+    acc += rowHeight(list[i])
+  }
+  return tops
+})
+
+const totalHeight = computed(() => {
+  const list = filteredEntries.value
+  if (!list.length) return 0
+  const last = list.length - 1
+  return rowTops.value[last] + rowHeight(list[last])
+})
+
+const visibleRange = computed(() => {
+  const tops = rowTops.value
+  const list = filteredEntries.value
+  const st = scrollTop.value
+  const bottom = st + VIEWPORT_HEIGHT
+
+  let start = 0
+  // 二分查找第一个可见行
+  let lo = 0, hi = tops.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (tops[mid] + rowHeight(list[mid]) < st) lo = mid + 1
+    else { start = mid; hi = mid - 1 }
+  }
+
+  let end = start
+  while (end < list.length && tops[end] < bottom) end++
+
+  return {
+    start: Math.max(0, start - OVERSCAN),
+    end: Math.min(list.length, end + OVERSCAN)
+  }
+})
+
+const offsetY = computed(() => {
+  const { start } = visibleRange.value
+  return rowTops.value[start] ?? 0
+})
+
+const visibleEntries = computed(() => {
+  const { start, end } = visibleRange.value
+  return filteredEntries.value.slice(start, end)
+})
+
+// ── API ───────────────────────────────────────────────────────────────────────
 const refreshLogs = async () => {
   loading.value = true
   try {
     const params = { limit: limit.value }
     if (filterLevel.value) params.level = filterLevel.value
-    if (searchText.value) params.keyword = searchText.value
     const res = await getApplicationLogs(params)
     if (res.code === 200) {
-      entries.value = res.data.entries || []
+      // 给每条日志加稳定 id，让 Vue diff 复用 DOM 节点
+      const raw = res.data.entries || []
+      raw.forEach((e, i) => { e._id = `${e.timestamp}-${i}` })
+      entries.value = raw
       levelCounts.value = res.data.levelCounts || {}
       lastUpdate.value = new Date().toLocaleTimeString()
     } else {
@@ -221,7 +307,10 @@ onMounted(async () => {
   startPolling()
 })
 
-onUnmounted(stopPolling)
+onUnmounted(() => {
+  stopPolling()
+  clearTimeout(searchDebounceTimer)
+})
 </script>
 
 <style scoped>
@@ -293,15 +382,28 @@ onUnmounted(stopPolling)
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.7;
-  max-height: 600px;
+  height: 600px;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .log-entry {
-  padding: 3px 6px;
+  height: 28px;
+  line-height: 28px;
+  padding: 0 6px;
   border-radius: 4px;
-  margin-bottom: 2px;
+  margin-bottom: 0;
   word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* exception 行允许换行，高度自适应 */
+.log-entry:has(.log-exception) {
+  height: auto;
+  white-space: normal;
+  padding: 3px 6px;
 }
 
 .log-entry:hover { background: rgba(255,255,255,0.05); }

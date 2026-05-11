@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount, flushPromises } from '@vue/test-utils'
 
-const { pushMock, elMessage, schoolDataApi } = vi.hoisted(() => ({
+const { pushMock, elMessage, elMessageFn, schoolDataApi } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   elMessage: {
     success: vi.fn(),
     error: vi.fn(),
     warning: vi.fn()
   },
+  elMessageFn: vi.fn(() => ({ close: vi.fn() })),
   schoolDataApi: {
     getSchoolDataConfig: vi.fn(),
     updateSchoolDataConfig: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('element-plus', () => ({
-  ElMessage: elMessage
+  ElMessage: Object.assign(elMessageFn, elMessage)
 }))
 
 vi.mock('@/api/schoolData', () => schoolDataApi)

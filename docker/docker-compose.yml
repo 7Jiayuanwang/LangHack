@@ -71,10 +71,11 @@ services:
       - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
       - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
       - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
+      - ./mysql/init/07-mark-init-complete.sh:/docker-entrypoint-initdb.d/07-mark-init-complete.sh:ro
     networks:
       - langhack-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SELECT 1 FROM _init_complete LIMIT 1' english_learning || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -276,10 +277,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health || exit 1"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 90s
+      retries: 20
+      start_period: 120s
 
   # ─────────────────────────────────────────────
   # Vue 3 前端 (Nginx 反向代理)
