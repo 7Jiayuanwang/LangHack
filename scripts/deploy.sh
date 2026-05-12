@@ -1796,6 +1796,19 @@ echo "[OK] Schema 验证通过（含学校数据关键表）"
 # ── 验证并修复从库复制 ────────────────────────────────────────────
 echo "[INFO] 验证从库复制状态..."
 
+# 等待 entrypoint-wrapper.sh 完成复制初始化（如果正在进行）
+# entrypoint-wrapper.sh 在完成后会删除 .replication-init-pending 标记
+echo "[INFO] 等待从库 entrypoint-wrapper 完成初始化..."
+wrapper_wait=0
+while [ $wrapper_wait -lt 120 ]; do
+    if ! docker exec "$SLAVE_CONTAINER" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null; then
+        echo "[OK] 从库 entrypoint-wrapper 已完成"
+        break
+    fi
+    sleep 5; wrapper_wait=$((wrapper_wait + 5))
+    echo "[INFO] 等待 entrypoint-wrapper... (${wrapper_wait}s)"
+done
+
 # 获取当前复制状态
 get_replica_status() {
     docker exec "$SLAVE_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" \
