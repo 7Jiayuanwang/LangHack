@@ -6,6 +6,8 @@ import java.util.List;
 public class SchoolDataSyncFilterRequest {
 
     private String triggerType = "MANUAL";
+    private String academicYear;
+    private Integer semester;
     private List<FilterGroup> filterGroups = new ArrayList<>();
 
     public String getTriggerType() {
@@ -14,6 +16,22 @@ public class SchoolDataSyncFilterRequest {
 
     public void setTriggerType(String triggerType) {
         this.triggerType = triggerType;
+    }
+
+    public String getAcademicYear() {
+        return academicYear;
+    }
+
+    public void setAcademicYear(String academicYear) {
+        this.academicYear = academicYear;
+    }
+
+    public Integer getSemester() {
+        return semester;
+    }
+
+    public void setSemester(Integer semester) {
+        this.semester = semester;
     }
 
     public List<FilterGroup> getFilterGroups() {

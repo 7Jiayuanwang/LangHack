@@ -975,11 +975,85 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         }
 
         Map<String, Object> ranking = new HashMap<>();
-        // 简化实现，返回模拟排名数据
-        ranking.put("studentRank", 5);
-        ranking.put("totalStudents", 20);
-        ranking.put("percentile", 75.0);
-        ranking.put("type", type != null ? type : "global");
+        String scopeType = type != null ? type : "global";
+        ranking.put("type", scopeType);
+
+        List<Map<String, Object>> rankingData;
+
+        if ("class".equals(scopeType) && targetId != null) {
+            // 班级内排名
+            List<StudentClass> classStudents = studentClassMapper.selectStudentsByClassId(targetId);
+            List<Long> studentIds = classStudents.stream()
+                    .map(StudentClass::getStudentId)
+                    .collect(Collectors.toList());
+            if (studentIds.isEmpty()) {
+                ranking.put("studentRank", 0);
+                ranking.put("totalStudents", 0);
+                ranking.put("percentile", 0.0);
+                ranking.put("masteredWords", 0L);
+                return ranking;
+            }
+            rankingData = vocabularyBookMapper.selectMasteredWordRankingByStudentIds(studentIds);
+        } else if ("course".equals(scopeType) && targetId != null) {
+            // 课程内排名：先找该课程下所有班级，再找这些班级里的所有学生
+            QueryWrapper<com.english.entity.Class> classWrapper = new QueryWrapper<>();
+            classWrapper.select("id").eq("course_id", targetId);
+            List<Object> classIdObjs = classMapper.selectObjs(classWrapper);
+            if (classIdObjs.isEmpty()) {
+                ranking.put("studentRank", 0);
+                ranking.put("totalStudents", 0);
+                ranking.put("percentile", 0.0);
+                ranking.put("masteredWords", 0L);
+                return ranking;
+            }
+            List<Long> classIds = classIdObjs.stream()
+                    .map(o -> ((Number) o).longValue())
+                    .collect(Collectors.toList());
+            List<Long> studentIds = studentClassMapper.selectStudentIdsByClassIds(classIds);
+            if (studentIds.isEmpty()) {
+                ranking.put("studentRank", 0);
+                ranking.put("totalStudents", 0);
+                ranking.put("percentile", 0.0);
+                ranking.put("masteredWords", 0L);
+                return ranking;
+            }
+            rankingData = vocabularyBookMapper.selectMasteredWordRankingByStudentIds(studentIds);
+        } else {
+            // 全局排名
+            rankingData = vocabularyBookMapper.selectAllMasteredWordRanking();
+        }
+
+        // 在排名表中定位当前学生
+        long masteredWords = 0;
+        int studentRank = 0;
+        int totalInRanking = rankingData.size();
+
+        for (int i = 0; i < rankingData.size(); i++) {
+            Map<String, Object> row = rankingData.get(i);
+            Long sid = ((Number) row.get("student_id")).longValue();
+            if (sid.equals(studentId)) {
+                studentRank = i + 1;
+                masteredWords = ((Number) row.get("mastered_count")).longValue();
+                break;
+            }
+        }
+
+        // 学生不在排名表中 → 掌握词数为 0，排最后
+        int totalStudents = totalInRanking;
+        if (studentRank == 0) {
+            studentRank = totalInRanking + 1;
+            totalStudents = totalInRanking + 1;
+        }
+
+        double percentile = totalStudents > 1
+                ? Math.round((1.0 - (double) studentRank / (double) totalStudents) * 10000.0) / 100.0
+                : 100.0;
+
+        ranking.put("studentRank", studentRank);
+        ranking.put("totalStudents", totalStudents);
+        ranking.put("percentile", percentile);
+        ranking.put("masteredWords", masteredWords);
+
         return ranking;
     }
 

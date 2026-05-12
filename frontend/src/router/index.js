@@ -221,6 +221,12 @@ const routes = [
         component: () => import("@/views/teacher/MyCourses.vue"),
         meta: { title: "我的授课", roles: ["TEACHER"] },
       },
+      {
+        path: "word-progress",
+        name: "TeacherWordProgress",
+        component: () => import("@/views/teacher/WordProgress.vue"),
+        meta: { title: "单词进度", roles: ["TEACHER"] },
+      },
     ],
   },
   {

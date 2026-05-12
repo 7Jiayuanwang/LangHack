@@ -585,7 +585,20 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
 
         QueryWrapper<VocabularyBook> masteredWrapper = new QueryWrapper<>();
         masteredWrapper.eq("student_id", studentId).eq("mastery_level", "MASTERED");
-        stats.put("masteredWords", vocabularyBookMapper.selectCount(masteredWrapper));
+        long masteredCount = vocabularyBookMapper.selectCount(masteredWrapper);
+        stats.put("masteredWords", masteredCount);
+        // 兼容前端旧字段名
+        stats.put("mastered", masteredCount);
+
+        // 计算进度（前端期望一个 0-1 的小数，前端会格式化为百分比）
+        try {
+            long total = ((Number) stats.getOrDefault("totalWords", 0)).longValue();
+            double progress = total > 0 ? (double) masteredCount / (double) total : 0.0;
+            // 保留 4 位小数以避免浮点表现问题
+            stats.put("progress", Math.round(progress * 10000.0) / 10000.0);
+        } catch (Exception e) {
+            stats.put("progress", 0.0);
+        }
 
         return stats;
     }
