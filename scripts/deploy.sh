@@ -1449,15 +1449,29 @@ while [ $elapsed -lt $timeout ]; do
         sleep 5; elapsed=$((elapsed + 5)); continue
     fi
 
-    # 快速失败：任意服务 unhealthy 或 exited 立即终止
-    failed_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
-    if [ -n "$failed_svcs" ]; then
-        fail_reason="unhealthy"
+    # 快速失败：仅对明确失败的服务（Exited 非0）立即终止
+    # unhealthy 状态在 start_period 内是正常的，不应立即失败
+    exited_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /Exit [^0]|exited \([^0]/ {print $1}' || true)
+    if [ -n "$exited_svcs" ]; then
+        fail_reason="exited"
         echo ""
-        echo "[ERROR] 以下服务启动失败，终止部署："
-        echo "$failed_svcs" | sed 's/^/         /'
+        echo "[ERROR] 以下服务异常退出，终止部署："
+        echo "$exited_svcs" | sed 's/^/         /'
         print_failed_services
         break
+    fi
+
+    # 对于 unhealthy 状态，只在超过一定时间后才判定为失败（给 start_period 留余量）
+    if [ $elapsed -gt 240 ]; then
+        unhealthy_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /\(unhealthy\)/ {print $1}' || true)
+        if [ -n "$unhealthy_svcs" ]; then
+            fail_reason="unhealthy"
+            echo ""
+            echo "[ERROR] 以下服务健康检查持续失败（超过 240s），终止部署："
+            echo "$unhealthy_svcs" | sed 's/^/         /'
+            print_failed_services
+            break
+        fi
     fi
 
     healthy=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /healthy/ && $2 !~ /unhealthy/' | wc -l | tr -d ' ')
