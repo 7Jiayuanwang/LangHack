@@ -189,6 +189,9 @@ public class UserVideoController {
                 video.setSubtitleContentZh(subZhVal != null ? subZhVal.toString() : null);
             }
 
+            // 修改后内容需要重新审核
+            video.setStatus("PENDING");
+
             videoService.updateById(video);
             return Result.success("更新成功");
         } catch (Exception e) {
@@ -216,6 +219,11 @@ public class UserVideoController {
             }
             if (!user.getId().equals(video.getUserId())) {
                 return Result.error("没有权限删除此视频");
+            }
+
+            // 已审核通过的内容不可删除（只能修改，修改后重新进入审核）
+            if ("APPROVED".equalsIgnoreCase(video.getStatus())) {
+                return Result.error("已审核通过的内容不可删除，如需调整请走修改流程");
             }
 
             videoService.deleteVideo(videoId);

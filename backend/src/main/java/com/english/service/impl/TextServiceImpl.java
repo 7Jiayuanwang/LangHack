@@ -181,7 +181,11 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         underlineService.deleteUnderlinesByTextId(id);
 
         // 级联删除该课文的所有习题（TextExercise 无 @TableLogic，物理删除）
-        textExerciseMapper.deleteExercisesByTextId(id);
+        try {
+            textExerciseMapper.deleteExercisesByTextId(id);
+        } catch (Exception e) {
+            log.warn("删除课文关联习题失败（可能text_exercises表未部署） textId=" + id + ": " + e.getMessage());
+        }
 
         // 逻辑删除：@TableLogic 会将 removeById 转换为 UPDATE SET deleted=1
         // 注意：不能用 updateById + setDeleted(1)，因为 @TableLogic 会从 SET 子句中排除 deleted 字段
