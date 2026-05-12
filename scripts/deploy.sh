@@ -1441,7 +1441,7 @@ do_rollback() {
 }
 
 echo "[INFO] 等待服务就绪 (预期 ${expected_healthy} 个 healthy)..."
-timeout=180; elapsed=0; deploy_ok=false; fail_reason=""
+timeout=300; elapsed=0; deploy_ok=false; fail_reason=""
 while [ $elapsed -lt $timeout ]; do
     # 获取每个服务的名称和状态
     svc_statuses=$(docker compose ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)

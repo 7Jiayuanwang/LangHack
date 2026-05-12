@@ -215,6 +215,8 @@ services:
     environment:
       TZ: Asia/Shanghai
       SPRING_PROFILES_ACTIVE: sso
+      # 应用端口（容器内部）
+      SERVER_PORT: ${SERVER_PORT:-8080}
       # 主库
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
@@ -259,7 +261,7 @@ services:
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
     ports:
-      - "${PORT_BACKEND:-8080}:8080"
+      - "${PORT_BACKEND:-8080}:${SERVER_PORT:-8080}"
     volumes:
       - app_logs:/app/logs
       # 上传文件绑定到宿主机，防止 docker compose down -v 丢失视频数据
@@ -276,11 +278,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:$${SERVER_PORT:-8080}/api/health || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 20
-      start_period: 120s
+      retries: 30
+      start_period: 180s
 
   # ─────────────────────────────────────────────
   # Vue 3 前端 (Nginx 反向代理)
