@@ -69,6 +69,22 @@
         </div>
       </div>
 
+      <div class="stat-card trend-reading">
+        <div class="stat-icon-wrapper">
+          <div class="stat-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+          </div>
+          <div class="stat-glow"></div>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ readingStats.totalCount }}</div>
+          <div class="stat-label">阅读次数</div>
+        </div>
+      </div>
+
       <div class="stat-card trend-score" v-if="dashboardData.averageScore !== undefined && dashboardData.averageScore > 0">
         <div class="stat-icon-wrapper">
           <div class="stat-icon">
@@ -359,7 +375,8 @@ import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   getStudentDashboard,
   getTodayLearningStats,
-  getVocabularyStats
+  getVocabularyStats,
+  getReadingHistory
 } from '@/api/student'
 
 const router = useRouter()
@@ -404,6 +421,12 @@ const vocabularyStats = reactive({
   newWords: 0,
   learningWords: 0,
   masteredWords: 0
+})
+
+// 阅读统计数据
+const readingStats = reactive({
+  totalCount: 0,      // 总阅读次数
+  totalArticles: 0    // 总阅读篇数
 })
 
 const vocabularyProgress = computed(() => {
@@ -455,6 +478,20 @@ const loadVocabularyStats = async () => {
     }
   } catch (error) {
     console.error('加载单词本统计失败:', error)
+  }
+}
+
+// 加载阅读统计
+const loadReadingStats = async () => {
+  try {
+    const response = await getReadingHistory({ page: 1, size: 1 })
+    if (response?.code === 200 && response?.data?.overview) {
+      const overview = response.data.overview
+      readingStats.totalCount = overview.totalReadingTimes || 0
+      readingStats.totalArticles = overview.totalArticlesRead || 0
+    }
+  } catch (error) {
+    console.error('加载阅读统计失败:', error)
   }
 }
 
@@ -613,6 +650,7 @@ onMounted(() => {
   loadLearningStats()
   loadDailyWordReciteProgress()
   loadVocabularyStats()
+  loadReadingStats()
   // 共享 feature-toggles 缓存（路由守卫与 Layout 已在加载；此处仅兜底）
   try {
     if (!isLoaded()) {
@@ -755,6 +793,15 @@ onMounted(() => {
 .trend-studytime .stat-icon,
 .trend-studytime .stat-glow {
   background: linear-gradient(135deg, var(--success-color), #20C997);
+}
+
+.trend-reading {
+  border-left: 3px solid #8b5cf6;
+}
+
+.trend-reading .stat-icon,
+.trend-reading .stat-glow {
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
 }
 
 /* 每日单词背诵任务卡片 */

@@ -42,6 +42,7 @@
               :style="{ background: getCourseColor(item.courseCode) }"
             >
               <div class="cell-course">{{ item.courseName }}</div>
+              <div class="cell-teacher">{{ item.teacherName }}</div>
               <div class="cell-location">{{ item.classLocation }}</div>
             </div>
           </div>
@@ -56,6 +57,10 @@
           <div class="detail-row">
             <span class="detail-label">课程</span>
             <span class="detail-value">{{ item.courseName }}</span>
+          </div>
+          <div v-if="item.courseCode" class="detail-row">
+            <span class="detail-label">课程代码</span>
+            <span class="detail-value">{{ item.courseCode }}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">教师</span>
@@ -76,6 +81,14 @@
           <div class="detail-row">
             <span class="detail-label">教学班</span>
             <span class="detail-value">{{ item.classId }}</span>
+          </div>
+          <div v-if="item.academicYear" class="detail-row">
+            <span class="detail-label">学年</span>
+            <span class="detail-value">{{ item.academicYear }}</span>
+          </div>
+          <div v-if="item.semester" class="detail-row">
+            <span class="detail-label">学期</span>
+            <span class="detail-value">{{ item.semester === 1 ? '秋季' : '春季' }}</span>
           </div>
         </div>
       </div>
@@ -295,6 +308,14 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
+.cell-teacher {
+  font-size: 9px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .cell-location {
   font-size: 9px;
   color: var(--text-tertiary);
@@ -351,6 +372,10 @@ onMounted(() => {
 
   .cell-course {
     font-size: 9px;
+  }
+
+  .cell-teacher {
+    font-size: 8px;
   }
 
   .cell-location {

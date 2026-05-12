@@ -484,12 +484,20 @@ export function refreshStudentSchedule(params) {
   })
 }
 
-// 获取当前学生等级考试成绩
+// 获取当前学生等级考试成绩（非 Lazy）
 export function getMyScores(params) {
   return request({
     url: '/api/student/scores',
     method: 'get',
     params
+  })
+}
+
+// 获取当前学生等级考试成绩（Lazy 同步，按需拉取 CDSP）
+export function getMyLevelExamScores() {
+  return request({
+    url: '/api/student/level-exam-scores',
+    method: 'get'
   })
 }
 
@@ -499,6 +507,15 @@ export function getMyCourseSelections(params) {
     url: '/api/student/course-selections',
     method: 'get',
     params
+  })
+}
+
+// 强制从学校API刷新选课记录
+export function refreshMyCourseSelections(params) {
+  return request({
+    url: '/api/student/course-selections',
+    method: 'get',
+    params: { ...params, refresh: true }
   })
 }
 
@@ -618,7 +635,9 @@ const studentApi = {
   refreshStudentSchedule,
   // 学生成绩和选课
   getMyScores,
-  getMyCourseSelections
+  getMyLevelExamScores,
+  getMyCourseSelections,
+  refreshMyCourseSelections
 }
 
 export default studentApi

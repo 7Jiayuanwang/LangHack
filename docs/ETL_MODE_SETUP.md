@@ -31,6 +31,7 @@
 | `v_level_exam_scores` | 等级考试成绩 | updated_at + 成绩相关字段 |
 | `v_teaching_plans` | 教学计划 | updated_at + 计划相关字段 |
 | `v_teacher_courses` | 教师课程 | updated_at + 教师课程字段 |
+| `v_student_schedule` | 学生课表 | updated_at + 学生课表字段 |
 
 ---
 
@@ -85,6 +86,8 @@ school:
           sql: SELECT * FROM v_teaching_plans WHERE updated_at >= ?
         - data-source: teacher_courses
           sql: SELECT * FROM v_teacher_courses WHERE updated_at >= ?
+        - data-source: student_schedule
+          sql: SELECT * FROM v_student_schedule WHERE updated_at >= ?
     sync:
       enabled: true
       full-sync-cron: "0 0 2 * * ?"      # 全量同步：每天凌晨 2 点

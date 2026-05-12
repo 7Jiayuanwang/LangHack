@@ -39,15 +39,17 @@ public class AccessMetricsService {
     }
 
     public void recordRequestStart(String username) {
+        String dateKey = LocalDate.now().format(DATE_KEY);
+
+        if (!dateKey.equals(lastPeakDate)) {
+            peakConcurrentToday.set(0);
+            lastPeakDate = dateKey;
+        }
+
+        long current = concurrentRequests.incrementAndGet();
+        peakConcurrentToday.updateAndGet(prev -> Math.max(prev, current));
+
         try {
-            String dateKey = LocalDate.now().format(DATE_KEY);
-
-            // Reset peak if new day
-            if (!dateKey.equals(lastPeakDate)) {
-                peakConcurrentToday.set(0);
-                lastPeakDate = dateKey;
-            }
-
             // Increment today's request count
             String countKey = "access:today:count:" + dateKey;
             redisTemplate.opsForValue().increment(countKey);
@@ -64,17 +66,13 @@ public class AccessMetricsService {
                 redisTemplate.opsForZSet().add(activeKey, username, System.currentTimeMillis());
                 redisTemplate.expire(activeKey, 10, TimeUnit.MINUTES);
             }
-
-            // Update concurrent count and peak
-            long current = concurrentRequests.incrementAndGet();
-            peakConcurrentToday.updateAndGet(prev -> Math.max(prev, current));
         } catch (Exception e) {
             logger.debug("Failed to record request start metrics", e);
         }
     }
 
     public void recordRequestEnd() {
-        concurrentRequests.decrementAndGet();
+        concurrentRequests.updateAndGet(value -> value > 0 ? value - 1 : 0);
     }
 
     public void recordError() {
@@ -121,8 +119,8 @@ public class AccessMetricsService {
             metrics.put("todayRequests", 0L);
             metrics.put("todayUniqueUsers", 0L);
             metrics.put("activeUsers", 0L);
-            metrics.put("concurrentRequests", 0L);
-            metrics.put("peakConcurrentToday", 0L);
+            metrics.put("concurrentRequests", concurrentRequests.get());
+            metrics.put("peakConcurrentToday", peakConcurrentToday.get());
             metrics.put("todayErrorCount", 0L);
         }
         return metrics;

@@ -24,7 +24,7 @@ describe('Media API', () => {
       expect(callArgs.url).toBe('/api/media/upload')
       expect(callArgs.method).toBe('post')
       expect(callArgs.data).toBeInstanceOf(FormData)
-      expect(callArgs.timeout).toBe(60000)
+      expect(callArgs.timeout).toBe(600000)
     })
 
     it('rejects for invalid media type', async () => {

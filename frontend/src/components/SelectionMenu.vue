@@ -3,6 +3,7 @@
     v-if="visible"
     class="selection-menu"
     :style="menuStyle"
+    @mousedown.prevent
   >
     <div class="menu-item" @click.stop="$emit('copy')" @touchend.stop.prevent="$emit('copy')">
       <el-icon><CopyDocument /></el-icon> 复制

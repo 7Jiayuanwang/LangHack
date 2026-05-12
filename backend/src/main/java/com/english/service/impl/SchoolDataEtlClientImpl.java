@@ -72,37 +72,61 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
 
     @Override
     public List<Map<String, Object>> fetchAdministrativeClasses(Map<String, String> params) {
-        return fetchByDataSource("administrative_class", params);
+        List<Map<String, Object>> rows = fetchByDataSource("administrative_class", params);
+        String collegeCode = firstParam(params, "collegeCode", "XSH", "xsh", "ssxybm");
+        String grade = firstParam(params, "grade", "NJ", "nj", "ssnj");
+        return filterRows(rows, row -> matchesAny(row, collegeCode, "college_code", "collegeCode", "XSH", "xsh", "ssxybm", "所属学院编码")
+                && matchesAny(row, grade, "grade", "NJ", "nj", "ssnj", "所属年级"));
     }
 
     @Override
     public List<Map<String, Object>> fetchSchoolCourses(Map<String, String> params) {
-        return fetchByDataSource("school_course", params);
+        List<Map<String, Object>> rows = fetchByDataSource("school_course", params);
+        String collegeName = firstParam(params, "collegeName", "kkyx");
+        String courseCode = firstParam(params, "courseCode", "kcdm");
+        return filterRows(rows, row -> matchesAny(row, collegeName, "college_name", "collegeName", "kkyx", "开课院系")
+                && matchesAny(row, courseCode, "course_code", "courseCode", "kcdm", "课程代码"));
     }
 
     @Override
     public List<Map<String, Object>> fetchTeachingClasses(Map<String, String> params) {
-        return fetchByDataSource("teaching_class", params);
+        List<Map<String, Object>> rows = fetchByDataSource("teaching_class", params);
+        String courseCode = firstParam(params, "courseCode", "kcdm", "KCH", "kch");
+        return filterRows(rows, row -> matchesAny(row, courseCode, "course_code", "courseCode", "kcdm", "KCH", "kch", "课程号", "课程代码"));
     }
 
     @Override
     public List<Map<String, Object>> fetchCourseSchedules(Map<String, String> params) {
-        return fetchByDataSource("course_schedule", params);
+        List<Map<String, Object>> rows = fetchByDataSource("course_schedule", params);
+        String classId = firstParam(params, "classId", "xkkch", "XKKCH");
+        String dayOfWeek = firstParam(params, "dayOfWeek", "skxqj");
+        String period = firstParam(params, "period", "skjc");
+        return filterRows(rows, row -> matchesAny(row, classId, "class_id", "classId", "xkkch", "XKKCH", "选课课程号")
+                && matchesAny(row, dayOfWeek, "day_of_week", "dayOfWeek", "skxqj", "上课星期几")
+                && matchesAny(row, period, "period", "skjc", "上课节次"));
     }
 
     @Override
     public List<Map<String, Object>> fetchCourseSelections(Map<String, String> params) {
-        return fetchByDataSource("course_selection", params);
+        List<Map<String, Object>> rows = fetchByDataSource("course_selection", params);
+        String studentId = firstParam(params, "studentId", "student_id", "XH", "xh");
+        String classId = firstParam(params, "classId", "courseClassCode", "KCBH", "kcbh");
+        return filterRows(rows, row -> matchesAny(row, studentId, "student_id", "studentId", "XH", "xh", "学号")
+                && matchesAny(row, classId, "class_id", "classId", "courseClassCode", "KCBH", "kcbh", "课程班号"));
     }
 
     @Override
     public List<Map<String, Object>> fetchLevelExamScores(Map<String, String> params) {
-        return fetchByDataSource("level_exam_scores", params);
+        List<Map<String, Object>> rows = fetchByDataSource("level_exam_scores", params);
+        String studentId = firstParam(params, "studentId", "student_id", "xh", "XH");
+        return filterRows(rows, row -> matchesAny(row, studentId, "student_id", "studentId", "xh", "XH", "学号"));
     }
 
     @Override
     public List<Map<String, Object>> fetchTeachingPlans(Map<String, String> params) {
-        return fetchByDataSource("teaching_plans", params);
+        List<Map<String, Object>> rows = fetchByDataSource("teaching_plans", params);
+        String grade = firstParam(params, "grade", "nj");
+        return filterRows(rows, row -> matchesAny(row, grade, "grade", "nj", "年级"));
     }
 
     @Override
@@ -116,15 +140,42 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
 
     @Override
     public List<Map<String, Object>> fetchStudentSchedules(String studentId, String academicYear, Integer semester) {
-        // ETL模式下不支持按学生ID查询课表，返回空列表
-        logger.warn("ETL mode does not support fetchStudentSchedules by student parameters. " +
-                "Configure a dedicated query in school.data.etl.queries if needed.");
-        return Collections.emptyList();
+        Map<String, String> params = new LinkedHashMap<>();
+        if (hasText(studentId)) {
+            params.put("studentId", studentId);
+        }
+        if (hasText(academicYear)) {
+            params.put("academicYear", academicYear);
+        }
+        if (semester != null) {
+            params.put("semester", String.valueOf(semester));
+        }
+        List<Map<String, Object>> rows = fetchByDataSource("student_schedule", params);
+        if (!hasText(studentId) && !hasText(academicYear) && semester == null) {
+            return rows;
+        }
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            if (matchesAny(row, studentId, "student_id", "studentId", "xh", "XH")
+                    && matchesAny(row, academicYear, "academic_year", "academicYear", "xn", "XN")
+                    && matchesSemester(row, semester)) {
+                filtered.add(row);
+            }
+        }
+        return filtered;
     }
 
     @Override
     public List<Map<String, Object>> fetchTeacherCourses(Map<String, String> params) {
-        return fetchByDataSource("teacher_courses", params);
+        List<Map<String, Object>> rows = fetchByDataSource("teacher_courses", params);
+        String teacherId = firstParam(params, "teacherId", "rkjsh");
+        String courseCode = firstParam(params, "courseCode", "kcdm");
+        String academicYear = firstParam(params, "academicYear", "xn");
+        Integer semester = parseSemesterParam(firstParam(params, "semester", "xq"));
+        return filterRows(rows, row -> matchesAny(row, teacherId, "teacher_id", "teacherId", "rkjsh", "任课教师号")
+                && matchesAny(row, courseCode, "course_code", "courseCode", "kcdm", "课程代码")
+                && matchesAny(row, academicYear, "academic_year", "academicYear", "xn", "学年")
+                && matchesSemester(row, semester));
     }
 
     @Override
@@ -182,8 +233,8 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
 
             stmt.setQueryTimeout(properties.getEtl().getQueryTimeout() / 1000);
 
-            if (updatedSince != null && !updatedSince.isEmpty()) {
-                stmt.setString(1, updatedSince);
+            if (sql.contains("?")) {
+                stmt.setString(1, hasText(updatedSince) ? updatedSince : "1970-01-01 00:00:00");
             }
 
             logger.info("学校 ETL SQL 执行中 dataSource={} updatedSince={} sql={}",
@@ -254,6 +305,114 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
             return "[BLOB]";
         }
         return value;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private List<Map<String, Object>> filterRows(List<Map<String, Object>> rows,
+                                                 java.util.function.Predicate<Map<String, Object>> predicate) {
+        if (rows == null || rows.isEmpty()) {
+            return rows == null ? Collections.emptyList() : rows;
+        }
+        if (predicate == null) {
+            return rows;
+        }
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            if (predicate.test(row)) {
+                filtered.add(row);
+            }
+        }
+        return filtered;
+    }
+
+    private String firstParam(Map<String, String> params, String... keys) {
+        if (params == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String value = params.get(key);
+            if (hasText(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private Integer parseSemesterParam(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        String normalized = value.trim();
+        if ("1".equals(normalized) || "\u79cb".equals(normalized)) {
+            return 1;
+        }
+        if ("2".equals(normalized) || "\u6625".equals(normalized)) {
+            return 2;
+        }
+        try {
+            return Integer.parseInt(normalized);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private boolean matchesAny(Map<String, Object> row, String expected, String... keys) {
+        if (!hasText(expected)) {
+            return true;
+        }
+        String normalizedExpected = expected.trim();
+        for (String key : keys) {
+            Object value = getIgnoreCase(row, key);
+            if (value != null && normalizedExpected.equals(String.valueOf(value).trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesSemester(Map<String, Object> row, Integer expected) {
+        if (expected == null) {
+            return true;
+        }
+        Object value = firstValue(row, "semester", "xq", "XQ");
+        if (value == null) {
+            return false;
+        }
+        String normalized = String.valueOf(value).trim();
+        if (String.valueOf(expected).equals(normalized)) {
+            return true;
+        }
+        return (expected == 1 && "\u79cb".equals(normalized))
+                || (expected == 2 && "\u6625".equals(normalized));
+    }
+
+    private Object firstValue(Map<String, Object> row, String... keys) {
+        for (String key : keys) {
+            Object value = getIgnoreCase(row, key);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private Object getIgnoreCase(Map<String, Object> row, String key) {
+        if (row == null || key == null) {
+            return null;
+        }
+        Object direct = row.get(key);
+        if (direct != null) {
+            return direct;
+        }
+        for (Map.Entry<String, Object> entry : row.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     /**

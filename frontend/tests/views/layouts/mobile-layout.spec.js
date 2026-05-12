@@ -135,10 +135,10 @@ describe('MobileLayout — 导航项数量与路由', () => {
     expect(wrapper.vm.navigationItems.length).toBeGreaterThanOrEqual(4)
   })
 
-  it('[USER] navItems 数量为 3', () => {
+  it('[USER] navItems 数量为 4', () => {
     mockUserStore({ userRole: 'USER' })
     const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'user' } })
-    expect(wrapper.vm.navItems.length).toBe(3)
+    expect(wrapper.vm.navItems.length).toBe(4)
   })
 })
 

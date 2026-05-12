@@ -2,7 +2,7 @@
   <div class="student-scores">
     <!-- 筛选 -->
     <div class="filter-bar">
-      <el-select v-model="examType" placeholder="考试类型" size="small" clearable style="width: 120px" @change="loadScores">
+      <el-select v-model="examType" placeholder="考试类型" size="small" clearable style="width: 120px">
         <el-option value="CET4" label="CET-4" />
         <el-option value="CET6" label="CET-6" />
       </el-select>
@@ -16,7 +16,10 @@
 
       <div v-for="item in scores" :key="item.id" class="score-card">
         <div class="score-header">
-          <span class="exam-type">{{ item.examType }}</span>
+          <div class="exam-type-group">
+            <span class="exam-type">{{ item.examType }}</span>
+            <span v-if="item.examName" class="exam-name">{{ item.examName }}</span>
+          </div>
           <el-tag :type="item.isPassed ? 'success' : 'danger'" size="small">
             {{ item.isPassed ? '通过' : '未通过' }}
           </el-tag>
@@ -39,6 +42,10 @@
               <span class="detail-label">写作</span>
               <span class="detail-value">{{ item.writingScore }}</span>
             </div>
+            <div v-if="item.translationScore != null" class="detail-item">
+              <span class="detail-label">翻译</span>
+              <span class="detail-value">{{ item.translationScore }}</span>
+            </div>
           </div>
         </div>
         <div class="score-footer">
@@ -51,23 +58,26 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getMyScores } from '@/api/student'
+import { ref, computed, onMounted } from 'vue'
+import { getMyLevelExamScores } from '@/api/student'
 
 const loading = ref(false)
-const scores = ref([])
+const allScores = ref([])
 const examType = ref('')
+
+const scores = computed(() => {
+  if (!examType.value) return allScores.value
+  return allScores.value.filter(s => s.examType === examType.value)
+})
 
 async function loadScores() {
   loading.value = true
   try {
-    const params = {}
-    if (examType.value) params.examType = examType.value
-    const res = await getMyScores(params)
-    scores.value = res?.data || []
+    const res = await getMyLevelExamScores()
+    allScores.value = res?.data || []
   } catch (e) {
     console.error('获取成绩失败:', e)
-    scores.value = []
+    allScores.value = []
   } finally {
     loading.value = false
   }
@@ -107,14 +117,25 @@ onMounted(() => {
 .score-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 12px;
+}
+
+.exam-type-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .exam-type {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.exam-name {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .score-body {

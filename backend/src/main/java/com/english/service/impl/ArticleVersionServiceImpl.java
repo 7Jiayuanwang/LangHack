@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -39,6 +40,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
     @Autowired
     private OpenRouterService openRouterService;
+
+    @Autowired(required = false)
+    private AiProviderRuntimeService aiProviderRuntimeService;
 
     // Self-injection to enable @Async and @Transactional to work for internal method calls
     @Autowired
@@ -286,6 +290,11 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
         return CompletableFuture.supplyAsync(() -> {
             log.info("Generating {} version for article {}", versionName, textId);
             try {
+                Optional<String> configuredResult = generateWithConfiguredArticleProvider(versionName, content);
+                if (configuredResult.isPresent()) {
+                    return configuredResult.get();
+                }
+
                 try {
                     return primaryGenerator.apply(content);
                 } catch (Exception ex) {
@@ -308,6 +317,77 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             }
             return null;
         });
+    }
+
+    private Optional<String> generateWithConfiguredArticleProvider(String versionName, String content) {
+        if (aiProviderRuntimeService == null) {
+            return Optional.empty();
+        }
+
+        try {
+            return aiProviderRuntimeService.completeIfConfigured(
+                    "article", methodNameForVersion(versionName), buildVersionPrompt(versionName, content));
+        } catch (Exception e) {
+            log.warn("Configured article AI provider failed for {} version, falling back to built-in providers: {}",
+                    versionName, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private String buildVersionPrompt(String versionName, String content) {
+        boolean markdown = versionName.contains("Markdown");
+
+        if (versionName.startsWith("CET-4")) {
+            return markdown
+                    ? "Please rewrite the following Markdown article to match CET-4 difficulty level. "
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + content
+                    : "Please rewrite the following English article to match CET-4 difficulty level. "
+                            + "Only return the rewritten text.\n\n" + content;
+        }
+        if (versionName.startsWith("CET-6")) {
+            return markdown
+                    ? "Please rewrite the following Markdown article to match CET-6 difficulty level. "
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + content
+                    : "Please rewrite the following English article to match CET-6 difficulty level. "
+                            + "Only return the rewritten text.\n\n" + content;
+        }
+        if (versionName.startsWith("Academic")) {
+            return markdown
+                    ? "Please rewrite the following Markdown article in an academic style. "
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + content
+                    : "Please rewrite the following English article in an academic style. "
+                            + "Only return the rewritten text.\n\n" + content;
+        }
+        if (versionName.startsWith("Chinese Parallel")) {
+            return markdown
+                    ? "Please create a Chinese-English parallel text version of the following Markdown article. "
+                            + "Format: English paragraph, then Chinese paragraph. PRESERVE ALL Markdown formatting. Only return the parallel Markdown.\n\n"
+                            + content
+                    : "Please create a Chinese-English parallel text version of the following English article. "
+                            + "Format: English paragraph, then Chinese paragraph. Only return the parallel text.\n\n" + content;
+        }
+
+        return content;
+    }
+
+    private String methodNameForVersion(String versionName) {
+        boolean markdown = versionName.contains("Markdown");
+        if (versionName.startsWith("CET-4")) {
+            return markdown ? "generateCET4VersionMarkdown" : "generateCET4Version";
+        }
+        if (versionName.startsWith("CET-6")) {
+            return markdown ? "generateCET6VersionMarkdown" : "generateCET6Version";
+        }
+        if (versionName.startsWith("Academic")) {
+            return markdown ? "generateAcademicVersionMarkdown" : "generateAcademicVersion";
+        }
+        if (versionName.startsWith("Chinese Parallel")) {
+            return markdown ? "generateChineseParallelVersionMarkdown" : "generateChineseParallelVersion";
+        }
+        return "generateArticleVersion";
     }
 
     /**

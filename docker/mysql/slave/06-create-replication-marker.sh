@@ -8,7 +8,7 @@
 set -e
 
 MARKER_FILE="/var/lib/mysql/.replication-init-pending"
-INIT_SCRIPT="/docker-entrypoint-initdb.d/init-replication.sh"
+INIT_SCRIPT="/opt/langhack/init-replication.sh"
 
 echo "[replication-marker] ======================================"
 echo "[replication-marker] 从库复制初始化标记"

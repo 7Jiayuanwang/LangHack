@@ -27,5 +27,14 @@ public interface UserTextReadMapper extends BaseMapper<UserTextRead> {
             "WHERE r.user_id = #{userId} AND t.difficulty IS NOT NULL AND t.difficulty <> '' " +
             "GROUP BY t.difficulty ORDER BY COUNT(*) DESC LIMIT 1")
     String selectMostReadDifficulty(@Param("userId") Long userId);
+
+    @Select("SELECT COUNT(*) FROM user_text_reads WHERE user_id = #{userId}")
+    int countReadArticles(@Param("userId") Long userId);
+
+    @Select("SELECT COALESCE(SUM(read_count), 0) FROM user_text_reads WHERE user_id = #{userId}")
+    int sumReadCounts(@Param("userId") Long userId);
+
+    @org.apache.ibatis.annotations.Update("UPDATE user_text_reads SET read_count = read_count + 1, last_read_at = NOW() WHERE user_id = #{userId} AND text_id = #{textId}")
+    int incrementReadCount(@Param("userId") Long userId, @Param("textId") Long textId);
 }
 

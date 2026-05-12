@@ -3,6 +3,7 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.LevelExamScore;
 import com.english.entity.User;
+import com.english.mapper.LevelExamScoreMapper;
 import com.english.service.SchoolDataSyncService;
 import com.english.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,9 @@ class StudentDataControllerTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private LevelExamScoreMapper levelExamScoreMapper;
+
     private Authentication auth;
 
     @BeforeEach
@@ -82,11 +86,14 @@ class StudentDataControllerTest {
         }
 
         @Test
-        @DisplayName("用户不存在时抛出异常")
-        void myLevelExams_userNotFound_throwsException() {
+        @DisplayName("用户不存在时返回错误响应")
+        void myLevelExams_userNotFound_returnsError() {
             when(userService.getUserByUsername("2023122066164")).thenReturn(null);
 
-            assertThrows(RuntimeException.class, () -> controller.getMyLevelExamScores(auth));
+            Result<List<LevelExamScore>> result = controller.getMyLevelExamScores(auth);
+
+            assertNotNull(result);
+            assertEquals(500, result.getCode());
         }
 
         @Test

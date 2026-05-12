@@ -28,15 +28,16 @@ echo "[replication] ======================================"
 
 DB_NAME="${MYSQL_DATABASE:-english_learning}"
 
-# ── 1. 等待主库可达（最多 120 秒）────────────────────
+# ── 1. 等待主库可达（最多 240 秒）────────────────────
 echo "[replication] 等待主库 mysql-master:3306 就绪..."
-MAX_RETRIES=60
+MAX_RETRIES=120
 RETRY_COUNT=0
 while ! mysqladmin ping -h mysql-master -u root -p"${MYSQL_ROOT_PASSWORD}" --silent 2>/dev/null; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
         echo "[replication] ❌ 主库连接超时（${MAX_RETRIES}次重试），复制初始化失败"
         echo "[replication] ❌ 从库将以 unhealthy 状态运行，部署将被阻塞"
+        echo "[replication] ❌ 请检查主库容器状态: docker logs langhack-mysql-master"
         exit 1
     fi
     echo "[replication] 等待主库... (${RETRY_COUNT}/${MAX_RETRIES})"
@@ -48,20 +49,21 @@ echo "[replication] ✅ 主库已就绪"
 # ── 2. 等待主库数据初始化完成 ────────────────────────
 # 检查主库 administrative_class 表是否已创建（V9 最后创建的表，说明所有 init 脚本已执行完毕）
 echo "[replication] 等待主库数据初始化完成（检查 V9 表: administrative_class）..."
-MAX_INIT_RETRIES=120
+MAX_INIT_RETRIES=180
 INIT_RETRY=0
 while true; do
     TABLE_EXISTS=$(mysql -h mysql-master -u root -p"${MYSQL_ROOT_PASSWORD}" -N -e \
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='administrative_class';" 2>/dev/null || echo "0")
     if [ "$TABLE_EXISTS" = "1" ]; then
         echo "[replication] ✅ 主库初始化完成（所有 V1~V9 迁移已执行）"
-        # 额外等待 5 秒，确保主库当前事务已提交
-        sleep 5
+        # 额外等待 10 秒，确保主库当前事务已提交
+        sleep 10
         break
     fi
     INIT_RETRY=$((INIT_RETRY + 1))
     if [ $INIT_RETRY -ge $MAX_INIT_RETRIES ]; then
-        echo "[replication] ⚠️ 等待主库数据初始化超时，继续配置复制（可能存在数据缺失）..."
+        echo "[replication] ⚠️ 等待主库数据初始化超时（${MAX_INIT_RETRIES}次重试），继续配置复制（可能存在数据缺失）..."
+        echo "[replication] ⚠️ 请检查主库初始化日志: docker logs langhack-mysql-master"
         break
     fi
     echo "[replication] 等待主库数据... (${INIT_RETRY}/${MAX_INIT_RETRIES})"
@@ -144,7 +146,7 @@ if [ -n "$DUMP_FILE" ] && [ -f "$DUMP_FILE" ]; then
     if [ "$DUMP_SIZE" -gt "1024" ]; then
         echo "[replication] 导入数据到从库..."
         IMPORT_START=$(date +%s)
-        mysql -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$DUMP_FILE" 2>/dev/null
+        mysql --default-character-set=utf8mb4 -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$DUMP_FILE" 2>/dev/null
         IMPORT_EXIT=$?
         IMPORT_END=$(date +%s)
         IMPORT_DURATION=$((IMPORT_END - IMPORT_START))
@@ -190,7 +192,7 @@ if [ -n "$DUMP_FILE" ] && [ -f "$DUMP_FILE" ]; then
             echo "[replication] 导入 ecdict_words 数据到从库..."
             ECDICT_IMPORT_START=$(date +%s)
             # 使用 -f 强制模式，跳过重复键错误（表结构可能已由 04 脚本创建）
-            mysql -f -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$ECDICT_DUMP_FILE" 2>/dev/null
+            mysql --default-character-set=utf8mb4 -f -u root -p"${MYSQL_ROOT_PASSWORD}" "$DB_NAME" < "$ECDICT_DUMP_FILE" 2>/dev/null
             ECDICT_IMPORT_EXIT=$?
             ECDICT_IMPORT_END=$(date +%s)
             ECDICT_IMPORT_DURATION=$((ECDICT_IMPORT_END - ECDICT_IMPORT_START))

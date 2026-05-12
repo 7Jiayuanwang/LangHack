@@ -14,10 +14,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -237,6 +239,49 @@ class BackupServiceTest {
         assertTrue(ex.getMessage().contains("创建备份记录失败"));
     }
 
+    @Test
+    void importBackup_sqlFile_createsImportedRecord() throws Exception {
+        when(baseMapper.insert(any(BackupRecord.class))).thenAnswer(invocation -> {
+            BackupRecord r = invocation.getArgument(0);
+            r.setId(20L);
+            return 1;
+        });
+        MockMultipartFile file = new MockMultipartFile("file", "backup.sql", "application/sql", "SELECT 1;".getBytes());
+
+        BackupRecord result = backupService.importBackup("admin", file, "AUTO", "school_data");
+
+        assertNotNull(result);
+        assertEquals("IMPORTED", result.getBackupType());
+        assertEquals("FULL", result.getBackupMode());
+        assertEquals("school_data", result.getCategory());
+        assertEquals("SUCCESS", result.getStatus());
+        assertEquals(Boolean.TRUE, result.getReadable());
+        assertTrue(result.getFilename().startsWith("imported_"));
+    }
+
+    @Test
+    void importBackup_incrementalFilename_infersMode() throws Exception {
+        when(baseMapper.insert(any(BackupRecord.class))).thenAnswer(invocation -> {
+            BackupRecord r = invocation.getArgument(0);
+            r.setId(21L);
+            return 1;
+        });
+        MockMultipartFile file = new MockMultipartFile("file", "english_learning_incr_20260506.sql", "application/sql", "SELECT 1;".getBytes());
+
+        BackupRecord result = backupService.importBackup("admin", file, "AUTO", null);
+
+        assertEquals("INCREMENTAL", result.getBackupMode());
+    }
+
+    @Test
+    void importBackup_invalidExtension_throwsBusinessException() {
+        MockMultipartFile file = new MockMultipartFile("file", "backup.txt", "text/plain", "bad".getBytes());
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> backupService.importBackup("admin", file, "AUTO", null));
+        assertEquals("仅支持导入 .sql 或 .gz 备份文件", ex.getMessage());
+    }
+
     // ========== executeScheduledBackup() tests ==========
 
     @Test
@@ -294,6 +339,30 @@ class BackupServiceTest {
         IPage<BackupRecord> result = backupService.getBackupsByPage(1, 10, null, "SUCCESS");
 
         assertNotNull(result);
+        verify(baseMapper).selectPage(any(Page.class), any(QueryWrapper.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getBackupsByPage_completedStatus_isNormalizedAndReadable() throws Exception {
+        Path backupFile = testBackupDir.resolve("legacy_backup.sql");
+        Files.writeString(backupFile, "-- backup\nSELECT 1;\n");
+
+        BackupRecord record = new BackupRecord();
+        record.setId(1L);
+        record.setFilename("legacy_backup.sql");
+        record.setStatus("COMPLETED");
+        record.setStoragePath(backupFile.toString());
+        Page<BackupRecord> pageResult = new Page<>(1, 10);
+        pageResult.setRecords(List.of(record));
+        doReturn(pageResult).when(baseMapper).selectPage(any(Page.class), any(QueryWrapper.class));
+
+        IPage<BackupRecord> result = backupService.getBackupsByPage(1, 10, null, "SUCCESS");
+
+        BackupRecord item = result.getRecords().get(0);
+        assertEquals("SUCCESS", item.getStatus());
+        assertEquals(Boolean.TRUE, item.getFileAvailable());
+        assertEquals(Boolean.TRUE, item.getReadable());
         verify(baseMapper).selectPage(any(Page.class), any(QueryWrapper.class));
     }
 
@@ -422,6 +491,60 @@ class BackupServiceTest {
         assertEquals("仅可下载状态为成功的备份文件", ex.getMessage());
     }
 
+    @Test
+    void getBackupFilePath_completedStatus_allowsLegacySuccessfulBackup() throws Exception {
+        Path backupFile = testBackupDir.resolve("legacy_backup.sql");
+        Files.writeString(backupFile, "-- backup\nSELECT 1;\n");
+
+        BackupRecord record = new BackupRecord();
+        record.setId(1L);
+        record.setStatus("COMPLETED");
+        record.setStoragePath(backupFile.toString());
+        when(baseMapper.selectById(1L)).thenReturn(record);
+
+        Path result = backupService.getBackupFilePath(1L);
+
+        assertEquals(backupFile.toAbsolutePath().normalize(), result);
+    }
+
+    @Test
+    void getBackupFilePath_directoryPath_throwsBusinessException() throws Exception {
+        Path backupFolder = Files.createDirectories(testBackupDir.resolve("not-a-backup-file"));
+
+        BackupRecord record = new BackupRecord();
+        record.setId(1L);
+        record.setStatus("SUCCESS");
+        record.setStoragePath(backupFolder.toString());
+        when(baseMapper.selectById(1L)).thenReturn(record);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> backupService.getBackupFilePath(1L));
+        assertEquals("备份文件类型无效", ex.getMessage());
+    }
+
+    @Test
+    void getBackupPreview_readsPreviewContent() throws Exception {
+        Path backupFile = testBackupDir.resolve("preview_backup.sql");
+        // Use valid SQL statements that match the smart skip logic (CREATE/INSERT)
+        Files.writeString(backupFile, "-- header comment\nCREATE TABLE test (id INT);\nINSERT INTO test VALUES (1);\nINSERT INTO test VALUES (2);\n");
+
+        BackupRecord record = new BackupRecord();
+        record.setId(2L);
+        record.setFilename("preview_backup.sql");
+        record.setStatus("SUCCESS");
+        record.setStoragePath(backupFile.toString());
+        when(baseMapper.selectById(2L)).thenReturn(record);
+
+        Map<String, Object> preview = backupService.getBackupPreview(2L, 2, 200);
+
+        assertEquals(Boolean.TRUE, ((BackupRecord) preview.get("record")).getReadable());
+        String previewContent = String.valueOf(preview.get("preview"));
+        assertTrue(previewContent.contains("CREATE TABLE test"));
+        // With maxLines=2, we get CREATE + INSERT (first 2 lines after skipping header)
+        assertEquals(2, preview.get("lineCount"));
+        assertEquals(Boolean.TRUE, preview.get("truncated"));
+    }
+
     // ========== restoreFromBackup() tests ==========
 
     @Test
@@ -461,6 +584,30 @@ class BackupServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> backupService.restoreFromBackup(999L, "english_test"));
         assertEquals("备份记录不存在", ex.getMessage());
+    }
+
+    @Test
+    void restoreFromBackup_invalidGzipInput_throwsBusinessException() throws Exception {
+        Path toolDir = Files.createDirectories(testBackupDir.resolve("fake-mysql-tools"));
+        Path mysqlScript = toolDir.resolve("mysql");
+        Files.writeString(mysqlScript, "#!/bin/sh\ncat >/dev/null\nexit 0\n", StandardCharsets.UTF_8);
+        assertTrue(mysqlScript.toFile().setExecutable(true));
+
+        Path brokenBackup = testBackupDir.resolve("broken_backup.gz");
+        Files.writeString(brokenBackup, "not-gzip-data", StandardCharsets.UTF_8);
+
+        setField(backupService, "mysqldumpPath", toolDir.resolve("mysqldump").toString());
+
+        BackupRecord record = new BackupRecord();
+        record.setId(1L);
+        record.setFilename("broken_backup.gz");
+        record.setStatus("SUCCESS");
+        record.setStoragePath(brokenBackup.toString());
+        when(baseMapper.selectById(1L)).thenReturn(record);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> backupService.restoreFromBackup(1L, "english_test"));
+        assertEquals("数据库恢复失败，备份文件读取或输入异常", ex.getMessage());
     }
 
     // ========== getBackupStats() tests ==========

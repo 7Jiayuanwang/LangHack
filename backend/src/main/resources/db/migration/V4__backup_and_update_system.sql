@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS backup_records (
     file_size BIGINT DEFAULT 0 COMMENT '文件大小(字节)',
     backup_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL' COMMENT '备份类型: MANUAL/SCHEDULED',
     backup_mode VARCHAR(20) NOT NULL DEFAULT 'FULL' COMMENT '备份模式: FULL/INCREMENTAL',
+    category VARCHAR(50) DEFAULT 'SYSTEM' COMMENT '备份分类: system_config/user_data/business_data/school_data',
     base_backup_id BIGINT DEFAULT NULL COMMENT '增量备份的基准全量备份ID',
     status VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS' COMMENT '状态: IN_PROGRESS/SUCCESS/FAILED',
     storage_path VARCHAR(500) NOT NULL COMMENT '存储路径',
@@ -26,6 +27,22 @@ CREATE TABLE IF NOT EXISTS backup_records (
     INDEX idx_status (status),
     INDEX idx_created_time (created_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数据库备份记录表';
+
+SET @backup_category_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'backup_records'
+      AND COLUMN_NAME = 'category'
+);
+SET @backup_category_sql = IF(
+    @backup_category_exists = 0,
+    'ALTER TABLE backup_records ADD COLUMN category VARCHAR(50) DEFAULT ''SYSTEM'' COMMENT ''备份分类: system_config/user_data/business_data/school_data'' AFTER backup_mode',
+    'SELECT 1'
+);
+PREPARE stmt FROM @backup_category_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- ────────────────────────────────────────
 -- 2. 创建备份操作日志表 [原 V4]

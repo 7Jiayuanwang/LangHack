@@ -47,17 +47,20 @@
 #   ./scripts/auto-update.sh -b main            # 指定分支
 #   ./scripts/auto-update.sh -i                 # 交互式选择分支
 #   # crontab (每小时检查)
-#   0 * * * * /path/to/LangHack/scripts/auto-update.sh >> /var/log/langhack-update.log 2>&1
+#   0 * * * * LOG_FILE=/var/log/langhack-update.log /path/to/LangHack/scripts/auto-update.sh
 # ==============================================================================
 set -euo pipefail
 
 # ── 健壮性增强：错误处理和状态追踪 ──────────────────────
 # 全局状态变量
-SCRIPT_STATE="INIT"           # INIT -> CHECKING -> UPDATING -> BUILDING -> DEPLOYING -> SUCCESS/FAILED
+SCRIPT_STATE="INIT"           # INIT -> CHECKING -> UPDATING -> BUILDING -> MIGRATING -> DEPLOYING -> SUCCESS/FAILED
 ROLLBACK_NEEDED=false
 MAINTENANCE_ACTIVE=false
 BUILD_PID=""
 CLEANUP_DONE=false
+AUTO_STASH_CREATED=false
+AUTO_STASH_NAME=""
+PRE_PULL_COMMIT=""
 
 # ── 配置 ──────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -103,12 +106,138 @@ if [ -f "$ENV_FILE" ]; then
     done < "$ENV_FILE"
 fi
 
+# ── .env 配置校验与自动修复 ────────────────────────────
+# 代码更新后，部分配置项的默认值可能已变更（如镜像源地址重命名）
+# 此函数自动修正 .env 中的过时值，无需用户手动干预
+fix_env_outdated_values() {
+    [ ! -f "$ENV_FILE" ] && return 0
+    local changed=false
+
+    # 已知的过时值修正表：旧值 → 新值
+    # 格式: "KEY|旧值模式|新值"
+    local -a FIXES=(
+        "ALPINE_MIRROR|alpine-proxy|alpine-mirror"
+        "NPM_REGISTRY|alpine-proxy|alpine-mirror"  # 防止误配
+    )
+
+    for fix in "${FIXES[@]}"; do
+        IFS='|' read -r key old_pattern new_value <<< "$fix"
+        # 检查 .env 中是否有该 key 且包含旧值
+        local current_val
+        current_val=$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+        if [ -n "$current_val" ] && echo "$current_val" | grep -q "$old_pattern"; then
+            local new_val="${current_val//$old_pattern/$new_value}"
+            sed -i "s|^${key}=.*|${key}=${new_val}|" "$ENV_FILE"
+            export "$key=$new_val"
+            log "INFO: 自动修正 .env: $key ($old_pattern → $new_value)"
+            changed=true
+        fi
+    done
+
+    if [ "$changed" = true ]; then
+        log "INFO: .env 配置已自动更新，使用修正后的值继续部署"
+    fi
+}
+
+# 加载 .env 后立即执行校验
+fix_env_outdated_values
+
 # 维护模式 & 备份配置（可通过 .env 中 AUTO_UPDATE_* 覆盖）
 MAINTENANCE_MODE="${AUTO_UPDATE_MAINTENANCE:-true}"
 PRE_BACKUP="${AUTO_UPDATE_PRE_BACKUP:-true}"
+RUN_DB_MIGRATIONS="${AUTO_UPDATE_RUN_MIGRATIONS:-true}"
 BACKUP_DIR="${BACKUP_DIR:-$PROJECT_ROOT/backups}"
 HEALTH_CHECK_TIMEOUT=120
 ENV_BACKUP_KEEP=10
+BACKEND_PORT="${PORT_BACKEND:-8080}"
+FRONTEND_PORT="${PORT_FRONTEND:-3000}"
+
+# ── 镜像源探测与降级 ──────────────────────────────────
+# 探测公共 Docker Hub 是否可达
+probe_public_docker() {
+    timeout 10 docker pull "${1:-node:20-alpine}" >/dev/null 2>&1
+}
+
+# 探测本地 registry 是否可达
+probe_local_registry() {
+    local registry="$1"
+    local image="${2:-node:20-alpine}"
+    timeout 10 docker pull "${registry%/}/${image}" >/dev/null 2>&1
+}
+
+# 根据 .env 配置自动解析 IMAGE_REGISTRY_PREFIX
+resolve_build_environment() {
+    local env_image_source="${IMAGE_SOURCE_MODE:-auto}"
+    local env_local_registry="${LOCAL_REGISTRY:-}"
+
+    # 如果 .env 中已有明确配置（非 auto），直接使用
+    if [ "$env_image_source" = "local" ] && [ -n "${IMAGE_REGISTRY_PREFIX:-}" ]; then
+        log "INFO: 使用本地 registry: $IMAGE_REGISTRY_PREFIX"
+        return 0
+    fi
+    if [ "$env_image_source" = "public" ]; then
+        export IMAGE_REGISTRY_PREFIX=""
+        log "INFO: 使用公共镜像"
+        return 0
+    fi
+
+    # auto 模式：探测
+    log "INFO: 自动探测镜像源..."
+    if probe_public_docker; then
+        export IMAGE_REGISTRY_PREFIX=""
+        log "INFO: 公共镜像可用，使用公共镜像"
+    elif [ -n "$env_local_registry" ] && probe_local_registry "$env_local_registry"; then
+        export IMAGE_REGISTRY_PREFIX="${env_local_registry%/}/"
+        log "INFO: 公共镜像不可达，降级到本地 registry: $IMAGE_REGISTRY_PREFIX"
+    else
+        log "WARN: 公共镜像和本地 registry 均不可达，使用 .env 中的配置"
+    fi
+}
+
+# 探测内网 Nexus 是否可达
+probe_nexus() {
+    local url="$1"
+    [ -z "$url" ] && return 1
+    timeout 5 curl -sf -o /dev/null "$url" 2>/dev/null
+}
+
+# 根据网络环境自动选择 Maven/npm/Alpine 镜像源
+resolve_mirror_urls() {
+    local build_env="${BUILD_NETWORK_ENV:-auto}"
+    local env_local_reg="${LOCAL_REGISTRY:-}"
+    local nexus_base=""
+    if [ -n "$env_local_reg" ]; then
+        local ip_only="${env_local_reg%%:*}"
+        nexus_base="http://${ip_only}:8081"
+    fi
+
+    case "$build_env" in
+        intranet)
+            log "INFO: 内网构建模式，使用 .env 中的镜像源配置"
+            ;;
+        public)
+            log "INFO: 公网构建模式，清空内网镜像源"
+            export MAVEN_MIRROR_URL=""
+            export NPM_REGISTRY=""
+            export ALPINE_MIRROR=""
+            ;;
+        auto|"")
+            if [ -n "$nexus_base" ] && probe_nexus "$nexus_base/repository/maven-public/" 2>/dev/null; then
+                log "INFO: 内网 Nexus 可达，使用内网构建"
+                export MAVEN_MIRROR_URL="${MAVEN_MIRROR_URL:-$nexus_base/repository/maven-public/}"
+                export NPM_REGISTRY="${NPM_REGISTRY:-$nexus_base/repository/npm-proxy/}"
+                export ALPINE_MIRROR="${ALPINE_MIRROR:-$nexus_base/repository/alpine-mirror/}"
+            elif [ -n "${MAVEN_MIRROR_URL:-}${NPM_REGISTRY:-}${ALPINE_MIRROR:-}" ]; then
+                log "INFO: 内网 Nexus 不可达，清空内网镜像源使用公网"
+                export MAVEN_MIRROR_URL=""
+                export NPM_REGISTRY=""
+                export ALPINE_MIRROR=""
+            else
+                log "INFO: 未配置内网镜像源，使用公网构建"
+            fi
+            ;;
+    esac
+}
 
 # ── 运维结构化日志函数 ────────────────────────────────
 # 写入 deploy-history.log，格式：时间戳|事件类型|commit|描述
@@ -150,7 +279,11 @@ while [[ $# -gt 0 ]]; do
             echo "  WEBHOOK_URL                通知 Webhook URL"
             echo "  AUTO_UPDATE_MAINTENANCE    更新时启用维护模式 (true/false)"
             echo "  AUTO_UPDATE_PRE_BACKUP     更新前备份数据库 (true/false)"
+            echo "  AUTO_UPDATE_RUN_MIGRATIONS 自动执行数据库迁移 (true/false，默认 true)"
             echo "  BACKUP_DIR                 备份存储目录"
+            echo "  BUILD_NETWORK_ENV          构建网络: auto|intranet|public (默认 auto)"
+            echo "  IMAGE_SOURCE_MODE          镜像源: auto|public|local (默认 auto)"
+            echo "  LOCAL_REGISTRY             本地 registry 地址 (如 172.20.14.249:80/langhack)"
             exit 0
             ;;
         *) echo "[ERROR] 未知参数: $1 (运行 $0 --help 查看帮助)"; exit 1 ;;
@@ -200,7 +333,85 @@ fi
 # ══════════════════════════════════════════════════════
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    echo "$message"
+    if [ -n "${LOG_FILE:-}" ]; then
+        printf '%s\n' "$message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+
+setup_log_destination() {
+    local preferred_log="$LOG_FILE"
+    local fallback_log="$PROJECT_ROOT/logs/langhack-update.log"
+
+    if mkdir -p "$(dirname "$preferred_log")" 2>/dev/null && touch "$preferred_log" 2>/dev/null; then
+        LOG_FILE="$preferred_log"
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$fallback_log")" 2>/dev/null || true
+    if touch "$fallback_log" 2>/dev/null; then
+        LOG_FILE="$fallback_log"
+        log "WARN: 无法写入日志文件 $preferred_log，回退到 $LOG_FILE"
+        return 0
+    fi
+
+    LOG_FILE=""
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN: 无法写入独立日志文件，将仅输出到当前终端"
+}
+
+restore_auto_stash_if_needed() {
+    [ "$AUTO_STASH_CREATED" = true ] || return 0
+
+    local stash_ref
+    stash_ref=$(git stash list | awk -v marker="$AUTO_STASH_NAME" '$0 ~ marker {print $1; exit}' | tr -d ':')
+    if [ -z "$stash_ref" ]; then
+        log "WARN: 未找到自动保存的 stash: $AUTO_STASH_NAME"
+        AUTO_STASH_CREATED=false
+        return 1
+    fi
+
+    if git stash pop --index --quiet "$stash_ref" >/dev/null 2>&1; then
+        log "INFO: 已恢复更新前的本地修改 ($AUTO_STASH_NAME)"
+        AUTO_STASH_CREATED=false
+        AUTO_STASH_NAME=""
+        return 0
+    fi
+
+    log "WARN: 自动恢复本地修改失败，请手动执行: git stash list | grep \"$AUTO_STASH_NAME\""
+    return 1
+}
+
+verify_changed_paths_writable() {
+    local from_commit="$1"
+    local to_commit="$2"
+    local issue_count=0
+    local changed_path=""
+    local parent_dir=""
+
+    while IFS= read -r changed_path; do
+        [ -z "$changed_path" ] && continue
+
+        parent_dir=$(dirname "$PROJECT_ROOT/$changed_path")
+        if [ -d "$parent_dir" ] && [ ! -w "$parent_dir" ]; then
+            log "ERROR: 更新目标目录不可写: ${parent_dir#$PROJECT_ROOT/}"
+            issue_count=$((issue_count + 1))
+        fi
+
+        if [ "$issue_count" -ge 10 ]; then
+            log "ERROR: 不可写路径超过 10 个，停止继续检查"
+            break
+        fi
+    done < <(git diff --name-only "$from_commit" "$to_commit" 2>/dev/null || true)
+
+    if [ "$issue_count" -gt 0 ]; then
+        log "ERROR: 检测到工作区权限异常，当前用户 $(id -un) 无法写入上述路径"
+        log "ERROR: 建议修复: sudo chown -R $(id -un):$(id -gn) \"$PROJECT_ROOT\""
+        log "ERROR: 可先排查: find \"$PROJECT_ROOT\" ! -user \"$(id -un)\" -ls | head"
+        return 1
+    fi
+
+    return 0
 }
 
 is_pid_running() {
@@ -343,13 +554,15 @@ local_start_frontend() {
 local_wait_for_health() {
     local timeout="${1:-120}"
     local elapsed=0
+    local local_backend_port=8080
+    local local_frontend_port=3000
     log "LOCAL: 等待本地服务健康检查通过 (超时 ${timeout}s)..."
 
     while [ "$elapsed" -lt "$timeout" ]; do
         local backend_ok=false
         local frontend_ok=false
-        curl -sf http://localhost:8080/api/health >/dev/null 2>&1 && backend_ok=true || true
-        curl -sf -I http://localhost:3000 >/dev/null 2>&1 && frontend_ok=true || true
+        curl -sf "http://localhost:${local_backend_port}/api/health" >/dev/null 2>&1 && backend_ok=true || true
+        curl -sf -I "http://localhost:${local_frontend_port}" >/dev/null 2>&1 && frontend_ok=true || true
 
         if [ "$backend_ok" = true ] && [ "$frontend_ok" = true ]; then
             log "LOCAL: 本地服务健康检查通过 ✓ (${elapsed}s)"
@@ -534,21 +747,27 @@ pre_update_backup() {
     fi
 
     log "BACKUP: 正在备份数据库..."
-    # 使用子 shell 隔离 pipefail，避免 mysqldump 失败导致整个脚本崩溃
-    if (docker compose -f "$COMPOSE_FILE" exec -T "$mysql_svc" \
+    # 使用临时文件捕获 mysqldump 输出，检查 PIPESTATUS 确保 mysqldump 成功
+    local dump_tmp="${backup_file}.tmp"
+    docker compose -f "$COMPOSE_FILE" exec -T "$mysql_svc" \
         mysqldump -u root -p"$db_password" --single-transaction \
-        --routines --triggers english_learning 2>/dev/null \
-        | gzip > "$backup_file"); then
-        :  # 管道成功
-    else
-        log "WARN: mysqldump 管道返回非零退出码，备份可能不完整"
+        --routines --triggers english_learning 2>/dev/null > "$dump_tmp"
+
+    local dump_exit=$?
+    if [ $dump_exit -ne 0 ]; then
+        log "ERROR: mysqldump 失败 (exit code: $dump_exit)，备份无效"
+        rm -f "$dump_tmp"
+        return 1
     fi
 
-    if [ -s "$backup_file" ]; then
+    # mysqldump 成功，压缩备份文件
+    if gzip < "$dump_tmp" > "$backup_file"; then
+        rm -f "$dump_tmp"
         log "BACKUP: 数据库已备份 → $backup_file ($(du -h "$backup_file" | cut -f1))"
     else
-        log "WARN: 备份文件为空（数据库可能为空或连接失败），继续更新"
-        rm -f "$backup_file"
+        log "ERROR: gzip 压缩失败"
+        rm -f "$dump_tmp" "$backup_file"
+        return 1
     fi
 }
 
@@ -582,7 +801,7 @@ wait_for_health() {
         fi
 
         # 2. 检查后端 HTTP 健康端点（确认应用层就绪）
-        if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
+        if curl -sf "http://localhost:${BACKEND_PORT}/api/health" > /dev/null 2>&1; then
             log "HEALTH: 所有服务正常 ✓ (${elapsed}s)"
             return 0
         fi
@@ -668,6 +887,8 @@ verify_ai_providers() {
 
 run_incremental_migrations() {
     local migration_sql="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+    local feature_toggle_repair_sql="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
+    local prepared_sql=""
 
     if [ ! -f "$migration_sql" ]; then
         log "ERROR: MIGRATE: 迁移脚本不存在: $migration_sql"
@@ -734,14 +955,47 @@ run_incremental_migrations() {
     # 提取最高版本号用于日志
     local max_ver
     max_ver=$(grep -oE '^--   V[0-9]+__' "$migration_sql" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
-    log "MIGRATE: 执行 04-apply-all-migrations.sql (V1~V${max_ver})..."
+    local db_name="${MYSQL_DATABASE:-english_learning}"
+    log "MIGRATE: 执行 04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${db_name})..."
+
+    prepared_sql=$(mktemp /tmp/langhack-migrate.XXXXXX.sql)
+    if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$migration_sql" "$prepared_sql"; then
+        log "ERROR: MIGRATE: 迁移脚本预处理失败"
+        rm -f "$prepared_sql" 2>/dev/null || true
+        return 1
+    fi
 
     local migrate_output migrate_exit migrate_errors
-    migrate_output=$(docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" 2>&1 < "$migration_sql")
-    migrate_exit=$?
+    local migrate_log migrate_pid migrate_elapsed activity
+    migrate_log=$(mktemp /tmp/langhack-migrate-output.XXXXXX.log)
+    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$prepared_sql" > "$migrate_log" 2>&1 &
+    migrate_pid=$!
+    migrate_elapsed=0
+
+    while kill -0 "$migrate_pid" 2>/dev/null; do
+        sleep 15
+        if kill -0 "$migrate_pid" 2>/dev/null; then
+            migrate_elapsed=$((migrate_elapsed + 15))
+            activity=$(bash "$PROJECT_ROOT/scripts/describe-mysql-activity.sh" "$mysql_container" "$db_root_pw" "$db_name" || true)
+            if [ -n "$activity" ]; then
+                log "MIGRATE: ${activity} (已耗时 ${migrate_elapsed}s)"
+            else
+                log "MIGRATE: 正在执行数据库迁移 (已耗时 ${migrate_elapsed}s)"
+            fi
+        fi
+    done
+
+    if wait "$migrate_pid"; then
+        migrate_exit=0
+    else
+        migrate_exit=$?
+    fi
+    migrate_output=$(cat "$migrate_log")
     migrate_errors=$(echo "$migrate_output" \
         | grep -v "Using a password on the command line interface can be insecure" \
         | grep -v "^$" || true)
+    rm -f "$migrate_log" 2>/dev/null || true
+    rm -f "$prepared_sql" 2>/dev/null || true
 
     if [ $migrate_exit -ne 0 ]; then
         log "ERROR: MIGRATE: 增量迁移失败，退出码: $migrate_exit"
@@ -769,8 +1023,6 @@ run_incremental_migrations() {
     if [ "$need_seed" = true ]; then
         log "SEED: 检测到空数据库（texts: ${texts_count}, ecdict_words: ${ecdict_count}, article: ${article_count}），开始自动导入..."
 
-        local db_name="${MYSQL_DATABASE:-english_learning}"
-
         # ① 全量备份
         local seed_file=""
         for dir in "$PROJECT_ROOT/database" "$PROJECT_ROOT/backups"; do
@@ -795,8 +1047,8 @@ run_incremental_migrations() {
         if [ -n "$seed_file" ] && [ -f "$seed_file" ]; then
             log "SEED: 导入全量备份: $(basename "$seed_file")"
             case "$seed_file" in
-                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
-                *.sql)    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql)    docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
             esac
             log "SEED: 全量备份导入完成 ✓"
         else
@@ -812,7 +1064,7 @@ run_incremental_migrations() {
                 log "SEED: 导入课文数据 (3Blue1Brown)..."
                 for f in "$article_dir"/*.sql; do
                     [ -f "$f" ] || continue
-                    docker exec -i "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
+                    docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
                 done
                 log "SEED: 课文数据导入完成 ✓"
             fi
@@ -827,7 +1079,7 @@ run_incremental_migrations() {
                 log "SEED: 导入 ECDICT 词典（预计 1-3 分钟）..."
                 docker cp "$ecdict_csv" "$mysql_container:/tmp/ecdict.csv"
                 docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
-                docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" --local-infile=1 "$db_name" -e \
+                docker exec "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" --local-infile=1 "$db_name" -e \
                     "TRUNCATE TABLE ecdict_words;
                      LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
                      INTO TABLE ecdict_words
@@ -856,6 +1108,15 @@ run_incremental_migrations() {
         log "SEED: 种子数据导入完成 ✓ (texts: ${texts_final}, ecdict_words: ${ecdict_final}, article: ${article_final})"
     fi
 
+    if [ -f "$feature_toggle_repair_sql" ]; then
+        log "MIGRATE: 修复功能开关描述文本..."
+        if docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$feature_toggle_repair_sql" >/dev/null 2>&1; then
+            log "MIGRATE: 功能开关描述修复完成 ✓"
+        else
+            log "WARN: MIGRATE: 功能开关描述修复失败，继续部署"
+        fi
+    fi
+
     # 验证从库复制延迟
     local slave_container slave_lag_wait=0
     slave_container=$(docker ps --format '{{.Names}}' | grep -E 'mysql.slave|mysql-slave' | head -1 || echo "")
@@ -873,6 +1134,22 @@ run_incremental_migrations() {
                 log "MIGRATE: 从库同步完成 ✓ (延迟: 0s)"
                 break
             elif [ "$lag" = "NULL" ]; then
+                if docker exec "$slave_container" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null \
+                   && docker exec "$slave_container" test -x /var/lib/mysql/init-replication.sh 2>/dev/null; then
+                    log "MIGRATE: 检测到从库首次初始化，执行完整复制初始化脚本..."
+                    local repl_init_log
+                    repl_init_log=$(mktemp /tmp/langhack-auto-slave-init.XXXXXX.log)
+                    if docker exec "$slave_container" bash /var/lib/mysql/init-replication.sh > "$repl_init_log" 2>&1; then
+                        log "MIGRATE: 从库完整复制初始化完成"
+                        docker exec "$slave_container" rm -f /var/lib/mysql/.replication-init-pending /var/lib/mysql/init-replication.sh 2>/dev/null || true
+                        rm -f "$repl_init_log" 2>/dev/null || true
+                        slave_lag_wait=0
+                        continue
+                    fi
+                    log "ERROR: MIGRATE: 从库完整复制初始化失败"
+                    tail -50 "$repl_init_log" 2>/dev/null | while read -r line; do log "         $line"; done
+                    rm -f "$repl_init_log" 2>/dev/null || true
+                fi
                 log "ERROR: MIGRATE: 从库复制未配置（SHOW REPLICA STATUS 为空），迁移后数据无法同步到从库"
                 log "ERROR:          请先运行 deploy.sh 完成主从复制初始化，再执行自动更新"
                 return 1
@@ -916,7 +1193,10 @@ verify_flyway_migrations() {
     local missing_tables=""
     for tbl in score_records text_learning_records media backup_records access_log \
                system_config ai_provider article_favorites user_tags feature_override \
-               sso_user_bindings administrative_class; do
+               sso_user_bindings administrative_class school_course teaching_class \
+               course_schedule course_selection level_exam_scores teaching_plans \
+               teaching_plan_courses student_schedule sync_logs field_mappings \
+               school_student school_teacher teacher_student_binding; do
         local exists
         exists=$(docker exec "$mysql_container" \
             mysql -uroot -p"$db_root_pw" english_learning \
@@ -937,6 +1217,74 @@ verify_flyway_migrations() {
 
     log "SCHEMA: 核心表验证通过 ✓ (V1~V9 全部关键表存在)"
     return 0
+}
+
+# ── 构建（含降级重试）──────────────────────────────────
+# 返回值: 0=成功, 1=失败, 2=超时
+do_docker_build() {
+    local services="$1"
+    local attempt=1
+    local max_attempts=2
+
+    while [ $attempt -le $max_attempts ]; do
+        log "INFO: 构建新镜像 (尝试 $attempt/$max_attempts)... (服务: $services)"
+        SCRIPT_STATE="BUILDING"
+
+        BUILD_LOG="/tmp/langhack-build-$$.log"
+        docker compose -f "$COMPOSE_FILE" build --no-cache $services > "$BUILD_LOG" 2>&1 &
+        BUILD_PID=$!
+
+        BUILD_TIMEOUT=1800
+        BUILD_ELAPSED=0
+        while kill -0 "$BUILD_PID" 2>/dev/null; do
+            sleep 30
+            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
+            log "INFO: 构建进行中... (已耗时 ${BUILD_ELAPSED}s)"
+            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
+                log "ERROR: 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
+                kill "$BUILD_PID" 2>/dev/null || true
+                wait "$BUILD_PID" 2>/dev/null || true
+                BUILD_PID=""
+                rm -f "$BUILD_LOG"
+                return 2
+            fi
+        done
+
+        wait "$BUILD_PID"
+        BUILD_EXIT=$?
+        BUILD_PID=""
+
+        if [ $BUILD_EXIT -eq 0 ]; then
+            rm -f "$BUILD_LOG"
+            log "INFO: 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
+            return 0
+        fi
+
+        log "WARN: 构建失败（退出码: $BUILD_EXIT）"
+        tail -20 "$BUILD_LOG" | while read -r line; do log "       $line"; done
+        rm -f "$BUILD_LOG"
+
+        # 降级重试：如果当前用内网源，切换到公网重试
+        if [ $attempt -lt $max_attempts ] && [ -n "${MAVEN_MIRROR_URL:-}${NPM_REGISTRY:-}${ALPINE_MIRROR:-}" ]; then
+            log "WARN: 内网构建失败，降级到公网重试..."
+            export MAVEN_MIRROR_URL=""
+            export NPM_REGISTRY=""
+            export ALPINE_MIRROR=""
+            if [ -n "${IMAGE_REGISTRY_PREFIX:-}" ]; then
+                log "WARN: 同时切换到公共 Docker 镜像..."
+                export IMAGE_REGISTRY_PREFIX=""
+                if ! probe_public_docker; then
+                    log "ERROR: 公共 Docker 镜像也不可达，无法降级"
+                    return 1
+                fi
+            fi
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        return 1
+    done
+    return 1
 }
 
 # ── 回滚 ─────────────────────────────────────────────
@@ -1018,19 +1366,37 @@ cleanup() {
         disable_maintenance
     fi
 
+    # 若更新失败且代码已回到更新前版本，则尝试恢复自动 stash 的本地修改
+    if [ $exit_code -ne 0 ] && [ "$AUTO_STASH_CREATED" = true ] && [ -n "$PRE_PULL_COMMIT" ]; then
+        local current_head
+        current_head=$(git rev-parse HEAD 2>/dev/null || echo "")
+        if [ "$current_head" = "$PRE_PULL_COMMIT" ]; then
+            restore_auto_stash_if_needed || true
+        fi
+    fi
+
     # 清理锁文件
     rm -f "$LOCK_FILE" 2>/dev/null || true
 
     # 非零退出时输出提示
     if [ $exit_code -ne 0 ]; then
         log "ERROR: 脚本异常退出（状态: $SCRIPT_STATE, 退出码: $exit_code）"
-        log "ERROR: 完整日志: tail -100 $LOG_FILE"
+        if [ -n "$LOG_FILE" ] && [ -f "$LOG_FILE" ]; then
+            log "ERROR: 完整日志: tail -100 $LOG_FILE"
+        else
+            log "ERROR: 当前终端输出即为完整日志（未写入独立日志文件）"
+        fi
 
         # 根据状态给出恢复建议
         case "$SCRIPT_STATE" in
             BUILDING)
                 log "ERROR: 构建阶段失败，旧服务应仍在运行"
                 log "ERROR: 检查构建日志: tail -100 /tmp/langhack-build-*.log"
+                ;;
+            MIGRATING)
+                log "ERROR: 数据库迁移阶段失败，旧服务应仍在运行"
+                log "ERROR: 检查数据库容器: docker compose -f $COMPOSE_FILE ps"
+                log "ERROR: 查看 MySQL 日志: docker compose -f $COMPOSE_FILE logs --tail=100 mysql-master"
                 ;;
             DEPLOYING)
                 log "ERROR: 部署阶段失败，可能需要手动回滚"
@@ -1058,6 +1424,8 @@ cleanup() {
 # ══════════════════════════════════════════════════════
 # 主流程
 # ══════════════════════════════════════════════════════
+
+setup_log_destination
 
 # ── 防止并发执行 ──────────────────────────────────────
 if [ -f "$LOCK_FILE" ]; then
@@ -1256,6 +1624,15 @@ log "────────────────────"
 PRE_PULL_COMMIT="$LOCAL_HASH"   # 保存 pull 前的 HEAD，用于 git checkout 回滚
 OLD_COMMIT="$DEPLOYED_HASH"     # 用已部署 commit 作为 diff 基准，检测本次变更范围
 
+# ①.5 更新前预检工作区写权限（避免进入维护模式后才因权限失败）
+if ! verify_changed_paths_writable "$LOCAL_HASH" "$REMOTE_HASH"; then
+    log "ERROR: 工作区写权限预检失败，中止更新"
+    notify "自动更新中止: 工作区存在不可写文件，请修复仓库属主/权限后重试"
+    ops_log "ERROR" "${LOCAL_HASH:0:8}" "工作区权限异常，无法更新到 ${REMOTE_HASH:0:8}"
+    SCRIPT_STATE="FAILED"
+    exit 1
+fi
+
 # ② 开启维护模式
 clear_stale_maintenance
 enable_maintenance
@@ -1280,21 +1657,48 @@ SCRIPT_STATE="UPDATING"
 PRE_PULL_COMMIT=$(git rev-parse HEAD)
 
 # 保存本地修改（如果有）
-git stash --include-untracked 2>/dev/null || true
+if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
+    AUTO_STASH_NAME="auto-update-$(date +%Y%m%d_%H%M%S)"
+    if git stash push --include-untracked -m "$AUTO_STASH_NAME" --quiet >/dev/null 2>&1; then
+        AUTO_STASH_CREATED=true
+        log "INFO: 已临时保存本地修改到 stash: $AUTO_STASH_NAME"
+    else
+        log "ERROR: git stash 失败，无法安全继续更新"
+        notify "自动更新失败: git stash 失败，请先手动处理本地修改"
+        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git stash 失败，更新中止"
+        disable_maintenance
+        SCRIPT_STATE="FAILED"
+        exit 1
+    fi
+fi
 git checkout --force "$BRANCH" --quiet 2>/dev/null || true
 
 # 使用 git reset --hard 而非 git pull，确保原子性和幂等性
-if git reset --hard "origin/$BRANCH" --quiet 2>/dev/null; then
+if reset_err=$(git reset --hard "origin/$BRANCH" --quiet 2>&1); then
     POST_PULL_COMMIT=$(git rev-parse HEAD)
     log "INFO: 代码更新成功 ✓"
     log "INFO:   更新前: ${PRE_PULL_COMMIT:0:8}"
     log "INFO:   更新后: ${POST_PULL_COMMIT:0:8}"
+    if [ "$AUTO_STASH_CREATED" = true ]; then
+        log "INFO: 本地修改已保存在 stash，可按需恢复: git stash list | grep \"$AUTO_STASH_NAME\""
+    fi
     ROLLBACK_NEEDED=true  # 从此刻起，失败需要回滚
 else
-    log "ERROR: git reset --hard 失败，可能是 Git 仓库损坏"
-    log "ERROR: 建议手动检查: git status && git fsck"
-    notify "自动更新失败: git reset 失败，仓库可能损坏"
-    ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git reset 失败，仓库可能损坏"
+    if echo "$reset_err" | grep -qi "Permission denied"; then
+        log "ERROR: git reset --hard 失败：检测到工作区文件权限问题"
+        log "ERROR: 原始错误: $reset_err"
+        log "ERROR: 建议修复: sudo chown -R $(id -un):$(id -gn) \"$PROJECT_ROOT\""
+        log "ERROR: 可先排查: find \"$PROJECT_ROOT\" ! -user \"$(id -un)\" -ls | head"
+        notify "自动更新失败: Git 工作区存在权限问题，请修复仓库属主/权限"
+        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git reset 失败：工作区文件权限异常"
+    else
+        log "ERROR: git reset --hard 失败"
+        [ -n "$reset_err" ] && log "ERROR: 原始错误: $reset_err"
+        log "ERROR: 建议手动检查: git status && git fsck"
+        notify "自动更新失败: git reset 失败，请检查 Git 工作区"
+        ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "git reset 失败，请检查 Git 工作区"
+    fi
+    restore_auto_stash_if_needed || true
     disable_maintenance
     SCRIPT_STATE="FAILED"
     exit 1
@@ -1340,76 +1744,47 @@ if echo "$CHANGED_FILES" | grep -qE '(docker/mysql/init/04-apply-all-migrations\
     log "INFO: 检测到数据库迁移脚本变更，将执行增量迁移"
 fi
 
+if [ "$RUN_MIGRATIONS" = true ] && [ "$RUN_DB_MIGRATIONS" != "true" ]; then
+    log "WARN: 检测到可能需要数据库迁移，但 AUTO_UPDATE_RUN_MIGRATIONS=false，已按配置跳过自动迁移。"
+    log "WARN: 整合版迁移链适合作为全新数据库初始稳定版；如需执行请先确认数据库策略并备份。"
+    RUN_MIGRATIONS=false
+fi
+
 if [ "$RUNTIME_MODE" = "local" ] && [ "$RUN_MIGRATIONS" = true ]; then
     log "WARN: LOCAL 模式检测到迁移文件变化；当前不会自动执行容器式迁移，请手动确认本地数据库 schema。"
 fi
 
 # ── 执行重建 / 重启 ───────────────────────────────────
 if [ "$RUNTIME_MODE" = "docker" ]; then
+    # 构建前自动解析镜像源（内网/公网/自动探测）
+    resolve_build_environment
+    resolve_mirror_urls
+
     if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
         SERVICES=""
         [ "$REBUILD_BACKEND" = true ] && SERVICES="backend"
         [ "$REBUILD_FRONTEND" = true ] && SERVICES="${SERVICES:+$SERVICES }frontend"
 
-        # ⑨ 构建新镜像（旧容器仍在运行）
-        log "INFO: 构建新镜像... (服务: $SERVICES)"
-        log "INFO: 构建可能需要数分钟，请耐心等待..."
-        SCRIPT_STATE="BUILDING"
-
-        # 使用后台进程 + 进度监控，避免长时间无输出导致用户误以为卡死
-        BUILD_LOG="/tmp/langhack-build-$$.log"
-        docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES > "$BUILD_LOG" 2>&1 &
-        BUILD_PID=$!
-
-        # 监控构建进程，每 30 秒输出一次心跳
-        BUILD_TIMEOUT=1800  # 30 分钟超时
-        BUILD_ELAPSED=0
-        while kill -0 "$BUILD_PID" 2>/dev/null; do
-            sleep 30
-            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
-            log "INFO: 构建进行中... (已耗时 ${BUILD_ELAPSED}s)"
-
-            # 超时检测
-            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
-                log "ERROR: 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
-                kill "$BUILD_PID" 2>/dev/null || true
-                wait "$BUILD_PID" 2>/dev/null || true
-                rm -f "$BUILD_LOG"
-                git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
-                disable_maintenance
+        # ⑨ 构建新镜像（含内网失败自动降级公网重试）
+        do_docker_build "$SERVICES"
+        BUILD_RESULT=$?
+        if [ $BUILD_RESULT -ne 0 ]; then
+            if [ $BUILD_RESULT -eq 2 ]; then
                 notify "自动更新失败: Docker 构建超时，已回退代码"
                 ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建超时，已回退代码"
-                SCRIPT_STATE="FAILED"
-                exit 1
+            else
+                notify "自动更新失败: Docker 构建失败（含降级重试），已回退代码"
+                ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败（含降级重试），已回退代码"
             fi
-        done
-
-        # 等待构建进程结束并获取退出码
-        wait "$BUILD_PID"
-        BUILD_EXIT=$?
-        BUILD_PID=""  # 清空 PID，防止 cleanup 重复 kill
-
-        if [ $BUILD_EXIT -ne 0 ]; then
-            log "ERROR: 构建失败（退出码: $BUILD_EXIT），回退代码"
-            log "ERROR: 构建日志（最后 50 行）："
-            tail -50 "$BUILD_LOG" | while read -r line; do log "       $line"; done
-            rm -f "$BUILD_LOG"
-            notify "自动更新失败: Docker 构建失败，正在回退代码..."
-            # 构建失败 → 旧容器未受影响，只需 revert git
             git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
-            # 部署记录文件不更新，保持指向上次成功部署的 commit
             disable_maintenance
-            notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
-            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
             SCRIPT_STATE="FAILED"
             exit 1
         fi
 
-        rm -f "$BUILD_LOG"
-        log "INFO: 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
-
         # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
         if [ "$RUN_MIGRATIONS" = true ]; then
+            SCRIPT_STATE="MIGRATING"
             run_incremental_migrations || {
                 log "ERROR: 增量迁移失败，回退代码（旧容器未受影响）"
                 git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
@@ -1443,7 +1818,7 @@ if [ "$RUNTIME_MODE" = "docker" ]; then
 
             # 重建旧版本镜像并启动
             log "INFO: 重建旧版本镜像..."
-            if docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES 2>&1 | tee -a "$LOG_FILE"; then
+            if { if [ -n "$LOG_FILE" ]; then docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES 2>&1 | tee -a "$LOG_FILE"; else docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES; fi; }; then
                 docker compose -f "$COMPOSE_FILE" up -d $SERVICES
                 notify "已回滚到 ${PRE_PULL_COMMIT:0:8}"
                 ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "容器启动失败，已回滚"
@@ -1485,6 +1860,7 @@ if [ "$RUNTIME_MODE" = "docker" ]; then
     else
         log "INFO: 变更不涉及前后端代码（可能是文档/脚本/迁移），跳过重建"
         if [ "$RUN_MIGRATIONS" = true ]; then
+            SCRIPT_STATE="MIGRATING"
             run_incremental_migrations || {
                 log "ERROR: 迁移执行失败，启动自动回滚..."
                 rollback_to_old_version "$PRE_PULL_COMMIT" "$SERVICES"

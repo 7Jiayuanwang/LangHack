@@ -251,7 +251,21 @@ public class AiProviderServiceImpl implements AiProviderService {
                     return result;
                 }
                 JsonNode root = objectMapper.readTree(body2);
-                String output = root.path("choices").get(0).path("message").path("content").asText("").trim();
+                JsonNode choices = root.path("choices");
+                String output = "";
+                if (choices.isArray() && choices.size() > 0) {
+                    JsonNode firstChoice = choices.get(0);
+                    output = firstChoice.path("message").path("content").asText("").trim();
+                    if (output.isEmpty()) {
+                        output = firstChoice.path("text").asText("").trim();
+                    }
+                }
+                if (output.isEmpty()) {
+                    result.put("success", false);
+                    result.put("error", "接口返回格式异常或内容为空");
+                    result.put("latencyMs", latency);
+                    return result;
+                }
                 result.put("success", true);
                 result.put("output", output);
                 result.put("latencyMs", latency);
@@ -346,6 +360,12 @@ public class AiProviderServiceImpl implements AiProviderService {
                 JsonNode chatRoot = objectMapper.readTree(chatResp.getBody());
                 String answer = chatRoot.path("answer").asText("");
                 if (answer.isEmpty()) answer = chatRoot.path("Answer").asText("");
+                if (answer.trim().isEmpty()) {
+                    result.put("success", false);
+                    result.put("error", "chat_query_v2 返回内容为空或格式异常");
+                    result.put("latencyMs", latency);
+                    return result;
+                }
                 result.put("success", true);
                 result.put("output", answer.trim());
                 result.put("latencyMs", latency);

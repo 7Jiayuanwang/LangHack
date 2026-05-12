@@ -1,10 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════
--- V14: 功能开关扩展 + AI 配置增强
+-- V13: 功能开关扩展 + AI 配置增强
 -- 整合自: V14 (expand_feature_toggles) + V16 (ai_qa_recovery_and_hiagent_config)
 --       + V17 (add_page_word_recite_toggle) + V18 (ai_provider_protocol)
 -- ═══════════════════════════════════════════════════════════════
 
--- V14: 扩展 feature_toggle 覆盖学生端全量页面 + 管理员模块分级
+-- V13: 扩展 feature_toggle 覆盖学生端全量页面 + 管理员模块分级
 -- 背景：
 --   1. 原 V7 只 seed 了 11 个学生页 toggle，page_scores / page_course_selections 在代码中引用
 --      但 DB 未 seed，导致 toggle 失效（默认展示）
@@ -12,7 +12,6 @@
 --   3. 新增 9 个 admin.* toggle 支持管理员模块级粒度控制
 -- 与 V7/V12 关系：V7 只覆盖部分学生页；V12 添加学校数据相关；V14 补齐剩余
 
-USE english_learning;
 SET NAMES utf8mb4;
 
 -- ─────────────────────────────────────────────
@@ -146,10 +145,24 @@ WHERE `config_group` = 'feature_toggle'
 -- ═══════════════════════════════════════════════════════════════
 
 
-ALTER TABLE `ai_provider`
-    ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
-        AFTER `service`;
+SET @ai_provider_protocol_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol'
+);
+SET @ai_provider_protocol_sql = IF(
+    @ai_provider_protocol_exists = 0,
+    'ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT ''openai_compatible'' AFTER `service`',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ai_provider_protocol_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 ALTER TABLE `ai_provider`
     MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
         COMMENT '协议类型: openai_compatible | hiagent';
+
+
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'student.lazy_course_selections', 'true', '学生端 Lazy 选课记录同步（陈旧度阈值 1 天）', 0),
+  ('feature_toggle', 'teacher.school_data_enabled', 'true', '教师端学校数据功能（课表/选课/成绩）', 0);

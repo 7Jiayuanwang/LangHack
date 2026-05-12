@@ -165,8 +165,9 @@ class AccessMetricsServiceTest {
             assertDoesNotThrow(() -> accessMetricsService.recordRequestStart("testuser"));
 
             // Concurrent count should still be updated (it's in-memory, before Redis calls)
-            // Note: due to the try/catch wrapping everything, the increment may or may not
-            // have been reached depending on where the exception occurs.
+            AtomicLong concurrentRequests = (AtomicLong) ReflectionTestUtils.getField(
+                    accessMetricsService, "concurrentRequests");
+            assertEquals(1, concurrentRequests.get());
         }
     }
 
@@ -207,6 +208,19 @@ class AccessMetricsServiceTest {
             accessMetricsService.recordRequestStart(null);
             accessMetricsService.recordRequestStart(null);
 
+            // Act
+            accessMetricsService.recordRequestEnd();
+            accessMetricsService.recordRequestEnd();
+
+            // Assert
+            AtomicLong concurrentRequests = (AtomicLong) ReflectionTestUtils.getField(
+                    accessMetricsService, "concurrentRequests");
+            assertEquals(0, concurrentRequests.get());
+        }
+
+        @Test
+        @DisplayName("结束次数过多时并发计数不会变成负数")
+        void recordRequestEnd_doesNotGoBelowZero() {
             // Act
             accessMetricsService.recordRequestEnd();
             accessMetricsService.recordRequestEnd();

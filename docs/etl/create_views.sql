@@ -213,6 +213,35 @@ WHERE SKZT = '1';                  -- 只查询有效授课记录
 CREATE INDEX idx_teacher_courses_updated ON t_teacher_courses(GXSJ);
 
 
+-- ----------------------------------------------------------------------------
+-- 9. 学生课表视图
+-- ----------------------------------------------------------------------------
+-- 说明：提供学生个人课表，用于 student_schedule 数据源和学生端课表页面
+-- 对应表：需要学校提供实际的学生课表表名
+-- ----------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW v_student_schedule AS
+SELECT
+    XH AS xh,                      -- 学号
+    XKKH AS xkkh,                  -- 选课课号/课程班号
+    KCBH AS kcbh,                  -- 课程编号
+    KCMC AS kcmc,                  -- 课程名称
+    SKJSZGH AS skjszgh,            -- 上课教师职工号
+    JSMC AS jsmc,                  -- 教师名称
+    XQJ AS xqj,                    -- 星期几
+    DJJ AS djj,                    -- 第几节
+    ZCAP AS zcap,                  -- 周次安排
+    JS AS js,                      -- 教室
+    XN AS xn,                      -- 学年
+    XQ AS xq,                      -- 学期
+    GXSJ AS updated_at,            -- 更新时间（必须字段）
+    CJSJ AS created_at             -- 创建时间
+FROM t_student_schedule            -- ← 替换为实际的学生课表表名
+WHERE 1=1;
+
+CREATE INDEX idx_student_schedule_updated ON t_student_schedule(GXSJ);
+
+
 -- ============================================================================
 -- 授权脚本
 -- ============================================================================
@@ -232,6 +261,7 @@ GRANT SELECT ON school_db.v_course_selection TO 'langhack_readonly'@'%';
 GRANT SELECT ON school_db.v_level_exam_scores TO 'langhack_readonly'@'%';
 GRANT SELECT ON school_db.v_teaching_plans TO 'langhack_readonly'@'%';
 GRANT SELECT ON school_db.v_teacher_courses TO 'langhack_readonly'@'%';
+GRANT SELECT ON school_db.v_student_schedule TO 'langhack_readonly'@'%';
 
 -- 刷新权限
 FLUSH PRIVILEGES;
@@ -277,6 +307,10 @@ SELECT * FROM v_teaching_plans LIMIT 5;
 -- 测试教师授课视图
 SELECT COUNT(*) AS total_teacher_courses FROM v_teacher_courses;
 SELECT * FROM v_teacher_courses LIMIT 5;
+
+-- 测试学生课表视图
+SELECT COUNT(*) AS total_student_schedules FROM v_student_schedule;
+SELECT * FROM v_student_schedule LIMIT 5;
 
 
 -- ============================================================================

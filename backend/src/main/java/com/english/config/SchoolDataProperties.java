@@ -284,7 +284,8 @@ public class SchoolDataProperties {
                 new QueryMapping("course_selection", "SELECT * FROM v_course_selection WHERE updated_at >= ?"),
                 new QueryMapping("level_exam_scores", "SELECT * FROM v_level_exam_scores WHERE updated_at >= ?"),
                 new QueryMapping("teaching_plans", "SELECT * FROM v_teaching_plans WHERE updated_at >= ?"),
-                new QueryMapping("teacher_courses", "SELECT * FROM v_teacher_courses WHERE updated_at >= ?")
+                new QueryMapping("teacher_courses", "SELECT * FROM v_teacher_courses WHERE updated_at >= ?"),
+                new QueryMapping("student_schedule", "SELECT * FROM v_student_schedule WHERE updated_at >= ?")
         );
 
         public String getJdbcUrl() {

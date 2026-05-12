@@ -56,7 +56,7 @@ services:
     ports:
       - "${PORT_MYSQL:-3306}:3306"
     volumes:
-      - mysql_master_data:/var/lib/mysql
+      - ./data/mysql-master:/var/lib/mysql
       # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
       # 仅挂载动态数据：历史备份目录 + ECDICT 词典 CSV（体积大且非 git 追踪）
       - ./database:/docker-entrypoint-initdb.d/seed:ro
@@ -116,7 +116,7 @@ services:
     ports:
       - "${PORT_MYSQL_SLAVE:-3307}:3306"
     volumes:
-      - mysql_slave_data:/var/lib/mysql
+      - ./data/mysql-slave:/var/lib/mysql
       # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
       # 从库通过 MYSQL_ROLE=slave 跳过所有数据导入（数据由主从复制同步）
     networks:
@@ -125,13 +125,16 @@ services:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 检查 MySQL 进程存活 + 复制线程运行状态
-      # 复制未配置或线程未运行时 healthcheck 失败 → backend 无法启动 → 部署阻塞
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
+      # 仅检查 MySQL 进程存活，不强制要求复制运行
+      # 复制状态三层保障：
+      #   1) entrypoint-wrapper.sh 每次启动时主动检查/修复
+      #   2) deploy.sh / auto-update.sh 后置兜底
+      #   3) DynamicDataSource 运行时降级（回退主库）
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
-      timeout: 5s
-      retries: 18
-      start_period: 240s  # 增加到 4 分钟，等待主库初始化完成 + 从库初始化 + 复制配置
+      timeout: 10s
+      retries: 12
+      start_period: 360s  # entrypoint-wrapper 会等待 MySQL 就绪 + 复制初始化，给足够时间
 
   # ─────────────────────────────────────────────
   # Redis 缓存
@@ -155,7 +158,7 @@ services:
     ports:
       - "${PORT_REDIS:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
     networks:
       - langhack-network
     healthcheck:
@@ -243,8 +246,8 @@ services:
     ports:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:
-      - app_logs:/app/logs
-      - app_uploads:/app/uploads
+      - ./data/app-logs:/app/logs
+      - ./data/app-uploads:/app/uploads
       # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
       - ./backups:/app/backups
     networks:
@@ -253,7 +256,7 @@ services:
       mysql-master:
         condition: service_healthy   # 主库进程必须存活（阻塞）
       mysql-slave:
-        condition: service_healthy   # 从库进程必须存活（阻塞）；复制状态由 DynamicDataSource 运行时降级处理
+        condition: service_started   # 从库容器启动即可；复制状态由后置复制初始化与运行时降级共同处理
       redis:
         condition: service_healthy
     healthcheck:
@@ -311,14 +314,4 @@ networks:
 # ─────────────────────────────────────────────
 # 持久化卷
 # ─────────────────────────────────────────────
-volumes:
-  mysql_master_data:
-    driver: local
-  mysql_slave_data:
-    driver: local
-  redis_data:
-    driver: local
-  app_logs:
-    driver: local
-  app_uploads:
-    driver: local
+volumes: {}

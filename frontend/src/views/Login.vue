@@ -5,10 +5,26 @@
 
     <!-- SSO 重定向提示 -->
     <div v-if="ssoEnabled" class="sso-redirect-overlay">
-      <div class="redirect-content">
-        <div class="redirect-spinner"></div>
-        <h2>正在跳转到统一身份认证...</h2>
-        <p>请稍候，即将跳转到学校统一身份认证平台</p>
+      <div class="redirect-glass">
+        <div class="redirect-content">
+          <div class="redirect-icon-wrapper">
+            <div class="redirect-spinner"></div>
+            <div class="sso-shield">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+          </div>
+          <h2>安全登录中</h2>
+          <p>正在跳转至学校统一身份认证平台</p>
+          <div class="redirect-progress-bar">
+            <div class="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+      <div class="redirect-bg">
+        <div class="orb o1"></div>
+        <div class="orb o2"></div>
       </div>
     </div>
 
@@ -32,7 +48,7 @@
           <div class="trend-logo">
             <div class="logo-inner">
               <div class="logo-icon">📚</div>
-              <div class="logo-text">EngLish</div>
+              <div class="logo-text">LangHack</div>
             </div>
           </div>
           <p class="trend-subtitle">Trend · Learn · Share · Grow</p>
@@ -233,20 +249,6 @@
               </button>
             </form>
 
-            <!-- 时尚演示账户 -->
-            <div class="trend-demo">
-              <div class="demo-header">
-                <h3 class="demo-title">🎯 快速体验</h3>
-              </div>
-              <div class="demo-buttons">
-                <div class="demo-btn" @click="fillDemo(loginIdentity)">
-                  <div class="btn-avatar" :class="loginIdentity">
-                    {{ identityEmoji }}
-                  </div>
-                  <div class="btn-text">{{ identityDemoLabel }} 演示</div>
-                </div>
-              </div>
-            </div>
           </div>
 
           <!-- 注册表单 -->
@@ -546,7 +548,7 @@ const loginIdentity = ref("student");
 // 权限拒绝相关状态
 const showPermissionDenied = ref(false);
 const permissionDeniedData = ref({
-  mainMessage: '对不起，您无权使用Langhack英语学习智能体平台。',
+  mainMessage: '对不起，您无权使用LangHack英语学习智能体平台。',
   subMessage: '您的账号正在审批中或权限不足',
   contactPhone: '43019235',
   contactDepartment: '计算机与信息工程学院'
@@ -564,13 +566,6 @@ const identityPlaceholder = computed(
 const identityEmoji = computed(
   () => ({ student: "🎓", teacher: "👨‍🏫", admin: "👑" })[loginIdentity.value],
 );
-const identityDemoLabel = computed(
-  () =>
-    ({ student: "学生", teacher: "教师", admin: "管理员" })[
-      loginIdentity.value
-    ],
-);
-
 const loginForm = reactive({
   username: "",
   password: "",
@@ -640,7 +635,7 @@ const handleLogin = async () => {
       // 解析权限拒绝信息
       const lines = errorMsg.split('\n')
       showPermissionDenied.value = true
-      permissionDeniedData.value.mainMessage = lines[0] || '对不起，您无权使用Langhack英语学习智能体平台。'
+      permissionDeniedData.value.mainMessage = lines[0] || '对不起，您无权使用LangHack英语学习智能体平台。'
       permissionDeniedData.value.subMessage = lines.length > 1 ? '' : '您的账号正在审批中或权限不足'
       
       // 提取联系电话（如果有的话）
@@ -720,18 +715,6 @@ const handleRegister = async () => {
   }
 };
 
-const fillDemo = (role) => {
-  const demos = {
-    admin: { username: "admin", password: "admin123" },
-    teacher: { username: "teacher", password: "admin123" },
-    student: { username: "student", password: "admin123" },
-  };
-  const info = demos[role] || demos.student;
-  loginForm.username = info.username;
-  loginForm.password = info.password;
-  const labels = { admin: "管理员", teacher: "教师", student: "学生" };
-  ElMessage.info(`已填充${labels[role]}演示账号`);
-};
 </script>
 
 <style scoped>
@@ -1410,51 +1393,136 @@ const fillDemo = (role) => {
   font-size: 14px;
 }
 
-/* SSO 重定向覆盖层 */
+/* SSO 重定向遮罩 */
 .sso-redirect-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--gradient-hero);
+  z-index: 2000;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
-  animation: fadeIn 0.3s ease;
+  overflow: hidden;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.redirect-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #0f172a;
+  z-index: -1;
 }
 
-.redirect-content {
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  animation: orbFloat 10s infinite alternate;
+}
+
+.o1 {
+  width: 400px;
+  height: 400px;
+  background: #4f46e5;
+  top: -100px;
+  left: -100px;
+}
+
+.o2 {
+  width: 300px;
+  height: 300px;
+  background: #7c3aed;
+  bottom: -50px;
+  right: -50px;
+  animation-delay: -5s;
+}
+
+@keyframes orbFloat {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(50px, 30px) scale(1.1); }
+}
+
+.redirect-glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 60px 40px;
+  border-radius: 32px;
+  width: 90%;
+  max-width: 440px;
   text-align: center;
-  color: white;
-  animation: fadeInUp 0.5s ease;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.redirect-icon-wrapper {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 32px;
 }
 
 .redirect-spinner {
-  width: 60px;
-  height: 60px;
-  border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top: 4px solid white;
+  width: 100%;
+  height: 100%;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top: 3px solid #6366f1;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 24px;
+  animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+.sso-shield {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  animation: shieldPulse 2s ease-in-out infinite;
+}
+
+@keyframes shieldPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+  50% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
 }
 
 .redirect-content h2 {
+  color: white;
   font-size: 24px;
   font-weight: 700;
-  margin: 0 0 12px 0;
-  letter-spacing: -0.5px;
+  margin: 0 0 12px;
+  letter-spacing: 1px;
+}
+
+.redirect-content p {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 15px;
+  margin: 0 0 32px;
+}
+
+.redirect-progress-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  overflow: hidden;
+  max-width: 200px;
+  margin: 0 auto;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 30%;
+  background: linear-gradient(90deg, #6366f1, #a855f7);
+  border-radius: 2px;
+  animation: progressMove 2s infinite ease-in-out;
+}
+
+@keyframes progressMove {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
 }
 
 .redirect-content p {

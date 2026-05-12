@@ -141,7 +141,8 @@ class SsoUserMappingServiceAutoGrantTest {
             mockCreateUser(100L);
             mockCreateBinding(200L);
             when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
-            doNothing().when(schoolStudentMapper).updateClassInfo(anyString(), anyString(), anyString(), anyString());
+            when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(1);
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -163,25 +164,73 @@ class SsoUserMappingServiceAutoGrantTest {
         }
 
         @Test
-        @DisplayName("feature toggle关闭时不自动授权学生")
-        void autoGrant_featureDisabled_doesNotGrantStudent() {
+        @DisplayName("CAS subject与uid不同时按uid匹配学校目录并保留subject绑定")
+        void autoGrant_subjectDifferentFromUsername_usesUsernameForDirectoryAndSubjectForBinding() {
+            ssoUserInfo.setSsoUserId("opaque-cas-subject");
+            ssoUserInfo.setSsoUsername("2023122066164");
+
+            when(bindingMapper.findByProviderAndSsoUserId("CAS", "opaque-cas-subject")).thenReturn(null);
+            when(userService.getUserByUsername("2023122066164")).thenReturn(null);
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
+                    .thenReturn("true");
+
+            SchoolStudent student = new SchoolStudent();
+            student.setStudentId("2023122066164");
+            student.setStudentName("张三");
+            when(schoolStudentMapper.selectByStudentId("2023122066164")).thenReturn(student);
+
+            mockCreateUser(104L);
+            mockCreateBinding(204L);
+            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(1);
+
+            SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
+
+            assertNotNull(result);
+            assertEquals("STUDENT", result.getUser().getRole());
+            assertEquals("2023122066164", result.getUser().getUsername());
+            verify(schoolStudentMapper).selectByStudentId("2023122066164");
+            verify(bindingMapper).insert(argThat(binding ->
+                    "opaque-cas-subject".equals(binding.getSsoUserId())
+                            && "2023122066164".equals(binding.getSsoUsername())
+                            && binding.getAutoApproved() == 1
+            ));
+        }
+
+        @Test
+        @DisplayName("feature toggle关闭时降级为USER待审批")
+        void autoGrant_featureDisabled_fallsBackToPendingUser() {
             mockNoBindingNoExistingUser("2023122066164");
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
                     .thenReturn("false");
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
                     .thenReturn("false");
             when(roleMappingService.mapRole(anyList())).thenReturn(null);
+            mockCreateUser(102L);
+            mockCreateBinding(202L);
+            when(jwtUtil.generateToken("2023122066164", "USER")).thenReturn("pending_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
             assertNotNull(result);
-            assertTrue(result.isNeedsApproval());
-            verify(userService, never()).createUser(any(User.class));
+            assertFalse(result.isNeedsApproval());
+            assertTrue(result.isApprovalPendingAfterLogin());
+            assertEquals("pending_token", result.getToken());
+            assertEquals("USER", result.getUser().getRole());
+            verify(userService).createUser(argThat(user ->
+                    "2023122066164".equals(user.getUsername()) &&
+                    "USER".equals(user.getRole()) &&
+                    "ACTIVE".equals(user.getStatus())
+            ));
+            verify(bindingMapper).insert(argThat(binding ->
+                    Long.valueOf(102L).equals(binding.getUserId()) && binding.getAutoApproved() == 0
+            ));
         }
 
         @Test
-        @DisplayName("school_student未命中时不自动授权")
-        void autoGrant_studentNotFound_doesNotGrant() {
+        @DisplayName("school_student未命中时降级为USER待审批")
+        void autoGrant_studentNotFound_fallsBackToPendingUser() {
             mockNoBindingNoExistingUser("2023122066164");
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
                     .thenReturn("true");
@@ -189,12 +238,26 @@ class SsoUserMappingServiceAutoGrantTest {
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
                     .thenReturn("false");
             when(roleMappingService.mapRole(anyList())).thenReturn(null);
+            mockCreateUser(103L);
+            mockCreateBinding(203L);
+            when(jwtUtil.generateToken("2023122066164", "USER")).thenReturn("pending_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
             assertNotNull(result);
-            assertTrue(result.isNeedsApproval());
-            verify(userService, never()).createUser(any(User.class));
+            assertFalse(result.isNeedsApproval());
+            assertTrue(result.isApprovalPendingAfterLogin());
+            assertEquals("pending_token", result.getToken());
+            assertEquals("USER", result.getUser().getRole());
+            verify(schoolStudentMapper).selectByStudentId("2023122066164");
+            verify(userService).createUser(argThat(user ->
+                    "2023122066164".equals(user.getUsername()) &&
+                    "USER".equals(user.getRole()) &&
+                    "ACTIVE".equals(user.getStatus())
+            ));
+            verify(bindingMapper).insert(argThat(binding ->
+                    Long.valueOf(103L).equals(binding.getUserId()) && binding.getAutoApproved() == 0
+            ));
         }
     }
 
@@ -212,7 +275,6 @@ class SsoUserMappingServiceAutoGrantTest {
             mockNoBindingNoExistingUser("T001");
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
                     .thenReturn("true");
-            when(schoolStudentMapper.selectByStudentId("T001")).thenReturn(null);
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
                     .thenReturn("true");
 
@@ -243,6 +305,45 @@ class SsoUserMappingServiceAutoGrantTest {
         }
 
         @Test
+        @DisplayName("优先使用解析出的userId完成本地用户与学校教师目录配对")
+        void autoGrant_teacherMatch_usesParsedUserIdForDatabasePairing() {
+            ssoUserInfo.setSsoUserId("opaque-subject");
+            ssoUserInfo.setSsoUsername("display-name");
+            ssoUserInfo.setRealName("李老师");
+            ssoUserInfo.getAttributes().put("userId", "T001");
+
+            when(bindingMapper.findByProviderAndSsoUserId("CAS", "opaque-subject")).thenReturn(null);
+            when(userService.getUserByUsername("T001")).thenReturn(null);
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
+                    .thenReturn("true");
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
+                    .thenReturn("true");
+
+            SchoolTeacher teacher = new SchoolTeacher();
+            teacher.setTeacherId("T001");
+            teacher.setTeacherName("李老师");
+            teacher.setCollegeName("外国语学院");
+            when(schoolTeacherMapper.selectByTeacherId("T001")).thenReturn(teacher);
+
+            mockCreateUser(105L);
+            mockCreateBinding(205L);
+            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+
+            SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
+
+            assertNotNull(result);
+            assertEquals("TEACHER", result.getUser().getRole());
+            assertEquals("T001", result.getUser().getUsername());
+            verify(userService).getUserByUsername("T001");
+            verify(schoolTeacherMapper).selectByTeacherId("T001");
+            verify(bindingMapper).insert(argThat(binding ->
+                    "opaque-subject".equals(binding.getSsoUserId())
+                            && "T001".equals(binding.getSsoUsername())
+                            && binding.getAutoApproved() == 1
+            ));
+        }
+
+        @Test
         @DisplayName("student优先于teacher检查")
         void autoGrant_studentPriority_checksStudentFirst() {
             mockNoBindingNoExistingUser("2023122066164");
@@ -256,7 +357,8 @@ class SsoUserMappingServiceAutoGrantTest {
             mockCreateUser(100L);
             mockCreateBinding(200L);
             when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
-            doNothing().when(schoolStudentMapper).updateClassInfo(anyString(), anyString(), anyString(), anyString());
+            when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(1);
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -270,6 +372,39 @@ class SsoUserMappingServiceAutoGrantTest {
     @Nested
     @DisplayName("已有用户登录时按学校目录升权")
     class ExistingUserUpgradeTests {
+
+        @Test
+        @DisplayName("待审批绑定保留本地高权限时必须人工审核且不发高权限token")
+        void pendingBindingWithElevatedLocalRole_requiresReviewWithoutToken() {
+            SsoUserBinding binding = new SsoUserBinding();
+            binding.setId(401L);
+            binding.setUserId(400L);
+            binding.setAutoApproved(0);
+
+            User pendingUser = new User();
+            pendingUser.setId(400L);
+            pendingUser.setUsername("2023122066164");
+            pendingUser.setRole("TEACHER");
+            pendingUser.setStatus("PENDING_APPROVAL");
+
+            when(bindingMapper.findByProviderAndSsoUserId("CAS", "2023122066164")).thenReturn(binding);
+            when(userService.getUserById(400L)).thenReturn(pendingUser);
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
+                    .thenReturn("false");
+            when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
+                    .thenReturn("false");
+            when(roleMappingService.mapRole(anyList())).thenReturn(null);
+
+            SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
+
+            assertNotNull(result);
+            assertTrue(result.isNeedsApproval());
+            assertNull(result.getToken());
+            assertNull(result.getUser());
+            assertEquals(401L, result.getBindingId());
+            verify(userService, never()).updateUser(any(User.class));
+            verify(jwtUtil, never()).generateToken(eq("2023122066164"), eq("TEACHER"));
+        }
 
         @Test
         @DisplayName("已有USER用户命中school_student时自动升权为STUDENT")
@@ -290,7 +425,8 @@ class SsoUserMappingServiceAutoGrantTest {
             student.setStudentName("张三");
             when(schoolStudentMapper.selectByStudentId("2023122066164")).thenReturn(student);
 
-            doNothing().when(schoolStudentMapper).updateClassInfo(anyString(), anyString(), anyString(), anyString());
+            when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(1);
             doNothing().when(userService).updateUser(any(User.class));
             doAnswer(invocation -> {
                 SsoUserBinding binding = invocation.getArgument(0);
@@ -316,8 +452,8 @@ class SsoUserMappingServiceAutoGrantTest {
         }
 
         @Test
-        @DisplayName("已有TEACHER用户命中school_student时不降权")
-        void existingTeacher_studentDirectoryMatch_doesNotDowngrade() {
+        @DisplayName("已有TEACHER用户仅命中school_student时进入人工审核且不发教师token")
+        void existingTeacher_studentDirectoryMatch_requiresReviewWithoutTeacherToken() {
             User existingUser = new User();
             existingUser.setId(302L);
             existingUser.setUsername("2023122066164");
@@ -338,18 +474,18 @@ class SsoUserMappingServiceAutoGrantTest {
                 binding.setId(302L);
                 return 1;
             }).when(bindingMapper).insert(any(SsoUserBinding.class));
-            doNothing().when(userService).updateUser(any(User.class));
-            when(jwtUtil.generateToken("2023122066164", "TEACHER")).thenReturn("teacher_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
             assertNotNull(result);
             assertTrue(result.isNeedsApproval());
-            assertEquals("TEACHER", result.getUser().getRole());
-            verify(userService).updateUser(argThat(user ->
-                    user.getId().equals(302L)
-                            && "TEACHER".equals(user.getRole())
-                            && "ACTIVE".equals(user.getStatus())
+            assertFalse(result.isApprovalPendingAfterLogin());
+            assertNull(result.getToken());
+            assertNull(result.getUser());
+            verify(userService, never()).updateUser(any(User.class));
+            verify(jwtUtil, never()).generateToken(eq("2023122066164"), eq("TEACHER"));
+            verify(bindingMapper).insert(argThat(binding ->
+                    binding.getUserId().equals(302L) && binding.getAutoApproved() == 0
             ));
             verify(schoolStudentMapper).selectByStudentId("2023122066164");
         }
@@ -373,7 +509,8 @@ class SsoUserMappingServiceAutoGrantTest {
             mockCreateUser(100L);
             mockCreateBinding(200L);
             when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
-            doNothing().when(schoolStudentMapper).updateClassInfo(anyString(), anyString(), anyString(), anyString());
+            when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(1);
 
             ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 

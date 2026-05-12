@@ -20,6 +20,9 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -191,9 +194,13 @@ public class TencentTranslateService {
         long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
         String user = AiCallMetricsService.getCurrentUser();
 
-        String protocol = config.getOrDefault("protocol", "openai_compatible");
+        String protocol = config.getOrDefault("protocol", "openai_compatible").toLowerCase(Locale.ROOT);
         if ("hiagent".equals(protocol)) {
-            return translateViaHiAgent(config, text, source, target, startTime, user);
+            try {
+                return translateViaHiAgent(config, text, source, target, startTime, user);
+            } finally {
+                semaphore.release();
+            }
         }
 
         try {
@@ -344,11 +351,18 @@ public class TencentTranslateService {
         String apiKey = config.get("api_key");
         String appId = config.get("app_id");
 
-        if (appId == null || appId.isEmpty()) {
-            throw new BusinessException("HiAgent 协议需要配置 App ID");
-        }
-
         try {
+            apiUrl = normalizeHiAgentApiUrl(apiUrl);
+            if (appId == null || appId.isEmpty()) {
+                throw new BusinessException("HiAgent 协议需要配置 App ID");
+            }
+            if (source == null || source.isEmpty()) {
+                source = "auto";
+            }
+            if (target == null || target.isEmpty()) {
+                target = "zh";
+            }
+
             String sourceLang = mapLanguageCode(source);
             String targetLang = mapLanguageCode(target);
             String prompt = String.format("将以下%s翻译为%s，只返回翻译结果:\n%s", sourceLang, targetLang, text);
@@ -357,6 +371,8 @@ public class TencentTranslateService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Apikey", apiKey);
             headers.set("Appid", appId);
+            headers.set("X-App-Id", appId);
+            headers.set("X-Date", currentXDate());
 
             // Step 1: create_conversation
             Map<String, Object> createBody = new HashMap<>();
@@ -367,8 +383,14 @@ public class TencentTranslateService {
                     apiUrl + "/create_conversation", HttpMethod.POST,
                     new HttpEntity<>(createBody, headers), String.class);
 
+            if (!createResp.getStatusCode().is2xxSuccessful() || createResp.getBody() == null) {
+                throw new BusinessException("HiAgent 创建会话失败: HTTP " + createResp.getStatusCodeValue());
+            }
             JsonNode createRoot = objectMapper.readTree(createResp.getBody());
             String conversationId = createRoot.path("Conversation").path("AppConversationID").asText();
+            if (conversationId == null || conversationId.isBlank() || "null".equalsIgnoreCase(conversationId)) {
+                throw new BusinessException("HiAgent 创建会话返回格式无效");
+            }
 
             // Step 2: chat_query_v2
             Map<String, Object> chatBody = new HashMap<>();
@@ -381,23 +403,49 @@ public class TencentTranslateService {
                     apiUrl + "/chat_query_v2", HttpMethod.POST,
                     new HttpEntity<>(chatBody, headers), String.class);
 
+            if (!chatResp.getStatusCode().is2xxSuccessful() || chatResp.getBody() == null) {
+                throw new BusinessException("HiAgent 翻译响应失败: HTTP " + chatResp.getStatusCodeValue());
+            }
             JsonNode chatRoot = objectMapper.readTree(chatResp.getBody());
             String answer = chatRoot.path("answer").asText("");
             if (answer.isEmpty()) answer = chatRoot.path("Answer").asText("");
+            if (answer == null || answer.trim().isEmpty()) {
+                throw new BusinessException("HiAgent 翻译返回内容为空或格式无效");
+            }
 
             if (aiCallMetricsService != null) {
-                aiCallMetricsService.recordSuccess("HIAGENT_TRANSLATE", "translate", "hiagent", startTime, user);
+                aiCallMetricsService.recordSuccess("HIAGENT", "translate", "hiagent", startTime, user);
             }
             return answer.trim();
         } catch (Exception e) {
             logger.error("HiAgent 翻译失败: {}", e.getMessage(), e);
             if (aiCallMetricsService != null) {
-                aiCallMetricsService.recordFailure("HIAGENT_TRANSLATE", "translate", startTime, e.getMessage(), user);
+                aiCallMetricsService.recordFailure("HIAGENT", "translate", startTime, e.getMessage(), user);
             }
             throw new BusinessException("翻译失败，请稍后重试");
-        } finally {
-            semaphore.release();
         }
+    }
+
+    private String normalizeHiAgentApiUrl(String url) {
+        if (url == null || url.isBlank()) {
+            throw new BusinessException("HiAgent 协议需要配置 API URL");
+        }
+        String trimmed = url.stripTrailing();
+        if (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        if (trimmed.endsWith("/create_conversation")) {
+            trimmed = trimmed.substring(0, trimmed.length() - "/create_conversation".length());
+        }
+        if (trimmed.endsWith("/chat_query_v2")) {
+            trimmed = trimmed.substring(0, trimmed.length() - "/chat_query_v2".length());
+        }
+        return trimmed;
+    }
+
+    private String currentXDate() {
+        return ZonedDateTime.now(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"));
     }
 
     /**

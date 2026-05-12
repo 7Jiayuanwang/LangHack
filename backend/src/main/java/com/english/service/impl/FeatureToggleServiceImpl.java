@@ -101,7 +101,36 @@ public class FeatureToggleServiceImpl implements FeatureToggleService {
 
     @Override
     public List<String> listAllTagNames() {
-        return userTagMapper.selectAllTagNames();
+        // 合并两个来源的标签：
+        // 1. user_tags 表中已分配给用户的标签
+        // 2. feature_overrides 表中定义的标签（可能还没有用户）
+        Set<String> allTags = new LinkedHashSet<>();
+
+        // 来源1：已分配给用户的标签
+        List<String> userTags = userTagMapper.selectAllTagNames();
+        if (userTags != null) {
+            allTags.addAll(userTags);
+        }
+
+        // 来源2：feature_overrides 表中的标签
+        List<FeatureOverride> overrides = featureOverrideMapper.selectList(
+            new LambdaQueryWrapper<FeatureOverride>()
+                .eq(FeatureOverride::getScope, "tag")
+                .isNotNull(FeatureOverride::getScopeValue)
+        );
+        if (overrides != null) {
+            for (FeatureOverride override : overrides) {
+                String tag = override.getScopeValue();
+                if (tag != null && !tag.trim().isEmpty()) {
+                    allTags.add(tag.trim());
+                }
+            }
+        }
+
+        // 返回排序后的列表
+        List<String> result = new ArrayList<>(allTags);
+        Collections.sort(result);
+        return result;
     }
 
     @Override

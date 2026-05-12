@@ -73,6 +73,13 @@ public class SchoolDataApiClientDelegate implements SchoolDataApiClient {
             case "teacher_courses":
                 rows = target.fetchTeacherCourses(params);
                 break;
+            case "student_schedule":
+                rows = target.fetchStudentSchedules(
+                        firstNonBlank(params, "studentId", "xh"),
+                        firstNonBlank(params, "academicYear", "xn"),
+                        parseSemester(firstNonBlank(params, "semester", "xq"))
+                );
+                break;
             default:
                 rows = List.of();
                 break;
@@ -133,5 +140,37 @@ public class SchoolDataApiClientDelegate implements SchoolDataApiClient {
     @Override
     public boolean testConnection() {
         return delegate().testConnection();
+    }
+
+    private String firstNonBlank(Map<String, String> params, String... keys) {
+        if (params == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String value = params.get(key);
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private Integer parseSemester(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if ("1".equals(normalized) || "\u79cb".equals(normalized)) {
+            return 1;
+        }
+        if ("2".equals(normalized) || "\u6625".equals(normalized)) {
+            return 2;
+        }
+        try {
+            return Integer.parseInt(normalized);
+        } catch (NumberFormatException e) {
+            logger.warn("Ignore invalid student_schedule semester param: {}", value);
+            return null;
+        }
     }
 }

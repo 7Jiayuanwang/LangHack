@@ -99,4 +99,19 @@ class SchoolDataFieldMetadataServiceImplTest {
             assertTrue(fields.get(i - 1).getField().compareTo(fields.get(i).getField()) <= 0);
         }
     }
+
+    @Test
+    @DisplayName("teacher_courses 应作为 teaching_class 表的可查询别名")
+    void getFilterFieldMap_teacherCoursesAlias_success() {
+        when(fieldMappingService.getMappingsByDataSource("teacher_courses")).thenReturn(List.of());
+
+        Map<String, SchoolDataFilterFieldDto> fields = service.getFilterFieldMap("teacher_courses");
+
+        assertTrue(fields.containsKey("teacherId"));
+        assertTrue(fields.containsKey("classId"));
+        assertEquals("teacher_id", fields.get("teacherId").getColumn());
+        assertEquals("教师工号", fields.get("teacherId").getLabel());
+        assertTrue(fields.get("teacherId").getCapabilities().isListQuery());
+        assertTrue(fields.get("teacherId").getCapabilities().isUpstreamSyncFilter());
+    }
 }

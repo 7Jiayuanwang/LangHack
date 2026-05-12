@@ -5,8 +5,8 @@
 -- ═══════════════════════════════════════════════════════════════
 -- V12: 学校数据集成整合
 -- 整合自: V12.1 (字段映射) + V13 (system_config seed)
---       + V14 (student_schedule 表) + V16 (course→school_course 重命名)
---       + V18 (功能开关 seed) + V19 (字段映射) + V20 (API 认证 appId+appSecret)
+--       + V14 (student_schedule 表) + V18 (功能开关 seed)
+--       + V19 (字段映射) + V20 (API 认证 appId+appSecret)
 --       + V20-align (2026-04-21 按 CDSP 官方 PDF 对齐 field_mappings)
 --
 -- 历史合并说明:
@@ -14,6 +14,9 @@
 --   - 2026-04-21: 按官方 PDF 原文修正 field_mappings, 剔除 V12.1/V19 遗留
 --     snake_case 冗余映射（FieldMappingServiceImpl 会自动将 target_field
 --     转 camelCase, snake_case/camelCase 两套是等价重复）, 合并 V20-align
+--   - 2026-05-05: 移除 V16 (course→school_course 重命名) 冗余代码，
+--     V9 已正确创建 school_course 表，无需兼容性处理
+--   - 2026-05-06: 吸收原 V15/V16 的学校数据 schema 修复，移除零散 fix 版本
 --
 -- 注意: Flyway 在本项目生产环境禁用 (application.yml flyway.enabled=false),
 --       实际生产部署走 docker/mysql/init/04-apply-all-migrations.sql
@@ -26,70 +29,7 @@
 -- ═══════════════════════════════════════════════════════════════
 
 -- ═══════════════════════════════════════════════════════════════
--- Part 1.1: 重命名 course → school_course (原 V16)
--- SchoolCourse 实体 @TableName("school_course"), 修正 V9 遗留的 course 表名
--- ═══════════════════════════════════════════════════════════════
-
-SET @course_exists = (SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'course');
-SET @school_course_exists = (SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'school_course');
-
--- 如果 course 存在且 school_course 不存在 → 重命名
-SET @rename_sql = IF(@course_exists = 1 AND @school_course_exists = 0,
-    'RENAME TABLE `course` TO `school_course`',
-    'SELECT 1');
-PREPARE stmt FROM @rename_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- 如果都不存在（全新环境）→ 创建 school_course
-SET @create_sql = IF(@course_exists = 0 AND @school_course_exists = 0,
-    'CREATE TABLE IF NOT EXISTS school_course (
-        id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT ''主键'',
-        course_code VARCHAR(50) NOT NULL UNIQUE COMMENT ''课程编号 (KCBH)'',
-        course_name VARCHAR(200) NOT NULL COMMENT ''课程名称 (KCMC)'',
-        course_name_en VARCHAR(200) COMMENT ''课程英文名称 (KCYWMC)'',
-        course_short_name VARCHAR(100) COMMENT ''课程简称 (KCJC)'',
-        course_nature VARCHAR(50) NOT NULL COMMENT ''课程性质 (KCXZ)'',
-        course_category VARCHAR(50) NOT NULL COMMENT ''课程类别 (KCLB)'',
-        credits DECIMAL(3,1) NOT NULL COMMENT ''学分 (XF)'',
-        total_hours INT NOT NULL COMMENT ''总学时 (ZXS)'',
-        theory_hours INT COMMENT ''理论学时 (LLXS)'',
-        experiment_hours INT COMMENT ''实验学时 (SYXS)'',
-        practice_hours INT COMMENT ''实践学时 (SJXS)'',
-        computer_hours INT COMMENT ''上机学时 (SJXS_PC)'',
-        college_code VARCHAR(50) NOT NULL COMMENT ''开课学院编号 (KKYXBH)'',
-        college_name VARCHAR(100) NOT NULL COMMENT ''开课学院名称 (KKYXMC)'',
-        department_code VARCHAR(50) COMMENT ''开课系部编号 (KKXBBH)'',
-        department_name VARCHAR(100) COMMENT ''开课系部名称 (KKXBMC)'',
-        leader_code VARCHAR(50) COMMENT ''课程负责人工号 (KCFZRGH)'',
-        leader_name VARCHAR(50) COMMENT ''课程负责人姓名 (KCFZRXM)'',
-        assessment_method VARCHAR(50) NOT NULL COMMENT ''考核方式 (KHFS)'',
-        is_bilingual VARCHAR(10) COMMENT ''是否双语教学 (SFSYJX)'',
-        is_online VARCHAR(10) COMMENT ''是否网络课程 (SFWLKC)'',
-        applicable_majors VARCHAR(500) COMMENT ''适用专业 (SYZY)'',
-        prerequisite_codes VARCHAR(500) COMMENT ''先修课程编号 (XXKCBH)'',
-        prerequisite_names VARCHAR(500) COMMENT ''先修课程名称 (XXKCMC)'',
-        course_intro TEXT COMMENT ''课程简介 (KCJJ)'',
-        teaching_objectives TEXT COMMENT ''教学目标 (JXMB)'',
-        course_status VARCHAR(20) NOT NULL COMMENT ''课程状态 (KCZT)'',
-        sync_time DATETIME NOT NULL COMMENT ''同步时间'',
-        sync_source VARCHAR(20) NOT NULL COMMENT ''同步来源'',
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT ''创建时间'',
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT ''更新时间'',
-        INDEX idx_college (college_code),
-        INDEX idx_nature (course_nature),
-        INDEX idx_category (course_category),
-        INDEX idx_sync_time (sync_time)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT=''学校课程基本信息表''',
-    'SELECT 1');
-PREPARE stmt FROM @create_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- ═══════════════════════════════════════════════════════════════
--- Part 1.2: 创建 student_schedule 表 (原 V14 Part 1)
+-- Part 1.1: 创建 student_schedule 表 (原 V14 Part 1)
 -- 存储学生个人课表数据 (/api/xskb)
 -- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS student_schedule (
@@ -101,8 +41,8 @@ CREATE TABLE IF NOT EXISTS student_schedule (
     course_name VARCHAR(200) NOT NULL,
     teacher_id VARCHAR(50),
     teacher_name VARCHAR(100),
-    day_of_week TINYINT NOT NULL,
-    period VARCHAR(20) NOT NULL,
+    day_of_week TINYINT NULL,
+    period VARCHAR(20) NULL,
     week_range VARCHAR(50),
     class_location VARCHAR(200),
     academic_year VARCHAR(20) NOT NULL,
@@ -147,9 +87,9 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 -- Part 2.2: 功能开关 seed (原 V18)
 -- ═══════════════════════════════════════════════════════════════
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('feature_toggle', 'ops.school_data_browser', 'false', '运维端学校数据浏览功能（行政班、课程、教学班等）', 0),
-('feature_toggle', 'ops.school_data_config', 'false', '运维端学校数据源配置功能（API/ETL切换、连接测试）', 0),
-('feature_toggle', 'page_schedule', 'false', '学生端课表查看功能（从教务系统同步课表数据）', 0);
+('feature_toggle', 'ops.school_data_browser', 'true', '运维端学校数据浏览功能（行政班、课程、教学班等）', 0),
+('feature_toggle', 'ops.school_data_config', 'true', '运维端学校数据源配置功能（API/ETL切换、连接测试）', 0),
+('feature_toggle', 'page_schedule', 'true', '学生端课表查看功能（从教务系统同步课表数据）', 0);
 
 -- ═══════════════════════════════════════════════════════════════
 -- Part 2.3: API 认证 appId + appSecret 签名 (原 V20)
@@ -179,11 +119,8 @@ WHERE `config_group` = 'school_data' AND `config_key` = 'api_token';
 --   - target_field 统一 camelCase, 匹配 Java 实体属性
 --
 -- 已知限制（非本 part 职责）:
---   - course_selection PDF 仅返回 XH/KSXZDM/KSXZMC/KCBH 4 个字段，
---     远少于 CourseSelection 实体 NOT NULL 列数，upsert 可能失败。
---   - teaching_plans 返回的是教学计划中的课程条目，部分实体必填
---     字段 (planName/planStatus) PDF 不提供。
---   - 上述需通过 DDL 放宽或默认值策略解决，本 part 仅确保字段映射本身正确。
+--   - course_selection / teaching_plans 的上游字段仍可能不完整，当前基线
+--     通过 DDL 放宽 + service 默认值兜底保证同步不因空值整批失败。
 -- ═══════════════════════════════════════════════════════════════
 
 -- Step 3.0: 清空 V12 历史遗留的错误 mappings（幂等）
@@ -196,7 +133,7 @@ DELETE FROM field_mappings WHERE data_source IN (
 -- 1. administrative_class (cdsp_1710949911983374368 / 行政班基本信息)
 -- PDF fields (UPPERCASE): XZBH, BJMC, XSLB, SSXYBM, SSXYMC, SSNJ, BZRGH, BZRXM, ZY, JBNY
 -- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('administrative_class', 'XZBH',         'class_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号（英文缩写）'),
 ('administrative_class', '行政班编号',   'class_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号（中文）'),
 ('administrative_class', 'BJMC',         'class_name',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '班级名称（英文缩写）'),
@@ -221,7 +158,7 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- 2. school_course (cdsp_1715290945064353805 / 课程基本信息)
 -- PDF fields (lowercase): kcxs, kcdm, kcxf, kcywmc, kcjj, kslx, kkyx, kcmc
 -- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('school_course', 'kcdm',       'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码（英文缩写）'),
 ('school_course', '课程代码',   'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码（中文）'),
 ('school_course', 'kcmc',       'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（英文缩写）'),
@@ -243,7 +180,7 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- 此端点实际返回课程信息（非教学班），代码已路由到 upsertSchoolCourse
 -- PDF fields (UPPERCASE): KCXS, KCXF, KKYX, KCJJ, KCYWMC, KCMC, KCH, KSLX
 -- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('teaching_class', 'KCH',          'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（英文缩写）'),
 ('teaching_class', '课程号',       'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（中文）'),
 ('teaching_class', 'KCMC',         'course_name',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程名称（英文缩写）'),
@@ -264,9 +201,19 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- 4. course_schedule (cdsp_1715290377801515044 / 课程安排信息)
 -- PDF fields (lowercase): xkkch, xn, xq, skxqj, skjc, kczc, skdd
 -- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('course_schedule', 'xkkch',        'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '选课课号（作 class_id）'),
 ('course_schedule', '选课课号',     'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '选课课号（中文字段名）'),
+('course_schedule', 'kcdm',         'course_code',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '课程代码（英文缩写）'),
+('course_schedule', '课程代码',     'course_code',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '课程代码（中文字段名）'),
+('course_schedule', 'kcmc',         'course_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '课程名称（英文缩写）'),
+('course_schedule', '课程名称',     'course_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '课程名称（中文字段名）'),
+('course_schedule', 'jsgh',         'teacher_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '教师工号（英文缩写）'),
+('course_schedule', '教师工号',     'teacher_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '教师工号（中文字段名）'),
+('course_schedule', 'jsxm',         'teacher_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '教师姓名（英文缩写）'),
+('course_schedule', '教师姓名',     'teacher_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '教师姓名（中文字段名）'),
+('course_schedule', 'kkyx',         'college_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '开课院系（英文缩写）'),
+('course_schedule', '开课院系',     'college_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 1, 1, '开课院系（中文字段名）'),
 ('course_schedule', 'skxqj',        'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '上课星期几 1-7（英文缩写）'),
 ('course_schedule', '上课星期几',   'day_of_week',    'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 1, 2, 1, '上课星期几 1-7（中文字段名）'),
 ('course_schedule', 'skjc',         'period',         'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '上课节次（英文缩写）'),
@@ -284,15 +231,19 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- PDF fields (UPPERCASE): XH, KSXZDM, KSXZMC, KCBH
 -- 注意：PDF 只返回 4 个字段，远少于 CourseSelection 实体 NOT NULL 列数。
 -- KCBH 在链式拉取与历史兼容中按”课程班号”使用，应统一落到 classId。
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('course_selection', 'XH',     'student_id',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
 ('course_selection', 'KCBH',   'class_id',          'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程班号（作 class_id）'),
 ('course_selection', 'KSXZDM', 'selection_status',  'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3, 1, '考试性质代码（作选课状态）'),
-('course_selection', 'KSXZMC', 'class_time',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '考试性质名称（暂存 classTime）');
+('course_selection', 'KSXZMC', 'class_time',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '考试性质名称（暂存 classTime）'),
+('course_selection', 'XF',     'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '学分（兼容扩展返回）'),
+('course_selection', '学分',   'credits',           'NUMBER', 'NUMBER', 'NONE', NULL, NULL, 0, 5, 1, '学分（中文字段名）'),
+('course_selection', 'XM',     'student_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '姓名（兼容扩展返回）'),
+('course_selection', '姓名',   'student_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 6, 1, '姓名（中文字段名）');
 
 -- 6. level_exam_scores (DS0076 / 本专科生等级考试成绩)
 -- PDF fields (lowercase): xh, xhxm, xm, kskm, ksrq, fskscj
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('level_exam_scores', 'xh',     'student_id',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
 ('level_exam_scores', 'xm',     'student_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2, 1, '姓名'),
 ('level_exam_scores', 'kskm',   'exam_name',    'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '考试科目（作考试名称）'),
@@ -302,7 +253,7 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- 7. teaching_plans (cdsp_1715289655026466836 / 教学计划信息)
 -- PDF fields (lowercase): zxs, skjszgh, kkdwdm, kkxq, cksm, ksfsdm, kkjhid, kkxn,
 --   kcdm, kkxq_name, kkdwdm_name, ksfsmc
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('teaching_plans', 'kkjhid',      'plan_id',            'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '开课计划 ID（plan_id 主键）'),
 ('teaching_plans', 'kcdm',        'course_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 0, 2,  1, '课程代码'),
 ('teaching_plans', 'cksm',        'training_objective', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 3,  1, '参考书目（作培养目标）'),
@@ -324,7 +275,7 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 --   kxh  = 课序号（班内序号，通常与 kcdm 相同）→ 不入库
 --   xq   = 学期，API 返回中文 "秋"/"春" varchar → target_type=STRING 先保留原值，
 --          SchoolDataSyncServiceImpl.upsertTeachingClass 读取时再做中文→Integer 转换
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('teacher_courses', 'kcbh',   'class_id',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程班号（作 class_id，全局唯一开班 ID）'),
 ('teacher_courses', 'kcdm',   'course_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程代码'),
 ('teacher_courses', 'kcmc',   'course_name',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 3, 1, '课程名称'),
@@ -339,7 +290,7 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 --   xkkh, xh, xq, xn, zcap, kcbh
 -- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
 -- 注意：CDSP API 实际返回中文字段名（非英文缩写），需同时支持两种格式
-INSERT INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('student_schedule', '学号',           'student_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号（中文字段名）'),
 ('student_schedule', 'xh',            'student_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号（英文缩写）'),
 ('student_schedule', '选课课号',       'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2,  1, '选课课号（作 class_id，中文字段名）'),
@@ -370,11 +321,6 @@ INSERT INTO field_mappings (data_source, source_field, target_field, source_type
 -- Part 4: 视频管理表
 -- ═══════════════════════════════════════════════════════════════
 
-
--- ═══════════════════════════════════════════════════════════════
--- Part 4: 视频管理表
--- ═══════════════════════════════════════════════════════════════
-
 CREATE TABLE IF NOT EXISTS `videos` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `title` VARCHAR(200) NOT NULL COMMENT '视频标题',
@@ -384,6 +330,7 @@ CREATE TABLE IF NOT EXISTS `videos` (
     `video_url` VARCHAR(500) DEFAULT NULL COMMENT '视频URL（外部链接时使用）',
     `cover_url` VARCHAR(500) DEFAULT NULL COMMENT '封面URL',
     `subtitle_content` LONGTEXT COMMENT '字幕内容（SRT/VTT格式）',
+    `subtitle_content_zh` LONGTEXT COMMENT '中文字幕内容（SRT/VTT格式）',
     `user_id` BIGINT DEFAULT NULL COMMENT '上传者用户ID',
     `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
     `is_featured` TINYINT(1) DEFAULT 0 COMMENT '是否推荐',
@@ -407,3 +354,165 @@ CREATE TABLE IF NOT EXISTS `videos` (
     KEY `idx_associated_text_id` (`associated_text_id`),
     KEY `idx_created_time` (`created_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频表';
+
+SET @videos_subtitle_zh_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'videos'
+      AND COLUMN_NAME = 'subtitle_content_zh'
+);
+SET @videos_subtitle_zh_sql = IF(
+    @videos_subtitle_zh_exists = 0,
+    'ALTER TABLE videos ADD COLUMN subtitle_content_zh LONGTEXT COMMENT ''中文字幕内容（SRT/VTT格式）'' AFTER subtitle_content',
+    'SELECT 1'
+);
+PREPARE stmt FROM @videos_subtitle_zh_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+ALTER TABLE administrative_class
+    MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称 (YXMC)',
+    MODIFY COLUMN major_name VARCHAR(100) NULL COMMENT '专业名称 (ZYMC)';
+
+ALTER TABLE teaching_plans
+    MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称',
+    MODIFY COLUMN major_name VARCHAR(100) NULL COMMENT '专业名称';
+
+UPDATE administrative_class SET college_name = NULL WHERE college_name = '';
+UPDATE administrative_class SET major_name = NULL WHERE major_name = '';
+UPDATE teaching_plans SET college_name = NULL WHERE college_name = '';
+UPDATE teaching_plans SET major_name = NULL WHERE major_name = '';
+
+ALTER TABLE course_selection
+    MODIFY COLUMN student_name VARCHAR(100) NULL COMMENT '学生姓名',
+    MODIFY COLUMN credits DECIMAL(3,1) NULL COMMENT '学分（CDSP API不返回，可为空）',
+    MODIFY COLUMN teacher_id VARCHAR(50) NULL COMMENT '授课教师工号',
+    MODIFY COLUMN teacher_name VARCHAR(50) NULL COMMENT '授课教师姓名',
+    MODIFY COLUMN academic_year VARCHAR(20) NULL COMMENT '学年',
+    MODIFY COLUMN semester INT NULL COMMENT '学期',
+    MODIFY COLUMN selection_time DATETIME NULL COMMENT '选课时间',
+    MODIFY COLUMN selection_status VARCHAR(20) NULL DEFAULT 'SELECTED' COMMENT '选课状态 SELECTED/DROPPED/COMPLETED';
+
+ALTER TABLE course_schedule
+    MODIFY COLUMN class_id VARCHAR(50) NULL COMMENT '教学班号 (JXBID)',
+    MODIFY COLUMN day_of_week INT NULL COMMENT '星期几 (XQJ) 1-7',
+    MODIFY COLUMN period VARCHAR(20) NULL COMMENT '节次 (JCS) 如"1-2"',
+    MODIFY COLUMN week_range VARCHAR(50) NULL COMMENT '周次 (ZCD) 如"1-16周"',
+    MODIFY COLUMN class_location VARCHAR(100) NULL COMMENT '上课地点 (CDMC)';
+
+ALTER TABLE teaching_class
+    MODIFY COLUMN class_name VARCHAR(100) NULL COMMENT '教学班名称 (JXBMC)',
+    MODIFY COLUMN capacity INT NULL DEFAULT 0 COMMENT '班级容量',
+    MODIFY COLUMN class_status VARCHAR(20) NULL DEFAULT 'ACTIVE' COMMENT '课程状态';
+
+DELETE cs
+FROM course_schedule cs
+LEFT JOIN teaching_class tc ON cs.class_id = tc.class_id
+WHERE cs.class_id IS NOT NULL
+  AND tc.class_id IS NULL;
+
+DELETE csel
+FROM course_selection csel
+LEFT JOIN school_course sc ON csel.course_code = sc.course_code
+WHERE csel.course_code IS NOT NULL
+  AND sc.course_code IS NULL;
+
+SET @course_schedule_fk_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'course_schedule'
+      AND CONSTRAINT_NAME = 'fk_course_schedule_teaching_class'
+      AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @course_schedule_drop_fk_sql = IF(
+    @course_schedule_fk_exists > 0,
+    'ALTER TABLE course_schedule DROP FOREIGN KEY fk_course_schedule_teaching_class',
+    'SELECT 1'
+);
+PREPARE stmt FROM @course_schedule_drop_fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @course_schedule_fk_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'course_schedule'
+      AND CONSTRAINT_NAME = 'course_schedule_ibfk_1'
+      AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @course_schedule_drop_fk_sql = IF(
+    @course_schedule_fk_exists > 0,
+    'ALTER TABLE course_schedule DROP FOREIGN KEY course_schedule_ibfk_1',
+    'SELECT 1'
+);
+PREPARE stmt FROM @course_schedule_drop_fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @course_schedule_fk_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'course_schedule'
+      AND CONSTRAINT_NAME = 'fk_course_schedule_teaching_class'
+      AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @course_schedule_add_fk_sql = IF(
+    @course_schedule_fk_exists = 0,
+    'ALTER TABLE course_schedule ADD CONSTRAINT fk_course_schedule_teaching_class FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE SET NULL ON UPDATE CASCADE',
+    'SELECT 1'
+);
+PREPARE stmt FROM @course_schedule_add_fk_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @course_selection_student_academic_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'course_selection'
+      AND INDEX_NAME = 'idx_student_academic'
+);
+SET @course_selection_student_academic_sql = IF(
+    @course_selection_student_academic_exists = 0,
+    'CREATE INDEX idx_student_academic ON course_selection(student_id, academic_year, semester)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @course_selection_student_academic_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @course_schedule_class_academic_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'course_schedule'
+      AND INDEX_NAME = 'idx_class_academic'
+);
+SET @course_schedule_class_academic_sql = IF(
+    @course_schedule_class_academic_exists = 0,
+    'CREATE INDEX idx_class_academic ON course_schedule(class_id, academic_year, semester)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @course_schedule_class_academic_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+
+UPDATE field_mappings
+SET is_active = 0
+WHERE data_source = 'administrative_class'
+  AND source_field IN ('SSXYBM', 'SSXYMC', '所属学院编码', '所属学院名称');
+
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('administrative_class', 'YXDM',       'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（英文缩写）'),
+('administrative_class', '学院代码',   'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（中文）'),
+('administrative_class', 'YXMC',       'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（英文缩写）'),
+('administrative_class', '学院名称',   'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（中文）'),
+('administrative_class', 'ZYDM',       'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（英文缩写）'),
+('administrative_class', '专业代码',   'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（中文）'),
+('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
+('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');

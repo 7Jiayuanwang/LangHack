@@ -14,8 +14,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.ResourceAccessException;
@@ -25,9 +23,12 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 学校数据API客户端实现 - 通过REST API对接学校数据源
@@ -156,9 +157,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     /**
-     * 本地学年拆分为学校接口所需的单年份。
-     * 规则：2025-2026 学年 = 2025秋（第一学期）+ 2026春（第二学期）。
-     * 若 semester 未提供，默认取起始年；若已是单年份则原样返回。
+     * 将学年参数规范化为 CDSP 接口所需的单年份字符串（xn 参数）。
+     * 新格式（单年份）：直接返回，如 "2025" → "2025"，"2026" → "2026"。
+     * 旧格式（兼容）：若传入 "2025-2026"，按学期拆分：秋(1)→"2025"，春(2)→"2026"。
      */
     private String splitAcademicYearToSingleYear(String academicYear, Integer semester) {
         if (academicYear == null || academicYear.isEmpty()) {
@@ -337,8 +338,13 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         }
 
         int skip = pageSize;
-        int maxPages = 100; // 防止无限循环
+        int maxPages = resolveMaxPages(dataSource);
         int fetchedPages = 1;
+        boolean complete = true;
+        boolean guardHit = false;
+        String stopReason = "PAGINATED_COMPLETE";
+        Set<String> seenFingerprints = new HashSet<>();
+        seenFingerprints.add(fingerprintPage(firstPage.rows));
 
         try {
             while (fetchedPages < maxPages) {
@@ -368,6 +374,16 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                     break;
                 }
 
+                String pageFingerprint = fingerprintPage(nextPage.rows);
+                if (!seenFingerprints.add(pageFingerprint)) {
+                    logger.warn("分页拉取检测到重复页，提前停止 dataSource={} skip={} pageFingerprint={}",
+                            dataSource, skip, pageFingerprint);
+                    complete = false;
+                    guardHit = true;
+                    stopReason = "DUPLICATE_PAGE_GUARD";
+                    break;
+                }
+
                 allRows.addAll(nextPage.rows);
                 fetchedPages++;
                 skip += nextPage.rows.size();
@@ -386,20 +402,26 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             if (fetchedPages >= maxPages) {
                 logger.warn("分页拉取达到最大页数限制 dataSource={} maxPages={} totalRows={}",
                         dataSource, maxPages, allRows.size());
+                complete = false;
+                guardHit = true;
+                stopReason = "MAX_PAGES_GUARD";
             }
 
         } catch (Exception e) {
             logger.error("分页拉取失败，返回已获取数据 dataSource={} fetchedPages={} totalRows={} err={}",
                     dataSource, fetchedPages, allRows.size(), e.getMessage(), e);
+            complete = false;
+            guardHit = true;
+            stopReason = "PAGINATION_EXCEPTION";
         }
 
         SchoolDataFetchResult.PaginationSummary finalSummary = new SchoolDataFetchResult.PaginationSummary(
-                true,
-                "PAGINATED_COMPLETE",
+                complete,
+                stopReason,
                 fetchedPages,
                 skip,
                 pageSize,
-                false,
+                guardHit,
                 allRows.size()
         );
 
@@ -464,23 +486,28 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     /**
-     * 使用 POST 方法请求 CDSP API，参数放在请求体中（application/x-www-form-urlencoded）
+     * 使用 POST 方法请求 CDSP API，参数放在请求体中（application/json）
      * 用于学生课表等不支持 GET 查询参数的端点
+     *
+     * 注意：CDSP API 要求 POST 请求使用 application/json 格式，
+     * 使用 application/x-www-form-urlencoded 会返回 errcode=999 错误
      */
     private ParsedResponse fetchPagePost(String url, Map<String, String> params) {
         int retryAttempts = properties.getApi().getRetryAttempts();
         for (int attempt = 1; attempt <= retryAttempts; attempt++) {
             try {
                 HttpHeaders headers = buildHeaders();
-                headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+                // 修复：使用 application/json 而非 application/x-www-form-urlencoded
+                // CDSP API 文档明确要求 Content-Type: application/json
+                headers.setContentType(MediaType.APPLICATION_JSON);
 
-                // 构建表单参数
-                MultiValueMap<String, String> formParams = new LinkedMultiValueMap<>();
+                // 构建 JSON 请求体（将 Map 转为 JSON 对象）
+                Map<String, Object> jsonBody = new HashMap<>();
                 if (params != null) {
-                    params.forEach(formParams::add);
+                    params.forEach(jsonBody::put);
                 }
 
-                HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(formParams, headers);
+                HttpEntity<Map<String, Object>> entity = new HttpEntity<>(jsonBody, headers);
 
                 logger.info("学校数据 API POST 请求中 url={} params={} attempt={}/{}", url, params, attempt, retryAttempts);
                 ResponseEntity<String> response = restTemplate.exchange(
@@ -577,6 +604,12 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         return null;
     }
 
+    private int resolveMaxPages(String dataSource) {
+        if ("teacher_courses".equals(dataSource)) return 300;
+        if ("course_schedule".equals(dataSource)) return 200;
+        return 100;
+    }
+
     private String fingerprintRecord(Map<String, Object> record) {
         if (record == null || record.isEmpty()) {
             return "null";
@@ -645,6 +678,38 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                             url, code, wrapper.get("msg"), truncateForLog(responseBody));
                     throw new BusinessException("学校 API 返回错误: " + code + " " + wrapper.get("msg"));
                 }
+                Object errCode = wrapper.get("errcode");
+                Object errMsg = wrapper.get("errmsg");
+                if (errCode != null || errMsg != null) {
+                    String codeText = errCode == null ? "" : String.valueOf(errCode).trim();
+                    String msgText = errMsg == null ? "" : String.valueOf(errMsg).trim();
+                    if (!codeText.isEmpty() && !"0".equals(codeText) && !"200".equals(codeText)) {
+                        logger.error("学校 API 返回 errcode/errmsg 错误 url={} errcode={} errmsg={} bodyPreview={}",
+                                url, codeText, msgText, truncateForLog(responseBody));
+                        throw new BusinessException("学校 API 返回错误: " + codeText + " " + msgText);
+                    }
+                }
+                Object error = wrapper.get("error");
+                if (error instanceof Map) {
+                    Object nestedCode = ((Map<?, ?>) error).get("code");
+                    Object nestedMessage = ((Map<?, ?>) error).get("message");
+                    if (nestedMessage != null) {
+                        logger.error("学校 API 返回 error 对象 url={} code={} message={} bodyPreview={}",
+                                url, nestedCode, nestedMessage, truncateForLog(responseBody));
+                        throw new BusinessException("学校 API 返回错误: "
+                                + (nestedCode == null ? "" : String.valueOf(nestedCode) + " ")
+                                + String.valueOf(nestedMessage));
+                    }
+                }
+
+                // Enhanced logging: show wrapper structure
+                logger.info("学校 API 响应 wrapper 结构 url={} keys={} types={}",
+                        url, wrapper.keySet(),
+                        wrapper.entrySet().stream()
+                                .collect(java.util.stream.Collectors.toMap(
+                                        Map.Entry::getKey,
+                                        e -> e.getValue() == null ? "null" : e.getValue().getClass().getSimpleName()
+                                )));
 
                 for (String key : List.of("value", "data", "result", "records", "list", "items")) {
                     Object data = wrapper.get(key);
@@ -659,9 +724,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             } catch (BusinessException e2) {
                 throw e2;
             } catch (Exception e2) {
-                logger.error("学校 API 响应体无法解析为 JSON url={} bodyPreview={} err={}",
-                        url, truncateForLog(responseBody), e2.getMessage(), e2);
-                throw new BusinessException("学校 API 响应体无法解析为 JSON");
+                // Enhanced error logging: distinguish error types
+                String errorType = e2.getClass().getSimpleName();
+                logger.error("学校 API 响应体解析失败 url={} errorType={} bodyPreview={} err={}",
+                        url, errorType, truncateForLog(responseBody), e2.getMessage(), e2);
+                throw new BusinessException("学校 API 响应体无法解析为 JSON (错误类型: " + errorType + ")");
             }
         }
     }

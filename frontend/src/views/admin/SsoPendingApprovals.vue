@@ -163,130 +163,228 @@ const formatDate = (dateString) => {
 <style scoped>
 .pending-approvals {
   padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .pending-approvals {
+    padding: 30px;
+  }
+  
+  h2 {
+    font-size: 28px;
+    margin-bottom: 24px;
+  }
+
+  .filter-section input,
+  .filter-section select {
+    font-size: 15px;
+    padding: 12px 16px;
+  }
+
+  .user-info h3 {
+    font-size: 20px;
+  }
+
+  .user-info p {
+    font-size: 15px;
+  }
+
+  .role-selection label {
+    font-size: 15px;
+  }
 }
 
 h2 {
   margin-bottom: 20px;
-  color: #333;
+  color: #303133;
+  font-weight: 700;
 }
 
 .filter-section {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 12px;
 }
 
 .filter-section input,
 .filter-section select {
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   flex: 1;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.filter-section input:focus,
+.filter-section select:focus {
+  border-color: #409eff;
 }
 
 .refresh-btn {
-  padding: 8px 16px;
+  padding: 8px 20px;
   background: #409eff;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
 }
 
 .refresh-btn:hover {
   background: #66b1ff;
+  transform: translateY(-1px);
 }
 
 .loading,
 .empty {
   text-align: center;
-  padding: 40px;
-  color: #999;
+  padding: 60px;
+  color: #94a3b8;
+  font-size: 16px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
 .user-list {
   display: grid;
   gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
 }
 
 .user-card {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 20px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 20px;
+  border: none;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
   background: white;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.user-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+
+.user-info {
+  flex: 1;
 }
 
 .user-info h3 {
-  margin: 0 0 10px 0;
-  color: #333;
+  margin: 0 0 12px 0;
+  color: #1e293b;
+  font-size: 18px;
 }
 
 .user-info p {
-  margin: 5px 0;
-  color: #666;
+  margin: 6px 0;
+  color: #64748b;
+  font-size: 14px;
 }
 
-.role-ADMIN { color: #e74c3c; font-weight: bold; }
-.role-OPS { color: #f39c12; font-weight: bold; }
-.role-TEACHER { color: #3498db; font-weight: bold; }
-.role-STUDENT { color: #27ae60; }
-.role-USER { color: #95a5a6; }
+.role-ADMIN { color: #ef4444; font-weight: 700; }
+.role-OPS { color: #f59e0b; font-weight: 700; }
+.role-TEACHER { color: #3b82f6; font-weight: 700; }
+.role-STUDENT { color: #10b981; font-weight: 600; }
+.role-USER { color: #94a3b8; }
 
 .actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 200px;
+  gap: 16px;
+  min-width: 180px;
+  padding-left: 20px;
+  border-left: 1px solid #f1f5f9;
 }
 
 .role-selection {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
 .role-selection label {
-  font-weight: bold;
-  color: #666;
+  font-weight: 600;
+  color: #475569;
+  font-size: 13px;
 }
 
 .role-selection select {
-  padding: 5px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
 }
 
 .action-buttons {
   display: flex;
   gap: 10px;
+  margin-top: auto;
 }
 
 .action-buttons button {
   flex: 1;
-  padding: 8px;
+  padding: 10px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   color: white;
-  font-weight: bold;
+  font-weight: 600;
+  transition: opacity 0.2s;
 }
 
 .approve {
-  background-color: #27ae60;
+  background-color: #10b981;
 }
 
 .approve:hover {
-  background-color: #229954;
+  opacity: 0.9;
 }
 
 .reject {
-  background-color: #e74c3c;
+  background-color: #ef4444;
 }
 
 .reject:hover {
-  background-color: #c0392b;
+  opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+  .pending-approvals {
+    padding: 12px;
+  }
+  
+  .filter-section {
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .user-list {
+    grid-template-columns: 1fr;
+  }
+
+  .user-card {
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .actions {
+    border-left: none;
+    border-top: 1px solid #f1f5f9;
+    padding-left: 0;
+    padding-top: 16px;
+    min-width: 0;
+  }
 }
 </style>

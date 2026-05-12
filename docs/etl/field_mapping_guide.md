@@ -121,6 +121,23 @@ SELECT * FROM field_mappings WHERE data_source = 'administrative_class';
 | XN | academicYear | 学年 |
 | XQ | semester | 学期 |
 
+### 2.9 学生课表（student_schedule）
+
+| 学校字段 | 系统字段 | 说明 |
+|---------|---------|------|
+| XH / xh | studentId | 学号 |
+| XKKH / xkkh | classId | 选课课号/课程班号 |
+| KCBH / kcbh | courseCode | 课程编号 |
+| KCMC / kcmc | courseName | 课程名称 |
+| SKJSZGH / skjszgh | teacherId | 上课教师职工号 |
+| JSMC / jsmc | teacherName | 教师名称 |
+| XQJ / xqj | dayOfWeek | 星期几 |
+| DJJ / djj | period | 第几节 |
+| ZCAP / zcap | weekRange | 周次安排 |
+| JS / js | classLocation | 教室 |
+| XN / xn | academicYear | 学年 |
+| XQ / xq | semester | 学期 |
+
 ---
 
 ## 三、自定义字段映射

@@ -158,11 +158,14 @@ export function deleteText(id) {
   })
 }
 
-export function toggleTextFeatured(id, featured) {
+export function toggleTextFeatured(id, featured, forcePublic = false) {
+  const params = {}
+  if (featured !== undefined) params.featured = featured
+  if (forcePublic) params.forcePublic = true
   return request({
     url: `/api/admin/texts/${id}/featured`,
     method: 'put',
-    params: featured === undefined ? undefined : { featured }
+    params
   })
 }
 
@@ -222,3 +225,98 @@ export function getClasses(params) {
 }
 
 // ========== 数据备份和系统监控已迁移至 api/ops.js ==========
+
+// ========== 内容审核相关 ==========
+
+export function getReviewTexts(params) {
+  return request({
+    url: '/api/admin/content-review/texts',
+    method: 'get',
+    params
+  })
+}
+
+export function approveText(id, data) {
+  return request({
+    url: `/api/admin/content-review/texts/${id}/approve`,
+    method: 'put',
+    data: data || {}
+  })
+}
+
+export function rejectText(id) {
+  return request({
+    url: `/api/admin/content-review/texts/${id}/reject`,
+    method: 'put'
+  })
+}
+
+export function getReviewVideos(params) {
+  return request({
+    url: '/api/admin/content-review/videos',
+    method: 'get',
+    params
+  })
+}
+
+export function approveVideo(id) {
+  return request({
+    url: `/api/admin/content-review/videos/${id}/approve`,
+    method: 'put'
+  })
+}
+
+export function rejectVideo(id) {
+  return request({
+    url: `/api/admin/content-review/videos/${id}/reject`,
+    method: 'put'
+  })
+}
+
+export function getAdminVideoDetail(id) {
+  return request({
+    url: `/api/admin/videos/${id}/detail`,
+    method: 'get'
+  })
+}
+
+// ========== 内容标签管理 ==========
+
+export function getContentTags() {
+  return request({
+    url: '/api/admin/content-tags',
+    method: 'get'
+  })
+}
+
+export function createContentTag(data) {
+  return request({
+    url: '/api/admin/content-tags',
+    method: 'post',
+    data
+  })
+}
+
+export function updateContentTag(id, data) {
+  return request({
+    url: `/api/admin/content-tags/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+export function deleteContentTag(id) {
+  return request({
+    url: `/api/admin/content-tags/${id}`,
+    method: 'delete'
+  })
+}
+
+// ========== 公开标签列表（学生端用） ==========
+
+export function getPublicContentTags() {
+  return request({
+    url: '/api/public/texts/content-tags',
+    method: 'get'
+  })
+}

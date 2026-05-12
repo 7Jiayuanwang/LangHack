@@ -5,14 +5,20 @@
     <!-- 绑定关系 UPSERT：唯一键 (teacher_id, student_id, course_code, academic_year, semester) -->
     <insert id="upsertBinding" parameterType="com.english.entity.TeacherStudentBinding" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO teacher_student_binding (
-            teacher_id, student_id, course_code, course_class_code,
+            teacher_id, teacher_name, student_id, student_name, college_name,
+            course_code, course_name, course_class_code,
             academic_year, semester, source_type, sync_time
         ) VALUES (
-            #{teacherId}, #{studentId}, #{courseCode}, #{courseClassCode},
+            #{teacherId}, #{teacherName}, #{studentId}, #{studentName}, #{collegeName},
+            #{courseCode}, #{courseName}, #{courseClassCode},
             COALESCE(#{academicYear}, ''), COALESCE(#{semester}, ''),
             #{sourceType}, #{syncTime}
         )
         ON DUPLICATE KEY UPDATE
+            teacher_name = COALESCE(#{teacherName}, teacher_name),
+            student_name = COALESCE(#{studentName}, student_name),
+            college_name = COALESCE(#{collegeName}, college_name),
+            course_name = COALESCE(#{courseName}, course_name),
             course_class_code = COALESCE(#{courseClassCode}, course_class_code),
             source_type = #{sourceType},
             sync_time = #{syncTime}
@@ -40,6 +46,13 @@
             AND semester = #{semester}
         </if>
         ORDER BY sync_time DESC
+    </select>
+
+    <select id="selectDistinctColleges" resultType="java.lang.String">
+        SELECT DISTINCT college_name
+        FROM teacher_student_binding
+        WHERE college_name IS NOT NULL AND college_name != ''
+        ORDER BY college_name
     </select>
 
 </mapper>

@@ -17,9 +17,9 @@ CREATE TABLE IF NOT EXISTS administrative_class (
     class_name VARCHAR(100) NOT NULL COMMENT '行政班名称 (XZBMC)',
     class_short_name VARCHAR(50) COMMENT '行政班简称 (XZBJC)',
     college_code VARCHAR(50) NOT NULL COMMENT '学院编号 (YXBH)',
-    college_name VARCHAR(100) NOT NULL COMMENT '学院名称 (YXMC)',
+    college_name VARCHAR(100) NULL COMMENT '学院名称 (YXMC)',
     major_code VARCHAR(50) NOT NULL COMMENT '专业编号 (ZYBH)',
-    major_name VARCHAR(100) NOT NULL COMMENT '专业名称 (ZYMC)',
+    major_name VARCHAR(100) NULL COMMENT '专业名称 (ZYMC)',
     grade VARCHAR(10) NOT NULL COMMENT '年级 (NJ)',
     class_type VARCHAR(20) COMMENT '班级类型 (BJLX)',
     head_teacher_code VARCHAR(50) COMMENT '班主任工号 (BZRGH)',
@@ -42,8 +42,8 @@ CREATE TABLE IF NOT EXISTS administrative_class (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行政班基本信息表';
 
--- 1.2 课程表
-CREATE TABLE IF NOT EXISTS course (
+-- 1.2 学校课程表
+CREATE TABLE IF NOT EXISTS school_course (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     course_code VARCHAR(50) NOT NULL UNIQUE COMMENT '课程编号 (KCBH)',
     course_name VARCHAR(200) NOT NULL COMMENT '课程名称 (KCMC)',
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS course (
     INDEX idx_nature (course_nature),
     INDEX idx_category (course_category),
     INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程基本信息表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学校课程基本信息表';
 
 -- ============================================================================
 -- 2. 教学组织层 (Teaching Organization Layer)
@@ -98,15 +98,15 @@ CREATE TABLE IF NOT EXISTS teaching_class (
     teacher_name VARCHAR(50) NOT NULL COMMENT '授课教师姓名 (XM)',
     academic_year VARCHAR(20) NOT NULL COMMENT '学年 (XNM)',
     semester INT NOT NULL COMMENT '学期 (XQM)',
-    capacity INT NOT NULL COMMENT '班级容量',
+    capacity INT NULL DEFAULT 0 COMMENT '班级容量',
     enrolled_count INT DEFAULT 0 COMMENT '已选人数',
-    class_status VARCHAR(20) NOT NULL COMMENT '课程状态',
+    class_status VARCHAR(20) NULL DEFAULT 'ACTIVE' COMMENT '课程状态',
     sync_time DATETIME NOT NULL COMMENT '同步时间',
     sync_source VARCHAR(20) NOT NULL COMMENT '同步来源',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
-    FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_course (course_code),
     INDEX idx_teacher (teacher_id),
     INDEX idx_academic_year_semester (academic_year, semester),
@@ -116,11 +116,11 @@ CREATE TABLE IF NOT EXISTS teaching_class (
 -- 2.2 课程安排表
 CREATE TABLE IF NOT EXISTS course_schedule (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
-    class_id VARCHAR(50) NOT NULL COMMENT '教学班号 (JXBID)',
-    day_of_week INT NOT NULL COMMENT '星期几 (XQJ) 1-7',
-    period VARCHAR(20) NOT NULL COMMENT '节次 (JCS) 如"1-2"',
-    week_range VARCHAR(50) NOT NULL COMMENT '周次 (ZCD) 如"1-16周"',
-    class_location VARCHAR(100) NOT NULL COMMENT '上课地点 (CDMC)',
+    class_id VARCHAR(50) NULL COMMENT '教学班号 (JXBID)',
+    day_of_week INT NULL COMMENT '星期几 (XQJ) 1-7',
+    period VARCHAR(20) NULL COMMENT '节次 (JCS) 如"1-2"',
+    week_range VARCHAR(50) NULL COMMENT '周次 (ZCD) 如"1-16周"',
+    class_location VARCHAR(100) NULL COMMENT '上课地点 (CDMC)',
     academic_year VARCHAR(20) NOT NULL COMMENT '学年 (XNM)',
     semester INT NOT NULL COMMENT '学期 (XQM)',
     sync_time DATETIME NOT NULL COMMENT '同步时间',
@@ -128,10 +128,11 @@ CREATE TABLE IF NOT EXISTS course_schedule (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
-    FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE SET NULL ON UPDATE CASCADE,
     INDEX idx_class_id (class_id),
     INDEX idx_day_period (day_of_week, period),
     INDEX idx_academic_year_semester (academic_year, semester),
+    INDEX idx_class_academic (class_id, academic_year, semester),
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程安排信息表';
 
@@ -144,19 +145,19 @@ CREATE TABLE IF NOT EXISTS course_selection (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     selection_id VARCHAR(50) NOT NULL UNIQUE COMMENT '选课记录ID',
     student_id VARCHAR(50) NOT NULL COMMENT '学号',
-    student_name VARCHAR(100) NOT NULL COMMENT '学生姓名',
+    student_name VARCHAR(100) NULL COMMENT '学生姓名',
     course_code VARCHAR(50) NOT NULL COMMENT '课程代码',
-    course_name VARCHAR(200) NOT NULL COMMENT '课程名称',
+    course_name VARCHAR(200) COMMENT '课程名称（CDSP API不返回，可为空）',
     class_id VARCHAR(50) NOT NULL COMMENT '教学班号',
-    teacher_id VARCHAR(50) NOT NULL COMMENT '授课教师工号',
-    teacher_name VARCHAR(50) NOT NULL COMMENT '授课教师姓名',
-    credits DECIMAL(3,1) NOT NULL COMMENT '学分',
-    academic_year VARCHAR(20) NOT NULL COMMENT '学年',
-    semester INT NOT NULL COMMENT '学期',
+    teacher_id VARCHAR(50) NULL COMMENT '授课教师工号',
+    teacher_name VARCHAR(50) NULL COMMENT '授课教师姓名',
+    credits DECIMAL(3,1) COMMENT '学分（CDSP API不返回，可为空）',
+    academic_year VARCHAR(20) NULL COMMENT '学年',
+    semester INT NULL COMMENT '学期',
     class_time VARCHAR(100) COMMENT '上课时间',
     class_location VARCHAR(100) COMMENT '上课地点',
-    selection_time DATETIME NOT NULL COMMENT '选课时间',
-    selection_status VARCHAR(20) NOT NULL COMMENT '选课状态 SELECTED/DROPPED/COMPLETED',
+    selection_time DATETIME NULL COMMENT '选课时间',
+    selection_status VARCHAR(20) NULL DEFAULT 'SELECTED' COMMENT '选课状态 SELECTED/DROPPED/COMPLETED',
     regular_grade DECIMAL(5,2) COMMENT '平时成绩',
     final_grade DECIMAL(5,2) COMMENT '期末成绩',
     total_grade DECIMAL(5,2) COMMENT '总评成绩',
@@ -169,12 +170,13 @@ CREATE TABLE IF NOT EXISTS course_selection (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
-    FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (course_code) REFERENCES school_course(course_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_student (student_id),
     INDEX idx_course (course_code),
     INDEX idx_class (class_id),
     INDEX idx_academic_year_semester (academic_year, semester),
+    INDEX idx_student_academic (student_id, academic_year, semester),
     INDEX idx_selection_status (selection_status),
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='选课记录表';
@@ -183,14 +185,14 @@ CREATE TABLE IF NOT EXISTS course_selection (
 CREATE TABLE IF NOT EXISTS level_exam_scores (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     student_id VARCHAR(50) NOT NULL COMMENT '学号',
-    student_name VARCHAR(100) NOT NULL COMMENT '姓名',
-    exam_type VARCHAR(50) NOT NULL COMMENT '考试类型',
+    student_name VARCHAR(100) COMMENT '学生姓名（CDSP 不提供，可为空）',
+    exam_type VARCHAR(50) COMMENT '考试类型（CDSP 不提供，从 examName 推断）',
     exam_name VARCHAR(100) NOT NULL COMMENT '考试名称',
     admission_ticket_no VARCHAR(30) COMMENT '准考证号',
     exam_date DATE NOT NULL COMMENT '考试时间',
     score DECIMAL(5,2) NOT NULL COMMENT '成绩',
     grade VARCHAR(20) COMMENT '等级',
-    is_passed BOOLEAN NOT NULL COMMENT '是否通过',
+    is_passed BOOLEAN COMMENT '是否通过（CDSP 不提供，从 score 推断）',
     passing_score DECIMAL(5,2) COMMENT '合格分数线',
     listening_score DECIMAL(5,2) COMMENT '听力成绩',
     reading_score DECIMAL(5,2) COMMENT '阅读成绩',
@@ -224,13 +226,13 @@ CREATE TABLE IF NOT EXISTS teaching_plans (
     plan_id VARCHAR(30) NOT NULL UNIQUE COMMENT '计划编号',
     plan_name VARCHAR(200) NOT NULL COMMENT '计划名称',
     major_code VARCHAR(20) NOT NULL COMMENT '专业代码',
-    major_name VARCHAR(100) NOT NULL COMMENT '专业名称',
+    major_name VARCHAR(100) NULL COMMENT '专业名称',
     grade VARCHAR(10) NOT NULL COMMENT '年级',
     schooling_length INT NOT NULL COMMENT '学制',
     degree_type VARCHAR(20) NOT NULL COMMENT '学位类型',
     education_level VARCHAR(20) NOT NULL COMMENT '培养层次',
     college_code VARCHAR(20) NOT NULL COMMENT '学院代码',
-    college_name VARCHAR(100) NOT NULL COMMENT '学院名称',
+    college_name VARCHAR(100) NULL COMMENT '学院名称',
     total_credits DECIMAL(5,2) NOT NULL COMMENT '总学分要求',
     required_credits DECIMAL(5,2) NOT NULL COMMENT '必修学分',
     elective_credits DECIMAL(5,2) NOT NULL COMMENT '选修学分',

@@ -1,35 +1,59 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="二次鉴权验证"
-    width="360px"
+    title="安全提权验证"
+    width="400px"
     :close-on-click-modal="false"
+    append-to-body
+    class="elevation-dialog"
     @close="handleClose"
   >
-    <div class="elevation-content">
+    <div class="elevation-body">
+      <div class="security-header">
+        <div class="shield-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <h3>身份二次确认</h3>
+      </div>
+
       <p class="elevation-hint">
-        您正在以 <strong>{{ currentRoleLabel }}</strong> 身份访问
-        <strong>{{ targetRoleLabel }}</strong> 功能区。
-        请输入密码进行二次鉴权。
+        检测到敏感操作。您正在从 <strong>{{ currentRoleLabel }}</strong> 提权至 
+        <el-tag type="danger" size="small" effect="dark" class="role-tag">{{ targetRoleLabel }}</el-tag> 权限。
+        请确认您的管理员身份。
       </p>
-      <el-form @submit.prevent="handleElevate">
-        <el-form-item>
+
+      <el-form @submit.prevent="handleElevate" label-position="top">
+        <el-form-item label="管理员密码">
           <el-input
             v-model="password"
             type="password"
-            placeholder="请输入登录密码"
+            placeholder="请输入您的登录密码"
             show-password
             :disabled="loading"
+            class="security-input"
             @keyup.enter="handleElevate"
-          />
+          >
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
       </el-form>
+      
+      <div class="security-footer-hint">
+        <el-icon><InfoFilled /></el-icon>
+        验证成功后，提权状态将在 30 分钟后自动失效
+      </div>
     </div>
     <template #footer>
-      <el-button @click="handleClose">取消</el-button>
-      <el-button type="primary" :loading="loading" @click="handleElevate">
-        验证
-      </el-button>
+      <div class="dialog-footer">
+        <el-button @click="handleClose" plain>取消</el-button>
+        <el-button type="primary" :loading="loading" class="btn-elevate" @click="handleElevate">
+          确认提权
+        </el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
@@ -37,6 +61,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Lock, InfoFilled } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { elevate } from '@/api/ops'
 
@@ -100,14 +125,87 @@ const handleClose = () => {
 </script>
 
 <style scoped>
-.elevation-content {
-  padding: 0 4px;
+.elevation-body {
+  padding: 8px 12px;
+}
+
+.security-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.shield-icon {
+  width: 64px;
+  height: 64px;
+  background: #fef2f2;
+  color: #ef4444;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  box-shadow: 0 8px 16px rgba(239, 68, 68, 0.1);
+}
+
+.security-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
 }
 
 .elevation-hint {
   font-size: 14px;
-  color: var(--text-secondary, #666);
-  margin-bottom: 16px;
+  color: #64748b;
+  margin-bottom: 24px;
   line-height: 1.6;
+  background: #f8fafc;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
+}
+
+.role-tag {
+  font-weight: 700;
+  margin: 0 2px;
+}
+
+.security-input :deep(.el-input__wrapper) {
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.security-footer-hint {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.dialog-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.btn-elevate {
+  padding-left: 24px;
+  padding-right: 24px;
+  font-weight: 600;
+  border-radius: 10px;
+}
+
+:deep(.elevation-dialog) {
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+:deep(.elevation-dialog .el-dialog__header) {
+  margin-right: 0;
+  padding-bottom: 0;
 }
 </style>

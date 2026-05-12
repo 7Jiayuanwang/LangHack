@@ -20,6 +20,7 @@ fi
 
 DB_USER=${DB_USERNAME:-root}
 DB_PW=${DB_PASSWORD:-}
+RUN_DB_MIGRATIONS=${HOT_UPDATE_RUN_MIGRATIONS:-true}
 
 # 创建日志目录
 mkdir -p "$PROJECT_ROOT/logs"
@@ -49,9 +50,17 @@ read_choice() {
 # 数据库迁移（公共函数）
 # ─────────────────────────────────────────────
 run_db_migration() {
+    if [ "$RUN_DB_MIGRATIONS" != "true" ]; then
+        echo "⚠️  HOT_UPDATE_RUN_MIGRATIONS=false，已按配置跳过数据库迁移。"
+        echo "   整合版迁移链适合作为全新数据库初始稳定版；如需执行请先确认数据库策略并备份。"
+        return 0
+    fi
+
     echo "🗄️ 应用数据库增量迁移..."
     FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
     MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+    REPAIR_SQL="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
+    PREPARED_SQL=""
 
     if [ -f "$MIGRATION_SQL" ] && [ -d "$FLYWAY_DIR" ]; then
         flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' ' || echo 0)
@@ -64,17 +73,31 @@ run_db_migration() {
         fi
         echo "✅ 脚本同步校验通过。"
 
+        PREPARED_SQL=$(mktemp /tmp/langhack-hot-migrate.XXXXXX.sql)
+        if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$PREPARED_SQL"; then
+            echo "❌ [错误] 迁移脚本预处理失败"
+            rm -f "$PREPARED_SQL" 2>/dev/null || true
+            return 1
+        fi
+
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "langhack-mysql-master"; then
             echo "   🐳 检测到本地 Docker MySQL，正在注入合并脚本..."
-            docker exec -i langhack-mysql-master mysql -u"$DB_USER" -p"$DB_PW" english_learning < "$MIGRATION_SQL" 2>/dev/null
+            docker exec -i langhack-mysql-master mysql --default-character-set=utf8mb4 -u"$DB_USER" -p"$DB_PW" english_learning < "$PREPARED_SQL" 2>/dev/null
+            if [ -f "$REPAIR_SQL" ]; then
+                docker exec -i langhack-mysql-master mysql --default-character-set=utf8mb4 -u"$DB_USER" -p"$DB_PW" english_learning < "$REPAIR_SQL" 2>/dev/null || true
+            fi
             echo "✅ 数据库更新完成 (Docker 模式)。"
         elif command -v mysql &>/dev/null; then
             echo "   💻 检测到本地 mysql 客户端，正在连接 127.0.0.1 注入脚本..."
-            mysql -h 127.0.0.1 -u"$DB_USER" -p"$DB_PW" english_learning < "$MIGRATION_SQL" 2>/dev/null
+            mysql --default-character-set=utf8mb4 -h 127.0.0.1 -u"$DB_USER" -p"$DB_PW" english_learning < "$PREPARED_SQL" 2>/dev/null
+            if [ -f "$REPAIR_SQL" ]; then
+                mysql --default-character-set=utf8mb4 -h 127.0.0.1 -u"$DB_USER" -p"$DB_PW" english_learning < "$REPAIR_SQL" 2>/dev/null || true
+            fi
             echo "✅ 数据库更新完成 (本地模式)。"
         else
             echo "⚠️  未检测到运行中的 Docker MySQL 或本地 mysql 客户端，跳过手动 SQL 注入。"
         fi
+        rm -f "$PREPARED_SQL" 2>/dev/null || true
     else
         echo "⚠️  跳过数据库迁移（合并脚本或 Flyway 目录不存在）。"
     fi

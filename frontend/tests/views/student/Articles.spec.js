@@ -74,9 +74,9 @@ describe('Student Articles.vue', () => {
     expect(typeof result).toBe('string')
   })
 
-  it('readArticle navigates to article', () => {
+  it('handleItemClick navigates to article', () => {
     const wrapper = createWrapper()
-    wrapper.vm.readArticle({ id: 10, title: 'Test' })
+    wrapper.vm.handleItemClick({ id: 10, title: 'Test' })
     expect(mockPush).toHaveBeenCalled()
   })
 })

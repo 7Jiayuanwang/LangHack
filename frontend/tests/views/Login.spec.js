@@ -135,13 +135,6 @@ describe('Login.vue', () => {
     expect(ElMessage.warning).toHaveBeenCalled()
   })
 
-  it('fillDemo fills login form with demo credentials', () => {
-    const wrapper = shallowMount(Login)
-    wrapper.vm.fillDemo('admin')
-    expect(wrapper.vm.loginForm.username).toBe('admin')
-    expect(wrapper.vm.loginForm.password).toBeTruthy()
-  })
-
   it('loginLoading is false initially', () => {
     const wrapper = shallowMount(Login)
     expect(wrapper.vm.loginLoading).toBe(false)
