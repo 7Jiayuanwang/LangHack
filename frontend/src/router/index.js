@@ -263,7 +263,6 @@ const routes = [
         component: () => import("@/views/teacher/MyCourseSelections.vue"),
         meta: { title: "选课记录", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
       },
-      },
     ],
   },
   {
