@@ -72,16 +72,16 @@ else
         else
             echo "[slave-wrapper] ⚠️ START REPLICA 重连失败，原因可能是主库 binlog 已被清理"
             echo "[slave-wrapper] 回退到完整初始化（含 mysqldump + 导入，可能需要较长时间）..."
-            if [ -f /var/lib/mysql/init-replication.sh ]; then
-                bash /var/lib/mysql/init-replication.sh || echo "[slave-wrapper] ⚠️ 复制初始化返回非零"
+            if [ -f /opt/langhack/init-replication.sh ]; then
+                bash /opt/langhack/init-replication.sh || echo "[slave-wrapper] ⚠️ 复制初始化返回非零"
             fi
         fi
     else
         echo "[slave-wrapper] 无历史复制配置，执行完整初始化..."
-        if [ -f /var/lib/mysql/init-replication.sh ]; then
-            bash /var/lib/mysql/init-replication.sh || echo "[slave-wrapper] ⚠️ 复制初始化返回非零"
+        if [ -f /opt/langhack/init-replication.sh ]; then
+            bash /opt/langhack/init-replication.sh || echo "[slave-wrapper] ⚠️ 复制初始化返回非零"
         else
-            echo "[slave-wrapper] ⚠️ 未找到 /var/lib/mysql/init-replication.sh，跳过复制配置"
+            echo "[slave-wrapper] ⚠️ 未找到 /opt/langhack/init-replication.sh，跳过复制配置"
         fi
     fi
 fi
