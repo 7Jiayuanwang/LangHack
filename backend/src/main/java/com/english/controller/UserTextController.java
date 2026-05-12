@@ -250,6 +250,9 @@ public class UserTextController {
                 text.setAudioUrl(audioUrlVal != null ? audioUrlVal.toString() : "");
             }
 
+            // 修改后内容需要重新审核
+            text.setStatus("PENDING");
+
             textService.updateById(text);
             return Result.success("更新成功");
         } catch (Exception e) {
@@ -279,6 +282,11 @@ public class UserTextController {
             // 检查权限：只有上传者可以删除
             if (!user.getId().equals(text.getUploadedBy())) {
                 return Result.error("没有权限删除此课文");
+            }
+
+            // 已审核通过的内容不可删除（只能修改，修改后重新进入审核）
+            if ("APPROVED".equalsIgnoreCase(text.getStatus())) {
+                return Result.error("已审核通过的内容不可删除，如需调整请走修改流程");
             }
 
             textService.deleteText(textId);

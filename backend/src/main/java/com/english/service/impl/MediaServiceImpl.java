@@ -107,6 +107,7 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             if ("VIDEO".equals(mediaType)) {
                 String filePath = saveToFileSystem(file, mediaType, originalFileName);
                 media.setFilePath(filePath);
+                media.setFileContent(new byte[0]);
             } else {
                 try {
                     media.setFileContent(file.getBytes());

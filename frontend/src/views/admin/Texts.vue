@@ -87,12 +87,20 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="status" label="审核状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)" size="small">
+              {{ getStatusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="isFeatured" label="推荐" width="80" align="center">
           <template #default="{ row }">
             <el-switch
               :model-value="isTextFeatured(row)"
               @change="toggleFeatured(row, $event)"
               :loading="row._featuredLoading"
+              :disabled="row.status !== 'APPROVED'"
             />
           </template>
         </el-table-column>
@@ -462,6 +470,9 @@ const getDifficultyText = (difficulty) => {
   }
   return texts[difficulty] || difficulty
 }
+
+const getStatusType = (s) => ({ APPROVED: 'success', PENDING: 'warning', REJECTED: 'danger' }[s] || '')
+const getStatusText = (s) => ({ APPROVED: '已审核', PENDING: '待审核', REJECTED: '已拒绝' }[s] || s)
 
 const formatTime = (time) => {
   if (!time) return ''

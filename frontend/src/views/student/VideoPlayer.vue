@@ -235,7 +235,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, View, Star, StarFilled, Reading, ChatLineSquare, Document, VideoPlay } from '@element-plus/icons-vue'
 import Artplayer from 'artplayer'
-import { getPublicVideoDetail } from '@/api/video'
+import { getPublicVideoDetail, getUserVideoDetail } from '@/api/video'
 import { getAdminVideoDetail } from '@/api/admin'
 import { getMediaDetail } from '@/api/media'
 import { checkArticleFavorite, toggleArticleFavorite } from '@/api/student'
@@ -245,7 +245,7 @@ import SelectionMenu from '@/components/SelectionMenu.vue'
 const router = useRouter()
 const route = useRoute()
 
-const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg']
+const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska']
 
 const artPlayerRef = ref(null)
 const transcriptRef = ref(null)
@@ -360,6 +360,7 @@ const goBack = () => {
 const loadVideo = async () => {
   const videoId = route.query.videoId || route.query.id
   const isAdminPreview = route.query.preview === 'admin'
+  const isUserPreview = route.query.preview === 'user'
   if (!videoId) {
     error.value = true
     loading.value = false
@@ -369,10 +370,12 @@ const loadVideo = async () => {
   loading.value = true
   error.value = false
   try {
-    // 管理员预览模式使用管理员 API（不检查 isPublic）
+    // 管理员预览 / 用户预览自己的上传 使用专有 API（不检查 isPublic，允许未审核内容）
     const res = isAdminPreview
       ? await getAdminVideoDetail(videoId)
-      : await getPublicVideoDetail(videoId)
+      : isUserPreview
+        ? await getUserVideoDetail(videoId)
+        : await getPublicVideoDetail(videoId)
     if (res.code === 200 && res.data) {
       video.value = res.data
 

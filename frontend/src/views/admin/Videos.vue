@@ -81,6 +81,7 @@
               :model-value="row.isFeatured === 1"
               @change="toggleFeatured(row, $event)"
               :loading="row._featuredLoading"
+              :disabled="row.status !== 'APPROVED'"
             />
           </template>
         </el-table-column>
