@@ -898,6 +898,43 @@ if [ "$SKIP_ENV" = false ]; then
     CFG_IMAGE_REGISTRY_PREFIX=""
 
     echo ""
+    echo "  [ 构建网络环境 ]"
+    echo "  决定 Docker 构建阶段如何下载依赖（npm 包、Maven 包、Alpine apk）"
+    DEF_BUILD_ENV=$(load_env_value "BUILD_NETWORK_ENV" "public")
+    case "${DEF_BUILD_ENV,,}" in
+        intranet|local) BUILD_ENV_DEFAULT_IDX=2 ;;
+        *) BUILD_ENV_DEFAULT_IDX=1 ;;
+    esac
+    ask_choice "构建网络环境:" "公网构建 (依赖从公网 npm/Maven Central 下载)|内网构建 (依赖从内网 Nexus 代理下载)" BUILD_ENV_CHOICE "$BUILD_ENV_DEFAULT_IDX"
+    CFG_NPM_REGISTRY=""
+    CFG_MAVEN_MIRROR_URL=""
+    CFG_ALPINE_MIRROR=""
+    CFG_BUILD_NETWORK_ENV="public"
+    if [ "$BUILD_ENV_CHOICE" = "2" ]; then
+        CFG_BUILD_NETWORK_ENV="intranet"
+        echo ""
+        echo "  [提示] 内网 Nexus 通常为 http://172.20.14.249:8081（或实际内网地址）"
+        echo "  [提示] 留空则该依赖类型仍走公网（可按需只配其中几项）"
+        echo ""
+        DEF_NPM=$(load_env_value "NPM_REGISTRY" "")
+        if [ -z "$DEF_NPM" ]; then
+            _local_reg=$(load_env_value "LOCAL_REGISTRY" "")
+            _extracted_ip=$(echo "$_local_reg" | sed 's/:[0-9]*//' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
+            if [ -n "$_extracted_ip" ]; then
+                DEF_NPM="http://${_extracted_ip}:8081/repository/npm-proxy/"
+            fi
+        fi
+        ask_value "npm 内网镜像源 URL (留空跳过)" "$(load_env_value "NPM_REGISTRY" "${DEF_NPM:-http://172.20.14.249:8081/repository/npm-proxy/}")" CFG_NPM_REGISTRY
+        ask_value "Maven 内网镜像源 URL (留空跳过)" "$(load_env_value "MAVEN_MIRROR_URL" "http://172.20.14.249:8081/repository/maven-public/")" CFG_MAVEN_MIRROR_URL
+        ask_value "Alpine apk 内网镜像源 URL (留空跳过)" "$(load_env_value "ALPINE_MIRROR" "http://172.20.14.249:8081/repository/alpine-mirror/")" CFG_ALPINE_MIRROR
+        echo ""
+        echo "  [配置汇总]"
+        [ -n "$CFG_NPM_REGISTRY" ]     && echo "    npm      → $CFG_NPM_REGISTRY"     || echo "    npm      → (跳过，使用公网)"
+        [ -n "$CFG_MAVEN_MIRROR_URL" ] && echo "    Maven    → $CFG_MAVEN_MIRROR_URL" || echo "    Maven    → (跳过，使用公网)"
+        [ -n "$CFG_ALPINE_MIRROR" ]    && echo "    Alpine   → $CFG_ALPINE_MIRROR"    || echo "    Alpine   → (跳过，使用公网)"
+    fi
+
+    echo ""
     echo "  [ 备份 ]"
     ask_yn "启用自动备份？" "y" CFG_BACKUP_YN
     CFG_BACKUP_ENABLED="false"
@@ -980,6 +1017,10 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'LOCAL_REGISTRY=%s\n' "${CFG_LOCAL_REGISTRY:-localhost:5000}"
         printf 'IMAGE_REGISTRY_PREFIX=%s\n' "${CFG_IMAGE_REGISTRY_PREFIX:-}"
         printf 'PUBLIC_IMAGE_PROBE=%s\n' "${CFG_PUBLIC_IMAGE_PROBE:-node:20-alpine}"
+        printf 'BUILD_NETWORK_ENV=%s\n' "${CFG_BUILD_NETWORK_ENV:-public}"
+        [ -n "${CFG_NPM_REGISTRY:-}" ]     && printf 'NPM_REGISTRY=%s\n'     "$CFG_NPM_REGISTRY"     || printf '# NPM_REGISTRY=\n'
+        [ -n "${CFG_MAVEN_MIRROR_URL:-}" ] && printf 'MAVEN_MIRROR_URL=%s\n' "$CFG_MAVEN_MIRROR_URL" || printf '# MAVEN_MIRROR_URL=\n'
+        [ -n "${CFG_ALPINE_MIRROR:-}" ]    && printf 'ALPINE_MIRROR=%s\n'    "$CFG_ALPINE_MIRROR"    || printf '# ALPINE_MIRROR=\n'
         printf 'BACKUP_ENABLED=%s\n'     "$CFG_BACKUP_ENABLED"
         printf 'BACKUP_DIR=%s\n'         "$CFG_BACKUP_DIR"
         printf 'BACKUP_RETENTION_DAYS=%s\n' "$CFG_BACKUP_RETENTION"
@@ -1117,6 +1158,18 @@ else
     echo "  自动更新: 未启用"
 fi
 echo "  Docker 镜像源: ${RESOLVED_IMAGE_SOURCE_LABEL:-$(load_env_value "IMAGE_REGISTRY_PREFIX" "" "$ENV_FILE")}"
+_build_env_label="${CFG_BUILD_NETWORK_ENV:-$(load_env_value "BUILD_NETWORK_ENV" "public" "$ENV_FILE")}"
+if [ "${_build_env_label}" = "intranet" ]; then
+    echo "  构建网络: 内网 (Nexus 代理)"
+    _npm=$([ -n "${CFG_NPM_REGISTRY:-}" ] && echo "$CFG_NPM_REGISTRY" || load_env_value "NPM_REGISTRY" "" "$ENV_FILE")
+    _mvn=$([ -n "${CFG_MAVEN_MIRROR_URL:-}" ] && echo "$CFG_MAVEN_MIRROR_URL" || load_env_value "MAVEN_MIRROR_URL" "" "$ENV_FILE")
+    _apk=$([ -n "${CFG_ALPINE_MIRROR:-}" ] && echo "$CFG_ALPINE_MIRROR" || load_env_value "ALPINE_MIRROR" "" "$ENV_FILE")
+    [ -n "$_npm" ] && echo "    npm    → $_npm" || echo "    npm    → (公网)"
+    [ -n "$_mvn" ] && echo "    Maven  → $_mvn" || echo "    Maven  → (公网)"
+    [ -n "$_apk" ] && echo "    Alpine → $_apk" || echo "    Alpine → (公网)"
+else
+    echo "  构建网络: 公网"
+fi
 if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
     echo "  SSO: 已启用 (${CFG_SSO_SERVER_URL})"
     echo "  应用地址 (APP_BASE_URL): ${CFG_APP_BASE_URL}"
@@ -1280,46 +1333,16 @@ BUILD_ONLY=false
 case $BUILD_MODE in
     1)
         echo "[INFO] 全量构建（可能需要 5-15 分钟，请耐心等待）..."
-        BUILD_LOG="/tmp/langhack-deploy-build-$$.log"
         if [ -n "$SVCS" ]; then
-            docker compose build --no-cache $SVCS > "$BUILD_LOG" 2>&1 &
+            docker compose build --no-cache $SVCS
         else
-            docker compose build --no-cache > "$BUILD_LOG" 2>&1 &
+            docker compose build --no-cache
         fi
-        BUILD_PID=$!
-
-        # 监控构建进程，每 30 秒输出心跳
-        BUILD_TIMEOUT=1800  # 30 分钟超时
-        BUILD_ELAPSED=0
-        while kill -0 "$BUILD_PID" 2>/dev/null; do
-            sleep 30
-            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
-            printf "  构建进行中... (已耗时 %dm%ds)\r" $((BUILD_ELAPSED / 60)) $((BUILD_ELAPSED % 60))
-
-            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
-                echo ""
-                echo "[ERROR] 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
-                kill "$BUILD_PID" 2>/dev/null || true
-                wait "$BUILD_PID" 2>/dev/null || true
-                echo "[ERROR] 构建日志（最后 100 行）："
-                tail -100 "$BUILD_LOG" | sed 's/^/         /'
-                rm -f "$BUILD_LOG"
-                exit 1
-            fi
-        done
-        echo ""
-
-        wait "$BUILD_PID"
-        BUILD_EXIT=$?
-        if [ $BUILD_EXIT -ne 0 ]; then
-            echo "[ERROR] 构建失败（退出码: $BUILD_EXIT）"
-            echo "[ERROR] 构建日志（最后 100 行）："
-            tail -100 "$BUILD_LOG" | sed 's/^/         /'
-            rm -f "$BUILD_LOG"
+        if [ $? -ne 0 ]; then
+            echo "[ERROR] 构建失败"
             exit 1
         fi
-        rm -f "$BUILD_LOG"
-        echo "[OK] 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
+        echo "[OK] 构建完成 ✓"
         ;;
     2)
         echo "[INFO] 增量构建..."
@@ -1333,19 +1356,21 @@ case $BUILD_MODE in
 esac
 
 # 启动
+# --wait-timeout 300: 等待依赖的 service_healthy 条件最多 300 秒
+# 避免 backend 在 start_period 内未变为 healthy 导致 frontend 启动失败
 if [ "$BUILD_ONLY" = true ]; then
     echo "[INFO] 重启服务..."
     if [ -n "$SVCS" ]; then
-        docker compose up -d --force-recreate $SVCS
+        docker compose up -d --wait-timeout 300 --force-recreate $SVCS
     else
-        docker compose up -d --force-recreate
+        docker compose up -d --wait-timeout 300 --force-recreate
     fi
 else
     echo "[INFO] 启动服务..."
     if [ -n "$SVCS" ]; then
-        docker compose up -d $SVCS
+        docker compose up -d --wait-timeout 300 $SVCS
     else
-        docker compose up -d
+        docker compose up -d --wait-timeout 300
     fi
 fi
 
@@ -1418,7 +1443,7 @@ do_rollback() {
 }
 
 echo "[INFO] 等待服务就绪 (预期 ${expected_healthy} 个 healthy)..."
-timeout=180; elapsed=0; deploy_ok=false; fail_reason=""
+timeout=300; elapsed=0; deploy_ok=false; fail_reason=""
 while [ $elapsed -lt $timeout ]; do
     # 获取每个服务的名称和状态
     svc_statuses=$(docker compose ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
@@ -1426,15 +1451,29 @@ while [ $elapsed -lt $timeout ]; do
         sleep 5; elapsed=$((elapsed + 5)); continue
     fi
 
-    # 快速失败：任意服务 unhealthy 或 exited 立即终止
-    failed_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
-    if [ -n "$failed_svcs" ]; then
-        fail_reason="unhealthy"
+    # 快速失败：仅对明确失败的服务（Exited 非0）立即终止
+    # unhealthy 状态在 start_period 内是正常的，不应立即失败
+    exited_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /Exit [^0]|exited \([^0]/ {print $1}' || true)
+    if [ -n "$exited_svcs" ]; then
+        fail_reason="exited"
         echo ""
-        echo "[ERROR] 以下服务启动失败，终止部署："
-        echo "$failed_svcs" | sed 's/^/         /'
+        echo "[ERROR] 以下服务异常退出，终止部署："
+        echo "$exited_svcs" | sed 's/^/         /'
         print_failed_services
         break
+    fi
+
+    # 对于 unhealthy 状态，只在超过一定时间后才判定为失败（给 start_period 留余量）
+    if [ $elapsed -gt 240 ]; then
+        unhealthy_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /\(unhealthy\)/ {print $1}' || true)
+        if [ -n "$unhealthy_svcs" ]; then
+            fail_reason="unhealthy"
+            echo ""
+            echo "[ERROR] 以下服务健康检查持续失败（超过 240s），终止部署："
+            echo "$unhealthy_svcs" | sed 's/^/         /'
+            print_failed_services
+            break
+        fi
     fi
 
     healthy=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /healthy/ && $2 !~ /unhealthy/' | wc -l | tr -d ' ')
@@ -1756,6 +1795,19 @@ echo "[OK] Schema 验证通过（含学校数据关键表）"
 
 # ── 验证并修复从库复制 ────────────────────────────────────────────
 echo "[INFO] 验证从库复制状态..."
+
+# 等待 entrypoint-wrapper.sh 完成复制初始化（如果正在进行）
+# entrypoint-wrapper.sh 在完成后会删除 .replication-init-pending 标记
+echo "[INFO] 等待从库 entrypoint-wrapper 完成初始化..."
+wrapper_wait=0
+while [ $wrapper_wait -lt 120 ]; do
+    if ! docker exec "$SLAVE_CONTAINER" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null; then
+        echo "[OK] 从库 entrypoint-wrapper 已完成"
+        break
+    fi
+    sleep 5; wrapper_wait=$((wrapper_wait + 5))
+    echo "[INFO] 等待 entrypoint-wrapper... (${wrapper_wait}s)"
+done
 
 # 获取当前复制状态
 get_replica_status() {

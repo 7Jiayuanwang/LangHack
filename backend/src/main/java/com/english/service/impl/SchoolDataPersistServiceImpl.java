@@ -735,6 +735,9 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         courseData.put("courseNature", "未知");
         courseData.put("courseCategory", "未知");
         courseData.put("courseStatus", "ACTIVE");
+        // 为骨架记录提供默认值，避免 NOT NULL 约束失败
+        courseData.put("credits", BigDecimal.ZERO);
+        courseData.put("totalHours", 0);
         courseData.put("syncTime", syncTime);
         courseData.put("syncSource", syncSource);
         upsertSchoolCourse(courseData);

@@ -125,12 +125,16 @@ services:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 仅检查 MySQL 进程存活；复制状态由部署脚本后置初始化与运行时降级共同处理
+      # 仅检查 MySQL 进程存活，不强制要求复制运行
+      # 复制状态三层保障：
+      #   1) entrypoint-wrapper.sh 每次启动时主动检查/修复
+      #   2) deploy.sh / auto-update.sh 后置兜底
+      #   3) DynamicDataSource 运行时降级（回退主库）
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 10s
-      retries: 30
-      start_period: 360s  # 增加到 6 分钟，给主库和从库足够时间完成初始化（包括大量数据导入和复制配置）
+      retries: 12
+      start_period: 360s  # entrypoint-wrapper 会等待 MySQL 就绪 + 复制初始化，给足够时间
 
   # ─────────────────────────────────────────────
   # Redis 缓存

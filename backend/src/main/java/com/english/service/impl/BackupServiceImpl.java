@@ -587,20 +587,58 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         }
 
         Path filePath = resolveValidatedBackupPath(record, true);
-        int effectiveMaxLines = Math.min(Math.max(maxLines, 1), 300);
-        int effectiveMaxChars = Math.min(Math.max(maxChars, 200), 30000);
+        int effectiveMaxLines = Math.min(Math.max(maxLines, 1), 500);
+        int effectiveMaxChars = Math.min(Math.max(maxChars, 200), 100000);
+
         StringBuilder preview = new StringBuilder();
         int lineCount = 0;
+        int totalLinesRead = 0;
+        int skippedLines = 0;
         boolean truncated = false;
+        boolean foundDataSection = false;
 
         try (BufferedReader reader = openPreviewReader(filePath)) {
             String line;
             while ((line = reader.readLine()) != null) {
+                totalLinesRead++;
+
+                // 智能跳过无用的头部内容
+                if (!foundDataSection) {
+                    String trimmed = line.trim();
+                    // 跳过注释、空行、SET 语句、USE 语句
+                    if (trimmed.isEmpty()
+                        || trimmed.startsWith("--")
+                        || trimmed.startsWith("/*")
+                        || trimmed.startsWith("*/")
+                        || trimmed.startsWith("SET ")
+                        || trimmed.startsWith("USE ")
+                        || trimmed.startsWith("/*!")) {
+                        skippedLines++;
+                        continue;
+                    }
+                    // 找到第一个有效语句（CREATE/INSERT/DROP/ALTER）
+                    if (trimmed.startsWith("CREATE ")
+                        || trimmed.startsWith("INSERT ")
+                        || trimmed.startsWith("DROP ")
+                        || trimmed.startsWith("ALTER ")
+                        || trimmed.startsWith("LOCK ")
+                        || trimmed.startsWith("UNLOCK ")) {
+                        foundDataSection = true;
+                        preview.append("-- [跳过了前 ").append(skippedLines).append(" 行注释和配置]\n\n");
+                    } else {
+                        skippedLines++;
+                        continue;
+                    }
+                }
+
+                // 检查是否超出限制
                 if (lineCount >= effectiveMaxLines || preview.length() + line.length() + 1 > effectiveMaxChars) {
                     truncated = true;
                     break;
                 }
-                if (lineCount > 0) {
+
+                // 添加行内容
+                if (lineCount > 0 || foundDataSection) {
                     preview.append('\n');
                 }
                 preview.append(line);
@@ -616,6 +654,8 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         result.put("preview", preview.toString());
         result.put("truncated", truncated);
         result.put("lineCount", lineCount);
+        result.put("totalLinesRead", totalLinesRead);
+        result.put("skippedLines", skippedLines);
         result.put("maxLines", effectiveMaxLines);
         result.put("maxChars", effectiveMaxChars);
         return result;

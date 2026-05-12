@@ -1327,6 +1327,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         int teacherCourseMismatchCount = 0;
         int teacherMissingClassIdCount = 0;
         int teacherMissingTeacherIdCount = 0;
+        int teachingClassPersisted = 0;
+        int teachingClassPersistErrors = 0;
         int selectionFetchFailureCount = 0;
         int selectionFetchRowCount = 0;
         int selectionAcceptedRowCount = 0;
@@ -1370,6 +1372,28 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
             for (Map.Entry<String, List<Map<String, Object>>> entry : tcByClassCode.entrySet()) {
                 String kcbh = entry.getKey();
                 List<Map<String, Object>> tcs = entry.getValue();
+
+                // 2.1: 持久化 teaching_class（从 teacher_courses 数据构建）
+                if (persist && !tcs.isEmpty()) {
+                    Map<String, Object> firstTc = tcs.get(0);
+                    Map<String, Object> teachingClassData = new LinkedHashMap<>();
+                    teachingClassData.put("classId", kcbh);
+                    teachingClassData.put("courseCode", kcdm);
+                    teachingClassData.put("courseName", courseCodeToName.get(kcdm));
+                    teachingClassData.put("teacherId", stringValue(firstTc.get("teacherId")));
+                    teachingClassData.put("teacherName", stringValue(firstTc.get("teacherName")));
+                    teachingClassData.put("academicYear", stringValue(firstTc.get("academicYear")));
+                    teachingClassData.put("semester", stringValue(firstTc.get("semester")));
+                    teachingClassData.put("syncTime", syncTime);
+                    teachingClassData.put("syncSource", "CHAIN_SYNC");
+                    try {
+                        upsertTeachingClass(teachingClassData);
+                        teachingClassPersisted++;
+                    } catch (Exception e) {
+                        teachingClassPersistErrors++;
+                        logger.warn("[chainFetch] upsert teaching_class 失败 kcbh={} err={}", kcbh, e.getMessage());
+                    }
+                }
 
                 List<Map<String, Object>> rawSels;
                 try {
@@ -1468,6 +1492,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                 "courseMismatchCount", teacherCourseMismatchCount,
                 "missingClassIdCount", teacherMissingClassIdCount,
                 "missingTeacherIdCount", teacherMissingTeacherIdCount,
+                "teachingClassPersisted", teachingClassPersisted,
+                "teachingClassPersistErrors", teachingClassPersistErrors,
                 "failedCourseCodes", firstItems(failedTeacherCourses, 6)
         ));
         stepStats.put("courseSelection", linkedStats(

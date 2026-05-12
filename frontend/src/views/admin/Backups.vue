@@ -349,7 +349,12 @@
         <div class="detail-section">
           <div class="section-header">
             <strong>内容预览</strong>
-            <span v-if="previewMeta.truncated" class="preview-hint">已截断显示</span>
+            <span v-if="previewMeta.skippedLines > 0" class="preview-hint">
+              已跳过前 {{ previewMeta.skippedLines }} 行注释和配置
+            </span>
+            <span v-if="previewMeta.truncated" class="preview-hint">
+              已截断显示（共读取 {{ previewMeta.totalLinesRead }} 行，显示 {{ previewMeta.lineCount }} 行）
+            </span>
           </div>
           <el-alert
             v-if="previewError"
@@ -673,7 +678,9 @@ const backupPreview = ref('')
 const previewError = ref('')
 const previewMeta = reactive({
   truncated: false,
-  lineCount: 0
+  lineCount: 0,
+  totalLinesRead: 0,
+  skippedLines: 0
 })
 const importForm = reactive({
   file: null,
@@ -785,11 +792,13 @@ const handleView = async (row) => {
   previewError.value = ''
   previewMeta.truncated = false
   previewMeta.lineCount = 0
+  previewMeta.totalLinesRead = 0
+  previewMeta.skippedLines = 0
 
   try {
     const [detailRes, previewRes] = await Promise.allSettled([
       getBackupDetail(row.id),
-      getBackupPreview(row.id, { maxLines: 80, maxChars: 12000 })
+      getBackupPreview(row.id, { maxLines: 200, maxChars: 50000 })
     ])
 
     if (detailRes.status === 'fulfilled' && detailRes.value?.code === 200) {
@@ -804,6 +813,8 @@ const handleView = async (row) => {
       backupPreview.value = previewRes.value.data?.preview || ''
       previewMeta.truncated = previewRes.value.data?.truncated === true
       previewMeta.lineCount = previewRes.value.data?.lineCount || 0
+      previewMeta.totalLinesRead = previewRes.value.data?.totalLinesRead || 0
+      previewMeta.skippedLines = previewRes.value.data?.skippedLines || 0
     } else {
       previewError.value = previewRes.status === 'fulfilled'
         ? (previewRes.value?.message || '读取备份预览失败')
@@ -958,8 +969,31 @@ const handleCreateCategoryBackup = async (category) => {
 
 // Download backup
 const handleDownload = async (row) => {
+  let loadingInstance = null
   try {
-    const response = await downloadBackupApi(row.id)
+    // 显示下载进度提示
+    loadingInstance = ElMessage({
+      message: '正在下载备份文件，请稍候...',
+      type: 'info',
+      duration: 0,
+      showClose: false,
+    })
+
+    const response = await downloadBackupApi(row.id, (progressEvent) => {
+      if (progressEvent.total) {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        if (loadingInstance) {
+          loadingInstance.close()
+        }
+        loadingInstance = ElMessage({
+          message: `下载中: ${percentCompleted}% (${(progressEvent.loaded / 1024 / 1024).toFixed(2)}MB / ${(progressEvent.total / 1024 / 1024).toFixed(2)}MB)`,
+          type: 'info',
+          duration: 0,
+          showClose: false,
+        })
+      }
+    })
+
     const blobData = response.data || response
     const blob = blobData instanceof Blob
       ? blobData
@@ -989,10 +1023,14 @@ const handleDownload = async (row) => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    ElMessage.success('下载开始')
+    ElMessage.success('下载完成')
   } catch (error) {
     console.error('Download backup failed:', error)
     ElMessage.error('下载备份文件失败')
+  } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
   }
 }
 
