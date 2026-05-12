@@ -4,12 +4,34 @@
 ARG IMAGE_REGISTRY_PREFIX=
 FROM ${IMAGE_REGISTRY_PREFIX}maven:3.8-openjdk-17 AS builder
 
+# 内网构建 Maven 镜像源（留空=使用中央仓库；内网填入 Nexus Maven 代理地址）
+# 示例: http://172.20.14.249:8081/repository/maven-public/
+ARG MAVEN_MIRROR_URL=
+
 WORKDIR /app
+
+# 配置阿里云 Maven 镜像（加速依赖下载）
+RUN mkdir -p /root/.m2 && \
+    echo '<?xml version="1.0" encoding="UTF-8"?>' > /root/.m2/settings.xml && \
+    echo '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"' >> /root/.m2/settings.xml && \
+    echo '          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' >> /root/.m2/settings.xml && \
+    echo '          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0' >> /root/.m2/settings.xml && \
+    echo '          http://maven.apache.org/xsd/settings-1.0.0.xsd">' >> /root/.m2/settings.xml && \
+    echo '  <mirrors>' >> /root/.m2/settings.xml && \
+    echo '    <mirror>' >> /root/.m2/settings.xml && \
+    echo '      <id>aliyun</id>' >> /root/.m2/settings.xml && \
+    echo '      <mirrorOf>central</mirrorOf>' >> /root/.m2/settings.xml && \
+    echo '      <name>Aliyun Maven</name>' >> /root/.m2/settings.xml && \
+    echo '      <url>https://maven.aliyun.com/repository/public</url>' >> /root/.m2/settings.xml && \
+    echo '    </mirror>' >> /root/.m2/settings.xml && \
+    echo '  </mirrors>' >> /root/.m2/settings.xml && \
+    echo '</settings>' >> /root/.m2/settings.xml
 
 # 先复制 pom.xml 并下载依赖，利用 Docker 层缓存
 # 只有 pom.xml 变更时才重新下载依赖，加速后续构建
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+# 内网构建时动态注入 Nexus mirror 到 Maven settings，再下载依赖
+RUN mkdir -p /root/.m2 && if [ -n "$MAVEN_MIRROR_URL" ]; then echo "<settings><mirrors><mirror><id>nexus</id><mirrorOf>*</mirrorOf><name>Intranet Nexus Mirror</name><url>${MAVEN_MIRROR_URL}</url></mirror></mirrors></settings>" > /root/.m2/settings.xml; fi && mvn dependency:go-offline -B
 
 # 复制源码并打包（跳过单元测试加快 CI 构建速度）
 COPY src ./src
@@ -21,13 +43,16 @@ RUN mvn package -DskipTests -B
 ARG IMAGE_REGISTRY_PREFIX=
 FROM ${IMAGE_REGISTRY_PREFIX}eclipse-temurin:17-jre-alpine
 
+# Alpine 内网镜像源（留空=使用官方源；内网填入 Nexus Alpine 代理地址）
+# 示例: http://172.20.14.249:8081/repository/alpine-mirror/
+ARG ALPINE_MIRROR=
+
 WORKDIR /app
 
 # 安装 curl（healthcheck）、tzdata（时区）、mysql-client + mariadb-connector-c（mysqldump 备份/恢复）
 # mariadb-connector-c 提供 caching_sha2_password 插件，使 MariaDB 客户端兼容 MySQL 8.0
-RUN apk add --no-cache curl tzdata mysql-client mariadb-connector-c \
-    && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
-    && echo "Asia/Shanghai" > /etc/timezone
+# 内网构建时通过 ALPINE_MIRROR 参数替换 Alpine 包源为内网 Nexus 代理
+RUN if [ -n "$ALPINE_MIRROR" ]; then ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2); printf '%s\n' "${ALPINE_MIRROR%/}/v${ALPINE_VER}/main" "${ALPINE_MIRROR%/}/v${ALPINE_VER}/community" > /etc/apk/repositories; fi && apk add --no-cache curl tzdata mysql-client mariadb-connector-c && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
 
 # 从构建阶段复制可执行 jar
 COPY --from=builder /app/target/*.jar app.jar

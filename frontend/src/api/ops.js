@@ -41,11 +41,12 @@ export function getBackupPreview(id, params) {
   });
 }
 
-export function downloadBackupApi(id) {
+export function downloadBackupApi(id, onDownloadProgress) {
   return request({
     url: `/api/ops/backup/${id}/download`,
     method: "get",
     responseType: "blob",
+    onDownloadProgress,
   });
 }
 

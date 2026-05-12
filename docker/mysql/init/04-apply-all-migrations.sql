@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS `texts` (
     `tags` VARCHAR(255) DEFAULT NULL COMMENT '标签，多个用逗号分隔',
     `view_count` INT DEFAULT 0 COMMENT '查看次数',
     `like_count` INT DEFAULT 0 COMMENT '点赞次数',
+    `read_count` INT DEFAULT 0 COMMENT '阅读次数',
     `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
     `status` ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '审核状态',
     `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
@@ -2656,8 +2657,6 @@ INSERT IGNORE INTO `content_tags` (`name`, `color`, `sort_order`) VALUES
 -- V21__add_display_fields_to_teacher_student_binding.sql
 -- 为 teacher_student_binding 表添加显示字段（教师姓名、学生姓名、学院名称、课程名称）
 
-DELIMITER $$
-
 DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields$$
 CREATE PROCEDURE add_teacher_student_binding_display_fields()
 BEGIN
@@ -2716,10 +2715,8 @@ BEGIN
     END IF;
 END$$
 
-DELIMITER ;
-
-CALL add_teacher_student_binding_display_fields();
-DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields;
+CALL add_teacher_student_binding_display_fields()$$
+DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields$$
 
 -- ════════════════════════════════════════════════════════════════
 
@@ -2740,7 +2737,7 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 -- V17__add_reading_count.sql
 -- 为 user_text_reads 表添加阅读次数字段，为 users 表添加阅读统计字段
 
-DROP PROCEDURE IF EXISTS _add_reading_count_cols;
+DROP PROCEDURE IF EXISTS _add_reading_count_cols$$
 CREATE PROCEDURE _add_reading_count_cols()
 BEGIN
     IF NOT EXISTS (
@@ -2777,8 +2774,29 @@ BEGIN
     END IF;
 END;
 
-CALL _add_reading_count_cols();
-DROP PROCEDURE IF EXISTS _add_reading_count_cols;
+CALL _add_reading_count_cols()$$
+DROP PROCEDURE IF EXISTS _add_reading_count_cols$$
+
+-- ════════════════════════════════════════════════════════════════
+
+-- V18__add_texts_read_count.sql
+-- 为 texts 表添加 read_count 字段（修复 Entity 与 DB Schema 不一致）
+
+DROP PROCEDURE IF EXISTS _add_texts_read_count$$
+CREATE PROCEDURE _add_texts_read_count()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'texts'
+          AND COLUMN_NAME = 'read_count'
+    ) THEN
+        ALTER TABLE texts ADD COLUMN read_count INT NOT NULL DEFAULT 0 COMMENT '阅读次数' AFTER like_count;
+    END IF;
+END$$
+
+CALL _add_texts_read_count()$$
+DROP PROCEDURE IF EXISTS _add_texts_read_count$$
 
 -- ════════════════════════════════════════════════════════════════
 

@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS `texts` (
     `tags` VARCHAR(255) DEFAULT NULL COMMENT '标签，多个用逗号分隔',
     `view_count` INT DEFAULT 0 COMMENT '查看次数',
     `like_count` INT DEFAULT 0 COMMENT '点赞次数',
+    `read_count` INT DEFAULT 0 COMMENT '阅读次数',
     `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
     `status` ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '审核状态',
     `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',

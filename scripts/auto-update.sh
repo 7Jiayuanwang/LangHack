@@ -106,6 +106,42 @@ if [ -f "$ENV_FILE" ]; then
     done < "$ENV_FILE"
 fi
 
+# ── .env 配置校验与自动修复 ────────────────────────────
+# 代码更新后，部分配置项的默认值可能已变更（如镜像源地址重命名）
+# 此函数自动修正 .env 中的过时值，无需用户手动干预
+fix_env_outdated_values() {
+    [ ! -f "$ENV_FILE" ] && return 0
+    local changed=false
+
+    # 已知的过时值修正表：旧值 → 新值
+    # 格式: "KEY|旧值模式|新值"
+    local -a FIXES=(
+        "ALPINE_MIRROR|alpine-proxy|alpine-mirror"
+        "NPM_REGISTRY|alpine-proxy|alpine-mirror"  # 防止误配
+    )
+
+    for fix in "${FIXES[@]}"; do
+        IFS='|' read -r key old_pattern new_value <<< "$fix"
+        # 检查 .env 中是否有该 key 且包含旧值
+        local current_val
+        current_val=$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+        if [ -n "$current_val" ] && echo "$current_val" | grep -q "$old_pattern"; then
+            local new_val="${current_val//$old_pattern/$new_value}"
+            sed -i "s|^${key}=.*|${key}=${new_val}|" "$ENV_FILE"
+            export "$key=$new_val"
+            log "INFO: 自动修正 .env: $key ($old_pattern → $new_value)"
+            changed=true
+        fi
+    done
+
+    if [ "$changed" = true ]; then
+        log "INFO: .env 配置已自动更新，使用修正后的值继续部署"
+    fi
+}
+
+# 加载 .env 后立即执行校验
+fix_env_outdated_values
+
 # 维护模式 & 备份配置（可通过 .env 中 AUTO_UPDATE_* 覆盖）
 MAINTENANCE_MODE="${AUTO_UPDATE_MAINTENANCE:-true}"
 PRE_BACKUP="${AUTO_UPDATE_PRE_BACKUP:-true}"
@@ -115,6 +151,93 @@ HEALTH_CHECK_TIMEOUT=120
 ENV_BACKUP_KEEP=10
 BACKEND_PORT="${PORT_BACKEND:-8080}"
 FRONTEND_PORT="${PORT_FRONTEND:-3000}"
+
+# ── 镜像源探测与降级 ──────────────────────────────────
+# 探测公共 Docker Hub 是否可达
+probe_public_docker() {
+    timeout 10 docker pull "${1:-node:20-alpine}" >/dev/null 2>&1
+}
+
+# 探测本地 registry 是否可达
+probe_local_registry() {
+    local registry="$1"
+    local image="${2:-node:20-alpine}"
+    timeout 10 docker pull "${registry%/}/${image}" >/dev/null 2>&1
+}
+
+# 根据 .env 配置自动解析 IMAGE_REGISTRY_PREFIX
+resolve_build_environment() {
+    local env_image_source="${IMAGE_SOURCE_MODE:-auto}"
+    local env_local_registry="${LOCAL_REGISTRY:-}"
+
+    # 如果 .env 中已有明确配置（非 auto），直接使用
+    if [ "$env_image_source" = "local" ] && [ -n "${IMAGE_REGISTRY_PREFIX:-}" ]; then
+        log "INFO: 使用本地 registry: $IMAGE_REGISTRY_PREFIX"
+        return 0
+    fi
+    if [ "$env_image_source" = "public" ]; then
+        export IMAGE_REGISTRY_PREFIX=""
+        log "INFO: 使用公共镜像"
+        return 0
+    fi
+
+    # auto 模式：探测
+    log "INFO: 自动探测镜像源..."
+    if probe_public_docker; then
+        export IMAGE_REGISTRY_PREFIX=""
+        log "INFO: 公共镜像可用，使用公共镜像"
+    elif [ -n "$env_local_registry" ] && probe_local_registry "$env_local_registry"; then
+        export IMAGE_REGISTRY_PREFIX="${env_local_registry%/}/"
+        log "INFO: 公共镜像不可达，降级到本地 registry: $IMAGE_REGISTRY_PREFIX"
+    else
+        log "WARN: 公共镜像和本地 registry 均不可达，使用 .env 中的配置"
+    fi
+}
+
+# 探测内网 Nexus 是否可达
+probe_nexus() {
+    local url="$1"
+    [ -z "$url" ] && return 1
+    timeout 5 curl -sf -o /dev/null "$url" 2>/dev/null
+}
+
+# 根据网络环境自动选择 Maven/npm/Alpine 镜像源
+resolve_mirror_urls() {
+    local build_env="${BUILD_NETWORK_ENV:-auto}"
+    local env_local_reg="${LOCAL_REGISTRY:-}"
+    local nexus_base=""
+    if [ -n "$env_local_reg" ]; then
+        local ip_only="${env_local_reg%%:*}"
+        nexus_base="http://${ip_only}:8081"
+    fi
+
+    case "$build_env" in
+        intranet)
+            log "INFO: 内网构建模式，使用 .env 中的镜像源配置"
+            ;;
+        public)
+            log "INFO: 公网构建模式，清空内网镜像源"
+            export MAVEN_MIRROR_URL=""
+            export NPM_REGISTRY=""
+            export ALPINE_MIRROR=""
+            ;;
+        auto|"")
+            if [ -n "$nexus_base" ] && probe_nexus "$nexus_base/repository/maven-public/" 2>/dev/null; then
+                log "INFO: 内网 Nexus 可达，使用内网构建"
+                export MAVEN_MIRROR_URL="${MAVEN_MIRROR_URL:-$nexus_base/repository/maven-public/}"
+                export NPM_REGISTRY="${NPM_REGISTRY:-$nexus_base/repository/npm-proxy/}"
+                export ALPINE_MIRROR="${ALPINE_MIRROR:-$nexus_base/repository/alpine-mirror/}"
+            elif [ -n "${MAVEN_MIRROR_URL:-}${NPM_REGISTRY:-}${ALPINE_MIRROR:-}" ]; then
+                log "INFO: 内网 Nexus 不可达，清空内网镜像源使用公网"
+                export MAVEN_MIRROR_URL=""
+                export NPM_REGISTRY=""
+                export ALPINE_MIRROR=""
+            else
+                log "INFO: 未配置内网镜像源，使用公网构建"
+            fi
+            ;;
+    esac
+}
 
 # ── 运维结构化日志函数 ────────────────────────────────
 # 写入 deploy-history.log，格式：时间戳|事件类型|commit|描述
@@ -158,6 +281,9 @@ while [[ $# -gt 0 ]]; do
             echo "  AUTO_UPDATE_PRE_BACKUP     更新前备份数据库 (true/false)"
             echo "  AUTO_UPDATE_RUN_MIGRATIONS 自动执行数据库迁移 (true/false，默认 true)"
             echo "  BACKUP_DIR                 备份存储目录"
+            echo "  BUILD_NETWORK_ENV          构建网络: auto|intranet|public (默认 auto)"
+            echo "  IMAGE_SOURCE_MODE          镜像源: auto|public|local (默认 auto)"
+            echo "  LOCAL_REGISTRY             本地 registry 地址 (如 172.20.14.249:80/langhack)"
             exit 0
             ;;
         *) echo "[ERROR] 未知参数: $1 (运行 $0 --help 查看帮助)"; exit 1 ;;
@@ -1093,6 +1219,74 @@ verify_flyway_migrations() {
     return 0
 }
 
+# ── 构建（含降级重试）──────────────────────────────────
+# 返回值: 0=成功, 1=失败, 2=超时
+do_docker_build() {
+    local services="$1"
+    local attempt=1
+    local max_attempts=2
+
+    while [ $attempt -le $max_attempts ]; do
+        log "INFO: 构建新镜像 (尝试 $attempt/$max_attempts)... (服务: $services)"
+        SCRIPT_STATE="BUILDING"
+
+        BUILD_LOG="/tmp/langhack-build-$$.log"
+        docker compose -f "$COMPOSE_FILE" build --no-cache $services > "$BUILD_LOG" 2>&1 &
+        BUILD_PID=$!
+
+        BUILD_TIMEOUT=1800
+        BUILD_ELAPSED=0
+        while kill -0 "$BUILD_PID" 2>/dev/null; do
+            sleep 30
+            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
+            log "INFO: 构建进行中... (已耗时 ${BUILD_ELAPSED}s)"
+            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
+                log "ERROR: 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
+                kill "$BUILD_PID" 2>/dev/null || true
+                wait "$BUILD_PID" 2>/dev/null || true
+                BUILD_PID=""
+                rm -f "$BUILD_LOG"
+                return 2
+            fi
+        done
+
+        wait "$BUILD_PID"
+        BUILD_EXIT=$?
+        BUILD_PID=""
+
+        if [ $BUILD_EXIT -eq 0 ]; then
+            rm -f "$BUILD_LOG"
+            log "INFO: 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
+            return 0
+        fi
+
+        log "WARN: 构建失败（退出码: $BUILD_EXIT）"
+        tail -20 "$BUILD_LOG" | while read -r line; do log "       $line"; done
+        rm -f "$BUILD_LOG"
+
+        # 降级重试：如果当前用内网源，切换到公网重试
+        if [ $attempt -lt $max_attempts ] && [ -n "${MAVEN_MIRROR_URL:-}${NPM_REGISTRY:-}${ALPINE_MIRROR:-}" ]; then
+            log "WARN: 内网构建失败，降级到公网重试..."
+            export MAVEN_MIRROR_URL=""
+            export NPM_REGISTRY=""
+            export ALPINE_MIRROR=""
+            if [ -n "${IMAGE_REGISTRY_PREFIX:-}" ]; then
+                log "WARN: 同时切换到公共 Docker 镜像..."
+                export IMAGE_REGISTRY_PREFIX=""
+                if ! probe_public_docker; then
+                    log "ERROR: 公共 Docker 镜像也不可达，无法降级"
+                    return 1
+                fi
+            fi
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        return 1
+    done
+    return 1
+}
+
 # ── 回滚 ─────────────────────────────────────────────
 
 rollback_to_old_version() {
@@ -1562,67 +1756,31 @@ fi
 
 # ── 执行重建 / 重启 ───────────────────────────────────
 if [ "$RUNTIME_MODE" = "docker" ]; then
+    # 构建前自动解析镜像源（内网/公网/自动探测）
+    resolve_build_environment
+    resolve_mirror_urls
+
     if [ "$REBUILD_BACKEND" = true ] || [ "$REBUILD_FRONTEND" = true ]; then
         SERVICES=""
         [ "$REBUILD_BACKEND" = true ] && SERVICES="backend"
         [ "$REBUILD_FRONTEND" = true ] && SERVICES="${SERVICES:+$SERVICES }frontend"
 
-        # ⑨ 构建新镜像（旧容器仍在运行）
-        log "INFO: 构建新镜像... (服务: $SERVICES)"
-        log "INFO: 构建可能需要数分钟，请耐心等待..."
-        SCRIPT_STATE="BUILDING"
-
-        # 使用后台进程 + 进度监控，避免长时间无输出导致用户误以为卡死
-        BUILD_LOG="/tmp/langhack-build-$$.log"
-        docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES > "$BUILD_LOG" 2>&1 &
-        BUILD_PID=$!
-
-        # 监控构建进程，每 30 秒输出一次心跳
-        BUILD_TIMEOUT=1800  # 30 分钟超时
-        BUILD_ELAPSED=0
-        while kill -0 "$BUILD_PID" 2>/dev/null; do
-            sleep 30
-            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
-            log "INFO: 构建进行中... (已耗时 ${BUILD_ELAPSED}s)"
-
-            # 超时检测
-            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
-                log "ERROR: 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
-                kill "$BUILD_PID" 2>/dev/null || true
-                wait "$BUILD_PID" 2>/dev/null || true
-                rm -f "$BUILD_LOG"
-                git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
-                disable_maintenance
+        # ⑨ 构建新镜像（含内网失败自动降级公网重试）
+        do_docker_build "$SERVICES"
+        BUILD_RESULT=$?
+        if [ $BUILD_RESULT -ne 0 ]; then
+            if [ $BUILD_RESULT -eq 2 ]; then
                 notify "自动更新失败: Docker 构建超时，已回退代码"
                 ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建超时，已回退代码"
-                SCRIPT_STATE="FAILED"
-                exit 1
+            else
+                notify "自动更新失败: Docker 构建失败（含降级重试），已回退代码"
+                ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败（含降级重试），已回退代码"
             fi
-        done
-
-        # 等待构建进程结束并获取退出码
-        wait "$BUILD_PID"
-        BUILD_EXIT=$?
-        BUILD_PID=""  # 清空 PID，防止 cleanup 重复 kill
-
-        if [ $BUILD_EXIT -ne 0 ]; then
-            log "ERROR: 构建失败（退出码: $BUILD_EXIT），回退代码"
-            log "ERROR: 构建日志（最后 50 行）："
-            tail -50 "$BUILD_LOG" | while read -r line; do log "       $line"; done
-            rm -f "$BUILD_LOG"
-            notify "自动更新失败: Docker 构建失败，正在回退代码..."
-            # 构建失败 → 旧容器未受影响，只需 revert git
             git checkout "$PRE_PULL_COMMIT" --force --quiet 2>/dev/null || true
-            # 部署记录文件不更新，保持指向上次成功部署的 commit
             disable_maintenance
-            notify "已回退到 ${PRE_PULL_COMMIT:0:8}，旧服务继续运行"
-            ops_log "ERROR" "${PRE_PULL_COMMIT:0:8}" "构建失败，已回退代码，部署记录未更新"
             SCRIPT_STATE="FAILED"
             exit 1
         fi
-
-        rm -f "$BUILD_LOG"
-        log "INFO: 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
 
         # ⑩ 先执行数据库迁移，再启动新容器（避免新后端启动时 Schema 尚未更新）
         if [ "$RUN_MIGRATIONS" = true ]; then
