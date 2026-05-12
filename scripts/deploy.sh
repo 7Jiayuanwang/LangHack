@@ -1356,19 +1356,21 @@ case $BUILD_MODE in
 esac
 
 # 启动
+# --wait-timeout 300: 等待依赖的 service_healthy 条件最多 300 秒
+# 避免 backend 在 start_period 内未变为 healthy 导致 frontend 启动失败
 if [ "$BUILD_ONLY" = true ]; then
     echo "[INFO] 重启服务..."
     if [ -n "$SVCS" ]; then
-        docker compose up -d --force-recreate $SVCS
+        docker compose up -d --wait-timeout 300 --force-recreate $SVCS
     else
-        docker compose up -d --force-recreate
+        docker compose up -d --wait-timeout 300 --force-recreate
     fi
 else
     echo "[INFO] 启动服务..."
     if [ -n "$SVCS" ]; then
-        docker compose up -d $SVCS
+        docker compose up -d --wait-timeout 300 $SVCS
     else
-        docker compose up -d
+        docker compose up -d --wait-timeout 300
     fi
 fi
 
