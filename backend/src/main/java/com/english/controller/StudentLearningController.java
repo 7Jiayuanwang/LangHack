@@ -257,6 +257,7 @@ public class StudentLearningController {
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
+            logger.info("[课文详情] 请求文章详情: textId={}, studentId={}", textId, studentId);
 
             // 校验学生是否有权访问该课文
             assertStudentCanRecord(studentId, textId, null, assignmentId);
@@ -266,6 +267,17 @@ public class StudentLearningController {
 
             Map<String, Object> detail = learningRecordsService.getTextDetailWithAnnotation(studentId, textId,
                     assignmentId);
+
+            // 调试日志：查看返回的版本信息
+            Object versionsObj = detail.get("versions");
+            if (versionsObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, String> versions = (Map<String, String>) versionsObj;
+                logger.info("[课文详情] 文章{} 返回版本数={}, 版本keys={}", textId, versions.size(), versions.keySet());
+            } else {
+                logger.info("[课文详情] 文章{} 无versions字段或类型异常: {}", textId,
+                        versionsObj != null ? versionsObj.getClass().getSimpleName() : "null");
+            }
 
             // 移除自动记录逻辑，学习记录由前端学习页面管理
             // 这样可以避免每次刷新页面都增加学习时长

@@ -51,7 +51,7 @@ spring:
       # CRITICAL: DB credentials MUST be provided via environment variables
       # Local dev: set DB_URL, DB_USERNAME, DB_PASSWORD in your environment or .env file
       # Production: MUST be set via environment variables, no defaults
-      jdbc-url: ${DB_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8mb4&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true&allowMultiQueries=true}
+      jdbc-url: ${DB_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true&allowMultiQueries=true}
       username: ${DB_USERNAME}
       password: ${DB_PASSWORD}
       driver-class-name: com.mysql.cj.jdbc.Driver
@@ -69,7 +69,7 @@ spring:
       ssl-mode: ${DB_SSL_MODE:}
     slave:
       # Fallback to master when slave not configured (single-instance deployment)
-      jdbc-url: ${DB_SLAVE_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8mb4&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true&allowMultiQueries=true}
+      jdbc-url: ${DB_SLAVE_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true&allowMultiQueries=true}
       username: ${DB_SLAVE_USERNAME:${DB_USERNAME}}
       password: ${DB_SLAVE_PASSWORD:${DB_PASSWORD}}
       driver-class-name: com.mysql.cj.jdbc.Driver

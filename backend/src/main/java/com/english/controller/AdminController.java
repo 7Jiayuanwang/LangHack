@@ -1558,6 +1558,14 @@ public class AdminController {
             }
 
             textService.updateText(text);
+
+            // 触发 AI 版本生成（CET-4、CET-6、学术、中英对照）
+            if ("MARKDOWN".equals(text.getContentType())) {
+                articleVersionService.checkAndGenerateMarkdownVersions(text.getId());
+            } else {
+                articleVersionService.checkAndGenerateVersions(text.getId());
+            }
+
             return Result.success("审核通过");
         } catch (Exception e) {
             logger.error("课文审核通过失败 id={}", id, e);
