@@ -340,10 +340,7 @@ renderer.image = function({ href, title, text }) {
 marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
 import { getArticlesPath } from '@/config/site'
-import * as rangy from '@/utils/rangy'
-import 'rangy/lib/rangy-classapplier'
-import 'rangy/lib/rangy-highlighter'
-import 'rangy/lib/rangy-serializer'
+import rangy from '@/utils/rangy'
 
 const route = useRoute()
 const router = useRouter()
@@ -1850,7 +1847,7 @@ const applySharedUnderlines = () => {
         window.getSelection().removeAllRanges()
         applied = true
       } catch (e) {
-        console.error('Rangy deserialization failed, trying fallback:', e)
+        // 反序列化失败是正常回退流程（DOM 结构变化后序列化失效），静默处理
       }
     }
 
