@@ -47,6 +47,7 @@ describe('SsoCallback.vue', () => {
     userStore = useUserStore()
     mockPush.mockClear()
     vi.clearAllMocks()
+    sessionStorage.clear()
     mockRoute.query = { code: 'test-one-time-code' }
   })
 
@@ -205,6 +206,101 @@ describe('SsoCallback.vue', () => {
     expect(denied.exists()).toBe(true)
     expect(denied.props('theme')).toBe('error')
   })
+
+  // ===== SSO 登录后返回原始受保护页面 =====
+
+  it('有保存的重定向路径时，STUDENT 优先跳转到保存的路径', async () => {
+    const fakeJwt = createFakeJwt('STUDENT', '2023122066164')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    sessionStorage.setItem('sso_redirect_after_login', '/articles')
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(mockPush).toHaveBeenCalledWith('/articles')
+    expect(sessionStorage.getItem('sso_redirect_after_login')).toBeNull()
+  })
+
+  it('有保存的重定向路径时，ADMIN 优先跳转到保存的路径而非 /admin', async () => {
+    const fakeJwt = createFakeJwt('ADMIN', 'admin')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    sessionStorage.setItem('sso_redirect_after_login', '/admin/users')
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(mockPush).toHaveBeenCalledWith('/admin/users')
+    expect(mockPush).not.toHaveBeenCalledWith('/admin')
+  })
+
+  it('无保存路径时按原角色逻辑跳转', async () => {
+    const fakeJwt = createFakeJwt('TEACHER', 'teacher')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    // 确保 sessionStorage 为空
+    sessionStorage.removeItem('sso_redirect_after_login')
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(mockPush).toHaveBeenCalledWith('/teacher')
+  })
+
+  it('重定向路径包含查询参数时仍正确跳转', async () => {
+    const fakeJwt = createFakeJwt('STUDENT', '2023122066164')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    sessionStorage.setItem('sso_redirect_after_login', '/article/42?tab=vocabulary')
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(mockPush).toHaveBeenCalledWith('/article/42?tab=vocabulary')
+  })
+
+  it('恶意路径（绝对 URL）被安全过滤，回退到角色首页', async () => {
+    const fakeJwt = createFakeJwt('STUDENT', '2023122066164')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    sessionStorage.setItem('sso_redirect_after_login', 'https://evil.com')
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(mockPush).toHaveBeenCalledWith('/student')
+  })
+
+  it('恶意路径（伪协议）被安全过滤，回退到角色首页', async () => {
+    const fakeJwt = createFakeJwt('STUDENT', '2023122066164')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    sessionStorage.setItem('sso_redirect_after_login', 'javascript:alert(1)')
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(mockPush).toHaveBeenCalledWith('/student')
+  })
+
+  it('恶意路径（空字符串）被安全过滤，回退到角色首页', async () => {
+    const fakeJwt = createFakeJwt('STUDENT', '2023122066164')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    sessionStorage.setItem('sso_redirect_after_login', '')
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(mockPush).toHaveBeenCalledWith('/student')
+  })
+
+  it('登录成功后 sessionStorage 中的重定向路径被清除', async () => {
+    const fakeJwt = createFakeJwt('OPS', 'ops')
+    ssoApi.exchangeSsoToken.mockResolvedValue({ code: 200, data: { token: fakeJwt } })
+
+    sessionStorage.setItem('sso_redirect_after_login', '/ops/monitoring')
+    wrapper = mount(SsoCallback)
+    await flushPromises()
+
+    expect(sessionStorage.getItem('sso_redirect_after_login')).toBeNull()
+  })
+
+  // ===== 错误路径 =====
 
   it('点击"返回登录"按钮跳转 /login', async () => {
     ssoApi.exchangeSsoToken.mockRejectedValue(new Error('Login failed'))
