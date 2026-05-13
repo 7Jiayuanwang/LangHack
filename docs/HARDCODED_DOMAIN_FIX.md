@@ -173,6 +173,8 @@ docker exec langhack-frontend nginx -s reload
 **预期**:
 - 在 `langhack.imau.edu.cn` 上 → 回调到 `https://langhack.imau.edu.cn/api/auth/sso/callback`
 - 在 `isa.imau.edu.cn` 上 → 回调到 `https://isa.imau.edu.cn/api/auth/sso/callback`
+- 若登录前访问的是受保护页面，前端 `/sso/callback` 兑换 token 成功后会优先返回该同域站内路径
+- 无保存路径或保存路径不安全时，回退到按角色首页跳转
 
 **验证方法**:
 ```bash

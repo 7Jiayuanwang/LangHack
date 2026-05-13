@@ -146,6 +146,24 @@ onMounted(async () => {
     localStorage.setItem('userInfo', JSON.stringify(jwtUserInfo))
     localStorage.setItem('userRole', jwtRole)
 
+    // SSO 登录成功后优先跳回原始受保护页面
+    let savedRedirect = ''
+    try {
+      savedRedirect = sessionStorage.getItem('sso_redirect_after_login') || ''
+      sessionStorage.removeItem('sso_redirect_after_login')
+    } catch (e) {
+      console.warn('[SSO] 读取登录后重定向路径失败', e)
+    }
+
+    if (savedRedirect) {
+      // 安全校验：仅允许站内路径，避免 open redirect
+      const isSafeRedirect = savedRedirect.startsWith('/') && !savedRedirect.startsWith('//')
+      if (isSafeRedirect) {
+        router.push(savedRedirect)
+        return
+      }
+    }
+
     // 根据角色跳转
     switch (jwtRole) {
       case 'ADMIN':

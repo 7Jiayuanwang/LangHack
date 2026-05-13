@@ -508,7 +508,15 @@ router.beforeEach(async (to, from, next) => {
 
   // 需要登录的页面
   if (!hasValidToken) {
-    // 防止无限重定向循环
+    // 防止无限重定向循环，且不在 SSO 回调页保存（避免嵌套）
+    if (to.path !== "/login" && to.path !== "/sso/callback") {
+      // 保存原始目标页，SSO 登录成功后跳回
+      try {
+        sessionStorage.setItem("sso_redirect_after_login", to.fullPath);
+      } catch (e) {
+        console.warn("[SSO] 保存登录后重定向路径失败", e);
+      }
+    }
     if (to.path !== "/login") {
       next("/login");
     } else {
