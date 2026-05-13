@@ -15,6 +15,22 @@ let isLoggingOut = false
 const handleLogout = async () => {
   if (isLoggingOut) return
   isLoggingOut = true
+
+  // 保存当前页面路径，SSO 重新登录后可跳回
+  // 301/302 是重定向，不应保存；login/sso/callback 也不保存避免循环
+  const currentPath = window.location.pathname + window.location.search + window.location.hash
+  if (
+    currentPath !== '/login' &&
+    !currentPath.startsWith('/sso/callback') &&
+    !currentPath.startsWith('/admin-portal')
+  ) {
+    try {
+      sessionStorage.setItem('sso_redirect_after_login', currentPath)
+    } catch (e) {
+      console.warn('[SSO] 保存 401 重定向路径失败', e)
+    }
+  }
+
   try {
     const userStore = useUserStore()
     // 先清理本地状态（store.logout 内部会先清本地再调 API）
