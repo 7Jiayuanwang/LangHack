@@ -657,15 +657,15 @@ public class AdminController {
             Map<String, Object> stats = new HashMap<>();
 
             long totalTexts = textService.lambdaQuery()
-                    .eq(Text::getDeleted, 0).count();
+                    .eq(Text::getDeleted, 0).eq(Text::getStatus, "APPROVED").count();
             long totalEasy = textService.lambdaQuery()
-                    .eq(Text::getDeleted, 0).eq(Text::getDifficulty, "EASY").count();
+                    .eq(Text::getDeleted, 0).eq(Text::getStatus, "APPROVED").eq(Text::getDifficulty, "EASY").count();
             long totalMedium = textService.lambdaQuery()
-                    .eq(Text::getDeleted, 0).eq(Text::getDifficulty, "MEDIUM").count();
+                    .eq(Text::getDeleted, 0).eq(Text::getStatus, "APPROVED").eq(Text::getDifficulty, "MEDIUM").count();
             long totalHard = textService.lambdaQuery()
-                    .eq(Text::getDeleted, 0).eq(Text::getDifficulty, "HARD").count();
+                    .eq(Text::getDeleted, 0).eq(Text::getStatus, "APPROVED").eq(Text::getDifficulty, "HARD").count();
             long totalFeatured = textService.lambdaQuery()
-                    .eq(Text::getDeleted, 0).eq(Text::getIsFeatured, 1).count();
+                    .eq(Text::getDeleted, 0).eq(Text::getStatus, "APPROVED").eq(Text::getIsFeatured, 1).count();
 
             stats.put("totalTexts", totalTexts);
             stats.put("totalEasy", totalEasy);
@@ -690,7 +690,9 @@ public class AdminController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) Long unitId,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String difficulty) {
+            @RequestParam(required = false) String difficulty,
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) Integer featured) {
         try {
             // 分页参数边界校验
             page = Math.max(1, page);
@@ -707,6 +709,8 @@ public class AdminController {
             if (unitId != null) params.put("unitId", unitId);
             if (keyword != null) params.put("keyword", keyword);
             if (difficulty != null) params.put("difficulty", difficulty);
+            if (tag != null) params.put("tag", tag);
+            if (featured != null) params.put("featured", featured);
 
             Map<String, Object> result = textService.getTextsByPage(params);
             return Result.success(result);

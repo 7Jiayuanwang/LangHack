@@ -24,6 +24,7 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         int size = params.get("size") != null ? ((Number) params.get("size")).intValue() : 10;
         Object keywordObj = params.get("keyword");
         String keyword = keywordObj != null ? keywordObj.toString() : null;
+        String tag = (String) params.get("tag");
 
         Page<Video> pageParam = new Page<>(page, size);
         QueryWrapper<Video> queryWrapper = new QueryWrapper<>();
@@ -36,6 +37,16 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
                 .or()
                 .like("tags", keyword)
             );
+        }
+
+        if (tag != null && !tag.trim().isEmpty()) {
+            String[] tags = tag.split(",");
+            for (String t : tags) {
+                String trimmed = t.trim();
+                if (!trimmed.isEmpty()) {
+                    queryWrapper.like("tags", trimmed);
+                }
+            }
         }
 
         queryWrapper.eq("deleted", 0);
