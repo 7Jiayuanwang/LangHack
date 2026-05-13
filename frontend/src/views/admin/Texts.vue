@@ -19,6 +19,11 @@
             <el-option label="困难" value="HARD" />
           </el-select>
         </el-form-item>
+        <el-form-item label="标签">
+          <el-select v-model="tagFilter" multiple collapse-tags placeholder="标签筛选" clearable style="width: 200px" @change="handleSearch">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">
             <el-icon><Search /></el-icon>
@@ -40,23 +45,23 @@
 
     <!-- 统计信息 -->
     <div class="stats-cards">
-      <div class="stat-card">
+      <div class="stat-card" :class="{ active: activeStatFilter === 'EASY' }" @click="handleStatClick('EASY')">
         <div class="stat-value">{{ stats.totalEasy || 0 }}</div>
         <div class="stat-label">简单课文</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" :class="{ active: activeStatFilter === 'MEDIUM' }" @click="handleStatClick('MEDIUM')">
         <div class="stat-value">{{ stats.totalMedium || 0 }}</div>
         <div class="stat-label">中等课文</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" :class="{ active: activeStatFilter === 'HARD' }" @click="handleStatClick('HARD')">
         <div class="stat-value">{{ stats.totalHard || 0 }}</div>
         <div class="stat-label">困难课文</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" :class="{ active: activeStatFilter === 'FEATURED' }" @click="handleStatClick('FEATURED')">
         <div class="stat-value">{{ stats.totalFeatured || 0 }}</div>
         <div class="stat-label">推荐课文</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" :class="{ active: activeStatFilter === null }" @click="handleStatClick(null)">
         <div class="stat-value">{{ stats.totalTexts || 0 }}</div>
         <div class="stat-label">总课文数</div>
       </div>
@@ -84,13 +89,6 @@
           <template #default="{ row }">
             <el-tag :type="getDifficultyType(row.difficulty)">
               {{ getDifficultyText(row.difficulty) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="审核状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">
-              {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -218,6 +216,9 @@
 </template>
 
 <script setup>
+// 注意：此组件为 ContentManagement.vue 的嵌入式子组件，通过 v-show 在「内容管理 → 文章管理」Tab 中渲染。
+// 原独立路由 /admin/texts 已移除，所有文章管理功能统一走 ContentManagement。
+// 如需修改文章管理逻辑，编辑此文件即可，ContentManagement 会自动同步。
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -242,6 +243,9 @@ const searchForm = reactive({
   keyword: '',
   difficulty: ''
 })
+const tagFilter = ref([])
+const availableTags = ref([])
+const activeStatFilter = ref(null) // null | 'EASY' | 'MEDIUM' | 'HARD' | 'FEATURED'
 
 // 分页数据
 const pagination = reactive({
@@ -289,8 +293,16 @@ const loadTexts = async () => {
     if (searchForm.keyword) {
       params.keyword = searchForm.keyword
     }
-    if (searchForm.difficulty) {
+    // 统计卡片筛选优先于搜索表单的难度筛选
+    if (activeStatFilter.value === 'FEATURED') {
+      params.featured = 1
+    } else if (activeStatFilter.value) {
+      params.difficulty = activeStatFilter.value
+    } else if (searchForm.difficulty) {
       params.difficulty = searchForm.difficulty
+    }
+    if (tagFilter.value && tagFilter.value.length > 0) {
+      params.tag = tagFilter.value.join(',')
     }
 
     const response = await adminApi.getTexts(params)
@@ -305,9 +317,21 @@ const loadTexts = async () => {
   } finally {
     loading.value = false
   }
+  loadStats()
+}
+
+const handleStatClick = (filter) => {
+  if (activeStatFilter.value === filter) {
+    activeStatFilter.value = null
+  } else {
+    activeStatFilter.value = filter
+  }
+  pagination.current = 1
+  loadTexts()
 }
 
 const handleSearch = () => {
+  activeStatFilter.value = null
   pagination.current = 1
   loadTexts()
 }
@@ -471,13 +495,21 @@ const getDifficultyText = (difficulty) => {
   return texts[difficulty] || difficulty
 }
 
-const getStatusType = (s) => ({ APPROVED: 'success', PENDING: 'warning', REJECTED: 'danger' }[s] || '')
-const getStatusText = (s) => ({ APPROVED: '已审核', PENDING: '待审核', REJECTED: '已拒绝' }[s] || s)
-
 const formatTime = (time) => {
   if (!time) return ''
   const date = new Date(time)
   return date.toLocaleString('zh-CN')
+}
+
+const loadAvailableTags = async () => {
+  try {
+    const res = await adminApi.getContentTags()
+    if (res.code === 200) {
+      availableTags.value = res.data || []
+    }
+  } catch (e) {
+    // 静默失败
+  }
 }
 
 // 生命周期
@@ -485,6 +517,7 @@ onMounted(() => {
   loadCourses()
   loadStats()
   loadTexts()
+  loadAvailableTags()
 })
 
 defineExpose({ loadTexts })
@@ -553,6 +586,16 @@ defineExpose({ loadTexts })
   border: 1px solid #e4e7ed;
   border-radius: 8px;
   transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.stat-card.active {
+  border-color: #409eff;
+  background-color: #ecf5ff;
+}
+
+.stat-card.active .stat-value {
+  color: #337ecc;
 }
 
 .stat-card:hover {
