@@ -42,7 +42,7 @@ public class MediaController {
     // mimeType 白名单，防止数据库中的值被篡改为 text/html 触发存储型 XSS
     private static final Set<String> ALLOWED_MIME_TYPES = Set.of(
         "image/jpeg", "image/png", "image/gif", "image/webp",
-        "video/mp4", "video/webm", "video/ogg",
+        "video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo", "video/x-matroska",
         "audio/mpeg", "audio/ogg", "audio/wav", "audio/webm",
         "application/pdf"
     );

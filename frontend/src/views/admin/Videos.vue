@@ -12,6 +12,11 @@
             @keyup.enter="handleSearch"
           />
         </el-form-item>
+        <el-form-item label="标签">
+          <el-select v-model="tagFilter" multiple collapse-tags placeholder="标签筛选" clearable style="width: 200px" @change="handleSearch">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">
             <el-icon><Search /></el-icon>
@@ -81,6 +86,7 @@
               :model-value="row.isFeatured === 1"
               @change="toggleFeatured(row, $event)"
               :loading="row._featuredLoading"
+              :disabled="row.status !== 'APPROVED'"
             />
           </template>
         </el-table-column>
@@ -231,6 +237,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
 import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
+import { getContentTags } from '@/api/admin'
 
 const router = useRouter()
 
@@ -255,6 +262,8 @@ const previewVideo = (row) => {
 }
 
 const searchForm = reactive({ keyword: '' })
+const tagFilter = ref([])
+const availableTags = ref([])
 const pagination = reactive({ current: 1, size: 20, total: 0 })
 
 const form = reactive({
@@ -302,6 +311,7 @@ const loadVideos = async () => {
   try {
     const params = { page: pagination.current, size: pagination.size }
     if (searchForm.keyword) params.keyword = searchForm.keyword
+    if (tagFilter.value && tagFilter.value.length > 0) params.tag = tagFilter.value.join(',')
 
     const res = await videoApi.getAdminVideos(params)
     if (res.code === 200) {
@@ -313,6 +323,7 @@ const loadVideos = async () => {
   } finally {
     loading.value = false
   }
+  loadStats()
 }
 
 const handleSearch = () => { pagination.current = 1; loadVideos() }
@@ -440,7 +451,18 @@ const getStatusType = (s) => ({ APPROVED: 'success', PENDING: 'warning', REJECTE
 const getStatusText = (s) => ({ APPROVED: '已审核', PENDING: '待审核', REJECTED: '已拒绝' }[s] || s)
 const formatTime = (t) => t ? new Date(t).toLocaleString('zh-CN') : ''
 
-onMounted(() => { loadStats(); loadVideos() })
+const loadAvailableTags = async () => {
+  try {
+    const res = await getContentTags()
+    if (res.code === 200) {
+      availableTags.value = res.data || []
+    }
+  } catch (e) {
+    // 静默失败
+  }
+}
+
+onMounted(() => { loadStats(); loadVideos(); loadAvailableTags() })
 
 defineExpose({ loadVideos })
 </script>

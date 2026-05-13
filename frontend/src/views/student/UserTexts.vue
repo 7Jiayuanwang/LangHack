@@ -65,10 +65,6 @@
 
       <div v-else-if="allItems.length === 0" class="empty-container">
         <el-empty description="暂无上传内容" />
-        <div style="margin-top: 20px; display: flex; gap: 12px;">
-          <el-button type="primary" @click="showUploadDialog = true">上传课文</el-button>
-          <el-button type="warning" @click="showVideoUploadDialog = true">上传视频</el-button>
-        </div>
       </div>
 
       <div v-else class="text-grid">
@@ -117,7 +113,7 @@
               <el-button size="small" type="primary" @click.stop="previewItem(item)">
                 <el-icon><View /></el-icon> 预览
               </el-button>
-              <el-button v-if="item.status !== 'APPROVED'" size="small" @click.stop="item._type === 'video' ? editVideoItem(item) : editText(item)">
+              <el-button size="small" @click.stop="item._type === 'video' ? editVideoItem(item) : editText(item)">
                 <el-icon><Edit /></el-icon> 编辑
               </el-button>
               <el-button
@@ -630,6 +626,7 @@ const triggerMdImport = () => {
 
 const closeImportDialog = () => {
   importDialogVisible.value = false
+  showUploadDialog.value = true
 }
 
 const handleMdFileChange = async (event) => {
@@ -670,7 +667,6 @@ const handleMdFileChange = async (event) => {
       importLogs.value.push({ type: 'success', msg: '未检测到任何图片链接，提取完成。' })
       importProgress.value = 100
       uploadMarkdownContent.value = content
-      showUploadDialog.value = true
       importComplete.value = true
       return
     }
@@ -749,10 +745,9 @@ const handleMdFileChange = async (event) => {
     importLogs.value.push({ type: 'info', msg: `🎉 处理完成！成功搬运/匹配 ${successCount} 张（含本地 ${localMatchCount} 张），跳过/失败 ${skipCount} 张。` })
     importProgress.value = 100
     importComplete.value = true
-    
+
     // 将最终的内容赋值给编辑器
     uploadMarkdownContent.value = content
-    showUploadDialog.value = true
   }
   
   reader.onerror = () => {

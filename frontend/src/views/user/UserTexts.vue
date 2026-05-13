@@ -53,9 +53,6 @@
 
       <div v-else-if="myTexts.length === 0" class="empty-container">
         <el-empty description="暂无上传内容" />
-        <el-button type="primary" @click="showUploadDialog = true" style="margin-top: 20px">
-          立即上传
-        </el-button>
       </div>
 
       <div v-else class="text-grid">

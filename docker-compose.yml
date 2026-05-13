@@ -232,6 +232,10 @@ services:
       APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
+      # Flyway — 自动增量迁移（通过环境变量启用，覆盖 application.yml 的 false）
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "21"
       # School Data Integration
       SCHOOL_DATA_SOURCE: ${SCHOOL_DATA_SOURCE:-api}
       SCHOOL_API_BASE_URL: ${SCHOOL_API_BASE_URL:-}
