@@ -250,6 +250,7 @@ ops_log() {
 
 # ── 参数解析 ──────────────────────────────────────────
 OFFLINE_MODE=false
+AUTO_UPDATE_SKIP_GIT=${AUTO_UPDATE_SKIP_GIT:-0}
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -b|--branch) BRANCH="$2"; shift 2 ;;
@@ -257,6 +258,7 @@ while [[ $# -gt 0 ]]; do
         --backup-before-update) PRE_BACKUP=true; shift ;;
         --no-backup) PRE_BACKUP=false; shift ;;
         --offline|--local-only) OFFLINE_MODE=true; shift ;;
+        --skip-git-check) AUTO_UPDATE_SKIP_GIT=1; shift ;;
         -h|--help)
             echo "用法: $0 [选项]"
             echo ""
@@ -1487,6 +1489,8 @@ if [ "$OFFLINE_MODE" = true ]; then
 
     # 跳过远程检查，直接进入部署流程
     REMOTE_HASH="$LOCAL_HASH"  # 设置为相同，触发"强制部署"逻辑
+    elif [ "$AUTO_UPDATE_SKIP_GIT" = "1" ]; then
+        log "INFO: 更新脚本已重载，跳过 git 检查直接进入部署..."
 else
     # 在线模式：正常 git fetch
     # git fetch 带超时和重试（网络断开时 set -e 会直接退出）
@@ -1563,8 +1567,8 @@ fi  # 结束 fetch_ok 检查
 fi  # 结束离线模式 if
 
 LOCAL_HASH=$(git rev-parse HEAD)
-# 离线模式下直接使用本地 HEAD，否则使用 origin/$BRANCH
-if [ "$OFFLINE_MODE" = true ]; then
+# 离线模式 / 脚本重载时直接使用本地 HEAD，否则使用 origin/$BRANCH
+if [ "$OFFLINE_MODE" = true ] || [ "$AUTO_UPDATE_SKIP_GIT" = "1" ]; then
     REMOTE_HASH="$LOCAL_HASH"
 else
     REMOTE_HASH=$(git rev-parse "origin/$BRANCH")
@@ -1677,6 +1681,14 @@ if reset_err=$(git reset --hard "origin/$BRANCH" --quiet 2>&1); then
         log "INFO: 本地修改已保存在 stash，可按需恢复: git stash list | grep \"$AUTO_STASH_NAME\""
     fi
     ROLLBACK_NEEDED=true  # 从此刻起，失败需要回滚
+
+        # 检测更新脚本自身是否变更，若变更则重新加载最新版本
+        if echo "$CHANGED_FILES" | grep -q "scripts/auto-update.sh"; then
+            log "INFO: 检测到更新脚本自身变更，重新执行最新版本..."
+            export AUTO_UPDATE_REEXEC=1
+            export AUTO_UPDATE_SKIP_GIT=1
+            exec bash "$0" "$@"
+        fi
 else
     if echo "$reset_err" | grep -qi "Permission denied"; then
         log "ERROR: git reset --hard 失败：检测到工作区文件权限问题"
