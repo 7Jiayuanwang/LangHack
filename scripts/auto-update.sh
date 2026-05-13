@@ -56,7 +56,6 @@ set -euo pipefail
 SCRIPT_STATE="INIT"           # INIT -> CHECKING -> UPDATING -> BUILDING -> MIGRATING -> DEPLOYING -> SUCCESS/FAILED
 ROLLBACK_NEEDED=false
 MAINTENANCE_ACTIVE=false
-BUILD_PID=""
 CLEANUP_DONE=false
 AUTO_STASH_CREATED=false
 AUTO_STASH_NAME=""
@@ -1231,41 +1230,40 @@ do_docker_build() {
 
     while [ $attempt -le $max_attempts ]; do
         log "INFO: 构建新镜像 (尝试 $attempt/$max_attempts)... (服务: $services)"
+        log "════ 构建日志开始 ════"
         SCRIPT_STATE="BUILDING"
 
         BUILD_LOG="/tmp/langhack-build-$$.log"
-        docker compose -f "$COMPOSE_FILE" build --no-cache $services > "$BUILD_LOG" 2>&1 &
-        BUILD_PID=$!
-
         BUILD_TIMEOUT=1800
-        BUILD_ELAPSED=0
-        while kill -0 "$BUILD_PID" 2>/dev/null; do
-            sleep 30
-            BUILD_ELAPSED=$((BUILD_ELAPSED + 30))
-            log "INFO: 构建进行中... (已耗时 ${BUILD_ELAPSED}s)"
-            if [ $BUILD_ELAPSED -ge $BUILD_TIMEOUT ]; then
-                log "ERROR: 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
-                kill "$BUILD_PID" 2>/dev/null || true
-                wait "$BUILD_PID" 2>/dev/null || true
-                BUILD_PID=""
-                rm -f "$BUILD_LOG"
-                return 2
-            fi
-        done
 
-        wait "$BUILD_PID"
-        BUILD_EXIT=$?
-        BUILD_PID=""
+        # 临时关闭 pipefail 以正确处理管道退出码
+        set +o pipefail
+        if command -v timeout >/dev/null 2>&1; then
+            timeout "$BUILD_TIMEOUT" docker compose -f "$COMPOSE_FILE" build --no-cache $services 2>&1 | tee "$BUILD_LOG"
+            BUILD_EXIT=${PIPESTATUS[0]}
+        else
+            docker compose -f "$COMPOSE_FILE" build --no-cache $services 2>&1 | tee "$BUILD_LOG"
+            BUILD_EXIT=${PIPESTATUS[0]}
+        fi
+        set -o pipefail
+
+        log "════ 构建日志结束 ════"
 
         if [ $BUILD_EXIT -eq 0 ]; then
             rm -f "$BUILD_LOG"
-            log "INFO: 构建完成 ✓ (耗时 ${BUILD_ELAPSED}s)"
+            log "INFO: 构建完成 ✓"
             return 0
         fi
 
+        # timeout 返回 124
+        if [ $BUILD_EXIT -eq 124 ]; then
+            log "ERROR: 构建超时 (${BUILD_TIMEOUT}s)，终止构建"
+            rm -f "$BUILD_LOG"
+            return 2
+        fi
+
         log "WARN: 构建失败（退出码: $BUILD_EXIT）"
-        tail -20 "$BUILD_LOG" | while read -r line; do log "       $line"; done
-        rm -f "$BUILD_LOG"
+        log "WARN: 完整日志: $BUILD_LOG"
 
         # 降级重试：如果当前用内网源，切换到公网重试
         if [ $attempt -lt $max_attempts ] && [ -n "${MAVEN_MIRROR_URL:-}${NPM_REGISTRY:-}${ALPINE_MIRROR:-}" ]; then
@@ -1353,14 +1351,7 @@ cleanup() {
 
     log "INFO: 执行清理操作（状态: $SCRIPT_STATE, 退出码: $exit_code）..."
 
-    # 清理构建进程
-    if [ -n "$BUILD_PID" ] && kill -0 "$BUILD_PID" 2>/dev/null; then
-        log "WARN: 终止残留的构建进程 (PID: $BUILD_PID)"
-        kill "$BUILD_PID" 2>/dev/null || true
-        wait "$BUILD_PID" 2>/dev/null || true
-    fi
-
-    # 清理临时文件
+    # 清理临时构建日志文件
     rm -f /tmp/langhack-build-$$.log 2>/dev/null || true
 
     # 保底: 无论脚本如何退出，都尝试关闭维护模式
