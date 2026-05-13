@@ -40,13 +40,17 @@ public class AdminVideoController {
     public Result<Map<String, Object>> getVideos(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String keyword) {
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String tag) {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("page", page);
             params.put("size", size);
             if (keyword != null && !keyword.trim().isEmpty()) {
                 params.put("keyword", keyword);
+            }
+            if (tag != null && !tag.trim().isEmpty()) {
+                params.put("tag", tag);
             }
             Map<String, Object> result = videoService.getVideosByPage(params);
             return Result.success(result);

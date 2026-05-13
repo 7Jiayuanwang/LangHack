@@ -1,7 +1,7 @@
 <template>
   <div class="content-management">
     <!-- 一级 Tab：文章 / 视频 / 内容审核 -->
-    <el-tabs v-model="activeTab" class="main-tabs" @tab-change="handleTabChange">
+    <el-tabs v-model="activeTab" class="main-tabs" @tab-click="handleTabClick">
       <el-tab-pane name="texts">
         <template #label>
           <el-icon><Document /></el-icon>
@@ -82,18 +82,19 @@ const loadPendingCount = async () => {
   }
 }
 
-const handleTabChange = () => {
-  // tab 切换时不需要重新加载，v-show 保持状态
+const handleTabClick = (pane) => {
+  refreshCurrent(pane.paneName)
 }
 
-const refreshCurrent = () => {
-  if (activeTab.value === 'texts' && textsPanel.value?.loadTexts) {
+const refreshCurrent = (tabName) => {
+  const target = tabName || activeTab.value
+  if (target === 'texts' && textsPanel.value?.loadTexts) {
     textsPanel.value.loadTexts()
-  } else if (activeTab.value === 'videos' && videosPanel.value?.loadVideos) {
+  } else if (target === 'videos' && videosPanel.value?.loadVideos) {
     videosPanel.value.loadVideos()
-  } else if (activeTab.value === 'review' && reviewPanel.value?.loadData) {
+  } else if (target === 'review' && reviewPanel.value?.loadData) {
     reviewPanel.value.loadData()
-  } else if (activeTab.value === 'tags' && tagsPanel.value?.loadTags) {
+  } else if (target === 'tags' && tagsPanel.value?.loadTags) {
     tagsPanel.value.loadTags()
   }
 }

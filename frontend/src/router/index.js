@@ -96,12 +96,6 @@ const routes = [
         meta: { title: "单词管理", roles: ["ADMIN"], featureKey: "admin.words" },
       },
       {
-        path: "texts",
-        name: "AdminTexts",
-        component: () => import("@/views/admin/Texts.vue"),
-        meta: { title: "课文管理", roles: ["ADMIN"], featureKey: "admin.texts" },
-      },
-      {
         path: "assignments",
         name: "AdminAssignments",
         component: () => import("@/views/admin/Assignments.vue"),

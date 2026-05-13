@@ -114,7 +114,7 @@
     <el-dialog
       v-model="showTranslateDialog"
       title="翻译结果"
-      :width="translateDialogWidth"
+      width="min(400px, 92vw)"
       class="translate-dialog"
     >
       <div class="translate-content" v-if="!translating">
@@ -151,42 +151,25 @@
     </el-dialog>
 
     <!-- 单词详情对话框 -->
-    <el-dialog 
-      v-model="showWordDialog" 
-      title="单词详情" 
-      width="350px"
-      :class="{ 'mobile-word-dialog': true }"
+    <el-dialog
+      v-model="showWordDialog"
+      title="词汇详情"
+      width="min(350px, 92vw)"
+      class="word-dialog"
+      align-center
     >
       <div class="word-content" v-if="selectedWordInfo && !loadingWord">
         <div class="word-header">
-          <div class="word-title-row">
-            <h2 class="word-title">{{ selectedWordInfo.word || '未知单词' }}</h2>
-            <el-button 
-              v-if="selectedWordInfo.audioUrl || selectedWordInfo.audio" 
-              circle 
-              size="small" 
-              @click="playWordAudio"
-            >
-              <el-icon><VideoPlay /></el-icon>
-            </el-button>
-          </div>
+          <h2 class="word-title">{{ selectedWordInfo.word || '未知单词' }}</h2>
           <div class="pronunciation" v-if="selectedWordInfo.phonetic || selectedWordInfo.pronunciation">
-            [{{ selectedWordInfo.phonetic || selectedWordInfo.pronunciation }}]
+            {{ selectedWordInfo.pronunciation || selectedWordInfo.phonetic }}
           </div>
         </div>
 
         <div class="word-body">
-          <div class="main-meaning">
-            <div class="section-title">释义</div>
+          <div class="main-meaning" v-if="selectedWordInfo.definition || selectedWordInfo.translation">
             <div class="meaning-content">
-              {{ selectedWordInfo.translation || selectedWordInfo.definition }}
-            </div>
-          </div>
-          
-          <div class="example-sentences" v-if="selectedWordInfo.exampleSentence || selectedWordInfo.examples">
-            <div class="section-title">例句</div>
-            <div class="example-item">
-              {{ selectedWordInfo.exampleSentence || selectedWordInfo.examples }}
+              {{ selectedWordInfo.definition || selectedWordInfo.translation }}
             </div>
           </div>
         </div>
@@ -202,17 +185,16 @@
       </div>
 
       <template #footer>
-        <div class="dialog-footer">
-          <el-button 
-            type="primary" 
-            :loading="addingToVocabulary" 
-            @click="handleAddToVocabulary"
-            v-if="selectedWordInfo && selectedWordInfo.found !== false"
-          >
-            <el-icon><Star /></el-icon> 收藏到生词本
-          </el-button>
-          <el-button @click="showWordDialog = false">关闭</el-button>
-        </div>
+        <el-button
+          type="primary"
+          :loading="addingToVocabulary"
+          :disabled="isInVocabulary"
+          @click="handleAddToVocabulary"
+          v-if="selectedWordInfo && selectedWordInfo.found !== false"
+        >
+          {{ isInVocabulary ? '已在生词本' : '添加到生词本' }}
+        </el-button>
+        <el-button @click="showWordDialog = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -388,6 +370,7 @@ const selectedWord = ref(null)
 const selectedWordInfo = ref(null)
 const loadingWord = ref(false)
 const addingToVocabulary = ref(false)
+const isInVocabulary = ref(false)
 
 // 图片预览相关数据
 const showImagePreview = ref(false)
@@ -2162,11 +2145,20 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .article-body :deep(.interactive-text),
 .markdown-content {
-  background: transparent !important;
-  padding: 0 !important;
-  color: var(--text-main) !important;
+  background: #fff;
+  padding: 24px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  font-family: 'Georgia', serif;
+  line-height: 1.8;
+  color: #333;
   word-break: break-word;
   overflow-wrap: break-word;
+}
+
+.markdown-content :deep(p) {
+  text-align: justify;
+  margin-bottom: 24px;
 }
 
 .article-body :deep(img),
@@ -2295,70 +2287,95 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   margin: 48px 0 16px;
 }
 
-.markdown-content :deep(p) {
-  margin-bottom: 24px;
-}
-
 .markdown-content :deep(strong) {
   color: var(--text-main);
   font-weight: 600;
 }
 
-/* Word Dialog Enhancements */
-.word-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* 弹窗样式 - 与纯文本文章路径 components/InteractiveText.vue 保持一致 */
+.word-dialog :deep(.el-dialog__body) {
+  padding: 0 20px 20px 20px;
+}
+
+.word-dialog :deep(.el-dialog__header) {
+  padding: 16px 20px 0 20px;
+}
+
+.word-header {
+  text-align: center;
+  padding: 6px 0 2px 0;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 8px;
 }
 
 .word-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #1e293b; /* text-main */
+  margin: 0 0 2px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1890ff;
+  line-height: 1.0;
 }
 
 .pronunciation {
-  margin-top: 4px;
-  color: #197fe6; /* primary-color */
-  font-family: 'Lucida Sans Unicode', sans-serif;
-  font-size: 14px;
+  font-size: 12px;
+  color: #666;
+  font-family: 'Lucida Sans Unicode', 'Arial Unicode MS', Arial;
+  line-height: 1.0;
 }
 
-.section-title {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #64748b; /* text-muted */
-  margin: 16px 0 8px;
-  font-weight: 700;
+.word-body {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0 4px;
+}
+
+.main-meaning {
+  text-align: center;
+  margin-bottom: 8px;
 }
 
 .meaning-content {
-  font-size: 16px;
-  line-height: 1.6;
-  color: #1e293b; /* text-main */
+  font-size: 13px;
+  line-height: 1.3;
+  color: #2c3e50;
+  background: #f8f9fa;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border-left: 2px solid #1890ff;
+  display: inline-block;
+  max-width: 100%;
+  text-align: left;
+  white-space: pre-line;
+  word-break: break-word;
+  box-sizing: border-box;
 }
 
-.example-item {
-  font-size: 14px;
-  line-height: 1.5;
-  color: #64748b; /* text-muted */
-  font-style: italic;
-  padding: 8px 12px;
-  background: rgba(226, 232, 240, 0.3);
-  border-radius: 8px;
-  border-left: 3px solid #197fe6; /* primary-color */
+.loading-content {
+  text-align: center;
+  padding: 40px 0;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
+.error-content {
+  text-align: center;
+  padding: 20px 0;
 }
 
-.mobile-word-dialog :deep(.el-dialog__body) {
-  padding-top: 10px;
+@media (max-width: 768px) {
+  .word-title {
+    font-size: 16px;
+  }
+
+  .pronunciation {
+    font-size: 11px;
+  }
+
+  .word-dialog :deep(.el-dialog__body) {
+    padding: 0 8px 8px 8px;
+  }
+
+  .word-dialog :deep(.el-dialog__header) {
+    padding: 12px 8px 0 8px;
+  }
 }
 /* Underline Styles */
 :deep(.user-underline) {
@@ -2477,5 +2494,90 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     border-radius: 12px;
   }
   .floating-translate-btn .fab-icon { font-size: 17px; }
+}
+
+</style>
+
+<style>
+/* 全局弹窗样式 - 不受 scoped 限制，与 components/InteractiveText.vue 保持一致 */
+.word-dialog.el-dialog,
+.word-dialog.el-dialog__wrapper {
+  margin: 0 !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 85% !important;
+  max-width: 320px !important;
+  max-height: 60vh;
+}
+
+@media (max-width: 480px) {
+  .word-dialog.el-dialog,
+  .word-dialog.el-dialog__wrapper {
+    width: 90% !important;
+    max-width: 300px !important;
+    max-height: 50vh;
+  }
+}
+
+/* 可点击单词样式 - v-html 注入的元素必须在全局样式中才能生效 */
+/* 与 components/InteractiveText.vue 中 .word.clickable:hover 保持一致 */
+.clickable-word {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+.clickable-word:hover {
+  background: rgba(24, 144, 255, 0.1);
+}
+
+/* 翻译弹窗样式 - el-dialog teleport 到 body，必须在全局样式中 */
+/* 与 components/InteractiveText.vue 保持一致 */
+.translate-dialog .translate-content {
+  padding: 16px 0;
+}
+
+.translate-dialog .original-text,
+.translate-dialog .translated-text {
+  margin-bottom: 12px;
+}
+
+.translate-dialog .original-text h4,
+.translate-dialog .translated-text h4 {
+  margin: 0 0 8px 0;
+  color: #666;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.translate-dialog .original-text p,
+.translate-dialog .translated-text p {
+  margin: 0;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.translate-dialog .translated-text p {
+  background: #e6f7ff;
+  border-left: 3px solid #1890ff;
+}
+
+@media (max-width: 768px) {
+  .translate-dialog.el-dialog {
+    width: 230px !important;
+    max-width: 230px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .translate-dialog.el-dialog {
+    width: 230px !important;
+    max-width: 230px !important;
+  }
 }
 </style>
