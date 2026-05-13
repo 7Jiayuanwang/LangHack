@@ -751,7 +751,7 @@ pre_update_backup() {
     local dump_tmp="${backup_file}.tmp"
     docker compose -f "$COMPOSE_FILE" exec -T "$mysql_svc" \
         mysqldump -u root -p"$db_password" --single-transaction \
-        --routines --triggers english_learning 2>/dev/null > "$dump_tmp"
+        --routines --triggers --set-gtid-purged=OFF english_learning 2>/dev/null > "$dump_tmp"
 
     local dump_exit=$?
     if [ $dump_exit -ne 0 ]; then
@@ -1047,8 +1047,8 @@ run_incremental_migrations() {
         if [ -n "$seed_file" ] && [ -f "$seed_file" ]; then
             log "SEED: 导入全量备份: $(basename "$seed_file")"
             case "$seed_file" in
-                *.sql.gz) zcat "$seed_file" | docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
-                *.sql)    docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$seed_file" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql.gz) zcat "$seed_file" | sed '/^SET @@GLOBAL\.GTID_PURGED/d; /^SET @@SESSION\.SQL_LOG_BIN/d' | docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
+                *.sql)    sed '/^SET @@GLOBAL\.GTID_PURGED/d; /^SET @@SESSION\.SQL_LOG_BIN/d' "$seed_file" | docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" 2>&1 | grep -v "Using a password" || true ;;
             esac
             log "SEED: 全量备份导入完成 ✓"
         else
@@ -1062,6 +1062,9 @@ run_incremental_migrations() {
                 -sN -e "SELECT COUNT(*) FROM article;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
             if [ "${article_after:-0}" = "0" ]; then
                 log "SEED: 导入课文数据 (3Blue1Brown)..."
+                # 确保默认课程存在（种子数据依赖 courses.id=1）
+                docker exec "$mysql_container" mysql -uroot -p"$db_root_pw" "$db_name" \
+                    -e "INSERT IGNORE INTO courses (id, name, description, created_by, status) VALUES (1, '默认课程', '系统默认课程', NULL, 'ACTIVE');" 2>&1 | grep -v "Using a password" || true
                 for f in "$article_dir"/*.sql; do
                     [ -f "$f" ] || continue
                     docker exec -i "$mysql_container" mysql --default-character-set=utf8mb4 -uroot -p"$db_root_pw" "$db_name" < "$f" 2>&1 | grep -v "Using a password" || true
