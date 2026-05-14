@@ -1578,6 +1578,34 @@ const recordLearning = async (type, word, duration) => {
     console.error('记录学习失败:', error)
   }
 }
+const isNodeInsideArticleBody = (node) => {
+  const articleBody = document.querySelector('.article-body')
+  if (!articleBody || !node) return false
+  const target = node.nodeType === Node.TEXT_NODE ? node.parentElement : node
+  return target && articleBody.contains(target)
+}
+
+const normalizeSelectionToArticleBody = (selection) => {
+  if (!selection || !selection.rangeCount || selection.isCollapsed) return false
+  if (isNodeInsideArticleBody(selection.anchorNode) && isNodeInsideArticleBody(selection.focusNode)) return true
+
+  const articleBody = document.querySelector('.article-body')
+  if (!articleBody) return false
+
+  const range = selection.getRangeAt(0)
+  const clippedRange = range.cloneRange()
+  if (!isNodeInsideArticleBody(range.startContainer)) {
+    clippedRange.setStart(articleBody, 0)
+  }
+  if (!isNodeInsideArticleBody(range.endContainer)) {
+    clippedRange.setEnd(articleBody, articleBody.childNodes.length)
+  }
+
+  selection.removeAllRanges()
+  selection.addRange(clippedRange)
+  return isNodeInsideArticleBody(selection.anchorNode) && isNodeInsideArticleBody(selection.focusNode)
+}
+
 // 处理文本选择
 const handleSelectionChange = () => {
   if (isTranslateBtnDragging.value) return
@@ -1598,21 +1626,19 @@ const handleSelectionChange = () => {
 
   const text = selection.toString().trim()
   if (text) {
-    // 检查选择是否在文本内容区域内 (class="article-body")
-    const anchorNode = selection.anchorNode
-    const focusNode = selection.focusNode
-    const articleBody = document.querySelector('.article-body')
-    
-    if (articleBody && (articleBody.contains(anchorNode) || articleBody.contains(focusNode))) {
-      selectedTextContent.value = text
+    const clamped = normalizeSelectionToArticleBody(selection)
+    const trimmedText = clamped ? selection.toString().trim() : ''
+
+    if (trimmedText && isNodeInsideArticleBody(selection.anchorNode) && isNodeInsideArticleBody(selection.focusNode)) {
+      selectedTextContent.value = trimmedText
       const range = selection.getRangeAt(0)
       const rect = range.getBoundingClientRect()
-      
+
       selectionPosition.x = rect.left + rect.width / 2
       selectionPosition.y = rect.top - 60 // 显示在上方
       showSelectionMenu.value = true
     } else {
-       showSelectionMenu.value = false
+      showSelectionMenu.value = false
     }
   } else {
     showSelectionMenu.value = false
@@ -2144,9 +2170,14 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .article-body :deep(.interactive-text),
 .article-body :deep(.text-content),
-.markdown-content {
+.article-body :deep(.text-paragraph),
+.article-body :deep(.word),
+.article-body :deep(.clickable),
+.markdown-content,
+.markdown-content * {
   user-select: text;
   -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .article-meta,
@@ -2159,6 +2190,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .floating-translate-btn * {
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .article-body :deep(.interactive-text),
