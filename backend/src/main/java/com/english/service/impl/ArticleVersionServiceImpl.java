@@ -61,6 +61,11 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             return;
         }
 
+        if ("MARKDOWN".equals(text.getContentType())) {
+            checkAndGenerateMarkdownVersions(textId);
+            return;
+        }
+
         // Check which versions are missing
         boolean needsCET4 = isNullOrEmpty(text.getCet4Content());
         boolean needsCET6 = isNullOrEmpty(text.getCet6Content());
