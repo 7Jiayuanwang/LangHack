@@ -71,11 +71,12 @@
           @learning-record="handleLearningRecord"
         />
         
-        <div 
-          v-else 
-          class="markdown-content" 
+        <div
+          v-else
+          class="markdown-content"
           v-html="textContent"
           @click="handleMarkdownClick"
+          @dblclick="handleMarkdownDoubleClick"
         ></div>
       </section>
 
@@ -577,7 +578,6 @@ const loadTextDetail = async () => {
           const originalMarkdown = textVersions.value['original'] || data.markdownContent || ''
           // 渲染 Markdown 并添加点击功能
           let renderedHtml = DOMPurify.sanitize(marked(originalMarkdown), SANITIZE_CONFIG)
-          renderedHtml = addClickableWordsToHtml(renderedHtml)
           textContent.value = renderedHtml
         } else {
           // 备用方案：如果没有版本数据，直接使用 markdownContent
@@ -586,7 +586,6 @@ const loadTextDetail = async () => {
           availableVersions.value = ['original']
           currentVersion.value = 'original'
           let renderedHtml = DOMPurify.sanitize(marked(markdownContent), SANITIZE_CONFIG)
-          renderedHtml = addClickableWordsToHtml(renderedHtml)
           textContent.value = renderedHtml
         }
       } else {
@@ -1099,45 +1098,27 @@ const goBack = () => {
   }
 }
 
-// 为 HTML 内容中的英文单词添加点击功能
-// 注意：此函数的输入必须是已经过 DOMPurify.sanitize() 处理的 HTML
-const addClickableWordsToHtml = (sanitizedHtml) => {
-  // 使用正则表达式为英文单词添加可点击的 span 标签
-  // 避免处理 HTML 标签内的内容
-  const withSpans = sanitizedHtml.replace(/(<[^>]+>)|(\b[a-zA-Z]{2,}\b)/g, (match, tag, word) => {
-    if (tag) {
-      // 如果是 HTML 标签，保持不变
-      return tag
-    } else if (word) {
-      // 如果是单词，添加可点击的 span（word 为纯字母，encodeURIComponent 防止属性注入）
-      return `<span class="clickable-word" data-word="${encodeURIComponent(word.toLowerCase())}">${word}</span>`
-    }
-    return match
-  })
-  // 再次净化，防止正则替换引入意外的不安全内容
-  return DOMPurify.sanitize(withSpans, SANITIZE_CONFIG)
-}
-
 // 处理 Markdown 内容的点击事件（事件委托）
 const handleMarkdownClick = (event) => {
-  // 用户正在拖选文本时不处理单词点击
+  // 用户正在拖选文本时不处理点击动作
   const selection = window.getSelection()
   if (selection && !selection.isCollapsed) return
 
   const target = event.target
-  
-  // 检查点击的是否是图片
+
   if (target.tagName === 'IMG') {
     handleImageClick(target)
-    return
   }
-  
-  // 检查点击的是否是可点击的单词
-  if (target.classList.contains('clickable-word')) {
-    const word = target.getAttribute('data-word')
-    if (word) {
-      handleMarkdownWordClick(word)
-    }
+}
+
+const handleMarkdownDoubleClick = (event) => {
+  const target = event.target
+  if (target.tagName === 'IMG') return
+
+  const selection = window.getSelection()
+  const selectedText = selection?.toString()?.trim()
+  if (selectedText && /^\p{L}+$/u.test(selectedText)) {
+    handleMarkdownWordClick(selectedText)
   }
 }
 
@@ -1381,7 +1362,6 @@ const switchVersion = (version) => {
     if (isMarkdown.value) {
       // Markdown 格式，需要渲染
       let renderedHtml = DOMPurify.sanitize(marked(versionContent), SANITIZE_CONFIG)
-      renderedHtml = addClickableWordsToHtml(renderedHtml)
       textContent.value = renderedHtml
       renderedVersionCache.set(cacheKey, renderedHtml)
     } else {
@@ -2519,18 +2499,6 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     max-width: 300px !important;
     max-height: 50vh;
   }
-}
-
-/* 可点击单词样式 - v-html 注入的元素必须在全局样式中才能生效 */
-/* 与 components/InteractiveText.vue 中 .word.clickable:hover 保持一致 */
-.clickable-word {
-  cursor: pointer;
-  border-radius: 3px;
-  transition: background-color 0.2s ease;
-}
-
-.clickable-word:hover {
-  background: rgba(24, 144, 255, 0.1);
 }
 
 /* 翻译弹窗样式 - el-dialog teleport 到 body，必须在全局样式中 */

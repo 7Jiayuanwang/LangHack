@@ -56,11 +56,6 @@ public class UnderlineServiceImpl implements UnderlineService {
             throw new BusinessException("课文不存在或已删除");
         }
 
-        // 验证索引不超出文本长度
-        if (text.getContent() == null || endIndex > text.getContent().length()) {
-            throw new BusinessException("选中范围超出文本长度");
-        }
-
         Underline underline = new Underline();
         underline.setUserId(userId);
         underline.setTextId(textId);
