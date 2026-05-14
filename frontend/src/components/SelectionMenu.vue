@@ -72,16 +72,27 @@ const menuStyle = computed(() => {
   z-index: 2000;
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap; /* 窄屏时自动换行，防止水平溢出 */
-  max-width: calc(100vw - 16px); /* 视口安全边距 */
-  overflow: hidden;
+  max-width: calc(100vw - 16px);
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   animation: menu-fade-in 0.15s ease-out;
-  /* iOS Safari: 禁止触摸延迟和双击缩放 */
   touch-action: none;
+  /* 手机端紧凑布局 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox 隐藏滚动条 */
+}
+
+.selection-menu::-webkit-scrollbar {
+  display: none; /* Chrome/Safari 隐藏滚动条 */
+}
+
+@media (max-width: 480px) {
+  .selection-menu {
+    border-radius: 20px;
+  }
 }
 
 @keyframes menu-fade-in {
