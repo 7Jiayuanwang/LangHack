@@ -334,10 +334,33 @@ fi
 # ══════════════════════════════════════════════════════
 
 log() {
-    local message="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
-    echo "$message"
+    local raw="$*"
+    local console="$raw"
+
+    case "$raw" in
+        INFO:\ *) console="[INFO] ${raw#INFO: }" ;;
+        WARN:\ *) console="[WARN] ${raw#WARN: }" ;;
+        ERROR:\ *) console="[ERROR] ${raw#ERROR: }" ;;
+        CRITICAL:\ *) console="[ERROR] ${raw#CRITICAL: }" ;;
+        SUCCESS:\ *) console="[INFO] ${raw#SUCCESS: }" ;;
+        SKIP:\ *) console="[INFO] ${raw#SKIP: }" ;;
+        HINT:\ *) console="[提示] ${raw#HINT: }" ;;
+        UPDATE:\ *) console="[INFO] ${raw#UPDATE: }" ;;
+        BACKUP:\ *) console="[备份] ${raw#BACKUP: }" ;;
+        HEALTH:\ *) console="[健康检查] ${raw#HEALTH: }" ;;
+        MIGRATE:\ *) console="[迁移] ${raw#MIGRATE: }" ;;
+        SCHEMA:\ *) console="[数据库] ${raw#SCHEMA: }" ;;
+        LOCAL:\ *) console="[本地] ${raw#LOCAL: }" ;;
+        ROLLBACK:\ *) console="[回滚] ${raw#ROLLBACK: }" ;;
+        MAINTENANCE:\ *) console="[维护] ${raw#MAINTENANCE: }" ;;
+        CONFIG:\ *) console="[配置] ${raw#CONFIG: }" ;;
+        AI_PROVIDER:\ *) console="[AI服务] ${raw#AI_PROVIDER: }" ;;
+        SEED:\ *) console="[种子数据] ${raw#SEED: }" ;;
+    esac
+
+    echo "$console"
     if [ -n "${LOG_FILE:-}" ]; then
-        printf '%s\n' "$message" >> "$LOG_FILE" 2>/dev/null || true
+        printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$raw" >> "$LOG_FILE" 2>/dev/null || true
     fi
 }
 
@@ -809,7 +832,9 @@ wait_for_health() {
 
         sleep 5
         elapsed=$((elapsed + 5))
-        log "HEALTH: 等待中... ${elapsed}s"
+        if [ $((elapsed % 30)) -eq 0 ]; then
+            log "HEALTH: 等待中... ${elapsed}s"
+        fi
     done
 
     log "ERROR: HEALTH: 健康检查超时 (${timeout}s)"
@@ -1231,8 +1256,7 @@ do_docker_build() {
     local max_attempts=2
 
     while [ $attempt -le $max_attempts ]; do
-        log "INFO: 构建新镜像 (尝试 $attempt/$max_attempts)... (服务: $services)"
-        log "════ 构建日志开始 ════"
+        log "INFO: 构建新镜像 (尝试 $attempt/$max_attempts，服务: $services)"
         SCRIPT_STATE="BUILDING"
 
         BUILD_LOG="/tmp/langhack-build-$$.log"
@@ -1241,17 +1265,22 @@ do_docker_build() {
         # 临时关闭 pipefail 以正确处理管道退出码
         set +o pipefail
         if command -v timeout >/dev/null 2>&1; then
-            timeout "$BUILD_TIMEOUT" docker compose -f "$COMPOSE_FILE" build --no-cache $services 2>&1 | tee "$BUILD_LOG"
-            BUILD_EXIT=${PIPESTATUS[0]}
+            timeout "$BUILD_TIMEOUT" docker compose -f "$COMPOSE_FILE" build --no-cache $services > "$BUILD_LOG" 2>&1
+            BUILD_EXIT=$?
         else
-            docker compose -f "$COMPOSE_FILE" build --no-cache $services 2>&1 | tee "$BUILD_LOG"
-            BUILD_EXIT=${PIPESTATUS[0]}
+            docker compose -f "$COMPOSE_FILE" build --no-cache $services > "$BUILD_LOG" 2>&1
+            BUILD_EXIT=$?
         fi
         set -o pipefail
 
-        log "════ 构建日志结束 ════"
-
         if [ $BUILD_EXIT -eq 0 ]; then
+            if [ -n "$LOG_FILE" ]; then
+                {
+                    printf '[%s] BUILD_LOG: begin\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+                    sed 's/^/BUILD_LOG: /' "$BUILD_LOG"
+                    printf '[%s] BUILD_LOG: end\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+                } >> "$LOG_FILE" 2>/dev/null || true
+            fi
             rm -f "$BUILD_LOG"
             log "INFO: 构建完成 ✓"
             return 0
@@ -1351,7 +1380,9 @@ cleanup() {
     fi
     CLEANUP_DONE=true
 
-    log "INFO: 执行清理操作（状态: $SCRIPT_STATE, 退出码: $exit_code）..."
+    if [ $exit_code -ne 0 ]; then
+        log "INFO: 执行清理操作（状态: $SCRIPT_STATE, 退出码: $exit_code）"
+    fi
 
     # 清理临时构建日志文件
     rm -f /tmp/langhack-build-$$.log 2>/dev/null || true
@@ -1412,8 +1443,6 @@ cleanup() {
             log "ERROR:   git checkout ${PRE_PULL_COMMIT:0:8}"
             log "ERROR:   cd docker && docker compose up -d --force-recreate"
         fi
-    else
-        log "INFO: 清理完成 ✓"
     fi
 }
 
@@ -1436,7 +1465,7 @@ fi
 
 # 原子性创建锁文件（使用 noclobber 防止竞态条件）
 if ( set -o noclobber; echo $$ > "$LOCK_FILE" ) 2>/dev/null; then
-    log "INFO: 获取更新锁成功 (PID: $$)"
+    :
 else
     log "SKIP: 无法获取更新锁，可能有并发进程"
     exit 0
@@ -1473,7 +1502,7 @@ fi
 
 # ── 检查 Git 远程更新 ────────────────────────────────
 SCRIPT_STATE="CHECKING"
-log "INFO: 检查远程仓库更新 (branch: $BRANCH)..."
+log "INFO: 检查远程仓库更新: $BRANCH"
 
 # 离线模式：跳过 git fetch，直接使用本地代码
 if [ "$OFFLINE_MODE" = true ]; then
@@ -1674,9 +1703,7 @@ git checkout --force "$BRANCH" --quiet 2>/dev/null || true
 # 使用 git reset --hard 而非 git pull，确保原子性和幂等性
 if reset_err=$(git reset --hard "origin/$BRANCH" --quiet 2>&1); then
     POST_PULL_COMMIT=$(git rev-parse HEAD)
-    log "INFO: 代码更新成功 ✓"
-    log "INFO:   更新前: ${PRE_PULL_COMMIT:0:8}"
-    log "INFO:   更新后: ${POST_PULL_COMMIT:0:8}"
+    log "INFO: 代码更新成功 ✓ (${PRE_PULL_COMMIT:0:8} → ${POST_PULL_COMMIT:0:8})"
     if [ "$AUTO_STASH_CREATED" = true ]; then
         log "INFO: 本地修改已保存在 stash，可按需恢复: git stash list | grep \"$AUTO_STASH_NAME\""
     fi
