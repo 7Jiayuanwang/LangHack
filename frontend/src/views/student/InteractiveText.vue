@@ -2178,6 +2178,8 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   color: var(--text-main);
   user-select: text;
   -webkit-user-select: text;
+  -webkit-tap-highlight-color: transparent;
+  cursor: text;
   position: relative;
   z-index: 1;
 }
@@ -2195,6 +2197,10 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   -webkit-touch-callout: default;
 }
 
+.article-title,
+.article-title *,
+.article-header,
+.article-header *,
 .article-meta,
 .article-meta *,
 .version-pill-selector,

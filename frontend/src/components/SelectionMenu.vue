@@ -80,6 +80,8 @@ const menuStyle = computed(() => {
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   animation: menu-fade-in 0.15s ease-out;
+  /* iOS Safari: 禁止触摸延迟和双击缩放 */
+  touch-action: none;
 }
 
 @keyframes menu-fade-in {
