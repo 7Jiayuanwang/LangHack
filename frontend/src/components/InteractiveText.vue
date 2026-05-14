@@ -711,6 +711,9 @@ onBeforeUnmount(() => {
 .text-paragraph {
   margin-bottom: 16px;
   text-align: justify;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .text-paragraph:last-child {

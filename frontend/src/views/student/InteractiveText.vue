@@ -1593,12 +1593,26 @@ const normalizeSelectionToArticleBody = (selection) => {
   if (!articleBody) return false
 
   const range = selection.getRangeAt(0)
+
+  // Guard: if the entire article is selected (>99% of text), reject it as a stray drag-to-end.
+  const allText = articleBody.innerText || ''
+  const selectedText = selection.toString()
+  if (allText.length > 0 && selectedText.length > allText.length * 0.99) return false
+
   const clippedRange = range.cloneRange()
   if (!isNodeInsideArticleBody(range.startContainer)) {
     clippedRange.setStart(articleBody, 0)
   }
   if (!isNodeInsideArticleBody(range.endContainer)) {
-    clippedRange.setEnd(articleBody, articleBody.childNodes.length)
+    // Find the last text node inside articleBody
+    const walker = document.createTreeWalker(articleBody, NodeFilter.SHOW_TEXT, null)
+    let lastTextNode = null
+    while (walker.nextNode()) {
+      if (walker.currentNode.textContent.trim()) lastTextNode = walker.currentNode
+    }
+    if (lastTextNode) {
+      clippedRange.setEnd(lastTextNode, lastTextNode.textContent.length)
+    }
   }
 
   selection.removeAllRanges()
@@ -2173,6 +2187,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .article-body :deep(.text-paragraph),
 .article-body :deep(.word),
 .article-body :deep(.clickable),
+.article-body :deep(.clickable-word),
 .markdown-content,
 .markdown-content * {
   user-select: text;
