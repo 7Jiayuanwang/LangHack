@@ -409,8 +409,15 @@ let textContentWatchTimerId = null
 let floatingBtnResetTimerId = null
 let imagePreviewCleanupTimerId = null
 let versionSwitchTimerId = null
+let selectionDebounceTimerId = null
 let selectionMenuHideTimerId = null
 let fetchUnderlineTimerId = null
+let isUserInteracting = false
+
+const onDragStart = () => { isUserInteracting = true }
+const onDragEnd = () => {
+  isUserInteracting = false
+}
 let imageDragMoveListener = null
 let imageDragEndListener = null
 
@@ -1455,6 +1462,11 @@ onMounted(async () => {
 
   // 监听文本选择
   document.addEventListener('selectionchange', handleSelectionChange)
+  // 选区交互监听
+  document.addEventListener('mousedown', onDragStart)
+  document.addEventListener('mouseup', onDragEnd)
+  document.addEventListener('touchstart', onDragStart, { passive: true })
+  document.addEventListener('touchend', onDragEnd)
   // 获取共享划线
   fetchSharedUnderlines()
 })
@@ -1478,6 +1490,12 @@ onBeforeUnmount(() => {
     floatingBtnDragHandlers = null
   }
 
+  // 清理选区交互监听
+  document.removeEventListener('mousedown', onDragStart)
+  document.removeEventListener('mouseup', onDragEnd)
+  document.removeEventListener('touchstart', onDragStart)
+  document.removeEventListener('touchend', onDragEnd)
+
   // 清理图片预览缩放拖拽事件监听（如果组件在拖拽图片时卸载）
   if (isDragging.value) {
     document.removeEventListener('mousemove', onDrag);
@@ -1492,6 +1510,7 @@ onBeforeUnmount(() => {
     imagePreviewCleanupTimerId,
     versionSwitchTimerId,
     selectionMenuHideTimerId,
+    selectionDebounceTimerId,
     fetchUnderlineTimerId
   ]
   timers.forEach(timer => {
@@ -1505,6 +1524,7 @@ onBeforeUnmount(() => {
   imagePreviewCleanupTimerId = null
   versionSwitchTimerId = null
   selectionMenuHideTimerId = null
+  selectionDebounceTimerId = null
   fetchUnderlineTimerId = null
 
   // 清理学习计时器
@@ -1585,83 +1605,85 @@ const isNodeInsideArticleBody = (node) => {
   return target && articleBody.contains(target)
 }
 
-const normalizeSelectionToArticleBody = (selection) => {
+// 检测并裁切过大的选区（如 iOS/安卓长按自动扩展到末尾）
+const clampLargeSelection = (selection) => {
   if (!selection || !selection.rangeCount || selection.isCollapsed) return false
-  if (isNodeInsideArticleBody(selection.anchorNode) && isNodeInsideArticleBody(selection.focusNode)) return true
-
   const articleBody = document.querySelector('.article-body')
   if (!articleBody) return false
 
+  const allText = articleBody.innerText || ''
+  const selectedText = selection.toString()
+  if (allText.length === 0 || selectedText.length === 0) return false
+
+  // 如果选中文本超过正文 70%，认为是长按到末尾的漂移选区，需要裁切
+  if (selectedText.length <= allText.length * 0.7) return false
+
+  // 裁切起点到正文开头，保留终点
   const range = selection.getRangeAt(0)
+  const newRange = document.createRange()
+  newRange.setStart(articleBody, 0)
 
-  const startInside = isNodeInsideArticleBody(range.startContainer)
-  const endInside = isNodeInsideArticleBody(range.endContainer)
-
-  // Only reject if both start AND end have drifted outside — that indicates a
-  // true stray drag-to-end on iOS. If only the end is outside (common on iOS
-  // long-press), clamp it instead of rejecting the whole selection.
-  if (!startInside && !endInside) {
-    return false
+  const walker = document.createTreeWalker(articleBody, NodeFilter.SHOW_TEXT, null)
+  let lastNode = null
+  while (walker.nextNode()) {
+    if (walker.currentNode.textContent.trim()) lastNode = walker.currentNode
   }
-
-  const clippedRange = range.cloneRange()
-  if (!isNodeInsideArticleBody(range.startContainer)) {
-    clippedRange.setStart(articleBody, 0)
-  }
-  if (!isNodeInsideArticleBody(range.endContainer)) {
-    // Find the last text node inside articleBody
-    const walker = document.createTreeWalker(articleBody, NodeFilter.SHOW_TEXT, null)
-    let lastTextNode = null
-    while (walker.nextNode()) {
-      if (walker.currentNode.textContent.trim()) lastTextNode = walker.currentNode
-    }
-    if (lastTextNode) {
-      clippedRange.setEnd(lastTextNode, lastTextNode.textContent.length)
-    }
+  if (lastNode) {
+    newRange.setEnd(lastNode, lastNode.textContent.length)
+  } else {
+    newRange.setEnd(range.endContainer, range.endOffset)
   }
 
   selection.removeAllRanges()
-  selection.addRange(clippedRange)
-  return isNodeInsideArticleBody(selection.anchorNode) && isNodeInsideArticleBody(selection.focusNode)
+  selection.addRange(newRange)
+  return true
 }
 
-// 处理文本选择
+// 处理文本选择（防抖：拖动期间跳过，松手后 300ms 再处理）
 const handleSelectionChange = () => {
   if (isTranslateBtnDragging.value) return
+  if (isUserInteracting) return
 
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || selection.isCollapsed) {
-    // Delay hiding to allow menu click events to fire first
     if (selectionMenuHideTimerId) clearTimeout(selectionMenuHideTimerId)
     selectionMenuHideTimerId = setTimeout(() => {
       const sel = window.getSelection()
-      if (!sel || !sel.rangeCount || sel.isCollapsed) {
-        showSelectionMenu.value = false
-      }
+      if (!sel || !sel.rangeCount || sel.isCollapsed) showSelectionMenu.value = false
       selectionMenuHideTimerId = null
     }, 200)
     return
   }
 
-  const text = selection.toString().trim()
-  if (text) {
-    const clamped = normalizeSelectionToArticleBody(selection)
-    const trimmedText = clamped ? selection.toString().trim() : ''
+  if (selectionDebounceTimerId) clearTimeout(selectionDebounceTimerId)
+  selectionDebounceTimerId = setTimeout(() => {
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount || sel.isCollapsed) {
+      showSelectionMenu.value = false
+      return
+    }
 
-    if (trimmedText && isNodeInsideArticleBody(selection.anchorNode) && isNodeInsideArticleBody(selection.focusNode)) {
+    // 裁切过大选区（如 iOS/安卓长按到末尾）
+    clampLargeSelection(sel)
+
+    const trimmedText = sel.toString().trim()
+    if (!trimmedText) {
+      showSelectionMenu.value = false
+      return
+    }
+
+    if (isNodeInsideArticleBody(sel.anchorNode) && isNodeInsideArticleBody(sel.focusNode)) {
       selectedTextContent.value = trimmedText
-      const range = selection.getRangeAt(0)
+      const range = sel.getRangeAt(0)
       const rect = range.getBoundingClientRect()
 
       selectionPosition.x = rect.left + rect.width / 2
-      selectionPosition.y = rect.top - 60 // 显示在上方
+      selectionPosition.y = rect.top - 60
       showSelectionMenu.value = true
     } else {
       showSelectionMenu.value = false
     }
-  } else {
-    showSelectionMenu.value = false
-  }
+  }, 300)
 }
 
 const handleCopy = () => {
