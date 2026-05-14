@@ -2136,11 +2136,29 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   font-size: 18px;
   line-height: 1.8;
   color: var(--text-main);
-  /* 确保文章内容区域始终可选中文本，不受上层 z-index/stacking context 干扰 */
   user-select: text;
   -webkit-user-select: text;
   position: relative;
   z-index: 1;
+}
+
+.article-body :deep(.interactive-text),
+.article-body :deep(.text-content),
+.markdown-content {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.article-meta,
+.article-meta *,
+.version-pill-selector,
+.version-pill-selector *,
+.reader-footer,
+.reader-footer *,
+.floating-translate-btn,
+.floating-translate-btn * {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .article-body :deep(.interactive-text),
