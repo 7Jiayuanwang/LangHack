@@ -1594,10 +1594,15 @@ const normalizeSelectionToArticleBody = (selection) => {
 
   const range = selection.getRangeAt(0)
 
-  // Guard: if the entire article is selected (>99% of text), reject it as a stray drag-to-end.
-  const allText = articleBody.innerText || ''
-  const selectedText = selection.toString()
-  if (allText.length > 0 && selectedText.length > allText.length * 0.99) return false
+  const startInside = isNodeInsideArticleBody(range.startContainer)
+  const endInside = isNodeInsideArticleBody(range.endContainer)
+
+  // Only reject if both start AND end have drifted outside — that indicates a
+  // true stray drag-to-end on iOS. If only the end is outside (common on iOS
+  // long-press), clamp it instead of rejecting the whole selection.
+  if (!startInside && !endInside) {
+    return false
+  }
 
   const clippedRange = range.cloneRange()
   if (!isNodeInsideArticleBody(range.startContainer)) {
