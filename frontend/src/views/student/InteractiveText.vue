@@ -1662,9 +1662,6 @@ const handleSelectionChange = () => {
       return
     }
 
-    // 裁切过大选区（如 iOS/安卓长按自动扩展到末尾）
-    clampLargeSelection(sel)
-
     const trimmedText = sel.toString().trim()
     if (!trimmedText) {
       showSelectionMenu.value = false
@@ -1726,6 +1723,8 @@ const handleUnderline = async () => {
     let endIndex = 0
 
     const articleBody = document.querySelector('.article-body')
+    // 裁切过大选区（如 iOS/安卓长按自动扩展到末尾）
+    clampLargeSelection(window.getSelection())
     const selection = rangy.getSelection()
     if (selection.rangeCount > 0) {
       try {
@@ -2235,9 +2234,21 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .reader-footer *,
 .floating-translate-btn,
 .floating-translate-btn * {
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+.floating-translate-btn,
+.floating-translate-btn button,
+.floating-translate-btn .translate-fab,
+.floating-translate-btn .fab-icon,
+.floating-translate-btn .fab-label,
+.floating-translate-btn span {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .article-body :deep(.interactive-text),
