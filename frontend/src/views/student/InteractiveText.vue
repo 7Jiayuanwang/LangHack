@@ -1677,7 +1677,7 @@ const handleSelectionChange = () => {
       const rect = range.getBoundingClientRect()
 
       selectionPosition.x = rect.left + rect.width / 2
-      selectionPosition.y = rect.top - 30
+      selectionPosition.y = rect.top - 60
       showSelectionMenu.value = true
     } else {
       showSelectionMenu.value = false
