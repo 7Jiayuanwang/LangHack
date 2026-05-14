@@ -1639,10 +1639,9 @@ const clampLargeSelection = (selection) => {
   return true
 }
 
-// 处理文本选择（防抖：拖动期间跳过，松手后 300ms 再处理）
+// 处理文本选择（防抖：50ms 延迟防止拖动时频繁触发）
 const handleSelectionChange = () => {
   if (isTranslateBtnDragging.value) return
-  if (isUserInteracting) return
 
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || selection.isCollapsed) {
@@ -1663,7 +1662,7 @@ const handleSelectionChange = () => {
       return
     }
 
-    // 裁切过大选区（如 iOS/安卓长按到末尾）
+    // 裁切过大选区（如 iOS/安卓长按自动扩展到末尾）
     clampLargeSelection(sel)
 
     const trimmedText = sel.toString().trim()
@@ -1683,7 +1682,7 @@ const handleSelectionChange = () => {
     } else {
       showSelectionMenu.value = false
     }
-  }, 300)
+  }, 50)
 }
 
 const handleCopy = () => {
