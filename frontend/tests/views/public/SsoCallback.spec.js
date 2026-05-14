@@ -13,7 +13,6 @@ vi.mock('@/api/sso', () => ({
 
 // Mock router
 const mockPush = vi.fn()
-const mockReplace = vi.fn()
 const mockRoute = {
   query: {
     code: 'test-one-time-code'
@@ -25,8 +24,7 @@ vi.mock('vue-router', async () => {
   return {
     ...actual,
     useRouter: () => ({
-      push: mockPush,
-      replace: mockReplace
+      push: mockPush
     }),
     useRoute: () => mockRoute
   }
@@ -48,7 +46,6 @@ describe('SsoCallback.vue', () => {
     setActivePinia(createPinia())
     userStore = useUserStore()
     mockPush.mockClear()
-    mockReplace.mockClear()
     vi.clearAllMocks()
     sessionStorage.clear()
     mockRoute.query = { code: 'test-one-time-code' }
@@ -66,7 +63,7 @@ describe('SsoCallback.vue', () => {
     expect(ssoApi.exchangeSsoToken).toHaveBeenCalledWith('test-one-time-code')
     expect(userStore.token).toBe(fakeJwt)
     expect(userStore.userRole).toBe('STUDENT')
-    expect(mockReplace).toHaveBeenCalledWith('/student')
+    expect(mockPush).toHaveBeenCalledWith('/student')
   })
 
   it('ADMIN 角色跳转 /admin', async () => {
@@ -76,7 +73,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/admin')
+    expect(mockPush).toHaveBeenCalledWith('/admin')
   })
 
   it('OPS 角色跳转 /ops', async () => {
@@ -86,7 +83,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/ops')
+    expect(mockPush).toHaveBeenCalledWith('/ops')
   })
 
   it('TEACHER 角色跳转 /teacher', async () => {
@@ -96,7 +93,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/teacher')
+    expect(mockPush).toHaveBeenCalledWith('/teacher')
   })
 
   it('USER 角色在校园环境中跳转 /student', async () => {
@@ -106,7 +103,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/student')
+    expect(mockPush).toHaveBeenCalledWith('/student')
   })
 
   // ===== 错误路径：统一走 PermissionDenied =====
@@ -220,7 +217,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/articles')
+    expect(mockPush).toHaveBeenCalledWith('/articles')
     expect(sessionStorage.getItem('sso_redirect_after_login')).toBeNull()
   })
 
@@ -232,8 +229,8 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/admin/users')
-    expect(mockReplace).not.toHaveBeenCalledWith('/admin')
+    expect(mockPush).toHaveBeenCalledWith('/admin/users')
+    expect(mockPush).not.toHaveBeenCalledWith('/admin')
   })
 
   it('无保存路径时按原角色逻辑跳转', async () => {
@@ -245,7 +242,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/teacher')
+    expect(mockPush).toHaveBeenCalledWith('/teacher')
   })
 
   it('重定向路径包含查询参数时仍正确跳转', async () => {
@@ -256,7 +253,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/article/42?tab=vocabulary')
+    expect(mockPush).toHaveBeenCalledWith('/article/42?tab=vocabulary')
   })
 
   it('恶意路径（绝对 URL）被安全过滤，回退到角色首页', async () => {
@@ -267,7 +264,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/student')
+    expect(mockPush).toHaveBeenCalledWith('/student')
   })
 
   it('恶意路径（伪协议）被安全过滤，回退到角色首页', async () => {
@@ -278,7 +275,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/student')
+    expect(mockPush).toHaveBeenCalledWith('/student')
   })
 
   it('恶意路径（空字符串）被安全过滤，回退到角色首页', async () => {
@@ -289,7 +286,7 @@ describe('SsoCallback.vue', () => {
     wrapper = mount(SsoCallback)
     await flushPromises()
 
-    expect(mockReplace).toHaveBeenCalledWith('/student')
+    expect(mockPush).toHaveBeenCalledWith('/student')
   })
 
   it('登录成功后 sessionStorage 中的重定向路径被清除', async () => {

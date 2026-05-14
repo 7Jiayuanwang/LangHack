@@ -49,49 +49,16 @@ const errorInfo = ref(null)
 
 function showError({ errorCode, rawMessage }) {
   errorInfo.value = mapSsoError({ errorCode, rawMessage })
+  // 详细错误只写入浏览器控制台供开发者排错，不在 UI 展示
   if (rawMessage) {
     console.error('[SSO] 登录失败:', { errorCode: errorInfo.value.errorCode, rawMessage })
   }
   loading.value = false
 }
 
-function isSafeRedirectPath(path) {
-  return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//')
-}
-
-function decodeJwtPayload(token) {
-  const payload = token.split('.')[1]
-  if (!payload) return null
-
-  const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
-
-  try {
-    return JSON.parse(atob(padded))
-  } catch (e) {
-    return null
-  }
-}
-
-function goAfterLogin(savedRedirect, jwtRole) {
-  const roleRoutes = {
-    ADMIN: '/admin',
-    OPS: '/ops',
-    TEACHER: '/teacher',
-    STUDENT: '/student',
-    USER: '/student'
-  }
-
-  if (isSafeRedirectPath(savedRedirect)) {
-    router.replace(savedRedirect)
-    return
-  }
-
-  router.replace(roleRoutes[jwtRole] || '/student')
-}
-
 onMounted(async () => {
   try {
+    // 1. 后端重定向携带的错误信息（handleCallback 异常路径）
     if (route.query.error || route.query.errorCode) {
       const rawMessage = route.query.error
         ? decodeURIComponent(String(route.query.error))
@@ -103,12 +70,14 @@ onMounted(async () => {
       return
     }
 
+    // 2. 必须携带一次性 code
     const code = route.query.code
     if (!code) {
       showError({ errorCode: 'MISSING_PARAM', rawMessage: '缺少授权码' })
       return
     }
 
+    // 3. 用一次性 code 换取 JWT token
     let response
     try {
       response = await exchangeSsoToken(code)
@@ -123,6 +92,7 @@ onMounted(async () => {
     }
 
     if (!response || response.code !== 200) {
+      // 后端返回业务错误，优先使用结构化 errorCode
       showError({
         errorCode: response?.data?.errorCode || '',
         rawMessage: response?.message || '登录失败'
@@ -140,19 +110,22 @@ onMounted(async () => {
 
     const { token, user: serverUser } = response.data
 
+    // 优先使用后端返回的用户信息（完整），否则从 JWT 解析（兜底）
     let jwtRole = ''
     let jwtUserInfo = {}
     if (serverUser && serverUser.role) {
       jwtRole = serverUser.role
       jwtUserInfo = serverUser
     } else {
-      const payload = decodeJwtPayload(token)
-      if (payload) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
         jwtRole = payload.role || ''
         jwtUserInfo = {
           username: payload.sub,
           role: payload.role
         }
+      } catch (e) {
+        console.error('解析 token 失败:', e)
       }
     }
 
@@ -165,6 +138,7 @@ onMounted(async () => {
       return
     }
 
+    // 保存认证信息到 Pinia + localStorage（与 store/user.js login() 保持一致）
     userStore.token = token
     userStore.userRole = jwtRole
     userStore.userInfo = jwtUserInfo
@@ -172,6 +146,7 @@ onMounted(async () => {
     localStorage.setItem('userInfo', JSON.stringify(jwtUserInfo))
     localStorage.setItem('userRole', jwtRole)
 
+    // SSO 登录成功后优先跳回原始受保护页面
     let savedRedirect = ''
     try {
       savedRedirect = sessionStorage.getItem('sso_redirect_after_login') || ''
@@ -180,7 +155,32 @@ onMounted(async () => {
       console.warn('[SSO] 读取登录后重定向路径失败', e)
     }
 
-    goAfterLogin(savedRedirect, jwtRole)
+    if (savedRedirect) {
+      // 安全校验：仅允许站内路径，避免 open redirect
+      const isSafeRedirect = savedRedirect.startsWith('/') && !savedRedirect.startsWith('//')
+      if (isSafeRedirect) {
+        router.push(savedRedirect)
+        return
+      }
+    }
+
+    // 根据角色跳转
+    switch (jwtRole) {
+      case 'ADMIN':
+        router.push('/admin')
+        break
+      case 'OPS':
+        router.push('/ops')
+        break
+      case 'TEACHER':
+        router.push('/teacher')
+        break
+      case 'STUDENT':
+        router.push('/student')
+        break
+      default:
+        router.push('/student') // USER 等其他角色在校园环境中进入学生端
+    }
   } catch (e) {
     showError({
       errorCode: 'SYSTEM_ERROR',

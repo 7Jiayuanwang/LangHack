@@ -18,7 +18,7 @@ const routes = [
     path: "/article/:id",
     name: "ArticleDetail",
     component: () => import("@/views/shared/ArticleDetailHost.vue"),
-    meta: { title: "文章详情" },
+    meta: { title: "文章详情", public: true }, // 公开页面：游客可看，登录用户保留身份 Layout
   },
   {
     path: "/login",
