@@ -56,9 +56,11 @@ public class UnderlineServiceImpl implements UnderlineService {
             throw new BusinessException("课文不存在或已删除");
         }
 
-        // 验证文本内容非空（索引值由前端基于渲染后的 DOM 计算，
-        // 对于 Markdown 文章可能与原始内容长度不一致，不做超出校验）
-        if (text.getContent() == null || text.getContent().trim().isEmpty()) {
+        // 验证文本内容非空（Markdown 文章内容在 markdownContent 字段）
+        // 索引值由前端基于渲染后的 DOM 计算，不做超出校验
+        boolean textContent = text.getContent() != null && !text.getContent().trim().isEmpty();
+        boolean mdContent = text.getMarkdownContent() != null && !text.getMarkdownContent().trim().isEmpty();
+        if (!textContent && !mdContent) {
             throw new BusinessException("课文内容为空，无法划线");
         }
 
