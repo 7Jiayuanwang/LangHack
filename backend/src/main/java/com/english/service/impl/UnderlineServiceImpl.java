@@ -56,9 +56,10 @@ public class UnderlineServiceImpl implements UnderlineService {
             throw new BusinessException("课文不存在或已删除");
         }
 
-        // 验证索引不超出文本长度
-        if (text.getContent() == null || endIndex > text.getContent().length()) {
-            throw new BusinessException("选中范围超出文本长度");
+        // 验证文本内容非空（索引值由前端基于渲染后的 DOM 计算，
+        // 对于 Markdown 文章可能与原始内容长度不一致，不做超出校验）
+        if (text.getContent() == null || text.getContent().trim().isEmpty()) {
+            throw new BusinessException("课文内容为空，无法划线");
         }
 
         Underline underline = new Underline();
