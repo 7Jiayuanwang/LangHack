@@ -1,26 +1,11 @@
 <template>
   <Teleport to="body">
-    <!-- 桌面端：SDK 容器（SDK 自行注入 UI） -->
-    <div v-if="!isMobile" ref="containerRef"></div>
-    <!-- 手机端：自定义可拖拽气泡 -->
-    <div
-      v-else
-      ref="bubbleRef"
-      class="hiagent-custom-bubble"
-      :class="{ 'hiagent-custom-bubble--dragging': isDragging }"
-      :style="bubbleStyle"
-    >
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        <line x1="9" y1="10" x2="15" y2="10"/>
-        <line x1="12" y1="7" x2="12" y2="13"/>
-      </svg>
-    </div>
+    <div ref="containerRef"></div>
   </Teleport>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { onMounted, onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps({
   appKey: {
@@ -30,36 +15,29 @@ const props = defineProps({
   baseUrl: {
     type: String,
     default: 'https://agent.imau.edu.cn:32300'
-  },
-  // 手机端点击气泡跳转的 HiAgent 网页地址
-  chatUrl: {
-    type: String,
-    default: ''
   }
 })
 
-const chatPageUrl = computed(() => {
-  return props.chatUrl || props.baseUrl
-})
+const containerRef = ref(null)
 
-// ---- 响应式设备检测 ----
+// ---- 设备检测 ----
 const isMobile = ref(false)
 function checkMobile() {
   isMobile.value = window.innerWidth < 400 && window.innerHeight < 1000
 }
 
-// ---- 桌面端 SDK 逻辑 ----
-const containerRef = ref(null)
-let hiagentClient = null
-let sdkInitialized = false
+// ---- SDK 实例 & DOM 引用 ----
+let client = null
+let initialized = false
+let sdkEl = null
 let observer = null
-let sdkBubbleEl = null
-let sdkDragHandlers = null
-const SDK_POSITION_KEY = 'hiagent_bubble_position'
+let dragHandlers = null
+const POSITION_KEY = 'hiagent_bubble_position'
 
+// ---- 位置持久化 ----
 function loadPosition() {
   try {
-    const raw = localStorage.getItem(SDK_POSITION_KEY)
+    const raw = localStorage.getItem(POSITION_KEY)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
   return null
@@ -67,7 +45,7 @@ function loadPosition() {
 
 function savePosition(pos) {
   try {
-    localStorage.setItem(SDK_POSITION_KEY, JSON.stringify(pos))
+    localStorage.setItem(POSITION_KEY, JSON.stringify(pos))
   } catch { /* ignore */ }
 }
 
@@ -80,14 +58,15 @@ function applyPosition(el) {
   el.style.bottom = 'auto'
 }
 
-function attachDrag(el, onTap) {
+// ---- 拖拽（沿用 InteractiveText.vue 模式） ----
+function attachDrag(el) {
   const startDrag = (event) => {
-    if (sdkDragHandlers) {
-      document.removeEventListener('mousemove', sdkDragHandlers.move)
-      document.removeEventListener('mouseup', sdkDragHandlers.end)
-      document.removeEventListener('touchmove', sdkDragHandlers.move)
-      document.removeEventListener('touchend', sdkDragHandlers.end)
-      sdkDragHandlers = null
+    if (dragHandlers) {
+      document.removeEventListener('mousemove', dragHandlers.move)
+      document.removeEventListener('mouseup', dragHandlers.end)
+      document.removeEventListener('touchmove', dragHandlers.move)
+      document.removeEventListener('touchend', dragHandlers.end)
+      dragHandlers = null
     }
 
     const isTouch = event.type === 'touchstart'
@@ -95,7 +74,6 @@ function attachDrag(el, onTap) {
 
     const startX = isTouch ? event.touches[0].clientX : event.clientX
     const startY = isTouch ? event.touches[0].clientY : event.clientY
-    const startTime = Date.now()
     const rect = el.getBoundingClientRect()
     let hasMoved = false
 
@@ -123,43 +101,43 @@ function attachDrag(el, onTap) {
       document.removeEventListener('mouseup', handleEnd)
       document.removeEventListener('touchmove', handleMove)
       document.removeEventListener('touchend', handleEnd)
-      sdkDragHandlers = null
+      dragHandlers = null
 
       if (hasMoved) {
         const finalRect = el.getBoundingClientRect()
         savePosition({ x: finalRect.left, y: finalRect.top })
-      } else if (onTap) {
-        onTap()
       }
+      // 未移动 → SDK 自己的点击行为，放行
     }
 
     document.addEventListener('mousemove', handleMove)
     document.addEventListener('mouseup', handleEnd)
     document.addEventListener('touchmove', handleMove, { passive: false })
     document.addEventListener('touchend', handleEnd)
-    sdkDragHandlers = { move: handleMove, end: handleEnd }
+    dragHandlers = { move: handleMove, end: handleEnd }
   }
 
   el.addEventListener('mousedown', startDrag)
   el.addEventListener('touchstart', startDrag, { passive: false })
 }
 
-function findAndAttachSdkBubble() {
+// ---- 定位 SDK 创建的浮动元素 ----
+function findSdkElement() {
   const candidates = document.querySelectorAll(
     '[class*="hiagent"], [class*="Hiagent"], [class*="web-client"], [class*="chat"], [class*="float"], [class*="bubble"]'
   )
   for (const el of candidates) {
     const style = window.getComputedStyle(el)
     if (style.position === 'fixed' && parseInt(style.zIndex) > 100) {
-      sdkBubbleEl = el
+      sdkEl = el
       applyPosition(el)
-      attachDrag(el, null)
+      attachDrag(el)
       return
     }
   }
 }
 
-function setupSdkBubbleObserver() {
+function setupObserver() {
   observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
@@ -167,9 +145,9 @@ function setupSdkBubbleObserver() {
         const el = node
         const style = window.getComputedStyle(el)
         if (style.position === 'fixed' && parseInt(style.zIndex) > 100) {
-          sdkBubbleEl = el
+          sdkEl = el
           applyPosition(el)
-          attachDrag(el, null)
+          attachDrag(el)
           observer.disconnect()
           observer = null
           return
@@ -179,9 +157,9 @@ function setupSdkBubbleObserver() {
           for (const child of children) {
             const cs = window.getComputedStyle(child)
             if (cs.position === 'fixed' && parseInt(cs.zIndex) > 100) {
-              sdkBubbleEl = child
+              sdkEl = child
               applyPosition(child)
-              attachDrag(child, null)
+              attachDrag(child)
               observer.disconnect()
               observer = null
               return
@@ -194,23 +172,37 @@ function setupSdkBubbleObserver() {
   observer.observe(document.body, { childList: true, subtree: true })
 }
 
+function waitAndAttach() {
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      findSdkElement()
+      if (!sdkEl) setupObserver()
+    }, 500)
+  })
+}
+
+// ---- SDK 初始化 ----
+function getClientClass() {
+  if (isMobile.value) {
+    // 手机端：完整嵌入的 WebClient
+    return { name: 'WebClient', label: 'WebClient（手机端）' }
+  }
+  // 电脑端：轻量浮窗 WebLiteClient
+  return { name: 'WebLiteClient', label: 'WebLiteClient（电脑端）' }
+}
+
 function initSdk() {
-  if (sdkInitialized) return
-  if (window.HiagentWebSDK && window.HiagentWebSDK.WebClient) {
+  if (initialized) return
+  const { name, label } = getClientClass()
+  if (window.HiagentWebSDK && window.HiagentWebSDK[name]) {
     try {
-      hiagentClient = new window.HiagentWebSDK.WebClient({
+      client = new window.HiagentWebSDK[name]({
         appKey: props.appKey,
         baseUrl: props.baseUrl
       })
-      sdkInitialized = true
-      console.log('HiAgent WebClient 已初始化')
-
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          findAndAttachSdkBubble()
-          if (!sdkBubbleEl) setupSdkBubbleObserver()
-        }, 500)
-      })
+      initialized = true
+      console.log(`HiAgent ${label} 已初始化`)
+      waitAndAttach()
     } catch (error) {
       console.error('HiAgent 初始化失败:', error)
     }
@@ -219,141 +211,25 @@ function initSdk() {
   }
 }
 
+// ---- 清理 ----
 function destroySdk() {
-  if (sdkDragHandlers) {
-    document.removeEventListener('mousemove', sdkDragHandlers.move)
-    document.removeEventListener('mouseup', sdkDragHandlers.end)
-    document.removeEventListener('touchmove', sdkDragHandlers.move)
-    document.removeEventListener('touchend', sdkDragHandlers.end)
-    sdkDragHandlers = null
+  if (dragHandlers) {
+    document.removeEventListener('mousemove', dragHandlers.move)
+    document.removeEventListener('mouseup', dragHandlers.end)
+    document.removeEventListener('touchmove', dragHandlers.move)
+    document.removeEventListener('touchend', dragHandlers.end)
+    dragHandlers = null
   }
   if (observer) {
     observer.disconnect()
     observer = null
   }
-  if (hiagentClient && typeof hiagentClient.destroy === 'function') {
-    try { hiagentClient.destroy() } catch { /* ignore */ }
+  if (client && typeof client.destroy === 'function') {
+    try { client.destroy() } catch { /* ignore */ }
   }
-  hiagentClient = null
-  sdkBubbleEl = null
-  sdkInitialized = false
-}
-
-// ---- 手机端自定义气泡 ----
-const bubbleRef = ref(null)
-const isDragging = ref(false)
-const bubblePos = reactive({ x: -1, y: -1 }) // -1 = 使用 CSS 默认位置（右下角）
-const BUBBLE_POS_KEY = 'hiagent_custom_bubble_position'
-let bubbleDragHandlers = null
-
-function loadBubblePosition() {
-  try {
-    const raw = localStorage.getItem(BUBBLE_POS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return null
-}
-
-function saveBubblePosition(pos) {
-  try {
-    localStorage.setItem(BUBBLE_POS_KEY, JSON.stringify(pos))
-  } catch { /* ignore */ }
-}
-
-const bubbleStyle = computed(() => {
-  if (bubblePos.x >= 0 && bubblePos.y >= 0) {
-    return { left: bubblePos.x + 'px', top: bubblePos.y + 'px', right: 'auto', bottom: 'auto' }
-  }
-  return {}
-})
-
-function openChatPage() {
-  window.open(chatPageUrl.value, '_blank')
-}
-
-function setupBubbleDrag() {
-  const el = bubbleRef.value
-  if (!el) return
-
-  const startDrag = (event) => {
-    if (bubbleDragHandlers) {
-      document.removeEventListener('mousemove', bubbleDragHandlers.move)
-      document.removeEventListener('mouseup', bubbleDragHandlers.end)
-      document.removeEventListener('touchmove', bubbleDragHandlers.move)
-      document.removeEventListener('touchend', bubbleDragHandlers.end)
-      bubbleDragHandlers = null
-    }
-
-    const isTouch = event.type === 'touchstart'
-    if (!isTouch && event.button !== 0) return
-
-    const startX = isTouch ? event.touches[0].clientX : event.clientX
-    const startY = isTouch ? event.touches[0].clientY : event.clientY
-    const startTime = Date.now()
-    const rect = el.getBoundingClientRect()
-    let hasMoved = false
-
-    const offsetX = startX - rect.left
-    const offsetY = startY - rect.top
-
-    isDragging.value = true
-    if (isTouch) event.preventDefault()
-
-    const handleMove = (e) => {
-      const moveX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX
-      const moveY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY
-
-      const deltaX = Math.abs(moveX - startX)
-      const deltaY = Math.abs(moveY - startY)
-      if (deltaX > 5 || deltaY > 5) hasMoved = true
-
-      bubblePos.x = moveX - offsetX
-      bubblePos.y = moveY - offsetY
-    }
-
-    const handleEnd = () => {
-      document.removeEventListener('mousemove', handleMove)
-      document.removeEventListener('mouseup', handleEnd)
-      document.removeEventListener('touchmove', handleMove)
-      document.removeEventListener('touchend', handleEnd)
-      bubbleDragHandlers = null
-
-      if (hasMoved) {
-        saveBubblePosition({ x: bubblePos.x, y: bubblePos.y })
-      } else {
-        // 未拖拽 → 点击行为
-        openChatPage()
-      }
-      isDragging.value = false
-    }
-
-    document.addEventListener('mousemove', handleMove)
-    document.addEventListener('mouseup', handleEnd)
-    document.addEventListener('touchmove', handleMove, { passive: false })
-    document.addEventListener('touchend', handleEnd)
-    bubbleDragHandlers = { move: handleMove, end: handleEnd }
-  }
-
-  el.addEventListener('mousedown', startDrag)
-  el.addEventListener('touchstart', startDrag, { passive: false })
-}
-
-function restoreBubblePosition() {
-  const saved = loadBubblePosition()
-  if (saved) {
-    bubblePos.x = saved.x
-    bubblePos.y = saved.y
-  }
-}
-
-function destroyBubble() {
-  if (bubbleDragHandlers) {
-    document.removeEventListener('mousemove', bubbleDragHandlers.move)
-    document.removeEventListener('mouseup', bubbleDragHandlers.end)
-    document.removeEventListener('touchmove', bubbleDragHandlers.move)
-    document.removeEventListener('touchend', bubbleDragHandlers.end)
-    bubbleDragHandlers = null
-  }
+  client = null
+  sdkEl = null
+  initialized = false
 }
 
 // ---- 模式切换 ----
@@ -363,76 +239,25 @@ function handleResize() {
   if (prevMobile === isMobile.value) return
   prevMobile = isMobile.value
 
-  if (isMobile.value) {
-    // 桌面 → 手机：销毁 SDK，显示自定义气泡
-    destroySdk()
-    // 等下一帧自定义气泡 DOM 渲染后绑定拖拽
-    requestAnimationFrame(() => {
-      restoreBubblePosition()
-      setupBubbleDrag()
-    })
-  } else {
-    // 手机 → 桌面：清理自定义气泡，初始化 SDK
-    destroyBubble()
-    initSdk()
-  }
+  // 销毁旧的，重新初始化
+  destroySdk()
+  initSdk()
 }
 
 // ---- 生命周期 ----
 onMounted(() => {
   checkMobile()
   prevMobile = isMobile.value
-
-  if (isMobile.value) {
-    restoreBubblePosition()
-    // 等 DOM 渲染
-    requestAnimationFrame(() => {
-      setupBubbleDrag()
-    })
-  } else {
-    initSdk()
-  }
-
+  initSdk()
   window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
   destroySdk()
-  destroyBubble()
 })
 </script>
 
 <style scoped>
-/* 手机端自定义气泡 */
-.hiagent-custom-bubble {
-  position: fixed;
-  right: 16px;
-  bottom: 80px;
-  z-index: 9999;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #4f6ef6 0%, #6c5ce7 100%);
-  box-shadow: 0 4px 16px rgba(79, 110, 246, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  cursor: pointer;
-  touch-action: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.hiagent-custom-bubble:active {
-  transform: scale(0.95);
-}
-
-.hiagent-custom-bubble--dragging {
-  transform: scale(1.05);
-  box-shadow: 0 8px 24px rgba(79, 110, 246, 0.5), 0 0 0 3px rgba(255, 255, 255, 0.4);
-  transition: none;
-}
+/* HiAgent 气泡样式由 SDK 自动注入 */
 </style>
