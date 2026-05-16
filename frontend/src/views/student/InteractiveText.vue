@@ -2348,17 +2348,36 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 /* Mobile Adjustments */
 @media (max-width: 768px) {
+  .premium-reader {
+    padding-bottom: 60px;
+  }
+
+  .glass-header .header-inner {
+    height: 52px;
+    padding: 0 12px;
+  }
+
   .article-title {
-    font-size: 28px;
-    margin-bottom: 16px;
+    font-size: 24px;
+    margin-bottom: 12px;
   }
 
   .reader-container {
-    padding: 24px 12px;
+    padding: 16px 12px;
   }
 
   .article-header {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
+  }
+
+  .article-meta {
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .article-body {
+    font-size: 16px;
+    line-height: 1.75;
   }
 
   .header-title {
@@ -2404,6 +2423,23 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .reader-footer {
+    margin-top: 40px;
+  }
+
+  .footer-divider {
+    margin-bottom: 24px;
+  }
+
+  .markdown-content :deep(h2) {
+    font-size: 20px;
+    margin: 24px 0 12px;
+  }
+
+  .markdown-content :deep(p) {
+    margin-bottom: 16px;
   }
 }
 
