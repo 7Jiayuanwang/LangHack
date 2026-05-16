@@ -32,6 +32,7 @@ let initialized = false
 let sdkEl = null
 let observer = null
 let dragHandlers = null
+let dragging = false
 const POSITION_KEY = 'hiagent_bubble_position'
 
 // ---- 位置持久化 ----
@@ -58,19 +59,23 @@ function applyPosition(el) {
   el.style.bottom = 'auto'
 }
 
-// ---- 拖拽（沿用 InteractiveText.vue 模式） ----
+// ---- 拖拽 ----
 function attachDrag(el) {
+  // 置顶，确保在所有页面都能点击和拖动
+  el.style.setProperty('z-index', '99999', 'important')
+  el.style.setProperty('pointer-events', 'auto', 'important')
+
   const startDrag = (event) => {
-    if (dragHandlers) {
-      document.removeEventListener('mousemove', dragHandlers.move)
-      document.removeEventListener('mouseup', dragHandlers.end)
-      document.removeEventListener('touchmove', dragHandlers.move)
-      document.removeEventListener('touchend', dragHandlers.end)
-      dragHandlers = null
-    }
+    if (dragging) return
+    if (dragHandlers) cleanupDrag()
 
     const isTouch = event.type === 'touchstart'
     if (!isTouch && event.button !== 0) return
+
+    // 阻止 touch → mouse 模拟事件，避免双重触发
+    if (isTouch) event.preventDefault()
+
+    dragging = true
 
     const startX = isTouch ? event.touches[0].clientX : event.clientX
     const startY = isTouch ? event.touches[0].clientY : event.clientY
@@ -80,9 +85,18 @@ function attachDrag(el) {
     const offsetX = startX - rect.left
     const offsetY = startY - rect.top
 
-    if (isTouch) event.preventDefault()
+    // 禁用 SDK 元素上的 CSS transition，避免拖拽时位置回弹
+    const origTransition = el.style.transition
+    el.style.transition = 'none'
+
+    // 强制使用 left/top 定位
+    el.style.left = rect.left + 'px'
+    el.style.top = rect.top + 'px'
+    el.style.right = 'auto'
+    el.style.bottom = 'auto'
 
     const handleMove = (e) => {
+      if (!dragging) return
       const moveX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX
       const moveY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY
 
@@ -92,33 +106,44 @@ function attachDrag(el) {
 
       el.style.left = (moveX - offsetX) + 'px'
       el.style.top = (moveY - offsetY) + 'px'
-      el.style.right = 'auto'
-      el.style.bottom = 'auto'
     }
 
     const handleEnd = () => {
-      document.removeEventListener('mousemove', handleMove)
-      document.removeEventListener('mouseup', handleEnd)
-      document.removeEventListener('touchmove', handleMove)
-      document.removeEventListener('touchend', handleEnd)
-      dragHandlers = null
+      if (!dragging) return
+      dragging = false
+      cleanupDrag()
+
+      // 恢复 transition
+      el.style.transition = origTransition
 
       if (hasMoved) {
         const finalRect = el.getBoundingClientRect()
         savePosition({ x: finalRect.left, y: finalRect.top })
       }
-      // 未移动 → SDK 自己的点击行为，放行
     }
 
     document.addEventListener('mousemove', handleMove)
     document.addEventListener('mouseup', handleEnd)
     document.addEventListener('touchmove', handleMove, { passive: false })
     document.addEventListener('touchend', handleEnd)
+    // touchcancel 也要处理（手势被系统中断等场景）
+    document.addEventListener('touchcancel', handleEnd)
+
     dragHandlers = { move: handleMove, end: handleEnd }
   }
 
   el.addEventListener('mousedown', startDrag)
   el.addEventListener('touchstart', startDrag, { passive: false })
+}
+
+function cleanupDrag() {
+  if (!dragHandlers) return
+  document.removeEventListener('mousemove', dragHandlers.move)
+  document.removeEventListener('mouseup', dragHandlers.end)
+  document.removeEventListener('touchmove', dragHandlers.move)
+  document.removeEventListener('touchend', dragHandlers.end)
+  document.removeEventListener('touchcancel', dragHandlers.end)
+  dragHandlers = null
 }
 
 // ---- 定位 SDK 创建的浮动元素 ----
@@ -127,8 +152,9 @@ function findSdkElement() {
     '[class*="hiagent"], [class*="Hiagent"], [class*="web-client"], [class*="chat"], [class*="float"], [class*="bubble"]'
   )
   for (const el of candidates) {
+    if (el.id === 'app' || el.closest('#app')) continue // 跳过 Vue app 内元素
     const style = window.getComputedStyle(el)
-    if (style.position === 'fixed' && parseInt(style.zIndex) > 100) {
+    if (style.position === 'fixed' && parseInt(style.zIndex) > 0) {
       sdkEl = el
       applyPosition(el)
       attachDrag(el)
@@ -138,35 +164,12 @@ function findSdkElement() {
 }
 
 function setupObserver() {
-  observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType !== 1) continue
-        const el = node
-        const style = window.getComputedStyle(el)
-        if (style.position === 'fixed' && parseInt(style.zIndex) > 100) {
-          sdkEl = el
-          applyPosition(el)
-          attachDrag(el)
-          observer.disconnect()
-          observer = null
-          return
-        }
-        const children = el.querySelectorAll?.('[class*="hiagent"], [class*="Hiagent"], [class*="chat"], [class*="float"], [class*="bubble"], [class*="web-client"]')
-        if (children?.length) {
-          for (const child of children) {
-            const cs = window.getComputedStyle(child)
-            if (cs.position === 'fixed' && parseInt(cs.zIndex) > 100) {
-              sdkEl = child
-              applyPosition(child)
-              attachDrag(child)
-              observer.disconnect()
-              observer = null
-              return
-            }
-          }
-        }
-      }
+  observer = new MutationObserver(() => {
+    if (sdkEl && document.body.contains(sdkEl)) return // 已找到且未被移除
+    findSdkElement()
+    if (sdkEl && observer) {
+      observer.disconnect()
+      observer = null
     }
   })
   observer.observe(document.body, { childList: true, subtree: true })
@@ -177,17 +180,15 @@ function waitAndAttach() {
     setTimeout(() => {
       findSdkElement()
       if (!sdkEl) setupObserver()
-    }, 500)
+    }, 800)
   })
 }
 
 // ---- SDK 初始化 ----
 function getClientClass() {
   if (isMobile.value) {
-    // 手机端：完整嵌入的 WebClient
     return { name: 'WebClient', label: 'WebClient（手机端）' }
   }
-  // 电脑端：轻量浮窗 WebLiteClient
   return { name: 'WebLiteClient', label: 'WebLiteClient（电脑端）' }
 }
 
@@ -213,13 +214,8 @@ function initSdk() {
 
 // ---- 清理 ----
 function destroySdk() {
-  if (dragHandlers) {
-    document.removeEventListener('mousemove', dragHandlers.move)
-    document.removeEventListener('mouseup', dragHandlers.end)
-    document.removeEventListener('touchmove', dragHandlers.move)
-    document.removeEventListener('touchend', dragHandlers.end)
-    dragHandlers = null
-  }
+  cleanupDrag()
+  dragging = false
   if (observer) {
     observer.disconnect()
     observer = null
@@ -238,8 +234,6 @@ function handleResize() {
   checkMobile()
   if (prevMobile === isMobile.value) return
   prevMobile = isMobile.value
-
-  // 销毁旧的，重新初始化
   destroySdk()
   initSdk()
 }
