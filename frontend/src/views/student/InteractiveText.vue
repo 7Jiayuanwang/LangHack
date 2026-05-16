@@ -409,8 +409,15 @@ let textContentWatchTimerId = null
 let floatingBtnResetTimerId = null
 let imagePreviewCleanupTimerId = null
 let versionSwitchTimerId = null
+let selectionDebounceTimerId = null
 let selectionMenuHideTimerId = null
 let fetchUnderlineTimerId = null
+let isUserInteracting = false
+
+const onDragStart = () => { isUserInteracting = true }
+const onDragEnd = () => {
+  isUserInteracting = false
+}
 let imageDragMoveListener = null
 let imageDragEndListener = null
 
@@ -1455,6 +1462,11 @@ onMounted(async () => {
 
   // 监听文本选择
   document.addEventListener('selectionchange', handleSelectionChange)
+  // 选区交互监听
+  document.addEventListener('mousedown', onDragStart)
+  document.addEventListener('mouseup', onDragEnd)
+  document.addEventListener('touchstart', onDragStart, { passive: true })
+  document.addEventListener('touchend', onDragEnd)
   // 获取共享划线
   fetchSharedUnderlines()
 })
@@ -1478,6 +1490,12 @@ onBeforeUnmount(() => {
     floatingBtnDragHandlers = null
   }
 
+  // 清理选区交互监听
+  document.removeEventListener('mousedown', onDragStart)
+  document.removeEventListener('mouseup', onDragEnd)
+  document.removeEventListener('touchstart', onDragStart)
+  document.removeEventListener('touchend', onDragEnd)
+
   // 清理图片预览缩放拖拽事件监听（如果组件在拖拽图片时卸载）
   if (isDragging.value) {
     document.removeEventListener('mousemove', onDrag);
@@ -1492,6 +1510,7 @@ onBeforeUnmount(() => {
     imagePreviewCleanupTimerId,
     versionSwitchTimerId,
     selectionMenuHideTimerId,
+    selectionDebounceTimerId,
     fetchUnderlineTimerId
   ]
   timers.forEach(timer => {
@@ -1505,6 +1524,7 @@ onBeforeUnmount(() => {
   imagePreviewCleanupTimerId = null
   versionSwitchTimerId = null
   selectionMenuHideTimerId = null
+  selectionDebounceTimerId = null
   fetchUnderlineTimerId = null
 
   // 清理学习计时器
@@ -1578,45 +1598,88 @@ const recordLearning = async (type, word, duration) => {
     console.error('记录学习失败:', error)
   }
 }
-// 处理文本选择
+const isNodeInsideArticleBody = (node) => {
+  const articleBody = document.querySelector('.article-body')
+  if (!articleBody || !node) return false
+  const target = node.nodeType === Node.TEXT_NODE ? node.parentElement : node
+  return target && articleBody.contains(target)
+}
+
+// 检测并裁切过大的选区（如 iOS/安卓长按自动扩展到末尾）
+const clampLargeSelection = (selection) => {
+  if (!selection || !selection.rangeCount || selection.isCollapsed) return false
+  const articleBody = document.querySelector('.article-body')
+  if (!articleBody) return false
+
+  const allText = articleBody.innerText || ''
+  const selectedText = selection.toString()
+  if (allText.length === 0 || selectedText.length === 0) return false
+
+  // 如果选中文本超过正文 70%，认为是长按到末尾的漂移选区，需要裁切
+  if (selectedText.length <= allText.length * 0.7) return false
+
+  // 裁切起点到正文开头，保留终点
+  const range = selection.getRangeAt(0)
+  const newRange = document.createRange()
+  newRange.setStart(articleBody, 0)
+
+  const walker = document.createTreeWalker(articleBody, NodeFilter.SHOW_TEXT, null)
+  let lastNode = null
+  while (walker.nextNode()) {
+    if (walker.currentNode.textContent.trim()) lastNode = walker.currentNode
+  }
+  if (lastNode) {
+    newRange.setEnd(lastNode, lastNode.textContent.length)
+  } else {
+    newRange.setEnd(range.endContainer, range.endOffset)
+  }
+
+  selection.removeAllRanges()
+  selection.addRange(newRange)
+  return true
+}
+
+// 处理文本选择（防抖：50ms 延迟防止拖动时频繁触发）
 const handleSelectionChange = () => {
   if (isTranslateBtnDragging.value) return
 
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || selection.isCollapsed) {
-    // Delay hiding to allow menu click events to fire first
     if (selectionMenuHideTimerId) clearTimeout(selectionMenuHideTimerId)
     selectionMenuHideTimerId = setTimeout(() => {
       const sel = window.getSelection()
-      if (!sel || !sel.rangeCount || sel.isCollapsed) {
-        showSelectionMenu.value = false
-      }
+      if (!sel || !sel.rangeCount || sel.isCollapsed) showSelectionMenu.value = false
       selectionMenuHideTimerId = null
     }, 200)
     return
   }
 
-  const text = selection.toString().trim()
-  if (text) {
-    // 检查选择是否在文本内容区域内 (class="article-body")
-    const anchorNode = selection.anchorNode
-    const focusNode = selection.focusNode
-    const articleBody = document.querySelector('.article-body')
-    
-    if (articleBody && (articleBody.contains(anchorNode) || articleBody.contains(focusNode))) {
-      selectedTextContent.value = text
-      const range = selection.getRangeAt(0)
+  if (selectionDebounceTimerId) clearTimeout(selectionDebounceTimerId)
+  selectionDebounceTimerId = setTimeout(() => {
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount || sel.isCollapsed) {
+      showSelectionMenu.value = false
+      return
+    }
+
+    const trimmedText = sel.toString().trim()
+    if (!trimmedText) {
+      showSelectionMenu.value = false
+      return
+    }
+
+    if (isNodeInsideArticleBody(sel.anchorNode) && isNodeInsideArticleBody(sel.focusNode)) {
+      selectedTextContent.value = trimmedText
+      const range = sel.getRangeAt(0)
       const rect = range.getBoundingClientRect()
-      
+
       selectionPosition.x = rect.left + rect.width / 2
-      selectionPosition.y = rect.top - 60 // 显示在上方
+      selectionPosition.y = rect.top - 60
       showSelectionMenu.value = true
     } else {
-       showSelectionMenu.value = false
+      showSelectionMenu.value = false
     }
-  } else {
-    showSelectionMenu.value = false
-  }
+  }, 50)
 }
 
 const handleCopy = () => {
@@ -1660,6 +1723,8 @@ const handleUnderline = async () => {
     let endIndex = 0
 
     const articleBody = document.querySelector('.article-body')
+    // 裁切过大选区（如 iOS/安卓长按自动扩展到末尾）
+    clampLargeSelection(window.getSelection())
     const selection = rangy.getSelection()
     if (selection.rangeCount > 0) {
       try {
@@ -2136,11 +2201,54 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   font-size: 18px;
   line-height: 1.8;
   color: var(--text-main);
-  /* 确保文章内容区域始终可选中文本，不受上层 z-index/stacking context 干扰 */
   user-select: text;
   -webkit-user-select: text;
+  -webkit-tap-highlight-color: transparent;
+  cursor: text;
   position: relative;
   z-index: 1;
+}
+
+.article-body :deep(.interactive-text),
+.article-body :deep(.text-content),
+.article-body :deep(.text-paragraph),
+.article-body :deep(.word),
+.article-body :deep(.clickable),
+.article-body :deep(.clickable-word),
+.markdown-content,
+.markdown-content * {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+.article-title,
+.article-title *,
+.article-header,
+.article-header *,
+.article-meta,
+.article-meta *,
+.version-pill-selector,
+.version-pill-selector *,
+.reader-footer,
+.reader-footer *,
+.floating-translate-btn,
+.floating-translate-btn * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+.floating-translate-btn,
+.floating-translate-btn button,
+.floating-translate-btn .translate-fab,
+.floating-translate-btn .fab-icon,
+.floating-translate-btn .fab-label,
+.floating-translate-btn span {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .article-body :deep(.interactive-text),

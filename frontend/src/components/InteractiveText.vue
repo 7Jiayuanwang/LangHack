@@ -694,6 +694,8 @@ onBeforeUnmount(() => {
   font-family: 'Georgia', serif;
   line-height: 1.8;
   color: #333;
+  /* Safari: prevent text selection quirks */
+  -webkit-text-size-adjust: 100%;
 }
 
 .text-content {
@@ -706,11 +708,18 @@ onBeforeUnmount(() => {
   /* 确保文本始终可选中 */
   user-select: text;
   -webkit-user-select: text;
+  -webkit-touch-callout: default;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .text-paragraph {
   margin-bottom: 16px;
   text-align: justify;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .text-paragraph:last-child {
