@@ -239,6 +239,7 @@ const navItems = computed(() => {
 // admin 专属：二级管理菜单
 const MORE_ITEMS = {
   admin: [
+    { path: '/admin/texts',          label: '课文管理', icon: Reading,  featureKey: 'admin.texts' },
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
     { path: '/admin/content',        label: '内容管理', icon: Document },
