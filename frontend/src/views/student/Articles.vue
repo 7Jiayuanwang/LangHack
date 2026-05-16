@@ -725,7 +725,7 @@ onMounted(() => {
 }
 
 .articles-feed {
-  padding: 16px 20px;
+  padding: 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 20px;
