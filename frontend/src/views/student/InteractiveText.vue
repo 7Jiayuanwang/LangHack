@@ -62,18 +62,8 @@
 
       <!-- Main Content Area -->
       <section class="article-body">
-        <InteractiveText
-          v-if="!isMarkdown"
-          :text="textContent"
-          :text-id="textId"
-          :unit-id="unitId"
-          @word-click="handleWordClick"
-          @learning-record="handleLearningRecord"
-        />
-        
-        <div 
-          v-else 
-          class="markdown-content" 
+        <div
+          class="markdown-content"
           v-html="textContent"
           @click="handleMarkdownClick"
         ></div>
@@ -299,8 +289,6 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay } from '@element-plus/icons-vue'
-import InteractiveText from '@/components/InteractiveText.vue'
-import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -362,6 +350,7 @@ const pageHeader = ref(null)
 const textVersions = ref({}) // 存储所有版本内容
 const availableVersions = ref([]) // 可用版本列表
 const currentVersion = ref('original') // 当前选择的版本
+const isPlainText = ref(false) // 原始内容是否为纯文本（用于 switchVersion 转换）
 
 
 // 单词对话框相关数据
@@ -533,6 +522,22 @@ const normalizeTextContent = (text) => {
     .replace(/\\\\/g, '\\')
 }
 
+// 纯文本转 HTML：段落拆分 + 转义 + 添加可点击单词
+const plainTextToHtml = (rawText) => {
+  if (!rawText) return ''
+  const text = normalizeTextContent(rawText)
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  const html = escaped
+    .split(/\n\s*\n|\n/)
+    .filter(p => p.trim().length > 0)
+    .map(p => `<p>${p.trim().replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  return addClickableWordsToHtml(DOMPurify.sanitize(html, SANITIZE_CONFIG))
+}
+
 // 方法
 const loadTextDetail = async () => {
   try {
@@ -597,26 +602,23 @@ const loadTextDetail = async () => {
           textContent.value = renderedHtml
         }
       } else {
-        // 纯文本格式，获取所有课文版本
-        isMarkdown.value = false
+        // 纯文本格式：转为 HTML 渲染，与 Markdown 保持一致的视觉效果
+        isMarkdown.value = true
+        isPlainText.value = true
         if (data.versions && typeof data.versions === 'object') {
           textVersions.value = data.versions
-          // 设置可用版本列表（用于显示按钮）
           availableVersions.value = Object.keys(data.versions).sort((a, b) => {
-            // 按优先级排序：original > cet4 > cet6 > academic > chinese_parallel
             const order = { 'original': 0, 'cet4': 1, 'cet6': 2, 'academic': 3, 'chinese_parallel': 4 }
             return (order[a] || 999) - (order[b] || 999)
           })
-          // 默认选择原始版本
           currentVersion.value = 'original'
-          textContent.value = normalizeTextContent(textVersions.value['original'] || data.content)
+          textContent.value = plainTextToHtml(textVersions.value['original'] || data.content)
         } else {
-          // 备用方案：如果没有版本数据，直接使用 content
           const rawContent = data.content
           textVersions.value = { 'original': rawContent }
           availableVersions.value = ['original']
           currentVersion.value = 'original'
-          textContent.value = normalizeTextContent(rawContent)
+          textContent.value = plainTextToHtml(rawContent)
         }
       }
 
@@ -1381,22 +1383,21 @@ const switchVersion = (version) => {
   const versionContent = textVersions.value[version] || ''
 
   // 检查缓存
-  const cacheKey = `${version}-${isMarkdown.value}`
+  const cacheKey = `${version}-${isPlainText.value}`
   if (renderedVersionCache.has(cacheKey)) {
     textContent.value = renderedVersionCache.get(cacheKey)
   } else {
-    if (isMarkdown.value) {
-      // Markdown 格式，需要渲染
-      let renderedHtml = DOMPurify.sanitize(marked(versionContent), SANITIZE_CONFIG)
-      renderedHtml = addClickableWordsToHtml(renderedHtml)
-      textContent.value = renderedHtml
-      renderedVersionCache.set(cacheKey, renderedHtml)
+    let renderedHtml
+    if (isPlainText.value) {
+      // 纯文本格式：转为 HTML
+      renderedHtml = plainTextToHtml(versionContent)
     } else {
-      // 纯文本格式，直接显示（应用规范化去除转义残留）
-      const normalized = normalizeTextContent(versionContent)
-      textContent.value = normalized
-      renderedVersionCache.set(cacheKey, normalized)
+      // Markdown 格式，需要渲染
+      renderedHtml = DOMPurify.sanitize(marked(versionContent), SANITIZE_CONFIG)
+      renderedHtml = addClickableWordsToHtml(renderedHtml)
     }
+    textContent.value = renderedHtml
+    renderedVersionCache.set(cacheKey, renderedHtml)
   }
 
   // 切换版本后重新加载划线
@@ -2347,16 +2348,53 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 /* Mobile Adjustments */
 @media (max-width: 768px) {
+  .premium-reader {
+    padding-bottom: 60px;
+  }
+
+  .glass-header .header-inner {
+    height: 52px;
+    padding: 0 12px;
+  }
+
   .article-title {
-    font-size: 32px;
+    font-size: 24px;
+    margin-bottom: 12px;
   }
-  
+
   .reader-container {
-    padding: 40px 20px;
+    padding: 16px 12px;
   }
-  
+
+  .article-header {
+    margin-bottom: 16px;
+  }
+
+  .article-meta {
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .article-body {
+    font-size: 16px;
+    line-height: 1.75;
+  }
+
   .header-title {
     display: none;
+  }
+
+  .article-body :deep(.interactive-text),
+  .markdown-content {
+    padding: 12px;
+  }
+
+  .article-body :deep(.text-content) {
+    padding: 12px !important;
+  }
+
+  .header-inner {
+    padding: 0 12px;
   }
   
   .version-pill-selector {
@@ -2385,6 +2423,23 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .reader-footer {
+    margin-top: 40px;
+  }
+
+  .footer-divider {
+    margin-bottom: 24px;
+  }
+
+  .markdown-content :deep(h2) {
+    font-size: 20px;
+    margin: 24px 0 12px;
+  }
+
+  .markdown-content :deep(p) {
+    margin-bottom: 16px;
   }
 }
 

@@ -8,23 +8,23 @@
 <script setup>
 import { computed } from 'vue'
 import { useUserStore } from '@/store/user'
-import MobileLayout from '@/views/shared/MobileLayout.vue'
 import StudentLayout from '@/views/student/Layout.vue'
 import PublicArticles from '@/views/public/Articles.vue'
 import StudentArticles from '@/views/student/Articles.vue'
 
 const userStore = useUserStore()
 
+// 所有已登录角色统一使用 StudentArticles，保证文章列表体验一致
 const content = computed(() =>
-  userStore.userRole === 'STUDENT' ? StudentArticles : PublicArticles
+  userStore.token ? StudentArticles : PublicArticles
 )
 
 const layoutConfig = computed(() => {
   const role = userStore.userRole
   if (!userStore.token) return { layout: null, layoutRole: null }
-  if (role === 'STUDENT') return { layout: StudentLayout, layoutRole: null }
-  if (['USER', 'TEACHER', 'ADMIN', 'OPS'].includes(role)) {
-    return { layout: MobileLayout, layoutRole: role.toLowerCase() }
+  // 所有已登录角色统一使用 StudentLayout
+  if (['STUDENT', 'USER', 'TEACHER', 'ADMIN', 'OPS'].includes(role)) {
+    return { layout: StudentLayout, layoutRole: null }
   }
   return { layout: null, layoutRole: null }
 })
