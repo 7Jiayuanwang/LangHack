@@ -157,6 +157,14 @@ function applyStoredOrDefaultPosition(el, mode) {
   setElementPosition(el, position.x, position.y)
 }
 
+function applyStoredPosition(el, mode) {
+  const saved = loadPosition(mode)
+  if (!saved) return
+
+  const position = clampPosition(el, saved.x, saved.y)
+  setElementPosition(el, position.x, position.y)
+}
+
 function clearPointerDragState() {
   dragging.value = false
   activePointerId = null
@@ -354,7 +362,7 @@ function findSdkElement() {
 
     seen.add(dragRoot)
     sdkEl = dragRoot
-    applyStoredOrDefaultPosition(dragRoot, 'desktop')
+    applyStoredPosition(dragRoot, 'desktop')
     attachPointerDrag(dragRoot, 'desktop')
     return dragRoot
   }
