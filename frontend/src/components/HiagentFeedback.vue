@@ -9,7 +9,7 @@
       @click="handleMobileBubbleClick"
     >
       <span class="hiagent-mobile-bubble__icon">AI</span>
-      <span class="hiagent-mobile-bubble__label">问问助手</span>
+      <span class="hiagent-mobile-bubble__label">问题反馈</span>
     </button>
   </Teleport>
 </template>
@@ -290,7 +290,7 @@ function isHiagentDesktopElement(el) {
 
   const className = typeof el.className === 'string' ? el.className.toLowerCase() : ''
   const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
-  const text = (el.textContent || '').trim()
+  const text = (el.textContent || '').trim().toLowerCase()
 
   if (id.includes('hiagent')) return true
   if (className.includes('hiagent')) return true
@@ -298,24 +298,54 @@ function isHiagentDesktopElement(el) {
   if (className.includes('web-client')) return true
   if (className.includes('embed-lite')) return true
   if (className.includes('embedfull')) return true
-  if (text.includes('问问助手') || text.includes('hiagent')) return true
+  if (text.includes('问题反馈') || text.includes('问问助手') || text.includes('hiagent')) return true
 
   return false
 }
 
+function findDesktopDragRoot(el) {
+  let current = el
+  let dragRoot = null
+
+  while (current && current !== document.body) {
+    if (current === mobileBubbleRef.value) return null
+    if (current.id === 'app' || current.closest?.('#app')) return dragRoot
+
+    const style = window.getComputedStyle(current)
+    if (style.position === 'fixed') {
+      dragRoot = current
+    }
+
+    current = current.parentElement
+  }
+
+  return dragRoot
+}
+
+function isUsableDesktopDragRoot(el) {
+  if (!el) return false
+
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return false
+
+  return true
+}
+
 function findSdkElement() {
+  const seen = new Set()
   const candidates = Array.from(document.body.querySelectorAll('*'))
 
   for (const el of candidates) {
     if (!isHiagentDesktopElement(el)) continue
 
-    const style = window.getComputedStyle(el)
-    if (style.position !== 'fixed') continue
+    const dragRoot = findDesktopDragRoot(el)
+    if (!isUsableDesktopDragRoot(dragRoot) || seen.has(dragRoot)) continue
 
-    sdkEl = el
-    applyStoredOrDefaultPosition(el, 'desktop')
-    attachPointerDrag(el, 'desktop')
-    return el
+    seen.add(dragRoot)
+    sdkEl = dragRoot
+    applyStoredOrDefaultPosition(dragRoot, 'desktop')
+    attachPointerDrag(dragRoot, 'desktop')
+    return dragRoot
   }
 
   return null
