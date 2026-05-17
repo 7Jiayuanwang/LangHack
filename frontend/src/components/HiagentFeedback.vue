@@ -23,7 +23,8 @@ const containerRef = ref(null)
 const LITE_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedLite.js'
 const FULL_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedFull.js'
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)'
-const POSITION_KEY = 'hiagent_bubble_position'
+const POSITION_KEY_DESKTOP = 'hiagent_bubble_position_desktop'
+const POSITION_KEY_MOBILE = 'hiagent_bubble_position_mobile'
 const OPEN_FULL_METHOD = 'openHiagentFullClient'
 
 let liteClient = null
@@ -35,9 +36,18 @@ let dragging = false
 let resizeHandler = null
 let mounted = false
 let mobileApiRegistered = false
+let activeMode = null
 
 function isDesktop() {
   return window.matchMedia(DESKTOP_MEDIA_QUERY).matches
+}
+
+function getCurrentMode() {
+  return isDesktop() ? 'desktop' : 'mobile'
+}
+
+function getPositionKey() {
+  return getCurrentMode() === 'desktop' ? POSITION_KEY_DESKTOP : POSITION_KEY_MOBILE
 }
 
 function getScriptUrl(path) {
@@ -79,7 +89,7 @@ function loadSdkScript(path) {
 
 function loadPosition() {
   try {
-    const raw = localStorage.getItem(POSITION_KEY)
+    const raw = localStorage.getItem(getPositionKey())
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
@@ -88,7 +98,7 @@ function loadPosition() {
 
 function savePosition(pos) {
   try {
-    localStorage.setItem(POSITION_KEY, JSON.stringify(pos))
+    localStorage.setItem(getPositionKey(), JSON.stringify(pos))
   } catch {
     // ignore
   }
@@ -101,6 +111,21 @@ function applyPosition(el) {
   el.style.top = `${saved.y}px`
   el.style.right = 'auto'
   el.style.bottom = 'auto'
+}
+
+function getPoint(event) {
+  if (event.type === 'touchend' || event.type === 'touchcancel') {
+    const touch = event.changedTouches?.[0]
+    return touch ? { x: touch.clientX, y: touch.clientY } : null
+  }
+  if (event.type === 'touchstart' || event.type === 'touchmove') {
+    const touch = event.touches?.[0]
+    return touch ? { x: touch.clientX, y: touch.clientY } : null
+  }
+  if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
+    return { x: event.clientX, y: event.clientY }
+  }
+  return null
 }
 
 function cleanupDrag() {
@@ -118,24 +143,29 @@ function attachDrag(el) {
 
   el.style.setProperty('z-index', '99999', 'important')
   el.style.setProperty('pointer-events', 'auto', 'important')
+  el.style.setProperty('touch-action', 'none', 'important')
 
   const startDrag = (event) => {
-    if (!isDesktop() || dragging) return
+    if (dragging) return
     if (dragHandlers) cleanupDrag()
 
     const isTouch = event.type === 'touchstart'
     if (!isTouch && event.button !== 0) return
     if (isTouch) event.preventDefault()
 
+    const startPoint = getPoint(event)
+    if (!startPoint) return
+
     dragging = true
 
-    const startX = isTouch ? event.touches[0].clientX : event.clientX
-    const startY = isTouch ? event.touches[0].clientY : event.clientY
+    const startX = startPoint.x
+    const startY = startPoint.y
+    const startTime = Date.now()
     const rect = el.getBoundingClientRect()
     const offsetX = startX - rect.left
     const offsetY = startY - rect.top
     const originalTransition = el.style.transition
-    let moved = false
+    let hasMoved = false
 
     el.style.transition = 'none'
     el.style.left = `${rect.left}px`
@@ -143,26 +173,34 @@ function attachDrag(el) {
     el.style.right = 'auto'
     el.style.bottom = 'auto'
 
-    const handleMove = (moveEvent) => {
-      if (!dragging) return
-      const moveX = moveEvent.type === 'touchmove' ? moveEvent.touches[0].clientX : moveEvent.clientX
-      const moveY = moveEvent.type === 'touchmove' ? moveEvent.touches[0].clientY : moveEvent.clientY
-
-      if (Math.abs(moveX - startX) > 5 || Math.abs(moveY - startY) > 5) {
-        moved = true
+    const updatePosition = (point) => {
+      if (!point) return
+      if (Math.abs(point.x - startX) > 5 || Math.abs(point.y - startY) > 5) {
+        hasMoved = true
       }
-
-      el.style.left = `${moveX - offsetX}px`
-      el.style.top = `${moveY - offsetY}px`
+      el.style.left = `${point.x - offsetX}px`
+      el.style.top = `${point.y - offsetY}px`
     }
 
-    const handleEnd = () => {
+    const handleMove = (moveEvent) => {
       if (!dragging) return
+      if (moveEvent.type === 'touchmove') {
+        moveEvent.preventDefault()
+      }
+      updatePosition(getPoint(moveEvent))
+    }
+
+    const handleEnd = (endEvent) => {
+      if (!dragging) return
+
+      updatePosition(getPoint(endEvent))
+
+      const duration = Date.now() - startTime
       dragging = false
       cleanupDrag()
       el.style.transition = originalTransition
 
-      if (moved) {
+      if (hasMoved || duration >= 300) {
         const finalRect = el.getBoundingClientRect()
         savePosition({ x: finalRect.left, y: finalRect.top })
       }
@@ -204,7 +242,7 @@ function observeSdkElement() {
   if (observer) return
 
   observer = new MutationObserver(() => {
-    if (!mounted || !isDesktop()) return
+    if (!mounted) return
     if (sdkEl && document.body.contains(sdkEl)) return
 
     const found = findSdkElement()
@@ -217,15 +255,30 @@ function observeSdkElement() {
   observer.observe(document.body, { childList: true, subtree: true })
 }
 
-function destroyLiteClient() {
+function afterClientReady() {
+  requestAnimationFrame(() => {
+    window.setTimeout(() => {
+      if (!findSdkElement()) {
+        observeSdkElement()
+      }
+    }, 400)
+  })
+}
+
+function disconnectObserver() {
+  if (!observer) return
+  observer.disconnect()
+  observer = null
+}
+
+function resetSdkState() {
   cleanupDrag()
   dragging = false
+  disconnectObserver()
+  sdkEl = null
+}
 
-  if (observer) {
-    observer.disconnect()
-    observer = null
-  }
-
+function destroyLiteClient() {
   if (liteClient && typeof liteClient.destroy === 'function') {
     try {
       liteClient.destroy()
@@ -233,58 +286,80 @@ function destroyLiteClient() {
       // ignore
     }
   }
-
   liteClient = null
-  sdkEl = null
+}
+
+function destroyFullClient() {
+  if (fullClient && typeof fullClient.destroy === 'function') {
+    try {
+      fullClient.destroy()
+    } catch {
+      // ignore
+    }
+  }
+  fullClient = null
+}
+
+function destroyAllClients() {
+  resetSdkState()
+  destroyLiteClient()
+  destroyFullClient()
+  activeMode = null
 }
 
 async function initDesktopBubble() {
-  if (!mounted || !isDesktop() || liteClient) return
+  if (!mounted || activeMode === 'desktop' || liteClient) return
 
   try {
     const sdk = await loadSdkScript(LITE_SCRIPT_PATH)
-    if (!mounted || !isDesktop() || liteClient) return
+    if (!mounted || getCurrentMode() !== 'desktop' || activeMode === 'desktop' || liteClient) return
 
     if (!sdk?.WebLiteClient) {
       throw new Error('HiAgent WebLiteClient 不可用')
     }
 
+    resetSdkState()
+    destroyFullClient()
+
     liteClient = new sdk.WebLiteClient({
       appKey: props.appKey,
       baseUrl: props.baseUrl
     })
-
-    requestAnimationFrame(() => {
-      window.setTimeout(() => {
-        if (!findSdkElement()) {
-          observeSdkElement()
-        }
-      }, 400)
-    })
+    activeMode = 'desktop'
+    afterClientReady()
   } catch (error) {
     console.error('HiAgent 桌面气泡初始化失败:', error)
   }
 }
 
-async function openFullClient() {
+async function initMobileBubble() {
+  if (!mounted || activeMode === 'mobile' || fullClient) return
+
   try {
     const sdk = await loadSdkScript(FULL_SCRIPT_PATH)
+    if (!mounted || getCurrentMode() !== 'mobile' || activeMode === 'mobile' || fullClient) return
+
     if (!sdk?.WebClient) {
       throw new Error('HiAgent WebClient 不可用')
     }
 
-    if (!fullClient) {
-      fullClient = new sdk.WebClient({
-        appKey: props.appKey,
-        baseUrl: props.baseUrl
-      })
-    }
+    resetSdkState()
+    destroyLiteClient()
 
-    return fullClient
+    fullClient = new sdk.WebClient({
+      appKey: props.appKey,
+      baseUrl: props.baseUrl
+    })
+    activeMode = 'mobile'
+    afterClientReady()
   } catch (error) {
-    console.error('HiAgent 手机端全量客户端初始化失败:', error)
-    throw error
+    console.error('HiAgent 手机端气泡初始化失败:', error)
   }
+}
+
+async function openFullClient() {
+  await initMobileBubble()
+  return fullClient
 }
 
 function registerMobileApi() {
@@ -302,12 +377,17 @@ function unregisterMobileApi() {
 }
 
 function handleViewportChange() {
-  if (isDesktop()) {
+  const mode = getCurrentMode()
+  if (mode === activeMode) return
+
+  destroyAllClients()
+
+  if (mode === 'desktop') {
     initDesktopBubble()
     return
   }
 
-  destroyLiteClient()
+  initMobileBubble()
 }
 
 defineExpose({
@@ -335,7 +415,7 @@ onBeforeUnmount(() => {
   }
 
   unregisterMobileApi()
-  destroyLiteClient()
+  destroyAllClients()
 })
 </script>
 
