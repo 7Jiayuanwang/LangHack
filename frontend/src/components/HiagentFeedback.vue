@@ -16,7 +16,6 @@
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 
 const props = defineProps({
   appKey: {
@@ -26,19 +25,15 @@ const props = defineProps({
   baseUrl: {
     type: String,
     default: 'https://agent.imau.edu.cn:32300'
-  },
-  mobileTargetRoute: {
-    type: String,
-    required: true
   }
 })
 
-const router = useRouter()
 const mobileBubbleRef = ref(null)
 const showMobileBubble = ref(false)
 const dragging = ref(false)
 
 const LITE_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedLite.js'
+const FULL_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedFull.js'
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)'
 const POSITION_KEY_DESKTOP = 'hiagent_bubble_position_desktop'
 const POSITION_KEY_MOBILE = 'hiagent_bubble_position_mobile'
@@ -47,6 +42,7 @@ const DRAG_DURATION_THRESHOLD = 300
 const MOBILE_BUBBLE_MARGIN = 16
 
 let liteClient = null
+let fullClient = null
 let sdkEl = null
 let observer = null
 let resizeHandler = null
@@ -405,6 +401,17 @@ function destroyLiteClient() {
   liteClient = null
 }
 
+function destroyFullClient() {
+  if (fullClient && typeof fullClient.destroy === 'function') {
+    try {
+      fullClient.destroy()
+    } catch {
+      // ignore
+    }
+  }
+  fullClient = null
+}
+
 async function initDesktopBubble() {
   if (!mounted || !isDesktop() || liteClient) return
 
@@ -417,6 +424,7 @@ async function initDesktopBubble() {
     }
 
     showMobileBubble.value = false
+    destroyFullClient()
     resetSdkState()
     liteClient = new sdk.WebLiteClient({
       appKey: props.appKey,
@@ -425,6 +433,24 @@ async function initDesktopBubble() {
     afterClientReady()
   } catch (error) {
     console.error('HiAgent 桌面气泡初始化失败:', error)
+  }
+}
+
+async function openMobileFullClient() {
+  try {
+    const sdk = await loadSdkScript(FULL_SCRIPT_PATH)
+    if (!sdk?.WebClient) {
+      throw new Error('HiAgent WebClient 不可用')
+    }
+
+    if (!fullClient) {
+      fullClient = new sdk.WebClient({
+        appKey: props.appKey,
+        baseUrl: props.baseUrl
+      })
+    }
+  } catch (error) {
+    console.error('HiAgent 移动端全页面初始化失败:', error)
   }
 }
 
@@ -461,7 +487,7 @@ function syncMode() {
 
 function handleMobileBubbleClick() {
   if (dragging.value || suppressNextClick) return
-  router.push(props.mobileTargetRoute)
+  openMobileFullClient()
 }
 
 onMounted(() => {
@@ -485,6 +511,7 @@ onBeforeUnmount(() => {
 
   destroyMobileBubbleDrag()
   destroyLiteClient()
+  destroyFullClient()
   showMobileBubble.value = false
   resetSdkState()
 })
