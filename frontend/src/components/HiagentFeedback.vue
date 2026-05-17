@@ -9,8 +9,7 @@
       type="button"
       @click="handleBubbleClick"
     >
-      <span class="hiagent-bubble__icon">AI</span>
-      <span class="hiagent-bubble__label">问题反馈</span>
+      <span class="hiagent-bubble__text">问题反馈</span>
     </button>
   </Teleport>
 </template>
@@ -317,40 +316,63 @@ onBeforeUnmount(() => {
   position: fixed;
   right: 16px;
   bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  width: 56px;
+  height: 56px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
+  justify-content: center;
+  padding: 0;
   border: none;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #197fe6, #3b82f6);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(135deg, #197fe6, #3b82f6);
   color: #fff;
   box-shadow: 0 12px 32px rgba(25, 127, 230, 0.28);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.2;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.hiagent-bubble:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 16px 36px rgba(25, 127, 230, 0.4);
+  filter: brightness(1.08);
+}
+
+.hiagent-bubble::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.28) 0%, rgba(59, 130, 246, 0) 72%);
+  opacity: 0;
+  transform: scale(0.88);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.hiagent-bubble:hover::before {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .hiagent-bubble.is-dragging {
   cursor: grabbing;
+  transform: scale(1.03);
+  box-shadow: 0 18px 38px rgba(25, 127, 230, 0.36);
 }
 
-.hiagent-bubble__icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.hiagent-bubble__label {
-  white-space: nowrap;
+.hiagent-bubble__text {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding: 0 6px;
+  white-space: normal;
 }
 </style>
