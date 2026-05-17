@@ -162,8 +162,12 @@ function applyStoredOrDefaultPosition(el, mode) {
 
 function applyStoredPosition(el, mode) {
   const saved = loadPosition(mode)
-  if (!saved) return
-  if (mode === 'desktop' && saved.source !== 'pointer-drag') return
+  if (!saved || (mode === 'desktop' && saved.source !== 'pointer-drag')) {
+    // 没有有效的保存位置 — 放到右下角默认位置
+    const position = getDefaultPosition(el, mode)
+    setElementPosition(el, position.x, position.y)
+    return
+  }
 
   const position = clampPosition(el, saved.x, saved.y)
   setElementPosition(el, position.x, position.y)
@@ -392,12 +396,25 @@ function observeSdkElement() {
 }
 
 function afterClientReady() {
+  // SDK 渲染可能较慢，使用递增延迟多次尝试查找
+  const RETRY_DELAYS = [400, 1000, 2000, 4000]
+  let attempt = 0
+
+  function tryFind() {
+    if (!mounted || !isDesktop() || sdkEl) return
+    if (findSdkElement()) return
+
+    attempt++
+    if (attempt < RETRY_DELAYS.length) {
+      window.setTimeout(tryFind, RETRY_DELAYS[attempt])
+    } else {
+      // 所有重试都失败，启动 MutationObserver 持续监听
+      observeSdkElement()
+    }
+  }
+
   requestAnimationFrame(() => {
-    window.setTimeout(() => {
-      if (!findSdkElement()) {
-        observeSdkElement()
-      }
-    }, 400)
+    window.setTimeout(tryFind, RETRY_DELAYS[0])
   })
 }
 
@@ -409,6 +426,10 @@ function disconnectObserver() {
 
 function resetSdkState() {
   disconnectObserver()
+  // 清除拖拽绑定标记，确保元素重建后可以重新绑定拖拽事件
+  if (sdkEl && sdkEl.dataset) {
+    delete sdkEl.dataset.hiagentDragBound
+  }
   sdkEl = null
   if (activeDragElement && activeDragElement !== mobileBubbleRef.value) {
     finishPointerDrag()
