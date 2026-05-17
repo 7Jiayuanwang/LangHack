@@ -316,19 +316,18 @@ onBeforeUnmount(() => {
   position: fixed;
   right: 16px;
   bottom: calc(86px + env(safe-area-inset-bottom, 0px));
-  width: 72px;
-  height: 72px;
+  height: 38px;
+  padding: 0 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: 12px;
   background:
     radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 38%),
     linear-gradient(135deg, #197fe6, #3b82f6);
   color: #fff;
-  box-shadow: 0 12px 32px rgba(25, 127, 230, 0.28);
+  box-shadow: 0 8px 22px rgba(25, 127, 230, 0.28);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
@@ -348,11 +347,11 @@ onBeforeUnmount(() => {
 .hiagent-bubble::before {
   content: '';
   position: absolute;
-  inset: -6px;
-  border-radius: 50%;
+  inset: -4px;
+  border-radius: 14px;
   background: radial-gradient(circle, rgba(59, 130, 246, 0.28) 0%, rgba(59, 130, 246, 0) 72%);
   opacity: 0;
-  transform: scale(0.88);
+  transform: scale(0.92);
   transition: opacity 0.2s ease, transform 0.2s ease;
   pointer-events: none;
 }
