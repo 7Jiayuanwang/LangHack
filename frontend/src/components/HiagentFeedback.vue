@@ -1,15 +1,15 @@
 <template>
   <Teleport to="body">
     <button
-      v-if="showMobileBubble"
-      ref="mobileBubbleRef"
-      class="hiagent-mobile-bubble"
+      v-if="showBubble"
+      ref="bubbleRef"
+      class="hiagent-bubble"
       :class="{ 'is-dragging': dragging }"
       type="button"
-      @click="handleMobileBubbleClick"
+      @click="handleBubbleClick"
     >
-      <span class="hiagent-mobile-bubble__icon">AI</span>
-      <span class="hiagent-mobile-bubble__label">问题反馈</span>
+      <span class="hiagent-bubble__icon">AI</span>
+      <span class="hiagent-bubble__label">问题反馈</span>
     </button>
   </Teleport>
 </template>
@@ -28,40 +28,36 @@ const props = defineProps({
   }
 })
 
-const mobileBubbleRef = ref(null)
-const showMobileBubble = ref(false)
+const bubbleRef = ref(null)
+const showBubble = ref(false)
 const dragging = ref(false)
 
 const LITE_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedLite.js'
 const FULL_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedFull.js'
 const FULL_PAGE_PATH = '/product/llm/chat'
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)'
-const POSITION_KEY_DESKTOP = 'hiagent_bubble_position_desktop'
-const POSITION_KEY_MOBILE = 'hiagent_bubble_position_mobile'
+const POSITION_KEY = 'hiagent_bubble_position'
 const DRAG_THRESHOLD = 5
 const DRAG_DURATION_THRESHOLD = 300
-const MOBILE_BUBBLE_MARGIN = 16
+const BUBBLE_MARGIN = 16
+const BOTTOM_NAV_HEIGHT = 70
 const FULL_CLIENT_RENDER_TIMEOUT = 1200
+const SDK_HIDE_STYLE_ID = 'hiagent-sdk-hide'
 
 let liteClient = null
 let fullClient = null
-let sdkEl = null
-let observer = null
 let resizeHandler = null
 let mounted = false
-let isDesktopMode = true
 let suppressNextClick = false
 let activePointerId = null
 let activeDragElement = null
 let releasePointerCaptureFn = null
 let dragState = null
 
+// ─── Helpers ───────────────────────────────────────────
+
 function isDesktop() {
   return window.matchMedia(DESKTOP_MEDIA_QUERY).matches
-}
-
-function getPositionKeyForMode(mode) {
-  return mode === 'desktop' ? POSITION_KEY_DESKTOP : POSITION_KEY_MOBILE
 }
 
 function getScriptUrl(path) {
@@ -105,25 +101,20 @@ function getFullPageUrl() {
   return `${props.baseUrl}${FULL_PAGE_PATH}/${props.appKey}`
 }
 
-function openFullPageUrl() {
-  window.location.href = getFullPageUrl()
-}
+// ─── Position ──────────────────────────────────────────
 
-function loadPosition(mode) {
+function loadPosition() {
   try {
-    const raw = localStorage.getItem(getPositionKeyForMode(mode))
+    const raw = localStorage.getItem(POSITION_KEY)
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
   }
 }
 
-function savePosition(mode, pos) {
+function savePosition(pos) {
   try {
-    const value = mode === 'desktop'
-      ? { ...pos, source: 'pointer-drag' }
-      : pos
-    localStorage.setItem(getPositionKeyForMode(mode), JSON.stringify(value))
+    localStorage.setItem(POSITION_KEY, JSON.stringify(pos))
   } catch {
     // ignore
   }
@@ -133,7 +124,6 @@ function clampPosition(el, x, y) {
   const rect = el.getBoundingClientRect()
   const maxX = Math.max(window.innerWidth - rect.width, 0)
   const maxY = Math.max(window.innerHeight - rect.height, 0)
-
   return {
     x: Math.min(Math.max(x, 0), maxX),
     y: Math.min(Math.max(y, 0), maxY)
@@ -141,39 +131,33 @@ function clampPosition(el, x, y) {
 }
 
 function setElementPosition(el, x, y) {
-  const next = clampPosition(el, x, y)
-  el.style.left = `${next.x}px`
-  el.style.top = `${next.y}px`
+  const pos = clampPosition(el, x, y)
+  el.style.left = `${pos.x}px`
+  el.style.top = `${pos.y}px`
   el.style.right = 'auto'
   el.style.bottom = 'auto'
 }
 
-function getDefaultPosition(el, mode) {
+function getDefaultPosition(el) {
   const rect = el.getBoundingClientRect()
-  const margin = mode === 'mobile' ? MOBILE_BUBBLE_MARGIN : 24
-  return clampPosition(el, window.innerWidth - rect.width - margin, window.innerHeight - rect.height - margin)
+  return clampPosition(
+    el,
+    window.innerWidth - rect.width - BUBBLE_MARGIN,
+    window.innerHeight - rect.height - BUBBLE_MARGIN - BOTTOM_NAV_HEIGHT
+  )
 }
 
-function applyStoredOrDefaultPosition(el, mode) {
-  const saved = loadPosition(mode)
-  const position = saved ? clampPosition(el, saved.x, saved.y) : getDefaultPosition(el, mode)
-  setElementPosition(el, position.x, position.y)
+function applyPosition(el) {
+  const saved = loadPosition()
+  const pos = saved
+    ? clampPosition(el, saved.x, saved.y)
+    : getDefaultPosition(el)
+  setElementPosition(el, pos.x, pos.y)
 }
 
-function applyStoredPosition(el, mode) {
-  const saved = loadPosition(mode)
-  if (!saved || (mode === 'desktop' && saved.source !== 'pointer-drag')) {
-    // 没有有效的保存位置 — 放到右下角默认位置
-    const position = getDefaultPosition(el, mode)
-    setElementPosition(el, position.x, position.y)
-    return
-  }
+// ─── Drag ──────────────────────────────────────────────
 
-  const position = clampPosition(el, saved.x, saved.y)
-  setElementPosition(el, position.x, position.y)
-}
-
-function clearPointerDragState() {
+function clearDragState() {
   dragging.value = false
   activePointerId = null
   activeDragElement = null
@@ -181,9 +165,9 @@ function clearPointerDragState() {
   dragState = null
 }
 
-function finishPointerDrag(event) {
+function finishDrag(event) {
   if (!activeDragElement || !dragState) {
-    clearPointerDragState()
+    clearDragState()
     return
   }
 
@@ -196,16 +180,14 @@ function finishPointerDrag(event) {
   }
 
   if (event) {
-    const nextX = event.clientX - state.offsetX
-    const nextY = event.clientY - state.offsetY
-    setElementPosition(el, nextX, nextY)
+    setElementPosition(el, event.clientX - state.offsetX, event.clientY - state.offsetY)
   }
 
   const duration = Date.now() - state.startTime
   const didDrag = state.hasMoved || duration >= DRAG_DURATION_THRESHOLD
   if (didDrag) {
     const finalRect = el.getBoundingClientRect()
-    savePosition(state.mode, { x: finalRect.left, y: finalRect.top })
+    savePosition({ x: finalRect.left, y: finalRect.top })
     suppressNextClick = true
     window.setTimeout(() => {
       suppressNextClick = false
@@ -218,17 +200,17 @@ function finishPointerDrag(event) {
     releasePointerCaptureFn()
   }
 
-  clearPointerDragState()
+  clearDragState()
 }
 
-function attachPointerDrag(el, mode) {
+function attachDrag(el) {
   if (!el || el.dataset.hiagentDragBound === 'true') return
 
   el.style.setProperty('z-index', '99999', 'important')
   el.style.setProperty('pointer-events', 'auto', 'important')
   el.style.setProperty('touch-action', 'none', 'important')
 
-  const handlePointerDown = (event) => {
+  const onPointerDown = (event) => {
     if (event.button !== undefined && event.button !== 0) return
     if (activePointerId !== null) return
 
@@ -237,7 +219,6 @@ function attachPointerDrag(el, mode) {
     activeDragElement = el
     dragging.value = true
     dragState = {
-      mode,
       startX: event.clientX,
       startY: event.clientY,
       offsetX: event.clientX - rect.left,
@@ -266,7 +247,7 @@ function attachPointerDrag(el, mode) {
     }
   }
 
-  const handlePointerMove = (event) => {
+  const onPointerMove = (event) => {
     if (!dragState || event.pointerId !== activePointerId) return
 
     const deltaX = Math.abs(event.clientX - dragState.startX)
@@ -278,218 +259,117 @@ function attachPointerDrag(el, mode) {
     setElementPosition(el, event.clientX - dragState.offsetX, event.clientY - dragState.offsetY)
   }
 
-  const handlePointerUp = (event) => {
-    finishPointerDrag(event)
-  }
+  const onPointerUp = (event) => finishDrag(event)
+  const onPointerCancel = (event) => finishDrag(event)
+  const onLostCapture = (event) => finishDrag(event)
 
-  const handlePointerCancel = (event) => {
-    finishPointerDrag(event)
-  }
-
-  const handleLostPointerCapture = (event) => {
-    finishPointerDrag(event)
-  }
-
-  const handleClick = (event) => {
+  const onClickCapture = (event) => {
     if (!suppressNextClick) return
     event.preventDefault()
     event.stopPropagation()
     suppressNextClick = false
   }
 
-  el.addEventListener('pointerdown', handlePointerDown)
-  el.addEventListener('pointermove', handlePointerMove)
-  el.addEventListener('pointerup', handlePointerUp)
-  el.addEventListener('pointercancel', handlePointerCancel)
-  el.addEventListener('lostpointercapture', handleLostPointerCapture)
-  el.addEventListener('click', handleClick, true)
+  el.addEventListener('pointerdown', onPointerDown)
+  el.addEventListener('pointermove', onPointerMove)
+  el.addEventListener('pointerup', onPointerUp)
+  el.addEventListener('pointercancel', onPointerCancel)
+  el.addEventListener('lostpointercapture', onLostCapture)
+  el.addEventListener('click', onClickCapture, true)
   el.dataset.hiagentDragBound = 'true'
 }
 
-function isHiagentDesktopElement(el) {
-  if (!el || el === mobileBubbleRef.value) return false
-  if (el.id === 'app' || el.closest('#app')) return false
+// ─── SDK bubble hiding ─────────────────────────────────
+// WebLiteClient 会渲染自己的气泡，我们注入 CSS 隐藏它
 
-  const className = typeof el.className === 'string' ? el.className.toLowerCase() : ''
-  const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
-  const text = (el.textContent || '').trim().toLowerCase()
-
-  if (id.includes('hiagent')) return true
-  if (className.includes('hiagent')) return true
-  if (className.includes('web-lite')) return true
-  if (className.includes('web-client')) return true
-  if (className.includes('embed-lite')) return true
-  if (className.includes('embedfull')) return true
-  if (text.includes('问题反馈') || text.includes('问问助手') || text.includes('hiagent')) return true
-
-  return false
-}
-
-function findDesktopDragRoot(el) {
-  let current = el
-
-  while (current && current !== document.body) {
-    if (current === mobileBubbleRef.value) return null
-    if (current.id === 'app' || current.closest?.('#app')) return null
-
-    const style = window.getComputedStyle(current)
-    if (style.position === 'fixed') {
-      const rect = current.getBoundingClientRect()
-      const isViewportShell = rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9
-
-      if (!isViewportShell) {
-        return current
-      }
+function injectSdkHideStyle() {
+  if (document.getElementById(SDK_HIDE_STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = SDK_HIDE_STYLE_ID
+  style.textContent = `
+    /* 隐藏 HiAgent SDK 自带的浮动气泡，我们使用自己的可拖拽气泡 */
+    body > div[class*="web-lite"],
+    body > div[class*="embed-lite"],
+    body > div[class*="hiagent"][style*="fixed"] {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      width: 0 !important;
+      height: 0 !important;
+      overflow: hidden !important;
     }
-
-    current = current.parentElement
-  }
-
-  return null
+  `
+  document.head.appendChild(style)
 }
 
-function isUsableDesktopDragRoot(el) {
-  if (!el) return false
-
-  const rect = el.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return false
-  if (rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9) return false
-
-  return true
+function removeSdkHideStyle() {
+  const el = document.getElementById(SDK_HIDE_STYLE_ID)
+  if (el) el.remove()
 }
 
-function findSdkElement() {
-  const seen = new Set()
+// 查找 SDK 渲染的气泡元素（用于代理点击以打开聊天面板）
+function findSdkClickTarget() {
   const candidates = Array.from(document.body.querySelectorAll('*'))
-
   for (const el of candidates) {
-    if (!isHiagentDesktopElement(el)) continue
+    if (el === bubbleRef.value) continue
+    if (el.id === 'app' || el.closest('#app')) continue
 
-    const dragRoot = findDesktopDragRoot(el)
-    if (!isUsableDesktopDragRoot(dragRoot) || seen.has(dragRoot)) continue
+    const cn = typeof el.className === 'string' ? el.className.toLowerCase() : ''
+    const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
 
-    seen.add(dragRoot)
-    sdkEl = dragRoot
-    applyStoredPosition(dragRoot, 'desktop')
-    attachPointerDrag(dragRoot, 'desktop')
-    return dragRoot
+    if (
+      cn.includes('web-lite') ||
+      cn.includes('embed-lite') ||
+      id.includes('hiagent')
+    ) {
+      return el
+    }
   }
-
   return null
 }
 
-function observeSdkElement() {
-  if (observer) return
-
-  observer = new MutationObserver(() => {
-    if (!mounted || !isDesktop()) return
-    if (sdkEl && document.body.contains(sdkEl)) return
-
-    const found = findSdkElement()
-    if (found && observer) {
-      observer.disconnect()
-      observer = null
-    }
-  })
-
-  observer.observe(document.body, { childList: true, subtree: true })
-}
-
-function afterClientReady() {
-  // SDK 渲染可能较慢，使用递增延迟多次尝试查找
-  const RETRY_DELAYS = [400, 1000, 2000, 4000]
-  let attempt = 0
-
-  function tryFind() {
-    if (!mounted || !isDesktop() || sdkEl) return
-    if (findSdkElement()) return
-
-    attempt++
-    if (attempt < RETRY_DELAYS.length) {
-      window.setTimeout(tryFind, RETRY_DELAYS[attempt])
-    } else {
-      // 所有重试都失败，启动 MutationObserver 持续监听
-      observeSdkElement()
-    }
-  }
-
-  requestAnimationFrame(() => {
-    window.setTimeout(tryFind, RETRY_DELAYS[0])
-  })
-}
-
-function disconnectObserver() {
-  if (!observer) return
-  observer.disconnect()
-  observer = null
-}
-
-function resetSdkState() {
-  disconnectObserver()
-  // 清除拖拽绑定标记，确保元素重建后可以重新绑定拖拽事件
-  if (sdkEl && sdkEl.dataset) {
-    delete sdkEl.dataset.hiagentDragBound
-  }
-  sdkEl = null
-  if (activeDragElement && activeDragElement !== mobileBubbleRef.value) {
-    finishPointerDrag()
-  } else {
-    clearPointerDragState()
-  }
-}
+// ─── SDK init ──────────────────────────────────────────
 
 function destroyLiteClient() {
   if (liteClient && typeof liteClient.destroy === 'function') {
-    try {
-      liteClient.destroy()
-    } catch {
-      // ignore
-    }
+    try { liteClient.destroy() } catch { /* ignore */ }
   }
   liteClient = null
 }
 
 function destroyFullClient() {
   if (fullClient && typeof fullClient.destroy === 'function') {
-    try {
-      fullClient.destroy()
-    } catch {
-      // ignore
-    }
+    try { fullClient.destroy() } catch { /* ignore */ }
   }
   fullClient = null
 }
 
-async function initDesktopBubble() {
-  if (!mounted || !isDesktop() || liteClient) return
+async function initDesktopSdk() {
+  if (!mounted || liteClient) return
 
   try {
     const sdk = await loadSdkScript(LITE_SCRIPT_PATH)
-    if (!mounted || !isDesktop() || liteClient) return
+    if (!mounted || liteClient) return
 
-    if (!sdk?.WebLiteClient) {
-      throw new Error('HiAgent WebLiteClient 不可用')
-    }
+    if (!sdk?.WebLiteClient) return
 
-    showMobileBubble.value = false
-    destroyFullClient()
-    resetSdkState()
     liteClient = new sdk.WebLiteClient({
       appKey: props.appKey,
       baseUrl: props.baseUrl
     })
-    afterClientReady()
+
+    // 等 SDK 渲染完再隐藏它的气泡
+    window.setTimeout(() => {
+      if (mounted) injectSdkHideStyle()
+    }, 800)
   } catch (error) {
-    console.error('HiAgent 桌面气泡初始化失败:', error)
+    console.warn('HiAgent SDK 加载失败，点击气泡将打开全页面:', error)
   }
 }
 
-async function openMobileFullClient() {
+async function openFullClient() {
   try {
     const sdk = await loadSdkScript(FULL_SCRIPT_PATH)
-    if (!sdk?.WebClient) {
-      throw new Error('HiAgent WebClient 不可用')
-    }
+    if (!sdk?.WebClient) throw new Error('WebClient 不可用')
 
     if (!fullClient) {
       fullClient = new sdk.WebClient({
@@ -498,79 +378,87 @@ async function openMobileFullClient() {
       })
     }
 
+    // 检查 SDK 是否成功渲染了全屏聊天界面
     window.setTimeout(() => {
-      const hasRenderedFullClient = Array.from(document.body.querySelectorAll('*')).some((el) => {
-        if (el === mobileBubbleRef.value) return false
-
-        const className = typeof el.className === 'string' ? el.className.toLowerCase() : ''
-        const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
-        const text = (el.textContent || '').trim().toLowerCase()
-
-        return (
-          className.includes('hiagent') ||
-          className.includes('web-client') ||
-          className.includes('embedfull') ||
-          id.includes('hiagent') ||
-          text.includes('hiagent') ||
-          text.includes('问题反馈') ||
-          text.includes('问问助手')
-        )
+      const rendered = Array.from(document.body.querySelectorAll('*')).some((el) => {
+        if (el === bubbleRef.value) return false
+        const cn = typeof el.className === 'string' ? el.className.toLowerCase() : ''
+        return cn.includes('web-client') || cn.includes('embedfull')
       })
 
-      if (!hasRenderedFullClient) {
-        openFullPageUrl()
+      if (!rendered) {
+        window.open(getFullPageUrl(), '_blank')
       }
     }, FULL_CLIENT_RENDER_TIMEOUT)
-  } catch (error) {
-    console.error('HiAgent 移动端全页面初始化失败:', error)
-    openFullPageUrl()
+  } catch {
+    window.open(getFullPageUrl(), '_blank')
   }
 }
 
-function destroyMobileBubbleDrag() {
-  if (activeDragElement === mobileBubbleRef.value) {
-    finishPointerDrag()
-  }
-}
+// ─── Bubble setup ──────────────────────────────────────
 
-function setupMobileBubble() {
-  showMobileBubble.value = true
+function setupBubble() {
+  showBubble.value = true
 
   nextTick(() => {
-    const el = mobileBubbleRef.value
-    if (!mounted || !el || isDesktop()) return
+    const el = bubbleRef.value
+    if (!mounted || !el) return
 
-    applyStoredOrDefaultPosition(el, 'mobile')
-    attachPointerDrag(el, 'mobile')
+    applyPosition(el)
+    attachDrag(el)
   })
 }
 
-function syncMode() {
-  isDesktopMode = isDesktop()
-
-  if (isDesktopMode) {
-    initDesktopBubble()
-    return
-  }
-
-  destroyLiteClient()
-  resetSdkState()
-  setupMobileBubble()
-}
-
-function handleMobileBubbleClick() {
+function handleBubbleClick() {
   if (dragging.value || suppressNextClick) return
-  openMobileFullClient()
+
+  if (isDesktop()) {
+    // 桌面端：尝试代理点击 SDK 气泡以打开聊天面板
+    // 先临时取消隐藏让 SDK 能接收点击
+    removeSdkHideStyle()
+    const sdkTarget = findSdkClickTarget()
+    if (sdkTarget) {
+      sdkTarget.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      // 延迟重新隐藏 SDK 气泡
+      window.setTimeout(() => {
+        if (mounted) injectSdkHideStyle()
+      }, 300)
+    } else {
+      // SDK 未加载成功，打开全页面
+      injectSdkHideStyle()
+      window.open(getFullPageUrl(), '_blank')
+    }
+  } else {
+    // 移动端：尝试嵌入全屏聊天，失败则打开全页面
+    openFullClient()
+  }
 }
+
+function handleResize() {
+  const el = bubbleRef.value
+  if (!el || !showBubble.value) return
+
+  // 窗口大小变化时重新约束位置
+  const saved = loadPosition()
+  if (saved) {
+    const pos = clampPosition(el, saved.x, saved.y)
+    setElementPosition(el, pos.x, pos.y)
+  }
+}
+
+// ─── Lifecycle ─────────────────────────────────────────
 
 onMounted(() => {
   mounted = true
-  syncMode()
 
-  resizeHandler = () => {
-    syncMode()
+  // 桌面端加载 SDK（后台），但统一用我们自己的气泡
+  if (isDesktop()) {
+    initDesktopSdk()
   }
 
+  setupBubble()
+
+  resizeHandler = handleResize
   window.addEventListener('resize', resizeHandler)
 })
 
@@ -582,16 +470,19 @@ onBeforeUnmount(() => {
     resizeHandler = null
   }
 
-  destroyMobileBubbleDrag()
+  if (activeDragElement) {
+    finishDrag()
+  }
+
   destroyLiteClient()
   destroyFullClient()
-  showMobileBubble.value = false
-  resetSdkState()
+  removeSdkHideStyle()
+  showBubble.value = false
 })
 </script>
 
 <style scoped>
-.hiagent-mobile-bubble {
+.hiagent-bubble {
   position: fixed;
   right: 16px;
   bottom: calc(86px + env(safe-area-inset-bottom, 0px));
@@ -612,11 +503,11 @@ onBeforeUnmount(() => {
   -webkit-user-select: none;
 }
 
-.hiagent-mobile-bubble.is-dragging {
+.hiagent-bubble.is-dragging {
   cursor: grabbing;
 }
 
-.hiagent-mobile-bubble__icon {
+.hiagent-bubble__icon {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -628,7 +519,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-.hiagent-mobile-bubble__label {
+.hiagent-bubble__label {
   white-space: nowrap;
 }
 </style>
