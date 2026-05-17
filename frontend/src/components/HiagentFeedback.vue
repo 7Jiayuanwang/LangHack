@@ -1,12 +1,13 @@
 <template>
+  <!-- 移动端：自定义气泡，点击跳转 HiAgent 网页 -->
   <Teleport to="body">
     <button
-      v-if="showBubble"
+      v-if="showMobileBubble"
       ref="bubbleRef"
       class="hiagent-bubble"
       :class="{ 'is-dragging': dragging }"
       type="button"
-      @click="handleBubbleClick"
+      @click="handleMobileBubbleClick"
     >
       <span class="hiagent-bubble__icon">AI</span>
       <span class="hiagent-bubble__label">问题反馈</span>
@@ -29,24 +30,19 @@ const props = defineProps({
 })
 
 const bubbleRef = ref(null)
-const showBubble = ref(false)
+const showMobileBubble = ref(false)
 const dragging = ref(false)
 
 const LITE_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedLite.js'
-const FULL_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedFull.js'
 const FULL_PAGE_PATH = '/product/llm/chat'
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)'
 const POSITION_KEY = 'hiagent_bubble_position'
 const DRAG_THRESHOLD = 5
-const DRAG_DURATION_THRESHOLD = 300
 const BUBBLE_MARGIN = 16
 const BOTTOM_NAV_HEIGHT = 70
-const FULL_CLIENT_RENDER_TIMEOUT = 1200
-const SDK_HIDE_STYLE_ID = 'hiagent-sdk-hide'
 
 let liteClient = null
-let fullClient = null
-let resizeHandler = null
+let mediaQueryList = null
 let mounted = false
 let suppressNextClick = false
 let activePointerId = null
@@ -101,7 +97,7 @@ function getFullPageUrl() {
   return `${props.baseUrl}${FULL_PAGE_PATH}/${props.appKey}`
 }
 
-// ─── Position ──────────────────────────────────────────
+// ─── Mobile bubble position ────────────────────────────
 
 function loadPosition() {
   try {
@@ -155,7 +151,7 @@ function applyPosition(el) {
   setElementPosition(el, pos.x, pos.y)
 }
 
-// ─── Drag ──────────────────────────────────────────────
+// ─── Mobile bubble drag ────────────────────────────────
 
 function clearDragState() {
   dragging.value = false
@@ -183,9 +179,7 @@ function finishDrag(event) {
     setElementPosition(el, event.clientX - state.offsetX, event.clientY - state.offsetY)
   }
 
-  const duration = Date.now() - state.startTime
-  const didDrag = state.hasMoved || duration >= DRAG_DURATION_THRESHOLD
-  if (didDrag) {
+  if (state.hasMoved) {
     const finalRect = el.getBoundingClientRect()
     savePosition({ x: finalRect.left, y: finalRect.top })
     suppressNextClick = true
@@ -279,68 +273,15 @@ function attachDrag(el) {
   el.dataset.hiagentDragBound = 'true'
 }
 
-// ─── SDK bubble hiding ─────────────────────────────────
-// WebLiteClient 会渲染自己的气泡，我们注入 CSS 隐藏它
-
-function injectSdkHideStyle() {
-  if (document.getElementById(SDK_HIDE_STYLE_ID)) return
-  const style = document.createElement('style')
-  style.id = SDK_HIDE_STYLE_ID
-  style.textContent = `
-    /* 隐藏 HiAgent SDK 自带的浮动气泡，我们使用自己的可拖拽气泡 */
-    body > div[class*="web-lite"],
-    body > div[class*="embed-lite"],
-    body > div[class*="hiagent"][style*="fixed"] {
-      opacity: 0 !important;
-      pointer-events: none !important;
-      width: 0 !important;
-      height: 0 !important;
-      overflow: hidden !important;
-    }
-  `
-  document.head.appendChild(style)
-}
-
-function removeSdkHideStyle() {
-  const el = document.getElementById(SDK_HIDE_STYLE_ID)
-  if (el) el.remove()
-}
-
-// 查找 SDK 渲染的气泡元素（用于代理点击以打开聊天面板）
-function findSdkClickTarget() {
-  const candidates = Array.from(document.body.querySelectorAll('*'))
-  for (const el of candidates) {
-    if (el === bubbleRef.value) continue
-    if (el.id === 'app' || el.closest('#app')) continue
-
-    const cn = typeof el.className === 'string' ? el.className.toLowerCase() : ''
-    const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
-
-    if (
-      cn.includes('web-lite') ||
-      cn.includes('embed-lite') ||
-      id.includes('hiagent')
-    ) {
-      return el
-    }
-  }
-  return null
-}
-
-// ─── SDK init ──────────────────────────────────────────
+// ─── Desktop: SDK WebLiteClient ────────────────────────
+// 桌面端直接使用 HiAgent SDK 的悬浮窗气泡，由 SDK 自己渲染和管理
+// 我们不显示自己的气泡，不劫持 SDK 的 DOM
 
 function destroyLiteClient() {
   if (liteClient && typeof liteClient.destroy === 'function') {
     try { liteClient.destroy() } catch { /* ignore */ }
   }
   liteClient = null
-}
-
-function destroyFullClient() {
-  if (fullClient && typeof fullClient.destroy === 'function') {
-    try { fullClient.destroy() } catch { /* ignore */ }
-  }
-  fullClient = null
 }
 
 async function initDesktopSdk() {
@@ -356,49 +297,17 @@ async function initDesktopSdk() {
       appKey: props.appKey,
       baseUrl: props.baseUrl
     })
-
-    // 等 SDK 渲染完再隐藏它的气泡
-    window.setTimeout(() => {
-      if (mounted) injectSdkHideStyle()
-    }, 800)
+    // SDK 会自己渲染悬浮窗气泡，不需要我们做任何操作
   } catch (error) {
-    console.warn('HiAgent SDK 加载失败，点击气泡将打开全页面:', error)
+    console.warn('HiAgent SDK 加载失败:', error)
   }
 }
 
-async function openFullClient() {
-  try {
-    const sdk = await loadSdkScript(FULL_SCRIPT_PATH)
-    if (!sdk?.WebClient) throw new Error('WebClient 不可用')
+// ─── Mobile bubble ─────────────────────────────────────
+// 移动端显示自定义气泡，点击跳转到 HiAgent 网页
 
-    if (!fullClient) {
-      fullClient = new sdk.WebClient({
-        appKey: props.appKey,
-        baseUrl: props.baseUrl
-      })
-    }
-
-    // 检查 SDK 是否成功渲染了全屏聊天界面
-    window.setTimeout(() => {
-      const rendered = Array.from(document.body.querySelectorAll('*')).some((el) => {
-        if (el === bubbleRef.value) return false
-        const cn = typeof el.className === 'string' ? el.className.toLowerCase() : ''
-        return cn.includes('web-client') || cn.includes('embedfull')
-      })
-
-      if (!rendered) {
-        window.open(getFullPageUrl(), '_blank')
-      }
-    }, FULL_CLIENT_RENDER_TIMEOUT)
-  } catch {
-    window.open(getFullPageUrl(), '_blank')
-  }
-}
-
-// ─── Bubble setup ──────────────────────────────────────
-
-function setupBubble() {
-  showBubble.value = true
+function setupMobileBubble() {
+  showMobileBubble.value = true
 
   nextTick(() => {
     const el = bubbleRef.value
@@ -409,40 +318,38 @@ function setupBubble() {
   })
 }
 
-function handleBubbleClick() {
+function handleMobileBubbleClick() {
   if (dragging.value || suppressNextClick) return
-
-  if (isDesktop()) {
-    // 桌面端：尝试代理点击 SDK 气泡以打开聊天面板
-    // 先临时取消隐藏让 SDK 能接收点击
-    removeSdkHideStyle()
-    const sdkTarget = findSdkClickTarget()
-    if (sdkTarget) {
-      sdkTarget.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-      // 延迟重新隐藏 SDK 气泡
-      window.setTimeout(() => {
-        if (mounted) injectSdkHideStyle()
-      }, 300)
-    } else {
-      // SDK 未加载成功，打开全页面
-      injectSdkHideStyle()
-      window.open(getFullPageUrl(), '_blank')
-    }
-  } else {
-    // 移动端：尝试嵌入全屏聊天，失败则打开全页面
-    openFullClient()
-  }
+  // 移动端：直接打开 HiAgent 全页面
+  window.open(getFullPageUrl(), '_blank')
 }
 
 function handleResize() {
   const el = bubbleRef.value
-  if (!el || !showBubble.value) return
+  if (!el || !showMobileBubble.value) return
 
-  // 窗口大小变化时重新约束位置
   const saved = loadPosition()
   if (saved) {
     const pos = clampPosition(el, saved.x, saved.y)
     setElementPosition(el, pos.x, pos.y)
+  }
+}
+
+// ─── 模式切换处理 ──────────────────────────────────────
+
+function handleModeChange() {
+  if (!mounted) return
+
+  if (isDesktop()) {
+    // 切换到桌面模式：隐藏自定义气泡，启用 SDK
+    showMobileBubble.value = false
+    if (!liteClient) {
+      initDesktopSdk()
+    }
+  } else {
+    // 切换到移动模式：销毁 SDK，显示自定义气泡
+    destroyLiteClient()
+    setupMobileBubble()
   }
 }
 
@@ -451,33 +358,36 @@ function handleResize() {
 onMounted(() => {
   mounted = true
 
-  // 桌面端加载 SDK（后台），但统一用我们自己的气泡
   if (isDesktop()) {
+    // 桌面端：只用 SDK 的悬浮窗，不显示自定义气泡
     initDesktopSdk()
+  } else {
+    // 移动端：显示自定义气泡
+    setupMobileBubble()
   }
 
-  setupBubble()
-
-  resizeHandler = handleResize
-  window.addEventListener('resize', resizeHandler)
+  // 监听窗口大小变化，切换模式
+  mediaQueryList = window.matchMedia(DESKTOP_MEDIA_QUERY)
+  mediaQueryList.addEventListener('change', handleModeChange)
+  window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
   mounted = false
 
-  if (resizeHandler) {
-    window.removeEventListener('resize', resizeHandler)
-    resizeHandler = null
+  if (mediaQueryList) {
+    mediaQueryList.removeEventListener('change', handleModeChange)
+    mediaQueryList = null
   }
+
+  window.removeEventListener('resize', handleResize)
 
   if (activeDragElement) {
     finishDrag()
   }
 
   destroyLiteClient()
-  destroyFullClient()
-  removeSdkHideStyle()
-  showBubble.value = false
+  showMobileBubble.value = false
 })
 </script>
 
