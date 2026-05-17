@@ -316,8 +316,8 @@ onBeforeUnmount(() => {
   position: fixed;
   right: 16px;
   bottom: calc(86px + env(safe-area-inset-bottom, 0px));
-  width: 56px;
-  height: 56px;
+  width: 72px;
+  height: 72px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -329,7 +329,7 @@ onBeforeUnmount(() => {
     linear-gradient(135deg, #197fe6, #3b82f6);
   color: #fff;
   box-shadow: 0 12px 32px rgba(25, 127, 230, 0.28);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
@@ -371,8 +371,6 @@ onBeforeUnmount(() => {
 .hiagent-bubble__text {
   position: relative;
   z-index: 1;
-  width: 100%;
-  padding: 0 6px;
-  white-space: normal;
+  white-space: nowrap;
 }
 </style>
