@@ -129,6 +129,9 @@
       :target-role="elevationTarget"
       @success="onElevationSuccess"
     />
+
+    <!-- HiAgent 问题反馈气泡（仅教师端显示） -->
+    <HiagentFeedback v-if="role === 'teacher'" />
   </div>
 </template>
 
@@ -140,6 +143,7 @@ import { getSsoLogoutUrl, getSsoStatus } from '@/api/sso'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ElevationDialog from '@/components/ElevationDialog.vue'
+import HiagentFeedback from '@/components/HiagentFeedback.vue'
 import {
   DataBoard, School, Edit, Reading,
   Upload, Document, House,

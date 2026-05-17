@@ -9,14 +9,14 @@
       @touchstart.prevent="startDrag"
     >
       <el-tooltip :content="isSelectingMode ? '选择文本后点击翻译' : '点击开始翻译'" placement="left" :disabled="isMobile">
-        <el-button 
-          :type="isSelectingMode ? 'success' : 'primary'" 
-          circle
-          :size="isMobile ? 'default' : 'large'"
+        <button
+          class="translate-fab"
+          :class="isSelectingMode ? 'fab-active' : 'fab-default'"
         >
-          <span v-if="isSelectingMode">✓</span>
-          <span v-else>译</span>
-        </el-button>
+          <span v-if="isSelectingMode" class="fab-icon">✓</span>
+          <span v-else class="fab-icon">译</span>
+          <span class="fab-label">{{ isSelectingMode ? '翻译' : '划词翻译' }}</span>
+        </button>
       </el-tooltip>
     </div>
 
@@ -1086,65 +1086,113 @@ onUnmounted(() => {
   }
 }
 
-/* 浮动翻译按钮样式 */
+/* 浮动翻译按钮样式（与 Markdown 模式对齐） */
 .floating-translate-btn {
   position: fixed;
   z-index: 1000;
   cursor: move;
-  transition: transform 0.2s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border-radius: 50%;
+  touch-action: none;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
+  transition: filter 0.2s;
 }
 
 .floating-translate-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  filter: drop-shadow(0 6px 20px rgba(24, 144, 255, 0.4));
 }
 
 .floating-translate-btn:active {
   cursor: grabbing;
 }
 
-.floating-translate-btn.selecting {
-  animation: pulse 1.5s ease-in-out infinite;
+.translate-fab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  gap: 2px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
 }
 
-.floating-translate-btn .el-button {
-  font-size: 18px;
-  font-weight: bold;
+.translate-fab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.2s;
+  background: rgba(255, 255, 255, 0.15);
 }
 
-@keyframes pulse {
+.translate-fab:hover::before { opacity: 1; }
+.translate-fab:active { transform: scale(0.94) !important; }
+
+.fab-default {
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  box-shadow: 0 4px 14px rgba(24, 144, 255, 0.5), 0 0 0 3px rgba(24, 144, 255, 0.15);
+}
+
+.fab-active {
+  background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
+  box-shadow: 0 4px 14px rgba(82, 196, 26, 0.5), 0 0 0 3px rgba(82, 196, 26, 0.15);
+  animation: pulse-active 1.5s ease-in-out infinite;
+}
+
+.fab-icon {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.fab-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.floating-translate-btn:hover .translate-fab {
+  transform: scale(1.08) translateY(-2px);
+}
+
+@keyframes pulse-active {
   0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 14px rgba(82, 196, 26, 0.5), 0 0 0 3px rgba(82, 196, 26, 0.15);
   }
   50% {
-    transform: scale(1.15);
-    box-shadow: 0 6px 20px rgba(82, 196, 26, 0.4);
+    box-shadow: 0 6px 20px rgba(82, 196, 26, 0.65), 0 0 0 6px rgba(82, 196, 26, 0.1);
   }
 }
 
 /* 移动端适配 */
 @media (max-width: 768px) {
-  .floating-translate-btn {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  .translate-fab {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
   }
-  
-  .floating-translate-btn :deep(.el-button) {
-    width: 48px;
-    height: 48px;
-    font-size: 16px;
-  }
-  
+  .fab-icon { font-size: 18px; }
+  .fab-label { font-size: 8px; }
+
   .translate-content {
     padding: 12px 0;
   }
-  
+
   .original-text h4, .translated-text h4 {
     font-size: 13px;
   }
-  
+
   .original-text p, .translated-text p {
     font-size: 14px;
     padding: 10px;
@@ -1152,11 +1200,13 @@ onUnmounted(() => {
 }
 
 @media (max-width: 480px) {
-  .floating-translate-btn :deep(.el-button) {
-    width: 44px;
-    height: 44px;
-    font-size: 15px;
+  .translate-fab {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
   }
+  .fab-icon { font-size: 17px; }
+  .fab-label { display: none; }
 }
 
 /* 翻译弹窗样式 */

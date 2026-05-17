@@ -62,6 +62,9 @@
         </div>
       </div>
     </div>
+
+    <!-- HiAgent 问题反馈气泡 -->
+    <HiagentFeedback />
   </div>
 </template>
 
@@ -72,6 +75,7 @@ import { useUserStore } from '@/store/user'
 import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import HiagentFeedback from '@/components/HiagentFeedback.vue'
 import {
   DataBoard,
   Reading,
