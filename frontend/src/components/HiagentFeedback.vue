@@ -1,23 +1,21 @@
 <template>
   <Teleport to="body">
-    <div ref="containerRef">
-      <button
-        v-if="isMobileMode"
-        ref="mobileBubbleRef"
-        class="hiagent-mobile-bubble"
-        :class="{ 'is-dragging': dragging }"
-        type="button"
-        @click="handleMobileBubbleClick"
-      >
-        <span class="hiagent-mobile-bubble__icon">AI</span>
-        <span class="hiagent-mobile-bubble__label">问问助手</span>
-      </button>
-    </div>
+    <button
+      v-if="showMobileBubble"
+      ref="mobileBubbleRef"
+      class="hiagent-mobile-bubble"
+      :class="{ 'is-dragging': dragging }"
+      type="button"
+      @click="handleMobileBubbleClick"
+    >
+      <span class="hiagent-mobile-bubble__icon">AI</span>
+      <span class="hiagent-mobile-bubble__label">问问助手</span>
+    </button>
   </Teleport>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -36,8 +34,9 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const containerRef = ref(null)
 const mobileBubbleRef = ref(null)
+const showMobileBubble = ref(false)
+const dragging = ref(false)
 
 const LITE_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedLite.js'
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)'
@@ -45,6 +44,7 @@ const POSITION_KEY_DESKTOP = 'hiagent_bubble_position_desktop'
 const POSITION_KEY_MOBILE = 'hiagent_bubble_position_mobile'
 const DRAG_THRESHOLD = 5
 const DRAG_DURATION_THRESHOLD = 300
+const MOBILE_BUBBLE_MARGIN = 16
 
 let liteClient = null
 let sdkEl = null
@@ -57,9 +57,6 @@ let activePointerId = null
 let activeDragElement = null
 let releasePointerCaptureFn = null
 let dragState = null
-
-const isMobileMode = computed(() => mounted && !isDesktopMode)
-const dragging = ref(false)
 
 function isDesktop() {
   return window.matchMedia(DESKTOP_MEDIA_QUERY).matches
@@ -144,7 +141,7 @@ function setElementPosition(el, x, y) {
 
 function getDefaultPosition(el, mode) {
   const rect = el.getBoundingClientRect()
-  const margin = mode === 'mobile' ? 16 : 24
+  const margin = mode === 'mobile' ? MOBILE_BUBBLE_MARGIN : 24
   return clampPosition(el, window.innerWidth - rect.width - margin, window.innerHeight - rect.height - margin)
 }
 
@@ -287,13 +284,31 @@ function attachPointerDrag(el, mode) {
   el.dataset.hiagentDragBound = 'true'
 }
 
+function isHiagentDesktopElement(el) {
+  if (!el || el === mobileBubbleRef.value) return false
+  if (el.id === 'app' || el.closest('#app')) return false
+
+  const className = typeof el.className === 'string' ? el.className.toLowerCase() : ''
+  const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
+  const text = (el.textContent || '').trim()
+
+  if (id.includes('hiagent')) return true
+  if (className.includes('hiagent')) return true
+  if (className.includes('web-lite')) return true
+  if (className.includes('web-client')) return true
+  if (className.includes('embed-lite')) return true
+  if (className.includes('embedfull')) return true
+  if (text.includes('问问助手') || text.includes('hiagent')) return true
+
+  return false
+}
+
 function findSdkElement() {
-  const candidates = document.querySelectorAll(
-    '[class*="hiagent"], [class*="Hiagent"], [class*="web-client"], [class*="chat"], [class*="float"], [class*="bubble"]'
-  )
+  const candidates = Array.from(document.body.querySelectorAll('*'))
 
   for (const el of candidates) {
-    if (el === mobileBubbleRef.value || el.id === 'app' || el.closest('#app')) continue
+    if (!isHiagentDesktopElement(el)) continue
+
     const style = window.getComputedStyle(el)
     if (style.position !== 'fixed') continue
 
@@ -371,6 +386,7 @@ async function initDesktopBubble() {
       throw new Error('HiAgent WebLiteClient 不可用')
     }
 
+    showMobileBubble.value = false
     resetSdkState()
     liteClient = new sdk.WebLiteClient({
       appKey: props.appKey,
@@ -389,6 +405,8 @@ function destroyMobileBubbleDrag() {
 }
 
 function setupMobileBubble() {
+  showMobileBubble.value = true
+
   nextTick(() => {
     const el = mobileBubbleRef.value
     if (!mounted || !el || isDesktop()) return
@@ -416,12 +434,6 @@ function handleMobileBubbleClick() {
   router.push(props.mobileTargetRoute)
 }
 
-watch(isMobileMode, (value) => {
-  if (value) {
-    setupMobileBubble()
-  }
-})
-
 onMounted(() => {
   mounted = true
   syncMode()
@@ -443,6 +455,7 @@ onBeforeUnmount(() => {
 
   destroyMobileBubbleDrag()
   destroyLiteClient()
+  showMobileBubble.value = false
   resetSdkState()
 })
 </script>
@@ -450,6 +463,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .hiagent-mobile-bubble {
   position: fixed;
+  right: 16px;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
   display: inline-flex;
   align-items: center;
   gap: 8px;
