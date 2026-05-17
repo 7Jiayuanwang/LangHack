@@ -120,7 +120,10 @@ function loadPosition(mode) {
 
 function savePosition(mode, pos) {
   try {
-    localStorage.setItem(getPositionKeyForMode(mode), JSON.stringify(pos))
+    const value = mode === 'desktop'
+      ? { ...pos, source: 'pointer-drag' }
+      : pos
+    localStorage.setItem(getPositionKeyForMode(mode), JSON.stringify(value))
   } catch {
     // ignore
   }
@@ -160,6 +163,7 @@ function applyStoredOrDefaultPosition(el, mode) {
 function applyStoredPosition(el, mode) {
   const saved = loadPosition(mode)
   if (!saved) return
+  if (mode === 'desktop' && saved.source !== 'pointer-drag') return
 
   const position = clampPosition(el, saved.x, saved.y)
   setElementPosition(el, position.x, position.y)
