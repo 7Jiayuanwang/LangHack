@@ -311,21 +311,25 @@ function isHiagentDesktopElement(el) {
 
 function findDesktopDragRoot(el) {
   let current = el
-  let dragRoot = null
 
   while (current && current !== document.body) {
     if (current === mobileBubbleRef.value) return null
-    if (current.id === 'app' || current.closest?.('#app')) return dragRoot
+    if (current.id === 'app' || current.closest?.('#app')) return null
 
     const style = window.getComputedStyle(current)
     if (style.position === 'fixed') {
-      dragRoot = current
+      const rect = current.getBoundingClientRect()
+      const isViewportShell = rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9
+
+      if (!isViewportShell) {
+        return current
+      }
     }
 
     current = current.parentElement
   }
 
-  return dragRoot
+  return null
 }
 
 function isUsableDesktopDragRoot(el) {
@@ -333,6 +337,7 @@ function isUsableDesktopDragRoot(el) {
 
   const rect = el.getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return false
+  if (rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9) return false
 
   return true
 }
