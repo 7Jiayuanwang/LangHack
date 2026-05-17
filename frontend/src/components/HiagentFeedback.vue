@@ -34,12 +34,14 @@ const dragging = ref(false)
 
 const LITE_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedLite.js'
 const FULL_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedFull.js'
+const FULL_PAGE_PATH = '/product/llm/chat'
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)'
 const POSITION_KEY_DESKTOP = 'hiagent_bubble_position_desktop'
 const POSITION_KEY_MOBILE = 'hiagent_bubble_position_mobile'
 const DRAG_THRESHOLD = 5
 const DRAG_DURATION_THRESHOLD = 300
 const MOBILE_BUBBLE_MARGIN = 16
+const FULL_CLIENT_RENDER_TIMEOUT = 1200
 
 let liteClient = null
 let fullClient = null
@@ -97,6 +99,14 @@ function loadSdkScript(path) {
   })
 
   return window[loadKey]
+}
+
+function getFullPageUrl() {
+  return `${props.baseUrl}${FULL_PAGE_PATH}/${props.appKey}`
+}
+
+function openFullPageUrl() {
+  window.location.href = getFullPageUrl()
 }
 
 function loadPosition(mode) {
@@ -449,8 +459,33 @@ async function openMobileFullClient() {
         baseUrl: props.baseUrl
       })
     }
+
+    window.setTimeout(() => {
+      const hasRenderedFullClient = Array.from(document.body.querySelectorAll('*')).some((el) => {
+        if (el === mobileBubbleRef.value) return false
+
+        const className = typeof el.className === 'string' ? el.className.toLowerCase() : ''
+        const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
+        const text = (el.textContent || '').trim().toLowerCase()
+
+        return (
+          className.includes('hiagent') ||
+          className.includes('web-client') ||
+          className.includes('embedfull') ||
+          id.includes('hiagent') ||
+          text.includes('hiagent') ||
+          text.includes('问题反馈') ||
+          text.includes('问问助手')
+        )
+      })
+
+      if (!hasRenderedFullClient) {
+        openFullPageUrl()
+      }
+    }, FULL_CLIENT_RENDER_TIMEOUT)
   } catch (error) {
     console.error('HiAgent 移动端全页面初始化失败:', error)
+    openFullPageUrl()
   }
 }
 
