@@ -251,6 +251,12 @@ const routes = [
         component: () => import("@/views/teacher/MyCourseSelections.vue"),
         meta: { title: "选课记录", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
       },
+      {
+        path: "ai-qa",
+        name: "TeacherAiQa",
+        component: () => import("@/views/teacher/AiQa.vue"),
+        meta: { title: "AI问答", roles: ["TEACHER"] },
+      },
     ],
   },
   {

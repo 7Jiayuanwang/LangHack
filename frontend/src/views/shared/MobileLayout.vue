@@ -131,7 +131,7 @@
     />
 
     <!-- HiAgent 问题反馈气泡（仅教师端显示） -->
-    <HiagentFeedback v-if="role === 'teacher'" />
+    <HiagentFeedback v-if="role === 'teacher'" mobile-target-route="/teacher/ai-qa" />
   </div>
 </template>
 

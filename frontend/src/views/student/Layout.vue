@@ -64,7 +64,7 @@
     </div>
 
     <!-- HiAgent 问题反馈气泡 -->
-    <HiagentFeedback />
+    <HiagentFeedback mobile-target-route="/student/ai-qa" />
   </div>
 </template>
 
