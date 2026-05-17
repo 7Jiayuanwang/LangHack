@@ -7,7 +7,7 @@
       class="hiagent-bubble"
       :class="{ 'is-dragging': dragging }"
       type="button"
-      @click="handleMobileBubbleClick"
+      @click="handleBubbleClick"
     >
       <span class="hiagent-bubble__icon">AI</span>
       <span class="hiagent-bubble__label">问题反馈</span>
@@ -33,7 +33,6 @@ const bubbleRef = ref(null)
 const showMobileBubble = ref(false)
 const dragging = ref(false)
 
-const LITE_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedLite.js'
 const FULL_PAGE_PATH = '/product/llm/chat'
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)'
 const POSITION_KEY_MOBILE = 'hiagent_bubble_position_mobile'
@@ -41,11 +40,8 @@ const POSITION_KEY_DESKTOP = 'hiagent_bubble_position_desktop'
 const DRAG_THRESHOLD = 5
 const BUBBLE_MARGIN = 16
 const BOTTOM_NAV_HEIGHT = 70
-const SDK_ELEMENT_POLL_DELAYS = [500, 1000, 2000, 4000]
 
-let liteClient = null
 let mediaQueryList = null
-let sdkObserver = null
 let mounted = false
 let suppressNextClick = false
 let activePointerId = null
@@ -59,48 +55,11 @@ function isDesktop() {
   return window.matchMedia(DESKTOP_MEDIA_QUERY).matches
 }
 
-function getScriptUrl(path) {
-  return `${props.baseUrl}${path}`
-}
-
-function getGlobalLoadKey(path) {
-  return `__hiagentScriptLoad__:${path}`
-}
-
-function loadSdkScript(path) {
-  const loadKey = getGlobalLoadKey(path)
-  if (window[loadKey]) return window[loadKey]
-
-  const existing = document.querySelector(`script[src="${getScriptUrl(path)}"]`)
-  if (existing) {
-    window[loadKey] = new Promise((resolve, reject) => {
-      if (window.HiagentWebSDK) {
-        resolve(window.HiagentWebSDK)
-        return
-      }
-      existing.addEventListener('load', () => resolve(window.HiagentWebSDK), { once: true })
-      existing.addEventListener('error', reject, { once: true })
-    })
-    return window[loadKey]
-  }
-
-  window[loadKey] = new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = getScriptUrl(path)
-    script.async = true
-    script.onload = () => resolve(window.HiagentWebSDK)
-    script.onerror = reject
-    document.body.appendChild(script)
-  })
-
-  return window[loadKey]
-}
-
 function getFullPageUrl() {
   return `${props.baseUrl}${FULL_PAGE_PATH}/${props.appKey}`
 }
 
-// ─── Mobile bubble position ────────────────────────────
+// ─── Bubble position ───────────────────────────────────
 
 function loadPosition(mode) {
   try {
@@ -139,24 +98,43 @@ function setElementPosition(el, x, y) {
   el.style.bottom = 'auto'
 }
 
-function getDefaultPosition(el) {
+// ─── Unified bubble ────────────────────────────────────
+
+function getMode() {
+  return isDesktop() ? 'desktop' : 'mobile'
+}
+
+function getDefaultPosition(el, mode = getMode()) {
   const rect = el.getBoundingClientRect()
+  const bottomOffset = mode === 'mobile' ? BOTTOM_NAV_HEIGHT : 0
   return clampPosition(
     el,
     window.innerWidth - rect.width - BUBBLE_MARGIN,
-    window.innerHeight - rect.height - BUBBLE_MARGIN - BOTTOM_NAV_HEIGHT
+    window.innerHeight - rect.height - BUBBLE_MARGIN - bottomOffset
   )
 }
 
-function applyPosition(el, mode = 'mobile') {
+function applyPosition(el, mode = getMode()) {
   const saved = loadPosition(mode)
   const pos = saved
     ? clampPosition(el, saved.x, saved.y)
-    : getDefaultPosition(el)
+    : getDefaultPosition(el, mode)
   setElementPosition(el, pos.x, pos.y)
 }
 
-// ─── Mobile bubble drag ────────────────────────────────
+function showBubble() {
+  showMobileBubble.value = true
+
+  nextTick(() => {
+    const el = bubbleRef.value
+    if (!mounted || !el) return
+
+    applyPosition(el, getMode())
+    attachDrag(el)
+  })
+}
+
+// ─── Unified bubble drag ───────────────────────────────
 
 function clearDragState() {
   dragging.value = false
@@ -218,7 +196,7 @@ function attachDrag(el) {
     activeDragElement = el
     dragging.value = true
     dragState = {
-      mode: el === bubbleRef.value ? 'mobile' : 'desktop',
+      mode: getMode(),
       startX: event.clientX,
       startY: event.clientY,
       offsetX: event.clientX - rect.left,
@@ -279,155 +257,8 @@ function attachDrag(el) {
   el.dataset.hiagentDragBound = 'true'
 }
 
-// ─── Desktop: SDK WebLiteClient ────────────────────────
-// 桌面端直接使用 HiAgent SDK 的悬浮窗气泡，由 SDK 自己渲染和管理
-// 我们不显示自己的气泡，不劫持 SDK 的 DOM
-
-function destroyLiteClient() {
-  if (sdkObserver) {
-    sdkObserver.disconnect()
-    sdkObserver = null
-  }
-  // 清除 SDK 元素上的拖拽标记，以便重新初始化时能重新绑定
-  const sdkEl = findSdkBubbleElement?.()
-  if (sdkEl) {
-    delete sdkEl.dataset.hiagentDragBound
-  }
-  if (liteClient && typeof liteClient.destroy === 'function') {
-    try { liteClient.destroy() } catch { /* ignore */ }
-  }
-  liteClient = null
-}
-
-async function initDesktopSdk() {
-  if (!mounted || liteClient) return
-
-  try {
-    const sdk = await loadSdkScript(LITE_SCRIPT_PATH)
-    if (!mounted || liteClient) return
-
-    if (!sdk?.WebLiteClient) return
-
-    liteClient = new sdk.WebLiteClient({
-      appKey: props.appKey,
-      baseUrl: props.baseUrl
-    })
-
-    // SDK 渲染完成后，找到它的气泡元素并加上拖拽功能
-    waitForSdkElement()
-  } catch (error) {
-    console.warn('HiAgent SDK 加载失败:', error)
-  }
-}
-
-// 查找 SDK 渲染的气泡/容器元素
-function findSdkBubbleElement() {
-  const candidates = Array.from(document.body.querySelectorAll('*'))
-
-  for (const el of candidates) {
-    if (el === bubbleRef.value) continue
-    if (el.id === 'app' || el.closest?.('#app')) continue
-
-    const cn = typeof el.className === 'string' ? el.className.toLowerCase() : ''
-    const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
-    const text = (el.textContent || '').trim().toLowerCase()
-    const style = window.getComputedStyle(el)
-
-    if (style.position !== 'fixed') continue
-
-    const rect = el.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) continue
-
-    const isViewportShell = rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9
-    if (isViewportShell) continue
-
-    if (
-      cn.includes('web-lite') ||
-      cn.includes('embed-lite') ||
-      cn.includes('hiagent') ||
-      cn.includes('webchat') ||
-      id.includes('hiagent') ||
-      text.includes('问题反馈') ||
-      text.includes('问问助手') ||
-      text.includes('hiagent')
-    ) {
-      return el
-    }
-  }
-
-  return null
-}
-
-// 等待 SDK 元素渲染完成，通过轮询 + MutationObserver 双保险
-function waitForSdkElement() {
-  // 先尝试轮询
-  let pollIndex = 0
-  function poll() {
-    if (!mounted) return
-    const el = findSdkBubbleElement()
-    if (el) {
-      makeSdkElementDraggable(el)
-      return
-    }
-    if (pollIndex < SDK_ELEMENT_POLL_DELAYS.length) {
-      window.setTimeout(poll, SDK_ELEMENT_POLL_DELAYS[pollIndex++])
-    }
-    // 轮询结束后 MutationObserver 继续兜底
-  }
-  poll()
-
-  // MutationObserver 兜底：监听 body 子节点变化
-  if (sdkObserver) {
-    sdkObserver.disconnect()
-    sdkObserver = null
-  }
-  sdkObserver = new MutationObserver(() => {
-    if (!mounted) return
-    const el = findSdkBubbleElement()
-    if (el) {
-      makeSdkElementDraggable(el)
-      sdkObserver?.disconnect()
-      sdkObserver = null
-    }
-  })
-  sdkObserver.observe(document.body, { childList: true, subtree: false })
-}
-
-// 给 SDK 气泡元素加上拖拽功能
-function makeSdkElementDraggable(el) {
-  if (el.dataset.hiagentDragBound === 'true') return
-
-  el.style.setProperty('position', 'fixed', 'important')
-  el.style.setProperty('touch-action', 'none', 'important')
-  el.style.setProperty('z-index', '99999', 'important')
-
-  const saved = loadPosition('desktop')
-  if (saved) {
-    const pos = clampPosition(el, saved.x, saved.y)
-    setElementPosition(el, pos.x, pos.y)
-  }
-
-  attachDrag(el)
-}
-
-// ─── Mobile bubble ─────────────────────────────────────
-// 移动端显示自定义气泡，点击跳转到 HiAgent 网页
-
-function setupMobileBubble() {
-  showMobileBubble.value = true
-
-  nextTick(() => {
-    const el = bubbleRef.value
-    if (!mounted || !el) return
-
-    applyPosition(el, 'mobile')
-    attachDrag(el)
-  })
-}
-
-function handleMobileBubbleClick() {
+function handleBubbleClick() {
   if (dragging.value || suppressNextClick) return
-  // 移动端：直接打开 HiAgent 全页面
   window.open(getFullPageUrl(), '_blank')
 }
 
@@ -435,45 +266,29 @@ function handleResize() {
   const el = bubbleRef.value
   if (!el || !showMobileBubble.value) return
 
-  const saved = loadPosition('mobile')
+  const mode = getMode()
+  const saved = loadPosition(mode)
   if (saved) {
     const pos = clampPosition(el, saved.x, saved.y)
     setElementPosition(el, pos.x, pos.y)
+    return
   }
-}
 
-// ─── 模式切换处理 ──────────────────────────────────────
+  const pos = getDefaultPosition(el, mode)
+  setElementPosition(el, pos.x, pos.y)
+}
 
 function handleModeChange() {
   if (!mounted) return
-
-  if (isDesktop()) {
-    // 切换到桌面模式：隐藏自定义气泡，启用 SDK
-    showMobileBubble.value = false
-    if (!liteClient) {
-      initDesktopSdk()
-    }
-  } else {
-    // 切换到移动模式：销毁 SDK，显示自定义气泡
-    destroyLiteClient()
-    setupMobileBubble()
-  }
+  showBubble()
 }
 
 // ─── Lifecycle ─────────────────────────────────────────
 
 onMounted(() => {
   mounted = true
+  showBubble()
 
-  if (isDesktop()) {
-    // 桌面端：只用 SDK 的悬浮窗，不显示自定义气泡
-    initDesktopSdk()
-  } else {
-    // 移动端：显示自定义气泡
-    setupMobileBubble()
-  }
-
-  // 监听窗口大小变化，切换模式
   mediaQueryList = window.matchMedia(DESKTOP_MEDIA_QUERY)
   mediaQueryList.addEventListener('change', handleModeChange)
   window.addEventListener('resize', handleResize)
@@ -493,7 +308,6 @@ onBeforeUnmount(() => {
     finishDrag()
   }
 
-  destroyLiteClient()
   showMobileBubble.value = false
 })
 </script>
