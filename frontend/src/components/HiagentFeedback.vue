@@ -40,9 +40,11 @@ const POSITION_KEY = 'hiagent_bubble_position'
 const DRAG_THRESHOLD = 5
 const BUBBLE_MARGIN = 16
 const BOTTOM_NAV_HEIGHT = 70
+const SDK_ELEMENT_POLL_DELAYS = [500, 1000, 2000, 4000]
 
 let liteClient = null
 let mediaQueryList = null
+let sdkObserver = null
 let mounted = false
 let suppressNextClick = false
 let activePointerId = null
@@ -278,6 +280,15 @@ function attachDrag(el) {
 // 我们不显示自己的气泡，不劫持 SDK 的 DOM
 
 function destroyLiteClient() {
+  if (sdkObserver) {
+    sdkObserver.disconnect()
+    sdkObserver = null
+  }
+  // 清除 SDK 元素上的拖拽标记，以便重新初始化时能重新绑定
+  const sdkEl = findSdkBubbleElement?.()
+  if (sdkEl) {
+    delete sdkEl.dataset.hiagentDragBound
+  }
   if (liteClient && typeof liteClient.destroy === 'function') {
     try { liteClient.destroy() } catch { /* ignore */ }
   }
@@ -297,10 +308,96 @@ async function initDesktopSdk() {
       appKey: props.appKey,
       baseUrl: props.baseUrl
     })
-    // SDK 会自己渲染悬浮窗气泡，不需要我们做任何操作
+
+    // SDK 渲染完成后，找到它的气泡元素并加上拖拽功能
+    waitForSdkElement()
   } catch (error) {
     console.warn('HiAgent SDK 加载失败:', error)
   }
+}
+
+// 查找 SDK 渲染的气泡/容器元素
+function findSdkBubbleElement() {
+  // SDK 通常在 body 下渲染 fixed 定位的容器
+  const candidates = document.body.children
+  for (let i = 0; i < candidates.length; i++) {
+    const el = candidates[i]
+    if (el.id === 'app' || el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK') continue
+    // 跳过我们自己 Teleport 出去的元素
+    if (el === bubbleRef.value) continue
+
+    const cn = typeof el.className === 'string' ? el.className.toLowerCase() : ''
+    const style = window.getComputedStyle(el)
+
+    // SDK 元素特征：fixed 定位，class 名包含 web-lite / embed-lite / hiagent
+    if (
+      style.position === 'fixed' &&
+      (cn.includes('web-lite') || cn.includes('embed-lite') || cn.includes('hiagent') || cn.includes('webchat'))
+    ) {
+      return el
+    }
+  }
+  return null
+}
+
+// 等待 SDK 元素渲染完成，通过轮询 + MutationObserver 双保险
+function waitForSdkElement() {
+  // 先尝试轮询
+  let pollIndex = 0
+  function poll() {
+    if (!mounted) return
+    const el = findSdkBubbleElement()
+    if (el) {
+      makeSdkElementDraggable(el)
+      return
+    }
+    if (pollIndex < SDK_ELEMENT_POLL_DELAYS.length) {
+      window.setTimeout(poll, SDK_ELEMENT_POLL_DELAYS[pollIndex++])
+    }
+    // 轮询结束后 MutationObserver 继续兜底
+  }
+  poll()
+
+  // MutationObserver 兜底：监听 body 子节点变化
+  if (sdkObserver) {
+    sdkObserver.disconnect()
+    sdkObserver = null
+  }
+  sdkObserver = new MutationObserver(() => {
+    if (!mounted) return
+    const el = findSdkBubbleElement()
+    if (el) {
+      makeSdkElementDraggable(el)
+      sdkObserver?.disconnect()
+      sdkObserver = null
+    }
+  })
+  sdkObserver.observe(document.body, { childList: true, subtree: false })
+}
+
+// 给 SDK 气泡元素加上拖拽功能
+function makeSdkElementDraggable(el) {
+  if (el.dataset.hiagentDragBound === 'true') return
+
+  // 确保元素是 fixed 定位
+  el.style.setProperty('position', 'fixed', 'important')
+  el.style.setProperty('touch-action', 'none', 'important')
+
+  // 应用保存的位置或默认位置
+  const saved = loadPosition()
+  if (saved) {
+    const pos = clampPosition(el, saved.x, saved.y)
+    setElementPosition(el, pos.x, pos.y)
+  } else {
+    // SDK 默认可能放在不好的位置，移到右下角
+    nextTick(() => {
+      const pos = getDefaultPosition(el)
+      setElementPosition(el, pos.x, pos.y)
+    })
+  }
+
+  // 绑定拖拽事件（与移动端气泡共用同一套逻辑）
+  attachDrag(el)
 }
 
 // ─── Mobile bubble ─────────────────────────────────────
