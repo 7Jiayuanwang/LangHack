@@ -36,7 +36,8 @@ const dragging = ref(false)
 const LITE_SCRIPT_PATH = '/resources/product/llm/public/sdk/embedLite.js'
 const FULL_PAGE_PATH = '/product/llm/chat'
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)'
-const POSITION_KEY = 'hiagent_bubble_position'
+const POSITION_KEY_MOBILE = 'hiagent_bubble_position_mobile'
+const POSITION_KEY_DESKTOP = 'hiagent_bubble_position_desktop'
 const DRAG_THRESHOLD = 5
 const BUBBLE_MARGIN = 16
 const BOTTOM_NAV_HEIGHT = 70
@@ -101,18 +102,20 @@ function getFullPageUrl() {
 
 // ─── Mobile bubble position ────────────────────────────
 
-function loadPosition() {
+function loadPosition(mode) {
   try {
-    const raw = localStorage.getItem(POSITION_KEY)
+    const key = mode === 'desktop' ? POSITION_KEY_DESKTOP : POSITION_KEY_MOBILE
+    const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
   }
 }
 
-function savePosition(pos) {
+function savePosition(mode, pos) {
   try {
-    localStorage.setItem(POSITION_KEY, JSON.stringify(pos))
+    const key = mode === 'desktop' ? POSITION_KEY_DESKTOP : POSITION_KEY_MOBILE
+    localStorage.setItem(key, JSON.stringify(pos))
   } catch {
     // ignore
   }
@@ -145,8 +148,8 @@ function getDefaultPosition(el) {
   )
 }
 
-function applyPosition(el) {
-  const saved = loadPosition()
+function applyPosition(el, mode = 'mobile') {
+  const saved = loadPosition(mode)
   const pos = saved
     ? clampPosition(el, saved.x, saved.y)
     : getDefaultPosition(el)
@@ -183,7 +186,7 @@ function finishDrag(event) {
 
   if (state.hasMoved) {
     const finalRect = el.getBoundingClientRect()
-    savePosition({ x: finalRect.left, y: finalRect.top })
+    savePosition(state.mode, { x: finalRect.left, y: finalRect.top })
     suppressNextClick = true
     window.setTimeout(() => {
       suppressNextClick = false
@@ -215,6 +218,7 @@ function attachDrag(el) {
     activeDragElement = el
     dragging.value = true
     dragState = {
+      mode: el === bubbleRef.value ? 'mobile' : 'desktop',
       startX: event.clientX,
       startY: event.clientY,
       offsetX: event.clientX - rect.left,
@@ -318,25 +322,39 @@ async function initDesktopSdk() {
 
 // 查找 SDK 渲染的气泡/容器元素
 function findSdkBubbleElement() {
-  // SDK 通常在 body 下渲染 fixed 定位的容器
-  const candidates = document.body.children
-  for (let i = 0; i < candidates.length; i++) {
-    const el = candidates[i]
-    if (el.id === 'app' || el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK') continue
-    // 跳过我们自己 Teleport 出去的元素
+  const candidates = Array.from(document.body.querySelectorAll('*'))
+
+  for (const el of candidates) {
     if (el === bubbleRef.value) continue
+    if (el.id === 'app' || el.closest?.('#app')) continue
 
     const cn = typeof el.className === 'string' ? el.className.toLowerCase() : ''
+    const id = typeof el.id === 'string' ? el.id.toLowerCase() : ''
+    const text = (el.textContent || '').trim().toLowerCase()
     const style = window.getComputedStyle(el)
 
-    // SDK 元素特征：fixed 定位，class 名包含 web-lite / embed-lite / hiagent
+    if (style.position !== 'fixed') continue
+
+    const rect = el.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) continue
+
+    const isViewportShell = rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9
+    if (isViewportShell) continue
+
     if (
-      style.position === 'fixed' &&
-      (cn.includes('web-lite') || cn.includes('embed-lite') || cn.includes('hiagent') || cn.includes('webchat'))
+      cn.includes('web-lite') ||
+      cn.includes('embed-lite') ||
+      cn.includes('hiagent') ||
+      cn.includes('webchat') ||
+      id.includes('hiagent') ||
+      text.includes('问题反馈') ||
+      text.includes('问问助手') ||
+      text.includes('hiagent')
     ) {
       return el
     }
   }
+
   return null
 }
 
@@ -379,24 +397,16 @@ function waitForSdkElement() {
 function makeSdkElementDraggable(el) {
   if (el.dataset.hiagentDragBound === 'true') return
 
-  // 确保元素是 fixed 定位
   el.style.setProperty('position', 'fixed', 'important')
   el.style.setProperty('touch-action', 'none', 'important')
+  el.style.setProperty('z-index', '99999', 'important')
 
-  // 应用保存的位置或默认位置
-  const saved = loadPosition()
+  const saved = loadPosition('desktop')
   if (saved) {
     const pos = clampPosition(el, saved.x, saved.y)
     setElementPosition(el, pos.x, pos.y)
-  } else {
-    // SDK 默认可能放在不好的位置，移到右下角
-    nextTick(() => {
-      const pos = getDefaultPosition(el)
-      setElementPosition(el, pos.x, pos.y)
-    })
   }
 
-  // 绑定拖拽事件（与移动端气泡共用同一套逻辑）
   attachDrag(el)
 }
 
@@ -410,7 +420,7 @@ function setupMobileBubble() {
     const el = bubbleRef.value
     if (!mounted || !el) return
 
-    applyPosition(el)
+    applyPosition(el, 'mobile')
     attachDrag(el)
   })
 }
@@ -425,7 +435,7 @@ function handleResize() {
   const el = bubbleRef.value
   if (!el || !showMobileBubble.value) return
 
-  const saved = loadPosition()
+  const saved = loadPosition('mobile')
   if (saved) {
     const pos = clampPosition(el, saved.x, saved.y)
     setElementPosition(el, pos.x, pos.y)
