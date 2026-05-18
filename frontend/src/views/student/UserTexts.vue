@@ -456,7 +456,7 @@
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="字幕">
+        <el-form-item label="英文字幕">
           <el-upload
             class="subtitle-uploader"
             :auto-upload="false"
@@ -465,7 +465,22 @@
             accept=".vtt,.srt,.txt"
             :on-change="handleSubtitleSelect"
           >
-            <el-button>选择字幕文件</el-button>
+            <el-button>选择英文字幕</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="中文字幕">
+          <el-upload
+            class="subtitle-uploader"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept=".vtt,.srt,.txt"
+            :on-change="handleSubtitleZhSelect"
+          >
+            <el-button>选择中文字幕</el-button>
             <template #tip>
               <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
             </template>
@@ -1126,6 +1141,7 @@ const videoForm = reactive({
   coverMediaId: null,
   tags: [],
   subtitleContent: '',
+  subtitleContentZh: '',
   isPublicBool: true,
   videoUrl: '',
   coverUrl: ''
@@ -1146,12 +1162,20 @@ const handleSubtitleSelect = async (file) => {
     const text = await file.raw.text()
     videoForm.subtitleContent = text
   } catch (e) {
-    ElMessage.error('字幕文件读取失败')
+    ElMessage.error('英文字幕文件读取失败')
+  }
+}
+const handleSubtitleZhSelect = async (file) => {
+  try {
+    const text = await file.raw.text()
+    videoForm.subtitleContentZh = text
+  } catch (e) {
+    ElMessage.error('中文字幕文件读取失败')
   }
 }
 
 const resetVideoForm = () => {
-  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: [], subtitleContent: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
+  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: [], subtitleContent: '', subtitleContentZh: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
   selectedVideoFile = null
   selectedVideoCoverFile = null
   editingVideo.value = null
@@ -1216,6 +1240,7 @@ const handleVideoSubmit = async () => {
       coverMediaId: videoForm.coverMediaId,
       tags: videoForm.tags.join(','),
       subtitleContent: videoForm.subtitleContent || null,
+      subtitleContentZh: videoForm.subtitleContentZh || null,
       isPublic: videoForm.isPublicBool ? 1 : 0,
       videoUrl: videoForm.videoUrl,
       coverUrl: videoForm.coverUrl
@@ -1257,6 +1282,7 @@ const editVideoItem = (video) => {
     coverMediaId: video.coverMediaId,
     tags: video.tags ? video.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     subtitleContent: video.subtitleContent || '',
+    subtitleContentZh: video.subtitleContentZh || '',
     isPublicBool: video.isPublic === 1,
     videoUrl: video.videoUrl || '',
     coverUrl: video.coverUrl || ''

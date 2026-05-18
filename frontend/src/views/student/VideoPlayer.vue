@@ -167,6 +167,7 @@
               >
                 <span class="subtitle-time">{{ formatTimestamp(cue.startTime) }}</span>
                 <span class="subtitle-text">{{ cue.text }}</span>
+                <span v-if="activeSubtitleLang === 'both' && subtitleCuesZh[index]" class="subtitle-text-zh">{{ subtitleCuesZh[index].text }}</span>
               </div>
             </div>
 
@@ -196,6 +197,7 @@
               >
                 <span class="article-subtitle-time">{{ formatTimestamp(cue.startTime) }}</span>
                 <span class="article-subtitle-text">{{ cue.text }}</span>
+                <span v-if="activeSubtitleLang === 'both' && subtitleCuesZh[index]" class="article-subtitle-text-zh">{{ subtitleCuesZh[index].text }}</span>
               </div>
             </div>
 
@@ -277,7 +279,59 @@ const videoUrl = computed(() => {
 })
 
 const hasSubtitle = computed(() => {
-  return !!(video.value?.subtitleContent && video.value.subtitleContent.trim())
+  const v = video.value
+  return !!((v?.subtitleContent && v.subtitleContent.trim()) || (v?.subtitleContentZh && v.subtitleContentZh.trim()))
+})
+
+const availableSubtitleLangs = computed(() => {
+  const langs = []
+  const hasEn = !!video.value?.subtitleContent?.trim()
+  const hasZh = !!video.value?.subtitleContentZh?.trim()
+  if (hasEn) langs.push('en')
+  if (hasZh) langs.push('zh')
+  if (hasEn && hasZh) langs.push('both')
+  return langs
+})
+
+const activeSubtitleLang = ref('off')
+
+const subtitleCuesZh = ref([])
+
+function generateBilingualVTT() {
+  const enCues = parseVTT(video.value?.subtitleContent || '')
+  const zhCues = parseVTT(video.value?.subtitleContentZh || '')
+  let vtt = 'WEBVTT\n\n'
+  for (let i = 0; i < enCues.length; i++) {
+    const en = enCues[i]
+    const zh = zhCues[i]
+    const start = formatVTTTime(en.startTime)
+    const end = formatVTTTime(en.endTime)
+    const zhText = zh ? zh.text : ''
+    vtt += `${start} --> ${end}\n${en.text}\n${zhText}\n\n`
+  }
+  return vtt
+}
+
+function formatVTTTime(seconds) {
+  const h = String(Math.floor(seconds / 3600)).padStart(2, '0')
+  const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')
+  const s = String(Math.floor(seconds % 60)).padStart(2, '0')
+  const ms = String(Math.round((seconds % 1) * 1000)).padStart(3, '0')
+  return `${h}:${m}:${s}.${ms}`
+}
+
+const activeSubtitleContent = computed(() => {
+  if (activeSubtitleLang.value === 'en') return video.value?.subtitleContent || ''
+  if (activeSubtitleLang.value === 'zh') return video.value?.subtitleContentZh || ''
+  if (activeSubtitleLang.value === 'both') return generateBilingualVTT()
+  return ''
+})
+
+const subtitleBtnLabel = computed(() => {
+  if (activeSubtitleLang.value === 'en') return '英文字幕'
+  if (activeSubtitleLang.value === 'zh') return '中文字幕'
+  if (activeSubtitleLang.value === 'both') return '双语字幕'
+  return '字幕关'
 })
 
 // Combine all subtitle cues into a single text for article mode
@@ -382,6 +436,12 @@ const loadVideo = async () => {
       if (video.value.subtitleContent) {
         subtitleCues.value = parseVTT(video.value.subtitleContent)
       }
+      if (video.value.subtitleContentZh) {
+        subtitleCuesZh.value = parseVTT(video.value.subtitleContentZh)
+      }
+      if (availableSubtitleLangs.value.length > 0) {
+        activeSubtitleLang.value = availableSubtitleLangs.value[0]
+      }
 
       if (video.value.mediaId) {
         try {
@@ -466,28 +526,11 @@ const initPlayer = () => {
       backdrop: true,
       theme: '#1d4ed8',
       lang: navigator.language.startsWith('zh') ? 'zh-cn' : 'en',
-      controls: [
-        {
-          position: 'right',
-          html: subtitleVisible.value ? '关闭字幕' : '开启字幕',
-          tooltip: '切换视频高亮字幕',
-          style: {
-            fontSize: '13px',
-            color: '#fff',
-            cursor: 'pointer',
-            padding: '0 10px',
-            opacity: 0.8
-          },
-          click: function (...args) {
-            toggleSubtitle()
-            this.innerHTML = subtitleVisible.value ? '关闭字幕' : '开启字幕'
-          },
-        },
-      ],
     }
 
-    if (video.value.subtitleContent && subtitleVisible.value) {
-      const subtitleBlob = new Blob([video.value.subtitleContent], { type: 'text/vtt' })
+    const initSubContent = activeSubtitleContent.value
+    if (initSubContent && activeSubtitleLang.value !== 'off') {
+      const subtitleBlob = new Blob([initSubContent], { type: 'text/vtt' })
       const subtitleUrl = URL.createObjectURL(subtitleBlob)
       options.subtitle = {
         url: subtitleUrl,
@@ -507,6 +550,30 @@ const initPlayer = () => {
     }
 
     artInstance = new Artplayer(options)
+
+    if (hasSubtitle.value) {
+      const langs = availableSubtitleLangs.value
+      const defaultLang = activeSubtitleLang.value
+
+      const selectorItems = []
+      if (langs.includes('en')) selectorItems.push({ html: '英文字幕', value: 'en', default: defaultLang === 'en' })
+      if (langs.includes('zh')) selectorItems.push({ html: '中文字幕', value: 'zh', default: defaultLang === 'zh' })
+      if (langs.includes('both')) selectorItems.push({ html: '双语字幕', value: 'both', default: defaultLang === 'both' })
+      selectorItems.push({ html: '关闭字幕', value: 'off', default: defaultLang === 'off' })
+
+      artInstance.controls.add({
+        position: 'right',
+        html: subtitleBtnLabel.value,
+        style: {
+          padding: '0 10px',
+        },
+        selector: selectorItems,
+        onSelect: function (item) {
+          switchSubtitleLang(item.value)
+          return subtitleBtnLabel.value
+        },
+      })
+    }
 
     artInstance.on('video:timeupdate', () => {
       updateActiveCue()
@@ -541,21 +608,40 @@ const initPlayer = () => {
   }
 }
 
-// ─── Subtitle Toggle ───────────────────────────────────────────
-const toggleSubtitle = () => {
-  subtitleVisible.value = !subtitleVisible.value
-  if (artInstance) {
-    if (subtitleVisible.value) {
-      if (video.value?.subtitleContent) {
-        const subtitleBlob = new Blob([video.value.subtitleContent], { type: 'text/vtt' })
-        const subtitleUrl = URL.createObjectURL(subtitleBlob)
-        artInstance.subtitle.switch(subtitleUrl, { type: 'vtt' })
-        artInstance.subtitle.show = true
-      }
-    } else {
+// ─── Subtitle Language Switch ─────────────────────────────────
+const switchSubtitleLang = (lang) => {
+  activeSubtitleLang.value = lang
+
+  if (lang !== 'off') {
+    if (lang === 'en') {
+      subtitleCues.value = parseVTT(video.value?.subtitleContent || '')
+    } else if (lang === 'zh') {
+      subtitleCues.value = parseVTT(video.value?.subtitleContentZh || '')
+    } else if (lang === 'both') {
+      subtitleCues.value = parseVTT(video.value?.subtitleContent || '')
+      subtitleCuesZh.value = parseVTT(video.value?.subtitleContentZh || '')
+    }
+
+    subtitleVisible.value = true
+    const playerContent = activeSubtitleContent.value
+    if (artInstance && playerContent) {
+      const blob = new Blob([playerContent], { type: 'text/vtt' })
+      const url = URL.createObjectURL(blob)
+      artInstance.subtitle.switch(url, { type: 'vtt' })
+      artInstance.subtitle.show = true
+    }
+  } else {
+    subtitleVisible.value = false
+    if (artInstance) {
       artInstance.subtitle.show = false
     }
   }
+
+  updateSubtitleSettingUI()
+}
+
+function updateSubtitleSettingUI() {
+  if (!artInstance) return
 }
 
 // ─── Transcript Sync (Video Mode) ──────────────────────────────
@@ -1178,6 +1264,18 @@ onBeforeUnmount(() => {
 
 .subtitle-text {
   flex: 1;
+  min-width: 0;
+}
+
+.subtitle-text-zh {
+  width: 100%;
+  padding-left: 72px;
+  font-size: 15px;
+  color: #64748b;
+  line-height: 1.5;
+}
+.subtitle-item.active .subtitle-text-zh {
+  color: #3b82f6;
 }
 
 /* ─── Flow Text Display ─────────────────────────────────────── */
@@ -1289,6 +1387,17 @@ onBeforeUnmount(() => {
 
 .article-subtitle-text {
   flex: 1;
+  min-width: 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.article-subtitle-text-zh {
+  width: 100%;
+  padding-left: 76px;
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.6;
   user-select: text;
   -webkit-user-select: text;
 }

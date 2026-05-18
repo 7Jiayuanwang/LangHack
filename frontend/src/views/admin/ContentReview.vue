@@ -284,8 +284,8 @@
             <el-descriptions-item label="字幕" :span="2">
               <div class="subtitle-info">
                 <el-tag v-if="hasEnglishSubtitle(currentDetail.subtitleContent)" type="success" size="small" style="margin-right: 6px">英文字幕</el-tag>
-                <el-tag v-if="hasChineseSubtitle(currentDetail.subtitleContent)" type="warning" size="small" style="margin-right: 6px">中文字幕</el-tag>
-                <span v-if="!currentDetail.subtitleContent" style="color: #999">无字幕</span>
+                <el-tag v-if="currentDetail.subtitleContentZh" type="warning" size="small" style="margin-right: 6px">中文字幕</el-tag>
+                <span v-if="!currentDetail.subtitleContent && !currentDetail.subtitleContentZh" style="color: #999">无字幕</span>
               </div>
             </el-descriptions-item>
           </el-descriptions>
@@ -593,11 +593,6 @@ const previewVideo = (row) => {
 }
 
 // 字幕检测
-const hasChineseSubtitle = (content) => {
-  if (!content) return false
-  return /[\u4e00-\u9fff]/.test(content)
-}
-
 const hasEnglishSubtitle = (content) => {
   if (!content) return false
   return /[a-zA-Z]{2,}/.test(content)
