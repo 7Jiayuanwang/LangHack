@@ -16,9 +16,12 @@ import org.springframework.cache.annotation.CacheEvict;
 import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -99,16 +102,38 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             media.setCreatedAt(LocalDateTime.now());
             media.setUpdatedAt(LocalDateTime.now());
 
-            try {
-                media.setFileContent(file.getBytes());
-            } catch (IOException e) {
-                throw new BusinessException("文件读取失败");
+            if ("VIDEO".equals(mediaType)) {
+                String filePath = saveToFileSystem(file, mediaType, originalFileName);
+                media.setFilePath(filePath);
+                media.setFileContent(new byte[0]);
+            } else {
+                try {
+                    media.setFileContent(file.getBytes());
+                } catch (IOException e) {
+                    throw new BusinessException("文件读取失败");
+                }
             }
 
             this.save(media);
             return media;
         } finally {
             uploadSemaphore.release();
+        }
+    }
+
+    private String saveToFileSystem(MultipartFile file, String mediaType, String originalFileName) {
+        String ext = getFileExtension(originalFileName);
+        String dateDir = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
+        String uniqueName = UUID.randomUUID().toString() + (ext.isEmpty() ? "" : "." + ext);
+        Path dir = Paths.get(storagePath, mediaType.toLowerCase(), dateDir);
+        try {
+            Files.createDirectories(dir);
+            Path target = dir.resolve(uniqueName);
+            file.transferTo(target.toFile());
+            return target.toString();
+        } catch (IOException e) {
+            logger.error("Failed to save file to disk: {}", originalFileName, e);
+            throw new BusinessException("文件保存失败");
         }
     }
 
@@ -121,19 +146,15 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
 
     private boolean isValidMediaType(String mediaType, String mimeType, String fileName) {
         if ("IMAGE".equals(mediaType)) {
-            // 校验 MIME 类型
             if (!(mimeType != null && mimeType.startsWith("image/"))) {
                 return false;
             }
-            // 校验文件扩展名
             String ext = getFileExtension(fileName).toLowerCase();
             return !ext.isEmpty() && ALLOWED_IMAGE_EXTENSIONS.contains(ext);
         } else if ("VIDEO".equals(mediaType)) {
-            // 校验 MIME 类型
             if (!(mimeType != null && mimeType.startsWith("video/"))) {
                 return false;
             }
-            // 校验文件扩展名
             String ext = getFileExtension(fileName).toLowerCase();
             return !ext.isEmpty() && ALLOWED_VIDEO_EXTENSIONS.contains(ext);
         }
@@ -142,8 +163,6 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
 
     @Override
     public Media getMediaById(Long id) {
-        // 注意：@TableLogic 已在 Media 实体定义，MyBatis Plus 会自动过滤已删除的记录
-        // 所以这里不需要手动添加 eq("deleted", 0) 条件
         return getById(id);
     }
 
