@@ -41,4 +41,10 @@ public interface StudentClassMapper extends BaseMapper<StudentClass> {
      * 获取学生加入的班级数量
      */
     Long selectClassCountByStudentId(@Param("studentId") Long studentId);
+
+    /**
+     * 根据班级ID列表获取所有学生ID（去重）
+     */
+    @org.apache.ibatis.annotations.Select("<script>SELECT DISTINCT student_id FROM student_classes WHERE class_id IN <foreach collection='classIds' item='id' open='(' separator=',' close=')'>#{id}</foreach></script>")
+    List<Long> selectStudentIdsByClassIds(@Param("classIds") List<Long> classIds);
 }
