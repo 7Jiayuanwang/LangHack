@@ -1,6 +1,5 @@
 package com.english.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Media;
 import com.english.mapper.MediaMapper;
@@ -17,13 +16,9 @@ import org.springframework.cache.annotation.CacheEvict;
 import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -104,37 +99,16 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             media.setCreatedAt(LocalDateTime.now());
             media.setUpdatedAt(LocalDateTime.now());
 
-            if ("VIDEO".equals(mediaType)) {
-                String filePath = saveToFileSystem(file, mediaType, originalFileName);
-                media.setFilePath(filePath);
-            } else {
-                try {
-                    media.setFileContent(file.getBytes());
-                } catch (IOException e) {
-                    throw new BusinessException("文件读取失败");
-                }
+            try {
+                media.setFileContent(file.getBytes());
+            } catch (IOException e) {
+                throw new BusinessException("文件读取失败");
             }
 
             this.save(media);
             return media;
         } finally {
             uploadSemaphore.release();
-        }
-    }
-
-    private String saveToFileSystem(MultipartFile file, String mediaType, String originalFileName) {
-        String ext = getFileExtension(originalFileName);
-        String dateDir = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
-        String uniqueName = UUID.randomUUID().toString() + (ext.isEmpty() ? "" : "." + ext);
-        Path dir = Paths.get(storagePath, mediaType.toLowerCase(), dateDir);
-        try {
-            Files.createDirectories(dir);
-            Path target = dir.resolve(uniqueName);
-            file.transferTo(target.toFile());
-            return target.toString();
-        } catch (IOException e) {
-            logger.error("Failed to save file to disk: {}", originalFileName, e);
-            throw new BusinessException("文件保存失败");
         }
     }
 
