@@ -17,4 +17,24 @@ public interface UserTextReadMapper extends BaseMapper<UserTextRead> {
 
     @Delete("DELETE FROM user_text_reads WHERE user_id = #{userId}")
     int deleteByUserId(@Param("userId") Long userId);
+
+    /**
+     * 统计用户已读文章的难度众数（只返回出现最多的那一个 difficulty）。
+     * 比加载全部 Text 行再在内存里分组便宜得多（content 字段是长文本）。
+     */
+    @Select("SELECT t.difficulty FROM texts t " +
+            "INNER JOIN user_text_reads r ON r.text_id = t.id " +
+            "WHERE r.user_id = #{userId} AND t.difficulty IS NOT NULL AND t.difficulty <> '' " +
+            "GROUP BY t.difficulty ORDER BY COUNT(*) DESC LIMIT 1")
+    String selectMostReadDifficulty(@Param("userId") Long userId);
+
+    @Select("SELECT COUNT(*) FROM user_text_reads WHERE user_id = #{userId}")
+    int countReadArticles(@Param("userId") Long userId);
+
+    @Select("SELECT COALESCE(SUM(read_count), 0) FROM user_text_reads WHERE user_id = #{userId}")
+    int sumReadCounts(@Param("userId") Long userId);
+
+    @org.apache.ibatis.annotations.Update("UPDATE user_text_reads SET read_count = read_count + 1, last_read_at = NOW() WHERE user_id = #{userId} AND text_id = #{textId}")
+    int incrementReadCount(@Param("userId") Long userId, @Param("textId") Long textId);
 }
+

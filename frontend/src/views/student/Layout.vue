@@ -62,6 +62,9 @@
         </div>
       </div>
     </div>
+
+    <!-- HiAgent 问题反馈气泡 -->
+    <HiagentFeedback />
   </div>
 </template>
 
@@ -72,6 +75,7 @@ import { useUserStore } from '@/store/user'
 import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import HiagentFeedback from '@/components/HiagentFeedback.vue'
 import {
   DataBoard,
   Reading,
@@ -181,6 +185,10 @@ const isActiveRoute = (path) => {
     return true
   }
   // 文章列表与详情页共享"文章"导航项高亮
+  // /student/articles 导航项对应 /articles 路由（重定向后的实际路径）
+  if (path === '/student/articles' && (currentPath === '/articles' || currentPath.startsWith('/article/'))) {
+    return true
+  }
   if (path === '/articles' && currentPath.startsWith('/article/')) {
     return true
   }
@@ -384,7 +392,7 @@ onUnmounted(() => {
 .content-wrapper {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: scroll;
   -webkit-overflow-scrolling: touch;
   background: var(--bg-secondary);
 }

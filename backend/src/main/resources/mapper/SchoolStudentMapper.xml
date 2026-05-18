@@ -17,13 +17,13 @@
         )
         ON DUPLICATE KEY UPDATE
             student_name = COALESCE(#{studentName}, student_name),
-            college_name = #{collegeName},
+            college_name = COALESCE(#{collegeName}, college_name),
             college_code = COALESCE(#{collegeCode}, college_code),
             class_code = COALESCE(#{classCode}, class_code),
             class_name = COALESCE(#{className}, class_name),
             grade = COALESCE(#{grade}, grade),
             major_name = COALESCE(#{majorName}, major_name),
-            source_course_codes = #{sourceCourseCodes},
+            source_course_codes = COALESCE(#{sourceCourseCodes}, source_course_codes),
             sync_time = #{syncTime},
             last_exam_sync_time = COALESCE(#{lastExamSyncTime}, last_exam_sync_time),
             last_schedule_sync_time = COALESCE(#{lastScheduleSyncTime}, last_schedule_sync_time),

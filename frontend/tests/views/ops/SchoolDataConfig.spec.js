@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount, flushPromises } from '@vue/test-utils'
 
-const { pushMock, elMessage, schoolDataApi } = vi.hoisted(() => ({
+const { pushMock, elMessage, elMessageFn, schoolDataApi } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   elMessage: {
     success: vi.fn(),
     error: vi.fn(),
     warning: vi.fn()
   },
+  elMessageFn: vi.fn(() => ({ close: vi.fn() })),
   schoolDataApi: {
     getSchoolDataConfig: vi.fn(),
     updateSchoolDataConfig: vi.fn(),
@@ -26,10 +27,28 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('element-plus', () => ({
-  ElMessage: elMessage
+  ElMessage: Object.assign(elMessageFn, elMessage)
 }))
 
 vi.mock('@/api/schoolData', () => schoolDataApi)
+
+vi.mock('@/composables/useFeatureToggles', () => ({
+  useFeatureToggles: () => ({
+    toggles: { value: {} },
+    isEnabled: () => true,
+    load: vi.fn().mockResolvedValue({}),
+    invalidate: vi.fn(),
+    isLoaded: () => true,
+    startAutoRefresh: vi.fn(),
+    stopAutoRefresh: vi.fn(),
+    onChange: vi.fn(),
+    watchToggle: vi.fn(),
+    connectWebSocket: vi.fn(),
+    disconnectWebSocket: vi.fn(),
+    isWebSocketConnected: () => false
+  }),
+  invalidateFeatureToggleCache: vi.fn()
+}))
 
 import SchoolDataConfig from '@/views/ops/SchoolDataConfig.vue'
 
@@ -134,5 +153,28 @@ describe('SchoolDataConfig quick actions', () => {
       persist: true
     })
     expect(wrapper.vm.chainResult.courseCount).toBe(3)
+  })
+
+  it('opens browser with local chain result query', async () => {
+    const wrapper = shallowMount(SchoolDataConfig)
+    await flushPromises()
+
+    wrapper.vm.chainResult = {
+      collegeName: '外国语学院',
+      studentCount: 60,
+      teacherCount: 5,
+      bindingCount: 120,
+      courseCount: 3
+    }
+
+    wrapper.vm.openChainResultInBrowser()
+
+    expect(pushMock).toHaveBeenCalledWith({
+      path: '/ops/school-data-browser',
+      query: {
+        tab: 'school_student',
+        collegeName: '外国语学院'
+      }
+    })
   })
 })

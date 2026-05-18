@@ -1,70 +1,85 @@
 <template>
   <div class="school-data-config">
     <div class="page-header">
-      <h2>学校数据配置</h2>
-      <el-button @click="loadAll" :loading="loading">
-        <el-icon><Refresh /></el-icon> 刷新
+      <div class="header-left">
+        <h2>学校数据集成配置</h2>
+        <p class="subtitle">管理学校数据源 API 或 ETL 数据库连接与同步任务</p>
+      </div>
+      <el-button @click="loadAll" :loading="loading" plain round>
+        <el-icon><Refresh /></el-icon> 刷新状态
       </el-button>
     </div>
 
     <!-- 配置状态警告横幅 -->
-    <el-alert
-      v-if="showAuthWarning"
-      type="error"
-      :closable="false"
-      show-icon
-      class="status-banner"
-    >
-      <template #title>
-        <strong>学校 API 认证未配置 — 数据同步当前全部失败</strong>
-      </template>
-      <template #default>
-        <div>
-          缺失项:
-          <el-tag
-            v-for="k in status.missingKeys"
-            :key="k"
-            type="danger"
-            size="small"
-            class="missing-tag"
-          >{{ k }}</el-tag>
-        </div>
-        <div class="banner-hint">
-          请在下方 "API 接口配置" 区填入 <strong>App ID</strong> 与 <strong>App Secret</strong>，保存后点击"测试连接"验证。
-        </div>
-      </template>
-    </el-alert>
-    <el-alert
-      v-else-if="showEtlWarning"
-      type="error"
-      :closable="false"
-      show-icon
-      class="status-banner"
-    >
-      <template #title>
-        <strong>ETL 数据库配置未完成 — JDBC 直连当前不可用</strong>
-      </template>
-      <template #default>
-        <div>
-          缺失项:
-          <el-tag
-            v-for="k in status.missingKeys"
-            :key="k"
-            type="danger"
-            size="small"
-            class="missing-tag"
-          >{{ k }}</el-tag>
-        </div>
-      </template>
-    </el-alert>
-    <el-alert
-      v-else-if="status.authConfigured || status.etlConfigured"
-      type="success"
-      :closable="false"
-      show-icon
-      class="status-banner"
-      :title="`${status.source === 'api' ? 'API' : 'ETL'} 配置已完成，可点击下方 '测试连接' 验证`"
-    />
+    <div class="banners-area">
+      <el-alert
+        v-if="showAuthWarning"
+        type="error"
+        :closable="false"
+        show-icon
+        class="status-banner premium-alert"
+      >
+        <template #title>
+          <span class="banner-title">学校 API 认证未配置</span>
+        </template>
+        <template #default>
+          <div class="banner-content">
+            <p>数据同步当前全部失败。缺失项:
+              <el-tag
+                v-for="k in status.missingKeys"
+                :key="k"
+                type="danger"
+                size="small"
+                effect="dark"
+                class="missing-tag"
+              >{{ k }}</el-tag>
+            </p>
+            <div class="banner-hint">
+              请在下方 "API 接口配置" 区填入 <strong>App ID</strong> 与 <strong>App Secret</strong>，保存后点击"测试连接"验证。
+            </div>
+          </div>
+        </template>
+      </el-alert>
+      <el-alert
+        v-else-if="showEtlWarning"
+        type="error"
+        :closable="false"
+        show-icon
+        class="status-banner premium-alert"
+      >
+        <template #title>
+          <span class="banner-title">ETL 数据库配置未完成</span>
+        </template>
+        <template #default>
+          <div class="banner-content">
+            <p>JDBC 直连当前不可用。缺失项:
+              <el-tag
+                v-for="k in status.missingKeys"
+                :key="k"
+                type="danger"
+                size="small"
+                effect="dark"
+                class="missing-tag"
+              >{{ k }}</el-tag>
+            </p>
+          </div>
+        </template>
+      </el-alert>
+      <el-alert
+        v-else-if="status.authConfigured || status.etlConfigured"
+        type="success"
+        :closable="false"
+        show-icon
+        class="status-banner premium-alert success-alert"
+      >
+        <template #title>
+          <span class="banner-title">{{ status.source === 'api' ? 'REST API' : 'JDBC ETL' }} 模式已就绪</span>
+        </template>
+        <template #default>
+          <p>集成配置已完成，同步服务正常运行中。您可以点击下方按钮测试实时连接。</p>
+        </template>
+      </el-alert>
+    </div>
 
     <div v-if="loading" class="loading-state">
       <el-icon class="is-loading" :size="32"><Loading /></el-icon>
@@ -294,7 +309,7 @@
                     <el-option value="eq" label="精确匹配" />
                     <el-option value="contains" label="模糊匹配" />
                   </el-select>
-                  <el-button type="primary" size="small" :loading="chainFetching" @click="handleQuickChainFetch">
+                  <el-button type="primary" size="small" :loading="chainFetching" :disabled="!chainFetchEnabled" @click="handleQuickChainFetch">
                     执行链式拉取
                   </el-button>
                 </div>
@@ -324,8 +339,8 @@
 
             <div v-if="chainResult" class="quick-result-card">
               <div class="quick-result-title">链式拉取结果</div>
-              <div v-if="chainResult.errorMessage" class="quick-result-error">{{ chainResult.errorMessage }}</div>
-              <div v-else class="quick-result-grid">
+              <div class="quick-result-grid">
+                <div><span>状态：</span>{{ chainStatusText(chainResult.status) }}</div>
                 <div><span>学院：</span>{{ chainResult.collegeName }}</div>
                 <div><span>匹配：</span>{{ chainResult.matchMode }}</div>
                 <div><span>课程数：</span>{{ chainResult.courseCount || 0 }}</div>
@@ -333,6 +348,24 @@
                 <div><span>教师数：</span>{{ chainResult.teacherCount || 0 }}</div>
                 <div><span>绑定数：</span>{{ chainResult.bindingCount || 0 }}</div>
                 <div v-if="chainResult.upstreamKcbhSupported !== undefined"><span>KCBH支持：</span>{{ chainResult.upstreamKcbhSupported ? '是' : '否（客户端过滤）' }}</div>
+              </div>
+              <div v-if="chainResult.errorMessage" class="quick-result-error">{{ chainResult.errorMessage }}</div>
+              <div v-if="chainErrors(chainResult).length > 0" class="quick-result-issues">
+                <div class="quick-result-issues-title">错误</div>
+                <div v-for="item in chainErrors(chainResult)" :key="`error-${item}`" class="quick-result-issue-item">{{ item }}</div>
+              </div>
+              <div v-if="chainWarnings(chainResult).length > 0" class="quick-result-issues warnings">
+                <div class="quick-result-issues-title">警告</div>
+                <div v-for="item in chainWarnings(chainResult)" :key="`warning-${item}`" class="quick-result-issue-item">{{ item }}</div>
+              </div>
+              <div v-if="chainStepEntries(chainResult).length > 0" class="quick-result-steps">
+                <div v-for="[stepName, stats] in chainStepEntries(chainResult)" :key="stepName" class="quick-result-step">
+                  <strong>{{ chainStepLabel(stepName) }}</strong>
+                  <span>{{ formatChainStepStats(stats) }}</span>
+                </div>
+              </div>
+              <div v-if="chainResult.status !== 'FAILED'" class="quick-result-actions">
+                <el-button size="small" @click="openChainResultInBrowser">查看本地数据</el-button>
               </div>
             </div>
           </div>
@@ -347,6 +380,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   Refresh, Loading, QuestionFilled, InfoFilled,
   Connection, Check, CircleCheckFilled, CircleCloseFilled
@@ -445,6 +479,21 @@ const chainFetchForm = reactive({
 })
 const quickResult = ref(null)
 const chainResult = ref(null)
+const { isEnabled: isFeatureEnabled, load: loadFeatureToggles } = useFeatureToggles()
+const chainFetchEnabled = computed(() => isFeatureEnabled('ops.school_data_chain_fetch'))
+
+const CHAIN_STATUS_LABELS = {
+  SUCCESS: '成功',
+  PARTIAL: '部分异常',
+  FAILED: '失败'
+}
+
+const CHAIN_STEP_LABELS = {
+  schoolCourse: '课程阶段',
+  teacherCourses: '授课阶段',
+  courseSelection: '选课阶段',
+  persist: '落库阶段'
+}
 
 const canRunQuickActions = computed(() => {
   if (form.source === 'api') {
@@ -621,6 +670,14 @@ const handleQuickSync = async () => {
   }
   quickSyncing.value = true
   quickResult.value = null
+
+  let loadingInstance = ElMessage({
+    message: `正在同步 ${quickSyncForm.dataSource}，请稍候...`,
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
+
   try {
     const syncFn = quickSyncForm.mode === 'full'
       ? fullSyncSchoolDataFiltered
@@ -646,6 +703,9 @@ const handleQuickSync = async () => {
     }
     ElMessage.error(quickResult.value.errorMessage)
   } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
     quickSyncing.value = false
   }
 }
@@ -657,6 +717,14 @@ const handleQuickSyncAll = async (mode) => {
   }
   quickSyncing.value = true
   quickResult.value = null
+
+  let loadingInstance = ElMessage({
+    message: `正在${mode === 'full' ? '全量' : '增量'}同步全部数据源，请稍候...`,
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
+
   try {
     const syncFn = mode === 'full' ? fullSyncAllSchoolData : incrementalSyncAllSchoolData
     const res = await syncFn({ triggerType: 'MANUAL' })
@@ -694,6 +762,9 @@ const handleQuickSyncAll = async (mode) => {
     }
     ElMessage.error(quickResult.value.errorMessage)
   } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
     quickSyncing.value = false
   }
 }
@@ -703,12 +774,24 @@ const handleQuickChainFetch = async () => {
     ElMessage.warning('请先完成配置并测试连接')
     return
   }
+  if (!chainFetchEnabled.value) {
+    ElMessage.warning('按学院链式拉取功能已关闭')
+    return
+  }
   if (!chainFetchForm.collegeName.trim()) {
     ElMessage.warning('请输入学院名称')
     return
   }
   chainFetching.value = true
   chainResult.value = null
+
+  let loadingInstance = ElMessage({
+    message: `正在按学院链式拉取数据（${chainFetchForm.collegeName}），请稍候...`,
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
+
   try {
     const res = await chainFetchStudentsByCollege({
       collegeName: chainFetchForm.collegeName.trim(),
@@ -717,7 +800,13 @@ const handleQuickChainFetch = async () => {
     })
     if (res?.code === 200 && res.data) {
       chainResult.value = res.data
-      ElMessage.success('按学院链式拉取完成')
+      if (chainResult.value?.status === 'FAILED') {
+        ElMessage.error(chainResult.value.errorMessage || '按学院链式拉取失败，请查看诊断信息')
+      } else if (chainResult.value?.status === 'PARTIAL') {
+        ElMessage.warning(chainResult.value.errorMessage || '按学院链式拉取已完成，但存在异常')
+      } else {
+        ElMessage.success('按学院链式拉取完成')
+      }
     } else {
       throw new Error(res?.message || '按学院链式拉取失败')
     }
@@ -725,239 +814,349 @@ const handleQuickChainFetch = async () => {
     chainResult.value = { errorMessage: error.message || '按学院链式拉取失败' }
     ElMessage.error(chainResult.value.errorMessage)
   } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
     chainFetching.value = false
   }
 }
 
-onMounted(loadAll)
+const chainStatusText = (status) => CHAIN_STATUS_LABELS[status] || '未知'
+
+const chainErrors = (result) => (Array.isArray(result?.errors) ? result.errors : [])
+
+const chainWarnings = (result) => (Array.isArray(result?.warnings) ? result.warnings : [])
+
+const chainStepEntries = (result) => Object.entries(result?.stepStats || {})
+
+const chainStepLabel = (stepName) => CHAIN_STEP_LABELS[stepName] || stepName
+
+const formatChainStepStats = (stats) => {
+  if (!stats || typeof stats !== 'object') return ''
+  return Object.entries(stats)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '' && (!Array.isArray(value) || value.length > 0))
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(',') : value}`)
+    .join(' | ')
+}
+
+const resolveChainResultTab = (result) => {
+  if ((result?.studentCount || 0) > 0) return 'school_student'
+  if ((result?.teacherCount || 0) > 0) return 'school_teacher'
+  if ((result?.bindingCount || 0) > 0) return 'teacher_student_binding'
+  if ((result?.courseCount || 0) > 0) return 'school_course'
+  return 'school_student'
+}
+
+const openChainResultInBrowser = () => {
+  const result = chainResult.value
+  if (!result || result.status === 'FAILED') {
+    return
+  }
+  router.push({
+    path: '/ops/school-data-browser',
+    query: {
+      tab: resolveChainResultTab(result),
+      collegeName: result.collegeName || chainFetchForm.collegeName.trim()
+    }
+  })
+}
+
+onMounted(async () => {
+  try {
+    await loadFeatureToggles({ authenticated: true })
+  } catch {
+    // ignore toggle preload failure; route guard/cache will retry
+  }
+  await loadAll()
+})
 </script>
 
 <style scoped>
 .school-data-config {
-  max-width: 900px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 24px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .school-data-config {
+    padding: 30px;
+  }
+  
+  :deep(.el-collapse-item__header) {
+    font-size: 18px;
+    height: 56px;
+  }
+
+  .quick-actions-header strong {
+    font-size: 20px;
+  }
+
+  .quick-card-title,
+  .quick-result-title {
+    font-size: 15px;
+  }
+
+  :deep(.el-form-item__label) {
+    font-size: 15px;
+  }
+
+  :deep(.el-table) {
+    font-size: 14px;
+  }
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  margin-bottom: 24px;
 }
 
-.page-header h2 {
+.header-left h2 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 800;
+  color: #1e293b;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
   margin: 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 14px;
+  color: #64748b;
 }
 
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px;
-  color: #94a3b8;
+.banners-area {
+  margin-bottom: 24px;
+}
+
+.premium-alert {
+  border-radius: 16px;
+  padding: 16px 20px;
+  border: 1px solid rgba(239, 68, 68, 0.1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.05);
+}
+
+.success-alert {
+  border-color: rgba(34, 197, 94, 0.1);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.05);
+}
+
+.banner-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.banner-content p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.banner-hint {
+  font-size: 13px;
+  opacity: 0.9;
 }
 
 .config-collapse {
-  background: #fff;
-  border-radius: 12px;
+  background: white;
+  border-radius: 20px;
   border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.02);
+}
+
+:deep(.el-collapse-item__header) {
+  padding: 16px 24px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+  background: white;
+  transition: all 0.2s;
+}
+
+:deep(.el-collapse-item__header.is-active) {
+  background: #f8fafc;
+  color: #4f46e5;
+}
+
+:deep(.el-collapse-item__content) {
+  padding: 24px;
+  background: white;
 }
 
 .form-hint {
   margin-left: 12px;
   font-size: 12px;
   color: #94a3b8;
-}
-
-.form-subhint {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #64748b;
-  font-family: ui-monospace, monospace;
-  line-height: 1.4;
-}
-
-.cron-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
-  background: #f0f9ff;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #0369a1;
-  margin-top: 8px;
-}
-
-.cron-hint code {
-  background: #e0f2fe;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 12px;
-}
-
-.action-row {
-  display: flex;
-  gap: 12px;
-  padding: 4px 0;
-  flex-wrap: wrap;
-}
-
-.quick-actions-panel {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #f8fafc;
-}
-
-.quick-actions-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
-  color: #334155;
-}
-
-.quick-actions-header span {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.quick-actions-alert {
-  margin-bottom: 12px;
-}
-
-.quick-actions-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.quick-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 12px;
-}
-
-.quick-card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-  margin-bottom: 10px;
-}
-
-.quick-card-form,
-.quick-card-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.quick-card-actions {
-  margin-top: 10px;
-}
-
-.quick-result-card {
-  margin-top: 12px;
-  background: #fff;
-  border: 1px solid #dbeafe;
-  border-radius: 10px;
-  padding: 12px;
-}
-
-.quick-result-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1d4ed8;
-  margin-bottom: 8px;
-}
-
-.quick-result-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  font-size: 13px;
-  color: #334155;
-}
-
-.quick-result-grid span {
-  color: #64748b;
-}
-
-.quick-result-error {
-  margin-top: 8px;
-  color: #dc2626;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.test-result {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.test-success {
-  background: #f0fdf4;
-  color: #16a34a;
-}
-
-.test-fail {
-  background: #fef2f2;
-  color: #dc2626;
-}
-
-.status-banner {
-  margin-bottom: 16px;
-}
-
-.missing-tag {
-  margin: 0 4px 0 4px;
-}
-
-.banner-hint {
-  margin-top: 6px;
-  font-size: 13px;
-  color: #991b1b;
-}
-
-.field-missing :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px #dc2626 inset !important;
-}
-
-.field-warning {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #dc2626;
-  font-weight: 500;
+  font-weight: normal;
 }
 
 .endpoints-panel {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin: 8px 0 16px 0;
+  background: #f1f5f9;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
 }
 
 .endpoints-title {
   display: flex;
   align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.endpoints-table {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+
+.ds-name {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  color: #4f46e5;
+  background: #eef2ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ds-url {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.action-row {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 24px;
+}
+
+.quick-actions-panel {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 20px;
+  padding: 24px;
+}
+
+.quick-actions-header strong {
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.quick-actions-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.quick-card {
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+  transition: transform 0.2s;
+}
+
+.quick-card:hover {
+  transform: translateY(-2px);
+  border-color: #4f46e5;
+}
+
+.quick-result-card {
+  border-radius: 16px;
+  border-left: 4px solid #4f46e5;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.04);
+}
+
+.quick-card-title,
+.quick-result-title {
+  display: flex;
+  align-items: center;
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
   color: #334155;
   margin-bottom: 8px;
+}
+
+.quick-result-actions {
+  margin-top: 12px;
+}
+
+.quick-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.quick-result-error {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.quick-result-issues {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+}
+
+.quick-result-issues.warnings {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #9a3412;
+}
+
+.quick-result-issues-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.quick-result-issue-item {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.quick-result-issue-item + .quick-result-issue-item {
+  margin-top: 6px;
+}
+
+.quick-result-steps {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.quick-result-step {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #334155;
+}
+
+.quick-result-step strong {
+  font-size: 12px;
+  color: #0f172a;
 }
 
 .endpoints-table {
@@ -994,5 +1193,47 @@ onMounted(loadAll)
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 11px;
+}
+
+@media (max-width: 768px) {
+  .school-data-config {
+    padding: 16px;
+  }
+
+  .config-collapse :deep(.el-collapse-item__header) {
+    padding: 12px 16px;
+  }
+
+  .config-collapse :deep(.el-collapse-item__content) {
+    padding: 16px;
+  }
+
+  .action-row {
+    flex-direction: column;
+  }
+
+  .action-row .el-button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  .quick-actions-panel {
+    padding: 16px;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-card-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .quick-card-form :deep(.el-select),
+  .quick-card-form :deep(.el-input),
+  .quick-card-form .el-button {
+    width: 100% !important;
+  }
 }
 </style>

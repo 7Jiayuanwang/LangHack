@@ -9,6 +9,8 @@ import com.english.mapper.UserTextReadMapper;
 import com.english.service.ArticleVersionService;
 import com.english.service.TextService;
 import com.english.service.UserService;
+import com.english.service.ContentTagService;
+import com.english.entity.ContentTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +25,35 @@ import java.util.Map;
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
+
+/**
+ * 用户阅读统计DTO
+ */
+class UserReadingStats {
+    private Integer readArticlesCount;  // 阅读篇数
+    private Integer totalReadCount;      // 阅读次数
+    
+    public UserReadingStats(Integer readArticlesCount, Integer totalReadCount) {
+        this.readArticlesCount = readArticlesCount;
+        this.totalReadCount = totalReadCount;
+    }
+    
+    public Integer getReadArticlesCount() {
+        return readArticlesCount;
+    }
+    
+    public void setReadArticlesCount(Integer readArticlesCount) {
+        this.readArticlesCount = readArticlesCount;
+    }
+    
+    public Integer getTotalReadCount() {
+        return totalReadCount;
+    }
+    
+    public void setTotalReadCount(Integer totalReadCount) {
+        this.totalReadCount = totalReadCount;
+    }
+}
 
 /**
  * 公开课文控制器
@@ -46,6 +77,30 @@ public class PublicTextController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private ContentTagService contentTagService;
+
+    @Autowired
+    private com.english.service.RecommendationService recommendationService;
+
+    /**
+     * 获取所有内容标签（公开接口，学生上传时使用）
+     */
+    @GetMapping("/content-tags")
+    public Result<List<ContentTag>> getPublicContentTags() {
+        try {
+            List<ContentTag> tags = contentTagService.lambdaQuery()
+                    .eq(ContentTag::getDeleted, 0)
+                    .orderByAsc(ContentTag::getSortOrder)
+                    .orderByAsc(ContentTag::getId)
+                    .list();
+            return Result.success(tags);
+        } catch (Exception e) {
+            log.error("获取内容标签列表失败", e);
+            return Result.error("获取标签列表失败");
+        }
+    }
+
     /**
      * 获取首页推荐文章
      * 已登录用户：排除已读文章，未读不足6篇时重置已读记录
@@ -61,6 +116,14 @@ public class PublicTextController {
             List<Text> featuredTexts = textService.lambdaQuery()
                     .eq(Text::getDeleted, 0)
                     .eq(Text::getIsFeatured, 1)
+                    .and(w -> w
+                        .isNull(Text::getUploadedBy)
+                        .or(sub -> sub
+                            .isNotNull(Text::getUploadedBy)
+                            .eq(Text::getIsPublic, 1)
+                            .eq(Text::getStatus, "APPROVED")
+                        )
+                    )
                     .orderByDesc(Text::getFeaturedPriority)
                     .orderByDesc(Text::getCreatedAt)
                     .list();
@@ -128,10 +191,45 @@ public class PublicTextController {
     }
 
     /**
-     * 标记文章为已读
+<<<<<<< HEAD
+     * 个性化推荐文章
+     */
+    @GetMapping("/recommended")
+    public Result<List<Text>> getRecommendedTexts(
+            @RequestParam(defaultValue = "12") int count,
+            @RequestParam(required = false) String exclude) {
+        try {
+            count = Math.min(Math.max(count, 1), 50);
+
+            Long userId = getCurrentUserId();
+            if (userId == null) {
+                return Result.success(Collections.emptyList());
+            }
+
+            List<Long> excludeIds = new ArrayList<>();
+            if (exclude != null && !exclude.trim().isEmpty()) {
+                for (String s : exclude.split(",")) {
+                    try {
+                        excludeIds.add(Long.parseLong(s.trim()));
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+
+            List<Text> result = recommendationService.recommend(userId, count, excludeIds);
+            return Result.success(result != null ? result : Collections.emptyList());
+        } catch (Exception e) {
+            log.error("获取推荐文章失败", e);
+            return Result.error("获取推荐文章失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 记录用户阅读行为
+     * 阅读次数：每次调用都+1
+     * 阅读篇数：同一用户同一篇文章仅第一次+1
      */
     @PostMapping("/{textId}/read")
-    public Result<Void> markTextAsRead(@PathVariable Long textId) {
+    public Result<Void> recordReading(@PathVariable Long textId) {
         try {
             Long userId = getCurrentUserId();
             if (userId == null) {
@@ -142,18 +240,46 @@ public class PublicTextController {
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<UserTextRead>()
                             .eq(UserTextRead::getUserId, userId)
                             .eq(UserTextRead::getTextId, textId));
+                            
             if (existing == null) {
+                // 首次阅读：创建新记录，阅读篇数+1，阅读次数=1
                 UserTextRead record = new UserTextRead();
                 record.setUserId(userId);
                 record.setTextId(textId);
                 record.setReadAt(LocalDateTime.now());
+                record.setLastReadAt(LocalDateTime.now());
+                record.setReadCount(1);
                 userTextReadMapper.insert(record);
+            } else {
+                // 重复阅读：仅增加阅读次数，不增加阅读篇数
+                userTextReadMapper.incrementReadCount(userId, textId);
             }
 
             return Result.success(null);
         } catch (Exception e) {
-            log.error("标记已读失败, textId={}", textId, e);
-            return Result.error("标记已读失败");
+            log.error("记录阅读行为失败, textId={}", textId, e);
+            return Result.error("记录阅读行为失败");
+        }
+    }
+
+    /**
+     * 获取用户阅读统计
+     */
+    @GetMapping("/reading-stats")
+    public Result<UserReadingStats> getReadingStats() {
+        try {
+            Long userId = getCurrentUserId();
+            if (userId == null) {
+                return Result.success(new UserReadingStats(0, 0));
+            }
+
+            int readArticlesCount = userTextReadMapper.countReadArticles(userId);
+            int totalReadCount = userTextReadMapper.sumReadCounts(userId);
+            
+            return Result.success(new UserReadingStats(readArticlesCount, totalReadCount));
+        } catch (Exception e) {
+            log.error("获取阅读统计失败", e);
+            return Result.error("获取阅读统计失败");
         }
     }
 
@@ -337,6 +463,9 @@ public class PublicTextController {
                 return Result.error("课文不存在或未公开");
             }
 
+            // 记录用户阅读行为
+            recordReading(textId);
+            
             // 原子递增查看次数
             textService.incrementViewCount(textId);
 

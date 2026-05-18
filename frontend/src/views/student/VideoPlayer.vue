@@ -7,12 +7,8 @@
         <span>返回</span>
       </button>
       <h1 class="header-title">{{ video?.title || '视频播放' }}</h1>
-      <!-- 自己的视频预览时显示待审核标记，否则显示收藏按鈕 -->
-      <el-tag v-if="isOwnerPreview" type="warning" size="small" effect="dark" style="white-space: nowrap;">
-        <el-icon style="margin-right:2px;"><WarningFilled /></el-icon>待审核
-      </el-tag>
-      <button
-        v-else-if="video"
+      <button 
+        v-if="video"
         class="favorite-btn"
         :class="{ 'is-favorite': isFavorite }"
         @click="toggleFavorite"
@@ -44,12 +40,6 @@
         <div v-if="playerError" class="player-error-text">
           播放器组件加载失败，已切换至内置播放器。错误: {{ playerErrorMsg }}
         </div>
-      </div>
-
-      <!-- 自己上传的视频在待审核状态时显示提示条 -->
-      <div v-if="isOwnerPreview && video?.status !== 'APPROVED'" class="owner-preview-banner">
-        <el-icon><WarningFilled /></el-icon>
-        <span>这是你自己上传的视频预览，当前状态：<strong>{{ video?.status === 'PENDING' ? '待审核' : video?.status === 'REJECTED' ? '已拒绝' : video?.status }}</strong>。审核通过后将对所有人公开。</span>
       </div>
 
       <!-- Video Info -->
@@ -177,7 +167,6 @@
               >
                 <span class="subtitle-time">{{ formatTimestamp(cue.startTime) }}</span>
                 <span class="subtitle-text">{{ cue.text }}</span>
-                <span v-if="activeSubtitleLang === 'both' && subtitleCuesZh[index]" class="subtitle-text-zh">{{ subtitleCuesZh[index].text }}</span>
               </div>
             </div>
 
@@ -207,7 +196,6 @@
               >
                 <span class="article-subtitle-time">{{ formatTimestamp(cue.startTime) }}</span>
                 <span class="article-subtitle-text">{{ cue.text }}</span>
-                <span v-if="activeSubtitleLang === 'both' && subtitleCuesZh[index]" class="article-subtitle-text-zh">{{ subtitleCuesZh[index].text }}</span>
               </div>
             </div>
 
@@ -245,9 +233,10 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, View, Star, StarFilled, Reading, ChatLineSquare, Document, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, View, Star, StarFilled, Reading, ChatLineSquare, Document, VideoPlay } from '@element-plus/icons-vue'
 import Artplayer from 'artplayer'
 import { getPublicVideoDetail, getUserVideoDetail } from '@/api/video'
+import { getAdminVideoDetail } from '@/api/admin'
 import { getMediaDetail } from '@/api/media'
 import { checkArticleFavorite, toggleArticleFavorite } from '@/api/student'
 import InteractiveText from '@/components/InteractiveText.vue'
@@ -256,7 +245,7 @@ import SelectionMenu from '@/components/SelectionMenu.vue'
 const router = useRouter()
 const route = useRoute()
 
-const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg']
+const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska']
 
 const artPlayerRef = ref(null)
 const transcriptRef = ref(null)
@@ -274,9 +263,6 @@ const transcriptMode = ref('video') // 'video' | 'article'
 const displayFormat = ref('subtitle') // 'subtitle' | 'flow'
 const descExpanded = ref(false)
 
-// 是否为自己上传的视频（预览模式）
-const isOwnerPreview = computed(() => route.query.isOwner === '1')
-
 const showSelectionMenu = ref(false)
 const selectionPosition = reactive({ x: 0, y: 0 })
 const selectedTextContent = ref('')
@@ -291,65 +277,7 @@ const videoUrl = computed(() => {
 })
 
 const hasSubtitle = computed(() => {
-  const v = video.value
-  return !!((v?.subtitleContent && v.subtitleContent.trim()) || (v?.subtitleContentZh && v.subtitleContentZh.trim()))
-})
-
-// 可用字幕语言列表
-const availableSubtitleLangs = computed(() => {
-  const langs = []
-  const hasEn = !!video.value?.subtitleContent?.trim()
-  const hasZh = !!video.value?.subtitleContentZh?.trim()
-  if (hasEn) langs.push('en')
-  if (hasZh) langs.push('zh')
-  if (hasEn && hasZh) langs.push('both')
-  return langs
-})
-
-// 当前激活的字幕语言: 'en' | 'zh' | 'both' | 'off'
-const activeSubtitleLang = ref('off')
-
-// 中文字幕 cues（双语模式用）
-const subtitleCuesZh = ref([])
-
-// 生成双语 VTT（英文 + 中文合并到同一 cue）
-function generateBilingualVTT() {
-  const enCues = parseVTT(video.value?.subtitleContent || '')
-  const zhCues = parseVTT(video.value?.subtitleContentZh || '')
-  let vtt = 'WEBVTT\n\n'
-  for (let i = 0; i < enCues.length; i++) {
-    const en = enCues[i]
-    const zh = zhCues[i]
-    const start = formatVTTTime(en.startTime)
-    const end = formatVTTTime(en.endTime)
-    const zhText = zh ? zh.text : ''
-    vtt += `${start} --> ${end}\n${en.text}\n${zhText}\n\n`
-  }
-  return vtt
-}
-
-function formatVTTTime(seconds) {
-  const h = String(Math.floor(seconds / 3600)).padStart(2, '0')
-  const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')
-  const s = String(Math.floor(seconds % 60)).padStart(2, '0')
-  const ms = String(Math.round((seconds % 1) * 1000)).padStart(3, '0')
-  return `${h}:${m}:${s}.${ms}`
-}
-
-// 当前 Artplayer 内嵌字幕的文本内容
-const activeSubtitleContent = computed(() => {
-  if (activeSubtitleLang.value === 'en') return video.value?.subtitleContent || ''
-  if (activeSubtitleLang.value === 'zh') return video.value?.subtitleContentZh || ''
-  if (activeSubtitleLang.value === 'both') return generateBilingualVTT()
-  return ''
-})
-
-// 字幕按钮显示文案
-const subtitleBtnLabel = computed(() => {
-  if (activeSubtitleLang.value === 'en') return '英文字幕'
-  if (activeSubtitleLang.value === 'zh') return '中文字幕'
-  if (activeSubtitleLang.value === 'both') return '双语字幕'
-  return '字幕关'
+  return !!(video.value?.subtitleContent && video.value.subtitleContent.trim())
 })
 
 // Combine all subtitle cues into a single text for article mode
@@ -415,16 +343,24 @@ function formatTimestamp(seconds) {
 
 // ─── Navigation ────────────────────────────────────────────────
 const goBack = () => {
-  if (window.history.length > 1) {
+  const isAdminPreview = route.query.preview === 'admin'
+  if (isAdminPreview) {
+    // 管理员预览模式（新标签页打开的）→ 关闭标签页或回管理页
+    window.close()
+    // 如果 window.close() 被浏览器阻止，则跳转到内容管理
+    setTimeout(() => { window.location.href = '/admin/content' }, 100)
+  } else if (window.history.length > 1) {
     router.back()
   } else {
     router.push('/student/articles')
   }
 }
 
-// ─── Video Loading ─────────────────────────────────────────────
+// ─── Video Loading ─────────────────────────────────────────────────────
 const loadVideo = async () => {
-  const videoId = route.query.videoId
+  const videoId = route.query.videoId || route.query.id
+  const isAdminPreview = route.query.preview === 'admin'
+  const isUserPreview = route.query.preview === 'user'
   if (!videoId) {
     error.value = true
     loading.value = false
@@ -434,22 +370,17 @@ const loadVideo = async () => {
   loading.value = true
   error.value = false
   try {
-    // 自己的视频（待审核）用用户端 API，否则用公开 API
-    const res = isOwnerPreview.value
-      ? await getUserVideoDetail(videoId)
-      : await getPublicVideoDetail(videoId)
+    // 管理员预览 / 用户预览自己的上传 使用专有 API（不检查 isPublic，允许未审核内容）
+    const res = isAdminPreview
+      ? await getAdminVideoDetail(videoId)
+      : isUserPreview
+        ? await getUserVideoDetail(videoId)
+        : await getPublicVideoDetail(videoId)
     if (res.code === 200 && res.data) {
       video.value = res.data
 
       if (video.value.subtitleContent) {
         subtitleCues.value = parseVTT(video.value.subtitleContent)
-      }
-      if (video.value.subtitleContentZh) {
-        subtitleCuesZh.value = parseVTT(video.value.subtitleContentZh)
-      }
-      // 默认激活第一个可用字幕语言
-      if (availableSubtitleLangs.value.length > 0) {
-        activeSubtitleLang.value = availableSubtitleLangs.value[0]
       }
 
       if (video.value.mediaId) {
@@ -469,7 +400,7 @@ const loadVideo = async () => {
         }
       }
 
-      if (video.value.associatedTextId) {
+      if (!isAdminPreview && video.value.associatedTextId) {
         try {
           const favRes = await checkArticleFavorite(video.value.associatedTextId)
           isFavorite.value = favRes.data.isFavorite
@@ -535,13 +466,28 @@ const initPlayer = () => {
       backdrop: true,
       theme: '#1d4ed8',
       lang: navigator.language.startsWith('zh') ? 'zh-cn' : 'en',
-      controls: [],
+      controls: [
+        {
+          position: 'right',
+          html: subtitleVisible.value ? '关闭字幕' : '开启字幕',
+          tooltip: '切换视频高亮字幕',
+          style: {
+            fontSize: '13px',
+            color: '#fff',
+            cursor: 'pointer',
+            padding: '0 10px',
+            opacity: 0.8
+          },
+          click: function (...args) {
+            toggleSubtitle()
+            this.innerHTML = subtitleVisible.value ? '关闭字幕' : '开启字幕'
+          },
+        },
+      ],
     }
 
-    // 获取初始字幕内容
-    const initSubContent = activeSubtitleContent.value
-    if (initSubContent && activeSubtitleLang.value !== 'off') {
-      const subtitleBlob = new Blob([initSubContent], { type: 'text/vtt' })
+    if (video.value.subtitleContent && subtitleVisible.value) {
+      const subtitleBlob = new Blob([video.value.subtitleContent], { type: 'text/vtt' })
       const subtitleUrl = URL.createObjectURL(subtitleBlob)
       options.subtitle = {
         url: subtitleUrl,
@@ -561,31 +507,6 @@ const initPlayer = () => {
     }
 
     artInstance = new Artplayer(options)
-
-    // 添加字幕语言选择弹出菜单
-    if (hasSubtitle.value) {
-      const langs = availableSubtitleLangs.value
-      const defaultLang = activeSubtitleLang.value
-
-      const selectorItems = []
-      if (langs.includes('en')) selectorItems.push({ html: '英文字幕', value: 'en', default: defaultLang === 'en' })
-      if (langs.includes('zh')) selectorItems.push({ html: '中文字幕', value: 'zh', default: defaultLang === 'zh' })
-      if (langs.includes('both')) selectorItems.push({ html: '双语字幕', value: 'both', default: defaultLang === 'both' })
-      selectorItems.push({ html: '关闭字幕', value: 'off', default: defaultLang === 'off' })
-
-      artInstance.controls.add({
-        position: 'right',
-        html: subtitleBtnLabel.value,
-        style: {
-          padding: '0 10px',
-        },
-        selector: selectorItems,
-        onSelect: function (item) {
-          switchSubtitleLang(item.value)
-          return subtitleBtnLabel.value
-        },
-      })
-    }
 
     artInstance.on('video:timeupdate', () => {
       updateActiveCue()
@@ -620,43 +541,21 @@ const initPlayer = () => {
   }
 }
 
-// ─── Subtitle Language Switch ─────────────────────────────────
-const switchSubtitleLang = (lang) => {
-  activeSubtitleLang.value = lang
-
-  if (lang !== 'off') {
-    if (lang === 'en') {
-      subtitleCues.value = parseVTT(video.value?.subtitleContent || '')
-    } else if (lang === 'zh') {
-      subtitleCues.value = parseVTT(video.value?.subtitleContentZh || '')
-    } else if (lang === 'both') {
-      subtitleCues.value = parseVTT(video.value?.subtitleContent || '')
-      subtitleCuesZh.value = parseVTT(video.value?.subtitleContentZh || '')
-    }
-
-    subtitleVisible.value = true
-    const playerContent = activeSubtitleContent.value
-    if (artInstance && playerContent) {
-      const blob = new Blob([playerContent], { type: 'text/vtt' })
-      const url = URL.createObjectURL(blob)
-      artInstance.subtitle.switch(url, { type: 'vtt' })
-      artInstance.subtitle.show = true
-    }
-  } else {
-    subtitleVisible.value = false
-    if (artInstance) {
+// ─── Subtitle Toggle ───────────────────────────────────────────
+const toggleSubtitle = () => {
+  subtitleVisible.value = !subtitleVisible.value
+  if (artInstance) {
+    if (subtitleVisible.value) {
+      if (video.value?.subtitleContent) {
+        const subtitleBlob = new Blob([video.value.subtitleContent], { type: 'text/vtt' })
+        const subtitleUrl = URL.createObjectURL(subtitleBlob)
+        artInstance.subtitle.switch(subtitleUrl, { type: 'vtt' })
+        artInstance.subtitle.show = true
+      }
+    } else {
       artInstance.subtitle.show = false
     }
   }
-
-  // 更新 Artplayer 设置菜单 UI
-  updateSubtitleSettingUI()
-}
-
-// 更新控制栏字幕按钮文字
-function updateSubtitleSettingUI() {
-  if (!artInstance) return
-  // 使用 native selector 后，我们在 onSelect 里返回新文字即可
 }
 
 // ─── Transcript Sync (Video Mode) ──────────────────────────────
@@ -864,31 +763,6 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   background: #f6f7f8;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-/* 待审核状态提示条 */
-.owner-preview-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 960px;
-  margin: 12px auto;
-  padding: 10px 16px;
-  background: #fef9e7;
-  border: 1px solid #f0d283;
-  border-radius: 8px;
-  color: #92600a;
-  font-size: 13px;
-  line-height: 1.5;
-  box-sizing: border-box;
-}
-.owner-preview-banner .el-icon {
-  flex-shrink: 0;
-  font-size: 16px;
-  color: #e6a23c;
-}
-.owner-preview-banner strong {
-  color: #e6a23c;
 }
 
 .player-header {
@@ -1261,9 +1135,8 @@ onBeforeUnmount(() => {
 
 .subtitle-item {
   display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
-  gap: 8px 12px;
+  gap: 12px;
   padding: 10px 20px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1305,18 +1178,6 @@ onBeforeUnmount(() => {
 
 .subtitle-text {
   flex: 1;
-  min-width: 0;
-}
-
-.subtitle-text-zh {
-  width: 100%;
-  padding-left: 72px; /* align with text after time badge */
-  font-size: 15px;
-  color: #64748b;
-  line-height: 1.5;
-}
-.subtitle-item.active .subtitle-text-zh {
-  color: #3b82f6;
 }
 
 /* ─── Flow Text Display ─────────────────────────────────────── */
@@ -1395,9 +1256,8 @@ onBeforeUnmount(() => {
 
 .article-subtitle-item {
   display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
-  gap: 8px 14px;
+  gap: 14px;
   padding: 12px 20px;
   border-bottom: 1px solid #f1f5f9;
   font-size: 16px;
@@ -1429,22 +1289,9 @@ onBeforeUnmount(() => {
 
 .article-subtitle-text {
   flex: 1;
-  min-width: 0;
   user-select: text;
   -webkit-user-select: text;
 }
-
-.article-subtitle-text-zh {
-  width: 100%;
-  padding-left: 76px; /* align with text after time badge */
-  font-size: 14px;
-  color: #64748b;
-  line-height: 1.6;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-
 
 .bottom-spacer { height: 80px; }
 

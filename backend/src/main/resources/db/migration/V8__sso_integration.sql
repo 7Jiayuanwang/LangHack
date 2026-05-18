@@ -53,19 +53,78 @@ CREATE TABLE IF NOT EXISTS sso_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO配置表';
 
 -- 扩展 users 表字段
-ALTER TABLE users
-ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT '是否通过SSO绑定: 0=否, 1=是',
-ADD COLUMN sso_provider VARCHAR(50) COMMENT 'SSO提供商',
-ADD COLUMN sso_subject VARCHAR(255) COMMENT 'SSO唯一标识',
-ADD INDEX idx_sso_bound (sso_bound),
-ADD INDEX idx_sso_subject (sso_provider, sso_subject);
+SET @sso_bound_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_bound'
+);
+SET @sso_bound_sql = IF(
+    @sso_bound_exists = 0,
+    'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''是否通过SSO绑定: 0=否, 1=是''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sso_bound_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sso_provider_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_provider'
+);
+SET @sso_provider_sql = IF(
+    @sso_provider_exists = 0,
+    'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO提供商''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sso_provider_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sso_subject_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_subject'
+);
+SET @sso_subject_sql = IF(
+    @sso_subject_exists = 0,
+    'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO唯一标识''',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sso_subject_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_sso_bound_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_bound'
+);
+SET @idx_sso_bound_sql = IF(
+    @idx_sso_bound_exists = 0,
+    'CREATE INDEX idx_sso_bound ON users (sso_bound)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_sso_bound_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_sso_subject_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_subject'
+);
+SET @idx_sso_subject_sql = IF(
+    @idx_sso_subject_exists = 0,
+    'CREATE INDEX idx_sso_subject ON users (sso_provider, sso_subject)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_sso_subject_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- 插入默认 SSO 配置
-INSERT INTO sso_config (config_key, config_value, config_type, description) VALUES
+INSERT IGNORE INTO sso_config (config_key, config_value, config_type, description) VALUES
 ('sso.enabled', 'false', 'SYSTEM', 'SSO功能总开关'),
 ('sso.protocol', 'CAS', 'SYSTEM', 'SSO协议类型: CAS 或 OAUTH2'),
 ('sso.auto_approval.enabled', 'true', 'SYSTEM', '是否启用自动审批'),
 ('sso.role_mapping.ou=管理员', 'ADMIN', 'ROLE_MAPPING', '管理员角色映射'),
 ('sso.role_mapping.ou=运维', 'OPS', 'ROLE_MAPPING', '运维角色映射'),
 ('sso.role_mapping.ou=教师', 'TEACHER', 'ROLE_MAPPING', '教师角色映射'),
-('sso.role_mapping.ou=学生', 'STUDENT', 'ROLE_MAPPING', '学生角色映射');
+('sso.role_mapping.ou=学生', 'STUDENT', 'ROLE_MAPPING', '学生角色映射'),
+('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId 为 People 的用户映射为 STUDENT 角色');

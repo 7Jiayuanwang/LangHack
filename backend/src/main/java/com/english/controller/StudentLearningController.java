@@ -257,6 +257,7 @@ public class StudentLearningController {
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
+            logger.info("[课文详情] 请求文章详情: textId={}, studentId={}", textId, studentId);
 
             // 校验学生是否有权访问该课文
             assertStudentCanRecord(studentId, textId, null, assignmentId);
@@ -266,6 +267,17 @@ public class StudentLearningController {
 
             Map<String, Object> detail = learningRecordsService.getTextDetailWithAnnotation(studentId, textId,
                     assignmentId);
+
+            // 调试日志：查看返回的版本信息
+            Object versionsObj = detail.get("versions");
+            if (versionsObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, String> versions = (Map<String, String>) versionsObj;
+                logger.info("[课文详情] 文章{} 返回版本数={}, 版本keys={}", textId, versions.size(), versions.keySet());
+            } else {
+                logger.info("[课文详情] 文章{} 无versions字段或类型异常: {}", textId,
+                        versionsObj != null ? versionsObj.getClass().getSimpleName() : "null");
+            }
 
             // 移除自动记录逻辑，学习记录由前端学习页面管理
             // 这样可以避免每次刷新页面都增加学习时长
@@ -1551,63 +1563,47 @@ public class StudentLearningController {
             page = Math.max(1, page);
             size = Math.max(1, Math.min(size, 50));
 
-            QueryWrapper<TextLearningRecord> wrapper = new QueryWrapper<>();
-            wrapper.eq("student_id", studentId).orderByDesc("start_time");
+            // 使用 GROUP BY text_id 的分页查询，确保每页返回正好 size 篇不重复文章
+            int offset = (page - 1) * size;
+            List<Map<String, Object>> groupedRecords = textLearningRecordMapper.getGroupedHistory(studentId, size, offset);
 
-            com.baomidou.mybatisplus.extension.plugins.pagination.Page<TextLearningRecord> pageParam =
-                    new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
-            com.baomidou.mybatisplus.extension.plugins.pagination.Page<TextLearningRecord> recordPage =
-                    textLearningRecordMapper.selectPage(pageParam, wrapper);
+            // 补充文章详情
+            List<Map<String, Object>> records = new ArrayList<>();
+            for (Map<String, Object> row : groupedRecords) {
+                Object textIdObj = row.get("textId");
+                if (textIdObj == null) continue;
+                Long textId = Long.valueOf(textIdObj.toString());
 
-            // 去重：同一篇文章只取最新一条记录，并累计时长
-            Map<Long, Map<String, Object>> textRecordMap = new LinkedHashMap<>();
-            for (TextLearningRecord record : recordPage.getRecords()) {
-                Long textId = record.getTextId();
-                Map<String, Object> existing = textRecordMap.get(textId);
-                if (existing == null) {
-                    Text text = textMapper.selectById(textId);
-                    if (text == null) continue;
+                Text text = textMapper.selectById(textId);
+                if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) continue;
 
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("textId", textId);
-                    item.put("title", text.getTitle());
-                    item.put("difficulty", text.getDifficulty());
-                    item.put("totalDuration", record.getDurationSeconds() != null ? record.getDurationSeconds() : 0);
-                    item.put("isCompleted", record.getIsCompleted() != null && record.getIsCompleted() == 1);
-                    item.put("lastReadAt", record.getStartTime());
-                    item.put("readCount", 1);
-                    textRecordMap.put(textId, item);
-                } else {
-                    int prevDuration = (int) existing.getOrDefault("totalDuration", 0);
-                    existing.put("totalDuration", prevDuration + (record.getDurationSeconds() != null ? record.getDurationSeconds() : 0));
-                    existing.put("readCount", (int) existing.getOrDefault("readCount", 0) + 1);
-                    if (record.getIsCompleted() != null && record.getIsCompleted() == 1) {
-                        existing.put("isCompleted", true);
-                    }
-                }
+                Map<String, Object> item = new HashMap<>();
+                item.put("textId", textId);
+                item.put("title", text.getTitle());
+                item.put("difficulty", text.getDifficulty());
+                item.put("totalDuration", row.get("totalDuration"));
+                item.put("isCompleted", row.get("isCompleted") != null && Long.valueOf(row.get("isCompleted").toString()) == 1);
+                item.put("lastReadAt", row.get("lastReadAt"));
+                item.put("readCount", row.get("readCount"));
+                records.add(item);
             }
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("records", new ArrayList<>(textRecordMap.values()));
-            result.put("total", recordPage.getTotal());
-
-            // 阅读统计概览
-            QueryWrapper<TextLearningRecord> statsWrapper = new QueryWrapper<>();
-            statsWrapper.eq("student_id", studentId);
-            long totalRecords = textLearningRecordMapper.selectCount(statsWrapper);
-
-            statsWrapper = new QueryWrapper<>();
-            statsWrapper.eq("student_id", studentId).eq("is_completed", 1);
-            long completedCount = textLearningRecordMapper.selectCount(statsWrapper);
+            // 阅读统计概览（使用 DISTINCT 来统计唯一文章数）
+            long totalArticlesRead = textLearningRecordMapper.countDistinctTexts(studentId);
+            long completedCount = textLearningRecordMapper.countDistinctCompletedTexts(studentId);
 
             QueryWrapper<ArticleFavorite> favWrapper = new QueryWrapper<>();
             favWrapper.eq("student_id", studentId);
             long favoriteCount = articleFavoriteMapper.selectCount(favWrapper);
 
             Map<String, Object> overview = new HashMap<>();
-            overview.put("totalArticlesRead", totalRecords);
+            overview.put("totalArticlesRead", totalArticlesRead);
             overview.put("completedArticles", completedCount);
             overview.put("favoriteCount", favoriteCount);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", records);
+            result.put("total", totalArticlesRead);
             result.put("overview", overview);
 
             return Result.success(result);

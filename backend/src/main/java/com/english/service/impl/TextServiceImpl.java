@@ -40,6 +40,8 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         String keyword = keywordObj != null ? keywordObj.toString() : null;
         String difficulty = (String) params.get("difficulty");
         Long unitId = params.get("unitId") != null ? Long.valueOf(params.get("unitId").toString()) : null;
+        String tag = (String) params.get("tag");
+        Integer featured = params.get("featured") != null ? ((Number) params.get("featured")).intValue() : null;
 
         Page<Text> pageParam = new Page<>(page, size);
         QueryWrapper<Text> queryWrapper = new QueryWrapper<>();
@@ -56,12 +58,27 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
             queryWrapper.eq("difficulty", difficulty);
         }
 
+        if (tag != null && !tag.trim().isEmpty()) {
+            String[] tags = tag.split(",");
+            for (String t : tags) {
+                String trimmed = t.trim();
+                if (!trimmed.isEmpty()) {
+                    queryWrapper.like("tags", trimmed);
+                }
+            }
+        }
+
+        if (featured != null) {
+            queryWrapper.eq("is_featured", featured);
+        }
+
         // 如果指定了unitId，则按unitId过滤；否则显示所有课文（包括未分配的）
         if (unitId != null) {
             queryWrapper.eq("unit_id", unitId);
         }
 
         queryWrapper.eq("deleted", 0);
+        queryWrapper.eq("status", "APPROVED");
         queryWrapper.orderByDesc("created_time");
 
         IPage<Text> pageResult = page(pageParam, queryWrapper);
@@ -160,6 +177,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (text.getFeaturedPriority() != null) {
             updateWrapper.set("featured_priority", text.getFeaturedPriority());
         }
+        if (text.getStatus() != null) {
+            updateWrapper.set("status", text.getStatus());
+        }
 
         update(updateWrapper);
     }
@@ -178,7 +198,11 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         underlineService.deleteUnderlinesByTextId(id);
 
         // 级联删除该课文的所有习题（TextExercise 无 @TableLogic，物理删除）
-        textExerciseMapper.deleteExercisesByTextId(id);
+        try {
+            textExerciseMapper.deleteExercisesByTextId(id);
+        } catch (Exception e) {
+            log.warn("删除课文关联习题失败（可能text_exercises表未部署） textId=" + id + ": " + e.getMessage());
+        }
 
         // 逻辑删除：@TableLogic 会将 removeById 转换为 UPDATE SET deleted=1
         // 注意：不能用 updateById + setDeleted(1)，因为 @TableLogic 会从 SET 子句中排除 deleted 字段

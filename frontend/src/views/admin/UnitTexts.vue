@@ -478,12 +478,47 @@ onMounted(() => {
 
 <style scoped>
 .unit-texts-management {
+  max-width: 1400px;
+  margin: 0 auto;
   padding: 20px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .unit-texts-management {
+    padding: 30px;
+  }
+  
+  :deep(.el-card__header) {
+    padding: 20px 24px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .title-info h3 {
+    font-size: 24px;
+  }
+
+  :deep(.el-table) {
+    font-size: 16px;
+  }
+
+  :deep(.el-table .cell) {
+    line-height: 1.6;
+    padding: 12px 0;
+  }
+
+  .search-bar {
+    margin-bottom: 25px;
+    padding: 24px;
+  }
 }
 
 .table-wrapper {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
 }
 
 .card-header {
@@ -494,8 +529,9 @@ onMounted(() => {
 
 .title-info h3 {
   margin: 0 0 8px 0;
-  color: #303133;
-  font-size: 18px;
+  color: #1e293b;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .title-info .el-breadcrumb {
@@ -510,8 +546,9 @@ onMounted(() => {
 .search-bar {
   margin-bottom: 20px;
   padding: 20px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  background-color: #f8fafc;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
 }
 
 .search-bar .el-form {
@@ -519,74 +556,90 @@ onMounted(() => {
 }
 
 .pagination {
-  margin-top: 20px;
-  text-align: right;
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
 }
 
 .text-option {
   display: flex;
   flex-direction: column;
-  line-height: 1.4;
+  line-height: 1.5;
+  padding: 4px 0;
 }
 
 .text-title {
-  font-weight: 500;
-  color: #303133;
+  font-weight: 600;
+  color: #1e293b;
 }
 
 .text-meta {
   font-size: 12px;
-  color: #909399;
+  color: #64748b;
 }
 
 .text-detail {
-  padding: 20px 0;
+  padding: 10px 0;
 }
 
 .text-detail h3 {
   margin: 0 0 16px 0;
-  color: #303133;
-  font-size: 18px;
-  font-weight: 500;
+  color: #1e293b;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
 }
 
-.text-meta {
+.text-meta-detail {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e4e7ed;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .create-time {
   font-size: 13px;
-  color: #909399;
+  color: #94a3b8;
 }
 
 .text-content {
-  margin-bottom: 20px;
-  max-height: 50vh;
+  margin-bottom: 24px;
+  max-height: 60vh;
   overflow-y: auto;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  padding: 24px;
+  background-color: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
+  line-height: 1.8;
+  font-size: 16px;
 }
 
 .text-content pre {
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.6;
+  line-height: 1.8;
   font-family: inherit;
-  color: #303133;
+  color: #334155;
   margin: 0;
 }
 
+.text-audio {
+  background: #f1f5f9;
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
 .text-audio h4 {
-  margin: 0 0 12px 0;
-  color: #606266;
+  margin: 0;
+  color: #475569;
   font-size: 14px;
-  font-weight: normal;
+  font-weight: 600;
 }
 
 .dialog-footer {
@@ -597,7 +650,7 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .unit-texts-management {
-    padding: 16px;
+    padding: 12px;
   }
 
   .card-header {
@@ -611,13 +664,14 @@ onMounted(() => {
     justify-content: flex-start;
   }
 
-  .search-bar .el-form {
-    display: block;
+  .search-bar {
+    padding: 16px;
   }
 
   .search-bar .el-form-item {
     margin-right: 0;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
+    display: block;
   }
 }
 </style>

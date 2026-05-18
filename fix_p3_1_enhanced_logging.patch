@@ -1,0 +1,32 @@
+--- a/backend/src/main/java/com/english/service/impl/SchoolDataApiClientImpl.java
++++ b/backend/src/main/java/com/english/service/impl/SchoolDataApiClientImpl.java
+@@ -649,17 +649,25 @@
+                 for (String key : List.of("value", "data", "result", "records", "list", "items")) {
+                     Object data = wrapper.get(key);
+                     if (data instanceof List) {
++                        logger.debug("成功从 wrapper.{} 提取数据数组 url={} size={}", key, url, ((List<?>) data).size());
+                         return new ParsedResponse((List<Map<String, Object>>) data, wrapper);
+                     }
+                 }
+ 
+-                logger.error("学校 API 响应 wrapper 不包含数据数组字段 url={} keys={} fullBody={}",
+-                        url, wrapper.keySet(), responseBody.length() > 2000 ? responseBody.substring(0, 2000) + "..." : responseBody);
++                // 增强错误日志：记录完整的 wrapper 结构用于诊断
++                String wrapperStructure = wrapper.entrySet().stream()
++                    .map(e -> e.getKey() + ":" + (e.getValue() != null ? e.getValue().getClass().getSimpleName() : "null"))
++                    .reduce((a, b) -> a + ", " + b).orElse("empty");
++                logger.error("学校 API 响应 wrapper 不包含数据数组字段 url={} wrapperKeys={} wrapperStructure={} bodyPreview={}",
++                        url, wrapper.keySet(), wrapperStructure, truncateForLog(responseBody));
+                 throw new BusinessException("学校 API 响应缺少数据数组字段，请检查 API 认证配置或联系管理员");
+             } catch (BusinessException e2) {
+                 throw e2;
+             } catch (Exception e2) {
+-                logger.error("学校 API 响应体无法解析为 JSON url={} bodyPreview={} err={}",
+-                        url, truncateForLog(responseBody), e2.getMessage(), e2);
+-                throw new BusinessException("学校 API 响应体无法解析为 JSON");
++                logger.error("学校 API 响应体无法解析为 JSON url={} bodyPreview={} parseError={} errorType={}",
++                        url, truncateForLog(responseBody), e2.getMessage(), e2.getClass().getSimpleName(), e2);
++                throw new BusinessException("学校 API 响应体无法解析为 JSON: " + e2.getMessage());
+             }
+         }
+     }

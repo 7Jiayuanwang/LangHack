@@ -5,7 +5,6 @@ import com.english.dto.Result;
 import com.english.entity.CourseSelection;
 import com.english.entity.LevelExamScore;
 import com.english.entity.StudentSchedule;
-import com.english.mapper.CourseSelectionMapper;
 import com.english.mapper.LevelExamScoreMapper;
 import com.english.service.SchoolDataSyncService;
 import com.english.service.UserService;
@@ -32,9 +31,6 @@ public class StudentDataController {
 
     @Autowired
     private LevelExamScoreMapper levelExamScoreMapper;
-
-    @Autowired
-    private CourseSelectionMapper courseSelectionMapper;
 
     @Autowired
     private SchoolDataSyncService syncService;
@@ -68,26 +64,22 @@ public class StudentDataController {
 
     /**
      * 获取当前学生的选课记录
-     * GET /api/student/course-selections?academicYear=2025-2026&semester=1
+     * GET /api/student/course-selections?academicYear=2026&semester=春
      */
     @GetMapping("/course-selections")
     @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
     public Result<List<CourseSelection>> getMyCourseSelections(
             @RequestParam(required = false) String academicYear,
-            @RequestParam(required = false) Integer semester,
+            @RequestParam(required = false) String semester,
+            @RequestParam(required = false, defaultValue = "false") boolean refresh,
             Authentication authentication) {
         try {
             String studentId = getStudentId(authentication);
-            QueryWrapper<CourseSelection> wrapper = new QueryWrapper<>();
-            wrapper.eq("student_id", studentId);
-            if (academicYear != null && !academicYear.isEmpty()) {
-                wrapper.eq("academic_year", academicYear);
-            }
-            if (semester != null) {
-                wrapper.eq("semester", semester);
-            }
-            wrapper.orderByDesc("academic_year", "semester");
-            return Result.success(courseSelectionMapper.selectList(wrapper));
+            Integer semesterInt = toIntSemester(semester);
+            Duration staleness = refresh ? Duration.ZERO : Duration.ofDays(1);
+            List<CourseSelection> list = syncService.getOrSyncCourseSelections(
+                    studentId, academicYear, semesterInt, staleness);
+            return Result.success(list);
         } catch (Exception e) {
             logger.error("获取选课记录失败", e);
             return Result.error("获取选课记录失败，请稍后重试");
@@ -119,5 +111,12 @@ public class StudentDataController {
             throw new RuntimeException("用户信息不存在");
         }
         return user.getUsername();
+    }
+
+    private Integer toIntSemester(String semester) {
+        if (semester == null || semester.isEmpty()) return null;
+        if ("秋".equals(semester) || "1".equals(semester)) return 1;
+        if ("春".equals(semester) || "2".equals(semester)) return 2;
+        try { return Integer.parseInt(semester); } catch (NumberFormatException e) { return null; }
     }
 }

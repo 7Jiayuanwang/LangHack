@@ -16,6 +16,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,6 +39,9 @@ public class SchoolDataQueryController {
     @Autowired private TeachingPlanMapper teachingPlanMapper;
     @Autowired private TeachingPlanCourseMapper teachingPlanCourseMapper;
     @Autowired private StudentScheduleMapper studentScheduleMapper;
+    @Autowired private SchoolStudentMapper schoolStudentMapper;
+    @Autowired private SchoolTeacherMapper schoolTeacherMapper;
+    @Autowired private TeacherStudentBindingMapper teacherStudentBindingMapper;
     @Autowired private SchoolDataFieldMetadataService fieldMetadataService;
 
     // =========================================================================
@@ -58,7 +62,7 @@ public class SchoolDataQueryController {
         QueryWrapper<AdministrativeClass> wrapper = new QueryWrapper<>();
         if (collegeCode != null && !collegeCode.isEmpty()) wrapper.eq("college_code", collegeCode);
         if (grade != null && !grade.isEmpty()) wrapper.eq("grade", grade);
-        wrapper.orderByDesc("updated_at");
+        wrapper.orderByDesc("grade", "updated_at");
         return Result.success(administrativeClassMapper.selectPage(pageReq, wrapper));
     }
 
@@ -102,7 +106,7 @@ public class SchoolDataQueryController {
         QueryWrapper<TeachingClass> wrapper = new QueryWrapper<>();
         if (academicYear != null && !academicYear.isEmpty()) wrapper.eq("academic_year", academicYear);
         applySemesterFilter(wrapper, semester);
-        wrapper.orderByDesc("updated_at");
+        wrapper.orderByDesc("academic_year", "semester", "updated_at");
         return Result.success(teachingClassMapper.selectPage(pageReq, wrapper));
     }
 
@@ -126,7 +130,7 @@ public class SchoolDataQueryController {
         if (classId != null && !classId.isEmpty()) wrapper.eq("class_id", classId);
         if (academicYear != null && !academicYear.isEmpty()) wrapper.eq("academic_year", academicYear);
         applySemesterFilter(wrapper, semester);
-        wrapper.orderByAsc("day_of_week", "period");
+        wrapper.orderByDesc("academic_year", "semester").orderByAsc("day_of_week", "period");
         return Result.success(courseScheduleMapper.selectPage(pageReq, wrapper));
     }
 
@@ -152,7 +156,7 @@ public class SchoolDataQueryController {
         if (courseCode != null && !courseCode.isEmpty()) wrapper.eq("course_code", courseCode);
         if (academicYear != null && !academicYear.isEmpty()) wrapper.eq("academic_year", academicYear);
         applySemesterFilter(wrapper, semester);
-        wrapper.orderByDesc("updated_at");
+        wrapper.orderByDesc("academic_year", "semester", "updated_at");
         return Result.success(courseSelectionMapper.selectPage(pageReq, wrapper));
     }
 
@@ -196,7 +200,7 @@ public class SchoolDataQueryController {
         QueryWrapper<TeachingPlan> wrapper = new QueryWrapper<>();
         if (majorCode != null && !majorCode.isEmpty()) wrapper.eq("major_code", majorCode);
         if (grade != null && !grade.isEmpty()) wrapper.eq("grade", grade);
-        wrapper.orderByDesc("updated_at");
+        wrapper.orderByDesc("grade", "updated_at");
         return Result.success(teachingPlanMapper.selectPage(pageReq, wrapper));
     }
 
@@ -206,7 +210,7 @@ public class SchoolDataQueryController {
     @GetMapping("/teaching-plans/{planId}/courses")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<java.util.List<TeachingPlanCourse>> listTeachingPlanCourses(
-            @PathVariable String planId) {
+            @PathVariable("planId") String planId) {
         QueryWrapper<TeachingPlanCourse> wrapper = new QueryWrapper<>();
         wrapper.eq("plan_id", planId).orderByAsc("semester", "sort_order");
         return Result.success(teachingPlanCourseMapper.selectList(wrapper));
@@ -232,7 +236,7 @@ public class SchoolDataQueryController {
         if (studentId != null && !studentId.isEmpty()) wrapper.eq("student_id", studentId);
         if (academicYear != null && !academicYear.isEmpty()) wrapper.eq("academic_year", academicYear);
         applySemesterFilter(wrapper, semester);
-        wrapper.orderByAsc("day_of_week", "period");
+        wrapper.orderByDesc("academic_year", "semester").orderByAsc("day_of_week", "period");
         return Result.success(studentScheduleMapper.selectPage(pageReq, wrapper));
     }
 
@@ -242,31 +246,37 @@ public class SchoolDataQueryController {
 
     /**
      * GET /api/admin/school-data/overview
+     * 使用 information_schema 近似行数，毫秒级返回，避免全表 COUNT 阻塞页面。
      */
     @GetMapping("/overview")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Long>> getOverview() {
+        // InnoDB 的 information_schema.TABLE_ROWS 是估算值，刚同步完数据时统计信息未刷新会返回 0。
+        // 直接用 COUNT(*) 保证准确性；11 张表串行查询通常在 1s 内完成。
         Map<String, Long> overview = new LinkedHashMap<>();
-        overview.put("administrative_class", administrativeClassMapper.selectCount(null));
-        overview.put("school_course", schoolCourseMapper.selectCount(null));
-        overview.put("teaching_class", teachingClassMapper.selectCount(null));
-        overview.put("course_schedule", courseScheduleMapper.selectCount(null));
-        overview.put("course_selection", courseSelectionMapper.selectCount(null));
-        overview.put("level_exam_scores", levelExamScoreMapper.selectCount(null));
-        overview.put("teaching_plans", teachingPlanMapper.selectCount(null));
-        overview.put("student_schedule", studentScheduleMapper.selectCount(null));
+        overview.put("administrative_class",    administrativeClassMapper.selectCount(null));
+        overview.put("school_course",           schoolCourseMapper.selectCount(null));
+        overview.put("teacher_courses",         teachingClassMapper.selectCount(null));
+        overview.put("course_schedule",         courseScheduleMapper.selectCount(null));
+        overview.put("course_selection",        courseSelectionMapper.selectCount(null));
+        overview.put("level_exam_scores",       levelExamScoreMapper.selectCount(null));
+        overview.put("teaching_plans",          teachingPlanMapper.selectCount(null));
+        overview.put("student_schedule",        studentScheduleMapper.selectCount(null));
+        overview.put("school_student",          schoolStudentMapper.selectCount(null));
+        overview.put("school_teacher",          schoolTeacherMapper.selectCount(null));
+        overview.put("teacher_student_binding", teacherStudentBindingMapper.selectCount(null));
         return Result.success(overview);
     }
 
     @GetMapping("/{dataSource}/filter-fields")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
-    public Result<java.util.List<SchoolDataFilterFieldDto>> getFilterFields(@PathVariable String dataSource) {
+    public Result<java.util.List<SchoolDataFilterFieldDto>> getFilterFields(@PathVariable("dataSource") String dataSource) {
         return Result.success(fieldMetadataService.getFilterFields(dataSource));
     }
 
     @PostMapping("/{dataSource}/query")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
-    public Result<?> querySchoolData(@PathVariable String dataSource,
+    public Result<?> querySchoolData(@PathVariable("dataSource") String dataSource,
                                      @RequestBody(required = false) SchoolDataQueryRequest request) {
         SchoolDataQueryRequest queryRequest = request == null ? new SchoolDataQueryRequest() : request;
         switch (dataSource) {
@@ -284,31 +294,33 @@ public class SchoolDataQueryController {
                 wrapper.orderByDesc("updated_at");
                 return Result.success(schoolCourseMapper.selectPage(pageReq, wrapper));
             }
-            case "teaching_class": {
+            case "teaching_class":
+            case "teacher_courses": {
                 Page<TeachingClass> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
                 QueryWrapper<TeachingClass> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
-                wrapper.orderByDesc("updated_at");
+                wrapper.orderByDesc("academic_year", "semester", "updated_at");
                 return Result.success(teachingClassMapper.selectPage(pageReq, wrapper));
             }
             case "course_schedule": {
                 Page<CourseSchedule> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
                 QueryWrapper<CourseSchedule> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
-                wrapper.orderByAsc("day_of_week", "period");
+                wrapper.orderByDesc("academic_year", "semester").orderByAsc("day_of_week", "period");
                 return Result.success(courseScheduleMapper.selectPage(pageReq, wrapper));
             }
             case "course_selection": {
                 Page<CourseSelection> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
                 QueryWrapper<CourseSelection> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
-                wrapper.orderByDesc("updated_at");
+                wrapper.orderByDesc("academic_year", "semester", "updated_at");
                 return Result.success(courseSelectionMapper.selectPage(pageReq, wrapper));
             }
             case "level_exam_scores": {
                 Page<LevelExamScore> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
                 QueryWrapper<LevelExamScore> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
+                // 按考试日期降序（最新的在前）
                 wrapper.orderByDesc("exam_date");
                 return Result.success(levelExamScoreMapper.selectPage(pageReq, wrapper));
             }
@@ -323,8 +335,29 @@ public class SchoolDataQueryController {
                 Page<StudentSchedule> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
                 QueryWrapper<StudentSchedule> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
-                wrapper.orderByAsc("day_of_week", "period");
+                wrapper.orderByDesc("academic_year", "semester").orderByAsc("day_of_week", "period");
                 return Result.success(studentScheduleMapper.selectPage(pageReq, wrapper));
+            }
+            case "school_student": {
+                Page<SchoolStudent> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
+                QueryWrapper<SchoolStudent> wrapper = new QueryWrapper<>();
+                applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
+                wrapper.orderByDesc("updated_at");
+                return Result.success(schoolStudentMapper.selectPage(pageReq, wrapper));
+            }
+            case "school_teacher": {
+                Page<SchoolTeacher> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
+                QueryWrapper<SchoolTeacher> wrapper = new QueryWrapper<>();
+                applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
+                wrapper.orderByDesc("updated_at");
+                return Result.success(schoolTeacherMapper.selectPage(pageReq, wrapper));
+            }
+            case "teacher_student_binding": {
+                Page<TeacherStudentBinding> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
+                QueryWrapper<TeacherStudentBinding> wrapper = new QueryWrapper<>();
+                applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
+                wrapper.orderByDesc("sync_time");
+                return Result.success(teacherStudentBindingMapper.selectPage(pageReq, wrapper));
             }
             default:
                 throw new IllegalArgumentException("不支持的数据源: " + dataSource);

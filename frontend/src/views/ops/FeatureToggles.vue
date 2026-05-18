@@ -1,11 +1,20 @@
 <template>
   <div class="feature-toggles-page">
     <div class="page-header">
-      <h2>功能开关管理</h2>
-      <p class="subtitle">三层优先级：用户级 &gt; 标签级 &gt; 全局默认</p>
+      <div class="header-left">
+        <h2>功能开关管理</h2>
+        <div class="priority-badges">
+          <span class="priority-label">三层优先级策略：</span>
+          <el-tag size="small" effect="light" type="danger">1. 用户级</el-tag>
+          <el-icon><ArrowRight /></el-icon>
+          <el-tag size="small" effect="light" type="warning">2. 标签级</el-tag>
+          <el-icon><ArrowRight /></el-icon>
+          <el-tag size="small" effect="light" type="info">3. 全局默认</el-tag>
+        </div>
+      </div>
     </div>
 
-    <el-tabs v-model="activeTab" class="main-tabs">
+    <el-tabs v-model="activeTab" class="main-tabs premium-tabs">
 
       <!-- ── Tab 1：全局开关 ──────────────────────────────────────── -->
       <el-tab-pane label="全局开关" name="global">
@@ -127,39 +136,53 @@
             <template v-else>
               <div class="members-header">
                 <span class="members-title">标签「{{ selectedTag }}」的成员</span>
-                <el-button
-                  link
-                  size="small"
-                  :loading="loadingTagMembers"
-                  @click="loadTagMembers(selectedTag)"
-                >
-                  <el-icon><Refresh /></el-icon> 刷新
-                </el-button>
+                <div class="members-actions">
+                  <el-button
+                    type="primary"
+                    size="small"
+                    @click="openAddUsersDialog"
+                  >
+                    <el-icon><Plus /></el-icon> 添加用户
+                  </el-button>
+                  <el-button
+                    link
+                    size="small"
+                    :loading="loadingTagMembers"
+                    @click="loadTagMembers(selectedTag)"
+                  >
+                    <el-icon><Refresh /></el-icon>
+                  </el-button>
+                </div>
               </div>
               <div v-if="loadingTagMembers" class="loading-state">
                 <el-icon class="is-loading" :size="28"><Loading /></el-icon>
                 <p>加载中...</p>
               </div>
-              <el-table v-else :data="tagMembers" border stripe size="small">
-                <el-table-column prop="id" label="ID" width="80" />
-                <el-table-column prop="username" label="用户名" />
-                <el-table-column label="昵称">
-                  <template #default="{ row }">
-                    {{ row.nickname || row.realName || '-' }}
-                  </template>
-                </el-table-column>
-                <el-table-column label="角色" width="100">
-                  <template #default="{ row }">
-                    <el-tag :type="roleTagType(row.role)" size="small">{{ row.role }}</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="80" fixed="right">
-                  <template #default="{ row }">
-                    <el-button link type="danger" size="small" @click="removeUserFromTag(row)">移除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-              <div v-if="!loadingTagMembers && tagMembers.length === 0" class="members-empty">该标签下暂无用户</div>
+              <template v-else>
+                <el-table :data="tagMembers" border stripe size="small">
+                  <el-table-column type="selection" width="55" />
+                  <el-table-column prop="id" label="ID" width="80" />
+                  <el-table-column prop="username" label="用户名" />
+                  <el-table-column label="昵称">
+                    <template #default="{ row }">
+                      {{ row.nickname || row.realName || '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="角色" width="100">
+                    <template #default="{ row }">
+                      <el-tag :type="roleTagType(row.role)" size="small">{{ row.role }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="80" fixed="right">
+                    <template #default="{ row }">
+                      <el-button link type="danger" size="small" @click="removeUserFromTag(row)">移除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <div v-if="tagMembers.length === 0" class="members-empty">
+                  该标签下暂无用户，点击上方"添加用户"按钮添加
+                </div>
+              </template>
             </template>
           </div>
         </div>
@@ -298,6 +321,97 @@
 
     </el-tabs>
 
+    <!-- ── 添加用户到标签对话框 ──────────────────────────────────────── -->
+    <el-dialog v-model="addUsersDialogVisible" title="添加用户到标签" width="600px">
+      <div class="add-users-dialog-content">
+        <div class="dialog-tag-info">
+          <el-icon><Collection /></el-icon>
+          <span>目标标签：<strong>{{ selectedTag }}</strong></span>
+        </div>
+
+        <el-divider />
+
+        <div class="user-search-section">
+          <el-input
+            v-model="addUsersSearch"
+            placeholder="搜索用户名、ID 或昵称"
+            clearable
+            @keyup.enter="searchUsersForAdd"
+          >
+            <template #append>
+              <el-button :icon="Search" @click="searchUsersForAdd" :loading="searchingUsersForAdd" />
+            </template>
+          </el-input>
+        </div>
+
+        <div v-if="searchingUsersForAdd" class="loading-state">
+          <el-icon class="is-loading" :size="24"><Loading /></el-icon>
+          <p>搜索中...</p>
+        </div>
+
+        <el-table
+          v-else-if="addUsersResults.length > 0"
+          ref="addUsersTableRef"
+          :data="addUsersResults"
+          @selection-change="handleAddUsersSelectionChange"
+          max-height="400px"
+          style="margin-top: 16px"
+        >
+          <el-table-column type="selection" width="55" />
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="username" label="用户名" min-width="120" />
+          <el-table-column label="昵称" min-width="120">
+            <template #default="{ row }">
+              {{ row.nickname || row.realName || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="角色" width="100">
+            <template #default="{ row }">
+              <el-tag :type="roleTagType(row.role)" size="small">{{ row.role }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="当前标签" min-width="150">
+            <template #default="{ row }">
+              <el-tag
+                v-for="tag in (row.tags || [])"
+                :key="tag"
+                size="small"
+                style="margin-right: 4px"
+              >{{ tag }}</el-tag>
+              <span v-if="!row.tags || row.tags.length === 0" style="color: #94a3b8">无</span>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-else-if="addUsersSearch && !searchingUsersForAdd" class="empty-search-result">
+          <el-icon :size="48" color="#94a3b8"><Search /></el-icon>
+          <p>未找到匹配的用户</p>
+        </div>
+
+        <div v-else class="search-hint">
+          <el-icon :size="48" color="#cbd5e1"><Search /></el-icon>
+          <p>请输入关键词搜索用户</p>
+        </div>
+
+        <div v-if="selectedUsersForAdd.length > 0" class="selected-users-summary">
+          <el-icon><Select /></el-icon>
+          <span>已选择 <strong>{{ selectedUsersForAdd.length }}</strong> 个用户</span>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="addUsersDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="selectedUsersForAdd.length === 0"
+          :loading="addingUsers"
+          @click="confirmAddUsersToTag"
+        >
+          添加到标签
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- ── 覆盖规则编辑对话框 ──────────────────────────────────────── -->
     <el-dialog v-model="overrideDialogVisible" :title="overrideForm.isNew ? '新建覆盖规则' : '编辑覆盖规则'" width="420px">
       <el-form :model="overrideForm" label-width="90px">
@@ -336,7 +450,8 @@
 <script setup>
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled } from '@element-plus/icons-vue'
+import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight, Search, Collection, Select } from '@element-plus/icons-vue'
+import { useFeatureToggles, invalidateFeatureToggleCache } from '@/composables/useFeatureToggles'
 import {
   getSystemConfig, updateSystemConfig,
   listAllTags, getUsersByTag, deleteTag, getUserTags, setUserTags,
@@ -345,6 +460,7 @@ import {
 } from '@/api/systemConfig'
 
 const activeTab = ref('global')
+const { load: loadFeatureToggleRuntime } = useFeatureToggles()
 
 watch(activeTab, (val) => {
   if (val === 'tags') loadAllTags()
@@ -356,18 +472,31 @@ const toggles = ref([])
 
 // 角色分组定义（按 configKey 前缀分组）
 const groupDefs = [
-  { key: 'student', label: '学生端', desc: '学生端页面与导航可见性', prefix: 'page_', iconName: 'User' },
-  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',  prefix: 'admin.', iconName: 'Management' },
-  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',  prefix: 'ops.',   iconName: 'Monitor' },
-  { key: 'other',   label: '其他',    desc: '未归类的全局开关',        prefix: null,     iconName: 'MoreFilled' }
+  { key: 'student', label: '学生端', desc: '学生端页面与导航可见性', prefixes: ['page_'], excludePrefixes: ['page_teacher_', 'page_admin_', 'page_ops_'], iconName: 'User' },
+  { key: 'teacher', label: '教师端', desc: '教师端页面与功能',       prefixes: ['page_teacher_'], excludePrefixes: [], iconName: 'Reading' },
+  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',  prefixes: ['admin.', 'page_admin_'], excludePrefixes: [], iconName: 'Management' },
+  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',  prefixes: ['ops.', 'page_ops_'], excludePrefixes: [], iconName: 'Monitor' },
+  { key: 'other',   label: '其他',    desc: '未归类的全局开关',        prefixes: [], excludePrefixes: [], iconName: 'MoreFilled' }
 ]
 
 const roleFilter = ref('all')
-const activeGroupPanels = ref(['student', 'admin', 'ops', 'other'])
+const activeGroupPanels = ref(['student', 'teacher', 'admin', 'ops', 'other'])
 
 const categorize = (key) => {
-  const hit = groupDefs.find(g => g.prefix && key && key.startsWith(g.prefix))
-  return hit ? hit.key : 'other'
+  if (!key) return 'other'
+
+  // 按优先级匹配（更具体的前缀优先）
+  for (const g of groupDefs) {
+    if (g.key === 'other') continue
+
+    // 检查排除前缀
+    if (g.excludePrefixes.some(ex => key.startsWith(ex))) continue
+
+    // 检查匹配前缀
+    if (g.prefixes.some(p => key.startsWith(p))) return g.key
+  }
+
+  return 'other'
 }
 
 const groupedToggles = computed(() => {
@@ -395,6 +524,7 @@ const groupCounts = computed(() => {
 const countTagType = (key) => {
   switch (key) {
     case 'student': return 'info'
+    case 'teacher': return 'success'
     case 'admin':   return 'danger'
     case 'ops':     return 'warning'
     default:        return ''
@@ -423,6 +553,7 @@ const handleToggle = async (toggle, enabled) => {
   toggle.saving = true
   try {
     await updateSystemConfig([{ ...toggle, configValue: enabled ? 'true' : 'false' }])
+    await refreshFeatureToggleRuntime('global_toggle_updated')
     ElMessage.success(`${toggle.description} 已${enabled ? '启用' : '关闭'}`)
   } catch (e) {
     ElMessage.error('更新失败')
@@ -484,10 +615,112 @@ const removeUserFromTag = async (user) => {
     const currentTags = tagsRes?.code === 200 ? (tagsRes.data || []) : []
     const newTags = currentTags.filter(t => t !== selectedTag.value)
     await setUserTags(user.id, newTags)
+    await refreshFeatureToggleRuntime('user_removed_from_tag')
     ElMessage.success('已移除')
     await loadTagMembers(selectedTag.value)
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('操作失败')
+  }
+}
+
+// 添加用户到标签对话框
+const addUsersDialogVisible = ref(false)
+const addUsersSearch = ref('')
+const addUsersResults = ref([])
+const searchingUsersForAdd = ref(false)
+const selectedUsersForAdd = ref([])
+const addingUsers = ref(false)
+const addUsersTableRef = ref(null)
+
+const openAddUsersDialog = () => {
+  if (!selectedTag.value) {
+    ElMessage.warning('请先选择一个标签')
+    return
+  }
+  addUsersDialogVisible.value = true
+  addUsersSearch.value = ''
+  addUsersResults.value = []
+  selectedUsersForAdd.value = []
+}
+
+const searchUsersForAdd = async () => {
+  if (!addUsersSearch.value.trim()) {
+    ElMessage.warning('请输入搜索关键词')
+    return
+  }
+  searchingUsersForAdd.value = true
+  try {
+    const res = await searchUsers({ keyword: addUsersSearch.value, page: 1, size: 50 })
+    if (res?.code === 200) {
+      const users = res.data?.records || res.data || []
+      // 为每个用户加载当前标签
+      const usersWithTags = await Promise.all(
+        users.map(async (user) => {
+          try {
+            const tagsRes = await getUserTags(user.id)
+            return { ...user, tags: tagsRes?.code === 200 ? (tagsRes.data || []) : [] }
+          } catch {
+            return { ...user, tags: [] }
+          }
+        })
+      )
+      addUsersResults.value = usersWithTags
+    }
+  } catch (e) {
+    ElMessage.error('搜索用户失败')
+  } finally {
+    searchingUsersForAdd.value = false
+  }
+}
+
+const handleAddUsersSelectionChange = (selection) => {
+  selectedUsersForAdd.value = selection
+}
+
+const confirmAddUsersToTag = async () => {
+  if (selectedUsersForAdd.value.length === 0) {
+    ElMessage.warning('请至少选择一个用户')
+    return
+  }
+
+  addingUsers.value = true
+  let successCount = 0
+  let failCount = 0
+
+  try {
+    for (const user of selectedUsersForAdd.value) {
+      try {
+        const tagsRes = await getUserTags(user.id)
+        const currentTags = tagsRes?.code === 200 ? (tagsRes.data || []) : []
+
+        // 如果用户已经有这个标签，跳过
+        if (currentTags.includes(selectedTag.value)) {
+          continue
+        }
+
+        // 添加新标签
+        const newTags = [...currentTags, selectedTag.value]
+        await setUserTags(user.id, newTags)
+        successCount++
+      } catch {
+        failCount++
+      }
+    }
+
+    await refreshFeatureToggleRuntime('users_added_to_tag')
+
+    if (failCount === 0) {
+      ElMessage.success(`成功添加 ${successCount} 个用户到标签「${selectedTag.value}」`)
+    } else {
+      ElMessage.warning(`添加完成：成功 ${successCount} 个，失败 ${failCount} 个`)
+    }
+
+    addUsersDialogVisible.value = false
+    await loadTagMembers(selectedTag.value)
+  } catch (e) {
+    ElMessage.error('批量添加失败')
+  } finally {
+    addingUsers.value = false
   }
 }
 
@@ -572,6 +805,7 @@ const saveUserTags = async () => {
   if (!tagUserId.value) return
   try {
     await setUserTags(tagUserId.value, currentUserTags.value)
+    await refreshFeatureToggleRuntime('user_tags_updated')
     ElMessage.success('标签已保存')
   } catch (e) {
     ElMessage.error('保存标签失败')
@@ -636,6 +870,7 @@ const saveOverride = async () => {
       enabled: f.enabled,
       description: f.description
     })
+    await refreshFeatureToggleRuntime('feature_override_upserted')
     ElMessage.success('保存成功')
     overrideDialogVisible.value = false
     if (f.scope === 'tag') loadTagOverrides()
@@ -651,11 +886,21 @@ const removeOverride = async (scope, row) => {
   try {
     await ElMessageBox.confirm(`确认删除该覆盖规则？`, '提示', { type: 'warning' })
     await deleteFeatureOverride(scope, row.scopeValue, row.featureKey)
+    await refreshFeatureToggleRuntime('feature_override_deleted')
     ElMessage.success('已删除')
     if (scope === 'tag') loadTagOverrides()
     else loadUserOverrides()
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('删除失败')
+  }
+}
+
+const refreshFeatureToggleRuntime = async (reason) => {
+  invalidateFeatureToggleCache(reason)
+  try {
+    await loadFeatureToggleRuntime({ authenticated: true, force: true })
+  } catch {
+    // fall back to lazy reload on next guarded navigation
   }
 }
 
@@ -669,109 +914,83 @@ onMounted(() => {
 
 <style scoped>
 .feature-toggles-page {
-  max-width: 900px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .feature-toggles-page {
+    padding: 30px;
+  }
+  
+  .page-header h2 {
+    font-size: 28px;
+  }
+
+  :deep(.el-tabs__item) {
+    font-size: 16px;
+    height: 48px;
+  }
+
+  .toggle-name {
+    font-size: 16px;
+  }
+
+  .group-label {
+    font-size: 18px;
+  }
+
+  :deep(.el-table) {
+    font-size: 14px;
+  }
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 32px;
 }
 
-.page-header h2 {
-  margin: 0 0 6px;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #64748b;
-}
-
-.main-tabs {
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #e2e8f0;
-}
-
-.toggles-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.role-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  flex-wrap: wrap;
-}
-
-.role-filter-label {
-  font-size: 13px;
-  color: #475569;
-  font-weight: 500;
-}
-
-.role-filter-row :deep(.el-radio-button__inner) {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.group-collapse {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.group-title {
+.priority-badges {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding-right: 8px;
 }
 
-.group-icon {
-  font-size: 16px;
-}
-
-.group-icon--student { color: #2563eb; }
-.group-icon--admin   { color: #dc2626; }
-.group-icon--ops     { color: #d97706; }
-.group-icon--other   { color: #64748b; }
-
-.group-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.group-count {
-  margin-left: 2px;
-}
-
-.group-desc {
-  margin-left: 8px;
-  font-size: 12px;
-  color: #94a3b8;
-  font-weight: normal;
-}
-
-.empty-filter {
-  padding: 40px;
-  text-align: center;
-  color: #94a3b8;
+.priority-label {
   font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.premium-tabs {
+  background: white;
+  border-radius: 24px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+}
+
+:deep(.el-tabs__header) {
+  margin-bottom: 24px;
+  padding: 0 16px;
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+:deep(.el-tabs__item) {
+  font-size: 15px;
+  font-weight: 600;
+  height: 44px;
+}
+
+.toggles-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
 }
 
 .toggle-card {
@@ -780,167 +999,89 @@ onMounted(() => {
   justify-content: space-between;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 14px 18px;
+  border-radius: 16px;
+  padding: 16px 20px;
+  transition: all 0.2s;
 }
 
-.toggle-info { flex: 1; }
+.toggle-card:hover {
+  background: white;
+  border-color: #4f46e5;
+  box-shadow: 0 8px 16px rgba(79, 70, 229, 0.05);
+}
 
 .toggle-name {
-  margin: 0 0 3px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
 }
 
-.toggle-key {
-  font-size: 12px;
-  color: #94a3b8;
-  font-family: monospace;
-}
-
-.save-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 16px;
-  padding: 10px 14px;
-  background: #f0f9ff;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #0369a1;
-}
-
-.section-toolbar {
+.role-filter-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: #f1f5f9;
+  border-radius: 16px;
 }
 
-.user-tag-section {
-  margin-top: 8px;
+.group-collapse {
+  border: none;
 }
 
-.user-search-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.selected-user-tags {
-  margin-top: 12px;
-  padding: 12px;
-  background: #f8fafc;
-  border-radius: 8px;
+:deep(.group-collapse .el-collapse-item) {
   border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  margin-bottom: 12px;
+  overflow: hidden;
 }
 
-.selected-user-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  font-size: 13px;
-  color: #475569;
+:deep(.group-collapse .el-collapse-item__header) {
+  border-bottom: none;
+  background: white;
+  padding: 12px 20px;
 }
 
-.user-tag-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+:deep(.group-collapse .el-collapse-item__wrap) {
+  border-bottom: none;
+  background: #f8fafc;
 }
 
-.user-tag-chip {
-  cursor: default;
-}
-
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px;
-  color: #94a3b8;
-}
-
-/* ── 标签管理两栏布局 ───────────────────────────────────────────── */
 .tags-two-col {
   display: flex;
-  gap: 16px;
-  margin-bottom: 8px;
-  min-height: 200px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .tag-list-panel {
-  width: 200px;
-  flex-shrink: 0;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px;
+  width: 240px;
   background: #f8fafc;
-  display: flex;
-  flex-direction: column;
-}
-
-.tag-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.tag-list-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.empty-tags {
-  font-size: 12px;
-  color: #94a3b8;
-  text-align: center;
-  padding: 20px 0;
-}
-
-.tag-chip-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-}
-
-.tag-chip {
-  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
   border-radius: 20px;
-  background: #e2e8f0;
-  color: #475569;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tag-chip:hover {
-  background: #bfdbfe;
-  color: #1d4ed8;
-}
-
-.tag-chip--active {
-  background: #3b82f6;
-  color: #fff;
+  padding: 20px;
 }
 
 .tag-members-panel {
   flex: 1;
-  min-width: 0;
+  background: white;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px;
-  background: #fff;
+  border-radius: 20px;
+  padding: 20px;
+}
+
+.tag-chip {
+  padding: 8px 16px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.tag-chip--active {
+  background: #4f46e5;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
 }
 
 .members-placeholder {
@@ -972,4 +1113,69 @@ onMounted(() => {
   font-size: 13px;
   padding: 16px 0;
 }
+
+.add-users-dialog-content {
+  min-height: 300px;
+}
+
+.dialog-tag-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.dialog-tag-info strong {
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+.user-search-section {
+  margin-bottom: 16px;
+}
+
+.empty-search-result,
+.search-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+.empty-search-result p,
+.search-hint p {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.selected-users-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #1e40af;
+}
+
+.selected-users-summary strong {
+  color: #1e3a8a;
+  font-weight: 700;
+}
+
+.members-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 </style>

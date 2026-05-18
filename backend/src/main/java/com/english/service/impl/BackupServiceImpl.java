@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.PostConstruct;
 import javax.sql.DataSource;
@@ -35,6 +36,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.GZIPInputStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,6 +49,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
     private static final DateTimeFormatter SQL_DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final AtomicBoolean backupInProgress = new AtomicBoolean(false);
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
+    private static final Set<String> SUCCESS_STATUSES = Set.of("SUCCESS", "COMPLETED");
 
     private final Executor executor;
     private final DataSource masterDataSource;
@@ -184,7 +188,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                         executeFullBackup(record);
                     }
                     // Log async completion result
-                    String logDetail = "SUCCESS".equals(record.getStatus())
+                    String logDetail = isSuccessfulStatus(record.getStatus())
                             ? "备份执行成功，文件大小: " + formatFileSizeInternal(record.getFileSize())
                             : "备份执行失败: " + record.getErrorMessage();
                     operationLogService.log(record.getCreatedBy(), "BACKUP_CREATE", record.getId(),
@@ -219,6 +223,242 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         return record;
     }
 
+    // 分类备份表映射
+    private static final Map<String, List<String>> CATEGORY_TABLES = new LinkedHashMap<>();
+    static {
+        CATEGORY_TABLES.put("system_config", Arrays.asList(
+                "system_config", "sso_config", "ai_provider", "backup_config", "update_config"));
+        CATEGORY_TABLES.put("user_data", Arrays.asList(
+                "users", "student_classes", "user_tags", "article_favorites",
+                "learning_records", "text_learning_records", "user_text_reads",
+                "vocabulary_books", "underlines"));
+        CATEGORY_TABLES.put("business_data", Arrays.asList(
+                "courses", "units", "texts", "classes", "assignments",
+                "words", "media", "videos", "score_records"));
+        CATEGORY_TABLES.put("school_data", Arrays.asList(
+                "school_student", "school_teacher", "school_course", "teaching_class",
+                "course_schedule", "course_selection", "level_exam_scores",
+                "teacher_student_binding", "administrative_class", "teaching_plans",
+                "teaching_plan_courses", "sync_logs"));
+    }
+
+    @Override
+    public BackupRecord createCategoryBackup(String createdBy, String category) {
+        if (!backupEnabled) {
+            throw new BusinessException("备份功能已禁用");
+        }
+        if (!CATEGORY_TABLES.containsKey(category)) {
+            throw new BusinessException("不支持的备份分类: " + category
+                    + "，可选: " + String.join(", ", CATEGORY_TABLES.keySet()));
+        }
+        long usableSpace = Paths.get(backupDir).toFile().getUsableSpace();
+        if (usableSpace < 100 * 1024 * 1024) {
+            throw new BusinessException("磁盘空间不足，请先清理旧备份或扩展存储");
+        }
+        if (!backupInProgress.compareAndSet(false, true)) {
+            throw new BusinessException("已有备份任务正在执行，请稍后再试");
+        }
+
+        BackupRecord record;
+        try {
+            String timestamp = LocalDateTime.now().format(FILENAME_FORMATTER);
+            String filename = "english_learning_" + category + "_" + timestamp + ".sql";
+            record = new BackupRecord();
+            record.setFilename(filename);
+            record.setBackupType("MANUAL");
+            record.setBackupMode("FULL");
+            record.setCategory(category);
+            record.setStatus("IN_PROGRESS");
+            record.setCreatedBy(createdBy);
+            record.setCreatedTime(LocalDateTime.now());
+            record.setStoragePath(Paths.get(backupDir, filename).toAbsolutePath().toString());
+            save(record);
+        } catch (Exception e) {
+            backupInProgress.set(false);
+            logger.error("Failed to create category backup record", e);
+            throw new BusinessException("创建备份记录失败，请稍后重试");
+        }
+
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    executeCategoryBackup(record, CATEGORY_TABLES.get(category));
+                    String logDetail = isSuccessfulStatus(record.getStatus())
+                            ? "分类备份[" + category + "]完成，文件大小: " + formatFileSizeInternal(record.getFileSize())
+                            : "分类备份[" + category + "]失败: " + record.getErrorMessage();
+                    operationLogService.log(record.getCreatedBy(), "BACKUP_CREATE", record.getId(),
+                            record.getFilename(), logDetail, record.getStatus(), null);
+                } catch (Exception e) {
+                    logger.error("Category backup task failed unexpectedly", e);
+                    try {
+                        record.setStatus("FAILED");
+                        record.setErrorMessage("备份执行异常");
+                        record.setCompletedTime(LocalDateTime.now());
+                        updateById(record);
+                    } catch (Exception updateEx) {
+                        logger.error("Failed to update backup record after failure", updateEx);
+                    }
+                    operationLogService.log(record.getCreatedBy(), "BACKUP_CREATE", record.getId(),
+                            record.getFilename(), "分类备份执行异常", "FAILED", null);
+                } finally {
+                    backupInProgress.set(false);
+                }
+            }, executor);
+        } catch (Throwable t) {
+            backupInProgress.set(false);
+            logger.error("Failed to submit category backup task to executor", t);
+            record.setStatus("FAILED");
+            record.setErrorMessage("提交备份任务失败");
+            record.setCompletedTime(LocalDateTime.now());
+            updateById(record);
+            if (t instanceof Error) throw (Error) t;
+            throw new BusinessException("备份任务提交失败，请稍后重试");
+        }
+
+        return record;
+    }
+
+    @Override
+    public BackupRecord importBackup(String createdBy, MultipartFile file, String mode, String category) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("请选择要导入的备份文件");
+        }
+
+        String originalFilename = defaultString(file.getOriginalFilename(), "backup.sql").trim();
+        String lowerName = originalFilename.toLowerCase(Locale.ROOT);
+        if (!(lowerName.endsWith(".sql") || lowerName.endsWith(".gz"))) {
+            throw new BusinessException("仅支持导入 .sql 或 .gz 备份文件");
+        }
+
+        String normalizedMode = normalizeImportMode(mode, originalFilename);
+        String normalizedCategory = normalizeImportCategory(category, originalFilename);
+        String safeFilename = buildImportedFilename(originalFilename);
+        Path targetPath = resolveImportTargetPath(safeFilename);
+
+        try {
+            Files.createDirectories(targetPath.getParent());
+            file.transferTo(targetPath);
+        } catch (IOException e) {
+            logger.error("Failed to store imported backup: {}", originalFilename, e);
+            throw new BusinessException("保存导入备份文件失败");
+        }
+
+        BackupRecord record = new BackupRecord();
+        record.setFilename(safeFilename);
+        record.setFileSize(file.getSize());
+        record.setBackupType("IMPORTED");
+        record.setBackupMode(normalizedMode);
+        record.setCategory(normalizedCategory);
+        record.setStatus("SUCCESS");
+        record.setStoragePath(targetPath.toString());
+        record.setCreatedBy(createdBy);
+        record.setDatabaseSize(0L);
+        record.setCreatedTime(LocalDateTime.now());
+        record.setCompletedTime(LocalDateTime.now());
+        try {
+            save(record);
+        } catch (Exception e) {
+            try {
+                Files.deleteIfExists(targetPath);
+            } catch (IOException cleanupEx) {
+                logger.warn("Failed to clean up imported backup file after DB save failure: {}", targetPath, cleanupEx);
+            }
+            logger.error("Failed to save imported backup record", e);
+            throw new BusinessException("写入导入备份记录失败");
+        }
+        return enrichBackupRecord(record);
+    }
+
+    private void executeCategoryBackup(BackupRecord record, List<String> tables) {
+        Path outputPath = Paths.get(record.getStoragePath()).toAbsolutePath().normalize();
+        Path allowedDir = Paths.get(backupDir).toAbsolutePath().normalize();
+        if (!outputPath.startsWith(allowedDir)) {
+            logger.error("Path traversal detected in category backup output: {}", record.getFilename());
+            record.setStatus("FAILED");
+            record.setErrorMessage("备份输出路径异常");
+            record.setCompletedTime(LocalDateTime.now());
+            updateById(record);
+            return;
+        }
+
+        try {
+            DbConnectionInfo connInfo = parseJdbcUrl();
+            String databaseName = extractDatabaseName();
+
+            List<String> cmd = new ArrayList<>(Arrays.asList(
+                    mysqldumpPath,
+                    "-h", connInfo.host,
+                    "-P", String.valueOf(connInfo.port),
+                    "-u", dbUsername,
+                    "--single-transaction",
+                    "--routines",
+                    "--triggers",
+                    "--result-file=" + record.getStoragePath(),
+                    databaseName
+            ));
+            cmd.addAll(tables);
+
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.environment().put("MYSQL_PWD", dbPassword);
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            try {
+                StringBuilder output = new StringBuilder();
+                Thread outputReader = new Thread(() -> {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            output.append(line).append("\n");
+                        }
+                    } catch (IOException ignored) {}
+                });
+                outputReader.setDaemon(true);
+                outputReader.start();
+
+                boolean finished = process.waitFor(10, TimeUnit.MINUTES);
+                outputReader.join(5000);
+
+                if (!finished) {
+                    process.destroyForcibly();
+                    record.setStatus("FAILED");
+                    record.setErrorMessage("备份超时（10分钟）");
+                    record.setCompletedTime(LocalDateTime.now());
+                    updateById(record);
+                    return;
+                }
+
+                int exitCode = process.exitValue();
+                if (exitCode != 0) {
+                    String errMsg = output.toString().trim();
+                    logger.error("mysqldump category backup failed (exit {}): {}", exitCode, errMsg);
+                    record.setStatus("FAILED");
+                    record.setErrorMessage("mysqldump 退出码: " + exitCode);
+                    record.setCompletedTime(LocalDateTime.now());
+                    updateById(record);
+                    return;
+                }
+            } finally {
+                process.destroy();
+            }
+
+            Path filePath = Paths.get(record.getStoragePath());
+            long fileSize = Files.exists(filePath) ? Files.size(filePath) : 0;
+            record.setFileSize(fileSize);
+            record.setStatus("SUCCESS");
+            record.setCompletedTime(LocalDateTime.now());
+            updateById(record);
+            logger.info("Category backup [{}] completed: {} ({} bytes)", record.getCategory(), record.getFilename(), fileSize);
+
+        } catch (Exception e) {
+            logger.error("Category backup execution failed", e);
+            record.setStatus("FAILED");
+            record.setErrorMessage("备份执行失败: " + e.getMessage());
+            record.setCompletedTime(LocalDateTime.now());
+            updateById(record);
+        }
+    }
+
     @Override
     public void executeScheduledBackup() {
         BackupConfig effectiveConfig = getEffectiveConfig();
@@ -246,7 +486,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
             }
             // Log scheduled backup result
             String modeLabel = "INCREMENTAL".equals(mode) ? "增量" : "全量";
-            String logDetail = "SUCCESS".equals(record.getStatus())
+            String logDetail = isSuccessfulStatus(record.getStatus())
                     ? "定时" + modeLabel + "备份完成，文件大小: " + formatFileSizeInternal(record.getFileSize())
                     : "定时" + modeLabel + "备份失败: " + record.getErrorMessage();
             operationLogService.log("SYSTEM", "BACKUP_SCHEDULED", record.getId(),
@@ -261,7 +501,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                     "定时备份失败: " + safeMsg, "FAILED", null);
             // Update record status if it was created but not yet marked as FAILED/SUCCESS
             if (record != null && record.getId() != null
-                    && !"SUCCESS".equals(record.getStatus()) && !"FAILED".equals(record.getStatus())) {
+                    && !isSuccessfulStatus(record.getStatus()) && !"FAILED".equals(normalizeStatus(record.getStatus()))) {
                 try {
                     record.setStatus("FAILED");
                     record.setErrorMessage("定时备份执行异常");
@@ -295,15 +535,39 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         if (size < 1) size = 10;
         if (size > 100) size = 100;
 
+        // Lazily clean up IN_PROGRESS records older than 2 hours (handles cases where
+        // @PostConstruct cleanup was skipped because the container was not restarted)
+        try {
+            LocalDateTime twoHoursAgo = LocalDateTime.now().minus(2, ChronoUnit.HOURS);
+            QueryWrapper<BackupRecord> staleWrapper = new QueryWrapper<>();
+            staleWrapper.eq("status", "IN_PROGRESS").lt("created_time", twoHoursAgo);
+            List<BackupRecord> staleRecords = list(staleWrapper);
+            for (BackupRecord stale : staleRecords) {
+                stale.setStatus("FAILED");
+                stale.setErrorMessage("备份超时（超过2小时未完成）");
+                stale.setCompletedTime(LocalDateTime.now());
+                updateById(stale);
+                logger.warn("Marked timed-out IN_PROGRESS backup as FAILED: id={}, file={}", stale.getId(), stale.getFilename());
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to cleanup timed-out backup records: {}", e.getMessage());
+        }
+
         QueryWrapper<BackupRecord> wrapper = new QueryWrapper<>();
         if (backupType != null && !backupType.isEmpty()) {
             wrapper.eq("backup_type", backupType);
         }
         if (status != null && !status.isEmpty()) {
-            wrapper.eq("status", status);
+            if (isSuccessfulStatus(status)) {
+                wrapper.in("status", SUCCESS_STATUSES);
+            } else {
+                wrapper.eq("status", normalizeStatus(status));
+            }
         }
         wrapper.orderByDesc("created_time");
-        return page(new Page<>(page, size), wrapper);
+        IPage<BackupRecord> result = page(new Page<>(page, size), wrapper);
+        enrichBackupPage(result);
+        return result;
     }
 
     @Override
@@ -312,7 +576,89 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         if (record == null) {
             throw new BusinessException("备份记录不存在");
         }
-        return record;
+        return enrichBackupRecord(record);
+    }
+
+    @Override
+    public Map<String, Object> getBackupPreview(Long id, int maxLines, int maxChars) {
+        BackupRecord record = getBackupById(id);
+        if (!isSuccessfulStatus(record.getStatus())) {
+            throw new BusinessException("仅可预览状态为成功的备份文件");
+        }
+
+        Path filePath = resolveValidatedBackupPath(record, true);
+        int effectiveMaxLines = Math.min(Math.max(maxLines, 1), 500);
+        int effectiveMaxChars = Math.min(Math.max(maxChars, 200), 100000);
+
+        StringBuilder preview = new StringBuilder();
+        int lineCount = 0;
+        int totalLinesRead = 0;
+        int skippedLines = 0;
+        boolean truncated = false;
+        boolean foundDataSection = false;
+
+        try (BufferedReader reader = openPreviewReader(filePath)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                totalLinesRead++;
+
+                // 智能跳过无用的头部内容
+                if (!foundDataSection) {
+                    String trimmed = line.trim();
+                    // 跳过注释、空行、SET 语句、USE 语句
+                    if (trimmed.isEmpty()
+                        || trimmed.startsWith("--")
+                        || trimmed.startsWith("/*")
+                        || trimmed.startsWith("*/")
+                        || trimmed.startsWith("SET ")
+                        || trimmed.startsWith("USE ")
+                        || trimmed.startsWith("/*!")) {
+                        skippedLines++;
+                        continue;
+                    }
+                    // 找到第一个有效语句（CREATE/INSERT/DROP/ALTER）
+                    if (trimmed.startsWith("CREATE ")
+                        || trimmed.startsWith("INSERT ")
+                        || trimmed.startsWith("DROP ")
+                        || trimmed.startsWith("ALTER ")
+                        || trimmed.startsWith("LOCK ")
+                        || trimmed.startsWith("UNLOCK ")) {
+                        foundDataSection = true;
+                        preview.append("-- [跳过了前 ").append(skippedLines).append(" 行注释和配置]\n\n");
+                    } else {
+                        skippedLines++;
+                        continue;
+                    }
+                }
+
+                // 检查是否超出限制
+                if (lineCount >= effectiveMaxLines || preview.length() + line.length() + 1 > effectiveMaxChars) {
+                    truncated = true;
+                    break;
+                }
+
+                // 添加行内容
+                if (lineCount > 0 || foundDataSection) {
+                    preview.append('\n');
+                }
+                preview.append(line);
+                lineCount++;
+            }
+        } catch (IOException e) {
+            logger.error("Failed to read backup preview: {}", filePath, e);
+            throw new BusinessException("读取备份预览失败");
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("record", record);
+        result.put("preview", preview.toString());
+        result.put("truncated", truncated);
+        result.put("lineCount", lineCount);
+        result.put("totalLinesRead", totalLinesRead);
+        result.put("skippedLines", skippedLines);
+        result.put("maxLines", effectiveMaxLines);
+        result.put("maxChars", effectiveMaxChars);
+        return result;
     }
 
     @Override
@@ -326,15 +672,12 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
 
         // Delete the physical file
         try {
-            Path filePath = Paths.get(record.getStoragePath()).toAbsolutePath().normalize();
-            Path allowedDir = Paths.get(backupDir).toAbsolutePath().normalize();
-
-            if (!filePath.startsWith(allowedDir)) {
-                logger.error("Path traversal attempt in deleteBackup: {}", filePath);
-                throw new BusinessException("备份文件路径无效，无法删除");
-            }
+            Path filePath = resolveValidatedBackupPath(record, false);
 
             if (Files.exists(filePath)) {
+                if (!Files.isRegularFile(filePath)) {
+                    throw new BusinessException("备份文件类型无效，无法删除");
+                }
                 Files.delete(filePath);
                 logger.info("Backup file deleted: {}", filePath);
             }
@@ -351,23 +694,10 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
     @Override
     public Path getBackupFilePath(Long id) {
         BackupRecord record = getBackupById(id);
-        if (!"SUCCESS".equals(record.getStatus())) {
+        if (!isSuccessfulStatus(record.getStatus())) {
             throw new BusinessException("仅可下载状态为成功的备份文件");
         }
-
-        Path filePath = Paths.get(record.getStoragePath()).toAbsolutePath().normalize();
-        Path allowedDir = Paths.get(backupDir).toAbsolutePath().normalize();
-
-        if (!filePath.startsWith(allowedDir)) {
-            logger.error("Path traversal attempt detected: {} is outside {}", filePath, allowedDir);
-            throw new BusinessException("备份文件路径无效");
-        }
-
-        if (!Files.exists(filePath)) {
-            throw new BusinessException("备份文件不存在，可能已被手动删除");
-        }
-
-        return filePath;
+        return resolveValidatedBackupPath(record, true);
     }
 
     @Override
@@ -384,7 +714,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
 
         try {
             BackupRecord record = getBackupById(id);
-            if (!"SUCCESS".equals(record.getStatus())) {
+            if (!isSuccessfulStatus(record.getStatus())) {
                 throw new BusinessException("仅可从成功的备份中恢复");
             }
 
@@ -394,17 +724,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                         id, record.getBaseBackupId());
             }
 
-            Path filePath = Paths.get(record.getStoragePath()).toAbsolutePath().normalize();
-            Path allowedDir = Paths.get(backupDir).toAbsolutePath().normalize();
-
-            if (!filePath.startsWith(allowedDir)) {
-                logger.error("Path traversal attempt in restoreFromBackup: {}", filePath);
-                throw new BusinessException("备份文件路径无效");
-            }
-
-            if (!Files.exists(filePath)) {
-                throw new BusinessException("备份文件不存在");
-            }
+            Path filePath = resolveValidatedBackupPath(record, true);
 
             DbConnectionInfo connInfo = parseJdbcUrl();
             String mysqlPath;
@@ -424,11 +744,23 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                         databaseName
                 );
                 pb.environment().put("MYSQL_PWD", dbPassword);
-                pb.redirectInput(filePath.toFile());
                 pb.redirectErrorStream(true);
 
                 Process process = pb.start();
                 try {
+                    AtomicReference<IOException> inputError = new AtomicReference<>();
+                    Thread inputWriter = new Thread(() -> {
+                        try (OutputStream processInput = process.getOutputStream();
+                             InputStream backupInput = openBackupInputStream(filePath)) {
+                            backupInput.transferTo(processInput);
+                        } catch (IOException e) {
+                            inputError.set(e);
+                            logger.error("Error streaming backup into mysql process", e);
+                        }
+                    });
+                    inputWriter.setDaemon(true);
+                    inputWriter.start();
+
                     // Read stdout in daemon thread to prevent readLine blocking timeout
                     StringBuilder output = new StringBuilder();
                     Thread outputReader = new Thread(() -> {
@@ -447,16 +779,26 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                     boolean completed = process.waitFor(60, TimeUnit.MINUTES);
                     if (!completed) {
                         process.destroyForcibly();
+                        inputWriter.join(5000);
                         outputReader.join(5000);
                         logger.error("Database restore timed out after 60 minutes");
                         throw new BusinessException("数据库恢复超时，已中止");
                     }
 
+                    inputWriter.join(5000);
                     outputReader.join(5000);
+                    if (inputWriter.isAlive()) {
+                        process.destroyForcibly();
+                        logger.error("Timed out waiting for backup input writer thread to finish");
+                        throw new BusinessException("数据库恢复失败，备份输入未完成");
+                    }
                     int exitCode = process.exitValue();
                     if (exitCode != 0) {
                         logger.error("Database restore failed with exit code {}: {}", exitCode, output);
                         throw new BusinessException("数据库恢复失败，请检查日志");
+                    }
+                    if (inputError.get() != null) {
+                        throw new BusinessException("数据库恢复失败，备份文件读取或输入异常");
                     }
 
                     logger.warn("Database restored from backup: {}. Application restart is recommended to refresh cached data.", record.getFilename());
@@ -477,6 +819,173 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
     }
 
     @Override
+    public void restoreFromBackupIncremental(Long id, String confirmDatabaseName) {
+        String databaseName = extractDatabaseName();
+        if (!databaseName.equals(confirmDatabaseName)) {
+            throw new BusinessException("数据库名称确认不匹配，请确认后重新输入");
+        }
+
+        if (!backupInProgress.compareAndSet(false, true)) {
+            throw new BusinessException("已有备份或恢复任务正在执行，请稍后再试");
+        }
+
+        try {
+            BackupRecord record = getBackupById(id);
+            if (!isSuccessfulStatus(record.getStatus())) {
+                throw new BusinessException("仅可从成功的备份中恢复");
+            }
+
+            Path filePath = resolveValidatedBackupPath(record, true);
+
+            DbConnectionInfo connInfo = parseJdbcUrl();
+            String mysqlPath;
+            int lastIdx = mysqldumpPath.lastIndexOf("mysqldump");
+            if (lastIdx >= 0) {
+                mysqlPath = mysqldumpPath.substring(0, lastIdx) + "mysql" + mysqldumpPath.substring(lastIdx + "mysqldump".length());
+            } else {
+                mysqlPath = "mysql";
+            }
+
+            try {
+                // Convert backup SQL to incremental restore format (INSERT -> INSERT IGNORE INTO)
+                Path convertedPath = convertToIncrementalRestore(filePath);
+                ProcessBuilder pb = new ProcessBuilder(
+                        mysqlPath,
+                        "-h", connInfo.host,
+                        "-P", String.valueOf(connInfo.port),
+                        "-u", dbUsername,
+                        databaseName
+                );
+                pb.environment().put("MYSQL_PWD", dbPassword);
+                pb.redirectErrorStream(true);
+
+                Process process = pb.start();
+                try {
+                    AtomicReference<IOException> inputError = new AtomicReference<>();
+                    Thread inputWriter = new Thread(() -> {
+                        try (OutputStream processInput = process.getOutputStream();
+                             InputStream backupInput = openBackupInputStream(convertedPath)) {
+                            backupInput.transferTo(processInput);
+                        } catch (IOException e) {
+                            inputError.set(e);
+                            logger.error("Error streaming converted backup into mysql process", e);
+                        }
+                    });
+                    inputWriter.setDaemon(true);
+                    inputWriter.start();
+
+                    StringBuilder output = new StringBuilder();
+                    Thread outputReader = new Thread(() -> {
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                output.append(line).append("\n");
+                            }
+                        } catch (IOException e) {
+                            logger.warn("Error reading mysql restore output", e);
+                        }
+                    });
+                    outputReader.setDaemon(true);
+                    outputReader.start();
+
+                    boolean completed = process.waitFor(60, TimeUnit.MINUTES);
+                    if (!completed) {
+                        process.destroyForcibly();
+                        inputWriter.join(5000);
+                        outputReader.join(5000);
+                        logger.error("Incremental restore timed out after 60 minutes");
+                        throw new BusinessException("增量恢复超时，已中止");
+                    }
+
+                    inputWriter.join(5000);
+                    outputReader.join(5000);
+                    if (inputWriter.isAlive()) {
+                        process.destroyForcibly();
+                        logger.error("Timed out waiting for backup input writer thread to finish");
+                        throw new BusinessException("增量恢复失败，备份输入未完成");
+                    }
+                    int exitCode = process.exitValue();
+                    if (exitCode != 0) {
+                        logger.error("Incremental restore failed with exit code {}: {}", exitCode, output);
+                        throw new BusinessException("增量恢复失败，请检查日志");
+                    }
+                    if (inputError.get() != null) {
+                        throw new BusinessException("增量恢复失败，备份文件读取或输入异常");
+                    }
+
+                    logger.info("Database incrementally restored from backup: {}. New data preserved.", record.getFilename());
+                } finally {
+                    if (process.isAlive()) {
+                        process.destroyForcibly();
+                    }
+                    // Clean up temporary converted file
+                    try {
+                        Files.deleteIfExists(convertedPath);
+                    } catch (IOException e) {
+                        logger.warn("Failed to delete temporary converted backup file: {}", convertedPath, e);
+                    }
+                }
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.error("Incremental restore failed", e);
+                throw new BusinessException("增量恢复失败");
+            }
+        } finally {
+            backupInProgress.set(false);
+        }
+    }
+
+    /**
+     * Convert backup SQL to incremental restore format:
+     * - Comment out DROP TABLE / TRUNCATE TABLE statements
+     * - Convert INSERT INTO to INSERT IGNORE INTO
+     * - Preserve existing data by skipping duplicate key conflicts
+     */
+    private Path convertToIncrementalRestore(Path originalPath) throws IOException {
+        Path tempDir = Paths.get(System.getProperty("java.io.tmpdir"));
+        Path convertedPath = tempDir.resolve("incremental_restore_" + System.currentTimeMillis() + ".sql");
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(openBackupInputStream(originalPath), StandardCharsets.UTF_8));
+             BufferedWriter writer = Files.newBufferedWriter(convertedPath, StandardCharsets.UTF_8)) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                // Comment out DROP TABLE statements
+                if (line.trim().toUpperCase().startsWith("DROP TABLE")) {
+                    writer.write("-- [INCREMENTAL RESTORE] ");
+                    writer.write(line);
+                    writer.newLine();
+                    continue;
+                }
+
+                // Comment out TRUNCATE TABLE statements
+                if (line.trim().toUpperCase().startsWith("TRUNCATE TABLE")) {
+                    writer.write("-- [INCREMENTAL RESTORE] ");
+                    writer.write(line);
+                    writer.newLine();
+                    continue;
+                }
+
+                // Convert INSERT INTO to INSERT IGNORE INTO
+                if (line.trim().toUpperCase().startsWith("INSERT INTO")) {
+                    String converted = line.replaceFirst("(?i)INSERT INTO", "INSERT IGNORE INTO");
+                    writer.write(converted);
+                    writer.newLine();
+                    continue;
+                }
+
+                // Write other lines as-is
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+
+        logger.info("Converted backup to incremental restore format: {} -> {}", originalPath, convertedPath);
+        return convertedPath;
+    }
+
+    @Override
     public Map<String, Object> getBackupStats() {
         Map<String, Object> stats = new HashMap<>();
 
@@ -484,13 +993,13 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         stats.put("totalCount", totalCount);
 
         QueryWrapper<BackupRecord> successWrapper = new QueryWrapper<>();
-        successWrapper.eq("status", "SUCCESS");
+        successWrapper.in("status", SUCCESS_STATUSES);
         long successCount = count(successWrapper);
         stats.put("successCount", successCount);
 
         // Total size of successful backups
         QueryWrapper<BackupRecord> sizeWrapper = new QueryWrapper<>();
-        sizeWrapper.eq("status", "SUCCESS");
+        sizeWrapper.in("status", SUCCESS_STATUSES);
         sizeWrapper.select("COALESCE(SUM(file_size), 0) as file_size");
         Map<String, Object> sizeResult = getMap(sizeWrapper);
         long totalSize = 0;
@@ -510,9 +1019,24 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
 
         // Last backup time
         QueryWrapper<BackupRecord> lastWrapper = new QueryWrapper<>();
-        lastWrapper.eq("status", "SUCCESS").orderByDesc("created_time").last("LIMIT 1");
+        lastWrapper.in("status", SUCCESS_STATUSES).orderByDesc("created_time").last("LIMIT 1");
         BackupRecord lastBackup = getOne(lastWrapper, false);
         stats.put("lastBackupTime", lastBackup != null ? lastBackup.getCreatedTime() : null);
+
+        int readableCount = 0;
+        int missingFileCount = 0;
+        QueryWrapper<BackupRecord> readableWrapper = new QueryWrapper<>();
+        readableWrapper.in("status", SUCCESS_STATUSES);
+        for (BackupRecord record : list(readableWrapper)) {
+            BackupRecord enriched = enrichBackupRecord(record);
+            if (Boolean.TRUE.equals(enriched.getReadable())) {
+                readableCount++;
+            } else if (Boolean.FALSE.equals(enriched.getFileAvailable())) {
+                missingFileCount++;
+            }
+        }
+        stats.put("readableCount", readableCount);
+        stats.put("missingFileCount", missingFileCount);
 
         // Read from effective DB config (not @Value defaults) so frontend stays in sync after config changes
         BackupConfig effectiveConfig = getEffectiveConfig();
@@ -646,6 +1170,155 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
 
     // ========== Private helpers ==========
 
+    private void enrichBackupPage(IPage<BackupRecord> backupPage) {
+        if (backupPage == null || backupPage.getRecords() == null) {
+            return;
+        }
+        for (BackupRecord record : backupPage.getRecords()) {
+            enrichBackupRecord(record);
+        }
+    }
+
+    private BackupRecord enrichBackupRecord(BackupRecord record) {
+        if (record == null) {
+            return null;
+        }
+        record.setStatus(normalizeStatus(record.getStatus()));
+        if (isSuccessfulStatus(record.getStatus())) {
+            try {
+                Path filePath = resolveValidatedBackupPath(record, true);
+                record.setFileAvailable(true);
+                record.setReadable(Files.isReadable(filePath));
+                record.setAvailabilityMessage(Boolean.TRUE.equals(record.getReadable()) ? "文件可读" : "文件不可读");
+                if ((record.getFileSize() == null || record.getFileSize() == 0L) && Files.isRegularFile(filePath)) {
+                    record.setFileSize(Files.size(filePath));
+                }
+            } catch (BusinessException e) {
+                record.setFileAvailable(false);
+                record.setReadable(false);
+                record.setAvailabilityMessage(e.getMessage());
+            } catch (IOException e) {
+                record.setFileAvailable(false);
+                record.setReadable(false);
+                record.setAvailabilityMessage("读取备份文件属性失败");
+            }
+        } else {
+            record.setFileAvailable(false);
+            record.setReadable(false);
+            if ("IN_PROGRESS".equals(record.getStatus())) {
+                record.setAvailabilityMessage("备份执行中");
+            } else if ("FAILED".equals(record.getStatus())) {
+                record.setAvailabilityMessage(defaultString(record.getErrorMessage(), "备份执行失败"));
+            } else {
+                record.setAvailabilityMessage("当前状态不可读取");
+            }
+        }
+        return record;
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.trim().isEmpty()) {
+            return "UNKNOWN";
+        }
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
+        if ("COMPLETED".equals(normalized)) {
+            return "SUCCESS";
+        }
+        if ("RUNNING".equals(normalized)) {
+            return "IN_PROGRESS";
+        }
+        return normalized;
+    }
+
+    private boolean isSuccessfulStatus(String status) {
+        return "SUCCESS".equals(normalizeStatus(status));
+    }
+
+    private String defaultString(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private String normalizeImportMode(String mode, String filename) {
+        String normalized = defaultString(mode, "AUTO").trim().toUpperCase(Locale.ROOT);
+        if ("FULL".equals(normalized) || "INCREMENTAL".equals(normalized)) {
+            return normalized;
+        }
+        String lowerName = defaultString(filename, "").toLowerCase(Locale.ROOT);
+        if (lowerName.contains("_incr") || lowerName.contains("incremental")) {
+            return "INCREMENTAL";
+        }
+        return "FULL";
+    }
+
+    private String normalizeImportCategory(String category, String filename) {
+        String normalized = category == null ? "" : category.trim().toLowerCase(Locale.ROOT);
+        if (!normalized.isEmpty() && CATEGORY_TABLES.containsKey(normalized)) {
+            return normalized;
+        }
+        String lowerName = defaultString(filename, "").toLowerCase(Locale.ROOT);
+        for (String candidate : CATEGORY_TABLES.keySet()) {
+            if (lowerName.contains(candidate.toLowerCase(Locale.ROOT))) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private String buildImportedFilename(String originalFilename) {
+        String sanitized = defaultString(originalFilename, "backup.sql")
+                .replaceAll("[^a-zA-Z0-9._-]", "_");
+        String timestamp = LocalDateTime.now().format(FILENAME_FORMATTER);
+        return "imported_" + timestamp + "_" + sanitized;
+    }
+
+    private Path resolveImportTargetPath(String filename) {
+        Path allowedDir = Paths.get(backupDir).toAbsolutePath().normalize();
+        Path targetPath = allowedDir.resolve(filename).normalize();
+        if (!targetPath.startsWith(allowedDir)) {
+            throw new BusinessException("导入备份文件路径无效");
+        }
+        return targetPath;
+    }
+
+    private Path resolveValidatedBackupPath(BackupRecord record, boolean requireExists) {
+        if (record == null || record.getStoragePath() == null || record.getStoragePath().trim().isEmpty()) {
+            throw new BusinessException("备份文件路径为空");
+        }
+
+        Path filePath = Paths.get(record.getStoragePath()).toAbsolutePath().normalize();
+        Path allowedDir = Paths.get(backupDir).toAbsolutePath().normalize();
+
+        if (!filePath.startsWith(allowedDir)) {
+            logger.error("Path traversal attempt detected: {} is outside {}", filePath, allowedDir);
+            throw new BusinessException("备份文件路径无效");
+        }
+
+        if (requireExists && !Files.exists(filePath)) {
+            throw new BusinessException("备份文件不存在，可能已被手动删除");
+        }
+        if (Files.exists(filePath) && !Files.isRegularFile(filePath)) {
+            throw new BusinessException("备份文件类型无效");
+        }
+
+        return filePath;
+    }
+
+    private BufferedReader openPreviewReader(Path filePath) throws IOException {
+        InputStream inputStream = Files.newInputStream(filePath);
+        if (filePath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".gz")) {
+            inputStream = new GZIPInputStream(inputStream);
+        }
+        return new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+    }
+
+    private InputStream openBackupInputStream(Path filePath) throws IOException {
+        InputStream inputStream = Files.newInputStream(filePath);
+        if (filePath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".gz")) {
+            inputStream = new GZIPInputStream(inputStream);
+        }
+        return inputStream;
+    }
+
     private BackupRecord createBackupRecord(String type, String mode, String createdBy) {
         String timestamp = LocalDateTime.now().format(FILENAME_FORMATTER);
         String databaseName = extractDatabaseName();
@@ -709,7 +1382,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
      */
     private BackupRecord getLastSuccessfulFullBackup() {
         QueryWrapper<BackupRecord> wrapper = new QueryWrapper<>();
-        wrapper.eq("status", "SUCCESS")
+        wrapper.in("status", SUCCESS_STATUSES)
                .eq("backup_mode", "FULL")
                .orderByDesc("created_time")
                .last("LIMIT 1");
@@ -722,7 +1395,7 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
      */
     private BackupRecord getLastSuccessfulBackup() {
         QueryWrapper<BackupRecord> wrapper = new QueryWrapper<>();
-        wrapper.eq("status", "SUCCESS")
+        wrapper.in("status", SUCCESS_STATUSES)
                .orderByDesc("created_time")
                .last("LIMIT 1");
         return getOne(wrapper, false);

@@ -145,7 +145,7 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="pagination">
+      <div class="pagination" :style="{ visibility: totalPages > 1 ? 'visible' : 'hidden' }">
         <button class="page-btn" :disabled="currentPage === 1" @click="prevPage">
           <el-icon><ArrowLeft /></el-icon>
         </button>
@@ -168,6 +168,18 @@
       </div>
     </main>
 
+    <!-- FAB: 换一批推荐 -->
+    <button
+      v-if="selectedCategory === 'recommendation'"
+      class="fab-refresh"
+      :class="{ 'is-loading': loading }"
+      :disabled="loading"
+      @click="loadRecommended"
+      title="换一批推荐"
+    >
+      <el-icon :size="22"><Refresh /></el-icon>
+    </button>
+
   </div>
 </template>
 
@@ -178,16 +190,18 @@ import { ElMessage } from 'element-plus'
 import {
   Search, Bell, DocumentRemove, Timer, VideoPlay, View,
   TrendCharts, Connection, Reading, Medal,
-  ArrowUp, ArrowDown, ArrowLeft, ArrowRight
+  ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Refresh
 } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import { getFeaturedVideos } from '@/api/video'
+import { getRecommendedTexts } from '@/api/texts'
 
 const router = useRouter()
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const loading = ref(true)
 const allItems = ref([])
+const recommendedArticles = ref([])
 const selectedCategory = ref('')
 const filterVisible = ref(true)
 const loadError = ref(false)
@@ -195,9 +209,15 @@ const currentPage = ref(1)
 const pageSize = 5
 const searchQuery = ref('')
 const searchVisible = ref(false)
+// 本会话中已展示过的推荐文章 ID — 传给后端用于"换一批"时排除
+const shownRecommendedIds = ref([])
+
 
 const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize))
 const filteredItems = computed(() => {
+  if (selectedCategory.value === 'recommendation') {
+    return recommendedArticles.value
+  }
   let result = allItems.value
   if (selectedCategory.value) {
     if (selectedCategory.value === 'video') {
@@ -228,7 +248,8 @@ const toggleFilter = () => {
 
 // Predefined categories based on design
 const categories = [
-  { label: '全部', value: '' },
+  { label: '全部', value: '', icon: 'House' },
+  { label: '推荐', value: 'recommendation', icon: 'Star' },
   { label: '视频', value: 'video' },
   { label: '科技', value: 'technology', icon: 'Monitor' },
   { label: '商务', value: 'business', icon: 'TrendCharts' },
@@ -264,6 +285,10 @@ const getRandomGradient = () => {
 const selectCategory = (val) => {
   selectedCategory.value = val
   currentPage.value = 1
+  if (val === 'recommendation') {
+    shownRecommendedIds.value = []
+    loadRecommended()
+  }
 }
 
 const goToPage = (page) => {
@@ -283,8 +308,53 @@ const toggleSearch = () => {
 }
 
 const getRandomCategory = () => {
-  const cats = categories.filter(c => c.value !== '' && c.value !== 'video')
+  const cats = categories.filter(c => c.value !== '' && c.value !== 'video' && c.value !== 'recommendation')
   return cats[Math.floor(Math.random() * cats.length)].value
+}
+
+const COUNT_PER_BATCH = 5
+
+const mapRecommendedText = (text) => ({
+  ...text,
+  _type: 'article',
+  category: 'recommendation',
+  coverGradient: getRandomGradient(),
+  readingTime: Math.max(1, Math.ceil((text.content?.length || text.markdownContent?.length || 0) / 800))
+})
+
+const loadRecommended = async ({ resetExclusions = false } = {}) => {
+  loading.value = true
+  loadError.value = false
+  try {
+    if (resetExclusions) {
+      shownRecommendedIds.value = []
+    }
+    let data = await getRecommendedTexts(COUNT_PER_BATCH, shownRecommendedIds.value)
+    if (data?.code === 200) {
+      let list = Array.isArray(data.data) ? data.data : []
+      // 如果返回空且已有排除列表，重置排除列表重新拉取
+      if (list.length === 0 && shownRecommendedIds.value.length > 0) {
+        shownRecommendedIds.value = []
+        data = await getRecommendedTexts(COUNT_PER_BATCH, [])
+        list = Array.isArray(data.data) ? data.data : []
+      }
+      recommendedArticles.value = list.map(mapRecommendedText)
+      // 记录本次展示的 ID
+      list.forEach(t => {
+        if (t?.id != null && !shownRecommendedIds.value.includes(t.id)) {
+          shownRecommendedIds.value.push(t.id)
+        }
+      })
+    } else {
+      loadError.value = true
+    }
+  } catch (err) {
+    console.error('加载推荐失败:', err)
+    loadError.value = true
+    recommendedArticles.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 const loadFeed = async () => {
@@ -341,7 +411,7 @@ const loadFeed = async () => {
     if (merged.length === 0) loadError.value = true
   } catch (error) {
     console.error('加载推荐内容失败:', error)
-    loadError.value = true
+    allItems.value = []
   } finally {
     loading.value = false
   }
@@ -356,12 +426,19 @@ const handleItemClick = (item) => {
     console.warn('readArticle: 文章ID不存在', item)
     return
   }
+  // 验证 ID 是否为有效数字
+  const numericId = typeof item.id === 'number' ? item.id : parseInt(item.id, 10)
+  if (isNaN(numericId) || numericId <= 0) {
+    console.error('readArticle: 无效的文章ID', item.id, item)
+    ElMessage.error('文章ID无效，无法打开')
+    return
+  }
   // Fire-and-forget: 标记文章为已读
   const authHeader = getAuthHeader()
   const headers = authHeader ? { Authorization: authHeader } : {}
-  fetch(`${apiBase}/api/public/texts/${item.id}/read`, { method: 'POST', headers }).catch(() => {})
+  fetch(`${apiBase}/api/public/texts/${numericId}/read`, { method: 'POST', headers }).catch(() => {})
   router.push({
-    path: `/article/${item.id}`,
+    path: `/article/${numericId}`,
     query: {
       from: 'articles',
       _title: encodeURIComponent(item.title || '')
@@ -437,12 +514,13 @@ onMounted(() => {
 .articles-mobile-page {
   height: 100vh;
   height: 100dvh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   background-color: var(--app-bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--app-text);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 /* --- Responsive Layout for Desktop --- */
@@ -461,8 +539,10 @@ onMounted(() => {
   .articles-feed {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, 320px);
     gap: 24px;
     padding: 0;
+    align-content: start;
   }
 
   .bottom-spacer,
@@ -475,7 +555,7 @@ onMounted(() => {
   }
 
   .article-card {
-    min-height: 280px;
+    height: 320px;
   }
 
   .article-cover {
@@ -494,6 +574,7 @@ onMounted(() => {
 @media (min-width: 1200px) {
   .articles-feed {
     grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 320px);
   }
 }
 
@@ -509,7 +590,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 12px 12px;
   padding-top: max(env(safe-area-inset-top, 12px), 12px);
 }
 
@@ -566,7 +647,7 @@ onMounted(() => {
 /* --- Filter Bar --- */
 .filter-bar {
   position: sticky;
-  top: 60px; /* Header height only — safe-area is consumed by Layout's .status-bar */
+  top: 0; /* Header is outside the scroll container, so stick to top of .page-main */
   z-index: 40;
   background: rgba(246, 247, 248, 0.95);
   backdrop-filter: blur(8px);
@@ -576,7 +657,7 @@ onMounted(() => {
 }
 
 .search-bar {
-  padding: 12px 20px;
+  padding: 12px 12px;
   background: rgba(246, 247, 248, 0.95);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -587,15 +668,19 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding: 0 20px;
+  padding: 0 12px;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+}
+@media (min-width: 768px) {
+  .filter-scroll { justify-content: center; gap: 16px; }
+  .filter-pill { padding: 12px 36px; font-size: 16px; font-weight: 600; }
 }
 .filter-scroll::-webkit-scrollbar { display: none; }
 
 .filter-pill {
   flex-shrink: 0;
-  padding: 8px 20px;
+  padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid #e2e8f0;
   background: white;
@@ -627,19 +712,30 @@ onMounted(() => {
 .page-main {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;      /* Critical for flex scroll — see AGENTS.md */
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .articles-feed {
-  padding: 16px 20px;
+  padding: 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
+  flex: 1;
 }
 
 /* --- Article Card --- */
 .article-card {
   background: white;
-  border-radius: 20px;
+  border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05);
   transition: transform 0.2s, box-shadow 0.2s;
@@ -647,6 +743,9 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   border: 1px solid #f1f5f9;
+  width: 100%;
+  min-width: 0;
+  height: 340px;
 }
 
 @media (hover: hover) {
@@ -710,7 +809,8 @@ onMounted(() => {
 
 /* Content */
 .article-content {
-  padding: 16px 16px 12px;
+  padding: 12px 12px 10px;
+  flex: 1;
 }
 
 .article-title {
@@ -726,6 +826,8 @@ onMounted(() => {
   overflow: hidden;
   word-break: break-word;
   overflow-wrap: break-word;
+  /* Fixed 2-line height for consistent card size */
+  height: calc(2 * 1.3em);
 }
 
 .article-snippet {
@@ -740,11 +842,13 @@ onMounted(() => {
   overflow: hidden;
   word-break: break-word;
   overflow-wrap: break-word;
+  /* Fixed 2-line height for consistent card size */
+  height: calc(2 * 1.5em);
 }
 
 /* Footer Insights */
 .article-footer {
-  padding: 0 16px 16px;
+  padding: 0 12px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -820,7 +924,7 @@ onMounted(() => {
 .skeleton-card:hover { transform: none; box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05); }
 
 .skeleton-img { width: 100%; height: 170px; }
-.skeleton-body { padding: 16px; }
+.skeleton-body { padding: 12px; }
 .skeleton-title { height: 20px; width: 85%; border-radius: 6px; margin-bottom: 8px; }
 .skeleton-title.short { width: 60%; margin-bottom: 16px; }
 .skeleton-text { height: 14px; width: 100%; border-radius: 4px; margin-bottom: 6px; }
@@ -901,6 +1005,58 @@ onMounted(() => {
   height: calc(80px + env(safe-area-inset-bottom, 0px)); /* Match Layout nav + safe area */
 }
 
+/* --- Floating Refresh Button --- */
+.fab-refresh {
+  position: fixed;
+  right: 20px;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px)); /* 避开底部导航栏 */
+  z-index: 60;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #1d4ed8 0%, #137fec 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(29, 78, 216, 0.35), 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.fab-refresh:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 12px 32px rgba(29, 78, 216, 0.45), 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.fab-refresh:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.fab-refresh:disabled {
+  cursor: wait;
+  opacity: 0.85;
+}
+
+.fab-refresh.is-loading .el-icon {
+  animation: fab-spin 0.9s linear infinite;
+}
+
+@keyframes fab-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (min-width: 768px) {
+  .fab-refresh {
+    right: 32px;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* --- Filter Collapse Transition --- */
 .filter-collapse-enter-active,
 .filter-collapse-leave-active {
@@ -950,5 +1106,57 @@ onMounted(() => {
   letter-spacing: 0.05em;
   background: rgba(99, 102, 241, 0.1);
   color: #4f46e5;
+}
+
+/* --- FAB: 换一批推荐 --- */
+.fab-refresh {
+  position: fixed;
+  right: 20px;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #1d4ed8 0%, #137fec 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(29, 78, 216, 0.35), 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.fab-refresh:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 12px 32px rgba(29, 78, 216, 0.45), 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.fab-refresh:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.fab-refresh:disabled {
+  cursor: wait;
+  opacity: 0.85;
+}
+
+.fab-refresh.is-loading .el-icon {
+  animation: fab-spin 0.9s linear infinite;
+}
+
+@keyframes fab-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (min-width: 768px) {
+  .fab-refresh {
+    right: 32px;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>

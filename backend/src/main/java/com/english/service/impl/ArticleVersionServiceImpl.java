@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -40,6 +41,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
     @Autowired
     private OpenRouterService openRouterService;
 
+    @Autowired(required = false)
+    private AiProviderRuntimeService aiProviderRuntimeService;
+
     // Self-injection to enable @Async and @Transactional to work for internal method calls
     @Autowired
     @Lazy
@@ -57,26 +61,34 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             return;
         }
 
+        if ("MARKDOWN".equals(text.getContentType())) {
+            checkAndGenerateMarkdownVersions(textId);
+            return;
+        }
+
         // Check which versions are missing
         boolean needsCET4 = isNullOrEmpty(text.getCet4Content());
         boolean needsCET6 = isNullOrEmpty(text.getCet6Content());
         boolean needsAcademic = isNullOrEmpty(text.getAcademicContent());
         boolean needsChineseParallel = isNullOrEmpty(text.getChineseParallelContent());
 
+        log.info("[版本生成] 文章{} 版本状态: contentType={}, needsCET4={}, needsCET6={}, needsAcademic={}, needsChineseParallel={}",
+                textId, text.getContentType(), needsCET4, needsCET6, needsAcademic, needsChineseParallel);
+
         // If any version is missing, trigger async generation via self-proxy
         if (needsCET4 || needsCET6 || needsAcademic || needsChineseParallel) {
             String content = text.getContent();
             if (content == null || content.isBlank()) {
-                log.warn("Text {} has null/empty content, skipping version generation", textId);
+                log.warn("[版本生成] 文章{} 内容为空，跳过版本生成", textId);
                 return;
             }
-            log.info("Article {} is missing versions. Triggering async generation...", textId);
+            log.info("[版本生成] 文章{} 缺少版本，触发异步生成，原文长度={}字符", textId, content.length());
             // Use self-injection to ensure @Async annotation is properly processed by
             // Spring proxy
             self.generateVersionsAsync(textId, content, needsCET4, needsCET6, needsAcademic,
                     needsChineseParallel);
         } else {
-            log.debug("Article {} already has all versions", textId);
+            log.info("[版本生成] 文章{} 已有所有版本，无需生成", textId);
         }
     }
 
@@ -121,15 +133,17 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
             waitForFutures(futures, textId, "Plain text");
 
+            log.info("[版本生成] 文章{} 异步生成完成，成功生成 {} 个版本: {}", textId, results.size(), results.keySet());
+
             // Save results via proxy for @Transactional to work
             if (!results.isEmpty()) {
                 self.saveVersionResults(textId, results);
             } else {
-                log.warn("No versions were generated for article {}", textId);
+                log.warn("[版本生成] 文章{} 没有任何版本生成成功!", textId);
             }
 
         } catch (Exception e) {
-            log.error("Error during async version generation for article {}", textId, e);
+            log.error("[版本生成] 文章{} 异步生成过程异常", textId, e);
         }
     }
 
@@ -169,13 +183,16 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
         boolean needsAcademic = isNullOrEmpty(text.getAcademicMarkdownContent());
         boolean needsChineseParallel = isNullOrEmpty(text.getChineseParallelMarkdownContent());
 
+        log.info("[版本生成] Markdown文章{} 版本状态: needsCET4={}, needsCET6={}, needsAcademic={}, needsChineseParallel={}",
+                textId, needsCET4, needsCET6, needsAcademic, needsChineseParallel);
+
         // If any version is missing, trigger async generation via self-proxy
         if (needsCET4 || needsCET6 || needsAcademic || needsChineseParallel) {
-            log.info("Markdown article {} is missing versions. Triggering async generation...", textId);
+            log.info("[版本生成] Markdown文章{} 缺少版本，触发异步生成，原文长度={}字符", textId, markdownContent.length());
             // Use self-injection to ensure @Async annotation is properly processed by Spring proxy
             self.generateMarkdownVersionsAsync(textId, markdownContent, needsCET4, needsCET6, needsAcademic, needsChineseParallel);
         } else {
-            log.debug("Markdown article {} already has all versions", textId);
+            log.info("[版本生成] Markdown文章{} 已有所有版本，无需生成", textId);
         }
     }
 
@@ -220,15 +237,17 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
             waitForFutures(futures, textId, "Markdown");
 
+            log.info("[版本生成] Markdown文章{} 异步生成完成，成功生成 {} 个版本: {}", textId, results.size(), results.keySet());
+
             // Save results via proxy for @Transactional to work
             if (!results.isEmpty()) {
                 self.saveMarkdownVersionResults(textId, results);
             } else {
-                log.warn("No Markdown versions were generated for article {}", textId);
+                log.warn("[版本生成] Markdown文章{} 没有任何版本生成成功!", textId);
             }
 
         } catch (Exception e) {
-            log.error("Error during async Markdown version generation for article {}", textId, e);
+            log.error("[版本生成] Markdown文章{} 异步生成过程异常", textId, e);
         }
     }
 
@@ -284,30 +303,143 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             Function<String, String> fallbackGenerator,
             String resultKey, Map<String, String> results) {
         return CompletableFuture.supplyAsync(() -> {
-            log.info("Generating {} version for article {}", versionName, textId);
+            log.info("[版本生成] 开始生成 {} 版本，文章{}", versionName, textId);
             try {
+                // 1. 尝试管理员配置的 AI 提供商
+                Optional<String> configuredResult = generateWithConfiguredArticleProvider(versionName, content);
+                if (configuredResult.isPresent()) {
+                    log.info("[版本生成] {} 版本通过配置的AI提供商生成成功，文章{}，结果长度={}字符",
+                            versionName, textId, configuredResult.get().length());
+                    return configuredResult.get();
+                }
+                log.info("[版本生成] {} 无配置的AI提供商或生成为空，尝试 HiAgent，文章{}", versionName, textId);
+
+                // 2. 尝试 HiAgent
                 try {
-                    return primaryGenerator.apply(content);
+                    String result = primaryGenerator.apply(content);
+                    if (result != null && !result.isBlank()) {
+                        log.info("[版本生成] {} 版本通过 HiAgent 生成成功，文章{}，结果长度={}字符",
+                                versionName, textId, result.length());
+                    } else {
+                        log.warn("[版本生成] {} 版本 HiAgent 返回空结果，文章{}", versionName, textId);
+                    }
+                    return result;
                 } catch (Exception ex) {
-                    log.warn("HiAgent failed to generate {} version for article {}, falling back to OpenRouter: {}",
+                    log.warn("[版本生成] {} 版本 HiAgent 调用失败，降级到 OpenRouter，文章{}，错误: {}",
                             versionName, textId, ex.getMessage());
-                    return fallbackGenerator.apply(content);
+                    // 3. 降级到 OpenRouter
+                    try {
+                        String fallbackResult = fallbackGenerator.apply(content);
+                        if (fallbackResult != null && !fallbackResult.isBlank()) {
+                            log.info("[版本生成] {} 版本通过 OpenRouter 生成成功，文章{}，结果长度={}字符",
+                                    versionName, textId, fallbackResult.length());
+                        } else {
+                            log.warn("[版本生成] {} 版本 OpenRouter 也返回空结果，文章{}", versionName, textId);
+                        }
+                        return fallbackResult;
+                    } catch (Exception fallbackEx) {
+                        log.error("[版本生成] {} 版本 OpenRouter 也失败，文章{}，错误: {}",
+                                versionName, textId, fallbackEx.getMessage());
+                        return null;
+                    }
                 }
             } catch (Exception e) {
-                log.error("Failed to generate {} version for article {}", versionName, textId, e);
+                log.error("[版本生成] {} 版本生成异常，文章{}", versionName, textId, e);
                 return null;
             }
         }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((result, ex) -> {
             if (ex != null) {
-                log.error("{} generation timed out or failed for article {}", versionName, textId, ex);
+                String cause = ex.getCause() != null ? ex.getCause().getClass().getSimpleName() : "unknown";
+                log.error("[版本生成] {} 版本超时或失败，文章{}，异常类型={}，原因: {}",
+                        versionName, textId, cause, ex.getMessage());
                 return null;
             }
             if (result != null) {
                 results.put(resultKey, result);
-                log.info("{} version generated successfully for article {}", versionName, textId);
+                log.info("[版本生成] {} 版本已加入结果集，文章{}，结果长度={}字符",
+                        versionName, textId, result.length());
+            } else {
+                log.warn("[版本生成] {} 版本结果为null，文章{}", versionName, textId);
             }
             return null;
         });
+    }
+
+    private Optional<String> generateWithConfiguredArticleProvider(String versionName, String content) {
+        if (aiProviderRuntimeService == null) {
+            log.info("[版本生成] 未配置 AiProviderRuntimeService，跳过配置的AI提供商");
+            return Optional.empty();
+        }
+
+        try {
+            String method = methodNameForVersion(versionName);
+            log.info("[版本生成] 尝试配置的AI提供商: service=article, method={}, version={}", method, versionName);
+            Optional<String> result = aiProviderRuntimeService.completeIfConfigured(
+                    "article", method, buildVersionPrompt(versionName, content));
+            if (result.isEmpty()) {
+                log.info("[版本生成] 配置的AI提供商未返回结果 (可能未配置)，version={}", versionName);
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("[版本生成] 配置的AI提供商调用失败，version={}，错误: {}", versionName, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private String buildVersionPrompt(String versionName, String content) {
+        boolean markdown = versionName.contains("Markdown");
+
+        if (versionName.startsWith("CET-4")) {
+            return markdown
+                    ? "Please rewrite the following Markdown article to match CET-4 difficulty level. "
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + content
+                    : "Please rewrite the following English article to match CET-4 difficulty level. "
+                            + "Only return the rewritten text.\n\n" + content;
+        }
+        if (versionName.startsWith("CET-6")) {
+            return markdown
+                    ? "Please rewrite the following Markdown article to match CET-6 difficulty level. "
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + content
+                    : "Please rewrite the following English article to match CET-6 difficulty level. "
+                            + "Only return the rewritten text.\n\n" + content;
+        }
+        if (versionName.startsWith("Academic")) {
+            return markdown
+                    ? "Please rewrite the following Markdown article in an academic style. "
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + content
+                    : "Please rewrite the following English article in an academic style. "
+                            + "Only return the rewritten text.\n\n" + content;
+        }
+        if (versionName.startsWith("Chinese Parallel")) {
+            return markdown
+                    ? "Please create a Chinese-English parallel text version of the following Markdown article. "
+                            + "Format: English paragraph, then Chinese paragraph. PRESERVE ALL Markdown formatting. Only return the parallel Markdown.\n\n"
+                            + content
+                    : "Please create a Chinese-English parallel text version of the following English article. "
+                            + "Format: English paragraph, then Chinese paragraph. Only return the parallel text.\n\n" + content;
+        }
+
+        return content;
+    }
+
+    private String methodNameForVersion(String versionName) {
+        boolean markdown = versionName.contains("Markdown");
+        if (versionName.startsWith("CET-4")) {
+            return markdown ? "generateCET4VersionMarkdown" : "generateCET4Version";
+        }
+        if (versionName.startsWith("CET-6")) {
+            return markdown ? "generateCET6VersionMarkdown" : "generateCET6Version";
+        }
+        if (versionName.startsWith("Academic")) {
+            return markdown ? "generateAcademicVersionMarkdown" : "generateAcademicVersion";
+        }
+        if (versionName.startsWith("Chinese Parallel")) {
+            return markdown ? "generateChineseParallelVersionMarkdown" : "generateChineseParallelVersion";
+        }
+        return "generateArticleVersion";
     }
 
     /**

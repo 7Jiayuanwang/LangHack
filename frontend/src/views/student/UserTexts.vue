@@ -65,10 +65,6 @@
 
       <div v-else-if="allItems.length === 0" class="empty-container">
         <el-empty description="暂无上传内容" />
-        <div style="margin-top: 20px; display: flex; gap: 12px;">
-          <el-button type="primary" @click="showUploadDialog = true">上传课文</el-button>
-          <el-button type="warning" @click="showVideoUploadDialog = true">上传视频</el-button>
-        </div>
       </div>
 
       <div v-else class="text-grid">
@@ -76,7 +72,7 @@
           v-for="item in allItems"
           :key="item._type + '-' + item.id"
           class="text-item"
-          :class="{ 'video-item': item._type === 'video' }"
+          :class="{ 'video-item': item._type === 'video', 'article-item': item._type !== 'video' }"
           @click="handleItemClick(item)"
         >
           <div class="text-header">
@@ -92,6 +88,14 @@
               <el-tag v-if="item.tags" size="small" type="info">
                 {{ item.tags.split(',')[0] }}
               </el-tag>
+              <el-tag
+                v-if="item.status"
+                :type="item.status === 'APPROVED' ? 'success' : item.status === 'REJECTED' ? 'danger' : 'warning'"
+                size="small"
+                effect="plain"
+              >
+                {{ item.status === 'APPROVED' ? '已通过' : item.status === 'REJECTED' ? '已驳回' : '待审核' }}
+              </el-tag>
             </div>
           </div>
 
@@ -106,10 +110,18 @@
             </div>
 
             <div class="text-actions">
+              <el-button size="small" type="primary" @click.stop="previewItem(item)">
+                <el-icon><View /></el-icon> 预览
+              </el-button>
               <el-button size="small" @click.stop="item._type === 'video' ? editVideoItem(item) : editText(item)">
                 <el-icon><Edit /></el-icon> 编辑
               </el-button>
-              <el-button size="small" type="danger" @click.stop="item._type === 'video' ? deleteVideoItem(item) : deleteText(item)">
+              <el-button
+                v-if="item.status !== 'APPROVED'"
+                size="small"
+                type="danger"
+                @click.stop="item._type === 'video' ? deleteVideoItem(item) : deleteText(item)"
+              >
                 <el-icon><Delete /></el-icon> 删除
               </el-button>
             </div>
@@ -213,20 +225,17 @@
           </el-select>
         </el-form-item>
 
-        <!-- 标签 -->
-        <el-form-item label="标签" prop="tags">
-          <el-input v-model="uploadForm.tags" placeholder="请输入标签，多个用逗号分隔" maxlength="100" />
-          <div class="form-tip">例如：日常对话, 商务英语, 科技文章</div>
+        <!-- 标签（必选） -->
+        <el-form-item label="标签" prop="tags" required>
+          <el-select v-model="uploadForm.tags" multiple placeholder="请选择标签（必选）" style="width: 100%" :disabled="availableTags.length === 0">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+          <div v-if="availableTags.length === 0" class="form-tip" style="color: #f56c6c">暂无可选标签，请联系管理员设置</div>
         </el-form-item>
 
         <!-- Task 3.4: 音频 URL -->
         <el-form-item label="音频URL">
           <el-input v-model="uploadForm.audioUrl" placeholder="请输入音频URL（可选）" />
-        </el-form-item>
-
-        <!-- Task 3.5: 是否公开 -->
-        <el-form-item label="是否公开">
-          <el-switch v-model="uploadForm.isPublic" />
         </el-form-item>
       </el-form>
 
@@ -332,19 +341,17 @@
           </el-select>
         </el-form-item>
 
-        <!-- 标签 -->
-        <el-form-item label="标签" prop="tags">
-          <el-input v-model="editForm.tags" placeholder="请输入标签，多个用逗号分隔" maxlength="100" />
+        <!-- 标签（必选） -->
+        <el-form-item label="标签" prop="tags" required>
+          <el-select v-model="editForm.tags" multiple placeholder="请选择标签（必选）" style="width: 100%" :disabled="availableTags.length === 0">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+          <div v-if="availableTags.length === 0" class="form-tip" style="color: #f56c6c">暂无可选标签，请联系管理员设置</div>
         </el-form-item>
 
         <!-- 音频 URL -->
         <el-form-item label="音频URL">
           <el-input v-model="editForm.audioUrl" placeholder="请输入音频URL（可选）" />
-        </el-form-item>
-
-        <!-- 是否公开 -->
-        <el-form-item label="是否公开">
-          <el-switch v-model="editForm.isPublic" />
         </el-form-item>
       </el-form>
 
@@ -409,7 +416,6 @@
       v-model="showVideoUploadDialog"
       :title="editingVideo ? '编辑视频' : '上传视频'"
       width="min(600px, 94vw)"
-      class="custom-video-dialog"
       :close-on-click-modal="false"
       @close="resetVideoForm"
     >
@@ -450,7 +456,7 @@
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="英文字幕">
+        <el-form-item label="字幕">
           <el-upload
             class="subtitle-uploader"
             :auto-upload="false"
@@ -459,32 +465,17 @@
             accept=".vtt,.srt,.txt"
             :on-change="handleSubtitleSelect"
           >
-            <el-button>选择英文字幕</el-button>
+            <el-button>选择字幕文件</el-button>
             <template #tip>
               <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="中文字幕">
-          <el-upload
-            class="subtitle-uploader"
-            :auto-upload="false"
-            :show-file-list="true"
-            :limit="1"
-            accept=".vtt,.srt,.txt"
-            :on-change="handleSubtitleZhSelect"
-          >
-            <el-button>选择中文字幕</el-button>
-            <template #tip>
-              <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
-            </template>
-          </el-upload>
-        </el-form-item>
-        <el-form-item label="标签">
-          <el-input v-model="videoForm.tags" placeholder="多个标签用逗号分隔" />
-        </el-form-item>
-        <el-form-item label="公开">
-          <el-switch v-model="videoForm.isPublicBool" />
+        <el-form-item label="标签" prop="tags" required>
+          <el-select v-model="videoForm.tags" multiple placeholder="请选择标签（必选）" style="width: 100%" :disabled="availableTags.length === 0">
+            <el-option v-for="t in availableTags" :key="t.id" :label="t.name" :value="t.name" />
+          </el-select>
+          <div v-if="availableTags.length === 0" class="form-tip" style="color: #f56c6c">暂无可选标签，请联系管理员设置</div>
         </el-form-item>
       </el-form>
 
@@ -512,6 +503,7 @@ import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { isCoverFileValid } from '@/utils/coverUpload'
 import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
+import { getPublicContentTags } from '@/api/admin'
 import { VideoPlay } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -548,14 +540,46 @@ const handleItemClick = (item) => {
   }
 }
 
+const previewItem = (item) => {
+  if (item._type === 'video') {
+    // 视频预览：新标签页打开视频播放器
+    const routeData = router.resolve({
+      name: 'StudentVideoPlayer',
+      query: { id: item.id, preview: 'user', from: 'user-texts' }
+    })
+    window.open(routeData.href, '_blank')
+  } else {
+    // 文章预览：新标签页打开文章详情页
+    const routeData = router.resolve({
+      name: 'ArticleDetail',
+      params: { id: item.id },
+      query: { from: 'user-texts' }
+    })
+    window.open(routeData.href, '_blank')
+  }
+}
+
 // 表单数据
 const uploadFormRef = ref()
 const editFormRef = ref()
+const availableTags = ref([])
+
+const loadContentTags = async () => {
+  try {
+    const res = await getPublicContentTags()
+    if (res.code === 200) {
+      availableTags.value = res.data || []
+    }
+  } catch (e) {
+    console.error('加载标签列表失败:', e)
+  }
+}
+
 const uploadForm = reactive({
   title: '',
   content: '',
   difficulty: 'MEDIUM',
-  tags: '',
+  tags: [],
   coverUrl: '',
   contentType: 'TEXT',
   audioUrl: '',
@@ -567,7 +591,7 @@ const editForm = reactive({
   title: '',
   content: '',
   difficulty: 'MEDIUM',
-  tags: '',
+  tags: [],
   coverUrl: '',
   contentType: 'TEXT',
   audioUrl: '',
@@ -602,6 +626,7 @@ const triggerMdImport = () => {
 
 const closeImportDialog = () => {
   importDialogVisible.value = false
+  showUploadDialog.value = true
 }
 
 const handleMdFileChange = async (event) => {
@@ -642,7 +667,6 @@ const handleMdFileChange = async (event) => {
       importLogs.value.push({ type: 'success', msg: '未检测到任何图片链接，提取完成。' })
       importProgress.value = 100
       uploadMarkdownContent.value = content
-      showUploadDialog.value = true
       importComplete.value = true
       return
     }
@@ -721,10 +745,9 @@ const handleMdFileChange = async (event) => {
     importLogs.value.push({ type: 'info', msg: `🎉 处理完成！成功搬运/匹配 ${successCount} 张（含本地 ${localMatchCount} 张），跳过/失败 ${skipCount} 张。` })
     importProgress.value = 100
     importComplete.value = true
-    
+
     // 将最终的内容赋值给编辑器
     uploadMarkdownContent.value = content
-    showUploadDialog.value = true
   }
   
   reader.onerror = () => {
@@ -839,13 +862,18 @@ const handleUpload = async () => {
 
       uploadLoading.value = true
       try {
+        // 验证标签必选
+        if (!uploadForm.tags || uploadForm.tags.length === 0) {
+          ElMessage.warning('请至少选择一个标签')
+          return
+        }
         const data = {
           title: uploadForm.title,
           content: uploadForm.contentType === 'TEXT' ? uploadForm.content : '',
           markdownContent: uploadForm.contentType === 'MARKDOWN' ? uploadMarkdownContent.value : '',
           contentType: uploadForm.contentType,
           difficulty: uploadForm.difficulty,
-          tags: uploadForm.tags,
+          tags: uploadForm.tags.join(','),
           coverUrl: uploadForm.coverUrl,
           audioUrl: uploadForm.audioUrl,
           isPublic: uploadForm.isPublic
@@ -880,7 +908,7 @@ const resetUploadForm = () => {
     content: '',
     contentType: 'TEXT',
     difficulty: 'MEDIUM',
-    tags: '',
+    tags: [],
     coverUrl: '',
     audioUrl: '',
     isPublic: true
@@ -891,6 +919,12 @@ const resetUploadForm = () => {
   }
 }
 
+const handlePublicChange = (val) => {
+  if (!val) {
+    ElMessage.warning('当前课文选择不公开，只有管理员可以看到')
+  }
+}
+
 const editText = (text) => {
   Object.assign(editForm, {
     id: text.id,
@@ -898,7 +932,7 @@ const editText = (text) => {
     content: text.content || '',
     contentType: text.contentType || 'TEXT',
     difficulty: text.difficulty,
-    tags: text.tags || '',
+    tags: text.tags ? text.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     coverUrl: text.coverUrl || '',
     audioUrl: text.audioUrl || '',
     isPublic: text.isPublic != null ? text.isPublic : true
@@ -920,13 +954,18 @@ const handleEdit = async () => {
 
       editLoading.value = true
       try {
+        // 验证标签必选
+        if (!editForm.tags || editForm.tags.length === 0) {
+          ElMessage.warning('请至少选择一个标签')
+          return
+        }
         const data = {
           title: editForm.title,
           content: editForm.contentType === 'TEXT' ? editForm.content : '',
           markdownContent: editForm.contentType === 'MARKDOWN' ? editMarkdownContent.value : '',
           contentType: editForm.contentType,
           difficulty: editForm.difficulty,
-          tags: editForm.tags,
+          tags: editForm.tags.join(','),
           coverUrl: editForm.coverUrl,
           audioUrl: editForm.audioUrl,
           isPublic: editForm.isPublic
@@ -1085,16 +1124,16 @@ const videoForm = reactive({
   description: '',
   mediaId: null,
   coverMediaId: null,
-  tags: '',
+  tags: [],
   subtitleContent: '',
-  subtitleContentZh: '',
   isPublicBool: true,
   videoUrl: '',
   coverUrl: ''
 })
 
 const videoFormRules = {
-  title: [{ required: true, message: '请输入视频标题', trigger: 'blur' }]
+  title: [{ required: true, message: '请输入视频标题', trigger: 'blur' }],
+  tags: [{ type: 'array', required: true, message: '请至少选择一个标签', trigger: 'change' }]
 }
 
 let selectedVideoFile = null
@@ -1107,20 +1146,12 @@ const handleSubtitleSelect = async (file) => {
     const text = await file.raw.text()
     videoForm.subtitleContent = text
   } catch (e) {
-    ElMessage.error('英文字幕文件读取失败')
-  }
-}
-const handleSubtitleZhSelect = async (file) => {
-  try {
-    const text = await file.raw.text()
-    videoForm.subtitleContentZh = text
-  } catch (e) {
-    ElMessage.error('中文字幕文件读取失败')
+    ElMessage.error('字幕文件读取失败')
   }
 }
 
 const resetVideoForm = () => {
-  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', subtitleContentZh: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
+  Object.assign(videoForm, { title: '', description: '', mediaId: null, coverMediaId: null, tags: [], subtitleContent: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
   selectedVideoFile = null
   selectedVideoCoverFile = null
   editingVideo.value = null
@@ -1173,14 +1204,18 @@ const handleVideoSubmit = async () => {
       ElMessage.error('请选择视频文件'); return
     }
 
+    // 验证标签必选
+    if (!videoForm.tags || videoForm.tags.length === 0) {
+      ElMessage.warning('请至少选择一个标签')
+      return
+    }
     const data = {
       title: videoForm.title,
       description: videoForm.description,
       mediaId: videoForm.mediaId,
       coverMediaId: videoForm.coverMediaId,
-      tags: videoForm.tags,
+      tags: videoForm.tags.join(','),
       subtitleContent: videoForm.subtitleContent || null,
-      subtitleContentZh: videoForm.subtitleContentZh || null,
       isPublic: videoForm.isPublicBool ? 1 : 0,
       videoUrl: videoForm.videoUrl,
       coverUrl: videoForm.coverUrl
@@ -1220,9 +1255,8 @@ const editVideoItem = (video) => {
     description: video.description || '',
     mediaId: video.mediaId,
     coverMediaId: video.coverMediaId,
-    tags: video.tags || '',
+    tags: video.tags ? video.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     subtitleContent: video.subtitleContent || '',
-    subtitleContentZh: video.subtitleContentZh || '',
     isPublicBool: video.isPublic === 1,
     videoUrl: video.videoUrl || '',
     coverUrl: video.coverUrl || ''
@@ -1244,14 +1278,14 @@ const deleteVideoItem = (video) => {
 }
 
 const playVideo = (video) => {
-  // isOwner=true 告知 VideoPlayer 用用户端 API 加载（支持预览待审核的自己的视频）
-  router.push({ path: '/student/video-player', query: { videoId: video.id, isOwner: '1' } })
+  router.push({ path: '/student/video-player', query: { videoId: video.id } })
 }
 
 // 生命周期
 onMounted(() => {
   loadMyUploads()
   loadMyVideos()
+  loadContentTags()
 })
 </script>
 
@@ -1268,6 +1302,14 @@ onMounted(() => {
 
 .video-item:hover {
   border-left-color: #f5a623 !important;
+}
+
+.article-item {
+  border-left: 3px solid #67c23a !important;
+}
+
+.article-item:hover {
+  border-left-color: #85ce61 !important;
 }
 .user-texts-container {
   padding: 20px;
@@ -1691,44 +1733,5 @@ onMounted(() => {
 .editor-dialog .el-dialog.is-fullscreen .text-form .markdown-editor {
   height: 100% !important;
   flex: 1;
-}
-
-/* 修复视频弹窗内上传列表内容溢出问题并允许多行完整显示 */
-.custom-video-dialog .el-form-item__content {
-  min-width: 0 !important; /* 关键修复：防止 flex 子项无限自适应文本宽度撑开弹窗 */
-}
-.custom-video-dialog .video-uploader,
-.custom-video-dialog .cover-uploader,
-.custom-video-dialog .subtitle-uploader {
-  width: 100%;
-  max-width: 100%;
-}
-.custom-video-dialog .el-upload-list {
-  width: 100%;
-}
-.custom-video-dialog .el-upload-list__item {
-  height: auto !important;
-  min-height: 32px;
-  max-width: 100% !important;
-  box-sizing: border-box;
-}
-.custom-video-dialog .el-upload-list__item-info {
-  width: 100%;
-  min-width: 0 !important;
-}
-.custom-video-dialog .el-upload-list__item-name {
-  display: block !important;
-  white-space: normal !important;
-  word-wrap: break-word !important;
-  word-break: break-all !important;
-  line-height: 1.5 !important;
-  height: auto !important;
-  padding-right: 25px !important;
-  margin-bottom: 2px !important;
-}
-.custom-video-dialog .el-upload-list__item-file-name {
-  white-space: normal !important;
-  word-wrap: break-word !important;
-  word-break: break-all !important;
 }
 </style>

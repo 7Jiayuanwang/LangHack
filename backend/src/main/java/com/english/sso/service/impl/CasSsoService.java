@@ -169,7 +169,7 @@ public class CasSsoService implements SsoService {
             if (userNodes.getLength() == 0) {
                 throw new BusinessException("CAS 响应中缺少用户名");
             }
-            String username = userNodes.item(0).getTextContent();
+            String casSubject = userNodes.item(0).getTextContent();
 
             // 提取属性（参照官方 Cas20ServiceTicketValidator.extractCustomAttributes()）：
             // 同一属性名出现多次时（如多个 memberOf），单值存 String，多值存 List<String>
@@ -204,19 +204,26 @@ public class CasSsoService implements SsoService {
             // 构建 SsoUserInfo
             SsoUserInfo userInfo = new SsoUserInfo();
             userInfo.setProvider("CAS");
-            userInfo.setSsoUserId(username);
-            userInfo.setSsoUsername(username);
+            userInfo.setSsoUserId(casSubject);
+            userInfo.setSsoUsername(casSubject);
             userInfo.setAttributes(attributes);
 
             // 映射属性
             Map<String, String> attrMapping = ssoProperties.getCas().getAttributes();
+            if (attrMapping.containsKey("username")) {
+                String usernameKey = attrMapping.get("username");
+                String mappedUsername = firstAttributeValue(attributes.get(usernameKey));
+                if (mappedUsername != null) {
+                    userInfo.setSsoUsername(mappedUsername);
+                }
+            }
             if (attrMapping.containsKey("real-name")) {
                 String realNameKey = attrMapping.get("real-name");
-                userInfo.setRealName((String) attributes.get(realNameKey));
+                userInfo.setRealName(firstAttributeValue(attributes.get(realNameKey)));
             }
             if (attrMapping.containsKey("email")) {
                 String emailKey = attrMapping.get("email");
-                userInfo.setEmail((String) attributes.get(emailKey));
+                userInfo.setEmail(firstAttributeValue(attributes.get(emailKey)));
             }
             if (attrMapping.containsKey("member-of")) {
                 String memberOfKey = attrMapping.get("member-of");
@@ -236,7 +243,8 @@ public class CasSsoService implements SsoService {
                 }
             }
 
-            log.info("CAS 用户信息解析成功: username={}, realName={}", username, userInfo.getRealName());
+            log.info("CAS 用户信息解析成功: subject={}, username={}, realName={}",
+                    casSubject, userInfo.getSsoUsername(), userInfo.getRealName());
             return userInfo;
 
         } catch (BusinessException e) {
@@ -277,5 +285,27 @@ public class CasSsoService implements SsoService {
         }
 
         return new ArrayList<>();
+    }
+
+    private String firstAttributeValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String) {
+            String str = ((String) value).trim();
+            return str.isEmpty() ? null : str;
+        }
+        if (value instanceof List) {
+            for (Object item : (List<?>) value) {
+                if (item == null) {
+                    continue;
+                }
+                String str = String.valueOf(item).trim();
+                if (!str.isEmpty()) {
+                    return str;
+                }
+            }
+        }
+        return null;
     }
 }

@@ -18,6 +18,14 @@ export function createBackupApi(mode = "FULL") {
   });
 }
 
+export function importBackupApi(data) {
+  return request({
+    url: "/api/ops/backup/import",
+    method: "post",
+    data,
+  });
+}
+
 export function getBackupDetail(id) {
   return request({
     url: `/api/ops/backup/${id}`,
@@ -25,11 +33,20 @@ export function getBackupDetail(id) {
   });
 }
 
-export function downloadBackupApi(id) {
+export function getBackupPreview(id, params) {
+  return request({
+    url: `/api/ops/backup/${id}/preview`,
+    method: "get",
+    params,
+  });
+}
+
+export function downloadBackupApi(id, onDownloadProgress) {
   return request({
     url: `/api/ops/backup/${id}/download`,
     method: "get",
     responseType: "blob",
+    onDownloadProgress,
   });
 }
 
@@ -82,6 +99,14 @@ export function getBackupOperationLogs(params) {
     url: "/api/ops/backup/logs",
     method: "get",
     params,
+  });
+}
+
+export function createCategoryBackupApi(category) {
+  return request({
+    url: "/api/ops/backup/category",
+    method: "post",
+    params: { category },
   });
 }
 
@@ -153,6 +178,15 @@ export function getApplicationLogs(params = {}) {
     url: "/api/ops/monitoring/app-logs",
     method: "get",
     params,
+  });
+}
+
+export function downloadApplicationLogs(params = {}) {
+  return request({
+    url: "/api/ops/monitoring/app-logs/download",
+    method: "get",
+    params,
+    responseType: "blob",
   });
 }
 

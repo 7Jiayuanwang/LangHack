@@ -539,66 +539,114 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.header-buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: flex-start;
-}
-
-.action-buttons .el-button {
-  margin: 0;
-  padding: 5px 12px;
-  font-size: 13px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.action-buttons .el-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.action-buttons .el-button--circle {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-buttons .el-dropdown {
-  margin-left: 2px;
-}
-
 .users-management {
+  max-width: 1400px;
+  margin: 0 auto;
   padding: 20px;
 }
 
-.table-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .users-management {
+    padding: 30px;
+  }
+  
+  :deep(.el-card__header) {
+    padding: 20px 24px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  :deep(.el-table) {
+    font-size: 16px;
+  }
+
+  :deep(.el-table .cell) {
+    line-height: 1.6;
+    padding: 12px 0;
+  }
+
+  .search-bar {
+    margin-bottom: 25px;
+    padding: 24px;
+  }
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.card-header span {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e293b;
+  position: relative;
+  padding-left: 16px;
+}
+
+.card-header span::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6366f1;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 12px;
 }
 
 .search-bar {
-  margin-bottom: 20px;
+  background: #f8fafc;
+  padding: 20px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  border: 1px solid #f1f5f9;
+}
+
+.search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.search-form :deep(.el-form-item) {
+  margin-bottom: 0;
+  margin-right: 0;
+}
+
+.table-wrapper {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+}
+
+:deep(.el-table) {
+  --el-table-header-bg-color: #f8fafc;
+  font-size: 15px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .pagination {
-  margin-top: 20px;
-  text-align: right;
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
 }
 
 @media (max-width: 768px) {
@@ -606,18 +654,27 @@ onMounted(() => {
     padding: 12px;
   }
 
-  .search-bar .el-form {
-    display: block;
-  }
-
-  .search-bar .el-form-item {
-    margin-right: 0;
-    margin-bottom: 12px;
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .header-buttons {
+    width: 100%;
+  }
+
+  .header-buttons .el-button {
+    flex: 1;
+  }
+
+  .search-form {
     flex-direction: column;
-    gap: 8px;
+    align-items: stretch;
+  }
+
+  .search-form :deep(.el-input),
+  .search-form :deep(.el-select) {
+    width: 100% !important;
   }
 }
 </style>

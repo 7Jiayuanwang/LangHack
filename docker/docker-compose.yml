@@ -49,6 +49,8 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
       MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
+      MYSQL_APP_USER: ${MYSQL_APP_USER:-}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-}
       TZ: Asia/Shanghai
     ports:
       - "${PORT_MYSQL:-3306}:3306"
@@ -64,10 +66,12 @@ services:
       # 03-import-backup.sh 自动选取最新全量备份（排除 pre-update_* 增量文件）
       - ../database:/docker-entrypoint-initdb.d/seed:ro
       - ../backups:/docker-entrypoint-initdb.d/seed-backups:ro
-      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/opt/langhack/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sh:/docker-entrypoint-initdb.d/04-apply-all-migrations.sh:ro
       - ./mysql/init/05-import-incremental-backup.sh:/docker-entrypoint-initdb.d/05-import-incremental-backup.sh:ro
       - ./mysql/init/06-import-ecdict.sh:/docker-entrypoint-initdb.d/06-import-ecdict.sh:ro
       - ../ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
+      - ./mysql/init/07-mark-init-complete.sh:/docker-entrypoint-initdb.d/07-mark-init-complete.sh:ro
     networks:
       - langhack-network
     healthcheck:
@@ -84,6 +88,9 @@ services:
     image: ${IMAGE_REGISTRY_PREFIX:-}mysql:8.0
     container_name: langhack-mysql-slave
     restart: unless-stopped
+    # 使用自定义 entrypoint wrapper 确保每次容器启动时都检查/修复复制
+    # 解决重部署时 docker-entrypoint-initdb.d 被跳过导致复制未配置的问题
+    entrypoint: /usr/local/bin/slave-wrapper.sh
     logging: *default-logging
     deploy:
       resources:
@@ -116,6 +123,8 @@ services:
       MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
       MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
       MYSQL_ROLE: slave
+      MYSQL_APP_USER: ${MYSQL_APP_USER:-}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-}
       TZ: Asia/Shanghai
     ports:
       - "${PORT_MYSQL_SLAVE:-3307}:3306"
@@ -126,25 +135,30 @@ services:
       # 不需要 seed/seed-backups/ecdict.csv（数据来自主库 mysqldump）
       - ./mysql/init/00-base-tables.sql:/docker-entrypoint-initdb.d/00-base-tables.sql:ro
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
-      - ./mysql/init/04-apply-all-migrations.sql:/docker-entrypoint-initdb.d/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sql:/opt/langhack/04-apply-all-migrations.sql:ro
+      - ./mysql/init/04-apply-all-migrations.sh:/docker-entrypoint-initdb.d/04-apply-all-migrations.sh:ro
       - ./mysql/init/08-v16-school-tables.sql:/docker-entrypoint-initdb.d/08-v16-school-tables.sql:ro
       # 复制初始化标记 + 实际初始化脚本
       - ./mysql/slave/06-create-replication-marker.sh:/docker-entrypoint-initdb.d/07-create-replication-marker.sh:ro
-      - ./mysql/slave/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
+      - ./mysql/slave/init-replication.sh:/opt/langhack/init-replication.sh:ro
+      # Entrypoint wrapper（每次容器启动时主动检查/修复复制）
+      - ./mysql/slave/entrypoint-wrapper.sh:/usr/local/bin/slave-wrapper.sh:ro
     networks:
       - langhack-network
     depends_on:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 检查 MySQL 进程存活 + 复制 IO 线程运行状态
-      # init-replication.sh 包含 mysqldump 数据同步，启动时间较长
-      # 复制 SQL 线程未运行时由 DynamicDataSource 运行时降级处理
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
+      # 仅检查 MySQL 进程存活，不强制要求复制运行
+      # 复制状态三层保障：
+      #   1) entrypoint-wrapper.sh 每次启动时主动检查/修复
+      #   2) deploy.sh / auto-update.sh 后置兜底
+      #   3) DynamicDataSource 运行时降级（回退主库）
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
-      retries: 24
-      start_period: 300s  # 5 分钟，等待主库初始化 + mysqldump 数据同步 + 复制配置
+      retries: 12
+      start_period: 120s  # MySQL 正常启动 2 分钟内可完成
 
   # ─────────────────────────────────────────────
   # Redis 缓存
@@ -187,6 +201,8 @@ services:
       dockerfile: Dockerfile
       args:
         IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
+        MAVEN_MIRROR_URL: ${MAVEN_MIRROR_URL:-}
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
     container_name: langhack-backend
     restart: unless-stopped
     logging: *default-logging
@@ -199,6 +215,8 @@ services:
     environment:
       TZ: Asia/Shanghai
       SPRING_PROFILES_ACTIVE: sso
+      # 应用端口（容器内部）
+      SERVER_PORT: ${SERVER_PORT:-8080}
       # 主库
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
@@ -213,7 +231,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       # 认证 & AI
       JWT_SECRET: ${JWT_SECRET}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       TUTOR_API_BASE_URL: ${TUTOR_API_BASE_URL}
       # HiAgent (文章版本生成 + AI问答)
       HIAGENT_API_KEY: ${HIAGENT_API_KEY:-}
@@ -243,7 +261,7 @@ services:
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
     ports:
-      - "${PORT_BACKEND:-8080}:8080"
+      - "${PORT_BACKEND:-8080}:${SERVER_PORT:-8080}"
     volumes:
       - app_logs:/app/logs
       # 上传文件绑定到宿主机，防止 docker compose down -v 丢失视频数据
@@ -256,15 +274,15 @@ services:
       mysql-master:
         condition: service_healthy   # 主库进程必须存活（阻塞）
       mysql-slave:
-        condition: service_healthy   # 从库进程必须存活（阻塞）；复制状态由 DynamicDataSource 运行时降级处理
+        condition: service_started   # 从库容器启动即可；复制状态由后置复制初始化与运行时降级共同处理
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health || exit 1"]
-      interval: 30s
+      test: ["CMD-SHELL", "curl -sf http://localhost:$${SERVER_PORT:-8080}/api/health || exit 1"]
+      interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 90s
+      retries: 30
+      start_period: 180s
 
   # ─────────────────────────────────────────────
   # Vue 3 前端 (Nginx 反向代理)
@@ -275,6 +293,8 @@ services:
       dockerfile: Dockerfile
       args:
         IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
         VITE_API_BASE_URL: ""
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
         VITE_ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
@@ -296,7 +316,7 @@ services:
       - langhack-network
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:80/ || exit 1"]
       interval: 30s

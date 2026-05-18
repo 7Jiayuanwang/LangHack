@@ -10,9 +10,18 @@
             <el-dropdown-menu>
               <el-dropdown-item command="FULL">全量备份</el-dropdown-item>
               <el-dropdown-item command="INCREMENTAL">增量备份</el-dropdown-item>
+              <el-dropdown-item divided disabled>分类备份</el-dropdown-item>
+              <el-dropdown-item command="category:system_config">系统配置</el-dropdown-item>
+              <el-dropdown-item command="category:user_data">用户数据</el-dropdown-item>
+              <el-dropdown-item command="category:business_data">业务数据</el-dropdown-item>
+              <el-dropdown-item command="category:school_data">学校数据</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <el-button type="primary" plain @click="openImportDialog">
+          <el-icon><Upload /></el-icon>
+          导入备份
+        </el-button>
         <el-button @click="loadBackups">
           <el-icon><Refresh /></el-icon>
           刷新
@@ -51,6 +60,10 @@
         <div class="stat-label">最近备份</div>
       </div>
       <div class="stat-card">
+        <div class="stat-value">{{ stats.missingFileCount || 0 }}</div>
+        <div class="stat-label">异常文件</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-value">
           <el-tag :type="stats.backupEnabled ? 'success' : 'danger'" size="small">
             {{ stats.backupEnabled ? '已启用' : '已禁用' }}
@@ -75,6 +88,7 @@
           <el-select v-model="filterType" placeholder="全部类型" clearable style="width: 130px" @change="handleFilter">
             <el-option label="手动备份" value="MANUAL" />
             <el-option label="定时备份" value="SCHEDULED" />
+            <el-option label="导入备份" value="IMPORTED" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -111,8 +125,8 @@
         </el-table-column>
         <el-table-column prop="backupType" label="类型" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.backupType === 'MANUAL' ? '' : 'success'" size="small">
-              {{ row.backupType === 'MANUAL' ? '手动' : '定时' }}
+            <el-tag :type="getBackupTypeTag(row.backupType)" size="small">
+              {{ getBackupTypeText(row.backupType) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -123,11 +137,26 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="category" label="分类" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="row.category" type="info" size="small">
+              {{ getCategoryLabel(row.category) }}
+            </el-tag>
+            <span v-else style="color: var(--text-tertiary, #909399); font-size: 12px;">-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">
-              {{ getStatusText(row.status) }}
+            <el-tag :type="getStatusType(row.status, row)" size="small">
+              {{ getStatusText(row.status, row) }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="文件" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="canReadBackup(row)" type="success" size="small">可读取</el-tag>
+            <el-tag v-else-if="isSuccessfulBackup(row)" type="danger" size="small">缺失/损坏</el-tag>
+            <span v-else style="color: var(--text-tertiary, #909399); font-size: 12px;">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="createdBy" label="创建者" width="100" show-overflow-tooltip />
@@ -136,26 +165,34 @@
             {{ formatTime(row.createdTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-if="row.status === 'SUCCESS'"
+              size="small"
+              @click="handleView(row)"
+            >
+              查看
+            </el-button>
+            <el-button
+              v-if="isSuccessfulBackup(row)"
               type="primary"
               size="small"
+              :disabled="!canReadBackup(row)"
               @click="handleDownload(row)"
             >
               下载
             </el-button>
             <el-button
-              v-if="row.status === 'SUCCESS'"
+              v-if="isSuccessfulBackup(row)"
               type="warning"
               size="small"
+              :disabled="!canReadBackup(row)"
               @click="handleRestore(row)"
             >
               恢复
             </el-button>
             <el-button
-              v-if="row.status !== 'IN_PROGRESS'"
+              v-if="row.status !== 'IN_PROGRESS' || isStaleInProgress(row)"
               type="danger"
               size="small"
               @click="handleDelete(row)"
@@ -195,13 +232,27 @@
           show-icon
         >
           <template #default>
-            <p>恢复数据库将覆盖当前所有数据，此操作不可撤销！</p>
+            <p v-if="restoreMode === 'full'">恢复数据库将覆盖当前所有数据，此操作不可撤销！</p>
+            <p v-else>增量恢复将导入备份数据，已存在的数据将被保留（跳过重复键冲突）。</p>
             <p>备份文件：<strong>{{ restoreRecord?.filename }}</strong></p>
             <p v-if="restoreRecord?.backupMode === 'INCREMENTAL'" style="color: #E6A23C; font-weight: bold;">
               ⚠ 这是增量备份，请确保已先恢复其基准全量备份（ID: {{ restoreRecord?.baseBackupId || '未知' }}）
             </p>
           </template>
         </el-alert>
+        <div class="restore-mode-selector">
+          <p style="margin-bottom: 8px; font-weight: 600;">恢复模式：</p>
+          <el-radio-group v-model="restoreMode">
+            <el-radio label="full">
+              <span style="font-weight: 600;">全量恢复</span>
+              <span style="color: var(--text-tertiary); font-size: 12px; margin-left: 4px;">（覆盖所有数据）</span>
+            </el-radio>
+            <el-radio label="incremental">
+              <span style="font-weight: 600;">增量恢复</span>
+              <span style="color: var(--text-tertiary); font-size: 12px; margin-left: 4px;">（保留新增数据）</span>
+            </el-radio>
+          </el-radio-group>
+        </div>
         <div class="confirm-input">
           <p>请输入数据库名称以确认恢复操作：</p>
           <el-input
@@ -224,6 +275,99 @@
       </template>
     </el-dialog>
 
+    <!-- 导入备份对话框 -->
+    <el-dialog
+      v-model="importDialogVisible"
+      title="导入备份"
+      width="min(560px, 92%)"
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="100px" class="import-form">
+        <el-form-item label="备份文件">
+          <div class="import-file-field">
+            <el-upload
+              :auto-upload="false"
+              :show-file-list="false"
+              accept=".sql,.gz"
+              :limit="1"
+              @change="handleImportFileChange"
+            >
+              <el-button>选择文件</el-button>
+            </el-upload>
+            <div class="selected-file-name">{{ importForm.fileName || '未选择文件' }}</div>
+          </div>
+        </el-form-item>
+        <el-form-item label="导入模式">
+          <el-select v-model="importForm.mode" style="width: 180px">
+            <el-option label="自动识别" value="AUTO" />
+            <el-option label="全量" value="FULL" />
+            <el-option label="增量" value="INCREMENTAL" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-select v-model="importForm.category" clearable placeholder="自动识别 / 留空" style="width: 220px">
+            <el-option label="系统配置" value="system_config" />
+            <el-option label="用户数据" value="user_data" />
+            <el-option label="业务数据" value="business_data" />
+            <el-option label="学校数据" value="school_data" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importForm.file" @click="confirmImportBackup">
+          导入
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 备份详情抽屉 -->
+    <el-drawer
+      v-model="detailDrawerVisible"
+      title="备份详情"
+      direction="rtl"
+      size="720px"
+    >
+      <div v-loading="detailLoading" class="backup-detail">
+        <div v-if="currentDetail" class="detail-section">
+          <div class="detail-grid">
+            <div><span>文件名：</span>{{ currentDetail.filename }}</div>
+            <div><span>状态：</span>{{ getStatusText(currentDetail.status) }}</div>
+            <div><span>模式：</span>{{ currentDetail.backupMode === 'INCREMENTAL' ? '增量' : '全量' }}</div>
+            <div><span>类型：</span>{{ getBackupTypeText(currentDetail.backupType) }}</div>
+            <div><span>分类：</span>{{ currentDetail.category ? getCategoryLabel(currentDetail.category) : '-' }}</div>
+            <div><span>文件大小：</span>{{ formatFileSize(currentDetail.fileSize || 0) }}</div>
+            <div><span>创建者：</span>{{ currentDetail.createdBy || '-' }}</div>
+            <div><span>创建时间：</span>{{ formatTime(currentDetail.createdTime) }}</div>
+            <div><span>完成时间：</span>{{ formatTime(currentDetail.completedTime) }}</div>
+            <div><span>文件状态：</span>{{ currentDetail.availabilityMessage || (canReadBackup(currentDetail) ? '文件可读' : '-') }}</div>
+            <div v-if="currentDetail.baseBackupId"><span>基准备份ID：</span>{{ currentDetail.baseBackupId }}</div>
+            <div v-if="currentDetail.errorMessage" class="detail-error"><span>错误信息：</span>{{ currentDetail.errorMessage }}</div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="section-header">
+            <strong>内容预览</strong>
+            <span v-if="previewMeta.skippedLines > 0" class="preview-hint">
+              已跳过前 {{ previewMeta.skippedLines }} 行注释和配置
+            </span>
+            <span v-if="previewMeta.truncated" class="preview-hint">
+              已截断显示（共读取 {{ previewMeta.totalLinesRead }} 行，显示 {{ previewMeta.lineCount }} 行）
+            </span>
+          </div>
+          <el-alert
+            v-if="previewError"
+            type="warning"
+            :closable="false"
+            show-icon
+            :title="previewError"
+          />
+          <pre v-else class="preview-block">{{ backupPreview || '暂无预览内容' }}</pre>
+        </div>
+      </div>
+    </el-drawer>
+
     <!-- 操作日志抽屉 -->
     <el-drawer
       v-model="logsDrawerVisible"
@@ -234,6 +378,7 @@
       <div class="logs-filter">
         <el-select v-model="logFilterType" placeholder="全部类型" clearable style="width: 160px" @change="handleLogFilter">
           <el-option label="创建备份" value="BACKUP_CREATE" />
+          <el-option label="导入备份" value="BACKUP_IMPORT" />
           <el-option label="删除备份" value="BACKUP_DELETE" />
           <el-option label="恢复备份" value="BACKUP_RESTORE" />
           <el-option label="下载备份" value="BACKUP_DOWNLOAD" />
@@ -494,9 +639,14 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Refresh, Delete, RefreshLeft, Document, Setting, Timer, Clock, FolderOpened, CopyDocument, Coin, InfoFilled, Check } from '@element-plus/icons-vue'
+import { normalizeDownloadResponse, extractBlobErrorMessage, triggerBlobDownload } from '@/utils/blobDownload'
 import {
   getBackupList,
   createBackupApi,
+  createCategoryBackupApi,
+  importBackupApi,
+  getBackupDetail,
+  getBackupPreview,
   downloadBackupApi,
   deleteBackupApi,
   restoreBackupApi,
@@ -513,11 +663,31 @@ const stats = ref({})
 const loading = ref(false)
 const creating = ref(false)
 const restoring = ref(false)
+const importing = ref(false)
 const filterType = ref('')
 const filterStatus = ref('')
 const restoreDialogVisible = ref(false)
 const restoreRecord = ref(null)
+const restoreMode = ref('full')
 const confirmDbName = ref('')
+const importDialogVisible = ref(false)
+const detailDrawerVisible = ref(false)
+const detailLoading = ref(false)
+const currentDetail = ref(null)
+const backupPreview = ref('')
+const previewError = ref('')
+const previewMeta = reactive({
+  truncated: false,
+  lineCount: 0,
+  totalLinesRead: 0,
+  skippedLines: 0
+})
+const importForm = reactive({
+  file: null,
+  fileName: '',
+  mode: 'AUTO',
+  category: ''
+})
 let pollTimer = null
 
 // Config drawer state
@@ -592,8 +762,76 @@ const loadStats = async () => {
   }
 }
 
+const normalizeBackupStatus = (status) => {
+  if (!status) return 'UNKNOWN'
+  const normalized = String(status).toUpperCase()
+  if (normalized === 'COMPLETED') return 'SUCCESS'
+  if (normalized === 'RUNNING') return 'IN_PROGRESS'
+  return normalized
+}
+
+const isSuccessfulBackup = (row) => normalizeBackupStatus(row?.status) === 'SUCCESS'
+
+const canReadBackup = (row) => isSuccessfulBackup(row) && row?.readable !== false && row?.fileAvailable !== false
+
+// IN_PROGRESS records older than 2 hours are considered stale (container not restarted)
+const isStaleInProgress = (row) => {
+  if (normalizeBackupStatus(row?.status) !== 'IN_PROGRESS') return false
+  if (!row?.createdTime) return false
+  const created = Array.isArray(row.createdTime)
+    ? new Date(row.createdTime[0], row.createdTime[1] - 1, row.createdTime[2], row.createdTime[3] || 0, row.createdTime[4] || 0)
+    : new Date(row.createdTime)
+  return Date.now() - created.getTime() > 2 * 60 * 60 * 1000
+}
+
+const handleView = async (row) => {
+  detailDrawerVisible.value = true
+  detailLoading.value = true
+  currentDetail.value = null
+  backupPreview.value = ''
+  previewError.value = ''
+  previewMeta.truncated = false
+  previewMeta.lineCount = 0
+  previewMeta.totalLinesRead = 0
+  previewMeta.skippedLines = 0
+
+  try {
+    const [detailRes, previewRes] = await Promise.allSettled([
+      getBackupDetail(row.id),
+      getBackupPreview(row.id, { maxLines: 200, maxChars: 50000 })
+    ])
+
+    if (detailRes.status === 'fulfilled' && detailRes.value?.code === 200) {
+      currentDetail.value = detailRes.value.data
+    } else {
+      previewError.value = detailRes.status === 'fulfilled'
+        ? (detailRes.value?.message || '读取备份详情失败')
+        : (detailRes.reason?.message || '读取备份详情失败')
+    }
+
+    if (previewRes.status === 'fulfilled' && previewRes.value?.code === 200) {
+      backupPreview.value = previewRes.value.data?.preview || ''
+      previewMeta.truncated = previewRes.value.data?.truncated === true
+      previewMeta.lineCount = previewRes.value.data?.lineCount || 0
+      previewMeta.totalLinesRead = previewRes.value.data?.totalLinesRead || 0
+      previewMeta.skippedLines = previewRes.value.data?.skippedLines || 0
+    } else {
+      previewError.value = previewRes.status === 'fulfilled'
+        ? (previewRes.value?.message || '读取备份预览失败')
+        : (previewRes.reason?.message || '读取备份预览失败')
+    }
+  } finally {
+    detailLoading.value = false
+  }
+}
+
 // Create backup
 const handleCreateBackup = async (mode) => {
+  if (typeof mode === 'string' && mode.startsWith('category:')) {
+    const category = mode.slice('category:'.length)
+    await handleCreateCategoryBackup(category)
+    return
+  }
   if (!['FULL', 'INCREMENTAL'].includes(mode)) return
   const modeLabel = mode === 'INCREMENTAL' ? '增量' : '全量'
   try {
@@ -626,10 +864,136 @@ const handleCreateBackup = async (mode) => {
   }
 }
 
+const CATEGORY_LABELS = {
+  system_config: '系统配置',
+  user_data: '用户数据',
+  business_data: '业务数据',
+  school_data: '学校数据'
+}
+
+const getCategoryLabel = (cat) => CATEGORY_LABELS[cat] || cat
+
+const getBackupTypeText = (type) => {
+  const map = {
+    MANUAL: '手动',
+    SCHEDULED: '定时',
+    IMPORTED: '导入'
+  }
+  return map[type] || type || '-'
+}
+
+const getBackupTypeTag = (type) => {
+  const map = {
+    MANUAL: '',
+    SCHEDULED: 'success',
+    IMPORTED: 'info'
+  }
+  return map[type] ?? 'info'
+}
+
+const openImportDialog = () => {
+  importDialogVisible.value = true
+  importForm.file = null
+  importForm.fileName = ''
+  importForm.mode = 'AUTO'
+  importForm.category = ''
+}
+
+const handleImportFileChange = (file) => {
+  importForm.file = file.raw || file
+  importForm.fileName = file.name || file.raw?.name || ''
+}
+
+const confirmImportBackup = async () => {
+  if (!importForm.file) {
+    ElMessage.warning('请选择要导入的备份文件')
+    return
+  }
+
+  const formData = new FormData()
+  formData.append('file', importForm.file)
+  formData.append('mode', importForm.mode)
+  if (importForm.category) {
+    formData.append('category', importForm.category)
+  }
+
+  importing.value = true
+  try {
+    const response = await importBackupApi(formData)
+    if (response.code === 200) {
+      ElMessage.success('备份文件已导入')
+      importDialogVisible.value = false
+      await loadBackups()
+      await loadStats()
+    } else {
+      ElMessage.error(response.message || '导入备份失败')
+    }
+  } catch (error) {
+    ElMessage.error('导入备份失败')
+  } finally {
+    importing.value = false
+  }
+}
+
+const handleCreateCategoryBackup = async (category) => {
+  const label = getCategoryLabel(category)
+  try {
+    await ElMessageBox.confirm(`确认创建「${label}」分类备份？`, '分类备份', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'info'
+    })
+  } catch {
+    return
+  }
+
+  creating.value = true
+  try {
+    const response = await createCategoryBackupApi(category)
+    if (response.code === 200) {
+      ElMessage.success(`「${label}」分类备份任务已创建，请稍候刷新查看结果`)
+      if (pollTimer) clearTimeout(pollTimer)
+      pollTimer = setTimeout(() => {
+        loadBackups()
+        loadStats()
+      }, 3000)
+    } else {
+      ElMessage.error(response.message || '创建分类备份失败')
+    }
+  } catch (error) {
+    ElMessage.error('创建分类备份失败')
+  } finally {
+    creating.value = false
+  }
+}
+
 // Download backup
 const handleDownload = async (row) => {
+  let loadingInstance = null
   try {
-    const response = await downloadBackupApi(row.id)
+    // 显示下载进度提示
+    loadingInstance = ElMessage({
+      message: '正在下载备份文件，请稍候...',
+      type: 'info',
+      duration: 0,
+      showClose: false,
+    })
+
+    const response = await downloadBackupApi(row.id, (progressEvent) => {
+      if (progressEvent.total) {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        if (loadingInstance) {
+          loadingInstance.close()
+        }
+        loadingInstance = ElMessage({
+          message: `下载中: ${percentCompleted}% (${(progressEvent.loaded / 1024 / 1024).toFixed(2)}MB / ${(progressEvent.total / 1024 / 1024).toFixed(2)}MB)`,
+          type: 'info',
+          duration: 0,
+          showClose: false,
+        })
+      }
+    })
+
     const blobData = response.data || response
     const blob = blobData instanceof Blob
       ? blobData
@@ -659,10 +1023,14 @@ const handleDownload = async (row) => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    ElMessage.success('下载开始')
+    ElMessage.success('下载完成')
   } catch (error) {
     console.error('Download backup failed:', error)
     ElMessage.error('下载备份文件失败')
+  } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
   }
 }
 
@@ -699,6 +1067,7 @@ const handleDelete = async (row) => {
 // Restore backup
 const handleRestore = (row) => {
   restoreRecord.value = row
+  restoreMode.value = 'full'
   confirmDbName.value = ''
   restoreDialogVisible.value = true
 }
@@ -712,10 +1081,11 @@ const confirmRestore = async () => {
   restoring.value = true
   try {
     const response = await restoreBackupApi(restoreRecord.value.id, {
-      confirmDatabaseName: confirmDbName.value.trim()
+      confirmDatabaseName: confirmDbName.value.trim(),
+      mode: restoreMode.value
     })
     if (response.code === 200) {
-      ElMessage.success('数据库恢复成功')
+      ElMessage.success(response.data || '数据库恢复成功')
       restoreDialogVisible.value = false
       loadBackups()
       loadStats()
@@ -809,14 +1179,17 @@ const formatLastTime = (time) => {
   return formatted.substring(5, 16)
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status, row) => {
+  if (normalizeBackupStatus(status) === 'IN_PROGRESS' && row && isStaleInProgress(row)) return 'danger'
   const map = { SUCCESS: 'success', FAILED: 'danger', IN_PROGRESS: 'warning' }
-  return map[status] || 'info'
+  return map[normalizeBackupStatus(status)] || 'info'
 }
 
-const getStatusText = (status) => {
+const getStatusText = (status, row) => {
+  if (normalizeBackupStatus(status) === 'IN_PROGRESS' && row && isStaleInProgress(row)) return '超时'
   const map = { SUCCESS: '成功', FAILED: '失败', IN_PROGRESS: '进行中' }
-  return map[status] || status
+  const normalized = normalizeBackupStatus(status)
+  return map[normalized] || normalized
 }
 
 // Operation Logs
@@ -876,6 +1249,7 @@ const handleLogPageChange = (page) => {
 const getLogTypeText = (type) => {
   const map = {
     BACKUP_CREATE: '创建备份',
+    BACKUP_IMPORT: '导入备份',
     BACKUP_DELETE: '删除备份',
     BACKUP_RESTORE: '恢复备份',
     BACKUP_DOWNLOAD: '下载备份',
@@ -889,6 +1263,7 @@ const getLogTypeText = (type) => {
 const getLogTypeTag = (type) => {
   const map = {
     BACKUP_CREATE: 'success',
+    BACKUP_IMPORT: 'info',
     BACKUP_DELETE: 'danger',
     BACKUP_RESTORE: 'warning',
     BACKUP_DOWNLOAD: '',
@@ -952,476 +1327,355 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+
+/* 备份管理样式 */
 .backups-management {
-  padding: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .backups-management {
+    padding: 30px;
+  }
+  
+  .header h2 {
+    font-size: 28px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .stat-label {
+    font-size: 15px;
+  }
+
+  :deep(.el-table) {
+    font-size: 16px;
+  }
+
+  :deep(.el-table .cell) {
+    line-height: 1.6;
+    padding: 12px 0;
+  }
+
+  .search-bar {
+    margin-bottom: 25px;
+    padding: 24px;
+  }
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
+  gap: 16px;
   flex-wrap: wrap;
-  gap: 12px;
 }
 
 .header h2 {
   margin: 0;
-  font-size: 20px;
-  color: var(--text-primary);
+  color: #1e293b;
+  font-weight: 700;
 }
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .stat-card {
-  background: var(--surface-color, #fff);
-  border-radius: 12px;
-  padding: 16px;
-  text-align: center;
-  border: 1px solid var(--border-light, #ebeef5);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.05);
+  border-color: #6366f1;
 }
 
 .stat-value {
   font-size: 20px;
-  font-weight: 700;
-  color: var(--accent-color, #409eff);
-  margin-bottom: 4px;
+  font-weight: 800;
+  color: #1e293b;
   word-break: break-all;
 }
 
 .stat-label {
-  font-size: 12px;
-  color: var(--text-tertiary, #909399);
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
 }
 
 .search-bar {
-  margin-bottom: 16px;
-  background: var(--surface-color, #fff);
-  padding: 12px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--border-light, #ebeef5);
+  background: #f8fafc;
+  padding: 20px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  border: 1px solid #e2e8f0;
 }
 
 .search-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.backups-table {
-  background: var(--surface-color, #fff);
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border-light, #ebeef5);
-}
-
-.pagination {
-  display: flex;
-  justify-content: center;
-  padding: 16px;
-}
-
-.restore-warning {
-  display: flex;
-  flex-direction: column;
   gap: 16px;
 }
 
-.confirm-input {
-  margin-top: 8px;
+.search-form :deep(.el-form-item) {
+  margin-bottom: 0;
+  margin-right: 0;
 }
 
-.confirm-input p {
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: var(--text-primary, #303133);
+.import-form {
+  padding-top: 8px;
 }
 
+.import-file-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.selected-file-name {
+  font-size: 13px;
+  color: #64748b;
+  word-break: break-all;
+}
+
+.backups-table {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+}
+
+.backup-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detail-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  background: #fff;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
+  font-size: 14px;
+  color: #334155;
+}
+
+.detail-grid span {
+  color: #64748b;
+}
+
+.detail-error {
+  grid-column: 1 / -1;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.preview-hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.preview-block {
+  margin: 0;
+  padding: 14px;
+  min-height: 220px;
+  max-height: 460px;
+  overflow: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+:deep(.el-table) {
+  --el-table-header-bg-color: #f8fafc;
+}
+
+.pagination {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+  padding-bottom: 16px;
+}
+
+/* 响应式适配 */
 @media (max-width: 768px) {
-  .stats-cards {
-    grid-template-columns: repeat(2, 1fr);
+  .backups-management {
+    padding: 16px;
   }
 
   .header {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions .el-button,
+  .actions .el-dropdown {
+    flex: 1;
+    min-width: 100px;
+  }
+
+  .stats-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .search-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-form :deep(.el-form-item__content) {
+    width: 100%;
+  }
+
+  .search-form :deep(.el-select) {
+    width: 100% !important;
+  }
 }
 
-.logs-filter {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+@media (max-width: 480px) {
+  .stats-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .actions .el-dropdown,
+  .actions .el-button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
 }
 
-/* 备份策略配置面板 */
+/* 配置面板样式 */
 .config-panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 4px 0;
 }
 
 .config-card {
-  background: var(--surface-color, #fff);
-  border: 1px solid var(--border-light, #ebeef5);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: box-shadow 0.2s;
-}
-
-.config-card:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .card-header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
-  flex: 1;
-  min-width: 0;
+  gap: 12px;
 }
 
 .card-icon {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
-.auto-icon {
-  background: linear-gradient(135deg, #e0f2fe, #bae6fd);
-  color: #0284c7;
-}
-
-.time-icon {
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
-  color: #d97706;
-}
-
-.full-icon {
-  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
-  color: #16a34a;
-}
-
-.incr-icon {
-  background: linear-gradient(135deg, #fce7f3, #fbcfe8);
-  color: #db2777;
-}
-
-.storage-icon {
-  background: linear-gradient(135deg, #f3e8ff, #e9d5ff);
-  color: #9333ea;
-}
-
-.card-title-group {
-  min-width: 0;
-}
-
-.card-title-group h4 {
-  margin: 0 0 2px 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary, #303133);
-  line-height: 1.4;
-}
-
-.card-desc {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-tertiary, #909399);
-  line-height: 1.4;
-}
-
-.card-body {
-  padding: 0 20px 16px;
-}
-
-/* 时间选择器 */
 .time-picker-row {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.time-picker-item {
-  flex: 1;
-}
-
-.time-picker-item label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-secondary, #606266);
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.time-separator {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-tertiary, #909399);
-  padding-bottom: 4px;
-}
-
-.time-preview {
-  display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: #f0f9ff;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #0369a1;
-}
-
-/* 信息横幅 */
-.info-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.info-banner.success {
-  background: #f0fdf4;
-  color: #166534;
-}
-
-/* 增量备份间隔设置 */
-.interval-setting {
-  margin-bottom: 20px;
-}
-
-.interval-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.interval-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary, #303133);
-}
-
-.interval-value {
-  font-size: 14px;
-  font-weight: 700;
-  color: #db2777;
-  background: #fce7f3;
-  padding: 2px 10px;
-  border-radius: 12px;
-}
-
-.interval-desc {
-  font-size: 12px;
-  color: var(--text-tertiary, #909399);
-  margin: 0 0 16px 0;
-  line-height: 1.4;
-}
-
-/* 备份计划预览 */
-.schedule-preview {
-  background: var(--bg-secondary, #f8fafc);
-  border: 1px solid var(--border-light, #e2e8f0);
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-
-.schedule-preview h5 {
-  margin: 0 0 12px 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary, #606266);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 12px;
 }
 
 .preview-days {
   display: flex;
   justify-content: space-between;
-  gap: 4px;
-  margin-bottom: 12px;
+  margin-top: 12px;
 }
 
 .preview-day {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  text-align: center;
   flex: 1;
-  padding: 8px 2px;
-  border-radius: 8px;
-  transition: background 0.2s;
 }
 
-.preview-day .day-label {
-  font-size: 11px;
-  color: var(--text-tertiary, #909399);
-  font-weight: 500;
-}
-
-.preview-day .day-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  transition: all 0.2s;
-}
-
-.preview-day.is-full .day-dot {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.4);
-}
-
-.preview-day.is-incremental .day-dot {
-  background: linear-gradient(135deg, #f472b6, #db2777);
-  box-shadow: 0 2px 6px rgba(219, 39, 119, 0.3);
-}
-
-.preview-day .day-type {
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.preview-day.is-full .day-type {
-  color: #16a34a;
-}
-
-.preview-day.is-incremental .day-type {
-  color: #db2777;
-}
-
-.preview-legend {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-tertiary, #909399);
-}
-
-.legend-dot {
+.day-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  margin: 4px auto;
 }
 
-.legend-dot.full-dot {
-  background: #22c55e;
+.is-full .day-dot { background: #10b981; }
+.is-incremental .day-dot { background: #f59e0b; }
+
+.restore-mode-selector {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
 }
 
-.legend-dot.incr-dot {
-  background: #db2777;
+.restore-mode-selector .el-radio {
+  display: block;
+  margin: 8px 0;
 }
 
-/* 存储策略 */
-.storage-items {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.confirm-input {
+  margin-top: 16px;
 }
 
-.storage-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}
-
-.storage-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.label-main {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary, #303133);
-}
-
-.label-hint {
-  font-size: 12px;
-  color: var(--text-tertiary, #909399);
-}
-
-/* 配置保存按钮 */
-.config-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-light, #ebeef5);
-}
-
-/* 动画 */
-.config-fade-enter-active,
-.config-fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.config-fade-enter-from,
-.config-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
-@media (max-width: 600px) {
-  .time-picker-row {
-    flex-direction: column;
-  }
-
-  .time-separator {
-    display: none;
-  }
-
-  .preview-days {
-    gap: 2px;
-  }
-
-  .preview-day .day-label {
-    font-size: 10px;
-  }
-
-  .storage-item {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+.confirm-input p {
+  margin-bottom: 8px;
+  font-weight: 600;
 }
 </style>

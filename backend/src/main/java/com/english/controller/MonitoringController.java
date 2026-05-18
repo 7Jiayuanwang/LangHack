@@ -21,12 +21,18 @@ import com.english.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -368,13 +374,50 @@ public class MonitoringController {
             @RequestParam(required = false) String level,
             @RequestParam(required = false) String keyword) {
         try {
+            InMemoryLogService.LogQueryResult result = inMemoryLogService.query(limit, level, keyword);
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("entries", inMemoryLogService.getRecentLogs(limit, level, keyword));
-            data.put("levelCounts", inMemoryLogService.getLevelCounts());
+            data.put("entries", result.entries);
+            data.put("levelCounts", result.levelCounts);
             return Result.success(data);
         } catch (Exception e) {
             logger.error("获取应用日志失败", e);
             return Result.error("获取应用日志失败");
+        }
+    }
+
+    @GetMapping("/app-logs/download")
+    public ResponseEntity<ByteArrayResource> downloadAppLogs(
+            @RequestParam(defaultValue = "2000") int limit,
+            @RequestParam(required = false) String level,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        try {
+            List<Map<String, Object>> entries = inMemoryLogService.getRecentLogs(limit, level, keyword);
+            StringBuilder sb = new StringBuilder();
+            for (Map<String, Object> entry : entries) {
+                String ts = (String) entry.get("timestamp");
+                // date-range filter: timestamp starts with "yyyy-MM-dd"
+                if (startDate != null && ts != null && ts.compareTo(startDate) < 0) continue;
+                if (endDate != null && ts != null && ts.compareTo(endDate + " 23:59:59") > 0) continue;
+                sb.append(ts).append(" [").append(entry.get("level")).append("] ")
+                  .append(entry.get("logger")).append(" - ").append(entry.get("message"));
+                if (entry.get("exception") != null) {
+                    sb.append("\n  ").append(entry.get("exception"));
+                }
+                sb.append("\n");
+            }
+            String filename = "langhack-" +
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".log";
+            byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("text/plain;charset=UTF-8"))
+                .contentLength(bytes.length)
+                .body(new ByteArrayResource(bytes));
+        } catch (Exception e) {
+            logger.error("下载日志失败", e);
+            return ResponseEntity.internalServerError().build();
         }
     }
 }

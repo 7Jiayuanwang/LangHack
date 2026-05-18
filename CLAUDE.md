@@ -159,12 +159,28 @@ backend/src/main/resources/db/migration/V{n}__{description}.sql
 
 ### 学校数据集成
 
-- 双模式：`api`（REST API）或 `etl`（JDBC 直连）
-- **API 认证方式**：`appId + appSecret + timestamp` 签名（2026-04-18 从旧 Bearer Token 迁移）
+- **双模式**：`api`（REST API，默认）或 `etl`（JDBC 直连）
+  - 配置：`SCHOOL_DATA_SOURCE=api` 或 `etl`
+  - 路由：`SchoolDataApiClientDelegate` 根据配置切换实现
+  
+#### API 模式（默认）
+- **认证方式**：`appId + appSecret + timestamp` 签名（2026-04-18 从旧 Bearer Token 迁移）
   - 签名公式：`sign = Base64(MD5(appId + appSecret + timestamp))`
   - 请求头：`appId`, `timestamp`（毫秒）, `sign`
   - 环境变量：`SCHOOL_API_APP_ID` + `SCHOOL_API_APP_SECRET`（旧 `SCHOOL_API_TOKEN` 已废弃）
   - 9 个数据源 endpoint URL 代码内置（`SchoolDataProperties.java:97-107`），无需配置
+- **实现**：`SchoolDataApiClientImpl`
+
+#### ETL 模式
+- **前置条件**：学校提供数据库直连权限 + 视图/表结构
+- **配置**：`SCHOOL_ETL_JDBC_URL`, `SCHOOL_ETL_USERNAME`, `SCHOOL_ETL_PASSWORD`
+- **实现**：`SchoolDataEtlClientImpl`（独立 HikariCP 连接池）
+- **查询配置**：`SchoolDataProperties.EtlProperties.queries`（8 个数据源，含 `teacher_courses`）
+- **必需视图**：`v_administrative_class`, `v_school_course`, `v_teaching_class`, `v_course_schedule`, `v_course_selection`, `v_level_exam_scores`, `v_teaching_plans`, `v_teacher_courses`
+- **必需字段**：每个视图必须包含 `updated_at` 字段（用于增量同步）
+- **文档**：`docs/ETL_MODE_SETUP.md`（配置指南）, `docs/etl/create_views.sql`（视图创建脚本）, `docs/etl/field_mapping_guide.md`（字段映射）
+
+#### 通用配置
 - **部署配置入口**：`scripts/deploy.sh` 交互向导（SSO 之后、备份之前）或运维面板 → 学校数据配置
 - 后端核心：`SchoolDataSyncServiceImpl` + `SchoolDataApiClientDelegate`
 - 控制器：`SchoolDataQueryController` + `SchoolDataSyncController`
@@ -236,6 +252,7 @@ cd backend && mvn test
 | AI 模型提供商集成文档 | `docs/AI模型提供商集成文档.md` | HiAgent / OpenRouter / SiliconFlow+Qwen / 腾讯云ASR 配置、协议、独立请求样例、路由架构 |
 | API 接口文档 | `docs/API接口文档.md` | 后端 REST API 接口说明 |
 | 部署文档 | `docs/DEPLOYMENT.md` | Docker Compose 部署指南 |
+| Docker 镜像同步工具 | `docs/DOCKER_IMAGE_SYNC.md` | 本地 registry 镜像同步、内网部署、故障排查 |
 | 数据库协作规范 | `docs/DATABASE_COLLABORATION_GUIDE.md` | 数据库表登记与变更规范 |
 | 故障排查 | `docs/TROUBLESHOOTING.md` | 常见问题排查 |
 | SSO 集成文档 | `docs/sso/` | CAS 统一身份认证集成（5 份文档） |

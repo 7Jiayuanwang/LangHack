@@ -62,18 +62,8 @@
 
       <!-- Main Content Area -->
       <section class="article-body">
-        <InteractiveText
-          v-if="!isMarkdown"
-          :text="textContent"
-          :text-id="textId"
-          :unit-id="unitId"
-          @word-click="handleWordClick"
-          @learning-record="handleLearningRecord"
-        />
-        
-        <div 
-          v-else 
-          class="markdown-content" 
+        <div
+          class="markdown-content"
           v-html="textContent"
           @click="handleMarkdownClick"
         ></div>
@@ -114,7 +104,7 @@
     <el-dialog
       v-model="showTranslateDialog"
       title="翻译结果"
-      :width="translateDialogWidth"
+      width="min(400px, 92vw)"
       class="translate-dialog"
     >
       <div class="translate-content" v-if="!translating">
@@ -151,42 +141,25 @@
     </el-dialog>
 
     <!-- 单词详情对话框 -->
-    <el-dialog 
-      v-model="showWordDialog" 
-      title="单词详情" 
-      width="350px"
-      :class="{ 'mobile-word-dialog': true }"
+    <el-dialog
+      v-model="showWordDialog"
+      title="词汇详情"
+      width="min(350px, 92vw)"
+      class="word-dialog"
+      align-center
     >
       <div class="word-content" v-if="selectedWordInfo && !loadingWord">
         <div class="word-header">
-          <div class="word-title-row">
-            <h2 class="word-title">{{ selectedWordInfo.word || '未知单词' }}</h2>
-            <el-button 
-              v-if="selectedWordInfo.audioUrl || selectedWordInfo.audio" 
-              circle 
-              size="small" 
-              @click="playWordAudio"
-            >
-              <el-icon><VideoPlay /></el-icon>
-            </el-button>
-          </div>
+          <h2 class="word-title">{{ selectedWordInfo.word || '未知单词' }}</h2>
           <div class="pronunciation" v-if="selectedWordInfo.phonetic || selectedWordInfo.pronunciation">
-            [{{ selectedWordInfo.phonetic || selectedWordInfo.pronunciation }}]
+            {{ selectedWordInfo.pronunciation || selectedWordInfo.phonetic }}
           </div>
         </div>
 
         <div class="word-body">
-          <div class="main-meaning">
-            <div class="section-title">释义</div>
+          <div class="main-meaning" v-if="selectedWordInfo.definition || selectedWordInfo.translation">
             <div class="meaning-content">
-              {{ selectedWordInfo.translation || selectedWordInfo.definition }}
-            </div>
-          </div>
-          
-          <div class="example-sentences" v-if="selectedWordInfo.exampleSentence || selectedWordInfo.examples">
-            <div class="section-title">例句</div>
-            <div class="example-item">
-              {{ selectedWordInfo.exampleSentence || selectedWordInfo.examples }}
+              {{ selectedWordInfo.definition || selectedWordInfo.translation }}
             </div>
           </div>
         </div>
@@ -202,17 +175,16 @@
       </div>
 
       <template #footer>
-        <div class="dialog-footer">
-          <el-button 
-            type="primary" 
-            :loading="addingToVocabulary" 
-            @click="handleAddToVocabulary"
-            v-if="selectedWordInfo && selectedWordInfo.found !== false"
-          >
-            <el-icon><Star /></el-icon> 收藏到生词本
-          </el-button>
-          <el-button @click="showWordDialog = false">关闭</el-button>
-        </div>
+        <el-button
+          type="primary"
+          :loading="addingToVocabulary"
+          :disabled="isInVocabulary"
+          @click="handleAddToVocabulary"
+          v-if="selectedWordInfo && selectedWordInfo.found !== false"
+        >
+          {{ isInVocabulary ? '已在生词本' : '添加到生词本' }}
+        </el-button>
+        <el-button @click="showWordDialog = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -317,8 +289,6 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay } from '@element-plus/icons-vue'
-import InteractiveText from '@/components/InteractiveText.vue'
-import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -340,10 +310,7 @@ renderer.image = function({ href, title, text }) {
 marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
 import { getArticlesPath } from '@/config/site'
-import * as rangy from '@/utils/rangy'
-import 'rangy/lib/rangy-classapplier'
-import 'rangy/lib/rangy-highlighter'
-import 'rangy/lib/rangy-serializer'
+import rangy from '@/utils/rangy'
 
 const route = useRoute()
 const router = useRouter()
@@ -383,6 +350,7 @@ const pageHeader = ref(null)
 const textVersions = ref({}) // 存储所有版本内容
 const availableVersions = ref([]) // 可用版本列表
 const currentVersion = ref('original') // 当前选择的版本
+const isPlainText = ref(false) // 原始内容是否为纯文本（用于 switchVersion 转换）
 
 
 // 单词对话框相关数据
@@ -391,6 +359,7 @@ const selectedWord = ref(null)
 const selectedWordInfo = ref(null)
 const loadingWord = ref(false)
 const addingToVocabulary = ref(false)
+const isInVocabulary = ref(false)
 
 // 图片预览相关数据
 const showImagePreview = ref(false)
@@ -429,8 +398,15 @@ let textContentWatchTimerId = null
 let floatingBtnResetTimerId = null
 let imagePreviewCleanupTimerId = null
 let versionSwitchTimerId = null
+let selectionDebounceTimerId = null
 let selectionMenuHideTimerId = null
 let fetchUnderlineTimerId = null
+let isUserInteracting = false
+
+const onDragStart = () => { isUserInteracting = true }
+const onDragEnd = () => {
+  isUserInteracting = false
+}
 let imageDragMoveListener = null
 let imageDragEndListener = null
 
@@ -515,18 +491,17 @@ const difficultyText = computed(() => {
 
 const wordCount = computed(() => {
   if (!textContent.value) return 0
+
   let text = textContent.value
-  // Markdown 模式下 textContent 含 HTML 标签，需要先用原始文本或去掉标签再计算
   if (isMarkdown.value) {
-    // 优先使用原始版本的纯文本
     const rawText = textVersions.value?.[currentVersion.value] || ''
     if (rawText) {
       text = rawText
     } else {
-      // fallback: 去除 HTML 标签
       text = textContent.value.replace(/<[^>]*>/g, ' ')
     }
   }
+
   return text.split(/\s+/).filter(word => word.length > 0).length
 })
 
@@ -545,6 +520,22 @@ const normalizeTextContent = (text) => {
     .replace(/\\"/g, '"')
     .replace(/\\'/g, "'")
     .replace(/\\\\/g, '\\')
+}
+
+// 纯文本转 HTML：段落拆分 + 转义 + 添加可点击单词
+const plainTextToHtml = (rawText) => {
+  if (!rawText) return ''
+  const text = normalizeTextContent(rawText)
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  const html = escaped
+    .split(/\n\s*\n|\n/)
+    .filter(p => p.trim().length > 0)
+    .map(p => `<p>${p.trim().replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  return addClickableWordsToHtml(DOMPurify.sanitize(html, SANITIZE_CONFIG))
 }
 
 // 方法
@@ -611,26 +602,23 @@ const loadTextDetail = async () => {
           textContent.value = renderedHtml
         }
       } else {
-        // 纯文本格式，获取所有课文版本
-        isMarkdown.value = false
+        // 纯文本格式：转为 HTML 渲染，与 Markdown 保持一致的视觉效果
+        isMarkdown.value = true
+        isPlainText.value = true
         if (data.versions && typeof data.versions === 'object') {
           textVersions.value = data.versions
-          // 设置可用版本列表（用于显示按钮）
           availableVersions.value = Object.keys(data.versions).sort((a, b) => {
-            // 按优先级排序：original > cet4 > cet6 > academic > chinese_parallel
             const order = { 'original': 0, 'cet4': 1, 'cet6': 2, 'academic': 3, 'chinese_parallel': 4 }
             return (order[a] || 999) - (order[b] || 999)
           })
-          // 默认选择原始版本
           currentVersion.value = 'original'
-          textContent.value = normalizeTextContent(textVersions.value['original'] || data.content)
+          textContent.value = plainTextToHtml(textVersions.value['original'] || data.content)
         } else {
-          // 备用方案：如果没有版本数据，直接使用 content
           const rawContent = data.content
           textVersions.value = { 'original': rawContent }
           availableVersions.value = ['original']
           currentVersion.value = 'original'
-          textContent.value = normalizeTextContent(rawContent)
+          textContent.value = plainTextToHtml(rawContent)
         }
       }
 
@@ -1099,7 +1087,13 @@ const goBack = () => {
     }
   }
   
-  if (from === 'assignment') {
+  if (from === 'admin-review') {
+    // 从管理员审核页来的，返回内容管理页
+    router.push('/admin/content')
+  } else if (from === 'user-texts') {
+    // 从学生上传页来的，返回上传页
+    router.push('/student/user-texts')
+  } else if (from === 'assignment') {
     // 从任务页面跳转来的，返回任务页面
     router.push('/student/assignments')
   } else if (from === 'articles') {
@@ -1323,14 +1317,14 @@ const closeImagePreview = () => {
   }, 300)
 }
 
-// 监听内容变化重新应用划线
+// 监听内容变化重新应用划线（防抖优化：延长到 800ms，减少频繁触发）
 import { watch } from 'vue'
 watch(textContent, () => {
   if (textContentWatchTimerId) clearTimeout(textContentWatchTimerId)
   textContentWatchTimerId = setTimeout(() => {
     applySharedUnderlines()
     textContentWatchTimerId = null
-  }, 500)
+  }, 800) // 从 500ms 延长到 800ms，减少重复渲染
 })
 
 // 处理 Markdown 中的单词点击
@@ -1381,21 +1375,31 @@ const handleMarkdownWordClick = async (word) => {
   }
 }
 
-// 版本管理方法
+// 版本管理方法（优化：缓存渲染结果）
+const renderedVersionCache = new Map()
+
 const switchVersion = (version) => {
   currentVersion.value = version
   const versionContent = textVersions.value[version] || ''
-  
-  if (isMarkdown.value) {
-    // Markdown 格式，需要渲染
-    let renderedHtml = DOMPurify.sanitize(marked(versionContent), SANITIZE_CONFIG)
-    renderedHtml = addClickableWordsToHtml(renderedHtml)
-    textContent.value = renderedHtml
+
+  // 检查缓存
+  const cacheKey = `${version}-${isPlainText.value}`
+  if (renderedVersionCache.has(cacheKey)) {
+    textContent.value = renderedVersionCache.get(cacheKey)
   } else {
-    // 纯文本格式，直接显示（应用规范化去除转义残留）
-    textContent.value = normalizeTextContent(versionContent)
+    let renderedHtml
+    if (isPlainText.value) {
+      // 纯文本格式：转为 HTML
+      renderedHtml = plainTextToHtml(versionContent)
+    } else {
+      // Markdown 格式，需要渲染
+      renderedHtml = DOMPurify.sanitize(marked(versionContent), SANITIZE_CONFIG)
+      renderedHtml = addClickableWordsToHtml(renderedHtml)
+    }
+    textContent.value = renderedHtml
+    renderedVersionCache.set(cacheKey, renderedHtml)
   }
-  
+
   // 切换版本后重新加载划线
   if (versionSwitchTimerId) clearTimeout(versionSwitchTimerId)
   versionSwitchTimerId = setTimeout(() => {
@@ -1417,20 +1421,27 @@ const getVersionLabel = (version) => {
   return labels[version] || version
 }
 
-// 滚动处理函数
+// 滚动处理函数（节流优化：使用 requestAnimationFrame）
+let scrollTicking = false
 const handleScroll = () => {
-  const currentScrollY = window.scrollY
-  
-  // 向下滚动超过100px时隐藏头部
-  if (currentScrollY > lastScrollY.value && currentScrollY > 100) {
-    headerHidden.value = true
+  if (!scrollTicking) {
+    window.requestAnimationFrame(() => {
+      const currentScrollY = window.scrollY
+
+      // 向下滚动超过100px时隐藏头部
+      if (currentScrollY > lastScrollY.value && currentScrollY > 100) {
+        headerHidden.value = true
+      }
+      // 向上滚动时显示头部，或者滚动到顶部时也显示
+      else if (currentScrollY < lastScrollY.value || currentScrollY <= 50) {
+        headerHidden.value = false
+      }
+
+      lastScrollY.value = currentScrollY
+      scrollTicking = false
+    })
+    scrollTicking = true
   }
-  // 向上滚动时显示头部，或者滚动到顶部时也显示
-  else if (currentScrollY < lastScrollY.value || currentScrollY <= 50) {
-    headerHidden.value = false
-  }
-  
-  lastScrollY.value = currentScrollY
 }
 
 // 生命周期
@@ -1452,6 +1463,11 @@ onMounted(async () => {
 
   // 监听文本选择
   document.addEventListener('selectionchange', handleSelectionChange)
+  // 选区交互监听
+  document.addEventListener('mousedown', onDragStart)
+  document.addEventListener('mouseup', onDragEnd)
+  document.addEventListener('touchstart', onDragStart, { passive: true })
+  document.addEventListener('touchend', onDragEnd)
   // 获取共享划线
   fetchSharedUnderlines()
 })
@@ -1475,6 +1491,12 @@ onBeforeUnmount(() => {
     floatingBtnDragHandlers = null
   }
 
+  // 清理选区交互监听
+  document.removeEventListener('mousedown', onDragStart)
+  document.removeEventListener('mouseup', onDragEnd)
+  document.removeEventListener('touchstart', onDragStart)
+  document.removeEventListener('touchend', onDragEnd)
+
   // 清理图片预览缩放拖拽事件监听（如果组件在拖拽图片时卸载）
   if (isDragging.value) {
     document.removeEventListener('mousemove', onDrag);
@@ -1482,31 +1504,32 @@ onBeforeUnmount(() => {
     isDragging.value = false;
   }
 
-  // 清理定时器
-  if (autoStartTimerId) {
-    clearTimeout(autoStartTimerId)
-    autoStartTimerId = null
-  }
-  if (textContentWatchTimerId) {
-    clearTimeout(textContentWatchTimerId)
-    textContentWatchTimerId = null
-  }
-  if (imagePreviewCleanupTimerId) {
-    clearTimeout(imagePreviewCleanupTimerId)
-    imagePreviewCleanupTimerId = null
-  }
-  if (versionSwitchTimerId) {
-    clearTimeout(versionSwitchTimerId)
-    versionSwitchTimerId = null
-  }
-  if (selectionMenuHideTimerId) {
-    clearTimeout(selectionMenuHideTimerId)
-    selectionMenuHideTimerId = null
-  }
-  if (fetchUnderlineTimerId) {
-    clearTimeout(fetchUnderlineTimerId)
-    fetchUnderlineTimerId = null
-  }
+  // 清理所有定时器（统一清理）
+  const timers = [
+    autoStartTimerId,
+    textContentWatchTimerId,
+    imagePreviewCleanupTimerId,
+    versionSwitchTimerId,
+    selectionMenuHideTimerId,
+    selectionDebounceTimerId,
+    fetchUnderlineTimerId
+  ]
+  timers.forEach(timer => {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  })
+  // 重置所有定时器变量
+  autoStartTimerId = null
+  textContentWatchTimerId = null
+  imagePreviewCleanupTimerId = null
+  versionSwitchTimerId = null
+  selectionMenuHideTimerId = null
+  selectionDebounceTimerId = null
+  fetchUnderlineTimerId = null
+
+  // 清理学习计时器
+  stopStudyTimer()
 
   // 退出全屏模式
   document.body.classList.remove('fullscreen-reading')
@@ -1541,7 +1564,7 @@ onBeforeUnmount(() => {
       keepalive: true
     }).catch(() => {})
   }
-  stopStudyTimer()
+
   // 清理音频资源
   if (currentAudio) {
     currentAudio.pause()
@@ -1549,6 +1572,9 @@ onBeforeUnmount(() => {
     currentAudio.onerror = null
     currentAudio = null
   }
+
+  // 清理缓存
+  renderedVersionCache.clear()
 })
 
 // 处理页面可见性变化（切换标签页时自动暂停）
@@ -1573,45 +1599,88 @@ const recordLearning = async (type, word, duration) => {
     console.error('记录学习失败:', error)
   }
 }
-// 处理文本选择
+const isNodeInsideArticleBody = (node) => {
+  const articleBody = document.querySelector('.article-body')
+  if (!articleBody || !node) return false
+  const target = node.nodeType === Node.TEXT_NODE ? node.parentElement : node
+  return target && articleBody.contains(target)
+}
+
+// 检测并裁切过大的选区（如 iOS/安卓长按自动扩展到末尾）
+const clampLargeSelection = (selection) => {
+  if (!selection || !selection.rangeCount || selection.isCollapsed) return false
+  const articleBody = document.querySelector('.article-body')
+  if (!articleBody) return false
+
+  const allText = articleBody.innerText || ''
+  const selectedText = selection.toString()
+  if (allText.length === 0 || selectedText.length === 0) return false
+
+  // 如果选中文本超过正文 70%，认为是长按到末尾的漂移选区，需要裁切
+  if (selectedText.length <= allText.length * 0.7) return false
+
+  // 裁切起点到正文开头，保留终点
+  const range = selection.getRangeAt(0)
+  const newRange = document.createRange()
+  newRange.setStart(articleBody, 0)
+
+  const walker = document.createTreeWalker(articleBody, NodeFilter.SHOW_TEXT, null)
+  let lastNode = null
+  while (walker.nextNode()) {
+    if (walker.currentNode.textContent.trim()) lastNode = walker.currentNode
+  }
+  if (lastNode) {
+    newRange.setEnd(lastNode, lastNode.textContent.length)
+  } else {
+    newRange.setEnd(range.endContainer, range.endOffset)
+  }
+
+  selection.removeAllRanges()
+  selection.addRange(newRange)
+  return true
+}
+
+// 处理文本选择（防抖：50ms 延迟防止拖动时频繁触发）
 const handleSelectionChange = () => {
   if (isTranslateBtnDragging.value) return
 
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || selection.isCollapsed) {
-    // Delay hiding to allow menu click events to fire first
     if (selectionMenuHideTimerId) clearTimeout(selectionMenuHideTimerId)
     selectionMenuHideTimerId = setTimeout(() => {
       const sel = window.getSelection()
-      if (!sel || !sel.rangeCount || sel.isCollapsed) {
-        showSelectionMenu.value = false
-      }
+      if (!sel || !sel.rangeCount || sel.isCollapsed) showSelectionMenu.value = false
       selectionMenuHideTimerId = null
     }, 200)
     return
   }
 
-  const text = selection.toString().trim()
-  if (text) {
-    // 检查选择是否在文本内容区域内 (class="article-body")
-    const anchorNode = selection.anchorNode
-    const focusNode = selection.focusNode
-    const articleBody = document.querySelector('.article-body')
-    
-    if (articleBody && (articleBody.contains(anchorNode) || articleBody.contains(focusNode))) {
-      selectedTextContent.value = text
-      const range = selection.getRangeAt(0)
+  if (selectionDebounceTimerId) clearTimeout(selectionDebounceTimerId)
+  selectionDebounceTimerId = setTimeout(() => {
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount || sel.isCollapsed) {
+      showSelectionMenu.value = false
+      return
+    }
+
+    const trimmedText = sel.toString().trim()
+    if (!trimmedText) {
+      showSelectionMenu.value = false
+      return
+    }
+
+    if (isNodeInsideArticleBody(sel.anchorNode) && isNodeInsideArticleBody(sel.focusNode)) {
+      selectedTextContent.value = trimmedText
+      const range = sel.getRangeAt(0)
       const rect = range.getBoundingClientRect()
-      
+
       selectionPosition.x = rect.left + rect.width / 2
-      selectionPosition.y = rect.top - 60 // 显示在上方
+      selectionPosition.y = rect.top - 60
       showSelectionMenu.value = true
     } else {
-       showSelectionMenu.value = false
+      showSelectionMenu.value = false
     }
-  } else {
-    showSelectionMenu.value = false
-  }
+  }, 50)
 }
 
 const handleCopy = () => {
@@ -1655,6 +1724,8 @@ const handleUnderline = async () => {
     let endIndex = 0
 
     const articleBody = document.querySelector('.article-body')
+    // 裁切过大选区（如 iOS/安卓长按自动扩展到末尾）
+    clampLargeSelection(window.getSelection())
     const selection = rangy.getSelection()
     if (selection.rangeCount > 0) {
       try {
@@ -1699,7 +1770,9 @@ const handleUnderline = async () => {
       await fetchSharedUnderlines()
       ElMessage.success('划线成功')
     } else {
-      ElMessage.success('划线成功')
+      removeAllHighlights()
+      applySharedUnderlines()
+      ElMessage.error(res?.message || '划线失败，请重试')
     }
     showSelectionMenu.value = false
     window.getSelection().removeAllRanges()
@@ -1823,7 +1896,7 @@ const applySharedUnderlines = () => {
         window.getSelection().removeAllRanges()
         applied = true
       } catch (e) {
-        console.error('Rangy deserialization failed, trying fallback:', e)
+        // 反序列化失败是正常回退流程（DOM 结构变化后序列化失效），静默处理
       }
     }
 
@@ -2129,20 +2202,72 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   font-size: 18px;
   line-height: 1.8;
   color: var(--text-main);
-  /* 确保文章内容区域始终可选中文本，不受上层 z-index/stacking context 干扰 */
   user-select: text;
   -webkit-user-select: text;
+  -webkit-tap-highlight-color: transparent;
+  cursor: text;
   position: relative;
   z-index: 1;
 }
 
 .article-body :deep(.interactive-text),
+.article-body :deep(.text-content),
+.article-body :deep(.text-paragraph),
+.article-body :deep(.word),
+.article-body :deep(.clickable),
+.article-body :deep(.clickable-word),
+.markdown-content,
+.markdown-content * {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+.article-title,
+.article-title *,
+.article-header,
+.article-header *,
+.article-meta,
+.article-meta *,
+.version-pill-selector,
+.version-pill-selector *,
+.reader-footer,
+.reader-footer *,
+.floating-translate-btn,
+.floating-translate-btn * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+.floating-translate-btn,
+.floating-translate-btn button,
+.floating-translate-btn .translate-fab,
+.floating-translate-btn .fab-icon,
+.floating-translate-btn .fab-label,
+.floating-translate-btn span {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.article-body :deep(.interactive-text),
 .markdown-content {
-  background: transparent !important;
-  padding: 0 !important;
-  color: var(--text-main) !important;
+  background: #fff;
+  padding: 24px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  font-family: 'Georgia', serif;
+  line-height: 1.8;
+  color: #333;
   word-break: break-word;
   overflow-wrap: break-word;
+}
+
+.markdown-content :deep(p) {
+  text-align: justify;
+  margin-bottom: 24px;
 }
 
 .article-body :deep(img),
@@ -2223,16 +2348,53 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 /* Mobile Adjustments */
 @media (max-width: 768px) {
+  .premium-reader {
+    padding-bottom: 60px;
+  }
+
+  .glass-header .header-inner {
+    height: 52px;
+    padding: 0 12px;
+  }
+
   .article-title {
-    font-size: 32px;
+    font-size: 24px;
+    margin-bottom: 12px;
   }
-  
+
   .reader-container {
-    padding: 40px 20px;
+    padding: 16px 12px;
   }
-  
+
+  .article-header {
+    margin-bottom: 16px;
+  }
+
+  .article-meta {
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .article-body {
+    font-size: 16px;
+    line-height: 1.75;
+  }
+
   .header-title {
     display: none;
+  }
+
+  .article-body :deep(.interactive-text),
+  .markdown-content {
+    padding: 12px;
+  }
+
+  .article-body :deep(.text-content) {
+    padding: 12px !important;
+  }
+
+  .header-inner {
+    padding: 0 12px;
   }
   
   .version-pill-selector {
@@ -2262,6 +2424,23 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     align-items: center;
     gap: 4px;
   }
+
+  .reader-footer {
+    margin-top: 40px;
+  }
+
+  .footer-divider {
+    margin-bottom: 24px;
+  }
+
+  .markdown-content :deep(h2) {
+    font-size: 20px;
+    margin: 24px 0 12px;
+  }
+
+  .markdown-content :deep(p) {
+    margin-bottom: 16px;
+  }
 }
 
 /* Markdown Content Styling Overrides */
@@ -2271,70 +2450,95 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   margin: 48px 0 16px;
 }
 
-.markdown-content :deep(p) {
-  margin-bottom: 24px;
-}
-
 .markdown-content :deep(strong) {
   color: var(--text-main);
   font-weight: 600;
 }
 
-/* Word Dialog Enhancements */
-.word-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* 弹窗样式 - 与纯文本文章路径 components/InteractiveText.vue 保持一致 */
+.word-dialog :deep(.el-dialog__body) {
+  padding: 0 20px 20px 20px;
+}
+
+.word-dialog :deep(.el-dialog__header) {
+  padding: 16px 20px 0 20px;
+}
+
+.word-header {
+  text-align: center;
+  padding: 6px 0 2px 0;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 8px;
 }
 
 .word-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #1e293b; /* text-main */
+  margin: 0 0 2px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1890ff;
+  line-height: 1.0;
 }
 
 .pronunciation {
-  margin-top: 4px;
-  color: #197fe6; /* primary-color */
-  font-family: 'Lucida Sans Unicode', sans-serif;
-  font-size: 14px;
+  font-size: 12px;
+  color: #666;
+  font-family: 'Lucida Sans Unicode', 'Arial Unicode MS', Arial;
+  line-height: 1.0;
 }
 
-.section-title {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #64748b; /* text-muted */
-  margin: 16px 0 8px;
-  font-weight: 700;
+.word-body {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0 4px;
+}
+
+.main-meaning {
+  text-align: center;
+  margin-bottom: 8px;
 }
 
 .meaning-content {
-  font-size: 16px;
-  line-height: 1.6;
-  color: #1e293b; /* text-main */
+  font-size: 13px;
+  line-height: 1.3;
+  color: #2c3e50;
+  background: #f8f9fa;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border-left: 2px solid #1890ff;
+  display: inline-block;
+  max-width: 100%;
+  text-align: left;
+  white-space: pre-line;
+  word-break: break-word;
+  box-sizing: border-box;
 }
 
-.example-item {
-  font-size: 14px;
-  line-height: 1.5;
-  color: #64748b; /* text-muted */
-  font-style: italic;
-  padding: 8px 12px;
-  background: rgba(226, 232, 240, 0.3);
-  border-radius: 8px;
-  border-left: 3px solid #197fe6; /* primary-color */
+.loading-content {
+  text-align: center;
+  padding: 40px 0;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
+.error-content {
+  text-align: center;
+  padding: 20px 0;
 }
 
-.mobile-word-dialog :deep(.el-dialog__body) {
-  padding-top: 10px;
+@media (max-width: 768px) {
+  .word-title {
+    font-size: 16px;
+  }
+
+  .pronunciation {
+    font-size: 11px;
+  }
+
+  .word-dialog :deep(.el-dialog__body) {
+    padding: 0 8px 8px 8px;
+  }
+
+  .word-dialog :deep(.el-dialog__header) {
+    padding: 12px 8px 0 8px;
+  }
 }
 /* Underline Styles */
 :deep(.user-underline) {
@@ -2453,5 +2657,90 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     border-radius: 12px;
   }
   .floating-translate-btn .fab-icon { font-size: 17px; }
+}
+
+</style>
+
+<style>
+/* 全局弹窗样式 - 不受 scoped 限制，与 components/InteractiveText.vue 保持一致 */
+.word-dialog.el-dialog,
+.word-dialog.el-dialog__wrapper {
+  margin: 0 !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 85% !important;
+  max-width: 320px !important;
+  max-height: 60vh;
+}
+
+@media (max-width: 480px) {
+  .word-dialog.el-dialog,
+  .word-dialog.el-dialog__wrapper {
+    width: 90% !important;
+    max-width: 300px !important;
+    max-height: 50vh;
+  }
+}
+
+/* 可点击单词样式 - v-html 注入的元素必须在全局样式中才能生效 */
+/* 与 components/InteractiveText.vue 中 .word.clickable:hover 保持一致 */
+.clickable-word {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+.clickable-word:hover {
+  background: rgba(24, 144, 255, 0.1);
+}
+
+/* 翻译弹窗样式 - el-dialog teleport 到 body，必须在全局样式中 */
+/* 与 components/InteractiveText.vue 保持一致 */
+.translate-dialog .translate-content {
+  padding: 16px 0;
+}
+
+.translate-dialog .original-text,
+.translate-dialog .translated-text {
+  margin-bottom: 12px;
+}
+
+.translate-dialog .original-text h4,
+.translate-dialog .translated-text h4 {
+  margin: 0 0 8px 0;
+  color: #666;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.translate-dialog .original-text p,
+.translate-dialog .translated-text p {
+  margin: 0;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.translate-dialog .translated-text p {
+  background: #e6f7ff;
+  border-left: 3px solid #1890ff;
+}
+
+@media (max-width: 768px) {
+  .translate-dialog.el-dialog {
+    width: 230px !important;
+    max-width: 230px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .translate-dialog.el-dialog {
+    width: 230px !important;
+    max-width: 230px !important;
+  }
 }
 </style>

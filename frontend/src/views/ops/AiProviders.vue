@@ -168,82 +168,85 @@
     </div>
 
     <!-- 服务商列表 -->
-    <div v-loading="loading" class="provider-list">
+    <div v-loading="loading" class="provider-grid">
       <el-empty v-if="!loading && currentProviders.length === 0" description="暂无服务商，点击「添加服务商」创建" />
 
-      <el-card
+      <div
         v-for="p in currentProviders"
         :key="p.id"
-        class="provider-card"
+        class="provider-glass-card"
         :class="{ disabled: p.enabled !== 1 }"
       >
+        <div class="card-glow"></div>
         <div class="provider-header">
-          <div class="provider-name">
-            <el-tag :type="p.enabled === 1 ? 'success' : 'info'" size="small" style="margin-right:8px">
-              {{ p.enabled === 1 ? '启用' : '禁用' }}
-            </el-tag>
-            <el-tag
-              :type="p.protocol === 'hiagent' ? 'warning' : ''"
-              size="small"
-              style="margin-right:8px"
-            >
-              {{ p.protocol === 'hiagent' ? 'HiAgent' : 'OpenAI' }}
-            </el-tag>
-            <span class="name-text">{{ p.name }}</span>
+          <div class="provider-info-main">
+            <div class="protocol-badge" :class="p.protocol">
+              {{ p.protocol === 'hiagent' ? 'Hi' : 'AI' }}
+            </div>
+            <div class="name-area">
+              <span class="name-text">{{ p.name }}</span>
+              <span class="model-text">{{ p.model || '自动模型' }}</span>
+            </div>
           </div>
-          <div class="provider-actions">
+          <div class="provider-status">
             <el-switch
               :model-value="p.enabled === 1"
               @change="val => toggleProvider(p, val)"
               size="small"
+              inline-prompt
+              active-text="ON"
+              inactive-text="OFF"
             />
-            <el-button size="small" @click="openTestPanel(p)" :loading="testingId === p.id">测试</el-button>
-            <el-button size="small" type="primary" @click="openEditDialog(p)">编辑</el-button>
-            <el-button size="small" type="danger" @click="confirmDelete(p)">删除</el-button>
           </div>
         </div>
 
         <div class="provider-body">
-          <div class="meta-row">
-            <span class="meta-label">API 地址</span>
-            <span class="meta-value meta-url">{{ p.apiUrl }}</span>
+          <div class="meta-item">
+            <el-icon><Link /></el-icon>
+            <span class="meta-val url-val">{{ p.apiUrl }}</span>
           </div>
-          <div class="meta-row">
-            <span class="meta-label">模型</span>
-            <span class="meta-value">{{ p.model || '—' }}</span>
+          <div class="meta-item">
+            <el-icon><Key /></el-icon>
+            <span class="meta-val key-val">{{ p.apiKey }}</span>
           </div>
-          <div class="meta-row">
-            <span class="meta-label">API Key</span>
-            <span class="meta-value meta-key">{{ p.apiKey }}</span>
+          <div class="meta-stats">
+            <div class="stat-pill">
+              <span class="stat-label">权重</span>
+              <span class="stat-val">{{ p.weight }}</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-label">超时</span>
+              <span class="stat-val">{{ p.timeoutMs }}ms</span>
+            </div>
           </div>
-          <div v-if="p.appId" class="meta-row">
-            <span class="meta-label">App ID</span>
-            <span class="meta-value meta-key">{{ p.appId }}</span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-label">权重</span>
-            <span class="meta-value">
-              <el-tag size="small" type="warning">{{ p.weight }}</el-tag>
-              <span class="weight-hint">（按权重比例负载均衡）</span>
-            </span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-label">超时</span>
-            <span class="meta-value">{{ p.timeoutMs }} ms</span>
-          </div>
-          <div v-if="p.remark" class="meta-row">
-            <span class="meta-label">备注</span>
-            <span class="meta-value">{{ p.remark }}</span>
+        </div>
+
+        <div class="provider-footer">
+          <div class="footer-actions">
+            <el-button link type="primary" @click="openTestPanel(p)" :loading="testingId === p.id">
+              <el-icon><VideoPlay /></el-icon> 测试
+            </el-button>
+            <el-button link type="primary" @click="openEditDialog(p)">
+              <el-icon><Edit /></el-icon> 编辑
+            </el-button>
+            <el-button link type="danger" @click="confirmDelete(p)">
+              <el-icon><Delete /></el-icon> 删除
+            </el-button>
           </div>
         </div>
 
         <!-- 内联测试结果 -->
-        <div v-if="testResults[p.id]" class="test-result" :class="testResults[p.id].success ? 'is-success' : 'is-error'">
-          <span class="test-label">{{ testResults[p.id].success ? '✓ 测试通过' : '✗ 测试失败' }}</span>
-          <span class="test-detail" v-if="testResults[p.id].success">{{ testResults[p.id].output }}</span>
-          <span class="test-detail" v-else>{{ testResults[p.id].error }}</span>
-        </div>
-      </el-card>
+        <transition name="el-zoom-in-top">
+          <div v-if="testResults[p.id]" class="test-result-overlay" :class="testResults[p.id].success ? 'is-success' : 'is-error'">
+            <div class="res-header">
+              <el-icon><component :is="testResults[p.id].success ? 'CircleCheck' : 'CircleClose'" /></el-icon>
+              <span>{{ testResults[p.id].success ? '测试通过' : '测试失败' }}</span>
+              <el-icon class="close-res" @click="testResults[p.id] = null"><Close /></el-icon>
+            </div>
+            <div class="res-content">{{ testResults[p.id].success ? testResults[p.id].output : testResults[p.id].error }}</div>
+          </div>
+        </transition>
+      </div>
     </div>
 
     <!-- 负载均衡说明 -->
@@ -353,7 +356,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Plus, View, Hide, Check } from '@element-plus/icons-vue'
+import { Refresh, Plus, View, Hide, Check, Link, Key, VideoPlay, Edit, Delete, CircleCheck, CircleClose, Close } from '@element-plus/icons-vue'
 import {
   listAiProviders,
   createAiProvider,
@@ -697,176 +700,255 @@ const runHiAgentTest = async (mode) => {
 
 <style scoped>
 .ai-providers {
-  max-width: 900px;
+  max-width: 1400px;
   margin: 0 auto;
+  padding: 20px;
+}
+
+/* PC端大字号适配 */
+@media (min-width: 1200px) {
+  .ai-providers {
+    padding: 30px;
+  }
+  
+  .page-header h2 {
+    font-size: 28px;
+  }
+
+  :deep(.el-tabs__item) {
+    font-size: 16px;
+    height: 48px;
+  }
+
+  .name-text {
+    font-size: 18px;
+  }
+
+  .meta-item {
+    font-size: 14px;
+  }
+
+  .stat-pill {
+    font-size: 13px;
+    padding: 6px 12px;
+  }
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  color: var(--text-primary);
+.hiagent-card {
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+  margin-bottom: 32px;
 }
 
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 12px 0;
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 24px;
 }
 
-.provider-list {
+.provider-glass-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
-.provider-card {
-  transition: opacity 0.2s;
+@media (max-width: 480px) {
+  .ai-providers {
+    padding: 16px;
+  }
+
+  .provider-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .provider-glass-card {
+    padding: 16px;
+  }
+
+  .meta-stats {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .stat-pill {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
-.provider-card.disabled {
-  opacity: 0.55;
+.provider-glass-card:hover {
+  transform: translateY(-4px);
+  border-color: #4f46e5;
+  box-shadow: 0 20px 40px rgba(79, 70, 229, 0.08);
+}
+
+.card-glow {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.1) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .provider-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+  align-items: flex-start;
+  margin-bottom: 20px;
 }
 
-.provider-name {
+.provider-info-main {
+  display: flex;
+  gap: 12px;
+}
+
+.protocol-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #f1f5f9;
   display: flex;
   align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.protocol-badge.hiagent {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.name-area {
+  display: flex;
+  flex-direction: column;
 }
 
 .name-text {
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: 700;
+  font-size: 16px;
+  color: #1e293b;
 }
 
-.provider-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.model-text {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
 }
 
 .provider-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 24px;
+  flex: 1;
 }
 
-.meta-row {
+.meta-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
+  margin-bottom: 8px;
+  color: #64748b;
   font-size: 13px;
 }
 
-.meta-label {
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-  min-width: 56px;
-}
-
-.meta-value {
-  color: var(--el-text-color-primary);
+.meta-val {
   word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.meta-url {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
+.url-val { color: #94a3b8; font-size: 12px; }
+.key-val { font-family: ui-monospace, monospace; }
 
-.meta-key {
-  font-family: monospace;
-  font-size: 12px;
-}
-
-.weight-hint {
-  font-size: 11px;
-  color: var(--el-text-color-placeholder);
-  margin-left: 4px;
-}
-
-.test-result {
-  margin-top: 12px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
+.meta-stats {
   display: flex;
   gap: 12px;
-  align-items: baseline;
+  margin-top: 16px;
 }
 
-.test-result.is-success {
-  background: #f0f9eb;
-  border: 1px solid #e1f3d8;
-}
-
-.test-result.is-error {
-  background: #fef0f0;
-  border: 1px solid #fde2e2;
-}
-
-.test-label {
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.test-result.is-success .test-label { color: #67c23a; }
-.test-result.is-error   .test-label { color: #f56c6c; }
-
-.test-detail {
-  word-break: break-all;
-  color: var(--el-text-color-regular);
-}
-
-.field-hint {
+.stat-pill {
+  background: #f8fafc;
+  padding: 4px 10px;
+  border-radius: 100px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin-top: 4px;
 }
 
-.hiagent-card {
-  margin-bottom: 16px;
-  border: 1px solid var(--el-border-color-light);
+.stat-label { color: #94a3b8; }
+.stat-val { font-weight: 700; color: #475569; }
+
+.provider-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
 }
 
-.hiagent-header {
+.footer-actions {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 12px;
 }
 
-.hiagent-title {
+.test-result-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.res-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-weight: 700;
+  margin-bottom: 12px;
 }
 
-.title-text {
-  font-weight: 600;
-  font-size: 15px;
+.is-success .res-header { color: #10b981; }
+.is-error .res-header { color: #ef4444; }
+
+.close-res {
+  margin-left: auto;
+  cursor: pointer;
+  color: #94a3b8;
 }
 
-.hiagent-form {
-  max-width: 620px;
-}
-
-.divider-tag {
-  font-weight: 600;
+.res-content {
   font-size: 13px;
-  color: var(--el-text-color-regular);
+  line-height: 1.6;
+  color: #475569;
+  overflow-y: auto;
+  font-family: ui-monospace, monospace;
+}
+
+.provider-glass-card.disabled {
+  opacity: 0.6;
+  filter: grayscale(0.5);
 }
 </style>

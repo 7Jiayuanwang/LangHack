@@ -28,6 +28,18 @@ mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<-EOSQL
 EOSQL
 
 echo "[init-db] ✅ 字符集配置完成 (utf8mb4_unicode_ci)"
+
+# 如果配置了非 root 的应用用户，自动创建并授权
+# 这样 deploy.sh 中填写的 DB_USERNAME 无论是 root 还是自定义用户都能正常连接
+if [ -n "${MYSQL_APP_USER}" ] && [ "${MYSQL_APP_USER}" != "root" ] && [ -n "${MYSQL_APP_PASSWORD}" ]; then
+    echo "[init-db] 创建应用用户: ${MYSQL_APP_USER}"
+    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" <<-EOSQL
+        CREATE USER IF NOT EXISTS '${MYSQL_APP_USER}'@'%' IDENTIFIED BY '${MYSQL_APP_PASSWORD}';
+        GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_APP_USER}'@'%';
+        FLUSH PRIVILEGES;
+EOSQL
+    echo "[init-db] ✅ 应用用户创建完成: ${MYSQL_APP_USER}"
+fi
 echo "[init-db] 后续 SQL 文件将自动按文件名顺序执行："
 echo "[init-db]   → 02: 主从复制用户创建"
 echo "[init-db]   → 03: 历史备份数据导入"

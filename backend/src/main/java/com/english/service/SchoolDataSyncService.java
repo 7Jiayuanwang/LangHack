@@ -73,8 +73,8 @@ public interface SchoolDataSyncService {
      * 同步指定学生的课表数据（从学校API拉取并保存到本地）
      *
      * @param studentId    学号
-     * @param academicYear 学年（如 2025-2026）
-     * @param semester     学期（1 或 2）
+     * @param academicYear 学年（CDSP 单年份，如 "2025" 表示 2025-2026 学年秋季，"2026" 表示 2025-2026 学年春季）
+     * @param semester     学期（1=秋季，2=春季）
      * @return 同步的课表记录列表
      */
     List<com.english.entity.StudentSchedule> syncStudentSchedule(String studentId, String academicYear, Integer semester);
@@ -130,4 +130,18 @@ public interface SchoolDataSyncService {
                                                                      String academicYear,
                                                                      Integer semester,
                                                                      Duration staleness);
+
+    /**
+     * 按需同步并返回指定学生的选课记录（Lazy 策略）。
+     *
+     * @param studentId    学号
+     * @param academicYear 学年（可选）
+     * @param semester     学期（可选）
+     * @param staleness    数据陈旧度阈值
+     * @return 选课记录列表
+     */
+    List<com.english.entity.CourseSelection> getOrSyncCourseSelections(String studentId,
+                                                                       String academicYear,
+                                                                       Integer semester,
+                                                                       Duration staleness);
 }

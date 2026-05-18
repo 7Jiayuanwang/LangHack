@@ -99,6 +99,36 @@ class CasSsoServiceTest {
     }
 
     @Test
+    void testValidateCallback_UsesConfiguredUsernameAttribute() {
+        String xmlResponse = """
+            <cas:serviceResponse xmlns:cas='http://www.yale.edu/tp/cas'>
+                <cas:authenticationSuccess>
+                    <cas:user>opaque-cas-subject</cas:user>
+                    <cas:attributes>
+                        <cas:uid>2023122066164</cas:uid>
+                        <cas:mail>student@imau.edu.cn</cas:mail>
+                        <cas:cn>张三</cas:cn>
+                    </cas:attributes>
+                </cas:authenticationSuccess>
+            </cas:serviceResponse>
+            """;
+
+        when(restTemplate.getForObject(any(URI.class), eq(String.class))).thenReturn(xmlResponse);
+
+        Map<String, String> callbackParams = new HashMap<>();
+        callbackParams.put("ticket", "ST-123-abc");
+
+        SsoUserInfo userInfo = casSsoService.validateCallback(
+                callbackParams,
+                "https://learn.imau.edu.cn/api/auth/sso/callback"
+        );
+
+        assertEquals("opaque-cas-subject", userInfo.getSsoUserId());
+        assertEquals("2023122066164", userInfo.getSsoUsername());
+        assertEquals("张三", userInfo.getRealName());
+    }
+
+    @Test
     void testValidateCallback_MissingTicket() {
         Map<String, String> callbackParams = new HashMap<>();
         String callbackUrl = "https://learn.imau.edu.cn/api/auth/sso/callback";

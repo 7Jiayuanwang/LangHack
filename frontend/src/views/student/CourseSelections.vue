@@ -6,9 +6,10 @@
         <el-option v-for="y in academicYears" :key="y" :label="y" :value="y" />
       </el-select>
       <el-select v-model="semester" placeholder="学期" size="small" style="width: 96px" @change="loadData">
-        <el-option :value="1" label="秋季学期" />
-        <el-option :value="2" label="春季学期" />
+        <el-option value="秋" label="秋季学期" />
+        <el-option value="春" label="春季学期" />
       </el-select>
+      <el-button size="small" :loading="refreshing" @click="handleRefresh">刷新</el-button>
     </div>
 
     <!-- 选课列表 -->
@@ -19,7 +20,7 @@
 
       <div v-for="item in selections" :key="item.id" class="selection-card">
         <div class="card-header">
-          <span class="course-name">{{ item.courseName }}</span>
+          <span class="course-name">{{ item.courseName || item.courseCode || '-' }}</span>
           <span class="credits">{{ item.credits }}学分</span>
         </div>
         <div class="card-body">
@@ -48,24 +49,30 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getMyCourseSelections } from '@/api/student'
+import { ElMessage } from 'element-plus'
+import { getMyCourseSelections, refreshMyCourseSelections } from '@/api/student'
 
 const loading = ref(false)
+const refreshing = ref(false)
 const selections = ref([])
 
 const now = new Date()
 const currentMonth = now.getMonth() + 1
 const currentYear = now.getFullYear()
-const defaultAcademicYear = String(currentYear)
-const defaultSemester = (currentMonth >= 2 && currentMonth <= 7) ? 2 : 1
+// CDSP 学期字段: "秋"(8月-次年1月) 或 "春"(2月-7月)
+const defaultSemester = (currentMonth >= 2 && currentMonth <= 7) ? '春' : '秋'
+// CDSP 学年字段: 该学期所在的日历年份
+// 2025-2026学年第一学期=2025秋(xn=2025), 第二学期=2026春(xn=2026)
+// 1月仍属上一学年秋季学期，故 xn = currentYear - 1
+const defaultAcademicYear = currentMonth === 1 ? String(currentYear - 1) : String(currentYear)
 
 const academicYear = ref(defaultAcademicYear)
 const semester = ref(defaultSemester)
 
 const academicYears = computed(() => {
   const years = []
-  for (let year = currentYear - 4; year <= currentYear; year++) {
-    years.push(String(year))
+  for (let y = currentYear - 4; y <= currentYear; y++) {
+    years.push(String(y))
   }
   return years
 })
@@ -83,6 +90,22 @@ async function loadData() {
     selections.value = []
   } finally {
     loading.value = false
+  }
+}
+
+async function handleRefresh() {
+  refreshing.value = true
+  try {
+    const res = await refreshMyCourseSelections({
+      academicYear: academicYear.value,
+      semester: semester.value
+    })
+    selections.value = res?.data || []
+  } catch (e) {
+    console.error('刷新选课记录失败:', e)
+    ElMessage.error('刷新失败，请稍后重试')
+  } finally {
+    refreshing.value = false
   }
 }
 

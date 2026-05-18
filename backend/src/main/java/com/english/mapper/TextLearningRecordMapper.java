@@ -3,10 +3,45 @@ package com.english.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.english.entity.TextLearningRecord;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * 文章学习记录Mapper接口
  */
 @Mapper
 public interface TextLearningRecordMapper extends BaseMapper<TextLearningRecord> {
+
+    /**
+     * 统计学生阅读过的不重复文章数（阅读篇数）
+     */
+    @Select("SELECT COUNT(DISTINCT text_id) FROM text_learning_records WHERE student_id = #{studentId}")
+    long countDistinctTexts(@Param("studentId") Long studentId);
+
+    /**
+     * 统计学生已完成的不重复文章数（完成篇数）
+     */
+    @Select("SELECT COUNT(DISTINCT text_id) FROM text_learning_records WHERE student_id = #{studentId} AND is_completed = 1")
+    long countDistinctCompletedTexts(@Param("studentId") Long studentId);
+
+    /**
+     * 分页获取按文章去重的阅读记录（按最近阅读时间排序）
+     * 返回每篇文章的聚合统计：阅读次数、总时长、是否完成、最后阅读时间
+     */
+    @Select("SELECT text_id AS textId, " +
+            "COUNT(*) AS readCount, " +
+            "COALESCE(SUM(duration_seconds), 0) AS totalDuration, " +
+            "MAX(CASE WHEN is_completed = 1 THEN 1 ELSE 0 END) AS isCompleted, " +
+            "MAX(start_time) AS lastReadAt " +
+            "FROM text_learning_records " +
+            "WHERE student_id = #{studentId} " +
+            "GROUP BY text_id " +
+            "ORDER BY lastReadAt DESC " +
+            "LIMIT #{size} OFFSET #{offset}")
+    List<Map<String, Object>> getGroupedHistory(@Param("studentId") Long studentId,
+                                                 @Param("size") int size,
+                                                 @Param("offset") int offset);
 }

@@ -383,7 +383,8 @@ class AiCallMetricsServiceTest {
 
             // Assert
             assertThat(result).containsKeys("HIAGENT", "OPENROUTER",
-                    "TENCENT_TRANSLATE", "TENCENT_ASR", "BILIBILI");
+                    "OPENAI_COMPATIBLE", "TENCENT_TRANSLATE",
+                    "HIAGENT_TRANSLATE", "TENCENT_ASR", "BILIBILI");
 
             @SuppressWarnings("unchecked")
             Map<String, Object> hiagentStats = (Map<String, Object>) result.get("HIAGENT");
@@ -404,7 +405,7 @@ class AiCallMetricsServiceTest {
             Map<String, Object> result = aiCallMetricsService.getTodayStats();
 
             // Assert: all services should have default (zeroed) stats
-            assertThat(result).hasSize(5);
+            assertThat(result).hasSize(7);
 
             for (Object serviceStatsObj : result.values()) {
                 @SuppressWarnings("unchecked")
@@ -429,7 +430,7 @@ class AiCallMetricsServiceTest {
             Map<String, Object> result = aiCallMetricsService.getTodayStats();
 
             // Assert
-            assertThat(result).hasSize(5);
+            assertThat(result).hasSize(7);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> stats = (Map<String, Object>) result.get("OPENROUTER");

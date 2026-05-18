@@ -15,14 +15,25 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
 
 QUICK_MODE=false
+OFFLINE_MODE=false
 STASHED=false
 OLD_BRANCH=""
 OLD_COMMIT=""
 CRON_TMP=""
+BUILD_PID=""
 
 # ── 信号处理 & 清理 ─────────────────────────────────
 deploy_cleanup() {
     local exit_code=$?
+
+    # 清理后台构建进程
+    if [ -n "$BUILD_PID" ] && kill -0 "$BUILD_PID" 2>/dev/null; then
+        echo ""
+        echo "[清理] 终止后台构建进程 (PID: $BUILD_PID)..."
+        kill "$BUILD_PID" 2>/dev/null || true
+        wait "$BUILD_PID" 2>/dev/null || true
+    fi
+
     if [ "$STASHED" = true ]; then
         echo ""
         echo "[提示] 部署前保存了本地修改，恢复命令: git stash pop"
@@ -30,22 +41,46 @@ deploy_cleanup() {
     fi
     if [ $exit_code -ne 0 ] && [ -n "$OLD_BRANCH" ]; then
         echo "[提示] 原始分支: $OLD_BRANCH"
+        echo "[提示] 如需回退: git checkout $OLD_BRANCH"
     fi
     # 清理可能残留的 crontab 临时文件
     [ -n "$CRON_TMP" ] && rm -f "$CRON_TMP" 2>/dev/null || true
+    # 清理构建日志
+    rm -f /tmp/langhack-deploy-build-$$.log 2>/dev/null || true
 }
 trap deploy_cleanup EXIT
+
+# 捕获中断信号（Ctrl+C）并优雅退出
+trap_interrupt() {
+    echo ""
+    echo "[WARN] 收到中断信号 (Ctrl+C)，正在安全退出..."
+
+    # 立即终止后台构建进程
+    if [ -n "$BUILD_PID" ] && kill -0 "$BUILD_PID" 2>/dev/null; then
+        echo "[清理] 终止后台构建进程 (PID: $BUILD_PID)..."
+        kill "$BUILD_PID" 2>/dev/null || true
+        wait "$BUILD_PID" 2>/dev/null || true
+    fi
+
+    echo "[INFO] 已执行的操作不会回滚，如需清理请手动执行:"
+    echo "  - 停止容器: cd $DOCKER_DIR && docker compose down"
+    echo "  - 回退代码: cd $PROJECT_ROOT && git checkout $OLD_BRANCH"
+    exit 130
+}
+trap trap_interrupt SIGINT SIGTERM
 
 # ── 参数解析 ──────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick|-q) QUICK_MODE=true; shift ;;
+        --offline|--local-only) OFFLINE_MODE=true; shift ;;
         --help|-h)
             echo "LangHack Docker Compose 交互式部署"
             echo ""
             echo "用法: $0 [选项]"
-            echo "  --quick, -q   快速模式（跳过已配置项）"
-            echo "  --help, -h    显示帮助"
+            echo "  --quick, -q          快速模式（跳过已配置项）"
+            echo "  --offline, --local-only  离线模式（跳过 git pull，使用本地代码）"
+            echo "  --help, -h           显示帮助"
             exit 0
             ;;
         *) echo "[ERROR] 未知参数: $1"; exit 1 ;;
@@ -54,21 +89,27 @@ done
 
 # ── 工具函数 ──────────────────────────────────────────
 ask_value() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local input
     if [ -n "$default" ]; then
         read -rp "  ${prompt} [${default}]: " input
-        input=$(echo "${input:-$default}" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
+        # 清理 ANSI 转义序列、控制字符和 shell 元字符
+        input=$(echo "${input:-$default}" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g' | sed 's/[$`!\\]/\\&/g')
         printf -v "$var_name" '%s' "$input"
     else
         read -rp "  ${prompt}: " input
-        input=$(echo "$input" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
+        # 清理 ANSI 转义序列、控制字符和 shell 元字符
+        input=$(echo "$input" | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g' | sed 's/[$`!\\]/\\&/g')
         printf -v "$var_name" '%s' "$input"
     fi
 }
 
 ask_secret() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local input masked=""
     if [ -n "$default" ]; then
         [ ${#default} -gt 6 ] && masked="${default:0:3}***${default: -3}" || masked="***"
@@ -101,7 +142,9 @@ ask_choice() {
 }
 
 ask_yn() {
-    local question="$1" default="$2" var_name="$3"
+    local question="$1"
+    local default="$2"
+    local var_name="$3"
     local hint; [ "$default" = "y" ] && hint="Y/n" || hint="y/N"
     while true; do
         read -rp "  ${question} [${hint}]: " answer
@@ -114,7 +157,9 @@ ask_yn() {
 }
 
 load_env_value() {
-    local key="$1" default="$2" file="${3:-$DOCKER_DIR/.env}"
+    local key="$1"
+    local default="$2"
+    local file="${3:-$DOCKER_DIR/.env}"
     if [ -f "$file" ]; then
         local val; val=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v '^\s*#' | head -1 | cut -d'=' -f2- | LC_ALL=C sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/[[:cntrl:]]//g')
         [ -n "$val" ] && echo "$val" && return
@@ -123,7 +168,9 @@ load_env_value() {
 }
 
 set_env_value() {
-    local file="$1" key="$2" value="$3" tmp="${file}.tmp.$$"
+    local file="${1:-}" key="${2:-}" value="${3:-}"
+    [ -z "$file" ] && { echo "[ERROR] set_env_value: file parameter required"; return 1; }
+    local tmp="${file}.tmp.$$"
     local found=false
     touch "$file"
     while IFS= read -r line || [ -n "$line" ]; do
@@ -150,15 +197,69 @@ normalize_registry_prefix() {
 
 probe_public_image() {
     local image="$1"
-    echo "  [INFO] 探测公共镜像源: docker pull $image"
-    if docker pull "$image" >/dev/null 2>&1; then
-        return 0
+    local timeout=30  # 探测超时 30 秒
+    echo "  [INFO] 探测公共镜像源: docker pull $image (超时 ${timeout}s)"
+
+    # 使用后台进程 + timeout 避免 docker pull 卡死
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout "$timeout" docker pull "$image" >/dev/null 2>&1; then
+            return 0
+        fi
+    else
+        # 无 timeout 命令时使用后台进程 + kill
+        docker pull "$image" >/dev/null 2>&1 &
+        local pull_pid=$!
+        local elapsed=0
+        while kill -0 "$pull_pid" 2>/dev/null && [ $elapsed -lt $timeout ]; do
+            sleep 2
+            elapsed=$((elapsed + 2))
+        done
+        if kill -0 "$pull_pid" 2>/dev/null; then
+            kill "$pull_pid" 2>/dev/null || true
+            wait "$pull_pid" 2>/dev/null || true
+            return 1
+        fi
+        wait "$pull_pid" 2>/dev/null && return 0 || return 1
+    fi
+    return 1
+}
+
+probe_local_registry() {
+    local registry="$1"
+    local image="$2"
+    local timeout=30
+    local full_image="${registry}/${image}"
+
+    echo "  [INFO] 探测本地 registry: docker pull $full_image (超时 ${timeout}s)"
+
+    # 使用后台进程 + timeout 避免 docker pull 卡死
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout "$timeout" docker pull "$full_image" >/dev/null 2>&1; then
+            return 0
+        fi
+    else
+        # 无 timeout 命令时使用后台进程 + kill
+        docker pull "$full_image" >/dev/null 2>&1 &
+        local pull_pid=$!
+        local elapsed=0
+        while kill -0 "$pull_pid" 2>/dev/null && [ $elapsed -lt $timeout ]; do
+            sleep 2
+            elapsed=$((elapsed + 2))
+        done
+        if kill -0 "$pull_pid" 2>/dev/null; then
+            kill "$pull_pid" 2>/dev/null || true
+            wait "$pull_pid" 2>/dev/null || true
+            return 1
+        fi
+        wait "$pull_pid" 2>/dev/null && return 0 || return 1
     fi
     return 1
 }
 
 resolve_image_registry_prefix() {
-    local mode="$1" local_registry="$2" probe_image="$3"
+    local mode="$1"
+    local local_registry="$2"
+    local probe_image="$3"
     RESOLVED_IMAGE_REGISTRY_PREFIX=""
     RESOLVED_IMAGE_SOURCE_LABEL="公共镜像"
 
@@ -177,10 +278,23 @@ resolve_image_registry_prefix() {
                 RESOLVED_IMAGE_REGISTRY_PREFIX=""
                 RESOLVED_IMAGE_SOURCE_LABEL="公共镜像（自动）"
             else
-                RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
-                RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry}, 公共镜像不可达自动降级)"
-                echo "  [WARN] 公共镜像不可达，自动降级到本地 registry: $local_registry"
-                echo "  [提示] 如本地 registry 尚未同步，请先运行: bash scripts/sync-docker-images.sh --registry $local_registry"
+                echo "  [WARN] 公共镜像不可达，尝试本地 registry: $local_registry"
+                # 验证本地 registry 是否可达
+                if probe_local_registry "$local_registry" "$probe_image"; then
+                    echo "  [OK] 本地 registry 可用"
+                    RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
+                    RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry}, 公共镜像不可达自动降级)"
+                else
+                    echo "  [ERROR] 公共镜像和本地 registry 都不可用"
+                    echo "  [ERROR] 公共镜像: 不可达"
+                    echo "  [ERROR] 本地 registry ($local_registry): 不可达或镜像不存在"
+                    echo ""
+                    echo "  [修复建议]:"
+                    echo "    1. 检查网络连接"
+                    echo "    2. 同步镜像到本地 registry: bash scripts/sync-docker-images.sh --registry $local_registry"
+                    echo "    3. 或强制使用公共镜像: 在 .env 中设置 IMAGE_SOURCE_MODE=public"
+                    exit 1
+                fi
             fi
             ;;
         *)
@@ -193,12 +307,6 @@ resolve_image_registry_prefix() {
         echo "  [INFO] Docker 镜像前缀: (空，使用公共镜像)"
     else
         echo "  [INFO] Docker 镜像前缀: $RESOLVED_IMAGE_REGISTRY_PREFIX"
-        if ! docker manifest inspect "${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}" >/dev/null 2>&1; then
-            echo "  [ERROR] 本地 registry 缺少探测镜像: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
-            echo "  [修复] 先同步镜像: bash scripts/sync-docker-images.sh --registry $local_registry"
-            exit 1
-        fi
-        echo "  [OK] 本地 registry 探测镜像可用: ${RESOLVED_IMAGE_REGISTRY_PREFIX}${probe_image}"
     fi
 }
 
@@ -229,24 +337,53 @@ check_port() {
 
 # 端口选择（自动跳过占用端口）
 ask_port() {
-    local prompt="$1" default="$2" var_name="$3"
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
     local port="$default"
-    ask_value "$prompt" "$port" "$var_name"
-    port="${!var_name}"
+
+    # 首次检查：如果默认端口被占用，自动寻找可用端口
     if ! check_port "$port"; then
-        echo "  [WARN] 端口 ${port} 已被占用，自动寻找可用端口..."
+        echo "  [WARN] 默认端口 ${port} 已被占用，自动寻找可用端口..."
         local suggest=$((port + 1))
         local max_suggest=$((port + 100))
         [ "$max_suggest" -gt 65535 ] && max_suggest=65535
         while ! check_port "$suggest" && [ "$suggest" -le "$max_suggest" ]; do suggest=$((suggest + 1)); done
-        if [ "$suggest" -gt "$max_suggest" ]; then
-            echo "  [ERROR] 在 ${port}-${max_suggest} 范围内未找到可用端口"
-            suggest="$port"
-        else
+        if [ "$suggest" -le "$max_suggest" ]; then
             echo "  [建议] 可用端口: ${suggest}"
+            port="$suggest"
         fi
-        ask_value "$prompt (换一个)" "$suggest" "$var_name"
     fi
+
+    # 循环验证用户输入
+    while true; do
+        ask_value "$prompt" "$port" "$var_name"
+        port="${!var_name}"
+
+        # 验证端口号范围
+        if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+            echo "  [ERROR] 端口号必须在 1-65535 范围内，请重新输入"
+            continue
+        fi
+
+        # 检查端口占用
+        if ! check_port "$port"; then
+            echo "  [WARN] 端口 ${port} 已被占用，请换一个端口"
+            # 自动寻找下一个可用端口作为建议
+            local suggest=$((port + 1))
+            local max_suggest=$((port + 100))
+            [ "$max_suggest" -gt 65535 ] && max_suggest=65535
+            while ! check_port "$suggest" && [ "$suggest" -le "$max_suggest" ]; do suggest=$((suggest + 1)); done
+            if [ "$suggest" -le "$max_suggest" ]; then
+                echo "  [建议] 可用端口: ${suggest}"
+                port="$suggest"
+            fi
+            continue
+        fi
+
+        # 端口有效且可用
+        break
+    done
 }
 
 # ── 部署验证函数 ──────────────────────────────────────
@@ -343,13 +480,32 @@ fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 echo "  当前分支: $CURRENT_BRANCH"
 
-git fetch --all --quiet 2>/dev/null || true
+# 尝试获取远程分支列表（带超时）
+FETCH_TIMEOUT=30
+FETCH_SUCCESS=false
+echo "  [INFO] 获取远程分支列表（超时 ${FETCH_TIMEOUT}s）..."
+
+if command -v timeout >/dev/null 2>&1; then
+    if timeout "$FETCH_TIMEOUT" git fetch --all --quiet 2>/dev/null; then
+        FETCH_SUCCESS=true
+    fi
+else
+    if git fetch --all --quiet 2>/dev/null; then
+        FETCH_SUCCESS=true
+    fi
+fi
+
+if [ "$FETCH_SUCCESS" = false ]; then
+    echo "  [WARN] 无法连接远程仓库（网络故障或超时），将使用本地分支列表"
+    echo "  [INFO] 离线部署模式：只能选择本地已有的分支"
+fi
+
 mapfile -t BRANCH_LIST < <({
     git branch -r --no-color 2>/dev/null | grep -v 'HEAD' | sed 's|origin/||;s|^[[:space:]]*||'
     git branch --no-color 2>/dev/null | sed 's|^\*||;s|^[[:space:]]*||'
-} | sort -u)
+} | grep -v 'HEAD detached' | grep -v '^$' | sort -u)
 
-[ ${#BRANCH_LIST[@]} -eq 0 ] && BRANCH_LIST=("$CURRENT_BRANCH")
+[ ${#BRANCH_LIST[@]} -eq 0 ] && BRANCH_LIST=("master")
 
 default_idx=1
 for i in "${!BRANCH_LIST[@]}"; do
@@ -438,7 +594,14 @@ if [ "$SKIP_ENV" = false ]; then
         echo "  [提示] AI 问答需独立的 HiAgent 应用，不 fallback 到改写凭证；留空则禁用问答功能。"
         ask_secret "HiAgent 问答 API Key (留空禁用问答)"    "$(load_env_value "HIAGENT_QA_API_KEY" "")" CFG_HIAGENT_QA_KEY
         if [ -n "$CFG_HIAGENT_QA_KEY" ]; then
-            ask_value  "HiAgent 问答 App ID" "$(load_env_value "HIAGENT_QA_APP_ID" "")" CFG_HIAGENT_QA_APP_ID
+            # App ID 必填校验
+            while true; do
+                ask_value  "HiAgent 问答 App ID" "$(load_env_value "HIAGENT_QA_APP_ID" "")" CFG_HIAGENT_QA_APP_ID
+                if [ -n "$CFG_HIAGENT_QA_APP_ID" ]; then
+                    break
+                fi
+                echo "  [ERROR] HiAgent 问答 App ID 不能为空（已提供 API Key）"
+            done
             # 校验：问答凭证必须与改写凭证完全不同
             if [ -n "$CFG_HIAGENT_KEY" ] && [ "$CFG_HIAGENT_QA_KEY" = "$CFG_HIAGENT_KEY" ]; then
                 echo "  [WARN] 问答 API Key 与改写 API Key 相同，违反"两套完全不同"的应用隔离要求。"
@@ -735,6 +898,43 @@ if [ "$SKIP_ENV" = false ]; then
     CFG_IMAGE_REGISTRY_PREFIX=""
 
     echo ""
+    echo "  [ 构建网络环境 ]"
+    echo "  决定 Docker 构建阶段如何下载依赖（npm 包、Maven 包、Alpine apk）"
+    DEF_BUILD_ENV=$(load_env_value "BUILD_NETWORK_ENV" "public")
+    case "${DEF_BUILD_ENV,,}" in
+        intranet|local) BUILD_ENV_DEFAULT_IDX=2 ;;
+        *) BUILD_ENV_DEFAULT_IDX=1 ;;
+    esac
+    ask_choice "构建网络环境:" "公网构建 (依赖从公网 npm/Maven Central 下载)|内网构建 (依赖从内网 Nexus 代理下载)" BUILD_ENV_CHOICE "$BUILD_ENV_DEFAULT_IDX"
+    CFG_NPM_REGISTRY=""
+    CFG_MAVEN_MIRROR_URL=""
+    CFG_ALPINE_MIRROR=""
+    CFG_BUILD_NETWORK_ENV="public"
+    if [ "$BUILD_ENV_CHOICE" = "2" ]; then
+        CFG_BUILD_NETWORK_ENV="intranet"
+        echo ""
+        echo "  [提示] 内网 Nexus 通常为 http://172.20.14.249:8081（或实际内网地址）"
+        echo "  [提示] 留空则该依赖类型仍走公网（可按需只配其中几项）"
+        echo ""
+        DEF_NPM=$(load_env_value "NPM_REGISTRY" "")
+        if [ -z "$DEF_NPM" ]; then
+            _local_reg=$(load_env_value "LOCAL_REGISTRY" "")
+            _extracted_ip=$(echo "$_local_reg" | sed 's/:[0-9]*//' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
+            if [ -n "$_extracted_ip" ]; then
+                DEF_NPM="http://${_extracted_ip}:8081/repository/npm-proxy/"
+            fi
+        fi
+        ask_value "npm 内网镜像源 URL (留空跳过)" "$(load_env_value "NPM_REGISTRY" "${DEF_NPM:-http://172.20.14.249:8081/repository/npm-proxy/}")" CFG_NPM_REGISTRY
+        ask_value "Maven 内网镜像源 URL (留空跳过)" "$(load_env_value "MAVEN_MIRROR_URL" "http://172.20.14.249:8081/repository/maven-public/")" CFG_MAVEN_MIRROR_URL
+        ask_value "Alpine apk 内网镜像源 URL (留空跳过)" "$(load_env_value "ALPINE_MIRROR" "http://172.20.14.249:8081/repository/alpine-mirror/")" CFG_ALPINE_MIRROR
+        echo ""
+        echo "  [配置汇总]"
+        [ -n "$CFG_NPM_REGISTRY" ]     && echo "    npm      → $CFG_NPM_REGISTRY"     || echo "    npm      → (跳过，使用公网)"
+        [ -n "$CFG_MAVEN_MIRROR_URL" ] && echo "    Maven    → $CFG_MAVEN_MIRROR_URL" || echo "    Maven    → (跳过，使用公网)"
+        [ -n "$CFG_ALPINE_MIRROR" ]    && echo "    Alpine   → $CFG_ALPINE_MIRROR"    || echo "    Alpine   → (跳过，使用公网)"
+    fi
+
+    echo ""
     echo "  [ 备份 ]"
     ask_yn "启用自动备份？" "y" CFG_BACKUP_YN
     CFG_BACKUP_ENABLED="false"
@@ -795,8 +995,13 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'MYSQL_DATABASE=english_learning\n'
         printf 'MYSQL_REPLICATION_USER=replicator\n'
         printf 'MYSQL_REPLICATION_PASSWORD=%s_repl\n' "$CFG_DB_PASSWORD"
-        printf 'DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
-        printf 'DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
+        # 若应用用户不是 root，写入 MYSQL_APP_USER/PASSWORD 供 init-db.sh 自动创建
+        if [ "$CFG_DB_USERNAME" != "root" ]; then
+            printf 'MYSQL_APP_USER=%s\n'     "$CFG_DB_USERNAME"
+            printf 'MYSQL_APP_PASSWORD=%s\n' "$CFG_DB_PASSWORD"
+        fi
+        printf 'DB_URL=jdbc:mysql://mysql-master:3306/english_learning?useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
+        printf 'DB_SLAVE_URL=jdbc:mysql://mysql-slave:3306/english_learning?useSSL=false&serverTimezone=GMT%%2B8&allowPublicKeyRetrieval=true\n'
         printf 'DB_SLAVE_USERNAME=%s\n'  "$CFG_DB_USERNAME"
         printf 'DB_SLAVE_PASSWORD=%s\n'  "$CFG_DB_PASSWORD"
         printf 'REDIS_HOST=redis\n'
@@ -812,6 +1017,10 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'LOCAL_REGISTRY=%s\n' "${CFG_LOCAL_REGISTRY:-localhost:5000}"
         printf 'IMAGE_REGISTRY_PREFIX=%s\n' "${CFG_IMAGE_REGISTRY_PREFIX:-}"
         printf 'PUBLIC_IMAGE_PROBE=%s\n' "${CFG_PUBLIC_IMAGE_PROBE:-node:20-alpine}"
+        printf 'BUILD_NETWORK_ENV=%s\n' "${CFG_BUILD_NETWORK_ENV:-public}"
+        [ -n "${CFG_NPM_REGISTRY:-}" ]     && printf 'NPM_REGISTRY=%s\n'     "$CFG_NPM_REGISTRY"     || printf '# NPM_REGISTRY=\n'
+        [ -n "${CFG_MAVEN_MIRROR_URL:-}" ] && printf 'MAVEN_MIRROR_URL=%s\n' "$CFG_MAVEN_MIRROR_URL" || printf '# MAVEN_MIRROR_URL=\n'
+        [ -n "${CFG_ALPINE_MIRROR:-}" ]    && printf 'ALPINE_MIRROR=%s\n'    "$CFG_ALPINE_MIRROR"    || printf '# ALPINE_MIRROR=\n'
         printf 'BACKUP_ENABLED=%s\n'     "$CFG_BACKUP_ENABLED"
         printf 'BACKUP_DIR=%s\n'         "$CFG_BACKUP_DIR"
         printf 'BACKUP_RETENTION_DAYS=%s\n' "$CFG_BACKUP_RETENTION"
@@ -949,6 +1158,18 @@ else
     echo "  自动更新: 未启用"
 fi
 echo "  Docker 镜像源: ${RESOLVED_IMAGE_SOURCE_LABEL:-$(load_env_value "IMAGE_REGISTRY_PREFIX" "" "$ENV_FILE")}"
+_build_env_label="${CFG_BUILD_NETWORK_ENV:-$(load_env_value "BUILD_NETWORK_ENV" "public" "$ENV_FILE")}"
+if [ "${_build_env_label}" = "intranet" ]; then
+    echo "  构建网络: 内网 (Nexus 代理)"
+    _npm=$([ -n "${CFG_NPM_REGISTRY:-}" ] && echo "$CFG_NPM_REGISTRY" || load_env_value "NPM_REGISTRY" "" "$ENV_FILE")
+    _mvn=$([ -n "${CFG_MAVEN_MIRROR_URL:-}" ] && echo "$CFG_MAVEN_MIRROR_URL" || load_env_value "MAVEN_MIRROR_URL" "" "$ENV_FILE")
+    _apk=$([ -n "${CFG_ALPINE_MIRROR:-}" ] && echo "$CFG_ALPINE_MIRROR" || load_env_value "ALPINE_MIRROR" "" "$ENV_FILE")
+    [ -n "$_npm" ] && echo "    npm    → $_npm" || echo "    npm    → (公网)"
+    [ -n "$_mvn" ] && echo "    Maven  → $_mvn" || echo "    Maven  → (公网)"
+    [ -n "$_apk" ] && echo "    Alpine → $_apk" || echo "    Alpine → (公网)"
+else
+    echo "  构建网络: 公网"
+fi
 if [ "${CFG_SSO_ENABLED:-false}" = "true" ]; then
     echo "  SSO: 已启用 (${CFG_SSO_SERVER_URL})"
     echo "  应用地址 (APP_BASE_URL): ${CFG_APP_BASE_URL}"
@@ -998,17 +1219,92 @@ if [ "$TARGET_BRANCH" != "$CURRENT" ]; then
         echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
         exit 1
     fi
+elif [ "$CURRENT" = "HEAD" ]; then
+    # 游离 HEAD 状态：直接切换到目标分支
+    echo "[INFO] 当前处于游离 HEAD 状态，切换到分支 $TARGET_BRANCH..."
+    if ! git checkout "$TARGET_BRANCH" --quiet 2>/dev/null; then
+        echo "[ERROR] 无法切换到分支 $TARGET_BRANCH，请检查分支是否存在"
+        exit 1
+    fi
 fi
 
-# 始终拉取远程最新代码（无论是否切换分支）
-echo "[INFO] 拉取远程最新代码..."
-git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null || \
-    echo "[WARN] 无法从远程拉取 $TARGET_BRANCH，使用本地版本"
+# 尝试拉取远程最新代码（带超时和离线降级）
+if [ "$OFFLINE_MODE" = true ]; then
+    echo "[INFO] 离线模式已启用，跳过 git pull"
+    echo "[INFO] 使用本地当前代码进行部署"
+
+    # 检查是否有未提交的更改
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        echo "[WARN] 检测到未提交的本地更改，将包含在部署中"
+    fi
+else
+    echo "[INFO] 拉取远程最新代码..."
+    PULL_TIMEOUT=60
+    PULL_SUCCESS=false
+
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout "$PULL_TIMEOUT" git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+            PULL_SUCCESS=true
+            echo "[OK] 远程代码拉取成功"
+        fi
+    else
+        if git pull origin "$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+            PULL_SUCCESS=true
+            echo "[OK] 远程代码拉取成功"
+        fi
+    fi
+
+    if [ "$PULL_SUCCESS" = false ]; then
+        echo "[WARN] 无法从远程拉取 $TARGET_BRANCH（网络故障或超时）"
+
+        # 检查本地是否有 origin/$TARGET_BRANCH 引用
+        if git rev-parse "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
+            LOCAL_HEAD=$(git rev-parse HEAD)
+            CACHED_REMOTE=$(git rev-parse "origin/$TARGET_BRANCH")
+
+            if [ "$LOCAL_HEAD" != "$CACHED_REMOTE" ]; then
+                echo "[INFO] 检测到本地缓存的远程分支有更新，尝试合并..."
+                if git merge "origin/$TARGET_BRANCH" --ff-only --quiet 2>/dev/null; then
+                    echo "[OK] 使用本地缓存的远程分支进行部署"
+                    echo "[INFO]   本地 HEAD: ${LOCAL_HEAD:0:8}"
+                    echo "[INFO]   缓存远程: ${CACHED_REMOTE:0:8}"
+                else
+                    echo "[WARN] 无法快进合并缓存的远程分支，使用当前本地版本"
+                fi
+            else
+                echo "[INFO] 本地 HEAD 与缓存的远程分支一致，使用当前版本"
+            fi
+        else
+            echo "[WARN] 本地无远程分支引用，使用当前本地版本"
+        fi
+
+        echo "[INFO] 离线部署模式：使用本地代码进行部署"
+    fi
+fi
 
 # 拉取 Git LFS 文件（database/*.sql 等大文件）
 if command -v git-lfs &>/dev/null || git lfs version &>/dev/null 2>&1; then
     echo "[INFO] 拉取 Git LFS 文件（database/*.sql）..."
-    git lfs pull 2>/dev/null || echo "[WARN] git lfs pull 失败，若需导入历史数据请手动执行"
+    # 添加 30 秒超时，避免网络故障时长时间卡顿
+    if command -v timeout &>/dev/null; then
+        if ! timeout 30 git lfs pull 2>/dev/null; then
+            echo "[WARN] git lfs pull 失败或超时（可能网络故障或无 LFS 文件），继续部署"
+        fi
+    else
+        # 无 timeout 命令时，后台执行并等待最多 30 秒
+        git lfs pull 2>/dev/null &
+        LFS_PID=$!
+        for i in {1..30}; do
+            if ! kill -0 $LFS_PID 2>/dev/null; then
+                break
+            fi
+            sleep 1
+        done
+        if kill -0 $LFS_PID 2>/dev/null; then
+            kill $LFS_PID 2>/dev/null
+            echo "[WARN] git lfs pull 超时（30s），继续部署"
+        fi
+    fi
 else
     echo "[WARN] git-lfs 未安装，跳过 LFS 文件拉取"
 fi
@@ -1036,12 +1332,17 @@ esac
 BUILD_ONLY=false
 case $BUILD_MODE in
     1)
-        echo "[INFO] 全量构建..."
+        echo "[INFO] 全量构建（可能需要 5-15 分钟，请耐心等待）..."
         if [ -n "$SVCS" ]; then
             docker compose build --no-cache $SVCS
         else
             docker compose build --no-cache
         fi
+        if [ $? -ne 0 ]; then
+            echo "[ERROR] 构建失败"
+            exit 1
+        fi
+        echo "[OK] 构建完成 ✓"
         ;;
     2)
         echo "[INFO] 增量构建..."
@@ -1055,19 +1356,21 @@ case $BUILD_MODE in
 esac
 
 # 启动
+# --wait-timeout 300: 等待依赖的 service_healthy 条件最多 300 秒
+# 避免 backend 在 start_period 内未变为 healthy 导致 frontend 启动失败
 if [ "$BUILD_ONLY" = true ]; then
     echo "[INFO] 重启服务..."
     if [ -n "$SVCS" ]; then
-        docker compose up -d --force-recreate $SVCS
+        docker compose up -d --wait-timeout 300 --force-recreate $SVCS
     else
-        docker compose up -d --force-recreate
+        docker compose up -d --wait-timeout 300 --force-recreate
     fi
 else
     echo "[INFO] 启动服务..."
     if [ -n "$SVCS" ]; then
-        docker compose up -d $SVCS
+        docker compose up -d --wait-timeout 300 $SVCS
     else
-        docker compose up -d
+        docker compose up -d --wait-timeout 300
     fi
 fi
 
@@ -1140,7 +1443,7 @@ do_rollback() {
 }
 
 echo "[INFO] 等待服务就绪 (预期 ${expected_healthy} 个 healthy)..."
-timeout=180; elapsed=0; deploy_ok=false; fail_reason=""
+timeout=300; elapsed=0; deploy_ok=false; fail_reason=""
 while [ $elapsed -lt $timeout ]; do
     # 获取每个服务的名称和状态
     svc_statuses=$(docker compose ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null || true)
@@ -1148,15 +1451,29 @@ while [ $elapsed -lt $timeout ]; do
         sleep 5; elapsed=$((elapsed + 5)); continue
     fi
 
-    # 快速失败：任意服务 unhealthy 或 exited 立即终止
-    failed_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /unhealthy|Exit [^0]|exited/ {print $1}' || true)
-    if [ -n "$failed_svcs" ]; then
-        fail_reason="unhealthy"
+    # 快速失败：仅对明确失败的服务（Exited 非0）立即终止
+    # unhealthy 状态在 start_period 内是正常的，不应立即失败
+    exited_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /Exit [^0]|exited \([^0]/ {print $1}' || true)
+    if [ -n "$exited_svcs" ]; then
+        fail_reason="exited"
         echo ""
-        echo "[ERROR] 以下服务启动失败，终止部署："
-        echo "$failed_svcs" | sed 's/^/         /'
+        echo "[ERROR] 以下服务异常退出，终止部署："
+        echo "$exited_svcs" | sed 's/^/         /'
         print_failed_services
         break
+    fi
+
+    # 对于 unhealthy 状态，只在超过一定时间后才判定为失败（给 start_period 留余量）
+    if [ $elapsed -gt 240 ]; then
+        unhealthy_svcs=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /\(unhealthy\)/ {print $1}' || true)
+        if [ -n "$unhealthy_svcs" ]; then
+            fail_reason="unhealthy"
+            echo ""
+            echo "[ERROR] 以下服务健康检查持续失败（超过 240s），终止部署："
+            echo "$unhealthy_svcs" | sed 's/^/         /'
+            print_failed_services
+            break
+        fi
     fi
 
     healthy=$(echo "$svc_statuses" | awk -F'\t' '$2 ~ /healthy/ && $2 !~ /unhealthy/' | wc -l | tr -d ' ')
@@ -1169,6 +1486,26 @@ while [ $elapsed -lt $timeout ]; do
     printf "  等待中... %ds (healthy: %d/%d)\r" "$elapsed" "$healthy" "$expected_healthy"
 done
 echo ""
+
+# 容器健康检查通过后，验证后端 API 可用性
+if [ "$deploy_ok" = true ]; then
+    echo "[INFO] 验证后端 API 可用性..."
+    api_wait=0
+    api_ok=false
+    while [ $api_wait -lt 60 ]; do
+        if curl -sf "http://localhost:${PORT_BACKEND:-8080}/api/health" > /dev/null 2>&1; then
+            echo "[OK] 后端 API 健康检查通过"
+            api_ok=true
+            break
+        fi
+        sleep 3
+        api_wait=$((api_wait + 3))
+    done
+    if [ "$api_ok" = false ]; then
+        echo "[WARN] 后端 API 健康检查超时（60s），但容器状态正常"
+        echo "[WARN] 可能原因：应用启动慢、端口映射错误、或 /api/health 端点不可用"
+    fi
+fi
 
 if [ "$deploy_ok" = false ]; then
     if [ "$fail_reason" != "unhealthy" ]; then
@@ -1208,9 +1545,12 @@ fi
 echo "[INFO] 应用增量数据库迁移..."
 DB_ROOT_PW=$(load_env_value "MYSQL_ROOT_PASSWORD" "" "$ENV_FILE")
 [ -z "$DB_ROOT_PW" ] && DB_ROOT_PW=$(load_env_value "DB_PASSWORD" "" "$ENV_FILE")
+DB_NAME="${MYSQL_DATABASE:-english_learning}"
 MASTER_CONTAINER="langhack-mysql-master"
 SLAVE_CONTAINER="langhack-mysql-slave"
 MIGRATION_SQL="$PROJECT_ROOT/docker/mysql/init/04-apply-all-migrations.sql"
+FEATURE_TOGGLE_REPAIR_SQL="$PROJECT_ROOT/scripts/repair-feature-toggle-descriptions.sql"
+PREPARED_MIGRATION_SQL=""
 FLYWAY_DIR="$PROJECT_ROOT/backend/src/main/resources/db/migration"
 
 # 等待 mysql-master 容器可用（最多 60s）
@@ -1230,8 +1570,8 @@ if [ ! -f "$MIGRATION_SQL" ]; then
 fi
 
 # 版本同步强制检查：Flyway 文件数必须与合并脚本一致，否则阻塞部署
-flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' ' || echo 0)
-merged_count=$(grep -cE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | tr -d ' ' || echo 0)
+flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' \n\r' || echo 0)
+merged_count=$(grep -cE '^-- V[0-9]+__.*\.sql$' "$MIGRATION_SQL" 2>/dev/null | tr -d ' \n\r' || echo 0)
 if [ "$flyway_count" -gt "$merged_count" ]; then
     echo "[ERROR] ══════════════════════════════════════════════════════"
     echo "[ERROR] 迁移脚本版本不同步，部署终止"
@@ -1250,10 +1590,38 @@ else
 fi
 
 # 从头部列表提取最高版本号用于日志
-max_ver=$(grep -oE '^--   V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || echo "?")
-echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver})"
-MIGRATE_OUTPUT=$(docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" 2>&1 < "$MIGRATION_SQL")
-MIGRATE_EXIT=$?
+max_ver=$(grep -oE '^-- V[0-9]+__' "$MIGRATION_SQL" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 | tr -d ' \n\r' || echo "?")
+echo "[INFO] 执行迁移脚本: docker/mysql/init/04-apply-all-migrations.sql (V1~V${max_ver}, DB: ${DB_NAME})"
+PREPARED_MIGRATION_SQL=$(mktemp /tmp/langhack-deploy-migrate.XXXXXX.sql)
+if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$PREPARED_MIGRATION_SQL"; then
+    echo "[ERROR] 迁移脚本预处理失败"
+    rm -f "$PREPARED_MIGRATION_SQL" 2>/dev/null || true
+    exit 1
+fi
+MIGRATE_LOG=$(mktemp /tmp/langhack-deploy-migrate-output.XXXXXX.log)
+docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" < "$PREPARED_MIGRATION_SQL" > "$MIGRATE_LOG" 2>&1 &
+MIGRATE_PID=$!
+MIGRATE_ELAPSED=0
+while kill -0 "$MIGRATE_PID" 2>/dev/null; do
+    sleep 15
+    if kill -0 "$MIGRATE_PID" 2>/dev/null; then
+        MIGRATE_ELAPSED=$((MIGRATE_ELAPSED + 15))
+        MIGRATE_ACTIVITY=$(bash "$PROJECT_ROOT/scripts/describe-mysql-activity.sh" "$MASTER_CONTAINER" "$DB_ROOT_PW" "$DB_NAME" || true)
+        if [ -n "$MIGRATE_ACTIVITY" ]; then
+            echo "[INFO] MIGRATE: ${MIGRATE_ACTIVITY} (已耗时 ${MIGRATE_ELAPSED}s)"
+        else
+            echo "[INFO] MIGRATE: 正在执行数据库迁移 (已耗时 ${MIGRATE_ELAPSED}s)"
+        fi
+    fi
+done
+if wait "$MIGRATE_PID"; then
+    MIGRATE_EXIT=0
+else
+    MIGRATE_EXIT=$?
+fi
+MIGRATE_OUTPUT=$(cat "$MIGRATE_LOG")
+rm -f "$MIGRATE_LOG" 2>/dev/null || true
+rm -f "$PREPARED_MIGRATION_SQL" 2>/dev/null || true
 MIGRATE_ERRORS=$(echo "$MIGRATE_OUTPUT" | grep -v "Using a password on the command line interface can be insecure" | grep -v "^$" || true)
 if [ $MIGRATE_EXIT -ne 0 ]; then
     echo "[ERROR] 数据库增量迁移失败，退出码: $MIGRATE_EXIT"
@@ -1265,13 +1633,21 @@ elif [ -n "$MIGRATE_ERRORS" ]; then
 fi
 echo "[OK] 数据库增量迁移完成（V1~V${max_ver} 全量幂等）"
 
+if [ -f "$FEATURE_TOGGLE_REPAIR_SQL" ]; then
+    echo "[INFO] 修复功能开关描述文本..."
+    if docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" < "$FEATURE_TOGGLE_REPAIR_SQL" >/dev/null 2>&1; then
+        echo "[OK] 功能开关描述修复完成"
+    else
+        echo "[WARN] 功能开关描述修复失败，继续部署"
+    fi
+fi
+
 # ── 数据导入检查与补全 ──────────────────────────────────────────
 # docker compose down -v 后重建时，Docker init 脚本可能未成功导入种子数据
 # 此步骤检测关键表数据量，为空时自动从 database/ 和 backups/ 导入
 echo "[INFO] 检查数据库种子数据..."
 
 # 检查关键表的数据量（texts=文章, ecdict_words=词典, article=课文）
-DB_NAME="${MYSQL_DATABASE:-english_learning}"
 TEXTS_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
     -sN -e "SELECT COUNT(*) FROM texts;" 2>/dev/null | tr -d '[:space:]\r' || echo "0")
 ECDICT_COUNT=$(docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
@@ -1318,12 +1694,20 @@ if [ "$NEED_SEED" = true ]; then
         echo "[INFO] 导入全量备份: $(basename "$SEED_FILE")"
         case "$SEED_FILE" in
             *.sql.gz)
-                zcat "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" \
-                    mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password" || true
+                if ! zcat "$SEED_FILE" | sed '/^\/\*!50013 DEFINER/d; /^\/\*!50003 CREATE.*DEFINER/d; /SET @@GLOBAL.GTID_PURGED/d; /SET @@SESSION.SQL_LOG_BIN/d' | docker exec -i "$MASTER_CONTAINER" \
+                    mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" 2>&1 | grep -v "Using a password"; then
+                    echo "[ERROR] 全量备份导入失败: $(basename "$SEED_FILE")"
+                    echo "[ERROR] 请检查备份文件完整性或数据库连接"
+                    exit 1
+                fi
                 ;;
             *.sql)
-                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
-                    < "$SEED_FILE" 2>&1 | grep -v "Using a password" || true
+                if ! sed '/^\/\*!50013 DEFINER/d; /^\/\*!50003 CREATE.*DEFINER/d; /SET @@GLOBAL.GTID_PURGED/d; /SET @@SESSION.SQL_LOG_BIN/d' "$SEED_FILE" | docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                    2>&1 | grep -v "Using a password"; then
+                    echo "[ERROR] 全量备份导入失败: $(basename "$SEED_FILE")"
+                    echo "[ERROR] 请检查备份文件完整性或数据库连接"
+                    exit 1
+                fi
                 ;;
         esac
         echo "[OK] 全量备份导入完成"
@@ -1340,7 +1724,7 @@ if [ "$NEED_SEED" = true ]; then
             echo "[INFO] 导入课文数据 (3Blue1Brown)..."
             for f in "$ARTICLE_DIR"/*.sql; do
                 [ -f "$f" ] || continue
-                docker exec -i "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
+                docker exec -i "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" "$DB_NAME" \
                     < "$f" 2>&1 | grep -v "Using a password" || true
             done
             echo "[OK] 课文数据导入完成"
@@ -1357,7 +1741,7 @@ if [ "$NEED_SEED" = true ]; then
             # 通过 docker cp + LOAD DATA 方式导入（比管道快得多）
             docker cp "$ECDICT_CSV_PATH" "$MASTER_CONTAINER:/tmp/ecdict.csv"
             docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" -e "SET GLOBAL local_infile=ON;" 2>/dev/null || true
-            docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" --local-infile=1 "$DB_NAME" -e \
+            docker exec "$MASTER_CONTAINER" mysql --default-character-set=utf8mb4 -uroot -p"$DB_ROOT_PW" --local-infile=1 "$DB_NAME" -e \
                 "TRUNCATE TABLE ecdict_words;
                  LOAD DATA LOCAL INFILE '/tmp/ecdict.csv'
                  INTO TABLE ecdict_words
@@ -1390,7 +1774,11 @@ fi
 # Schema 验证：确认关键表存在（与 auto-update.sh 保持一致）
 echo "[INFO] 验证数据库 Schema 完整性..."
 SCHEMA_MISSING=""
-for tbl in users system_config article_favorites user_tags feature_override; do
+for tbl in users system_config article_favorites user_tags feature_override \
+           administrative_class school_course teaching_class course_schedule \
+           course_selection level_exam_scores teaching_plans teaching_plan_courses \
+           student_schedule sync_logs field_mappings school_student school_teacher \
+           teacher_student_binding; do
     exists=$(docker exec "$MASTER_CONTAINER" \
         mysql -uroot -p"$DB_ROOT_PW" english_learning \
         -sN -e "SELECT COUNT(*) FROM information_schema.TABLES
@@ -1403,10 +1791,23 @@ if [ -n "$SCHEMA_MISSING" ]; then
     echo "[ERROR] 迁移可能未完整执行，请检查迁移脚本后重新部署"
     exit 1
 fi
-echo "[OK] Schema 验证通过（users / system_config / article_favorites / user_tags / feature_override）"
+echo "[OK] Schema 验证通过（含学校数据关键表）"
 
 # ── 验证并修复从库复制 ────────────────────────────────────────────
 echo "[INFO] 验证从库复制状态..."
+
+# 等待 entrypoint-wrapper.sh 完成复制初始化（如果正在进行）
+# entrypoint-wrapper.sh 在完成后会删除 .replication-init-pending 标记
+echo "[INFO] 等待从库 entrypoint-wrapper 完成初始化..."
+wrapper_wait=0
+while [ $wrapper_wait -lt 120 ]; do
+    if ! docker exec "$SLAVE_CONTAINER" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null; then
+        echo "[OK] 从库 entrypoint-wrapper 已完成"
+        break
+    fi
+    sleep 5; wrapper_wait=$((wrapper_wait + 5))
+    echo "[INFO] 等待 entrypoint-wrapper... (${wrapper_wait}s)"
+done
 
 # 获取当前复制状态
 get_replica_status() {
@@ -1423,10 +1824,34 @@ LAST_SQL_ERR=$(echo "$REPLICA_STATUS" | grep "Last_SQL_Error:" | sed 's/.*Last_S
 
 replication_ok=false
 
+if [ "$IO_RUNNING" != "Yes" ] || [ "$SQL_RUNNING" != "Yes" ]; then
+    if docker exec "$SLAVE_CONTAINER" test -f /var/lib/mysql/.replication-init-pending 2>/dev/null \
+       && docker exec "$SLAVE_CONTAINER" test -x /var/lib/mysql/init-replication.sh 2>/dev/null; then
+        echo "[INFO] 检测到从库为首次初始化，执行完整复制初始化脚本..."
+        REPL_INIT_LOG="/tmp/langhack-slave-init-$$.log"
+        if docker exec "$SLAVE_CONTAINER" bash /var/lib/mysql/init-replication.sh > "$REPL_INIT_LOG" 2>&1; then
+            echo "[OK] 从库完整复制初始化完成"
+            docker exec "$SLAVE_CONTAINER" rm -f /var/lib/mysql/.replication-init-pending /var/lib/mysql/init-replication.sh 2>/dev/null || true
+            REPLICA_STATUS=$(get_replica_status)
+            IO_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_IO_Running:" | awk '{print $2}' || echo "NULL")
+            SQL_RUNNING=$(echo "$REPLICA_STATUS" | grep "Replica_SQL_Running:" | awk '{print $2}' || echo "NULL")
+            LAG=$(echo "$REPLICA_STATUS" | grep "Seconds_Behind_Source:" | awk '{print $2}' || echo "NULL")
+            if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
+                echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
+                replication_ok=true
+            fi
+        else
+            echo "[WARN] 从库完整复制初始化脚本执行失败，回退到轻量修复流程"
+            tail -50 "$REPL_INIT_LOG" 2>/dev/null | sed 's/^/         /' || true
+        fi
+        rm -f "$REPL_INIT_LOG" 2>/dev/null || true
+    fi
+fi
+
 if [ "$IO_RUNNING" = "Yes" ] && [ "$SQL_RUNNING" = "Yes" ]; then
     echo "[OK] 从库复制运行正常（IO: Yes, SQL: Yes, 延迟: ${LAG}s）"
     replication_ok=true
-else
+elif [ "$replication_ok" = false ]; then
     # 复制未配置或线程未运行 → 尝试自动修复
     if [ "$IO_RUNNING" = "NULL" ]; then
         echo "[WARN] 从库复制未配置（SHOW REPLICA STATUS 为空），尝试自动初始化..."
@@ -1634,7 +2059,12 @@ echo "       如需手动管理，请访问运维面板 → AI服务管理"
 if [ "${CFG_SCHOOL_FEATURE_ENABLED:-false}" = "true" ]; then
     echo "[INFO] 激活学校数据功能开关..."
     docker exec "$MASTER_CONTAINER" mysql -uroot -p"$DB_ROOT_PW" "$DB_NAME" -e \
-        "UPDATE system_config SET config_value='true'
+        "INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret)
+         VALUES
+           ('feature_toggle', 'ops.school_data_browser', 'true', '运维端学校数据浏览功能（行政班、课程、教学班等）', 0),
+           ('feature_toggle', 'ops.school_data_config', 'true', '运维端学校数据源配置功能（API/ETL切换、连接测试）', 0),
+           ('feature_toggle', 'page_schedule', 'true', '学生端课表查看功能（从教务系统同步课表数据）', 0);
+         UPDATE system_config SET config_value='true'
          WHERE config_group='feature_toggle'
            AND config_key IN ('ops.school_data_browser', 'ops.school_data_config', 'page_schedule');" \
         2>&1 | grep -v "Using a password" || true

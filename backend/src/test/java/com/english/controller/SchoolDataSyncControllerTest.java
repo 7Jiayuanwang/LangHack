@@ -6,6 +6,7 @@ import com.english.entity.SyncLog;
 import com.english.service.FieldMappingService;
 import com.english.service.SchoolDataApiClient;
 import com.english.service.SchoolDataSyncService;
+import com.english.service.SystemConfigService;
 import com.english.service.SyncMonitorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +57,9 @@ class SchoolDataSyncControllerTest {
 
     @Mock
     private SyncMonitorService monitorService;
+
+    @Mock
+    private SystemConfigService systemConfigService;
 
     @BeforeEach
     void setUp() {
@@ -162,6 +166,8 @@ class SchoolDataSyncControllerTest {
         @Test
         @DisplayName("按学院链式拉取成功")
         void chainFetch_success() throws Exception {
+            when(systemConfigService.get("feature_toggle", "ops.school_data_chain_fetch", "true"))
+                    .thenReturn("true");
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("collegeName", "外国语学院");
             result.put("courseCount", 5);
@@ -185,6 +191,8 @@ class SchoolDataSyncControllerTest {
         @Test
         @DisplayName("按学院链式拉取失败返回错误")
         void chainFetch_failure() throws Exception {
+            when(systemConfigService.get("feature_toggle", "ops.school_data_chain_fetch", "true"))
+                    .thenReturn("true");
             when(syncService.chainFetchStudentsByCollege("外国语学院", "eq", true))
                     .thenThrow(new RuntimeException("分页异常"));
 
@@ -195,6 +203,21 @@ class SchoolDataSyncControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(500))
                     .andExpect(jsonPath("$.message").value("分页异常"));
+        }
+
+        @Test
+        @DisplayName("链式拉取功能开关关闭时直接拒绝执行")
+        void chainFetch_disabledByFeatureToggle_returnsError() throws Exception {
+            when(systemConfigService.get("feature_toggle", "ops.school_data_chain_fetch", "true"))
+                    .thenReturn("false");
+
+            mockMvc.perform(post("/api/admin/sync/chain/students-by-college")
+                            .param("collegeName", "外国语学院")
+                            .param("matchMode", "eq")
+                            .param("persist", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(500))
+                    .andExpect(jsonPath("$.message").value("按学院链式拉取功能当前已关闭"));
         }
     }
 

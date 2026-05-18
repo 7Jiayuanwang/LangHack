@@ -6,7 +6,7 @@ import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
-  timeout: 15000
+  timeout: 60000  // 增加到 60 秒，适配学校数据 API 响应较慢的情况
 })
 
 // 防止并发 401 多次触发 logout
@@ -15,6 +15,22 @@ let isLoggingOut = false
 const handleLogout = async () => {
   if (isLoggingOut) return
   isLoggingOut = true
+
+  // 保存当前页面路径，SSO 重新登录后可跳回
+  // 301/302 是重定向，不应保存；login/sso/callback 也不保存避免循环
+  const currentPath = window.location.pathname + window.location.search + window.location.hash
+  if (
+    currentPath !== '/login' &&
+    !currentPath.startsWith('/sso/callback') &&
+    !currentPath.startsWith('/admin-portal')
+  ) {
+    try {
+      sessionStorage.setItem('sso_redirect_after_login', currentPath)
+    } catch (e) {
+      console.warn('[SSO] 保存 401 重定向路径失败', e)
+    }
+  }
+
   try {
     const userStore = useUserStore()
     // 先清理本地状态（store.logout 内部会先清本地再调 API）
@@ -82,6 +98,11 @@ request.interceptors.response.use(
         return Promise.reject({ code: 401, message: '未授权，请重新登录' })
       }
 
+      // 4001: 需要前端确认的业务提示（如"文章未公开，是否同时公开？"），直接放行让调用方处理
+      if (res.code === 4001) {
+        return res
+      }
+
       // 非 401 的业务错误：仅展示预定义的错误信息，防止后端敏感信息泄露
       const errorMessage = getBusinessErrorMessage(res.code, res.message)
       ElMessage({
@@ -102,6 +123,10 @@ request.interceptors.response.use(
     // 超时 / 网络断连的友好提示
     if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
       message = '请求超时，请检查网络连接后重试'
+      // 如果配置了 skipErrorHandler，则不显示错误提示（用于数据已成功加载的场景）
+      if (error.config?.skipErrorHandler) {
+        return Promise.reject({ code: 408, message })
+      }
     } else if (!error.response && error.request) {
       // No response + request exists = network error or CORS block.
       // CORS blocks appear as network errors because the browser hides the response entirely.
@@ -121,7 +146,12 @@ request.interceptors.response.use(
     }
     if (!error.config?.skipErrorHandler) {
       const reqUrl = error.config?.url || 'unknown'
-      console.warn(`[HTTP ${error.response.status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
+      const status = error.response?.status
+      if (status) {
+        console.warn(`[HTTP ${status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
+        // Map HTTP status codes to friendly messages
+        message = getHttpErrorMessage(status, error.response?.data)
+      }
 
       ElMessage({
         message,
@@ -139,6 +169,33 @@ request.interceptors.response.use(
     return Promise.reject(errorResponse)
   }
 )
+
+
+/**
+ * 将 HTTP 状态码映射为用户友好的错误信息
+ * OPS/ADMIN 用户可看到 500 的详细信息（detail 字段）
+ */
+function getHttpErrorMessage(status, responseData) {
+  if (status === 500) {
+    try {
+      const store = useUserStore()
+      const isOps = store.userRole === 'OPS' || store.userRole === 'ADMIN' ||
+        (store.elevatedRole === 'OPS' && store.elevationExpiresAt && new Date(store.elevationExpiresAt) > new Date())
+      if (isOps && responseData?.detail) {
+        return `服务器错误: ${responseData.detail}`
+      }
+    } catch (e) { /* store not available */ }
+    return '服务器内部错误'
+  }
+  const httpErrorMap = {
+    400: '请求参数错误',
+    401: '未授权，请重新登录',
+    403: '拒绝访问',
+    404: '请求地址不存在',
+    409: '请求冲突',
+  }
+  return httpErrorMap[status] || '请求失败，请稍后重试'
+}
 
 
 /**

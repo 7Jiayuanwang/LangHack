@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
@@ -90,6 +91,31 @@ public class BackupController {
         }
     }
 
+    @PostMapping("/import")
+    public Result<?> importBackup(@RequestParam("file") MultipartFile file,
+                                  @RequestParam(defaultValue = "AUTO") String mode,
+                                  @RequestParam(required = false) String category,
+                                  Authentication authentication,
+                                  HttpServletRequest request) {
+        String username = authentication.getName();
+        String ip = getClientIp(request);
+        try {
+            BackupRecord record = backupService.importBackup(username, file, mode, category);
+            operationLogService.log(username, "BACKUP_IMPORT", record.getId(),
+                    record.getFilename(), "导入备份文件", "SUCCESS", ip);
+            return Result.success("备份文件已导入", record);
+        } catch (BusinessException e) {
+            operationLogService.log(username, "BACKUP_IMPORT", null,
+                    file != null ? file.getOriginalFilename() : null, "导入失败: " + e.getMessage(), "FAILED", ip);
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("导入备份文件失败", e);
+            operationLogService.log(username, "BACKUP_IMPORT", null,
+                    file != null ? file.getOriginalFilename() : null, "导入失败: 系统内部错误", "FAILED", ip);
+            return Result.error("导入备份文件失败，请稍后重试");
+        }
+    }
+
     @GetMapping("/{id}")
     public Result<?> getBackupDetail(@PathVariable Long id) {
         try {
@@ -100,6 +126,20 @@ public class BackupController {
         } catch (Exception e) {
             logger.error("获取备份详情失败", e);
             return Result.error("获取备份详情失败，请稍后重试");
+        }
+    }
+
+    @GetMapping("/{id}/preview")
+    public Result<?> getBackupPreview(@PathVariable Long id,
+                                      @RequestParam(defaultValue = "80") int maxLines,
+                                      @RequestParam(defaultValue = "12000") int maxChars) {
+        try {
+            return Result.success(backupService.getBackupPreview(id, maxLines, maxChars));
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取备份预览失败", e);
+            return Result.error("获取备份预览失败，请稍后重试");
         }
     }
 
@@ -184,12 +224,22 @@ public class BackupController {
             if (confirmDatabaseName == null || confirmDatabaseName.trim().isEmpty()) {
                 return Result.error("请输入数据库名称以确认恢复操作");
             }
+
+            String mode = body.get("mode"); // "full" or "incremental"
             BackupRecord record = backupService.getBackupById(id);
             filename = record.getFilename();
-            backupService.restoreFromBackup(id, confirmDatabaseName.trim());
-            operationLogService.log(username, "BACKUP_RESTORE", id,
-                    filename, "从备份恢复数据库 [" + confirmDatabaseName.trim() + "]", "SUCCESS", ip);
-            return Result.success("数据库恢复成功");
+
+            if ("incremental".equals(mode)) {
+                backupService.restoreFromBackupIncremental(id, confirmDatabaseName.trim());
+                operationLogService.log(username, "BACKUP_RESTORE_INCREMENTAL", id,
+                        filename, "增量恢复数据库 [" + confirmDatabaseName.trim() + "]，保留新增数据", "SUCCESS", ip);
+                return Result.success("数据库增量恢复成功，新增数据已保留");
+            } else {
+                backupService.restoreFromBackup(id, confirmDatabaseName.trim());
+                operationLogService.log(username, "BACKUP_RESTORE", id,
+                        filename, "从备份恢复数据库 [" + confirmDatabaseName.trim() + "]", "SUCCESS", ip);
+                return Result.success("数据库恢复成功");
+            }
         } catch (BusinessException e) {
             operationLogService.log(username, "BACKUP_RESTORE", id,
                     filename, "恢复失败: " + e.getMessage(), "FAILED", ip);
@@ -248,6 +298,35 @@ public class BackupController {
             operationLogService.log(username, "CONFIG_UPDATE", null,
                     null, "更新备份配置失败: 系统内部错误", "FAILED", ip);
             return Result.error("更新备份配置失败，请稍后重试");
+        }
+    }
+
+    @PostMapping("/category")
+    public Result<?> createCategoryBackup(
+            @RequestParam String category,
+            Authentication authentication,
+            HttpServletRequest request) {
+        String username = authentication.getName();
+        String ip = getClientIp(request);
+        java.util.Set<String> validCategories = java.util.Set.of(
+                "system_config", "user_data", "business_data", "school_data");
+        if (!validCategories.contains(category)) {
+            return Result.error("无效的备份分类，支持: system_config / user_data / business_data / school_data");
+        }
+        try {
+            BackupRecord record = backupService.createCategoryBackup(username, category);
+            operationLogService.log(username, "BACKUP_CREATE", record.getId(),
+                    record.getFilename(), "手动创建分类备份: " + category, "SUCCESS", ip);
+            return Result.success("分类备份任务已创建", record);
+        } catch (BusinessException e) {
+            operationLogService.log(username, "BACKUP_CREATE", null,
+                    null, "创建分类备份失败: " + e.getMessage(), "FAILED", ip);
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("创建分类备份失败 category={}", category, e);
+            operationLogService.log(username, "BACKUP_CREATE", null,
+                    null, "创建分类备份失败: 系统内部错误", "FAILED", ip);
+            return Result.error("创建分类备份失败，请稍后重试");
         }
     }
 

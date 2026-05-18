@@ -1673,4 +1673,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
 }
+
+.empty-state-v2 {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40vh;
+}
 </style>

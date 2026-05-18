@@ -27,11 +27,23 @@ public class TeacherStudentBinding {
     @TableField("teacher_id")
     private String teacherId;
 
+    @TableField("teacher_name")
+    private String teacherName;
+
     @TableField("student_id")
     private String studentId;
 
+    @TableField("student_name")
+    private String studentName;
+
+    @TableField("college_name")
+    private String collegeName;
+
     @TableField("course_code")
     private String courseCode;
+
+    @TableField("course_name")
+    private String courseName;
 
     @TableField("course_class_code")
     private String courseClassCode;

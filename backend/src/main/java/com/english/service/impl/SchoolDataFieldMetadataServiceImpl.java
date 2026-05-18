@@ -8,7 +8,10 @@ import com.english.entity.CourseSelection;
 import com.english.entity.FieldMapping;
 import com.english.entity.LevelExamScore;
 import com.english.entity.SchoolCourse;
+import com.english.entity.SchoolStudent;
+import com.english.entity.SchoolTeacher;
 import com.english.entity.StudentSchedule;
+import com.english.entity.TeacherStudentBinding;
 import com.english.entity.TeachingClass;
 import com.english.entity.TeachingPlan;
 import com.english.service.FieldMappingService;
@@ -26,15 +29,19 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
 
     private static final Set<String> HIDDEN_FIELDS = Set.of("id", "createdAt", "updatedAt", "syncTime", "syncSource");
 
-    private static final Map<String, Class<?>> ENTITY_TYPES = Map.of(
-            "administrative_class", AdministrativeClass.class,
-            "school_course", SchoolCourse.class,
-            "teaching_class", TeachingClass.class,
-            "course_schedule", CourseSchedule.class,
-            "course_selection", CourseSelection.class,
-            "level_exam_scores", LevelExamScore.class,
-            "teaching_plans", TeachingPlan.class,
-            "student_schedule", StudentSchedule.class
+    private static final Map<String, Class<?>> ENTITY_TYPES = Map.ofEntries(
+            Map.entry("administrative_class", AdministrativeClass.class),
+            Map.entry("school_course", SchoolCourse.class),
+            Map.entry("teaching_class", TeachingClass.class),
+            Map.entry("course_schedule", CourseSchedule.class),
+            Map.entry("course_selection", CourseSelection.class),
+            Map.entry("level_exam_scores", LevelExamScore.class),
+            Map.entry("teaching_plans", TeachingPlan.class),
+            Map.entry("teacher_courses", TeachingClass.class),
+            Map.entry("student_schedule", StudentSchedule.class),
+            Map.entry("school_student", SchoolStudent.class),
+            Map.entry("school_teacher", SchoolTeacher.class),
+            Map.entry("teacher_student_binding", TeacherStudentBinding.class)
     );
 
     private static final Map<String, String> FIELD_LABELS = createFieldLabels();
@@ -185,7 +192,11 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
     }
 
     private String resolveLabel(String dataSource, String field) {
-        return FIELD_LABELS.getOrDefault(dataSource + "." + field, field);
+        String label = FIELD_LABELS.get(dataSource + "." + field);
+        if (label == null && "teacher_courses".equals(dataSource)) {
+            label = FIELD_LABELS.get("teaching_class." + field);
+        }
+        return label == null ? field : label;
     }
 
     private static Map<String, String> createFieldLabels() {
@@ -348,6 +359,32 @@ public class SchoolDataFieldMetadataServiceImpl implements SchoolDataFieldMetada
         labels.put("student_schedule.classLocation", "教室");
         labels.put("student_schedule.academicYear", "学年");
         labels.put("student_schedule.semester", "学期");
+
+        labels.put("school_student.studentId", "学号");
+        labels.put("school_student.studentName", "姓名");
+        labels.put("school_student.collegeName", "学院名称");
+        labels.put("school_student.collegeCode", "学院代码");
+        labels.put("school_student.classCode", "行政班编码");
+        labels.put("school_student.className", "行政班名称");
+        labels.put("school_student.grade", "年级");
+        labels.put("school_student.majorName", "专业名称");
+        labels.put("school_student.sourceCourseCodes", "来源课程代码");
+        labels.put("school_student.lastExamSyncTime", "最近成绩同步");
+        labels.put("school_student.lastScheduleSyncTime", "最近课表同步");
+
+        labels.put("school_teacher.teacherId", "教师工号");
+        labels.put("school_teacher.teacherName", "教师姓名");
+        labels.put("school_teacher.collegeName", "学院名称");
+        labels.put("school_teacher.collegeCode", "学院代码");
+        labels.put("school_teacher.lastScheduleSyncTime", "最近课表同步");
+
+        labels.put("teacher_student_binding.teacherId", "教师工号");
+        labels.put("teacher_student_binding.studentId", "学号");
+        labels.put("teacher_student_binding.courseCode", "课程代码");
+        labels.put("teacher_student_binding.courseClassCode", "教学班号");
+        labels.put("teacher_student_binding.academicYear", "学年");
+        labels.put("teacher_student_binding.semester", "学期");
+        labels.put("teacher_student_binding.sourceType", "来源类型");
         return labels;
     }
 

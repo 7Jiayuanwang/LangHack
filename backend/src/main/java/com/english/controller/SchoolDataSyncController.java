@@ -7,6 +7,7 @@ import com.english.entity.SyncLog;
 import com.english.service.FieldMappingService;
 import com.english.service.SchoolDataApiClient;
 import com.english.service.SchoolDataSyncService;
+import com.english.service.SystemConfigService;
 import com.english.service.SyncMonitorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,12 @@ public class SchoolDataSyncController {
 
     @Autowired
     private SyncMonitorService monitorService;
+
+    @Autowired(required = false)
+    private SystemConfigService systemConfigService;
+
+    @Autowired
+    private com.english.service.SchoolDataArchiveService archiveService;
 
     // =========================================================================
     // 同步操作
@@ -161,6 +168,9 @@ public class SchoolDataSyncController {
             @RequestParam String collegeName,
             @RequestParam(defaultValue = "eq") String matchMode,
             @RequestParam(defaultValue = "true") boolean persist) {
+        if (!isChainFetchEnabled()) {
+            return Result.error("按学院链式拉取功能当前已关闭");
+        }
         logger.info("手动触发链式拉取: collegeName={}, matchMode={}, persist={}",
                 collegeName, matchMode, persist);
         try {
@@ -248,6 +258,54 @@ public class SchoolDataSyncController {
     }
 
     // =========================================================================
+    // 数据归档
+    // =========================================================================
+
+    /**
+     * 归档指定数据源的历史数据
+     * POST /api/admin/sync/archive/{dataSource}
+     */
+    @PostMapping("/archive/{dataSource}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<Map<String, Object>> archiveDataSource(@PathVariable String dataSource) {
+        // 白名单校验：防止路径参数被用于 SQL 标识符注入
+        java.util.Set<String> allowed = java.util.Set.of(
+            "school_student", "school_teacher", "school_course",
+            "teaching_class", "course_schedule", "course_selection",
+            "level_exam_scores", "teacher_student_binding",
+            "administrative_class", "teaching_plan", "teaching_plan_courses"
+        );
+        if (!allowed.contains(dataSource)) {
+            return Result.error("不支持的数据源: " + dataSource);
+        }
+        logger.info("手动触发数据归档: dataSource={}", dataSource);
+        try {
+            Map<String, Object> result = archiveService.archiveDataSource(dataSource);
+            return Result.success("归档完成", result);
+        } catch (Exception e) {
+            logger.error("数据归档失败: dataSource={}", dataSource, e);
+            return Result.error("归档失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 归档所有数据源
+     * POST /api/admin/sync/archive/all
+     */
+    @PostMapping("/archive/all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<Map<String, Map<String, Object>>> archiveAll() {
+        logger.info("手动触发全部数据归档");
+        try {
+            Map<String, Map<String, Object>> results = archiveService.archiveAll();
+            return Result.success("归档完成", results);
+        } catch (Exception e) {
+            logger.error("全部数据归档失败", e);
+            return Result.error("归档失败: " + e.getMessage());
+        }
+    }
+
+    // =========================================================================
     // 字段映射管理
     // =========================================================================
 
@@ -285,6 +343,19 @@ public class SchoolDataSyncController {
     /**
      * 获取当前操作人（简化实现，从Security上下文获取）
      */
+    private boolean isChainFetchEnabled() {
+        if (systemConfigService == null) {
+            return true;
+        }
+        try {
+            String value = systemConfigService.get("feature_toggle", "ops.school_data_chain_fetch", "true");
+            return "true".equalsIgnoreCase(value) || "1".equals(value);
+        } catch (Exception e) {
+            logger.warn("读取 ops.school_data_chain_fetch 失败，默认允许执行: {}", e.getMessage());
+            return true;
+        }
+    }
+
     private String getCurrentOperator() {
         try {
             org.springframework.security.core.Authentication auth =

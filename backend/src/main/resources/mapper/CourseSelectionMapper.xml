@@ -23,9 +23,14 @@
         )
         ON DUPLICATE KEY UPDATE
             student_name = #{studentName},
+            course_code = #{courseCode},
             course_name = #{courseName},
+            class_id = #{classId},
+            teacher_id = #{teacherId},
             teacher_name = #{teacherName},
             credits = #{credits},
+            academic_year = #{academicYear},
+            semester = #{semester},
             class_time = #{classTime},
             class_location = #{classLocation},
             selection_time = #{selectionTime},

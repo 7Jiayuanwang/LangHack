@@ -16,10 +16,20 @@ import com.english.service.impl.DataCleanupServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -482,5 +492,137 @@ public class OpsController {
             data.put("error", "问答测试调用失败，请检查日志");
         }
         return Result.success(data);
+    }
+
+    // ==================== 日志管理 ====================
+
+    /**
+     * 获取最近的应用日志（最近 N 行）
+     */
+    @GetMapping("/logs/recent")
+    public Result<Map<String, Object>> getRecentLogs(
+            @RequestParam(defaultValue = "500") int lines,
+            @RequestParam(required = false) String level) {
+        try {
+            // 读取 Docker 容器日志
+            ProcessBuilder pb = new ProcessBuilder(
+                "docker", "logs", "langhack-backend", "--tail", String.valueOf(lines)
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            List<String> logLines = new ArrayList<>();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // 如果指定了日志级别，只返回匹配的行
+                    if (level == null || line.contains(level.toUpperCase())) {
+                        logLines.add(line);
+                    }
+                }
+            }
+
+            process.waitFor();
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("lines", logLines);
+            data.put("total", logLines.size());
+            data.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("获取日志失败", e);
+            return Result.error("获取日志失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 下载完整日志文件
+     */
+    @GetMapping("/logs/download")
+    public ResponseEntity<InputStreamResource> downloadLogs(
+            @RequestParam(defaultValue = "5000") int lines) {
+        try {
+            // 读取 Docker 容器日志
+            ProcessBuilder pb = new ProcessBuilder(
+                "docker", "logs", "langhack-backend", "--tail", String.valueOf(lines)
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            StringBuilder content = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    content.append(line).append("\n");
+                }
+            }
+
+            process.waitFor();
+
+            // 生成文件名
+            String filename = "langhack-backend-" +
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".log";
+
+            byte[] bytes = content.toString().getBytes(StandardCharsets.UTF_8);
+            ByteArrayInputStream inputStream = new ByteArrayInputStream(bytes);
+
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.TEXT_PLAIN)
+                .contentLength(bytes.length)
+                .body(new InputStreamResource(inputStream));
+
+        } catch (Exception e) {
+            logger.error("下载日志失败", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 获取日志统计信息
+     */
+    @GetMapping("/logs/stats")
+    public Result<Map<String, Object>> getLogStats(
+            @RequestParam(defaultValue = "1000") int lines) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                "docker", "logs", "langhack-backend", "--tail", String.valueOf(lines)
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            int errorCount = 0;
+            int warnCount = 0;
+            int infoCount = 0;
+            int totalLines = 0;
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    totalLines++;
+                    if (line.contains("ERROR")) errorCount++;
+                    else if (line.contains("WARN")) warnCount++;
+                    else if (line.contains("INFO")) infoCount++;
+                }
+            }
+
+            process.waitFor();
+
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("total", totalLines);
+            stats.put("error", errorCount);
+            stats.put("warn", warnCount);
+            stats.put("info", infoCount);
+            stats.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+
+            return Result.success(stats);
+        } catch (Exception e) {
+            logger.error("获取日志统计失败", e);
+            return Result.error("获取日志统计失败: " + e.getMessage());
+        }
     }
 }

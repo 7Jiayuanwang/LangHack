@@ -96,12 +96,6 @@ const routes = [
         meta: { title: "单词管理", roles: ["ADMIN"], featureKey: "admin.words" },
       },
       {
-        path: "texts",
-        name: "AdminTexts",
-        component: () => import("@/views/admin/Texts.vue"),
-        meta: { title: "课文管理", roles: ["ADMIN"], featureKey: "admin.texts" },
-      },
-      {
         path: "assignments",
         name: "AdminAssignments",
         component: () => import("@/views/admin/Assignments.vue"),
@@ -117,13 +111,25 @@ const routes = [
         path: "videos",
         name: "AdminVideos",
         component: () => import("@/views/admin/Videos.vue"),
-        meta: { title: "视频管理", roles: ["ADMIN"] },
+        meta: { title: "视频管理", roles: ["ADMIN"], featureKey: "page_admin_videos" },
+      },
+      {
+        path: "content",
+        name: "AdminContentManagement",
+        component: () => import("@/views/admin/ContentManagement.vue"),
+        meta: { title: "内容管理", roles: ["ADMIN"] },
       },
       {
         path: "sso-pending",
         name: "AdminSsoPending",
         component: () => import("@/views/admin/SsoPendingApprovals.vue"),
         meta: { title: "SSO 用户审批", roles: ["ADMIN"], featureKey: "admin.sso_approval" },
+      },
+      {
+        path: "content-review",
+        name: "AdminContentReview",
+        component: () => import("@/views/admin/ContentReview.vue"),
+        meta: { title: "内容审核", roles: ["ADMIN"] },
       },
     ],
   },
@@ -182,6 +188,12 @@ const routes = [
         component: () => import("@/views/ops/SchoolDataBrowser.vue"),
         meta: { title: "数据浏览", roles: ["OPS", "ADMIN"], featureKey: "ops.school_data_browser" },
       },
+      {
+        path: "logs",
+        name: "OpsLogs",
+        component: () => import("@/views/ops/Logs.vue"),
+        meta: { title: "日志管理", roles: ["OPS", "ADMIN"] },
+      },
     ],
   },
   {
@@ -220,6 +232,30 @@ const routes = [
         name: "TeacherMyCourses",
         component: () => import("@/views/teacher/MyCourses.vue"),
         meta: { title: "我的授课", roles: ["TEACHER"] },
+      },
+      {
+        path: "word-progress",
+        name: "TeacherWordProgress",
+        component: () => import("@/views/teacher/WordProgress.vue"),
+        meta: { title: "单词进度", roles: ["TEACHER"] },
+      },
+      {
+        path: "my-students",
+        name: "TeacherMyStudents",
+        component: () => import("@/views/teacher/MyStudents.vue"),
+        meta: { title: "我的学生", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
+      },
+      {
+        path: "my-schedule",
+        name: "TeacherMySchedule",
+        component: () => import("@/views/teacher/MySchedule.vue"),
+        meta: { title: "我的课表", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
+      },
+      {
+        path: "my-course-selections",
+        name: "TeacherMyCourseSelections",
+        component: () => import("@/views/teacher/MyCourseSelections.vue"),
+        meta: { title: "选课记录", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
       },
     ],
   },
@@ -472,7 +508,15 @@ router.beforeEach(async (to, from, next) => {
 
   // 需要登录的页面
   if (!hasValidToken) {
-    // 防止无限重定向循环
+    // 防止无限重定向循环，且不在 SSO 回调页保存（避免嵌套）
+    if (to.path !== "/login" && to.path !== "/sso/callback") {
+      // 保存原始目标页，SSO 登录成功后跳回
+      try {
+        sessionStorage.setItem("sso_redirect_after_login", to.fullPath);
+      } catch (e) {
+        console.warn("[SSO] 保存登录后重定向路径失败", e);
+      }
+    }
     if (to.path !== "/login") {
       next("/login");
     } else {

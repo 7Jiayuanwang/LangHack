@@ -18,6 +18,8 @@ services:
     build:
       context: ./docker
       dockerfile: mysql/master/Dockerfile
+      args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
     image: langhack-mysql-master:latest
     container_name: langhack-mysql-master
     restart: unless-stopped
@@ -54,7 +56,7 @@ services:
     ports:
       - "${PORT_MYSQL:-3306}:3306"
     volumes:
-      - mysql_master_data:/var/lib/mysql
+      - ./data/mysql-master:/var/lib/mysql
       # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
       # 仅挂载动态数据：历史备份目录 + ECDICT 词典 CSV（体积大且非 git 追踪）
       - ./database:/docker-entrypoint-initdb.d/seed:ro
@@ -76,6 +78,8 @@ services:
     build:
       context: ./docker
       dockerfile: mysql/slave/Dockerfile
+      args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
     image: langhack-mysql-slave:latest
     container_name: langhack-mysql-slave
     restart: unless-stopped
@@ -112,7 +116,7 @@ services:
     ports:
       - "${PORT_MYSQL_SLAVE:-3307}:3306"
     volumes:
-      - mysql_slave_data:/var/lib/mysql
+      - ./data/mysql-slave:/var/lib/mysql
       # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
       # 从库通过 MYSQL_ROLE=slave 跳过所有数据导入（数据由主从复制同步）
     networks:
@@ -121,13 +125,16 @@ services:
       mysql-master:
         condition: service_healthy
     healthcheck:
-      # 检查 MySQL 进程存活 + 复制线程运行状态
-      # 复制未配置或线程未运行时 healthcheck 失败 → backend 无法启动 → 部署阻塞
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent >/dev/null 2>&1 && mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW REPLICA STATUS\\G' 2>&1 | grep -q 'Replica_IO_Running: Yes'"]
+      # 仅检查 MySQL 进程存活，不强制要求复制运行
+      # 复制状态三层保障：
+      #   1) entrypoint-wrapper.sh 每次启动时主动检查/修复
+      #   2) deploy.sh / auto-update.sh 后置兜底
+      #   3) DynamicDataSource 运行时降级（回退主库）
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
-      timeout: 5s
-      retries: 18
-      start_period: 240s  # 增加到 4 分钟，等待主库初始化完成 + 从库初始化 + 复制配置
+      timeout: 10s
+      retries: 12
+      start_period: 360s  # entrypoint-wrapper 会等待 MySQL 就绪 + 复制初始化，给足够时间
 
   # ─────────────────────────────────────────────
   # Redis 缓存
@@ -151,7 +158,7 @@ services:
     ports:
       - "${PORT_REDIS:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
     networks:
       - langhack-network
     healthcheck:
@@ -168,6 +175,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
     container_name: langhack-backend
     restart: unless-stopped
     logging: *default-logging
@@ -205,8 +214,9 @@ services:
       # 备份
       BACKUP_DIR: /app/backups
       MYSQLDUMP_PATH: mysqldump
-      # CORS
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
+      # CORS（全局跨域：允许本机 + 局域网所有 IP 访问）
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80,http://localhost:3000,http://127.0.0.1:3000,http://10.213.113.105:3000,http://192.168.81.1:3000,http://192.168.192.1:3000,http://172.24.160.1:3000}
+      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-http://192.168.*.*:*,http://172.*.*.*:*,http://10.*.*.*:*}
       # AI 翻译（可选，也可在运维面板配置）
       AI_TRANSLATE_API_URL: ${AI_TRANSLATE_API_URL:-}
       AI_TRANSLATE_API_KEY: ${AI_TRANSLATE_API_KEY:-}
@@ -223,6 +233,10 @@ services:
       APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
+      # Flyway — 自动增量迁移（通过环境变量启用，覆盖 application.yml 的 false）
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "21"
       # School Data Integration
       SCHOOL_DATA_SOURCE: ${SCHOOL_DATA_SOURCE:-api}
       SCHOOL_API_BASE_URL: ${SCHOOL_API_BASE_URL:-}
@@ -236,8 +250,8 @@ services:
     ports:
       - "${PORT_BACKEND:-8080}:8080"
     volumes:
-      - app_logs:/app/logs
-      - app_uploads:/app/uploads
+      - ./data/app-logs:/app/logs
+      - ./data/app-uploads:/app/uploads
       # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
       - ./backups:/app/backups
     networks:
@@ -246,7 +260,7 @@ services:
       mysql-master:
         condition: service_healthy   # 主库进程必须存活（阻塞）
       mysql-slave:
-        condition: service_healthy   # 从库进程必须存活（阻塞）；复制状态由 DynamicDataSource 运行时降级处理
+        condition: service_started   # 从库容器启动即可；复制状态由后置复制初始化与运行时降级共同处理
       redis:
         condition: service_healthy
     healthcheck:
@@ -264,6 +278,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
         VITE_API_BASE_URL: ""
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
         VITE_ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
@@ -303,14 +318,4 @@ networks:
 # ─────────────────────────────────────────────
 # 持久化卷
 # ─────────────────────────────────────────────
-volumes:
-  mysql_master_data:
-    driver: local
-  mysql_slave_data:
-    driver: local
-  redis_data:
-    driver: local
-  app_logs:
-    driver: local
-  app_uploads:
-    driver: local
+volumes: {}
