@@ -395,6 +395,84 @@ function formatTimestamp(seconds) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+// ─── Subtitle Cleaner ──────────────────────────────────────────
+
+function cleanSubtitle(raw) {
+  if (!raw || !raw.trim()) return raw
+
+  let text = raw.trim()
+
+  // 已有标准时间轴（含 -->），只做标签清理
+  if (text.includes('-->')) {
+    text = text.replace(/<[^>]+>/g, '')
+    if (!text.startsWith('WEBVTT')) {
+      text = 'WEBVTT\n\n' + text
+    }
+    return text
+  }
+
+  // 检测内联时间戳 <HH:MM:SS.mmm> 或 <c> 标签
+  const hasInline = /<\d{1,2}:\d{2}:\d{2}[.,]\d{3}>/.test(text)
+  const hasCTag = /<\/?c\s*>/i.test(text)
+  if (!hasInline && !hasCTag) return text
+
+  // 去掉 <c> </c>
+  text = text.replace(/<\/?c\s*>/gi, '')
+
+  // 提取时间戳和对应文本
+  const regex = /<(\d{1,2}:\d{2}:\d{2}[.,]\d{3})>/g
+  const segments = []
+  let lastIdx = 0
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const ts = match[1]
+    const start = match.index + match[0].length
+    // 找下一个时间戳位置
+    regex.lastIndex = 0 // reset for next search
+    const nextMatch = regex.exec(text.substring(start))
+    const end = nextMatch ? start + nextMatch.index : text.length
+    const word = text.substring(start, end).trim()
+    if (word) {
+      segments.push({ time: parseTimestamp(ts), word })
+    }
+    regex.lastIndex = start + (end - start)
+  }
+
+  // 第一个时间戳之前的文本（可能无时间戳前缀）
+  const firstTsIdx = text.search(/<\d{1,2}:\d{2}:\d{2}[.,]\d{3}>/)
+  if (firstTsIdx > 0) {
+    const prefix = text.substring(0, firstTsIdx).trim()
+    if (prefix && segments.length > 0) {
+      segments.unshift({ time: Math.max(0, segments[0].time - 2), word: prefix })
+    }
+  }
+
+  if (!segments.length) return text
+
+  // 按句子边界分组（句号/问号/感叹号 或 超过 10 词）
+  const cues = []
+  let buf = []
+  let cueStart = segments[0].time
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+    buf.push(seg.word)
+    const isEnd = /[.!?]$/.test(seg.word)
+    if (isEnd || buf.length >= 10 || i === segments.length - 1) {
+      const endTime = i + 1 < segments.length ? segments[i + 1].time : seg.time + 2
+      cues.push({ start: cueStart, end: endTime, text: buf.join(' ') })
+      buf = []
+      if (i + 1 < segments.length) cueStart = segments[i + 1].time
+    }
+  }
+
+  // 组装 VTT
+  let vtt = 'WEBVTT\n\n'
+  for (const cue of cues) {
+    vtt += `${formatVTTTime(cue.start)} --> ${formatVTTTime(cue.end)}\n${cue.text}\n\n`
+  }
+  return vtt.trim()
+}
+
 // ─── Navigation ────────────────────────────────────────────────
 const goBack = () => {
   const isAdminPreview = route.query.preview === 'admin'
@@ -432,6 +510,14 @@ const loadVideo = async () => {
         : await getPublicVideoDetail(videoId)
     if (res.code === 200 && res.data) {
       video.value = res.data
+
+      // 清洗字幕内容（去除 <c> 标签、内联时间戳等 SRT 转 VTT 污染）
+      if (video.value.subtitleContent) {
+        video.value.subtitleContent = cleanSubtitle(video.value.subtitleContent)
+      }
+      if (video.value.subtitleContentZh) {
+        video.value.subtitleContentZh = cleanSubtitle(video.value.subtitleContentZh)
+      }
 
       if (video.value.subtitleContent) {
         subtitleCues.value = parseVTT(video.value.subtitleContent)
