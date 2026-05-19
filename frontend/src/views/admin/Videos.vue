@@ -193,7 +193,7 @@
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="字幕">
+        <el-form-item label="英文字幕">
           <el-upload
             class="subtitle-uploader"
             :auto-upload="false"
@@ -202,7 +202,22 @@
             accept=".vtt,.srt,.txt"
             :on-change="handleSubtitleFileChange"
           >
-            <el-button>选择字幕文件</el-button>
+            <el-button>选择英文字幕</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="中文字幕">
+          <el-upload
+            class="subtitle-uploader"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept=".vtt,.srt,.txt"
+            :on-change="handleSubtitleZhFileChange"
+          >
+            <el-button>选择中文字幕</el-button>
             <template #tip>
               <div class="el-upload__tip">支持 VTT/SRT/TXT 格式（可选）</div>
             </template>
@@ -273,6 +288,7 @@ const form = reactive({
   coverMediaId: null,
   tags: '',
   subtitleContent: '',
+  subtitleContentZh: '',
   isPublicBool: true,
   videoUrl: '',
   coverUrl: ''
@@ -293,7 +309,15 @@ const handleSubtitleFileChange = async (file) => {
     const text = await file.raw.text()
     form.subtitleContent = text
   } catch (e) {
-    ElMessage.error('字幕文件读取失败')
+    ElMessage.error('英文字幕文件读取失败')
+  }
+}
+const handleSubtitleZhFileChange = async (file) => {
+  try {
+    const text = await file.raw.text()
+    form.subtitleContentZh = text
+  } catch (e) {
+    ElMessage.error('中文字幕文件读取失败')
   }
 }
 
@@ -341,6 +365,7 @@ const editVideo = (row) => {
     coverMediaId: row.coverMediaId,
     tags: row.tags || '',
     subtitleContent: row.subtitleContent || '',
+    subtitleContentZh: row.subtitleContentZh || '',
     isPublicBool: row.isPublic === 1,
     videoUrl: row.videoUrl || '',
     coverUrl: row.coverUrl || ''
@@ -349,7 +374,7 @@ const editVideo = (row) => {
 }
 
 const resetForm = () => {
-  Object.assign(form, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
+  Object.assign(form, { title: '', description: '', mediaId: null, coverMediaId: null, tags: '', subtitleContent: '', subtitleContentZh: '', isPublicBool: true, videoUrl: '', coverUrl: '' })
   videoFile = null; coverFile = null
   formRef.value?.clearValidate()
 }
@@ -394,6 +419,7 @@ const handleSubmit = async () => {
       coverMediaId: form.coverMediaId,
       tags: form.tags,
       subtitleContent: form.subtitleContent || null,
+      subtitleContentZh: form.subtitleContentZh || null,
       isPublic: form.isPublicBool ? 1 : 0,
       status: 'APPROVED',
       videoUrl: form.videoUrl,

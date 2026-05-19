@@ -12,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRange;
 import org.springframework.http.HttpStatus;
@@ -163,7 +162,20 @@ public class MediaController {
             long end = range.getRangeEnd(fileLength);
             long rangeLength = end - start + 1;
 
-            ResourceRegion region = new ResourceRegion(resource, start, rangeLength);
+            // 开放式 Range（如 bytes=0-）实际上等于请求整个文件，直接走全量响应
+            if (start == 0 && rangeLength >= fileLength) {
+                return fullResponse(resource, fileName, mimeType, fileLength);
+            }
+
+            // 读取精确的字节范围——之前这里 body 传了完整 resource 导致
+            // Content-Range 头说只返回 N 字节，但实体却返回了整个文件，
+            // 浏览器解码器收到错位数据后抛出 MEDIA_ERR_DECODE (code 3)
+            byte[] rangeBytes = new byte[(int) rangeLength];
+            try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(path.toFile(), "r")) {
+                raf.seek(start);
+                raf.readFully(rangeBytes);
+            }
+
             return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                     .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
                     .contentType(MediaType.parseMediaType(mimeType))
@@ -171,9 +183,14 @@ public class MediaController {
                     .header(HttpHeaders.CONTENT_RANGE,
                             "bytes " + start + "-" + end + "/" + fileLength)
                     .contentLength(rangeLength)
-                    .body(resource);
+                    .body(new ByteArrayResource(rangeBytes));
         }
 
+        return fullResponse(resource, fileName, mimeType, fileLength);
+    }
+
+    private ResponseEntity<Resource> fullResponse(
+            Resource resource, String fileName, String mimeType, long fileLength) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
                 .contentType(MediaType.parseMediaType(mimeType))

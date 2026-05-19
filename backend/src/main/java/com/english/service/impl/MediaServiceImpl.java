@@ -1,6 +1,5 @@
 package com.english.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Media;
 import com.english.mapper.MediaMapper;
@@ -19,7 +18,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Set;
@@ -148,19 +146,15 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
 
     private boolean isValidMediaType(String mediaType, String mimeType, String fileName) {
         if ("IMAGE".equals(mediaType)) {
-            // 校验 MIME 类型
             if (!(mimeType != null && mimeType.startsWith("image/"))) {
                 return false;
             }
-            // 校验文件扩展名
             String ext = getFileExtension(fileName).toLowerCase();
             return !ext.isEmpty() && ALLOWED_IMAGE_EXTENSIONS.contains(ext);
         } else if ("VIDEO".equals(mediaType)) {
-            // 校验 MIME 类型
             if (!(mimeType != null && mimeType.startsWith("video/"))) {
                 return false;
             }
-            // 校验文件扩展名
             String ext = getFileExtension(fileName).toLowerCase();
             return !ext.isEmpty() && ALLOWED_VIDEO_EXTENSIONS.contains(ext);
         }
@@ -169,8 +163,6 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
 
     @Override
     public Media getMediaById(Long id) {
-        // 注意：@TableLogic 已在 Media 实体定义，MyBatis Plus 会自动过滤已删除的记录
-        // 所以这里不需要手动添加 eq("deleted", 0) 条件
         return getById(id);
     }
 
