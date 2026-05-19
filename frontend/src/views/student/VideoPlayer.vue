@@ -1307,6 +1307,7 @@ onBeforeUnmount(() => {
 
 .subtitle-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 12px;
   padding: 10px 20px;
@@ -1440,6 +1441,7 @@ onBeforeUnmount(() => {
 
 .article-subtitle-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 14px;
   padding: 12px 20px;
