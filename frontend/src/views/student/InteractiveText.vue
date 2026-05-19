@@ -311,6 +311,7 @@ marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
 import { getArticlesPath } from '@/config/site'
 import rangy from '@/utils/rangy'
+import { useUserStore } from '@/store/user'
 
 const route = useRoute()
 const router = useRouter()
@@ -1803,7 +1804,7 @@ const handleAiQa = () => {
   }
 
   router.push({
-    path: '/student/ai-qa',
+    path: useUserStore().userRole === 'TEACHER' ? '/teacher/ai-qa' : '/student/ai-qa',
     query: {
       textId: textId.value,
       text: selectedTextContent.value,

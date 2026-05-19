@@ -9,6 +9,7 @@
 import { computed } from 'vue'
 import { useUserStore } from '@/store/user'
 import StudentLayout from '@/views/student/Layout.vue'
+import MobileLayout from '@/views/shared/MobileLayout.vue'
 import PublicArticles from '@/views/public/Articles.vue'
 import StudentArticles from '@/views/student/Articles.vue'
 
@@ -22,8 +23,11 @@ const content = computed(() =>
 const layoutConfig = computed(() => {
   const role = userStore.userRole
   if (!userStore.token) return { layout: null, layoutRole: null }
-  // 所有已登录角色统一使用 StudentLayout
-  if (['STUDENT', 'USER', 'TEACHER', 'ADMIN', 'OPS'].includes(role)) {
+  // 教师保留教师端布局（底部导航栏不变），其他角色统一用 StudentLayout
+  if (role === 'TEACHER') {
+    return { layout: MobileLayout, layoutRole: 'teacher' }
+  }
+  if (['STUDENT', 'USER', 'ADMIN', 'OPS'].includes(role)) {
     return { layout: StudentLayout, layoutRole: null }
   }
   return { layout: null, layoutRole: null }

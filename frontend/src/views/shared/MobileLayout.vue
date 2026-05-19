@@ -149,7 +149,7 @@ import {
   Upload, Document, House,
   User, EditPen, Setting,
   DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
-  VideoPlay,
+  VideoPlay, ChatLineRound,
 } from '@element-plus/icons-vue'
 import { getReviewTexts, getReviewVideos } from '@/api/admin'
 
@@ -197,6 +197,7 @@ const NAV_ITEMS = {
     { path: '/teacher/my-courses',       label: '授课', icon: Notebook,  badge: null },
     { path: '/teacher/word-progress',    label: '单词进度', icon: DataLine, badge: null },
     { path: '/teacher/courses',          label: '课程', icon: Reading,   badge: null },
+    { path: '/articles',                 label: '文章', icon: ChatLineRound, badge: null },
     { path: '/teacher/my-students',      label: '学生', icon: User,      badge: null, featureKey: 'teacher.school_data_enabled' },
     { path: '/teacher/my-schedule',      label: '课表', icon: DataBoard, badge: null, featureKey: 'teacher.school_data_enabled' },
   ],
@@ -278,6 +279,7 @@ const ROUTE_MAP = {
     '/teacher/my-courses':  '我的授课',
     '/teacher/word-progress': '单词进度',
     '/teacher/courses':     '课程浏览',
+    '/articles':            '文章',
   },
   user: {
     '/user':            '首页',
