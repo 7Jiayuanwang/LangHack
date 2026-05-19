@@ -42,11 +42,32 @@ const BOTTOM_NAV_HEIGHT = 70
 
 let mediaQueryList = null
 let mounted = false
-let suppressNextClick = false
 let activePointerId = null
 let activeDragElement = null
 let releasePointerCaptureFn = null
 let dragState = null
+
+function isValidCoord(n) {
+  return typeof n === 'number' && Number.isFinite(n)
+}
+
+function trapNextClick(el) {
+  let timerId = null
+  const handler = (event) => {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    el.removeEventListener('click', handler, true)
+    if (timerId !== null) {
+      window.clearTimeout(timerId)
+      timerId = null
+    }
+  }
+  el.addEventListener('click', handler, true)
+  timerId = window.setTimeout(() => {
+    el.removeEventListener('click', handler, true)
+    timerId = null
+  }, 350)
+}
 
 // ─── Helpers ───────────────────────────────────────────
 
@@ -143,7 +164,7 @@ function clearDragState() {
   dragState = null
 }
 
-function finishDrag(event) {
+function endDrag(event) {
   if (!activeDragElement || !dragState) {
     clearDragState()
     return
@@ -157,20 +178,49 @@ function finishDrag(event) {
     return
   }
 
-  if (event) {
+  if (event && isValidCoord(event.clientX) && isValidCoord(event.clientY)) {
     setElementPosition(el, event.clientX - state.offsetX, event.clientY - state.offsetY)
   }
 
   if (state.hasMoved) {
     const finalRect = el.getBoundingClientRect()
-    savePosition(state.mode, { x: finalRect.left, y: finalRect.top })
-    suppressNextClick = true
-    window.setTimeout(() => {
-      suppressNextClick = false
-    }, 0)
+    if (isValidCoord(finalRect.left) && isValidCoord(finalRect.top)) {
+      savePosition(state.mode, { x: finalRect.left, y: finalRect.top })
+    }
+    trapNextClick(el)
   }
 
+  if (state.originalTransform !== undefined) {
+    el.style.transform = state.originalTransform
+  }
   el.style.transition = state.originalTransition
+  el.removeAttribute('data-dragging')
+
+  if (releasePointerCaptureFn) {
+    releasePointerCaptureFn()
+  }
+
+  clearDragState()
+}
+
+function cancelDrag() {
+  if (!activeDragElement || !dragState) {
+    clearDragState()
+    return
+  }
+
+  const el = activeDragElement
+  const state = dragState
+
+  if (state.originalTransform !== undefined) {
+    el.style.transform = state.originalTransform
+  }
+  el.style.transition = state.originalTransition
+  el.removeAttribute('data-dragging')
+
+  if (state.hasMoved) {
+    trapNextClick(el)
+  }
 
   if (releasePointerCaptureFn) {
     releasePointerCaptureFn()
@@ -188,7 +238,14 @@ function attachDrag(el) {
 
   const onPointerDown = (event) => {
     if (event.button !== undefined && event.button !== 0) return
-    if (activePointerId !== null) return
+    if (!isValidCoord(event.clientX) || !isValidCoord(event.clientY)) return
+    if (activePointerId !== null) {
+      cancelDrag()
+    }
+
+    const originalTransform = el.style.transform
+    el.style.transform = 'none'
+    el.setAttribute('data-dragging', 'true')
 
     const rect = el.getBoundingClientRect()
     activePointerId = event.pointerId
@@ -202,14 +259,20 @@ function attachDrag(el) {
       offsetY: event.clientY - rect.top,
       startTime: Date.now(),
       hasMoved: false,
-      originalTransition: el.style.transition
+      originalTransition: el.style.transition,
+      originalTransform
     }
 
     el.style.transition = 'none'
     setElementPosition(el, rect.left, rect.top)
+    el.style.transform = ''
 
     if (typeof el.setPointerCapture === 'function') {
-      el.setPointerCapture(event.pointerId)
+      try {
+        el.setPointerCapture(event.pointerId)
+      } catch {
+        // ignore
+      }
       releasePointerCaptureFn = () => {
         try {
           if (el.hasPointerCapture?.(event.pointerId)) {
@@ -226,6 +289,7 @@ function attachDrag(el) {
 
   const onPointerMove = (event) => {
     if (!dragState || event.pointerId !== activePointerId) return
+    if (!isValidCoord(event.clientX) || !isValidCoord(event.clientY)) return
 
     const deltaX = Math.abs(event.clientX - dragState.startX)
     const deltaY = Math.abs(event.clientY - dragState.startY)
@@ -236,28 +300,20 @@ function attachDrag(el) {
     setElementPosition(el, event.clientX - dragState.offsetX, event.clientY - dragState.offsetY)
   }
 
-  const onPointerUp = (event) => finishDrag(event)
-  const onPointerCancel = (event) => finishDrag(event)
-  const onLostCapture = (event) => finishDrag(event)
-
-  const onClickCapture = (event) => {
-    if (!suppressNextClick) return
-    event.preventDefault()
-    event.stopPropagation()
-    suppressNextClick = false
-  }
+  const onPointerUp = (event) => endDrag(event)
+  const onPointerCancel = () => cancelDrag()
+  const onLostCapture = () => cancelDrag()
 
   el.addEventListener('pointerdown', onPointerDown)
   el.addEventListener('pointermove', onPointerMove)
   el.addEventListener('pointerup', onPointerUp)
   el.addEventListener('pointercancel', onPointerCancel)
   el.addEventListener('lostpointercapture', onLostCapture)
-  el.addEventListener('click', onClickCapture, true)
   el.dataset.hiagentDragBound = 'true'
 }
 
 function handleBubbleClick() {
-  if (dragging.value || suppressNextClick) return
+  if (dragging.value) return
   window.open(getFullPageUrl(), '_blank')
 }
 
@@ -304,7 +360,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
 
   if (activeDragElement) {
-    finishDrag()
+    cancelDrag()
   }
 
   showMobileBubble.value = false
@@ -365,6 +421,17 @@ onBeforeUnmount(() => {
   cursor: grabbing;
   transform: scale(1.03);
   box-shadow: 0 18px 38px rgba(25, 127, 230, 0.36);
+}
+
+.hiagent-bubble[data-dragging="true"]:hover {
+  transform: none;
+  box-shadow: 0 8px 22px rgba(25, 127, 230, 0.28);
+  filter: none;
+}
+
+.hiagent-bubble[data-dragging="true"]:hover::before {
+  opacity: 0;
+  transform: scale(0.92);
 }
 
 .hiagent-bubble__text {
