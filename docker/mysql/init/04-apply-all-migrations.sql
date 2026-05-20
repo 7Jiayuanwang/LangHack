@@ -2800,3 +2800,74 @@ DROP PROCEDURE IF EXISTS _add_texts_read_count$$
 
 -- ════════════════════════════════════════════════════════════════
 
+
+-- ════════════════════════════════════════════════════════════════
+
+-- V23__ai_quiz_support.sql
+-- AI 出题功能支持：text_exercises 加字段 + 新建 ai_quiz_session 表
+
+DROP PROCEDURE IF EXISTS _ai_quiz_support$$
+CREATE PROCEDURE _ai_quiz_support()
+BEGIN
+    -- text_exercises 表添加新字段
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'text_exercises'
+          AND COLUMN_NAME = 'question_type'
+    ) THEN
+        ALTER TABLE text_exercises ADD COLUMN question_type VARCHAR(50) DEFAULT 'MULTIPLE_CHOICE' COMMENT '题目类型';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'text_exercises'
+          AND COLUMN_NAME = 'analysis'
+    ) THEN
+        ALTER TABLE text_exercises ADD COLUMN analysis TEXT COMMENT '题目解析';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'text_exercises'
+          AND COLUMN_NAME = 'distractor_analysis'
+    ) THEN
+        ALTER TABLE text_exercises ADD COLUMN distractor_analysis JSON COMMENT '干扰项分析';
+    END IF;
+
+    -- AI 出题会话表
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'ai_quiz_session'
+    ) THEN
+        CREATE TABLE ai_quiz_session (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            text_id BIGINT NOT NULL COMMENT '文章ID',
+            difficulty VARCHAR(50) COMMENT '难度级别',
+            passage_analysis JSON COMMENT '文章分析',
+            quality_metrics JSON COMMENT '质量指标',
+            question_count INT DEFAULT 0 COMMENT '生成题目数量',
+            ai_service VARCHAR(50) COMMENT 'AI服务类型',
+            ai_model VARCHAR(100) COMMENT 'AI模型名称',
+            created_by BIGINT COMMENT '创建者ID',
+            created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+            INDEX idx_text_id (text_id),
+            INDEX idx_created_by (created_by)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI出题会话';
+    END IF;
+END$$
+
+CALL _ai_quiz_support()$$
+DROP PROCEDURE IF EXISTS _ai_quiz_support$$
+
+-- V24__hiagent_quiz_credentials.sql
+-- HiAgent 出题凭证配置项（独立于改写/问答凭证）
+
+INSERT INTO system_config (config_group, config_key, config_value, description, is_secret)
+VALUES
+  ('ai_config', 'hiagent_quiz_api_key', '', 'HiAgent 出题应用 API Key（独立于改写/问答凭证）', 1),
+  ('ai_config', 'hiagent_quiz_app_id', '', 'HiAgent 出题应用 App ID（独立于改写/问答凭证）', 0)
+ON DUPLICATE KEY UPDATE description = VALUES(description);

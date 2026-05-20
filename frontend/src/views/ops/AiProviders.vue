@@ -24,7 +24,7 @@
         <div class="hiagent-header">
           <div class="hiagent-title">
             <span class="title-text">HiAgent 专有协议配置</span>
-            <el-tag size="small" type="warning">两套凭证必须完全不同，不 fallback</el-tag>
+            <el-tag size="small" type="warning">三套凭证各自独立，不 fallback</el-tag>
           </div>
           <div class="hiagent-header-actions">
             <el-button size="small" @click="loadHiAgentConfig" :loading="hiagentLoading">
@@ -43,7 +43,8 @@
       >
         <template #title>
           <strong>AI 改写</strong> (CET-4/6/学术版/中英对照) 使用 api_key + app_id；
-          <strong>AI 问答</strong> (文章划词) 使用 qa_api_key + qa_app_id。
+          <strong>AI 问答</strong> (文章划词) 使用 qa_api_key + qa_app_id；
+          <strong>AI 出题</strong> (文章自动生成选择题) 使用 quiz_api_key + quiz_app_id。
           保存后立即生效（读取自 system_config，60s 内存缓存刷新）。
         </template>
       </el-alert>
@@ -121,6 +122,38 @@
           </div>
         </el-form-item>
 
+        <el-divider content-position="left">
+          <span class="divider-tag">出题凭证（独立应用）</span>
+        </el-divider>
+
+        <el-form-item label="出题 API Key">
+          <el-input
+            v-model="hiagentForm.hiagent_quiz_api_key"
+            :type="showKeys.quizKey ? 'text' : 'password'"
+            :placeholder="statusMap.hiagent_quiz_api_key_configured ? '留空保持原值不变' : '尚未配置，请输入出题 API Key'"
+          >
+            <template #append>
+              <el-button @click="showKeys.quizKey = !showKeys.quizKey">
+                <el-icon><View v-if="!showKeys.quizKey" /><Hide v-else /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+          <div class="field-hint">
+            <el-tag size="small" :type="statusMap.hiagent_quiz_api_key_configured ? 'success' : 'danger'">
+              {{ statusMap.hiagent_quiz_api_key_configured ? '已配置' : '未配置' }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="出题 App ID">
+          <el-input v-model="hiagentForm.hiagent_quiz_app_id" placeholder="出题 App ID（明文）" />
+          <div class="field-hint">
+            <el-tag size="small" :type="statusMap.hiagent_quiz_app_id_configured ? 'success' : 'danger'">
+              {{ statusMap.hiagent_quiz_app_id_configured ? '已配置' : '未配置' }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
         <el-form-item>
           <el-button type="primary" @click="saveHiAgentConfig" :loading="hiagentSaving">
             <el-icon><Check /></el-icon>
@@ -140,6 +173,13 @@
           >
             测试问答
           </el-button>
+          <el-button
+            @click="runHiAgentTest('quiz')"
+            :loading="hiagentTesting.quiz"
+            :disabled="!statusMap.quiz_ready_from_db"
+          >
+            测试出题
+          </el-button>
         </el-form-item>
       </el-form>
 
@@ -152,6 +192,11 @@
       <div v-if="hiagentResults.qa" class="test-result" :class="hiagentResults.qa.success ? 'is-success' : 'is-error'">
         <span class="test-label">{{ hiagentResults.qa.success ? '✓ 问答测试通过' : '✗ 问答测试失败' }}</span>
         <span class="test-detail">{{ hiagentResults.qa.success ? hiagentResults.qa.preview : hiagentResults.qa.error }}</span>
+      </div>
+      <!-- 出题测试结果 -->
+      <div v-if="hiagentResults.quiz" class="test-result" :class="hiagentResults.quiz.success ? 'is-success' : 'is-error'">
+        <span class="test-label">{{ hiagentResults.quiz.success ? '✓ 出题测试通过' : '✗ 出题测试失败' }}</span>
+        <span class="test-detail">{{ hiagentResults.quiz.success ? hiagentResults.quiz.preview : hiagentResults.quiz.error }}</span>
       </div>
     </el-card>
 
@@ -368,13 +413,15 @@ import {
   updateSystemConfig,
   getHiAgentStatus,
   testHiAgentRewrite,
-  testHiAgentQa
+  testHiAgentQa,
+  testHiAgentQuiz
 } from '@/api/systemConfig'
 
 const serviceTypes = [
   { value: 'translate', label: '翻译服务 (translate)' },
   { value: 'article',   label: '文章生成 (article)' },
-  { value: 'chat',      label: 'AI 对话 (chat)' }
+  { value: 'chat',      label: 'AI 对话 (chat)' },
+  { value: 'quiz',      label: 'AI 出题 (quiz)' }
 ]
 
 const loading       = ref(false)
@@ -575,37 +622,45 @@ const HIAGENT_KEYS = [
   'hiagent_api_key',
   'hiagent_app_id',
   'hiagent_qa_api_key',
-  'hiagent_qa_app_id'
+  'hiagent_qa_app_id',
+  'hiagent_quiz_api_key',
+  'hiagent_quiz_app_id'
 ]
-const HIAGENT_SECRET_KEYS = new Set(['hiagent_api_key', 'hiagent_qa_api_key'])
+const HIAGENT_SECRET_KEYS = new Set(['hiagent_api_key', 'hiagent_qa_api_key', 'hiagent_quiz_api_key'])
 
 const hiagentLoading = ref(false)
 const hiagentSaving  = ref(false)
-const hiagentTesting = reactive({ rewrite: false, qa: false })
-const hiagentResults = reactive({ rewrite: null, qa: null })
-const showKeys       = reactive({ rewriteKey: false, qaKey: false })
+const hiagentTesting = reactive({ rewrite: false, qa: false, quiz: false })
+const hiagentResults = reactive({ rewrite: null, qa: null, quiz: null })
+const showKeys       = reactive({ rewriteKey: false, qaKey: false, quizKey: false })
 const statusMap      = reactive({
-  hiagent_api_url_configured:    false,
-  hiagent_api_key_configured:    false,
-  hiagent_app_id_configured:     false,
-  hiagent_qa_api_key_configured: false,
-  hiagent_qa_app_id_configured:  false,
-  rewrite_ready_from_db:         false,
-  qa_ready_from_db:              false
+  hiagent_api_url_configured:      false,
+  hiagent_api_key_configured:      false,
+  hiagent_app_id_configured:       false,
+  hiagent_qa_api_key_configured:   false,
+  hiagent_qa_app_id_configured:    false,
+  hiagent_quiz_api_key_configured: false,
+  hiagent_quiz_app_id_configured:  false,
+  rewrite_ready_from_db:           false,
+  qa_ready_from_db:                false,
+  quiz_ready_from_db:              false
 })
 
 // 保存原始（脱敏）值，用于判断用户是否修改过密钥字段
 const originalMaskedKeys = reactive({
-  hiagent_api_key:    '',
-  hiagent_qa_api_key: ''
+  hiagent_api_key:      '',
+  hiagent_qa_api_key:   '',
+  hiagent_quiz_api_key: ''
 })
 
 const hiagentForm = reactive({
-  hiagent_api_url:    '',
-  hiagent_api_key:    '',
-  hiagent_app_id:     '',
-  hiagent_qa_api_key: '',
-  hiagent_qa_app_id:  ''
+  hiagent_api_url:      '',
+  hiagent_api_key:      '',
+  hiagent_app_id:       '',
+  hiagent_qa_api_key:   '',
+  hiagent_qa_app_id:    '',
+  hiagent_quiz_api_key: '',
+  hiagent_quiz_app_id:  ''
 })
 
 const loadHiAgentConfig = async () => {
@@ -671,6 +726,11 @@ const saveHiAgentConfig = async () => {
     await updateSystemConfig(payload)
     ElMessage.success('HiAgent 配置已保存，后端缓存将在 60s 内刷新')
     await loadHiAgentConfig()
+
+    // 自动同步出题凭证到 ai_provider 表
+    await syncQuizProvider()
+
+    await loadProviders()
   } catch (e) {
     if (e?.response?.data?.message) {
       ElMessage.error(e.response.data.message)
@@ -682,13 +742,52 @@ const saveHiAgentConfig = async () => {
   }
 }
 
+const syncQuizProvider = async () => {
+  const quizApiKey = (hiagentForm.hiagent_quiz_api_key || '').trim()
+  const quizAppId  = (hiagentForm.hiagent_quiz_app_id || '').trim()
+  const apiUrl     = (hiagentForm.hiagent_api_url || '').trim()
+
+  // 出题凭证不完整时不同步
+  if (!quizApiKey || quizApiKey.includes('****') || !quizAppId || !apiUrl) return
+
+  const existing = allProviders.value.find(p => p.service === 'quiz' && p.protocol === 'hiagent')
+  const providerData = {
+    name:     'HiAgent-出题',
+    service:  'quiz',
+    protocol: 'hiagent',
+    apiUrl:   apiUrl,
+    apiKey:   quizApiKey,
+    appId:    quizAppId,
+    model:    'hiagent-app',
+    weight:   10,
+    timeoutMs: 180000,
+    enabled:  1,
+    remark:   '出题专用 HiAgent 应用（自动同步）'
+  }
+
+  try {
+    if (existing) {
+      await updateAiProvider(existing.id, providerData)
+    } else {
+      await createAiProvider(providerData)
+    }
+  } catch (e) {
+    console.warn('同步出题服务商失败:', e)
+  }
+}
+
 const runHiAgentTest = async (mode) => {
   hiagentTesting[mode] = true
   hiagentResults[mode] = null
   try {
-    const res = mode === 'rewrite'
-      ? await testHiAgentRewrite()
-      : await testHiAgentQa()
+    let res
+    if (mode === 'rewrite') {
+      res = await testHiAgentRewrite()
+    } else if (mode === 'qa') {
+      res = await testHiAgentQa()
+    } else {
+      res = await testHiAgentQuiz()
+    }
     hiagentResults[mode] = res.data?.data || res.data || {}
   } catch (e) {
     hiagentResults[mode] = { success: false, error: e?.response?.data?.message || '请求失败' }

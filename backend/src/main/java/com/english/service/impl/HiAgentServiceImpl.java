@@ -48,6 +48,8 @@ public class HiAgentServiceImpl implements HiAgentService {
     private static final String KEY_APP_ID      = "hiagent_app_id";
     private static final String KEY_QA_API_KEY  = "hiagent_qa_api_key";
     private static final String KEY_QA_APP_ID   = "hiagent_qa_app_id";
+    private static final String KEY_QUIZ_API_KEY = "hiagent_quiz_api_key";
+    private static final String KEY_QUIZ_APP_ID  = "hiagent_quiz_app_id";
 
     @Autowired
     private HiAgentConfig config;
@@ -526,6 +528,136 @@ public class HiAgentServiceImpl implements HiAgentService {
         throw new BusinessException("AI Q&A 服务返回结果解析失败");
     }
 
+    // ==================== AI 出题（Quiz）====================
+
+    /**
+     * 使用出题专用凭证调用 HiAgent 生成选择题（连通测试用）
+     */
+    @CircuitBreaker(name = "hiagent-qa", fallbackMethod = "fallbackQuiz")
+    public String generateQuiz(String title, String content, int count) {
+        String quizApiKey = effectiveQuizApiKey();
+        String quizAppId  = effectiveQuizAppId();
+        if (quizApiKey == null || quizApiKey.isBlank() || quizAppId == null || quizAppId.isBlank()) {
+            throw new BusinessException("AI 出题服务未配置独立凭证，请在运维面板「AI 服务管理」中配置 HiAgent 出题凭证");
+        }
+
+        String prompt = "请为以下文章生成 " + count + " 道选择题。\n\n"
+                + "【文章标题】\n" + title + "\n\n"
+                + "【文章内容】\n" + content;
+
+        long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
+        String user = AiCallMetricsService.getCurrentUser();
+
+        try {
+            String conversationId = createConversationWithQuizCredentials();
+            String result = chatQueryWithQuizCredentials(conversationId, prompt);
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordSuccess("HIAGENT", "generateQuiz", startTime, user);
+            }
+            return result;
+        } catch (Exception e) {
+            if (aiCallMetricsService != null) {
+                aiCallMetricsService.recordFailure("HIAGENT", "generateQuiz", startTime, e.getMessage(), user);
+            }
+            throw new BusinessException("AI 出题服务调用失败: " + e.getMessage());
+        }
+    }
+
+    public String fallbackQuiz(String title, String content, int count, Exception e) {
+        if (e instanceof BusinessException) {
+            throw (BusinessException) e;
+        }
+        throw new BusinessException("AI 出题服务暂时不可用，请稍后重试");
+    }
+
+    private HttpHeaders createQuizHeaders() {
+        String quizApiKey = effectiveQuizApiKey();
+        String quizAppId  = effectiveQuizAppId();
+
+        if (quizApiKey == null || quizApiKey.isBlank() || quizAppId == null || quizAppId.isBlank()) {
+            throw new BusinessException("AI 出题服务未配置独立凭证，请在运维面板「AI 服务管理」中配置 HiAgent 出题凭证");
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Apikey", quizApiKey);
+        headers.set("Appid", quizAppId);
+        headers.set("X-App-Id", quizAppId);
+        headers.set("X-Date", currentXDate());
+        return headers;
+    }
+
+    private String createConversationWithQuizCredentials() throws Exception {
+        String url = effectiveApiUrl() + "/create_conversation";
+
+        HttpHeaders headers = createQuizHeaders();
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("UserID", config.getUserId());
+        body.put("Inputs", new HashMap<String, String>());
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+        log.debug("Creating HiAgent Quiz conversation at {}", url);
+
+        ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+
+        if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            log.error("HiAgent (Quiz) create_conversation 非 200 响应 url={} status={} bodyPreview={}",
+                    url, response.getStatusCode(), truncateForLog(response.getBody()));
+            throw new BusinessException("无法创建 AI 出题会话: " + response.getStatusCode());
+        }
+
+        JsonNode root = objectMapper.readTree(response.getBody());
+        JsonNode conversation = root.get("Conversation");
+        if (conversation == null || conversation.get("AppConversationID") == null) {
+            String bodyPreview = truncateForLog(response.getBody());
+            log.error("Invalid response from create_conversation (Quiz): {}", bodyPreview);
+            throw new BusinessException("AI 出题会话创建失败：返回数据格式不正确");
+        }
+
+        String conversationId = conversation.get("AppConversationID").asText();
+        if (conversationId == null || conversationId.isBlank() || "null".equals(conversationId)) {
+            throw new BusinessException("AI 出题会话创建失败：会话ID为空");
+        }
+
+        return conversationId;
+    }
+
+    private String chatQueryWithQuizCredentials(String conversationId, String prompt) throws Exception {
+        String url = effectiveApiUrl() + "/chat_query_v2";
+
+        HttpHeaders headers = createQuizHeaders();
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("AppConversationID", conversationId);
+        body.put("Query", prompt);
+        body.put("UserID", config.getUserId());
+        body.put("ResponseMode", "blocking");
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+        log.debug("Sending HiAgent Quiz query for conversation {}", conversationId);
+
+        ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+
+        if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+            log.error("HiAgent (Quiz) chat_query_v2 非 200 响应 url={} conversationId={} status={} bodyPreview={}",
+                    url, conversationId, response.getStatusCode(), truncateForLog(response.getBody()));
+            throw new BusinessException("AI 出题服务响应失败: " + response.getStatusCode());
+        }
+
+        JsonNode root = objectMapper.readTree(response.getBody());
+
+        if (root.has("answer")) {
+            return root.get("answer").asText();
+        } else if (root.has("Answer")) {
+            return root.get("Answer").asText();
+        }
+
+        String bodyPreview = truncateForLog(response.getBody());
+        log.error("Unexpected HiAgent Quiz response structure: {}", bodyPreview);
+        throw new BusinessException("AI 出题服务返回结果解析失败");
+    }
+
     /**
      * Truncate response body for safe logging (avoid leaking sensitive data)
      */
@@ -559,6 +691,14 @@ public class HiAgentServiceImpl implements HiAgentService {
 
     private String effectiveQaAppId() {
         return resolveWithFallback(KEY_QA_APP_ID, config.getQaAppId());
+    }
+
+    private String effectiveQuizApiKey() {
+        return resolveWithFallback(KEY_QUIZ_API_KEY, config.getQuizApiKey());
+    }
+
+    private String effectiveQuizAppId() {
+        return resolveWithFallback(KEY_QUIZ_APP_ID, config.getQuizAppId());
     }
 
     /**

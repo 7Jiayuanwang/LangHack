@@ -39,4 +39,9 @@ public interface HiAgentService {
      * AI Q&A: answer a user question about highlighted text in an article
      */
     String chatQA(String userQuestion, String selectedText, String articleContext);
+
+    /**
+     * AI Quiz: generate multiple-choice questions for an article using quiz-specific credentials
+     */
+    String generateQuiz(String title, String content, int count);
 }

@@ -14,6 +14,7 @@ import com.english.service.UserService;
 import com.english.service.ClassService;
 import com.english.service.TextService;
 import com.english.service.UnitService;
+import com.english.mapper.ExerciseOptionMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +33,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/student/exercises")
-@PreAuthorize("hasAnyRole('STUDENT', 'USER')")
+@PreAuthorize("hasAnyRole('STUDENT', 'USER', 'OPS', 'ADMIN', 'TEACHER')")
 public class StudentExerciseController {
 
     private static final Logger log = LoggerFactory.getLogger(StudentExerciseController.class);
@@ -56,6 +58,9 @@ public class StudentExerciseController {
 
     @Autowired
     private TextService textService;
+
+    @Autowired
+    private ExerciseOptionMapper exerciseOptionMapper;
 
     @Autowired
     private UnitService unitService;
@@ -150,6 +155,91 @@ public class StudentExerciseController {
             return Result.error(e.getMessage());
         } catch (Exception e) {
             log.error("提交答案失败", e);
+            return Result.error("提交答案失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 批量提交 AI 出题答案（返回每题对错 + 解析）
+     */
+    @PostMapping("/submit-quiz")
+    public Result<Map<String, Object>> submitQuizAnswers(@RequestBody Map<String, Object> requestData,
+                                                         Authentication authentication) {
+        try {
+            String username = authentication.getName();
+            com.english.entity.User currentUser = userService.getUserByUsername(username);
+            if (currentUser == null) throw new BusinessException("用户不存在");
+
+            Object answersObj = requestData.get("answers");
+            if (!(answersObj instanceof List)) {
+                return Result.error("answers 必须是数组");
+            }
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> answers = (List<Map<String, Object>>) answersObj;
+            if (answers.isEmpty()) {
+                return Result.error("答案列表不能为空");
+            }
+
+            List<Map<String, Object>> results = new ArrayList<>();
+            int correctCount = 0;
+
+            for (Map<String, Object> item : answers) {
+                Object exerciseIdObj = item.get("exerciseId");
+                Object userAnswerObj = item.get("userAnswer");
+                if (exerciseIdObj == null || userAnswerObj == null) continue;
+
+                Long exerciseId = Long.valueOf(exerciseIdObj.toString());
+                String userAnswer = userAnswerObj.toString();
+
+                TextExercise exercise = textExerciseService.getById(exerciseId);
+                if (exercise == null) continue;
+
+                // 查找正确答案
+                List<com.english.entity.ExerciseOption> options =
+                        exerciseOptionMapper.getOptionsByExerciseId(exerciseId);
+                String correctKey = null;
+                for (com.english.entity.ExerciseOption opt : options) {
+                    if (Integer.valueOf(1).equals(opt.getIsCorrect())) {
+                        correctKey = opt.getOptionKey();
+                        break;
+                    }
+                }
+
+                boolean isCorrect = userAnswer.equalsIgnoreCase(correctKey);
+                if (isCorrect) correctCount++;
+
+                Map<String, Object> result = new HashMap<>();
+                result.put("exerciseId", exerciseId);
+                result.put("userAnswer", userAnswer);
+                result.put("correctAnswer", correctKey);
+                result.put("isCorrect", isCorrect);
+                result.put("analysis", exercise.getAnalysis());
+                results.add(result);
+
+                // 记录答题
+                StudentExerciseAnswer answer = new StudentExerciseAnswer();
+                answer.setExerciseId(exerciseId);
+                answer.setStudentId(currentUser.getId());
+                answer.setAnswerContent(userAnswer);
+                answer.setIsCorrect(isCorrect);
+                answer.setTimeSpentSeconds(0);
+                try {
+                    studentExerciseService.submitAnswer(answer);
+                } catch (Exception e) {
+                    // 记录失败不阻塞返回
+                    log.warn("记录答题失败: exerciseId={}", exerciseId, e);
+                }
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("total", results.size());
+            response.put("correctCount", correctCount);
+            response.put("results", results);
+            return Result.success(response);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            log.error("批量提交答案失败", e);
             return Result.error("提交答案失败，请稍后重试");
         }
     }

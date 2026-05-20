@@ -422,7 +422,8 @@ public class OpsController {
         Map<String, String> dbCfg = systemConfigService.getByGroup("ai_config");
         Map<String, Object> result = new HashMap<>();
         for (String key : new String[]{"hiagent_api_url", "hiagent_api_key", "hiagent_app_id",
-                                        "hiagent_qa_api_key", "hiagent_qa_app_id"}) {
+                                        "hiagent_qa_api_key", "hiagent_qa_app_id",
+                                        "hiagent_quiz_api_key", "hiagent_quiz_app_id"}) {
             String v = dbCfg.get(key);
             result.put(key + "_configured", v != null && !v.isBlank());
         }
@@ -431,8 +432,11 @@ public class OpsController {
                 && Boolean.TRUE.equals(result.get("hiagent_app_id_configured"));
         boolean qaReady = Boolean.TRUE.equals(result.get("hiagent_qa_api_key_configured"))
                 && Boolean.TRUE.equals(result.get("hiagent_qa_app_id_configured"));
+        boolean quizReady = Boolean.TRUE.equals(result.get("hiagent_quiz_api_key_configured"))
+                && Boolean.TRUE.equals(result.get("hiagent_quiz_app_id_configured"));
         result.put("rewrite_ready_from_db", rewriteReady);
         result.put("qa_ready_from_db", qaReady);
+        result.put("quiz_ready_from_db", quizReady);
         return Result.success(result);
     }
 
@@ -490,6 +494,32 @@ public class OpsController {
             logger.error("HiAgent 问答测试失败", e);
             data.put("success", false);
             data.put("error", "问答测试调用失败，请检查日志");
+        }
+        return Result.success(data);
+    }
+
+    /**
+     * HiAgent 出题应用连通测试（调用短文出题）
+     */
+    @PostMapping("/hiagent/test-quiz")
+    public Result<Map<String, Object>> testHiAgentQuiz(@RequestBody(required = false) Map<String, String> body) {
+        Map<String, Object> data = new HashMap<>();
+        if (hiAgentService == null) {
+            data.put("success", false);
+            data.put("error", "HiAgent 服务未注入");
+            return Result.success(data);
+        }
+        try {
+            String out = hiAgentService.generateQuiz("Test Article", "Knowledge is power. This is a simple test sentence for quiz generation.", 2);
+            data.put("success", true);
+            data.put("preview", out != null && out.length() > 300 ? out.substring(0, 300) + "..." : out);
+        } catch (BusinessException e) {
+            data.put("success", false);
+            data.put("error", e.getMessage());
+        } catch (Exception e) {
+            logger.error("HiAgent 出题测试失败", e);
+            data.put("success", false);
+            data.put("error", "出题测试调用失败，请检查日志");
         }
         return Result.success(data);
     }

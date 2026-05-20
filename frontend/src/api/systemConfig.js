@@ -67,6 +67,10 @@ export function testHiAgentQa(payload) {
   return request({ url: '/api/ops/hiagent/test-qa', method: 'post', data: payload || {} })
 }
 
+export function testHiAgentQuiz(payload) {
+  return request({ url: '/api/ops/hiagent/test-quiz', method: 'post', data: payload || {} })
+}
+
 // 功能开关（公开接口，无需鉴权）
 export function getFeatureToggles() {
   return request({

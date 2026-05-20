@@ -107,6 +107,8 @@ public class TextExerciseServiceImpl extends ServiceImpl<TextExerciseMapper, Tex
                 exerciseMap.put("createdBy", exercise.getCreatedBy());
                 exerciseMap.put("createdTime", exercise.getCreatedTime());
                 exerciseMap.put("textId", exercise.getTextId());
+                exerciseMap.put("analysis", exercise.getAnalysis());
+                exerciseMap.put("questionType", exercise.getQuestionType());
 
                 // 获取习题的选项 - 防守：options可能为null，改为空列表
                 List<ExerciseOption> options = exerciseOptionMapper.getOptionsByExerciseId(exercise.getId());

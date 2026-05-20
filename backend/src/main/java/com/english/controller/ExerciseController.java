@@ -3,14 +3,10 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.TextExercise;
 import com.english.entity.ExerciseOption;
-import com.english.entity.Unit;
 import com.english.exception.BusinessException;
 import com.english.service.TextExerciseService;
 import com.english.service.UserService;
 import com.english.service.TextService;
-import com.english.service.StudentClassesService;
-import com.english.service.ClassService;
-import com.english.service.UnitService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,15 +36,6 @@ public class ExerciseController {
 
     @Autowired
     private TextService textService;
-
-    @Autowired
-    private StudentClassesService studentClassesService;
-
-    @Autowired
-    private ClassService classService;
-
-    @Autowired
-    private UnitService unitService;
 
     /**
      * 批量创建课文习题
@@ -301,7 +288,7 @@ public class ExerciseController {
      * 注意：学生/普通用户获取时会隐藏正确答案标记，防止作弊
      */
     @GetMapping("/text/{textId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER', 'OPS')")
     public Result<List<Map<String, Object>>> getExercisesByTextId(@PathVariable Long textId) {
         try {
             // FIX #5: 验证课文存在性，防止访问不存在的课文的习题
@@ -336,7 +323,7 @@ public class ExerciseController {
      * 注意：学生/普通用户获取时会隐藏正确答案标记
      */
     @GetMapping("/{exerciseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER', 'OPS')")
     public Result<Map<String, Object>> getExerciseDetail(@PathVariable Long exerciseId) {
         try {
             Map<String, Object> exercise = textExerciseService.getExerciseDetail(exerciseId);
@@ -522,7 +509,7 @@ public class ExerciseController {
      * 获取课文习题数量
      */
     @GetMapping("/text/{textId}/count")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT', 'USER', 'OPS')")
     public Result<Map<String, Object>> getExerciseCount(@PathVariable Long textId) {
         try {
             int count = textExerciseService.getExerciseCount(textId);
@@ -557,6 +544,11 @@ public class ExerciseController {
                 .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
         if (isAdmin) return;
 
+        // OPS 放行（运维测试需要）
+        boolean isOps = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_OPS".equals(a.getAuthority()));
+        if (isOps) return;
+
         boolean isTeacher = authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_TEACHER".equals(a.getAuthority()));
 
@@ -568,30 +560,7 @@ public class ExerciseController {
                 throw new BusinessException("无权访问其他教师创建的课文习题");
             }
         } else {
-            // 学生/普通用户：校验课文所属课程是否在学生加入的班级中
-            com.english.entity.User currentUser = userService.getUserByUsername(authentication.getName());
-            if (currentUser == null) throw new BusinessException("用户不存在");
-            Long studentId = currentUser.getId();
-
-            if (text.getUnitId() != null) {
-                Unit unit = unitService.getUnitById(text.getUnitId());
-                if (unit != null && unit.getCourseId() != null) {
-                    List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
-                    boolean hasAccess = false;
-                    if (classIds != null) {
-                        for (Long classId : classIds) {
-                            com.english.entity.Class classInfo = classService.getClassById(classId);
-                            if (classInfo != null && unit.getCourseId().equals(classInfo.getCourseId())) {
-                                hasAccess = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!hasAccess) {
-                        throw new BusinessException("无权访问该课文的习题");
-                    }
-                }
-            }
+            // 学生/普通用户：自主练习不限制访问权限
         }
     }
 

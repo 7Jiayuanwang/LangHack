@@ -26,6 +26,15 @@ public class TextExercise {
     @TableField("created_by")
     private Long createdBy;
 
+    @TableField("question_type")
+    private String questionType;
+
+    @TableField("analysis")
+    private String analysis;
+
+    @TableField("distractor_analysis")
+    private String distractorAnalysis;
+
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
@@ -92,6 +101,30 @@ public class TextExercise {
         this.createdBy = createdBy;
     }
 
+    public String getQuestionType() {
+        return questionType;
+    }
+
+    public void setQuestionType(String questionType) {
+        this.questionType = questionType;
+    }
+
+    public String getAnalysis() {
+        return analysis;
+    }
+
+    public void setAnalysis(String analysis) {
+        this.analysis = analysis;
+    }
+
+    public String getDistractorAnalysis() {
+        return distractorAnalysis;
+    }
+
+    public void setDistractorAnalysis(String distractorAnalysis) {
+        this.distractorAnalysis = distractorAnalysis;
+    }
+
     public LocalDateTime getCreatedTime() {
         return createdTime;
     }
@@ -117,6 +150,9 @@ public class TextExercise {
                 ", exerciseType='" + exerciseType + '\'' +
                 ", orderNum=" + orderNum +
                 ", createdBy=" + createdBy +
+                ", questionType='" + questionType + '\'' +
+                ", analysis='" + analysis + '\'' +
+                ", distractorAnalysis='" + distractorAnalysis + '\'' +
                 ", createdTime=" + createdTime +
                 ", updatedTime=" + updatedTime +
                 '}';

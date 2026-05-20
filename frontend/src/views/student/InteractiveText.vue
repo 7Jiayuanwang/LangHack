@@ -69,6 +69,92 @@
         ></div>
       </section>
 
+      <!-- AI Quiz Section -->
+      <section class="ai-quiz-section">
+        <button
+          class="ai-quiz-btn"
+          @click="handleAiQuiz"
+          :disabled="quizLoading"
+          v-if="quizQuestions.length === 0"
+        >
+          <span class="btn-content" v-if="!quizLoading">
+            <el-icon><Edit /></el-icon>
+            AI 出题
+          </span>
+          <span class="btn-content" v-else>
+            <el-icon class="is-loading"><Loading /></el-icon>
+            正在生成题目...
+          </span>
+        </button>
+
+        <!-- 出题内容（内嵌展示，不影响阅读）-->
+        <div class="quiz-inline" v-if="quizQuestions.length > 0">
+          <div class="quiz-inline-header">
+            <span class="quiz-inline-title">
+              <el-icon><Edit /></el-icon>
+              AI 出题（{{ quizQuestions.length }} 题）
+            </span>
+            <div class="quiz-inline-actions-top">
+              <el-button size="small" @click="regenerateQuiz" :loading="quizLoading">
+                重新出题
+              </el-button>
+              <el-button size="small" @click="closeQuiz">收起</el-button>
+            </div>
+          </div>
+
+          <div class="quiz-content">
+            <div
+              v-for="(q, index) in quizQuestions"
+              :key="index"
+              class="quiz-question"
+            >
+              <div class="question-header">
+                <span class="question-number">{{ index + 1 }}</span>
+                <span class="question-type">{{ q.questionType || '选择题' }}</span>
+              </div>
+              <div class="question-text">{{ q.question }}</div>
+              <div class="question-options">
+                <div
+                  v-for="opt in q.options"
+                  :key="opt.optionKey"
+                  class="option-item"
+                  :class="{
+                    'selected': q.userAnswer === opt.optionKey,
+                    'correct': q.showAnswer && opt.isCorrect === 1,
+                    'wrong': q.showAnswer && q.userAnswer === opt.optionKey && opt.isCorrect !== 1
+                  }"
+                  @click="selectQuizAnswer(index, opt.optionKey)"
+                >
+                  <span class="option-key">{{ opt.optionKey }}</span>
+                  <span class="option-content">{{ opt.optionContent }}</span>
+                </div>
+              </div>
+              <div class="question-analysis" v-if="q.showAnswer && q.analysis">
+                <div class="analysis-label">解析：</div>
+                <div class="analysis-text">{{ q.analysis }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="quiz-actions">
+            <el-button
+              v-if="!allAnswered"
+              type="primary"
+              @click="submitQuiz"
+              :disabled="!hasAnyAnswer"
+            >
+              提交答案
+            </el-button>
+            <el-button
+              v-if="allAnswered"
+              @click="resetQuizAnswers"
+            >
+              重新作答
+            </el-button>
+          </div>
+        </div>
+      </section>
+
       <!-- Completion Section -->
       <footer class="reader-footer" v-if="!isCompleted && !isPreviewMode">
         <div class="footer-divider"></div>
@@ -288,8 +374,10 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit } from '@element-plus/icons-vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
+import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
+import { generateAiQuiz } from '@/api/aiQuiz'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
@@ -382,6 +470,10 @@ const dragStartTranslateY = ref(0)
 // 学习计时器
 let studyTimer = null
 let studyStartTime = null
+
+// AI 出题相关数据
+const quizLoading = ref(false)
+const quizQuestions = ref([])
 let accumulatedTime = 0 // 累计学习时间（秒）
 
 // 翻译相关
@@ -509,6 +601,19 @@ const wordCount = computed(() => {
 const estimatedTime = computed(() => {
   // 预计每分钟阅读100个单词
   return Math.ceil(wordCount.value / 100)
+})
+
+// AI 出题相关计算属性
+const hasAnyAnswer = computed(() => {
+  return quizQuestions.value.some(q => q.userAnswer)
+})
+
+const allAnswered = computed(() => {
+  return quizQuestions.value.length > 0 && quizQuestions.value.every(q => q.showAnswer)
+})
+
+const allShown = computed(() => {
+  return quizQuestions.value.length > 0 && quizQuestions.value.every(q => q.showAnswer)
 })
 
 // 规范化纯文本内容：修复双序列化导致的反斜杠转义残留
@@ -1814,6 +1919,204 @@ const handleAiQa = () => {
   })
 }
 
+// AI 出题相关方法
+const handleAiQuiz = async () => {
+  if (!textId.value) {
+    ElMessage.warning('文章ID无效')
+    return
+  }
+
+  // 优先恢复本地保存的做题进度
+  if (restoreQuizProgress()) {
+    ElMessage.success('已恢复上次做题进度')
+    return
+  }
+
+  quizLoading.value = true
+  try {
+    // 先检查数据库中是否已有题目
+    const existResponse = await getExercisesByTextId(textId.value)
+    const existData = existResponse?.data || existResponse
+    if (existData && Array.isArray(existData) && existData.length > 0) {
+      // 数据库中已有题目，直接使用
+      quizQuestions.value = existData.map(q => ({
+        ...q,
+        userAnswer: null,
+        showAnswer: false,
+        options: q.options || []
+      }))
+      ElMessage.success(`已加载 ${existData.length} 道题目`)
+      return
+    }
+
+    // 数据库中没有题目，调用 AI 生成
+    ElMessage.info('正在调用 AI 生成题目，请稍候...')
+    const response = await generateAiQuiz(textId.value, 5)
+    const quizData = response?.data || response
+    if (quizData && quizData.questionCount > 0) {
+      // 生成成功，重新从数据库加载题目
+      const newExercises = await getExercisesByTextId(textId.value)
+      const newData = newExercises?.data || newExercises
+      if (newData && Array.isArray(newData) && newData.length > 0) {
+        quizQuestions.value = newData.map(q => ({
+          ...q,
+          userAnswer: null,
+          showAnswer: false,
+          options: q.options || []
+        }))
+        ElMessage.success(`AI 成功生成 ${quizData.questionCount} 道题目`)
+      }
+    } else {
+      ElMessage.error('AI 出题失败，请稍后重试')
+    }
+  } catch (error) {
+    console.error('AI quiz error:', error)
+    ElMessage.error(error.message || 'AI 出题失败')
+  } finally {
+    quizLoading.value = false
+  }
+}
+
+const selectQuizAnswer = (questionIndex, optionKey) => {
+  if (quizQuestions.value[questionIndex].showAnswer) return
+  quizQuestions.value[questionIndex].userAnswer = optionKey
+}
+
+const submitQuiz = async () => {
+  const unanswered = quizQuestions.value.filter(q => !q.userAnswer)
+  if (unanswered.length > 0) {
+    ElMessage.warning(`还有 ${unanswered.length} 题未作答`)
+    return
+  }
+
+  try {
+    const answers = quizQuestions.value.map(q => ({
+      exerciseId: q.id,
+      userAnswer: q.userAnswer
+    }))
+    const res = await submitQuizAnswers(answers)
+    const data = res?.data || res
+
+    if (data && data.results) {
+      const resultMap = {}
+      data.results.forEach(r => { resultMap[r.exerciseId] = r })
+
+      quizQuestions.value.forEach(q => {
+        const r = resultMap[q.id]
+        if (r) {
+          q.showAnswer = true
+          q._isCorrect = r.isCorrect
+          q._correctAnswer = r.correctAnswer
+          if (r.analysis) q.analysis = r.analysis
+          // 标记选项对错
+          q.options.forEach(opt => {
+            if (r.correctAnswer && opt.optionKey === r.correctAnswer) {
+              opt.isCorrect = 1
+            }
+          })
+        }
+      })
+      ElMessage.success(`答对 ${data.correctCount}/${data.total} 题`)
+    } else {
+      // fallback: 仅显示答案
+      quizQuestions.value.forEach(q => { q.showAnswer = true })
+    }
+  } catch (e) {
+    // fallback: 仅显示答案
+    quizQuestions.value.forEach(q => { q.showAnswer = true })
+  }
+}
+
+const showAllAnswers = () => {
+  quizQuestions.value.forEach(q => {
+    q.showAnswer = true
+  })
+}
+
+const closeQuiz = () => {
+  // 保存做题进度到 localStorage
+  if (quizQuestions.value.length > 0 && textId.value) {
+    const key = `quiz_progress_${textId.value}`
+    const saved = quizQuestions.value.map(q => ({
+      id: q.id,
+      question: q.question,
+      questionType: q.questionType,
+      options: q.options,
+      userAnswer: q.userAnswer,
+      showAnswer: q.showAnswer,
+      analysis: q.analysis
+    }))
+    try {
+      localStorage.setItem(key, JSON.stringify(saved))
+    } catch (e) {
+      console.warn('保存做题进度失败:', e)
+    }
+  }
+  quizQuestions.value = []
+}
+
+const restoreQuizProgress = () => {
+  if (!textId.value) return false
+  const key = `quiz_progress_${textId.value}`
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) {
+      const saved = JSON.parse(raw)
+      if (Array.isArray(saved) && saved.length > 0) {
+        quizQuestions.value = saved
+        localStorage.removeItem(key)
+        return true
+      }
+    }
+  } catch (e) {
+    console.warn('恢复做题进度失败:', e)
+  }
+  return false
+}
+
+const resetQuizAnswers = () => {
+  quizQuestions.value.forEach(q => {
+    q.userAnswer = null
+    q.showAnswer = false
+  })
+}
+
+const regenerateQuiz = async () => {
+  // 删除旧题目并重新生成
+  quizLoading.value = true
+  try {
+    // 直接调用 AI 生成（绕过已有题目检查）
+    ElMessage.info('正在重新生成题目...')
+    const response = await generateAiQuiz(textId.value, 5, true)
+    const quizData = response?.data || response
+    if (quizData && quizData.questionCount > 0) {
+      const newExercises = await getExercisesByTextId(textId.value)
+      const newData = newExercises?.data || newExercises
+      if (newData && Array.isArray(newData) && newData.length > 0) {
+        // 取最新生成的 N 道（按 createdTime 排序后取最后 quizData.questionCount 道）
+        const sorted = [...newData].sort((a, b) =>
+          new Date(b.createdTime || 0) - new Date(a.createdTime || 0)
+        )
+        const latest = sorted.slice(0, quizData.questionCount).reverse()
+        quizQuestions.value = latest.map(q => ({
+          ...q,
+          userAnswer: null,
+          showAnswer: false,
+          options: q.options || []
+        }))
+        ElMessage.success(`已重新生成 ${quizData.questionCount} 道题目`)
+      }
+    } else {
+      ElMessage.error('AI 出题失败，请稍后重试')
+    }
+  } catch (error) {
+    console.error('AI quiz error:', error)
+    ElMessage.error(error.message || 'AI 出题失败')
+  } finally {
+    quizLoading.value = false
+  }
+}
+
 const loadVocabularyStats = async () => {
   try {
     const response = await getVocabularyStats()
@@ -2281,6 +2584,238 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 }
 
 /* Completion Footer */
+.ai-quiz-section {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.quiz-inline {
+  width: 100%;
+  background: #fefefe;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.quiz-inline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.quiz-inline-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #8b5cf6;
+}
+
+.quiz-inline-actions-top {
+  display: flex;
+  gap: 8px;
+}
+
+.quiz-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ai-quiz-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 36px;
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.ai-quiz-btn:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 8px 20px -4px rgba(139, 92, 246, 0.4);
+}
+
+.ai-quiz-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.ai-quiz-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.ai-quiz-btn .btn-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quiz-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.quiz-question {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.question-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.question-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+  color: white;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.question-type {
+  font-size: 12px;
+  color: #64748b;
+  padding: 2px 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+
+.question-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #1e293b;
+  margin-bottom: 16px;
+}
+
+.question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.option-item:hover:not(.correct):not(.wrong) {
+  border-color: #a78bfa;
+  background: #faf5ff;
+}
+
+.option-item.selected {
+  border-color: #8b5cf6;
+  background: #f5f3ff;
+}
+
+.option-item.correct {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.option-item.wrong {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.option-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: #e2e8f0;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.option-item.selected .option-key {
+  background: #8b5cf6;
+  color: white;
+}
+
+.option-item.correct .option-key {
+  background: #10b981;
+  color: white;
+}
+
+.option-item.wrong .option-key {
+  background: #ef4444;
+  color: white;
+}
+
+.option-content {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.question-analysis {
+  margin-top: 16px;
+  padding: 12px;
+  background: #fffbeb;
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+}
+
+.analysis-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 6px;
+}
+
+.analysis-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #78350f;
+}
+
+.quiz-empty {
+  text-align: center;
+  padding: 40px;
+  color: #94a3b8;
+}
+
 .reader-footer {
   margin-top: 80px;
   display: flex;

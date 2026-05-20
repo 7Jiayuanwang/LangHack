@@ -43,6 +43,16 @@ public class HiAgentConfig {
     private String qaAppId;
 
     /**
+     * Quiz App API key (for AI quiz generation)
+     */
+    private String quizApiKey;
+
+    /**
+     * Quiz App ID (for AI quiz generation)
+     */
+    private String quizAppId;
+
+    /**
      * Request timeout in milliseconds
      */
     private Integer timeout = 60000;

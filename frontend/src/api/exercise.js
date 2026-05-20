@@ -169,6 +169,16 @@ export const submitAnswer = (data) => {
   })
 }
 
+// 批量提交 AI 出题答案（返回对错 + 解析）
+export const submitQuizAnswers = (answers) => {
+  return request({
+    url: '/api/student/exercises/submit-quiz',
+    method: 'post',
+    data: { answers },
+    timeout: 15000
+  })
+}
+
 // 获取学生的课文答题记录
 export const getStudentAnswersByText = (textId, assignmentId) => {
   const params = assignmentId ? { assignmentId } : {}
@@ -216,6 +226,7 @@ const exerciseApi = {
   deleteExercise,
   deleteAllExercisesByTextId,
   submitAnswer,
+  submitQuizAnswers,
   getStudentAnswersByText,
   getStudentAnswersByAssignment,
   getStudentAnswerStats,
