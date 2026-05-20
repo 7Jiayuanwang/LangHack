@@ -540,14 +540,14 @@
 
 ##### P2 - 可选（10.5 天）
 
-- ❌ **9. 推荐算法效果详细分析**
+- ❌ **11. 推荐算法效果详细分析**
   - 数据库: 新增 `recommendation_logs` 表（完整方案）
   - 后端 API: `GET /api/admin/metrics/recommendation-detailed`
     - 返回: 按算法类型（Item-CF/User-CF/Cold-Start）分组效果、按文章分析点击率
   - 前端页面: 新增独立页面 `/admin/recommendation-analysis`
     - 图表: 算法效果对比、文章推荐效果排行、用户行为漏斗
 
-- ❌ **10. 综合数据大屏**
+- ❌ **12. 综合数据大屏**
   - 前端页面: 新增 `/admin/data-dashboard` 全屏数据大屏
   - 布局: 6-8 个数据卡片 + 实时刷新（每 30 秒）
   - 用途: 比赛答辩/路演展示
@@ -564,54 +564,6 @@
 - 为产品迭代提供数据支撑（哪些功能使用频繁、哪些需要优化）
 
 ---
-
-#### 性能压测基线建立（优先级：高）
-- ❌ **压测脚本编写**
-  - wrk 压测脚本（公开接口 + 认证接口 + 写入接口）
-  - 典型业务场景模拟（文章列表、登录、阅读进度提交）
-- ❌ **性能基线报告**
-  - QPS/TPS 基准数据
-  - P50/P95/P99 响应时间分布
-  - 并发 100/200/500 下的错误率
-  - 数据库慢查询分析
-- ❌ **性能优化**
-  - Redis 缓存热点数据（文章列表、单词查询）
-  - 数据库连接池参数调优
-  - Nginx gzip 压缩 + 静态资源缓存策略
-  - API 响应分页默认值优化
-
-#### 运维监控体系（优先级：高）
-- ❌ **指标监控**
-  - Prometheus + Grafana 容器化部署
-  - Spring Boot Actuator 集成（`/actuator/prometheus`）
-  - JVM 内存/GC/线程池监控
-  - 数据库连接池监控（HikariCP metrics）
-  - API 级别 QPS/延迟/错误率 Dashboard
-- ❌ **集中式日志**
-  - ELK（Elasticsearch + Logstash + Kibana）或 Loki + Grafana
-  - 日志结构化（JSON 格式）
-  - 请求链路追踪（Trace ID）
-- ❌ **告警通知**
-  - 错误率阈值告警（钉钉/邮件）
-  - 服务健康检查告警
-  - 磁盘/内存/CPU 资源告警
-- ❌ **APM 应用性能监控**
-  - SkyWalking / Pinpoint 集成
-  - 慢请求自动发现
-  - 依赖拓扑可视化
-
-**实现要点**：
-- 新增 `docker-compose.monitoring.yml` 或扩展 `docker-compose.yml`
-- 新增 `monitoring/prometheus.yml` 配置文件
-- 新增 `monitoring/grafana-dashboards/` 目录（预置 Dashboard JSON）
-- Spring Boot `application.yml` 启用 `management.endpoints.web.exposure.include: health,metrics,prometheus`
-- 日志格式统一为 JSON，便于 Logstash/Loki 解析
-
-**预期收益**：
-- 评审/路演时有可视化大屏展示，专业度大幅提升
-- 30 分钟内定位性能瓶颈（vs 当前人工排查数小时）
-- 故障自动告警，避免依赖用户反馈才发现问题
-- 为扩容决策提供量化依据（CPU/内存/QPS 趋势）
 
 #### 性能压测基线建立（优先级：高）
 - ❌ **压测脚本编写**
