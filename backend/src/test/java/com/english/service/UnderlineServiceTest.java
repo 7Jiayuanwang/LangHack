@@ -233,7 +233,8 @@ class UnderlineServiceTest {
     }
 
     @Test
-    void createUnderline_rangeExceedsTextLength_shouldThrowException() {
+    void createUnderline_rangeExceedsTextLength_shouldStillInsert() {
+        // 索引值由前端基于渲染后的 DOM 计算，后端不做超出校验（见 UnderlineServiceImpl 注释）
         Long userId = 1L;
         Long textId = 100L;
         String selectedText = "text content";
@@ -241,10 +242,10 @@ class UnderlineServiceTest {
         Integer endIndex = 100;
 
         when(textService.getTextById(textId)).thenReturn(mockText);
+        when(underlineMapper.insert(any(Underline.class))).thenReturn(1);
 
-        assertThrows(BusinessException.class, () ->
-            underlineService.createUnderline(userId, textId, selectedText, startIndex, endIndex, null)
-        );
+        underlineService.createUnderline(userId, textId, selectedText, startIndex, endIndex, null);
+        verify(underlineMapper, times(1)).insert(any(Underline.class));
     }
 
     @Test

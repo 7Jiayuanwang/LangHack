@@ -2809,6 +2809,27 @@ DROP PROCEDURE IF EXISTS _add_texts_read_count$$
 DROP PROCEDURE IF EXISTS _ai_quiz_support$$
 CREATE PROCEDURE _ai_quiz_support()
 BEGIN
+    -- 兜底：text_exercises 表不存在时先建（防止全量备份未导入的环境直接 ALTER 失败）
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'text_exercises'
+    ) THEN
+        CREATE TABLE text_exercises (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            text_id BIGINT NOT NULL COMMENT '课文ID',
+            question TEXT NOT NULL COMMENT '题目内容',
+            exercise_type VARCHAR(32) DEFAULT 'MULTIPLE_CHOICE' COMMENT '习题类型',
+            order_num INT DEFAULT 1 COMMENT '显示顺序',
+            created_by BIGINT NOT NULL COMMENT '创建者ID',
+            created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+            updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+            INDEX idx_text_id (text_id),
+            INDEX idx_exercise_type (exercise_type),
+            INDEX idx_order_num (order_num)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课文习题表';
+    END IF;
+
     -- text_exercises 表添加新字段
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.COLUMNS
