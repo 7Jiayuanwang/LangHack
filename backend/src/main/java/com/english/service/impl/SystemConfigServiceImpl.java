@@ -125,7 +125,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 continue;
             }
 
-            mapper.update(null,
+            int updated = mapper.update(null,
                     new LambdaUpdateWrapper<SystemConfig>()
                             .eq(SystemConfig::getConfigGroup, config.getConfigGroup())
                             .eq(SystemConfig::getConfigKey, config.getConfigKey())
@@ -133,6 +133,17 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                             .set(SystemConfig::getUpdatedBy, updatedBy)
                             .set(SystemConfig::getUpdatedTime, LocalDateTime.now())
             );
+
+            if (updated == 0) {
+                SystemConfig inserted = new SystemConfig();
+                inserted.setConfigGroup(config.getConfigGroup());
+                inserted.setConfigKey(config.getConfigKey());
+                inserted.setConfigValue(config.getConfigValue());
+                inserted.setIsSecret(config.getIsSecret() != null ? config.getIsSecret() : 0);
+                inserted.setUpdatedBy(updatedBy);
+                inserted.setUpdatedTime(LocalDateTime.now());
+                mapper.insert(inserted);
+            }
 
             groupsToInvalidate.add(config.getConfigGroup());
         }
