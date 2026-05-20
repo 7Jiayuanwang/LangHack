@@ -61,6 +61,7 @@ jobs:
       - name: Upload JaCoCo coverage report
         uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: jacoco-report
           path: backend/target/site/jacoco/
@@ -110,6 +111,7 @@ jobs:
       - name: Upload v8 coverage report
         uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: vitest-coverage-report
           path: frontend/coverage/
