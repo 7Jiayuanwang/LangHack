@@ -112,36 +112,21 @@
           </div>
         </div>
 
-        <!-- 操作按钮 -->
+        <!-- 直接选择题 -->
         <div class="action-buttons">
-          <button v-if="!showMeaning && !showQuiz" @click="rateWord(5)" class="btn btn-success">
-            认识
-          </button>
-          <button v-if="!showMeaning && !showQuiz" @click="showMeaning = true" class="btn btn-primary">
-            提示
-          </button>
-          <button v-if="!showMeaning && !showQuiz" @click="generateQuizOptions" class="btn btn-info">
-            测验
-          </button>
-          <template v-if="showMeaning">
-            <button @click="rateWord(0)" class="btn btn-danger">不认识</button>
-          </template>
-          <template v-if="showQuiz">
-            <div class="quiz-error" v-if="quizError">
-              答错了，请重新选择！
-            </div>
-            <div class="quiz-options">
-              <button 
-                v-for="(option, index) in quizOptions" 
-                :key="index"
-                @click="selectQuizOption(option)"
-                class="btn quiz-btn"
-              >
-                {{ option }}
-              </button>
-            </div>
-            <button @click="cancelQuiz" class="btn btn-secondary cancel-btn">取消</button>
-          </template>
+          <div class="quiz-error shake" v-if="quizError">
+            答错了，请重新选择！
+          </div>
+          <div class="quiz-options">
+            <button
+              v-for="(option, index) in quizOptions"
+              :key="index"
+              @click="selectQuizOption(option)"
+              class="btn quiz-btn"
+            >
+              {{ option }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -234,24 +219,24 @@ const currentUserId = computed(() => userStore.userInfo?.id || 'anonymous')
 const vocabularies = ref([
   {
     id: 'cet6',
-    name: '六级核心1500词',
+    name: '六级核心词汇',
     description: '大学英语六级核心词汇',
-    wordCount: 418,
-    file: '/data/六级核心1500词_unique.csv'
+    wordCount: 1500,
+    file: '/data/六级核心词汇.csv'
   },
   {
     id: 'cet4',
-    name: '四级核心1500词',
+    name: '四级核心词汇',
     description: '大学英语四级核心词汇',
-    wordCount: 5044,
-    file: '/data/四级核心1500词_unique.csv'
+    wordCount: 5038,
+    file: '/data/四级核心词汇.csv'
   },
   {
     id: 'gaokao',
-    name: '高考英语必背3500词',
+    name: '高考英语必背词汇',
     description: '高考英语核心词汇',
-    wordCount: 3642,
-    file: '/data/高考英语必背词汇3500_final.csv'
+    wordCount: 3603,
+    file: '/data/高考英语必背词汇.csv'
   }
 ])
 
@@ -342,27 +327,29 @@ const generateQuizOptions = () => {
   showQuiz.value = true
 }
 
-// 处理测验选项选择
+// 处理选择题选项
 const selectQuizOption = (selectedMeaning) => {
-  if (!currentWord.value) return
-  
+  if (!currentWord.value || quizError.value) return
+
   if (selectedMeaning === currentWord.value.meaning) {
-    // 选对：按"一般"处理
-    rateWord(3)
+    // 选对：标记为掌握，进入下一个单词
+    rateWord(5)
     showQuiz.value = false
     quizError.value = false
   } else {
-    // 选错：增加出现频率，显示错误提示，继续重试
+    // 选错：增加不认识计数，显示错误提示，重新选择
     currentWord.value.unknownCount = (currentWord.value.unknownCount || 0) + 1
+    currentWord.value.lastReviewTime = new Date().toISOString()
     saveProgress()
     quizError.value = true
+    todayReviewed.value++
+    const today = new Date().toDateString()
+    localStorage.setItem(`todayReviewed_${currentUserId.value}`, todayReviewed.value.toString())
+    localStorage.setItem(`lastReviewDate_${currentUserId.value}`, today)
+    setTimeout(() => {
+      quizError.value = false
+    }, 1500)
   }
-}
-
-// 取消测验
-const cancelQuiz = () => {
-  showQuiz.value = false
-  quizError.value = false
 }
 
 // 获取单词详细信息
@@ -389,6 +376,7 @@ const fetchWordDetails = async (word) => {
 
 // 深度背诵相关函数
 const startDeepRecite = () => {
+  if (showDeepRecite.value) exitDeepRecite()
   // 获取今天背诵过的单词（从 allWords 中筛选已复习的）
   const todayWords = allWords.value.filter(w => w.lastReviewTime && new Date(w.lastReviewTime).toDateString() === new Date().toDateString())
   if (todayWords.length === 0) {
@@ -503,7 +491,7 @@ const exitDeepRecite = () => {
   deepOptions.value = []
 }
 
-// 监听当前单词变化，自动加载图片、发音和详细信息
+// 监听当前单词变化，自动加载图片、发音、详细信息，并生成选项
 watch(currentWord, (newWord) => {
   if (newWord) {
     loadWordImage(newWord.word)
@@ -511,6 +499,7 @@ watch(currentWord, (newWord) => {
     showMeaning.value = false
     showQuiz.value = false
     quizError.value = false
+    generateQuizOptions()
   }
 })
 
@@ -551,6 +540,7 @@ const backToSelection = () => {
 
 // 返回设置
 const backToSettings = () => {
+  if (showDeepRecite.value) exitDeepRecite()
   dailyCountSelected.value = false
   pendingWords.value = []
 }
@@ -594,15 +584,29 @@ const loadVocabularyData = async (file) => {
     const text = await response.text()
     allWords.value = parseCSV(text)
 
-    // 从 localStorage 加载复习进度
-    const savedProgress = localStorage.getItem(`vocab_progress_${currentUserId.value}_${selectedVocabulary.value}`)
-    if (savedProgress) {
-      const progress = JSON.parse(savedProgress)
-      allWords.value = allWords.value.map(word => {
-        const savedWord = progress.find(p => p.word === word.word)
-        return savedWord ? { ...word, ...savedWord } : word
-      })
+    // 从 localStorage 加载复习进度（自动检测词库更新）
+    const progressKey = `vocab_progress_${currentUserId.value}_${selectedVocabulary.value}`
+    const savedCountKey = `vocab_count_${currentUserId.value}_${selectedVocabulary.value}`
+    const savedCount = localStorage.getItem(savedCountKey)
+    const currentCount = allWords.value.length
+    // 如果词库词数变了（比如从418更新到1500），自动清旧进度
+    if (savedCount && parseInt(savedCount) !== currentCount) {
+      localStorage.removeItem(progressKey)
+      localStorage.removeItem(savedCountKey)
+      localStorage.removeItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`)
+      console.log('词库已更新，旧进度已清除')
+    } else {
+      const savedProgress = localStorage.getItem(progressKey)
+      if (savedProgress) {
+        const progress = JSON.parse(savedProgress)
+        allWords.value = allWords.value.map(word => {
+          const savedWord = progress.find(p => p.word === word.word)
+          return savedWord ? { ...word, ...savedWord } : word
+        })
+      }
     }
+    // 保存当前词数，用于下次检测
+    localStorage.setItem(savedCountKey, currentCount.toString())
 
     loadWords()
     // 登录后台补偿同步：将本地已评分但未成功写入 vocabulary_books 的单词重推一次
@@ -630,10 +634,33 @@ const resyncPendingWords = async () => {
 const loadWords = () => {
   // 过滤掉已掌握的单词，只显示未掌握的
   let words = allWords.value.filter(word => !word.mastered)
-  // 按不认识次数降序排列，不认识次数多的优先出现
-  words.sort((a, b) => (b.unknownCount || 0) - (a.unknownCount || 0))
+  // 优先选今天没复习过的，再按不认识次数降序，同组内随机打乱
+  const today = new Date().toDateString()
+  words.sort((a, b) => {
+    const aToday = a.lastReviewTime && new Date(a.lastReviewTime).toDateString() === today ? 1 : 0
+    const bToday = b.lastReviewTime && new Date(b.lastReviewTime).toDateString() === today ? 1 : 0
+    if (aToday !== bToday) return aToday - bToday
+    return (b.unknownCount || 0) - (a.unknownCount || 0)
+  })
+  // 在同 unknownCount 组内随机打乱
+  const grouped = {}
+  for (const w of words) {
+    const key = w.unknownCount || 0
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(w)
+  }
+  const shuffled = []
+  const keys = Object.keys(grouped).sort((a, b) => Number(b) - Number(a))
+  for (const key of keys) {
+    const group = grouped[key]
+    for (let i = group.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [group[i], group[j]] = [group[j], group[i]]
+    }
+    shuffled.push(...group)
+  }
   // 限制每日复习数量
-  pendingWords.value = words.slice(0, dailyCount.value)
+  pendingWords.value = shuffled.slice(0, dailyCount.value)
   
   // 从 localStorage 恢复背诵进度
   const savedIndex = localStorage.getItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`)
@@ -651,20 +678,49 @@ const loadWords = () => {
 }
 
 const loadMoreWords = () => {
+  if (showDeepRecite.value) exitDeepRecite()
   // 过滤掉已掌握的单词，只显示未掌握的
   let words = allWords.value.filter(word => !word.mastered)
-  // 按不认识次数降序排列，不认识次数多的优先出现
-  words.sort((a, b) => (b.unknownCount || 0) - (a.unknownCount || 0))
+  // 优先选今天没复习过的，再按不认识次数降序，同组内随机打乱
+  const today = new Date().toDateString()
+  words.sort((a, b) => {
+    const aToday = a.lastReviewTime && new Date(a.lastReviewTime).toDateString() === today ? 1 : 0
+    const bToday = b.lastReviewTime && new Date(b.lastReviewTime).toDateString() === today ? 1 : 0
+    if (aToday !== bToday) return aToday - bToday
+    return (b.unknownCount || 0) - (a.unknownCount || 0)
+  })
+  // 在同 unknownCount 组内随机打乱
+  const grouped = {}
+  for (const w of words) {
+    const key = w.unknownCount || 0
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(w)
+  }
+  const shuffled = []
+  const keys = Object.keys(grouped).sort((a, b) => Number(b) - Number(a))
+  for (const key of keys) {
+    const group = grouped[key]
+    for (let i = group.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [group[i], group[j]] = [group[j], group[i]]
+    }
+    shuffled.push(...group)
+  }
   // 加载 dailyCount 个新单词
-  pendingWords.value = words.slice(0, dailyCount.value)
+  pendingWords.value = shuffled.slice(0, dailyCount.value)
   currentWordIndex.value = 0
   // 清除保存的进度
   localStorage.removeItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`)
   masteredWords.value = allWords.value.filter(w => w.mastered).length
-  ElMessage.success(`已加载 ${dailyCount.value} 个新单词`)
+  if (pendingWords.value.length === 0) {
+    ElMessage.warning('所有单词都已掌握！')
+  } else {
+    ElMessage.success(`已加载 ${pendingWords.value.length} 个新单词`)
+  }
 }
 
 const takeBreak = () => {
+  if (showDeepRecite.value) exitDeepRecite()
   ElMessage.success('休息一下，记得回来继续学习哦！')
   setTimeout(() => {
     router.push('/student')
@@ -1179,6 +1235,12 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 50%, 90% { transform: translateX(-6px); }
+  30%, 70% { transform: translateX(6px); }
+}
+
 .quiz-error {
   color: var(--error-color);
   font-weight: 600;
@@ -1187,6 +1249,10 @@ onMounted(() => {
   background: rgba(245, 108, 108, 0.1);
   padding: 8px 16px;
   border-radius: 8px;
+}
+
+.quiz-error.shake {
+  animation: shake 0.5s ease-in-out;
 }
 
 .quiz-btn {

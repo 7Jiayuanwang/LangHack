@@ -190,11 +190,11 @@ services:
       TZ: Asia/Shanghai
       SPRING_PROFILES_ACTIVE: sso
       # 主库
-      DB_URL: ${DB_URL}
+      DB_URL: jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       # 从库（读写分离，可选）
-      DB_SLAVE_URL: ${DB_SLAVE_URL}
+      DB_SLAVE_URL: jdbc:mysql://mysql-slave:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
       DB_SLAVE_USERNAME: ${DB_SLAVE_USERNAME:-${DB_USERNAME}}
       DB_SLAVE_PASSWORD: ${DB_SLAVE_PASSWORD:-${DB_PASSWORD}}
       # Redis
