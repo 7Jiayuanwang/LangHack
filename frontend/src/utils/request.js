@@ -2,7 +2,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { getAuthHeader } from '@/utils/auth'
-import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
+import { getSsoLoginUrl } from '@/api/sso'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
@@ -43,9 +43,9 @@ const handleLogout = async () => {
     // 优先检查 sessionStorage 缓存的 SSO 状态，避免额外网络请求
     const ssoEnabled = sessionStorage.getItem('sso_enabled') === 'true'
     if (ssoEnabled) {
-      getSsoLogoutUrl().then(res => {
-        if (res?.code === 200 && res.data?.logoutUrl) {
-          window.location.href = res.data.logoutUrl
+      getSsoLoginUrl().then(res => {
+        if (res?.code === 200 && res.data?.loginUrl) {
+          window.location.href = res.data.loginUrl
         } else {
           window.location.replace('/login')
         }

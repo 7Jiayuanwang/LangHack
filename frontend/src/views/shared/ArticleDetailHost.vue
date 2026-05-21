@@ -14,7 +14,9 @@ import InteractiveText from '@/views/student/InteractiveText.vue'
 
 const userStore = useUserStore()
 
-const content = computed(() => InteractiveText)
+const content = computed(() =>
+  userStore.token ? InteractiveText : SimpleTextView
+)
 
 const layoutConfig = computed(() => {
   const role = userStore.userRole
