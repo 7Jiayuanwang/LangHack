@@ -9,7 +9,7 @@
     }"
   >
     <!-- 顶部标题栏 -->
-    <header class="mobile-header">
+    <header class="mobile-header" v-if="!hideHeader">
       <div class="header-left">
         <h1 class="page-title">{{ pageTitle }}</h1>
       </div>
@@ -17,7 +17,7 @@
 
     <!-- 主内容区域 -->
     <main class="mobile-main">
-      <div class="content-container">
+      <div class="content-container" :class="{ 'no-padding': hideHeader }">
         <transition name="fade" mode="out-in">
           <slot><router-view /></slot>
         </transition>
@@ -158,6 +158,10 @@ const props = defineProps({
     type: String,
     required: true,
     validator: (v) => ['teacher', 'user', 'ops', 'admin'].includes(v),
+  },
+  hideHeader: {
+    type: Boolean,
+    default: false,
   },
 })
 
@@ -560,6 +564,11 @@ onUnmounted(() => {
   overflow-y: auto;
   padding: 16px;
   background: var(--bg-secondary);
+}
+.content-container.no-padding {
+  padding: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  overflow: hidden;
 }
 
 /* 底部导航栏 */

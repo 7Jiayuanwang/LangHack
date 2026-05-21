@@ -1,5 +1,5 @@
 <template>
-  <component :is="layout" :role="layoutRole" v-if="layout">
+  <component :is="layout" :role="layoutRole" :hideHeader="hideHeader" v-if="layout">
     <component :is="content" />
   </component>
   <component :is="content" v-else />
@@ -8,8 +8,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useUserStore } from '@/store/user'
-import StudentLayout from '@/views/student/Layout.vue'
 import MobileLayout from '@/views/shared/MobileLayout.vue'
+import StudentLayout from '@/views/student/Layout.vue'
 import PublicArticles from '@/views/public/Articles.vue'
 import StudentArticles from '@/views/student/Articles.vue'
 
@@ -23,9 +23,9 @@ const content = computed(() =>
 const layoutConfig = computed(() => {
   const role = userStore.userRole
   if (!userStore.token) return { layout: null, layoutRole: null }
-  // 教师保留教师端布局（底部导航栏不变），其他角色统一用 StudentLayout
+  // 教师保留教师端底部导航，隐藏标题栏（StudentArticles 自带工具栏）
   if (role === 'TEACHER') {
-    return { layout: MobileLayout, layoutRole: 'teacher' }
+    return { layout: MobileLayout, layoutRole: 'teacher', hideHeader: true }
   }
   if (['STUDENT', 'USER', 'ADMIN', 'OPS'].includes(role)) {
     return { layout: StudentLayout, layoutRole: null }
@@ -35,4 +35,5 @@ const layoutConfig = computed(() => {
 
 const layout = computed(() => layoutConfig.value.layout)
 const layoutRole = computed(() => layoutConfig.value.layoutRole)
+const hideHeader = computed(() => layoutConfig.value.hideHeader || false)
 </script>
