@@ -139,6 +139,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 inserted.setConfigGroup(config.getConfigGroup());
                 inserted.setConfigKey(config.getConfigKey());
                 inserted.setConfigValue(config.getConfigValue());
+                inserted.setDescription(config.getDescription());
                 inserted.setIsSecret(config.getIsSecret() != null ? config.getIsSecret() : 0);
                 inserted.setUpdatedBy(updatedBy);
                 inserted.setUpdatedTime(LocalDateTime.now());
