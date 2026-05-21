@@ -1121,15 +1121,9 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
   .translate-dialog :deep(.el-dialog) {
-    width: 230px !important;
-    max-width: 230px !important;
-  }
-}
-
-@media (max-width: 480px) {
-  .translate-dialog :deep(.el-dialog) {
-    width: 230px !important;
-    max-width: 230px !important;
+    width: 92vw !important;
+    max-width: 92vw !important;
+    margin: 0 auto;
   }
 }
 </style>

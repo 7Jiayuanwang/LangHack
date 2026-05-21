@@ -3268,15 +3268,18 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 @media (max-width: 768px) {
   .translate-dialog.el-dialog {
-    width: 230px !important;
-    max-width: 230px !important;
+    width: 92vw !important;
+    max-width: 92vw !important;
+    margin: 0 auto;
   }
-}
-
-@media (max-width: 480px) {
-  .translate-dialog.el-dialog {
-    width: 230px !important;
-    max-width: 230px !important;
+  .translate-dialog .translate-content {
+    padding: 8px 0;
+  }
+  .translate-dialog .original-text p,
+  .translate-dialog .translated-text p {
+    padding: 8px;
+    font-size: 14px;
+    word-break: break-word;
   }
 }
 </style>

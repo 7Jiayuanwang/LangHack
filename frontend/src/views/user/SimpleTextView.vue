@@ -243,7 +243,7 @@ const isMobile = computed(() => windowWidth.value < 480)
 
 // 响应式弹窗宽度
 const dialogWidth = computed(() => {
-  if (windowWidth.value < 768) return '230px'
+  if (windowWidth.value < 768) return '92vw'
   return '400px'
 })
 
