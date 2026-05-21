@@ -2,7 +2,7 @@
   <div class="articles-mobile-page">
     
     <!-- Sticky Header -->
-    <header class="mobile-header">
+    <header class="articles-toolbar">
       <div></div>
       <div class="header-actions">
         <span v-if="!filterVisible" class="current-filter-label">{{ currentCategoryLabel }}</span>
@@ -19,15 +19,12 @@
       </div>
     </header>
 
-    <!-- Main Content Area -->
-    <main class="page-main">
-      <div class="page-content-wrapper">
-        <!-- Filter Pills -->
-      <transition name="filter-collapse">
-        <div v-show="filterVisible" class="filter-bar">
+    <!-- Filter Pills -->
+    <transition name="filter-collapse">
+      <div v-show="filterVisible" class="filter-bar">
         <div class="filter-scroll">
-          <button 
-            v-for="cat in categories" 
+          <button
+            v-for="cat in categories"
             :key="cat.value"
             class="filter-pill"
             :class="{ 'active': selectedCategory === cat.value }"
@@ -37,23 +34,27 @@
           </button>
         </div>
       </div>
-      </transition>
+    </transition>
 
-      <!-- Search Bar -->
-      <transition name="filter-collapse">
-        <div v-show="searchVisible" class="search-bar">
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜索文章标题或内容..."
-            clearable
-            @keyup.enter="currentPage = 1"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </div>
-      </transition>
+    <!-- Search Bar -->
+    <transition name="filter-collapse">
+      <div v-show="searchVisible" class="search-bar">
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜索文章标题或内容..."
+          clearable
+          @keyup.enter="currentPage = 1"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
+    </transition>
+
+    <!-- Main Content Area -->
+    <main class="page-main">
+      <div class="page-content-wrapper">
 
       <!-- Articles Feed -->
       <div class="articles-feed">
@@ -512,8 +513,7 @@ onMounted(() => {
 }
 
 .articles-mobile-page {
-  height: 100vh;
-  height: 100dvh;
+  height: 100%;
   overflow: hidden;
   background-color: var(--app-bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -579,9 +579,8 @@ onMounted(() => {
 }
 
 /* --- Header --- */
-.mobile-header {
-  position: sticky;
-  top: 0;
+.articles-toolbar {
+  flex-shrink: 0;
   z-index: 50;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(16px);
@@ -647,7 +646,7 @@ onMounted(() => {
 /* --- Filter Bar --- */
 .filter-bar {
   position: sticky;
-  top: 0; /* Header is outside the scroll container, so stick to top of .page-main */
+  top: 0;
   z-index: 40;
   background: rgba(246, 247, 248, 0.95);
   backdrop-filter: blur(8px);
@@ -657,6 +656,8 @@ onMounted(() => {
 }
 
 .search-bar {
+  position: sticky;
+  top: 0;
   padding: 12px 12px;
   background: rgba(246, 247, 248, 0.95);
   backdrop-filter: blur(8px);
@@ -713,8 +714,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;      /* Critical for flex scroll — see AGENTS.md */
-  overflow-y: scroll;
+  min-height: 0;
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 
