@@ -2962,3 +2962,45 @@ CREATE TABLE IF NOT EXISTS `exercise_options` (
   KEY `idx_exercise_id` (`exercise_id`),
   CONSTRAINT `exercise_options_ibfk_1` FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='习题选项表';
+
+
+-- V27__media_transcoding.sql
+-- media 表新增异步转码字段（移动端 AV1/HEVC/VP9 → H.264 流水线）
+
+DROP PROCEDURE IF EXISTS _add_col_media_transcode$$
+CREATE PROCEDURE _add_col_media_transcode()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='media'
+                     AND column_name='transcode_status') THEN
+        ALTER TABLE media ADD COLUMN transcode_status VARCHAR(20)
+            NOT NULL DEFAULT 'SKIPPED'
+            COMMENT '转码状态: SKIPPED|PENDING|PROCESSING|SUCCESS|FAILED';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='media'
+                     AND column_name='transcode_error') THEN
+        ALTER TABLE media ADD COLUMN transcode_error VARCHAR(500) NULL
+            COMMENT '转码失败原因（最后 500 字 stderr 摘要）';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='media'
+                     AND column_name='original_codec') THEN
+        ALTER TABLE media ADD COLUMN original_codec VARCHAR(50) NULL
+            COMMENT '上传时探测到的原始视频编码（av1/hevc/h264/vp9 等）';
+    END IF;
+END$$
+CALL _add_col_media_transcode()$$
+DROP PROCEDURE IF EXISTS _add_col_media_transcode$$
+
+DROP PROCEDURE IF EXISTS _add_idx_media_transcode$$
+CREATE PROCEDURE _add_idx_media_transcode()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE table_schema=DATABASE() AND table_name='media'
+                     AND index_name='idx_transcode_status') THEN
+        ALTER TABLE media ADD INDEX idx_transcode_status (transcode_status);
+    END IF;
+END$$
+CALL _add_idx_media_transcode()$$
+DROP PROCEDURE IF EXISTS _add_idx_media_transcode$$
