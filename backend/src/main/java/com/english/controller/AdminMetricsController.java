@@ -283,7 +283,7 @@ public class AdminMetricsController {
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
         qw.select("record_type AS type, COUNT(*) AS cnt")
                 .in("record_type", "TEXT_VIEW", "VIEW", "REVIEW", "TEST", "WORD_COMPLETE",
-                        "RECOMMENDATION_VIEW", "RECOMMENDATION_CLICK", "RECOMMENDATION_REFRESH")
+                        "COMPLETE", "RECOMMENDATION_VIEW", "RECOMMENDATION_CLICK", "RECOMMENDATION_REFRESH")
                 .groupBy("record_type")
                 .orderByDesc("cnt");
         List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);

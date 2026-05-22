@@ -259,10 +259,11 @@ const CHART_COLORS = ['#6366f1', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#e
 
 const RECORD_TYPE_LABELS = {
   TEXT_VIEW: '课文阅读',
-  VIEW: '内容浏览',
+  VIEW: '单词浏览',
   REVIEW: '复习',
   TEST: '测验',
   WORD_COMPLETE: '单词学习',
+  COMPLETE: '任务完成',
   RECOMMENDATION_VIEW: '推荐曝光',
   RECOMMENDATION_CLICK: '推荐点击',
   RECOMMENDATION_REFRESH: '换一批'
