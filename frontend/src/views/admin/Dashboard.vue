@@ -257,6 +257,25 @@ const recLineOption = ref(null)
 
 const CHART_COLORS = ['#6366f1', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
+const RECORD_TYPE_LABELS = {
+  TEXT_VIEW: '课文阅读',
+  VIEW: '内容浏览',
+  REVIEW: '复习',
+  TEST: '测验',
+  WORD_COMPLETE: '单词学习',
+  RECOMMENDATION_VIEW: '推荐曝光',
+  RECOMMENDATION_CLICK: '推荐点击',
+  RECOMMENDATION_REFRESH: '换一批'
+}
+
+const AI_SERVICE_LABELS = {
+  HIAGENT: 'HiAgent 问答',
+  OPENROUTER: 'OpenRouter',
+  TRANSLATE: 'AI 翻译',
+  VERSION_GEN: '版本生成',
+  QA: 'AI 问答'
+}
+
 const calcPercent = (val) => {
   if (!stats.totalUsers) return 0
   return Math.round((val / stats.totalUsers) * 100)
@@ -323,7 +342,7 @@ const loadMetrics = async () => {
       series: [{
         type: 'pie', radius: ['40%', '70%'], center: ['50%', '45%'],
         data: dist.map((item, i) => ({
-          name: item.type, value: item.count,
+          name: RECORD_TYPE_LABELS[item.type] || item.type, value: item.count,
           itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
         }))
       }]
@@ -370,7 +389,7 @@ const loadMetrics = async () => {
       series: [{
         type: 'pie', radius: ['35%', '65%'], center: ['50%', '45%'],
         data: svc.map((item, i) => ({
-          name: item.service, value: item.count,
+          name: AI_SERVICE_LABELS[item.service] || item.service, value: item.count,
           itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
         }))
       }]
