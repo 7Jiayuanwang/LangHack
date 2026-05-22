@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -92,11 +91,14 @@ public class AdminMetricsController {
         try {
             long totalRecords = learningRecordMapper.selectCount(null);
 
-            long totalReads = learningRecordMapper.selectCount(
-                    new QueryWrapper<com.english.entity.LearningRecord>()
-                            .eq("record_type", "TEXT_VIEW"));
+            // 记录类型分布（1条 GROUP BY 查询）
+            List<Map<String, Object>> typeDistribution = buildRecordTypeDistribution();
 
-            // 热门文章 Top 10（按 view_count 降序）
+            // totalReads 直接从分布结果取，不再单独查库
+            long totalReads = typeDistribution.stream()
+                    .filter(m -> "TEXT_VIEW".equals(m.get("type")))
+                    .mapToLong(m -> toLong(m.get("count")))
+                    .findFirst().orElse(0L);
             List<Text> hotTexts = textMapper.selectList(
                     new QueryWrapper<Text>()
                             .eq("deleted", 0)
@@ -109,9 +111,6 @@ public class AdminMetricsController {
                 item.put("viewCount", t.getViewCount() != null ? t.getViewCount() : 0);
                 return item;
             }).collect(Collectors.toList());
-
-            // 记录类型分布
-            List<Map<String, Object>> typeDistribution = buildRecordTypeDistribution();
 
             // 最近30天每日学习记录趋势
             List<Map<String, Object>> dailyTrend = buildLearningDailyTrend(30);
@@ -244,7 +243,6 @@ public class AdminMetricsController {
     // ── 私有辅助方法 ──────────────────────────────────────────────────────────
 
     private long countDistinctStudents(LocalDateTime start, LocalDateTime end) {
-        // 使用 selectMaps 聚合查询
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
         qw.select("COUNT(DISTINCT student_id) AS cnt")
                 .ge("created_time", start)
@@ -256,78 +254,102 @@ public class AdminMetricsController {
         return 0L;
     }
 
+    // 1条 GROUP BY 替代 30 次循环查询
     private List<Map<String, Object>> buildDauTrend(int days) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start = LocalDateTime.now().minusDays(days - 1).toLocalDate().atStartOfDay();
+        QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
+        qw.select("DATE(created_time) AS stat_date, COUNT(DISTINCT student_id) AS cnt")
+                .ge("created_time", start)
+                .groupBy("DATE(created_time)");
+        List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
+        Map<String, Long> byDate = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("cnt")));
+        }
         List<Map<String, Object>> trend = new ArrayList<>();
+        LocalDate today = LocalDate.now();
         for (int i = days - 1; i >= 0; i--) {
-            LocalDate date = now.toLocalDate().minusDays(i);
-            LocalDateTime start = date.atStartOfDay();
-            LocalDateTime end = date.atTime(LocalTime.MAX);
-            long count = countDistinctStudents(start, end);
+            String date = today.minusDays(i).format(DATE_FMT);
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("date", date.format(DATE_FMT));
-            item.put("count", count);
+            item.put("date", date);
+            item.put("count", byDate.getOrDefault(date, 0L));
             trend.add(item);
         }
         return trend;
     }
 
+    // 1条 GROUP BY 替代 8 次 SELECT COUNT
     private List<Map<String, Object>> buildRecordTypeDistribution() {
-        String[] types = {"TEXT_VIEW", "VIEW", "REVIEW", "TEST", "WORD_COMPLETE",
-                "RECOMMENDATION_VIEW", "RECOMMENDATION_CLICK", "RECOMMENDATION_REFRESH"};
+        QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
+        qw.select("record_type AS type, COUNT(*) AS cnt")
+                .in("record_type", "TEXT_VIEW", "VIEW", "REVIEW", "TEST", "WORD_COMPLETE",
+                        "RECOMMENDATION_VIEW", "RECOMMENDATION_CLICK", "RECOMMENDATION_REFRESH")
+                .groupBy("record_type")
+                .orderByDesc("cnt");
+        List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String type : types) {
-            long count = learningRecordMapper.selectCount(
-                    new QueryWrapper<com.english.entity.LearningRecord>().eq("record_type", type));
-            if (count > 0) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("type", type);
-                item.put("count", count);
-                result.add(item);
-            }
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("type", String.valueOf(row.get("type")));
+            item.put("count", toLong(row.get("cnt")));
+            result.add(item);
         }
         return result;
     }
 
+    // 1条 GROUP BY 替代 30 次循环查询
     private List<Map<String, Object>> buildLearningDailyTrend(int days) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start = LocalDateTime.now().minusDays(days - 1).toLocalDate().atStartOfDay();
+        QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
+        qw.select("DATE(created_time) AS stat_date, COUNT(*) AS cnt")
+                .ge("created_time", start)
+                .groupBy("DATE(created_time)");
+        List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
+        Map<String, Long> byDate = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("cnt")));
+        }
         List<Map<String, Object>> trend = new ArrayList<>();
+        LocalDate today = LocalDate.now();
         for (int i = days - 1; i >= 0; i--) {
-            LocalDate date = now.toLocalDate().minusDays(i);
-            LocalDateTime start = date.atStartOfDay();
-            LocalDateTime end = date.atTime(LocalTime.MAX);
-            long count = learningRecordMapper.selectCount(
-                    new QueryWrapper<com.english.entity.LearningRecord>()
-                            .ge("created_time", start)
-                            .le("created_time", end));
+            String date = today.minusDays(i).format(DATE_FMT);
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("date", date.format(DATE_FMT));
-            item.put("count", count);
+            item.put("date", date);
+            item.put("count", byDate.getOrDefault(date, 0L));
             trend.add(item);
         }
         return trend;
     }
 
+    // 1条 GROUP BY 替代 30×2 次循环查询
     private List<Map<String, Object>> buildRecommendationDailyTrend(int days) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start = LocalDateTime.now().minusDays(days - 1).toLocalDate().atStartOfDay();
+        QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
+        qw.select("DATE(created_time) AS stat_date, record_type, COUNT(*) AS cnt")
+                .in("record_type", "RECOMMENDATION_VIEW", "RECOMMENDATION_CLICK")
+                .ge("created_time", start)
+                .groupBy("DATE(created_time)", "record_type");
+        List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
+        // 按日期聚合 views/clicks
+        Map<String, long[]> byDate = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            String date = String.valueOf(row.get("stat_date"));
+            long[] vc = byDate.computeIfAbsent(date, k -> new long[2]);
+            String type = String.valueOf(row.get("record_type"));
+            long cnt = toLong(row.get("cnt"));
+            if ("RECOMMENDATION_VIEW".equals(type)) vc[0] += cnt;
+            else if ("RECOMMENDATION_CLICK".equals(type)) vc[1] += cnt;
+        }
         List<Map<String, Object>> trend = new ArrayList<>();
+        LocalDate today = LocalDate.now();
         for (int i = days - 1; i >= 0; i--) {
-            LocalDate date = now.toLocalDate().minusDays(i);
-            LocalDateTime start = date.atStartOfDay();
-            LocalDateTime end = date.atTime(LocalTime.MAX);
-            long views = learningRecordMapper.selectCount(
-                    new QueryWrapper<com.english.entity.LearningRecord>()
-                            .eq("record_type", "RECOMMENDATION_VIEW")
-                            .ge("created_time", start).le("created_time", end));
-            long clicks = learningRecordMapper.selectCount(
-                    new QueryWrapper<com.english.entity.LearningRecord>()
-                            .eq("record_type", "RECOMMENDATION_CLICK")
-                            .ge("created_time", start).le("created_time", end));
-            double clickRate = views > 0 ? Math.round(clicks * 1000.0 / views) / 1000.0 : 0.0;
+            String date = today.minusDays(i).format(DATE_FMT);
+            long[] vc = byDate.getOrDefault(date, new long[2]);
+            double clickRate = vc[0] > 0 ? Math.round(vc[1] * 1000.0 / vc[0]) / 1000.0 : 0.0;
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("date", date.format(DATE_FMT));
-            item.put("views", views);
-            item.put("clicks", clicks);
+            item.put("date", date);
+            item.put("views", vc[0]);
+            item.put("clicks", vc[1]);
             item.put("clickRate", clickRate);
             trend.add(item);
         }
