@@ -5,7 +5,6 @@ import com.english.mapper.*;
 import com.english.service.FieldMappingService;
 import com.english.service.SchoolDataSyncService;
 import com.english.service.SyncMonitorService;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -118,7 +117,6 @@ class SchoolDataSyncIntegrationTest {
     class FieldMappingIntegrationTests {
 
     @Test
-    @Disabled("TODO: Flyway 在测试环境中未正确加载 V12 字段映射数据")
     @DisplayName("获取行政班字段映射配置")
     void getAdministrativeClassMappings() {
             List<FieldMapping> mappings = fieldMappingService.getMappingsByDataSource("administrative_class");
@@ -126,8 +124,9 @@ class SchoolDataSyncIntegrationTest {
             assertNotNull(mappings);
             assertFalse(mappings.isEmpty(), "行政班字段映射不应为空");
             // V12 按 CDSP 官方 PDF 对齐: source_field 使用 UPPERCASE (XZBH/BJMC 等)
+            // target_field 存储 snake_case (class_code)，applyMapping 输出时转为 camelCase
             assertTrue(mappings.stream().anyMatch(m -> "XZBH".equals(m.getSourceField())));
-            assertTrue(mappings.stream().anyMatch(m -> "classCode".equals(m.getTargetField())));
+            assertTrue(mappings.stream().anyMatch(m -> "class_code".equals(m.getTargetField())));
         }
 
         @Test
@@ -179,21 +178,21 @@ class SchoolDataSyncIntegrationTest {
         }
 
         @Test
-        @Disabled("TODO: Flyway 在测试环境中未正确加载 V12 字段映射数据")
-        @DisplayName("course_selection 中 KCBH 应映射为 classId")
+        @DisplayName("course_selection 中 KCBH 应映射为 class_id")
         void courseSelectionKcbhMapsToClassId() {
             List<FieldMapping> mappings = fieldMappingService.getMappingsByDataSource("course_selection");
 
-            assertTrue(mappings.stream().anyMatch(m -> "KCBH".equals(m.getSourceField()) && "classId".equals(m.getTargetField())));
+            // target_field 存储 snake_case (class_id)，applyMapping 输出时转为 camelCase (classId)
+            assertTrue(mappings.stream().anyMatch(m -> "KCBH".equals(m.getSourceField()) && "class_id".equals(m.getTargetField())));
         }
 
         @Test
-        @Disabled("TODO: Flyway 在测试环境中未正确加载 V12 字段映射数据")
-        @DisplayName("level_exam_scores 已包含 xm 到 studentName 映射")
+        @DisplayName("level_exam_scores 已包含 xm 到 student_name 映射")
         void levelExamScoresIncludesXmStudentNameMapping() {
             List<FieldMapping> mappings = fieldMappingService.getMappingsByDataSource("level_exam_scores");
 
-            assertTrue(mappings.stream().anyMatch(m -> "xm".equals(m.getSourceField()) && "studentName".equals(m.getTargetField())));
+            // target_field 存储 snake_case (student_name)，applyMapping 输出时转为 camelCase (studentName)
+            assertTrue(mappings.stream().anyMatch(m -> "xm".equals(m.getSourceField()) && "student_name".equals(m.getTargetField())));
         }
 
         @Test

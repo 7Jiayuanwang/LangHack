@@ -1,5 +1,6 @@
 package com.english.integration;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.english.entity.*;
 import com.english.mapper.*;
 import com.english.service.impl.*;
@@ -32,6 +33,9 @@ public class DataIntegrityTest {
 
     @Autowired
     private AssignmentServiceImpl assignmentService;
+
+    @Autowired
+    private UserMapper userMapper;
 
     /**
      * 测试统计数据计算
@@ -72,12 +76,12 @@ public class DataIntegrityTest {
     }
 
     /**
-     * 获取测试学生ID
-     * 从测试数据库或配置中获取有效的学生ID
+     * 获取测试学生ID — 查询数据库中第一个 STUDENT 角色用户
      */
     private Long getTestStudentId() {
-        // TODO: 实现从测试数据库中获取有效学生ID的逻辑
-        // 可以从测试数据fixtures中读取，或从配置文件中获取
-        return null; // 需要在实际使用前配置
+        QueryWrapper<User> query = new QueryWrapper<>();
+        query.eq("role", "STUDENT").last("LIMIT 1");
+        User student = userMapper.selectOne(query);
+        return student != null ? student.getId() : null;
     }
 }

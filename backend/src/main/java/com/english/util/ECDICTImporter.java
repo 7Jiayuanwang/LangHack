@@ -18,10 +18,10 @@ import java.util.List;
 /**
  * ECDICT数据导入工具
  * 用于一次性将ECDICT CSV文件导入到数据库
- * 
+ *
  * 使用方法:
  * java -cp target/classes com.english.util.ECDICTImporter
- * 
+ *
  * 或者使用提供的脚本:
  * ./import-ecdict.sh
  */
@@ -32,11 +32,22 @@ public class ECDICTImporter {
     private final String dbUrl;
     private final String dbUser;
     private final String dbPassword;
+    // When non-null, use this connection directly instead of creating a new one
+    private final Connection providedConnection;
 
     public ECDICTImporter(String dbUrl, String dbUser, String dbPassword) {
         this.dbUrl = dbUrl;
         this.dbUser = dbUser;
         this.dbPassword = dbPassword;
+        this.providedConnection = null;
+    }
+
+    /** Use a pre-existing connection (e.g. from Flyway context) — no new connection is opened. */
+    public ECDICTImporter(Connection connection) {
+        this.dbUrl = null;
+        this.dbUser = null;
+        this.dbPassword = null;
+        this.providedConnection = connection;
     }
 
     public static void main(String[] args) {
@@ -64,54 +75,62 @@ public class ECDICTImporter {
         System.out.println("===================================");
         System.out.println();
 
-        // 加载 MySQL 驱动
-        Class.forName("com.mysql.cj.jdbc.Driver");
-
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
-            // 检查是否已有数据
-            long existingCount = getWordCount(conn);
-            if (existingCount > 0) {
-                System.out.println("数据库中已存在 " + existingCount + " 条ECDICT词汇数据");
-                System.out.println("如需重新导入，请先执行: TRUNCATE TABLE ecdict_words;");
-                System.out.println("导入已取消");
-                return;
+        if (providedConnection != null) {
+            // Use the connection provided by the caller (e.g. Flyway context)
+            runWithConnection(providedConnection);
+        } else {
+            // Create our own connection from credentials
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
+                runWithConnection(conn);
             }
-
-            // 查找ECDICT文件
-            String[] possiblePaths = {
-                    "ECDICT-master/ecdict.csv",
-                    "../ECDICT-master/ecdict.csv",
-                    "/usr/local/ecdict/ecdict.csv"
-            };
-
-            File ecdictFile = null;
-            for (String path : possiblePaths) {
-                File testFile = new File(path);
-                if (testFile.exists() && testFile.isFile()) {
-                    ecdictFile = testFile;
-                    break;
-                }
-            }
-
-            if (ecdictFile == null) {
-                System.err.println("错误: 找不到ECDICT数据文件");
-                System.err.println("请确保ECDICT-master/ecdict.csv文件存在");
-                return;
-            }
-
-            System.out.println("找到ECDICT文件: " + ecdictFile.getAbsolutePath());
-            System.out.println("开始导入数据...");
-            System.out.println();
-
-            importECDICTData(conn, ecdictFile);
-
-            System.out.println();
-            System.out.println("===================================");
-            System.out.println("  ECDICT数据导入完成");
-            System.out.println("===================================");
-            long finalCount = getWordCount(conn);
-            System.out.println("数据库中共有 " + finalCount + " 条ECDICT词汇数据");
         }
+    }
+
+    private void runWithConnection(Connection conn) throws Exception {
+        // 检查是否已有数据
+        long existingCount = getWordCount(conn);
+        if (existingCount > 0) {
+            System.out.println("数据库中已存在 " + existingCount + " 条ECDICT词汇数据");
+            System.out.println("如需重新导入，请先执行: TRUNCATE TABLE ecdict_words;");
+            System.out.println("导入已取消");
+            return;
+        }
+
+        // 查找ECDICT文件
+        String[] possiblePaths = {
+                "ECDICT-master/ecdict.csv",
+                "../ECDICT-master/ecdict.csv",
+                "/usr/local/ecdict/ecdict.csv"
+        };
+
+        File ecdictFile = null;
+        for (String path : possiblePaths) {
+            File testFile = new File(path);
+            if (testFile.exists() && testFile.isFile()) {
+                ecdictFile = testFile;
+                break;
+            }
+        }
+
+        if (ecdictFile == null) {
+            System.err.println("错误: 找不到ECDICT数据文件");
+            System.err.println("请确保ECDICT-master/ecdict.csv文件存在");
+            return;
+        }
+
+        System.out.println("找到ECDICT文件: " + ecdictFile.getAbsolutePath());
+        System.out.println("开始导入数据...");
+        System.out.println();
+
+        importECDICTData(conn, ecdictFile);
+
+        System.out.println();
+        System.out.println("===================================");
+        System.out.println("  ECDICT数据导入完成");
+        System.out.println("===================================");
+        long finalCount = getWordCount(conn);
+        System.out.println("数据库中共有 " + finalCount + " 条ECDICT词汇数据");
     }
 
     private long getWordCount(Connection conn) throws Exception {
