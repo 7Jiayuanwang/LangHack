@@ -1,7 +1,6 @@
 app:
   cors:
-    # 明确列出本地开发常用 origin，避免带端口通配符导致 Spring CORS 拒绝。
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://localhost:8080}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080,http://127.0.0.1:*,http://localhost:*}
     # 允许局域网IP访问（手机测试）
     allowed-origin-patterns: http://192.168.*.*:3000,http://172.*.*.*:3000,http://10.*.*.*:3000
   update:
@@ -169,7 +168,7 @@ hiagent:
   qa-api-key: ${HIAGENT_QA_API_KEY:}
   qa-app-id: ${HIAGENT_QA_APP_ID:}
 
-  timeout: 60000
+  timeout: 180000
   max-retries: 3
 
 openrouter:

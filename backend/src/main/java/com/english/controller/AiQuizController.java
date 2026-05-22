@@ -45,6 +45,9 @@ public class AiQuizController {
     @Autowired(required = false)
     private AiProviderRuntimeService aiProviderRuntimeService;
 
+    @Autowired(required = false)
+    private com.english.service.impl.HiAgentServiceImpl hiAgentService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/generate")
@@ -69,7 +72,7 @@ public class AiQuizController {
 
             User currentUser = getCurrentUser();
 
-            if (aiProviderRuntimeService == null) {
+            if (aiProviderRuntimeService == null && hiAgentService == null) {
                 return Result.error("AI 服务未配置");
             }
 
@@ -85,14 +88,18 @@ public class AiQuizController {
             int count = request.getCount() != null ? request.getCount() : 5;
             String prompt = buildPrompt(text.getTitle(), content, count);
 
-            Optional<String> aiResponse = aiProviderRuntimeService.completeIfConfigured(
-                    "quiz", "generateQuiz", prompt);
+            Optional<String> aiResponse = aiProviderRuntimeService != null
+                    ? aiProviderRuntimeService.completeIfConfigured("quiz", "generateQuiz", prompt)
+                    : Optional.empty();
 
-            if (aiResponse.isEmpty()) {
+            String responseText;
+            if (aiResponse.isPresent()) {
+                responseText = aiResponse.get();
+            } else if (hiAgentService != null) {
+                responseText = hiAgentService.generateQuiz(text.getTitle(), content, count);
+            } else {
                 return Result.error("AI 出题服务未配置，请联系运维在运维面板配置 quiz 类型的 AI 提供商");
             }
-
-            String responseText = aiResponse.get();
             String jsonStr = stripCodeFence(responseText);
 
             AiQuizResponseDTO quizResponse;

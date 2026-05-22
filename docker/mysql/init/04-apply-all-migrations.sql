@@ -2801,7 +2801,80 @@ DROP PROCEDURE IF EXISTS _add_texts_read_count$$
 -- ════════════════════════════════════════════════════════════════
 
 
+-- V22__fix_reading_count_columns.sql
+-- 补齐 read_count 相关字段（V17 遗漏 texts.read_count，且历史 DB 未应用 V17 的 user_text_reads 部分）
+
+DROP PROCEDURE IF EXISTS _fix_reading_count_cols$$
+CREATE PROCEDURE _fix_reading_count_cols()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'texts'
+          AND COLUMN_NAME = 'read_count'
+    ) THEN
+        ALTER TABLE texts ADD COLUMN read_count INT NOT NULL DEFAULT 0 COMMENT '阅读次数';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'user_text_reads'
+          AND COLUMN_NAME = 'read_count'
+    ) THEN
+        ALTER TABLE user_text_reads ADD COLUMN read_count INT NOT NULL DEFAULT 1 COMMENT '阅读次数';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'user_text_reads'
+          AND COLUMN_NAME = 'last_read_at'
+    ) THEN
+        ALTER TABLE user_text_reads ADD COLUMN last_read_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '最后阅读时间';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'users'
+          AND COLUMN_NAME = 'read_article_count'
+    ) THEN
+        ALTER TABLE users ADD COLUMN read_article_count INT NOT NULL DEFAULT 0 COMMENT '已读文章数';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'users'
+          AND COLUMN_NAME = 'read_total_times'
+    ) THEN
+        ALTER TABLE users ADD COLUMN read_total_times INT NOT NULL DEFAULT 0 COMMENT '累计阅读次数';
+    END IF;
+END$$
+
+CALL _fix_reading_count_cols()$$
+DROP PROCEDURE IF EXISTS _fix_reading_count_cols$$
+
 -- ════════════════════════════════════════════════════════════════
+
+
+-- V26__text_exercises_table.sql
+-- 补建 text_exercises 表（历史手动建表，从未纳入迁移脚本）
+CREATE TABLE IF NOT EXISTS `text_exercises` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `text_id` BIGINT NOT NULL COMMENT '课文ID',
+    `question` TEXT NOT NULL COMMENT '题目内容',
+    `exercise_type` ENUM('MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_BLANK', 'SHORT_ANSWER') DEFAULT 'MULTIPLE_CHOICE' COMMENT '习题类型',
+    `order_num` INT DEFAULT 1 COMMENT '显示顺序',
+    `created_by` BIGINT NOT NULL COMMENT '创建者ID',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    FOREIGN KEY (`text_id`) REFERENCES `texts`(`id`) ON DELETE CASCADE,
+    INDEX `idx_text_id` (`text_id`),
+    INDEX `idx_exercise_type` (`exercise_type`),
+    INDEX `idx_order_num` (`order_num`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课文习题表';
 
 -- V23__ai_quiz_support.sql
 -- AI 出题功能支持：text_exercises 加字段 + 新建 ai_quiz_session 表
@@ -2809,27 +2882,6 @@ DROP PROCEDURE IF EXISTS _add_texts_read_count$$
 DROP PROCEDURE IF EXISTS _ai_quiz_support$$
 CREATE PROCEDURE _ai_quiz_support()
 BEGIN
-    -- 兜底：text_exercises 表不存在时先建（防止全量备份未导入的环境直接 ALTER 失败）
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.TABLES
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'text_exercises'
-    ) THEN
-        CREATE TABLE text_exercises (
-            id BIGINT PRIMARY KEY AUTO_INCREMENT,
-            text_id BIGINT NOT NULL COMMENT '课文ID',
-            question TEXT NOT NULL COMMENT '题目内容',
-            exercise_type VARCHAR(32) DEFAULT 'MULTIPLE_CHOICE' COMMENT '习题类型',
-            order_num INT DEFAULT 1 COMMENT '显示顺序',
-            created_by BIGINT NOT NULL COMMENT '创建者ID',
-            created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-            updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-            INDEX idx_text_id (text_id),
-            INDEX idx_exercise_type (exercise_type),
-            INDEX idx_order_num (order_num)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课文习题表';
-    END IF;
-
     -- text_exercises 表添加新字段
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.COLUMNS
@@ -2892,3 +2944,21 @@ VALUES
   ('ai_config', 'hiagent_quiz_api_key', '', 'HiAgent 出题应用 API Key（独立于改写/问答凭证）', 1),
   ('ai_config', 'hiagent_quiz_app_id', '', 'HiAgent 出题应用 App ID（独立于改写/问答凭证）', 0)
 ON DUPLICATE KEY UPDATE description = VALUES(description);
+
+
+-- V25__exercise_options_table.sql
+-- 补建 exercise_options 表（AI 出题选项存储，V23 遗漏）
+
+CREATE TABLE IF NOT EXISTS `exercise_options` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `exercise_id` BIGINT NOT NULL COMMENT '习题ID',
+  `option_content` VARCHAR(500) NOT NULL COMMENT '选项内容',
+  `option_key` VARCHAR(10) NOT NULL COMMENT '选项标识(A, B, C, D等)',
+  `is_correct` TINYINT(1) DEFAULT '0' COMMENT '是否正确答案',
+  `order_num` INT DEFAULT '1' COMMENT '显示顺序',
+  `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_exercise_option` (`exercise_id`, `option_key`),
+  KEY `idx_exercise_id` (`exercise_id`),
+  CONSTRAINT `exercise_options_ibfk_1` FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='习题选项表';

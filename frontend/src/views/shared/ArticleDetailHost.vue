@@ -11,10 +11,13 @@ import { useUserStore } from '@/store/user'
 import StudentLayout from '@/views/student/Layout.vue'
 import MobileLayout from '@/views/shared/MobileLayout.vue'
 import InteractiveText from '@/views/student/InteractiveText.vue'
+import SimpleTextView from '@/views/user/SimpleTextView.vue'
 
 const userStore = useUserStore()
 
-const content = computed(() => InteractiveText)
+const content = computed(() =>
+  userStore.token ? InteractiveText : SimpleTextView
+)
 
 const layoutConfig = computed(() => {
   const role = userStore.userRole
