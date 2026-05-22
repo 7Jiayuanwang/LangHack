@@ -46,12 +46,15 @@
       <div class="translate-content" v-if="!translating">
         <div class="original-text">
           <h4>原文：</h4>
-          <p>{{ selectedText }}</p>
+          <div class="text-scroll-area">
+            <p>{{ selectedText }}</p>
+          </div>
         </div>
-        <el-divider />
         <div class="translated-text">
           <h4>译文：</h4>
-          <p>{{ translatedText }}</p>
+          <div class="text-scroll-area">
+            <p>{{ translatedText }}</p>
+          </div>
         </div>
       </div>
       <div class="loading-content" v-else>
@@ -1106,6 +1109,8 @@ onBeforeUnmount(() => {
 }
 
 .original-text p, .translated-text p {
+  height: 350px;
+  overflow-y: auto;
   margin: 0;
   padding: 12px;
   background: #f8f9fa;
@@ -1124,6 +1129,35 @@ onBeforeUnmount(() => {
     width: 92vw !important;
     max-width: 92vw !important;
     margin: 0 auto;
+  }
+  .translate-dialog :deep(.el-dialog__body) {
+    padding: 8px 12px 12px;
+  }
+  .translate-content {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 65vh;
+  }
+  .original-text, .translated-text {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+  .text-scroll-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .original-text p, .translated-text p {
+    padding: 8px;
+    font-size: 14px;
+    word-break: break-word;
+    margin: 0;
   }
 }
 </style>

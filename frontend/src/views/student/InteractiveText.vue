@@ -196,12 +196,15 @@
       <div class="translate-content" v-if="!translating">
         <div class="original-text">
           <h4>原文：</h4>
-          <p>{{ selectedTextForTranslate }}</p>
+          <div class="text-scroll-area">
+            <p>{{ selectedTextForTranslate }}</p>
+          </div>
         </div>
-        <el-divider />
         <div class="translated-text">
           <h4>译文：</h4>
-          <p>{{ translatedText }}</p>
+          <div class="text-scroll-area">
+            <p>{{ translatedText }}</p>
+          </div>
         </div>
       </div>
       <div class="loading-content" v-else>
@@ -3252,6 +3255,8 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .translate-dialog .original-text p,
 .translate-dialog .translated-text p {
+  height: 350px;
+  overflow-y: auto;
   margin: 0;
   padding: 12px;
   background: #f8f9fa;
@@ -3271,14 +3276,36 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     max-width: 92vw !important;
     margin: 0 auto;
   }
+  .translate-dialog .el-dialog__body {
+    padding: 8px 12px 12px;
+  }
   .translate-dialog .translate-content {
-    padding: 8px 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 65vh;
+  }
+  .translate-dialog .original-text,
+  .translate-dialog .translated-text {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+  .translate-dialog .text-scroll-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .translate-dialog .original-text p,
   .translate-dialog .translated-text p {
     padding: 8px;
     font-size: 14px;
     word-break: break-word;
+    margin: 0;
   }
 }
 </style>
