@@ -68,6 +68,7 @@ public class CacheConfig extends CachingConfigurerSupport {
                 .allowIfSubType("com.english.")
                 // Allowed JDK collections (immutable variants are safer)
                 .allowIfSubType("java.util.HashMap")
+                .allowIfSubType("java.util.LinkedHashMap")
                 .allowIfSubType("java.util.ArrayList")
                 .allowIfSubType("java.util.LinkedList")
                 .allowIfSubType("java.util.HashSet")
