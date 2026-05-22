@@ -323,20 +323,20 @@ export function getPublicContentTags() {
 
 // ========== 数据指标 ==========
 
-export function getUserActivityMetrics() {
-  return request({ url: '/api/admin/metrics/user-activity', method: 'get' })
+export function getUserActivityMetrics(params) {
+  return request({ url: '/api/admin/metrics/user-activity', method: 'get', params })
 }
 
-export function getLearningBehaviorMetrics() {
-  return request({ url: '/api/admin/metrics/learning-behavior', method: 'get' })
+export function getLearningBehaviorMetrics(params) {
+  return request({ url: '/api/admin/metrics/learning-behavior', method: 'get', params })
 }
 
-export function getAiUsageMetrics() {
-  return request({ url: '/api/admin/metrics/ai-usage', method: 'get' })
+export function getAiUsageMetrics(params) {
+  return request({ url: '/api/admin/metrics/ai-usage', method: 'get', params })
 }
 
-export function getRecommendationMetrics() {
-  return request({ url: '/api/admin/metrics/recommendation-effectiveness', method: 'get' })
+export function getRecommendationMetrics(params) {
+  return request({ url: '/api/admin/metrics/recommendation-effectiveness', method: 'get', params })
 }
 
 export function getAiFeedbackSummary() {
