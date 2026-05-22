@@ -51,6 +51,15 @@ public class Media {
     @TableField("status")
     private String status;
 
+    @TableField("transcode_status")
+    private String transcodeStatus;
+
+    @TableField("transcode_error")
+    private String transcodeError;
+
+    @TableField("original_codec")
+    private String originalCodec;
+
     @TableField("deleted")
     @TableLogic(value = "0", delval = "1")
     private Integer deleted;
@@ -106,6 +115,15 @@ public class Media {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getTranscodeStatus() { return transcodeStatus; }
+    public void setTranscodeStatus(String transcodeStatus) { this.transcodeStatus = transcodeStatus; }
+
+    public String getTranscodeError() { return transcodeError; }
+    public void setTranscodeError(String transcodeError) { this.transcodeError = transcodeError; }
+
+    public String getOriginalCodec() { return originalCodec; }
+    public void setOriginalCodec(String originalCodec) { this.originalCodec = originalCodec; }
 
     public Integer getDeleted() { return deleted; }
     public void setDeleted(Integer deleted) { this.deleted = deleted; }

@@ -4,10 +4,13 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.english.entity.Media;
 import com.english.entity.Video;
 import com.english.exception.BusinessException;
+import com.english.mapper.MediaMapper;
 import com.english.mapper.VideoMapper;
 import com.english.service.VideoService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +20,9 @@ import java.util.stream.Collectors;
 
 @Service
 public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements VideoService {
+
+    @Autowired
+    private MediaMapper mediaMapper;
 
     @Override
     public Map<String, Object> getVideosByPage(Map<String, Object> params) {
@@ -54,14 +60,40 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
 
         IPage<Video> pageResult = page(pageParam, queryWrapper);
 
+        List<Video> records = pageResult.getRecords();
+        enrichTranscodeStatus(records);
+
         Map<String, Object> result = new HashMap<>();
-        result.put("records", pageResult.getRecords());
+        result.put("records", records);
         result.put("total", pageResult.getTotal());
         result.put("pages", pageResult.getPages());
         result.put("current", pageResult.getCurrent());
         result.put("size", pageResult.getSize());
 
         return result;
+    }
+
+    private void enrichTranscodeStatus(List<Video> videos) {
+        if (videos == null || videos.isEmpty()) return;
+        List<Long> mediaIds = videos.stream()
+                .map(Video::getMediaId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (mediaIds.isEmpty()) return;
+        QueryWrapper<Media> mw = new QueryWrapper<>();
+        mw.select("id", "transcode_status", "transcode_error").in("id", mediaIds);
+        List<Media> medias = mediaMapper.selectList(mw);
+        Map<Long, Media> mediaMap = medias.stream()
+                .collect(Collectors.toMap(Media::getId, m -> m, (a, b) -> a));
+        for (Video v : videos) {
+            if (v.getMediaId() == null) continue;
+            Media m = mediaMap.get(v.getMediaId());
+            if (m != null) {
+                v.setTranscodeStatus(m.getTranscodeStatus());
+                v.setTranscodeError(m.getTranscodeError());
+            }
+        }
     }
 
     @Override

@@ -4,16 +4,21 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Media;
 import com.english.mapper.MediaMapper;
 import com.english.service.MediaService;
+import com.english.service.MediaTranscodeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import com.english.exception.BusinessException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
 
 import javax.annotation.PostConstruct;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,6 +48,9 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
 
     @Value("${media.upload.storage-path:/app/uploads}")
     private String storagePath;
+
+    @Autowired
+    private MediaTranscodeService transcodeService;
 
     @PostConstruct
     public void init() {
@@ -106,15 +114,42 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
                 String filePath = saveToFileSystem(file, mediaType, originalFileName);
                 media.setFilePath(filePath);
                 media.setFileContent(new byte[0]);
+
+                MediaTranscodeService.ProbeResult probe = transcodeService.probe(new File(filePath));
+                if (probe != null) {
+                    media.setOriginalCodec(probe.videoCodec);
+                    if (probe.width > 0) media.setWidth(probe.width);
+                    if (probe.height > 0) media.setHeight(probe.height);
+                }
+                if (probe != null && transcodeService.needsTranscode(probe)) {
+                    media.setTranscodeStatus("PENDING");
+                } else {
+                    media.setTranscodeStatus("SKIPPED");
+                }
             } else {
                 try {
                     media.setFileContent(file.getBytes());
                 } catch (IOException e) {
                     throw new BusinessException("文件读取失败");
                 }
+                media.setTranscodeStatus("SKIPPED");
             }
 
             this.save(media);
+
+            if ("VIDEO".equals(mediaType) && "PENDING".equals(media.getTranscodeStatus())) {
+                final Long mediaId = media.getId();
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            transcodeService.transcodeAsync(mediaId);
+                        }
+                    });
+                } else {
+                    transcodeService.transcodeAsync(mediaId);
+                }
+            }
             return media;
         } finally {
             uploadSemaphore.release();

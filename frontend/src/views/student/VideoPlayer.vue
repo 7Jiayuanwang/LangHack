@@ -35,11 +35,19 @@
     <div v-else-if="video" class="player-content">
       <!-- ArtPlayer Container -->
       <div class="player-wrapper">
-        <div v-show="!playerError" ref="artPlayerRef" class="art-player-container"></div>
-        <video v-if="playerError" :src="videoUrl" controls class="native-video"></video>
-        <div v-if="playerError" class="player-error-text">
-          播放器组件加载失败，已切换至内置播放器。错误: {{ playerErrorMsg }}
+        <div v-if="transcoding" class="transcode-placeholder">
+          <el-icon class="loading-icon is-loading"><Loading /></el-icon>
+          <p class="transcode-title">视频正在转码中</p>
+          <p class="transcode-tip">为兼容移动端播放，系统正在将视频转换为标准格式，预计 1-10 分钟。</p>
+          <el-button type="primary" @click="loadVideo">刷新查看</el-button>
         </div>
+        <template v-else>
+          <div v-show="!playerError" ref="artPlayerRef" class="art-player-container"></div>
+          <video v-if="playerError" :src="videoUrl" controls class="native-video"></video>
+          <div v-if="playerError" class="player-error-text">
+            播放器组件加载失败，已切换至内置播放器。错误: {{ playerErrorMsg }}
+          </div>
+        </template>
       </div>
 
       <!-- Video Info -->
@@ -235,7 +243,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, View, Star, StarFilled, Reading, ChatLineSquare, Document, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowLeft, View, Star, StarFilled, Reading, ChatLineSquare, Document, VideoPlay, Loading } from '@element-plus/icons-vue'
 import Artplayer from 'artplayer'
 import { getPublicVideoDetail, getUserVideoDetail } from '@/api/video'
 import { getAdminVideoDetail } from '@/api/admin'
@@ -257,6 +265,8 @@ const error = ref(false)
 const isFavorite = ref(false)
 const favoriteLoading = ref(false)
 const playerError = ref(false)
+const transcoding = ref(false)
+const transcodeStatus = ref('')
 const playerErrorMsg = ref('')
 const subtitleVisible = ref(true)
 const subtitleCues = ref([])
@@ -501,6 +511,8 @@ const loadVideo = async () => {
 
   loading.value = true
   error.value = false
+  transcoding.value = false
+  playerError.value = false
   try {
     // 管理员预览 / 用户预览自己的上传 使用专有 API（不检查 isPublic，允许未审核内容）
     const res = isAdminPreview
@@ -533,6 +545,22 @@ const loadVideo = async () => {
         try {
           const mediaRes = await getMediaDetail(video.value.mediaId)
           if (mediaRes.code === 200 && mediaRes.data) {
+            const status = mediaRes.data.transcodeStatus
+            transcodeStatus.value = status || ''
+            if (status === 'PENDING' || status === 'PROCESSING') {
+              transcoding.value = true
+              loading.value = false
+              return
+            }
+            if (status === 'FAILED') {
+              playerError.value = true
+              playerErrorMsg.value = mediaRes.data.transcodeError
+                ? `视频转码失败：${mediaRes.data.transcodeError}`
+                : '视频转码失败，请联系管理员重试'
+              loading.value = false
+              return
+            }
+            transcoding.value = false
             const mimeType = mediaRes.data.mimeType
             if (mimeType && !VIDEO_MIME_TYPES.includes(mimeType)) {
               playerError.value = true
@@ -1030,6 +1058,39 @@ onBeforeUnmount(() => {
   color: red;
   text-align: center;
   padding: 10px;
+}
+
+.transcode-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: #f1f5f9;
+  background: #0f172a;
+  text-align: center;
+  padding: 24px;
+  gap: 12px;
+}
+
+.transcode-placeholder .loading-icon {
+  font-size: 40px;
+  color: #60a5fa;
+}
+
+.transcode-placeholder .transcode-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.transcode-placeholder .transcode-tip {
+  margin: 0;
+  font-size: 14px;
+  color: #cbd5e1;
+  max-width: 480px;
+  line-height: 1.6;
 }
 
 .video-info {

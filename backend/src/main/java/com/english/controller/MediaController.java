@@ -5,6 +5,7 @@ import com.english.entity.Media;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.service.MediaService;
+import com.english.service.MediaTranscodeService;
 import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,9 @@ public class MediaController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private MediaTranscodeService mediaTranscodeService;
 
     @PostMapping("/upload")
     @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
@@ -108,6 +112,9 @@ public class MediaController {
             dto.put("width", media.getWidth());
             dto.put("height", media.getHeight());
             dto.put("duration", media.getDuration());
+            dto.put("transcodeStatus", media.getTranscodeStatus());
+            dto.put("transcodeError", media.getTranscodeError());
+            dto.put("originalCodec", media.getOriginalCodec());
             return Result.success(dto);
         } catch (Exception e) {
             logger.error("获取失败", e);
@@ -263,6 +270,30 @@ public class MediaController {
             logger.error("删除失败", e);
 
             return Result.error("删除失败，请稍后重试");
+        }
+    }
+
+    @PostMapping("/{mediaId}/retry-transcode")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public Result<String> retryTranscode(@PathVariable Long mediaId) {
+        try {
+            Media media = mediaService.getMediaById(mediaId);
+            if (media == null) {
+                return Result.error("媒体不存在");
+            }
+            if (!"VIDEO".equals(media.getMediaType())) {
+                return Result.error("仅视频支持重试转码");
+            }
+            if ("PROCESSING".equals(media.getTranscodeStatus())) {
+                return Result.error("当前正在转码中");
+            }
+            mediaTranscodeService.retry(mediaId);
+            return Result.success("已重新加入转码队列");
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("重试转码失败 mediaId={}", mediaId, e);
+            return Result.error("重试失败，请稍后重试");
         }
     }
 }

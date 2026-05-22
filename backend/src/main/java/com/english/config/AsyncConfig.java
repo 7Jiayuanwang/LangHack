@@ -39,6 +39,15 @@ public class AsyncConfig {
     @Value("${async.version-generator.queue-capacity:200}")
     private int queueCapacity;
 
+    @Value("${media.transcode.max-concurrent:1}")
+    private int transcodeMaxConcurrent;
+
+    @Value("${media.transcode.queue-capacity:50}")
+    private int transcodeQueueCapacity;
+
+    @Value("${media.transcode.timeout-minutes:30}")
+    private int transcodeTimeoutMinutes;
+
     /**
      * Thread pool executor for version generation tasks
      *
@@ -73,6 +82,22 @@ public class AsyncConfig {
         executor.initialize();
         log.info("Version generator thread pool initialized: core={}, max={}, queue={}",
                 corePoolSize, maxPoolSize, queueCapacity);
+        return executor;
+    }
+
+    @Bean(name = "transcodeExecutor")
+    public Executor transcodeExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(transcodeMaxConcurrent);
+        executor.setMaxPoolSize(transcodeMaxConcurrent);
+        executor.setQueueCapacity(transcodeQueueCapacity);
+        executor.setThreadNamePrefix("transcode-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(transcodeTimeoutMinutes * 60 + 10);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        log.info("Transcode thread pool initialized: concurrent={}, queue={}, awaitSec={}",
+                transcodeMaxConcurrent, transcodeQueueCapacity, transcodeTimeoutMinutes * 60 + 10);
         return executor;
     }
 
