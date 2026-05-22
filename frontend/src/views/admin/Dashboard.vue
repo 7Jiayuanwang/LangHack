@@ -110,6 +110,30 @@
       </el-col>
     </el-row>
 
+    <!-- 日期筛选工具栏 -->
+    <div class="date-filter-bar mt-32">
+      <div class="quick-btns">
+        <button
+          v-for="preset in datePresets"
+          :key="preset.label"
+          class="preset-btn"
+          :class="{ active: activePreset === preset.label }"
+          @click="applyPreset(preset)"
+        >{{ preset.label }}</button>
+      </div>
+      <el-date-picker
+        v-model="customRange"
+        type="daterange"
+        range-separator="至"
+        start-placeholder="开始日期"
+        end-placeholder="结束日期"
+        value-format="YYYY-MM-DD"
+        :clearable="false"
+        size="small"
+        @change="onCustomRangeChange"
+      />
+    </div>
+
     <!-- 用户活跃度 -->
     <el-row :gutter="24" class="mt-32">
       <el-col :span="24">
@@ -231,6 +255,35 @@ import {
 use([CanvasRenderer, LineChart, BarChart, PieChart,
   GridComponent, TooltipComponent, LegendComponent, TitleComponent])
 
+const today = new Date()
+const fmt = (d) => d.toISOString().slice(0, 10)
+const daysAgo = (n) => { const d = new Date(today); d.setDate(d.getDate() - n); return d }
+
+const datePresets = [
+  { label: '最近7天',  days: 6 },
+  { label: '最近30天', days: 29 },
+  { label: '最近90天', days: 89 }
+]
+const activePreset = ref('最近30天')
+const dateRange = reactive({ startDate: fmt(daysAgo(29)), endDate: fmt(today) })
+const customRange = ref([dateRange.startDate, dateRange.endDate])
+
+const applyPreset = (preset) => {
+  activePreset.value = preset.label
+  dateRange.startDate = fmt(daysAgo(preset.days))
+  dateRange.endDate = fmt(today)
+  customRange.value = [dateRange.startDate, dateRange.endDate]
+  loadMetrics()
+}
+
+const onCustomRangeChange = (val) => {
+  if (!val) return
+  activePreset.value = ''
+  dateRange.startDate = val[0]
+  dateRange.endDate = val[1]
+  loadMetrics()
+}
+
 const stats = reactive({
   totalUsers: 0,
   totalCourses: 0,
@@ -301,12 +354,21 @@ const loadDashboardData = async () => {
 }
 
 const loadMetrics = async () => {
+  // 重置图表，触发 loading 状态，避免旧数据残留
+  dauChartOption.value = null
+  learningPieOption.value = null
+  learningBarOption.value = null
+  aiLineOption.value = null
+  aiPieOption.value = null
+  recLineOption.value = null
+
   // 并行加载4个指标
+  const params = { startDate: dateRange.startDate, endDate: dateRange.endDate }
   const [actRes, learnRes, aiRes, recRes] = await Promise.allSettled([
-    getUserActivityMetrics(),
-    getLearningBehaviorMetrics(),
-    getAiUsageMetrics(),
-    getRecommendationMetrics()
+    getUserActivityMetrics(params),
+    getLearningBehaviorMetrics(params),
+    getAiUsageMetrics(params),
+    getRecommendationMetrics(params)
   ])
 
   // 用户活跃度
@@ -658,14 +720,50 @@ onMounted(() => {
   .dashboard-container {
     padding: 16px;
   }
-  
+
   .modern-stat-card {
     height: 140px;
     padding: 20px;
   }
-  
+
   .modern-stat-card .value {
     font-size: 28px;
   }
+}
+
+.date-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quick-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  padding: 6px 16px;
+  border-radius: 100px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+}
+
+.preset-btn.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: white;
 }
 </style>

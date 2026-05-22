@@ -12,13 +12,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -49,26 +52,27 @@ public class AdminMetricsController {
     // ── 用户活跃度 ──────────────────────────────────────────────────────────────
 
     @GetMapping("/user-activity")
-    @Cacheable(value = "metrics", key = "'user-activity'", unless = "#result == null")
-    public Result<Map<String, Object>> getUserActivity() {
+    @Cacheable(value = "metrics", key = "'user-activity-' + (#startDate == null ? 'null' : #startDate.toString()) + '-' + (#endDate == null ? 'null' : #endDate.toString())", unless = "#result == null")
+    public Result<Map<String, Object>> getUserActivity(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         try {
             LocalDateTime now = LocalDateTime.now();
+            LocalDate end = endDate != null ? endDate : now.toLocalDate();
+            LocalDate start = startDate != null ? startDate : end.minusDays(29);
+            LocalDateTime startDt = start.atStartOfDay();
+            LocalDateTime endDt = end.atTime(LocalTime.MAX);
+
             LocalDateTime todayStart = now.toLocalDate().atStartOfDay();
             LocalDateTime monthStart = now.toLocalDate().withDayOfMonth(1).atStartOfDay();
 
             long totalUsers = userMapper.selectCount(
                     new QueryWrapper<com.english.entity.User>().eq("deleted", 0));
-
             long totalClasses = classMapper.selectCount(null);
-
-            // DAU: 今日有学习记录的不重复用户数
             long dau = countDistinctStudents(todayStart, now);
-
-            // MAU: 本月有学习记录的不重复用户数
             long mau = countDistinctStudents(monthStart, now);
 
-            // 最近30天 DAU 趋势
-            List<Map<String, Object>> dauTrend = buildDauTrend(30);
+            List<Map<String, Object>> dauTrend = buildDauTrend(startDt, endDt);
 
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("totalUsers", totalUsers);
@@ -86,19 +90,27 @@ public class AdminMetricsController {
     // ── 学习行为 ──────────────────────────────────────────────────────────────
 
     @GetMapping("/learning-behavior")
-    @Cacheable(value = "metrics", key = "'learning-behavior'", unless = "#result == null")
-    public Result<Map<String, Object>> getLearningBehavior() {
+    @Cacheable(value = "metrics", key = "'learning-behavior-' + (#startDate == null ? 'null' : #startDate.toString()) + '-' + (#endDate == null ? 'null' : #endDate.toString())", unless = "#result == null")
+    public Result<Map<String, Object>> getLearningBehavior(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         try {
-            long totalRecords = learningRecordMapper.selectCount(null);
+            LocalDate end = endDate != null ? endDate : LocalDate.now();
+            LocalDate start = startDate != null ? startDate : end.minusDays(29);
+            LocalDateTime startDt = start.atStartOfDay();
+            LocalDateTime endDt = end.atTime(LocalTime.MAX);
 
-            // 记录类型分布（1条 GROUP BY 查询）
-            List<Map<String, Object>> typeDistribution = buildRecordTypeDistribution();
+            long totalRecords = learningRecordMapper.selectCount(
+                    new QueryWrapper<com.english.entity.LearningRecord>()
+                            .ge("created_time", startDt).le("created_time", endDt));
 
-            // totalReads 直接从分布结果取，不再单独查库
+            List<Map<String, Object>> typeDistribution = buildRecordTypeDistribution(startDt, endDt);
+
             long totalReads = typeDistribution.stream()
                     .filter(m -> "TEXT_VIEW".equals(m.get("type")))
                     .mapToLong(m -> toLong(m.get("count")))
                     .findFirst().orElse(0L);
+
             List<Text> hotTexts = textMapper.selectList(
                     new QueryWrapper<Text>()
                             .eq("deleted", 0)
@@ -112,8 +124,7 @@ public class AdminMetricsController {
                 return item;
             }).collect(Collectors.toList());
 
-            // 最近30天每日学习记录趋势
-            List<Map<String, Object>> dailyTrend = buildLearningDailyTrend(30);
+            List<Map<String, Object>> dailyTrend = buildLearningDailyTrend(startDt, endDt);
 
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("totalReads", totalReads);
@@ -131,20 +142,25 @@ public class AdminMetricsController {
     // ── AI 调用统计 ──────────────────────────────────────────────────────────
 
     @GetMapping("/ai-usage")
-    @Cacheable(value = "metrics", key = "'ai-usage'", unless = "#result == null")
-    public Result<Map<String, Object>> getAiUsage() {
+    @Cacheable(value = "metrics", key = "'ai-usage-' + (#startDate == null ? 'null' : #startDate.toString()) + '-' + (#endDate == null ? 'null' : #endDate.toString())", unless = "#result == null")
+    public Result<Map<String, Object>> getAiUsage(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         try {
             LocalDateTime now = LocalDateTime.now();
+            LocalDate end = endDate != null ? endDate : now.toLocalDate();
+            LocalDate start = startDate != null ? startDate : end.minusDays(29);
+            LocalDateTime startDt = start.atStartOfDay();
+            LocalDateTime endDt = end.atTime(LocalTime.MAX);
             LocalDateTime todayStart = now.toLocalDate().atStartOfDay();
-            LocalDateTime thirtyDaysAgo = now.minusDays(30);
 
             // 今日统计
             List<Map<String, Object>> todayStats = aiCallLogMapper.getRealtimeStats(todayStart);
             long todayCalls = todayStats.stream()
                     .mapToLong(m -> toLong(m.get("total_calls"))).sum();
 
-            // 全量统计（最近30天）
-            List<Map<String, Object>> allStats = aiCallLogMapper.aggregateDaily(thirtyDaysAgo, now);
+            // 指定范围统计
+            List<Map<String, Object>> allStats = aiCallLogMapper.aggregateDaily(startDt, endDt);
 
             long totalCalls = allStats.stream()
                     .mapToLong(m -> toLong(m.get("total_calls"))).sum();
@@ -158,7 +174,7 @@ public class AdminMetricsController {
                     .sum();
             long avgResponseMs = totalCalls > 0 ? totalResponseTime / totalCalls : 0;
 
-            // 服务类型分布（最近30天）
+            // 服务类型分布
             Map<String, Long> serviceMap = new LinkedHashMap<>();
             for (Map<String, Object> row : allStats) {
                 String service = String.valueOf(row.getOrDefault("service_name", "UNKNOWN"));
@@ -172,10 +188,10 @@ public class AdminMetricsController {
                         return item;
                     }).collect(Collectors.toList());
 
-            // 每日趋势（最近30天，按日期聚合）
+            // 每日趋势（按日期范围填充）
             Map<String, Long> dailyMap = new LinkedHashMap<>();
-            for (int i = 29; i >= 0; i--) {
-                dailyMap.put(now.minusDays(i).toLocalDate().format(DATE_FMT), 0L);
+            for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
+                dailyMap.put(d.format(DATE_FMT), 0L);
             }
             for (Map<String, Object> row : allStats) {
                 String date = String.valueOf(row.getOrDefault("stat_date", ""));
@@ -208,24 +224,33 @@ public class AdminMetricsController {
     // ── 推荐效果 ──────────────────────────────────────────────────────────────
 
     @GetMapping("/recommendation-effectiveness")
-    @Cacheable(value = "metrics", key = "'recommendation-effectiveness'", unless = "#result == null")
-    public Result<Map<String, Object>> getRecommendationEffectiveness() {
+    @Cacheable(value = "metrics", key = "'recommendation-effectiveness-' + (#startDate == null ? 'null' : #startDate.toString()) + '-' + (#endDate == null ? 'null' : #endDate.toString())", unless = "#result == null")
+    public Result<Map<String, Object>> getRecommendationEffectiveness(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         try {
+            LocalDate end = endDate != null ? endDate : LocalDate.now();
+            LocalDate start = startDate != null ? startDate : end.minusDays(29);
+            LocalDateTime startDt = start.atStartOfDay();
+            LocalDateTime endDt = end.atTime(LocalTime.MAX);
+
             long totalViews = learningRecordMapper.selectCount(
                     new QueryWrapper<com.english.entity.LearningRecord>()
-                            .eq("record_type", "RECOMMENDATION_VIEW"));
+                            .eq("record_type", "RECOMMENDATION_VIEW")
+                            .ge("created_time", startDt).le("created_time", endDt));
             long totalClicks = learningRecordMapper.selectCount(
                     new QueryWrapper<com.english.entity.LearningRecord>()
-                            .eq("record_type", "RECOMMENDATION_CLICK"));
+                            .eq("record_type", "RECOMMENDATION_CLICK")
+                            .ge("created_time", startDt).le("created_time", endDt));
             long totalRefreshes = learningRecordMapper.selectCount(
                     new QueryWrapper<com.english.entity.LearningRecord>()
-                            .eq("record_type", "RECOMMENDATION_REFRESH"));
+                            .eq("record_type", "RECOMMENDATION_REFRESH")
+                            .ge("created_time", startDt).le("created_time", endDt));
 
             double clickRate = totalViews > 0
                     ? Math.round(totalClicks * 1000.0 / totalViews) / 1000.0 : 0.0;
 
-            // 最近30天每日点击率趋势
-            List<Map<String, Object>> dailyTrend = buildRecommendationDailyTrend(30);
+            List<Map<String, Object>> dailyTrend = buildRecommendationDailyTrend(startDt, endDt);
 
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("totalViews", totalViews);
@@ -254,12 +279,10 @@ public class AdminMetricsController {
         return 0L;
     }
 
-    // 1条 GROUP BY 替代 30 次循环查询
-    private List<Map<String, Object>> buildDauTrend(int days) {
-        LocalDateTime start = LocalDateTime.now().minusDays(days - 1).toLocalDate().atStartOfDay();
+    private List<Map<String, Object>> buildDauTrend(LocalDateTime startDt, LocalDateTime endDt) {
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
         qw.select("DATE(created_time) AS stat_date, COUNT(DISTINCT student_id) AS cnt")
-                .ge("created_time", start)
+                .ge("created_time", startDt).le("created_time", endDt)
                 .groupBy("DATE(created_time)");
         List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
         Map<String, Long> byDate = new HashMap<>();
@@ -267,9 +290,8 @@ public class AdminMetricsController {
             byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("cnt")));
         }
         List<Map<String, Object>> trend = new ArrayList<>();
-        LocalDate today = LocalDate.now();
-        for (int i = days - 1; i >= 0; i--) {
-            String date = today.minusDays(i).format(DATE_FMT);
+        for (LocalDate d = startDt.toLocalDate(); !d.isAfter(endDt.toLocalDate()); d = d.plusDays(1)) {
+            String date = d.format(DATE_FMT);
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("date", date);
             item.put("count", byDate.getOrDefault(date, 0L));
@@ -278,12 +300,12 @@ public class AdminMetricsController {
         return trend;
     }
 
-    // 1条 GROUP BY 替代 8 次 SELECT COUNT
-    private List<Map<String, Object>> buildRecordTypeDistribution() {
+    private List<Map<String, Object>> buildRecordTypeDistribution(LocalDateTime startDt, LocalDateTime endDt) {
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
         qw.select("record_type AS type, COUNT(*) AS cnt")
                 .in("record_type", "TEXT_VIEW", "VIEW", "REVIEW", "TEST", "WORD_COMPLETE",
                         "COMPLETE", "RECOMMENDATION_VIEW", "RECOMMENDATION_CLICK", "RECOMMENDATION_REFRESH")
+                .ge("created_time", startDt).le("created_time", endDt)
                 .groupBy("record_type")
                 .orderByDesc("cnt");
         List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
@@ -297,12 +319,10 @@ public class AdminMetricsController {
         return result;
     }
 
-    // 1条 GROUP BY 替代 30 次循环查询
-    private List<Map<String, Object>> buildLearningDailyTrend(int days) {
-        LocalDateTime start = LocalDateTime.now().minusDays(days - 1).toLocalDate().atStartOfDay();
+    private List<Map<String, Object>> buildLearningDailyTrend(LocalDateTime startDt, LocalDateTime endDt) {
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
         qw.select("DATE(created_time) AS stat_date, COUNT(*) AS cnt")
-                .ge("created_time", start)
+                .ge("created_time", startDt).le("created_time", endDt)
                 .groupBy("DATE(created_time)");
         List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
         Map<String, Long> byDate = new HashMap<>();
@@ -310,9 +330,8 @@ public class AdminMetricsController {
             byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("cnt")));
         }
         List<Map<String, Object>> trend = new ArrayList<>();
-        LocalDate today = LocalDate.now();
-        for (int i = days - 1; i >= 0; i--) {
-            String date = today.minusDays(i).format(DATE_FMT);
+        for (LocalDate d = startDt.toLocalDate(); !d.isAfter(endDt.toLocalDate()); d = d.plusDays(1)) {
+            String date = d.format(DATE_FMT);
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("date", date);
             item.put("count", byDate.getOrDefault(date, 0L));
@@ -321,16 +340,13 @@ public class AdminMetricsController {
         return trend;
     }
 
-    // 1条 GROUP BY 替代 30×2 次循环查询
-    private List<Map<String, Object>> buildRecommendationDailyTrend(int days) {
-        LocalDateTime start = LocalDateTime.now().minusDays(days - 1).toLocalDate().atStartOfDay();
+    private List<Map<String, Object>> buildRecommendationDailyTrend(LocalDateTime startDt, LocalDateTime endDt) {
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
         qw.select("DATE(created_time) AS stat_date, record_type, COUNT(*) AS cnt")
                 .in("record_type", "RECOMMENDATION_VIEW", "RECOMMENDATION_CLICK")
-                .ge("created_time", start)
+                .ge("created_time", startDt).le("created_time", endDt)
                 .groupBy("DATE(created_time)", "record_type");
         List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
-        // 按日期聚合 views/clicks
         Map<String, long[]> byDate = new HashMap<>();
         for (Map<String, Object> row : rows) {
             String date = String.valueOf(row.get("stat_date"));
@@ -341,9 +357,8 @@ public class AdminMetricsController {
             else if ("RECOMMENDATION_CLICK".equals(type)) vc[1] += cnt;
         }
         List<Map<String, Object>> trend = new ArrayList<>();
-        LocalDate today = LocalDate.now();
-        for (int i = days - 1; i >= 0; i--) {
-            String date = today.minusDays(i).format(DATE_FMT);
+        for (LocalDate d = startDt.toLocalDate(); !d.isAfter(endDt.toLocalDate()); d = d.plusDays(1)) {
+            String date = d.format(DATE_FMT);
             long[] vc = byDate.getOrDefault(date, new long[2]);
             double clickRate = vc[0] > 0 ? Math.round(vc[1] * 1000.0 / vc[0]) / 1000.0 : 0.0;
             Map<String, Object> item = new LinkedHashMap<>();
