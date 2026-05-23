@@ -49,11 +49,13 @@
       <template #header><span>部署配置</span></template>
       <el-form :model="deployConfig" label-width="120px">
         <el-form-item label="部署分支">
-          <el-select v-model="deployConfig.branch" style="width: 160px">
+          <el-select v-model="deployConfig.branch" style="width: 200px" allow-create filterable>
+            <el-option label="当前分支（默认）" value="" />
             <el-option label="master" value="master" />
             <el-option label="main" value="main" />
             <el-option label="develop" value="develop" />
           </el-select>
+          <span class="form-hint">留空则使用服务器当前所在分支</span>
         </el-form-item>
         <el-form-item label="跳过构建">
           <el-switch v-model="deployConfig.skipBuild" />
@@ -146,7 +148,7 @@ const logs = ref([])
 const logBox = ref(null)
 
 const deployConfig = ref({
-  branch: 'master',
+  branch: '',
   skipBuild: false,
   dryRun: false
 })
@@ -182,9 +184,10 @@ const loadStatus = async () => {
 }
 
 const confirmDeploy = async () => {
+  const branchLabel = deployConfig.value.branch || '当前分支'
   const dryRunNote = deployConfig.value.dryRun ? '（演练模式，不实际执行）' : ''
   await ElMessageBox.confirm(
-    `确认对分支 "${deployConfig.value.branch}" 执行零停机热更新${dryRunNote}？\n\n此操作将重新构建并滚动替换后端服务。`,
+    `确认对分支 "${branchLabel}" 执行零停机热更新${dryRunNote}？\n\n此操作将重新构建并滚动替换后端服务。`,
     '确认部署',
     { type: 'warning', confirmButtonText: '确认部署', cancelButtonText: '取消' }
   )

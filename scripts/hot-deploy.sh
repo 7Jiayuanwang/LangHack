@@ -45,7 +45,7 @@ HEALTH_WAIT_SECS=120
 HEALTH_INTERVAL=3
 
 # ── 参数 ──────────────────────────────────────────────────────────────────────
-BRANCH="master"
+BRANCH="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'master')"
 SKIP_BUILD=false
 DRY_RUN=false
 
@@ -77,7 +77,7 @@ usage() {
 用法: $(basename "$0") [选项]
 
 选项:
-  --branch <branch>   部署分支（默认: master）
+  --branch <branch>   部署分支（默认: 当前所在分支）
   --skip-build        跳过镜像构建（使用现有镜像）
   --dry-run           仅打印操作，不实际执行
   --help, -h          显示帮助
