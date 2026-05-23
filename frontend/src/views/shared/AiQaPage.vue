@@ -42,6 +42,23 @@
           <div class="msg-bubble" :class="msg.role === 'user' ? 'user-bubble' : 'ai-bubble'">
             <div v-if="msg.role === 'user'">{{ msg.content }}</div>
             <div v-else v-html="msg.content"></div>
+            <div v-if="msg.role === 'assistant' && msg.callLogId" class="feedback-row">
+              <button
+                class="feedback-btn"
+                :class="{ active: msg.feedback === true }"
+                :disabled="msg.feedback !== undefined"
+                @click="submitFeedback(msg, true)"
+                title="有帮助"
+              >👍</button>
+              <button
+                class="feedback-btn"
+                :class="{ active: msg.feedback === false }"
+                :disabled="msg.feedback !== undefined"
+                @click="submitFeedback(msg, false)"
+                title="没帮助"
+              >👎</button>
+              <span v-if="msg.feedback !== undefined" class="feedback-thanks">已记录，感谢反馈</span>
+            </div>
           </div>
         </div>
       </template>
@@ -100,6 +117,7 @@ import { ArrowLeft, ArrowRight, Reading, Monitor, Top, ChatLineSquare } from '@e
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
+import { submitAiFeedback } from '@/api/student'
 
 const props = defineProps({
   apiPath: {
@@ -185,7 +203,9 @@ const sendMessage = async () => {
       const htmlResponse = DOMPurify.sanitize(marked(data.data.response))
       messages.value.push({
         role: 'assistant',
-        content: htmlResponse
+        content: htmlResponse,
+        callLogId: data.data.callLogId || null,
+        feedback: undefined
       })
     } else {
       messages.value.push({
@@ -220,6 +240,11 @@ const scrollToBottom = () => {
       container.scrollTop = container.scrollHeight
     }
   })
+}
+
+const submitFeedback = (msg, isHelpful) => {
+  msg.feedback = isHelpful
+  submitAiFeedback({ callLogId: msg.callLogId, isHelpful })
 }
 
 onBeforeUnmount(() => {
@@ -414,6 +439,46 @@ onBeforeUnmount(() => {
   border: 1px solid #f1f5f9;
   border-bottom-left-radius: 4px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+
+.feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.feedback-btn {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1.4;
+}
+
+.feedback-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #6366f1;
+}
+
+.feedback-btn.active {
+  background: #ede9fe;
+  border-color: #6366f1;
+}
+
+.feedback-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.feedback-thanks {
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 .ai-bubble :deep(h1),

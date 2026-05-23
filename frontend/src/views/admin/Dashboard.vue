@@ -109,13 +109,127 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 用户活跃度 -->
+    <el-row :gutter="24" class="mt-32">
+      <el-col :span="24">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header">
+              <span class="title-with-dot">用户活跃度</span>
+              <div class="metric-summary">
+                <span class="metric-badge">今日活跃 <b>{{ activityMetrics.dau }}</b></span>
+                <span class="metric-badge">月活跃 <b>{{ activityMetrics.mau }}</b></span>
+              </div>
+            </div>
+          </template>
+          <v-chart v-if="dauChartOption" :option="dauChartOption" style="height:220px" autoresize />
+          <div v-else class="chart-loading"><el-icon class="is-loading"><Loading /></el-icon> 加载中...</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 学习行为 -->
+    <el-row :gutter="24" class="mt-32">
+      <el-col :xs="24" :lg="12">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header">
+              <span class="title-with-dot">学习记录类型分布</span>
+              <span class="metric-badge">总记录 <b>{{ learningMetrics.totalRecords }}</b></span>
+            </div>
+          </template>
+          <v-chart v-if="learningPieOption" :option="learningPieOption" style="height:240px" autoresize />
+          <div v-else class="chart-loading"><el-icon class="is-loading"><Loading /></el-icon> 加载中...</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :lg="12">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header">
+              <span class="title-with-dot">每日学习趋势</span>
+              <span class="metric-badge">总阅读 <b>{{ learningMetrics.totalReads }}</b></span>
+            </div>
+          </template>
+          <v-chart v-if="learningBarOption" :option="learningBarOption" style="height:240px" autoresize />
+          <div v-else class="chart-loading"><el-icon class="is-loading"><Loading /></el-icon> 加载中...</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- AI 调用统计 -->
+    <el-row :gutter="24" class="mt-32">
+      <el-col :xs="24" :lg="14">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header">
+              <span class="title-with-dot">AI 调用趋势（近30天）</span>
+              <div class="metric-summary">
+                <span class="metric-badge">总调用 <b>{{ aiMetrics.totalCalls }}</b></span>
+                <span class="metric-badge">成功率 <b>{{ (aiMetrics.successRate * 100).toFixed(1) }}%</b></span>
+                <span class="metric-badge">均响应 <b>{{ aiMetrics.avgResponseMs }}ms</b></span>
+              </div>
+            </div>
+          </template>
+          <v-chart v-if="aiLineOption" :option="aiLineOption" style="height:220px" autoresize />
+          <div v-else class="chart-loading"><el-icon class="is-loading"><Loading /></el-icon> 加载中...</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :lg="10">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header">
+              <span class="title-with-dot">AI 服务分布</span>
+              <span class="metric-badge">今日 <b>{{ aiMetrics.todayCalls }}</b></span>
+            </div>
+          </template>
+          <v-chart v-if="aiPieOption" :option="aiPieOption" style="height:220px" autoresize />
+          <div v-else class="chart-loading"><el-icon class="is-loading"><Loading /></el-icon> 加载中...</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 推荐效果 -->
+    <el-row :gutter="24" class="mt-32">
+      <el-col :span="24">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header">
+              <span class="title-with-dot">推荐算法效果</span>
+              <div class="metric-summary">
+                <span class="metric-badge">曝光 <b>{{ recMetrics.totalViews }}</b></span>
+                <span class="metric-badge">点击 <b>{{ recMetrics.totalClicks }}</b></span>
+                <span class="metric-badge">点击率 <b>{{ (recMetrics.clickRate * 100).toFixed(1) }}%</b></span>
+                <span class="metric-badge">换一批 <b>{{ recMetrics.totalRefreshes }}</b></span>
+              </div>
+            </div>
+          </template>
+          <v-chart v-if="recLineOption" :option="recLineOption" style="height:200px" autoresize />
+          <div v-else class="chart-loading"><el-icon class="is-loading"><Loading /></el-icon> 加载中...</div>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { User, Reading, School, Document } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { User, Reading, School, Document, Loading } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart, BarChart, PieChart } from 'echarts/charts'
+import {
+  GridComponent, TooltipComponent, LegendComponent, TitleComponent
+} from 'echarts/components'
+import {
+  getUserActivityMetrics, getLearningBehaviorMetrics,
+  getAiUsageMetrics, getRecommendationMetrics
+} from '@/api/admin'
+
+use([CanvasRenderer, LineChart, BarChart, PieChart,
+  GridComponent, TooltipComponent, LegendComponent, TitleComponent])
 
 const stats = reactive({
   totalUsers: 0,
@@ -124,14 +238,24 @@ const stats = reactive({
   totalWords: 0
 })
 
-// 用户分布统计（初始为0，等待API返回）
-const userStats = reactive({
-  admin: 0,
-  teacher: 0,
-  student: 0
-})
-
+const userStats = reactive({ admin: 0, teacher: 0, student: 0 })
 const recentActivities = ref([])
+
+// 指标数据
+const activityMetrics = reactive({ dau: 0, mau: 0, totalUsers: 0 })
+const learningMetrics = reactive({ totalReads: 0, totalRecords: 0 })
+const aiMetrics = reactive({ totalCalls: 0, todayCalls: 0, successRate: 0, avgResponseMs: 0 })
+const recMetrics = reactive({ totalViews: 0, totalClicks: 0, totalRefreshes: 0, clickRate: 0 })
+
+// ECharts options
+const dauChartOption = ref(null)
+const learningPieOption = ref(null)
+const learningBarOption = ref(null)
+const aiLineOption = ref(null)
+const aiPieOption = ref(null)
+const recLineOption = ref(null)
+
+const CHART_COLORS = ['#6366f1', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
 const calcPercent = (val) => {
   if (!stats.totalUsers) return 0
@@ -156,8 +280,133 @@ const loadDashboardData = async () => {
   }
 }
 
+const loadMetrics = async () => {
+  // 并行加载4个指标
+  const [actRes, learnRes, aiRes, recRes] = await Promise.allSettled([
+    getUserActivityMetrics(),
+    getLearningBehaviorMetrics(),
+    getAiUsageMetrics(),
+    getRecommendationMetrics()
+  ])
+
+  // 用户活跃度
+  if (actRes.status === 'fulfilled' && actRes.value?.code === 200) {
+    const d = actRes.value.data
+    activityMetrics.dau = d.dau || 0
+    activityMetrics.mau = d.mau || 0
+    activityMetrics.totalUsers = d.totalUsers || 0
+    const trend = d.dauTrend || []
+    dauChartOption.value = {
+      tooltip: { trigger: 'axis' },
+      grid: { left: 40, right: 20, top: 20, bottom: 30 },
+      xAxis: { type: 'category', data: trend.map(t => t.date.slice(5)), axisLabel: { fontSize: 11 } },
+      yAxis: { type: 'value', minInterval: 1 },
+      series: [{
+        name: '日活用户', type: 'line', smooth: true,
+        data: trend.map(t => t.count),
+        areaStyle: { color: 'rgba(99,102,241,0.12)' },
+        lineStyle: { color: '#6366f1', width: 2 },
+        itemStyle: { color: '#6366f1' }
+      }]
+    }
+  }
+
+  // 学习行为
+  if (learnRes.status === 'fulfilled' && learnRes.value?.code === 200) {
+    const d = learnRes.value.data
+    learningMetrics.totalReads = d.totalReads || 0
+    learningMetrics.totalRecords = d.totalRecords || 0
+    const dist = d.recordTypeDistribution || []
+    learningPieOption.value = {
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      legend: { bottom: 0, type: 'scroll', textStyle: { fontSize: 11 } },
+      series: [{
+        type: 'pie', radius: ['40%', '70%'], center: ['50%', '45%'],
+        data: dist.map((item, i) => ({
+          name: item.type, value: item.count,
+          itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
+        }))
+      }]
+    }
+    const daily = d.dailyTrend || []
+    learningBarOption.value = {
+      tooltip: { trigger: 'axis' },
+      grid: { left: 40, right: 20, top: 20, bottom: 30 },
+      xAxis: { type: 'category', data: daily.map(t => t.date.slice(5)), axisLabel: { fontSize: 11 } },
+      yAxis: { type: 'value', minInterval: 1 },
+      series: [{
+        name: '学习记录', type: 'bar', barMaxWidth: 20,
+        data: daily.map(t => t.count),
+        itemStyle: { color: '#06b6d4', borderRadius: [4, 4, 0, 0] }
+      }]
+    }
+  }
+
+  // AI 调用
+  if (aiRes.status === 'fulfilled' && aiRes.value?.code === 200) {
+    const d = aiRes.value.data
+    aiMetrics.totalCalls = d.totalCalls || 0
+    aiMetrics.todayCalls = d.todayCalls || 0
+    aiMetrics.successRate = d.successRate || 0
+    aiMetrics.avgResponseMs = d.avgResponseMs || 0
+    const daily = d.dailyTrend || []
+    aiLineOption.value = {
+      tooltip: { trigger: 'axis' },
+      grid: { left: 40, right: 20, top: 20, bottom: 30 },
+      xAxis: { type: 'category', data: daily.map(t => t.date.slice(5)), axisLabel: { fontSize: 11 } },
+      yAxis: { type: 'value', minInterval: 1 },
+      series: [{
+        name: 'AI调用', type: 'line', smooth: true,
+        data: daily.map(t => t.count),
+        areaStyle: { color: 'rgba(236,72,153,0.1)' },
+        lineStyle: { color: '#ec4899', width: 2 },
+        itemStyle: { color: '#ec4899' }
+      }]
+    }
+    const svc = d.serviceDistribution || []
+    aiPieOption.value = {
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      legend: { bottom: 0, type: 'scroll', textStyle: { fontSize: 11 } },
+      series: [{
+        type: 'pie', radius: ['35%', '65%'], center: ['50%', '45%'],
+        data: svc.map((item, i) => ({
+          name: item.service, value: item.count,
+          itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
+        }))
+      }]
+    }
+  }
+
+  // 推荐效果
+  if (recRes.status === 'fulfilled' && recRes.value?.code === 200) {
+    const d = recRes.value.data
+    recMetrics.totalViews = d.totalViews || 0
+    recMetrics.totalClicks = d.totalClicks || 0
+    recMetrics.totalRefreshes = d.totalRefreshes || 0
+    recMetrics.clickRate = d.clickRate || 0
+    const daily = d.dailyTrend || []
+    recLineOption.value = {
+      tooltip: { trigger: 'axis', formatter: (params) => {
+        const p = params[0]
+        return `${p.name}<br/>点击率: ${(p.value * 100).toFixed(1)}%`
+      }},
+      grid: { left: 50, right: 20, top: 20, bottom: 30 },
+      xAxis: { type: 'category', data: daily.map(t => t.date.slice(5)), axisLabel: { fontSize: 11 } },
+      yAxis: { type: 'value', min: 0, max: 1, axisLabel: { formatter: v => (v * 100).toFixed(0) + '%' } },
+      series: [{
+        name: '点击率', type: 'line', smooth: true,
+        data: daily.map(t => t.clickRate),
+        areaStyle: { color: 'rgba(16,185,129,0.1)' },
+        lineStyle: { color: '#10b981', width: 2 },
+        itemStyle: { color: '#10b981' }
+      }]
+    }
+  }
+}
+
 onMounted(() => {
   loadDashboardData()
+  loadMetrics()
 })
 </script>
 
@@ -315,6 +564,43 @@ onMounted(() => {
 }
 
 .mt-32 { margin-top: 32px; }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metric-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metric-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.metric-badge b {
+  color: #1e293b;
+  font-weight: 700;
+}
+
+.chart-loading {
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  gap: 8px;
+  font-size: 14px;
+}
 
 /* PC端大字号适配 */
 @media (min-width: 1200px) {

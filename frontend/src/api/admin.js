@@ -320,3 +320,25 @@ export function getPublicContentTags() {
     method: 'get'
   })
 }
+
+// ========== 数据指标 ==========
+
+export function getUserActivityMetrics() {
+  return request({ url: '/api/admin/metrics/user-activity', method: 'get' })
+}
+
+export function getLearningBehaviorMetrics() {
+  return request({ url: '/api/admin/metrics/learning-behavior', method: 'get' })
+}
+
+export function getAiUsageMetrics() {
+  return request({ url: '/api/admin/metrics/ai-usage', method: 'get' })
+}
+
+export function getRecommendationMetrics() {
+  return request({ url: '/api/admin/metrics/recommendation-effectiveness', method: 'get' })
+}
+
+export function getAiFeedbackSummary() {
+  return request({ url: '/api/admin/metrics/ai-feedback-summary', method: 'get' })
+}

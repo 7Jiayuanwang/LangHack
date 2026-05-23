@@ -175,7 +175,7 @@
       class="fab-refresh"
       :class="{ 'is-loading': loading }"
       :disabled="loading"
-      @click="loadRecommended"
+      @click="() => { recordRecommendationEvent('RECOMMENDATION_REFRESH', null); loadRecommended() }"
       title="换一批推荐"
     >
       <el-icon :size="22"><Refresh /></el-icon>
@@ -196,6 +196,7 @@ import {
 import { getAuthHeader } from '@/utils/auth'
 import { getFeaturedVideos } from '@/api/video'
 import { getRecommendedTexts } from '@/api/texts'
+import { recordRecommendationEvent } from '@/api/student'
 
 const router = useRouter()
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
@@ -346,6 +347,8 @@ const loadRecommended = async ({ resetExclusions = false } = {}) => {
           shownRecommendedIds.value.push(t.id)
         }
       })
+      // 推荐曝光埋点
+      if (list.length > 0) recordRecommendationEvent('RECOMMENDATION_VIEW', null)
     } else {
       loadError.value = true
     }
@@ -426,6 +429,10 @@ const handleItemClick = (item) => {
   if (!item?.id) {
     console.warn('readArticle: 文章ID不存在', item)
     return
+  }
+  // 推荐点击埋点
+  if (selectedCategory.value === 'recommendation') {
+    recordRecommendationEvent('RECOMMENDATION_CLICK', item.id)
   }
   // 验证 ID 是否为有效数字
   const numericId = typeof item.id === 'number' ? item.id : parseInt(item.id, 10)
