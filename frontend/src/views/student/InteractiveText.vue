@@ -364,9 +364,68 @@
       :underline-label="selectionUnderlineLabel"
       @copy="handleCopy"
       @underline="handleUnderline"
-      @share="handleShare"
+      @annotate="handleAnnotate"
       @ai-qa="handleAiQa"
     />
+
+    <!-- 批注输入弹窗 -->
+    <el-dialog v-model="showAnnotationDialog" title="添加批注" width="min(480px, 92vw)" align-center>
+      <div class="annotation-dialog-body">
+        <div class="ann-selected-text">
+          <span class="ann-quote-mark">"</span>{{ annotationSelectedText }}<span class="ann-quote-mark">"</span>
+        </div>
+        <el-input
+          v-model="annotationNote"
+          type="textarea"
+          :rows="4"
+          placeholder="写下你的批注..."
+          maxlength="500"
+          show-word-limit
+        />
+      </div>
+      <template #footer>
+        <el-button @click="showAnnotationDialog = false">取消</el-button>
+        <el-button type="primary" :loading="submittingAnnotation" @click="submitAnnotation">发布批注</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批注侧边栏 -->
+    <div class="annotation-sidebar" :class="{ open: showAnnotationSidebar }">
+      <div class="ann-sidebar-header">
+        <span class="ann-sidebar-title">批注 ({{ annotations.length }})</span>
+        <el-button text @click="showAnnotationSidebar = false">
+          <el-icon><Close /></el-icon>
+        </el-button>
+      </div>
+      <div class="ann-sidebar-body">
+        <div v-if="annotations.length === 0" class="ann-empty">
+          暂无批注，选中文本后点击"批注"添加
+        </div>
+        <div v-for="ann in annotations" :key="ann.id" class="ann-card">
+          <div class="ann-card-quote">"{{ ann.selectedText }}"</div>
+          <div class="ann-card-note">{{ ann.note }}</div>
+          <div class="ann-card-footer">
+            <span class="ann-author">{{ ann.username }}</span>
+            <div class="ann-actions">
+              <button class="ann-upvote-btn" :class="{ active: ann.upvotedByMe }" @click="handleUpvote(ann)">
+                👍 {{ ann.upvoteCount }}
+              </button>
+              <button v-if="ann.isMine" class="ann-delete-btn" @click="handleDeleteAnnotation(ann)">删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批注侧边栏触发按钮 -->
+    <button
+      v-if="!showAnnotationSidebar && annotations.length > 0"
+      class="ann-fab"
+      @click="showAnnotationSidebar = true"
+      :title="`查看 ${annotations.length} 条批注`"
+    >
+      💬 {{ annotations.length }}
+    </button>
   </div>
 </template>
 
@@ -374,7 +433,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit } from '@element-plus/icons-vue'
+import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close } from '@element-plus/icons-vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
@@ -397,6 +456,7 @@ renderer.image = function({ href, title, text }) {
 }
 marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
+import { getAnnotations, createAnnotation, deleteAnnotation, toggleUpvote } from '@/api/annotation'
 import { getArticlesPath } from '@/config/site'
 import rangy from '@/utils/rangy'
 
@@ -517,6 +577,14 @@ const showSelectionMenu = ref(false)
 const selectionPosition = reactive({ x: 0, y: 0 })
 const selectedTextContent = ref('')
 const sharedUnderlines = ref([])
+
+// 协作批注
+const annotations = ref([])
+const showAnnotationSidebar = ref(false)
+const showAnnotationDialog = ref(false)
+const annotationNote = ref('')
+const annotationSelectedText = ref('')
+const submittingAnnotation = ref(false)
 
 /**
  * 判断当前选区文本是否已完全被某条划线记录覆盖。
@@ -1552,6 +1620,7 @@ const handleScroll = () => {
 // 生命周期
 onMounted(async () => {
   await loadTextDetail()
+  loadAnnotations()
   // 添加页面可见性变化监听
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // 添加滚动监听
@@ -1889,6 +1958,71 @@ const handleUnderline = async () => {
 
 const handleShare = () => {
   ElMessage.info('分享功能即将上线')
+}
+
+const loadAnnotations = async () => {
+  if (!textId.value) return
+  try {
+    const res = await getAnnotations(textId.value)
+    if (res?.code === 200) annotations.value = res.data || []
+  } catch (e) {
+    console.error('Failed to load annotations', e)
+  }
+}
+
+const handleAnnotate = () => {
+  if (!selectedTextContent.value?.trim()) return
+  annotationSelectedText.value = selectedTextContent.value.trim()
+  annotationNote.value = ''
+  showAnnotationDialog.value = true
+  showSelectionMenu.value = false
+}
+
+const submitAnnotation = async () => {
+  if (!annotationNote.value.trim()) {
+    ElMessage.warning('请输入批注内容')
+    return
+  }
+  submittingAnnotation.value = true
+  try {
+    const res = await createAnnotation({
+      textId: textId.value,
+      selectedText: annotationSelectedText.value,
+      note: annotationNote.value.trim()
+    })
+    if (res?.code === 200) {
+      annotations.value.unshift(res.data)
+      showAnnotationDialog.value = false
+      showAnnotationSidebar.value = true
+      ElMessage.success('批注已添加')
+    }
+  } catch (e) {
+    ElMessage.error('添加批注失败')
+  } finally {
+    submittingAnnotation.value = false
+  }
+}
+
+const handleDeleteAnnotation = async (ann) => {
+  try {
+    await deleteAnnotation(ann.id)
+    annotations.value = annotations.value.filter(a => a.id !== ann.id)
+    ElMessage.success('已删除')
+  } catch (e) {
+    ElMessage.error('删除失败')
+  }
+}
+
+const handleUpvote = async (ann) => {
+  try {
+    const res = await toggleUpvote(ann.id)
+    if (res?.code === 200) {
+      ann.upvoteCount = res.data.upvoteCount
+      ann.upvotedByMe = !ann.upvotedByMe
+    }
+  } catch (e) {
+    ElMessage.error('操作失败')
+  }
 }
 
 const handleAiQa = () => {
@@ -3278,4 +3412,115 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     max-width: 230px !important;
   }
 }
+
+/* ── 协作批注 ── */
+.annotation-sidebar {
+  position: fixed;
+  top: 0;
+  right: -340px;
+  width: 320px;
+  height: 100vh;
+  background: #fff;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.12);
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  transition: right 0.3s ease;
+}
+.annotation-sidebar.open { right: 0; }
+
+.ann-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.ann-sidebar-title { font-weight: 700; font-size: 15px; color: #1e293b; }
+
+.ann-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ann-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 32px 0; }
+
+.ann-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+}
+.ann-card-quote {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin-bottom: 6px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ann-card-note { font-size: 14px; color: #1e293b; line-height: 1.6; margin-bottom: 8px; }
+.ann-card-footer { display: flex; align-items: center; justify-content: space-between; }
+.ann-author { font-size: 12px; color: #94a3b8; }
+.ann-actions { display: flex; gap: 8px; align-items: center; }
+.ann-upvote-btn {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.15s;
+}
+.ann-upvote-btn.active { border-color: #197fe6; color: #197fe6; background: #eff6ff; }
+.ann-upvote-btn:hover { border-color: #197fe6; color: #197fe6; }
+.ann-delete-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.ann-fab {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  background: #197fe6;
+  color: white;
+  border: none;
+  border-radius: 24px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(25,127,230,0.4);
+  z-index: 1400;
+  transition: transform 0.15s;
+}
+.ann-fab:hover { transform: scale(1.05); }
+
+.annotation-dialog-body { display: flex; flex-direction: column; gap: 12px; }
+.ann-selected-text {
+  background: #f8fafc;
+  border-left: 3px solid #197fe6;
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  color: #475569;
+  font-style: italic;
+  line-height: 1.5;
+  max-height: 80px;
+  overflow-y: auto;
+}
+.ann-quote-mark { color: #197fe6; font-size: 16px; font-style: normal; }
 </style>

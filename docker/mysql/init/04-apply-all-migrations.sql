@@ -3004,3 +3004,34 @@ CREATE TABLE IF NOT EXISTS conversation_shares (
     FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
+
+-- ═══════════════════════════════════════════════════════════════
+-- V28: 协作式互动阅读 — 公共批注 + 点赞
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS text_annotations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    text_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    selected_text TEXT NOT NULL,
+    note TEXT NOT NULL,
+    upvote_count INT DEFAULT 0,
+    deleted TINYINT DEFAULT 0,
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_text_id (text_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_text_deleted (text_id, deleted),
+    CONSTRAINT fk_ann_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ann_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS annotation_upvotes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    annotation_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_ann_user (annotation_id, user_id),
+    CONSTRAINT fk_upvote_ann FOREIGN KEY (annotation_id) REFERENCES text_annotations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_upvote_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

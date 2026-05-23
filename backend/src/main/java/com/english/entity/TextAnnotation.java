@@ -1,0 +1,27 @@
+package com.english.entity;
+
+import com.baomidou.mybatisplus.annotation.*;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@TableName("text_annotations")
+public class TextAnnotation {
+    @TableId(type = IdType.AUTO)
+    private Long id;
+    private Long textId;
+    private Long userId;
+    private String selectedText;
+    private String note;
+    private Integer upvoteCount;
+    @TableLogic
+    private Integer deleted;
+    private LocalDateTime createdTime;
+    private LocalDateTime updatedTime;
+
+    // transient — populated by service, not stored in DB
+    @TableField(exist = false)
+    private String username;
+    @TableField(exist = false)
+    private Boolean upvotedByMe;
+}
