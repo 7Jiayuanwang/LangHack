@@ -1110,50 +1110,6 @@ onMounted(() => {
 }
 
 /* --- FAB: 换一批推荐 --- */
-.fab-refresh {
-  position: fixed;
-  right: 20px;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  z-index: 60;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: none;
-  background: linear-gradient(135deg, #1d4ed8 0%, #137fec 100%);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 8px 24px rgba(29, 78, 216, 0.35), 0 2px 6px rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-.fab-refresh:hover:not(:disabled) {
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 12px 32px rgba(29, 78, 216, 0.45), 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
-.fab-refresh:active:not(:disabled) {
-  transform: scale(0.94);
-}
-
-.fab-refresh:disabled {
-  cursor: wait;
-  opacity: 0.85;
-}
-
-.fab-refresh.is-loading .el-icon {
-  animation: fab-spin 0.9s linear infinite;
-}
-
-@keyframes fab-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 @media (min-width: 768px) {
   .fab-refresh {
     right: 32px;
