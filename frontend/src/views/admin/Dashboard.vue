@@ -46,6 +46,70 @@
       </div>
     </div>
 
+    <!-- 四六级成绩对比卡片 -->
+    <el-row :gutter="24" class="mt-32">
+      <el-col :span="24">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+              <span class="title-with-dot">四六级成绩对比分析</span>
+              <el-button size="small" text @click="$router.push('/admin/cet-analysis')">
+                详细分析 →
+              </el-button>
+            </div>
+          </template>
+          <div v-if="cetLoading" style="text-align:center;padding:40px">
+            <el-icon class="is-loading"><Loading /></el-icon>
+          </div>
+          <div v-else-if="cetData" class="cet-comparison">
+            <div class="cet-summary">
+              <div class="cet-stat-item highlight">
+                <div class="cet-stat-value">+{{ cetData.improvement }}%</div>
+                <div class="cet-stat-label">通过率提升</div>
+              </div>
+              <div class="cet-stat-item">
+                <div class="cet-stat-value">{{ cetData.totalScoreRecords }}</div>
+                <div class="cet-stat-label">成绩记录总数</div>
+              </div>
+              <div class="cet-stat-item">
+                <div class="cet-stat-value">{{ cetData.used?.totalStudents || 0 }}</div>
+                <div class="cet-stat-label">使用平台学生</div>
+              </div>
+              <div class="cet-stat-item">
+                <div class="cet-stat-value">{{ cetData.unused?.totalStudents || 0 }}</div>
+                <div class="cet-stat-label">未使用平台学生</div>
+              </div>
+            </div>
+            <div class="cet-bars">
+              <div class="cet-bar-row">
+                <span class="cet-bar-label">使用平台</span>
+                <el-progress
+                  :percentage="cetData.used?.passRate || 0"
+                  :format="(p) => p + '%'"
+                  status="success"
+                  :stroke-width="18"
+                  style="flex:1"
+                />
+              </div>
+              <div class="cet-bar-row">
+                <span class="cet-bar-label">未使用平台</span>
+                <el-progress
+                  :percentage="cetData.unused?.passRate || 0"
+                  :format="(p) => p + '%'"
+                  :stroke-width="18"
+                  style="flex:1"
+                />
+              </div>
+            </div>
+            <div style="height:260px;margin-top:16px">
+              <v-chart :option="cetChartOption" autoresize />
+            </div>
+          </div>
+          <el-empty v-else description="暂无四六级成绩数据，请先同步学校数据" :image-size="80" />
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-row :gutter="24" class="mt-32">
       <el-col :xs="24" :lg="10">
         <el-card class="glass-card shadow-sm">
@@ -113,9 +177,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { User, Reading, School, Document } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { User, Reading, School, Document, Loading } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { BarChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+
+use([CanvasRenderer, BarChart, GridComponent, TooltipComponent, LegendComponent])
 
 const stats = reactive({
   totalUsers: 0,
@@ -156,8 +227,62 @@ const loadDashboardData = async () => {
   }
 }
 
+const cetLoading = ref(false)
+const cetData = ref(null)
+
+const cetChartOption = computed(() => {
+  if (!cetData.value) return {}
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: ['使用平台', '未使用平台'] },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', data: ['通过率 (%)', '通过人数', '总人数'] },
+    yAxis: { type: 'value' },
+    series: [
+      {
+        name: '使用平台',
+        type: 'bar',
+        data: [
+          cetData.value.used?.passRate || 0,
+          cetData.value.used?.passed || 0,
+          cetData.value.used?.totalStudents || 0
+        ],
+        itemStyle: { color: '#10b981' }
+      },
+      {
+        name: '未使用平台',
+        type: 'bar',
+        data: [
+          cetData.value.unused?.passRate || 0,
+          cetData.value.unused?.passed || 0,
+          cetData.value.unused?.totalStudents || 0
+        ],
+        itemStyle: { color: '#94a3b8' }
+      }
+    ]
+  }
+})
+
+const loadCetData = async () => {
+  cetLoading.value = true
+  try {
+    const res = await request({ url: '/api/admin/metrics/cet-comparison', method: 'get' })
+    if (res?.code === 200 && res?.data) {
+      const d = res.data
+      if (d.totalScoreRecords > 0) {
+        cetData.value = d
+      }
+    }
+  } catch (e) {
+    console.error('加载四六级对比数据失败:', e)
+  } finally {
+    cetLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadDashboardData()
+  loadCetData()
 })
 </script>
 
@@ -312,6 +437,69 @@ onMounted(() => {
   color: #334155;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.cet-comparison {
+  padding: 8px 0;
+}
+
+.cet-summary {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.cet-stat-item {
+  flex: 1;
+  min-width: 100px;
+  text-align: center;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.cet-stat-item.highlight {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+}
+
+.cet-stat-item.highlight .cet-stat-value,
+.cet-stat-item.highlight .cet-stat-label {
+  color: white;
+}
+
+.cet-stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1;
+}
+
+.cet-stat-label {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 6px;
+}
+
+.cet-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cet-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cet-bar-label {
+  width: 90px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+  flex-shrink: 0;
 }
 
 .mt-32 { margin-top: 32px; }

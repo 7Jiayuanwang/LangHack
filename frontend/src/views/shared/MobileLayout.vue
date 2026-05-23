@@ -149,7 +149,7 @@ import {
   Upload, Document, House,
   User, EditPen, Setting,
   DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
-  VideoPlay, ChatLineRound,
+  VideoPlay, ChatLineRound, DataAnalysis,
 } from '@element-plus/icons-vue'
 import { getReviewTexts, getReviewVideos } from '@/api/admin'
 
@@ -251,6 +251,7 @@ const MORE_ITEMS = {
     { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
+    { path: '/admin/cet-analysis',   label: '四六级分析', icon: DataAnalysis },
   ],
 }
 
@@ -313,6 +314,7 @@ const ROUTE_MAP = {
     '/admin/assignments': '作业管理',
     '/admin/sso-pending': 'SSO 用户审批',
     '/admin/content-review': '内容审核',
+    '/admin/cet-analysis':   '四六级分析',
   },
 }
 
