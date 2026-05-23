@@ -176,4 +176,98 @@ public class AdminMetricsController {
         if (val == null) return 0L;
         return ((Number) val).longValue();
     }
+
+    /**
+     * 推荐算法分析：覆盖率、相似度矩阵、交互分布、热门推荐文章
+     */
+    @GetMapping("/recommendation")
+    public Result<?> getRecommendationAnalysis() {
+        try {
+            Map<String, Object> result = new LinkedHashMap<>();
+
+            // 用户覆盖率：冷启动 vs CF 用户数
+            String sqlCoverage = """
+                SELECT
+                  COUNT(DISTINCT user_id) AS total_users,
+                  SUM(CASE WHEN read_count >= 3 THEN 1 ELSE 0 END) AS cf_users,
+                  SUM(CASE WHEN read_count < 3 THEN 1 ELSE 0 END) AS cold_start_users
+                FROM (
+                  SELECT user_id, COUNT(*) AS read_count
+                  FROM user_text_reads
+                  GROUP BY user_id
+                ) t
+                """;
+            Map<String, Object> coverage = jdbcTemplate.queryForMap(sqlCoverage);
+            result.put("coverage", coverage);
+
+            // 相似度矩阵统计
+            String sqlMatrix = """
+                SELECT
+                  COUNT(*) AS total_pairs,
+                  ROUND(AVG(similarity), 4) AS avg_similarity,
+                  ROUND(MAX(similarity), 4) AS max_similarity,
+                  SUM(CASE WHEN similarity >= 0.7 THEN 1 ELSE 0 END) AS high_sim_pairs,
+                  SUM(CASE WHEN similarity >= 0.4 AND similarity < 0.7 THEN 1 ELSE 0 END) AS mid_sim_pairs,
+                  SUM(CASE WHEN similarity < 0.4 THEN 1 ELSE 0 END) AS low_sim_pairs
+                FROM text_similarity_matrix
+                """;
+            try {
+                result.put("similarityMatrix", jdbcTemplate.queryForMap(sqlMatrix));
+            } catch (Exception e) {
+                result.put("similarityMatrix", Map.of("total_pairs", 0));
+            }
+
+            // 交互分数分布（按分数段）
+            String sqlInteraction = """
+                SELECT
+                  CASE
+                    WHEN interaction_score < 0.2 THEN '0.0-0.2'
+                    WHEN interaction_score < 0.4 THEN '0.2-0.4'
+                    WHEN interaction_score < 0.6 THEN '0.4-0.6'
+                    WHEN interaction_score < 0.8 THEN '0.6-0.8'
+                    ELSE '0.8-1.0'
+                  END AS score_range,
+                  COUNT(*) AS count
+                FROM v_user_text_interaction_scores
+                GROUP BY score_range
+                ORDER BY MIN(interaction_score)
+                """;
+            try {
+                result.put("interactionDist", jdbcTemplate.queryForList(sqlInteraction));
+            } catch (Exception e) {
+                result.put("interactionDist", List.of());
+            }
+
+            // 被推荐次数最多的文章（通过相似度矩阵出现频率估算）
+            String sqlTopTexts = """
+                SELECT t.id, t.title, t.difficulty,
+                  COUNT(*) AS similarity_links
+                FROM text_similarity_matrix tsm
+                JOIN texts t ON (t.id = tsm.text_id OR t.id = tsm.similar_text_id)
+                WHERE t.deleted = 0
+                GROUP BY t.id, t.title, t.difficulty
+                ORDER BY similarity_links DESC
+                LIMIT 10
+                """;
+            try {
+                result.put("topLinkedTexts", jdbcTemplate.queryForList(sqlTopTexts));
+            } catch (Exception e) {
+                result.put("topLinkedTexts", List.of());
+            }
+
+            // 推荐算法配置参数（从 application.yml 读取的默认值）
+            result.put("config", Map.of(
+                    "itemCfWeight", 0.6,
+                    "userCfWeight", 0.4,
+                    "coldStartMinReads", 3,
+                    "textSimilarityThreshold", 0.2,
+                    "userSimilarityThreshold", 0.3
+            ));
+
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取推荐算法分析失败", e);
+            return Result.error("获取推荐算法分析失败");
+        }
+    }
 }

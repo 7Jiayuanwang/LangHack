@@ -143,6 +143,12 @@ const routes = [
         component: () => import("@/views/admin/CetAnalysis.vue"),
         meta: { title: "四六级分析", roles: ["ADMIN"] },
       },
+      {
+        path: "recommendation-analysis",
+        name: "AdminRecommendationAnalysis",
+        component: () => import("@/views/admin/RecommendationAnalysis.vue"),
+        meta: { title: "推荐算法分析", roles: ["ADMIN"] },
+      },
     ],
   },
   {

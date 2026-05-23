@@ -252,6 +252,7 @@ const MORE_ITEMS = {
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
     { path: '/admin/cet-analysis',   label: '四六级分析', icon: DataAnalysis },
+    { path: '/admin/recommendation-analysis', label: '推荐分析', icon: DataLine },
   ],
 }
 
@@ -315,6 +316,7 @@ const ROUTE_MAP = {
     '/admin/sso-pending': 'SSO 用户审批',
     '/admin/content-review': '内容审核',
     '/admin/cet-analysis':   '四六级分析',
+    '/admin/recommendation-analysis': '推荐算法分析',
   },
 }
 
