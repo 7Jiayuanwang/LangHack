@@ -7,8 +7,9 @@
 #   1. 构建新镜像（green）
 #   2. 启动 green 栈（使用备用端口）
 #   3. 健康检查通过后，切换 nginx upstream 到 green
-#   4. 停止 blue 栈
-#   5. 失败时自动回滚到 blue
+#   4. 启动新 blue，健康检查通过后切换 nginx 回 blue
+#   5. 停止 green 栈
+#   6. 失败时自动回滚到 blue
 #
 # 用法:
 #   ./scripts/hot-deploy.sh [--branch <branch>] [--skip-build] [--dry-run]
@@ -32,6 +33,10 @@ GREEN_COMPOSE="$DOCKER_DIR/docker-compose.green.yml"
 BLUE_BACKEND_CONTAINER="langhack-backend"
 GREEN_BACKEND_CONTAINER="langhack-backend-green"
 NGINX_CONTAINER="langhack-frontend"
+
+# ── 镜像 & 网络（与 docker-compose.yml name: LangHack 保持一致）──────────────
+BACKEND_IMAGE="langhack-backend:latest"
+NETWORK_NAME="langhack_langhack-network"
 
 # ── 健康检查 ──────────────────────────────────────────────────────────────────
 HEALTH_URL_BLUE="http://localhost:${BLUE_BACKEND_PORT}/api/health"
@@ -81,9 +86,10 @@ usage() {
   1. git pull 最新代码
   2. 构建新 Docker 镜像（green）
   3. 启动 green 后端（端口 $GREEN_BACKEND_PORT）
-  4. 健康检查通过后切换 nginx upstream
-  5. 停止 blue 后端（端口 $BLUE_BACKEND_PORT）
-  6. 失败时自动回滚
+  4. 健康检查通过后切换 nginx upstream → green
+  5. 启动新 blue 后端，健康检查通过后切换 nginx → blue
+  6. 停止 green 后端
+  7. 失败时自动回滚
 EOF
 }
 
@@ -115,47 +121,82 @@ wait_healthy() {
     return 1
 }
 
+# ── nginx upstream 切换 ───────────────────────────────────────────────────────
+# nginx conf 使用 Docker Compose 服务名 DNS：
+#   blue  → proxy_pass http://backend:8080
+#   green → proxy_pass http://backend-green:8080
+switch_nginx_to() {
+    local target="$1"  # blue | green
+
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${NGINX_CONTAINER}$"; then
+        log_warn "nginx 容器 ${NGINX_CONTAINER} 未运行，跳过流量切换"
+        return 0
+    fi
+
+    log_info "切换 nginx upstream → $target"
+
+    if [ "$target" = "green" ]; then
+        # backend → backend-green（替换所有 proxy_pass 中的服务名）
+        run docker exec "$NGINX_CONTAINER" sh -c \
+            "sed -i 's|http://backend:|http://backend-green:|g' /etc/nginx/conf.d/default.conf && nginx -t && nginx -s reload" \
+            || log_warn "nginx reload 失败，流量切换可能未生效"
+    else
+        # backend-green → backend
+        run docker exec "$NGINX_CONTAINER" sh -c \
+            "sed -i 's|http://backend-green:|http://backend:|g' /etc/nginx/conf.d/default.conf && nginx -t && nginx -s reload" \
+            || log_warn "nginx reload 失败，流量切换可能未生效"
+    fi
+}
+
 # ── 回滚 ──────────────────────────────────────────────────────────────────────
 rollback() {
     log_warn "部署失败，执行回滚..."
     # 停止 green 栈
     if [ -f "$GREEN_COMPOSE" ]; then
-        run docker compose -f "$GREEN_COMPOSE" --env-file "$ENV_FILE" down --remove-orphans 2>/dev/null || true
+        run docker compose -f "$GREEN_COMPOSE" down --remove-orphans 2>/dev/null || true
     fi
+    # 切换 nginx 回 blue（无论当前指向哪里）
+    switch_nginx_to blue
     # 确保 blue 仍在运行
-    if ! curl -sf -m 3 "$HEALTH_URL_BLUE" >/dev/null 2>&1; then
+    if ! $DRY_RUN && ! curl -sf -m 3 "$HEALTH_URL_BLUE" >/dev/null 2>&1; then
         log_warn "blue 后端不健康，尝试重启..."
         run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" up -d backend
         wait_healthy "$HEALTH_URL_BLUE" "blue backend (回滚)" || log_error "回滚失败，请手动检查"
     else
         log_ok "blue 后端仍在运行，回滚完成"
     fi
-    # 切换 nginx 回 blue
-    switch_nginx_to blue
 }
 
-# ── nginx upstream 切换 ───────────────────────────────────────────────────────
-switch_nginx_to() {
-    local target="$1"  # blue | green
-    local port
-    if [ "$target" = "green" ]; then
-        port=$GREEN_BACKEND_PORT
-    else
-        port=$BLUE_BACKEND_PORT
-    fi
+# ── 生成 green compose ────────────────────────────────────────────────────────
+generate_green_compose() {
+    cat > "$GREEN_COMPOSE" <<EOF
+# 自动生成 — 零停机热更新 green 栈
+# 由 hot-deploy.sh 生成，部署完成后自动删除
+services:
+  backend-green:
+    image: ${BACKEND_IMAGE}
+    container_name: ${GREEN_BACKEND_CONTAINER}
+    ports:
+      - "${GREEN_BACKEND_PORT}:8080"
+    env_file:
+      - .env
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+    networks:
+      - langhack-network
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-    log_info "切换 nginx upstream → $target (port $port)"
-
-    # 通过 nginx reload 实现无缝切换
-    # nginx.conf 中 upstream backend 使用环境变量或动态配置
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$NGINX_CONTAINER"; then
-        run docker exec "$NGINX_CONTAINER" sh -c \
-            "sed -i 's|server langhack-backend[^;]*;|server host.docker.internal:${port};|g' /etc/nginx/conf.d/default.conf && nginx -s reload" 2>/dev/null || \
-        run docker exec "$NGINX_CONTAINER" nginx -s reload 2>/dev/null || \
-        log_warn "nginx reload 失败，流量切换可能未生效"
-    else
-        log_warn "nginx 容器未运行，跳过流量切换"
-    fi
+networks:
+  langhack-network:
+    external: true
+    name: ${NETWORK_NAME}
+EOF
 }
 
 # ── 主流程 ────────────────────────────────────────────────────────────────────
@@ -183,15 +224,19 @@ main() {
 
     # 3. 生成 green compose 文件
     log_section "Step 3: 生成 green 栈配置"
-    generate_green_compose
+    if $DRY_RUN; then
+        log_info "[DRY-RUN] 生成 $GREEN_COMPOSE"
+    else
+        generate_green_compose
+    fi
     log_ok "green compose 文件已生成: $GREEN_COMPOSE"
 
     # 4. 启动 green 后端
     log_section "Step 4: 启动 green 后端 (port $GREEN_BACKEND_PORT)"
-    run docker compose -f "$GREEN_COMPOSE" --env-file "$ENV_FILE" up -d backend-green
+    run docker compose -f "$GREEN_COMPOSE" up -d backend-green
 
     # 5. 健康检查
-    log_section "Step 5: 健康检查"
+    log_section "Step 5: 健康检查 green"
     if ! $DRY_RUN; then
         if ! wait_healthy "$HEALTH_URL_GREEN" "green backend"; then
             rollback
@@ -203,64 +248,35 @@ main() {
     log_section "Step 6: 切换流量 → green"
     switch_nginx_to green
 
-    # 7. 停止 blue 后端
-    log_section "Step 7: 停止 blue 后端"
+    # 7. 停止旧 blue 后端
+    log_section "Step 7: 停止旧 blue 后端"
     run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" stop backend
-    log_ok "blue 后端已停止"
+    log_ok "旧 blue 后端已停止"
 
-    # 8. 将 green 提升为新的 blue（重命名容器）
-    log_section "Step 8: 提升 green → blue"
-    run docker compose -f "$GREEN_COMPOSE" --env-file "$ENV_FILE" down --remove-orphans
+    # 8. 启动新 blue（使用刚构建的镜像），健康检查后切换 nginx 回 blue
+    log_section "Step 8: 启动新 blue 后端"
     run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" up -d backend
     if ! $DRY_RUN; then
-        wait_healthy "$HEALTH_URL_BLUE" "new blue backend" || {
-            log_error "新 blue 后端启动失败"
+        if ! wait_healthy "$HEALTH_URL_BLUE" "new blue backend"; then
+            log_error "新 blue 后端启动失败，保持流量在 green"
             exit 1
-        }
+        fi
     fi
-    switch_nginx_to blue
 
-    # 9. 清理 green compose 文件
-    rm -f "$GREEN_COMPOSE" 2>/dev/null || true
+    # 9. 切换流量回 blue，停止 green
+    log_section "Step 9: 切换流量 → blue，停止 green"
+    switch_nginx_to blue
+    run docker compose -f "$GREEN_COMPOSE" down --remove-orphans
+    log_ok "green 后端已停止"
+
+    # 10. 清理 green compose 文件
+    if ! $DRY_RUN; then
+        rm -f "$GREEN_COMPOSE" 2>/dev/null || true
+    fi
 
     log_section "部署完成"
     log_ok "零停机热更新成功！"
     log_info "当前运行版本: $(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
-}
-
-# ── 生成 green compose ────────────────────────────────────────────────────────
-generate_green_compose() {
-    cat > "$GREEN_COMPOSE" <<EOF
-# 自动生成 — 零停机热更新 green 栈
-# 由 hot-deploy.sh 生成，部署完成后自动删除
-version: '3.8'
-services:
-  backend-green:
-    image: \${COMPOSE_PROJECT_NAME:-langhack}-backend:latest
-    container_name: ${GREEN_BACKEND_CONTAINER}
-    ports:
-      - "${GREEN_BACKEND_PORT}:8080"
-    env_file:
-      - .env
-    environment:
-      - SPRING_PROFILES_ACTIVE=prod
-    depends_on:
-      - mysql-master
-    networks:
-      - langhack-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-networks:
-  langhack-network:
-    external: true
-    name: \${COMPOSE_PROJECT_NAME:-langhack}_langhack-network
-EOF
 }
 
 # ── 错误陷阱 ──────────────────────────────────────────────────────────────────
