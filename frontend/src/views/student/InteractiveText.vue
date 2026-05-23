@@ -386,6 +386,13 @@
           maxlength="500"
           show-word-limit
         />
+        <div class="ann-visibility-row">
+          <span class="ann-visibility-label">可见性</span>
+          <el-radio-group v-model="annotationVisibility" size="small">
+            <el-radio-button :value="1">🌐 公开</el-radio-button>
+            <el-radio-button :value="0">🔒 仅自己</el-radio-button>
+          </el-radio-group>
+        </div>
       </div>
       <template #footer>
         <el-button @click="showAnnotationDialog = false">取消</el-button>
@@ -411,6 +418,12 @@
           <div class="ann-card-footer">
             <span class="ann-author">{{ ann.username }}</span>
             <div class="ann-actions">
+              <button
+                v-if="ann.isMine"
+                class="ann-visibility-btn"
+                :title="ann.visibility === 1 ? '当前公开，点击改为仅自己可见' : '当前仅自己可见，点击改为公开'"
+                @click="handleToggleVisibility(ann)"
+              >{{ ann.visibility === 1 ? '🌐' : '🔒' }}</button>
               <button class="ann-upvote-btn" :class="{ active: ann.upvotedByMe }" @click="handleUpvote(ann)">
                 👍 {{ ann.upvoteCount }}
               </button>
@@ -460,7 +473,7 @@ renderer.image = function({ href, title, text }) {
 }
 marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
-import { getAnnotations, createAnnotation, deleteAnnotation, toggleUpvote } from '@/api/annotation'
+import { getAnnotations, createAnnotation, deleteAnnotation, toggleUpvote, updateAnnotationVisibility } from '@/api/annotation'
 import { getArticlesPath } from '@/config/site'
 import rangy from '@/utils/rangy'
 
@@ -589,6 +602,7 @@ const showAnnotationDialog = ref(false)
 const annotationNote = ref('')
 const annotationSelectedText = ref('')
 const submittingAnnotation = ref(false)
+const annotationVisibility = ref(1)
 
 /**
  * 判断当前选区文本是否已完全被某条划线记录覆盖。
@@ -1978,6 +1992,7 @@ const handleAnnotate = () => {
   if (!selectedTextContent.value?.trim()) return
   annotationSelectedText.value = selectedTextContent.value.trim()
   annotationNote.value = ''
+  annotationVisibility.value = 1
   showAnnotationDialog.value = true
   showSelectionMenu.value = false
 }
@@ -1992,7 +2007,8 @@ const submitAnnotation = async () => {
     const res = await createAnnotation({
       textId: textId.value,
       selectedText: annotationSelectedText.value,
-      note: annotationNote.value.trim()
+      note: annotationNote.value.trim(),
+      visibility: annotationVisibility.value
     })
     if (res?.code === 200) {
       annotations.value.unshift(res.data)
@@ -2014,6 +2030,17 @@ const handleDeleteAnnotation = async (ann) => {
     ElMessage.success('已删除')
   } catch (e) {
     ElMessage.error('删除失败')
+  }
+}
+
+const handleToggleVisibility = async (ann) => {
+  const next = ann.visibility === 1 ? 0 : 1
+  try {
+    await updateAnnotationVisibility(ann.id, next)
+    ann.visibility = next
+    ElMessage.success(next === 1 ? '已改为公开' : '已改为仅自己可见')
+  } catch (e) {
+    ElMessage.error('修改失败')
   }
 }
 
@@ -3528,6 +3555,26 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   cursor: pointer;
   padding: 2px 4px;
 }
+.ann-private-badge { font-size: 13px; opacity: 0.7; cursor: default; }
+.ann-visibility-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.ann-visibility-btn:hover { opacity: 1; background: #f1f5f9; }
+.ann-visibility-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.ann-visibility-label { font-size: 13px; color: #64748b; white-space: nowrap; }
+.annotation-dialog-body { display: flex; flex-direction: column; gap: 0; }
 
 .ann-fab {
   position: fixed;

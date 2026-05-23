@@ -14,6 +14,8 @@ public class TextAnnotation {
     private String selectedText;
     private String note;
     private Integer upvoteCount;
+    /** 可见性: 1=公开（默认），0=仅自己可见 */
+    private Integer visibility;
     @TableLogic
     private Integer deleted;
     private LocalDateTime createdTime;

@@ -42,8 +42,22 @@ public class AnnotationController {
             return Result.error("批注内容不能为空");
         }
         TextAnnotation ann = annotationService.create(req.getTextId(), userId,
-                req.getSelectedText().trim(), req.getNote().trim());
+                req.getSelectedText().trim(), req.getNote().trim(), req.getVisibility());
         return Result.success(ann);
+    }
+
+    @PatchMapping("/{id}/visibility")
+    public Result<Map<String, Object>> updateVisibility(
+            @PathVariable Long id,
+            @RequestBody Map<String, Integer> body,
+            Authentication auth) {
+        Long userId = getUserId(auth);
+        Integer visibility = body.get("visibility");
+        if (visibility == null || (visibility != 0 && visibility != 1)) {
+            return Result.error("visibility 必须为 0 或 1");
+        }
+        annotationService.updateVisibility(id, userId, visibility);
+        return Result.success(Map.of("visibility", visibility));
     }
 
     @DeleteMapping("/{id}")
@@ -69,5 +83,7 @@ public class AnnotationController {
         private Long textId;
         private String selectedText;
         private String note;
+        /** 1=公开（默认），0=仅自己可见 */
+        private Integer visibility;
     }
 }

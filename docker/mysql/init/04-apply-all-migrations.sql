@@ -3035,3 +3035,9 @@ CREATE TABLE IF NOT EXISTS annotation_upvotes (
     CONSTRAINT fk_upvote_ann FOREIGN KEY (annotation_id) REFERENCES text_annotations(id) ON DELETE CASCADE,
     CONSTRAINT fk_upvote_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ═══════════════════════════════════════════════════════════════
+-- V29: 批注可见性 — 1=公开（默认），0=仅自己可见
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE text_annotations
+    ADD COLUMN IF NOT EXISTS visibility TINYINT NOT NULL DEFAULT 1 COMMENT '可见性: 1=公开, 0=仅自己';

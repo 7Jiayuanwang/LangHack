@@ -29,9 +29,12 @@ public class AnnotationService {
     private UserService userService;
 
     public List<TextAnnotation> listByText(Long textId, Long currentUserId) {
+        // 返回：公开批注 + 当前用户自己的私密批注
         List<TextAnnotation> list = annotationMapper.selectList(
             new LambdaQueryWrapper<TextAnnotation>()
                 .eq(TextAnnotation::getTextId, textId)
+                .and(w -> w.eq(TextAnnotation::getVisibility, 1)
+                    .or(sub -> sub.eq(TextAnnotation::getUserId, currentUserId != null ? currentUserId : -1L)))
                 .orderByDesc(TextAnnotation::getUpvoteCount)
                 .orderByDesc(TextAnnotation::getCreatedTime)
         );
@@ -57,18 +60,29 @@ public class AnnotationService {
         return list;
     }
 
-    public TextAnnotation create(Long textId, Long userId, String selectedText, String note) {
+    public TextAnnotation create(Long textId, Long userId, String selectedText, String note, Integer visibility) {
         TextAnnotation ann = new TextAnnotation();
         ann.setTextId(textId);
         ann.setUserId(userId);
         ann.setSelectedText(selectedText);
         ann.setNote(note);
         ann.setUpvoteCount(0);
+        ann.setVisibility(visibility != null ? visibility : 1);
         annotationMapper.insert(ann);
         User u = userService.getUserById(userId);
         ann.setUsername(u != null ? (u.getNickname() != null ? u.getNickname() : u.getUsername()) : "用户");
         ann.setUpvotedByMe(false);
         ann.setIsMine(true);
+        return ann;
+    }
+
+    public TextAnnotation updateVisibility(Long id, Long userId, Integer visibility) {
+        TextAnnotation ann = annotationMapper.selectById(id);
+        if (ann == null || !ann.getUserId().equals(userId)) {
+            throw new RuntimeException("无权修改此批注");
+        }
+        ann.setVisibility(visibility);
+        annotationMapper.updateById(ann);
         return ann;
     }
 

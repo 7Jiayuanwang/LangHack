@@ -47,7 +47,9 @@ HEALTH_INTERVAL=3
 # ── 参数 ──────────────────────────────────────────────────────────────────────
 BRANCH="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'master')"
 SKIP_BUILD=false
+SKIP_PULL=false
 DRY_RUN=false
+REMOTE_URL=""
 
 mkdir -p "$LOG_DIR"
 
@@ -65,6 +67,8 @@ parse_args() {
         case "$1" in
             --branch)   BRANCH="$2"; shift 2 ;;
             --skip-build) SKIP_BUILD=true; shift ;;
+            --skip-pull)  SKIP_PULL=true; shift ;;
+            --remote)   REMOTE_URL="$2"; shift 2 ;;
             --dry-run)  DRY_RUN=true; shift ;;
             --help|-h)  usage; exit 0 ;;
             *) log_error "未知参数: $1"; usage; exit 2 ;;
@@ -79,6 +83,8 @@ usage() {
 选项:
   --branch <branch>   部署分支（默认: 当前所在分支）
   --skip-build        跳过镜像构建（使用现有镜像）
+  --skip-pull         跳过 git pull（使用本地当前代码，GitHub 不可达时使用）
+  --remote <url>      指定 git 远程仓库地址（如 Gitee 镜像）
   --dry-run           仅打印操作，不实际执行
   --help, -h          显示帮助
 
@@ -169,6 +175,11 @@ rollback() {
 
 # ── 生成 green compose ────────────────────────────────────────────────────────
 generate_green_compose() {
+    # 从 blue compose 读取实际 profile，保持 green 与 blue 环境一致
+    local profile
+    profile=$(grep 'SPRING_PROFILES_ACTIVE' "$BLUE_COMPOSE" | awk -F': ' '{print $2}' | tr -d ' "' | head -1)
+    profile="${profile:-sso}"
+
     cat > "$GREEN_COMPOSE" <<EOF
 # 自动生成 — 零停机热更新 green 栈
 # 由 hot-deploy.sh 生成，部署完成后自动删除
@@ -181,7 +192,7 @@ services:
     env_file:
       - .env
     environment:
-      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_PROFILES_ACTIVE=${profile}
     networks:
       - langhack-network
     restart: "no"
@@ -197,6 +208,7 @@ networks:
     external: true
     name: ${NETWORK_NAME}
 EOF
+    log_info "green profile: ${profile}"
 }
 
 # ── 主流程 ────────────────────────────────────────────────────────────────────
@@ -204,14 +216,24 @@ main() {
     parse_args "$@"
 
     log_section "LangHack 零停机热更新"
-    log_info "分支: $BRANCH | skip-build: $SKIP_BUILD | dry-run: $DRY_RUN"
+    log_info "分支: $BRANCH | skip-build: $SKIP_BUILD | skip-pull: $SKIP_PULL | dry-run: $DRY_RUN"
 
     # 1. 拉取最新代码
     log_section "Step 1: 拉取最新代码"
-    run git -C "$PROJECT_ROOT" fetch origin "$BRANCH"
-    run git -C "$PROJECT_ROOT" checkout "$BRANCH"
-    run git -C "$PROJECT_ROOT" pull origin "$BRANCH"
-    log_ok "代码已更新到最新"
+    if $SKIP_PULL; then
+        log_info "跳过 git pull（--skip-pull），使用本地当前代码"
+        log_info "当前版本: $(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+    else
+        # 如果指定了 --remote，临时设置远程地址
+        if [ -n "$REMOTE_URL" ]; then
+            log_info "使用指定远程仓库: $REMOTE_URL"
+            run git -C "$PROJECT_ROOT" remote set-url origin "$REMOTE_URL"
+        fi
+        run git -C "$PROJECT_ROOT" fetch origin "$BRANCH"
+        run git -C "$PROJECT_ROOT" checkout "$BRANCH"
+        run git -C "$PROJECT_ROOT" pull origin "$BRANCH"
+    fi
+    log_ok "代码已就绪"
 
     # 2. 构建新镜像
     if ! $SKIP_BUILD; then

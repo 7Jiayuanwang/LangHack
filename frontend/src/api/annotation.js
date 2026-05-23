@@ -11,3 +11,6 @@ export const deleteAnnotation = (id) =>
 
 export const toggleUpvote = (id) =>
   request({ url: `/api/student/annotations/${id}/upvote`, method: 'post' })
+
+export const updateAnnotationVisibility = (id, visibility) =>
+  request({ url: `/api/student/annotations/${id}/visibility`, method: 'patch', data: { visibility } })
