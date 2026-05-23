@@ -39,6 +39,12 @@ const routes = [
     meta: { title: "SSO 登录回调", public: true },
   },
   {
+    path: "/shared-conversation/:token",
+    name: "SharedConversation",
+    component: () => import("@/views/public/SharedConversation.vue"),
+    meta: { title: "分享的对话", public: true },
+  },
+  {
     path: "/admin",
     name: "Admin",
     component: () => import("@/views/admin/Layout.vue"),

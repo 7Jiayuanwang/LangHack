@@ -2962,3 +2962,45 @@ CREATE TABLE IF NOT EXISTS `exercise_options` (
   KEY `idx_exercise_id` (`exercise_id`),
   CONSTRAINT `exercise_options_ibfk_1` FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='习题选项表';
+
+-- V27__ai_conversation_persistence.sql
+-- AI 对话持久化与分享
+
+CREATE TABLE IF NOT EXISTS ai_conversations (
+    id           BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id      BIGINT       NOT NULL,
+    title        VARCHAR(200) COMMENT '对话标题',
+    message_count INT         DEFAULT 0,
+    created_time DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted      TINYINT      DEFAULT 0,
+    INDEX idx_user_time (user_id, updated_time),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS ai_messages (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    conversation_id BIGINT       NOT NULL,
+    role            ENUM('user','assistant') NOT NULL,
+    content         TEXT         NOT NULL,
+    selected_text   TEXT,
+    article_context TEXT,
+    created_time    DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_conversation (conversation_id, created_time),
+    FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS conversation_shares (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    conversation_id BIGINT       NOT NULL,
+    share_token     VARCHAR(64)  UNIQUE NOT NULL,
+    access_password VARCHAR(128),
+    expires_at      DATETIME,
+    view_count      INT          DEFAULT 0,
+    created_by      BIGINT       NOT NULL,
+    created_time    DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_token (share_token),
+    INDEX idx_conversation (conversation_id),
+    FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);

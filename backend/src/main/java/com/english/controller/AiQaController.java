@@ -1,12 +1,16 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.entity.AiConversation;
+import com.english.service.ConversationService;
 import com.english.service.HiAgentService;
+import com.english.service.UserService;
 import com.english.service.impl.AiProviderRuntimeService;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -25,8 +29,14 @@ public class AiQaController {
     @Autowired(required = false)
     private AiProviderRuntimeService aiProviderRuntimeService;
 
+    @Autowired
+    private ConversationService conversationService;
+
+    @Autowired
+    private UserService userService;
+
     @PostMapping("/chat")
-    public Result<Map<String, Object>> chat(@RequestBody ChatRequest request) {
+    public Result<Map<String, Object>> chat(@RequestBody ChatRequest request, Authentication auth) {
         if (request.getUserQuestion() == null || request.getUserQuestion().trim().isEmpty()) {
             return Result.error("问题不能为空");
         }
@@ -57,9 +67,27 @@ public class AiQaController {
                 answer = hiAgentService.chatQA(question, selectedText, articleContext);
             }
 
+            // 持久化对话（仅当用户已登录且 auth 不为 null）
+            Long conversationId = request.getConversationId();
+            if (auth != null) {
+                try {
+                    Long userId = userService.getUserByUsername(auth.getName()).getId();
+                    if (conversationId == null) {
+                        AiConversation conv = conversationService.createConversation(userId, question);
+                        conversationId = conv.getId();
+                    }
+                    conversationService.addMessage(conversationId, userId, "user", question, selectedText, articleContext);
+                    conversationService.addMessage(conversationId, userId, "assistant", answer, null, null);
+                } catch (Exception e) {
+                    log.warn("Failed to persist conversation, continuing without persistence: {}", e.getMessage());
+                    conversationId = null;
+                }
+            }
+
             Map<String, Object> data = new HashMap<>();
             data.put("response", answer);
             data.put("success", true);
+            data.put("conversationId", conversationId);
             return Result.success(data);
         } catch (Exception e) {
             log.error("AI Q&A failed: {}", e.getMessage(), e);
@@ -81,5 +109,7 @@ public class AiQaController {
         private String userQuestion;
         private String selectedText;
         private String articleContext;
+        private Long conversationId;
     }
 }
+
