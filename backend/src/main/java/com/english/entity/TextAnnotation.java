@@ -24,4 +24,6 @@ public class TextAnnotation {
     private String username;
     @TableField(exist = false)
     private Boolean upvotedByMe;
+    @TableField(exist = false)
+    private Boolean isMine;
 }

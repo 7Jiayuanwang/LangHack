@@ -72,7 +72,7 @@
 
       <main class="qa-chat-area" ref="chatContainer" id="chat-container">
         <div class="empty-hint" v-if="messages.length === 0">
-          <p>点击下方快捷提问或输入你的问题</p>
+          <p>输入问题开始对话，或点击左上角 <strong>☰</strong> 查看历史对话</p>
         </div>
 
         <template v-for="(msg, index) in messages" :key="index">
@@ -216,6 +216,10 @@ const loadConversations = async () => {
     const res = await getConversations(1, 50)
     if (res?.code === 200) {
       conversations.value = res.data?.records || []
+      // auto-open sidebar when user has prior conversations and no article context
+      if (conversations.value.length > 0 && !selectedText.value) {
+        sidebarOpen.value = true
+      }
     }
   } catch (e) {
     // 静默失败，不影响主功能

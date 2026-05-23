@@ -52,6 +52,7 @@ public class AnnotationService {
             User u = userService.getUserById(ann.getUserId());
             ann.setUsername(u != null ? (u.getNickname() != null ? u.getNickname() : u.getUsername()) : "用户");
             ann.setUpvotedByMe(finalUpvotedIds.contains(ann.getId()));
+            ann.setIsMine(currentUserId != null && currentUserId.equals(ann.getUserId()));
         }
         return list;
     }
@@ -67,6 +68,7 @@ public class AnnotationService {
         User u = userService.getUserById(userId);
         ann.setUsername(u != null ? (u.getNickname() != null ? u.getNickname() : u.getUsername()) : "用户");
         ann.setUpvotedByMe(false);
+        ann.setIsMine(true);
         return ann;
     }
 

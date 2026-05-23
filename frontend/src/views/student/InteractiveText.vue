@@ -18,6 +18,10 @@
             <span class="pill-label">难度</span>
             <span class="pill-value">{{ difficultyText }}</span>
           </div>
+          <button class="annotation-header-btn" @click="showAnnotationSidebar = true" :title="`批注 (${annotations.length})`">
+            <el-icon><Comment /></el-icon>
+            <span v-if="annotations.length > 0" class="ann-header-count">{{ annotations.length }}</span>
+          </button>
           <button v-if="canFavorite" class="favorite-btn" :class="{ 'is-favorite': isFavorite }" @click="addToFavorite">
             <el-icon><Star v-if="!isFavorite" /><StarFilled v-else /></el-icon>
           </button>
@@ -433,7 +437,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close } from '@element-plus/icons-vue'
+import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment } from '@element-plus/icons-vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
@@ -2547,6 +2551,40 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .favorite-btn.is-favorite {
   color: #f59e0b;
+}
+
+.annotation-header-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.2s, color 0.2s;
+}
+.annotation-header-btn:hover { background: #f1f5f9; color: #197fe6; }
+.ann-header-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #197fe6;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  line-height: 1;
 }
 
 /* Reader Container */
