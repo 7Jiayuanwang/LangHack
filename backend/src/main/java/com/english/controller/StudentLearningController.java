@@ -1613,4 +1613,29 @@ public class StudentLearningController {
         }
     }
 
+    @PostMapping("/record/recommendation")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
+    public Result<Void> recordRecommendation(@RequestBody Map<String, Object> params,
+                                              Authentication authentication) {
+        try {
+            String type = params.get("type") != null ? params.get("type").toString() : null;
+            if (type == null || (!type.equals("RECOMMENDATION_VIEW")
+                    && !type.equals("RECOMMENDATION_CLICK")
+                    && !type.equals("RECOMMENDATION_REFRESH"))) {
+                return Result.success();
+            }
+            Long studentId = getCurrentStudentId(authentication);
+            Long textId = null;
+            if (params.get("textId") != null) {
+                try {
+                    textId = Long.valueOf(params.get("textId").toString());
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            learningRecordsService.recordLearning(studentId, type, null, null, textId, null);
+        } catch (Exception e) {
+            logger.debug("推荐埋点记录失败（非阻塞）: {}", e.getMessage());
+        }
+        return Result.success();
+    }
 }

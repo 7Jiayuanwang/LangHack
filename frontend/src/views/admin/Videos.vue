@@ -107,6 +107,19 @@
           </template>
         </el-table-column>
         <el-table-column prop="viewCount" label="观看" width="80" align="center" />
+        <el-table-column label="转码" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag
+              v-if="row.transcodeStatus === 'SUCCESS' || row.transcodeStatus === 'SKIPPED' || !row.transcodeStatus"
+              type="success" size="small">就绪</el-tag>
+            <el-tag v-else-if="row.transcodeStatus === 'PENDING'" type="info" size="small">排队中</el-tag>
+            <el-tag v-else-if="row.transcodeStatus === 'PROCESSING'" type="warning" size="small">转码中</el-tag>
+            <el-button
+              v-else-if="row.transcodeStatus === 'FAILED'"
+              type="danger" size="small" link
+              @click="handleRetryTranscode(row)">失败 ↻</el-button>
+          </template>
+        </el-table-column>
         <el-table-column prop="createdTime" label="创建时间" width="180">
           <template #default="{ row }">
             {{ formatTime(row.createdTime) }}
@@ -250,7 +263,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
-import { uploadMedia } from '@/api/media'
+import { uploadMedia, retryTranscode } from '@/api/media'
 import * as videoApi from '@/api/video'
 import { getContentTags } from '@/api/admin'
 
@@ -449,6 +462,28 @@ const handleDelete = (row) => {
       const res = await videoApi.deleteAdminVideo(row.id)
       if (res.code === 200) { ElMessage.success('删除成功'); loadVideos(); loadStats() }
       else ElMessage.error(res.message || '删除失败')
+    }).catch(() => {})
+}
+
+const handleRetryTranscode = (row) => {
+  if (!row.mediaId) {
+    ElMessage.error('该视频缺少媒体记录，无法重试')
+    return
+  }
+  ElMessageBox.confirm(`确定要重新转码视频 "${row.title}" 吗？`, '重试转码', { type: 'warning' })
+    .then(async () => {
+      try {
+        const res = await retryTranscode(row.mediaId)
+        if (res.code === 200) {
+          ElMessage.success('已重新加入转码队列')
+          row.transcodeStatus = 'PENDING'
+          loadVideos()
+        } else {
+          ElMessage.error(res.message || '重试失败')
+        }
+      } catch (e) {
+        ElMessage.error(e?.message || '重试失败')
+      }
     }).catch(() => {})
 }
 

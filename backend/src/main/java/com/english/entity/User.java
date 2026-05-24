@@ -56,6 +56,18 @@ public class User {
     @TableField("sso_subject")
     private String ssoSubject;
 
+    /**
+     * 关联 school_student.id（学号匹配，由 V25 迁移引入）
+     */
+    @TableField("school_student_id")
+    private Long schoolStudentId;
+
+    /**
+     * 关联 school_teacher.id（工号匹配，由 V25 迁移引入）
+     */
+    @TableField("school_teacher_id")
+    private Long schoolTeacherId;
+
     // Getters and Setters
     public Long getId() {
         return id;
@@ -175,6 +187,22 @@ public class User {
 
     public void setSsoSubject(String ssoSubject) {
         this.ssoSubject = ssoSubject;
+    }
+
+    public Long getSchoolStudentId() {
+        return schoolStudentId;
+    }
+
+    public void setSchoolStudentId(Long schoolStudentId) {
+        this.schoolStudentId = schoolStudentId;
+    }
+
+    public Long getSchoolTeacherId() {
+        return schoolTeacherId;
+    }
+
+    public void setSchoolTeacherId(Long schoolTeacherId) {
+        this.schoolTeacherId = schoolTeacherId;
     }
     @TableField("read_article_count")
     private Integer readArticleCount = 0;

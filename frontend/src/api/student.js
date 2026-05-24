@@ -708,3 +708,23 @@ export function getWordNetStatus() {
     method: 'get'
   })
 }
+
+// ========== 推荐埋点 ==========
+
+export function recordRecommendationEvent(type, textId) {
+  return request({
+    url: '/api/student/learning/record/recommendation',
+    method: 'post',
+    data: { type, textId: textId || null }
+  }).catch(() => {})
+}
+
+// ========== AI 反馈 ==========
+
+export function submitAiFeedback(data) {
+  return request({
+    url: '/api/student/ai-qa/feedback',
+    method: 'post',
+    data
+  }).catch(() => {})
+}

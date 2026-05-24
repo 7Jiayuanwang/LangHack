@@ -96,12 +96,15 @@
       <div class="translate-content" v-if="!translating">
         <div class="original-text">
           <h4>原文：</h4>
-          <p>{{ selectedTextForTranslate }}</p>
+          <div class="text-scroll-area">
+            <p>{{ selectedTextForTranslate }}</p>
+          </div>
         </div>
-        <el-divider />
         <div class="translated-text">
           <h4>译文：</h4>
-          <p>{{ translatedText }}</p>
+          <div class="text-scroll-area">
+            <p>{{ translatedText }}</p>
+          </div>
         </div>
       </div>
       <div class="loading-content" v-else>
@@ -243,7 +246,7 @@ const isMobile = computed(() => windowWidth.value < 480)
 
 // 响应式弹窗宽度
 const dialogWidth = computed(() => {
-  if (windowWidth.value < 768) return '230px'
+  if (windowWidth.value < 768) return '92vw'
   return '400px'
 })
 
@@ -1186,7 +1189,26 @@ onUnmounted(() => {
   .fab-label { font-size: 8px; }
 
   .translate-content {
-    padding: 12px 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 65vh;
+  }
+
+  .original-text, .translated-text {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+
+  .text-scroll-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .original-text h4, .translated-text h4 {
@@ -1196,6 +1218,7 @@ onUnmounted(() => {
   .original-text p, .translated-text p {
     font-size: 14px;
     padding: 10px;
+    margin: 0;
   }
 }
 
@@ -1226,6 +1249,8 @@ onUnmounted(() => {
 }
 
 .original-text p, .translated-text p {
+  height: 350px;
+  overflow-y: auto;
   margin: 0;
   padding: 12px;
   background: #f8f9fa;

@@ -149,6 +149,8 @@ public class SecurityConfig {
                 // 学校数据查询/同步：OPS 也可访问（Controller 层同样有 @PreAuthorize 双重校验）
                 .antMatchers("/api/admin/school-data/**").hasAnyRole("ADMIN", "OPS")
                 .antMatchers("/api/admin/sync/**").hasAnyRole("ADMIN", "OPS")
+                // 数据指标：OPS 也可访问
+                .antMatchers("/api/admin/metrics/**").hasAnyRole("ADMIN", "OPS")
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
                 // 运维权限
                 .antMatchers("/api/ops/**").hasAnyRole("OPS", "ADMIN")

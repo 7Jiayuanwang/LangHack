@@ -17,9 +17,6 @@ import java.sql.ResultSet;
  */
 public class V15__ImportECDICTData extends BaseJavaMigration {
 
-    private static final String DEFAULT_DB_URL = "jdbc:mysql://localhost:3306/english_learning?" +
-            "useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true";
-
     @Override
     public void migrate(Context context) throws Exception {
         System.out.println("Flyway: Detected ECDICT import task...");
@@ -32,25 +29,9 @@ public class V15__ImportECDICTData extends BaseJavaMigration {
             }
         }
 
-        // Read database credentials from environment variables
-        // CRITICAL: DB_PASSWORD must be explicitly set - no hardcoded default for security reasons
-        String dbUrl = System.getenv().getOrDefault("DB_URL", DEFAULT_DB_URL);
-        String dbUser = System.getenv().getOrDefault("DB_USER", "root");
-        String dbPassword = System.getenv("DB_PASSWORD");
-
-        // Validate that password is explicitly provided for security
-        if (dbPassword == null || dbPassword.isEmpty()) {
-            System.err.println("WARNING: DB_PASSWORD environment variable not set, ECDICT import skipped");
-            System.out.println("Flyway: ECDICT import task completed (skipped due to missing credentials).");
-            return;
-        }
-
-        // Instantiate import tool and run
-        ECDICTImporter importer = new ECDICTImporter(dbUrl, dbUser, dbPassword);
-
-        // NOTE: The tool creates its own connection management for now
-        // TODO: Refactor ECDICTImporter to accept the Connection provided by Flyway context
-        // to avoid duplicate connections and ensure proper transaction boundaries
+        // Use the connection provided by Flyway context — avoids duplicate connections
+        // and ensures proper transaction boundaries within the migration
+        ECDICTImporter importer = new ECDICTImporter(context.getConnection());
         importer.run();
 
         System.out.println("Flyway: ECDICT import task execution completed.");

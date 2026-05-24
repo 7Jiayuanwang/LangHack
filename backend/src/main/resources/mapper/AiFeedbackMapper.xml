@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.AiFeedbackMapper">
+
+    <select id="selectFeedbackSummary" resultType="java.util.Map">
+        SELECT
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN is_helpful = 1 THEN 1 ELSE 0 END) AS helpful_count,
+            SUM(CASE WHEN is_helpful = 0 THEN 1 ELSE 0 END) AS not_helpful_count,
+            ROUND(AVG(CASE WHEN rating IS NOT NULL THEN rating END), 2) AS avg_rating,
+            ROUND(
+                SUM(CASE WHEN is_helpful = 1 THEN 1 ELSE 0 END) * 100.0
+                / NULLIF(COUNT(CASE WHEN is_helpful IS NOT NULL THEN 1 END), 0),
+                1
+            ) AS helpful_rate
+        FROM ai_feedback
+    </select>
+
+</mapper>
