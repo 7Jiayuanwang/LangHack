@@ -39,6 +39,12 @@ const routes = [
     meta: { title: "SSO 登录回调", public: true },
   },
   {
+    path: "/shared-conversation/:token",
+    name: "SharedConversation",
+    component: () => import("@/views/public/SharedConversation.vue"),
+    meta: { title: "分享的对话", public: true },
+  },
+  {
     path: "/admin",
     name: "Admin",
     component: () => import("@/views/admin/Layout.vue"),
@@ -131,6 +137,18 @@ const routes = [
         component: () => import("@/views/admin/ContentReview.vue"),
         meta: { title: "内容审核", roles: ["ADMIN"] },
       },
+      {
+        path: "cet-analysis",
+        name: "AdminCetAnalysis",
+        component: () => import("@/views/admin/CetAnalysis.vue"),
+        meta: { title: "四六级分析", roles: ["ADMIN"] },
+      },
+      {
+        path: "recommendation-analysis",
+        name: "AdminRecommendationAnalysis",
+        component: () => import("@/views/admin/RecommendationAnalysis.vue"),
+        meta: { title: "推荐算法分析", roles: ["ADMIN"] },
+      },
     ],
   },
   {
@@ -169,6 +187,12 @@ const routes = [
         name: "OpsUpdate",
         component: () => import("@/views/ops/Update.vue"),
         meta: { title: "系统更新", roles: ["OPS", "ADMIN"] },
+      },
+      {
+        path: "hot-deploy",
+        name: "OpsHotDeploy",
+        component: () => import("@/views/ops/HotDeploy.vue"),
+        meta: { title: "零停机热更新", roles: ["OPS", "ADMIN"] },
       },
       {
         path: "feature-toggles",

@@ -250,3 +250,4 @@ data/app-uploads/*
 .claude/
 CLAUDE.md
 agent.md
+docker-compose.green.yml
