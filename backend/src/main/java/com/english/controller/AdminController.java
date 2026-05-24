@@ -939,6 +939,49 @@ public class AdminController {
     }
 
     /**
+     * 重新生成课文改写版本（CET-4 / CET-6 / 学术 / 中英对照），异步执行。
+     * version 取值：CET4、CET6、ACADEMIC、PARALLEL、ALL（缺省 ALL，大小写不敏感）。
+     */
+    @PostMapping("/texts/{id}/regenerate-versions")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> regenerateTextVersions(@PathVariable Long id,
+                                                 @RequestParam(required = false, defaultValue = "ALL") String version) {
+        String adminUser = "unknown";
+        try {
+            Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) {
+                adminUser = auth.getName();
+            }
+        } catch (Exception ignore) {
+            // 安全上下文不可用时降级为 unknown，不影响主流程
+        }
+
+        logger.info("[改写重生成] 收到请求: 操作员={}, 课文ID={}, 版本参数={}", adminUser, id, version);
+
+        try {
+            Text text = textService.getTextById(id);
+            if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
+                logger.warn("[改写重生成] 课文不存在或已删除: 课文ID={}, 操作员={}", id, adminUser);
+                return Result.error("课文不存在");
+            }
+            String normalized = version == null ? "ALL" : version.trim().toUpperCase();
+            if (!java.util.Set.of("ALL", "CET4", "CET6", "ACADEMIC", "PARALLEL").contains(normalized)) {
+                logger.warn("[改写重生成] 版本参数无效: 课文ID={}, 版本={}, 操作员={}", id, version, adminUser);
+                return Result.error("不支持的版本参数：" + version);
+            }
+            logger.info("[改写重生成] 校验通过，准备提交异步任务: 课文ID={}, 标题=\"{}\", 内容类型={}, 版本={}, 操作员={}",
+                    id, text.getTitle(), text.getContentType(), normalized, adminUser);
+            articleVersionService.regenerateVersions(id, normalized);
+            logger.info("[改写重生成] 任务已提交后台执行: 课文ID={}, 版本={}, 操作员={} —— 实际生成进度请关注 [版本重生成]/[版本生成] 日志",
+                    id, normalized, adminUser);
+            return Result.success("已提交重新生成任务，请稍后刷新查看");
+        } catch (Exception e) {
+            logger.error("[改写重生成] 提交失败: 课文ID={}, 版本={}, 操作员={}", id, version, adminUser, e);
+            return Result.error("提交失败，请稍后重试");
+        }
+    }
+
+    /**
      * 切换课文推荐状态
      */
     @PutMapping("/texts/{id}/featured")
