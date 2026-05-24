@@ -3038,9 +3038,17 @@ CREATE TABLE IF NOT EXISTS annotation_upvotes (
 
 -- ═══════════════════════════════════════════════════════════════
 -- V29: 批注可见性 — 1=公开（默认），0=仅自己可见
+-- 注: MySQL 8 不支持 ALTER TABLE ... ADD COLUMN IF NOT EXISTS（仅 MariaDB），
+--     故改用 information_schema + 动态 SQL 的幂等模式。
 -- ═══════════════════════════════════════════════════════════════
-ALTER TABLE text_annotations
-    ADD COLUMN IF NOT EXISTS visibility TINYINT NOT NULL DEFAULT 1 COMMENT '可见性: 1=公开, 0=仅自己';
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'text_annotations'
+                     AND COLUMN_NAME = 'visibility');
+SET @col_sql = IF(@col_exists = 0,
+    'ALTER TABLE text_annotations ADD COLUMN visibility TINYINT NOT NULL DEFAULT 1 COMMENT ''可见性: 1=公开, 0=仅自己''',
+    'SELECT 1');
+PREPARE stmt FROM @col_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- V27__media_transcoding.sql
 -- media 表新增异步转码字段（移动端 AV1/HEVC/VP9 → H.264 流水线）
@@ -3168,13 +3176,18 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- 5) 回填外键（幂等：WHERE IS NULL）
+--    注：users.username 与 school_student/teacher 的 student_id/teacher_id 可能存在
+--    collation 差异（utf8mb4_0900_ai_ci vs utf8mb4_unicode_ci），显式 COLLATE 避免
+--    "Illegal mix of collations" 错误。
 UPDATE users u
-JOIN school_student s ON s.student_id = u.username
+JOIN school_student s
+  ON s.student_id COLLATE utf8mb4_unicode_ci = u.username COLLATE utf8mb4_unicode_ci
 SET u.school_student_id = s.id
 WHERE u.school_student_id IS NULL;
 
 UPDATE users u
-JOIN school_teacher t ON t.teacher_id = u.username
+JOIN school_teacher t
+  ON t.teacher_id COLLATE utf8mb4_unicode_ci = u.username COLLATE utf8mb4_unicode_ci
 SET u.school_teacher_id = t.id
 WHERE u.school_teacher_id IS NULL;
 
