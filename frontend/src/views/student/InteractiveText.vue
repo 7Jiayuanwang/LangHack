@@ -155,6 +155,31 @@
         </div>
       </section>
 
+      <!-- Related Articles Section -->
+      <section class="related-articles" v-if="relatedTexts.length > 0">
+        <h3 class="related-title">相关推荐</h3>
+        <div class="related-cards">
+          <div
+            class="related-card"
+            v-for="item in relatedTexts"
+            :key="item.id"
+            @click="goToRelatedArticle(item.id)"
+          >
+            <div class="card-title">{{ item.title }}</div>
+            <div class="card-meta">
+              <el-tag
+                :type="item.difficulty === 'EASY' ? 'success' : item.difficulty === 'HARD' ? 'danger' : 'warning'"
+                size="small"
+                effect="plain"
+              >
+                {{ item.difficulty === 'EASY' ? '简单' : item.difficulty === 'HARD' ? '困难' : '中等' }}
+              </el-tag>
+              <span class="word-count">{{ item.wordCount }} 词</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Completion Section -->
       <footer class="reader-footer" v-if="!isCompleted && !isPreviewMode">
         <div class="footer-divider"></div>
@@ -378,7 +403,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit } from '@element-plus/icons-vue'
-import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
+import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, getRelatedTexts } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
 import { marked } from 'marked'
@@ -477,6 +502,9 @@ let studyStartTime = null
 const quizLoading = ref(false)
 const quizQuestions = ref([])
 let accumulatedTime = 0 // 累计学习时间（秒）
+
+// 相关文章推荐
+const relatedTexts = ref([])
 
 // 翻译相关
 const showTranslateDialog = ref(false)
@@ -754,6 +782,13 @@ const loadTextDetail = async () => {
 
       // 生成学习建议
       generateLearningSuggestions()
+
+      // 异步加载相关文章推荐（不阻塞主流程）
+      getRelatedTexts(textId.value).then(res => {
+        if (res?.code === 200 && Array.isArray(res.data)) {
+          relatedTexts.value = res.data
+        }
+      }).catch(() => {})
     } else {
       ElMessage.error('获取课文详情失败')
     }
@@ -1216,6 +1251,13 @@ const goBack = () => {
   }
 }
 
+// 跳转到相关文章
+const goToRelatedArticle = (id) => {
+  const from = route.query.from
+  const query = from ? { from } : {}
+  router.push({ path: `/article/${id}`, query })
+}
+
 // 为 HTML 内容中的英文单词添加点击功能
 // 注意：此函数的输入必须是已经过 DOMPurify.sanitize() 处理的 HTML
 const addClickableWordsToHtml = (sanitizedHtml) => {
@@ -1433,6 +1475,18 @@ watch(textContent, () => {
     applySharedUnderlines()
     textContentWatchTimerId = null
   }, 800) // 从 500ms 延长到 800ms，减少重复渲染
+})
+
+// 监听路由参数变化（相关文章点击时复用组件，需重新加载数据）
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    textId.value = newId
+    relatedTexts.value = []
+    quizQuestions.value = []
+    isCompleted.value = false
+    window.scrollTo(0, 0)
+    loadTextDetail()
+  }
 })
 
 // 处理 Markdown 中的单词点击
@@ -2818,6 +2872,80 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   color: #94a3b8;
 }
 
+/* Related Articles */
+.related-articles {
+  margin-top: 48px;
+  padding: 0 8px;
+}
+
+.related-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 16px;
+  padding-left: 4px;
+}
+
+.related-cards {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.related-cards::-webkit-scrollbar {
+  height: 4px;
+}
+
+.related-cards::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+.related-card {
+  flex: 0 0 200px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.related-card:hover {
+  background: #fff;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 10px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.word-count {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
 .reader-footer {
   margin-top: 80px;
   display: flex;
@@ -2961,6 +3089,23 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .related-articles {
+    margin-top: 32px;
+  }
+
+  .related-title {
+    font-size: 16px;
+  }
+
+  .related-card {
+    flex: 0 0 160px;
+    padding: 12px;
+  }
+
+  .card-title {
+    font-size: 13px;
   }
 
   .reader-footer {
