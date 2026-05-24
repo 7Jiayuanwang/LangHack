@@ -139,7 +139,7 @@
             {{ formatTime(row.createdTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="viewText(row)">
               查看
@@ -150,6 +150,27 @@
             <el-button type="danger" size="small" @click="deleteText(row)">
               删除
             </el-button>
+            <el-dropdown
+              trigger="click"
+              :disabled="row._regenLoading"
+              @command="(cmd) => handleMoreCommand(cmd, row)"
+            >
+              <el-button
+                size="small"
+                circle
+                :icon="MoreFilled"
+                :loading="row._regenLoading"
+                class="more-action-btn"
+                title="更多操作"
+              />
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="regen-open" :icon="Refresh">
+                    重新改写
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -212,6 +233,50 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 重新生成改写文章对话框 -->
+    <el-dialog
+      v-model="regenDialogVisible"
+      title="重新生成改写文章"
+      width="min(520px, 92%)"
+      :close-on-click-modal="false"
+      append-to-body
+    >
+      <div class="regen-dialog">
+        <div class="regen-target">
+          <span class="regen-target-label">目标课文</span>
+          <span class="regen-target-title">{{ regenTarget?.title }}</span>
+        </div>
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          title="该操作会调用 AI 重新生成所选版本并覆盖现有改写内容，且需要异步等待数分钟。"
+        />
+        <div class="regen-version">
+          <div class="regen-section-title">选择要重新生成的版本</div>
+          <el-radio-group v-model="regenVersion" class="regen-radio-group">
+            <el-radio-button label="CET4">CET-4</el-radio-button>
+            <el-radio-button label="CET6">CET-6</el-radio-button>
+            <el-radio-button label="ACADEMIC">学术</el-radio-button>
+            <el-radio-button label="PARALLEL">中英对照</el-radio-button>
+            <el-radio-button label="ALL">全部</el-radio-button>
+          </el-radio-group>
+        </div>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="regenDialogVisible = false" :disabled="regenSubmitting">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="regenSubmitting"
+            @click="confirmRegenerate"
+          >
+            确认重新生成
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -222,7 +287,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, RefreshLeft, Refresh, VideoPlay } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshLeft, Refresh, VideoPlay, MoreFilled } from '@element-plus/icons-vue'
 import * as adminApi from '@/api/admin'
 import TextEditDialog from '@/components/TextEditDialog.vue'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
@@ -453,6 +518,54 @@ const deleteText = (text) => {
     .catch(() => {
       // 用户取消删除
     })
+}
+
+const VERSION_LABELS = {
+  CET4: 'CET-4 版本',
+  CET6: 'CET-6 版本',
+  ACADEMIC: '学术版本',
+  PARALLEL: '中英对照',
+  ALL: '全部版本'
+}
+
+// "重新生成改写文章"弹窗状态
+const regenDialogVisible = ref(false)
+const regenTarget = ref(null)
+const regenVersion = ref('ALL')
+const regenSubmitting = ref(false)
+
+const handleMoreCommand = (command, row) => {
+  if (command === 'regen-open') {
+    openRegenDialog(row)
+  }
+}
+
+const openRegenDialog = (row) => {
+  regenTarget.value = row
+  regenVersion.value = 'ALL'
+  regenDialogVisible.value = true
+}
+
+const confirmRegenerate = async () => {
+  const row = regenTarget.value
+  if (!row) return
+  const version = regenVersion.value
+  regenSubmitting.value = true
+  row._regenLoading = true
+  try {
+    const response = await adminApi.regenerateTextVersions(row.id, version)
+    if (response.code === 200) {
+      ElMessage.success(response.message || `已提交「${VERSION_LABELS[version] || version}」重新生成，稍后刷新查看`)
+      regenDialogVisible.value = false
+    } else {
+      ElMessage.error(response.message || '提交失败')
+    }
+  } catch (error) {
+    ElMessage.error('提交失败')
+  } finally {
+    regenSubmitting.value = false
+    row._regenLoading = false
+  }
 }
 
 let currentAudio = null
@@ -760,5 +873,62 @@ defineExpose({ loadTexts })
 .priority-na {
   color: #c0c4cc;
   font-size: 16px;
+}
+
+/* "更多"操作按钮：圆形 + 柔和阴影 */
+.more-action-btn {
+  margin-left: 8px;
+  vertical-align: middle;
+  background-color: #f5f7fa;
+  border-color: #dcdfe6;
+  color: #606266;
+  transition: all 0.2s ease;
+}
+.more-action-btn:hover {
+  background-color: #ecf5ff;
+  border-color: #409eff;
+  color: #409eff;
+}
+
+/* "重新生成改写文章"弹窗内容 */
+.regen-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.regen-target {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 14px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border-left: 3px solid #409eff;
+}
+.regen-target-label {
+  font-size: 12px;
+  color: #909399;
+  flex-shrink: 0;
+}
+.regen-target-title {
+  font-size: 14px;
+  color: #303133;
+  font-weight: 500;
+  word-break: break-word;
+}
+.regen-section-title {
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+.regen-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.regen-radio-group :deep(.el-radio-button__inner) {
+  border-radius: 4px;
+  border-left: 1px solid #dcdfe6;
 }
 </style>
