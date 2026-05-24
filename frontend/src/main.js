@@ -114,10 +114,8 @@ const errorCollector = {
   },
 
   reportError(errorInfo) {
-    // TODO: 对接真实的错误监控服务（如 Sentry）
-    // 示例: fetch('/api/errors', { method: 'POST', body: JSON.stringify(errorInfo) })
     try {
-      // 可选：发送到后端错误日志端点
+      // Send to backend error log endpoint
       navigator.sendBeacon(
         environment.resolveApiUrl("/api/errors/report"),
         new Blob([JSON.stringify(errorInfo)], { type: "application/json" }),

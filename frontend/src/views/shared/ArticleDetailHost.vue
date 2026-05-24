@@ -22,13 +22,12 @@ const content = computed(() =>
 const layoutConfig = computed(() => {
   const role = userStore.userRole
   if (!userStore.token) return { layout: null, layoutRole: null }
-  if (role === 'STUDENT') return { layout: StudentLayout, layoutRole: null }
-  if (['USER', 'TEACHER', 'ADMIN', 'OPS'].includes(role)) {
-    return {
-      layout: MobileLayout,
-      layoutRole: role.toLowerCase(),
-      hideHeader: role === 'TEACHER'
-    }
+  // 教师保留教师端底部导航，隐藏标题栏
+  if (role === 'TEACHER') {
+    return { layout: MobileLayout, layoutRole: 'teacher', hideHeader: true }
+  }
+  if (['STUDENT', 'USER', 'ADMIN', 'OPS'].includes(role)) {
+    return { layout: StudentLayout, layoutRole: null }
   }
   return { layout: null, layoutRole: null }
 })

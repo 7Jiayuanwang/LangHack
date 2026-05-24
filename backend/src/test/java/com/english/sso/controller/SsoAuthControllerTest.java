@@ -1,39 +1,39 @@
 package com.english.sso.controller;
 
 import com.english.entity.User;
+import com.english.service.UserService;
+import com.english.sso.config.SsoProperties;
 import com.english.sso.controller.SsoAuthController;
 import com.english.sso.dto.SsoLoginResult;
 import com.english.sso.dto.SsoUserInfo;
 import com.english.sso.service.SsoProtocolType;
 import com.english.sso.service.SsoService;
 import com.english.sso.service.SsoUserMappingService;
+import com.english.util.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// TODO: Fix controller test dependencies (JwtUtil, AccessLogInterceptor, etc.)
-// For now, disable these tests to unblock CI. Service layer tests are passing.
-@Disabled("Controller tests require full application context - needs refactoring")
+// TODO resolved: added @MockBean for JwtUtil, SsoProperties, StringRedisTemplate, UserService
 @WebMvcTest(controllers = SsoAuthController.class, excludeAutoConfiguration = {
     org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class
 })
@@ -66,11 +66,28 @@ class SsoAuthControllerTest {
     @MockBean
     private com.english.service.impl.AccessMetricsService accessMetricsService;
 
+    @MockBean
+    private JwtUtil jwtUtil;
+
+    @MockBean
+    private SsoProperties ssoProperties;
+
+    @MockBean
+    private StringRedisTemplate stringRedisTemplate;
+
+    @MockBean
+    private UserService userService;
+
     private SsoUserInfo mockUserInfo;
     private SsoLoginResult mockLoginResult;
 
     @BeforeEach
     void setUp() {
+        // Stub ssoProperties.getCas() so buildServiceUrl() doesn't NPE
+        SsoProperties.CasConfig casConfig = new SsoProperties.CasConfig();
+        casConfig.setServerName("http://localhost:8088");
+        when(ssoProperties.getCas()).thenReturn(casConfig);
+
         mockUserInfo = new SsoUserInfo();
         mockUserInfo.setSsoUserId("2023122066164");
         mockUserInfo.setSsoUsername("2023122066164");
@@ -115,20 +132,19 @@ class SsoAuthControllerTest {
 
     @Test
     void testHandleCallback_Success() throws Exception {
+        // The callback endpoint is GET and redirects to frontend with a one-time code
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOps);
         when(ssoService.isEnabled()).thenReturn(true);
         when(ssoService.validateCallback(any(), anyString())).thenReturn(mockUserInfo);
+        when(ssoService.getProtocolType()).thenReturn(SsoProtocolType.CAS);
         when(ssoUserMappingService.processLogin(any(), any())).thenReturn(mockLoginResult);
 
-        String requestBody = "{\"ticket\":\"ST-123-abc\"}";
-
-        mockMvc.perform(post("/api/auth/sso/callback")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.token").value("mock-jwt-token"))
-                .andExpect(jsonPath("$.data.user.username").value("2023122066164"))
-                .andExpect(jsonPath("$.data.user.role").value("STUDENT"));
+        mockMvc.perform(get("/api/auth/sso/callback")
+                        .param("ticket", "ST-123-abc"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrlPattern("http://localhost:8088/sso/callback?code=*"));
     }
 
     @Test
@@ -138,18 +154,18 @@ class SsoAuthControllerTest {
         mockLoginResult.setUser(null);
         mockLoginResult.setMessage("您的账号正在审批中，请联系管理员");
 
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOps);
         when(ssoService.isEnabled()).thenReturn(true);
         when(ssoService.validateCallback(any(), anyString())).thenReturn(mockUserInfo);
+        when(ssoService.getProtocolType()).thenReturn(SsoProtocolType.CAS);
         when(ssoUserMappingService.processLogin(any(), any())).thenReturn(mockLoginResult);
 
-        String requestBody = "{\"ticket\":\"ST-123-abc\"}";
-
-        mockMvc.perform(post("/api/auth/sso/callback")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("您的账号正在审批中，请联系管理员"));
+        mockMvc.perform(get("/api/auth/sso/callback")
+                        .param("ticket", "ST-123-abc"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrlPattern("http://localhost:8088/sso/callback?code=*"));
     }
 
     @Test

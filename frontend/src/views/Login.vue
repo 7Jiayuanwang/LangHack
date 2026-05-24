@@ -721,6 +721,7 @@ const handleRegister = async () => {
 /* 时尚登录页面 */
 .trend-login {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   font-family:

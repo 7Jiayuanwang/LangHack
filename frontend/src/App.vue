@@ -136,6 +136,7 @@ html, body {
 
 #app {
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   /* 不设 overflow:hidden，避免阻断公开页（/articles 等）的原生滚动
      各布局组件自行管理内部滚动区域 */

@@ -127,6 +127,16 @@ media:
     max-image-size: ${MEDIA_UPLOAD_MAX_IMAGE_SIZE:10485760}   # 默认 10 MB
     max-video-size: ${MEDIA_UPLOAD_MAX_VIDEO_SIZE:536870912}  # 默认 512 MB
     storage-path: ${MEDIA_UPLOAD_STORAGE_PATH:/app/uploads}   # 视频文件存储路径
+  transcode:
+    enabled: ${MEDIA_TRANSCODE_ENABLED:true}                  # 总开关：关闭后所有视频走 SKIPPED
+    ffmpeg-path: ${MEDIA_TRANSCODE_FFMPEG:ffmpeg}             # ffmpeg 可执行文件路径（容器内 PATH 中）
+    ffprobe-path: ${MEDIA_TRANSCODE_FFPROBE:ffprobe}          # ffprobe 可执行文件路径
+    target-resolution-height: ${MEDIA_TRANSCODE_TARGET_H:1080} # 目标最大高度（仅缩小不放大）
+    preset: ${MEDIA_TRANSCODE_PRESET:medium}                  # libx264 preset：ultrafast..veryslow
+    crf: ${MEDIA_TRANSCODE_CRF:23}                            # 质量 18(高)-28(低)，23 为合理默认
+    timeout-minutes: ${MEDIA_TRANSCODE_TIMEOUT_MIN:30}        # 单任务超时（分钟），超时强杀
+    max-concurrent: ${MEDIA_TRANSCODE_CONCURRENT:1}           # 同时并行任务数
+    queue-capacity: ${MEDIA_TRANSCODE_QUEUE:50}               # 队列容量，满后调用线程跑（背压）
 
 recommendation:
   weight:

@@ -74,6 +74,28 @@ public class Video {
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedTime;
 
+    @TableField(exist = false)
+    private String transcodeStatus;
+
+    @TableField(exist = false)
+    private String transcodeError;
+
+    public String getTranscodeStatus() {
+        return transcodeStatus;
+    }
+
+    public void setTranscodeStatus(String transcodeStatus) {
+        this.transcodeStatus = transcodeStatus;
+    }
+
+    public String getTranscodeError() {
+        return transcodeError;
+    }
+
+    public void setTranscodeError(String transcodeError) {
+        this.transcodeError = transcodeError;
+    }
+
     // ========== Getters and Setters ==========
 
     public Long getId() {

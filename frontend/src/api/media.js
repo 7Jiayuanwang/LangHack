@@ -145,3 +145,21 @@ export function deleteMedia(mediaId) {
     method: 'delete'
   })
 }
+
+/**
+ * 重试视频转码（管理员）
+ * @param {number|string} mediaId
+ */
+export function retryTranscode(mediaId) {
+  if (!mediaId || (typeof mediaId !== 'number' && typeof mediaId !== 'string')) {
+    return Promise.reject(new Error('媒体 ID 无效'))
+  }
+  const id = typeof mediaId === 'string' ? mediaId.trim() : mediaId
+  if (!id || (typeof id === 'string' && !/^\d+$/.test(id))) {
+    return Promise.reject(new Error('媒体 ID 必须是有效的正整数'))
+  }
+  return request({
+    url: `/api/media/${id}/retry-transcode`,
+    method: 'post'
+  })
+}
