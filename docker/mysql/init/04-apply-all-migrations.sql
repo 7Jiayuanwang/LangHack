@@ -3099,3 +3099,105 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     FOREIGN KEY (call_log_id) REFERENCES ai_call_log(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI用户反馈表';
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- V25__link_users_to_school_directory.sql
+-- 将 users 与 school_student / school_teacher 主数据建立显式联系
+-- 注：与 V25__exercise_options_table.sql 同 V25 版本号；本块为后续补录，
+--     全部使用 IF NOT EXISTS / WHERE NULL 包装，保证幂等可重复执行
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- 1) 规范化 username：student_<digits> -> <digits>（已规范化的不会再匹配）
+UPDATE users
+SET username = SUBSTRING(username, 9)
+WHERE username REGEXP '^student_[0-9]+$';
+
+-- 2) users 新增 school_student_id（幂等）
+SET @col_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'school_student_id'
+);
+SET @col_sql = IF(
+    @col_exists = 0,
+    'ALTER TABLE users ADD COLUMN school_student_id BIGINT NULL COMMENT ''关联 school_student.id（学号匹配）'' AFTER inner_uid',
+    'SELECT 1'
+);
+PREPARE stmt FROM @col_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 3) users 新增 school_teacher_id（幂等）
+SET @col_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'school_teacher_id'
+);
+SET @col_sql = IF(
+    @col_exists = 0,
+    'ALTER TABLE users ADD COLUMN school_teacher_id BIGINT NULL COMMENT ''关联 school_teacher.id（工号匹配）'' AFTER school_student_id',
+    'SELECT 1'
+);
+PREPARE stmt FROM @col_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 4) 索引（幂等）
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_school_student_id'
+);
+SET @idx_sql = IF(
+    @idx_exists = 0,
+    'CREATE INDEX idx_users_school_student_id ON users(school_student_id)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_school_teacher_id'
+);
+SET @idx_sql = IF(
+    @idx_exists = 0,
+    'CREATE INDEX idx_users_school_teacher_id ON users(school_teacher_id)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 5) 回填外键（幂等：WHERE IS NULL）
+UPDATE users u
+JOIN school_student s ON s.student_id = u.username
+SET u.school_student_id = s.id
+WHERE u.school_student_id IS NULL;
+
+UPDATE users u
+JOIN school_teacher t ON t.teacher_id = u.username
+SET u.school_teacher_id = t.id
+WHERE u.school_teacher_id IS NULL;
+
+-- 6) 学生学校画像视图（DROP + CREATE 幂等）
+DROP VIEW IF EXISTS v_user_school_profile;
+CREATE VIEW v_user_school_profile AS
+SELECT
+    u.id                          AS user_id,
+    u.username                    AS username,
+    u.role                        AS role,
+    u.real_name                   AS real_name,
+    s.id                          AS school_student_id,
+    s.student_id                  AS student_id,
+    s.student_name                AS student_name,
+    s.college_name                AS college_name,
+    s.class_code                  AS class_code,
+    s.class_name                  AS class_name,
+    s.grade                       AS grade,
+    s.major_name                  AS major_name,
+    (SELECT COUNT(*) FROM course_selection cs            WHERE cs.student_id = s.student_id) AS course_selection_count,
+    (SELECT COUNT(*) FROM teacher_student_binding tsb    WHERE tsb.student_id = s.student_id) AS teacher_binding_count,
+    (SELECT MAX(les.exam_date) FROM level_exam_scores les WHERE les.student_id = s.student_id) AS last_exam_date,
+    (SELECT MAX(les.score)     FROM level_exam_scores les WHERE les.student_id = s.student_id) AS best_exam_score
+FROM users u
+JOIN school_student s ON s.id = u.school_student_id
+WHERE u.deleted = 0;
