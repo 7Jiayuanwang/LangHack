@@ -152,14 +152,14 @@
             </el-button>
             <el-dropdown
               trigger="click"
-              :disabled="row._regenLoading"
+              :disabled="row._regenLoading || row._requizLoading"
               @command="(cmd) => handleMoreCommand(cmd, row)"
             >
               <el-button
                 size="small"
                 circle
                 :icon="MoreFilled"
-                :loading="row._regenLoading"
+                :loading="row._regenLoading || row._requizLoading"
                 class="more-action-btn"
                 title="更多操作"
               />
@@ -167,6 +167,9 @@
                 <el-dropdown-menu>
                   <el-dropdown-item command="regen-open" :icon="Refresh">
                     重新改写
+                  </el-dropdown-item>
+                  <el-dropdown-item command="requiz" :icon="Edit">
+                    重新出题
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -287,8 +290,9 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, RefreshLeft, Refresh, VideoPlay, MoreFilled } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshLeft, Refresh, VideoPlay, MoreFilled, Edit } from '@element-plus/icons-vue'
 import * as adminApi from '@/api/admin'
+import { generateAiQuiz } from '@/api/aiQuiz'
 import TextEditDialog from '@/components/TextEditDialog.vue'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 
@@ -534,9 +538,23 @@ const regenTarget = ref(null)
 const regenVersion = ref('ALL')
 const regenSubmitting = ref(false)
 
-const handleMoreCommand = (command, row) => {
+const handleMoreCommand = async (command, row) => {
   if (command === 'regen-open') {
     openRegenDialog(row)
+  } else if (command === 'requiz') {
+    try {
+      row._requizLoading = true
+      const resp = await generateAiQuiz(row.id, 5, true)
+      if (resp.code === 200) {
+        ElMessage.success('已提交重新出题任务')
+      } else {
+        ElMessage.error(resp.message || '重新出题失败')
+      }
+    } catch (e) {
+      ElMessage.error('重新出题失败：' + (e.message || '网络异常'))
+    } finally {
+      row._requizLoading = false
+    }
   }
 }
 
