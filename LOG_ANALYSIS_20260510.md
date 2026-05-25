@@ -272,5 +272,5 @@ for (Map<String, Object> record : records) {
 ---
 
 **报告生成时间**: 2026-05-10  
-**分析工具**: Claude Code + Bash  
+**分析工具**: Shell + AI Assistant  
 **下一步**: 执行修复方案并验证

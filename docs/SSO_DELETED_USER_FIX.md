@@ -165,5 +165,5 @@ SSO 用户登录
 ---
 
 **修复日期**：2026-04-21  
-**修复人员**：Claude (Kiro AI Assistant)  
+**修复人员**：AI Assistant  
 **问题来源**：生产日志分析

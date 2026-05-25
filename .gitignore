@@ -246,7 +246,7 @@ data/app-uploads/*
 !data/app-logs/.gitkeep
 !data/app-uploads/.gitkeep
 
-# Claude Code AI assistant files
+# AI assistant files
 .claude/
 CLAUDE.md
 agent.md

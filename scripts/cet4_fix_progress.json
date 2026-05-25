@@ -1,0 +1,9042 @@
+{
+  "abbreviation": {
+    "done": true,
+    "meaning": "n.缩写,简称",
+    "source": "api"
+  },
+  "abort": {
+    "done": true,
+    "meaning": "中止",
+    "source": "api"
+  },
+  "absorption": {
+    "done": true,
+    "meaning": "吸着",
+    "source": "api"
+  },
+  "academician": {
+    "done": true,
+    "meaning": "n.院士",
+    "source": "api"
+  },
+  "acclaim": {
+    "done": true,
+    "meaning": "赞誉",
+    "source": "api"
+  },
+  "abreast": {
+    "done": true,
+    "meaning": "并排",
+    "source": "api"
+  },
+  "abolition": {
+    "done": true,
+    "meaning": "废除",
+    "source": "api"
+  },
+  "abide": {
+    "done": true,
+    "meaning": "v.容忍",
+    "source": "api"
+  },
+  "addiction": {
+    "done": true,
+    "meaning": "癖好",
+    "source": "api"
+  },
+  "acupuncture": {
+    "done": true,
+    "meaning": "针刺疗法",
+    "source": "api"
+  },
+  "accountability": {
+    "done": true,
+    "meaning": "问责；问责制",
+    "source": "api"
+  },
+  "ace": {
+    "done": true,
+    "meaning": "高手",
+    "source": "api"
+  },
+  "addictive": {
+    "done": true,
+    "meaning": "上瘾",
+    "source": "api"
+  },
+  "according to": {
+    "done": true,
+    "meaning": "根据",
+    "source": "api"
+  },
+  "adequacy": {
+    "done": true,
+    "meaning": "适当",
+    "source": "api"
+  },
+  "addict": {
+    "done": true,
+    "meaning": "成瘾",
+    "source": "api"
+  },
+  "adjacent": {
+    "done": true,
+    "meaning": "adj.邻近",
+    "source": "api"
+  },
+  "adhere": {
+    "done": true,
+    "meaning": "v.参加 ,赞成,加入",
+    "source": "api"
+  },
+  "administrative": {
+    "done": true,
+    "meaning": "行政结构",
+    "source": "api"
+  },
+  "administrate": {
+    "done": true,
+    "meaning": "v.代管",
+    "source": "api"
+  },
+  "admittance": {
+    "done": true,
+    "meaning": "导纳",
+    "source": "api"
+  },
+  "admittedly": {
+    "done": true,
+    "meaning": "固然",
+    "source": "api"
+  },
+  "adherence": {
+    "done": true,
+    "meaning": "依从性",
+    "source": "api"
+  },
+  "advent": {
+    "done": true,
+    "meaning": "降临",
+    "source": "api"
+  },
+  "adversary": {
+    "done": true,
+    "meaning": "敌人",
+    "source": "api"
+  },
+  "adventurous": {
+    "done": true,
+    "meaning": "有冒险精神",
+    "source": "api"
+  },
+  "aesthetics": {
+    "done": true,
+    "meaning": "美学",
+    "source": "api"
+  },
+  "adversity": {
+    "done": true,
+    "meaning": "n.不幸 ,灾",
+    "source": "api"
+  },
+  "aerial": {
+    "done": true,
+    "meaning": "航空",
+    "source": "api"
+  },
+  "aesthetic": {
+    "done": true,
+    "meaning": "美学",
+    "source": "api"
+  },
+  "advocacy": {
+    "done": true,
+    "meaning": "n.辩护",
+    "source": "api"
+  },
+  "adverse": {
+    "done": true,
+    "meaning": "adj.不利 ,恶劣",
+    "source": "api"
+  },
+  "affiliate": {
+    "done": true,
+    "meaning": "关联公司",
+    "source": "api"
+  },
+  "affirm": {
+    "done": true,
+    "meaning": "v.确认 ,维持",
+    "source": "api"
+  },
+  "affiliation": {
+    "done": true,
+    "meaning": "加入",
+    "source": "api"
+  },
+  "affix": {
+    "done": true,
+    "meaning": "v.签署",
+    "source": "api"
+  },
+  "affluence": {
+    "done": true,
+    "meaning": "财富",
+    "source": "api"
+  },
+  "affirmative": {
+    "done": true,
+    "meaning": "adj.肯定",
+    "source": "api"
+  },
+  "affixation": {
+    "done": true,
+    "meaning": "詞綴",
+    "source": "api"
+  },
+  "affirmation": {
+    "done": true,
+    "meaning": "励志语录",
+    "source": "api"
+  },
+  "affluent": {
+    "done": true,
+    "meaning": "财富",
+    "source": "api"
+  },
+  "affordability": {
+    "done": true,
+    "meaning": "店",
+    "source": "api"
+  },
+  "afloat": {
+    "done": true,
+    "meaning": "业经装船,已流通的(如票据等)，已装运的,在途中,在运输中",
+    "source": "api"
+  },
+  "aggravation": {
+    "done": true,
+    "meaning": "加重因素",
+    "source": "api"
+  },
+  "agitate": {
+    "done": true,
+    "meaning": "v.煽惑",
+    "source": "api"
+  },
+  "aggravate": {
+    "done": true,
+    "meaning": "加重",
+    "source": "api"
+  },
+  "aggregate": {
+    "done": true,
+    "meaning": "聚合函数",
+    "source": "api"
+  },
+  "aftermath": {
+    "done": true,
+    "meaning": "n.后果",
+    "source": "api"
+  },
+  "ailment": {
+    "done": true,
+    "meaning": "疾病",
+    "source": "api"
+  },
+  "ail": {
+    "done": true,
+    "meaning": "AIL",
+    "source": "api"
+  },
+  "agitation": {
+    "done": true,
+    "meaning": "激动",
+    "source": "api"
+  },
+  "aisle": {
+    "done": true,
+    "meaning": "走廊",
+    "source": "api"
+  },
+  "aide": {
+    "done": true,
+    "meaning": "幕僚",
+    "source": "api"
+  },
+  "air-conditioning": {
+    "done": true,
+    "meaning": "空气调节",
+    "source": "api"
+  },
+  "airborne": {
+    "done": true,
+    "meaning": "空传",
+    "source": "api"
+  },
+  "air-conditioner": {
+    "done": true,
+    "meaning": "空调",
+    "source": "api"
+  },
+  "alien": {
+    "done": true,
+    "meaning": "外星人",
+    "source": "api"
+  },
+  "ale": {
+    "done": true,
+    "meaning": "麦芽酒",
+    "source": "api"
+  },
+  "align": {
+    "done": true,
+    "meaning": "对齐",
+    "source": "api"
+  },
+  "allegation": {
+    "done": true,
+    "meaning": "控诉主张；当事人在诉讼状中的肯定性陈述",
+    "source": "api"
+  },
+  "alienation": {
+    "done": true,
+    "meaning": "n.让渡 ,让与,财产的转让 ,财产转让",
+    "source": "api"
+  },
+  "akin": {
+    "done": true,
+    "meaning": "性质相同的",
+    "source": "api"
+  },
+  "alignment": {
+    "done": true,
+    "meaning": "大纲",
+    "source": "api"
+  },
+  "alienate": {
+    "done": true,
+    "meaning": "v.让渡 ,让与",
+    "source": "api"
+  },
+  "alliance": {
+    "done": true,
+    "meaning": "結盟",
+    "source": "api"
+  },
+  "allergy": {
+    "done": true,
+    "meaning": "过敏",
+    "source": "api"
+  },
+  "alleviate": {
+    "done": true,
+    "meaning": "v.缓和",
+    "source": "api"
+  },
+  "allegedly": {
+    "done": true,
+    "meaning": "据称",
+    "source": "api"
+  },
+  "allude": {
+    "done": true,
+    "meaning": "暗示",
+    "source": "api"
+  },
+  "allotment": {
+    "done": true,
+    "meaning": "n.划拨 ,摊派,分配",
+    "source": "api"
+  },
+  "alleviation": {
+    "done": true,
+    "meaning": "n.缓和",
+    "source": "api"
+  },
+  "allot": {
+    "done": true,
+    "meaning": "v.划拨,分配",
+    "source": "api"
+  },
+  "alphabetical": {
+    "done": true,
+    "meaning": "按字母顺序排列",
+    "source": "api"
+  },
+  "allusion": {
+    "done": true,
+    "meaning": "典故",
+    "source": "api"
+  },
+  "alteration": {
+    "done": true,
+    "meaning": "变化",
+    "source": "api"
+  },
+  "almighty": {
+    "done": true,
+    "meaning": "全能者",
+    "source": "api"
+  },
+  "ally": {
+    "done": true,
+    "meaning": "v.联合 ,盟国",
+    "source": "api"
+  },
+  "aloft": {
+    "done": true,
+    "meaning": "高空",
+    "source": "api"
+  },
+  "allure": {
+    "done": true,
+    "meaning": "魅惑",
+    "source": "api"
+  },
+  "ambiguity": {
+    "done": true,
+    "meaning": "模棱两可",
+    "source": "api"
+  },
+  "amend": {
+    "done": true,
+    "meaning": "改善 改善 [gai3 shan4]",
+    "source": "api"
+  },
+  "amendment": {
+    "done": true,
+    "meaning": "n.修正 ,改正 ,修改书",
+    "source": "api"
+  },
+  "amiable": {
+    "done": true,
+    "meaning": "亲和",
+    "source": "api"
+  },
+  "alternation": {
+    "done": true,
+    "meaning": "n.交替主义",
+    "source": "api"
+  },
+  "alternately": {
+    "done": true,
+    "meaning": "交替",
+    "source": "api"
+  },
+  "analogous": {
+    "done": true,
+    "meaning": "类似色",
+    "source": "api"
+  },
+  "amidst": {
+    "done": true,
+    "meaning": "中 中 [zhong1]",
+    "source": "api"
+  },
+  "analogue": {
+    "done": true,
+    "meaning": "相似物",
+    "source": "api"
+  },
+  "analogy": {
+    "done": true,
+    "meaning": "n.类比 ,类推",
+    "source": "api"
+  },
+  "analyst": {
+    "done": true,
+    "meaning": "分析员",
+    "source": "api"
+  },
+  "analytic": {
+    "done": true,
+    "meaning": "分析型的",
+    "source": "api"
+  },
+  "ammunition": {
+    "done": true,
+    "meaning": "弹药",
+    "source": "api"
+  },
+  "amid": {
+    "done": true,
+    "meaning": "中",
+    "source": "api"
+  },
+  "ancestry": {
+    "done": true,
+    "meaning": "先祖",
+    "source": "api"
+  },
+  "analyze": {
+    "done": true,
+    "meaning": "分析道",
+    "source": "api"
+  },
+  "analytical": {
+    "done": true,
+    "meaning": "adj.分析",
+    "source": "api"
+  },
+  "anguish": {
+    "done": true,
+    "meaning": "痛苦",
+    "source": "api"
+  },
+  "animation": {
+    "done": true,
+    "meaning": "动画",
+    "source": "api"
+  },
+  "anew": {
+    "done": true,
+    "meaning": "adv.重新",
+    "source": "api"
+  },
+  "anchorage": {
+    "done": true,
+    "meaning": "泊地",
+    "source": "api"
+  },
+  "animate": {
+    "done": true,
+    "meaning": "赋予生命",
+    "source": "api"
+  },
+  "annoyance": {
+    "done": true,
+    "meaning": "烦恼",
+    "source": "api"
+  },
+  "antagonist": {
+    "done": true,
+    "meaning": "反主角",
+    "source": "api"
+  },
+  "annexation": {
+    "done": true,
+    "meaning": "被合并的国土",
+    "source": "api"
+  },
+  "anonymous": {
+    "done": true,
+    "meaning": "匿名",
+    "source": "api"
+  },
+  "annex": {
+    "done": true,
+    "meaning": "附件",
+    "source": "api"
+  },
+  "antagonistic": {
+    "done": true,
+    "meaning": "adj.敌对",
+    "source": "api"
+  },
+  "anonymity": {
+    "done": true,
+    "meaning": "匿名",
+    "source": "api"
+  },
+  "antagonistically": {
+    "done": true,
+    "meaning": "对抗性地",
+    "source": "api"
+  },
+  "apologetic": {
+    "done": true,
+    "meaning": "歉意",
+    "source": "api"
+  },
+  "antibiotic": {
+    "done": true,
+    "meaning": "抗生素",
+    "source": "api"
+  },
+  "ape": {
+    "done": true,
+    "meaning": "猿猴",
+    "source": "api"
+  },
+  "app": {
+    "done": true,
+    "meaning": "应用程序",
+    "source": "api"
+  },
+  "antenna": {
+    "done": true,
+    "meaning": "触须",
+    "source": "api"
+  },
+  "appal": {
+    "done": true,
+    "meaning": "震動 震动 [zhen4 dong4]",
+    "source": "api"
+  },
+  "antonym": {
+    "done": true,
+    "meaning": "反义词",
+    "source": "api"
+  },
+  "appall": {
+    "done": true,
+    "meaning": "震動 震动 [zhen4 dong4]",
+    "source": "api"
+  },
+  "applause": {
+    "done": true,
+    "meaning": "鼓掌",
+    "source": "api"
+  },
+  "apt": {
+    "done": true,
+    "meaning": "APT",
+    "source": "api"
+  },
+  "appeasement": {
+    "done": true,
+    "meaning": "n.绥靖",
+    "source": "api"
+  },
+  "appease": {
+    "done": true,
+    "meaning": "安扶",
+    "source": "api"
+  },
+  "aptly": {
+    "done": true,
+    "meaning": "恰如其分",
+    "source": "api"
+  },
+  "appalling": {
+    "done": true,
+    "meaning": "骇人听闻",
+    "source": "api"
+  },
+  "appraisal": {
+    "done": true,
+    "meaning": "n.鉴定 ,评估,估矿期",
+    "source": "api"
+  },
+  "arbitration": {
+    "done": true,
+    "meaning": "仲裁",
+    "source": "api"
+  },
+  "arc": {
+    "done": true,
+    "meaning": "弧",
+    "source": "api"
+  },
+  "arena": {
+    "done": true,
+    "meaning": "竞技场",
+    "source": "api"
+  },
+  "argumentative": {
+    "done": true,
+    "meaning": "喜欢讨论",
+    "source": "api"
+  },
+  "argumentation": {
+    "done": true,
+    "meaning": "证据；",
+    "source": "api"
+  },
+  "ardent": {
+    "done": true,
+    "meaning": "热心",
+    "source": "api"
+  },
+  "aristocracy": {
+    "done": true,
+    "meaning": "贵族制",
+    "source": "api"
+  },
+  "arbitrate": {
+    "done": true,
+    "meaning": "&#20210;&#35009;",
+    "source": "api"
+  },
+  "artery": {
+    "done": true,
+    "meaning": "动脉",
+    "source": "api"
+  },
+  "arrogance": {
+    "done": true,
+    "meaning": "架子",
+    "source": "api"
+  },
+  "armour": {
+    "done": true,
+    "meaning": "盔甲",
+    "source": "api"
+  },
+  "aristocratic": {
+    "done": true,
+    "meaning": "贵族的",
+    "source": "api"
+  },
+  "arrogant": {
+    "done": true,
+    "meaning": "自大的",
+    "source": "api"
+  },
+  "aristocrat": {
+    "done": true,
+    "meaning": "贵族",
+    "source": "api"
+  },
+  "array": {
+    "done": true,
+    "meaning": "数组",
+    "source": "api"
+  },
+  "armament": {
+    "done": true,
+    "meaning": "武器",
+    "source": "api"
+  },
+  "articulate": {
+    "done": true,
+    "meaning": "明确表达",
+    "source": "api"
+  },
+  "articulation": {
+    "done": true,
+    "meaning": "清晰度",
+    "source": "api"
+  },
+  "artillery": {
+    "done": true,
+    "meaning": "炮兵部队",
+    "source": "api"
+  },
+  "ascend": {
+    "done": true,
+    "meaning": "飞升",
+    "source": "api"
+  },
+  "ascendance": {
+    "done": true,
+    "meaning": "治理 治理 [zhi4 li3]",
+    "source": "api"
+  },
+  "artifact": {
+    "done": true,
+    "meaning": "构件",
+    "source": "api"
+  },
+  "ascertain": {
+    "done": true,
+    "meaning": "查明 ,判明",
+    "source": "api"
+  },
+  "ascribe": {
+    "done": true,
+    "meaning": "归因",
+    "source": "api"
+  },
+  "assassin": {
+    "done": true,
+    "meaning": "n.暗杀者",
+    "source": "api"
+  },
+  "assassination": {
+    "done": true,
+    "meaning": "n.暗杀 ,行刺刺杀",
+    "source": "api"
+  },
+  "ass": {
+    "done": true,
+    "meaning": "驢",
+    "source": "api"
+  },
+  "assault": {
+    "done": true,
+    "meaning": "突袭；侵犯；威吓",
+    "source": "api"
+  },
+  "aspiration": {
+    "done": true,
+    "meaning": "志向",
+    "source": "api"
+  },
+  "ashore": {
+    "done": true,
+    "meaning": "岸上",
+    "source": "api"
+  },
+  "aspire": {
+    "done": true,
+    "meaning": "Aspire",
+    "source": "api"
+  },
+  "assassinate": {
+    "done": true,
+    "meaning": "v.暗杀 ,行刺,刺杀",
+    "source": "api"
+  },
+  "assertion": {
+    "done": true,
+    "meaning": "n.宣称 ,作者主张权",
+    "source": "api"
+  },
+  "assimilation": {
+    "done": true,
+    "meaning": "n.同化",
+    "source": "api"
+  },
+  "assimilate": {
+    "done": true,
+    "meaning": "同化",
+    "source": "api"
+  },
+  "astray": {
+    "done": true,
+    "meaning": "歧途",
+    "source": "api"
+  },
+  "assortment": {
+    "done": true,
+    "meaning": "n.品种",
+    "source": "api"
+  },
+  "assert": {
+    "done": true,
+    "meaning": "ɏһ¼¶",
+    "source": "api"
+  },
+  "assertive": {
+    "done": true,
+    "meaning": "有主见的",
+    "source": "api"
+  },
+  "assurance": {
+    "done": true,
+    "meaning": "保证",
+    "source": "api"
+  },
+  "atlas": {
+    "done": true,
+    "meaning": "阿特拉斯",
+    "source": "api"
+  },
+  "attendance": {
+    "done": true,
+    "meaning": "出勤",
+    "source": "api"
+  },
+  "asylum": {
+    "done": true,
+    "meaning": "n.庇护 ,庇护场所 ,庇护权,庇护所,避难所",
+    "source": "api"
+  },
+  "attendant": {
+    "done": true,
+    "meaning": "侍者",
+    "source": "api"
+  },
+  "atrocity": {
+    "done": true,
+    "meaning": "暴行",
+    "source": "api"
+  },
+  "atop": {
+    "done": true,
+    "meaning": "顶部",
+    "source": "api"
+  },
+  "astronomical": {
+    "done": true,
+    "meaning": "天文學",
+    "source": "api"
+  },
+  "atrocious": {
+    "done": true,
+    "meaning": "凶残",
+    "source": "api"
+  },
+  "auditorium": {
+    "done": true,
+    "meaning": "礼堂",
+    "source": "api"
+  },
+  "augment": {
+    "done": true,
+    "meaning": "v.增补",
+    "source": "api"
+  },
+  "audio": {
+    "done": true,
+    "meaning": "音频",
+    "source": "api"
+  },
+  "audit": {
+    "done": true,
+    "meaning": "v.稽核 ,审计,审计报告",
+    "source": "api"
+  },
+  "auditor": {
+    "done": true,
+    "meaning": "审核员",
+    "source": "api"
+  },
+  "auction": {
+    "done": true,
+    "meaning": "拍卖",
+    "source": "api"
+  },
+  "auctioneer": {
+    "done": true,
+    "meaning": "拍卖商",
+    "source": "api"
+  },
+  "authorization": {
+    "done": true,
+    "meaning": "许可",
+    "source": "api"
+  },
+  "augmentation": {
+    "done": true,
+    "meaning": "收益增加",
+    "source": "api"
+  },
+  "autobiographical": {
+    "done": true,
+    "meaning": "自传",
+    "source": "api"
+  },
+  "auntie": {
+    "done": true,
+    "meaning": "姑姑",
+    "source": "api"
+  },
+  "automate": {
+    "done": true,
+    "meaning": "自动",
+    "source": "api"
+  },
+  "authorisation": {
+    "done": true,
+    "meaning": "大權 大权 [da4 quan2]",
+    "source": "api"
+  },
+  "authoritative": {
+    "done": true,
+    "meaning": "权威",
+    "source": "api"
+  },
+  "autobiographic": {
+    "done": true,
+    "meaning": "自传体",
+    "source": "api"
+  },
+  "avenge": {
+    "done": true,
+    "meaning": "v.报仇",
+    "source": "api"
+  },
+  "avoidance": {
+    "done": true,
+    "meaning": "避免",
+    "source": "api"
+  },
+  "aversion": {
+    "done": true,
+    "meaning": "厌恶",
+    "source": "api"
+  },
+  "awe": {
+    "done": true,
+    "meaning": "敬畏",
+    "source": "api"
+  },
+  "avert": {
+    "done": true,
+    "meaning": "v.避免",
+    "source": "api"
+  },
+  "axe": {
+    "done": true,
+    "meaning": "斧头",
+    "source": "api"
+  },
+  "avail": {
+    "done": true,
+    "meaning": "利用",
+    "source": "api"
+  },
+  "backup": {
+    "done": true,
+    "meaning": "备份",
+    "source": "api"
+  },
+  "bankruptcy": {
+    "done": true,
+    "meaning": "破产",
+    "source": "api"
+  },
+  "bail": {
+    "done": true,
+    "meaning": "保释金",
+    "source": "api"
+  },
+  "baffle": {
+    "done": true,
+    "meaning": "挡板",
+    "source": "api"
+  },
+  "backyard": {
+    "done": true,
+    "meaning": "后hua院",
+    "source": "api"
+  },
+  "bait": {
+    "done": true,
+    "meaning": "诱饵",
+    "source": "api"
+  },
+  "bald": {
+    "done": true,
+    "meaning": "卡尔博",
+    "source": "api"
+  },
+  "barometer": {
+    "done": true,
+    "meaning": "气压",
+    "source": "api"
+  },
+  "barge": {
+    "done": true,
+    "meaning": "驳船",
+    "source": "api"
+  },
+  "battalion": {
+    "done": true,
+    "meaning": "n.营",
+    "source": "api"
+  },
+  "barracks": {
+    "done": true,
+    "meaning": "n.营 ,营房",
+    "source": "api"
+  },
+  "barren": {
+    "done": true,
+    "meaning": "寸草不生",
+    "source": "api"
+  },
+  "batch": {
+    "done": true,
+    "meaning": "批量",
+    "source": "api"
+  },
+  "bass": {
+    "done": true,
+    "meaning": "低音",
+    "source": "api"
+  },
+  "bbq": {
+    "done": true,
+    "meaning": "BBQ",
+    "source": "api"
+  },
+  "beetle": {
+    "done": true,
+    "meaning": "甲虫",
+    "source": "api"
+  },
+  "bedding": {
+    "done": true,
+    "meaning": "卧具，",
+    "source": "api"
+  },
+  "beforehand": {
+    "done": true,
+    "meaning": "adv.提前 ,事前 ,预先",
+    "source": "api"
+  },
+  "beak": {
+    "done": true,
+    "meaning": "法案",
+    "source": "api"
+  },
+  "behavioural": {
+    "done": true,
+    "meaning": "行为方面",
+    "source": "api"
+  },
+  "bead": {
+    "done": true,
+    "meaning": "圆珠",
+    "source": "api"
+  },
+  "belongings": {
+    "done": true,
+    "meaning": "属性",
+    "source": "api"
+  },
+  "beckon": {
+    "done": true,
+    "meaning": "招手",
+    "source": "api"
+  },
+  "benevolent": {
+    "done": true,
+    "meaning": "n.慈善",
+    "source": "api"
+  },
+  "best-seller": {
+    "done": true,
+    "meaning": "n.畅销书",
+    "source": "api"
+  },
+  "beneficiary": {
+    "done": true,
+    "meaning": "信托受益人；受遗赠人、保险受益人",
+    "source": "api"
+  },
+  "benevolence": {
+    "done": true,
+    "meaning": "n.捐物 ,捐助财产",
+    "source": "api"
+  },
+  "benign": {
+    "done": true,
+    "meaning": "温善",
+    "source": "api"
+  },
+  "best-selling": {
+    "done": true,
+    "meaning": "热卖产品",
+    "source": "api"
+  },
+  "besiege": {
+    "done": true,
+    "meaning": "攻城戰",
+    "source": "api"
+  },
+  "billionaire": {
+    "done": true,
+    "meaning": "十亿富翁",
+    "source": "api"
+  },
+  "bin": {
+    "done": true,
+    "meaning": "箱子",
+    "source": "api"
+  },
+  "bibliography": {
+    "done": true,
+    "meaning": "n.参考书目",
+    "source": "api"
+  },
+  "beware": {
+    "done": true,
+    "meaning": "請留意：",
+    "source": "api"
+  },
+  "bewilderment": {
+    "done": true,
+    "meaning": "困惑",
+    "source": "api"
+  },
+  "biblical": {
+    "done": true,
+    "meaning": "圣经",
+    "source": "api"
+  },
+  "bilateral": {
+    "done": true,
+    "meaning": "adj.双方 ,双边",
+    "source": "api"
+  },
+  "biotechnology": {
+    "done": true,
+    "meaning": "生物技术",
+    "source": "api"
+  },
+  "biologist": {
+    "done": true,
+    "meaning": "生物学家",
+    "source": "api"
+  },
+  "binoculars": {
+    "done": true,
+    "meaning": "双筒望远镜",
+    "source": "api"
+  },
+  "bitch": {
+    "done": true,
+    "meaning": "你是个婊子",
+    "source": "api"
+  },
+  "biochemist": {
+    "done": true,
+    "meaning": "生物化学家",
+    "source": "api"
+  },
+  "biochemical": {
+    "done": true,
+    "meaning": "生物化学",
+    "source": "api"
+  },
+  "biographer": {
+    "done": true,
+    "meaning": "传记作者",
+    "source": "api"
+  },
+  "biographical": {
+    "done": true,
+    "meaning": "传记体",
+    "source": "api"
+  },
+  "bleak": {
+    "done": true,
+    "meaning": "萧索",
+    "source": "api"
+  },
+  "bizarre": {
+    "done": true,
+    "meaning": "奇形怪状的",
+    "source": "api"
+  },
+  "blackmail": {
+    "done": true,
+    "meaning": "n.敲诈 ,敲诈勒索,讹诈 ,恐吓索财,勒索",
+    "source": "api"
+  },
+  "blond": {
+    "done": true,
+    "meaning": "金色",
+    "source": "api"
+  },
+  "blog": {
+    "done": true,
+    "meaning": "博客",
+    "source": "api"
+  },
+  "bloc": {
+    "done": true,
+    "meaning": "n.集团",
+    "source": "api"
+  },
+  "bleach": {
+    "done": true,
+    "meaning": "漂白劑",
+    "source": "api"
+  },
+  "blush": {
+    "done": true,
+    "meaning": "红潮",
+    "source": "api"
+  },
+  "blunt": {
+    "done": true,
+    "meaning": "直来直去",
+    "source": "api"
+  },
+  "bloody": {
+    "done": true,
+    "meaning": "血腥的; 残忍的; 非常, 很",
+    "source": "api"
+  },
+  "blunder": {
+    "done": true,
+    "meaning": "臭棋",
+    "source": "api"
+  },
+  "blueprint": {
+    "done": true,
+    "meaning": "蓝图",
+    "source": "api"
+  },
+  "bluff": {
+    "done": true,
+    "meaning": "虚张声势",
+    "source": "api"
+  },
+  "bracket": {
+    "done": true,
+    "meaning": "支撑架",
+    "source": "api"
+  },
+  "brace": {
+    "done": true,
+    "meaning": "對 对 [dui4]",
+    "source": "api"
+  },
+  "bondage": {
+    "done": true,
+    "meaning": "奴役",
+    "source": "api"
+  },
+  "bout": {
+    "done": true,
+    "meaning": "竞技",
+    "source": "api"
+  },
+  "bouquet": {
+    "done": true,
+    "meaning": "花束",
+    "source": "api"
+  },
+  "bony": {
+    "done": true,
+    "meaning": "骨质",
+    "source": "api"
+  },
+  "bowel": {
+    "done": true,
+    "meaning": "腸臟",
+    "source": "api"
+  },
+  "brigade": {
+    "done": true,
+    "meaning": "n.旅",
+    "source": "api"
+  },
+  "breakdown": {
+    "done": true,
+    "meaning": "n.破裂",
+    "source": "api"
+  },
+  "brand-new": {
+    "done": true,
+    "meaning": "牌",
+    "source": "api"
+  },
+  "briefcase": {
+    "done": true,
+    "meaning": "公文包",
+    "source": "api"
+  },
+  "bribery": {
+    "done": true,
+    "meaning": "贿赂",
+    "source": "api"
+  },
+  "breach": {
+    "done": true,
+    "meaning": "n.违背法律 ,违犯,违约行为",
+    "source": "api"
+  },
+  "brew": {
+    "done": true,
+    "meaning": "混合调制",
+    "source": "api"
+  },
+  "bribe": {
+    "done": true,
+    "meaning": "賄賂",
+    "source": "api"
+  },
+  "buck": {
+    "done": true,
+    "meaning": "美元",
+    "source": "api"
+  },
+  "browser": {
+    "done": true,
+    "meaning": "浏览器",
+    "source": "api"
+  },
+  "buckle": {
+    "done": true,
+    "meaning": "扣上",
+    "source": "api"
+  },
+  "browse": {
+    "done": true,
+    "meaning": "浏览",
+    "source": "api"
+  },
+  "broker": {
+    "done": true,
+    "meaning": "n.经纪 ,牙行,经记人 ,居间人,皮包商,掮客,中间商",
+    "source": "api"
+  },
+  "brutality": {
+    "done": true,
+    "meaning": "n.兽行 ,残暴",
+    "source": "api"
+  },
+  "brink": {
+    "done": true,
+    "meaning": "布林克",
+    "source": "api"
+  },
+  "broke": {
+    "done": true,
+    "meaning": "破碎了",
+    "source": "api"
+  },
+  "buffer": {
+    "done": true,
+    "meaning": "缓冲区 ",
+    "source": "api"
+  },
+  "bump": {
+    "done": true,
+    "meaning": "凹凸",
+    "source": "api"
+  },
+  "bureaucracy": {
+    "done": true,
+    "meaning": "官僚体制",
+    "source": "api"
+  },
+  "buddhist": {
+    "done": true,
+    "meaning": "佛教",
+    "source": "api"
+  },
+  "bug": {
+    "done": true,
+    "meaning": "虫子",
+    "source": "api"
+  },
+  "bumper": {
+    "done": true,
+    "meaning": "保险杠",
+    "source": "api"
+  },
+  "buffalo": {
+    "done": true,
+    "meaning": "Buffalo式",
+    "source": "api"
+  },
+  "bulky": {
+    "done": true,
+    "meaning": "粗绒线",
+    "source": "api"
+  },
+  "burial": {
+    "done": true,
+    "meaning": "埋藏",
+    "source": "api"
+  },
+  "bust": {
+    "done": true,
+    "meaning": "经营失败,破产,暴降",
+    "source": "api"
+  },
+  "bureaucrat": {
+    "done": true,
+    "meaning": "官僚主义者",
+    "source": "api"
+  },
+  "buzz": {
+    "done": true,
+    "meaning": "动态",
+    "source": "api"
+  },
+  "burger": {
+    "done": true,
+    "meaning": "汉堡菜单文本",
+    "source": "api"
+  },
+  "bushy": {
+    "done": true,
+    "meaning": "茂密",
+    "source": "api"
+  },
+  "burglary": {
+    "done": true,
+    "meaning": "夜贼；破门盗窃者",
+    "source": "api"
+  },
+  "butt": {
+    "done": true,
+    "meaning": "臀部",
+    "source": "api"
+  },
+  "calf": {
+    "done": true,
+    "meaning": "小牛",
+    "source": "api"
+  },
+  "bystander": {
+    "done": true,
+    "meaning": "旁观者",
+    "source": "api"
+  },
+  "cancellation": {
+    "done": true,
+    "meaning": "取消",
+    "source": "api"
+  },
+  "calcium": {
+    "done": true,
+    "meaning": "钙",
+    "source": "api"
+  },
+  "cane": {
+    "done": true,
+    "meaning": "菖蒲",
+    "source": "api"
+  },
+  "bypass": {
+    "done": true,
+    "meaning": "旁路",
+    "source": "api"
+  },
+  "candidacy": {
+    "done": true,
+    "meaning": "n.候选人的资格 ,候选资格",
+    "source": "api"
+  },
+  "calorie": {
+    "done": true,
+    "meaning": "卡路里",
+    "source": "api"
+  },
+  "caravan": {
+    "done": true,
+    "meaning": "车队",
+    "source": "api"
+  },
+  "cardinal": {
+    "done": true,
+    "meaning": "深重样式",
+    "source": "api"
+  },
+  "carbohydrate": {
+    "done": true,
+    "meaning": "醣",
+    "source": "api"
+  },
+  "cashier": {
+    "done": true,
+    "meaning": "收银台",
+    "source": "api"
+  },
+  "casino": {
+    "done": true,
+    "meaning": "娱乐场",
+    "source": "api"
+  },
+  "cape": {
+    "done": true,
+    "meaning": "海角",
+    "source": "api"
+  },
+  "cardboard": {
+    "done": true,
+    "meaning": "硬纸板",
+    "source": "api"
+  },
+  "carton": {
+    "done": true,
+    "meaning": "纸箱",
+    "source": "api"
+  },
+  "celsius": {
+    "done": true,
+    "meaning": "摄氏度",
+    "source": "api"
+  },
+  "cemetery": {
+    "done": true,
+    "meaning": "墓地",
+    "source": "api"
+  },
+  "cauliflower": {
+    "done": true,
+    "meaning": "花菜",
+    "source": "api"
+  },
+  "celebrity": {
+    "done": true,
+    "meaning": "名人",
+    "source": "api"
+  },
+  "casualty": {
+    "done": true,
+    "meaning": "折损",
+    "source": "api"
+  },
+  "catastrophic": {
+    "done": true,
+    "meaning": "灾难性的...",
+    "source": "api"
+  },
+  "cell-phone": {
+    "done": true,
+    "meaning": "手机",
+    "source": "api"
+  },
+  "celcius": {
+    "done": true,
+    "meaning": "摄氏度",
+    "source": "api"
+  },
+  "censor": {
+    "done": true,
+    "meaning": "删减",
+    "source": "api"
+  },
+  "cereal": {
+    "done": true,
+    "meaning": "麦片",
+    "source": "api"
+  },
+  "chairperson": {
+    "done": true,
+    "meaning": "n.主任委员 ,主席",
+    "source": "api"
+  },
+  "census": {
+    "done": true,
+    "meaning": "普查人口",
+    "source": "api"
+  },
+  "ceramic": {
+    "done": true,
+    "meaning": "陶瓷",
+    "source": "api"
+  },
+  "chancellor": {
+    "done": true,
+    "meaning": "参事官 ,大法官,衡平法院大法官,主事,总理",
+    "source": "api"
+  },
+  "ceremonial": {
+    "done": true,
+    "meaning": "礼仪律。",
+    "source": "api"
+  },
+  "censorship": {
+    "done": true,
+    "meaning": "n.检查制度",
+    "source": "api"
+  },
+  "charitable": {
+    "done": true,
+    "meaning": "adj.慈善",
+    "source": "api"
+  },
+  "chip": {
+    "done": true,
+    "meaning": "比特 [bi3 te4]",
+    "source": "api"
+  },
+  "chaotic": {
+    "done": true,
+    "meaning": "混乱",
+    "source": "api"
+  },
+  "chilly": {
+    "done": true,
+    "meaning": "冷冽",
+    "source": "api"
+  },
+  "chapel": {
+    "done": true,
+    "meaning": "小教堂",
+    "source": "api"
+  },
+  "cherish": {
+    "done": true,
+    "meaning": "爱护",
+    "source": "api"
+  },
+  "charm": {
+    "done": true,
+    "meaning": "超级按钮",
+    "source": "api"
+  },
+  "chore": {
+    "done": true,
+    "meaning": "工作",
+    "source": "api"
+  },
+  "chunk": {
+    "done": true,
+    "meaning": "区块",
+    "source": "api"
+  },
+  "choosy": {
+    "done": true,
+    "meaning": "挑三拣四",
+    "source": "api"
+  },
+  "chopstick": {
+    "done": true,
+    "meaning": "筷子",
+    "source": "api"
+  },
+  "chronic": {
+    "done": true,
+    "meaning": "長期",
+    "source": "api"
+  },
+  "chord": {
+    "done": true,
+    "meaning": "同步選取",
+    "source": "api"
+  },
+  "chronically": {
+    "done": true,
+    "meaning": "慢性",
+    "source": "api"
+  },
+  "chronicle": {
+    "done": true,
+    "meaning": "历史记录",
+    "source": "api"
+  },
+  "clarity": {
+    "done": true,
+    "meaning": "明晰",
+    "source": "api"
+  },
+  "clause": {
+    "done": true,
+    "meaning": "条款",
+    "source": "api"
+  },
+  "clamp": {
+    "done": true,
+    "meaning": "夹具",
+    "source": "api"
+  },
+  "civilisation": {
+    "done": true,
+    "meaning": "文明",
+    "source": "api"
+  },
+  "cigaret": {
+    "done": true,
+    "meaning": "香烟",
+    "source": "api"
+  },
+  "clan": {
+    "done": true,
+    "meaning": "族",
+    "source": "api"
+  },
+  "citation": {
+    "done": true,
+    "meaning": "传讯；传票；交通罚单；引证；引用；引文",
+    "source": "api"
+  },
+  "civic": {
+    "done": true,
+    "meaning": "思域",
+    "source": "api"
+  },
+  "cliché": {
+    "done": true,
+    "meaning": "老套",
+    "source": "api"
+  },
+  "clearance": {
+    "done": true,
+    "meaning": "。",
+    "source": "api"
+  },
+  "clergy": {
+    "done": true,
+    "meaning": "n.教士 ,僧侣",
+    "source": "api"
+  },
+  "client": {
+    "done": true,
+    "meaning": "客户",
+    "source": "api"
+  },
+  "clerical": {
+    "done": true,
+    "meaning": "klerkal",
+    "source": "api"
+  },
+  "clench": {
+    "done": true,
+    "meaning": "握紧",
+    "source": "api"
+  },
+  "clear-cut": {
+    "done": true,
+    "meaning": "adj.明确",
+    "source": "api"
+  },
+  "cleanse": {
+    "done": true,
+    "meaning": "清洗",
+    "source": "api"
+  },
+  "clown": {
+    "done": true,
+    "meaning": "小丑",
+    "source": "api"
+  },
+  "cluster": {
+    "done": true,
+    "meaning": "集群",
+    "source": "api"
+  },
+  "closet": {
+    "done": true,
+    "meaning": "壁橱",
+    "source": "api"
+  },
+  "cling": {
+    "done": true,
+    "meaning": "将将",
+    "source": "api"
+  },
+  "clip": {
+    "done": true,
+    "meaning": "剪辑",
+    "source": "api"
+  },
+  "clutch": {
+    "done": true,
+    "meaning": "离合器",
+    "source": "api"
+  },
+  "climax": {
+    "done": true,
+    "meaning": "高潮",
+    "source": "api"
+  },
+  "clog": {
+    "done": true,
+    "meaning": "木鞋",
+    "source": "api"
+  },
+  "coherent": {
+    "done": true,
+    "meaning": "互相密合的",
+    "source": "api"
+  },
+  "coexist": {
+    "done": true,
+    "meaning": "共存",
+    "source": "api"
+  },
+  "cognition": {
+    "done": true,
+    "meaning": "知道",
+    "source": "api"
+  },
+  "cognitive": {
+    "done": true,
+    "meaning": "认知",
+    "source": "api"
+  },
+  "coalition": {
+    "done": true,
+    "meaning": "阵营",
+    "source": "api"
+  },
+  "collaboration": {
+    "done": true,
+    "meaning": "串通 ;n.合作",
+    "source": "api"
+  },
+  "coexistence": {
+    "done": true,
+    "meaning": "n.共处",
+    "source": "api"
+  },
+  "cohesive": {
+    "done": true,
+    "meaning": "有凝聚力",
+    "source": "api"
+  },
+  "commencement": {
+    "done": true,
+    "meaning": "开端 [kai1 duan1]",
+    "source": "api"
+  },
+  "commentator": {
+    "done": true,
+    "meaning": "解说",
+    "source": "api"
+  },
+  "collaborative": {
+    "done": true,
+    "meaning": "团队合作",
+    "source": "api"
+  },
+  "commemoration": {
+    "done": true,
+    "meaning": "- 纪念。。。",
+    "source": "api"
+  },
+  "commemorate": {
+    "done": true,
+    "meaning": "纪念.v",
+    "source": "api"
+  },
+  "comic": {
+    "done": true,
+    "meaning": "漫画",
+    "source": "api"
+  },
+  "commendation": {
+    "done": true,
+    "meaning": "n.嘉奖 ,领主附庸",
+    "source": "api"
+  },
+  "colonial": {
+    "done": true,
+    "meaning": "殖民地",
+    "source": "api"
+  },
+  "compatibility": {
+    "done": true,
+    "meaning": "兼容性",
+    "source": "api"
+  },
+  "competitive": {
+    "done": true,
+    "meaning": "竞争",
+    "source": "api"
+  },
+  "competitor": {
+    "done": true,
+    "meaning": "竞争对手",
+    "source": "api"
+  },
+  "compartment": {
+    "done": true,
+    "meaning": "舱",
+    "source": "api"
+  },
+  "complacent": {
+    "done": true,
+    "meaning": "得意",
+    "source": "api"
+  },
+  "complement": {
+    "done": true,
+    "meaning": "v.补充",
+    "source": "api"
+  },
+  "commuter": {
+    "done": true,
+    "meaning": "通勤",
+    "source": "api"
+  },
+  "compassionate": {
+    "done": true,
+    "meaning": "员工类",
+    "source": "api"
+  },
+  "compliment": {
+    "done": true,
+    "meaning": "感谢信",
+    "source": "api"
+  },
+  "conceptual": {
+    "done": true,
+    "meaning": "概念",
+    "source": "api"
+  },
+  "conceive": {
+    "done": true,
+    "meaning": "孕养",
+    "source": "api"
+  },
+  "condemnation": {
+    "done": true,
+    "meaning": "判决没收",
+    "source": "api"
+  },
+  "concession": {
+    "done": true,
+    "meaning": "n.让步 ,削减,租借,租让,减让 ,特许协议,专管租界,租界,租让权利",
+    "source": "api"
+  },
+  "conclusive": {
+    "done": true,
+    "meaning": "adj.确凿",
+    "source": "api"
+  },
+  "concurrent": {
+    "done": true,
+    "meaning": "adj.竞合",
+    "source": "api"
+  },
+  "compliance": {
+    "done": true,
+    "meaning": "顺从性",
+    "source": "api"
+  },
+  "confederation": {
+    "done": true,
+    "meaning": "n.邦联",
+    "source": "api"
+  },
+  "conformity": {
+    "done": true,
+    "meaning": "符合",
+    "source": "api"
+  },
+  "configuration": {
+    "done": true,
+    "meaning": "和",
+    "source": "api"
+  },
+  "confer": {
+    "done": true,
+    "meaning": "授予",
+    "source": "api"
+  },
+  "confederate": {
+    "done": true,
+    "meaning": "adj.邦联 ,共谋 ,同谋",
+    "source": "api"
+  },
+  "condolence": {
+    "done": true,
+    "meaning": "哀悼",
+    "source": "api"
+  },
+  "conducive": {
+    "done": true,
+    "meaning": "有益",
+    "source": "api"
+  },
+  "confirmation": {
+    "done": true,
+    "meaning": "确认",
+    "source": "api"
+  },
+  "connotation": {
+    "done": true,
+    "meaning": "n.内涵",
+    "source": "api"
+  },
+  "consecutive": {
+    "done": true,
+    "meaning": "结论的",
+    "source": "api"
+  },
+  "congressional": {
+    "done": true,
+    "meaning": "国会",
+    "source": "api"
+  },
+  "confrontation": {
+    "done": true,
+    "meaning": "n.对抗 ,对证,对峙,对质",
+    "source": "api"
+  },
+  "confucian": {
+    "done": true,
+    "meaning": "儒家",
+    "source": "api"
+  },
+  "congregation": {
+    "done": true,
+    "meaning": "会众",
+    "source": "api"
+  },
+  "congregate": {
+    "done": true,
+    "meaning": "聚集",
+    "source": "api"
+  },
+  "consulate": {
+    "done": true,
+    "meaning": "领事馆",
+    "source": "api"
+  },
+  "contagious": {
+    "done": true,
+    "meaning": "具有传染性",
+    "source": "api"
+  },
+  "constituent": {
+    "done": true,
+    "meaning": "成份",
+    "source": "api"
+  },
+  "consolation": {
+    "done": true,
+    "meaning": "n.安慰",
+    "source": "api"
+  },
+  "consultative": {
+    "done": true,
+    "meaning": "咨询",
+    "source": "api"
+  },
+  "contamination": {
+    "done": true,
+    "meaning": "n.污染",
+    "source": "api"
+  },
+  "conspicuous": {
+    "done": true,
+    "meaning": "引人注目",
+    "source": "api"
+  },
+  "consultation": {
+    "done": true,
+    "meaning": "咨询",
+    "source": "api"
+  },
+  "contemplate": {
+    "done": true,
+    "meaning": "思考",
+    "source": "api"
+  },
+  "contentious": {
+    "done": true,
+    "meaning": "adj.争议 ,有争议",
+    "source": "api"
+  },
+  "contemplative": {
+    "done": true,
+    "meaning": "冥思",
+    "source": "api"
+  },
+  "contemplation": {
+    "done": true,
+    "meaning": "n.默察 ,意图",
+    "source": "api"
+  },
+  "contingent": {
+    "done": true,
+    "meaning": "特遣队",
+    "source": "api"
+  },
+  "contrive": {
+    "done": true,
+    "meaning": "策划",
+    "source": "api"
+  },
+  "contestant": {
+    "done": true,
+    "meaning": "参赛选手",
+    "source": "api"
+  },
+  "contextual": {
+    "done": true,
+    "meaning": "上下文",
+    "source": "api"
+  },
+  "cork": {
+    "done": true,
+    "meaning": "软木塞",
+    "source": "api"
+  },
+  "corporal": {
+    "done": true,
+    "meaning": "n.下士",
+    "source": "api"
+  },
+  "convergence": {
+    "done": true,
+    "meaning": "聚集",
+    "source": "api"
+  },
+  "correlation": {
+    "done": true,
+    "meaning": "n.相互关系",
+    "source": "api"
+  },
+  "corporate": {
+    "done": true,
+    "meaning": "公司",
+    "source": "api"
+  },
+  "conveyance": {
+    "done": true,
+    "meaning": "n.让与 ,运输,运送,转让,财产的转让 ,财产转让,财产转让书,财产转让证书,传达,传送",
+    "source": "api"
+  },
+  "correlate": {
+    "done": true,
+    "meaning": "相关",
+    "source": "api"
+  },
+  "conviction": {
+    "done": true,
+    "meaning": "判决有罪；刑事定罪",
+    "source": "api"
+  },
+  "councillor": {
+    "done": true,
+    "meaning": "n.地方议员",
+    "source": "api"
+  },
+  "corrosion": {
+    "done": true,
+    "meaning": "腐蚀",
+    "source": "api"
+  },
+  "cosmic": {
+    "done": true,
+    "meaning": "重要的",
+    "source": "api"
+  },
+  "counselor": {
+    "done": true,
+    "meaning": "n.律师 ,律师,参赞 ,顾问,顾问律师",
+    "source": "api"
+  },
+  "counsellor": {
+    "done": true,
+    "meaning": "n.参事 ,参赞",
+    "source": "api"
+  },
+  "cosmetic": {
+    "done": true,
+    "meaning": "化妆品",
+    "source": "api"
+  },
+  "correlative": {
+    "done": true,
+    "meaning": "关联类",
+    "source": "api"
+  },
+  "counteraction": {
+    "done": true,
+    "meaning": "反作用",
+    "source": "api"
+  },
+  "crab": {
+    "done": true,
+    "meaning": "巨蟹zodiac symbol for Leo",
+    "source": "api"
+  },
+  "crate": {
+    "done": true,
+    "meaning": "板纸箱",
+    "source": "api"
+  },
+  "cradle": {
+    "done": true,
+    "meaning": "底座",
+    "source": "api"
+  },
+  "crave": {
+    "done": true,
+    "meaning": "渴望",
+    "source": "api"
+  },
+  "coup": {
+    "done": true,
+    "meaning": "政变",
+    "source": "api"
+  },
+  "craze": {
+    "done": true,
+    "meaning": "热潮",
+    "source": "api"
+  },
+  "crackdown": {
+    "done": true,
+    "meaning": "v.打击",
+    "source": "api"
+  },
+  "credibility": {
+    "done": true,
+    "meaning": "n.确实性 ,证据能力",
+    "source": "api"
+  },
+  "creamy": {
+    "done": true,
+    "meaning": "凝脂",
+    "source": "api"
+  },
+  "crocodile": {
+    "done": true,
+    "meaning": "鱷魚",
+    "source": "api"
+  },
+  "crouch": {
+    "done": true,
+    "meaning": "正蹲",
+    "source": "api"
+  },
+  "crisp": {
+    "done": true,
+    "meaning": "爽快",
+    "source": "api"
+  },
+  "credible": {
+    "done": true,
+    "meaning": "有公信力",
+    "source": "api"
+  },
+  "credential": {
+    "done": true,
+    "meaning": "凭证",
+    "source": "api"
+  },
+  "cruelty": {
+    "done": true,
+    "meaning": "n.虐待",
+    "source": "api"
+  },
+  "cue": {
+    "done": true,
+    "meaning": "配乐点",
+    "source": "api"
+  },
+  "cub": {
+    "done": true,
+    "meaning": "崽子",
+    "source": "api"
+  },
+  "cult": {
+    "done": true,
+    "meaning": "邪恶教派",
+    "source": "api"
+  },
+  "crumble": {
+    "done": true,
+    "meaning": "捏碎",
+    "source": "api"
+  },
+  "crunch": {
+    "done": true,
+    "meaning": "壓碎 压碎 [ya1 sui4]",
+    "source": "api"
+  },
+  "cruiser": {
+    "done": true,
+    "meaning": "巡洋舰",
+    "source": "api"
+  },
+  "culmination": {
+    "done": true,
+    "meaning": "收官：",
+    "source": "api"
+  },
+  "culminate": {
+    "done": true,
+    "meaning": "达到顶峰",
+    "source": "api"
+  },
+  "cute": {
+    "done": true,
+    "meaning": "可爱的",
+    "source": "api"
+  },
+  "cylinder": {
+    "done": true,
+    "meaning": "油缸",
+    "source": "api"
+  },
+  "cynical": {
+    "done": true,
+    "meaning": "阴阳怪气",
+    "source": "api"
+  },
+  "cyberspace": {
+    "done": true,
+    "meaning": "互联网",
+    "source": "api"
+  },
+  "custody": {
+    "done": true,
+    "meaning": "保管",
+    "source": "api"
+  },
+  "cumulative": {
+    "done": true,
+    "meaning": "adj.累积",
+    "source": "api"
+  },
+  "curfew": {
+    "done": true,
+    "meaning": "n.戒严令 ,宵禁,宵禁令 ;n.戒严",
+    "source": "api"
+  },
+  "decimal": {
+    "done": true,
+    "meaning": "始终显示小数位数",
+    "source": "api"
+  },
+  "deception": {
+    "done": true,
+    "meaning": "n.欺骗 ,欺诈,诈欺",
+    "source": "api"
+  },
+  "datum": {
+    "done": true,
+    "meaning": "datum  数据",
+    "source": "api"
+  },
+  "deceptive": {
+    "done": true,
+    "meaning": "adj.欺骗",
+    "source": "api"
+  },
+  "dart": {
+    "done": true,
+    "meaning": "矢一",
+    "source": "api"
+  },
+  "dean": {
+    "done": true,
+    "meaning": "n.系主任",
+    "source": "api"
+  },
+  "dazzle": {
+    "done": true,
+    "meaning": "失明。",
+    "source": "api"
+  },
+  "damn": {
+    "done": true,
+    "meaning": "该死",
+    "source": "api"
+  },
+  "defendant": {
+    "done": true,
+    "meaning": "被告；被告人",
+    "source": "api"
+  },
+  "declarative": {
+    "done": true,
+    "meaning": "adj.宣示性",
+    "source": "api"
+  },
+  "deem": {
+    "done": true,
+    "meaning": "v.认为",
+    "source": "api"
+  },
+  "deductible": {
+    "done": true,
+    "meaning": "绝对免赔额,可扣除的，可减的",
+    "source": "api"
+  },
+  "deductive": {
+    "done": true,
+    "meaning": "演绎推理",
+    "source": "api"
+  },
+  "defer": {
+    "done": true,
+    "meaning": "延迟",
+    "source": "api"
+  },
+  "decisive": {
+    "done": true,
+    "meaning": "果断",
+    "source": "api"
+  },
+  "deduction": {
+    "done": true,
+    "meaning": "n.扣除 ,演绎",
+    "source": "api"
+  },
+  "demo": {
+    "done": true,
+    "meaning": "演示",
+    "source": "api"
+  },
+  "delusion": {
+    "done": true,
+    "meaning": "妄想症",
+    "source": "api"
+  },
+  "defiant": {
+    "done": true,
+    "meaning": "叛逆",
+    "source": "api"
+  },
+  "delegate": {
+    "done": true,
+    "meaning": "代理人",
+    "source": "api"
+  },
+  "degradation": {
+    "done": true,
+    "meaning": "分解作用",
+    "source": "api"
+  },
+  "degenerate": {
+    "done": true,
+    "meaning": "堕落 ,腐化,腐化,腐化分子",
+    "source": "api"
+  },
+  "defiance": {
+    "done": true,
+    "meaning": "n.抗拒司法当局 ,藐视,违抗",
+    "source": "api"
+  },
+  "degeneration": {
+    "done": true,
+    "meaning": "变质 ,堕落,腐化",
+    "source": "api"
+  },
+  "denunciation": {
+    "done": true,
+    "meaning": "n.谴责 ,退约,宣告无效,废约",
+    "source": "api"
+  },
+  "dent": {
+    "done": true,
+    "meaning": "麻面",
+    "source": "api"
+  },
+  "depiction": {
+    "done": true,
+    "meaning": "图形",
+    "source": "api"
+  },
+  "denial": {
+    "done": true,
+    "meaning": "n.拒绝接受 ,否定 ,狡赖",
+    "source": "api"
+  },
+  "dental": {
+    "done": true,
+    "meaning": "牙科",
+    "source": "api"
+  },
+  "denotation": {
+    "done": true,
+    "meaning": "名称",
+    "source": "api"
+  },
+  "depletion": {
+    "done": true,
+    "meaning": "亏损,损耗",
+    "source": "api"
+  },
+  "demographic": {
+    "done": true,
+    "meaning": "人口",
+    "source": "api"
+  },
+  "deprivation": {
+    "done": true,
+    "meaning": "n.剥夺 ,剥夺行为 ,损失,宗教上的剥夺",
+    "source": "api"
+  },
+  "deregulation": {
+    "done": true,
+    "meaning": "反调节",
+    "source": "api"
+  },
+  "deportation": {
+    "done": true,
+    "meaning": "n.遣送出境 ,驱逐,驱逐出境,递解",
+    "source": "api"
+  },
+  "depreciation": {
+    "done": true,
+    "meaning": "n.贬低 ,贬值,折旧",
+    "source": "api"
+  },
+  "deployment": {
+    "done": true,
+    "meaning": "部署",
+    "source": "api"
+  },
+  "derailment": {
+    "done": true,
+    "meaning": "脫軌",
+    "source": "api"
+  },
+  "deregulate": {
+    "done": true,
+    "meaning": "v.解除管制",
+    "source": "api"
+  },
+  "depreciate": {
+    "done": true,
+    "meaning": "v.贬低 ,贬值,折旧",
+    "source": "api"
+  },
+  "derivative": {
+    "done": true,
+    "meaning": "adj.派生",
+    "source": "api"
+  },
+  "desolate": {
+    "done": true,
+    "meaning": "萧索",
+    "source": "api"
+  },
+  "designation": {
+    "done": true,
+    "meaning": "指定",
+    "source": "api"
+  },
+  "descent": {
+    "done": true,
+    "meaning": "n.血统 ,血统继承制",
+    "source": "api"
+  },
+  "descriptive": {
+    "done": true,
+    "meaning": "描述的",
+    "source": "api"
+  },
+  "destructive": {
+    "done": true,
+    "meaning": "adj.破坏性",
+    "source": "api"
+  },
+  "desirous": {
+    "done": true,
+    "meaning": "渴望",
+    "source": "api"
+  },
+  "descendant": {
+    "done": true,
+    "meaning": "后代",
+    "source": "api"
+  },
+  "deterioration": {
+    "done": true,
+    "meaning": "恶化",
+    "source": "api"
+  },
+  "detergent": {
+    "done": true,
+    "meaning": "洗涤剂",
+    "source": "api"
+  },
+  "detriment": {
+    "done": true,
+    "meaning": "损害。",
+    "source": "api"
+  },
+  "deter": {
+    "done": true,
+    "meaning": "震慑",
+    "source": "api"
+  },
+  "detention": {
+    "done": true,
+    "meaning": "n.拘留 ,扣留,收押",
+    "source": "api"
+  },
+  "detrimental": {
+    "done": true,
+    "meaning": "adj.损害 ,不利 ,有害",
+    "source": "api"
+  },
+  "deterrent": {
+    "done": true,
+    "meaning": "具威慑性的事物",
+    "source": "api"
+  },
+  "detachment": {
+    "done": true,
+    "meaning": "分队",
+    "source": "api"
+  },
+  "diesel": {
+    "done": true,
+    "meaning": "柴油",
+    "source": "api"
+  },
+  "diagnosis": {
+    "done": true,
+    "meaning": "调查分析",
+    "source": "api"
+  },
+  "deviation": {
+    "done": true,
+    "meaning": "偏差",
+    "source": "api"
+  },
+  "devastation": {
+    "done": true,
+    "meaning": "覆滅 覆灭 [fu4 mie4]",
+    "source": "api"
+  },
+  "deviate": {
+    "done": true,
+    "meaning": "偏离",
+    "source": "api"
+  },
+  "differentiate": {
+    "done": true,
+    "meaning": "v.分别 ,鉴别,区别",
+    "source": "api"
+  },
+  "devastate": {
+    "done": true,
+    "meaning": "v.掠夺 ,毁灭",
+    "source": "api"
+  },
+  "diabetes": {
+    "done": true,
+    "meaning": "糖尿病",
+    "source": "api"
+  },
+  "digit": {
+    "done": true,
+    "meaning": "标签和数字之间的空间",
+    "source": "api"
+  },
+  "diffusion": {
+    "done": true,
+    "meaning": "扩散(中间商功能之一)",
+    "source": "api"
+  },
+  "diffuse": {
+    "done": true,
+    "meaning": "扩散(中间商功能之一)",
+    "source": "api"
+  },
+  "dine": {
+    "done": true,
+    "meaning": "用餐",
+    "source": "api"
+  },
+  "dime": {
+    "done": true,
+    "meaning": "DIME",
+    "source": "api"
+  },
+  "dilute": {
+    "done": true,
+    "meaning": "稀释",
+    "source": "api"
+  },
+  "dilution": {
+    "done": true,
+    "meaning": "匀减,股权收益减损,价值缩减",
+    "source": "api"
+  },
+  "differentiation": {
+    "done": true,
+    "meaning": "差别化,区别",
+    "source": "api"
+  },
+  "disco": {
+    "done": true,
+    "meaning": "迪斯科",
+    "source": "api"
+  },
+  "disarmament": {
+    "done": true,
+    "meaning": "n.裁军 ,解除军备",
+    "source": "api"
+  },
+  "diplomacy": {
+    "done": true,
+    "meaning": "n.外交 ,外交使节",
+    "source": "api"
+  },
+  "diner": {
+    "done": true,
+    "meaning": "餐馆",
+    "source": "api"
+  },
+  "disapproval": {
+    "done": true,
+    "meaning": "n.驳斥 ,不批准",
+    "source": "api"
+  },
+  "disappearance": {
+    "done": true,
+    "meaning": "n.失踪",
+    "source": "api"
+  },
+  "diplomat": {
+    "done": true,
+    "meaning": "n.外交家 ,外交官",
+    "source": "api"
+  },
+  "disastrous": {
+    "done": true,
+    "meaning": "灾难",
+    "source": "api"
+  },
+  "dissident": {
+    "done": true,
+    "meaning": "n.持不同政见者",
+    "source": "api"
+  },
+  "displacement": {
+    "done": true,
+    "meaning": "排水量",
+    "source": "api"
+  },
+  "dissent": {
+    "done": true,
+    "meaning": "(合议庭法官对多数法官作出的判决所提出的)不同意见，异议",
+    "source": "api"
+  },
+  "disruption": {
+    "done": true,
+    "meaning": "n.扰乱 ,妨害 ,破裂",
+    "source": "api"
+  },
+  "dissertation": {
+    "done": true,
+    "meaning": "n.论文 ,学位论文",
+    "source": "api"
+  },
+  "disruptive": {
+    "done": true,
+    "meaning": "破坏性",
+    "source": "api"
+  },
+  "disintegrate": {
+    "done": true,
+    "meaning": "v.解体 ,分裂",
+    "source": "api"
+  },
+  "disintegration": {
+    "done": true,
+    "meaning": "n.解体 ,分裂",
+    "source": "api"
+  },
+  "divert": {
+    "done": true,
+    "meaning": "v.转移 ;n.挪用",
+    "source": "api"
+  },
+  "divine": {
+    "done": true,
+    "meaning": "神性",
+    "source": "api"
+  },
+  "diversion": {
+    "done": true,
+    "meaning": "转处",
+    "source": "api"
+  },
+  "distraction": {
+    "done": true,
+    "meaning": "分心",
+    "source": "api"
+  },
+  "divisive": {
+    "done": true,
+    "meaning": "分而治之",
+    "source": "api"
+  },
+  "dividend": {
+    "done": true,
+    "meaning": "公债利息 ,股利,股息,红利,盈余",
+    "source": "api"
+  },
+  "disturbance": {
+    "done": true,
+    "meaning": "n.扰乱 ,骚乱,动乱 ,干扰,骚动",
+    "source": "api"
+  },
+  "distortion": {
+    "done": true,
+    "meaning": "n.曲解 ,歪曲",
+    "source": "api"
+  },
+  "dolphin": {
+    "done": true,
+    "meaning": "海豚",
+    "source": "api"
+  },
+  "dogma": {
+    "done": true,
+    "meaning": "教條",
+    "source": "api"
+  },
+  "dominance": {
+    "done": true,
+    "meaning": "大權 大权 [da4 quan2]",
+    "source": "api"
+  },
+  "domain": {
+    "done": true,
+    "meaning": "域",
+    "source": "api"
+  },
+  "dome": {
+    "done": true,
+    "meaning": "穹顶",
+    "source": "api"
+  },
+  "dodge": {
+    "done": true,
+    "meaning": "法抗",
+    "source": "api"
+  },
+  "dole": {
+    "done": true,
+    "meaning": "n.救济金 ,失业救济",
+    "source": "api"
+  },
+  "doctrine": {
+    "done": true,
+    "meaning": "道理，学问",
+    "source": "api"
+  },
+  "downwards": {
+    "done": true,
+    "meaning": "向下",
+    "source": "api"
+  },
+  "dosage": {
+    "done": true,
+    "meaning": "剂量",
+    "source": "api"
+  },
+  "downgrade": {
+    "done": true,
+    "meaning": "降级",
+    "source": "api"
+  },
+  "doom": {
+    "done": true,
+    "meaning": "厄运",
+    "source": "api"
+  },
+  "donor": {
+    "done": true,
+    "meaning": "n.捐款人 ,捐赠人,捐助人,馈赠人,赠予人",
+    "source": "api"
+  },
+  "domination": {
+    "done": true,
+    "meaning": "支配",
+    "source": "api"
+  },
+  "dominant": {
+    "done": true,
+    "meaning": "优势",
+    "source": "api"
+  },
+  "dough": {
+    "done": true,
+    "meaning": "面团",
+    "source": "api"
+  },
+  "dropout": {
+    "done": true,
+    "meaning": "随机失活（Dropout）",
+    "source": "api"
+  },
+  "drunkard": {
+    "done": true,
+    "meaning": "n.酗酒人 ,醉酒者",
+    "source": "api"
+  },
+  "doze": {
+    "done": true,
+    "meaning": "瞌睡",
+    "source": "api"
+  },
+  "dreamy": {
+    "done": true,
+    "meaning": "梦幻的",
+    "source": "api"
+  },
+  "dub": {
+    "done": true,
+    "meaning": "配音",
+    "source": "api"
+  },
+  "drastic": {
+    "done": true,
+    "meaning": "adj.断然",
+    "source": "api"
+  },
+  "drastically": {
+    "done": true,
+    "meaning": "剧烈地",
+    "source": "api"
+  },
+  "drainage": {
+    "done": true,
+    "meaning": "排水",
+    "source": "api"
+  },
+  "earnings": {
+    "done": true,
+    "meaning": "66,178",
+    "source": "api"
+  },
+  "dynamics": {
+    "done": true,
+    "meaning": "动态学",
+    "source": "api"
+  },
+  "dwarf": {
+    "done": true,
+    "meaning": "侏儒",
+    "source": "api"
+  },
+  "duplication": {
+    "done": true,
+    "meaning": "复制",
+    "source": "api"
+  },
+  "duplicate": {
+    "done": true,
+    "meaning": "副本",
+    "source": "api"
+  },
+  "dubious": {
+    "done": true,
+    "meaning": "adj.可疑",
+    "source": "api"
+  },
+  "dweller": {
+    "done": true,
+    "meaning": "居住者",
+    "source": "api"
+  },
+  "dwell": {
+    "done": true,
+    "meaning": "v.居留",
+    "source": "api"
+  },
+  "eclipse": {
+    "done": true,
+    "meaning": "阴蚀",
+    "source": "api"
+  },
+  "eccentric": {
+    "done": true,
+    "meaning": "古怪",
+    "source": "api"
+  },
+  "ecosystem": {
+    "done": true,
+    "meaning": "n.生态系统",
+    "source": "api"
+  },
+  "economics": {
+    "done": true,
+    "meaning": "经济学",
+    "source": "api"
+  },
+  "economist": {
+    "done": true,
+    "meaning": "n.经济师",
+    "source": "api"
+  },
+  "easy-going": {
+    "done": true,
+    "meaning": "随和",
+    "source": "api"
+  },
+  "editorial": {
+    "done": true,
+    "meaning": "adj.编辑",
+    "source": "api"
+  },
+  "edible": {
+    "done": true,
+    "meaning": "能吃的",
+    "source": "api"
+  },
+  "eject": {
+    "done": true,
+    "meaning": "弹出",
+    "source": "api"
+  },
+  "ego": {
+    "done": true,
+    "meaning": "Ego",
+    "source": "api"
+  },
+  "ejection": {
+    "done": true,
+    "meaning": "出坯",
+    "source": "api"
+  },
+  "electorate": {
+    "done": true,
+    "meaning": "n.选民",
+    "source": "api"
+  },
+  "electrician": {
+    "done": true,
+    "meaning": "电机师,电学家",
+    "source": "api"
+  },
+  "electoral": {
+    "done": true,
+    "meaning": "adj.选举 ,选举人",
+    "source": "api"
+  },
+  "eligibility": {
+    "done": true,
+    "meaning": "资格",
+    "source": "api"
+  },
+  "eloquence": {
+    "done": true,
+    "meaning": "n.口才 ,善辩",
+    "source": "api"
+  },
+  "emancipate": {
+    "done": true,
+    "meaning": "v.解放",
+    "source": "api"
+  },
+  "eligible": {
+    "done": true,
+    "meaning": "adj.合格",
+    "source": "api"
+  },
+  "elevate": {
+    "done": true,
+    "meaning": "举起",
+    "source": "api"
+  },
+  "eloquent": {
+    "done": true,
+    "meaning": "雄辩",
+    "source": "api"
+  },
+  "elevation": {
+    "done": true,
+    "meaning": "上麵 上面 [shang4 mian5]",
+    "source": "api"
+  },
+  "embroidery": {
+    "done": true,
+    "meaning": "刺繡",
+    "source": "api"
+  },
+  "embark": {
+    "done": true,
+    "meaning": "投资",
+    "source": "api"
+  },
+  "embargo": {
+    "done": true,
+    "meaning": "v.禁止通商 ,封港令 ,禁运,扣船 ;n.禁止 ,禁止通商",
+    "source": "api"
+  },
+  "emancipation": {
+    "done": true,
+    "meaning": "解放",
+    "source": "api"
+  },
+  "emergence": {
+    "done": true,
+    "meaning": "崛起",
+    "source": "api"
+  },
+  "embodiment": {
+    "done": true,
+    "meaning": "化身",
+    "source": "api"
+  },
+  "emigrant": {
+    "done": true,
+    "meaning": "移民",
+    "source": "api"
+  },
+  "embody": {
+    "done": true,
+    "meaning": "具体表达",
+    "source": "api"
+  },
+  "emigration": {
+    "done": true,
+    "meaning": "移居国外",
+    "source": "api"
+  },
+  "empress": {
+    "done": true,
+    "meaning": "n.皇后 ,女皇",
+    "source": "api"
+  },
+  "emphatic": {
+    "done": true,
+    "meaning": "强调左",
+    "source": "api"
+  },
+  "eminence": {
+    "done": true,
+    "meaning": "隆起",
+    "source": "api"
+  },
+  "eminent": {
+    "done": true,
+    "meaning": "杰出",
+    "source": "api"
+  },
+  "emigrate": {
+    "done": true,
+    "meaning": "v.迁居 ,移居国外",
+    "source": "api"
+  },
+  "empirical": {
+    "done": true,
+    "meaning": "经验",
+    "source": "api"
+  },
+  "emission": {
+    "done": true,
+    "meaning": "排放",
+    "source": "api"
+  },
+  "encyclopedia": {
+    "done": true,
+    "meaning": "百科全書",
+    "source": "api"
+  },
+  "endanger": {
+    "done": true,
+    "meaning": "使遭危险",
+    "source": "api"
+  },
+  "emulate": {
+    "done": true,
+    "meaning": "模擬",
+    "source": "api"
+  },
+  "emptiness": {
+    "done": true,
+    "meaning": "空虚感",
+    "source": "api"
+  },
+  "emulation": {
+    "done": true,
+    "meaning": "模擬",
+    "source": "api"
+  },
+  "encyclopaedia": {
+    "done": true,
+    "meaning": "辞海",
+    "source": "api"
+  },
+  "enactment": {
+    "done": true,
+    "meaning": "n.颁布 ,通过,制定,法规",
+    "source": "api"
+  },
+  "enact": {
+    "done": true,
+    "meaning": "v.颁布 ,通过,制定",
+    "source": "api"
+  },
+  "endeavor": {
+    "done": true,
+    "meaning": "企图",
+    "source": "api"
+  },
+  "endorse": {
+    "done": true,
+    "meaning": "v.背书 ,批准,签注,认可,背签 ,拥护,赞成",
+    "source": "api"
+  },
+  "endeavour": {
+    "done": true,
+    "meaning": "企图",
+    "source": "api"
+  },
+  "endurance": {
+    "done": true,
+    "meaning": "忍耐",
+    "source": "api"
+  },
+  "endow": {
+    "done": true,
+    "meaning": "v.捐助 ,授予",
+    "source": "api"
+  },
+  "endowment": {
+    "done": true,
+    "meaning": "n.捐赠 ,基金 ,捐款,资金",
+    "source": "api"
+  },
+  "endorsement": {
+    "done": true,
+    "meaning": "背书",
+    "source": "api"
+  },
+  "enlist": {
+    "done": true,
+    "meaning": "招募",
+    "source": "api"
+  },
+  "enrolment": {
+    "done": true,
+    "meaning": "报名",
+    "source": "api"
+  },
+  "enrollment": {
+    "done": true,
+    "meaning": "n.登记 ,入会",
+    "source": "api"
+  },
+  "enrol": {
+    "done": true,
+    "meaning": "这是为了通知您课程<strong>{course_name}的注册</strong>已过期。您现在必须重新注册该课程才能访问其内容",
+    "source": "api"
+  },
+  "enroll": {
+    "done": true,
+    "meaning": "v.登记",
+    "source": "api"
+  },
+  "enrich": {
+    "done": true,
+    "meaning": "扩充",
+    "source": "api"
+  },
+  "enquire": {
+    "done": true,
+    "meaning": "问 (wèn)",
+    "source": "api"
+  },
+  "entail": {
+    "done": true,
+    "meaning": "v.限定继承,限定继承权,限定继承权益,限嗣继承,预定继承人的顺序",
+    "source": "api"
+  },
+  "ensue": {
+    "done": true,
+    "meaning": "那么随之而来的将是重大而快速的气候变化。 ",
+    "source": "api"
+  },
+  "entrepreneur": {
+    "done": true,
+    "meaning": "n.承包人 ,企业家,中间商,主办者",
+    "source": "api"
+  },
+  "entrust": {
+    "done": true,
+    "meaning": "v.托管 ,委,委托",
+    "source": "api"
+  },
+  "entity": {
+    "done": true,
+    "meaning": "實體",
+    "source": "api"
+  },
+  "environmentalist": {
+    "done": true,
+    "meaning": "环境科学家,研究环境问题的专家",
+    "source": "api"
+  },
+  "enthusiast": {
+    "done": true,
+    "meaning": "爱好者",
+    "source": "api"
+  },
+  "entrepreneurial": {
+    "done": true,
+    "meaning": "企业家",
+    "source": "api"
+  },
+  "envelop": {
+    "done": true,
+    "meaning": "信封",
+    "source": "api"
+  },
+  "entirety": {
+    "done": true,
+    "meaning": "n.全部 ,整体,夫妻共有制 ,共同占有,共有制",
+    "source": "api"
+  },
+  "epic": {
+    "done": true,
+    "meaning": "史诗",
+    "source": "api"
+  },
+  "equator": {
+    "done": true,
+    "meaning": "赤道",
+    "source": "api"
+  },
+  "epoch": {
+    "done": true,
+    "meaning": "时期",
+    "source": "api"
+  },
+  "envoy": {
+    "done": true,
+    "meaning": "n.代表 ,公使,使节,使者,特使",
+    "source": "api"
+  },
+  "episode": {
+    "done": true,
+    "meaning": "集",
+    "source": "api"
+  },
+  "envisage": {
+    "done": true,
+    "meaning": "设想",
+    "source": "api"
+  },
+  "epidemic": {
+    "done": true,
+    "meaning": "流行病",
+    "source": "api"
+  },
+  "eradicate": {
+    "done": true,
+    "meaning": "v.消灭",
+    "source": "api"
+  },
+  "equity": {
+    "done": true,
+    "meaning": "464,629",
+    "source": "api"
+  },
+  "erode": {
+    "done": true,
+    "meaning": "侵蚀",
+    "source": "api"
+  },
+  "equitable": {
+    "done": true,
+    "meaning": "adj.衡平法 ,公平 ,公正,合理",
+    "source": "api"
+  },
+  "erase": {
+    "done": true,
+    "meaning": "清除",
+    "source": "api"
+  },
+  "eradication": {
+    "done": true,
+    "meaning": "n.消灭",
+    "source": "api"
+  },
+  "erosion": {
+    "done": true,
+    "meaning": "侵蚀",
+    "source": "api"
+  },
+  "erosive": {
+    "done": true,
+    "meaning": "侵蚀作用",
+    "source": "api"
+  },
+  "escalator": {
+    "done": true,
+    "meaning": "规定工资等定期按生活费用作出上下调整,上下调整的条款(规定工资定期按生活费用)",
+    "source": "api"
+  },
+  "escalate": {
+    "done": true,
+    "meaning": "v.逐步升级",
+    "source": "api"
+  },
+  "escalation": {
+    "done": true,
+    "meaning": "升级",
+    "source": "api"
+  },
+  "err": {
+    "done": true,
+    "meaning": "错误",
+    "source": "api"
+  },
+  "escort": {
+    "done": true,
+    "meaning": "v.押解",
+    "source": "api"
+  },
+  "errand": {
+    "done": true,
+    "meaning": "家務",
+    "source": "api"
+  },
+  "esteem": {
+    "done": true,
+    "meaning": "v.尊重 ;n.尊重誓言",
+    "source": "api"
+  },
+  "erroneous": {
+    "done": true,
+    "meaning": "adj.错 ,错误",
+    "source": "api"
+  },
+  "eternal": {
+    "done": true,
+    "meaning": "永恒",
+    "source": "api"
+  },
+  "ethics": {
+    "done": true,
+    "meaning": "伦理",
+    "source": "api"
+  },
+  "euro": {
+    "done": true,
+    "meaning": "欧元",
+    "source": "api"
+  },
+  "ethnic": {
+    "done": true,
+    "meaning": "adj.种族",
+    "source": "api"
+  },
+  "eternity": {
+    "done": true,
+    "meaning": "永恒",
+    "source": "api"
+  },
+  "etiquette": {
+    "done": true,
+    "meaning": "礼数",
+    "source": "api"
+  },
+  "esthetic": {
+    "done": true,
+    "meaning": "美学",
+    "source": "api"
+  },
+  "esthetics": {
+    "done": true,
+    "meaning": "美学",
+    "source": "api"
+  },
+  "evacuation": {
+    "done": true,
+    "meaning": "排空",
+    "source": "api"
+  },
+  "evasive": {
+    "done": true,
+    "meaning": "adj.逃避",
+    "source": "api"
+  },
+  "evoke": {
+    "done": true,
+    "meaning": "v.移送",
+    "source": "api"
+  },
+  "evade": {
+    "done": true,
+    "meaning": "v.避免 ,逃避",
+    "source": "api"
+  },
+  "eventual": {
+    "done": true,
+    "meaning": "最终",
+    "source": "api"
+  },
+  "eventuality": {
+    "done": true,
+    "meaning": "可能性",
+    "source": "api"
+  },
+  "evasion": {
+    "done": true,
+    "meaning": "闪避",
+    "source": "api"
+  },
+  "evacuate": {
+    "done": true,
+    "meaning": "v.撤",
+    "source": "api"
+  },
+  "exclusive": {
+    "done": true,
+    "meaning": "独家的",
+    "source": "api"
+  },
+  "exclusion": {
+    "done": true,
+    "meaning": "排除",
+    "source": "api"
+  },
+  "exemption": {
+    "done": true,
+    "meaning": "豁免",
+    "source": "api"
+  },
+  "expiration": {
+    "done": true,
+    "meaning": "到期",
+    "source": "api"
+  },
+  "expedition": {
+    "done": true,
+    "meaning": "远征",
+    "source": "api"
+  },
+  "existent": {
+    "done": true,
+    "meaning": "现存",
+    "source": "api"
+  },
+  "exclamation": {
+    "done": true,
+    "meaning": "惊叹提示音",
+    "source": "api"
+  },
+  "exotic": {
+    "done": true,
+    "meaning": "外来货币(金融外汇),舶来品",
+    "source": "api"
+  },
+  "extraction": {
+    "done": true,
+    "meaning": "n.血统",
+    "source": "api"
+  },
+  "extravagant": {
+    "done": true,
+    "meaning": "奢靡",
+    "source": "api"
+  },
+  "exponent": {
+    "done": true,
+    "meaning": "指数",
+    "source": "api"
+  },
+  "exportation": {
+    "done": true,
+    "meaning": "n.输出 ,出口",
+    "source": "api"
+  },
+  "extravagance": {
+    "done": true,
+    "meaning": "n.浪费",
+    "source": "api"
+  },
+  "eyebrow": {
+    "done": true,
+    "meaning": "眉毛",
+    "source": "api"
+  },
+  "extinction": {
+    "done": true,
+    "meaning": "n.灭绝 ,消灭",
+    "source": "api"
+  },
+  "exploitation": {
+    "done": true,
+    "meaning": "利用",
+    "source": "api"
+  },
+  "fake": {
+    "done": true,
+    "meaning": "仿冒",
+    "source": "api"
+  },
+  "facilitation": {
+    "done": true,
+    "meaning": "n.促进",
+    "source": "api"
+  },
+  "factual": {
+    "done": true,
+    "meaning": "事实",
+    "source": "api"
+  },
+  "fairy": {
+    "done": true,
+    "meaning": "精灵",
+    "source": "api"
+  },
+  "fascinate": {
+    "done": true,
+    "meaning": "v.吸引",
+    "source": "api"
+  },
+  "fabrication": {
+    "done": true,
+    "meaning": "预制",
+    "source": "api"
+  },
+  "fabulous": {
+    "done": true,
+    "meaning": "极好",
+    "source": "api"
+  },
+  "feminist": {
+    "done": true,
+    "meaning": "女權主義",
+    "source": "api"
+  },
+  "federation": {
+    "done": true,
+    "meaning": "联合身份验证",
+    "source": "api"
+  },
+  "feminine": {
+    "done": true,
+    "meaning": "阴柔",
+    "source": "api"
+  },
+  "fascination": {
+    "done": true,
+    "meaning": "n.吸引",
+    "source": "api"
+  },
+  "fascinating": {
+    "done": true,
+    "meaning": "迷人",
+    "source": "api"
+  },
+  "feat": {
+    "done": true,
+    "meaning": "专长",
+    "source": "api"
+  },
+  "fertiliser": {
+    "done": true,
+    "meaning": "化肥",
+    "source": "api"
+  },
+  "fascist": {
+    "done": true,
+    "meaning": "n.法西斯",
+    "source": "api"
+  },
+  "flank": {
+    "done": true,
+    "meaning": "侧翼",
+    "source": "api"
+  },
+  "fingerprint": {
+    "done": true,
+    "meaning": "指纹",
+    "source": "api"
+  },
+  "fixation": {
+    "done": true,
+    "meaning": "n.录制 ,固着",
+    "source": "api"
+  },
+  "fiscal": {
+    "done": true,
+    "meaning": "财政",
+    "source": "api"
+  },
+  "fixture": {
+    "done": true,
+    "meaning": "检具",
+    "source": "api"
+  },
+  "fireplace": {
+    "done": true,
+    "meaning": "壁炉",
+    "source": "api"
+  },
+  "flap": {
+    "done": true,
+    "meaning": "扇动",
+    "source": "api"
+  },
+  "figurative": {
+    "done": true,
+    "meaning": "比喻",
+    "source": "api"
+  },
+  "flavor": {
+    "done": true,
+    "meaning": "给调味",
+    "source": "api"
+  },
+  "fling": {
+    "done": true,
+    "meaning": "抛投",
+    "source": "api"
+  },
+  "flattery": {
+    "done": true,
+    "meaning": "諂媚，奉承",
+    "source": "api"
+  },
+  "flirt": {
+    "done": true,
+    "meaning": "调情",
+    "source": "api"
+  },
+  "flirtation": {
+    "done": true,
+    "meaning": "风流韵事",
+    "source": "api"
+  },
+  "flip": {
+    "done": true,
+    "meaning": "翻转",
+    "source": "api"
+  },
+  "flaw": {
+    "done": true,
+    "meaning": "漏洞 ,缺点,缺陷,瑕疵",
+    "source": "api"
+  },
+  "fluctuation": {
+    "done": true,
+    "meaning": "n.不稳定 , 涨落",
+    "source": "api"
+  },
+  "foe": {
+    "done": true,
+    "meaning": "敵人",
+    "source": "api"
+  },
+  "forestry": {
+    "done": true,
+    "meaning": "林业",
+    "source": "api"
+  },
+  "footprint": {
+    "done": true,
+    "meaning": "n.脚印 ,足迹",
+    "source": "api"
+  },
+  "folklore": {
+    "done": true,
+    "meaning": "民俗学",
+    "source": "api"
+  },
+  "flutter": {
+    "done": true,
+    "meaning": "56",
+    "source": "api"
+  },
+  "foam": {
+    "done": true,
+    "meaning": "_阿门_",
+    "source": "api"
+  },
+  "foil": {
+    "done": true,
+    "meaning": "箔片",
+    "source": "api"
+  },
+  "foresight": {
+    "done": true,
+    "meaning": "v.预见",
+    "source": "api"
+  },
+  "fossil": {
+    "done": true,
+    "meaning": "化石",
+    "source": "api"
+  },
+  "forfeit": {
+    "done": true,
+    "meaning": "v.没收 ,弃权,丧失,惩罚 ,罚金,罚金,罚没财产,没收物,失去 ;n.剥夺 ,丧失",
+    "source": "api"
+  },
+  "formidable": {
+    "done": true,
+    "meaning": "威武",
+    "source": "api"
+  },
+  "fort": {
+    "done": true,
+    "meaning": "要塞",
+    "source": "api"
+  },
+  "fortification": {
+    "done": true,
+    "meaning": "要塞",
+    "source": "api"
+  },
+  "forgettable": {
+    "done": true,
+    "meaning": "遗忘",
+    "source": "api"
+  },
+  "foretell": {
+    "done": true,
+    "meaning": "预言",
+    "source": "api"
+  },
+  "forgery": {
+    "done": true,
+    "meaning": "伪造；伪造的文件、签名等",
+    "source": "api"
+  },
+  "freshman": {
+    "done": true,
+    "meaning": "新生",
+    "source": "api"
+  },
+  "fracture": {
+    "done": true,
+    "meaning": "骨折",
+    "source": "api"
+  },
+  "fraud": {
+    "done": true,
+    "meaning": "欺诈，欺骗行为",
+    "source": "api"
+  },
+  "frantic": {
+    "done": true,
+    "meaning": "疯狂",
+    "source": "api"
+  },
+  "foul": {
+    "done": true,
+    "meaning": "腐烂",
+    "source": "api"
+  },
+  "fraudulent": {
+    "done": true,
+    "meaning": "欺骗性的",
+    "source": "api"
+  },
+  "fragmentation": {
+    "done": true,
+    "meaning": "带裂解的Zeno，",
+    "source": "api"
+  },
+  "frantically": {
+    "done": true,
+    "meaning": "疯狂地",
+    "source": "api"
+  },
+  "frustrate": {
+    "done": true,
+    "meaning": "v.阻挠",
+    "source": "api"
+  },
+  "fringe": {
+    "done": true,
+    "meaning": "边缘",
+    "source": "api"
+  },
+  "fright": {
+    "done": true,
+    "meaning": "惊吓",
+    "source": "api"
+  },
+  "fury": {
+    "done": true,
+    "meaning": "狂怒",
+    "source": "api"
+  },
+  "fulfillment": {
+    "done": true,
+    "meaning": "n.履行 ,实现,完成",
+    "source": "api"
+  },
+  "frustrating": {
+    "done": true,
+    "meaning": "令人沮丧。",
+    "source": "api"
+  },
+  "frosty": {
+    "done": true,
+    "meaning": "冷冰冰",
+    "source": "api"
+  },
+  "gadget": {
+    "done": true,
+    "meaning": "小工具",
+    "source": "api"
+  },
+  "gamble": {
+    "done": true,
+    "meaning": "赌博",
+    "source": "api"
+  },
+  "futility": {
+    "done": true,
+    "meaning": "徒劳",
+    "source": "api"
+  },
+  "gadgetry": {
+    "done": true,
+    "meaning": "小巧装置",
+    "source": "api"
+  },
+  "futile": {
+    "done": true,
+    "meaning": "一场空",
+    "source": "api"
+  },
+  "fuse": {
+    "done": true,
+    "meaning": "熔合",
+    "source": "api"
+  },
+  "fusion": {
+    "done": true,
+    "meaning": "融合",
+    "source": "api"
+  },
+  "galaxy": {
+    "done": true,
+    "meaning": "星系",
+    "source": "api"
+  },
+  "gear": {
+    "done": true,
+    "meaning": "挂件",
+    "source": "api"
+  },
+  "genetically": {
+    "done": true,
+    "meaning": "遗传学",
+    "source": "api"
+  },
+  "genre": {
+    "done": true,
+    "meaning": "类型",
+    "source": "api"
+  },
+  "gangster": {
+    "done": true,
+    "meaning": "犯罪团伙成员",
+    "source": "api"
+  },
+  "geographic": {
+    "done": true,
+    "meaning": "地理",
+    "source": "api"
+  },
+  "genetic": {
+    "done": true,
+    "meaning": "adj.遗传",
+    "source": "api"
+  },
+  "gaol": {
+    "done": true,
+    "meaning": "n.监牢 ,拘役所",
+    "source": "api"
+  },
+  "gender": {
+    "done": true,
+    "meaning": "性别",
+    "source": "api"
+  },
+  "geometric": {
+    "done": true,
+    "meaning": "几何",
+    "source": "api"
+  },
+  "glacier": {
+    "done": true,
+    "meaning": "冰川",
+    "source": "api"
+  },
+  "geological": {
+    "done": true,
+    "meaning": "地质",
+    "source": "api"
+  },
+  "giggle": {
+    "done": true,
+    "meaning": "咯咯笑",
+    "source": "api"
+  },
+  "gigantic": {
+    "done": true,
+    "meaning": "巨大",
+    "source": "api"
+  },
+  "geologically": {
+    "done": true,
+    "meaning": "地质学上",
+    "source": "api"
+  },
+  "geometrically": {
+    "done": true,
+    "meaning": "几何学",
+    "source": "api"
+  },
+  "geographically": {
+    "done": true,
+    "meaning": "地理学",
+    "source": "api"
+  },
+  "glamorous": {
+    "done": true,
+    "meaning": "华丽丽",
+    "source": "api"
+  },
+  "gleam": {
+    "done": true,
+    "meaning": "一线",
+    "source": "api"
+  },
+  "gloom": {
+    "done": true,
+    "meaning": "幽暗",
+    "source": "api"
+  },
+  "glossary": {
+    "done": true,
+    "meaning": "词汇表",
+    "source": "api"
+  },
+  "glamor": {
+    "done": true,
+    "meaning": "魅力",
+    "source": "api"
+  },
+  "glamour": {
+    "done": true,
+    "meaning": "魅力",
+    "source": "api"
+  },
+  "glamourous": {
+    "done": true,
+    "meaning": "迷人",
+    "source": "api"
+  },
+  "gland": {
+    "done": true,
+    "meaning": "压盖",
+    "source": "api"
+  },
+  "grab": {
+    "done": true,
+    "meaning": "抓取 ",
+    "source": "api"
+  },
+  "grandchildren": {
+    "done": true,
+    "meaning": "n.孙子女 ,外孙子女",
+    "source": "api"
+  },
+  "gospel": {
+    "done": true,
+    "meaning": "本教典",
+    "source": "api"
+  },
+  "grandparent": {
+    "done": true,
+    "meaning": "n.祖父 ,祖母",
+    "source": "api"
+  },
+  "gorgeous": {
+    "done": true,
+    "meaning": "华丽",
+    "source": "api"
+  },
+  "gorge": {
+    "done": true,
+    "meaning": "峡谷",
+    "source": "api"
+  },
+  "graphically": {
+    "done": true,
+    "meaning": "以图形方式",
+    "source": "api"
+  },
+  "grassy": {
+    "done": true,
+    "meaning": "草地",
+    "source": "api"
+  },
+  "grid": {
+    "done": true,
+    "meaning": "网格",
+    "source": "api"
+  },
+  "grease": {
+    "done": true,
+    "meaning": "n.油",
+    "source": "api"
+  },
+  "graze": {
+    "done": true,
+    "meaning": "放牧",
+    "source": "api"
+  },
+  "greasy": {
+    "done": true,
+    "meaning": "油腻",
+    "source": "api"
+  },
+  "grievous": {
+    "done": true,
+    "meaning": "adj.严重",
+    "source": "api"
+  },
+  "grim": {
+    "done": true,
+    "meaning": "严峻",
+    "source": "api"
+  },
+  "gravitation": {
+    "done": true,
+    "meaning": "引力",
+    "source": "api"
+  },
+  "groove": {
+    "done": true,
+    "meaning": "坡口",
+    "source": "api"
+  },
+  "guilt": {
+    "done": true,
+    "meaning": "罪責",
+    "source": "api"
+  },
+  "hacker": {
+    "done": true,
+    "meaning": "黑客",
+    "source": "api"
+  },
+  "hairy": {
+    "done": true,
+    "meaning": "『毛』茸茸",
+    "source": "api"
+  },
+  "hail": {
+    "done": true,
+    "meaning": "冰雹",
+    "source": "api"
+  },
+  "guy": {
+    "done": true,
+    "meaning": "家伙",
+    "source": "api"
+  },
+  "gut": {
+    "done": true,
+    "meaning": "肠子",
+    "source": "api"
+  },
+  "grope": {
+    "done": true,
+    "meaning": "动手动脚",
+    "source": "api"
+  },
+  "guardian": {
+    "done": true,
+    "meaning": "守护",
+    "source": "api"
+  },
+  "handicap": {
+    "done": true,
+    "meaning": "让分盘",
+    "source": "api"
+  },
+  "handbook": {
+    "done": true,
+    "meaning": "手书",
+    "source": "api"
+  },
+  "harassment": {
+    "done": true,
+    "meaning": "n.侵扰 ,扰乱,骚扰,困扰罪",
+    "source": "api"
+  },
+  "harass": {
+    "done": true,
+    "meaning": "v.扰乱 ,骚扰",
+    "source": "api"
+  },
+  "hardy": {
+    "done": true,
+    "meaning": "哈代",
+    "source": "api"
+  },
+  "halfway": {
+    "done": true,
+    "meaning": "一半",
+    "source": "api"
+  },
+  "hamper": {
+    "done": true,
+    "meaning": "v.妨碍 ,妨碍",
+    "source": "api"
+  },
+  "handicraft": {
+    "done": true,
+    "meaning": "手工艺品",
+    "source": "api"
+  },
+  "hazy": {
+    "done": true,
+    "meaning": "薄雾weather forecast",
+    "source": "api"
+  },
+  "hearty": {
+    "done": true,
+    "meaning": "伙伴们",
+    "source": "api"
+  },
+  "heave": {
+    "done": true,
+    "meaning": "举起",
+    "source": "api"
+  },
+  "haze": {
+    "done": true,
+    "meaning": "雾weather condition",
+    "source": "api"
+  },
+  "havoc": {
+    "done": true,
+    "meaning": "浩劫",
+    "source": "api"
+  },
+  "hectic": {
+    "done": true,
+    "meaning": "忙碌",
+    "source": "api"
+  },
+  "heartfelt": {
+    "done": true,
+    "meaning": "心心相印",
+    "source": "api"
+  },
+  "hectare": {
+    "done": true,
+    "meaning": "% 1 g/ cmx gramm per cubic centimeter. This is the density.",
+    "source": "api"
+  },
+  "hesitant": {
+    "done": true,
+    "meaning": "犹犹豫豫",
+    "source": "api"
+  },
+  "heroin": {
+    "done": true,
+    "meaning": "n.海洛因",
+    "source": "api"
+  },
+  "heritage": {
+    "done": true,
+    "meaning": "n.继承财产 ,世袭财产,遗产",
+    "source": "api"
+  },
+  "hemisphere": {
+    "done": true,
+    "meaning": "半球",
+    "source": "api"
+  },
+  "hibernate": {
+    "done": true,
+    "meaning": "休眠Note this is a KRunner keyword",
+    "source": "api"
+  },
+  "herald": {
+    "done": true,
+    "meaning": "传令官",
+    "source": "api"
+  },
+  "henceforth": {
+    "done": true,
+    "meaning": "从此刻起",
+    "source": "api"
+  },
+  "heiress": {
+    "done": true,
+    "meaning": "n.女继承人",
+    "source": "api"
+  },
+  "hierarchical": {
+    "done": true,
+    "meaning": "分层的",
+    "source": "api"
+  },
+  "hike": {
+    "done": true,
+    "meaning": "远足",
+    "source": "api"
+  },
+  "hibernation": {
+    "done": true,
+    "meaning": "休眠",
+    "source": "api"
+  },
+  "hierarchy": {
+    "done": true,
+    "meaning": "分层结构",
+    "source": "api"
+  },
+  "hilly": {
+    "done": true,
+    "meaning": "丘",
+    "source": "api"
+  },
+  "high-tech": {
+    "done": true,
+    "meaning": "高科技",
+    "source": "api"
+  },
+  "hijack": {
+    "done": true,
+    "meaning": "v.绑架 ,劫持",
+    "source": "api"
+  },
+  "hindrance": {
+    "done": true,
+    "meaning": "n.阻碍 ,妨碍",
+    "source": "api"
+  },
+  "hip": {
+    "done": true,
+    "meaning": "斜脊式",
+    "source": "api"
+  },
+  "historic": {
+    "done": true,
+    "meaning": "历史",
+    "source": "api"
+  },
+  "hockey": {
+    "done": true,
+    "meaning": "曲棍球",
+    "source": "api"
+  },
+  "hoist": {
+    "done": true,
+    "meaning": "升降机",
+    "source": "api"
+  },
+  "hitherto": {
+    "done": true,
+    "meaning": "迄今",
+    "source": "api"
+  },
+  "hinge": {
+    "done": true,
+    "meaning": "合页",
+    "source": "api"
+  },
+  "historian": {
+    "done": true,
+    "meaning": "HISTORIAN",
+    "source": "api"
+  },
+  "hive": {
+    "done": true,
+    "meaning": "登錄區",
+    "source": "api"
+  },
+  "hop": {
+    "done": true,
+    "meaning": "跃点",
+    "source": "api"
+  },
+  "homosexual": {
+    "done": true,
+    "meaning": "同性恋",
+    "source": "api"
+  },
+  "homo": {
+    "done": true,
+    "meaning": "人",
+    "source": "api"
+  },
+  "homogeneous": {
+    "done": true,
+    "meaning": "同质",
+    "source": "api"
+  },
+  "hound": {
+    "done": true,
+    "meaning": "猎犬",
+    "source": "api"
+  },
+  "hose": {
+    "done": true,
+    "meaning": "较管",
+    "source": "api"
+  },
+  "hostage": {
+    "done": true,
+    "meaning": "n.抵押 ,抵押品,典当物,典物,票,人质",
+    "source": "api"
+  },
+  "holiness": {
+    "done": true,
+    "meaning": "圣洁",
+    "source": "api"
+  },
+  "humanitarian": {
+    "done": true,
+    "meaning": "人道主义的",
+    "source": "api"
+  },
+  "hover": {
+    "done": true,
+    "meaning": "悬停",
+    "source": "api"
+  },
+  "huddle": {
+    "done": true,
+    "meaning": "集合！",
+    "source": "api"
+  },
+  "hum": {
+    "done": true,
+    "meaning": "哼声",
+    "source": "api"
+  },
+  "humiliate": {
+    "done": true,
+    "meaning": "v.侮辱 ,污辱",
+    "source": "api"
+  },
+  "humbly": {
+    "done": true,
+    "meaning": "低贱",
+    "source": "api"
+  },
+  "humiliation": {
+    "done": true,
+    "meaning": "蒙羞",
+    "source": "api"
+  },
+  "humane": {
+    "done": true,
+    "meaning": "adj.人道",
+    "source": "api"
+  },
+  "hybrid": {
+    "done": true,
+    "meaning": "混合",
+    "source": "api"
+  },
+  "hypocrisy": {
+    "done": true,
+    "meaning": "n.虚伪",
+    "source": "api"
+  },
+  "hygiene": {
+    "done": true,
+    "meaning": "卫生",
+    "source": "api"
+  },
+  "hyphen": {
+    "done": true,
+    "meaning": "連字號",
+    "source": "api"
+  },
+  "hurdle": {
+    "done": true,
+    "meaning": "n.雪橇状囚笼",
+    "source": "api"
+  },
+  "hygienic": {
+    "done": true,
+    "meaning": "卫生",
+    "source": "api"
+  },
+  "hurriedly": {
+    "done": true,
+    "meaning": "急急忙忙",
+    "source": "api"
+  },
+  "hurl": {
+    "done": true,
+    "meaning": "投掷",
+    "source": "api"
+  },
+  "hypothetical": {
+    "done": true,
+    "meaning": "adj.假设",
+    "source": "api"
+  },
+  "hypocrite": {
+    "done": true,
+    "meaning": "虚伪的人",
+    "source": "api"
+  },
+  "icon": {
+    "done": true,
+    "meaning": "图标",
+    "source": "api"
+  },
+  "hypothesis": {
+    "done": true,
+    "meaning": "n.假定 ,假设,假设说 ,前提",
+    "source": "api"
+  },
+  "hysteria": {
+    "done": true,
+    "meaning": "歇斯底里",
+    "source": "api"
+  },
+  "iceberg": {
+    "done": true,
+    "meaning": "冰岛",
+    "source": "api"
+  },
+  "hypocritical": {
+    "done": true,
+    "meaning": "adj.虚伪",
+    "source": "api"
+  },
+  "hysterical": {
+    "done": true,
+    "meaning": "adj.歇斯底里 ,癔病",
+    "source": "api"
+  },
+  "idiot": {
+    "done": true,
+    "meaning": "白痴",
+    "source": "api"
+  },
+  "idol": {
+    "done": true,
+    "meaning": "神像",
+    "source": "api"
+  },
+  "ideology": {
+    "done": true,
+    "meaning": "n.意识形态 ,思想",
+    "source": "api"
+  },
+  "idiotic": {
+    "done": true,
+    "meaning": "白痴",
+    "source": "api"
+  },
+  "idiomatic": {
+    "done": true,
+    "meaning": "熟语",
+    "source": "api"
+  },
+  "icy": {
+    "done": true,
+    "meaning": "冷冰冰",
+    "source": "api"
+  },
+  "idly": {
+    "done": true,
+    "meaning": "懒洋洋的",
+    "source": "api"
+  },
+  "ideological": {
+    "done": true,
+    "meaning": "adj.意识形态",
+    "source": "api"
+  },
+  "illusion": {
+    "done": true,
+    "meaning": "虚幻",
+    "source": "api"
+  },
+  "illuminate": {
+    "done": true,
+    "meaning": "照亮",
+    "source": "api"
+  },
+  "illumination": {
+    "done": true,
+    "meaning": "照明",
+    "source": "api"
+  },
+  "immersion": {
+    "done": true,
+    "meaning": "洗礼",
+    "source": "api"
+  },
+  "imaginative": {
+    "done": true,
+    "meaning": "adj.想象",
+    "source": "api"
+  },
+  "illiterate": {
+    "done": true,
+    "meaning": "不识学的",
+    "source": "api"
+  },
+  "ignite": {
+    "done": true,
+    "meaning": "点燃 &#x0D;",
+    "source": "api"
+  },
+  "ignition": {
+    "done": true,
+    "meaning": "（点火）",
+    "source": "api"
+  },
+  "imminent": {
+    "done": true,
+    "meaning": "PsA前期",
+    "source": "api"
+  },
+  "immunity": {
+    "done": true,
+    "meaning": "免除；豁免",
+    "source": "api"
+  },
+  "implementation": {
+    "done": true,
+    "meaning": "执行",
+    "source": "api"
+  },
+  "inaugurate": {
+    "done": true,
+    "meaning": "v.成立 ,就职",
+    "source": "api"
+  },
+  "importation": {
+    "done": true,
+    "meaning": "n.输入 ,进口",
+    "source": "api"
+  },
+  "imperialist": {
+    "done": true,
+    "meaning": "n.帝国主义者",
+    "source": "api"
+  },
+  "imperative": {
+    "done": true,
+    "meaning": "adj.紧急 ,迫切,强行,强制",
+    "source": "api"
+  },
+  "immigrate": {
+    "done": true,
+    "meaning": "移居入境",
+    "source": "api"
+  },
+  "incredibly": {
+    "done": true,
+    "meaning": "令人难以置信地",
+    "source": "api"
+  },
+  "incorporate": {
+    "done": true,
+    "meaning": "包含 包含 [bao1 han2]",
+    "source": "api"
+  },
+  "incumbent": {
+    "done": true,
+    "meaning": "adj.在职",
+    "source": "api"
+  },
+  "inclusion": {
+    "done": true,
+    "meaning": "包含",
+    "source": "api"
+  },
+  "inauguration": {
+    "done": true,
+    "meaning": "启用礼，落成礼",
+    "source": "api"
+  },
+  "incorporation": {
+    "done": true,
+    "meaning": "n.公司的合并 ,公司的设立,公司发起成立,公司合并,全部合并,组成法人组织 ;n.包括 ,合并,设立;n.法人设立",
+    "source": "api"
+  },
+  "incredible": {
+    "done": true,
+    "meaning": "难以置信",
+    "source": "api"
+  },
+  "incidentally": {
+    "done": true,
+    "meaning": "顺便说一句",
+    "source": "api"
+  },
+  "inducement": {
+    "done": true,
+    "meaning": "n.引诱 ,陈述说明 ,序言",
+    "source": "api"
+  },
+  "indulgence": {
+    "done": true,
+    "meaning": "的广告",
+    "source": "api"
+  },
+  "indigenous": {
+    "done": true,
+    "meaning": "adj.本土",
+    "source": "api"
+  },
+  "indictment": {
+    "done": true,
+    "meaning": "控告",
+    "source": "api"
+  },
+  "indoor": {
+    "done": true,
+    "meaning": "室内",
+    "source": "api"
+  },
+  "infectious": {
+    "done": true,
+    "meaning": "传染病",
+    "source": "api"
+  },
+  "indignation": {
+    "done": true,
+    "meaning": "愤怒",
+    "source": "api"
+  },
+  "indulgent": {
+    "done": true,
+    "meaning": "放纵的",
+    "source": "api"
+  },
+  "informant": {
+    "done": true,
+    "meaning": "n.报案人 ,报告人,报信人,告发人,告密人",
+    "source": "api"
+  },
+  "informative": {
+    "done": true,
+    "meaning": "實用",
+    "source": "api"
+  },
+  "inference": {
+    "done": true,
+    "meaning": "n.结论 ,推论",
+    "source": "api"
+  },
+  "inflation": {
+    "done": true,
+    "meaning": "通货膨胀",
+    "source": "api"
+  },
+  "ingenious": {
+    "done": true,
+    "meaning": "巧妙",
+    "source": "api"
+  },
+  "infinity": {
+    "done": true,
+    "meaning": "无限",
+    "source": "api"
+  },
+  "infliction": {
+    "done": true,
+    "meaning": "n.伤害 ,处罚 ,打击,加刑",
+    "source": "api"
+  },
+  "infringement": {
+    "done": true,
+    "meaning": "侵权",
+    "source": "api"
+  },
+  "initiative": {
+    "done": true,
+    "meaning": "n.倡议权 ,创制权,动议权",
+    "source": "api"
+  },
+  "inherent": {
+    "done": true,
+    "meaning": "adj.内在",
+    "source": "api"
+  },
+  "ingenuity": {
+    "done": true,
+    "meaning": "独创性。",
+    "source": "api"
+  },
+  "inhibition": {
+    "done": true,
+    "meaning": "抑制",
+    "source": "api"
+  },
+  "initiation": {
+    "done": true,
+    "meaning": "n.创始",
+    "source": "api"
+  },
+  "inheritance": {
+    "done": true,
+    "meaning": "繼承産業",
+    "source": "api"
+  },
+  "inmate": {
+    "done": true,
+    "meaning": "n.居民",
+    "source": "api"
+  },
+  "innovative": {
+    "done": true,
+    "meaning": "创新",
+    "source": "api"
+  },
+  "inspirational": {
+    "done": true,
+    "meaning": "励志",
+    "source": "api"
+  },
+  "insistence": {
+    "done": true,
+    "meaning": "坚持",
+    "source": "api"
+  },
+  "innumerable": {
+    "done": true,
+    "meaning": "千千万万",
+    "source": "api"
+  },
+  "instal": {
+    "done": true,
+    "meaning": "安装",
+    "source": "api"
+  },
+  "insistent": {
+    "done": true,
+    "meaning": "坚持",
+    "source": "api"
+  },
+  "instalation": {
+    "done": true,
+    "meaning": "安装",
+    "source": "api"
+  },
+  "inquisitive": {
+    "done": true,
+    "meaning": "adj.审问",
+    "source": "api"
+  },
+  "insulation": {
+    "done": true,
+    "meaning": "绝缘",
+    "source": "api"
+  },
+  "integral": {
+    "done": true,
+    "meaning": "积分",
+    "source": "api"
+  },
+  "integration": {
+    "done": true,
+    "meaning": "整合功能",
+    "source": "api"
+  },
+  "instantaneous": {
+    "done": true,
+    "meaning": "adj.即时",
+    "source": "api"
+  },
+  "intelligible": {
+    "done": true,
+    "meaning": "易懂",
+    "source": "api"
+  },
+  "insulate": {
+    "done": true,
+    "meaning": "隔离",
+    "source": "api"
+  },
+  "instalment": {
+    "done": true,
+    "meaning": "分期付款",
+    "source": "api"
+  },
+  "insulator": {
+    "done": true,
+    "meaning": "绝缘子",
+    "source": "api"
+  },
+  "intermittent": {
+    "done": true,
+    "meaning": "间歇性",
+    "source": "api"
+  },
+  "intimidate": {
+    "done": true,
+    "meaning": "v.恐吓 ,威吓,恫吓",
+    "source": "api"
+  },
+  "interrogation": {
+    "done": true,
+    "meaning": "查询",
+    "source": "api"
+  },
+  "interrogate": {
+    "done": true,
+    "meaning": "v.问,盘诘 ,盘问,审,审问,讯问,质问",
+    "source": "api"
+  },
+  "interactive": {
+    "done": true,
+    "meaning": "交互式",
+    "source": "api"
+  },
+  "intimidation": {
+    "done": true,
+    "meaning": "n.恐吓 ,威吓,恐吓罪",
+    "source": "api"
+  },
+  "intent": {
+    "done": true,
+    "meaning": "退出 (退出意向)",
+    "source": "api"
+  },
+  "intervention": {
+    "done": true,
+    "meaning": "干涉；干预；调停",
+    "source": "api"
+  },
+  "intrinsic": {
+    "done": true,
+    "meaning": "adj.本质 ,内在",
+    "source": "api"
+  },
+  "intuition": {
+    "done": true,
+    "meaning": "直观",
+    "source": "api"
+  },
+  "intrusion": {
+    "done": true,
+    "meaning": "n.侵扰 ,侵入,入侵,闯入 ,侵入私地",
+    "source": "api"
+  },
+  "intruder": {
+    "done": true,
+    "meaning": "n.闯入者 ,侵入者",
+    "source": "api"
+  },
+  "intricate": {
+    "done": true,
+    "meaning": "难分析的",
+    "source": "api"
+  },
+  "intuitive": {
+    "done": true,
+    "meaning": "直观",
+    "source": "api"
+  },
+  "invariably": {
+    "done": true,
+    "meaning": "总是",
+    "source": "api"
+  },
+  "intrinsically": {
+    "done": true,
+    "meaning": "本质上",
+    "source": "api"
+  },
+  "irrational": {
+    "done": true,
+    "meaning": "无道理",
+    "source": "api"
+  },
+  "irritable": {
+    "done": true,
+    "meaning": "暴躁易怒",
+    "source": "api"
+  },
+  "invasive": {
+    "done": true,
+    "meaning": "侵入的",
+    "source": "api"
+  },
+  "inversion": {
+    "done": true,
+    "meaning": "一倒",
+    "source": "api"
+  },
+  "irritate": {
+    "done": true,
+    "meaning": "刺激性",
+    "source": "api"
+  },
+  "irrespective": {
+    "done": true,
+    "meaning": "不论",
+    "source": "api"
+  },
+  "ironically": {
+    "done": true,
+    "meaning": "具有讽刺意味",
+    "source": "api"
+  },
+  "ironical": {
+    "done": true,
+    "meaning": "反諷",
+    "source": "api"
+  },
+  "ivory": {
+    "done": true,
+    "meaning": "象牙色",
+    "source": "api"
+  },
+  "jealousy": {
+    "done": true,
+    "meaning": "醋味",
+    "source": "api"
+  },
+  "jack": {
+    "done": true,
+    "meaning": "插孔",
+    "source": "api"
+  },
+  "jargon": {
+    "done": true,
+    "meaning": "行話",
+    "source": "api"
+  },
+  "jeopardy": {
+    "done": true,
+    "meaning": "危险",
+    "source": "api"
+  },
+  "irritation": {
+    "done": true,
+    "meaning": "刺激",
+    "source": "api"
+  },
+  "isle": {
+    "done": true,
+    "meaning": "小岛",
+    "source": "api"
+  },
+  "jelly": {
+    "done": true,
+    "meaning": "果冻",
+    "source": "api"
+  },
+  "junk": {
+    "done": true,
+    "meaning": "垃圾",
+    "source": "api"
+  },
+  "judiciary": {
+    "done": true,
+    "meaning": "n.司法 ,法官 ,审判员",
+    "source": "api"
+  },
+  "juicy": {
+    "done": true,
+    "meaning": "Juicy",
+    "source": "api"
+  },
+  "junction": {
+    "done": true,
+    "meaning": "接合",
+    "source": "api"
+  },
+  "jockey": {
+    "done": true,
+    "meaning": "騎師",
+    "source": "api"
+  },
+  "judicial": {
+    "done": true,
+    "meaning": "adj.司法 ,法庭",
+    "source": "api"
+  },
+  "jetlag": {
+    "done": true,
+    "meaning": "时差问题",
+    "source": "api"
+  },
+  "jerk": {
+    "done": true,
+    "meaning": "渣男",
+    "source": "api"
+  },
+  "kin": {
+    "done": true,
+    "meaning": "n.家族 ,亲戚",
+    "source": "api"
+  },
+  "jurisdiction": {
+    "done": true,
+    "meaning": "管辖权",
+    "source": "api"
+  },
+  "juvenile": {
+    "done": true,
+    "meaning": "未成年人",
+    "source": "api"
+  },
+  "kidney": {
+    "done": true,
+    "meaning": "肾",
+    "source": "api"
+  },
+  "kit": {
+    "done": true,
+    "meaning": "整套球服",
+    "source": "api"
+  },
+  "kidnap": {
+    "done": true,
+    "meaning": "v.绑架 ,拐骗 ,拐骗,绑票,诱拐 ;n.绑架",
+    "source": "api"
+  },
+  "juror": {
+    "done": true,
+    "meaning": "n.陪审法官 ,陪审员,宣誓者",
+    "source": "api"
+  },
+  "kilogramme": {
+    "done": true,
+    "meaning": "千克",
+    "source": "api"
+  },
+  "laptop": {
+    "done": true,
+    "meaning": "笔记本",
+    "source": "api"
+  },
+  "knight": {
+    "done": true,
+    "meaning": "骑士",
+    "source": "api"
+  },
+  "landscape": {
+    "done": true,
+    "meaning": "风景",
+    "source": "api"
+  },
+  "knowhow": {
+    "done": true,
+    "meaning": "KnowHow",
+    "source": "api"
+  },
+  "lad": {
+    "done": true,
+    "meaning": "小伙子",
+    "source": "api"
+  },
+  "laborious": {
+    "done": true,
+    "meaning": "辛劳",
+    "source": "api"
+  },
+  "landmark": {
+    "done": true,
+    "meaning": "路标",
+    "source": "api"
+  },
+  "laziness": {
+    "done": true,
+    "meaning": "懒惰",
+    "source": "api"
+  },
+  "layman": {
+    "done": true,
+    "meaning": "力巴",
+    "source": "api"
+  },
+  "latitude": {
+    "done": true,
+    "meaning": "纬度",
+    "source": "api"
+  },
+  "lawsuit": {
+    "done": true,
+    "meaning": "诉讼",
+    "source": "api"
+  },
+  "lash": {
+    "done": true,
+    "meaning": "v.鞭笞 ,鞭打",
+    "source": "api"
+  },
+  "layoff": {
+    "done": true,
+    "meaning": "失业期间 ;n.临时解雇",
+    "source": "api"
+  },
+  "lass": {
+    "done": true,
+    "meaning": "姑娘",
+    "source": "api"
+  },
+  "lavish": {
+    "done": true,
+    "meaning": "奢侈",
+    "source": "api"
+  },
+  "legislation": {
+    "done": true,
+    "meaning": "法规",
+    "source": "api"
+  },
+  "legislative": {
+    "done": true,
+    "meaning": "adj.立法",
+    "source": "api"
+  },
+  "leaflet": {
+    "done": true,
+    "meaning": "传单",
+    "source": "api"
+  },
+  "legitimacy": {
+    "done": true,
+    "meaning": "合法性 ,正统",
+    "source": "api"
+  },
+  "legitimate": {
+    "done": true,
+    "meaning": "v.合法化 ;adj.合法",
+    "source": "api"
+  },
+  "legislator": {
+    "done": true,
+    "meaning": "立法者 ,议员",
+    "source": "api"
+  },
+  "legacy": {
+    "done": true,
+    "meaning": "旧版",
+    "source": "api"
+  },
+  "lengthy": {
+    "done": true,
+    "meaning": "冗长",
+    "source": "api"
+  },
+  "lesbian": {
+    "done": true,
+    "meaning": "蕾丝边",
+    "source": "api"
+  },
+  "likelihood": {
+    "done": true,
+    "meaning": "可能性",
+    "source": "api"
+  },
+  "licence": {
+    "done": true,
+    "meaning": "许可",
+    "source": "api"
+  },
+  "limelight": {
+    "done": true,
+    "meaning": "风头",
+    "source": "api"
+  },
+  "lenient": {
+    "done": true,
+    "meaning": "adj.宽大",
+    "source": "api"
+  },
+  "leverage": {
+    "done": true,
+    "meaning": "杠杆",
+    "source": "api"
+  },
+  "levy": {
+    "done": true,
+    "meaning": "征收；征税",
+    "source": "api"
+  },
+  "leniency": {
+    "done": true,
+    "meaning": "宽大处理",
+    "source": "api"
+  },
+  "linear": {
+    "done": true,
+    "meaning": "线性",
+    "source": "api"
+  },
+  "lipstick": {
+    "done": true,
+    "meaning": "唇膏",
+    "source": "api"
+  },
+  "linguistics": {
+    "done": true,
+    "meaning": "语言学",
+    "source": "api"
+  },
+  "limp": {
+    "done": true,
+    "meaning": "腿软",
+    "source": "api"
+  },
+  "linger": {
+    "done": true,
+    "meaning": "线条",
+    "source": "api"
+  },
+  "linkage": {
+    "done": true,
+    "meaning": "链接",
+    "source": "api"
+  },
+  "lioness": {
+    "done": true,
+    "meaning": "母狮子",
+    "source": "api"
+  },
+  "linguistic": {
+    "done": true,
+    "meaning": "Linguistic",
+    "source": "api"
+  },
+  "logistics": {
+    "done": true,
+    "meaning": "物流",
+    "source": "api"
+  },
+  "livestock": {
+    "done": true,
+    "meaning": "畜牲",
+    "source": "api"
+  },
+  "lobbyist": {
+    "done": true,
+    "meaning": "说客",
+    "source": "api"
+  },
+  "literacy": {
+    "done": true,
+    "meaning": "读写能力",
+    "source": "api"
+  },
+  "lofty": {
+    "done": true,
+    "meaning": "凌傲",
+    "source": "api"
+  },
+  "logistic": {
+    "done": true,
+    "meaning": "物流",
+    "source": "api"
+  },
+  "livelihood": {
+    "done": true,
+    "meaning": "生活",
+    "source": "api"
+  },
+  "logistical": {
+    "done": true,
+    "meaning": "物流",
+    "source": "api"
+  },
+  "loot": {
+    "done": true,
+    "meaning": "v.劫掠 ,掳掠 ;n.掠夺物,洗劫,赃物",
+    "source": "api"
+  },
+  "longitudinal": {
+    "done": true,
+    "meaning": "长度",
+    "source": "api"
+  },
+  "logo": {
+    "done": true,
+    "meaning": "徽标",
+    "source": "api"
+  },
+  "longevity": {
+    "done": true,
+    "meaning": "寿元",
+    "source": "api"
+  },
+  "loom": {
+    "done": true,
+    "meaning": "纺织车",
+    "source": "api"
+  },
+  "loophole": {
+    "done": true,
+    "meaning": "n.漏洞",
+    "source": "api"
+  },
+  "loneliness": {
+    "done": true,
+    "meaning": "孤单",
+    "source": "api"
+  },
+  "longitude": {
+    "done": true,
+    "meaning": "经度",
+    "source": "api"
+  },
+  "lottery": {
+    "done": true,
+    "meaning": "彩票",
+    "source": "api"
+  },
+  "lubrication": {
+    "done": true,
+    "meaning": "加润滑剂",
+    "source": "api"
+  },
+  "lyric": {
+    "done": true,
+    "meaning": "抒情",
+    "source": "api"
+  },
+  "luncheon": {
+    "done": true,
+    "meaning": "午饭",
+    "source": "api"
+  },
+  "lubricate": {
+    "done": true,
+    "meaning": "润滑",
+    "source": "api"
+  },
+  "lucrative": {
+    "done": true,
+    "meaning": "丰硕的",
+    "source": "api"
+  },
+  "luminous": {
+    "done": true,
+    "meaning": "发光的",
+    "source": "api"
+  },
+  "lure": {
+    "done": true,
+    "meaning": "v.勾引 ;v.引诱 ,诱惑",
+    "source": "api"
+  },
+  "majestic": {
+    "done": true,
+    "meaning": "崇高",
+    "source": "api"
+  },
+  "machinery": {
+    "done": true,
+    "meaning": "机械",
+    "source": "api"
+  },
+  "majesty": {
+    "done": true,
+    "meaning": "陛下",
+    "source": "api"
+  },
+  "mainstream": {
+    "done": true,
+    "meaning": "主流",
+    "source": "api"
+  },
+  "magnitude": {
+    "done": true,
+    "meaning": "量值",
+    "source": "api"
+  },
+  "madden": {
+    "done": true,
+    "meaning": "麦登",
+    "source": "api"
+  },
+  "lyrical": {
+    "done": true,
+    "meaning": "抒情的",
+    "source": "api"
+  },
+  "magistrate": {
+    "done": true,
+    "meaning": "地方法官；治安官",
+    "source": "api"
+  },
+  "malignant": {
+    "done": true,
+    "meaning": "adj.恶性",
+    "source": "api"
+  },
+  "mammal": {
+    "done": true,
+    "meaning": "哺乳动物",
+    "source": "api"
+  },
+  "malicious": {
+    "done": true,
+    "meaning": "adj.恶意, 预谋, 蓄意",
+    "source": "api"
+  },
+  "malpractice": {
+    "done": true,
+    "meaning": "玩忽职守",
+    "source": "api"
+  },
+  "mall": {
+    "done": true,
+    "meaning": "商城",
+    "source": "api"
+  },
+  "malice": {
+    "done": true,
+    "meaning": "恶意",
+    "source": "api"
+  },
+  "managerial": {
+    "done": true,
+    "meaning": "管理",
+    "source": "api"
+  },
+  "makeup": {
+    "done": true,
+    "meaning": "化妆",
+    "source": "api"
+  },
+  "maneuver": {
+    "done": true,
+    "meaning": "调动 ,演习",
+    "source": "api"
+  },
+  "manipulation": {
+    "done": true,
+    "meaning": "操纵 ,处理,篡改",
+    "source": "api"
+  },
+  "mandatory": {
+    "done": true,
+    "meaning": "强制性",
+    "source": "api"
+  },
+  "manifestation": {
+    "done": true,
+    "meaning": "显现",
+    "source": "api"
+  },
+  "manipulative": {
+    "done": true,
+    "meaning": "喜欢玩弄人心",
+    "source": "api"
+  },
+  "manifest": {
+    "done": true,
+    "meaning": "清单",
+    "source": "api"
+  },
+  "manoeuvre": {
+    "done": true,
+    "meaning": "演习",
+    "source": "api"
+  },
+  "mandate": {
+    "done": true,
+    "meaning": "法院授权",
+    "source": "api"
+  },
+  "mansion": {
+    "done": true,
+    "meaning": "大宅",
+    "source": "api"
+  },
+  "manuscript": {
+    "done": true,
+    "meaning": "本 ,底稿,稿本,原稿",
+    "source": "api"
+  },
+  "martyr": {
+    "done": true,
+    "meaning": "n.烈士",
+    "source": "api"
+  },
+  "martyrdom": {
+    "done": true,
+    "meaning": "殉难",
+    "source": "api"
+  },
+  "marvellous": {
+    "done": true,
+    "meaning": "极好",
+    "source": "api"
+  },
+  "mar": {
+    "done": true,
+    "meaning": "三",
+    "source": "api"
+  },
+  "maritime": {
+    "done": true,
+    "meaning": "海事",
+    "source": "api"
+  },
+  "marital": {
+    "done": true,
+    "meaning": "婚姻",
+    "source": "api"
+  },
+  "massage": {
+    "done": true,
+    "meaning": "马杀鸡",
+    "source": "api"
+  },
+  "mastery": {
+    "done": true,
+    "meaning": "控制权 ,统治权",
+    "source": "api"
+  },
+  "massacre": {
+    "done": true,
+    "meaning": "屠杀",
+    "source": "api"
+  },
+  "masculine": {
+    "done": true,
+    "meaning": "偏男性",
+    "source": "api"
+  },
+  "maternal": {
+    "done": true,
+    "meaning": "母系 ;adj.母亲",
+    "source": "api"
+  },
+  "maximal": {
+    "done": true,
+    "meaning": "最大",
+    "source": "api"
+  },
+  "masculinity": {
+    "done": true,
+    "meaning": "男子气概",
+    "source": "api"
+  },
+  "maternity": {
+    "done": true,
+    "meaning": "n.孕妇",
+    "source": "api"
+  },
+  "medication": {
+    "done": true,
+    "meaning": "医疗",
+    "source": "api"
+  },
+  "mediation": {
+    "done": true,
+    "meaning": "调解，调停",
+    "source": "api"
+  },
+  "mechanization": {
+    "done": true,
+    "meaning": "机巧化",
+    "source": "api"
+  },
+  "mechanisation": {
+    "done": true,
+    "meaning": "机械化",
+    "source": "api"
+  },
+  "medicare": {
+    "done": true,
+    "meaning": "医疗保险",
+    "source": "api"
+  },
+  "mediate": {
+    "done": true,
+    "meaning": "adj.间接 ;v.调解 ,调停",
+    "source": "api"
+  },
+  "mediator": {
+    "done": true,
+    "meaning": "中保 mediator",
+    "source": "api"
+  },
+  "meaty": {
+    "done": true,
+    "meaning": "肉质",
+    "source": "api"
+  },
+  "medieval": {
+    "done": true,
+    "meaning": "中世纪",
+    "source": "api"
+  },
+  "melody": {
+    "done": true,
+    "meaning": "旋律",
+    "source": "api"
+  },
+  "mentor": {
+    "done": true,
+    "meaning": "导师",
+    "source": "api"
+  },
+  "memorandum": {
+    "done": true,
+    "meaning": "备 忘 录",
+    "source": "api"
+  },
+  "menace": {
+    "done": true,
+    "meaning": "n.威胁者 恐吓 ,胁?;v.恐吓 ,胁迫",
+    "source": "api"
+  },
+  "memo": {
+    "done": true,
+    "meaning": "备注",
+    "source": "api"
+  },
+  "merge": {
+    "done": true,
+    "meaning": "合并",
+    "source": "api"
+  },
+  "melodious": {
+    "done": true,
+    "meaning": "悦耳的声音",
+    "source": "api"
+  },
+  "metallic": {
+    "done": true,
+    "meaning": "金属色",
+    "source": "api"
+  },
+  "metaphor": {
+    "done": true,
+    "meaning": "比喻",
+    "source": "api"
+  },
+  "merriment": {
+    "done": true,
+    "meaning": "欢乐",
+    "source": "api"
+  },
+  "merger": {
+    "done": true,
+    "meaning": "n.公司的合并 ,公司合并,混合,混同",
+    "source": "api"
+  },
+  "metabolic": {
+    "done": true,
+    "meaning": "代谢",
+    "source": "api"
+  },
+  "meritorious": {
+    "done": true,
+    "meaning": "adj.善意 ,有功",
+    "source": "api"
+  },
+  "methodical": {
+    "done": true,
+    "meaning": "有条不紊",
+    "source": "api"
+  },
+  "metaphorical": {
+    "done": true,
+    "meaning": "隐喻",
+    "source": "api"
+  },
+  "meticulous": {
+    "done": true,
+    "meaning": "一丝不苟",
+    "source": "api"
+  },
+  "midwife": {
+    "done": true,
+    "meaning": "接生妇",
+    "source": "api"
+  },
+  "metropolitan": {
+    "done": true,
+    "meaning": "adj.本土",
+    "source": "api"
+  },
+  "middle-class": {
+    "done": true,
+    "meaning": "中级",
+    "source": "api"
+  },
+  "methodology": {
+    "done": true,
+    "meaning": "方法论",
+    "source": "api"
+  },
+  "metro": {
+    "done": true,
+    "meaning": "地铁",
+    "source": "api"
+  },
+  "microscopic": {
+    "done": true,
+    "meaning": "太微",
+    "source": "api"
+  },
+  "mighty": {
+    "done": true,
+    "meaning": "威武",
+    "source": "api"
+  },
+  "milky": {
+    "done": true,
+    "meaning": "乳.白色",
+    "source": "api"
+  },
+  "mileage": {
+    "done": true,
+    "meaning": "英里数",
+    "source": "api"
+  },
+  "migrant": {
+    "done": true,
+    "meaning": "n.移居者 ,移民与入籍局",
+    "source": "api"
+  },
+  "militia": {
+    "done": true,
+    "meaning": "n.民兵 ,民兵",
+    "source": "api"
+  },
+  "militant": {
+    "done": true,
+    "meaning": "战斗派",
+    "source": "api"
+  },
+  "milestone": {
+    "done": true,
+    "meaning": "里程碑",
+    "source": "api"
+  },
+  "migration": {
+    "done": true,
+    "meaning": "迁移",
+    "source": "api"
+  },
+  "militancy": {
+    "done": true,
+    "meaning": "好战",
+    "source": "api"
+  },
+  "mint": {
+    "done": true,
+    "meaning": "薄荷",
+    "source": "api"
+  },
+  "mindset": {
+    "done": true,
+    "meaning": "心态",
+    "source": "api"
+  },
+  "minimal": {
+    "done": true,
+    "meaning": "最少",
+    "source": "api"
+  },
+  "misty": {
+    "done": true,
+    "meaning": "有雾weather forecast",
+    "source": "api"
+  },
+  "miraculous": {
+    "done": true,
+    "meaning": "奇迹",
+    "source": "api"
+  },
+  "miniature": {
+    "done": true,
+    "meaning": "小模型",
+    "source": "api"
+  },
+  "mingle": {
+    "done": true,
+    "meaning": "混杂",
+    "source": "api"
+  },
+  "ministerial": {
+    "done": true,
+    "meaning": "部长级",
+    "source": "api"
+  },
+  "mold": {
+    "done": true,
+    "meaning": "霉菌",
+    "source": "api"
+  },
+  "modesty": {
+    "done": true,
+    "meaning": "謙遜，端莊",
+    "source": "api"
+  },
+  "modernization": {
+    "done": true,
+    "meaning": "现代化.",
+    "source": "api"
+  },
+  "mock": {
+    "done": true,
+    "meaning": "v.欺骗",
+    "source": "api"
+  },
+  "moldy": {
+    "done": true,
+    "meaning": "黴菌",
+    "source": "api"
+  },
+  "momentarily": {
+    "done": true,
+    "meaning": "一时",
+    "source": "api"
+  },
+  "molecular": {
+    "done": true,
+    "meaning": "分子",
+    "source": "api"
+  },
+  "modernisation": {
+    "done": true,
+    "meaning": "一、以新理念引领教育现代化",
+    "source": "api"
+  },
+  "momentum": {
+    "done": true,
+    "meaning": "动量PropertyName",
+    "source": "api"
+  },
+  "monotonous": {
+    "done": true,
+    "meaning": "单调",
+    "source": "api"
+  },
+  "monster": {
+    "done": true,
+    "meaning": "法 - 奥廷怪物",
+    "source": "api"
+  },
+  "monarchy": {
+    "done": true,
+    "meaning": "帝制 ,君主国,君主政体,君主制",
+    "source": "api"
+  },
+  "monopoly": {
+    "done": true,
+    "meaning": "v.独占 ,独占权,专卖 ;n.垄断",
+    "source": "api"
+  },
+  "monarch": {
+    "done": true,
+    "meaning": "帝王 ,君主",
+    "source": "api"
+  },
+  "monotony": {
+    "done": true,
+    "meaning": "单调",
+    "source": "api"
+  },
+  "monstrous": {
+    "done": true,
+    "meaning": "妖姬",
+    "source": "api"
+  },
+  "mule": {
+    "done": true,
+    "meaning": "騾",
+    "source": "api"
+  },
+  "moody": {
+    "done": true,
+    "meaning": "喜怒无常",
+    "source": "api"
+  },
+  "motorway": {
+    "done": true,
+    "meaning": "公路",
+    "source": "api"
+  },
+  "morale": {
+    "done": true,
+    "meaning": "士气",
+    "source": "api"
+  },
+  "multilateral": {
+    "done": true,
+    "meaning": "多边 ,多国",
+    "source": "api"
+  },
+  "mouldy": {
+    "done": true,
+    "meaning": "发霉",
+    "source": "api"
+  },
+  "motel": {
+    "done": true,
+    "meaning": "汽车旅馆",
+    "source": "api"
+  },
+  "mow": {
+    "done": true,
+    "meaning": "MOW",
+    "source": "api"
+  },
+  "mythology": {
+    "done": true,
+    "meaning": "神话",
+    "source": "api"
+  },
+  "naive": {
+    "done": true,
+    "meaning": "天真的",
+    "source": "api"
+  },
+  "multitude": {
+    "done": true,
+    "meaning": "人山人海",
+    "source": "api"
+  },
+  "muscular": {
+    "done": true,
+    "meaning": "肌肉",
+    "source": "api"
+  },
+  "municipal": {
+    "done": true,
+    "meaning": "n.城市,内政 ,市",
+    "source": "api"
+  },
+  "municipality": {
+    "done": true,
+    "meaning": "n.市政当局 ,自治城市, 市",
+    "source": "api"
+  },
+  "murmur": {
+    "done": true,
+    "meaning": "呢喃声",
+    "source": "api"
+  },
+  "mythical": {
+    "done": true,
+    "meaning": "神话般",
+    "source": "api"
+  },
+  "napkin": {
+    "done": true,
+    "meaning": "纸巾",
+    "source": "api"
+  },
+  "narration": {
+    "done": true,
+    "meaning": "旁白",
+    "source": "api"
+  },
+  "narrative": {
+    "done": true,
+    "meaning": "叙述",
+    "source": "api"
+  },
+  "navigate": {
+    "done": true,
+    "meaning": "导航",
+    "source": "api"
+  },
+  "naivety": {
+    "done": true,
+    "meaning": "天真",
+    "source": "api"
+  },
+  "necessitate": {
+    "done": true,
+    "meaning": "要求",
+    "source": "api"
+  },
+  "narrator": {
+    "done": true,
+    "meaning": "叙述者",
+    "source": "api"
+  },
+  "narrate": {
+    "done": true,
+    "meaning": "v.叙述",
+    "source": "api"
+  },
+  "negligent": {
+    "done": true,
+    "meaning": "大意了",
+    "source": "api"
+  },
+  "negation": {
+    "done": true,
+    "meaning": "n.否定",
+    "source": "api"
+  },
+  "negate": {
+    "done": true,
+    "meaning": "v.否定",
+    "source": "api"
+  },
+  "negligence": {
+    "done": true,
+    "meaning": "过失",
+    "source": "api"
+  },
+  "needy": {
+    "done": true,
+    "meaning": "adj.贫穷",
+    "source": "api"
+  },
+  "negotiable": {
+    "done": true,
+    "meaning": "可转让",
+    "source": "api"
+  },
+  "nomination": {
+    "done": true,
+    "meaning": "任命权 ;n.任命 ,提名,推荐,指定",
+    "source": "api"
+  },
+  "norm": {
+    "done": true,
+    "meaning": "n.典型 ,定额,模范,限额,指标,批准,准则 ;n.标准",
+    "source": "api"
+  },
+  "nominal": {
+    "done": true,
+    "meaning": "名義金額",
+    "source": "api"
+  },
+  "nickel": {
+    "done": true,
+    "meaning": "镍",
+    "source": "api"
+  },
+  "nominate": {
+    "done": true,
+    "meaning": "adj.有名 ;v.任命 ,提名,推荐,指定",
+    "source": "api"
+  },
+  "nominee": {
+    "done": true,
+    "meaning": "n.被提名的候选人 ,被指定人",
+    "source": "api"
+  },
+  "nickname": {
+    "done": true,
+    "meaning": "昵称",
+    "source": "api"
+  },
+  "normalization": {
+    "done": true,
+    "meaning": "正常化",
+    "source": "api"
+  },
+  "notification": {
+    "done": true,
+    "meaning": "通知",
+    "source": "api"
+  },
+  "northeastern": {
+    "done": true,
+    "meaning": "东北",
+    "source": "api"
+  },
+  "normalisation": {
+    "done": true,
+    "meaning": "归一化",
+    "source": "api"
+  },
+  "noteworthy": {
+    "done": true,
+    "meaning": "值得注意的",
+    "source": "api"
+  },
+  "notoriety": {
+    "done": true,
+    "meaning": "恶名",
+    "source": "api"
+  },
+  "northwestern": {
+    "done": true,
+    "meaning": "西北地区france. kgm",
+    "source": "api"
+  },
+  "nosy": {
+    "done": true,
+    "meaning": "多管闲事",
+    "source": "api"
+  },
+  "numerical": {
+    "done": true,
+    "meaning": "数字",
+    "source": "api"
+  },
+  "novelty": {
+    "done": true,
+    "meaning": "新奇",
+    "source": "api"
+  },
+  "nude": {
+    "done": true,
+    "meaning": "n.无约因 ,无证据, 无报酬",
+    "source": "api"
+  },
+  "nudity": {
+    "done": true,
+    "meaning": "n.露体",
+    "source": "api"
+  },
+  "nurture": {
+    "done": true,
+    "meaning": "v.抚育, 教育",
+    "source": "api"
+  },
+  "notwithstanding": {
+    "done": true,
+    "meaning": "仍然",
+    "source": "api"
+  },
+  "notorious": {
+    "done": true,
+    "meaning": "臭名在外",
+    "source": "api"
+  },
+  "nourishment": {
+    "done": true,
+    "meaning": "营养学",
+    "source": "api"
+  },
+  "oath": {
+    "done": true,
+    "meaning": "宣誓，陈述真实性的声明",
+    "source": "api"
+  },
+  "obscene": {
+    "done": true,
+    "meaning": "n.黄色",
+    "source": "api"
+  },
+  "obesity": {
+    "done": true,
+    "meaning": "肥胖症，",
+    "source": "api"
+  },
+  "nutrient": {
+    "done": true,
+    "meaning": "食物",
+    "source": "api"
+  },
+  "obscenity": {
+    "done": true,
+    "meaning": "猥褻",
+    "source": "api"
+  },
+  "obedient": {
+    "done": true,
+    "meaning": "乖乖听话",
+    "source": "api"
+  },
+  "obedience": {
+    "done": true,
+    "meaning": "服从",
+    "source": "api"
+  },
+  "obligatory": {
+    "done": true,
+    "meaning": "adj.强制 ,强制性",
+    "source": "api"
+  },
+  "obsess": {
+    "done": true,
+    "meaning": "执念",
+    "source": "api"
+  },
+  "obscure": {
+    "done": true,
+    "meaning": "v.混淆",
+    "source": "api"
+  },
+  "observatory": {
+    "done": true,
+    "meaning": "天文台",
+    "source": "api"
+  },
+  "observant": {
+    "done": true,
+    "meaning": "细心的",
+    "source": "api"
+  },
+  "obstruct": {
+    "done": true,
+    "meaning": "v.妨碍 ,干扰,阻挠",
+    "source": "api"
+  },
+  "obsessive": {
+    "done": true,
+    "meaning": "偏执",
+    "source": "api"
+  },
+  "obsession": {
+    "done": true,
+    "meaning": "迷住",
+    "source": "api"
+  },
+  "obscurity": {
+    "done": true,
+    "meaning": "可选",
+    "source": "api"
+  },
+  "occupancy": {
+    "done": true,
+    "meaning": "占用情况",
+    "source": "api"
+  },
+  "offset": {
+    "done": true,
+    "meaning": "百萬港元",
+    "source": "api"
+  },
+  "odds": {
+    "done": true,
+    "meaning": "赔率",
+    "source": "api"
+  },
+  "odor": {
+    "done": true,
+    "meaning": "气味",
+    "source": "api"
+  },
+  "obstruction": {
+    "done": true,
+    "meaning": "阻塞",
+    "source": "api"
+  },
+  "odorous": {
+    "done": true,
+    "meaning": "氣味",
+    "source": "api"
+  },
+  "occupant": {
+    "done": true,
+    "meaning": "居住",
+    "source": "api"
+  },
+  "offense": {
+    "done": true,
+    "meaning": "犯罪",
+    "source": "api"
+  },
+  "olive": {
+    "done": true,
+    "meaning": "黄褐色",
+    "source": "api"
+  },
+  "ongoing": {
+    "done": true,
+    "meaning": "进行中",
+    "source": "api"
+  },
+  "olympiad": {
+    "done": true,
+    "meaning": "奥数",
+    "source": "api"
+  },
+  "oily": {
+    "done": true,
+    "meaning": "油油",
+    "source": "api"
+  },
+  "offspring": {
+    "done": true,
+    "meaning": "后代 ,后嗣,后裔,亲子,子女",
+    "source": "api"
+  },
+  "oftentimes": {
+    "done": true,
+    "meaning": "常常",
+    "source": "api"
+  },
+  "omission": {
+    "done": true,
+    "meaning": "n.不作为 ,消极的行为",
+    "source": "api"
+  },
+  "opaque": {
+    "done": true,
+    "meaning": "不透明",
+    "source": "api"
+  },
+  "opt": {
+    "done": true,
+    "meaning": "选择",
+    "source": "api"
+  },
+  "onset": {
+    "done": true,
+    "meaning": "攻打",
+    "source": "api"
+  },
+  "optimist": {
+    "done": true,
+    "meaning": "乐观主义者",
+    "source": "api"
+  },
+  "onward": {
+    "done": true,
+    "meaning": "下一页",
+    "source": "api"
+  },
+  "optimum": {
+    "done": true,
+    "meaning": "Optimum  最优化",
+    "source": "api"
+  },
+  "optic": {
+    "done": true,
+    "meaning": "眼睛",
+    "source": "api"
+  },
+  "optimal": {
+    "done": true,
+    "meaning": "最佳",
+    "source": "api"
+  },
+  "ordeal": {
+    "done": true,
+    "meaning": "神判法",
+    "source": "api"
+  },
+  "orthodox": {
+    "done": true,
+    "meaning": "正统的",
+    "source": "api"
+  },
+  "orphanage": {
+    "done": true,
+    "meaning": "孤儿 ,孤儿院",
+    "source": "api"
+  },
+  "outbreak": {
+    "done": true,
+    "meaning": "发病",
+    "source": "api"
+  },
+  "orientation": {
+    "done": true,
+    "meaning": "方向",
+    "source": "api"
+  },
+  "outfit": {
+    "done": true,
+    "meaning": "装备",
+    "source": "api"
+  },
+  "ought to": {
+    "done": true,
+    "meaning": "应该",
+    "source": "api"
+  },
+  "outlaw": {
+    "done": true,
+    "meaning": "无法者",
+    "source": "api"
+  },
+  "outrageous": {
+    "done": true,
+    "meaning": "不像话",
+    "source": "api"
+  },
+  "outskirts": {
+    "done": true,
+    "meaning": "郊外",
+    "source": "api"
+  },
+  "outrage": {
+    "done": true,
+    "meaning": "震動 震动 [zhen4 dong4]",
+    "source": "api"
+  },
+  "overhear": {
+    "done": true,
+    "meaning": "无意中听到",
+    "source": "api"
+  },
+  "owing to": {
+    "done": true,
+    "meaning": "由于",
+    "source": "api"
+  },
+  "overstate": {
+    "done": true,
+    "meaning": "夸大其词",
+    "source": "api"
+  },
+  "overwhelmingly": {
+    "done": true,
+    "meaning": "压倒性地",
+    "source": "api"
+  },
+  "overt": {
+    "done": true,
+    "meaning": "公开",
+    "source": "api"
+  },
+  "pact": {
+    "done": true,
+    "meaning": "n.公约 ,合约,条约",
+    "source": "api"
+  },
+  "pamphlet": {
+    "done": true,
+    "meaning": "n.小册子",
+    "source": "api"
+  },
+  "panorama": {
+    "done": true,
+    "meaning": "Name",
+    "source": "api"
+  },
+  "paperback": {
+    "done": true,
+    "meaning": "平装",
+    "source": "api"
+  },
+  "panoramic": {
+    "done": true,
+    "meaning": "全景",
+    "source": "api"
+  },
+  "paddy": {
+    "done": true,
+    "meaning": "Paddy",
+    "source": "api"
+  },
+  "oxide": {
+    "done": true,
+    "meaning": "氧化物",
+    "source": "api"
+  },
+  "pants": {
+    "done": true,
+    "meaning": "裤子",
+    "source": "api"
+  },
+  "paradox": {
+    "done": true,
+    "meaning": "n.谬论 ,似是而非的论点",
+    "source": "api"
+  },
+  "paralysis": {
+    "done": true,
+    "meaning": "麻痹",
+    "source": "api"
+  },
+  "paradigm": {
+    "done": true,
+    "meaning": "样机",
+    "source": "api"
+  },
+  "paradoxical": {
+    "done": true,
+    "meaning": "悖论",
+    "source": "api"
+  },
+  "parachute": {
+    "done": true,
+    "meaning": "降落伞",
+    "source": "api"
+  },
+  "paralyze": {
+    "done": true,
+    "meaning": "麻痹",
+    "source": "api"
+  },
+  "paralyse": {
+    "done": true,
+    "meaning": "麻翻",
+    "source": "api"
+  },
+  "pasta": {
+    "done": true,
+    "meaning": "面食",
+    "source": "api"
+  },
+  "parole": {
+    "done": true,
+    "meaning": "假释",
+    "source": "api"
+  },
+  "parasite": {
+    "done": true,
+    "meaning": "寄生者",
+    "source": "api"
+  },
+  "parish": {
+    "done": true,
+    "meaning": "n.救贫区",
+    "source": "api"
+  },
+  "partition": {
+    "done": true,
+    "meaning": "划分",
+    "source": "api"
+  },
+  "partisan": {
+    "done": true,
+    "meaning": "n.帮伙 ,同党,游击人员",
+    "source": "api"
+  },
+  "participant": {
+    "done": true,
+    "meaning": "参与者",
+    "source": "api"
+  },
+  "patronage": {
+    "done": true,
+    "meaning": "n.庇护",
+    "source": "api"
+  },
+  "patron": {
+    "done": true,
+    "meaning": "保护人 ,庇护人",
+    "source": "api"
+  },
+  "payroll": {
+    "done": true,
+    "meaning": "薪酬核算",
+    "source": "api"
+  },
+  "pathetic": {
+    "done": true,
+    "meaning": "差勁 差劲 [cha1 jin4]",
+    "source": "api"
+  },
+  "patriot": {
+    "done": true,
+    "meaning": "n.爱国者",
+    "source": "api"
+  },
+  "patrol": {
+    "done": true,
+    "meaning": "巡逻",
+    "source": "api"
+  },
+  "pastry": {
+    "done": true,
+    "meaning": "面点",
+    "source": "api"
+  },
+  "patriotic": {
+    "done": true,
+    "meaning": "愛國主義",
+    "source": "api"
+  },
+  "pedal": {
+    "done": true,
+    "meaning": "的要求",
+    "source": "api"
+  },
+  "penguin": {
+    "done": true,
+    "meaning": "企鹅",
+    "source": "api"
+  },
+  "pendulum": {
+    "done": true,
+    "meaning": "摆",
+    "source": "api"
+  },
+  "peck": {
+    "done": true,
+    "meaning": "一啄",
+    "source": "api"
+  },
+  "peddle": {
+    "done": true,
+    "meaning": "v.贩卖",
+    "source": "api"
+  },
+  "pending": {
+    "done": true,
+    "meaning": "暂挂",
+    "source": "api"
+  },
+  "peanut": {
+    "done": true,
+    "meaning": "花生",
+    "source": "api"
+  },
+  "peg": {
+    "done": true,
+    "meaning": "PEG",
+    "source": "api"
+  },
+  "perception": {
+    "done": true,
+    "meaning": "n.认知",
+    "source": "api"
+  },
+  "perilous": {
+    "done": true,
+    "meaning": "adj.危险",
+    "source": "api"
+  },
+  "permeation": {
+    "done": true,
+    "meaning": "n.渗透",
+    "source": "api"
+  },
+  "perch": {
+    "done": true,
+    "meaning": "鲈鱼",
+    "source": "api"
+  },
+  "permeate": {
+    "done": true,
+    "meaning": "渗透物",
+    "source": "api"
+  },
+  "periodical": {
+    "done": true,
+    "meaning": "adj.报 ,定期",
+    "source": "api"
+  },
+  "perceptive": {
+    "done": true,
+    "meaning": "反应敏锐",
+    "source": "api"
+  },
+  "permissible": {
+    "done": true,
+    "meaning": "adj.容许",
+    "source": "api"
+  },
+  "perseverance": {
+    "done": true,
+    "meaning": "毅力",
+    "source": "api"
+  },
+  "perpetual": {
+    "done": true,
+    "meaning": "adj.长期 ,永久",
+    "source": "api"
+  },
+  "permissive": {
+    "done": true,
+    "meaning": "宽松",
+    "source": "api"
+  },
+  "perplex": {
+    "done": true,
+    "meaning": "困惑",
+    "source": "api"
+  },
+  "perpetuate": {
+    "done": true,
+    "meaning": "延续",
+    "source": "api"
+  },
+  "persecution": {
+    "done": true,
+    "meaning": "迫害",
+    "source": "api"
+  },
+  "perplexity": {
+    "done": true,
+    "meaning": "困惑度",
+    "source": "api"
+  },
+  "persecute": {
+    "done": true,
+    "meaning": "v.迫害",
+    "source": "api"
+  },
+  "persistent": {
+    "done": true,
+    "meaning": "连续",
+    "source": "api"
+  },
+  "pesticide": {
+    "done": true,
+    "meaning": "农药",
+    "source": "api"
+  },
+  "persuasion": {
+    "done": true,
+    "meaning": "意见",
+    "source": "api"
+  },
+  "petitioner": {
+    "done": true,
+    "meaning": "请愿人；诉愿人；（英）离婚案原告",
+    "source": "api"
+  },
+  "petition": {
+    "done": true,
+    "meaning": "请愿；请愿书；申请书；请愿书；申请书",
+    "source": "api"
+  },
+  "persistence": {
+    "done": true,
+    "meaning": "暂留",
+    "source": "api"
+  },
+  "pessimist": {
+    "done": true,
+    "meaning": "悲观主义",
+    "source": "api"
+  },
+  "persuasive": {
+    "done": true,
+    "meaning": "有说服力",
+    "source": "api"
+  },
+  "photography": {
+    "done": true,
+    "meaning": "摄影",
+    "source": "api"
+  },
+  "pharmacy": {
+    "done": true,
+    "meaning": "药房",
+    "source": "api"
+  },
+  "philosophical": {
+    "done": true,
+    "meaning": "哲学",
+    "source": "api"
+  },
+  "petrochemical": {
+    "done": true,
+    "meaning": "石油化工",
+    "source": "api"
+  },
+  "picky": {
+    "done": true,
+    "meaning": "挑剔",
+    "source": "api"
+  },
+  "pharmaceutical": {
+    "done": true,
+    "meaning": "制药",
+    "source": "api"
+  },
+  "physiological": {
+    "done": true,
+    "meaning": "生理学",
+    "source": "api"
+  },
+  "petty": {
+    "done": true,
+    "meaning": "a, 次要 ,轻,小 ;n.下级",
+    "source": "api"
+  },
+  "pizza": {
+    "done": true,
+    "meaning": "比萨",
+    "source": "api"
+  },
+  "plaintiff": {
+    "done": true,
+    "meaning": "原告",
+    "source": "api"
+  },
+  "piracy": {
+    "done": true,
+    "meaning": "盗版",
+    "source": "api"
+  },
+  "pilgrimage": {
+    "done": true,
+    "meaning": "巡礼之路",
+    "source": "api"
+  },
+  "plateau": {
+    "done": true,
+    "meaning": "高原",
+    "source": "api"
+  },
+  "plague": {
+    "done": true,
+    "meaning": "瘟疫",
+    "source": "api"
+  },
+  "pilgrim": {
+    "done": true,
+    "meaning": "朝圣者",
+    "source": "api"
+  },
+  "picturesque": {
+    "done": true,
+    "meaning": "如画",
+    "source": "api"
+  },
+  "plaza": {
+    "done": true,
+    "meaning": "广场",
+    "source": "api"
+  },
+  "plumber": {
+    "done": true,
+    "meaning": "水管工",
+    "source": "api"
+  },
+  "plea": {
+    "done": true,
+    "meaning": "抗辩",
+    "source": "api"
+  },
+  "plow": {
+    "done": true,
+    "meaning": "犁",
+    "source": "api"
+  },
+  "plead": {
+    "done": true,
+    "meaning": "答辩 ;v.辩护 ,抗辩",
+    "source": "api"
+  },
+  "plausible": {
+    "done": true,
+    "meaning": "合理的",
+    "source": "api"
+  },
+  "plumbing": {
+    "done": true,
+    "meaning": "水",
+    "source": "api"
+  },
+  "plight": {
+    "done": true,
+    "meaning": "n.誓约",
+    "source": "api"
+  },
+  "polar": {
+    "done": true,
+    "meaning": "极地数据集标签",
+    "source": "api"
+  },
+  "pollutant": {
+    "done": true,
+    "meaning": "n.污染物",
+    "source": "api"
+  },
+  "poise": {
+    "done": true,
+    "meaning": "泊",
+    "source": "api"
+  },
+  "polytechnic": {
+    "done": true,
+    "meaning": "理工学院",
+    "source": "api"
+  },
+  "poke": {
+    "done": true,
+    "meaning": "查詢",
+    "source": "api"
+  },
+  "pollster": {
+    "done": true,
+    "meaning": "n.民意调查人",
+    "source": "api"
+  },
+  "podcast": {
+    "done": true,
+    "meaning": "播客",
+    "source": "api"
+  },
+  "plural": {
+    "done": true,
+    "meaning": "多重性的",
+    "source": "api"
+  },
+  "pose": {
+    "done": true,
+    "meaning": "安放",
+    "source": "api"
+  },
+  "portfolio": {
+    "done": true,
+    "meaning": "作品",
+    "source": "api"
+  },
+  "potent": {
+    "done": true,
+    "meaning": "奋力一击",
+    "source": "api"
+  },
+  "populous": {
+    "done": true,
+    "meaning": "上帝也瘋狂",
+    "source": "api"
+  },
+  "populate": {
+    "done": true,
+    "meaning": "depending on context:　写入，填充",
+    "source": "api"
+  },
+  "portrayal": {
+    "done": true,
+    "meaning": "描绘",
+    "source": "api"
+  },
+  "portray": {
+    "done": true,
+    "meaning": "描绘",
+    "source": "api"
+  },
+  "porcelain": {
+    "done": true,
+    "meaning": "瓷器",
+    "source": "api"
+  },
+  "precedent": {
+    "done": true,
+    "meaning": "判例；先例",
+    "source": "api"
+  },
+  "poultry": {
+    "done": true,
+    "meaning": "家禽",
+    "source": "api"
+  },
+  "predator": {
+    "done": true,
+    "meaning": "捕食动物",
+    "source": "api"
+  },
+  "pottery": {
+    "done": true,
+    "meaning": "陶盆",
+    "source": "api"
+  },
+  "preacher": {
+    "done": true,
+    "meaning": "传教士",
+    "source": "api"
+  },
+  "practitioner": {
+    "done": true,
+    "meaning": "从业人员",
+    "source": "api"
+  },
+  "predecessor": {
+    "done": true,
+    "meaning": "n.被继承人 ,前辈, 前任",
+    "source": "api"
+  },
+  "predominance": {
+    "done": true,
+    "meaning": "优势",
+    "source": "api"
+  },
+  "presumably": {
+    "done": true,
+    "meaning": "大概",
+    "source": "api"
+  },
+  "preferential": {
+    "done": true,
+    "meaning": "adj.优惠",
+    "source": "api"
+  },
+  "preservative": {
+    "done": true,
+    "meaning": "防腐剂",
+    "source": "api"
+  },
+  "prestigious": {
+    "done": true,
+    "meaning": "声望正隆",
+    "source": "api"
+  },
+  "presumption": {
+    "done": true,
+    "meaning": "n.事实的推定, 假定",
+    "source": "api"
+  },
+  "predominant": {
+    "done": true,
+    "meaning": "占主导地位",
+    "source": "api"
+  },
+  "pretence": {
+    "done": true,
+    "meaning": "伪装",
+    "source": "api"
+  },
+  "predominate": {
+    "done": true,
+    "meaning": "占主导地位",
+    "source": "api"
+  },
+  "problematic": {
+    "done": true,
+    "meaning": "疑难的",
+    "source": "api"
+  },
+  "prevalent": {
+    "done": true,
+    "meaning": "流行",
+    "source": "api"
+  },
+  "privacy": {
+    "done": true,
+    "meaning": "隐私",
+    "source": "api"
+  },
+  "privatization": {
+    "done": true,
+    "meaning": "私有化",
+    "source": "api"
+  },
+  "prevalence": {
+    "done": true,
+    "meaning": "感染率",
+    "source": "api"
+  },
+  "prey": {
+    "done": true,
+    "meaning": "牺牲品",
+    "source": "api"
+  },
+  "probe": {
+    "done": true,
+    "meaning": "v.查究 ,调查",
+    "source": "api"
+  },
+  "privatisation": {
+    "done": true,
+    "meaning": "私有化",
+    "source": "api"
+  },
+  "profile": {
+    "done": true,
+    "meaning": "型材",
+    "source": "api"
+  },
+  "profound": {
+    "done": true,
+    "meaning": "深奥",
+    "source": "api"
+  },
+  "proclamation": {
+    "done": true,
+    "meaning": "通告",
+    "source": "api"
+  },
+  "proceedings": {
+    "done": true,
+    "meaning": "n.事项",
+    "source": "api"
+  },
+  "prone": {
+    "done": true,
+    "meaning": "卧姿",
+    "source": "api"
+  },
+  "prolong": {
+    "done": true,
+    "meaning": "v.拖延 ,延长,延期",
+    "source": "api"
+  },
+  "proficiency": {
+    "done": true,
+    "meaning": "熟练程度",
+    "source": "api"
+  },
+  "proficient": {
+    "done": true,
+    "meaning": "精通业务",
+    "source": "api"
+  },
+  "propagation": {
+    "done": true,
+    "meaning": "传播",
+    "source": "api"
+  },
+  "propeller": {
+    "done": true,
+    "meaning": "螺旋槳",
+    "source": "api"
+  },
+  "prose": {
+    "done": true,
+    "meaning": "散文",
+    "source": "api"
+  },
+  "propagate": {
+    "done": true,
+    "meaning": "v.传播, 宣传",
+    "source": "api"
+  },
+  "prop": {
+    "done": true,
+    "meaning": "道具",
+    "source": "api"
+  },
+  "proofread": {
+    "done": true,
+    "meaning": "已审阅",
+    "source": "api"
+  },
+  "propel": {
+    "done": true,
+    "meaning": "推进",
+    "source": "api"
+  },
+  "propaganda": {
+    "done": true,
+    "meaning": "宣传活动",
+    "source": "api"
+  },
+  "prototype": {
+    "done": true,
+    "meaning": "原型",
+    "source": "api"
+  },
+  "prosper": {
+    "done": true,
+    "meaning": "繁荣",
+    "source": "api"
+  },
+  "prosecution": {
+    "done": true,
+    "meaning": "n.恶意的控告 ,检控, 检举 ,起诉,实施,追诉",
+    "source": "api"
+  },
+  "proverbial": {
+    "done": true,
+    "meaning": "谚语",
+    "source": "api"
+  },
+  "provocation": {
+    "done": true,
+    "meaning": "n.激怒行为, 挑拨 ,挑衅",
+    "source": "api"
+  },
+  "protocol": {
+    "done": true,
+    "meaning": "协议",
+    "source": "api"
+  },
+  "proverb": {
+    "done": true,
+    "meaning": "谚语\tyànyǔ",
+    "source": "api"
+  },
+  "prosecute": {
+    "done": true,
+    "meaning": "v.检察 ,起诉,实施,追诉",
+    "source": "api"
+  },
+  "psychologist": {
+    "done": true,
+    "meaning": "心理医生",
+    "source": "api"
+  },
+  "provocative": {
+    "done": true,
+    "meaning": "挑衅",
+    "source": "api"
+  },
+  "proximity": {
+    "done": true,
+    "meaning": "接近 ,近亲属 ;n.近亲",
+    "source": "api"
+  },
+  "psychiatry": {
+    "done": true,
+    "meaning": "精神病学",
+    "source": "api"
+  },
+  "psychiatric": {
+    "done": true,
+    "meaning": "精神病学",
+    "source": "api"
+  },
+  "proximate": {
+    "done": true,
+    "meaning": "最接近的",
+    "source": "api"
+  },
+  "pushy": {
+    "done": true,
+    "meaning": "固执己见",
+    "source": "api"
+  },
+  "psychiatrist": {
+    "done": true,
+    "meaning": "精神科医",
+    "source": "api"
+  },
+  "qualitative": {
+    "done": true,
+    "meaning": "质的",
+    "source": "api"
+  },
+  "quiver": {
+    "done": true,
+    "meaning": "箭袋",
+    "source": "api"
+  },
+  "quest": {
+    "done": true,
+    "meaning": "追求",
+    "source": "api"
+  },
+  "quantification": {
+    "done": true,
+    "meaning": "定量",
+    "source": "api"
+  },
+  "quarrelsome": {
+    "done": true,
+    "meaning": "爱争吵的",
+    "source": "api"
+  },
+  "quantitative": {
+    "done": true,
+    "meaning": "定量",
+    "source": "api"
+  },
+  "quota": {
+    "done": true,
+    "meaning": "指标",
+    "source": "api"
+  },
+  "query": {
+    "done": true,
+    "meaning": "询问",
+    "source": "api"
+  },
+  "rash": {
+    "done": true,
+    "meaning": "皮疹",
+    "source": "api"
+  },
+  "ranch": {
+    "done": true,
+    "meaning": "牧场",
+    "source": "api"
+  },
+  "rap": {
+    "done": true,
+    "meaning": "n.刑事责任 ,罪名,判刑",
+    "source": "api"
+  },
+  "rape": {
+    "done": true,
+    "meaning": "强奸",
+    "source": "api"
+  },
+  "radiant": {
+    "done": true,
+    "meaning": "容光焕发...",
+    "source": "api"
+  },
+  "rally": {
+    "done": true,
+    "meaning": "集结",
+    "source": "api"
+  },
+  "raggedly": {
+    "done": true,
+    "meaning": "衣衫褴褛",
+    "source": "api"
+  },
+  "ratification": {
+    "done": true,
+    "meaning": "承认 ,追认的代理 ;n.核准 ,批准",
+    "source": "api"
+  },
+  "rattle": {
+    "done": true,
+    "meaning": "咔嚓",
+    "source": "api"
+  },
+  "rebellious": {
+    "done": true,
+    "meaning": "adj.暴动 ,叛乱,造反",
+    "source": "api"
+  },
+  "reciprocal": {
+    "done": true,
+    "meaning": "adj.对等, 互惠",
+    "source": "api"
+  },
+  "reassurance": {
+    "done": true,
+    "meaning": "安心",
+    "source": "api"
+  },
+  "receptive": {
+    "done": true,
+    "meaning": "接受性强",
+    "source": "api"
+  },
+  "recipient": {
+    "done": true,
+    "meaning": "账号",
+    "source": "api"
+  },
+  "reconciliation": {
+    "done": true,
+    "meaning": "和好",
+    "source": "api"
+  },
+  "recession": {
+    "done": true,
+    "meaning": "衰退",
+    "source": "api"
+  },
+  "refrigeration": {
+    "done": true,
+    "meaning": "制冷",
+    "source": "api"
+  },
+  "regiment": {
+    "done": true,
+    "meaning": "团",
+    "source": "api"
+  },
+  "reformation": {
+    "done": true,
+    "meaning": "改造 ,维新",
+    "source": "api"
+  },
+  "registrar": {
+    "done": true,
+    "meaning": "登记官 ,书记官长",
+    "source": "api"
+  },
+  "recurrence": {
+    "done": true,
+    "meaning": "定期",
+    "source": "api"
+  },
+  "redundant": {
+    "done": true,
+    "meaning": "冗余",
+    "source": "api"
+  },
+  "rectification": {
+    "done": true,
+    "meaning": "n.改正 ,更正",
+    "source": "api"
+  },
+  "regimental": {
+    "done": true,
+    "meaning": "團",
+    "source": "api"
+  },
+  "relaxation": {
+    "done": true,
+    "meaning": "休止符 [xiu1 zhi3 fu2]",
+    "source": "api"
+  },
+  "relic": {
+    "done": true,
+    "meaning": "遗迹",
+    "source": "api"
+  },
+  "regrettable": {
+    "done": true,
+    "meaning": "不甘心",
+    "source": "api"
+  },
+  "remainder": {
+    "done": true,
+    "meaning": "余数",
+    "source": "api"
+  },
+  "rehabilitation": {
+    "done": true,
+    "meaning": "康复",
+    "source": "api"
+  },
+  "registration": {
+    "done": true,
+    "meaning": "注册",
+    "source": "api"
+  },
+  "rehabilitate": {
+    "done": true,
+    "meaning": "v.改过自新, 恢复 ,恢复名誉,平反",
+    "source": "api"
+  },
+  "remedial": {
+    "done": true,
+    "meaning": "adj.补救",
+    "source": "api"
+  },
+  "renaissance": {
+    "done": true,
+    "meaning": "文艺复兴",
+    "source": "api"
+  },
+  "reminiscent": {
+    "done": true,
+    "meaning": "回忆",
+    "source": "api"
+  },
+  "renovation": {
+    "done": true,
+    "meaning": "整修，翻新",
+    "source": "api"
+  },
+  "remembrance": {
+    "done": true,
+    "meaning": "记忆",
+    "source": "api"
+  },
+  "repayment": {
+    "done": true,
+    "meaning": "偿还",
+    "source": "api"
+  },
+  "reparable": {
+    "done": true,
+    "meaning": "可修复",
+    "source": "api"
+  },
+  "remnant": {
+    "done": true,
+    "meaning": "剩余的人",
+    "source": "api"
+  },
+  "reminiscence": {
+    "done": true,
+    "meaning": "忆旧",
+    "source": "api"
+  },
+  "repetitive": {
+    "done": true,
+    "meaning": "重复",
+    "source": "api"
+  },
+  "reproduction": {
+    "done": true,
+    "meaning": "传染",
+    "source": "api"
+  },
+  "reproductive": {
+    "done": true,
+    "meaning": "繁殖",
+    "source": "api"
+  },
+  "repression": {
+    "done": true,
+    "meaning": "- 取缔",
+    "source": "api"
+  },
+  "resemblance": {
+    "done": true,
+    "meaning": "相似",
+    "source": "api"
+  },
+  "representation": {
+    "done": true,
+    "meaning": "n.代表身份 ,代表权,代表制度,代理?",
+    "source": "api"
+  },
+  "repressive": {
+    "done": true,
+    "meaning": "adj.压制",
+    "source": "api"
+  },
+  "reputable": {
+    "done": true,
+    "meaning": "信誉良好",
+    "source": "api"
+  },
+  "retention": {
+    "done": true,
+    "meaning": "保留",
+    "source": "api"
+  },
+  "retailer": {
+    "done": true,
+    "meaning": "零售商",
+    "source": "api"
+  },
+  "resentment": {
+    "done": true,
+    "meaning": "怨念",
+    "source": "api"
+  },
+  "retaliate": {
+    "done": true,
+    "meaning": "v.报复",
+    "source": "api"
+  },
+  "resumption": {
+    "done": true,
+    "meaning": "n.恢复",
+    "source": "api"
+  },
+  "retaliation": {
+    "done": true,
+    "meaning": "n.打击报复, 报仇",
+    "source": "api"
+  },
+  "resultant": {
+    "done": true,
+    "meaning": "結果 结果 [jie2 guo3]",
+    "source": "api"
+  },
+  "respondent": {
+    "done": true,
+    "meaning": "被告；应答者；仲裁被诉人",
+    "source": "api"
+  },
+  "retrospective": {
+    "done": true,
+    "meaning": "追溯会议",
+    "source": "api"
+  },
+  "rhetoric": {
+    "done": true,
+    "meaning": "修辞学",
+    "source": "api"
+  },
+  "rhetorical": {
+    "done": true,
+    "meaning": "反問",
+    "source": "api"
+  },
+  "revival": {
+    "done": true,
+    "meaning": "复兴",
+    "source": "api"
+  },
+  "revive": {
+    "done": true,
+    "meaning": "复活",
+    "source": "api"
+  },
+  "reunification": {
+    "done": true,
+    "meaning": "政治统一",
+    "source": "api"
+  },
+  "retrieval": {
+    "done": true,
+    "meaning": "n.收回",
+    "source": "api"
+  },
+  "revelation": {
+    "done": true,
+    "meaning": "启示",
+    "source": "api"
+  },
+  "rigorous": {
+    "done": true,
+    "meaning": "adj.严格",
+    "source": "api"
+  },
+  "riot": {
+    "done": true,
+    "meaning": "n.暴乱 ,扰乱治安罪, 暴动",
+    "source": "api"
+  },
+  "rigour": {
+    "done": true,
+    "meaning": "严谨",
+    "source": "api"
+  },
+  "ridicule": {
+    "done": true,
+    "meaning": "譏誚",
+    "source": "api"
+  },
+  "rigor": {
+    "done": true,
+    "meaning": "n.严格",
+    "source": "api"
+  },
+  "rig": {
+    "done": true,
+    "meaning": "远程测试机组",
+    "source": "api"
+  },
+  "riotous": {
+    "done": true,
+    "meaning": "骚乱",
+    "source": "api"
+  },
+  "rim": {
+    "done": true,
+    "meaning": "Rim",
+    "source": "api"
+  },
+  "risky": {
+    "done": true,
+    "meaning": "风险",
+    "source": "api"
+  },
+  "robust": {
+    "done": true,
+    "meaning": "坚固",
+    "source": "api"
+  },
+  "ritual": {
+    "done": true,
+    "meaning": "礼数",
+    "source": "api"
+  },
+  "rocky": {
+    "done": true,
+    "meaning": "坚强&#x0D;",
+    "source": "api"
+  },
+  "romance": {
+    "done": true,
+    "meaning": "浪漫",
+    "source": "api"
+  },
+  "rosy": {
+    "done": true,
+    "meaning": "红润",
+    "source": "api"
+  },
+  "rivalry": {
+    "done": true,
+    "meaning": "竞争",
+    "source": "api"
+  },
+  "rip": {
+    "done": true,
+    "meaning": "RIP设定",
+    "source": "api"
+  },
+  "salon": {
+    "done": true,
+    "meaning": "沙龙",
+    "source": "api"
+  },
+  "safeguard": {
+    "done": true,
+    "meaning": "保護",
+    "source": "api"
+  },
+  "salmon": {
+    "done": true,
+    "meaning": "撒門",
+    "source": "api"
+  },
+  "royalty": {
+    "done": true,
+    "meaning": "n.版权费 ,技术使用费,上演税,使用费,提成费, 提成",
+    "source": "api"
+  },
+  "résumé": {
+    "done": true,
+    "meaning": "摘要",
+    "source": "api"
+  },
+  "rumor": {
+    "done": true,
+    "meaning": "n.传闻 ,蜚言蜚语,流言 ;v.散布谣言",
+    "source": "api"
+  },
+  "sadden": {
+    "done": true,
+    "meaning": "使悲伤",
+    "source": "api"
+  },
+  "runway": {
+    "done": true,
+    "meaning": "軌 轨 [gui3]",
+    "source": "api"
+  },
+  "sanction": {
+    "done": true,
+    "meaning": "制裁；处罚；(对遵守法律情况等的)奖惩(条款)",
+    "source": "api"
+  },
+  "sanitation": {
+    "done": true,
+    "meaning": "环境卫生 ,卫生处理 ;n.卫生",
+    "source": "api"
+  },
+  "salvation": {
+    "done": true,
+    "meaning": "拯救",
+    "source": "api"
+  },
+  "sanctuary": {
+    "done": true,
+    "meaning": "聖所",
+    "source": "api"
+  },
+  "sanitary": {
+    "done": true,
+    "meaning": "n.食品卫生",
+    "source": "api"
+  },
+  "sarcastic": {
+    "done": true,
+    "meaning": "讽刺",
+    "source": "api"
+  },
+  "salvage": {
+    "done": true,
+    "meaning": "n.被救财物 ,打捞,海难救助 ;v.救难 ,救助",
+    "source": "api"
+  },
+  "sarcasm": {
+    "done": true,
+    "meaning": "讽刺",
+    "source": "api"
+  },
+  "satire": {
+    "done": true,
+    "meaning": "諷刺",
+    "source": "api"
+  },
+  "savage": {
+    "done": true,
+    "meaning": "野蛮的",
+    "source": "api"
+  },
+  "satirical": {
+    "done": true,
+    "meaning": "讽刺",
+    "source": "api"
+  },
+  "satirist": {
+    "done": true,
+    "meaning": "讽刺",
+    "source": "api"
+  },
+  "scandal": {
+    "done": true,
+    "meaning": "丑闻",
+    "source": "api"
+  },
+  "saturate": {
+    "done": true,
+    "meaning": "饱和",
+    "source": "api"
+  },
+  "saturation": {
+    "done": true,
+    "meaning": "饱和 ",
+    "source": "api"
+  },
+  "scandalous": {
+    "done": true,
+    "meaning": "可耻的",
+    "source": "api"
+  },
+  "scary": {
+    "done": true,
+    "meaning": "害怕",
+    "source": "api"
+  },
+  "scrap": {
+    "done": true,
+    "meaning": "斗争",
+    "source": "api"
+  },
+  "scramble": {
+    "done": true,
+    "meaning": "乱拼",
+    "source": "api"
+  },
+  "script": {
+    "done": true,
+    "meaning": "剧本",
+    "source": "api"
+  },
+  "scholastic": {
+    "done": true,
+    "meaning": "Scholastic",
+    "source": "api"
+  },
+  "scenario": {
+    "done": true,
+    "meaning": "场景",
+    "source": "api"
+  },
+  "scenic": {
+    "done": true,
+    "meaning": "风景优美的",
+    "source": "api"
+  },
+  "sceptic": {
+    "done": true,
+    "meaning": "怀疑论者",
+    "source": "api"
+  },
+  "secrecy": {
+    "done": true,
+    "meaning": "保密",
+    "source": "api"
+  },
+  "secular": {
+    "done": true,
+    "meaning": "世俗 ,现世",
+    "source": "api"
+  },
+  "sector": {
+    "done": true,
+    "meaning": "行业",
+    "source": "api"
+  },
+  "scrutiny": {
+    "done": true,
+    "meaning": "n.监视 ,审查,详尽研究",
+    "source": "api"
+  },
+  "scrub": {
+    "done": true,
+    "meaning": "推移",
+    "source": "api"
+  },
+  "second-hand": {
+    "done": true,
+    "meaning": "二手",
+    "source": "api"
+  },
+  "secretarial": {
+    "done": true,
+    "meaning": "秘書",
+    "source": "api"
+  },
+  "scripture": {
+    "done": true,
+    "meaning": "经书",
+    "source": "api"
+  },
+  "seduction": {
+    "done": true,
+    "meaning": "n.诱奸罪, 诱惑",
+    "source": "api"
+  },
+  "seedling": {
+    "done": true,
+    "meaning": "幼苗",
+    "source": "api"
+  },
+  "segment": {
+    "done": true,
+    "meaning": "段",
+    "source": "api"
+  },
+  "segregate": {
+    "done": true,
+    "meaning": "隔离",
+    "source": "api"
+  },
+  "seductive": {
+    "done": true,
+    "meaning": "诱惑",
+    "source": "api"
+  },
+  "seduce": {
+    "done": true,
+    "meaning": "v.勾引 ,诱奸, 诱惑",
+    "source": "api"
+  },
+  "seemingly": {
+    "done": true,
+    "meaning": "放佛",
+    "source": "api"
+  },
+  "segmental": {
+    "done": true,
+    "meaning": "分段",
+    "source": "api"
+  },
+  "sentiment": {
+    "done": true,
+    "meaning": "意见",
+    "source": "api"
+  },
+  "sequential": {
+    "done": true,
+    "meaning": "序贯，",
+    "source": "api"
+  },
+  "serial": {
+    "done": true,
+    "meaning": "系列 系列 [xi4 lie4]",
+    "source": "api"
+  },
+  "sensational": {
+    "done": true,
+    "meaning": "耸人听闻",
+    "source": "api"
+  },
+  "segregation": {
+    "done": true,
+    "meaning": "分割",
+    "source": "api"
+  },
+  "semi-colon": {
+    "done": true,
+    "meaning": "分号",
+    "source": "api"
+  },
+  "sentimental": {
+    "done": true,
+    "meaning": "婆婆妈妈",
+    "source": "api"
+  },
+  "sergeant": {
+    "done": true,
+    "meaning": "n.警官 ,宪兵队长,中士",
+    "source": "api"
+  },
+  "shaft": {
+    "done": true,
+    "meaning": "轴",
+    "source": "api"
+  },
+  "setback": {
+    "done": true,
+    "meaning": "岔子",
+    "source": "api"
+  },
+  "sexy": {
+    "done": true,
+    "meaning": "性感的",
+    "source": "api"
+  },
+  "shatter": {
+    "done": true,
+    "meaning": "粉碎",
+    "source": "api"
+  },
+  "shaky": {
+    "done": true,
+    "meaning": "身体颤抖",
+    "source": "api"
+  },
+  "shipyard": {
+    "done": true,
+    "meaning": "船坞",
+    "source": "api"
+  },
+  "sexual": {
+    "done": true,
+    "meaning": "性爱",
+    "source": "api"
+  },
+  "shrimp": {
+    "done": true,
+    "meaning": "虾类",
+    "source": "api"
+  },
+  "showcase": {
+    "done": true,
+    "meaning": "展示",
+    "source": "api"
+  },
+  "shrub": {
+    "done": true,
+    "meaning": "灌木",
+    "source": "api"
+  },
+  "shove": {
+    "done": true,
+    "meaning": "啪！！",
+    "source": "api"
+  },
+  "shrewd": {
+    "done": true,
+    "meaning": "精明",
+    "source": "api"
+  },
+  "shit": {
+    "done": true,
+    "meaning": "艹",
+    "source": "api"
+  },
+  "shorthand": {
+    "done": true,
+    "meaning": "n.速记法",
+    "source": "api"
+  },
+  "showy": {
+    "done": true,
+    "meaning": "骚气",
+    "source": "api"
+  },
+  "shrubbery": {
+    "done": true,
+    "meaning": "欧石楠",
+    "source": "api"
+  },
+  "simulation": {
+    "done": true,
+    "meaning": "模拟",
+    "source": "api"
+  },
+  "silicon": {
+    "done": true,
+    "meaning": "硅",
+    "source": "api"
+  },
+  "silky": {
+    "done": true,
+    "meaning": "酥滑",
+    "source": "api"
+  },
+  "shrug": {
+    "done": true,
+    "meaning": "耸肩表示",
+    "source": "api"
+  },
+  "silvery": {
+    "done": true,
+    "meaning": "银色",
+    "source": "api"
+  },
+  "simulate": {
+    "done": true,
+    "meaning": "模仿",
+    "source": "api"
+  },
+  "siege": {
+    "done": true,
+    "meaning": "攻城",
+    "source": "api"
+  },
+  "skinny": {
+    "done": true,
+    "meaning": "瘦的",
+    "source": "api"
+  },
+  "simultaneous": {
+    "done": true,
+    "meaning": "齐齐",
+    "source": "api"
+  },
+  "sinister": {
+    "done": true,
+    "meaning": "阴狠",
+    "source": "api"
+  },
+  "sketchy": {
+    "done": true,
+    "meaning": "粗略",
+    "source": "api"
+  },
+  "skeleton": {
+    "done": true,
+    "meaning": "骨骼",
+    "source": "api"
+  },
+  "situate": {
+    "done": true,
+    "meaning": "定位",
+    "source": "api"
+  },
+  "skeptic": {
+    "done": true,
+    "meaning": "怀疑",
+    "source": "api"
+  },
+  "slash": {
+    "done": true,
+    "meaning": "迹地",
+    "source": "api"
+  },
+  "slack": {
+    "done": true,
+    "meaning": "Slack",
+    "source": "api"
+  },
+  "slot": {
+    "done": true,
+    "meaning": "插槽",
+    "source": "api"
+  },
+  "skull": {
+    "done": true,
+    "meaning": "头颅",
+    "source": "api"
+  },
+  "skyline": {
+    "done": true,
+    "meaning": "天际线",
+    "source": "api"
+  },
+  "sleepiness": {
+    "done": true,
+    "meaning": "困意",
+    "source": "api"
+  },
+  "slap": {
+    "done": true,
+    "meaning": "耳光",
+    "source": "api"
+  },
+  "smartphone": {
+    "done": true,
+    "meaning": "智能手机",
+    "source": "api"
+  },
+  "smash": {
+    "done": true,
+    "meaning": "粉碎",
+    "source": "api"
+  },
+  "smelly": {
+    "done": true,
+    "meaning": "坏了的",
+    "source": "api"
+  },
+  "smoky": {
+    "done": true,
+    "meaning": "烟",
+    "source": "api"
+  },
+  "smoggy": {
+    "done": true,
+    "meaning": "雾霾",
+    "source": "api"
+  },
+  "smuggler": {
+    "done": true,
+    "meaning": "n.偷运者 ,走私犯",
+    "source": "api"
+  },
+  "slump": {
+    "done": true,
+    "meaning": "n.暴跌",
+    "source": "api"
+  },
+  "smuggle": {
+    "done": true,
+    "meaning": "v.走私",
+    "source": "api"
+  },
+  "sneak": {
+    "done": true,
+    "meaning": "n.小偷",
+    "source": "api"
+  },
+  "snail": {
+    "done": true,
+    "meaning": "蝸牛",
+    "source": "api"
+  },
+  "snob": {
+    "done": true,
+    "meaning": "势利",
+    "source": "api"
+  },
+  "snack": {
+    "done": true,
+    "meaning": "零食",
+    "source": "api"
+  },
+  "smuggling": {
+    "done": true,
+    "meaning": "n.走私",
+    "source": "api"
+  },
+  "snatch": {
+    "done": true,
+    "meaning": "v.绑架 ,抢夺 ;n.抢夺",
+    "source": "api"
+  },
+  "snobbish": {
+    "done": true,
+    "meaning": "狗眼看人低",
+    "source": "api"
+  },
+  "snap": {
+    "done": true,
+    "meaning": "对齐",
+    "source": "api"
+  },
+  "sodium": {
+    "done": true,
+    "meaning": "钠",
+    "source": "api"
+  },
+  "solicitor": {
+    "done": true,
+    "meaning": "律师",
+    "source": "api"
+  },
+  "sociology": {
+    "done": true,
+    "meaning": "社会学",
+    "source": "api"
+  },
+  "soar": {
+    "done": true,
+    "meaning": "飙升",
+    "source": "api"
+  },
+  "sociologist": {
+    "done": true,
+    "meaning": "社会学",
+    "source": "api"
+  },
+  "sociable": {
+    "done": true,
+    "meaning": "社牛",
+    "source": "api"
+  },
+  "solicit": {
+    "done": true,
+    "meaning": "n.兜揽 ,勾引,诱使 ;v.教唆 ,请求",
+    "source": "api"
+  },
+  "solo": {
+    "done": true,
+    "meaning": "独奏",
+    "source": "api"
+  },
+  "solitary": {
+    "done": true,
+    "meaning": "寂寞",
+    "source": "api"
+  },
+  "solidarity": {
+    "done": true,
+    "meaning": "团结",
+    "source": "api"
+  },
+  "solvent": {
+    "done": true,
+    "meaning": "溶剂",
+    "source": "api"
+  },
+  "soothe": {
+    "done": true,
+    "meaning": "舒缓",
+    "source": "api"
+  },
+  "sophistication": {
+    "done": true,
+    "meaning": "高雅",
+    "source": "api"
+  },
+  "southeastern": {
+    "done": true,
+    "meaning": "东南部",
+    "source": "api"
+  },
+  "solitude": {
+    "done": true,
+    "meaning": "孤独",
+    "source": "api"
+  },
+  "sovereignty": {
+    "done": true,
+    "meaning": "至高統治權",
+    "source": "api"
+  },
+  "spaghetti": {
+    "done": true,
+    "meaning": "意大利面",
+    "source": "api"
+  },
+  "specialisation": {
+    "done": true,
+    "meaning": "专业课程",
+    "source": "api"
+  },
+  "sovereign": {
+    "done": true,
+    "meaning": "n.皇帝 ,金磅,君主",
+    "source": "api"
+  },
+  "southwestern": {
+    "done": true,
+    "meaning": "西南",
+    "source": "api"
+  },
+  "spatial": {
+    "done": true,
+    "meaning": "adj.空间",
+    "source": "api"
+  },
+  "sparingly": {
+    "done": true,
+    "meaning": "谨慎地",
+    "source": "api"
+  },
+  "spectator": {
+    "done": true,
+    "meaning": "围观者",
+    "source": "api"
+  },
+  "spice": {
+    "done": true,
+    "meaning": "香料",
+    "source": "api"
+  },
+  "spectrum": {
+    "done": true,
+    "meaning": "光谱",
+    "source": "api"
+  },
+  "speculation": {
+    "done": true,
+    "meaning": "n.投机交易 ,投机买卖",
+    "source": "api"
+  },
+  "speedy": {
+    "done": true,
+    "meaning": "迅速",
+    "source": "api"
+  },
+  "speculative": {
+    "done": true,
+    "meaning": "adj.投机",
+    "source": "api"
+  },
+  "spherical": {
+    "done": true,
+    "meaning": "球面",
+    "source": "api"
+  },
+  "spicy": {
+    "done": true,
+    "meaning": "辛辣",
+    "source": "api"
+  },
+  "spiral": {
+    "done": true,
+    "meaning": "螺旋",
+    "source": "api"
+  },
+  "spokesperson": {
+    "done": true,
+    "meaning": "代言人",
+    "source": "api"
+  },
+  "spine": {
+    "done": true,
+    "meaning": "脊柱",
+    "source": "api"
+  },
+  "spongy": {
+    "done": true,
+    "meaning": "海绵状",
+    "source": "api"
+  },
+  "spite": {
+    "done": true,
+    "meaning": "恶意",
+    "source": "api"
+  },
+  "splendor": {
+    "done": true,
+    "meaning": "华都",
+    "source": "api"
+  },
+  "splendour": {
+    "done": true,
+    "meaning": "辉煌",
+    "source": "api"
+  },
+  "spotlight": {
+    "done": true,
+    "meaning": "聚光灯",
+    "source": "api"
+  },
+  "stagger": {
+    "done": true,
+    "meaning": "n.尖刀",
+    "source": "api"
+  },
+  "spontaneity": {
+    "done": true,
+    "meaning": "自发性",
+    "source": "api"
+  },
+  "sprawl": {
+    "done": true,
+    "meaning": "蔓生",
+    "source": "api"
+  },
+  "stagnant": {
+    "done": true,
+    "meaning": "停滞不前",
+    "source": "api"
+  },
+  "squad": {
+    "done": true,
+    "meaning": "代表队",
+    "source": "api"
+  },
+  "spouse": {
+    "done": true,
+    "meaning": "配偶",
+    "source": "api"
+  },
+  "sportswoman": {
+    "done": true,
+    "meaning": "运动员",
+    "source": "api"
+  },
+  "stagnation": {
+    "done": true,
+    "meaning": "n.停滞性通货膨胀",
+    "source": "api"
+  },
+  "stall": {
+    "done": true,
+    "meaning": "排档",
+    "source": "api"
+  },
+  "stammer": {
+    "done": true,
+    "meaning": "支支吾吾",
+    "source": "api"
+  },
+  "standardisation": {
+    "done": true,
+    "meaning": "标准化",
+    "source": "api"
+  },
+  "standardization": {
+    "done": true,
+    "meaning": "（2）当前在身体活动量与各健康指标间的“剂量-效应”关系研究中，效益水平的界定标准仍比较模糊，而且不同活动剂量下可能带来的健康风险等不利因素往往被忽视。",
+    "source": "api"
+  },
+  "stalk": {
+    "done": true,
+    "meaning": "莖 茎 [jing1]",
+    "source": "api"
+  },
+  "stagnate": {
+    "done": true,
+    "meaning": "停滞",
+    "source": "api"
+  },
+  "stance": {
+    "done": true,
+    "meaning": "今天也是父亲节",
+    "source": "api"
+  },
+  "standby": {
+    "done": true,
+    "meaning": "一般待机 ",
+    "source": "api"
+  },
+  "stationery": {
+    "done": true,
+    "meaning": "文具",
+    "source": "api"
+  },
+  "statute": {
+    "done": true,
+    "meaning": "法令，法规",
+    "source": "api"
+  },
+  "stapler": {
+    "done": true,
+    "meaning": "订书机",
+    "source": "api"
+  },
+  "statutory": {
+    "done": true,
+    "meaning": "n.成文 ,法定,法令,法律",
+    "source": "api"
+  },
+  "stark": {
+    "done": true,
+    "meaning": "史塔克",
+    "source": "api"
+  },
+  "staple": {
+    "done": true,
+    "meaning": "打订书钉",
+    "source": "api"
+  },
+  "starry": {
+    "done": true,
+    "meaning": "星光熠熠",
+    "source": "api"
+  },
+  "stereotype": {
+    "done": true,
+    "meaning": "刻板印象",
+    "source": "api"
+  },
+  "stipulation": {
+    "done": true,
+    "meaning": "契约；约定；协定",
+    "source": "api"
+  },
+  "stimulant": {
+    "done": true,
+    "meaning": "n.兴奋剂",
+    "source": "api"
+  },
+  "stifle": {
+    "done": true,
+    "meaning": "v.压制",
+    "source": "api"
+  },
+  "steamy": {
+    "done": true,
+    "meaning": "热气腾腾",
+    "source": "api"
+  },
+  "stimulus": {
+    "done": true,
+    "meaning": "刺激",
+    "source": "api"
+  },
+  "stipulate": {
+    "done": true,
+    "meaning": "v.约定",
+    "source": "api"
+  },
+  "stigma": {
+    "done": true,
+    "meaning": "柱头",
+    "source": "api"
+  },
+  "streamline": {
+    "done": true,
+    "meaning": "简化",
+    "source": "api"
+  },
+  "streak": {
+    "done": true,
+    "meaning": "条纹",
+    "source": "api"
+  },
+  "strand": {
+    "done": true,
+    "meaning": "Strand",
+    "source": "api"
+  },
+  "stray": {
+    "done": true,
+    "meaning": "迷途",
+    "source": "api"
+  },
+  "strangle": {
+    "done": true,
+    "meaning": "掐死",
+    "source": "api"
+  },
+  "stroll": {
+    "done": true,
+    "meaning": "转转",
+    "source": "api"
+  },
+  "stoppage": {
+    "done": true,
+    "meaning": "n.抵销, 扣留 ,停止",
+    "source": "api"
+  },
+  "stride": {
+    "done": true,
+    "meaning": "脚步",
+    "source": "api"
+  },
+  "stunning": {
+    "done": true,
+    "meaning": "惊人",
+    "source": "api"
+  },
+  "submissive": {
+    "done": true,
+    "meaning": "温良忍让",
+    "source": "api"
+  },
+  "stun": {
+    "done": true,
+    "meaning": "僵直",
+    "source": "api"
+  },
+  "sturdy": {
+    "done": true,
+    "meaning": "坚固",
+    "source": "api"
+  },
+  "stylish": {
+    "done": true,
+    "meaning": "时尚",
+    "source": "api"
+  },
+  "subordinate": {
+    "done": true,
+    "meaning": "n.部下 ,次要,从属",
+    "source": "api"
+  },
+  "stump": {
+    "done": true,
+    "meaning": "牙槽窝",
+    "source": "api"
+  },
+  "submission": {
+    "done": true,
+    "meaning": "提交",
+    "source": "api"
+  },
+  "sulfur": {
+    "done": true,
+    "meaning": "硫磺",
+    "source": "api"
+  },
+  "suicide": {
+    "done": true,
+    "meaning": "自杀",
+    "source": "api"
+  },
+  "suffice": {
+    "done": true,
+    "meaning": "充分必要条件",
+    "source": "api"
+  },
+  "suicidal": {
+    "done": true,
+    "meaning": "自取灭亡",
+    "source": "api"
+  },
+  "subtlety": {
+    "done": true,
+    "meaning": "微妙",
+    "source": "api"
+  },
+  "sue": {
+    "done": true,
+    "meaning": "Sue",
+    "source": "api"
+  },
+  "subordination": {
+    "done": true,
+    "meaning": "从属之债",
+    "source": "api"
+  },
+  "subsistence": {
+    "done": true,
+    "meaning": "生计 / 为生之道",
+    "source": "api"
+  },
+  "superstitious": {
+    "done": true,
+    "meaning": "迷信的",
+    "source": "api"
+  },
+  "superintendent": {
+    "done": true,
+    "meaning": "n.警司 ,警长",
+    "source": "api"
+  },
+  "supervisor": {
+    "done": true,
+    "meaning": "主管",
+    "source": "api"
+  },
+  "summon": {
+    "done": true,
+    "meaning": "v.传",
+    "source": "api"
+  },
+  "supervision": {
+    "done": true,
+    "meaning": "监管",
+    "source": "api"
+  },
+  "supposedly": {
+    "done": true,
+    "meaning": "据说",
+    "source": "api"
+  },
+  "superstition": {
+    "done": true,
+    "meaning": "迷信",
+    "source": "api"
+  },
+  "suppress": {
+    "done": true,
+    "meaning": "禁止，使止住；抑制",
+    "source": "api"
+  },
+  "surgical": {
+    "done": true,
+    "meaning": "手术类医",
+    "source": "api"
+  },
+  "surveillance": {
+    "done": true,
+    "meaning": "n.监督 ,监视,看守",
+    "source": "api"
+  },
+  "surpass": {
+    "done": true,
+    "meaning": "回首历史，中美双方本着求同存异精神",
+    "source": "api"
+  },
+  "surfing": {
+    "done": true,
+    "meaning": "冲浪",
+    "source": "api"
+  },
+  "suppression": {
+    "done": true,
+    "meaning": "灭火",
+    "source": "api"
+  },
+  "suppressive": {
+    "done": true,
+    "meaning": "adj.压制",
+    "source": "api"
+  },
+  "surf": {
+    "done": true,
+    "meaning": "冲浪",
+    "source": "api"
+  },
+  "supremacy": {
+    "done": true,
+    "meaning": "霸权 ,无上权力",
+    "source": "api"
+  },
+  "suspense": {
+    "done": true,
+    "meaning": "结束",
+    "source": "api"
+  },
+  "suspicious": {
+    "done": true,
+    "meaning": "怀疑",
+    "source": "api"
+  },
+  "swipe": {
+    "done": true,
+    "meaning": "滑动",
+    "source": "api"
+  },
+  "sustainability": {
+    "done": true,
+    "meaning": "纺织品",
+    "source": "api"
+  },
+  "swimmer": {
+    "done": true,
+    "meaning": "游泳",
+    "source": "api"
+  },
+  "susceptible": {
+    "done": true,
+    "meaning": "易感个体",
+    "source": "api"
+  },
+  "symbolical": {
+    "done": true,
+    "meaning": "象征性的",
+    "source": "api"
+  },
+  "symmetric": {
+    "done": true,
+    "meaning": "Symmetric",
+    "source": "api"
+  },
+  "synonym": {
+    "done": true,
+    "meaning": "同义词",
+    "source": "api"
+  },
+  "symmetry": {
+    "done": true,
+    "meaning": "对称",
+    "source": "api"
+  },
+  "syndrome": {
+    "done": true,
+    "meaning": "综合征",
+    "source": "api"
+  },
+  "taboo": {
+    "done": true,
+    "meaning": "禁忌",
+    "source": "api"
+  },
+  "synthesis": {
+    "done": true,
+    "meaning": "合成",
+    "source": "api"
+  },
+  "syndicate": {
+    "done": true,
+    "meaning": "n.财团 ,董事会,辛迪加",
+    "source": "api"
+  },
+  "symposium": {
+    "done": true,
+    "meaning": "n.专题座谈",
+    "source": "api"
+  },
+  "symmetrical": {
+    "done": true,
+    "meaning": "对称",
+    "source": "api"
+  },
+  "taxation": {
+    "done": true,
+    "meaning": "税务",
+    "source": "api"
+  },
+  "takeoff": {
+    "done": true,
+    "meaning": "起飞",
+    "source": "api"
+  },
+  "tack": {
+    "done": true,
+    "meaning": "马具",
+    "source": "api"
+  },
+  "tact": {
+    "done": true,
+    "meaning": "机智",
+    "source": "api"
+  },
+  "tangle": {
+    "done": true,
+    "meaning": "缠结",
+    "source": "api"
+  },
+  "talkative": {
+    "done": true,
+    "meaning": "爱说话的",
+    "source": "api"
+  },
+  "tactic": {
+    "done": true,
+    "meaning": "战术",
+    "source": "api"
+  },
+  "tariff": {
+    "done": true,
+    "meaning": "关税 ,运价规程",
+    "source": "api"
+  },
+  "telescopic": {
+    "done": true,
+    "meaning": "望远的",
+    "source": "api"
+  },
+  "temperament": {
+    "done": true,
+    "meaning": "性格",
+    "source": "api"
+  },
+  "tempo": {
+    "done": true,
+    "meaning": "节奏",
+    "source": "api"
+  },
+  "temporal": {
+    "done": true,
+    "meaning": "世俗 ,现世",
+    "source": "api"
+  },
+  "tenure": {
+    "done": true,
+    "meaning": "使用期限",
+    "source": "api"
+  },
+  "telecommunications": {
+    "done": true,
+    "meaning": "电信",
+    "source": "api"
+  },
+  "teen": {
+    "done": true,
+    "meaning": "青少年",
+    "source": "api"
+  },
+  "terminate": {
+    "done": true,
+    "meaning": "终止",
+    "source": "api"
+  },
+  "termination": {
+    "done": true,
+    "meaning": "結果 结果 [jie2 guo3]",
+    "source": "api"
+  },
+  "thanksgiving": {
+    "done": true,
+    "meaning": "感恩",
+    "source": "api"
+  },
+  "territorial": {
+    "done": true,
+    "meaning": "adj.地方 ,地域 , 区域",
+    "source": "api"
+  },
+  "testimony": {
+    "done": true,
+    "meaning": "证词；口供；证人证言",
+    "source": "api"
+  },
+  "terrace": {
+    "done": true,
+    "meaning": "天台",
+    "source": "api"
+  }
+}
