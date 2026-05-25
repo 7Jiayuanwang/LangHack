@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS `users` (
     `avatar` VARCHAR(255) DEFAULT NULL COMMENT '头像URL',
     `status` VARCHAR(20) DEFAULT 'ACTIVE' COMMENT '状态',
     `inner_uid` VARCHAR(100) DEFAULT NULL COMMENT '用户内部唯一标识符',
+    `school_student_id` BIGINT DEFAULT NULL COMMENT '关联 school_student.id',
+    `school_teacher_id` BIGINT DEFAULT NULL COMMENT '关联 school_teacher.id',
     `hobby` VARCHAR(100) DEFAULT NULL COMMENT '用户兴趣爱好',
     `level` VARCHAR(50) DEFAULT NULL COMMENT '英语水平等级',
     `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
@@ -36,7 +38,9 @@ CREATE TABLE IF NOT EXISTS `users` (
     KEY `idx_role` (`role`),
     KEY `idx_status` (`status`),
     KEY `idx_deleted` (`deleted`),
-    KEY `idx_inner_uid` (`inner_uid`)
+    KEY `idx_inner_uid` (`inner_uid`),
+    KEY `idx_users_school_student_id` (`school_student_id`),
+    KEY `idx_users_school_teacher_id` (`school_teacher_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 -- ────────────────────────────────────────
