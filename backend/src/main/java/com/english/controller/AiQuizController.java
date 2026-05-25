@@ -9,6 +9,7 @@ import com.english.entity.TextExercise;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.mapper.AiQuizSessionMapper;
+import com.english.service.StudentAiQuizService;
 import com.english.service.TextExerciseService;
 import com.english.service.TextService;
 import com.english.service.UserService;
@@ -41,6 +42,9 @@ public class AiQuizController {
 
     @Autowired
     private AiQuizSessionMapper aiQuizSessionMapper;
+
+    @Autowired
+    private StudentAiQuizService studentAiQuizService;
 
     @Autowired(required = false)
     private AiProviderRuntimeService aiProviderRuntimeService;
@@ -224,5 +228,38 @@ public class AiQuizController {
         private Long textId;
         private Integer count;
         private Boolean regenerate;
+    }
+
+    /**
+     * 学生端：查自己的做题尝试列表
+     */
+    @GetMapping("/my-attempts")
+    public Result<java.util.List<com.english.entity.StudentAiQuizAttempt>> listMyAttempts(
+            @RequestParam(required = false) Long textId) {
+        try {
+            User user = getCurrentUser();
+            return Result.success(studentAiQuizService.listMyAttempts(user.getId(), textId));
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            log.error("查询学生做题记录失败", e);
+            return Result.error("查询失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 学生端：查自己某次尝试的明细
+     */
+    @GetMapping("/my-attempts/{attemptId}")
+    public Result<Map<String, Object>> getMyAttemptDetail(@PathVariable Long attemptId) {
+        try {
+            User user = getCurrentUser();
+            return Result.success(studentAiQuizService.getMyAttemptDetail(user.getId(), attemptId));
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            log.error("查询学生做题明细失败 attemptId={}", attemptId, e);
+            return Result.error("查询失败，请稍后重试");
+        }
     }
 }

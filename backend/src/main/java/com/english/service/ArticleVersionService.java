@@ -46,4 +46,11 @@ public interface ArticleVersionService {
      * Save Markdown version results (must be called via proxy for @Transactional)
      */
     void saveMarkdownVersionResults(Long textId, Map<String, String> results);
+
+    /**
+     * Force regenerate ALL versions of an article (regardless of whether they exist).
+     * 清空已有版本并重新生成 CET-4 / CET-6 / 学术 / 中英对照 四个版本。
+     * 根据 contentType 自动走 plain text 或 markdown 路径。
+     */
+    void regenerateAllVersions(Long textId);
 }

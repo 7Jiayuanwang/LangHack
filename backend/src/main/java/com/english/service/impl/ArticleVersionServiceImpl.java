@@ -291,6 +291,56 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
         }
     }
 
+    /**
+     * 强制重新生成所有版本：先清空数据库中的版本字段，再触发异步生成。
+     * 与 checkAndGenerateVersions 区别：不检查"是否已有"，直接强制重新生成。
+     */
+    @Override
+    public void regenerateAllVersions(Long textId) {
+        Text text = textMapper.selectById(textId);
+        if (text == null) {
+            log.warn("[强制重新生成] Text not found for ID: {}", textId);
+            return;
+        }
+        if (Integer.valueOf(1).equals(text.getDeleted())) {
+            log.warn("[强制重新生成] Text {} already deleted, skip", textId);
+            return;
+        }
+
+        boolean isMarkdown = "MARKDOWN".equals(text.getContentType());
+        UpdateWrapper<Text> clearWrapper = new UpdateWrapper<>();
+        clearWrapper.eq("id", textId).eq("deleted", 0);
+        if (isMarkdown) {
+            clearWrapper.set("cet4_markdown_content", null);
+            clearWrapper.set("cet6_markdown_content", null);
+            clearWrapper.set("academic_markdown_content", null);
+            clearWrapper.set("chinese_parallel_markdown_content", null);
+        } else {
+            clearWrapper.set("cet4_content", null);
+            clearWrapper.set("cet6_content", null);
+            clearWrapper.set("academic_content", null);
+            clearWrapper.set("chinese_parallel_content", null);
+        }
+        textMapper.update(null, clearWrapper);
+        log.info("[强制重新生成] 已清空文章{}的{}版本字段，触发异步重新生成", textId, isMarkdown ? "Markdown" : "Plain");
+
+        if (isMarkdown) {
+            String source = text.getMarkdownContent();
+            if (source == null || source.isBlank()) {
+                log.warn("[强制重新生成] 文章{} Markdown 原文为空，跳过", textId);
+                return;
+            }
+            self.generateMarkdownVersionsAsync(textId, source, true, true, true, true);
+        } else {
+            String source = text.getContent();
+            if (source == null || source.isBlank()) {
+                log.warn("[强制重新生成] 文章{} 原文为空，跳过", textId);
+                return;
+            }
+            self.generateVersionsAsync(textId, source, true, true, true, true);
+        }
+    }
+
     // ========== Private helpers ==========
 
     /**

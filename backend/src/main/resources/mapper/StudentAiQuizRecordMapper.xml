@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.StudentAiQuizRecordMapper">
+
+    <resultMap id="BaseResultMap" type="com.english.entity.StudentAiQuizRecord">
+        <id column="id" property="id" jdbcType="BIGINT"/>
+        <result column="attempt_id" property="attemptId" jdbcType="BIGINT"/>
+        <result column="student_id" property="studentId" jdbcType="BIGINT"/>
+        <result column="text_id" property="textId" jdbcType="BIGINT"/>
+        <result column="exercise_id" property="exerciseId" jdbcType="BIGINT"/>
+        <result column="question_snapshot" property="questionSnapshot" jdbcType="LONGVARCHAR"/>
+        <result column="options_snapshot" property="optionsSnapshot" jdbcType="LONGVARCHAR"/>
+        <result column="correct_answer" property="correctAnswer" jdbcType="VARCHAR"/>
+        <result column="analysis_snapshot" property="analysisSnapshot" jdbcType="LONGVARCHAR"/>
+        <result column="user_answer" property="userAnswer" jdbcType="VARCHAR"/>
+        <result column="is_correct" property="isCorrect" jdbcType="BOOLEAN"/>
+        <result column="time_spent_seconds" property="timeSpentSeconds" jdbcType="INTEGER"/>
+        <result column="question_order" property="questionOrder" jdbcType="INTEGER"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <select id="listByAttemptId" resultMap="BaseResultMap">
+        SELECT id, attempt_id, student_id, text_id, exercise_id,
+               question_snapshot, options_snapshot, correct_answer, analysis_snapshot,
+               user_answer, is_correct, time_spent_seconds, question_order, created_time
+        FROM student_ai_quiz_records
+        WHERE attempt_id = #{attemptId}
+        ORDER BY question_order ASC, id ASC
+    </select>
+
+</mapper>
