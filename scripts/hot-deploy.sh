@@ -50,8 +50,10 @@ SKIP_BUILD=false
 SKIP_PULL=false
 DRY_RUN=false
 REMOTE_URL=""
+DEPLOY_ID=""
 
 mkdir -p "$LOG_DIR"
+mkdir -p "$LOG_DIR/hot-deploy"
 
 # ── 日志工具 ──────────────────────────────────────────────────────────────────
 _ts() { date '+%H:%M:%S'; }
@@ -70,6 +72,7 @@ parse_args() {
             --skip-pull)  SKIP_PULL=true; shift ;;
             --remote)   REMOTE_URL="$2"; shift 2 ;;
             --dry-run)  DRY_RUN=true; shift ;;
+            --deploy-id) DEPLOY_ID="$2"; shift 2 ;;
             --help|-h)  usage; exit 0 ;;
             *) log_error "未知参数: $1"; usage; exit 2 ;;
         esac
@@ -86,6 +89,7 @@ usage() {
   --skip-pull         跳过 git pull（使用本地当前代码，GitHub 不可达时使用）
   --remote <url>      指定 git 远程仓库地址（如 Gitee 镜像）
   --dry-run           仅打印操作，不实际执行
+  --deploy-id <id>    本次部署的唯一 ID（被 HotDeployController 调用时使用）
   --help, -h          显示帮助
 
 零停机部署流程:
@@ -299,7 +303,38 @@ main() {
     log_section "部署完成"
     log_ok "零停机热更新成功！"
     log_info "当前运行版本: $(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+    write_done_marker SUCCESS
 }
+
+# ── deploy-id 状态机 ──────────────────────────────────────────────────────────
+write_done_marker() {
+    local status="$1"
+    [ -z "$DEPLOY_ID" ] && return 0
+    local commit
+    commit="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo '')"
+    {
+        echo "{"
+        echo "  \"deployId\": \"$DEPLOY_ID\","
+        echo "  \"status\":   \"$status\","
+        echo "  \"commit\":   \"$commit\","
+        echo "  \"finishedAt\": \"$(date -Iseconds 2>/dev/null || date)\""
+        echo "}"
+    } > "$LOG_DIR/hot-deploy/$DEPLOY_ID.done.tmp" 2>/dev/null || true
+    mv -f "$LOG_DIR/hot-deploy/$DEPLOY_ID.done.tmp" "$LOG_DIR/hot-deploy/$DEPLOY_ID.done" 2>/dev/null || true
+}
+
+# 失败/异常时也要落盘 done 标记，前端轮询才能停下
+on_exit_marker() {
+    local rc=$?
+    if [ -n "$DEPLOY_ID" ] && [ ! -f "$LOG_DIR/hot-deploy/$DEPLOY_ID.done" ]; then
+        if [ "$rc" -eq 0 ]; then
+            write_done_marker SUCCESS
+        else
+            write_done_marker "FAILED:$rc"
+        fi
+    fi
+}
+trap 'on_exit_marker' EXIT
 
 # ── 错误陷阱 ──────────────────────────────────────────────────────────────────
 trap 'log_error "脚本在第 $LINENO 行异常退出（exit=$?）"; rollback 2>/dev/null || true' ERR
