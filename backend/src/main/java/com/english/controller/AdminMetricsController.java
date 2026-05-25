@@ -5,12 +5,18 @@ import com.english.dto.Result;
 import com.english.entity.Text;
 import com.english.mapper.AiCallLogMapper;
 import com.english.mapper.ClassMapper;
+import com.english.mapper.InteractionScoreMapper;
 import com.english.mapper.LearningRecordMapper;
+import com.english.mapper.LevelExamScoreMapper;
 import com.english.mapper.TextMapper;
+import com.english.mapper.TextSimilarityMatrixMapper;
 import com.english.mapper.UserMapper;
+import com.english.mapper.UserSimilarityMatrixMapper;
+import com.english.mapper.UserTextReadMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -48,6 +56,36 @@ public class AdminMetricsController {
 
     @Autowired
     private ClassMapper classMapper;
+
+    @Autowired
+    private LevelExamScoreMapper levelExamScoreMapper;
+
+    @Autowired
+    private UserTextReadMapper userTextReadMapper;
+
+    @Autowired
+    private TextSimilarityMatrixMapper textSimilarityMatrixMapper;
+
+    @Autowired
+    private UserSimilarityMatrixMapper userSimilarityMatrixMapper;
+
+    @Autowired
+    private InteractionScoreMapper interactionScoreMapper;
+
+    @Value("${recommendation.weight.item-cf:0.6}")
+    private double itemCfWeight;
+
+    @Value("${recommendation.weight.user-cf:0.4}")
+    private double userCfWeight;
+
+    @Value("${recommendation.cold-start.min-reads:3}")
+    private int coldStartMinReads;
+
+    @Value("${recommendation.similarity.text-threshold:0.2}")
+    private double textSimilarityThreshold;
+
+    @Value("${recommendation.similarity.user-threshold:0.3}")
+    private double userSimilarityThreshold;
 
     // ── 用户活跃度 ──────────────────────────────────────────────────────────────
 
@@ -262,6 +300,227 @@ public class AdminMetricsController {
         } catch (Exception e) {
             log.error("Failed to get recommendation effectiveness metrics", e);
             return Result.error("获取推荐效果数据失败");
+        }
+    }
+
+    // ── CET 四六级对比 ──────────────────────────────────────────────────────
+
+    @GetMapping("/cet-comparison")
+    @Cacheable(value = "metrics", key = "'cet-comparison'", unless = "#result == null || #result.data == null")
+    public Result<Map<String, Object>> getCetComparison() {
+        try {
+            Map<String, Object> row = levelExamScoreMapper.selectCetComparison();
+            long totalStudents = toLong(row.get("totalStudents"));
+            long usedTotal = toLong(row.get("usedTotal"));
+            long usedPassed = toLong(row.get("usedPassed"));
+            long unusedTotal = toLong(row.get("unusedTotal"));
+            long unusedPassed = toLong(row.get("unusedPassed"));
+
+            double usedPassRate = usedTotal > 0 ? Math.round(usedPassed * 1000.0 / usedTotal) / 10.0 : 0.0;
+            double unusedPassRate = unusedTotal > 0 ? Math.round(unusedPassed * 1000.0 / unusedTotal) / 10.0 : 0.0;
+            double improvement = unusedPassRate > 0
+                    ? Math.round((usedPassRate - unusedPassRate) * 10.0) / 10.0
+                    : (usedPassRate > 0 ? usedPassRate : 0.0);
+
+            Map<String, Object> used = new LinkedHashMap<>();
+            used.put("passRate", usedPassRate);
+            used.put("passed", usedPassed);
+            used.put("totalStudents", usedTotal);
+
+            Map<String, Object> unused = new LinkedHashMap<>();
+            unused.put("passRate", unusedPassRate);
+            unused.put("passed", unusedPassed);
+            unused.put("totalStudents", unusedTotal);
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("totalScoreRecords", totalStudents);
+            data.put("improvement", improvement);
+            data.put("used", used);
+            data.put("unused", unused);
+            return Result.success(data);
+        } catch (Exception e) {
+            log.error("Failed to get CET comparison metrics", e);
+            return Result.error("获取四六级对比数据失败");
+        }
+    }
+
+    // ── CET 四六级详细分析 ──────────────────────────────────────────────────
+
+    @GetMapping("/cet-detailed")
+    @Cacheable(value = "metrics", key = "'cet-detailed'", unless = "#result == null || #result.data == null")
+    public Result<Map<String, Object>> getCetDetailed() {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+
+            // 按考试类型
+            List<Map<String, Object>> byExamType = levelExamScoreMapper.selectCetByExamType();
+            data.put("byExamType", byExamType != null ? byExamType : Collections.emptyList());
+
+            // 分数分布 — 平台用户
+            List<Map<String, Object>> distUsed = levelExamScoreMapper.selectCetScoreDistUsed();
+            List<Map<String, Object>> scoreDistUsed = new ArrayList<>();
+            if (distUsed != null) {
+                for (Map<String, Object> row : distUsed) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("score_range", row.get("scoreRange"));
+                    item.put("count", toLong(row.get("cnt")));
+                    scoreDistUsed.add(item);
+                }
+            }
+            data.put("scoreDistUsed", scoreDistUsed);
+
+            // 分数分布 — 非平台用户
+            List<Map<String, Object>> distUnused = levelExamScoreMapper.selectCetScoreDistUnused();
+            List<Map<String, Object>> scoreDistUnused = new ArrayList<>();
+            if (distUnused != null) {
+                for (Map<String, Object> row : distUnused) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("score_range", row.get("scoreRange"));
+                    item.put("count", toLong(row.get("cnt")));
+                    scoreDistUnused.add(item);
+                }
+            }
+            data.put("scoreDistUnused", scoreDistUnused);
+
+            // 历年趋势
+            List<Map<String, Object>> rawTrend = levelExamScoreMapper.selectCetTrend();
+            List<Map<String, Object>> trend = new ArrayList<>();
+            if (rawTrend != null) {
+                for (Map<String, Object> row : rawTrend) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("exam_year", toLong(row.get("examYear")));
+                    item.put("exam_type", row.get("examType"));
+                    Object pr = row.get("passRate");
+                    item.put("pass_rate", pr instanceof Number ? ((Number) pr).doubleValue() : 0.0);
+                    trend.add(item);
+                }
+            }
+            data.put("trend", trend);
+
+            return Result.success(data);
+        } catch (Exception e) {
+            log.error("Failed to get CET detailed metrics", e);
+            return Result.error("获取四六级详细分析数据失败");
+        }
+    }
+
+    // ── 推荐算法分析 ──────────────────────────────────────────────────────────
+
+    @GetMapping("/recommendation")
+    @Cacheable(value = "metrics", key = "'recommendation'", unless = "#result == null || #result.data == null")
+    public Result<Map<String, Object>> getRecommendation() {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+
+            // 覆盖率: 总活跃用户 / CF 用户 / 冷启动用户
+            long totalUsers = userMapper.selectCount(
+                    new QueryWrapper<com.english.entity.User>()
+                            .eq("deleted", 0)
+                            .in("role", "STUDENT", "USER"));
+            long cfUsers = 0;
+            QueryWrapper<com.english.entity.UserTextRead> cfQw = new QueryWrapper<>();
+            cfQw.select("user_id").groupBy("user_id").having("COUNT(*) >= " + coldStartMinReads);
+            List<Map<String, Object>> cfRows = userTextReadMapper.selectMaps(cfQw);
+            cfUsers = cfRows != null ? cfRows.size() : 0;
+            long coldStartUsers = Math.max(0, totalUsers - cfUsers);
+
+            Map<String, Object> coverage = new LinkedHashMap<>();
+            coverage.put("total_users", totalUsers);
+            coverage.put("cf_users", cfUsers);
+            coverage.put("cold_start_users", coldStartUsers);
+            data.put("coverage", coverage);
+
+            // 相似度矩阵统计
+            long textPairs = textSimilarityMatrixMapper.selectCount(null);
+            long userPairs = userSimilarityMatrixMapper.selectCount(null);
+            long totalPairs = textPairs + userPairs;
+
+            // 平均相似度
+            QueryWrapper<com.english.entity.TextSimilarityMatrix> textQw = new QueryWrapper<>();
+            textQw.select("AVG(similarity) AS avg_sim");
+            List<Map<String, Object>> textAvg = textSimilarityMatrixMapper.selectMaps(textQw);
+            BigDecimal textAvgSim = BigDecimal.ZERO;
+            if (textAvg != null && !textAvg.isEmpty() && textAvg.get(0).get("avg_sim") != null) {
+                textAvgSim = (BigDecimal) textAvg.get(0).get("avg_sim");
+            }
+
+            QueryWrapper<com.english.entity.UserSimilarityMatrix> userQw = new QueryWrapper<>();
+            userQw.select("AVG(similarity) AS avg_sim");
+            List<Map<String, Object>> userAvg = userSimilarityMatrixMapper.selectMaps(userQw);
+            BigDecimal userAvgSim = BigDecimal.ZERO;
+            if (userAvg != null && !userAvg.isEmpty() && userAvg.get(0).get("avg_sim") != null) {
+                userAvgSim = (BigDecimal) userAvg.get(0).get("avg_sim");
+            }
+
+            BigDecimal overallAvg = BigDecimal.ZERO;
+            if (textPairs > 0 && userPairs > 0) {
+                overallAvg = textAvgSim.multiply(BigDecimal.valueOf(textPairs))
+                        .add(userAvgSim.multiply(BigDecimal.valueOf(userPairs)))
+                        .divide(BigDecimal.valueOf(totalPairs), 4, RoundingMode.HALF_UP);
+            } else if (textPairs > 0) {
+                overallAvg = textAvgSim;
+            } else if (userPairs > 0) {
+                overallAvg = userAvgSim;
+            }
+
+            // 相似度分布统计
+            long highSimPairs = 0, midSimPairs = 0, lowSimPairs = 0;
+            highSimPairs += textSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.TextSimilarityMatrix>().ge("similarity", 0.7));
+            highSimPairs += userSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.UserSimilarityMatrix>().ge("similarity", 0.7));
+            midSimPairs += textSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.TextSimilarityMatrix>().ge("similarity", 0.3).lt("similarity", 0.7));
+            midSimPairs += userSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.UserSimilarityMatrix>().ge("similarity", 0.3).lt("similarity", 0.7));
+            lowSimPairs += textSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.TextSimilarityMatrix>().lt("similarity", 0.3));
+            lowSimPairs += userSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.UserSimilarityMatrix>().lt("similarity", 0.3));
+
+            Map<String, Object> similarityMatrix = new LinkedHashMap<>();
+            similarityMatrix.put("total_pairs", totalPairs);
+            similarityMatrix.put("avg_similarity", overallAvg.compareTo(BigDecimal.ZERO) > 0 ? overallAvg.toString() : "—");
+            similarityMatrix.put("high_sim_pairs", highSimPairs);
+            similarityMatrix.put("mid_sim_pairs", midSimPairs);
+            similarityMatrix.put("low_sim_pairs", lowSimPairs);
+            data.put("similarityMatrix", similarityMatrix);
+
+            // 推荐配置
+            Map<String, Object> config = new LinkedHashMap<>();
+            config.put("itemCfWeight", itemCfWeight);
+            config.put("userCfWeight", userCfWeight);
+            config.put("coldStartMinReads", coldStartMinReads);
+            config.put("textSimilarityThreshold", textSimilarityThreshold);
+            config.put("userSimilarityThreshold", userSimilarityThreshold);
+            data.put("config", config);
+
+            // 交互分数分布
+            QueryWrapper<com.english.entity.InteractionScore> scoreQw = new QueryWrapper<>();
+            scoreQw.select("CASE " +
+                    "WHEN interaction_score < 1 THEN '0-1' " +
+                    "WHEN interaction_score < 3 THEN '1-3' " +
+                    "WHEN interaction_score < 5 THEN '3-5' " +
+                    "WHEN interaction_score < 8 THEN '5-8' " +
+                    "ELSE '8+' END AS score_range, COUNT(*) AS cnt")
+                    .groupBy("score_range")
+                    .orderByAsc("MIN(interaction_score)");
+            List<Map<String, Object>> rawDist = interactionScoreMapper.selectMaps(scoreQw);
+            List<Map<String, Object>> interactionDist = new ArrayList<>();
+            if (rawDist != null) {
+                for (Map<String, Object> row : rawDist) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("score_range", row.get("score_range"));
+                    item.put("count", toLong(row.get("cnt")));
+                    interactionDist.add(item);
+                }
+            }
+            data.put("interactionDist", interactionDist);
+
+            return Result.success(data);
+        } catch (Exception e) {
+            log.error("Failed to get recommendation metrics", e);
+            return Result.error("获取推荐算法分析数据失败");
         }
     }
 
