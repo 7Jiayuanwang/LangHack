@@ -417,39 +417,30 @@ public class AdminMetricsController {
                     new QueryWrapper<com.english.entity.User>()
                             .eq("deleted", 0)
                             .in("role", "STUDENT", "USER"));
-            long cfUsers = 0;
-            QueryWrapper<com.english.entity.UserTextRead> cfQw = new QueryWrapper<>();
-            cfQw.select("user_id").groupBy("user_id").having("COUNT(*) >= " + coldStartMinReads);
-            List<Map<String, Object>> cfRows = userTextReadMapper.selectMaps(cfQw);
-            cfUsers = cfRows != null ? cfRows.size() : 0;
+            int cfUsers = userTextReadMapper.selectCfUserCount(coldStartMinReads);
             long coldStartUsers = Math.max(0, totalUsers - cfUsers);
 
             Map<String, Object> coverage = new LinkedHashMap<>();
             coverage.put("total_users", totalUsers);
-            coverage.put("cf_users", cfUsers);
+            coverage.put("cf_users", (long) cfUsers);
             coverage.put("cold_start_users", coldStartUsers);
             data.put("coverage", coverage);
 
-            // 相似度矩阵统计
+            // 相似度矩阵统计 + 平均相似度
             long textPairs = textSimilarityMatrixMapper.selectCount(null);
             long userPairs = userSimilarityMatrixMapper.selectCount(null);
             long totalPairs = textPairs + userPairs;
 
-            // 平均相似度
-            QueryWrapper<com.english.entity.TextSimilarityMatrix> textQw = new QueryWrapper<>();
-            textQw.select("AVG(similarity) AS avg_sim");
-            List<Map<String, Object>> textAvg = textSimilarityMatrixMapper.selectMaps(textQw);
             BigDecimal textAvgSim = BigDecimal.ZERO;
-            if (textAvg != null && !textAvg.isEmpty() && textAvg.get(0).get("avg_sim") != null) {
-                textAvgSim = (BigDecimal) textAvg.get(0).get("avg_sim");
+            Map<String, Object> textAvg = textSimilarityMatrixMapper.selectAvgSimilarity();
+            if (textAvg != null && textAvg.get("avg_sim") instanceof Number) {
+                textAvgSim = new BigDecimal(textAvg.get("avg_sim").toString());
             }
 
-            QueryWrapper<com.english.entity.UserSimilarityMatrix> userQw = new QueryWrapper<>();
-            userQw.select("AVG(similarity) AS avg_sim");
-            List<Map<String, Object>> userAvg = userSimilarityMatrixMapper.selectMaps(userQw);
             BigDecimal userAvgSim = BigDecimal.ZERO;
-            if (userAvg != null && !userAvg.isEmpty() && userAvg.get(0).get("avg_sim") != null) {
-                userAvgSim = (BigDecimal) userAvg.get(0).get("avg_sim");
+            Map<String, Object> userAvg = userSimilarityMatrixMapper.selectAvgSimilarity();
+            if (userAvg != null && userAvg.get("avg_sim") instanceof Number) {
+                userAvgSim = new BigDecimal(userAvg.get("avg_sim").toString());
             }
 
             BigDecimal overallAvg = BigDecimal.ZERO;
@@ -496,19 +487,11 @@ public class AdminMetricsController {
             data.put("config", config);
 
             // 交互分数分布
-            QueryWrapper<com.english.entity.InteractionScore> scoreQw = new QueryWrapper<>();
-            scoreQw.select("CASE " +
-                    "WHEN interaction_score < 1 THEN '0-1' " +
-                    "WHEN interaction_score < 3 THEN '1-3' " +
-                    "WHEN interaction_score < 5 THEN '3-5' " +
-                    "WHEN interaction_score < 8 THEN '5-8' " +
-                    "ELSE '8+' END AS score_range, COUNT(*) AS cnt")
-                    .groupBy("score_range")
-                    .orderByAsc("MIN(interaction_score)");
-            List<Map<String, Object>> rawDist = interactionScoreMapper.selectMaps(scoreQw);
+            List<Map<String, Object>> rawDist = interactionScoreMapper.selectScoreDistribution();
             List<Map<String, Object>> interactionDist = new ArrayList<>();
             if (rawDist != null) {
                 for (Map<String, Object> row : rawDist) {
+                    if (row == null) continue;
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("score_range", row.get("score_range"));
                     item.put("count", toLong(row.get("cnt")));
