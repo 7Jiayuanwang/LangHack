@@ -3006,7 +3006,8 @@ CREATE TABLE IF NOT EXISTS conversation_shares (
 );
 
 -- ═══════════════════════════════════════════════════════════════
--- V28: 协作式互动阅读 — 公共批注 + 点赞
+-- V28__collaborative_annotations.sql
+-- 协作式互动阅读 — 公共批注 + 点赞
 -- ═══════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS text_annotations (
@@ -3037,7 +3038,8 @@ CREATE TABLE IF NOT EXISTS annotation_upvotes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ═══════════════════════════════════════════════════════════════
--- V29: 批注可见性 — 1=公开（默认），0=仅自己可见
+-- V29__annotation_visibility.sql
+-- 批注可见性 — 1=公开（默认），0=仅自己可见
 -- 注: MySQL 8 不支持 ALTER TABLE ... ADD COLUMN IF NOT EXISTS（仅 MariaDB），
 --     故改用 information_schema + 动态 SQL 的幂等模式。
 -- ═══════════════════════════════════════════════════════════════
