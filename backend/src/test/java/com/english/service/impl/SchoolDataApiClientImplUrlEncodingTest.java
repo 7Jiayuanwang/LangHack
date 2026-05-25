@@ -23,7 +23,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p><b>规则</b>：URL 查询参数构建时，参数名（key）不能编码，只能对参数值（value）编码。
  *
  * @see <a href="file:///G:/GitHub_local/project/英语学习平台/LangHack/docs/CDSP_PAGINATION_FIX_2026-04-27.md">CDSP_PAGINATION_FIX_2026-04-27.md</a>
- * @see <a href="file:///C:/Users/ASUS/.claude/projects/G--GitHub-local-project--------LangHack/memory/feedback_url_encoding_critical.md">feedback_url_encoding_critical.md</a>
  */
 class SchoolDataApiClientImplUrlEncodingTest {
 
