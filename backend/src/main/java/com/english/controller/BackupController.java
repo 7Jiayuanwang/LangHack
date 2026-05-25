@@ -47,6 +47,9 @@ public class BackupController {
     @Autowired
     private DynamicBackupScheduler dynamicBackupScheduler;
 
+    @Autowired
+    private com.english.service.DownloadTokenService downloadTokenService;
+
     @GetMapping("/list")
     public Result<?> getBackupList(
             @RequestParam(defaultValue = "1") int page,
@@ -140,6 +143,27 @@ public class BackupController {
         } catch (Exception e) {
             logger.error("获取备份预览失败", e);
             return Result.error("获取备份预览失败，请稍后重试");
+        }
+    }
+
+    @PostMapping("/{id}/download-token")
+    public Result<?> getDownloadToken(@PathVariable Long id,
+                                       Authentication authentication) {
+        String username = authentication.getName();
+        try {
+            // Verify backup exists
+            backupService.getBackupById(id);
+            String token = downloadTokenService.generateToken(id, username);
+            var data = Map.of(
+                    "token", token,
+                    "expiresIn", 300
+            );
+            return Result.success("下载令牌已生成", data);
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("生成下载令牌失败", e);
+            return Result.error("生成下载令牌失败，请稍后重试");
         }
     }
 

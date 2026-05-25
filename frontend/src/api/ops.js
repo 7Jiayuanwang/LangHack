@@ -42,6 +42,13 @@ export function getBackupPreview(id, params) {
   });
 }
 
+export function getDownloadToken(id) {
+  return request({
+    url: `/api/ops/backup/${id}/download-token`,
+    method: "post",
+  })
+}
+
 export function downloadBackupApi(id, onDownloadProgress) {
   return request({
     url: `/api/ops/backup/${id}/download`,

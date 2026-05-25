@@ -639,7 +639,6 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Refresh, Delete, RefreshLeft, Document, Setting, Timer, Clock, FolderOpened, CopyDocument, Coin, InfoFilled, Check } from '@element-plus/icons-vue'
-import { normalizeDownloadResponse, extractBlobErrorMessage, triggerBlobDownload } from '@/utils/blobDownload'
 import {
   getBackupList,
   createBackupApi,
@@ -647,7 +646,7 @@ import {
   importBackupApi,
   getBackupDetail,
   getBackupPreview,
-  downloadBackupApi,
+  getDownloadToken,
   deleteBackupApi,
   restoreBackupApi,
   getBackupStats as fetchBackupStats,
@@ -967,66 +966,39 @@ const handleCreateCategoryBackup = async (category) => {
   }
 }
 
-// Download backup
+// Download backup — token-based direct browser download (no blob/memory issues)
 const handleDownload = async (row) => {
   let loadingInstance = null
   try {
-    // 显示下载进度提示
     loadingInstance = ElMessage({
-      message: '正在下载备份文件，请稍候...',
+      message: '正在准备下载，请稍候...',
       type: 'info',
       duration: 0,
       showClose: false,
     })
 
-    const response = await downloadBackupApi(row.id, (progressEvent) => {
-      if (progressEvent.total) {
-        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-        if (loadingInstance) {
-          loadingInstance.close()
-        }
-        loadingInstance = ElMessage({
-          message: `下载中: ${percentCompleted}% (${(progressEvent.loaded / 1024 / 1024).toFixed(2)}MB / ${(progressEvent.total / 1024 / 1024).toFixed(2)}MB)`,
-          type: 'info',
-          duration: 0,
-          showClose: false,
-        })
-      }
-    })
-
-    const blobData = response.data || response
-    const blob = blobData instanceof Blob
-      ? blobData
-      : new Blob([blobData], { type: 'application/octet-stream' })
-
-    // Check if the "blob" is actually a JSON error response
-    if (blob.type && blob.type.includes('application/json')) {
-      try {
-        const text = await blob.text()
-        const json = JSON.parse(text)
-        ElMessage.error(json.message || '下载备份文件失败')
-      } catch {
-        ElMessage.error('下载备份文件失败')
-      }
-      return
-    }
-    if (blob.size === 0) {
-      ElMessage.error('下载备份文件失败：文件为空')
+    const res = await getDownloadToken(row.id)
+    if (res?.code !== 200 || !res.data?.token) {
+      ElMessage.error(res?.message || '获取下载令牌失败')
       return
     }
 
-    const url = window.URL.createObjectURL(blob)
+    const token = res.data.token
+    const downloadUrl = `${import.meta.env.VITE_API_BASE_URL || ''}/api/ops/backup/${row.id}/download?download_token=${encodeURIComponent(token)}`
+    const filename = row.filename || `backup-${row.id}.sql`
+
+    if (loadingInstance) loadingInstance.close()
+    ElMessage.success('开始下载')
+
     const link = document.createElement('a')
-    link.href = url
-    link.download = row.filename || `backup-${row.id}.sql`
+    link.href = downloadUrl
+    link.download = filename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    ElMessage.success('下载完成')
   } catch (error) {
     console.error('Download backup failed:', error)
-    ElMessage.error('下载备份文件失败')
+    ElMessage.error(error?.message || '下载备份文件失败')
   } finally {
     if (loadingInstance) {
       loadingInstance.close()
