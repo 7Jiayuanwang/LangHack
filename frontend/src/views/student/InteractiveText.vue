@@ -99,9 +99,6 @@
               AI 出题（{{ quizQuestions.length }} 题）
             </span>
             <div class="quiz-inline-actions-top">
-              <el-button size="small" @click="regenerateQuiz" :loading="quizLoading">
-                重新出题
-              </el-button>
               <el-button size="small" @click="closeQuiz">收起</el-button>
             </div>
           </div>
