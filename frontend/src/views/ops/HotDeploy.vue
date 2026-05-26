@@ -237,16 +237,21 @@ const pollDeployLogs = (deployId) => {
     return
   }
   let stepIdx = 0
+  let fromLine = 0
   pollTimer = setInterval(async () => {
     try {
       const res = await request({
         url: `/api/ops/hot-deploy/logs/${deployId}`,
-        method: 'get'
+        method: 'get',
+        params: { fromLine }
       })
       if (res?.code === 200) {
-        const { lines, currentStep, status } = res.data || {}
+        const { lines, totalLines, currentStep, status } = res.data || {}
         if (lines?.length) {
           lines.forEach(l => addLog(l))
+        }
+        if (typeof totalLines === 'number') {
+          fromLine = totalLines
         }
         if (currentStep !== undefined && currentStep !== stepIdx) {
           markStepDone(stepIdx)
@@ -261,7 +266,7 @@ const pollDeployLogs = (deployId) => {
           clearInterval(pollTimer)
           ElMessage.success('零停机热更新完成！')
           loadStatus()
-        } else if (status === 'FAILED') {
+        } else if (typeof status === 'string' && status.startsWith('FAILED')) {
           markStepError(stepIdx)
           deploying.value = false
           clearInterval(pollTimer)

@@ -191,7 +191,6 @@ public class PublicTextController {
     }
 
     /**
-<<<<<<< HEAD
      * 个性化推荐文章
      */
     @GetMapping("/recommended")

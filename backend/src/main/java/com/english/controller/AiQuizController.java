@@ -56,13 +56,27 @@ public class AiQuizController {
 
     @PostMapping("/generate")
     public Result<Map<String, Object>> generateQuiz(@RequestBody GenerateQuizRequest request) {
+        String operator = "unknown";
+        try {
+            Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) {
+                operator = auth.getName();
+            }
+        } catch (Exception ignore) {
+        }
+
+        log.info("[AI出题] 收到请求: 操作员={}, textId={}, count={}, regenerate={}",
+                operator, request.getTextId(), request.getCount(), request.getRegenerate());
+
         try {
             if (request.getTextId() == null) {
+                log.warn("[AI出题] textId为空: 操作员={}", operator);
                 return Result.error("textId 不能为空");
             }
 
             Text text = textService.getTextById(request.getTextId());
             if (text == null || Integer.valueOf(1).equals(text.getDeleted())) {
+                log.warn("[AI出题] 文章不存在或已删除: textId={}, 操作员={}", request.getTextId(), operator);
                 return Result.error("文章不存在或已被删除");
             }
 
@@ -71,25 +85,29 @@ public class AiQuizController {
                 content = text.getContent();
             }
             if (content == null || content.isBlank()) {
+                log.warn("[AI出题] 文章内容为空: textId={}, 操作员={}", request.getTextId(), operator);
                 return Result.error("文章内容为空");
             }
 
             User currentUser = getCurrentUser();
 
             if (aiProviderRuntimeService == null && hiAgentService == null) {
+                log.warn("[AI出题] AI服务未配置: 操作员={}", operator);
                 return Result.error("AI 服务未配置");
             }
 
             // 重新出题：先清空该课文的旧题（含选项 + 答题记录）
             if (Boolean.TRUE.equals(request.getRegenerate())) {
+                log.info("[AI出题] 清空旧题: textId={}, 操作员={}", request.getTextId(), operator);
                 try {
                     textExerciseService.deleteAllExercisesByTextId(request.getTextId());
                 } catch (Exception e) {
-                    log.warn("清空旧题失败: textId={}", request.getTextId(), e);
+                    log.warn("[AI出题] 清空旧题失败: textId={}, 操作员={}", request.getTextId(), operator, e);
                 }
             }
 
             int count = request.getCount() != null ? request.getCount() : 5;
+            log.info("[AI出题] 开始调用AI: textId={}, 标题=\"{}\", 题数={}, 操作员={}", request.getTextId(), text.getTitle(), count, operator);
             String prompt = buildPrompt(text.getTitle(), content, count);
 
             Optional<String> aiResponse = aiProviderRuntimeService != null
@@ -110,7 +128,7 @@ public class AiQuizController {
             try {
                 quizResponse = objectMapper.readValue(jsonStr, AiQuizResponseDTO.class);
             } catch (Exception e) {
-                log.error("AI 返回 JSON 解析失败: {}", jsonStr, e);
+                log.error("[AI出题] AI返回JSON解析失败: textId={}, 操作员={}, 原文={}", request.getTextId(), operator, jsonStr, e);
                 return Result.error("AI 返回格式解析失败");
             }
 
@@ -179,12 +197,14 @@ public class AiQuizController {
                 result.put("qualityMetrics", quizResponse.getQualityMetrics());
             }
 
+            log.info("[AI出题] 出题成功: textId={}, 题目数={}, 操作员={}", request.getTextId(), exercises.size(), operator);
             return Result.success("AI 出题成功", result);
 
         } catch (BusinessException e) {
+            log.warn("[AI出题] 业务异常: textId={}, 操作员={}, 原因={}", request.getTextId(), operator, e.getMessage());
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("AI 出题失败", e);
+            log.error("[AI出题] 出题失败: textId={}, 操作员={}", request.getTextId(), operator, e);
             return Result.error("AI 出题失败: " + e.getMessage());
         }
     }

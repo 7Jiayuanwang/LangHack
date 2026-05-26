@@ -3030,7 +3030,8 @@ CREATE TABLE IF NOT EXISTS conversation_shares (
 );
 
 -- ═══════════════════════════════════════════════════════════════
--- V28: 协作式互动阅读 — 公共批注 + 点赞
+-- V28__collaborative_annotations.sql
+-- 协作式互动阅读 — 公共批注 + 点赞
 -- ═══════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS text_annotations (
@@ -3061,19 +3062,19 @@ CREATE TABLE IF NOT EXISTS annotation_upvotes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ═══════════════════════════════════════════════════════════════
--- V29: 批注可见性 — 1=公开（默认），0=仅自己可见
+-- V29__annotation_visibility.sql
+-- 批注可见性 — 1=公开（默认），0=仅自己可见
+-- 注: MySQL 8 不支持 ALTER TABLE ... ADD COLUMN IF NOT EXISTS（仅 MariaDB），
+--     故改用 information_schema + 动态 SQL 的幂等模式。
 -- ═══════════════════════════════════════════════════════════════
-DROP PROCEDURE IF EXISTS _add_col_visibility$$
-CREATE PROCEDURE _add_col_visibility()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE table_schema=DATABASE() AND table_name='text_annotations'
-                     AND column_name='visibility') THEN
-        ALTER TABLE text_annotations ADD COLUMN visibility TINYINT NOT NULL DEFAULT 1 COMMENT '可见性: 1=公开, 0=仅自己';
-    END IF;
-END$$
-CALL _add_col_visibility()$$
-DROP PROCEDURE IF EXISTS _add_col_visibility$$
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'text_annotations'
+                     AND COLUMN_NAME = 'visibility');
+SET @col_sql = IF(@col_exists = 0,
+    'ALTER TABLE text_annotations ADD COLUMN visibility TINYINT NOT NULL DEFAULT 1 COMMENT ''可见性: 1=公开, 0=仅自己''',
+    'SELECT 1');
+PREPARE stmt FROM @col_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- V27__media_transcoding.sql
 -- media 表新增异步转码字段（移动端 AV1/HEVC/VP9 → H.264 流水线）
@@ -3205,3 +3206,110 @@ CREATE TABLE IF NOT EXISTS `student_ai_quiz_records` (
     CONSTRAINT `fk_aiqr_text`    FOREIGN KEY (`text_id`)     REFERENCES `texts`(`id`)                   ON DELETE CASCADE,
     CONSTRAINT `fk_aiqr_ex`      FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises`(`id`)          ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- V25__link_users_to_school_directory.sql
+-- 将 users 与 school_student / school_teacher 主数据建立显式联系
+-- 注：与 V25__exercise_options_table.sql 同 V25 版本号；本块为后续补录，
+--     全部使用 IF NOT EXISTS / WHERE NULL 包装，保证幂等可重复执行
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- 1) 规范化 username：student_<digits> -> <digits>（已规范化的不会再匹配）
+UPDATE users
+SET username = SUBSTRING(username, 9)
+WHERE username REGEXP '^student_[0-9]+$';
+
+-- 2) users 新增 school_student_id（幂等）
+SET @col_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'school_student_id'
+);
+SET @col_sql = IF(
+    @col_exists = 0,
+    'ALTER TABLE users ADD COLUMN school_student_id BIGINT NULL COMMENT ''关联 school_student.id（学号匹配）'' AFTER inner_uid',
+    'SELECT 1'
+);
+PREPARE stmt FROM @col_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 3) users 新增 school_teacher_id（幂等）
+SET @col_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'school_teacher_id'
+);
+SET @col_sql = IF(
+    @col_exists = 0,
+    'ALTER TABLE users ADD COLUMN school_teacher_id BIGINT NULL COMMENT ''关联 school_teacher.id（工号匹配）'' AFTER school_student_id',
+    'SELECT 1'
+);
+PREPARE stmt FROM @col_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 4) 索引（幂等）
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_school_student_id'
+);
+SET @idx_sql = IF(
+    @idx_exists = 0,
+    'CREATE INDEX idx_users_school_student_id ON users(school_student_id)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_school_teacher_id'
+);
+SET @idx_sql = IF(
+    @idx_exists = 0,
+    'CREATE INDEX idx_users_school_teacher_id ON users(school_teacher_id)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @idx_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 5) 回填外键（幂等：WHERE IS NULL）
+--    注：users.username 与 school_student/teacher 的 student_id/teacher_id 可能存在
+--    collation 差异（utf8mb4_0900_ai_ci vs utf8mb4_unicode_ci），显式 COLLATE 避免
+--    "Illegal mix of collations" 错误。
+UPDATE users u
+JOIN school_student s
+  ON s.student_id COLLATE utf8mb4_unicode_ci = u.username COLLATE utf8mb4_unicode_ci
+SET u.school_student_id = s.id
+WHERE u.school_student_id IS NULL;
+
+UPDATE users u
+JOIN school_teacher t
+  ON t.teacher_id COLLATE utf8mb4_unicode_ci = u.username COLLATE utf8mb4_unicode_ci
+SET u.school_teacher_id = t.id
+WHERE u.school_teacher_id IS NULL;
+
+-- 6) 学生学校画像视图（DROP + CREATE 幂等）
+DROP VIEW IF EXISTS v_user_school_profile;
+CREATE VIEW v_user_school_profile AS
+SELECT
+    u.id                          AS user_id,
+    u.username                    AS username,
+    u.role                        AS role,
+    u.real_name                   AS real_name,
+    s.id                          AS school_student_id,
+    s.student_id                  AS student_id,
+    s.student_name                AS student_name,
+    s.college_name                AS college_name,
+    s.class_code                  AS class_code,
+    s.class_name                  AS class_name,
+    s.grade                       AS grade,
+    s.major_name                  AS major_name,
+    (SELECT COUNT(*) FROM course_selection cs            WHERE cs.student_id = s.student_id) AS course_selection_count,
+    (SELECT COUNT(*) FROM teacher_student_binding tsb    WHERE tsb.student_id = s.student_id) AS teacher_binding_count,
+    (SELECT MAX(les.exam_date) FROM level_exam_scores les WHERE les.student_id = s.student_id) AS last_exam_date,
+    (SELECT MAX(les.score)     FROM level_exam_scores les WHERE les.student_id = s.student_id) AS best_exam_score
+FROM users u
+JOIN school_student s ON s.id = u.school_student_id
+WHERE u.deleted = 0;

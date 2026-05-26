@@ -1064,6 +1064,8 @@ if [ "$SKIP_ENV" = false ]; then
             printf '# 学校数据集成未启用（可在运维面板 → 学校数据配置中手动启用）\n'
             printf 'SCHOOL_SYNC_ENABLED=false\n'
         fi
+        # ── 零停机热更新（HotDeployController 启动 sidecar 容器时需要宿主机项目根路径） ──
+        printf 'HOT_DEPLOY_HOST_PROJECT=%s\n' "$PROJECT_ROOT"
     } > "$ENV_FILE"
     # 设置 .env 文件权限为 600（仅所有者可读写，保护敏感信息）
     chmod 600 "$ENV_FILE" 2>/dev/null || true

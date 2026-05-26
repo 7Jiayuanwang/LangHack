@@ -48,9 +48,9 @@ public interface ArticleVersionService {
     void saveMarkdownVersionResults(Long textId, Map<String, String> results);
 
     /**
-     * Force regenerate ALL versions of an article (regardless of whether they exist).
-     * 清空已有版本并重新生成 CET-4 / CET-6 / 学术 / 中英对照 四个版本。
-     * 根据 contentType 自动走 plain text 或 markdown 路径。
+     * 强制重新生成指定文章的改写版本，覆盖已有内容。
+     * @param textId  文章 ID
+     * @param version 版本标识，取值 CET4 / CET6 / ACADEMIC / PARALLEL / ALL（大小写不敏感）
      */
-    void regenerateAllVersions(Long textId);
+    void regenerateVersions(Long textId, String version);
 }

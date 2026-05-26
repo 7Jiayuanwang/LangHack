@@ -260,6 +260,9 @@ services:
       APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
+      # 零停机热更新（HotDeployController 启动 deployer sidecar 容器时需要）
+      HOT_DEPLOY_HOST_PROJECT: ${HOT_DEPLOY_HOST_PROJECT:-}
+      HOT_DEPLOY_LOG_DIR: /app/hot-deploy-logs
     ports:
       - "${PORT_BACKEND:-8080}:${SERVER_PORT:-8080}"
     volumes:
@@ -268,6 +271,10 @@ services:
       - ../uploads:/app/uploads
       # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
       - ../backups:/app/backups
+      # 零停机热更新：与 deployer sidecar 共享日志目录（由 HotDeployController 写读）
+      - ../logs/hot-deploy:/app/hot-deploy-logs
+      # 零停机热更新：挂载宿主机 docker socket，使后端可启动 deployer 兄弟容器
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - langhack-network
     depends_on:

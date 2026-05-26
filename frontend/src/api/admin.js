@@ -177,6 +177,19 @@ export function setTextFeaturedPriority(id, priority) {
   })
 }
 
+/**
+ * 重新生成课文改写版本（异步任务）。
+ * @param {number|string} id 课文 ID
+ * @param {'ALL'|'CET4'|'CET6'|'ACADEMIC'|'PARALLEL'} version 版本标识，缺省 ALL
+ */
+export function regenerateTextVersions(id, version = 'ALL') {
+  return request({
+    url: `/api/admin/texts/${id}/regenerate-versions`,
+    method: 'post',
+    params: { version }
+  })
+}
+
 export function getTextDetail(textId) {
   return request({
     url: `/api/admin/texts/${textId}`,
