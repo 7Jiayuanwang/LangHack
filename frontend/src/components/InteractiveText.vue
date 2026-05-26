@@ -1109,7 +1109,7 @@ onBeforeUnmount(() => {
 }
 
 .original-text p, .translated-text p {
-  height: 350px;
+  max-height: 350px;
   overflow-y: auto;
   margin: 0;
   padding: 12px;
