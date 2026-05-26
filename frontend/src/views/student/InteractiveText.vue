@@ -2785,6 +2785,21 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   margin-bottom: 24px;
 }
 
+.markdown-content :deep(ul),
+.markdown-content :deep(ol) {
+  margin: 0 0 24px 0;
+  padding-left: 24px;
+}
+
+.markdown-content :deep(li) {
+  margin-bottom: 8px;
+  line-height: 1.8;
+}
+
+.markdown-content :deep(li p) {
+  margin-bottom: 8px;
+}
+
 .article-body :deep(img),
 .markdown-content :deep(img) {
   max-width: 100% !important;
@@ -3464,7 +3479,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .translate-dialog .original-text p,
 .translate-dialog .translated-text p {
-  height: 350px;
+  max-height: 350px;
   overflow-y: auto;
   margin: 0;
   padding: 12px;
