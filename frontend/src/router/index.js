@@ -359,19 +359,19 @@ const routes = [
         path: "ai-video",
         name: "StudentAiVideo",
         component: () => import("@/views/student/VideoSubtitlePlayer.vue"),
-        meta: { title: "AI视频字幕", roles: ["STUDENT", "USER"], featureKey: "page_ai_video" },
+        meta: { title: "AI视频字幕", roles: ["STUDENT", "USER", "TEACHER"], featureKey: "page_ai_video" },
       },
       {
         path: "videos",
         name: "StudentVideos",
         component: () => import("@/views/student/Videos.vue"),
-        meta: { title: "视频", roles: ["STUDENT", "USER"] },
+        meta: { title: "视频", roles: ["STUDENT", "USER", "TEACHER"] },
       },
       {
         path: "video-player",
         name: "StudentVideoPlayer",
         component: () => import("@/views/student/VideoPlayer.vue"),
-        meta: { title: "视频播放", roles: ["STUDENT", "USER"] },
+        meta: { title: "视频播放", roles: ["STUDENT", "USER", "TEACHER"] },
       },
       {
         path: "user-texts",
