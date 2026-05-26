@@ -823,7 +823,20 @@ onUnmounted(() => {
   line-height: 2;
   color: #333;
   padding: 20px;
-  white-space: pre-wrap;
+}
+
+.text-content :deep(ul),
+.text-content :deep(ol) {
+  margin: 0 0 24px 0;
+  padding-left: 24px;
+}
+
+.text-content :deep(li) {
+  margin-bottom: 8px;
+}
+
+.text-content :deep(li p) {
+  margin-bottom: 8px;
 }
 
 .text-content.font-size-small {
@@ -1249,7 +1262,7 @@ onUnmounted(() => {
 }
 
 .original-text p, .translated-text p {
-  height: 350px;
+  max-height: 350px;
   overflow-y: auto;
   margin: 0;
   padding: 12px;
