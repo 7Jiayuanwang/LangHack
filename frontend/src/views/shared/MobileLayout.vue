@@ -576,7 +576,10 @@ onUnmounted(() => {
 .content-container.no-padding {
   padding: 0;
   padding-top: env(safe-area-inset-top, 0px);
-  overflow: hidden;
+  /* overflow 不再锁成 hidden — VideoPlayer / Videos / AiQa 等依赖外层滚动的页面会被锁死。
+     InteractiveText / StudentArticles 自带 sticky + 内部滚动容器，外层 auto 不会触发额外滚动条。 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 底部导航栏 */
