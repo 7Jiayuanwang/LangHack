@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS `users` (
     `avatar` VARCHAR(255) DEFAULT NULL COMMENT '头像URL',
     `status` VARCHAR(20) DEFAULT 'ACTIVE' COMMENT '状态',
     `inner_uid` VARCHAR(100) DEFAULT NULL COMMENT '用户内部唯一标识符',
+    `school_student_id` BIGINT DEFAULT NULL COMMENT '关联 school_student.id',
+    `school_teacher_id` BIGINT DEFAULT NULL COMMENT '关联 school_teacher.id',
     `hobby` VARCHAR(100) DEFAULT NULL COMMENT '用户兴趣爱好',
     `level` VARCHAR(50) DEFAULT NULL COMMENT '英语水平等级',
     `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
@@ -41,8 +43,30 @@ CREATE TABLE IF NOT EXISTS `users` (
     KEY `idx_role` (`role`),
     KEY `idx_status` (`status`),
     KEY `idx_deleted` (`deleted`),
-    KEY `idx_inner_uid` (`inner_uid`)
+    KEY `idx_inner_uid` (`inner_uid`),
+    KEY `idx_users_school_student_id` (`school_student_id`),
+    KEY `idx_users_school_teacher_id` (`school_teacher_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
+
+-- V25: 确保 school_student_id / school_teacher_id 列存在（种子备份可能用旧结构建表）
+DROP PROCEDURE IF EXISTS _add_school_cols$$
+CREATE PROCEDURE _add_school_cols()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='users'
+                     AND column_name='school_student_id') THEN
+        ALTER TABLE users ADD COLUMN school_student_id BIGINT DEFAULT NULL COMMENT '关联 school_student.id' AFTER inner_uid;
+        ALTER TABLE users ADD INDEX idx_users_school_student_id (school_student_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='users'
+                     AND column_name='school_teacher_id') THEN
+        ALTER TABLE users ADD COLUMN school_teacher_id BIGINT DEFAULT NULL COMMENT '关联 school_teacher.id' AFTER school_student_id;
+        ALTER TABLE users ADD INDEX idx_users_school_teacher_id (school_teacher_id);
+    END IF;
+END$$
+CALL _add_school_cols()$$
+DROP PROCEDURE IF EXISTS _add_school_cols$$
 
 -- ────────────────────────────────────────
 -- 课程表
@@ -3109,6 +3133,79 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     FOREIGN KEY (call_log_id) REFERENCES ai_call_log(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI用户反馈表';
+
+-- ────────────────────────────────────────
+-- student_exercise_answers（旧答题记录表，V26 text_exercises 的配套表）
+-- ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `student_exercise_answers` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `exercise_id` BIGINT NOT NULL,
+    `student_id` BIGINT NOT NULL,
+    `assignment_id` BIGINT NULL,
+    `answer_content` TEXT NULL,
+    `is_correct` TINYINT(1) NULL,
+    `answer_time` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+    `time_spent_seconds` INT NULL,
+    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_sea_student` (`student_id`),
+    INDEX `idx_sea_exercise` (`exercise_id`),
+    INDEX `idx_sea_assignment` (`assignment_id`),
+    CONSTRAINT `fk_sea_student` FOREIGN KEY (`student_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_sea_exercise` FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_sea_assignment` FOREIGN KEY (`assignment_id`) REFERENCES `assignments`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- V30__student_ai_quiz_records.sql
+-- 学生 AI 题做题记录（两表设计）
+
+CREATE TABLE IF NOT EXISTS `student_ai_quiz_attempts` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '尝试ID',
+    `student_id`    BIGINT NOT NULL COMMENT '学生ID',
+    `text_id`       BIGINT NOT NULL COMMENT '文章ID',
+    `session_id`    BIGINT NULL     COMMENT 'AI 出题会话ID',
+    `assignment_id` BIGINT NULL     COMMENT '任务ID',
+    `total_questions`    INT          NOT NULL DEFAULT 0    COMMENT '题目总数',
+    `correct_count`      INT          NOT NULL DEFAULT 0    COMMENT '答对数',
+    `score`              DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '得分百分比',
+    `total_time_seconds` INT          NOT NULL DEFAULT 0    COMMENT '总用时(秒)',
+    `submitted_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '提交时间',
+    `created_time`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX `idx_aiqa_student`     (`student_id`),
+    INDEX `idx_aiqa_text`        (`text_id`),
+    INDEX `idx_aiqa_student_text`(`student_id`, `text_id`),
+    INDEX `idx_aiqa_submitted`   (`submitted_time`),
+    INDEX `idx_aiqa_session`     (`session_id`),
+    CONSTRAINT `fk_aiqa_student` FOREIGN KEY (`student_id`)    REFERENCES `users`(`id`)            ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqa_text`    FOREIGN KEY (`text_id`)       REFERENCES `texts`(`id`)            ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqa_session` FOREIGN KEY (`session_id`)    REFERENCES `ai_quiz_session`(`id`)  ON DELETE SET NULL,
+    CONSTRAINT `fk_aiqa_asn`     FOREIGN KEY (`assignment_id`) REFERENCES `assignments`(`id`)      ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `student_ai_quiz_records` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '明细ID',
+    `attempt_id` BIGINT NOT NULL COMMENT '做题尝试ID',
+    `student_id` BIGINT NOT NULL COMMENT '学生ID',
+    `text_id`    BIGINT NOT NULL COMMENT '文章ID',
+    `exercise_id` BIGINT NULL COMMENT '题目ID',
+    `question_snapshot`  TEXT        NOT NULL COMMENT '题干快照',
+    `options_snapshot`   JSON        NULL     COMMENT '选项快照',
+    `correct_answer`     VARCHAR(50) NULL     COMMENT '正确答案',
+    `analysis_snapshot`  TEXT        NULL     COMMENT '解析快照',
+    `user_answer`        VARCHAR(50) NOT NULL COMMENT '学生答案',
+    `is_correct`         TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '是否正确',
+    `time_spent_seconds` INT         NULL     COMMENT '本题用时(秒)',
+    `question_order`     INT         NULL     COMMENT '题号',
+    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX `idx_aiqr_attempt`     (`attempt_id`),
+    INDEX `idx_aiqr_student`     (`student_id`),
+    INDEX `idx_aiqr_text`        (`text_id`),
+    INDEX `idx_aiqr_student_text`(`student_id`, `text_id`),
+    INDEX `idx_aiqr_exercise`    (`exercise_id`),
+    CONSTRAINT `fk_aiqr_attempt` FOREIGN KEY (`attempt_id`)  REFERENCES `student_ai_quiz_attempts`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqr_student` FOREIGN KEY (`student_id`)  REFERENCES `users`(`id`)                   ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqr_text`    FOREIGN KEY (`text_id`)     REFERENCES `texts`(`id`)                   ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqr_ex`      FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises`(`id`)          ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- V25__link_users_to_school_directory.sql

@@ -550,6 +550,7 @@ let studyStartTime = null
 // AI 出题相关数据
 const quizLoading = ref(false)
 const quizQuestions = ref([])
+const quizStartedAt = ref(null) // 进入做题界面的时间戳，用于计算每题用时
 let accumulatedTime = 0 // 累计学习时间（秒）
 
 // 翻译相关
@@ -2109,6 +2110,7 @@ const handleAiQuiz = async () => {
         showAnswer: false,
         options: q.options || []
       }))
+      quizStartedAt.value = Date.now()
       ElMessage.success(`已加载 ${existData.length} 道题目`)
       return
     }
@@ -2128,6 +2130,7 @@ const handleAiQuiz = async () => {
           showAnswer: false,
           options: q.options || []
         }))
+        quizStartedAt.value = Date.now()
         ElMessage.success(`AI 成功生成 ${quizData.questionCount} 道题目`)
       }
     } else {
@@ -2144,6 +2147,7 @@ const handleAiQuiz = async () => {
 const selectQuizAnswer = (questionIndex, optionKey) => {
   if (quizQuestions.value[questionIndex].showAnswer) return
   quizQuestions.value[questionIndex].userAnswer = optionKey
+  quizQuestions.value[questionIndex]._answeredAt = Date.now()
 }
 
 const submitQuiz = async () => {
@@ -2154,11 +2158,18 @@ const submitQuiz = async () => {
   }
 
   try {
-    const answers = quizQuestions.value.map(q => ({
-      exerciseId: q.id,
-      userAnswer: q.userAnswer
-    }))
-    const res = await submitQuizAnswers(answers)
+    let prevTs = quizStartedAt.value || Date.now()
+    const answers = quizQuestions.value.map(q => {
+      const ts = q._answeredAt || Date.now()
+      const timeSpentSeconds = Math.max(0, Math.round((ts - prevTs) / 1000))
+      prevTs = ts
+      return {
+        exerciseId: q.id,
+        userAnswer: q.userAnswer,
+        timeSpentSeconds
+      }
+    })
+    const res = await submitQuizAnswers({ answers })
     const data = res?.data || res
 
     if (data && data.results) {
@@ -2228,6 +2239,7 @@ const restoreQuizProgress = () => {
       const saved = JSON.parse(raw)
       if (Array.isArray(saved) && saved.length > 0) {
         quizQuestions.value = saved
+        quizStartedAt.value = Date.now()
         localStorage.removeItem(key)
         return true
       }
@@ -2268,6 +2280,7 @@ const regenerateQuiz = async () => {
           showAnswer: false,
           options: q.options || []
         }))
+        quizStartedAt.value = Date.now()
         ElMessage.success(`已重新生成 ${quizData.questionCount} 道题目`)
       }
     } else {

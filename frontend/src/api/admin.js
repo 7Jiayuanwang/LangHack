@@ -355,3 +355,13 @@ export function getRecommendationMetrics(params) {
 export function getAiFeedbackSummary() {
   return request({ url: '/api/admin/metrics/ai-feedback-summary', method: 'get' })
 }
+
+// ── 做题记录 ──
+
+export function getQuizAttempts(params) {
+  return request({ url: '/api/admin/quiz-records/attempts', method: 'get', params })
+}
+
+export function getQuizAttemptDetail(attemptId) {
+  return request({ url: `/api/admin/quiz-records/attempts/${attemptId}`, method: 'get' })
+}

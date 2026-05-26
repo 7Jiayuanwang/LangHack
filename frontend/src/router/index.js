@@ -149,6 +149,12 @@ const routes = [
         component: () => import("@/views/admin/RecommendationAnalysis.vue"),
         meta: { title: "推荐算法分析", roles: ["ADMIN"] },
       },
+      {
+        path: "quiz-records",
+        name: "AdminQuizRecords",
+        component: () => import("@/views/admin/QuizRecords.vue"),
+        meta: { title: "做题管理", roles: ["ADMIN"] },
+      },
     ],
   },
   {
