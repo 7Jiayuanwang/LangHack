@@ -78,6 +78,15 @@ class SsoAuthControllerTest {
     @MockBean
     private UserService userService;
 
+    @MockBean
+    private com.english.service.DownloadTokenService downloadTokenService;
+
+    @MockBean
+    private com.english.service.TokenBlacklistService tokenBlacklistService;
+
+    @MockBean
+    private com.english.service.ElevationService elevationService;
+
     private SsoUserInfo mockUserInfo;
     private SsoLoginResult mockLoginResult;
 

@@ -141,8 +141,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
@@ -365,7 +365,7 @@ const startDrag = (event) => {
 
 // 处理浮动按钮点击
 // 处理浮动按钮点击
-const handleFloatingBtnClick = (event) => {
+const handleFloatingBtnClick = () => {
   // 如果刚拖动过，不触发点击
   if (isDragging.value) {
     return
@@ -576,40 +576,6 @@ const addToVocabulary = async () => {
   } finally {
     addingToVocabulary.value = false
   }
-}
-
-// 处理同义词点击
-const handleSynonymClick = async (synonym) => {
-  // 关闭当前弹窗
-  showWordDialog.value = false
-
-  // 延迟一下再打开新弹窗，确保动画效果
-  const timer = setTimeout(() => {
-    selectedWord.value = {
-      text: synonym,
-      cleanWord: synonym.toLowerCase(),
-      clickable: true,
-      position: 0
-    }
-    handleWordClick(selectedWord.value)
-  }, 300)
-
-  // FIX #5: 移除冗余的 Array.isArray 检查
-  // synonymClickTimers 在第 198 行已初始化为 []，无需重复检查
-  synonymClickTimers.push(timer)
-}
-
-// 格式化词性显示
-const getPosText = (pos) => {
-  if (!pos) return ''
-
-  const posMap = {
-    'n': '名词', 'v': '动词', 'adj': '形容词', 'adv': '副词',
-    'prep': '介词', 'conj': '连词', 'pron': '代词', 'int': '感叹词'
-  }
-
-  const posList = pos.toLowerCase().split(/[\s,;]+/)
-  return posList.map(p => posMap[p] || p.toUpperCase()).join(' / ')
 }
 
 // 处理弹窗关闭

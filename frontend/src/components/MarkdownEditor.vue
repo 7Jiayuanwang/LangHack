@@ -90,7 +90,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { uploadMedia, deleteMedia } from '@/api/media'
 import MarkdownRenderer from './MarkdownRenderer.vue'

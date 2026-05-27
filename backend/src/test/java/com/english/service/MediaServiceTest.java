@@ -36,6 +36,9 @@ public class MediaServiceTest {
     @Mock
     private MediaMapper mediaMapper;
 
+    @Mock
+    private MediaTranscodeService transcodeService;
+
     @InjectMocks
     private MediaServiceImpl mediaService;
 

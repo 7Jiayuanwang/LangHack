@@ -205,7 +205,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { calculateEbbinghaus, shouldReviewWord } from './ebbinghaus'
+import { calculateEbbinghaus } from './ebbinghaus'
 import { updateMasteryLevel, addWordToVocabularyByWord } from '@/api/student'
 import { useUserStore } from '@/store/user'
 
@@ -288,7 +288,7 @@ const calculateDays = (dailyCount) => {
 }
 
 // 加载单词图片
-const loadWordImage = (word) => {
+const loadWordImage = () => {
   // 使用 Picsum Photos 生成随机图片作为占位符
   wordImageUrl.value = `https://picsum.photos/400/300?random=${Math.random()}`
 }

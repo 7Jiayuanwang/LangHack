@@ -175,7 +175,7 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Plus, Upload, Picture, ZoomIn, Delete } from '@element-plus/icons-vue'
+import { Upload, Picture, ZoomIn, Delete } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import MarkdownEditor from './MarkdownEditor.vue'
 import { createText, updateText, getCourses, getUnitsByCourseId } from '@/api/admin'
