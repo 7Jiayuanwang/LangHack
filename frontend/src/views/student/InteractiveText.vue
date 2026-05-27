@@ -1379,7 +1379,10 @@ const goBack = () => {
 const goToRelatedArticle = (id) => {
   const from = route.query.from
   const query = from ? { from } : {}
-  router.push({ path: `/article/${id}`, query })
+  router.push({ path: `/article/${id}`, query }).then(() => {
+    const scrollEl = document.querySelector('.content-wrapper')
+    if (scrollEl) scrollEl.scrollTop = 0
+  })
 }
 
 // 为 HTML 内容中的英文单词添加点击功能
@@ -1608,7 +1611,8 @@ watch(() => route.params.id, (newId, oldId) => {
     relatedTexts.value = []
     quizQuestions.value = []
     isCompleted.value = false
-    window.scrollTo(0, 0)
+    const scrollEl = document.querySelector('.content-wrapper')
+    if (scrollEl) scrollEl.scrollTop = 0
     loadTextDetail()
   }
 })
