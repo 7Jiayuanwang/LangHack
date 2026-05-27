@@ -52,7 +52,7 @@ WORKDIR /app
 # 安装 curl（healthcheck）、tzdata（时区）、mysql-client + mariadb-connector-c（mysqldump 备份/恢复）
 # mariadb-connector-c 提供 caching_sha2_password 插件，使 MariaDB 客户端兼容 MySQL 8.0
 # 内网构建时通过 ALPINE_MIRROR 参数替换 Alpine 包源为内网 Nexus 代理
-RUN if [ -n "$ALPINE_MIRROR" ]; then ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2); printf '%s\n' "${ALPINE_MIRROR%/}/v${ALPINE_VER}/main" "${ALPINE_MIRROR%/}/v${ALPINE_VER}/community" > /etc/apk/repositories; fi && apk add --no-cache curl tzdata mysql-client mariadb-connector-c ffmpeg && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
+RUN if [ -n "$ALPINE_MIRROR" ]; then ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2); printf '%s\n' "${ALPINE_MIRROR%/}/v${ALPINE_VER}/main" "${ALPINE_MIRROR%/}/v${ALPINE_VER}/community" > /etc/apk/repositories; fi && apk add --no-cache curl tzdata mysql-client mariadb-connector-c ffmpeg docker-cli && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
 
 # 从构建阶段复制可执行 jar
 COPY --from=builder /app/target/*.jar app.jar

@@ -23,6 +23,7 @@ export function importBackupApi(data) {
     url: "/api/ops/backup/import",
     method: "post",
     data,
+    timeout: 3600000,  // 1 小时，支持大备份文件上传
   });
 }
 
@@ -41,12 +42,20 @@ export function getBackupPreview(id, params) {
   });
 }
 
+export function getDownloadToken(id) {
+  return request({
+    url: `/api/ops/backup/${id}/download-token`,
+    method: "post",
+  })
+}
+
 export function downloadBackupApi(id, onDownloadProgress) {
   return request({
     url: `/api/ops/backup/${id}/download`,
     method: "get",
     responseType: "blob",
     onDownloadProgress,
+    timeout: 3600000,  // 1 小时，支持大备份文件下载
   });
 }
 
@@ -62,6 +71,7 @@ export function restoreBackupApi(id, data) {
     url: `/api/ops/backup/${id}/restore`,
     method: "post",
     data,
+    timeout: 3600000,  // 1 小时，支持大备份文件恢复
   });
 }
 

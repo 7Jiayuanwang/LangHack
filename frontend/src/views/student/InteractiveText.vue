@@ -18,6 +18,10 @@
             <span class="pill-label">难度</span>
             <span class="pill-value">{{ difficultyText }}</span>
           </div>
+          <button class="annotation-header-btn" @click="showAnnotationSidebar = true" :title="`批注 (${annotations.length})`">
+            <el-icon><Comment /></el-icon>
+            <span v-if="annotations.length > 0" class="ann-header-count">{{ annotations.length }}</span>
+          </button>
           <button v-if="canFavorite" class="favorite-btn" :class="{ 'is-favorite': isFavorite }" @click="addToFavorite">
             <el-icon><Star v-if="!isFavorite" /><StarFilled v-else /></el-icon>
           </button>
@@ -95,9 +99,6 @@
               AI 出题（{{ quizQuestions.length }} 题）
             </span>
             <div class="quiz-inline-actions-top">
-              <el-button size="small" @click="regenerateQuiz" :loading="quizLoading">
-                重新出题
-              </el-button>
               <el-button size="small" @click="closeQuiz">收起</el-button>
             </div>
           </div>
@@ -392,9 +393,81 @@
       :underline-label="selectionUnderlineLabel"
       @copy="handleCopy"
       @underline="handleUnderline"
-      @share="handleShare"
+      @annotate="handleAnnotate"
       @ai-qa="handleAiQa"
     />
+
+    <!-- 批注输入弹窗 -->
+    <el-dialog v-model="showAnnotationDialog" title="添加批注" width="min(480px, 92vw)" align-center>
+      <div class="annotation-dialog-body">
+        <div class="ann-selected-text">
+          <span class="ann-quote-mark">"</span>{{ annotationSelectedText }}<span class="ann-quote-mark">"</span>
+        </div>
+        <el-input
+          v-model="annotationNote"
+          type="textarea"
+          :rows="4"
+          placeholder="写下你的批注..."
+          maxlength="500"
+          show-word-limit
+        />
+        <div class="ann-visibility-row">
+          <span class="ann-visibility-label">可见性</span>
+          <el-radio-group v-model="annotationVisibility" size="small">
+            <el-radio-button :value="1">🌐 公开</el-radio-button>
+            <el-radio-button :value="0">🔒 仅自己</el-radio-button>
+          </el-radio-group>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showAnnotationDialog = false">取消</el-button>
+        <el-button type="primary" :loading="submittingAnnotation" @click="submitAnnotation">发布批注</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批注侧边栏 -->
+    <div class="annotation-sidebar" :class="{ open: showAnnotationSidebar }">
+      <div class="ann-sidebar-header">
+        <span class="ann-sidebar-title">批注 ({{ annotations.length }})</span>
+        <el-button text @click="showAnnotationSidebar = false">
+          <el-icon><Close /></el-icon>
+        </el-button>
+      </div>
+      <div class="ann-sidebar-body">
+        <div v-if="annotations.length === 0" class="ann-empty">
+          暂无批注，选中文本后点击"批注"添加
+        </div>
+        <div v-for="ann in annotations" :key="ann.id" class="ann-card">
+          <div class="ann-card-quote">"{{ ann.selectedText }}"</div>
+          <div class="ann-card-note">{{ ann.note }}</div>
+          <div class="ann-card-footer">
+            <span class="ann-author">{{ ann.username }}</span>
+            <div class="ann-actions">
+              <button
+                v-if="ann.isMine"
+                class="ann-visibility-btn"
+                :title="ann.visibility === 1 ? '当前公开，点击改为仅自己可见' : '当前仅自己可见，点击改为公开'"
+                @click="handleToggleVisibility(ann)"
+              >{{ ann.visibility === 1 ? '🌐' : '🔒' }}</button>
+              <button class="ann-upvote-btn" :class="{ active: ann.upvotedByMe }" @click="handleUpvote(ann)">
+                👍 {{ ann.upvoteCount }}
+              </button>
+              <button v-if="ann.isMine" class="ann-delete-btn" @click="handleDeleteAnnotation(ann)">删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批注侧边栏触发按钮 -->
+    <button
+      v-if="!showAnnotationSidebar && annotations.length > 0"
+      class="ann-fab"
+      @click="showAnnotationSidebar = true"
+      :title="`查看 ${annotations.length} 条批注`"
+    >
+      💬 {{ annotations.length }}
+    </button>
   </div>
 </template>
 
@@ -402,7 +475,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit } from '@element-plus/icons-vue'
+import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment } from '@element-plus/icons-vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, getRelatedTexts } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
@@ -425,6 +498,7 @@ renderer.image = function({ href, title, text }) {
 }
 marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
+import { getAnnotations, createAnnotation, deleteAnnotation, toggleUpvote, updateAnnotationVisibility } from '@/api/annotation'
 import { getArticlesPath } from '@/config/site'
 import rangy from '@/utils/rangy'
 
@@ -501,6 +575,7 @@ let studyStartTime = null
 // AI 出题相关数据
 const quizLoading = ref(false)
 const quizQuestions = ref([])
+const quizStartedAt = ref(null) // 进入做题界面的时间戳，用于计算每题用时
 let accumulatedTime = 0 // 累计学习时间（秒）
 
 // 相关文章推荐
@@ -548,6 +623,15 @@ const showSelectionMenu = ref(false)
 const selectionPosition = reactive({ x: 0, y: 0 })
 const selectedTextContent = ref('')
 const sharedUnderlines = ref([])
+
+// 协作批注
+const annotations = ref([])
+const showAnnotationSidebar = ref(false)
+const showAnnotationDialog = ref(false)
+const annotationNote = ref('')
+const annotationSelectedText = ref('')
+const submittingAnnotation = ref(false)
+const annotationVisibility = ref(1)
 
 /**
  * 判断当前选区文本是否已完全被某条划线记录覆盖。
@@ -1609,6 +1693,7 @@ const handleScroll = () => {
 // 生命周期
 onMounted(async () => {
   await loadTextDetail()
+  loadAnnotations()
   // 添加页面可见性变化监听
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // 添加滚动监听
@@ -1948,6 +2033,84 @@ const handleShare = () => {
   ElMessage.info('分享功能即将上线')
 }
 
+const loadAnnotations = async () => {
+  if (!textId.value) return
+  try {
+    const res = await getAnnotations(textId.value)
+    if (res?.code === 200) annotations.value = res.data || []
+  } catch (e) {
+    console.error('Failed to load annotations', e)
+  }
+}
+
+const handleAnnotate = () => {
+  if (!selectedTextContent.value?.trim()) return
+  annotationSelectedText.value = selectedTextContent.value.trim()
+  annotationNote.value = ''
+  annotationVisibility.value = 1
+  showAnnotationDialog.value = true
+  showSelectionMenu.value = false
+}
+
+const submitAnnotation = async () => {
+  if (!annotationNote.value.trim()) {
+    ElMessage.warning('请输入批注内容')
+    return
+  }
+  submittingAnnotation.value = true
+  try {
+    const res = await createAnnotation({
+      textId: textId.value,
+      selectedText: annotationSelectedText.value,
+      note: annotationNote.value.trim(),
+      visibility: annotationVisibility.value
+    })
+    if (res?.code === 200) {
+      annotations.value.unshift(res.data)
+      showAnnotationDialog.value = false
+      showAnnotationSidebar.value = true
+      ElMessage.success('批注已添加')
+    }
+  } catch (e) {
+    ElMessage.error('添加批注失败')
+  } finally {
+    submittingAnnotation.value = false
+  }
+}
+
+const handleDeleteAnnotation = async (ann) => {
+  try {
+    await deleteAnnotation(ann.id)
+    annotations.value = annotations.value.filter(a => a.id !== ann.id)
+    ElMessage.success('已删除')
+  } catch (e) {
+    ElMessage.error('删除失败')
+  }
+}
+
+const handleToggleVisibility = async (ann) => {
+  const next = ann.visibility === 1 ? 0 : 1
+  try {
+    await updateAnnotationVisibility(ann.id, next)
+    ann.visibility = next
+    ElMessage.success(next === 1 ? '已改为公开' : '已改为仅自己可见')
+  } catch (e) {
+    ElMessage.error('修改失败')
+  }
+}
+
+const handleUpvote = async (ann) => {
+  try {
+    const res = await toggleUpvote(ann.id)
+    if (res?.code === 200) {
+      ann.upvoteCount = res.data.upvoteCount
+      ann.upvotedByMe = !ann.upvotedByMe
+    }
+  } catch (e) {
+    ElMessage.error('操作失败')
+  }
+}
+
 const handleAiQa = () => {
   // 获取上下文 (前后 100 字符)
   let context = ''
@@ -2001,6 +2164,7 @@ const handleAiQuiz = async () => {
         showAnswer: false,
         options: q.options || []
       }))
+      quizStartedAt.value = Date.now()
       ElMessage.success(`已加载 ${existData.length} 道题目`)
       return
     }
@@ -2020,6 +2184,7 @@ const handleAiQuiz = async () => {
           showAnswer: false,
           options: q.options || []
         }))
+        quizStartedAt.value = Date.now()
         ElMessage.success(`AI 成功生成 ${quizData.questionCount} 道题目`)
       }
     } else {
@@ -2036,6 +2201,7 @@ const handleAiQuiz = async () => {
 const selectQuizAnswer = (questionIndex, optionKey) => {
   if (quizQuestions.value[questionIndex].showAnswer) return
   quizQuestions.value[questionIndex].userAnswer = optionKey
+  quizQuestions.value[questionIndex]._answeredAt = Date.now()
 }
 
 const submitQuiz = async () => {
@@ -2046,11 +2212,18 @@ const submitQuiz = async () => {
   }
 
   try {
-    const answers = quizQuestions.value.map(q => ({
-      exerciseId: q.id,
-      userAnswer: q.userAnswer
-    }))
-    const res = await submitQuizAnswers(answers)
+    let prevTs = quizStartedAt.value || Date.now()
+    const answers = quizQuestions.value.map(q => {
+      const ts = q._answeredAt || Date.now()
+      const timeSpentSeconds = Math.max(0, Math.round((ts - prevTs) / 1000))
+      prevTs = ts
+      return {
+        exerciseId: q.id,
+        userAnswer: q.userAnswer,
+        timeSpentSeconds
+      }
+    })
+    const res = await submitQuizAnswers({ answers })
     const data = res?.data || res
 
     if (data && data.results) {
@@ -2120,6 +2293,7 @@ const restoreQuizProgress = () => {
       const saved = JSON.parse(raw)
       if (Array.isArray(saved) && saved.length > 0) {
         quizQuestions.value = saved
+        quizStartedAt.value = Date.now()
         localStorage.removeItem(key)
         return true
       }
@@ -2160,6 +2334,7 @@ const regenerateQuiz = async () => {
           showAnswer: false,
           options: q.options || []
         }))
+        quizStartedAt.value = Date.now()
         ElMessage.success(`已重新生成 ${quizData.questionCount} 道题目`)
       }
     } else {
@@ -2472,6 +2647,40 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   color: #f59e0b;
 }
 
+.annotation-header-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.2s, color 0.2s;
+}
+.annotation-header-btn:hover { background: #f1f5f9; color: #197fe6; }
+.ann-header-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #197fe6;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  line-height: 1;
+}
+
 /* Reader Container */
 .reader-container {
   max-width: 1200px;
@@ -2628,6 +2837,21 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .markdown-content :deep(p) {
   text-align: justify;
   margin-bottom: 24px;
+}
+
+.markdown-content :deep(ul),
+.markdown-content :deep(ol) {
+  margin: 0 0 24px 0;
+  padding-left: 24px;
+}
+
+.markdown-content :deep(li) {
+  margin-bottom: 8px;
+  line-height: 1.8;
+}
+
+.markdown-content :deep(li p) {
+  margin-bottom: 8px;
 }
 
 .article-body :deep(img),
@@ -3400,7 +3624,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .translate-dialog .original-text p,
 .translate-dialog .translated-text p {
-  height: 350px;
+  max-height: 350px;
   overflow-y: auto;
   margin: 0;
   padding: 12px;
@@ -3453,4 +3677,135 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     margin: 0;
   }
 }
+
+/* ── 协作批注 ── */
+.annotation-sidebar {
+  position: fixed;
+  top: 0;
+  right: -340px;
+  width: 320px;
+  height: 100vh;
+  background: #fff;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.12);
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  transition: right 0.3s ease;
+}
+.annotation-sidebar.open { right: 0; }
+
+.ann-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.ann-sidebar-title { font-weight: 700; font-size: 15px; color: #1e293b; }
+
+.ann-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ann-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 32px 0; }
+
+.ann-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+}
+.ann-card-quote {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin-bottom: 6px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ann-card-note { font-size: 14px; color: #1e293b; line-height: 1.6; margin-bottom: 8px; }
+.ann-card-footer { display: flex; align-items: center; justify-content: space-between; }
+.ann-author { font-size: 12px; color: #94a3b8; }
+.ann-actions { display: flex; gap: 8px; align-items: center; }
+.ann-upvote-btn {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.15s;
+}
+.ann-upvote-btn.active { border-color: #197fe6; color: #197fe6; background: #eff6ff; }
+.ann-upvote-btn:hover { border-color: #197fe6; color: #197fe6; }
+.ann-delete-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.ann-private-badge { font-size: 13px; opacity: 0.7; cursor: default; }
+.ann-visibility-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.ann-visibility-btn:hover { opacity: 1; background: #f1f5f9; }
+.ann-visibility-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.ann-visibility-label { font-size: 13px; color: #64748b; white-space: nowrap; }
+.annotation-dialog-body { display: flex; flex-direction: column; gap: 0; }
+
+.ann-fab {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  background: #197fe6;
+  color: white;
+  border: none;
+  border-radius: 24px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(25,127,230,0.4);
+  z-index: 1400;
+  transition: transform 0.15s;
+}
+.ann-fab:hover { transform: scale(1.05); }
+
+.annotation-dialog-body { display: flex; flex-direction: column; gap: 12px; }
+.ann-selected-text {
+  background: #f8fafc;
+  border-left: 3px solid #197fe6;
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  color: #475569;
+  font-style: italic;
+  line-height: 1.5;
+  max-height: 80px;
+  overflow-y: auto;
+}
+.ann-quote-mark { color: #197fe6; font-size: 16px; font-style: normal; }
 </style>

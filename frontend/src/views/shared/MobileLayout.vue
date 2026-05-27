@@ -149,7 +149,7 @@ import {
   Upload, Document, House,
   User, EditPen, Setting,
   DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
-  VideoPlay, ChatLineRound,
+  VideoPlay, ChatLineRound, DataAnalysis,
 } from '@element-plus/icons-vue'
 import { getReviewTexts, getReviewVideos } from '@/api/admin'
 
@@ -221,6 +221,7 @@ const NAV_ITEMS = {
     { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine,    featureKey: 'ops.school_data_browser' },
     { path: '/ops/logs',            label: '日志', icon: Document    },
     { path: '/ops/update',          label: '更新', icon: Refresh     },
+    { path: '/ops/hot-deploy',      label: '热更新', icon: VideoPlay   },
   ],
   admin: [
     { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null, featureKey: 'admin.dashboard' },
@@ -251,6 +252,9 @@ const MORE_ITEMS = {
     { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
+    { path: '/admin/cet-analysis',   label: '四六级分析', icon: DataAnalysis },
+    { path: '/admin/recommendation-analysis', label: '推荐分析', icon: DataLine },
+    { path: '/admin/quiz-records',    label: '做题管理', icon: EditPen },
   ],
 }
 
@@ -300,6 +304,7 @@ const ROUTE_MAP = {
     '/ops/school-data':         '学校数据',
     '/ops/school-data-browser':  '数据浏览',
     '/ops/update':          '系统更新',
+    '/ops/hot-deploy':      '零停机热更新',
   },
   admin: {
     '/admin/dashboard':   '管理概览',
@@ -313,6 +318,9 @@ const ROUTE_MAP = {
     '/admin/assignments': '作业管理',
     '/admin/sso-pending': 'SSO 用户审批',
     '/admin/content-review': '内容审核',
+    '/admin/cet-analysis':   '四六级分析',
+    '/admin/recommendation-analysis': '推荐算法分析',
+    '/admin/quiz-records':   '做题管理',
   },
 }
 
@@ -568,7 +576,10 @@ onUnmounted(() => {
 .content-container.no-padding {
   padding: 0;
   padding-top: env(safe-area-inset-top, 0px);
-  overflow: hidden;
+  /* overflow 不再锁成 hidden — VideoPlayer / Videos / AiQa 等依赖外层滚动的页面会被锁死。
+     InteractiveText / StudentArticles 自带 sticky + 内部滚动容器，外层 auto 不会触发额外滚动条。 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 底部导航栏 */

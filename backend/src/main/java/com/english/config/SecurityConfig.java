@@ -67,6 +67,9 @@ public class SecurityConfig {
     private String allowedOriginPatternsConfig;
 
     @Autowired
+    private DownloadTokenFilter downloadTokenFilter;
+
+    @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Autowired
@@ -152,7 +155,8 @@ public class SecurityConfig {
                 // 数据指标：OPS 也可访问
                 .antMatchers("/api/admin/metrics/**").hasAnyRole("ADMIN", "OPS")
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
-                // 运维权限
+                // 运维权限 — backup download 由 DownloadTokenFilter 处理（支持临时 token 直链下载）
+                .antMatchers(HttpMethod.GET, "/api/ops/backup/*/download").permitAll()
                 .antMatchers("/api/ops/**").hasAnyRole("OPS", "ADMIN")
                 // 教师权限
                 .antMatchers("/api/teacher/**").hasAnyRole("TEACHER", "ADMIN")
@@ -174,7 +178,8 @@ public class SecurityConfig {
                     .authenticationEntryPoint(securityExceptionHandler)
                     .accessDeniedHandler(securityExceptionHandler)
                 .and()
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(downloadTokenFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

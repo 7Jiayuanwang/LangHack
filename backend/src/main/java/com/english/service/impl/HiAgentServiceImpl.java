@@ -51,6 +51,13 @@ public class HiAgentServiceImpl implements HiAgentService {
     private static final String KEY_QUIZ_API_KEY = "hiagent_quiz_api_key";
     private static final String KEY_QUIZ_APP_ID  = "hiagent_quiz_app_id";
 
+    /** 严格输出指令：禁止 HiAgent 返回"分析+原文+改写"的结构化报告。 */
+    private static final String STRICT_OUTPUT =
+            " STRICT OUTPUT: respond with the rewritten content ONLY. " +
+                    "Do NOT include analysis, diagnosis, level descriptors, rewriting rules, constraints, " +
+                    "the original text, section headings, or labels such as \"Rewritten Text:\". " +
+                    "Do not repeat the rewritten content. No preface, no explanation, no markdown headings.";
+
     @Autowired
     private HiAgentConfig config;
 
@@ -132,7 +139,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
     public String generateCET4Version(String originalContent) {
         String prompt = "Please rewrite the following English article to match CET-4 difficulty level. " +
-                "Only return the rewritten text.\n\n" + originalContent;
+                "Only return the rewritten text." + STRICT_OUTPUT + "\n\n" + originalContent;
         return callHiAgentInternal(prompt);
     }
 
@@ -140,7 +147,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
     public String generateCET6Version(String originalContent) {
         String prompt = "Please rewrite the following English article to match CET-6 difficulty level. " +
-                "Only return the rewritten text.\n\n" + originalContent;
+                "Only return the rewritten text." + STRICT_OUTPUT + "\n\n" + originalContent;
         return callHiAgentInternal(prompt);
     }
 
@@ -148,7 +155,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
     public String generateAcademicVersion(String originalContent) {
         String prompt = "Please rewrite the following English article in an academic style. " +
-                "Only return the rewritten text.\n\n" + originalContent;
+                "Only return the rewritten text." + STRICT_OUTPUT + "\n\n" + originalContent;
         return callHiAgentInternal(prompt);
     }
 
@@ -156,7 +163,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
     public String generateChineseParallelVersion(String originalContent) {
         String prompt = "Please create a Chinese-English parallel text version of the following English article. " +
-                "Format: English paragraph, then Chinese paragraph. Only return the parallel text.\n\n" + originalContent;
+                "Format: English paragraph, then Chinese paragraph. Only return the parallel text." + STRICT_OUTPUT + "\n\n" + originalContent;
         return callHiAgentInternal(prompt);
     }
 
@@ -166,7 +173,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
     public String generateCET4VersionMarkdown(String originalMarkdownContent) {
         String prompt = "Please rewrite the following Markdown article to match CET-4 difficulty level. " +
-                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n" + originalMarkdownContent;
+                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown." + STRICT_OUTPUT + "\n\n" + originalMarkdownContent;
         return callHiAgentInternal(prompt);
     }
 
@@ -174,7 +181,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
     public String generateCET6VersionMarkdown(String originalMarkdownContent) {
         String prompt = "Please rewrite the following Markdown article to match CET-6 difficulty level. " +
-                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n" + originalMarkdownContent;
+                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown." + STRICT_OUTPUT + "\n\n" + originalMarkdownContent;
         return callHiAgentInternal(prompt);
     }
 
@@ -182,7 +189,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
     public String generateAcademicVersionMarkdown(String originalMarkdownContent) {
         String prompt = "Please rewrite the following Markdown article in an academic style. " +
-                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n" + originalMarkdownContent;
+                "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown." + STRICT_OUTPUT + "\n\n" + originalMarkdownContent;
         return callHiAgentInternal(prompt);
     }
 
@@ -190,7 +197,7 @@ public class HiAgentServiceImpl implements HiAgentService {
     @CircuitBreaker(name = "hiagent", fallbackMethod = "fallback")
     public String generateChineseParallelVersionMarkdown(String originalMarkdownContent) {
         String prompt = "Please create a Chinese-English parallel text version of the following Markdown article. " +
-                "Format: English paragraph, then Chinese paragraph. PRESERVE ALL Markdown formatting. Only return the parallel Markdown.\n\n" + originalMarkdownContent;
+                "Format: English paragraph, then Chinese paragraph. PRESERVE ALL Markdown formatting. Only return the parallel Markdown." + STRICT_OUTPUT + "\n\n" + originalMarkdownContent;
         return callHiAgentInternal(prompt);
     }
 

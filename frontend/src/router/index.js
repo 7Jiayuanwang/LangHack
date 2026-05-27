@@ -39,6 +39,12 @@ const routes = [
     meta: { title: "SSO 登录回调", public: true },
   },
   {
+    path: "/shared-conversation/:token",
+    name: "SharedConversation",
+    component: () => import("@/views/public/SharedConversation.vue"),
+    meta: { title: "分享的对话", public: true },
+  },
+  {
     path: "/admin",
     name: "Admin",
     component: () => import("@/views/admin/Layout.vue"),
@@ -131,6 +137,24 @@ const routes = [
         component: () => import("@/views/admin/ContentReview.vue"),
         meta: { title: "内容审核", roles: ["ADMIN"] },
       },
+      {
+        path: "cet-analysis",
+        name: "AdminCetAnalysis",
+        component: () => import("@/views/admin/CetAnalysis.vue"),
+        meta: { title: "四六级分析", roles: ["ADMIN"] },
+      },
+      {
+        path: "recommendation-analysis",
+        name: "AdminRecommendationAnalysis",
+        component: () => import("@/views/admin/RecommendationAnalysis.vue"),
+        meta: { title: "推荐算法分析", roles: ["ADMIN"] },
+      },
+      {
+        path: "quiz-records",
+        name: "AdminQuizRecords",
+        component: () => import("@/views/admin/QuizRecords.vue"),
+        meta: { title: "做题管理", roles: ["ADMIN"] },
+      },
     ],
   },
   {
@@ -169,6 +193,12 @@ const routes = [
         name: "OpsUpdate",
         component: () => import("@/views/ops/Update.vue"),
         meta: { title: "系统更新", roles: ["OPS", "ADMIN"] },
+      },
+      {
+        path: "hot-deploy",
+        name: "OpsHotDeploy",
+        component: () => import("@/views/ops/HotDeploy.vue"),
+        meta: { title: "零停机热更新", roles: ["OPS", "ADMIN"] },
       },
       {
         path: "feature-toggles",
@@ -268,9 +298,11 @@ const routes = [
   {
     path: "/student",
     name: "Student",
-    component: () => import("@/views/student/Layout.vue"),
+    // Host 包装：教师角色走 MobileLayout(教师 TabBar)，学生/USER 走 StudentLayout。
+    // 解决教师进入 /student/video-player 等路由时底部导航错显示成学生 TabBar 的问题。
+    component: () => import("@/views/shared/StudentLayoutHost.vue"),
     redirect: "/articles",
-    meta: { title: "文章", roles: ["STUDENT", "USER"] },
+    meta: { title: "文章", roles: ["STUDENT", "USER", "TEACHER"] },
     children: [
       {
         path: "dashboard",
@@ -314,7 +346,8 @@ const routes = [
         component: () => import("@/views/student/AiQa.vue"),
         // 不加 featureKey：AI 问答页路由始终可达，避免 toggle 误关或缓存漂移导致"进不去"。
         // 入口显隐由 MyStudy.vue 快捷入口 + 文章划词菜单自行根据 page_ai_qa toggle 过滤。
-        meta: { title: "AI问答", roles: ["STUDENT", "USER"] },
+        // TEACHER 同样允许 — 教师从 VideoPlayer/InteractiveText 跳进来时复用该页面。
+        meta: { title: "AI问答", roles: ["STUDENT", "USER", "TEACHER"] },
       },
       {
         path: "text-learning",
@@ -329,19 +362,19 @@ const routes = [
         path: "ai-video",
         name: "StudentAiVideo",
         component: () => import("@/views/student/VideoSubtitlePlayer.vue"),
-        meta: { title: "AI视频字幕", roles: ["STUDENT", "USER"], featureKey: "page_ai_video" },
+        meta: { title: "AI视频字幕", roles: ["STUDENT", "USER", "TEACHER"], featureKey: "page_ai_video" },
       },
       {
         path: "videos",
         name: "StudentVideos",
         component: () => import("@/views/student/Videos.vue"),
-        meta: { title: "视频", roles: ["STUDENT", "USER"] },
+        meta: { title: "视频", roles: ["STUDENT", "USER", "TEACHER"] },
       },
       {
         path: "video-player",
         name: "StudentVideoPlayer",
         component: () => import("@/views/student/VideoPlayer.vue"),
-        meta: { title: "视频播放", roles: ["STUDENT", "USER"] },
+        meta: { title: "视频播放", roles: ["STUDENT", "USER", "TEACHER"] },
       },
       {
         path: "user-texts",

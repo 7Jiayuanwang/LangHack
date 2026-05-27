@@ -36,5 +36,8 @@ public interface UserTextReadMapper extends BaseMapper<UserTextRead> {
 
     @org.apache.ibatis.annotations.Update("UPDATE user_text_reads SET read_count = read_count + 1, last_read_at = NOW() WHERE user_id = #{userId} AND text_id = #{textId}")
     int incrementReadCount(@Param("userId") Long userId, @Param("textId") Long textId);
+
+    @Select("SELECT COUNT(*) AS cnt FROM (SELECT user_id FROM user_text_reads GROUP BY user_id HAVING COUNT(*) >= #{minReads}) t")
+    int selectCfUserCount(@Param("minReads") int minReads);
 }
 
