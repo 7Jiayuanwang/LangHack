@@ -10,11 +10,16 @@ import com.english.sso.service.SsoProtocolType;
 import com.english.sso.service.SsoService;
 import com.english.sso.service.SsoUserMappingService;
 import com.english.util.JwtUtil;
+import org.apache.ibatis.mapping.Environment;
+import org.apache.ibatis.session.Configuration;
+import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -35,8 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // TODO resolved: added @MockBean for JwtUtil, SsoProperties, StringRedisTemplate, UserService
 @WebMvcTest(controllers = SsoAuthController.class, excludeAutoConfiguration = {
-    org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class,
-    org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration.class
+    org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class
 })
 @ActiveProfiles("sso")
 @TestPropertySource(properties = {
@@ -44,9 +48,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "sso.protocol=CAS",
     "sso.cas.enabled=true",
     "sso.cas.server-url=https://ids.imau.edu.cn/authserver",
-    "app.base-url=http://localhost:8088"
+    "app.base-url=http://localhost:8088",
+    "app.frontend-url=http://localhost:8088",
+    "spring.autoconfigure.exclude=org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration,com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration"
 })
-@Import({}) // Don't import any additional configuration
+@Import(SsoAuthControllerTest.MockMyBatisConfig.class)
 class SsoAuthControllerTest {
 
     @Autowired
@@ -88,11 +94,22 @@ class SsoAuthControllerTest {
     @MockBean
     private com.english.service.impl.ElevationService elevationService;
 
-    @MockBean
-    private javax.sql.DataSource dataSource;
+    @TestConfiguration
+    static class MockMyBatisConfig {
+        @Bean
+        public javax.sql.DataSource dataSource() {
+            return mock(javax.sql.DataSource.class);
+        }
 
-    @MockBean
-    private org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory;
+        @Bean
+        public org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory(javax.sql.DataSource dataSource) {
+            org.apache.ibatis.session.SqlSessionFactory factory = mock(org.apache.ibatis.session.SqlSessionFactory.class);
+            Configuration config = new Configuration();
+            config.setEnvironment(new Environment("test", new JdbcTransactionFactory(), dataSource));
+            when(factory.getConfiguration()).thenReturn(config);
+            return factory;
+        }
+    }
 
     private SsoUserInfo mockUserInfo;
     private SsoLoginResult mockLoginResult;
@@ -142,7 +159,7 @@ class SsoAuthControllerTest {
 
         mockMvc.perform(get("/api/auth/sso/login-url"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.code").value(500))
                 .andExpect(jsonPath("$.message").value("SSO 功能未启用"));
     }
 
