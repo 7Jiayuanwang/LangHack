@@ -23,12 +23,12 @@ CREATE INDEX idx_users_school_teacher_id ON users(school_teacher_id);
 
 -- 3) 回填外键
 UPDATE users u
-JOIN school_student s ON s.student_id = u.username
+JOIN school_student s ON s.student_id COLLATE utf8mb4_unicode_ci = u.username
 SET u.school_student_id = s.id
 WHERE u.school_student_id IS NULL;
 
 UPDATE users u
-JOIN school_teacher t ON t.teacher_id = u.username
+JOIN school_teacher t ON t.teacher_id COLLATE utf8mb4_unicode_ci = u.username
 SET u.school_teacher_id = t.id
 WHERE u.school_teacher_id IS NULL;
 

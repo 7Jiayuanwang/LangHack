@@ -35,7 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // TODO resolved: added @MockBean for JwtUtil, SsoProperties, StringRedisTemplate, UserService
 @WebMvcTest(controllers = SsoAuthController.class, excludeAutoConfiguration = {
-    org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class
+    org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class,
+    org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration.class
 })
 @ActiveProfiles("sso")
 @TestPropertySource(properties = {
@@ -86,6 +87,12 @@ class SsoAuthControllerTest {
 
     @MockBean
     private com.english.service.impl.ElevationService elevationService;
+
+    @MockBean
+    private javax.sql.DataSource dataSource;
+
+    @MockBean
+    private org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory;
 
     private SsoUserInfo mockUserInfo;
     private SsoLoginResult mockLoginResult;
