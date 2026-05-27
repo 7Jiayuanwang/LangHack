@@ -247,11 +247,9 @@ const loadArticles = async () => {
   loading.value = true
   loadError.value = false
   try {
-    const params = { count: 20 }
-
     const authHeader = getAuthHeader()
     const headers = authHeader ? { Authorization: authHeader } : {}
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured?${new URLSearchParams(params)}`, { headers })
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured`, { headers })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)

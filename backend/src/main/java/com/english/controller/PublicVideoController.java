@@ -28,9 +28,8 @@ public class PublicVideoController {
      */
     @GetMapping("/featured")
     public Result<List<Video>> getFeaturedVideos(
-            @RequestParam(defaultValue = "12") int count) {
+            @RequestParam(required = false) Integer count) {
         try {
-            count = Math.min(Math.max(count, 1), 50);
             List<Video> videos = videoService.getFeaturedVideos(count);
             return Result.success(videos);
         } catch (Exception e) {

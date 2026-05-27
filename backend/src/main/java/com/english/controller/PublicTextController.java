@@ -108,10 +108,9 @@ public class PublicTextController {
      */
     @GetMapping("/featured")
     public Result<List<Text>> getFeaturedTexts(
-            @RequestParam(defaultValue = "12") int count,
+            @RequestParam(required = false) Integer count,
             @RequestParam(required = false) String difficulty) {
         try {
-            count = Math.min(Math.max(count, 1), 50);
 
             List<Text> featuredTexts = textService.lambdaQuery()
                     .eq(Text::getDeleted, 0)
@@ -175,7 +174,11 @@ public class PublicTextController {
             Collections.shuffle(randomPool);
 
             List<Text> result = new ArrayList<>();
-            if (prioritized.size() >= count) {
+            if (count == null || count <= 0) {
+                // 不限制数量，返回所有推荐文章
+                result.addAll(prioritized);
+                result.addAll(randomPool);
+            } else if (prioritized.size() >= count) {
                 result = prioritized.subList(0, count);
             } else {
                 result.addAll(prioritized);

@@ -369,8 +369,8 @@ const loadFeed = async () => {
     const headers = authHeader ? { Authorization: authHeader } : {}
 
     const [articlesRes, videosRes] = await Promise.all([
-      fetch(`${apiBase}/api/public/texts/featured?count=20`, { headers }).then(r => r.json()),
-      getFeaturedVideos({ count: 20 }).catch(() => ({ code: 0, data: [] }))
+      fetch(`${apiBase}/api/public/texts/featured`, { headers }).then(r => r.json()),
+      getFeaturedVideos({}).catch(() => ({ code: 0, data: [] }))
     ])
 
     let articleItems = []
