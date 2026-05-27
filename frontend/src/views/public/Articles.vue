@@ -247,7 +247,7 @@ const loadArticles = async () => {
   loading.value = true
   loadError.value = false
   try {
-    const params = { count: 12 }
+    const params = { count: 20 }
 
     const authHeader = getAuthHeader()
     const headers = authHeader ? { Authorization: authHeader } : {}
