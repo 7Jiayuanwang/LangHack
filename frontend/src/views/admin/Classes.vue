@@ -197,6 +197,42 @@
           </el-table>
           </div>
         </div>
+
+        <!-- 画像摘要 -->
+        <div style="margin-top: 20px;">
+          <h3>
+            学习者画像摘要
+            <el-button size="small" type="primary" plain @click="loadClassProfile" :loading="profileLoading" style="margin-left: 12px">
+              加载画像
+            </el-button>
+          </h3>
+          <div v-if="classProfileSummary.length > 0">
+            <el-table :data="classProfileSummary" stripe size="small">
+              <el-table-column prop="realName" label="姓名" width="100">
+                <template #default="{ row }">{{ row.realName || row.username }}</template>
+              </el-table-column>
+              <el-table-column prop="riskLevel" label="风险" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.riskLevel === 'high' ? 'danger' : row.riskLevel === 'medium' ? 'warning' : 'success'" size="small">
+                    {{ { low: '低', medium: '中', high: '高' }[row.riskLevel] || '-' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="activeDays7d" label="7天活跃" width="80" />
+              <el-table-column label="14天时长" width="100">
+                <template #default="{ row }">{{ row.studyMinutes14d }}分钟</template>
+              </el-table-column>
+              <el-table-column label="标签">
+                <template #default="{ row }">
+                  <LearnerRiskTagList v-if="row.tags" :tags="row.tags" />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <div v-else-if="profileLoading" style="padding: 20px; text-align: center;">
+            加载中...
+          </div>
+        </div>
       </div>
     </el-dialog>
   </div>
@@ -207,6 +243,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { View, MoreFilled, Edit, Delete } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
+import { getClassLearnerProfileSummary } from '@/api/learnerProfile'
+import LearnerRiskTagList from '@/components/learner/LearnerRiskTagList.vue'
 
 // 数据状态
 const loading = ref(false)
@@ -220,6 +258,8 @@ const submitting = ref(false)
 const studentsLoading = ref(false)
 const classStudents = ref([])
 const currentClass = ref(null)
+const classProfileSummary = ref([])
+const profileLoading = ref(false)
 
 // 分页
 const pagination = reactive({
@@ -390,6 +430,7 @@ const showEditDialog = (row) => {
 const showDetailDialog = async (row) => {
   currentClass.value = row
   detailVisible.value = true
+  classProfileSummary.value = []
   await loadClassStudents(row.id)
 }
 
@@ -413,6 +454,20 @@ const loadClassStudents = async (classId) => {
     console.error('加载班级学生失败:', error)
   } finally {
     studentsLoading.value = false
+  }
+}
+
+const loadClassProfile = async () => {
+  if (!currentClass.value?.id) return
+  profileLoading.value = true
+  try {
+    const res = await getClassLearnerProfileSummary(currentClass.value.id)
+    classProfileSummary.value = res?.data || []
+  } catch (e) {
+    console.error('加载画像摘要失败:', e)
+    classProfileSummary.value = []
+  } finally {
+    profileLoading.value = false
   }
 }
 
