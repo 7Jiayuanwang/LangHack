@@ -150,7 +150,7 @@ class RecommendationTrackingServiceTest {
         void partialFailure_continues() {
             enableTracking();
             doThrow(new RuntimeException("fail"))
-                    .doNothing()
+                    .doReturn(1)
                     .when(recommendationEventMapper).insert(any());
             service.trackBatchImpressions(1L, List.of(10L, 20L), "RECOMMEND", null);
             verify(recommendationEventMapper, times(2)).insert(any());
