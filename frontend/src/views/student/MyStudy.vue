@@ -170,7 +170,7 @@ import { ElMessage } from 'element-plus'
 import {
   StarFilled, Clock, Timer, Reading, Loading,
   House, Calendar, Trophy, Tickets, Notebook,
-  VideoPlay, MessageBox, Edit
+  VideoPlay, MessageBox, Edit, User
 } from '@element-plus/icons-vue'
 import { getFavoriteArticles, getReadingHistory } from '@/api/student'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
@@ -188,7 +188,8 @@ const QUICK_ENTRIES = [
   { key: 'course_selections', path: '/student/course-selections', label: '选课',      icon: markRaw(Tickets),   color: '#8b5cf6', toggleKey: 'page_course_selections' },
   { key: 'user_texts',        path: '/student/user-texts',        label: '我的创作',   icon: markRaw(Notebook),  color: '#ec4899', toggleKey: 'page_user_texts' },
   { key: 'ai_video',          path: '/student/ai-video',          label: 'AI 视频',   icon: markRaw(VideoPlay), color: '#ef4444', toggleKey: 'page_ai_video' },
-  { key: 'ai_qa',             path: '/student/ai-qa',             label: 'AI 问答',   icon: markRaw(MessageBox),color: '#10b981', toggleKey: 'page_ai_qa' }
+  { key: 'ai_qa',             path: '/student/ai-qa',             label: 'AI 问答',   icon: markRaw(MessageBox),color: '#10b981', toggleKey: 'page_ai_qa' },
+  { key: 'my_profile',        path: '/student/my-profile',        label: '我的画像',  icon: markRaw(User),      color: '#7c3aed', toggleKey: 'student.learner_profile_enabled' },
 ]
 
 const { toggles: featureToggles, load: loadFeatureToggles, isLoaded } = useFeatureToggles()

@@ -18,7 +18,10 @@
       <div v-for="item in students" :key="item.studentId" class="student-card">
         <div class="card-header">
           <span class="student-name">{{ item.studentName }}</span>
-          <el-tag size="small" type="info">{{ item.studentId }}</el-tag>
+          <div class="card-actions">
+            <el-button size="small" type="primary" plain @click="openProfile(item.studentId)">画像</el-button>
+            <el-tag size="small" type="info">{{ item.studentId }}</el-tag>
+          </div>
         </div>
         <div class="card-body">
           <div class="info-row">
@@ -40,15 +43,26 @@
         </div>
       </div>
     </div>
+
+    <!-- 画像抽屉 -->
+    <el-drawer v-model="profileDrawerVisible" title="学习者画像" size="420px">
+      <LearnerProfileCard :profile="currentProfile" :loading="profileLoading" :error="profileError" />
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { getMyStudents } from '@/api/teacher'
+import { getTeacherStudentProfile } from '@/api/learnerProfile'
+import LearnerProfileCard from '@/components/learner/LearnerProfileCard.vue'
 
 const loading = ref(false)
 const students = ref([])
+const profileDrawerVisible = ref(false)
+const currentProfile = ref(null)
+const profileLoading = ref(false)
+const profileError = ref(false)
 
 const now = new Date()
 const currentMonth = now.getMonth() + 1
@@ -86,6 +100,22 @@ async function loadData() {
 onMounted(() => {
   loadData()
 })
+
+async function openProfile(studentId) {
+  profileDrawerVisible.value = true
+  profileLoading.value = true
+  profileError.value = false
+  currentProfile.value = null
+  try {
+    const res = await getTeacherStudentProfile(studentId)
+    currentProfile.value = res?.data || null
+  } catch (e) {
+    console.error('获取画像失败:', e)
+    profileError.value = true
+  } finally {
+    profileLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -121,6 +151,12 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .student-name {

@@ -13,6 +13,8 @@
 - [数据库协作规范](DATABASE_COLLABORATION_GUIDE.md) - 数据库表登记与变更规范
 
 ### AI 集成
+- [学习者画像 V1 主规范](LEARNER_PERSONA_V1_MASTER_SPEC.md) - 设计、标签字典、DTO/API 契约、代码级改造、任务拆解的单一事实源
+- [学习者画像全程路线图](LEARNER_PERSONA_ROADMAP.md) - V1/V2/V3 全阶段任务拆解与依赖关系
 - [AI 模型提供商集成文档](AI模型提供商集成文档.md) - HiAgent / OpenRouter / SiliconFlow / 腾讯云 ASR
 
 ### SSO 集成
@@ -114,4 +116,4 @@
 
 ---
 
-**最后更新**: 2026-05-05
+**最后更新**: 2026-05-27
