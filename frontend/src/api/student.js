@@ -448,11 +448,14 @@ export function markTextAsCompleted(textId, assignmentId = null) {
 }
 
 // 开始阅读课文并创建会话记录
-export function startReading(textId, assignmentId = null) {
+export function startReading(textId, assignmentId = null, contentVersion = null) {
+  const params = {}
+  if (assignmentId) params.assignmentId = assignmentId
+  if (contentVersion) params.contentVersion = contentVersion
   return request({
     url: `/api/student/learning/texts/${textId}/start`,
     method: 'post',
-    params: assignmentId ? { assignmentId } : {}
+    params
   })
 }
 

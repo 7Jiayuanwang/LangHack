@@ -722,6 +722,14 @@ const handleVersionChange = (versionKey) => {
   textContent.value = versions.value?.[versionKey] || ''
   // 重新处理内容
   processTextContent()
+  // 上报版本阅读记录（仅登录用户，fire-and-forget）
+  if (textId.value && versionKey !== 'original') {
+    request({
+      url: `/api/public/texts/${textId.value}/version-read`,
+      method: 'post',
+      params: { version: versionKey }
+    }).catch(() => {})
+  }
 }
 
 // 清理事件监听

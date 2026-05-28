@@ -44,4 +44,16 @@ public interface TextLearningRecordMapper extends BaseMapper<TextLearningRecord>
     List<Map<String, Object>> getGroupedHistory(@Param("studentId") Long studentId,
                                                  @Param("size") int size,
                                                  @Param("offset") int offset);
+
+    @Select("SELECT content_version, COUNT(*) as count, " +
+            "COALESCE(SUM(duration_seconds), 0) as total_seconds " +
+            "FROM text_learning_records " +
+            "WHERE student_id = #{studentId} AND content_version IS NOT NULL " +
+            "GROUP BY content_version ORDER BY total_seconds DESC")
+    List<Map<String, Object>> selectVersionDistribution(@Param("studentId") Long studentId);
+
+    @Select("SELECT content_version FROM text_learning_records " +
+            "WHERE student_id = #{studentId} AND content_version IS NOT NULL " +
+            "GROUP BY content_version ORDER BY SUM(duration_seconds) DESC LIMIT 1")
+    String selectPrimaryVersion(@Param("studentId") Long studentId);
 }

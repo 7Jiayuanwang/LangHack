@@ -563,10 +563,12 @@ CREATE TABLE IF NOT EXISTS text_learning_records (
     end_time DATETIME COMMENT '阅读结束时间',
     duration_seconds INT DEFAULT 0 COMMENT '阅读时长(秒)',
     is_completed TINYINT(1) DEFAULT 0 COMMENT '是否已完成阅读',
+    content_version VARCHAR(20) DEFAULT NULL COMMENT 'Content version: original/cet4/cet6/academic/chinese_parallel',
     created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_student_text (student_id, text_id),
-    INDEX idx_assignment (assignment_id)
+    INDEX idx_assignment (assignment_id),
+    INDEX idx_tlr_student_version (student_id, content_version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章学习记录表';
 
 -- ────────────────────────────────────────
@@ -3313,3 +3315,165 @@ SELECT
 FROM users u
 JOIN school_student s ON s.id = u.school_student_id
 WHERE u.deleted = 0;
+
+-- ============================================================
+-- V31: Add content_version to text_learning_records
+-- ============================================================
+
+DROP PROCEDURE IF EXISTS _add_col_tlr_content_version$$
+CREATE PROCEDURE _add_col_tlr_content_version()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='text_learning_records'
+                     AND column_name='content_version') THEN
+        ALTER TABLE text_learning_records ADD COLUMN content_version VARCHAR(20) DEFAULT NULL
+            COMMENT 'Content version: original/cet4/cet6/academic/chinese_parallel';
+        CREATE INDEX idx_tlr_student_version ON text_learning_records(student_id, content_version);
+    END IF;
+END$$
+CALL _add_col_tlr_content_version()$$
+DROP PROCEDURE IF EXISTS _add_col_tlr_content_version$$
+
+-- ============================================================
+-- V32: recommendation_events
+-- ============================================================
+CREATE TABLE IF NOT EXISTS recommendation_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    text_id BIGINT NOT NULL,
+    event_type VARCHAR(20) NOT NULL COMMENT 'IMPRESSION/CLICK/DISMISS/BOOKMARK',
+    source VARCHAR(30) DEFAULT NULL COMMENT 'item_cf/user_cf/fallback/persona',
+    position INT DEFAULT NULL COMMENT 'Recommendation list position (0-based)',
+    persona_tags VARCHAR(200) DEFAULT NULL COMMENT 'Active persona tag codes at event time',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_re_user (user_id),
+    INDEX idx_re_text (text_id),
+    INDEX idx_re_user_type (user_id, event_type),
+    INDEX idx_re_created (created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+
+-- ============================================================
+-- V33: learner_profile_snapshots
+-- ============================================================
+CREATE TABLE IF NOT EXISTS learner_profile_snapshots (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    snapshot_date DATE NOT NULL,
+    profile_status VARCHAR(10) DEFAULT NULL,
+    risk_level VARCHAR(10) DEFAULT NULL,
+    active_days_7d INT DEFAULT 0,
+    active_days_14d INT DEFAULT 0,
+    study_minutes_14d INT DEFAULT 0,
+    inactive_days INT DEFAULT 0,
+    new_count INT DEFAULT 0,
+    learning_count INT DEFAULT 0,
+    mastered_count INT DEFAULT 0,
+    weak_ratio DOUBLE DEFAULT 0.0,
+    overdue_review_count INT DEFAULT 0,
+    overdue_review_ratio DOUBLE DEFAULT 0.0,
+    primary_content_version VARCHAR(20) DEFAULT NULL,
+    version_distribution_json VARCHAR(500) DEFAULT NULL,
+    matched_tag_codes VARCHAR(200) DEFAULT NULL,
+    tag_scores_json VARCHAR(500) DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_date (user_id, snapshot_date),
+    INDEX idx_lps_user (user_id),
+    INDEX idx_lps_date (snapshot_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+
+-- ============================================================
+-- V34: tag_recalibration_log
+-- ============================================================
+CREATE TABLE IF NOT EXISTS tag_recalibration_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tag_code VARCHAR(50) NOT NULL,
+    old_threshold VARCHAR(50) NOT NULL,
+    new_threshold VARCHAR(50) NOT NULL,
+    reason VARCHAR(500) DEFAULT NULL,
+    affected_user_count INT DEFAULT 0,
+    operator VARCHAR(50) DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_trl_tag (tag_code),
+    INDEX idx_trl_created (created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+
+-- ============================================================
+-- V35: learner_profile_summaries
+-- ============================================================
+CREATE TABLE IF NOT EXISTS learner_profile_summaries (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    summary_type VARCHAR(20) NOT NULL COMMENT 'PERSONAL/TEACHER_FACED/CLASS_COHORT',
+    language VARCHAR(10) DEFAULT 'zh',
+    summary_text TEXT NOT NULL,
+    model_id VARCHAR(100) DEFAULT NULL,
+    input_snapshot_id BIGINT DEFAULT NULL,
+    input_tags_json VARCHAR(500) DEFAULT NULL,
+    generation_time_ms INT DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_lps2_user (user_id),
+    INDEX idx_lps2_type (summary_type),
+    INDEX idx_lps2_created (created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+
+-- ============================================================
+-- V36: learner_composite_tags
+-- ============================================================
+CREATE TABLE IF NOT EXISTS learner_composite_tags (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    tag_type VARCHAR(20) NOT NULL,
+    priority INT DEFAULT 50,
+    rule_definition JSON NOT NULL,
+    action_hint VARCHAR(200) DEFAULT NULL,
+    enabled TINYINT(1) DEFAULT 1,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+
+-- ============================================================
+-- V37: 学习者画像功能开关
+-- ============================================================
+INSERT IGNORE INTO system_config (config_group, config_key, config_value, description)
+VALUES
+  ('feature_toggle', 'admin.persona_analytics',         'true', '管理员-画像分析'),
+  ('feature_toggle', 'admin.class_cohort',              'true', '管理员-班级画像分析'),
+  ('feature_toggle', 'student.learner_profile_enabled', 'true', '学生端-我的画像')$$
+
+-- ============================================================
+-- V38: 种子标签定义 + 标签管理功能开关
+-- ============================================================
+INSERT IGNORE INTO learner_composite_tags (code, display_name, tag_type, priority, rule_definition, action_hint, enabled) VALUES
+('INACTIVE_RISK', '流失风险', 'risk', 10,
+ '{"conditions":[{"source":"metric","field":"activeDays14d","operator":"LT","value":3},{"source":"metric","field":"studyMinutes14d","operator":"GT","value":0}],"combiner":"AND"}',
+ '建议增加学习提醒频率', 1),
+('VOCAB_WEAK', '词汇弱势', 'risk', 20,
+ '{"conditions":[{"source":"metric","field":"totalWords","operator":"GTE","value":30},{"source":"metric","field":"weakRatio","operator":"GTE","value":0.6}],"combiner":"AND"}',
+ '建议加强词汇复习', 1),
+('REVIEW_OVERDUE', '复习逾期', 'risk', 30,
+ '{"conditions":[{"source":"metric","field":"dueReviewCount","operator":"GT","value":0},{"source":"metric","field":"overdueReviewRatio","operator":"GTE","value":0.5}],"combiner":"AND"}',
+ '请尽快完成待复习词汇', 1),
+('CONSISTENT_LEARNER', '学习稳定', 'positive', 40,
+ '{"conditions":[{"source":"metric","field":"activeDays7d","operator":"GTE","value":5}],"combiner":"AND"}',
+ '保持良好的学习节奏', 1),
+('CONTENT_LEVEL_STUCK', '版本停滞', 'ability', 50,
+ '{"conditions":[{"source":"metric","field":"textsRead","operator":"GTE","value":40},{"source":"metric","field":"versionDistSize","operator":"EQ","value":1}],"combiner":"AND"}',
+ '建议尝试更高难度版本', 1),
+('CONTENT_LEVEL_JUMP', '版本跳跃', 'ability', 60,
+ '{"conditions":[{"source":"metric","field":"activeDays7d","operator":"GTE","value":0}],"combiner":"AND"}',
+ '注意难度跨度是否过大', 0),
+('IMPROVING_TREND', '进步趋势', 'positive', 70,
+ '{"conditions":[{"source":"metric","field":"oldActiveDays14d","operator":"GT","value":0},{"source":"metric","field":"trendRatio","operator":"GTE","value":1.3}],"combiner":"AND"}',
+ '学习活跃度明显提升', 1),
+('DECLINING_TREND', '下滑趋势', 'risk', 80,
+ '{"conditions":[{"source":"metric","field":"oldActiveDays14d","operator":"GT","value":0},{"source":"metric","field":"trendRatio","operator":"LTE","value":0.6}],"combiner":"AND"}',
+ '学习活跃度出现下降', 1),
+('REVIEW_CHAMPION', '复习达人', 'positive', 90,
+ '{"conditions":[{"source":"metric","field":"snap0OverdueRatio","operator":"LT","value":0.05},{"source":"metric","field":"snap1OverdueRatio","operator":"LT","value":0.05},{"source":"metric","field":"snap2OverdueRatio","operator":"LT","value":0.05}],"combiner":"AND"}',
+ '复习习惯非常好', 1)$$
+
+INSERT IGNORE INTO system_config (config_group, config_key, config_value, description)
+VALUES ('feature_toggle', 'admin.tag_management', 'true', '管理员-标签管理')$$
