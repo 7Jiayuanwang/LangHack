@@ -38,9 +38,13 @@ public class UpdateServiceImpl implements UpdateService {
 
     private final UpdateConfigMapper updateConfigMapper;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
+    private final AtomicBoolean isHotDeployRunning = new AtomicBoolean(false);
 
     @Value("${app.update.script:scripts/auto-update.sh}")
     private String updateScript;
+
+    @Value("${app.update.hot-deploy-script:scripts/hot-deploy.sh}")
+    private String hotDeployScript;
 
     @Value("${app.update.supported:true}")
     private boolean updateSupported;
@@ -210,9 +214,70 @@ public class UpdateServiceImpl implements UpdateService {
     }
 
     @Override
-    public boolean isSupported() {
-        return resolveUnsupportedReason() == null;
+    @UseMaster
+    public SseEmitter triggerHotDeploy(SseEmitter emitter, String branch, boolean skipBuild, boolean dryRun) {
+        ensureSupported();
+
+        if (!isHotDeployRunning.compareAndSet(false, true)) {
+            throw new BusinessException("热部署正在进行中，请等待完成后再试。");
+        }
+
+        UpdateConfig config = getConfig();
+        try {
+            executor.submit(() -> runInteractiveHotDeploy(config, emitter, branch, skipBuild, dryRun));
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            isHotDeployRunning.set(false);
+            log.error("Hot deploy task submission rejected", e);
+            throw new BusinessException("部署服务正在关闭，请稍后重试。");
+        }
+        return emitter;
     }
+
+    @Override
+    @UseMaster
+    public void runHotDeploy() {
+        if (!isSupported()) {
+            log.warn("Skipping hot deploy: {}", getUnsupportedReason());
+            return;
+        }
+
+        UpdateConfig config = getConfig();
+        if (!Boolean.TRUE.equals(config.getHotDeployEnabled())) {
+            return;
+        }
+        if (!isHotDeployRunning.compareAndSet(false, true)) {
+            log.warn("Skipping scheduled hot deploy because another hot deploy is running");
+            return;
+        }
+
+        setHotDeployRunning(config.getId());
+        boolean success = false;
+        try {
+            List<String> command = buildHotDeployCommand(config, null, false, false);
+            log.info("Scheduled hot deploy command: {}", command);
+            ProcessBuilder builder = new ProcessBuilder(command);
+            builder.redirectErrorStream(true);
+            Process process = builder.start();
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.debug("[hot-deploy] {}", line);
+                }
+            }
+
+            success = process.waitFor() == 0;
+            log.info("Scheduled hot deploy finished, success={}", success);
+        } catch (Exception e) {
+            log.error("Scheduled hot deploy failed", e);
+        } finally {
+            finishHotDeploy(config.getId(), success);
+            isHotDeployRunning.set(false);
+        }
+    }
+
+    @Override
+    public boolean isSupported() {
 
     @Override
     public String getUnsupportedReason() {
@@ -376,5 +441,102 @@ public class UpdateServiceImpl implements UpdateService {
     private boolean isWindowsHost() {
         String osName = System.getProperty("os.name", "");
         return osName.toLowerCase(Locale.ROOT).contains("win");
+    }
+
+    private void runInteractiveHotDeploy(UpdateConfig config, SseEmitter emitter,
+                                          String branch, boolean skipBuild, boolean dryRun) {
+        setHotDeployRunning(config.getId());
+        boolean success = false;
+        Process process = null;
+        try {
+            List<String> command = buildHotDeployCommand(config, branch, skipBuild, dryRun);
+            log.info("Interactive hot deploy command: {}", command);
+            ProcessBuilder builder = new ProcessBuilder(command);
+            builder.redirectErrorStream(true);
+            process = builder.start();
+
+            boolean clientDisconnected = false;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    try {
+                        emitter.send(SseEmitter.event().data(line));
+                    } catch (Exception ignored) {
+                        clientDisconnected = true;
+                        process.destroyForcibly();
+                        break;
+                    }
+                }
+            }
+
+            if (clientDisconnected) {
+                waitForProcessExit(process);
+            } else {
+                int exitCode = process.waitFor();
+                success = exitCode == 0;
+                emitter.send(SseEmitter.event().name("done")
+                        .data(success ? "HOT_DEPLOY_SUCCESS" : "HOT_DEPLOY_FAILED:" + exitCode));
+                emitter.complete();
+            }
+        } catch (Exception e) {
+            log.error("Interactive hot deploy failed", e);
+            try {
+                emitter.send(SseEmitter.event().name("done")
+                        .data("HOT_DEPLOY_ERROR:热部署执行失败，请查看服务器日志。"));
+                emitter.complete();
+            } catch (Exception ignored) {
+                // Ignore secondary SSE failures.
+            }
+        } finally {
+            finishHotDeploy(config.getId(), success);
+            isHotDeployRunning.set(false);
+        }
+    }
+
+    private List<String> buildHotDeployCommand(UpdateConfig config, String branch, boolean skipBuild, boolean dryRun) {
+        Path scriptPath = resolveHotDeployScriptPath();
+        if (!Files.isRegularFile(scriptPath)) {
+            throw new BusinessException("热部署脚本未找到: " + scriptPath);
+        }
+
+        String effectiveBranch = (branch != null && !branch.isBlank()) ? branch.trim() : defaultBranch(config);
+        if (!GIT_BRANCH_PATTERN.matcher(effectiveBranch).matches()) {
+            throw new BusinessException("无效的 git 分支名: " + effectiveBranch);
+        }
+
+        List<String> command = new ArrayList<>();
+        command.add("bash");
+        command.add(scriptPath.normalize().toString());
+        command.add("--branch");
+        command.add(effectiveBranch);
+        if (skipBuild) command.add("--skip-build");
+        if (dryRun) command.add("--dry-run");
+        return command;
+    }
+
+    private Path resolveHotDeployScriptPath() {
+        Path scriptPath = Paths.get(hotDeployScript);
+        if (!scriptPath.isAbsolute()) {
+            scriptPath = Paths.get(System.getProperty("user.dir")).resolve(scriptPath);
+        }
+        return scriptPath.normalize();
+    }
+
+    private void setHotDeployRunning(Long id) {
+        if (id == null) return;
+        UpdateConfig update = new UpdateConfig();
+        update.setId(id);
+        update.setHotDeployLastRunAt(LocalDateTime.now());
+        update.setHotDeployLastRunStatus("RUNNING");
+        updateConfigMapper.updateById(update);
+    }
+
+    private void finishHotDeploy(Long id, boolean success) {
+        if (id == null) return;
+        UpdateConfig update = new UpdateConfig();
+        update.setId(id);
+        update.setHotDeployLastRunAt(LocalDateTime.now());
+        update.setHotDeployLastRunStatus(success ? "SUCCESS" : "FAILED");
+        updateConfigMapper.updateById(update);
     }
 }

@@ -13,6 +13,10 @@ public interface UpdateService {
 
     void runUpdate();
 
+    SseEmitter triggerHotDeploy(SseEmitter emitter, String branch, boolean skipBuild, boolean dryRun);
+
+    void runHotDeploy();
+
     boolean isSupported();
 
     String getUnsupportedReason();

@@ -220,8 +220,7 @@ const NAV_ITEMS = {
     { path: '/ops/school-data',         label: '数据', icon: Coin,        featureKey: 'ops.school_data_config' },
     { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine,    featureKey: 'ops.school_data_browser' },
     { path: '/ops/logs',            label: '日志', icon: Document    },
-    { path: '/ops/update',          label: '更新', icon: Refresh     },
-    { path: '/ops/hot-deploy',      label: '热更新', icon: VideoPlay   },
+    { path: '/ops/update',          label: '部署', icon: VideoPlay   },
   ],
   admin: [
     { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null, featureKey: 'admin.dashboard' },
@@ -302,8 +301,7 @@ const ROUTE_MAP = {
     '/ops/feature-toggles': '功能开关',
     '/ops/school-data':         '学校数据',
     '/ops/school-data-browser':  '数据浏览',
-    '/ops/update':          '系统更新',
-    '/ops/hot-deploy':      '零停机热更新',
+    '/ops/update':          '部署管理',
   },
   admin: {
     '/admin/dashboard':   '管理概览',

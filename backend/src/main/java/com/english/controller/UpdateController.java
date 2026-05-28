@@ -108,10 +108,40 @@ public class UpdateController {
             data.put("gitBranch", config.getGitBranch());
             data.put("supported", updateService.isSupported());
             data.put("unsupportedReason", updateService.getUnsupportedReason());
+            data.put("hotDeployEnabled", config.getHotDeployEnabled());
+            data.put("hotDeployCronExpr", config.getHotDeployCronExpr());
+            data.put("hotDeployLastRunAt", config.getHotDeployLastRunAt() != null ? config.getHotDeployLastRunAt().toString() : "");
+            data.put("hotDeployLastRunStatus", config.getHotDeployLastRunStatus() != null ? config.getHotDeployLastRunStatus() : "NEVER");
             return Result.success(data);
         } catch (Exception e) {
             log.error("Failed to get update status", e);
             return Result.error("Failed to get update status. Please try again later.");
+        }
+    }
+
+    @GetMapping(value = "/hot-deploy/trigger", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter triggerHotDeploy(
+            @RequestParam(required = false, defaultValue = "") String branch,
+            @RequestParam(required = false, defaultValue = "false") boolean skipBuild,
+            @RequestParam(required = false, defaultValue = "false") boolean dryRun) {
+        SseEmitter emitter = new SseEmitter(60 * 60 * 1000L); // 1h timeout for blue/green
+        emitter.onTimeout(() -> log.warn("Hot deploy SSE connection timed out"));
+        emitter.onCompletion(() -> log.debug("Hot deploy SSE connection completed"));
+        try {
+            return updateService.triggerHotDeploy(emitter, branch, skipBuild, dryRun);
+        } catch (com.english.exception.BusinessException e) {
+            try {
+                emitter.send(SseEmitter.event().name("done").data("HOT_DEPLOY_ERROR:" + e.getMessage()));
+                emitter.complete();
+            } catch (Exception ignored) {}
+            return emitter;
+        } catch (Exception e) {
+            log.error("Failed to trigger hot deploy", e);
+            try {
+                emitter.send(SseEmitter.event().name("done").data("HOT_DEPLOY_ERROR:触发热部署失败，请查看服务器日志。"));
+                emitter.complete();
+            } catch (Exception ignored) {}
+            return emitter;
         }
     }
 

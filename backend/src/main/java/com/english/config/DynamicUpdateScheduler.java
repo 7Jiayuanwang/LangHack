@@ -19,6 +19,7 @@ public class DynamicUpdateScheduler {
     private final UpdateService updateService;
 
     private ScheduledFuture<?> currentFuture;
+    private ScheduledFuture<?> currentHotDeployFuture;
 
     public DynamicUpdateScheduler(@Qualifier("updateTaskScheduler") TaskScheduler taskScheduler,
                                   UpdateService updateService) {
@@ -44,10 +45,18 @@ public class DynamicUpdateScheduler {
     }
 
     public synchronized void reschedule(UpdateConfig config) {
+        // 普通更新调度
         if (currentFuture != null && !currentFuture.isCancelled()) {
             currentFuture.cancel(false);
             currentFuture = null;
             log.info("[UpdateScheduler] Previous self-update schedule cancelled");
+        }
+
+        // 热部署调度
+        if (currentHotDeployFuture != null && !currentHotDeployFuture.isCancelled()) {
+            currentHotDeployFuture.cancel(false);
+            currentHotDeployFuture = null;
+            log.info("[UpdateScheduler] Previous hot-deploy schedule cancelled");
         }
 
         if (!updateService.isSupported()) {
@@ -60,17 +69,28 @@ public class DynamicUpdateScheduler {
             return;
         }
 
-        if (!Boolean.TRUE.equals(config.getEnabled())) {
+        if (Boolean.TRUE.equals(config.getEnabled()) && config.getCronExpr() != null) {
+            try {
+                currentFuture = taskScheduler.schedule(updateService::runUpdate, new CronTrigger(config.getCronExpr()));
+                log.info("[UpdateScheduler] Registered update schedule: cron={}, branch={}",
+                        config.getCronExpr(), config.getGitBranch());
+            } catch (Exception e) {
+                log.error("[UpdateScheduler] Failed to register update schedule", e);
+            }
+        } else {
             log.info("[UpdateScheduler] Self-update scheduler disabled");
-            return;
         }
 
-        try {
-            currentFuture = taskScheduler.schedule(updateService::runUpdate, new CronTrigger(config.getCronExpr()));
-            log.info("[UpdateScheduler] Registered new schedule: cron={}, branch={}",
-                    config.getCronExpr(), config.getGitBranch());
-        } catch (Exception e) {
-            log.error("[UpdateScheduler] Failed to register schedule", e);
+        if (Boolean.TRUE.equals(config.getHotDeployEnabled()) && config.getHotDeployCronExpr() != null) {
+            try {
+                currentHotDeployFuture = taskScheduler.schedule(updateService::runHotDeploy,
+                        new CronTrigger(config.getHotDeployCronExpr()));
+                log.info("[UpdateScheduler] Registered hot-deploy schedule: cron={}", config.getHotDeployCronExpr());
+            } catch (Exception e) {
+                log.error("[UpdateScheduler] Failed to register hot-deploy schedule", e);
+            }
+        } else {
+            log.info("[UpdateScheduler] Hot-deploy scheduler disabled");
         }
     }
 }

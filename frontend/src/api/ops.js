@@ -238,6 +238,8 @@ export function getDeployHistory(limit = 50) {
   });
 }
 // triggerUpdate 用原生 EventSource，不走 axios
+// triggerHotDeploy 同样用原生 EventSource
+// 调用方式：new EventSource(`/api/ops/update/hot-deploy/trigger?branch=...&skipBuild=...&dryRun=...&token=...`)
 
 // ========== 提权 ==========
 

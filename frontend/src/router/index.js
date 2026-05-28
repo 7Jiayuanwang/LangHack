@@ -210,13 +210,7 @@ const routes = [
         path: "update",
         name: "OpsUpdate",
         component: () => import("@/views/ops/Update.vue"),
-        meta: { title: "系统更新", roles: ["OPS", "ADMIN"] },
-      },
-      {
-        path: "hot-deploy",
-        name: "OpsHotDeploy",
-        component: () => import("@/views/ops/HotDeploy.vue"),
-        meta: { title: "零停机热更新", roles: ["OPS", "ADMIN"] },
+        meta: { title: "部署管理", roles: ["OPS", "ADMIN"] },
       },
       {
         path: "feature-toggles",

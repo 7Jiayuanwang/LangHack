@@ -31,4 +31,16 @@ public class UpdateConfig {
 
     /** 最近一次执行状态：NEVER / RUNNING / SUCCESS / FAILED */
     private String lastRunStatus;
+
+    /** 是否启用定时零停机热部署 */
+    private Boolean hotDeployEnabled;
+
+    /** 热部署定时 cron 表达式 */
+    private String hotDeployCronExpr;
+
+    /** 最近一次热部署执行时间 */
+    private LocalDateTime hotDeployLastRunAt;
+
+    /** 最近一次热部署状态：NEVER / RUNNING / SUCCESS / FAILED */
+    private String hotDeployLastRunStatus;
 }
