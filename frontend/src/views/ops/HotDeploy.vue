@@ -169,7 +169,7 @@ const deploySteps = ref([])
 const loadStatus = async () => {
   statusLoading.value = true
   try {
-    const res = await request({ url: '/api/ops/hot-deploy/status', method: 'get' })
+    const res = await request({ url: '/api/ops/hot-deploy/status', method: 'get', skipErrorHandler: true })
     if (res?.code === 200) {
       blueHealthy.value = res.data?.blueHealthy ?? false
       greenHealthy.value = res.data?.greenHealthy ?? false
