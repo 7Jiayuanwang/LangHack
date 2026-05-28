@@ -6,6 +6,8 @@ import com.english.entity.Text;
 import com.english.entity.UserTextRead;
 import com.english.entity.User;
 import com.english.mapper.UserTextReadMapper;
+import com.english.mapper.TextLearningRecordMapper;
+import com.english.entity.TextLearningRecord;
 import com.english.service.ArticleVersionService;
 import com.english.service.TextService;
 import com.english.service.UserService;
@@ -73,6 +75,9 @@ public class PublicTextController {
 
     @Autowired
     private UserTextReadMapper userTextReadMapper;
+
+    @Autowired
+    private TextLearningRecordMapper textLearningRecordMapper;
 
     @Autowired
     private UserService userService;
@@ -258,6 +263,26 @@ public class PublicTextController {
         } catch (Exception e) {
             log.error("记录阅读行为失败, textId={}", textId, e);
             return Result.error("记录阅读行为失败");
+        }
+    }
+
+    @PostMapping("/{textId}/version-read")
+    public Result<Void> recordVersionRead(@PathVariable Long textId,
+                                          @RequestParam String version) {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            return Result.success(null);
+        }
+        try {
+            TextLearningRecord record = new TextLearningRecord();
+            record.setStudentId(userId);
+            record.setTextId(textId);
+            record.setContentVersion(version);
+            textLearningRecordMapper.insert(record);
+            return Result.success(null);
+        } catch (Exception e) {
+            log.warn("记录版本阅读失败, textId={}, version={}", textId, version, e);
+            return Result.success(null);
         }
     }
 

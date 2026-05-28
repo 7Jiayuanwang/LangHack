@@ -360,6 +360,7 @@ public class StudentLearningController {
     public Result<Long> startReading(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
+            @RequestParam(required = false) String contentVersion,
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -368,7 +369,7 @@ public class StudentLearningController {
             assertStudentCanRecord(studentId, textId, null, assignmentId);
 
             logger.info("开始阅读课文调用: studentId={}, textId={}, assignmentId={}", studentId, textId, assignmentId);
-            Long recordId = learningRecordsService.startReadingSession(studentId, textId, assignmentId);
+            Long recordId = learningRecordsService.startReadingSession(studentId, textId, assignmentId, contentVersion);
             logger.info("阅读会话创建成功: recordId={}", recordId);
             return Result.success(recordId);
         } catch (BusinessException e) {
@@ -559,7 +560,10 @@ public class StudentLearningController {
             // 校验学生是否有权记录该学习活动
             assertStudentCanRecord(studentId, textId, wordId, assignmentId);
 
-            learningRecordsService.recordLearning(studentId, type, wordId, duration, textId, assignmentId);
+            // 提取可选的内容版本
+            String contentVersion = params.get("contentVersion") != null ? params.get("contentVersion").toString() : null;
+
+            learningRecordsService.recordLearning(studentId, type, wordId, duration, textId, assignmentId, contentVersion);
 
             logger.debug("记录学习活动: 学生={}, 类型={}, 时长={}秒{}",
                     studentId, type, duration, assignmentId != null ? ", 任务ID=" + assignmentId : "");
