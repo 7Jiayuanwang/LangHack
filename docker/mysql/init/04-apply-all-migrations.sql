@@ -3350,7 +3350,7 @@ CREATE TABLE IF NOT EXISTS recommendation_events (
     INDEX idx_re_text (text_id),
     INDEX idx_re_user_type (user_id, event_type),
     INDEX idx_re_created (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- V33__learner_profile_snapshots.sql
@@ -3379,7 +3379,7 @@ CREATE TABLE IF NOT EXISTS learner_profile_snapshots (
     UNIQUE KEY uk_user_date (user_id, snapshot_date),
     INDEX idx_lps_user (user_id),
     INDEX idx_lps_date (snapshot_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- V34__tag_recalibration_log.sql
@@ -3395,7 +3395,7 @@ CREATE TABLE IF NOT EXISTS tag_recalibration_log (
     created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_trl_tag (tag_code),
     INDEX idx_trl_created (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- V35__learner_profile_summaries.sql
@@ -3415,7 +3415,7 @@ CREATE TABLE IF NOT EXISTS learner_profile_summaries (
     INDEX idx_lps2_user (user_id),
     INDEX idx_lps2_type (summary_type),
     INDEX idx_lps2_created (created_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- V36__learner_composite_tags.sql
@@ -3432,7 +3432,7 @@ CREATE TABLE IF NOT EXISTS learner_composite_tags (
     created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_code (code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- V37__learner_profile_feature_toggles.sql
@@ -3441,7 +3441,7 @@ INSERT IGNORE INTO system_config (config_group, config_key, config_value, descri
 VALUES
   ('feature_toggle', 'admin.persona_analytics',         'true', '管理员-画像分析'),
   ('feature_toggle', 'admin.class_cohort',              'true', '管理员-班级画像分析'),
-  ('feature_toggle', 'student.learner_profile_enabled', 'true', '学生端-我的画像')$$
+  ('feature_toggle', 'student.learner_profile_enabled', 'true', '学生端-我的画像');
 
 -- ============================================================
 -- V38__seed_base_tag_definitions.sql
@@ -3473,7 +3473,7 @@ INSERT IGNORE INTO learner_composite_tags (code, display_name, tag_type, priorit
  '学习活跃度出现下降', 1),
 ('REVIEW_CHAMPION', '复习达人', 'positive', 90,
  '{"conditions":[{"source":"metric","field":"snap0OverdueRatio","operator":"LT","value":0.05},{"source":"metric","field":"snap1OverdueRatio","operator":"LT","value":0.05},{"source":"metric","field":"snap2OverdueRatio","operator":"LT","value":0.05}],"combiner":"AND"}',
- '复习习惯非常好', 1)$$
+ '复习习惯非常好', 1);
 
 INSERT IGNORE INTO system_config (config_group, config_key, config_value, description)
-VALUES ('feature_toggle', 'admin.tag_management', 'true', '管理员-标签管理')$$
+VALUES ('feature_toggle', 'admin.tag_management', 'true', '管理员-标签管理');
