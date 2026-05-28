@@ -3317,7 +3317,7 @@ JOIN school_student s ON s.id = u.school_student_id
 WHERE u.deleted = 0;
 
 -- ============================================================
--- V31: Add content_version to text_learning_records
+-- V31__add_content_version_to_text_learning_records.sql
 -- ============================================================
 
 DROP PROCEDURE IF EXISTS _add_col_tlr_content_version$$
@@ -3335,7 +3335,7 @@ CALL _add_col_tlr_content_version()$$
 DROP PROCEDURE IF EXISTS _add_col_tlr_content_version$$
 
 -- ============================================================
--- V32: recommendation_events
+-- V32__recommendation_events.sql
 -- ============================================================
 CREATE TABLE IF NOT EXISTS recommendation_events (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -3353,7 +3353,7 @@ CREATE TABLE IF NOT EXISTS recommendation_events (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
 
 -- ============================================================
--- V33: learner_profile_snapshots
+-- V33__learner_profile_snapshots.sql
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learner_profile_snapshots (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -3382,7 +3382,7 @@ CREATE TABLE IF NOT EXISTS learner_profile_snapshots (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
 
 -- ============================================================
--- V34: tag_recalibration_log
+-- V34__tag_recalibration_log.sql
 -- ============================================================
 CREATE TABLE IF NOT EXISTS tag_recalibration_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -3398,7 +3398,7 @@ CREATE TABLE IF NOT EXISTS tag_recalibration_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
 
 -- ============================================================
--- V35: learner_profile_summaries
+-- V35__learner_profile_summaries.sql
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learner_profile_summaries (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -3418,7 +3418,7 @@ CREATE TABLE IF NOT EXISTS learner_profile_summaries (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
 
 -- ============================================================
--- V36: learner_composite_tags
+-- V36__learner_composite_tags.sql
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learner_composite_tags (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -3435,7 +3435,7 @@ CREATE TABLE IF NOT EXISTS learner_composite_tags (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
 
 -- ============================================================
--- V37: 学习者画像功能开关
+-- V37__learner_profile_feature_toggles.sql
 -- ============================================================
 INSERT IGNORE INTO system_config (config_group, config_key, config_value, description)
 VALUES
@@ -3444,7 +3444,7 @@ VALUES
   ('feature_toggle', 'student.learner_profile_enabled', 'true', '学生端-我的画像')$$
 
 -- ============================================================
--- V38: 种子标签定义 + 标签管理功能开关
+-- V38__seed_base_tag_definitions.sql
 -- ============================================================
 INSERT IGNORE INTO learner_composite_tags (code, display_name, tag_type, priority, rule_definition, action_hint, enabled) VALUES
 ('INACTIVE_RISK', '流失风险', 'risk', 10,
