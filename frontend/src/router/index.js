@@ -149,6 +149,30 @@ const routes = [
         component: () => import("@/views/admin/RecommendationAnalysis.vue"),
         meta: { title: "推荐算法分析", roles: ["ADMIN"] },
       },
+      {
+        path: "quiz-records",
+        name: "AdminQuizRecords",
+        component: () => import("@/views/admin/QuizRecords.vue"),
+        meta: { title: "做题管理", roles: ["ADMIN"] },
+      },
+      {
+        path: "persona-analytics",
+        name: "AdminPersonaAnalytics",
+        component: () => import("@/views/admin/PersonaAnalytics.vue"),
+        meta: { title: "画像分析", roles: ["ADMIN"], featureKey: "admin.persona_analytics" },
+      },
+      {
+        path: "class-cohort",
+        name: "AdminClassCohort",
+        component: () => import("@/views/admin/ClassCohortAnalysis.vue"),
+        meta: { title: "班级队列分析", roles: ["ADMIN"], featureKey: "admin.class_cohort" },
+      },
+      {
+        path: "tag-management",
+        name: "AdminTagManagement",
+        component: () => import("@/views/admin/TagManagement.vue"),
+        meta: { title: "标签管理", roles: ["ADMIN"], featureKey: "admin.tag_management" },
+      },
     ],
   },
   {
