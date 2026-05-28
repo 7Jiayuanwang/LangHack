@@ -1,14 +1,17 @@
 package com.english.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.english.dto.Result;
 import com.english.entity.User;
 import com.english.entity.Class;
 import com.english.entity.Unit;
 import com.english.entity.Word;
 import com.english.entity.Text;
+import com.english.entity.TextSimilarityMatrix;
 import com.english.entity.UnitWord;
 import com.english.entity.ArticleFavorite;
+import com.english.mapper.TextSimilarityMatrixMapper;
 import com.english.mapper.ClassMapper;
 import com.english.mapper.UnitMapper;
 import com.english.mapper.UnitWordMapper;
@@ -89,6 +92,9 @@ public class StudentLearningController {
 
     @Autowired
     private ArticleFavoriteMapper articleFavoriteMapper;
+
+    @Autowired
+    private TextSimilarityMatrixMapper textSimilarityMatrixMapper;
 
     /**
      * 获取学生仪表板数据
@@ -290,6 +296,107 @@ public class StudentLearningController {
 
             return Result.error("获取课文详情失败，请稍后重试");
         }
+    }
+
+    /**
+     * 获取相关文章推荐（基于相似度矩阵）
+     */
+    @GetMapping("/texts/{textId}/related")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
+    public Result<List<Map<String, Object>>> getRelatedTexts(@PathVariable Long textId) {
+        try {
+            List<Map<String, Object>> related = new ArrayList<>();
+
+            // 查询相似度矩阵（双向：text_id 或 similar_text_id 包含当前文章）
+            List<TextSimilarityMatrix> similarities = textSimilarityMatrixMapper.selectList(
+                    new LambdaQueryWrapper<TextSimilarityMatrix>()
+                            .and(w -> w
+                                    .eq(TextSimilarityMatrix::getTextId, textId)
+                                    .or()
+                                    .eq(TextSimilarityMatrix::getSimilarTextId, textId))
+                            .orderByDesc(TextSimilarityMatrix::getSimilarity)
+                            .last("LIMIT 10")
+            );
+
+            if (!similarities.isEmpty()) {
+                // 提取对端文章 ID
+                Set<Long> relatedIds = new LinkedHashSet<>();
+                for (TextSimilarityMatrix m : similarities) {
+                    Long otherId = m.getTextId().equals(textId) ? m.getSimilarTextId() : m.getTextId();
+                    relatedIds.add(otherId);
+                }
+
+                // 批量查询文章信息
+                List<Text> texts = textMapper.selectBatchIds(relatedIds);
+                Map<Long, Text> textMap = texts.stream()
+                        .filter(t -> Integer.valueOf(0).equals(t.getDeleted()))
+                        .collect(Collectors.toMap(Text::getId, t -> t, (a, b) -> a));
+
+                // 按相似度顺序组装结果
+                for (TextSimilarityMatrix m : similarities) {
+                    Long otherId = m.getTextId().equals(textId) ? m.getSimilarTextId() : m.getTextId();
+                    Text t = textMap.get(otherId);
+                    if (t != null) {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("id", t.getId());
+                        item.put("title", t.getTitle());
+                        item.put("difficulty", t.getDifficulty());
+                        item.put("wordCount", estimateWordCount(t.getContent()));
+                        item.put("similarity", m.getSimilarity());
+                        related.add(item);
+                    }
+                    if (related.size() >= 5) break;
+                }
+            }
+
+            // 相似度数据不足时，降级为随机文章（排除内容过短的）
+            if (related.isEmpty()) {
+                Text current = textMapper.selectById(textId);
+                if (current != null) {
+                    // 优先推荐同难度长文章
+                    List<Text> candidates = textMapper.selectList(
+                            new LambdaQueryWrapper<Text>()
+                                    .eq(Text::getDeleted, 0)
+                                    .eq(Text::getIsPublic, 1)
+                                    .eq(current.getDifficulty() != null, Text::getDifficulty, current.getDifficulty())
+                                    .ne(Text::getId, textId)
+                                    .apply("LENGTH(content) > 500")
+                    );
+                    // 同难度不足时，推荐任意难度长文章
+                    if (candidates.size() < 5) {
+                        candidates = textMapper.selectList(
+                                new LambdaQueryWrapper<Text>()
+                                        .eq(Text::getDeleted, 0)
+                                        .eq(Text::getIsPublic, 1)
+                                        .ne(Text::getId, textId)
+                                        .apply("LENGTH(content) > 500")
+                        );
+                    }
+                    // Java 端随机选取 5 篇
+                    Collections.shuffle(candidates);
+                    List<Text> fallback = candidates.subList(0, Math.min(5, candidates.size()));
+                    for (Text t : fallback) {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("id", t.getId());
+                        item.put("title", t.getTitle());
+                        item.put("difficulty", t.getDifficulty());
+                        item.put("wordCount", estimateWordCount(t.getContent()));
+                        item.put("similarity", null);
+                        related.add(item);
+                    }
+                }
+            }
+
+            return Result.success(related);
+        } catch (Exception e) {
+            logger.error("获取相关文章失败: textId={}", textId, e);
+            return Result.error("获取相关文章失败");
+        }
+    }
+
+    private int estimateWordCount(String content) {
+        if (content == null || content.isBlank()) return 0;
+        return content.trim().split("\\s+").length;
     }
 
     /**

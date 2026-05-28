@@ -157,9 +157,7 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
     }
 
     @Override
-    public List<Video> getFeaturedVideos(int count) {
-        count = Math.min(Math.max(count, 1), 50);
-
+    public List<Video> getFeaturedVideos(Integer count) {
         List<Video> featuredVideos = lambdaQuery()
                 .eq(Video::getDeleted, 0)
                 .eq(Video::getIsFeatured, 1)
@@ -181,7 +179,11 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         Collections.shuffle(randomPool);
 
         List<Video> result = new ArrayList<>();
-        if (prioritized.size() >= count) {
+        if (count == null || count <= 0) {
+            // 不限制数量，返回所有推荐视频
+            result.addAll(prioritized);
+            result.addAll(randomPool);
+        } else if (prioritized.size() >= count) {
             result = prioritized.subList(0, count);
         } else {
             result.addAll(prioritized);

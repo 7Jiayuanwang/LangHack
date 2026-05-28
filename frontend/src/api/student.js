@@ -68,6 +68,14 @@ export function getTextDetail(params) {
   })
 }
 
+// 获取相关文章推荐
+export function getRelatedTexts(textId) {
+  return request({
+    url: `/api/student/learning/texts/${textId}/related`,
+    method: 'get'
+  })
+}
+
 // 获取单词详细信息
 export function getWordDetail(wordId) {
   return request({

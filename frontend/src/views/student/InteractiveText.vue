@@ -156,6 +156,49 @@
         </div>
       </section>
 
+      <!-- Related Articles Section -->
+      <section class="related-articles" v-if="relatedTexts.length > 0">
+        <h3 class="related-title">相关推荐</h3>
+        <div class="related-cards">
+          <article
+            class="article-card"
+            v-for="(item, idx) in relatedTexts"
+            :key="item.id"
+            @click="goToRelatedArticle(item.id)"
+          >
+            <div class="article-cover">
+              <div class="cover-gradient"></div>
+              <div
+                class="cover-image"
+                :style="{
+                  background: item._gradient || relatedGradients[idx % relatedGradients.length],
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }"
+              ></div>
+              <div class="category-badge">
+                <el-icon :size="14"><Reading /></el-icon>
+                <span>文章</span>
+              </div>
+            </div>
+            <div class="article-content">
+              <h2 class="article-title">{{ item.title }}</h2>
+              <p class="article-snippet">{{ item.wordCount }} words</p>
+            </div>
+            <div class="article-footer">
+              <div class="difficulty-pill" :class="item.difficulty">
+                <el-icon :size="14"><component :is="getDiffIcon(item.difficulty)" /></el-icon>
+                <span>{{ getDiffText(item.difficulty) }}</span>
+              </div>
+              <div class="reading-time">
+                <el-icon :size="16"><Timer /></el-icon>
+                <span>{{ Math.ceil((item.wordCount || 0) / 100) }} min</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <!-- Completion Section -->
       <footer class="reader-footer" v-if="!isCompleted && !isPreviewMode">
         <div class="footer-divider"></div>
@@ -450,8 +493,8 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment } from '@element-plus/icons-vue'
-import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
+import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts } from '@element-plus/icons-vue'
+import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, getRelatedTexts } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
 import { marked } from 'marked'
@@ -552,6 +595,31 @@ const quizLoading = ref(false)
 const quizQuestions = ref([])
 const quizStartedAt = ref(null) // 进入做题界面的时间戳，用于计算每题用时
 let accumulatedTime = 0 // 累计学习时间（秒）
+
+// 相关文章推荐
+const relatedTexts = ref([])
+
+// 相关文章卡片渐变色
+const relatedGradients = [
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
+  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
+  'linear-gradient(135deg, #f5576c 0%, #ff6a00 100%)',
+  'linear-gradient(135deg, #0ba360 0%, #3cba92 100%)',
+]
+const getDiffText = (diff) => {
+  const map = { 'EASY': '简单 EASY', 'MEDIUM': '中等 INT', 'HARD': '困难 HARD' }
+  return map[diff] || diff
+}
+const getDiffIcon = (diff) => {
+  const map = { 'EASY': Medal, 'MEDIUM': Connection, 'HARD': TrendCharts }
+  return map[diff] || Medal
+}
 
 // 翻译相关
 const showTranslateDialog = ref(false)
@@ -838,6 +906,13 @@ const loadTextDetail = async () => {
 
       // 生成学习建议
       generateLearningSuggestions()
+
+      // 异步加载相关文章推荐（不阻塞主流程）
+      getRelatedTexts(textId.value).then(res => {
+        if (res?.code === 200 && Array.isArray(res.data)) {
+          relatedTexts.value = res.data
+        }
+      }).catch(() => {})
     } else {
       ElMessage.error('获取课文详情失败')
     }
@@ -1300,6 +1375,16 @@ const goBack = () => {
   }
 }
 
+// 跳转到相关文章
+const goToRelatedArticle = (id) => {
+  const from = route.query.from
+  const query = from ? { from } : {}
+  router.push({ path: `/article/${id}`, query }).then(() => {
+    const scrollEl = document.querySelector('.content-wrapper')
+    if (scrollEl) scrollEl.scrollTop = 0
+  })
+}
+
 // 为 HTML 内容中的英文单词添加点击功能
 // 注意：此函数的输入必须是已经过 DOMPurify.sanitize() 处理的 HTML
 const addClickableWordsToHtml = (sanitizedHtml) => {
@@ -1517,6 +1602,19 @@ watch(textContent, () => {
     applySharedUnderlines()
     textContentWatchTimerId = null
   }, 800) // 从 500ms 延长到 800ms，减少重复渲染
+})
+
+// 监听路由参数变化（相关文章点击时复用组件，需重新加载数据）
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    textId.value = newId
+    relatedTexts.value = []
+    quizQuestions.value = []
+    isCompleted.value = false
+    const scrollEl = document.querySelector('.content-wrapper')
+    if (scrollEl) scrollEl.scrollTop = 0
+    loadTextDetail()
+  }
 })
 
 // 处理 Markdown 中的单词点击
@@ -3042,6 +3140,180 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   color: #94a3b8;
 }
 
+/* Related Articles */
+.related-articles {
+  margin-top: 48px;
+  padding: 0 8px;
+}
+
+.related-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 16px;
+  padding-left: 4px;
+}
+
+.related-cards {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.related-cards::-webkit-scrollbar {
+  height: 4px;
+}
+
+.related-cards::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+.related-cards .article-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #f1f5f9;
+  flex: 0 0 200px;
+  height: 280px;
+}
+
+@media (hover: hover) {
+  .related-cards .article-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px -4px rgba(0,0,0,0.08);
+  }
+}
+
+.related-cards .article-card:active {
+  transform: scale(0.98);
+}
+
+.related-cards .article-cover {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  overflow: hidden;
+}
+
+.related-cards .cover-image {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.7s ease;
+}
+
+.related-cards .article-card:hover .cover-image {
+  transform: scale(1.05);
+}
+
+.related-cards .cover-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%);
+  z-index: 1;
+}
+
+.related-cards .category-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.related-cards .article-content {
+  padding: 10px 12px 6px;
+  flex: 1;
+}
+
+.related-cards .article-title {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f172a;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  height: calc(2 * 1.3em);
+}
+
+.related-cards .article-snippet {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--app-text-muted, #94a3b8);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.related-cards .article-footer {
+  padding: 0 12px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.related-cards .difficulty-pill {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.related-cards .difficulty-pill.EASY {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.related-cards .difficulty-pill.MEDIUM {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.related-cards .difficulty-pill.HARD {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.related-cards .reading-time {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--app-text-muted, #94a3b8);
+}
+
 .reader-footer {
   margin-top: 80px;
   display: flex;
@@ -3185,6 +3457,31 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .related-articles {
+    margin-top: 32px;
+  }
+
+  .related-title {
+    font-size: 16px;
+  }
+
+  .related-cards .article-card {
+    flex: 0 0 160px;
+    height: 240px;
+  }
+
+  .related-cards .article-cover {
+    height: 100px;
+  }
+
+  .related-cards .article-title {
+    font-size: 13px;
+  }
+
+  .related-cards .article-snippet {
+    font-size: 11px;
   }
 
   .reader-footer {
