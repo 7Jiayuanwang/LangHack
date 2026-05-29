@@ -546,10 +546,9 @@ onMounted(() => {
   .articles-feed {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: repeat(3, 320px);
+    grid-auto-rows: 320px;
     gap: 24px;
     padding: 0;
-    align-content: start;
   }
 
   .bottom-spacer,
@@ -581,7 +580,6 @@ onMounted(() => {
 @media (min-width: 1200px) {
   .articles-feed {
     grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(2, 320px);
   }
 }
 
