@@ -562,6 +562,8 @@ onMounted(() => {
 
   .article-card {
     height: 320px;
+    min-height: 320px;
+    max-height: 320px;
   }
 
   .article-cover {
@@ -752,6 +754,8 @@ onMounted(() => {
   width: 100%;
   min-width: 0;
   height: 340px;
+  min-height: 340px;
+  max-height: 340px;
 }
 
 @media (hover: hover) {
