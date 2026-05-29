@@ -645,71 +645,33 @@
 - 风险隔离（业务数据损坏不影响用户数据）
 - 灵活性高（可单独恢复某类数据）
 
-#### 全栈零停机热更新体系（优先级：最高）
+#### 全栈零停机热部署（已实现 — Deployer Sidecar 架构）
 
-> **目标**：任何代码变更（前端/后端/数据库/配置/基础设施）都不需要停服维护，用户零感知。
-> **策略**：三层互补——蓝绿部署负责容器层、Shadow Table 负责数据库层、滚动升级负责基础设施层。
-> **详细设计文档**：`docs/ZERO_DOWNTIME_DEPLOYMENT.md`
+> **状态**：✅ 已实现（v2.0，2026-05-29）
+> **详细文档**：`docs/ZERO_DOWNTIME_DEPLOYMENT.md`
 
-| 层次 | 策略 | 覆盖变更类型 | 停机窗口 |
-|------|------|-------------|---------|
-| **应用层** | 蓝绿部署 | 前后端代码、配置文件、静态资源 | 毫秒级（Nginx upstream 切换） |
-| **数据库层** | Shadow Table | DDL 改表、加索引、改字段、新增 NOT NULL 列 | 毫秒级（RENAME TABLE 原子切换） |
-| **基础设施层** | 滚动升级 + 主从切换 | MySQL/Redis 版本升级、Docker 配置变更 | 秒级（连接池重连） |
+**已实现功能**：
 
-**覆盖的变更类型矩阵**：
+- `scripts/hot-deploy.sh`（308 行）— 蓝绿部署脚本，Docker 环境下由 deployer sidecar 容器执行
+- `docker/deployer/Dockerfile` — 基于 `docker:27-cli`，含 git/bash/curl/docker-compose
+- `UpdateServiceImpl.java` — 两阶段执行：`docker run -d` 启动 deployer + `docker logs -f` 流式日志
+- `Update.vue` — 统一部署管理页面（配置 + 手动触发 + SSE 实时日志 + 步骤进度 + 部署历史）
+- SSE 断连恢复 — 后端重启时自动 polling 等待新后端上线
+- `@PostConstruct` 遗留 RUNNING 状态清理
 
-| 变更类型 | 走哪层 | 具体操作 |
-|---------|--------|---------|
-| 前端代码（Vue 组件/路由/样式） | 蓝绿部署 | `frontend_blue` 构建 → 切换 |
-| 后端代码（Controller/Service/Mapper） | 蓝绿部署 | `backend_blue` 构建 → 切换 |
-| `application.yml` / `.env` 配置 | 蓝绿部署 | 新容器带新配置启动 |
-| `CREATE TABLE`（新增表） | 无需热更新 | Flyway 直接执行，瞬间完成 |
-| `ALTER TABLE` / `ADD INDEX` | Shadow Table | 影子表 DDL → 双写 → 切换 |
-| `MODIFY COLUMN` / `ADD NOT NULL` | Shadow Table | 同上 |
-| MySQL 版本升级 | 滚动升级 | 从库先升 → 切换 → 原主库再升 |
-| Redis 配置变更 | 滚动重启 | Sentinel 切换 |
-
-**统一脚本**（待实现）：
-
-**`scripts/hot-deploy.sh`** — 唯一入口，自动识别变更类型并路由到对应策略。
+**架构**：
 
 ```
-scripts/hot-deploy.sh
-  ├── 阶段0: git diff 自动检测变更类型
-  │   ├── 检测到 frontend/ 变更 → 触发蓝绿部署(frontend)
-  │   ├── 检测到 backend/ 变更  → 触发蓝绿部署(backend)
-  │   ├── 检测到 docker-compose.yml/.env 变更 → 触发蓝绿部署(全量)
-  │   ├── 检测到 Flyway Alter/Add Index → 触发 Shadow Table
-  │   ├── 检测到 Flyway Create Table  → 直接执行 Flyway
-  │   └── 混合变更 → 按顺序编排：DB → 蓝绿构建 → 切换
-  ├── 阶段1: 蓝绿部署引擎（内联）
-  │   ├── docker compose -f docker-compose.blue.yml build
-  │   ├── 健康检查 + 冒烟测试
-  │   ├── Nginx upstream 切换
-  │   └── 清理 / 回滚
-  ├── 阶段2: Shadow Table 引擎（内联）
-  │   ├── 建影子表 → 开双写 → 执行 DDL → 补齐 → RENAME TABLE
-  │   └── 回滚
-  └── 阶段3: 滚动升级引擎（内联）
-      └── 从库先升 → 切主 → 原主再升
+浏览器 ──SSE──> 后端容器 ──docker run -d──> deployer 容器 (独立运行 hot-deploy.sh)
+                  │                            │
+                  └── docker logs -f ──────────┘ (流式日志)
 ```
 
-**实现要点**：
-- **单一脚本**：`scripts/hot-deploy.sh`，所有变更类型路由由该脚本自动完成
-- **自动识别**：通过 `git diff HEAD~1 --name-only` 分析变更文件路径，路由到对应策略
-- **蓝绿部署**：Nginx upstream 指向蓝/绿两套 backend/frontend 容器（不同内部端口），通过 `docker compose -f docker-compose.blue.yml up -d` 并行运行
-- **Shadow Table**：MyBatis 插件 `ShadowTableInterceptor` 实现双写，`system_config` 控制开关，`RENAME TABLE` 原子切换
-- **滚动升级**：利用现有 MySQL 主从架构，从库先升级验证，然后主从切换，原主库再升级
-- **运维面板**：新增"零停机部署"Tab，调用 `hot-deploy.sh` 并显示实时状态
-- **回滚安全**：蓝绿旧容器不删除（手动清理前可随时切回），Shadow Table 旧表保留 24h，滚动升级保留旧从库
+**蓝绿流程**：拉代码 → 构建 green 镜像 → 启动 green → 健康检查 → 切 nginx → 停 blue → 启新 blue → 切回 → 清理 green
 
-**预期收益**：
-- 一条命令完成所有热更新：`./scripts/hot-deploy.sh`
-- 任何变更无需"系统维护中"公告，用户零感知
-- 比赛/路演中展示全栈零停机运维能力，技术深度满分加分项
-- 开发迭代速度大幅提升：随时可部署，不再等"维护窗口"
-- 为多学校 SaaS 化部署打下运维基础（各校独立的变更窗口协调）
+**配置**：`PROJECT_HOST_PATH`（宿主机项目路径）+ `APP_UPDATE_SUPPORTED=true` + Docker Socket 挂载
+
+**未来可扩展**：Shadow Table（DDL 变更）、滚动升级（基础设施层）
 
 ---
 

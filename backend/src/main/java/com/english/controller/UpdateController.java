@@ -38,7 +38,6 @@ public class UpdateController {
     private final UpdateService updateService;
     private final DynamicUpdateScheduler dynamicUpdateScheduler;
 
-    /** 部署历史日志文件路径（与 auto-update.sh 中 OPS_LOG_FILE 对应） */
     @Value("${deploy.history.log:${user.home}/LangHack/logs/deploy-history.log}")
     private String deployHistoryLogPath;
 
@@ -68,34 +67,6 @@ public class UpdateController {
         }
     }
 
-    @GetMapping(value = "/trigger", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter triggerUpdate() {
-        SseEmitter emitter = new SseEmitter(30 * 60 * 1000L);
-        emitter.onTimeout(() -> log.warn("Self-update SSE connection timed out"));
-        emitter.onCompletion(() -> log.debug("Self-update SSE connection completed"));
-        try {
-            return updateService.triggerUpdate(emitter);
-        } catch (BusinessException e) {
-            try {
-                emitter.send(SseEmitter.event().name("done").data("UPDATE_ERROR:" + e.getMessage()));
-                emitter.complete();
-            } catch (Exception ignored) {
-                // Ignore SSE secondary failures.
-            }
-            return emitter;
-        } catch (Exception e) {
-            log.error("Failed to trigger update", e);
-            try {
-                emitter.send(SseEmitter.event().name("done")
-                        .data("UPDATE_ERROR:Failed to trigger update. Please try again later."));
-                emitter.complete();
-            } catch (Exception ignored) {
-                // Ignore SSE secondary failures.
-            }
-            return emitter;
-        }
-    }
-
     @GetMapping("/status")
     public Result<Map<String, Object>> getStatus() {
         try {
@@ -108,10 +79,6 @@ public class UpdateController {
             data.put("gitBranch", config.getGitBranch());
             data.put("supported", updateService.isSupported());
             data.put("unsupportedReason", updateService.getUnsupportedReason());
-            data.put("hotDeployEnabled", config.getHotDeployEnabled());
-            data.put("hotDeployCronExpr", config.getHotDeployCronExpr());
-            data.put("hotDeployLastRunAt", config.getHotDeployLastRunAt() != null ? config.getHotDeployLastRunAt().toString() : "");
-            data.put("hotDeployLastRunStatus", config.getHotDeployLastRunStatus() != null ? config.getHotDeployLastRunStatus() : "NEVER");
             return Result.success(data);
         } catch (Exception e) {
             log.error("Failed to get update status", e);
@@ -119,17 +86,17 @@ public class UpdateController {
         }
     }
 
-    @GetMapping(value = "/hot-deploy/trigger", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter triggerHotDeploy(
+    @GetMapping(value = "/trigger", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter trigger(
             @RequestParam(required = false, defaultValue = "") String branch,
             @RequestParam(required = false, defaultValue = "false") boolean skipBuild,
             @RequestParam(required = false, defaultValue = "false") boolean dryRun) {
-        SseEmitter emitter = new SseEmitter(60 * 60 * 1000L); // 1h timeout for blue/green
+        SseEmitter emitter = new SseEmitter(60 * 60 * 1000L);
         emitter.onTimeout(() -> log.warn("Hot deploy SSE connection timed out"));
         emitter.onCompletion(() -> log.debug("Hot deploy SSE connection completed"));
         try {
-            return updateService.triggerHotDeploy(emitter, branch, skipBuild, dryRun);
-        } catch (com.english.exception.BusinessException e) {
+            return updateService.trigger(emitter, branch, skipBuild, dryRun);
+        } catch (BusinessException e) {
             try {
                 emitter.send(SseEmitter.event().name("done").data("HOT_DEPLOY_ERROR:" + e.getMessage()));
                 emitter.complete();
@@ -145,10 +112,6 @@ public class UpdateController {
         }
     }
 
-    /**
-     * 获取部署历史记录（读取 auto-update.sh 写入的结构化日志）
-     * 日志格式：时间戳|事件类型|commit|描述
-     */
     @GetMapping("/deploy-history")
     public Result<List<Map<String, String>>> getDeployHistory(
             @RequestParam(defaultValue = "50") int limit) {

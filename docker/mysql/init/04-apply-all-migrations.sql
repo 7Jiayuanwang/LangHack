@@ -740,17 +740,16 @@ VALUES (1, 1, '0 0 2 * * ?', 2, 0, 30, 50, 0, 7);
 -- 4. 自动更新配置表 [原 V8]
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS update_config (
-    id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
-    cron_expr            VARCHAR(64) NOT NULL DEFAULT '0 0 3 * * ?' COMMENT 'Spring cron expression',
-    enabled              TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether scheduled self-update is enabled',
-    git_branch           VARCHAR(64) NOT NULL DEFAULT 'master' COMMENT 'tracked git branch',
-    backup_before_update TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'whether to back up the database before update',
-    last_run_at          DATETIME DEFAULT NULL COMMENT 'last execution time',
-    last_run_status      VARCHAR(16) DEFAULT 'NEVER' COMMENT 'NEVER/RUNNING/SUCCESS/FAILED'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='self-update configuration';
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    enabled         TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether scheduled hot deploy is enabled',
+    cron_expr       VARCHAR(64) NOT NULL DEFAULT '0 0 2 ? * SUN' COMMENT 'Spring cron expression',
+    git_branch      VARCHAR(64) NOT NULL DEFAULT 'master' COMMENT 'tracked git branch',
+    last_run_at     DATETIME DEFAULT NULL COMMENT 'last execution time',
+    last_run_status VARCHAR(16) DEFAULT 'NEVER' COMMENT 'NEVER/RUNNING/SUCCESS/FAILED'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='hot deploy configuration';
 
-INSERT IGNORE INTO update_config (id, cron_expr, enabled, git_branch, backup_before_update, last_run_status)
-VALUES (1, '0 0 3 * * ?', 0, 'master', 1, 'NEVER');
+INSERT IGNORE INTO update_config (id, enabled, cron_expr, git_branch, last_run_status)
+VALUES (1, 0, '0 0 2 ? * SUN', 'master', 'NEVER');
 
 -- V5__monitoring_and_access.sql
 
@@ -3099,3 +3098,34 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     FOREIGN KEY (call_log_id) REFERENCES ai_call_log(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI用户反馈表';
+
+-- V30__update_config_hot_deploy_fields.sql (幂等：已在 V31 中合并处理)
+-- V31__cleanup_update_config.sql
+-- 清理 update_config：移除普通更新字段，热部署字段成为主字段
+DROP PROCEDURE IF EXISTS v31_cleanup_update_config$$
+CREATE PROCEDURE v31_cleanup_update_config()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'update_config'
+                 AND COLUMN_NAME = 'hot_deploy_enabled') THEN
+        UPDATE update_config
+        SET enabled         = COALESCE(hot_deploy_enabled, 0),
+            cron_expr       = COALESCE(hot_deploy_cron_expr, '0 0 2 ? * SUN'),
+            last_run_at     = hot_deploy_last_run_at,
+            last_run_status = COALESCE(hot_deploy_last_run_status, 'NEVER');
+        ALTER TABLE update_config
+            DROP COLUMN hot_deploy_enabled,
+            DROP COLUMN hot_deploy_cron_expr,
+            DROP COLUMN hot_deploy_last_run_at,
+            DROP COLUMN hot_deploy_last_run_status;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'update_config'
+                 AND COLUMN_NAME = 'backup_before_update') THEN
+        ALTER TABLE update_config DROP COLUMN backup_before_update;
+    END IF;
+END$$
+CALL v31_cleanup_update_config()$$
+DROP PROCEDURE IF EXISTS v31_cleanup_update_config$$

@@ -14,33 +14,18 @@ public class UpdateConfig {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** Quartz/Spring cron 表达式，例如 "0 0 3 * * ?" */
-    private String cronExpr;
-
-    /** 是否启用定时自动更新 */
+    /** 是否启用定时热部署 */
     private Boolean enabled;
+
+    /** Spring Cron 表达式，例如 "0 0 2 ? * SUN" */
+    private String cronExpr;
 
     /** 跟踪的 git 分支 */
     private String gitBranch;
-
-    /** 更新前是否自动备份数据库 */
-    private Boolean backupBeforeUpdate;
 
     /** 最近一次执行时间 */
     private LocalDateTime lastRunAt;
 
     /** 最近一次执行状态：NEVER / RUNNING / SUCCESS / FAILED */
     private String lastRunStatus;
-
-    /** 是否启用定时零停机热部署 */
-    private Boolean hotDeployEnabled;
-
-    /** 热部署定时 cron 表达式 */
-    private String hotDeployCronExpr;
-
-    /** 最近一次热部署执行时间 */
-    private LocalDateTime hotDeployLastRunAt;
-
-    /** 最近一次热部署状态：NEVER / RUNNING / SUCCESS / FAILED */
-    private String hotDeployLastRunStatus;
 }
