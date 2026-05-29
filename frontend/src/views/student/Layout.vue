@@ -118,8 +118,7 @@ const allNavigationItems = [
   { path: '/student/dashboard', label: '发现', icon: markRaw(DataBoard), badge: null, featureKey: null },
   { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, featureKey: 'page_articles' },
   { path: '/student/courses', label: '课程', icon: markRaw(School), badge: null, featureKey: 'page_courses' },
-  { path: '/student/vocabulary', label: '单词', icon: markRaw(Document), badge: null, featureKey: 'page_vocabulary' },
-  { path: '/student/word-recite', label: '背单词', icon: markRaw(Clock), badge: null, featureKey: 'page_word_recite' },
+  { path: '/student/words', label: '单词', icon: markRaw(Document), badge: null, featureKey: 'page_word_recite' },
   { path: '/student/my-study', label: '学习', icon: markRaw(Edit), badge: null, featureKey: 'page_my_study' }
 ]
 
@@ -146,6 +145,7 @@ const pageTitle = computed(() => {
     '/student/course-selections': '我的选课',
     '/student/articles': '',
     '/articles': '',
+    '/student/words': '单词',
     '/student/vocabulary': '单词本',
     '/student/word-recite': '单词背诵',
     '/student/ai-video': 'AI 视频字幕',

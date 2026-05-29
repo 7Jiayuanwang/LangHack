@@ -1,6 +1,7 @@
 package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.english.entity.UnitWord;
@@ -133,6 +134,7 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
         vocabularyBook.setMasteryLevel("NEW");
         vocabularyBook.setReviewCount(0);
         vocabularyBook.setAddedTime(LocalDateTime.now());
+        vocabularyBook.setSourceType("MANUAL");
 
         vocabularyBookMapper.insert(vocabularyBook);
     }
@@ -140,14 +142,39 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
     @Override
     @Transactional
     public void addToVocabularyWithLevel(Long studentId, Long wordId, String masteryLevel) {
+        addToVocabularyWithLevel(studentId, wordId, masteryLevel, "MANUAL");
+    }
+
+    /**
+     * 带来源标记的加词方法
+     */
+    @Transactional
+    public void addToVocabularyWithLevel(Long studentId, Long wordId, String masteryLevel, String sourceType) {
         VocabularyBook vocabularyBook = new VocabularyBook();
         vocabularyBook.setStudentId(studentId);
         vocabularyBook.setWordId(wordId);
         vocabularyBook.setMasteryLevel(masteryLevel);
         vocabularyBook.setReviewCount(0);
         vocabularyBook.setAddedTime(LocalDateTime.now());
+        vocabularyBook.setSourceType(sourceType != null ? sourceType : "MANUAL");
 
         vocabularyBookMapper.insert(vocabularyBook);
+    }
+
+    @Override
+    @Transactional
+    public boolean upgradeSourceTypeToArticle(Long studentId, Long wordId) {
+        QueryWrapper<VocabularyBook> wrapper = new QueryWrapper<>();
+        wrapper.eq("student_id", studentId)
+                .eq("word_id", wordId);
+        VocabularyBook existing = vocabularyBookMapper.selectOne(wrapper);
+        if (existing == null) return false;
+        if ("ARTICLE".equals(existing.getSourceType())) return false;
+        // 用 UpdateWrapper 仅更新 source_type，避免实体构造器里的非空默认值（mastery_level=NEW、ef=2.5 等）覆盖原有数据
+        UpdateWrapper<VocabularyBook> update = new UpdateWrapper<>();
+        update.eq("id", existing.getId()).set("source_type", "ARTICLE");
+        vocabularyBookMapper.update(null, update);
+        return true;
     }
 
     @Override
@@ -182,6 +209,12 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
 
         if (masteryLevel != null && !masteryLevel.isEmpty()) {
             wrapper.eq("mastery_level", masteryLevel);
+        }
+
+        // 来源过滤：支持按 ARTICLE / MANUAL 过滤
+        String sourceType = (String) params.get("sourceType");
+        if (sourceType != null && !sourceType.isEmpty()) {
+            wrapper.eq("source_type", sourceType);
         }
 
         // 排序：支持多种排序方式，默认按添加时间降序
@@ -298,6 +331,7 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
                 wordMap.put("interval", vb.getIntervalDays());
                 wordMap.put("easinessFactor", vb.getEasinessFactor());
                 wordMap.put("nextReviewTime", vb.getNextReviewTime());
+                wordMap.put("sourceType", vb.getSourceType());
 
                 records.add(wordMap);
             }

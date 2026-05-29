@@ -79,12 +79,19 @@ public class VocabularyBook {
     @TableField("next_review_time")
     private LocalDateTime nextReviewTime;
 
+    /**
+     * 来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他
+     */
+    @TableField("source_type")
+    private String sourceType = "MANUAL";
+
     public VocabularyBook() {
         this.reviewCount = 0;
         this.masteryLevel = "NEW";
         this.repetition = 0;
         this.intervalDays = 0;
         this.easinessFactor = 2.5;
+        this.sourceType = "MANUAL";
     }
 
     // Getters and Setters
@@ -174,6 +181,14 @@ public class VocabularyBook {
 
     public void setNextReviewTime(LocalDateTime nextReviewTime) {
         this.nextReviewTime = nextReviewTime;
+    }
+
+    public String getSourceType() {
+        return sourceType;
+    }
+
+    public void setSourceType(String sourceType) {
+        this.sourceType = sourceType;
     }
 
     @Override

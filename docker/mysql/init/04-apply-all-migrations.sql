@@ -3313,3 +3313,44 @@ SELECT
 FROM users u
 JOIN school_student s ON s.id = u.school_student_id
 WHERE u.deleted = 0;
+
+-- V26__add_vocabulary_source_type.sql
+-- 生词本来源标记：区分文章阅读加入的词和其他来源的词
+
+DROP PROCEDURE IF EXISTS _add_vocabulary_source_type$$
+CREATE PROCEDURE _add_vocabulary_source_type()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE table_schema = DATABASE()
+          AND table_name = 'vocabulary_books'
+          AND column_name = 'source_type'
+    ) THEN
+        ALTER TABLE vocabulary_books
+        ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
+        COMMENT '来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他'
+        AFTER next_review_time;
+    END IF;
+END$$
+CALL _add_vocabulary_source_type()$$
+DROP PROCEDURE IF EXISTS _add_vocabulary_source_type$$
+
+-- 历史数据全部标记为 MANUAL（旧数据无法确定来源）
+UPDATE vocabulary_books SET source_type = 'MANUAL'
+WHERE source_type IS NULL OR source_type = '';
+
+-- 给 student_id + source_type 加索引，提升按来源查询的性能
+DROP PROCEDURE IF EXISTS _idx_vocabulary_source$$
+CREATE PROCEDURE _idx_vocabulary_source()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE table_schema = DATABASE()
+          AND table_name = 'vocabulary_books'
+          AND index_name = 'idx_vocabulary_source'
+    ) THEN
+        CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
+    END IF;
+END$$
+CALL _idx_vocabulary_source()$$
+DROP PROCEDURE IF EXISTS _idx_vocabulary_source$$

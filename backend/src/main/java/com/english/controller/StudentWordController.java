@@ -217,6 +217,7 @@ public class StudentWordController {
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) Long courseId,
+            @RequestParam(required = false) String sourceType,
             Authentication authentication) {
 
         try {
@@ -235,6 +236,7 @@ public class StudentWordController {
             params.put("sortBy", sortBy);
             params.put("difficulty", difficulty);
             params.put("courseId", courseId);
+            params.put("sourceType", sourceType);
 
             Map<String, Object> result = vocabularyBooksService.getVocabularyWithPagination(params);
 
@@ -280,6 +282,12 @@ public class StudentWordController {
 
             // 更新生词本记录
             vocabularyBooksService.updateMasteryLevel(studentId, wordId, masteryLevel, request);
+
+            // 可选：把记录升级为 ARTICLE 来源
+            // 用于"在生词本里把已掌握的词重置为学习中"场景：让这个词出现在"每日背诵-加入文章生词"列表里
+            if (Boolean.TRUE.equals(request.get("upgradeSourceToArticle"))) {
+                vocabularyBooksService.upgradeSourceTypeToArticle(studentId, wordId);
+            }
 
             // 记录复习记录
             if (isCorrectObj != null) {

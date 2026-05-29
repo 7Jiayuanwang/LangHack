@@ -21,6 +21,67 @@
       </div>
     </div>
 
+    <!-- 是否加入文章生词选择界面 -->
+    <div class="article-choice-selection" v-else-if="includeArticleWords === null">
+      <div class="page-header">
+        <h2 class="page-title">是否加入文章生词？</h2>
+        <p class="page-subtitle">把生词本里筛选过的文章词加进每日清单一起背诵</p>
+      </div>
+
+      <div class="article-choice-options">
+        <div class="choice-card" @click="selectIncludeArticle(true)">
+          <span class="choice-icon">📚</span>
+          <span class="choice-title">加入文章生词</span>
+          <span class="choice-desc">每日清单 = 自选文章词数 + {{ currentVocabularyName }}</span>
+          <span class="choice-extra" v-if="articleWordsCount !== null">
+            当前可用 {{ articleWordsCount }} 个
+            <button class="refresh-mini-btn" @click.stop="refreshArticleWordsCount" :disabled="articleWordsLoading">
+              {{ articleWordsLoading ? '刷新中…' : '刷新' }}
+            </button>
+          </span>
+        </div>
+        <div class="choice-card" @click="selectIncludeArticle(false)">
+          <span class="choice-icon">📖</span>
+          <span class="choice-title">仅背诵词库</span>
+          <span class="choice-desc">每日清单 = {{ currentVocabularyName }}</span>
+        </div>
+      </div>
+
+      <div class="daily-footer">
+        <button @click="backToSelection" class="text-btn">返回</button>
+      </div>
+    </div>
+
+    <!-- 每日文章生词数量选择界面 -->
+    <div class="daily-count-selection" v-else-if="includeArticleWords === true && articleDailyCount === null">
+      <div class="page-header">
+        <h2 class="page-title">每天背几个文章生词？</h2>
+        <p class="page-subtitle">从生词本里挑选若干文章词加入每日清单，剩余名额自动用 {{ currentVocabularyName }} 补齐</p>
+      </div>
+
+      <div class="progress-info">
+        <span>可用文章生词：{{ articleWordsCount }} 个</span>
+      </div>
+
+      <div class="count-options">
+        <div
+          v-for="option in filteredArticleCountOptions"
+          :key="option.value"
+          class="count-card"
+          :class="{ insufficient: option.insufficient }"
+          @click="selectArticleDailyCount(option)"
+        >
+          <span class="count-number">{{ option.display }}</span>
+          <span class="count-label" v-if="option.label">个/天</span>
+          <span class="count-hint" v-if="option.hint">{{ option.hint }}</span>
+        </div>
+      </div>
+
+      <div class="daily-footer">
+        <button @click="backToIncludeChoice" class="text-btn">返回</button>
+      </div>
+    </div>
+
     <!-- 每日复习数量选择界面 -->
     <div class="daily-count-selection" v-else-if="!dailyCountSelected">
       <div class="page-header">
@@ -54,9 +115,17 @@
     <!-- 背诵界面 -->
     <div class="recitation-view" v-else>
       <!-- 顶部概览 -->
-      <div class="page-header">
-        <h2 class="page-title">{{ currentVocabularyName }}</h2>
-        <p class="page-subtitle">每日复习 {{ dailyCount }} 个单词</p>
+      <div class="recite-header-bar">
+        <div class="page-header recite-page-header">
+          <h2 class="page-title">{{ currentVocabularyName }}</h2>
+          <p class="page-subtitle">每日复习 {{ dailyCount + (includeArticleWords ? (articleDailyCount || 0) : 0) }} 个单词</p>
+        </div>
+        <button class="settings-gear-btn" @click="openSettingsDialog" title="修改每日背诵设置">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
       </div>
 
       <!-- 统计卡片 -->
@@ -112,21 +181,49 @@
           </div>
         </div>
 
-        <!-- 直接选择题 -->
-        <div class="action-buttons">
-          <div class="quiz-error shake" v-if="quizError">
-            答错了，请重新选择！
-          </div>
-          <div class="quiz-options">
-            <button
-              v-for="(option, index) in quizOptions"
-              :key="index"
-              @click="selectQuizOption(option)"
-              class="btn quiz-btn"
-            >
-              {{ option }}
-            </button>
-          </div>
+        <div class="quiz-error shake" v-if="quizError">
+          答错了，请重新选择！
+        </div>
+
+        <div class="quiz-options" v-if="showQuiz && !showMeaning && quizOptions.length">
+          <button
+            v-for="(option, index) in quizOptions"
+            :key="index"
+            @click="selectQuizOption(option)"
+            class="btn quiz-btn"
+            :disabled="isHandlingWordAction"
+          >
+            {{ option }}
+          </button>
+        </div>
+
+        <!-- 认识 / 不认识操作 -->
+        <div class="action-buttons" v-if="!showMeaning">
+          <button
+            class="btn action-btn action-btn--unknown"
+            :disabled="isHandlingWordAction"
+            @click="handleDontKnowWord"
+          >
+            不认识
+          </button>
+          <button
+            class="btn action-btn action-btn--known"
+            :disabled="isHandlingWordAction"
+            @click="handleKnowWord"
+          >
+            认识
+          </button>
+        </div>
+
+        <!-- 查看释义后的下一个按钮 -->
+        <div class="next-word-action" v-if="showMeaning">
+          <button
+            class="btn next-word-btn"
+            :disabled="isHandlingWordAction"
+            @click="handleNextWordAfterMeaning"
+          >
+            下一个单词
+          </button>
         </div>
       </div>
 
@@ -198,15 +295,69 @@
         <button @click="exitDeepRecite" class="text-btn">退出</button>
       </div>
     </div>
+
+    <!-- 修改设置弹窗：齿轮按钮和完成态"返回设置"都打开这个 -->
+    <el-dialog
+      v-model="settingsDialogVisible"
+      title="修改每日背诵设置"
+      width="420px"
+      :close-on-click-modal="false"
+      class="settings-dialog"
+    >
+      <div class="settings-form">
+        <div class="form-row">
+          <label class="form-label">CET 每日词数</label>
+          <el-input-number
+            v-model="draftDailyCount"
+            :min="1"
+            :max="500"
+            :step="5"
+            controls-position="right"
+            style="width: 160px"
+          />
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">加入文章生词</label>
+          <el-switch v-model="draftIncludeArticle" />
+        </div>
+
+        <div class="form-row" v-if="draftIncludeArticle">
+          <label class="form-label">文章每日词数</label>
+          <el-input-number
+            v-model="draftArticleDailyCount"
+            :min="0"
+            :max="articleWordsCount || 0"
+            :step="5"
+            controls-position="right"
+            style="width: 160px"
+          />
+          <span class="form-hint">当前可用 {{ articleWordsCount || 0 }} 个</span>
+        </div>
+
+        <div class="form-row form-tip">
+          <span>保存后会按新数量重新挑选待复习单词，今日已复习的计数不变。</span>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer-row">
+          <el-button type="warning" plain @click="goChangeVocabFromDialog">换词库</el-button>
+          <span class="dialog-footer-spacer"></span>
+          <el-button @click="cancelSettings">取消</el-button>
+          <el-button type="primary" @click="saveSettings">保存</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { calculateEbbinghaus } from './ebbinghaus'
-import { updateMasteryLevel, addWordToVocabularyByWord } from '@/api/student'
+import { calculateEbbinghaus, shouldReviewWord } from './ebbinghaus'
+import { updateMasteryLevel, addWordToVocabularyByWord, getVocabularyList } from '@/api/student'
 import { useUserStore } from '@/store/user'
 
 const router = useRouter()
@@ -252,9 +403,23 @@ const quizOptions = ref([])
 const showQuiz = ref(false)
 const wordDetails = ref(null)
 const quizError = ref(false)
+const isHandlingWordAction = ref(false)
 const dailyCount = ref(20)
 const dailyCountSelected = ref(false)
 const dailyCountOptions = ref([10, 20, 30, 50, 100])
+// 是否加入文章生词：null=未选 / true / false
+const includeArticleWords = ref(null)
+const articleWords = ref([])
+const articleWordsCount = ref(null)
+const articleWordsLoading = ref(false)
+// 每日要背的文章生词数量（null=未选；超过可用数量时自动取全部）
+const articleDailyCount = ref(null)
+const articleDailyCountOptions = ref([10, 20, 30, 50, 100])
+// 修改设置弹窗：编辑过程中改 draft，保存才覆盖真实状态 + 写 localStorage
+const settingsDialogVisible = ref(false)
+const draftDailyCount = ref(20)
+const draftIncludeArticle = ref(false)
+const draftArticleDailyCount = ref(0)
 // 深度背诵状态
 const showDeepRecite = ref(false)
 const deepReciteWords = ref([])
@@ -274,6 +439,27 @@ const currentVocabularyName = computed(() => {
 })
 
 const currentWord = computed(() => pendingWords.value[currentWordIndex.value] || null)
+
+// 背诵索引的 localStorage key：包含"是否加入文章词"维度，避免切换文章生词开关后复用错误的索引
+const vocabIndexKey = () => {
+  const includeFlag = includeArticleWords.value ? 'A' : 'N'
+  return `vocab_index_${currentUserId.value}_${selectedVocabulary.value}_${includeFlag}`
+}
+
+// 清掉某词库下所有维度（A/N）的索引 key
+// 用于"改设置 / 换词库 / loadMoreWords"——这些场景下旧索引指向的位置已经无意义，留着会让下次进入跳到陌生位置
+const clearAllVocabIndexKeys = (vocabId = selectedVocabulary.value) => {
+  if (!vocabId) return
+  localStorage.removeItem(`vocab_index_${currentUserId.value}_${vocabId}_A`)
+  localStorage.removeItem(`vocab_index_${currentUserId.value}_${vocabId}_N`)
+}
+
+// 跨会话设置持久化的 localStorage key 集中管理
+// 让"选过一次设置之后，下次直接进背诵页"成为可能；同时配合"换词库/重置设置"统一清理
+const selectedVocabKey = () => `selectedVocabulary_${currentUserId.value}`
+const dailyCountKey = (vocabId = selectedVocabulary.value) => `daily_count_${currentUserId.value}_${vocabId}`
+const articleDailyCountKey = (vocabId = selectedVocabulary.value) => `article_daily_count_${currentUserId.value}_${vocabId}`
+const includeArticleKey = (vocabId = selectedVocabulary.value) => `include_article_${currentUserId.value}_${vocabId}`
 
 const currentDeepWord = computed(() => deepReciteWords.value[currentDeepWordIndex.value] || null)
 
@@ -313,14 +499,17 @@ const speakWord = () => {
 // 生成测验选项
 const generateQuizOptions = () => {
   if (!currentWord.value) return
-  
+
   const correctMeaning = currentWord.value.meaning
-  const otherWords = allWords.value.filter(w => w.word !== currentWord.value.word && !w.mastered)
-  
+  // 干扰项池：CET 词库未掌握的 + 当前文章生词池，足够多样
+  const cetPool = allWords.value.filter(w => w.word !== currentWord.value.word && !w.mastered)
+  const articlePool = articleWords.value.filter(w => w.word !== currentWord.value.word)
+  const otherWords = [...cetPool, ...articlePool]
+
   // 随机选择3个错误选项
   const shuffled = otherWords.sort(() => Math.random() - 0.5)
   const wrongOptions = shuffled.slice(0, 3).map(w => w.meaning)
-  
+
   // 组合所有选项并打乱顺序
   const allOptions = [correctMeaning, ...wrongOptions]
   quizOptions.value = allOptions.sort(() => Math.random() - 0.5)
@@ -328,36 +517,75 @@ const generateQuizOptions = () => {
 }
 
 // 处理选择题选项
-const selectQuizOption = (selectedMeaning) => {
-  if (!currentWord.value || quizError.value) return
+const selectQuizOption = async (selectedMeaning) => {
+  if (!currentWord.value || quizError.value || isHandlingWordAction.value) return
 
   if (selectedMeaning === currentWord.value.meaning) {
     // 选对：标记为掌握，进入下一个单词
-    rateWord(5)
-    showQuiz.value = false
-    quizError.value = false
+    isHandlingWordAction.value = true
+    try {
+      await rateWord(5)
+      showQuiz.value = false
+      quizError.value = false
+    } finally {
+      isHandlingWordAction.value = false
+    }
   } else {
-    // 选错：增加不认识计数，显示错误提示，重新选择
+    // 选错：累计不认识次数 + 持久化，但不结束本词、不计入今日完成数
+    // 不立刻回写后端：避免与后续"选对"时的 MASTERED 同步发生竞争（晚到的 LEARNING 会把 MASTERED 覆写）
+    // 标记 synced=false 后由下次进入页面的 resyncPendingWords 兜底补传
     currentWord.value.unknownCount = (currentWord.value.unknownCount || 0) + 1
     currentWord.value.lastReviewTime = new Date().toISOString()
-    saveProgress()
+    if (currentWord.value.source !== 'article') {
+      currentWord.value.synced = false
+      saveProgress()
+    }
     quizError.value = true
-    todayReviewed.value++
-    const today = new Date().toDateString()
-    localStorage.setItem(`todayReviewed_${currentUserId.value}`, todayReviewed.value.toString())
-    localStorage.setItem(`lastReviewDate_${currentUserId.value}`, today)
     setTimeout(() => {
       quizError.value = false
     }, 1500)
   }
 }
 
+const handleKnowWord = async () => {
+  if (!currentWord.value || isHandlingWordAction.value) return
+  isHandlingWordAction.value = true
+  try {
+    await rateWord(5)
+  } finally {
+    isHandlingWordAction.value = false
+  }
+}
+
+const handleDontKnowWord = () => {
+  if (!currentWord.value || isHandlingWordAction.value) return
+  showMeaning.value = true
+  // 不自动切换下一个，等待用户点击"下一个单词"按钮
+}
+
+const handleNextWordAfterMeaning = async () => {
+  if (!currentWord.value || isHandlingWordAction.value) return
+  isHandlingWordAction.value = true
+  try {
+    await rateWord(0)
+    showMeaning.value = false
+  } finally {
+    isHandlingWordAction.value = false
+  }
+}
+
 // 获取单词详细信息
+// 防止"用户连续点认识/不认识 → 多个 fetch 并发 → 慢请求覆盖快请求"导致显示错位
+// 每次发起前自增 token，回写 wordDetails 之前比对，旧请求直接丢弃
+let fetchWordDetailsToken = 0
+
 const fetchWordDetails = async (word) => {
+  const myToken = ++fetchWordDetailsToken
   try {
     const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`)
     if (!response.ok) throw new Error('API请求失败')
     const data = await response.json()
+    if (myToken !== fetchWordDetailsToken) return
     if (data && data.length > 0) {
       const entry = data[0]
       wordDetails.value = {
@@ -369,6 +597,7 @@ const fetchWordDetails = async (word) => {
       wordDetails.value = null
     }
   } catch (error) {
+    if (myToken !== fetchWordDetailsToken) return
     console.error('获取单词详情失败:', error)
     wordDetails.value = null
   }
@@ -377,8 +606,11 @@ const fetchWordDetails = async (word) => {
 // 深度背诵相关函数
 const startDeepRecite = () => {
   if (showDeepRecite.value) exitDeepRecite()
-  // 获取今天背诵过的单词（从 allWords 中筛选已复习的）
-  const todayWords = allWords.value.filter(w => w.lastReviewTime && new Date(w.lastReviewTime).toDateString() === new Date().toDateString())
+  // 获取今天背诵过的单词：CET 词来自 allWords，文章词来自 pendingWords（未持久化到 allWords）
+  const isToday = (t) => t && new Date(t).toDateString() === new Date().toDateString()
+  const cetTodayWords = allWords.value.filter(w => isToday(w.lastReviewTime))
+  const articleTodayWords = pendingWords.value.filter(w => w.source === 'article' && isToday(w.lastReviewTime))
+  const todayWords = [...cetTodayWords, ...articleTodayWords]
   if (todayWords.length === 0) {
     ElMessage.warning('今天还没有背诵过单词')
     return
@@ -427,7 +659,9 @@ const checkDeepAnswer = () => {
     answerStatus.value = 'wrong'
     // 增加单词出现频率
     currentDeepWord.value.unknownCount = (currentDeepWord.value.unknownCount || 0) + 1
-    saveProgress()
+    if (currentDeepWord.value.source !== 'article') {
+      saveProgress()
+    }
     // 生成选项提示
     generateDeepOptions()
     showDeepOptions.value = true
@@ -506,43 +740,284 @@ watch(currentWord, (newWord) => {
 // 选择词库
 const selectVocabulary = async (vocab) => {
   try {
-    selectedVocabulary.value = vocab.id
-    localStorage.setItem(`selectedVocabulary_${currentUserId.value}`, vocab.id)
-    await loadVocabularyData(vocab.file)
-    // 恢复之前设置的每日复习量（作为默认值），但不直接进入背诵界面
-    const savedDailyCount = localStorage.getItem(`daily_count_${currentUserId.value}_${selectedVocabulary.value}`)
-    if (savedDailyCount) {
-      dailyCount.value = parseInt(savedDailyCount)
-    }
-    // 始终显示每日复习量选择界面，让用户可以重新选择
-    dailyCountSelected.value = false
+    await tryAutoEnterRecite(vocab.id)
   } catch (error) {
     ElMessage.error('加载词库失败：' + error.message)
   }
+}
+
+// 拉取生词本中未掌握的文章生词（按 SM-2 到期/逾期优先）
+const loadArticleWords = async () => {
+  articleWordsLoading.value = true
+  try {
+    const res = await getVocabularyList({ page: 1, size: 999, masteryLevel: '', sourceType: 'ARTICLE' })
+    const records = Array.isArray(res?.data?.records) ? res.data.records : []
+    const list = records
+      .filter(w => w.masteryLevel !== 'MASTERED')
+      .map(w => ({
+        id: `article_${w.wordId || w.id}`,
+        wordId: w.wordId || w.id,
+        word: w.word,
+        meaning: w.definition,
+        source: 'article',
+        nextReviewTime: w.nextReviewTime || null,
+        reviewCount: w.reviewCount || 0,
+        interval: 0,
+        easinessFactor: 2.5,
+        lastReviewTime: null,
+        mastered: false,
+        unknownCount: 0,
+        synced: true
+      }))
+      .sort((a, b) => {
+        const ta = a.nextReviewTime ? new Date(a.nextReviewTime) : new Date(0)
+        const tb = b.nextReviewTime ? new Date(b.nextReviewTime) : new Date(0)
+        return ta - tb
+      })
+    articleWords.value = list
+    articleWordsCount.value = list.length
+  } catch (error) {
+    console.error('拉取文章生词失败:', error)
+    articleWords.value = []
+    articleWordsCount.value = 0
+  } finally {
+    articleWordsLoading.value = false
+  }
+}
+
+// 手动刷新"当前可用文章生词"的数量
+// 用户在生词本里把已掌握的词重置为学习中后，点击这里可以让计数立即同步
+const refreshArticleWordsCount = async () => {
+  await loadArticleWords()
+  ElMessage.success(`已同步，当前可用 ${articleWordsCount.value} 个`)
+}
+
+// 一站式装载：选择 / 恢复词库后，能跳过哪步设置就跳过哪步
+// 复用入口：onMounted 时根据 selectedVocabKey() 自动恢复；用户在词库选择卡点击时也会走这里
+// 三项设置（includeArticleWords / articleDailyCount / dailyCount）都已持久化时，直接进入背诵页；否则停在缺失的那一步
+const tryAutoEnterRecite = async (vocabId) => {
+  const vocab = vocabularies.value.find(v => v.id === vocabId)
+  if (!vocab) {
+    // 词库列表里找不到这个 id（比如配置变更），清掉旧记录回到词库选择
+    localStorage.removeItem(selectedVocabKey())
+    return
+  }
+
+  // 进入新词库前重置所有向导状态；下面会根据 localStorage 把能恢复的恢复回来
+  selectedVocabulary.value = vocabId
+  dailyCountSelected.value = false
+  includeArticleWords.value = null
+  articleDailyCount.value = null
+  localStorage.setItem(selectedVocabKey(), vocabId)
+
+  // 只解析 CSV + 恢复 vocab_progress；loadVocabularyData 故意不内部调 loadWords()
+  // 由本函数末尾或 selectDailyCount 在所有依赖项就绪后统一调一次，避免 watch(currentWord) 重复触发
+  await loadVocabularyData(vocab.file)
+
+  const savedDailyCountRaw = localStorage.getItem(dailyCountKey())
+
+  // 未登录：不存在文章生词概念
+  if (!userStore.token) {
+    includeArticleWords.value = false
+    articleWords.value = []
+    articleWordsCount.value = 0
+    articleDailyCount.value = 0
+    if (savedDailyCountRaw) {
+      dailyCount.value = parseInt(savedDailyCountRaw) || dailyCount.value
+      dailyCountSelected.value = true
+      loadWords()
+    }
+    return
+  }
+
+  // 登录用户：拉文章词数（既作为选择卡片展示，也用于钳制 articleDailyCount）
+  await loadArticleWords()
+
+  const savedIncludeArticleRaw = localStorage.getItem(includeArticleKey())
+  const savedArticleDailyCountRaw = localStorage.getItem(articleDailyCountKey())
+
+  // 恢复"是否加入文章生词"
+  if (savedIncludeArticleRaw === '1') {
+    includeArticleWords.value = true
+    if (savedArticleDailyCountRaw !== null) {
+      const saved = parseInt(savedArticleDailyCountRaw) || 0
+      const available = articleWordsCount.value || 0
+      // 文章词被用户在生词本里掌握掉之后总数会下降；用 min 钳制避免越界
+      const clamped = Math.min(saved, available)
+      articleDailyCount.value = clamped
+      // 只有 available > 0 时才回写——避免 loadArticleWords 网络失败导致 articleWordsCount=0 时，
+      // 把用户真实偏好（比如 10）永久覆写成 0；下次加载成功也救不回来
+      if (clamped !== saved && available > 0) {
+        localStorage.setItem(articleDailyCountKey(), clamped.toString())
+      }
+    }
+  } else if (savedIncludeArticleRaw === '0') {
+    includeArticleWords.value = false
+    // include=false 时不参与选词，但仍恢复上次的数字
+    // 这样后续打开"修改设置"弹窗，再切回开启时能直接看到上次的值
+    if (savedArticleDailyCountRaw !== null) {
+      articleDailyCount.value = parseInt(savedArticleDailyCountRaw) || 0
+    } else {
+      articleDailyCount.value = 0
+    }
+  }
+  // savedIncludeArticleRaw 为 null：includeArticleWords 保持 null，向导停在"是否加入"
+
+  // 恢复 CET 每日词数
+  if (savedDailyCountRaw) {
+    const parsed = parseInt(savedDailyCountRaw)
+    if (!isNaN(parsed) && parsed > 0) dailyCount.value = parsed
+  }
+
+  // 三项全齐：直接落地到背诵页
+  const includeChosen = includeArticleWords.value !== null
+  const articleCountChosen = includeArticleWords.value === false || articleDailyCount.value !== null
+  const dailyCountSaved = !!savedDailyCountRaw
+  if (includeChosen && articleCountChosen && dailyCountSaved) {
+    dailyCountSelected.value = true
+    loadWords()
+  }
+}
+
+const selectIncludeArticle = (include) => {
+  includeArticleWords.value = include
+  // 持久化选择，方便下次进入直接跳过
+  localStorage.setItem(includeArticleKey(), include ? '1' : '0')
+  // 选择不加入时直接跳过文章数量选择，并把 articleDailyCount 也持久化为 0
+  if (!include) {
+    articleDailyCount.value = 0
+    localStorage.setItem(articleDailyCountKey(), '0')
+  }
+}
+
+// 打开"修改设置"弹窗：把当前真实值复制到草稿
+// 用 draft 是为了取消时不影响 pendingWords / dailyCount 等真实状态
+const openSettingsDialog = async () => {
+  draftDailyCount.value = dailyCount.value
+  draftIncludeArticle.value = includeArticleWords.value === true
+  draftArticleDailyCount.value = articleDailyCount.value || 0
+  // 先把弹窗打开，避免点击后视觉无反馈；接着异步同步最新文章生词数
+  settingsDialogVisible.value = true
+  if (userStore.token) {
+    await loadArticleWords()
+    // 拉到最新可用数后，如果草稿值越界就钳到新 max；防止 el-input-number 显示越界值
+    const available = articleWordsCount.value || 0
+    if (draftArticleDailyCount.value > available) {
+      draftArticleDailyCount.value = available
+    }
+  }
+}
+
+// 保存设置：钳制 + 写真实状态 + 写 localStorage + 重算 pendingWords
+// 显式不清零 todayReviewed —— 用户改设置不应该把今天的进度抹掉
+// 即使本次关闭了"加入文章生词"，也保留草稿里的数字并持久化，下次再开启时不必重输
+const saveSettings = () => {
+  const cet = Math.max(1, Math.min(500, parseInt(draftDailyCount.value) || dailyCount.value))
+  const available = articleWordsCount.value || 0
+  // 注意：不再用 draftIncludeArticle 决定是否归零；归零会丢掉用户上一次输入
+  // 关闭文章生词时由 loadWords 里的 `includeArticleWords ? ... : 0` 决定真实选词数量
+  const article = Math.max(0, Math.min(parseInt(draftArticleDailyCount.value) || 0, available))
+
+  dailyCount.value = cet
+  includeArticleWords.value = draftIncludeArticle.value
+  articleDailyCount.value = article
+  dailyCountSelected.value = true
+
+  localStorage.setItem(dailyCountKey(), cet.toString())
+  localStorage.setItem(includeArticleKey(), draftIncludeArticle.value ? '1' : '0')
+  localStorage.setItem(articleDailyCountKey(), article.toString())
+
+  // 先清掉两个维度（A/N）的索引 key，再 loadWords 让它走 "没保存索引" 分支自然落到 0
+  // 之所以清两份：includeArticleWords 切换会让 vocabIndexKey 的后缀变；只清当前后缀那一份，反向切回去时还会读到陈旧值
+  clearAllVocabIndexKeys()
+  loadWords()
+  currentWordIndex.value = 0
+
+  settingsDialogVisible.value = false
+  ElMessage.success('设置已更新')
+}
+
+const cancelSettings = () => {
+  settingsDialogVisible.value = false
+}
+
+// 从弹窗里跳"换词库"：清除所有持久化设置回到词库选择页
+const goChangeVocabFromDialog = () => {
+  settingsDialogVisible.value = false
+  backToSelection()
+}
+
+// 选择每日文章生词数量
+const selectArticleDailyCount = (option) => {
+  const availableCount = articleWordsCount.value || 0
+  const requestedCount = option.value
+  const actualCount = Math.min(requestedCount, availableCount)
+
+  if (requestedCount > availableCount && availableCount > 0) {
+    ElMessage.warning(`当前文章生词不足，最多可加入 ${availableCount} 个，已为你加入 ${availableCount} 个`)
+  } else if (availableCount === 0) {
+    ElMessage.info('没有可加入的文章生词，将只背诵词库中的单词')
+  }
+
+  articleDailyCount.value = actualCount
+  localStorage.setItem(articleDailyCountKey(), actualCount.toString())
+}
+
+// 文章数量选项（数量不足时仍可点击，点击后自动按最大可用数量加入）
+const filteredArticleCountOptions = computed(() => {
+  const count = articleWordsCount.value || 0
+  return articleDailyCountOptions.value.map(opt => ({
+    value: opt,
+    display: opt.toString(),
+    label: true,
+    insufficient: opt > count,
+    hint: opt > count ? `最多可加 ${count} 个` : ''
+  }))
+})
+
+// 从文章数量选择返回到"是否加入"步骤
+const backToIncludeChoice = () => {
+  includeArticleWords.value = null
+  articleDailyCount.value = null
 }
 
 // 选择每日复习数量
 const selectDailyCount = (count) => {
   dailyCount.value = count
   dailyCountSelected.value = true
-  localStorage.setItem(`daily_count_${currentUserId.value}_${selectedVocabulary.value}`, count.toString())
+  localStorage.setItem(dailyCountKey(), count.toString())
   loadWords()
 }
 
 // 返回词库选择
+// 同步清空"已选词库 / 是否加文章词 / 文章词数 / CET 词数 / 当前游标"五个 key，
+// 让用户重进时确实从头再选一遍（否则 onMounted 又会把人扔回背诵页）
 const backToSelection = () => {
+  // 先用旧的 vocabId 计算出三个相关 key，再把 selectedVocabulary 置 null
+  const vocabIdForKeys = selectedVocabulary.value
+  if (vocabIdForKeys) {
+    localStorage.removeItem(includeArticleKey(vocabIdForKeys))
+    localStorage.removeItem(articleDailyCountKey(vocabIdForKeys))
+    localStorage.removeItem(dailyCountKey(vocabIdForKeys))
+    clearAllVocabIndexKeys(vocabIdForKeys)
+  }
+  localStorage.removeItem(selectedVocabKey())
+
   selectedVocabulary.value = null
-  localStorage.removeItem(`selectedVocabulary_${currentUserId.value}`)
   pendingWords.value = []
   allWords.value = []
+  currentWordIndex.value = 0
   dailyCountSelected.value = false
+  includeArticleWords.value = null
+  articleWords.value = []
+  articleWordsCount.value = null
 }
 
-// 返回设置
+// 完成态的"返回设置"按钮：复用修改设置弹窗
+// 概念上和顶栏的齿轮一致，避免另搞一个返回向导的入口
 const backToSettings = () => {
   if (showDeepRecite.value) exitDeepRecite()
-  dailyCountSelected.value = false
-  pendingWords.value = []
+  openSettingsDialog()
 }
 
 // 解析 CSV 文件
@@ -577,6 +1052,9 @@ const parseCSV = (csvText) => {
 }
 
 // 加载词库数据
+// 故意不内部调用 loadWords()：tryAutoEnterRecite 会在最后一步统一 loadWords()，
+// 避免 pendingWords 被先以"includeArticleWords=null"算一次、再以恢复后值算一次，
+// 触发 watch(currentWord) → fetchWordDetails 跑两次出现 last-write-wins 错位
 const loadVocabularyData = async (file) => {
   try {
     const response = await fetch(file)
@@ -593,7 +1071,7 @@ const loadVocabularyData = async (file) => {
     if (savedCount && parseInt(savedCount) !== currentCount) {
       localStorage.removeItem(progressKey)
       localStorage.removeItem(savedCountKey)
-      localStorage.removeItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`)
+      clearAllVocabIndexKeys()
       console.log('词库已更新，旧进度已清除')
     } else {
       const savedProgress = localStorage.getItem(progressKey)
@@ -608,7 +1086,9 @@ const loadVocabularyData = async (file) => {
     // 保存当前词数，用于下次检测
     localStorage.setItem(savedCountKey, currentCount.toString())
 
-    loadWords()
+    // 顺便也算一次 masteredWords，让用户在向导阶段如果观察到统计也能看到正确值
+    masteredWords.value = allWords.value.filter(w => w.mastered).length
+
     // 登录后台补偿同步：将本地已评分但未成功写入 vocabulary_books 的单词重推一次
     // 保证"背过的单词"即使当时网络失败也会最终出现在单词页统计中
     resyncPendingWords()
@@ -621,7 +1101,8 @@ const loadVocabularyData = async (file) => {
 // 串行控制并发避免同时发起大量请求；每条请求失败不阻断后续
 const resyncPendingWords = async () => {
   if (!userStore.token) return
-  const pending = allWords.value.filter(w => w.lastReviewTime && w.synced !== true)
+  // 仅同步 CET 词；文章词不进 allWords 且不回写后端
+  const pending = allWords.value.filter(w => w.source !== 'article' && w.lastReviewTime && w.synced !== true)
   if (pending.length === 0) return
 
   for (const word of pending) {
@@ -659,11 +1140,20 @@ const loadWords = () => {
     }
     shuffled.push(...group)
   }
-  // 限制每日复习数量
-  pendingWords.value = shuffled.slice(0, dailyCount.value)
-  
+
+  // 文章词独立按 articleDailyCount 取，CET 词按 dailyCount 取，最终合并相加
+  const articleNeed = includeArticleWords.value ? (articleDailyCount.value || 0) : 0
+  const articlePicks = articleWords.value.slice(0, articleNeed)
+  const cetPicks = shuffled.slice(0, dailyCount.value)
+  const merged = [...articlePicks, ...cetPicks]
+  for (let i = merged.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [merged[i], merged[j]] = [merged[j], merged[i]]
+  }
+  pendingWords.value = merged
+
   // 从 localStorage 恢复背诵进度
-  const savedIndex = localStorage.getItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`)
+  const savedIndex = localStorage.getItem(vocabIndexKey())
   if (savedIndex) {
     currentWordIndex.value = parseInt(savedIndex)
     // 确保索引在有效范围内
@@ -673,12 +1163,16 @@ const loadWords = () => {
   } else {
     currentWordIndex.value = 0
   }
-  
+
   masteredWords.value = allWords.value.filter(w => w.mastered).length
 }
 
-const loadMoreWords = () => {
+const loadMoreWords = async () => {
   if (showDeepRecite.value) exitDeepRecite()
+  // 文章生词：重新拉一次（本地已掌握的会被过滤）
+  if (includeArticleWords.value) {
+    await loadArticleWords()
+  }
   // 过滤掉已掌握的单词，只显示未掌握的
   let words = allWords.value.filter(word => !word.mastered)
   // 优先选今天没复习过的，再按不认识次数降序，同组内随机打乱
@@ -706,11 +1200,19 @@ const loadMoreWords = () => {
     }
     shuffled.push(...group)
   }
-  // 加载 dailyCount 个新单词
-  pendingWords.value = shuffled.slice(0, dailyCount.value)
+  // 文章词独立按 articleDailyCount 取，CET 词按 dailyCount 取，最终合并相加
+  const articleNeed = includeArticleWords.value ? (articleDailyCount.value || 0) : 0
+  const articlePicks = articleWords.value.slice(0, articleNeed)
+  const cetPicks = shuffled.slice(0, dailyCount.value)
+  const merged = [...articlePicks, ...cetPicks]
+  for (let i = merged.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [merged[i], merged[j]] = [merged[j], merged[i]]
+  }
+  pendingWords.value = merged
   currentWordIndex.value = 0
   // 清除保存的进度
-  localStorage.removeItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`)
+  localStorage.removeItem(vocabIndexKey())
   masteredWords.value = allWords.value.filter(w => w.mastered).length
   if (pendingWords.value.length === 0) {
     ElMessage.warning('所有单词都已掌握！')
@@ -733,25 +1235,45 @@ const toBackendMasteryLevel = (quality) => {
   return 'LEARNING'
 }
 
-const rateWord = (quality) => {
+const rateWord = async (quality) => {
   if (!currentWord.value) return
 
   const word = currentWord.value
+  const isArticleWord = word.source === 'article'
   // 本次评分产生新状态，标记为未同步；syncWordToDatabase 成功后会置回 true
-  word.synced = false
+  // 文章词不回写后端，永远视为已同步以跳过补偿扫描
+  word.synced = isArticleWord ? true : false
 
   if (quality === 5) {
     // 认识：标记为已掌握，不再出现
-    word.mastered = true
-    word.lastReviewTime = new Date().toISOString()
-    // 尝试同步到后端数据库
-    syncWordToDatabase(word, toBackendMasteryLevel(quality))
+    if (isArticleWord) {
+      // 与单词本"标记为已掌握"保持一致：先等后端写入成功再更新本地 UI 状态
+      try {
+        const response = await updateMasteryLevel(word.wordId, { masteryLevel: 'MASTERED', isCorrect: true })
+        if (response?.code !== 200) {
+          ElMessage.error('标记失败')
+          return
+        }
+        word.mastered = true
+        word.lastReviewTime = new Date().toISOString()
+      } catch (err) {
+        console.error('文章词同步 MASTERED 失败:', err)
+        ElMessage.error('标记失败')
+        return
+      }
+    } else {
+      // CET 词同步到后端数据库
+      word.mastered = true
+      word.lastReviewTime = new Date().toISOString()
+      syncWordToDatabase(word, toBackendMasteryLevel(quality))
+    }
   } else if (quality === 0) {
     // 不认识：增加出现频率（增加不认识计数）
     word.unknownCount = (word.unknownCount || 0) + 1
     word.lastReviewTime = new Date().toISOString()
-    // 尝试同步到后端数据库
-    syncWordToDatabase(word, toBackendMasteryLevel(quality))
+    if (!isArticleWord) {
+      syncWordToDatabase(word, toBackendMasteryLevel(quality))
+    }
   } else if (quality === 3) {
     // 一般：按艾宾浩斯算法继续复习
     const result = calculateEbbinghaus(quality, {
@@ -763,18 +1285,18 @@ const rateWord = (quality) => {
     word.interval = result.interval
     word.easinessFactor = result.easinessFactor
     word.lastReviewTime = new Date().toISOString()
-    // 尝试同步到后端数据库
-    syncWordToDatabase(word, toBackendMasteryLevel(quality))
+    if (!isArticleWord) {
+      syncWordToDatabase(word, toBackendMasteryLevel(quality))
+    }
   }
 
-  // 保存进度到 localStorage（作为备份）
-  saveProgress()
-  
-  // 保存当前单词索引
-  localStorage.setItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`, currentWordIndex.value.toString())
+  // 保存进度到 localStorage（作为备份）：CET 词走 saveProgress，文章词不入 allWords，无需保存
+  if (!isArticleWord) {
+    saveProgress()
+  }
 
   todayReviewed.value++
-  
+
   // 保存每日背诵进度到 localStorage，供 Dashboard 读取
   const today = new Date().toDateString()
   localStorage.setItem(`todayReviewed_${currentUserId.value}`, todayReviewed.value.toString())
@@ -789,12 +1311,12 @@ const rateWord = (quality) => {
   // 移动到下一个单词
   if (currentWordIndex.value < pendingWords.value.length - 1) {
     currentWordIndex.value++
-    // 保存新的索引
-    localStorage.setItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`, currentWordIndex.value.toString())
+    // 保存新的索引（同步代码块内只需写一次）
+    localStorage.setItem(vocabIndexKey(), currentWordIndex.value.toString())
   } else {
     pendingWords.value = []
     // 完成背诵，清除保存的索引
-    localStorage.removeItem(`vocab_index_${currentUserId.value}_${selectedVocabulary.value}`)
+    localStorage.removeItem(vocabIndexKey())
     ElMessage.success('复习完成！')
   }
 }
@@ -844,10 +1366,17 @@ const syncWordToDatabase = async (word, masteryLevel) => {
   }
 }
 
-onMounted(() => {
-  // 每次进入都显示词库选择页面，不自动恢复
-  // 背诵数据会在选择词库后从 localStorage 恢复
-  
+// 当用户从其他标签页/路由切回本页时，如果停留在"是否加入文章生词"步骤上，重新拉一次
+// 解决"在生词本里把已掌握的词重置为学习中后，文章生词数量没跟着变"的问题
+const handleVisibilityChange = () => {
+  if (document.visibilityState !== 'visible') return
+  if (!userStore.token) return
+  if (!selectedVocabulary.value) return
+  if (includeArticleWords.value !== null) return
+  loadArticleWords()
+}
+
+onMounted(async () => {
   // 加载今日背诵进度
   const today = new Date().toDateString()
   const savedDate = localStorage.getItem(`lastReviewDate_${currentUserId.value}`)
@@ -857,6 +1386,25 @@ onMounted(() => {
       todayReviewed.value = parseInt(savedCount)
     }
   }
+
+  // 之前选过词库 → 试图按已持久化的设置直接进入背诵
+  // 三项设置缺任意一项时，停在缺失那一步的向导
+  const savedVocab = localStorage.getItem(selectedVocabKey())
+  if (savedVocab) {
+    try {
+      await tryAutoEnterRecite(savedVocab)
+    } catch (error) {
+      console.error('自动恢复词库失败:', error)
+    }
+  }
+
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('focus', handleVisibilityChange)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('focus', handleVisibilityChange)
 })
 </script>
 
@@ -890,10 +1438,184 @@ onMounted(() => {
   margin: 0;
 }
 
+/* 背诵界面：标题区 + 右上角齿轮按钮 */
+.recite-header-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recite-page-header {
+  flex: 1;
+}
+
+.settings-gear-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-gear-btn:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  transform: translateY(-50%) rotate(30deg);
+}
+
+.settings-gear-btn:active {
+  transform: translateY(-50%) rotate(60deg);
+}
+
+/* 修改设置弹窗 */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.form-label {
+  flex: 0 0 110px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.form-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.form-tip {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  padding: 10px 12px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.dialog-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-footer-spacer {
+  flex: 1;
+}
+
 /* 每日复习数量选择界面 */
 .daily-count-selection {
   max-width: 600px;
   margin: 0 auto;
+}
+
+/* 是否加入文章生词选择界面 */
+.article-choice-selection {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.article-choice-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.choice-card {
+  background: var(--bg-primary);
+  border-radius: 16px;
+  padding: 28px 20px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid var(--border-light);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.choice-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--brand-primary, #6366f1);
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.12);
+}
+
+.choice-icon {
+  font-size: 36px;
+}
+
+.choice-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.choice-desc {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.choice-extra {
+  font-size: 12px;
+  color: var(--brand-primary, #6366f1);
+  font-weight: 600;
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.refresh-mini-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--brand-primary, #6366f1);
+  background: white;
+  color: var(--brand-primary, #6366f1);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.refresh-mini-btn:hover:not(:disabled) {
+  background: var(--brand-primary, #6366f1);
+  color: white;
+}
+
+.refresh-mini-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .article-choice-options {
+    grid-template-columns: 1fr;
+  }
 }
 
 .count-options {
@@ -957,6 +1679,14 @@ onMounted(() => {
   color: var(--text-tertiary);
   display: block;
   margin-top: 4px;
+}
+
+.count-card.insufficient {
+  border-color: #f8d7da;
+}
+
+.count-card.insufficient .count-hint {
+  color: var(--warning-color);
 }
 
 .progress-info {
@@ -1220,27 +1950,6 @@ onMounted(() => {
   font-style: italic;
 }
 
-.action-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.quiz-options {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  width: 100%;
-  margin-bottom: 12px;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 50%, 90% { transform: translateX(-6px); }
-  30%, 70% { transform: translateX(6px); }
-}
-
 .quiz-error {
   color: var(--error-color);
   font-weight: 600;
@@ -1255,13 +1964,124 @@ onMounted(() => {
   animation: shake 0.5s ease-in-out;
 }
 
+.quiz-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
 .quiz-btn {
-  padding: 12px 8px;
+  min-height: 56px;
+  padding: 12px 14px;
   font-size: 14px;
   text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+}
+
+.quiz-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 50%, 90% { transform: translateX(-6px); }
+  30%, 70% { transform: translateX(6px); }
+}
+
+.action-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.action-btn {
+  min-width: 100px;
+  padding: 14px 24px;
+  font-size: 16px;
+  font-weight: 800;
+  flex: 1;
+  min-height: 58px;
+  border-radius: 16px;
+  letter-spacing: 1px;
+}
+
+.action-btn--unknown {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  color: #c2410c;
+  border: 2px solid #fdba74;
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.12);
+}
+
+.action-btn--unknown:hover {
+  background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.18);
+}
+
+.action-btn--known {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: white;
+  border: 2px solid #1d4ed8;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+}
+
+.action-btn--known:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.34);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.next-word-action {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.next-word-btn {
+  width: 100%;
+  padding: 16px 24px;
+  font-size: 17px;
+  font-weight: 800;
+  min-height: 60px;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: white;
+  border: 2px solid #6d28d9;
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(124, 58, 237, 0.28);
+  letter-spacing: 1px;
+}
+
+.next-word-btn:hover {
+  background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(124, 58, 237, 0.34);
+}
+
+.next-word-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .cancel-btn {
@@ -1598,14 +2418,12 @@ onMounted(() => {
     font-size: 16px;
   }
 
-  /* 按钮样式 */
   .action-buttons {
     gap: 8px;
   }
 
-  .btn {
-    padding: 10px 16px;
-    font-size: 14px;
+  .action-buttons .btn {
+    width: 100%;
   }
 
   .quiz-options {
