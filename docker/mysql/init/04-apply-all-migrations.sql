@@ -3314,8 +3314,9 @@ FROM users u
 JOIN school_student s ON s.id = u.school_student_id
 WHERE u.deleted = 0;
 
--- V26__add_vocabulary_source_type.sql
+-- V31__add_vocabulary_source_type.sql
 -- 生词本来源标记：区分文章阅读加入的词和其他来源的词
+-- 注：本地原编号 V26 与远端 V26__text_exercises_table.sql 冲突，rebase 时改为 V31
 
 DROP PROCEDURE IF EXISTS _add_vocabulary_source_type$$
 CREATE PROCEDURE _add_vocabulary_source_type()
