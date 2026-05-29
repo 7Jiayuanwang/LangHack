@@ -544,7 +544,7 @@ onMounted(() => {
   }
 
   .articles-feed {
-    display: grid;
+    display: grid !important;
     grid-template-columns: repeat(2, 1fr);
     grid-auto-rows: 320px;
     gap: 24px;
