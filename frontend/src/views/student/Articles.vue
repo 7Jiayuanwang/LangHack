@@ -720,9 +720,7 @@ onMounted(() => {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
-  -webkit-overflow-scrolling: touch;
+  /* 不单独滚动，由外层 .content-wrapper 统一处理 */
 }
 
 .page-content-wrapper {
