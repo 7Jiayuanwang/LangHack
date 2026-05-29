@@ -34,6 +34,7 @@ import java.util.regex.Pattern;
 public class UpdateServiceImpl implements UpdateService {
 
     private static final Pattern GIT_BRANCH_PATTERN = Pattern.compile("^[a-zA-Z0-9._/-]{1,100}$");
+    private static final String DEPLOYER_WORKSPACE = "/project";
 
     private final UpdateConfigMapper updateConfigMapper;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
@@ -337,11 +338,13 @@ public class UpdateServiceImpl implements UpdateService {
         cmd.add("-v");
         cmd.add(dockerSocket + ":/var/run/docker.sock");
         cmd.add("-v");
-        cmd.add(projectHostPath + ":" + projectHostPath);
+        cmd.add(projectHostPath + ":" + DEPLOYER_WORKSPACE);
         cmd.add("-w");
-        cmd.add(projectHostPath);
+        cmd.add(DEPLOYER_WORKSPACE);
+        cmd.add("-e");
+        cmd.add("HOST_PROJECT_DIR=" + projectHostPath);
         cmd.add("--network");
-        cmd.add("host");
+        cmd.add("langhack_langhack-network");
         cmd.add(deployerImage);
         cmd.add("bash");
         cmd.add(hotDeployScript);

@@ -229,7 +229,7 @@ services:
       # 应用服务器地址（对应官方 web.xml 的 serverName，格式: 协议://域名[:端口]）
       SSO_CAS_SERVER_NAME: ${SSO_CAS_SERVER_NAME:-http://localhost:8080}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8088}
-      APP_UPDATE_SUPPORTED: "${APP_UPDATE_SUPPORTED:-false}"
+      APP_UPDATE_SUPPORTED: "${APP_UPDATE_SUPPORTED:-true}"
       PROJECT_HOST_PATH: "${PROJECT_HOST_PATH:-}"
       APP_UPDATE_DEPLOYER_IMAGE: "${APP_UPDATE_DEPLOYER_IMAGE:-langhack-deployer:latest}"
       APP_UPDATE_DOCKER_SOCKET: "${APP_UPDATE_DOCKER_SOCKET:-/var/run/docker.sock}"

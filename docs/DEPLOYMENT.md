@@ -656,10 +656,11 @@ bash ../scripts/check-health.sh
 # 1. 构建 deployer 镜像
 docker compose --profile deploy build deployer
 
-# 2. 在 docker/.env 中添加配置
+# 2. 在两个 .env 中都添加配置（缺一不可！）
+#    项目根 .env（docker-compose.yml 读取）:
 PROJECT_HOST_PATH=/path/to/LangHack    # 项目在宿主机的绝对路径（必填）
 APP_UPDATE_SUPPORTED=true               # 启用热部署（必填）
-# APP_UPDATE_DEPLOYER_IMAGE=langhack-deployer:latest  # deployer 镜像名（可选）
+#    docker/.env（部署向导/脚本读取）: 添加相同的两行
 
 # 3. 重启后端使配置生效
 docker compose up -d backend

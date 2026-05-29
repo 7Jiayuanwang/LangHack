@@ -42,7 +42,7 @@
 | 2 | `docker compose build backend` | 构建新镜像（可 `--skip-build` 跳过） |
 | 3 | 生成 `docker-compose.green.yml` | Green 栈配置（端口 8081，同网络） |
 | 4 | `docker compose -f green.yml up -d` | 启动 green 后端 |
-| 5 | `curl http://localhost:8081/api/health` | 健康检查（120s 超时） |
+| 5 | 健康检查 green | Sidecar 模式用容器名 `backend-green:8080`；CLI 模式用 `localhost:8081`（120s 超时） |
 | 6 | Nginx upstream → green | `sed` 替换 + `nginx -s reload` |
 | 7 | `docker compose stop backend` | 停止旧 blue |
 | 8 | `docker compose up -d backend` | 启动新 blue（新镜像） |
@@ -75,6 +75,8 @@
 | `PROJECT_HOST_PATH` | 项目在宿主机的绝对路径 | `/home/ubuntu/LangHack` |
 | `APP_UPDATE_SUPPORTED` | 启用热部署 | `true` |
 
+> **双 `.env` 要求**: 根 `docker-compose.yml` 读取项目根目录的 `.env`，部署向导和脚本读取 `docker/.env`。两个文件都必须包含上述变量，否则后端会报 `supported: false`。
+
 ### 4.2 可选环境变量
 
 | 变量 | 默认值 | 说明 |
@@ -100,9 +102,11 @@
 # 1. 构建 deployer 镜像
 docker compose --profile deploy build deployer
 
-# 2. 配置 docker/.env
+# 2. 在两个 .env 中都添加热部署配置
+#    项目根 .env（docker-compose.yml 读取）:
 PROJECT_HOST_PATH=/home/ubuntu/LangHack
 APP_UPDATE_SUPPORTED=true
+#    docker/.env（部署向导/脚本读取）: 同上
 
 # 3. 重启后端（使新环境变量生效）
 docker compose up -d backend
@@ -132,10 +136,10 @@ curl http://localhost:8080/api/ops/update/status
 
 ## 七、本地开发
 
-Windows/Mac Docker Desktop 不支持 `--network host`，本地开发环境默认禁用热部署：
+Deployer 容器使用项目 Docker 网络 (`langhack_langhack-network`) 而非 `--network host`，因此在 Windows/Mac Docker Desktop 上同样可用：
 
-- 根 `docker-compose.yml`: `APP_UPDATE_SUPPORTED` 默认 `false`
-- 前端页面显示警告，但配置编辑和保存始终可用（预配置）
+- 根 `.env` 和 `docker/.env` 均配置 `PROJECT_HOST_PATH` 和 `APP_UPDATE_SUPPORTED=true`
+- Deployer 通过容器名 DNS 解析访问后端进行健康检查（无需 `localhost` 端口映射）
 - 可使用 `dryRun=true` 模式测试 UI 流程（不实际执行部署）
 
 ---

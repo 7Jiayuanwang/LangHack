@@ -22,6 +22,18 @@ DOCKER_DIR="$PROJECT_ROOT/docker"
 LOG_DIR="$PROJECT_ROOT/logs"
 ENV_FILE="$PROJECT_ROOT/docker/.env"
 
+# ── Deployer Sidecar 模式检测 ────────────────────────────────────────────────
+# HOST_PROJECT_DIR 由 UpdateServiceImpl 传入，表示宿主机上的项目绝对路径
+# 构建命令用容器内路径（compose 需要读源文件），运行时命令用宿主机路径（Docker daemon 需要）
+if [ -n "${HOST_PROJECT_DIR:-}" ]; then
+    HOST_DOCKER_DIR="${HOST_PROJECT_DIR}/docker"
+    COMPOSE_BUILD_PD="--project-directory $DOCKER_DIR"
+    COMPOSE_RUNTIME_PD="--project-directory $HOST_DOCKER_DIR"
+else
+    COMPOSE_BUILD_PD=""
+    COMPOSE_RUNTIME_PD=""
+fi
+
 # ── 端口配置 ──────────────────────────────────────────────────────────────────
 BLUE_BACKEND_PORT=8080
 GREEN_BACKEND_PORT=8081
@@ -39,8 +51,13 @@ BACKEND_IMAGE="langhack-backend:latest"
 NETWORK_NAME="langhack_langhack-network"
 
 # ── 健康检查 ──────────────────────────────────────────────────────────────────
-HEALTH_URL_BLUE="http://localhost:${BLUE_BACKEND_PORT}/api/health"
-HEALTH_URL_GREEN="http://localhost:${GREEN_BACKEND_PORT}/api/health"
+if [ -n "${HOST_PROJECT_DIR:-}" ]; then
+    HEALTH_URL_BLUE="http://langhack-backend:8080/api/health"
+    HEALTH_URL_GREEN="http://${GREEN_BACKEND_CONTAINER}:8080/api/health"
+else
+    HEALTH_URL_BLUE="http://localhost:${BLUE_BACKEND_PORT}/api/health"
+    HEALTH_URL_GREEN="http://localhost:${GREEN_BACKEND_PORT}/api/health"
+fi
 HEALTH_WAIT_SECS=120
 HEALTH_INTERVAL=3
 
@@ -166,7 +183,7 @@ rollback() {
     # 确保 blue 仍在运行
     if ! $DRY_RUN && ! curl -sf -m 3 "$HEALTH_URL_BLUE" >/dev/null 2>&1; then
         log_warn "blue 后端不健康，尝试重启..."
-        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" up -d backend
+        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d backend
         wait_healthy "$HEALTH_URL_BLUE" "blue backend (回滚)" || log_error "回滚失败，请手动检查"
     else
         log_ok "blue 后端仍在运行，回滚完成"
@@ -238,7 +255,7 @@ main() {
     # 2. 构建新镜像
     if ! $SKIP_BUILD; then
         log_section "Step 2: 构建 green 镜像"
-        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" build backend
+        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_BUILD_PD build backend
         log_ok "镜像构建完成"
     else
         log_info "跳过镜像构建（--skip-build）"
@@ -255,7 +272,7 @@ main() {
 
     # 4. 启动 green 后端
     log_section "Step 4: 启动 green 后端 (port $GREEN_BACKEND_PORT)"
-    run docker compose -f "$GREEN_COMPOSE" up -d backend-green
+    run docker compose -f "$GREEN_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d backend-green
 
     # 5. 健康检查
     log_section "Step 5: 健康检查 green"
@@ -272,12 +289,12 @@ main() {
 
     # 7. 停止旧 blue 后端
     log_section "Step 7: 停止旧 blue 后端"
-    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" stop backend
+    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD stop backend
     log_ok "旧 blue 后端已停止"
 
     # 8. 启动新 blue（使用刚构建的镜像），健康检查后切换 nginx 回 blue
     log_section "Step 8: 启动新 blue 后端"
-    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" up -d backend
+    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d backend
     if ! $DRY_RUN; then
         if ! wait_healthy "$HEALTH_URL_BLUE" "new blue backend"; then
             log_error "新 blue 后端启动失败，保持流量在 green"
