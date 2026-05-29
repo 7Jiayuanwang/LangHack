@@ -1564,7 +1564,8 @@ const handleAddToVocabulary = async () => {
       definition: selectedWordInfo.value.translation || selectedWordInfo.value.definition || '暂无释义',
       pronunciation: selectedWordInfo.value.phonetic || selectedWordInfo.value.pronunciation || '',
       exampleSentence: selectedWordInfo.value.exampleSentence || selectedWordInfo.value.examples || '',
-      audioUrl: selectedWordInfo.value.audioUrl || selectedWordInfo.value.audio || ''
+      audioUrl: selectedWordInfo.value.audioUrl || selectedWordInfo.value.audio || '',
+      sourceType: 'ARTICLE' // 文章阅读页加入，明确标记来源为文章
     })
 
     if (response.code === 200) {

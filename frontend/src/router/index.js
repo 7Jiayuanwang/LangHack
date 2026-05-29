@@ -323,16 +323,18 @@ const routes = [
         meta: { title: "我的任务", roles: ["STUDENT", "USER"], featureKey: "page_assignments" },
       },
       {
+        path: "words",
+        name: "StudentWords",
+        component: () => import("@/views/student/Words.vue"),
+        meta: { title: "单词", roles: ["STUDENT", "USER"], featureKey: "page_word_recite" },
+      },
+      {
         path: "word-recite",
-        name: "StudentWordRecite",
-        component: () => import("@/features/VocabularyFeatures/WordRecite.vue"),
-        meta: { title: "单词背诵", roles: ["STUDENT", "USER"], featureKey: "page_word_recite" },
+        redirect: "/student/words?tab=recite",
       },
       {
         path: "vocabulary",
-        name: "StudentVocabulary",
-        component: () => import("@/views/student/Vocabulary.vue"),
-        meta: { title: "生词本", roles: ["STUDENT", "USER"], featureKey: "page_vocabulary" },
+        redirect: "/student/words?tab=list",
       },
       {
         path: "classes",
@@ -412,11 +414,11 @@ const routes = [
       },
       {
         path: "word-test",
-        redirect: "/student/vocabulary",
+        redirect: "/student/words?tab=list",
       },
       {
         path: "word-learning",
-        redirect: "/student/vocabulary",
+        redirect: "/student/words?tab=list",
       },
     ],
   },

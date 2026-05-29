@@ -533,7 +533,9 @@ const resetToLearning = async (word) => {
       return
     }
     const response = await updateMasteryLevel(wordId, {
-      masteryLevel: 'LEARNING'
+      masteryLevel: 'LEARNING',
+      // 同时把来源升级为 ARTICLE，让这个词出现在"每日背诵-加入文章生词"的可选池里
+      upgradeSourceToArticle: true
     })
     if (response?.code === 200) {
       ElMessage.success('已重置为学习中')

@@ -1247,6 +1247,7 @@ public class StudentLearningController {
             @RequestParam(required = false) String masteryLevel,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false) String difficulty,
+            @RequestParam(required = false) String sourceType,
             Authentication authentication) {
         try {
             // 分页参数边界校验
@@ -1267,6 +1268,7 @@ public class StudentLearningController {
             params.put("masteryLevel", masteryLevel);
             params.put("sortBy", sortBy);
             params.put("difficulty", difficulty);
+            params.put("sourceType", sourceType);
             params.put("studentId", studentId);
 
             Map<String, Object> result = vocabularyBooksService.getVocabularyWithPagination(params);
@@ -1343,6 +1345,12 @@ public class StudentLearningController {
                 }
             }
 
+            // 来源类型：如果前端传了 sourceType 就用，否则根据是否有 unitId 推断为 ARTICLE
+            String sourceType = (String) params.get("sourceType");
+            if (sourceType == null || sourceType.isEmpty()) {
+                sourceType = (unitId != null) ? "ARTICLE" : "MANUAL";
+            }
+
             // 查询单词是否存在
             QueryWrapper<Word> wordWrapper = new QueryWrapper<>();
             wordWrapper.eq("word", word);
@@ -1380,11 +1388,19 @@ public class StudentLearningController {
 
             // 检查是否已在生词本中
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordEntity.getId())) {
+                // 已存在的记录，如果本次是文章来源，把旧来源升级为 ARTICLE，
+                // 让"再次从文章页加同一个词"也能进入文章生词列表统计
+                if ("ARTICLE".equals(sourceType)) {
+                    boolean upgraded = vocabularyBooksService.upgradeSourceTypeToArticle(studentId, wordEntity.getId());
+                    if (upgraded) {
+                        return Result.success("单词已在生词本中，来源已更新为文章");
+                    }
+                }
                 return Result.success("单词已在生词本中");
             }
 
-            // 添加到生词本，初始状态为 NEW
-            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordEntity.getId(), "NEW");
+            // 添加到生词本，初始状态为 NEW，带来源标记
+            vocabularyBooksService.addToVocabularyWithLevel(studentId, wordEntity.getId(), "NEW", sourceType);
 
             return Result.success("单词已添加到生词本");
         } catch (BusinessException e) {
