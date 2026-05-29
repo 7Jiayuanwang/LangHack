@@ -534,7 +534,7 @@ onMounted(() => {
 @media (min-width: 768px) {
   .articles-mobile-page {
     max-width: 100%;
-    height: 100vh;
+    overflow: visible;
   }
 
   .page-content-wrapper {
@@ -720,7 +720,8 @@ onMounted(() => {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  /* 不单独滚动，由外层 .content-wrapper 统一处理 */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
 }
 
 .page-content-wrapper {
