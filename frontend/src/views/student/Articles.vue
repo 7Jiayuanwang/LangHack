@@ -534,7 +534,8 @@ onMounted(() => {
 @media (min-width: 768px) {
   .articles-mobile-page {
     max-width: 100%;
-    overflow: visible;
+    height: 100%;
+    overflow: hidden;
   }
 
   .page-content-wrapper {
