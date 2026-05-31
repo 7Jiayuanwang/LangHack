@@ -534,8 +534,7 @@ onMounted(() => {
 @media (min-width: 768px) {
   .articles-mobile-page {
     max-width: 100%;
-    height: 100%;
-    overflow: hidden;
+    height: 100vh;
   }
 
   .page-content-wrapper {
@@ -545,11 +544,12 @@ onMounted(() => {
   }
 
   .articles-feed {
-    display: grid !important;
+    display: grid;
     grid-template-columns: repeat(2, 1fr);
-    grid-auto-rows: 320px;
+    grid-template-rows: repeat(3, 320px);
     gap: 24px;
     padding: 0;
+    align-content: start;
   }
 
   .bottom-spacer,
@@ -563,8 +563,6 @@ onMounted(() => {
 
   .article-card {
     height: 320px;
-    min-height: 320px;
-    max-height: 320px;
   }
 
   .article-cover {
@@ -583,6 +581,7 @@ onMounted(() => {
 @media (min-width: 1200px) {
   .articles-feed {
     grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 320px);
   }
 }
 
@@ -723,8 +722,8 @@ onMounted(() => {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .page-content-wrapper {
@@ -755,8 +754,6 @@ onMounted(() => {
   width: 100%;
   min-width: 0;
   height: 340px;
-  min-height: 340px;
-  max-height: 340px;
 }
 
 @media (hover: hover) {

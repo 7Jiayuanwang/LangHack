@@ -393,7 +393,6 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: scroll;
-  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
   background: var(--bg-secondary);
 }
