@@ -43,8 +43,6 @@
             {{ wordCount }} words
           </span>
         </div>
-        
-        <h1 class="article-title">{{ textTitle }}</h1>
 
         <!-- Redesigned Version Selector -->
         <div class="version-pill-selector" v-if="availableVersions.length > 1">
@@ -3387,8 +3385,19 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   }
 
   .glass-header .header-inner {
-    height: 52px;
-    padding: 0 12px;
+    height: 48px;
+    padding: 0 8px;
+    flex-wrap: nowrap;
+  }
+
+  .glass-header .header-left,
+  .glass-header .header-right {
+    gap: 8px;
+  }
+
+  .glass-header .header-title {
+    max-width: 150px;
+    font-size: 13px;
   }
 
   .article-title {
@@ -3414,9 +3423,6 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     line-height: 1.75;
   }
 
-  .header-title {
-    display: none;
-  }
 
   .article-body :deep(.interactive-text),
   .markdown-content {
