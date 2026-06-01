@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -55,6 +56,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
     @Qualifier("versionGeneratorExecutor")
     private Executor versionGeneratorExecutor;
 
+    /** 正在生成版本的文章ID集合，防止同一文章并发触发多次生成 */
+    private final Set<Long> generatingArticleIds = ConcurrentHashMap.newKeySet();
+
     @Override
     public void checkAndGenerateVersions(Long textId) {
         Text text = textMapper.selectById(textId);
@@ -82,6 +86,11 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             String content = text.getContent();
             if (content == null || content.isBlank()) {
                 log.warn("[版本生成] 文章{} 内容为空，跳过版本生成", textId);
+                return;
+            }
+            // 去重：同一文章正在生成中则跳过
+            if (!generatingArticleIds.add(textId)) {
+                log.info("[版本生成] 文章{} 正在生成中，跳过重复触发", textId);
                 return;
             }
             log.info("[版本生成] 文章{} 缺少版本，触发异步生成，原文长度={}字符", textId, content.length());
@@ -146,6 +155,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
         } catch (Exception e) {
             log.error("[版本生成] 文章{} 异步生成过程异常", textId, e);
+        } finally {
+            generatingArticleIds.remove(textId);
+            log.debug("[版本生成] 文章{} 释放生成锁", textId);
         }
     }
 
@@ -190,6 +202,11 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
         // If any version is missing, trigger async generation via self-proxy
         if (needsCET4 || needsCET6 || needsAcademic || needsChineseParallel) {
+            // 去重：同一文章正在生成中则跳过
+            if (!generatingArticleIds.add(textId)) {
+                log.info("[版本生成] Markdown文章{} 正在生成中，跳过重复触发", textId);
+                return;
+            }
             log.info("[版本生成] Markdown文章{} 缺少版本，触发异步生成，原文长度={}字符", textId, markdownContent.length());
             // Use self-injection to ensure @Async annotation is properly processed by Spring proxy
             self.generateMarkdownVersionsAsync(textId, markdownContent, needsCET4, needsCET6, needsAcademic, needsChineseParallel);
@@ -250,6 +267,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
         } catch (Exception e) {
             log.error("[版本生成] Markdown文章{} 异步生成过程异常", textId, e);
+        } finally {
+            generatingArticleIds.remove(textId);
+            log.debug("[版本生成] Markdown文章{} 释放生成锁", textId);
         }
     }
 
@@ -386,7 +406,7 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 log.error("[版本生成] {} 版本生成异常，文章{}", versionName, textId, e);
                 return null;
             }
-        }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((result, ex) -> {
+        }, versionGeneratorExecutor).orTimeout(300, TimeUnit.SECONDS).handle((result, ex) -> {
             if (ex != null) {
                 String cause = ex.getCause() != null ? ex.getCause().getClass().getSimpleName() : "unknown";
                 log.error("[版本生成] {} 版本超时或失败，文章{}，异常类型={}，原因: {}",

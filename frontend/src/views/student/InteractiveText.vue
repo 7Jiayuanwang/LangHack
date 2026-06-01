@@ -10,7 +10,9 @@
             <span>{{ fromSource === 'assignment' ? '返回任务' : '返回' }}</span>
           </button>
           <div class="header-divider"></div>
-          <h2 class="header-title" :title="textTitle">{{ textTitle }}</h2>
+          <div class="header-title-scroll" ref="headerTitleRef">
+            <h2 class="header-title" :class="{ 'scrolling': isTitleOverflow }" :title="textTitle">{{ textTitle }}</h2>
+          </div>
         </div>
         
         <div class="header-right">
@@ -43,8 +45,6 @@
             {{ wordCount }} words
           </span>
         </div>
-        
-        <h1 class="article-title">{{ textTitle }}</h1>
 
         <!-- Redesigned Version Selector -->
         <div class="version-pill-selector" v-if="availableVersions.length > 1">
@@ -532,6 +532,16 @@ const unitId = ref(null)
 const courseName = ref('')
 const unitName = ref('')
 const textTitle = ref('')
+const headerTitleRef = ref(null)
+const isTitleOverflow = ref(false)
+
+const checkTitleOverflow = () => {
+  const el = headerTitleRef.value
+  if (el) {
+    isTitleOverflow.value = el.scrollWidth > el.clientWidth
+  }
+}
+
 const textContent = ref('')
 const isMarkdown = ref(false)
 const difficulty = ref('MEDIUM')
@@ -630,7 +640,10 @@ const isSelectingMode = ref(false)
 
 // 响应式弹窗宽度
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
-const handleWindowResize = () => { windowWidth.value = window.innerWidth }
+const handleWindowResize = () => {
+  windowWidth.value = window.innerWidth
+  checkTitleOverflow()
+}
 let autoStartTimerId = null
 let textContentWatchTimerId = null
 let floatingBtnResetTimerId = null
@@ -811,6 +824,7 @@ const loadTextDetail = async () => {
     if (response.code === 200) {
       const data = response.data
       textTitle.value = data.title
+      nextTick(checkTitleOverflow)
       difficulty.value = data.difficulty || 'MEDIUM'
       courseId.value = data.courseId
       unitId.value = data.unitId
@@ -2637,13 +2651,27 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   background: #e2e8f0;
 }
 
+.header-title-scroll {
+  max-width: 300px;
+  overflow: hidden;
+  position: relative;
+}
+
 .header-title {
   font-size: 16px;
   font-weight: 700;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 300px;
+  display: inline-block;
+  padding-right: 24px;
+}
+
+.header-title.scrolling {
+  animation: header-title-scroll 12s linear infinite;
+}
+
+@keyframes header-title-scroll {
+  0%, 10% { transform: translateX(0); }
+  90%, 100% { transform: translateX(calc(-100% + 300px + 24px)); }
 }
 
 /* Difficulty Pill */
@@ -3388,8 +3416,31 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   }
 
   .glass-header .header-inner {
-    height: 52px;
-    padding: 0 12px;
+    height: 48px;
+    padding: 0 8px;
+    flex-wrap: nowrap;
+  }
+
+  .glass-header .header-left,
+  .glass-header .header-right {
+    gap: 8px;
+  }
+
+  .glass-header .header-title-scroll {
+    max-width: 150px;
+  }
+
+  .glass-header .header-title {
+    font-size: 13px;
+  }
+
+  .glass-header .header-title.scrolling {
+    animation: header-title-scroll-mobile 12s linear infinite;
+  }
+
+  @keyframes header-title-scroll-mobile {
+    0%, 10% { transform: translateX(0); }
+    90%, 100% { transform: translateX(calc(-100% + 150px + 24px)); }
   }
 
   .article-title {
@@ -3415,9 +3466,6 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     line-height: 1.75;
   }
 
-  .header-title {
-    display: none;
-  }
 
   .article-body :deep(.interactive-text),
   .markdown-content {
