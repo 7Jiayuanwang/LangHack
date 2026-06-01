@@ -72,6 +72,12 @@ public class TextLearningRecord {
     private LocalDateTime createdTime;
 
     /**
+     * 学生阅读的内容版本: original/cet4/cet6/academic/chinese_parallel
+     */
+    @TableField("content_version")
+    private String contentVersion;
+
+    /**
      * 更新时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

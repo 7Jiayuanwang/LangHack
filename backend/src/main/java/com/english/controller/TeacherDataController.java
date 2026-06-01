@@ -2,8 +2,10 @@ package com.english.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.english.dto.Result;
+import com.english.dto.learner.LearnerProfileDto;
 import com.english.entity.*;
 import com.english.mapper.*;
+import com.english.service.LearnerProfileService;
 import com.english.service.SystemConfigService;
 import com.english.service.UserService;
 import org.slf4j.Logger;
@@ -25,6 +27,7 @@ public class TeacherDataController {
 
     private static final Logger logger = LoggerFactory.getLogger(TeacherDataController.class);
     private static final String TEACHER_SCHOOL_DATA_TOGGLE = "teacher.school_data_enabled";
+    private static final String TEACHER_LEARNER_PROFILE_TOGGLE = "teacher.learner_profile_enabled";
 
     @Autowired
     private TeachingClassMapper teachingClassMapper;
@@ -55,6 +58,12 @@ public class TeacherDataController {
 
     @Autowired
     private SystemConfigService systemConfigService;
+
+    @Autowired
+    private LearnerProfileService learnerProfileService;
+
+    @Autowired
+    private com.english.mapper.UserMapper userMapper;
 
     /**
      * 获取当前教师的授课班级列表
@@ -336,8 +345,64 @@ public class TeacherDataController {
         }
     }
 
+    /**
+     * 获取学生的学习者画像
+     * GET /api/teacher/student-profile/{studentId}
+     */
+    @GetMapping("/student-profile/{studentId}")
+    @PreAuthorize("hasAnyRole('TEACHER')")
+    public Result<LearnerProfileDto> getStudentProfile(
+            @PathVariable Long studentId,
+            Authentication authentication) {
+        try {
+            if (!isTeacherLearnerProfileEnabled()) {
+                return Result.error("教师端学习者画像功能已关闭");
+            }
+            if (studentId == null || studentId <= 0) {
+                return Result.error("无效的学生ID");
+            }
+            String teacherId = getTeacherId(authentication);
+
+            // 验证教师与学生的绑定关系
+            QueryWrapper<TeacherStudentBinding> bindingWrapper = new QueryWrapper<>();
+            bindingWrapper.eq("teacher_id", teacherId)
+                    .eq("student_id", String.valueOf(studentId));
+            Long bindingCount = teacherStudentBindingMapper.selectCount(bindingWrapper);
+            if (bindingCount == null || bindingCount == 0) {
+                return Result.error("无权查看该学生画像");
+            }
+
+            // 根据 school_student.student_id 找到平台用户
+            QueryWrapper<SchoolStudent> ssWrapper = new QueryWrapper<>();
+            ssWrapper.eq("student_id", String.valueOf(studentId));
+            SchoolStudent schoolStudent = schoolStudentMapper.selectOne(ssWrapper);
+            if (schoolStudent == null) {
+                return Result.error("学生信息不存在");
+            }
+
+            // 找到关联的平台用户
+            QueryWrapper<User> userWrapper = new QueryWrapper<>();
+            userWrapper.eq("school_student_id", schoolStudent.getId()).eq("deleted", 0);
+            User platformUser = userMapper.selectOne(userWrapper);
+            if (platformUser == null) {
+                return Result.error("该学生尚未关联平台账号");
+            }
+
+            LearnerProfileDto profile = learnerProfileService.getUserProfile(platformUser.getId());
+            return Result.success(profile);
+        } catch (Exception e) {
+            logger.error("获取学生画像失败: studentId={}", studentId, e);
+            return Result.error("获取学生画像失败，请稍后重试");
+        }
+    }
+
     private boolean isTeacherSchoolDataEnabled() {
         String value = systemConfigService.get("feature_toggle", TEACHER_SCHOOL_DATA_TOGGLE, "true");
+        return value == null || "true".equalsIgnoreCase(value) || "1".equals(value);
+    }
+
+    private boolean isTeacherLearnerProfileEnabled() {
+        String value = systemConfigService.get("feature_toggle", TEACHER_LEARNER_PROFILE_TOGGLE, "true");
         return value == null || "true".equalsIgnoreCase(value) || "1".equals(value);
     }
 

@@ -76,6 +76,11 @@ public class CacheConfig extends CachingConfigurerSupport {
                 .allowIfSubType("java.util.Collections$UnmodifiableList")
                 .allowIfSubType("java.util.Collections$UnmodifiableSet")
                 .allowIfSubType("java.util.Collections$UnmodifiableMap")
+                .allowIfSubType("java.util.Collections$EmptyMap")
+                .allowIfSubType("java.util.Collections$EmptyList")
+                .allowIfSubType("java.util.Collections$EmptySet")
+                .allowIfSubType("java.util.Collections$SingletonList")
+                .allowIfSubType("java.util.Collections$SingletonMap")
                 // Primitive wrappers
                 .allowIfSubType("java.lang.String")
                 .allowIfSubType("java.lang.Long")
@@ -114,6 +119,8 @@ public class CacheConfig extends CachingConfigurerSupport {
         configs.put("stats",           defaultConfig.entryTtl(Duration.ofMinutes(3)));    // Statistics: 3 min (balance cost vs freshness)
         configs.put("publicTexts",     defaultConfig.entryTtl(Duration.ofMinutes(10)));   // Public texts: 10 min (allow new content within reasonable delay)
         configs.put("wordDetail",      defaultConfig.entryTtl(Duration.ofHours(1)));      // Word details: 1 hour (static reference data)
+        configs.put("learner-profile:user",  defaultConfig.entryTtl(Duration.ofMinutes(10)));  // Learner profile: 10 min (computed on read)
+        configs.put("learner-profile:class", defaultConfig.entryTtl(Duration.ofMinutes(10)));  // Class profile summary: 10 min
 
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(defaultConfig)

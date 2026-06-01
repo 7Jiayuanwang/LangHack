@@ -754,4 +754,15 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
 
         return stats;
     }
+
+    @Override
+    public Map<String, Object> getReviewStats(Long studentId) {
+        Map<String, Object> stats = new HashMap<>();
+        int overdueCount = vocabularyBookMapper.countOverdueReviews(studentId);
+        int dueCount = vocabularyBookMapper.countDueReviews(studentId);
+        stats.put("overdueCount", overdueCount);
+        stats.put("dueCount", dueCount);
+        stats.put("overdueRatio", dueCount > 0 ? (double) overdueCount / dueCount : 0.0);
+        return stats;
+    }
 }
