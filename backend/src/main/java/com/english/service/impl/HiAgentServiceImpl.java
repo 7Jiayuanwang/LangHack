@@ -548,9 +548,7 @@ public class HiAgentServiceImpl implements HiAgentService {
             throw new BusinessException("AI 出题服务未配置独立凭证，请在运维面板「AI 服务管理」中配置 HiAgent 出题凭证");
         }
 
-        String prompt = "请为以下文章生成 " + count + " 道选择题。\n\n"
-                + "【文章标题】\n" + title + "\n\n"
-                + "【文章内容】\n" + content;
+        String prompt = buildQuizPrompt(title, content, count);
 
         long startTime = aiCallMetricsService != null ? aiCallMetricsService.startTimer() : 0;
         String user = AiCallMetricsService.getCurrentUser();
@@ -568,6 +566,23 @@ public class HiAgentServiceImpl implements HiAgentService {
             }
             throw new BusinessException("AI 出题服务调用失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 构建出题 prompt。超长文章自动截断，防止超过模型上下文窗口。
+     */
+    private String buildQuizPrompt(String title, String content, int count) {
+        final int MAX_CONTENT_CHARS = 8000;
+        String truncated;
+        if (content.length() > MAX_CONTENT_CHARS) {
+            truncated = content.substring(0, MAX_CONTENT_CHARS)
+                    + "\n\n[... 文章过长已截断，共 " + content.length() + " 字符 ...]";
+        } else {
+            truncated = content;
+        }
+        return "请为以下文章生成 " + count + " 道选择题。\n\n"
+                + "【文章标题】\n" + title + "\n\n"
+                + "【文章内容】\n" + truncated;
     }
 
     public String fallbackQuiz(String title, String content, int count, Exception e) {
@@ -640,6 +655,7 @@ public class HiAgentServiceImpl implements HiAgentService {
         body.put("Query", prompt);
         body.put("UserID", config.getUserId());
         body.put("ResponseMode", "blocking");
+        body.put("MaxTokens", 16384);  // 防止长文章出题输出被模型截断
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
         log.debug("Sending HiAgent Quiz query for conversation {}", conversationId);

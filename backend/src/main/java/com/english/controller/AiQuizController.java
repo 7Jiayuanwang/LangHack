@@ -218,10 +218,21 @@ public class AiQuizController {
         }
     }
 
+    /**
+     * 构建 AI 出题 prompt。超长文章自动截断，防止超过模型上下文窗口。
+     */
     private String buildPrompt(String title, String content, int count) {
+        final int MAX_CONTENT_CHARS = 8000;  // 约 2000-3000 tokens，为输出留足空间
+        String truncated;
+        if (content.length() > MAX_CONTENT_CHARS) {
+            truncated = content.substring(0, MAX_CONTENT_CHARS)
+                    + "\n\n[... 文章过长已截断，共 " + content.length() + " 字符 ...]";
+        } else {
+            truncated = content;
+        }
         return "请为以下文章生成 " + count + " 道选择题。\n\n"
                 + "【文章标题】\n" + title + "\n\n"
-                + "【文章内容】\n" + content;
+                + "【文章内容】\n" + truncated;
     }
 
     private String stripCodeFence(String text) {
