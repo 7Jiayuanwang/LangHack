@@ -482,9 +482,12 @@ public class ExerciseController {
                 if (text == null) {
                     return Result.error("课文不存在");
                 }
-                Long textCreatedBy = text.getUploadedBy();
-                if (textCreatedBy == null || !textCreatedBy.equals(currentUser.getId())) {
-                    return Result.error("无权删除其他教师创建的课文习题");
+                // 如果课文是公开的，允许所有教师删除其习题（重新出题场景）
+                if (!Boolean.TRUE.equals(text.getIsPublic())) {
+                    Long textCreatedBy = text.getUploadedBy();
+                    if (textCreatedBy == null || !textCreatedBy.equals(currentUser.getId())) {
+                        return Result.error("无权删除其他教师创建的课文习题");
+                    }
                 }
             }
 
@@ -553,7 +556,11 @@ public class ExerciseController {
                 .anyMatch(a -> "ROLE_TEACHER".equals(a.getAuthority()));
 
         if (isTeacher) {
-            // 教师只能访问自己创建的课文的习题
+            // 如果课文是公开的，允许所有教师访问（AI出题、自主练习等场景）
+            if (Boolean.TRUE.equals(text.getIsPublic())) {
+                return;  // 允许访问
+            }
+            // 非公开课文：只能访问自己创建的课文的习题
             com.english.entity.User currentUser = userService.getUserByUsername(authentication.getName());
             if (currentUser == null) throw new BusinessException("用户不存在");
             if (text.getUploadedBy() != null && !text.getUploadedBy().equals(currentUser.getId())) {
