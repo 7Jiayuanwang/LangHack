@@ -5,14 +5,14 @@
 
 
     <!-- 主内容区域 -->
-    <main class="main-content">
+    <main class="main-content" :class="{ 'no-nav': hideNav }">
       <div class="content-wrapper">
         <slot><router-view /></slot>
       </div>
     </main>
 
     <!-- 底部导航栏 - 小红书风格 -->
-    <nav class="trend-nav">
+    <nav class="trend-nav" v-if="!hideNav">
       <div class="nav-wrapper">
         <router-link
           v-for="(item, index) in navigationItems"
@@ -85,6 +85,13 @@ import {
   School,
   Clock
 } from '@element-plus/icons-vue'
+
+const props = defineProps({
+  hideNav: {
+    type: Boolean,
+    default: false
+  }
+})
 
 const router = useRouter()
 const route = useRoute()
@@ -387,6 +394,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+}
+
+.main-content.no-nav {
+  padding-bottom: 0;
 }
 
 .content-wrapper {
