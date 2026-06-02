@@ -48,19 +48,28 @@ defineEmits(['copy', 'underline', 'translate', 'annotate', 'ai-qa'])
 
 // 防止菜单超出视口右边界：菜单自身宽度约 220px，水平居中后需保留一半安全边距
 const menuStyle = computed(() => {
-  const MENU_HALF_WIDTH = 110 // 菜单宽度的一半（估算值），用于边界钳制
+  const MENU_HALF_WIDTH = 110
   const SAFE_MARGIN = 8
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 375
 
-  // 确保 position 对象合法
   const x = props.position?.x ?? 0
   const y = props.position?.y ?? 0
 
-  // 钳制 x 坐标，使菜单不超出左右边界
   const clampedX = Math.min(
     Math.max(x, MENU_HALF_WIDTH + SAFE_MARGIN),
     viewportWidth - MENU_HALF_WIDTH - SAFE_MARGIN
   )
+
+  // 移动端菜单放在选区上方，避免和系统菜单重叠
+  if (isMobile) {
+    return {
+      left: clampedX + 'px',
+      bottom: `calc(100vh - ${y - 12}px)`,
+      transform: 'translateX(-50%)'
+    }
+  }
+
   return {
     left: clampedX + 'px',
     top: y + 'px'
