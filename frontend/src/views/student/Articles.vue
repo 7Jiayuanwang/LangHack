@@ -1,23 +1,5 @@
 <template>
   <div class="articles-mobile-page">
-    
-    <!-- Sticky Header -->
-    <header class="articles-toolbar">
-      <div></div>
-      <div class="header-actions">
-        <span v-if="!filterVisible" class="current-filter-label">{{ currentCategoryLabel }}</span>
-        <button class="icon-btn" @click="toggleFilter" :title="filterVisible ? '收起筛选' : '展开筛选'">
-          <el-icon><component :is="filterVisible ? ArrowUp : ArrowDown" /></el-icon>
-        </button>
-        <button class="icon-btn" @click="toggleSearch">
-          <el-icon><Search /></el-icon>
-        </button>
-        <button class="icon-btn notification-btn">
-          <el-icon><Bell /></el-icon>
-          <span class="notification-dot"></span>
-        </button>
-      </div>
-    </header>
 
     <!-- Filter Pills -->
     <transition name="filter-collapse">
@@ -36,25 +18,23 @@
       </div>
     </transition>
 
-    <!-- Search Bar -->
-    <transition name="filter-collapse">
-      <div v-show="searchVisible" class="search-bar">
+    <!-- Main Content Area -->
+    <main class="page-main">
+      <div class="page-content-wrapper">
+
+      <!-- Search Bar -->
+      <div class="search-bar">
         <el-input
           v-model="searchQuery"
-          placeholder="搜索文章标题或内容..."
+          placeholder="搜索文章..."
           clearable
           @keyup.enter="currentPage = 1"
         >
-          <template #prefix>
+          <template #suffix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
       </div>
-    </transition>
-
-    <!-- Main Content Area -->
-    <main class="page-main">
-      <div class="page-content-wrapper">
 
       <!-- Articles Feed -->
       <div class="articles-feed">
@@ -543,6 +523,10 @@ onMounted(() => {
     padding: 0 24px;
   }
 
+  .search-bar {
+    margin-bottom: 8px;
+  }
+
   .articles-feed {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -659,17 +643,16 @@ onMounted(() => {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  padding: 12px 0;
+  padding: 6px 0;
 }
 
 .search-bar {
-  position: sticky;
-  top: 0;
-  padding: 12px 12px;
-  background: rgba(246, 247, 248, 0.95);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  padding: 12px 12px 0;
+}
+
+.search-bar :deep(.el-input__wrapper) {
+  border-radius: 999px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
 }
 
 .filter-scroll {
@@ -681,14 +664,14 @@ onMounted(() => {
   -webkit-overflow-scrolling: touch;
 }
 @media (min-width: 768px) {
-  .filter-scroll { justify-content: center; gap: 16px; }
-  .filter-pill { padding: 12px 36px; font-size: 16px; font-weight: 600; }
+  .filter-scroll { justify-content: center; gap: 12px; }
+  .filter-pill { padding: 6px 24px; font-size: 14px; font-weight: 500; }
 }
 .filter-scroll::-webkit-scrollbar { display: none; }
 
 .filter-pill {
   flex-shrink: 0;
-  padding: 8px 14px;
+  padding: 5px 12px;
   border-radius: 999px;
   border: 1px solid #e2e8f0;
   background: white;

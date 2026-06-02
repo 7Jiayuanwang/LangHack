@@ -11,6 +11,9 @@
     <div class="menu-item" @click.stop="$emit('underline')" @touchend.stop.prevent="$emit('underline')">
       <el-icon><EditPen /></el-icon> {{ underlineLabel }}
     </div>
+    <div class="menu-item" @click.stop="$emit('translate')" @touchend.stop.prevent="$emit('translate')">
+      <el-icon><MagicStick /></el-icon> 翻译
+    </div>
     <div class="menu-item" @click.stop="$emit('annotate')" @touchend.stop.prevent="$emit('annotate')">
       <el-icon><Comment /></el-icon> 批注
     </div>
@@ -22,7 +25,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { CopyDocument, EditPen, Comment, ChatLineRound } from '@element-plus/icons-vue'
+import { CopyDocument, EditPen, Comment, ChatLineRound, MagicStick } from '@element-plus/icons-vue'
 
 const props = defineProps({
   visible: {
@@ -41,7 +44,7 @@ const props = defineProps({
     default: '划线'
   }
 })
-defineEmits(['copy', 'underline', 'annotate', 'ai-qa'])
+defineEmits(['copy', 'underline', 'translate', 'annotate', 'ai-qa'])
 
 // 防止菜单超出视口右边界：菜单自身宽度约 220px，水平居中后需保留一半安全边距
 const menuStyle = computed(() => {
