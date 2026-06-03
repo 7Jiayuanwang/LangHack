@@ -16,7 +16,7 @@
     </header>
 
     <!-- 主内容区域 -->
-    <main class="mobile-main">
+    <main class="mobile-main" :class="{ 'no-nav': hideNav }">
       <div class="content-container" :class="{ 'no-padding': hideHeader }">
         <transition name="fade" mode="out-in">
           <slot><router-view /></slot>
@@ -25,7 +25,7 @@
     </main>
 
     <!-- 底部导航栏 -->
-    <nav class="mobile-nav">
+    <nav class="mobile-nav" v-if="!hideNav">
       <div class="nav-container">
         <router-link
           v-for="item in navItems"
@@ -160,6 +160,10 @@ const props = defineProps({
     validator: (v) => ['teacher', 'user', 'ops', 'admin'].includes(v),
   },
   hideHeader: {
+    type: Boolean,
+    default: false,
+  },
+  hideNav: {
     type: Boolean,
     default: false,
   },
@@ -570,6 +574,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   padding-bottom: calc(60px + max(8px, env(safe-area-inset-bottom)));
+}
+
+.mobile-main.no-nav {
+  padding-bottom: 0;
 }
 
 .content-container {
