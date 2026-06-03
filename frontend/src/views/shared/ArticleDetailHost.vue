@@ -1,5 +1,5 @@
 <template>
-  <component :is="layout" :role="layoutRole" :hideHeader="hideHeader" v-if="layout">
+  <component :is="layout" :role="layoutRole" :hideHeader="hideHeader" :hideNav="true" v-if="layout">
     <component :is="content" />
   </component>
   <component :is="content" v-else />
