@@ -465,6 +465,13 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Transactional
     public void recordLearning(Long studentId, String type, Long wordId, Integer duration, Long textId,
             Long assignmentId) {
+        recordLearning(studentId, type, wordId, duration, textId, assignmentId, null);
+    }
+
+    @Override
+    @Transactional
+    public void recordLearning(Long studentId, String type, Long wordId, Integer duration, Long textId,
+            Long assignmentId, String contentVersion) {
         LearningRecord record = new LearningRecord();
         record.setStudentId(studentId);
         record.setAssignmentId(assignmentId);
@@ -473,7 +480,6 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         if (wordId != null) {
             record.setWordId(wordId);
         }
-        // wordId 为 null 时不设置，表示非单词学习活动（课文阅读、任务完成等）
 
         // 设置课文ID
         record.setTextId(textId);
@@ -486,10 +492,29 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
         learningRecordMapper.insert(record);
 
+        // 版本切换时更新最近的 TextLearningRecord
+        if ("TEXT_VIEW".equals(type) && textId != null && contentVersion != null && !contentVersion.isEmpty()) {
+            updateLatestTextRecordVersion(studentId, textId, contentVersion);
+        }
+
         logger.debug("记录学习活动: 学生={}, 类型={}, 时长={}秒{}",
                 studentId, type, duration,
                 textId != null ? ", 课文ID=" + textId
                         : wordId != null ? ", 单词ID=" + wordId : assignmentId != null ? ", 任务ID=" + assignmentId : "");
+    }
+
+    private void updateLatestTextRecordVersion(Long studentId, Long textId, String contentVersion) {
+        QueryWrapper<TextLearningRecord> wrapper = new QueryWrapper<>();
+        wrapper.eq("student_id", studentId)
+                .eq("text_id", textId)
+                .eq("is_completed", 0)
+                .orderByDesc("start_time")
+                .last("LIMIT 1");
+        TextLearningRecord tlr = textLearningRecordMapper.selectOne(wrapper);
+        if (tlr != null) {
+            tlr.setContentVersion(contentVersion);
+            textLearningRecordMapper.updateById(tlr);
+        }
     }
 
     @Override
@@ -508,12 +533,20 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Override
     public Long startReadingSession(Long studentId, Long textId, Long assignmentId) {
+        return startReadingSession(studentId, textId, assignmentId, null);
+    }
+
+    @Override
+    public Long startReadingSession(Long studentId, Long textId, Long assignmentId, String contentVersion) {
         TextLearningRecord record = new TextLearningRecord();
         record.setStudentId(studentId);
         record.setTextId(textId);
         record.setAssignmentId(assignmentId);
         record.setStartTime(LocalDateTime.now());
         record.setIsCompleted(0);
+        if (contentVersion != null && !contentVersion.isEmpty()) {
+            record.setContentVersion(contentVersion);
+        }
 
         textLearningRecordMapper.insert(record);
         return record.getId();
@@ -1154,12 +1187,38 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         return total > 0 ? (double) correct / total * 100 : 0.0;
     }
 
-    /**
-     * 计算连续学习天数
-     */
+    @Override
+    public int countActiveDays(Long studentId, int lastNDays) {
+        LocalDateTime since = LocalDate.now().minusDays(lastNDays).atStartOfDay();
+        return learningRecordMapper.countActiveDaysSince(studentId, since);
+    }
+
+    @Override
+    public int getConsecutiveDays(Long studentId) {
+        return calculateConsecutiveDays(studentId);
+    }
+
+    @Override
+    public long getStudyMinutesInRange(Long studentId, LocalDateTime from, LocalDateTime to) {
+        long totalSeconds = learningRecordMapper.sumDurationSecondsBetween(studentId, from, to);
+        return totalSeconds / 60;
+    }
+
     private int calculateConsecutiveDays(Long studentId) {
-        // 简化实现，返回模拟数据
-        return 7;
+        List<LocalDate> dates = learningRecordMapper.selectDistinctStudyDates(studentId);
+        if (dates == null || dates.isEmpty()) {
+            return 0;
+        }
+        LocalDate today = LocalDate.now();
+        int consecutive = 0;
+        for (LocalDate date : dates) {
+            if (date.equals(today.minusDays(consecutive))) {
+                consecutive++;
+            } else {
+                break;
+            }
+        }
+        return consecutive;
     }
 
     /**

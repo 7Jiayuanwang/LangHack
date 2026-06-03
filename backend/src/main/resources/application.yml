@@ -152,6 +152,9 @@ recommendation:
     per-user-limit: 10
   item-cf:
     per-seed-limit: 20
+  persona:
+    enabled: ${RECOMMENDATION_PERSONA_ENABLED:false}
+    max-adjustment: 0.12
 
 mybatis-plus:
   configuration:
@@ -311,3 +314,13 @@ school:
       full-sync-on-startup: ${SCHOOL_SYNC_FULL_ON_STARTUP:false}
     cli:
       enabled: ${SCHOOL_DATA_CLI_ENABLED:false}
+
+# 学习者画像
+learner-profile:
+  enabled: ${LEARNER_PROFILE_ENABLED:true}
+  tracking:
+    enabled: ${LEARNER_PROFILE_TRACKING_ENABLED:false}
+  snapshot:
+    enabled: ${LEARNER_PROFILE_SNAPSHOT_ENABLED:false}
+  llm-summary:
+    enabled: ${LEARNER_PROFILE_LLM_SUMMARY_ENABLED:false}

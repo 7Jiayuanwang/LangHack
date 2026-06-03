@@ -940,7 +940,7 @@ const generateLearningSuggestions = () => {
 
 const startReading = async () => {
   try {
-    const response = await studentApi.startReading(textId.value, assignmentId.value)
+    const response = await studentApi.startReading(textId.value, assignmentId.value, currentVersion.value)
     if (response.code === 200) {
       currentRecordId.value = response.data
       recording.value = true
@@ -993,9 +993,9 @@ const saveLearningRecord = async () => {
       // 这里我们保存总时间，让后端处理增量逻辑
       const recordPayload = {
         type: 'TEXT_VIEW',
-        duration: studyTime.value, // 保存总学习时间
+        duration: studyTime.value,
         textId: textId.value,
-        // 如果是从任务来的，包含任务ID
+        contentVersion: currentVersion.value,
         ...(assignmentId.value && { assignmentId: assignmentId.value })
       }
 
@@ -1729,6 +1729,7 @@ onBeforeUnmount(() => {
       type: 'TEXT_VIEW',
       duration: studyTime.value,
       textId: textId.value,
+      contentVersion: currentVersion.value,
       ...(assignmentId.value && { assignmentId: assignmentId.value })
     }
     const baseUrl = import.meta.env.VITE_API_BASE_URL || ''

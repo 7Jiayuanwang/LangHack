@@ -1,5 +1,6 @@
 package com.english.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -7,6 +8,12 @@ import java.util.Map;
  * 学习记录服务接口
  */
 public interface LearningRecordsService {
+
+    int countActiveDays(Long studentId, int lastNDays);
+
+    int getConsecutiveDays(Long studentId);
+
+    long getStudyMinutesInRange(Long studentId, LocalDateTime from, LocalDateTime to);
 
     /**
      * 获取今日学习时长（分钟）
@@ -59,6 +66,11 @@ public interface LearningRecordsService {
     void recordLearning(Long studentId, String type, Long wordId, Integer duration, Long textId, Long assignmentId);
 
     /**
+     * 记录学习活动（含内容版本）
+     */
+    void recordLearning(Long studentId, String type, Long wordId, Integer duration, Long textId, Long assignmentId, String contentVersion);
+
+    /**
      * 记录添加生词
      */
     void recordVocabularyAdd(Long studentId, Long wordId);
@@ -67,6 +79,11 @@ public interface LearningRecordsService {
      * 开始阅读会话
      */
     Long startReadingSession(Long studentId, Long textId, Long assignmentId);
+
+    /**
+     * 开始阅读会话（含内容版本）
+     */
+    Long startReadingSession(Long studentId, Long textId, Long assignmentId, String contentVersion);
 
     /**
      * 完成阅读会话

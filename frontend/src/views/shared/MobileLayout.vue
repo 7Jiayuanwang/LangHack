@@ -259,6 +259,9 @@ const MORE_ITEMS = {
     { path: '/admin/cet-analysis',   label: '四六级分析', icon: DataAnalysis },
     { path: '/admin/recommendation-analysis', label: '推荐分析', icon: DataLine },
     { path: '/admin/quiz-records',    label: '做题管理', icon: EditPen },
+    { path: '/admin/persona-analytics', label: '画像分析', icon: DataAnalysis, featureKey: 'admin.persona_analytics' },
+    { path: '/admin/class-cohort',      label: '班级画像', icon: DataLine,     featureKey: 'admin.class_cohort' },
+    { path: '/admin/tag-management',    label: '标签管理', icon: EditPen,      featureKey: 'admin.tag_management' },
   ],
 }
 
@@ -325,6 +328,9 @@ const ROUTE_MAP = {
     '/admin/cet-analysis':   '四六级分析',
     '/admin/recommendation-analysis': '推荐算法分析',
     '/admin/quiz-records':   '做题管理',
+    '/admin/persona-analytics': '画像分析',
+    '/admin/class-cohort':      '班级队列分析',
+    '/admin/tag-management':    '标签管理',
   },
 }
 

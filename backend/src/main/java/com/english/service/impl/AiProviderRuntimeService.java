@@ -89,6 +89,7 @@ public class AiProviderRuntimeService {
         Map<String, Object> body = new HashMap<>();
         body.put("model", provider.getModel());
         body.put("messages", Collections.singletonList(message));
+        body.put("max_tokens", 16384);  // 防止长文章 AI 出题输出被截断
 
         ResponseEntity<String> response = restTemplate.exchange(
                 normalizeOpenAiUrl(provider.getApiUrl()),
@@ -181,11 +182,11 @@ public class AiProviderRuntimeService {
     }
 
     protected RestTemplate createRestTemplate(AiProvider provider) {
-        int timeout = provider.getTimeoutMs() != null ? provider.getTimeoutMs() : 30000;
+        int timeout = provider.getTimeoutMs() != null ? provider.getTimeoutMs() : 180000;
         HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
-        factory.setConnectTimeout(timeout);
+        factory.setConnectTimeout(30000);
         factory.setReadTimeout(timeout);
-        factory.setConnectionRequestTimeout(timeout);
+        factory.setConnectionRequestTimeout(30000);
         return new RestTemplate(factory);
     }
 
