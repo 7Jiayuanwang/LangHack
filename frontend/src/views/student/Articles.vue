@@ -715,12 +715,14 @@ onMounted(() => {
   min-height: 100%;
 }
 
-.articles-feed {
-  padding: 12px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  flex: 1;
+@media (max-width: 767px) {
+  .articles-feed {
+    padding: 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+  }
 }
 
 /* --- Article Card --- */
