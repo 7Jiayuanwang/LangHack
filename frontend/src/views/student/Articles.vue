@@ -738,7 +738,12 @@ onMounted(() => {
   border: 1px solid #f1f5f9;
   width: 100%;
   min-width: 0;
-  height: 340px;
+}
+
+@media (max-width: 767px) {
+  .article-card {
+    height: 340px;
+  }
 }
 
 @media (hover: hover) {
@@ -756,8 +761,13 @@ onMounted(() => {
 .article-cover {
   position: relative;
   width: 100%;
-  height: 170px;
   overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .article-cover {
+    height: 170px;
+  }
 }
 
 .cover-image {
