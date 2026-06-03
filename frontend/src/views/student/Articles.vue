@@ -715,14 +715,12 @@ onMounted(() => {
   min-height: 100%;
 }
 
-@media (max-width: 767px) {
-  .articles-feed {
-    padding: 12px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    flex: 1;
-  }
+.articles-feed {
+  padding: 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
 }
 
 /* --- Article Card --- */
@@ -738,12 +736,7 @@ onMounted(() => {
   border: 1px solid #f1f5f9;
   width: 100%;
   min-width: 0;
-}
-
-@media (max-width: 767px) {
-  .article-card {
-    height: 340px;
-  }
+  height: 340px;
 }
 
 @media (hover: hover) {
@@ -761,13 +754,8 @@ onMounted(() => {
 .article-cover {
   position: relative;
   width: 100%;
+  height: 170px;
   overflow: hidden;
-}
-
-@media (max-width: 767px) {
-  .article-cover {
-    height: 170px;
-  }
 }
 
 .cover-image {
