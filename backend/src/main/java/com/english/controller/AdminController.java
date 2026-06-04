@@ -24,8 +24,6 @@ import com.english.service.ArticleVersionService;
 import com.english.service.ContentTagService;
 import com.english.mapper.StudentExerciseAnswerMapper;
 import com.english.mapper.TextExerciseMapper;
-import com.english.mapper.LearnerCompositeTagMapper;
-import com.english.entity.LearnerCompositeTag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -101,9 +99,6 @@ public class AdminController {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
-
-    @Autowired
-    private LearnerCompositeTagMapper compositeTagMapper;
 
     @GetMapping("/users")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
@@ -2056,62 +2051,4 @@ public class AdminController {
         }
     }
 
-    // ==================== 学习者标签管理 ====================
-
-    @GetMapping("/learner-profile/tag-definitions")
-    public Result<List<LearnerCompositeTag>> listLearnerTags() {
-        return Result.success(compositeTagMapper.selectAllOrdered());
-    }
-
-    @PostMapping("/learner-profile/tag-definitions")
-    @PreAuthorize("hasRole('ADMIN')")
-    public Result<LearnerCompositeTag> createLearnerTag(@RequestBody LearnerCompositeTag tag) {
-        if (tag.getCode() == null || tag.getCode().isBlank()) return Result.error("标签编码不能为空");
-        if (tag.getDisplayName() == null || tag.getDisplayName().isBlank()) return Result.error("标签名称不能为空");
-        if (compositeTagMapper.countByCode(tag.getCode()) > 0) return Result.error("标签编码已存在: " + tag.getCode());
-        if (tag.getEnabled() == null) tag.setEnabled(true);
-        if (tag.getPriority() == null) tag.setPriority(100);
-        compositeTagMapper.insert(tag);
-        return Result.success(tag);
-    }
-
-    @PutMapping("/learner-profile/tag-definitions/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public Result<LearnerCompositeTag> updateLearnerTag(@PathVariable Long id, @RequestBody LearnerCompositeTag tag) {
-        LearnerCompositeTag existing = compositeTagMapper.selectById(id);
-        if (existing == null) return Result.error("标签不存在");
-        if (tag.getDisplayName() == null || tag.getDisplayName().isBlank()) return Result.error("标签名称不能为空");
-        if (tag.getCode() != null && !tag.getCode().equals(existing.getCode())) {
-            if (compositeTagMapper.countByCodeExcluding(tag.getCode(), id) > 0) return Result.error("标签编码已存在: " + tag.getCode());
-            existing.setCode(tag.getCode());
-        }
-        existing.setDisplayName(tag.getDisplayName());
-        existing.setTagType(tag.getTagType());
-        existing.setActionHint(tag.getActionHint());
-        existing.setPriority(tag.getPriority());
-        existing.setRuleDefinition(tag.getRuleDefinition());
-        if (tag.getEnabled() != null) existing.setEnabled(tag.getEnabled());
-        compositeTagMapper.updateById(existing);
-        return Result.success(existing);
-    }
-
-    @DeleteMapping("/learner-profile/tag-definitions/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> deleteLearnerTag(@PathVariable Long id) {
-        if (compositeTagMapper.selectById(id) == null) return Result.error("标签不存在");
-        compositeTagMapper.deleteById(id);
-        return Result.success(null);
-    }
-
-    @PatchMapping("/learner-profile/tag-definitions/{id}/enabled")
-    @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> toggleLearnerTag(@PathVariable Long id, @RequestBody Map<String, Boolean> body) {
-        LearnerCompositeTag existing = compositeTagMapper.selectById(id);
-        if (existing == null) return Result.error("标签不存在");
-        Boolean enabled = body.get("enabled");
-        if (enabled == null) return Result.error("缺少enabled参数");
-        existing.setEnabled(enabled);
-        compositeTagMapper.updateById(existing);
-        return Result.success(null);
-    }
 }
