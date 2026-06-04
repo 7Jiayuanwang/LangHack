@@ -1,7 +1,7 @@
--- V31: 清理 update_config 表 — 移除普通更新字段，保留热部署字段并重命名为主字段
-DROP PROCEDURE IF EXISTS v31_cleanup_update_config;
+-- V40: 清理 update_config 表 — 移除普通更新字段，保留热部署字段并重命名为主字段
+DROP PROCEDURE IF EXISTS v40_cleanup_update_config;
 DELIMITER $$
-CREATE PROCEDURE v31_cleanup_update_config()
+CREATE PROCEDURE v40_cleanup_update_config()
 BEGIN
     -- 将 hot_deploy_enabled → enabled（如果旧 enabled 列存在则先删除）
     IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
@@ -33,5 +33,5 @@ BEGIN
     END IF;
 END$$
 DELIMITER ;
-CALL v31_cleanup_update_config();
-DROP PROCEDURE IF EXISTS v31_cleanup_update_config;
+CALL v40_cleanup_update_config();
+DROP PROCEDURE IF EXISTS v40_cleanup_update_config;

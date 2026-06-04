@@ -1,7 +1,7 @@
--- V30: update_config 表新增零停机热部署调度字段
-DROP PROCEDURE IF EXISTS v30_add_hot_deploy_fields;
+-- V39: update_config 表新增零停机热部署调度字段
+DROP PROCEDURE IF EXISTS v39_add_hot_deploy_fields;
 DELIMITER $$
-CREATE PROCEDURE v30_add_hot_deploy_fields()
+CREATE PROCEDURE v39_add_hot_deploy_fields()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                    WHERE TABLE_SCHEMA = DATABASE()
@@ -15,5 +15,5 @@ BEGIN
     END IF;
 END$$
 DELIMITER ;
-CALL v30_add_hot_deploy_fields();
-DROP PROCEDURE IF EXISTS v30_add_hot_deploy_fields;
+CALL v39_add_hot_deploy_fields();
+DROP PROCEDURE IF EXISTS v39_add_hot_deploy_fields;
