@@ -1,25 +1,5 @@
 <template>
   <div class="interactive-text">
-    <!-- 可拖动的翻译按钮 -->
-    <div
-      class="floating-translate-btn"
-      :class="{ 'selecting': isSelectingMode }"
-      :style="{ top: floatingBtnPosition.y + 'px', left: floatingBtnPosition.x + 'px' }"
-      @mousedown="startDrag"
-      @touchstart.prevent="startDrag"
-    >
-      <el-tooltip :content="isSelectingMode ? '选择文本后点击翻译' : '点击开始翻译'" placement="left">
-        <button
-          class="translate-fab"
-          :class="isSelectingMode ? 'fab-active' : 'fab-default'"
-        >
-          <span v-if="isSelectingMode" class="fab-icon">✓</span>
-          <span v-else class="fab-icon">译</span>
-          <span class="fab-label">{{ isSelectingMode ? '翻译' : '划词翻译' }}</span>
-        </button>
-      </el-tooltip>
-    </div>
-
     <div
       class="text-content"
       v-if="text"

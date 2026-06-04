@@ -6,7 +6,9 @@
         <el-icon><ArrowLeft /></el-icon>
         <span>返回</span>
       </button>
-      <h1 class="header-title">{{ video?.title || '视频播放' }}</h1>
+      <h1 class="header-title-scroll" ref="headerTitleRef">
+        <span class="header-title" :class="{ 'scrolling': isTitleOverflow }" :title="video?.title || '视频播放'">{{ video?.title || '视频播放' }}</span>
+      </h1>
       <button 
         v-if="video"
         class="favorite-btn"
@@ -52,47 +54,6 @@
 
       <!-- Video Info -->
       <div class="video-info">
-        <div class="video-header-top">
-          <!-- Left: Title and Metadata -->
-          <div class="header-left">
-            <div class="title-row">
-              <h2 class="video-title">{{ video.title }}</h2>
-            </div>
-            <div class="video-meta">
-              <span class="meta-item">
-                <el-icon><View /></el-icon>
-                {{ video.viewCount || 0 }} 次观看
-              </span>
-              <span class="meta-item">
-                <el-icon><Star /></el-icon>
-                {{ video.likeCount || 0 }} 收藏
-              </span>
-            </div>
-          </div>
-
-          <!-- Right: Mode toggle aligned with title -->
-          <div v-if="hasSubtitle && subtitleCues.length" class="right-controls">
-            <div class="mode-toggle">
-              <button
-                class="mode-btn"
-                :class="{ active: transcriptMode === 'video' }"
-                @click="transcriptMode = 'video'"
-              >
-                <el-icon><VideoPlay /></el-icon>
-                视频
-              </button>
-              <button
-                class="mode-btn"
-                :class="{ active: transcriptMode === 'article' }"
-                @click="transcriptMode = 'article'"
-              >
-                <el-icon><Reading /></el-icon>
-                文章
-              </button>
-            </div>
-          </div>
-        </div>
-
         <!-- Actions Container (Keep only associated article if exists) -->
         <div v-if="video.associatedTextId" class="video-actions-container">
           <div class="video-actions">
@@ -140,7 +101,26 @@
               {{ transcriptMode === 'video' ? '互动字幕文稿' : '文章阅读模式' }}
             </h3>
             <div class="transcript-header-right">
-              <!-- Display format toggle moved here -->
+              <!-- Mode toggle (视频/文章 切换) -->
+              <div class="mode-toggle">
+                <button
+                  class="mode-btn"
+                  :class="{ active: transcriptMode === 'video' }"
+                  @click="transcriptMode = 'video'"
+                >
+                  <el-icon><VideoPlay /></el-icon>
+                  视频
+                </button>
+                <button
+                  class="mode-btn"
+                  :class="{ active: transcriptMode === 'article' }"
+                  @click="transcriptMode = 'article'"
+                >
+                  <el-icon><Reading /></el-icon>
+                  文章
+                </button>
+              </div>
+              <!-- Display format toggle -->
               <div class="display-toggle">
                 <button
                   class="display-btn"
@@ -225,14 +205,55 @@
 
     <!-- 文本选择菜单 -->
     <SelectionMenu
-      v-if="transcriptMode === 'article'"
       :visible="showSelectionMenu"
       :position="selectionPosition"
       underline-label="划线"
       @copy="handleCopy"
       @underline="handleUnderline"
+      @translate="handleTranslate"
+      @annotate="handleAnnotate"
       @ai-qa="handleAiQa"
     />
+
+    <!-- 翻译对话框 -->
+    <el-dialog
+      v-model="showTranslateDialog"
+      title="翻译"
+      width="500px"
+      :close-on-click-modal="true"
+    >
+      <div class="translate-source">
+        <h4>原文</h4>
+        <p>{{ selectedTextForTranslate }}</p>
+      </div>
+      <div class="translate-result">
+        <h4>译文</h4>
+        <p v-if="translating"><el-icon class="is-loading"><Loading /></el-icon> 翻译中…</p>
+        <p v-else>{{ translatedText }}</p>
+      </div>
+    </el-dialog>
+
+    <!-- 批注对话框 -->
+    <el-dialog
+      v-model="showAnnotateDialog"
+      title="添加批注"
+      width="500px"
+    >
+      <div class="annotate-source">
+        <h4>选中内容</h4>
+        <p>{{ selectedTextForTranslate }}</p>
+      </div>
+      <el-input
+        v-model="annotateContent"
+        type="textarea"
+        :rows="4"
+        placeholder="输入你的批注..."
+      />
+      <template #footer>
+        <el-button @click="showAnnotateDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveAnnotation">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- Bottom Spacer -->
     <div class="bottom-spacer"></div>
@@ -259,6 +280,8 @@ const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quickti
 
 const artPlayerRef = ref(null)
 const transcriptRef = ref(null)
+const headerTitleRef = ref(null)
+const isTitleOverflow = ref(false)
 const video = ref(null)
 const loading = ref(true)
 const error = ref(false)
@@ -279,6 +302,24 @@ const showSelectionMenu = ref(false)
 const selectionPosition = reactive({ x: 0, y: 0 })
 const selectedTextContent = ref('')
 let selectionMenuHideTimerId = null
+
+// ─── 翻译 / 划线 / 批注 ──────────────────────────────
+const showTranslateDialog = ref(false)
+const translating = ref(false)
+const translatedText = ref('')
+const selectedTextForTranslate = ref('')
+const showAnnotateDialog = ref(false)
+const annotateContent = ref('')
+
+// 简单的获取认证 header
+const getAuthHeader = () => {
+  try {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+    return token ? `Bearer ${token}` : ''
+  } catch (e) {
+    return ''
+  }
+}
 
 let artInstance = null
 
@@ -499,6 +540,13 @@ const goBack = () => {
 }
 
 // ─── Video Loading ─────────────────────────────────────────────────────
+const checkTitleOverflow = () => {
+  const el = headerTitleRef.value
+  if (el) {
+    isTitleOverflow.value = el.scrollWidth > el.clientWidth
+  }
+}
+
 const loadVideo = async () => {
   const videoId = route.query.videoId || route.query.id
   const isAdminPreview = route.query.preview === 'admin'
@@ -522,6 +570,7 @@ const loadVideo = async () => {
         : await getPublicVideoDetail(videoId)
     if (res.code === 200 && res.data) {
       video.value = res.data
+      nextTick(() => checkTitleOverflow())
 
       // 清洗字幕内容（去除 <c> 标签、内联时间戳等 SRT 转 VTT 污染）
       if (video.value.subtitleContent) {
@@ -854,11 +903,6 @@ const goToArticle = () => {
 
 // ─── Text Selection Menu (AI QA, Copy, etc) ────────────────
 const handleSelectionChange = () => {
-  if (transcriptMode.value !== 'article') {
-    showSelectionMenu.value = false
-    return
-  }
-
   if (selectionMenuHideTimerId) {
     clearTimeout(selectionMenuHideTimerId)
     selectionMenuHideTimerId = null
@@ -867,7 +911,20 @@ const handleSelectionChange = () => {
   const selection = window.getSelection()
   const text = selection ? selection.toString().trim() : ''
 
+  // 仅在字幕/文章区域内的选择才显示菜单（避免在 input、视频控件等地方触发）
+  let inTranscript = false
   if (text.length > 0 && selection && selection.rangeCount > 0) {
+    try {
+      const range = selection.getRangeAt(0)
+      let node = range.commonAncestorContainer
+      if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+      inTranscript = !!(node && node.closest && node.closest('.transcript-section'))
+    } catch (e) {
+      inTranscript = false
+    }
+  }
+
+  if (text.length > 0 && inTranscript && selection.rangeCount > 0) {
     selectedTextContent.value = text
     
     // 短暂延迟计算位置，确保 UI 已更新
@@ -914,9 +971,102 @@ const handleCopy = () => {
 }
 
 const handleUnderline = () => {
-  ElMessage.info('划线功能即将上线')
+  if (!selectedTextContent.value) return
+  try {
+    const selection = window.getSelection()
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0)
+      // 简单的 DOM 高亮：用 span 包裹选区
+      const mark = document.createElement('mark')
+      mark.className = 'video-underline-mark'
+      mark.style.cssText = 'background: rgba(255, 235, 59, 0.4); padding: 1px 2px; border-radius: 2px;'
+      try {
+        range.surroundContents(mark)
+        ElMessage.success('已划线')
+      } catch (e) {
+        // 跨节点选区无法简单 surroundContents，回退
+        ElMessage.warning('请重新选择不跨段的文本')
+      }
+    }
+  } catch (e) {
+    console.error('underline failed', e)
+    ElMessage.error('划线失败')
+  }
   showSelectionMenu.value = false
   window.getSelection()?.removeAllRanges()
+}
+
+// 翻译选中的文本
+const handleTranslate = async () => {
+  const text = selectedTextContent.value?.trim()
+  if (!text) {
+    ElMessage.warning('请先选择要翻译的文本')
+    return
+  }
+  selectedTextForTranslate.value = text
+  showTranslateDialog.value = true
+  translating.value = true
+  translatedText.value = ''
+  showSelectionMenu.value = false
+
+  try {
+    const authHeaderValue = getAuthHeader()
+    const response = await fetch('/api/translate/auto', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {})
+      },
+      body: JSON.stringify({ text })
+    })
+    if (response.ok) {
+      const result = await response.json()
+      if (result.code === 200) {
+        translatedText.value = typeof result.data === 'string' ? result.data : '翻译失败'
+      } else {
+        translatedText.value = result.message || '翻译服务暂时不可用'
+      }
+    } else {
+      translatedText.value = `翻译失败（HTTP ${response.status}）`
+    }
+  } catch (e) {
+    console.error('translate failed', e)
+    translatedText.value = '翻译请求失败：' + (e.message || '网络错误')
+  } finally {
+    translating.value = false
+  }
+}
+
+// 批注（简化版）
+const handleAnnotate = () => {
+  if (!selectedTextContent.value) return
+  selectedTextForTranslate.value = selectedTextContent.value
+  annotateContent.value = ''
+  showAnnotateDialog.value = true
+  showSelectionMenu.value = false
+}
+
+const saveAnnotation = () => {
+  if (!annotateContent.value.trim()) {
+    ElMessage.warning('请输入批注内容')
+    return
+  }
+  // 简化：本地存储批注（按文本内容索引）
+  try {
+    const key = `video_annotations_${video.value?.id || 0}`
+    const annotations = JSON.parse(localStorage.getItem(key) || '[]')
+    annotations.push({
+      text: selectedTextForTranslate.value,
+      note: annotateContent.value.trim(),
+      time: Date.now()
+    })
+    localStorage.setItem(key, JSON.stringify(annotations))
+    ElMessage.success('批注已保存')
+    showAnnotateDialog.value = false
+    window.getSelection()?.removeAllRanges()
+  } catch (e) {
+    ElMessage.error('保存批注失败')
+  }
 }
 
 const handleAiQa = () => {
@@ -959,6 +1109,30 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 翻译/批注对话框内容样式 */
+.translate-source, .translate-result, .annotate-source {
+  margin-bottom: 16px;
+}
+.translate-source h4, .translate-result h4, .annotate-source h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 600;
+}
+.translate-source p, .translate-result p, .annotate-source p {
+  margin: 0;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #0f172a;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.translate-result p {
+  background: #f0f9ff;
+  color: #0c4a6e;
+}
 .video-player-page {
   min-height: 100vh;
   background: #f6f7f8;
@@ -994,15 +1168,29 @@ onBeforeUnmount(() => {
 }
 .back-btn:hover { background: #f1f5f9; color: #0f172a; }
 
+.header-title-scroll {
+  margin: 0 auto 0 0;
+  max-width: 300px;
+  overflow: hidden;
+  position: relative;
+}
+
 .header-title {
-  margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: #0f172a;
-  flex: 1;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-block;
+  padding-right: 24px;
+}
+
+.header-title.scrolling {
+  animation: header-title-scroll 12s linear infinite;
+}
+
+@keyframes header-title-scroll {
+  0%, 10% { transform: translateX(0); }
+  90%, 100% { transform: translateX(calc(-100% + 300px + 24px)); }
 }
 
 .favorite-btn {
@@ -1120,11 +1308,9 @@ onBeforeUnmount(() => {
 
 .video-header-top {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 4px;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .header-left {
