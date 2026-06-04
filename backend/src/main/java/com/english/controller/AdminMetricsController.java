@@ -5,22 +5,28 @@ import com.english.dto.Result;
 import com.english.entity.Text;
 import com.english.mapper.AiCallLogMapper;
 import com.english.mapper.ClassMapper;
-import com.english.mapper.LevelExamScoreMapper;
+import com.english.mapper.InteractionScoreMapper;
 import com.english.mapper.LearningRecordMapper;
+import com.english.mapper.LevelExamScoreMapper;
 import com.english.mapper.TextMapper;
+import com.english.mapper.TextSimilarityMatrixMapper;
 import com.english.mapper.UserMapper;
+import com.english.mapper.UserSimilarityMatrixMapper;
+import com.english.mapper.UserTextReadMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -38,9 +44,6 @@ public class AdminMetricsController {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     @Autowired
-    private JdbcTemplate jdbcTemplate;
-
-    @Autowired
     private UserMapper userMapper;
 
     @Autowired
@@ -55,238 +58,35 @@ public class AdminMetricsController {
     @Autowired
     private ClassMapper classMapper;
 
-    // ── 四六级成绩对比 ──────────────────────────────────────────────────────────
+    @Autowired
+    private LevelExamScoreMapper levelExamScoreMapper;
 
-    /**
-     * 四六级成绩对比摘要：使用平台 vs 未使用平台的通过率
-     * 仅返回汇总数据，严禁返回个人成绩
-     */
-    @GetMapping("/cet-comparison")
-    public Result<?> getCetComparison() {
-        try {
-            Map<String, Object> result = new LinkedHashMap<>();
+    @Autowired
+    private UserTextReadMapper userTextReadMapper;
 
-            String sqlUsed = """
-                SELECT
-                  COUNT(*) AS total_students,
-                  SUM(CASE WHEN score >= 425 THEN 1 ELSE 0 END) AS passed,
-                  ROUND(SUM(CASE WHEN score >= 425 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS pass_rate
-                FROM level_exam_scores les
-                WHERE EXISTS (
-                  SELECT 1 FROM learning_records lr
-                  WHERE lr.student_id = les.student_id
-                )
-                """;
+    @Autowired
+    private TextSimilarityMatrixMapper textSimilarityMatrixMapper;
 
-            String sqlUnused = """
-                SELECT
-                  COUNT(*) AS total_students,
-                  SUM(CASE WHEN score >= 425 THEN 1 ELSE 0 END) AS passed,
-                  ROUND(SUM(CASE WHEN score >= 425 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS pass_rate
-                FROM level_exam_scores les
-                WHERE NOT EXISTS (
-                  SELECT 1 FROM learning_records lr
-                  WHERE lr.student_id = les.student_id
-                )
-                """;
+    @Autowired
+    private UserSimilarityMatrixMapper userSimilarityMatrixMapper;
 
-            Map<String, Object> usedRow = jdbcTemplate.queryForMap(sqlUsed);
-            Map<String, Object> unusedRow = jdbcTemplate.queryForMap(sqlUnused);
+    @Autowired
+    private InteractionScoreMapper interactionScoreMapper;
 
-            double usedRate = usedRow.get("pass_rate") != null
-                    ? ((Number) usedRow.get("pass_rate")).doubleValue() : 0.0;
-            double unusedRate = unusedRow.get("pass_rate") != null
-                    ? ((Number) unusedRow.get("pass_rate")).doubleValue() : 0.0;
+    @Value("${recommendation.weight.item-cf:0.6}")
+    private double itemCfWeight;
 
-            result.put("used", Map.of(
-                    "totalStudents", toLong(usedRow.get("total_students")),
-                    "passed", toLong(usedRow.get("passed")),
-                    "passRate", usedRate
-            ));
-            result.put("unused", Map.of(
-                    "totalStudents", toLong(unusedRow.get("total_students")),
-                    "passed", toLong(unusedRow.get("passed")),
-                    "passRate", unusedRate
-            ));
-            result.put("improvement", Math.round((usedRate - unusedRate) * 100.0) / 100.0);
-            result.put("totalScoreRecords", toLong(usedRow.get("total_students")) + toLong(unusedRow.get("total_students")));
+    @Value("${recommendation.weight.user-cf:0.4}")
+    private double userCfWeight;
 
-            return Result.success(result);
-        } catch (Exception e) {
-            logger.error("获取四六级对比数据失败", e);
-            return Result.error("获取四六级对比数据失败");
-        }
-    }
+    @Value("${recommendation.cold-start.min-reads:3}")
+    private int coldStartMinReads;
 
-    /**
-     * 四六级成绩详细分析：按考试类型、分数段分布、时间趋势
-     * 仅返回汇总数据，严禁返回个人成绩
-     */
-    @GetMapping("/cet-detailed")
-    public Result<?> getCetDetailed() {
-        try {
-            Map<String, Object> result = new LinkedHashMap<>();
+    @Value("${recommendation.similarity.text-threshold:0.2}")
+    private double textSimilarityThreshold;
 
-            String sqlByType = """
-                SELECT
-                  exam_type,
-                  COUNT(*) AS total,
-                  SUM(CASE WHEN score >= 425 THEN 1 ELSE 0 END) AS passed,
-                  ROUND(SUM(CASE WHEN score >= 425 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS pass_rate,
-                  ROUND(AVG(score), 2) AS avg_score,
-                  MIN(score) AS min_score,
-                  MAX(score) AS max_score
-                FROM level_exam_scores
-                WHERE exam_type IS NOT NULL
-                GROUP BY exam_type
-                ORDER BY exam_type
-                """;
-            result.put("byExamType", jdbcTemplate.queryForList(sqlByType));
-
-            String sqlDistUsed = """
-                SELECT
-                  CASE
-                    WHEN score < 300 THEN '300以下'
-                    WHEN score < 350 THEN '300-349'
-                    WHEN score < 400 THEN '350-399'
-                    WHEN score < 425 THEN '400-424'
-                    WHEN score < 500 THEN '425-499'
-                    WHEN score < 550 THEN '500-549'
-                    ELSE '550以上'
-                  END AS score_range,
-                  COUNT(*) AS count
-                FROM level_exam_scores les
-                WHERE EXISTS (SELECT 1 FROM learning_records lr WHERE lr.student_id = les.student_id)
-                GROUP BY score_range
-                ORDER BY MIN(score)
-                """;
-            String sqlDistUnused = """
-                SELECT
-                  CASE
-                    WHEN score < 300 THEN '300以下'
-                    WHEN score < 350 THEN '300-349'
-                    WHEN score < 400 THEN '350-399'
-                    WHEN score < 425 THEN '400-424'
-                    WHEN score < 500 THEN '425-499'
-                    WHEN score < 550 THEN '500-549'
-                    ELSE '550以上'
-                  END AS score_range,
-                  COUNT(*) AS count
-                FROM level_exam_scores les
-                WHERE NOT EXISTS (SELECT 1 FROM learning_records lr WHERE lr.student_id = les.student_id)
-                GROUP BY score_range
-                ORDER BY MIN(score)
-                """;
-            result.put("scoreDistUsed", jdbcTemplate.queryForList(sqlDistUsed));
-            result.put("scoreDistUnused", jdbcTemplate.queryForList(sqlDistUnused));
-
-            String sqlTrend = """
-                SELECT
-                  YEAR(exam_date) AS exam_year,
-                  exam_type,
-                  COUNT(*) AS total,
-                  SUM(CASE WHEN score >= 425 THEN 1 ELSE 0 END) AS passed,
-                  ROUND(SUM(CASE WHEN score >= 425 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS pass_rate
-                FROM level_exam_scores
-                WHERE exam_date IS NOT NULL
-                GROUP BY exam_year, exam_type
-                ORDER BY exam_year, exam_type
-                """;
-            result.put("trend", jdbcTemplate.queryForList(sqlTrend));
-
-            return Result.success(result);
-        } catch (Exception e) {
-            logger.error("获取四六级详细分析失败", e);
-            return Result.error("获取四六级详细分析失败");
-        }
-    }
-
-    // ── 推荐算法分析 ──────────────────────────────────────────────────────────
-
-    @GetMapping("/recommendation")
-    public Result<?> getRecommendationAnalysis() {
-        try {
-            Map<String, Object> result = new LinkedHashMap<>();
-
-            String sqlCoverage = """
-                SELECT
-                  COUNT(DISTINCT user_id) AS total_users,
-                  SUM(CASE WHEN read_count >= 3 THEN 1 ELSE 0 END) AS cf_users,
-                  SUM(CASE WHEN read_count < 3 THEN 1 ELSE 0 END) AS cold_start_users
-                FROM (
-                  SELECT user_id, COUNT(*) AS read_count
-                  FROM user_text_reads
-                  GROUP BY user_id
-                ) t
-                """;
-            result.put("coverage", jdbcTemplate.queryForMap(sqlCoverage));
-
-            String sqlMatrix = """
-                SELECT
-                  COUNT(*) AS total_pairs,
-                  ROUND(AVG(similarity), 4) AS avg_similarity,
-                  ROUND(MAX(similarity), 4) AS max_similarity,
-                  SUM(CASE WHEN similarity >= 0.7 THEN 1 ELSE 0 END) AS high_sim_pairs,
-                  SUM(CASE WHEN similarity >= 0.4 AND similarity < 0.7 THEN 1 ELSE 0 END) AS mid_sim_pairs,
-                  SUM(CASE WHEN similarity < 0.4 THEN 1 ELSE 0 END) AS low_sim_pairs
-                FROM text_similarity_matrix
-                """;
-            try {
-                result.put("similarityMatrix", jdbcTemplate.queryForMap(sqlMatrix));
-            } catch (Exception e) {
-                result.put("similarityMatrix", Map.of("total_pairs", 0));
-            }
-
-            String sqlInteraction = """
-                SELECT
-                  CASE
-                    WHEN interaction_score < 0.2 THEN '0.0-0.2'
-                    WHEN interaction_score < 0.4 THEN '0.2-0.4'
-                    WHEN interaction_score < 0.6 THEN '0.4-0.6'
-                    WHEN interaction_score < 0.8 THEN '0.6-0.8'
-                    ELSE '0.8-1.0'
-                  END AS score_range,
-                  COUNT(*) AS count
-                FROM v_user_text_interaction_scores
-                GROUP BY score_range
-                ORDER BY MIN(interaction_score)
-                """;
-            try {
-                result.put("interactionDist", jdbcTemplate.queryForList(sqlInteraction));
-            } catch (Exception e) {
-                result.put("interactionDist", List.of());
-            }
-
-            String sqlTopTexts = """
-                SELECT t.id, t.title, t.difficulty,
-                  COUNT(*) AS similarity_links
-                FROM text_similarity_matrix tsm
-                JOIN texts t ON (t.id = tsm.text_id OR t.id = tsm.similar_text_id)
-                WHERE t.deleted = 0
-                GROUP BY t.id, t.title, t.difficulty
-                ORDER BY similarity_links DESC
-                LIMIT 10
-                """;
-            try {
-                result.put("topLinkedTexts", jdbcTemplate.queryForList(sqlTopTexts));
-            } catch (Exception e) {
-                result.put("topLinkedTexts", List.of());
-            }
-
-            result.put("config", Map.of(
-                    "itemCfWeight", 0.6,
-                    "userCfWeight", 0.4,
-                    "coldStartMinReads", 3,
-                    "textSimilarityThreshold", 0.2,
-                    "userSimilarityThreshold", 0.3
-            ));
-
-            return Result.success(result);
-        } catch (Exception e) {
-            logger.error("获取推荐算法分析失败", e);
-            return Result.error("获取推荐算法分析失败");
-        }
-    }
+    @Value("${recommendation.similarity.user-threshold:0.3}")
+    private double userSimilarityThreshold;
 
     // ── 用户活跃度 ──────────────────────────────────────────────────────────────
 
@@ -301,6 +101,7 @@ public class AdminMetricsController {
             LocalDate start = startDate != null ? startDate : end.minusDays(29);
             LocalDateTime startDt = start.atStartOfDay();
             LocalDateTime endDt = end.atTime(LocalTime.MAX);
+
             LocalDateTime todayStart = now.toLocalDate().atStartOfDay();
             LocalDateTime monthStart = now.toLocalDate().withDayOfMonth(1).atStartOfDay();
 
@@ -309,6 +110,7 @@ public class AdminMetricsController {
             long totalClasses = classMapper.selectCount(null);
             long dau = countDistinctStudents(todayStart, now);
             long mau = countDistinctStudents(monthStart, now);
+
             List<Map<String, Object>> dauTrend = buildDauTrend(startDt, endDt);
 
             Map<String, Object> data = new LinkedHashMap<>();
@@ -319,7 +121,7 @@ public class AdminMetricsController {
             data.put("dauTrend", dauTrend);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get user activity metrics", e);
+            logger.error("获取用户活跃度数据失败", e);
             return Result.error("获取用户活跃度数据失败");
         }
     }
@@ -342,12 +144,17 @@ public class AdminMetricsController {
                             .ge("created_time", startDt).le("created_time", endDt));
 
             List<Map<String, Object>> typeDistribution = buildRecordTypeDistribution(startDt, endDt);
+
             long totalReads = typeDistribution.stream()
                     .filter(m -> "TEXT_VIEW".equals(m.get("type")))
-                    .mapToLong(m -> toLong(m.get("count"))).findFirst().orElse(0L);
+                    .mapToLong(m -> toLong(m.get("count")))
+                    .findFirst().orElse(0L);
 
             List<Text> hotTexts = textMapper.selectList(
-                    new QueryWrapper<Text>().eq("deleted", 0).orderByDesc("view_count").last("LIMIT 10"));
+                    new QueryWrapper<Text>()
+                            .eq("deleted", 0)
+                            .orderByDesc("view_count")
+                            .last("LIMIT 10"));
             List<Map<String, Object>> hotArticles = hotTexts.stream().map(t -> {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("id", t.getId());
@@ -366,7 +173,7 @@ public class AdminMetricsController {
             data.put("dailyTrend", dailyTrend);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get learning behavior metrics", e);
+            logger.error("获取学习行为数据失败", e);
             return Result.error("获取学习行为数据失败");
         }
     }
@@ -386,42 +193,58 @@ public class AdminMetricsController {
             LocalDateTime endDt = end.atTime(LocalTime.MAX);
             LocalDateTime todayStart = now.toLocalDate().atStartOfDay();
 
+            // 今日统计
             List<Map<String, Object>> todayStats = aiCallLogMapper.getRealtimeStats(todayStart);
-            long todayCalls = todayStats.stream().mapToLong(m -> toLong(m.get("total_calls"))).sum();
+            long todayCalls = todayStats.stream()
+                    .mapToLong(m -> toLong(m.get("total_calls"))).sum();
 
+            // 指定范围统计
             List<Map<String, Object>> allStats = aiCallLogMapper.aggregateDaily(startDt, endDt);
-            long totalCalls = allStats.stream().mapToLong(m -> toLong(m.get("total_calls"))).sum();
-            long successCalls = allStats.stream().mapToLong(m -> toLong(m.get("success_calls"))).sum();
+
+            long totalCalls = allStats.stream()
+                    .mapToLong(m -> toLong(m.get("total_calls"))).sum();
+            long successCalls = allStats.stream()
+                    .mapToLong(m -> toLong(m.get("success_calls"))).sum();
             double successRate = totalCalls > 0
                     ? Math.round(successCalls * 1000.0 / totalCalls) / 1000.0 : 0.0;
+
             long totalResponseTime = allStats.stream()
-                    .mapToLong(m -> toLong(m.get("avg_response_time_ms")) * toLong(m.get("total_calls"))).sum();
+                    .mapToLong(m -> toLong(m.get("avg_response_time_ms")) * toLong(m.get("total_calls")))
+                    .sum();
             long avgResponseMs = totalCalls > 0 ? totalResponseTime / totalCalls : 0;
 
+            // 服务类型分布
             Map<String, Long> serviceMap = new LinkedHashMap<>();
             for (Map<String, Object> row : allStats) {
                 String service = String.valueOf(row.getOrDefault("service_name", "UNKNOWN"));
                 serviceMap.merge(service, toLong(row.get("total_calls")), Long::sum);
             }
-            List<Map<String, Object>> serviceDistribution = serviceMap.entrySet().stream().map(e -> {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("service", e.getKey());
-                item.put("count", e.getValue());
-                return item;
-            }).collect(Collectors.toList());
+            List<Map<String, Object>> serviceDistribution = serviceMap.entrySet().stream()
+                    .map(e -> {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("service", e.getKey());
+                        item.put("count", e.getValue());
+                        return item;
+                    }).collect(Collectors.toList());
 
+            // 每日趋势（按日期范围填充）
             Map<String, Long> dailyMap = new LinkedHashMap<>();
-            for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) dailyMap.put(d.format(DATE_FMT), 0L);
+            for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
+                dailyMap.put(d.format(DATE_FMT), 0L);
+            }
             for (Map<String, Object> row : allStats) {
                 String date = String.valueOf(row.getOrDefault("stat_date", ""));
-                if (dailyMap.containsKey(date)) dailyMap.merge(date, toLong(row.get("total_calls")), Long::sum);
+                if (dailyMap.containsKey(date)) {
+                    dailyMap.merge(date, toLong(row.get("total_calls")), Long::sum);
+                }
             }
-            List<Map<String, Object>> dailyTrend = dailyMap.entrySet().stream().map(e -> {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("date", e.getKey());
-                item.put("count", e.getValue());
-                return item;
-            }).collect(Collectors.toList());
+            List<Map<String, Object>> dailyTrend = dailyMap.entrySet().stream()
+                    .map(e -> {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("date", e.getKey());
+                        item.put("count", e.getValue());
+                        return item;
+                    }).collect(Collectors.toList());
 
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("totalCalls", totalCalls);
@@ -432,7 +255,7 @@ public class AdminMetricsController {
             data.put("dailyTrend", dailyTrend);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get AI usage metrics", e);
+            logger.error("获取AI调用统计失败", e);
             return Result.error("获取AI调用统计失败");
         }
     }
@@ -462,6 +285,7 @@ public class AdminMetricsController {
                     new QueryWrapper<com.english.entity.LearningRecord>()
                             .eq("record_type", "RECOMMENDATION_REFRESH")
                             .ge("created_time", startDt).le("created_time", endDt));
+
             double clickRate = totalViews > 0
                     ? Math.round(totalClicks * 1000.0 / totalViews) / 1000.0 : 0.0;
 
@@ -475,8 +299,216 @@ public class AdminMetricsController {
             data.put("dailyTrend", dailyTrend);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get recommendation effectiveness metrics", e);
+            logger.error("获取推荐效果数据失败", e);
             return Result.error("获取推荐效果数据失败");
+        }
+    }
+
+    // ── 四六级成绩对比 ──────────────────────────────────────────────────────────
+
+    /**
+     * 四六级成绩对比摘要：使用平台 vs 未使用平台的通过率
+     * 仅返回汇总数据，严禁返回个人成绩
+     */
+    @GetMapping("/cet-comparison")
+    public Result<?> getCetComparison() {
+        try {
+            Map<String, Object> row = levelExamScoreMapper.selectCetComparison();
+            long totalStudents = toLong(row.get("totalStudents"));
+            long usedTotal = toLong(row.get("usedTotal"));
+            long usedPassed = toLong(row.get("usedPassed"));
+            long unusedTotal = toLong(row.get("unusedTotal"));
+            long unusedPassed = toLong(row.get("unusedPassed"));
+
+            double usedPassRate = usedTotal > 0 ? Math.round(usedPassed * 1000.0 / usedTotal) / 10.0 : 0.0;
+            double unusedPassRate = unusedTotal > 0 ? Math.round(unusedPassed * 1000.0 / unusedTotal) / 10.0 : 0.0;
+            double improvement = unusedPassRate > 0
+                    ? Math.round((usedPassRate - unusedPassRate) * 10.0) / 10.0
+                    : (usedPassRate > 0 ? usedPassRate : 0.0);
+
+            Map<String, Object> used = new LinkedHashMap<>();
+            used.put("passRate", usedPassRate);
+            used.put("passed", usedPassed);
+            used.put("totalStudents", usedTotal);
+
+            Map<String, Object> unused = new LinkedHashMap<>();
+            unused.put("passRate", unusedPassRate);
+            unused.put("passed", unusedPassed);
+            unused.put("totalStudents", unusedTotal);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("used", used);
+            result.put("unused", unused);
+            result.put("improvement", improvement);
+            result.put("totalScoreRecords", totalStudents);
+
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取四六级对比数据失败", e);
+            return Result.error("获取四六级对比数据失败");
+        }
+    }
+
+    /**
+     * 四六级成绩详细分析：按考试类型、分数段分布、时间趋势
+     * 仅返回汇总数据，严禁返回个人成绩
+     */
+    @GetMapping("/cet-detailed")
+    public Result<?> getCetDetailed() {
+        try {
+            Map<String, Object> result = new LinkedHashMap<>();
+
+            // 按考试类型
+            List<Map<String, Object>> byExamType = levelExamScoreMapper.selectCetByExamType();
+            result.put("byExamType", byExamType != null ? byExamType : Collections.emptyList());
+
+            // 分数分布 — 平台用户
+            List<Map<String, Object>> distUsed = levelExamScoreMapper.selectCetScoreDistUsed();
+            List<Map<String, Object>> scoreDistUsed = new ArrayList<>();
+            if (distUsed != null) {
+                for (Map<String, Object> row : distUsed) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("score_range", row.get("scoreRange"));
+                    item.put("count", toLong(row.get("cnt")));
+                    scoreDistUsed.add(item);
+                }
+            }
+            result.put("scoreDistUsed", scoreDistUsed);
+
+            // 分数分布 — 非平台用户
+            List<Map<String, Object>> distUnused = levelExamScoreMapper.selectCetScoreDistUnused();
+            List<Map<String, Object>> scoreDistUnused = new ArrayList<>();
+            if (distUnused != null) {
+                for (Map<String, Object> row : distUnused) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("score_range", row.get("scoreRange"));
+                    item.put("count", toLong(row.get("cnt")));
+                    scoreDistUnused.add(item);
+                }
+            }
+            result.put("scoreDistUnused", scoreDistUnused);
+
+            // 历年趋势
+            List<Map<String, Object>> rawTrend = levelExamScoreMapper.selectCetTrend();
+            List<Map<String, Object>> trend = new ArrayList<>();
+            if (rawTrend != null) {
+                for (Map<String, Object> row : rawTrend) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("exam_year", toLong(row.get("examYear")));
+                    item.put("exam_type", row.get("examType"));
+                    Object pr = row.get("passRate");
+                    item.put("pass_rate", pr instanceof Number ? ((Number) pr).doubleValue() : 0.0);
+                    trend.add(item);
+                }
+            }
+            result.put("trend", trend);
+
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取四六级详细分析失败", e);
+            return Result.error("获取四六级详细分析失败");
+        }
+    }
+
+    // ── 推荐算法分析 ──────────────────────────────────────────────────────────
+
+    @GetMapping("/recommendation")
+    public Result<?> getRecommendationAnalysis() {
+        try {
+            Map<String, Object> result = new LinkedHashMap<>();
+
+            // 覆盖率: 总活跃用户 / CF 用户 / 冷启动用户
+            long totalUsers = userMapper.selectCount(
+                    new QueryWrapper<com.english.entity.User>()
+                            .eq("deleted", 0)
+                            .in("role", "STUDENT", "USER"));
+            int cfUsers = userTextReadMapper.selectCfUserCount(coldStartMinReads);
+            long coldStartUsers = Math.max(0, totalUsers - cfUsers);
+
+            Map<String, Object> coverage = new LinkedHashMap<>();
+            coverage.put("total_users", totalUsers);
+            coverage.put("cf_users", (long) cfUsers);
+            coverage.put("cold_start_users", coldStartUsers);
+            result.put("coverage", coverage);
+
+            // 相似度矩阵统计 + 平均相似度
+            long textPairs = textSimilarityMatrixMapper.selectCount(null);
+            long userPairs = userSimilarityMatrixMapper.selectCount(null);
+            long totalPairs = textPairs + userPairs;
+
+            BigDecimal textAvgSim = BigDecimal.ZERO;
+            Map<String, Object> textAvg = textSimilarityMatrixMapper.selectAvgSimilarity();
+            if (textAvg != null && textAvg.get("avg_sim") instanceof Number) {
+                textAvgSim = new BigDecimal(textAvg.get("avg_sim").toString());
+            }
+
+            BigDecimal userAvgSim = BigDecimal.ZERO;
+            Map<String, Object> userAvg = userSimilarityMatrixMapper.selectAvgSimilarity();
+            if (userAvg != null && userAvg.get("avg_sim") instanceof Number) {
+                userAvgSim = new BigDecimal(userAvg.get("avg_sim").toString());
+            }
+
+            BigDecimal overallAvg = BigDecimal.ZERO;
+            if (textPairs > 0 && userPairs > 0) {
+                overallAvg = textAvgSim.multiply(BigDecimal.valueOf(textPairs))
+                        .add(userAvgSim.multiply(BigDecimal.valueOf(userPairs)))
+                        .divide(BigDecimal.valueOf(totalPairs), 4, RoundingMode.HALF_UP);
+            } else if (textPairs > 0) {
+                overallAvg = textAvgSim;
+            } else if (userPairs > 0) {
+                overallAvg = userAvgSim;
+            }
+
+            // 相似度分布统计
+            long highSimPairs = 0, midSimPairs = 0, lowSimPairs = 0;
+            highSimPairs += textSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.TextSimilarityMatrix>().ge("similarity", 0.7));
+            highSimPairs += userSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.UserSimilarityMatrix>().ge("similarity", 0.7));
+            midSimPairs += textSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.TextSimilarityMatrix>().ge("similarity", 0.3).lt("similarity", 0.7));
+            midSimPairs += userSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.UserSimilarityMatrix>().ge("similarity", 0.3).lt("similarity", 0.7));
+            lowSimPairs += textSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.TextSimilarityMatrix>().lt("similarity", 0.3));
+            lowSimPairs += userSimilarityMatrixMapper.selectCount(
+                    new QueryWrapper<com.english.entity.UserSimilarityMatrix>().lt("similarity", 0.3));
+
+            Map<String, Object> similarityMatrix = new LinkedHashMap<>();
+            similarityMatrix.put("total_pairs", totalPairs);
+            similarityMatrix.put("avg_similarity", overallAvg.compareTo(BigDecimal.ZERO) > 0 ? overallAvg.toString() : "—");
+            similarityMatrix.put("high_sim_pairs", highSimPairs);
+            similarityMatrix.put("mid_sim_pairs", midSimPairs);
+            similarityMatrix.put("low_sim_pairs", lowSimPairs);
+            result.put("similarityMatrix", similarityMatrix);
+
+            // 推荐配置
+            Map<String, Object> config = new LinkedHashMap<>();
+            config.put("itemCfWeight", itemCfWeight);
+            config.put("userCfWeight", userCfWeight);
+            config.put("coldStartMinReads", coldStartMinReads);
+            config.put("textSimilarityThreshold", textSimilarityThreshold);
+            config.put("userSimilarityThreshold", userSimilarityThreshold);
+            result.put("config", config);
+
+            // 交互分数分布
+            List<Map<String, Object>> rawDist = interactionScoreMapper.selectScoreDistribution();
+            List<Map<String, Object>> interactionDist = new ArrayList<>();
+            if (rawDist != null) {
+                for (Map<String, Object> row : rawDist) {
+                    if (row == null) continue;
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("score_range", row.get("score_range"));
+                    item.put("count", toLong(row.get("cnt")));
+                    interactionDist.add(item);
+                }
+            }
+            result.put("interactionDist", interactionDist);
+
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取推荐算法分析失败", e);
+            return Result.error("获取推荐算法分析失败");
         }
     }
 
@@ -484,18 +516,26 @@ public class AdminMetricsController {
 
     private long countDistinctStudents(LocalDateTime start, LocalDateTime end) {
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
-        qw.select("COUNT(DISTINCT student_id) AS cnt").ge("created_time", start).lt("created_time", end);
+        qw.select("COUNT(DISTINCT student_id) AS cnt")
+                .ge("created_time", start)
+                .lt("created_time", end);
         List<Map<String, Object>> result = learningRecordMapper.selectMaps(qw);
-        return (result != null && !result.isEmpty()) ? toLong(result.get(0).get("cnt")) : 0L;
+        if (result != null && !result.isEmpty()) {
+            return toLong(result.get(0).get("cnt"));
+        }
+        return 0L;
     }
 
     private List<Map<String, Object>> buildDauTrend(LocalDateTime startDt, LocalDateTime endDt) {
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
         qw.select("DATE(created_time) AS stat_date, COUNT(DISTINCT student_id) AS cnt")
-                .ge("created_time", startDt).le("created_time", endDt).groupBy("DATE(created_time)");
+                .ge("created_time", startDt).le("created_time", endDt)
+                .groupBy("DATE(created_time)");
         List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
         Map<String, Long> byDate = new HashMap<>();
-        for (Map<String, Object> row : rows) byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("cnt")));
+        for (Map<String, Object> row : rows) {
+            byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("cnt")));
+        }
         List<Map<String, Object>> trend = new ArrayList<>();
         for (LocalDate d = startDt.toLocalDate(); !d.isAfter(endDt.toLocalDate()); d = d.plusDays(1)) {
             String date = d.format(DATE_FMT);
@@ -512,7 +552,9 @@ public class AdminMetricsController {
         qw.select("record_type AS type, COUNT(*) AS cnt")
                 .in("record_type", "TEXT_VIEW", "VIEW", "REVIEW", "TEST", "WORD_COMPLETE",
                         "COMPLETE", "RECOMMENDATION_VIEW", "RECOMMENDATION_CLICK", "RECOMMENDATION_REFRESH")
-                .ge("created_time", startDt).le("created_time", endDt).groupBy("record_type").orderByDesc("cnt");
+                .ge("created_time", startDt).le("created_time", endDt)
+                .groupBy("record_type")
+                .orderByDesc("cnt");
         List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
@@ -527,10 +569,13 @@ public class AdminMetricsController {
     private List<Map<String, Object>> buildLearningDailyTrend(LocalDateTime startDt, LocalDateTime endDt) {
         QueryWrapper<com.english.entity.LearningRecord> qw = new QueryWrapper<>();
         qw.select("DATE(created_time) AS stat_date, COUNT(*) AS cnt")
-                .ge("created_time", startDt).le("created_time", endDt).groupBy("DATE(created_time)");
+                .ge("created_time", startDt).le("created_time", endDt)
+                .groupBy("DATE(created_time)");
         List<Map<String, Object>> rows = learningRecordMapper.selectMaps(qw);
         Map<String, Long> byDate = new HashMap<>();
-        for (Map<String, Object> row : rows) byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("cnt")));
+        for (Map<String, Object> row : rows) {
+            byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("cnt")));
+        }
         List<Map<String, Object>> trend = new ArrayList<>();
         for (LocalDate d = startDt.toLocalDate(); !d.isAfter(endDt.toLocalDate()); d = d.plusDays(1)) {
             String date = d.format(DATE_FMT);

@@ -170,11 +170,13 @@ export const submitAnswer = (data) => {
 }
 
 // 批量提交 AI 出题答案（返回对错 + 解析）
-export const submitQuizAnswers = (answers) => {
+// payload: { answers: [{exerciseId, userAnswer, timeSpentSeconds?}], sessionId?, assignmentId? }
+export const submitQuizAnswers = (payload) => {
+  const data = Array.isArray(payload) ? { answers: payload } : payload
   return request({
     url: '/api/student/exercises/submit-quiz',
     method: 'post',
-    data: { answers },
+    data,
     timeout: 15000
   })
 }

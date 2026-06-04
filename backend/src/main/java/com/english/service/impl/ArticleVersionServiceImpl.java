@@ -18,12 +18,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Article version service implementation
@@ -53,6 +56,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
     @Qualifier("versionGeneratorExecutor")
     private Executor versionGeneratorExecutor;
 
+    /** 正在生成版本的文章ID集合，防止同一文章并发触发多次生成 */
+    private final Set<Long> generatingArticleIds = ConcurrentHashMap.newKeySet();
+
     @Override
     public void checkAndGenerateVersions(Long textId) {
         Text text = textMapper.selectById(textId);
@@ -80,6 +86,11 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             String content = text.getContent();
             if (content == null || content.isBlank()) {
                 log.warn("[版本生成] 文章{} 内容为空，跳过版本生成", textId);
+                return;
+            }
+            // 去重：同一文章正在生成中则跳过
+            if (!generatingArticleIds.add(textId)) {
+                log.info("[版本生成] 文章{} 正在生成中，跳过重复触发", textId);
                 return;
             }
             log.info("[版本生成] 文章{} 缺少版本，触发异步生成，原文长度={}字符", textId, content.length());
@@ -144,6 +155,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
         } catch (Exception e) {
             log.error("[版本生成] 文章{} 异步生成过程异常", textId, e);
+        } finally {
+            generatingArticleIds.remove(textId);
+            log.debug("[版本生成] 文章{} 释放生成锁", textId);
         }
     }
 
@@ -188,6 +202,11 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
         // If any version is missing, trigger async generation via self-proxy
         if (needsCET4 || needsCET6 || needsAcademic || needsChineseParallel) {
+            // 去重：同一文章正在生成中则跳过
+            if (!generatingArticleIds.add(textId)) {
+                log.info("[版本生成] Markdown文章{} 正在生成中，跳过重复触发", textId);
+                return;
+            }
             log.info("[版本生成] Markdown文章{} 缺少版本，触发异步生成，原文长度={}字符", textId, markdownContent.length());
             // Use self-injection to ensure @Async annotation is properly processed by Spring proxy
             self.generateMarkdownVersionsAsync(textId, markdownContent, needsCET4, needsCET6, needsAcademic, needsChineseParallel);
@@ -248,6 +267,9 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
 
         } catch (Exception e) {
             log.error("[版本生成] Markdown文章{} 异步生成过程异常", textId, e);
+        } finally {
+            generatingArticleIds.remove(textId);
+            log.debug("[版本生成] Markdown文章{} 释放生成锁", textId);
         }
     }
 
@@ -288,6 +310,43 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             log.info("Successfully saved {} generated Markdown versions for article {}", results.size(), textId);
         } else {
             log.warn("No Markdown versions were saved for article {} (text not found or deleted)", textId);
+        }
+    }
+
+    @Override
+    public void regenerateVersions(Long textId, String version) {
+        Text text = textMapper.selectById(textId);
+        if (text == null || (text.getDeleted() != null && text.getDeleted() == 1)) {
+            log.warn("[版本重生成] 文章{} 不存在或已删除", textId);
+            return;
+        }
+
+        String normalized = version == null ? "ALL" : version.trim().toUpperCase();
+        boolean regenCet4 = "ALL".equals(normalized) || "CET4".equals(normalized);
+        boolean regenCet6 = "ALL".equals(normalized) || "CET6".equals(normalized);
+        boolean regenAcademic = "ALL".equals(normalized) || "ACADEMIC".equals(normalized);
+        boolean regenParallel = "ALL".equals(normalized) || "PARALLEL".equals(normalized);
+
+        if (!(regenCet4 || regenCet6 || regenAcademic || regenParallel)) {
+            log.warn("[版本重生成] 文章{} 未识别的 version={}", textId, version);
+            return;
+        }
+
+        boolean isMarkdown = "MARKDOWN".equals(text.getContentType());
+        String source = isMarkdown ? text.getMarkdownContent() : text.getContent();
+        if (source == null || source.isBlank()) {
+            log.warn("[版本重生成] 文章{} 原文为空（contentType={}），跳过", textId, text.getContentType());
+            return;
+        }
+
+        log.info("[版本重生成] 文章{} 触发强制重生成，contentType={}，version={}，flags=[{},{},{},{}]",
+                textId, text.getContentType(), normalized,
+                regenCet4, regenCet6, regenAcademic, regenParallel);
+
+        if (isMarkdown) {
+            self.generateMarkdownVersionsAsync(textId, source, regenCet4, regenCet6, regenAcademic, regenParallel);
+        } else {
+            self.generateVersionsAsync(textId, source, regenCet4, regenCet6, regenAcademic, regenParallel);
         }
     }
 
@@ -347,7 +406,7 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 log.error("[版本生成] {} 版本生成异常，文章{}", versionName, textId, e);
                 return null;
             }
-        }, versionGeneratorExecutor).orTimeout(120, TimeUnit.SECONDS).handle((result, ex) -> {
+        }, versionGeneratorExecutor).orTimeout(300, TimeUnit.SECONDS).handle((result, ex) -> {
             if (ex != null) {
                 String cause = ex.getCause() != null ? ex.getCause().getClass().getSimpleName() : "unknown";
                 log.error("[版本生成] {} 版本超时或失败，文章{}，异常类型={}，原因: {}",
@@ -355,9 +414,19 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
                 return null;
             }
             if (result != null) {
-                results.put(resultKey, result);
-                log.info("[版本生成] {} 版本已加入结果集，文章{}，结果长度={}字符",
-                        versionName, textId, result.length());
+                String cleaned = sanitizeRewrittenOutput(result);
+                if (cleaned != null && !cleaned.isBlank()) {
+                    if (cleaned.length() != result.length()) {
+                        log.info("[版本生成] {} 版本剥离分析框架，文章{}，原始长度={}，清洗后长度={}",
+                                versionName, textId, result.length(), cleaned.length());
+                    }
+                    results.put(resultKey, cleaned);
+                    log.info("[版本生成] {} 版本已加入结果集，文章{}，结果长度={}字符",
+                            versionName, textId, cleaned.length());
+                } else {
+                    log.warn("[版本生成] {} 版本清洗后为空，回退使用原始结果，文章{}", versionName, textId);
+                    results.put(resultKey, result);
+                }
             } else {
                 log.warn("[版本生成] {} 版本结果为null，文章{}", versionName, textId);
             }
@@ -386,40 +455,54 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
         }
     }
 
+    private static final String STRICT_OUTPUT_INSTRUCTION =
+            " STRICT OUTPUT: respond with the rewritten content ONLY. " +
+                    "Do NOT include any analysis, diagnosis, level descriptors, rewriting rules, constraints, " +
+                    "the original text, section headings, or labels such as \"Rewritten Text:\". " +
+                    "Do not repeat the rewritten content. No preface, no explanation, no markdown headings.";
+
     private String buildVersionPrompt(String versionName, String content) {
         boolean markdown = versionName.contains("Markdown");
 
         if (versionName.startsWith("CET-4")) {
             return markdown
                     ? "Please rewrite the following Markdown article to match CET-4 difficulty level. "
-                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown."
+                            + STRICT_OUTPUT_INSTRUCTION + "\n\n"
                             + content
                     : "Please rewrite the following English article to match CET-4 difficulty level. "
-                            + "Only return the rewritten text.\n\n" + content;
+                            + "Only return the rewritten text."
+                            + STRICT_OUTPUT_INSTRUCTION + "\n\n" + content;
         }
         if (versionName.startsWith("CET-6")) {
             return markdown
                     ? "Please rewrite the following Markdown article to match CET-6 difficulty level. "
-                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown."
+                            + STRICT_OUTPUT_INSTRUCTION + "\n\n"
                             + content
                     : "Please rewrite the following English article to match CET-6 difficulty level. "
-                            + "Only return the rewritten text.\n\n" + content;
+                            + "Only return the rewritten text."
+                            + STRICT_OUTPUT_INSTRUCTION + "\n\n" + content;
         }
         if (versionName.startsWith("Academic")) {
             return markdown
                     ? "Please rewrite the following Markdown article in an academic style. "
-                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown.\n\n"
+                            + "PRESERVE ALL Markdown formatting and image/video references. Only return the rewritten Markdown."
+                            + STRICT_OUTPUT_INSTRUCTION + "\n\n"
                             + content
                     : "Please rewrite the following English article in an academic style. "
-                            + "Only return the rewritten text.\n\n" + content;
+                            + "Only return the rewritten text."
+                            + STRICT_OUTPUT_INSTRUCTION + "\n\n" + content;
         }
         if (versionName.startsWith("Chinese Parallel")) {
             return markdown
                     ? "Please create a Chinese-English parallel text version of the following Markdown article. "
-                            + "Format: English paragraph, then Chinese paragraph. PRESERVE ALL Markdown formatting. Only return the parallel Markdown.\n\n"
+                            + "Format: English paragraph, then Chinese paragraph. PRESERVE ALL Markdown formatting. Only return the parallel Markdown."
+                            + STRICT_OUTPUT_INSTRUCTION + "\n\n"
                             + content
                     : "Please create a Chinese-English parallel text version of the following English article. "
-                            + "Format: English paragraph, then Chinese paragraph. Only return the parallel text.\n\n" + content;
+                            + "Format: English paragraph, then Chinese paragraph. Only return the parallel text."
+                            + STRICT_OUTPUT_INSTRUCTION + "\n\n" + content;
         }
 
         return content;
@@ -463,5 +546,51 @@ public class ArticleVersionServiceImpl implements ArticleVersionService {
             log.error("Error waiting for {} version generation for article {}", type, textId, e);
             futures.forEach(f -> f.cancel(true));
         }
+    }
+
+    /**
+     * 识别 HiAgent / 其他 AI 返回的"分析报告"模板（Current Level / Diagnosis / Original Text /
+     * Rewritten Text ...）并只保留 "Rewritten Text" 之后的正文。
+     *
+     * 兼容多种 markdown 形态：
+     *   **Rewritten Text:**   ## Rewritten Text:   Rewritten Text:   改写后的文本：   改写结果：
+     *
+     * 若找不到任何已知标记，原样返回（不破坏已经干净的输出）。
+     */
+    private static final Pattern REWRITTEN_MARKER = Pattern.compile(
+            "(?im)^[\\s>]*(?:\\*{1,3}\\s*|#{1,6}\\s+|-\\s+)?" +
+                    "(?:rewritten\\s+(?:text|article|version|content|paragraph|passage)" +
+                    "|改写后?(?:的)?(?:文本|文章|内容|版本|段落)?|改写结果)" +
+                    "\\s*[:：]?\\s*(?:\\*{1,3})?\\s*$");
+
+    private static final Pattern CODE_FENCE = Pattern.compile(
+            "^```[a-zA-Z0-9_-]*\\s*\\r?\\n([\\s\\S]*?)\\r?\\n```\\s*$");
+
+    static String sanitizeRewrittenOutput(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return raw;
+        }
+        String text = raw.trim();
+
+        // 1) 找到所有"Rewritten Text:"标记位置，取最后一处之后的内容
+        Matcher m = REWRITTEN_MARKER.matcher(text);
+        int lastEnd = -1;
+        while (m.find()) {
+            lastEnd = m.end();
+        }
+        if (lastEnd > 0) {
+            text = text.substring(lastEnd).trim();
+        }
+
+        // 2) 剥掉外层 ```lang\n...\n``` 代码块
+        Matcher fm = CODE_FENCE.matcher(text);
+        if (fm.matches()) {
+            text = fm.group(1).trim();
+        }
+
+        // 3) 去掉可能残留的尾部 markdown 加粗/标题符号
+        text = text.replaceAll("^\\*{1,3}\\s*", "").replaceAll("\\s*\\*{1,3}$", "").trim();
+
+        return text.isBlank() ? raw : text;
     }
 }

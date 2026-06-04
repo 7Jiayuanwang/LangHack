@@ -16,7 +16,7 @@
     </header>
 
     <!-- 主内容区域 -->
-    <main class="mobile-main">
+    <main class="mobile-main" :class="{ 'no-nav': hideNav }">
       <div class="content-container" :class="{ 'no-padding': hideHeader }">
         <transition name="fade" mode="out-in">
           <slot><router-view /></slot>
@@ -25,7 +25,7 @@
     </main>
 
     <!-- 底部导航栏 -->
-    <nav class="mobile-nav">
+    <nav class="mobile-nav" v-if="!hideNav">
       <div class="nav-container">
         <router-link
           v-for="item in navItems"
@@ -163,6 +163,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  hideNav: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const router    = useRouter()
@@ -253,6 +257,10 @@ const MORE_ITEMS = {
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
     { path: '/admin/cet-analysis',   label: '四六级分析', icon: DataAnalysis },
     { path: '/admin/recommendation-analysis', label: '推荐分析', icon: DataLine },
+    { path: '/admin/quiz-records',    label: '做题管理', icon: EditPen },
+    { path: '/admin/persona-analytics', label: '画像分析', icon: DataAnalysis, featureKey: 'admin.persona_analytics' },
+    { path: '/admin/class-cohort',      label: '班级画像', icon: DataLine,     featureKey: 'admin.class_cohort' },
+    { path: '/admin/tag-management',    label: '标签管理', icon: EditPen,      featureKey: 'admin.tag_management' },
   ],
 }
 
@@ -317,6 +325,10 @@ const ROUTE_MAP = {
     '/admin/content-review': '内容审核',
     '/admin/cet-analysis':   '四六级分析',
     '/admin/recommendation-analysis': '推荐算法分析',
+    '/admin/quiz-records':   '做题管理',
+    '/admin/persona-analytics': '画像分析',
+    '/admin/class-cohort':      '班级队列分析',
+    '/admin/tag-management':    '标签管理',
   },
 }
 
@@ -562,6 +574,10 @@ onUnmounted(() => {
   padding-bottom: calc(60px + max(8px, env(safe-area-inset-bottom)));
 }
 
+.mobile-main.no-nav {
+  padding-bottom: 0;
+}
+
 .content-container {
   flex: 1;
   min-height: 0;
@@ -572,7 +588,10 @@ onUnmounted(() => {
 .content-container.no-padding {
   padding: 0;
   padding-top: env(safe-area-inset-top, 0px);
-  overflow: hidden;
+  /* overflow 不再锁成 hidden — VideoPlayer / Videos / AiQa 等依赖外层滚动的页面会被锁死。
+     InteractiveText / StudentArticles 自带 sticky + 内部滚动容器，外层 auto 不会触发额外滚动条。 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 底部导航栏 */

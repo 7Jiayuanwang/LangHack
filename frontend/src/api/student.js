@@ -68,6 +68,14 @@ export function getTextDetail(params) {
   })
 }
 
+// 获取相关文章推荐
+export function getRelatedTexts(textId) {
+  return request({
+    url: `/api/student/learning/texts/${textId}/related`,
+    method: 'get'
+  })
+}
+
 // 获取单词详细信息
 export function getWordDetail(wordId) {
   return request({
@@ -448,11 +456,14 @@ export function markTextAsCompleted(textId, assignmentId = null) {
 }
 
 // 开始阅读课文并创建会话记录
-export function startReading(textId, assignmentId = null) {
+export function startReading(textId, assignmentId = null, contentVersion = null) {
+  const params = {}
+  if (assignmentId) params.assignmentId = assignmentId
+  if (contentVersion) params.contentVersion = contentVersion
   return request({
     url: `/api/student/learning/texts/${textId}/start`,
     method: 'post',
-    params: assignmentId ? { assignmentId } : {}
+    params
   })
 }
 

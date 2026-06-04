@@ -64,7 +64,7 @@ describe('ArticleDetailHost.vue', () => {
     expect(wrapper.find('.mobile-layout').exists()).toBe(false)
   })
 
-  it('USER 登录时渲染交互阅读页并包 MobileLayout', () => {
+  it('USER 登录时渲染交互阅读页并包 StudentLayout', () => {
     userStore.token = 'test-token'
     userStore.userRole = 'USER'
 
@@ -72,26 +72,33 @@ describe('ArticleDetailHost.vue', () => {
 
     expect(wrapper.find('.interactive-text-view').exists()).toBe(true)
     expect(wrapper.find('.simple-text-view').exists()).toBe(false)
-    expect(wrapper.find('.mobile-layout').exists()).toBe(true)
-    expect(wrapper.find('.mobile-layout').attributes('data-role')).toBe('user')
+    expect(wrapper.find('.student-layout').exists()).toBe(true)
+    expect(wrapper.find('.mobile-layout').exists()).toBe(false)
   })
 
-  it('TEACHER/ADMIN/OPS 登录时都走 MobileLayout', () => {
-    const cases = [
-      ['TEACHER', 'teacher'],
-      ['ADMIN', 'admin'],
-      ['OPS', 'ops']
-    ]
+  it('TEACHER 登录时走 MobileLayout', () => {
+    userStore.token = 'test-token'
+    userStore.userRole = 'TEACHER'
 
-    cases.forEach(([role, layoutRole]) => {
+    const wrapper = mount(ArticleDetailHost)
+
+    expect(wrapper.find('.interactive-text-view').exists()).toBe(true)
+    expect(wrapper.find('.mobile-layout').exists()).toBe(true)
+    expect(wrapper.find('.mobile-layout').attributes('data-role')).toBe('teacher')
+  })
+
+  it('ADMIN/OPS 登录时走 StudentLayout', () => {
+    const cases = ['ADMIN', 'OPS']
+
+    cases.forEach((role) => {
       userStore.token = 'test-token'
       userStore.userRole = role
 
       const wrapper = mount(ArticleDetailHost)
 
       expect(wrapper.find('.interactive-text-view').exists()).toBe(true)
-      expect(wrapper.find('.mobile-layout').exists()).toBe(true)
-      expect(wrapper.find('.mobile-layout').attributes('data-role')).toBe(layoutRole)
+      expect(wrapper.find('.student-layout').exists()).toBe(true)
+      expect(wrapper.find('.mobile-layout').exists()).toBe(false)
     })
   })
 })

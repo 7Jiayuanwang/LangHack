@@ -49,7 +49,7 @@ $env:SCHOOL_API_APP_SECRET="你的appSecret"
 
 ### 容器外运行命令
 
-在 Claude Code 里可直接用 `!` 执行。
+在终端里直接执行。
 
 #### 1. 只拉取，不入库
 

@@ -4,6 +4,7 @@ import com.english.dto.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.FieldError;
@@ -120,6 +121,16 @@ public class GlobalExceptionHandler {
     public Result<?> handleClassCast(ClassCastException e) {
         log.warn("Type casting error: {}", e.getMessage());
         return Result.error(400, "请求数据格式不匹配，请检查字段类型");
+    }
+
+    /**
+     * 权限不足 — @PreAuthorize 方法级鉴权失败
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<?> handleAccessDenied(AccessDeniedException e) {
+        log.warn("Access denied: {}", e.getMessage());
+        return Result.error(403, "权限不足");
     }
 
     /**

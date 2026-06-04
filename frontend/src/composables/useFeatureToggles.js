@@ -1,4 +1,4 @@
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { getFeatureToggles, getUserFeatureToggles, getPersonalFeatureToggles } from '@/api/systemConfig'
 import featureToggleWS from '@/utils/featureToggleWebSocket'
 

@@ -9,6 +9,7 @@ import com.english.entity.TextExercise;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.mapper.AiQuizSessionMapper;
+import com.english.service.StudentAiQuizService;
 import com.english.service.TextExerciseService;
 import com.english.service.TextService;
 import com.english.service.UserService;
@@ -42,6 +43,9 @@ public class AiQuizController {
     @Autowired
     private AiQuizSessionMapper aiQuizSessionMapper;
 
+    @Autowired
+    private StudentAiQuizService studentAiQuizService;
+
     @Autowired(required = false)
     private AiProviderRuntimeService aiProviderRuntimeService;
 
@@ -52,13 +56,27 @@ public class AiQuizController {
 
     @PostMapping("/generate")
     public Result<Map<String, Object>> generateQuiz(@RequestBody GenerateQuizRequest request) {
+        String operator = "unknown";
+        try {
+            Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) {
+                operator = auth.getName();
+            }
+        } catch (Exception ignore) {
+        }
+
+        log.info("[AI出题] 收到请求: 操作员={}, textId={}, count={}, regenerate={}",
+                operator, request.getTextId(), request.getCount(), request.getRegenerate());
+
         try {
             if (request.getTextId() == null) {
+                log.warn("[AI出题] textId为空: 操作员={}", operator);
                 return Result.error("textId 不能为空");
             }
 
             Text text = textService.getTextById(request.getTextId());
             if (text == null || Integer.valueOf(1).equals(text.getDeleted())) {
+                log.warn("[AI出题] 文章不存在或已删除: textId={}, 操作员={}", request.getTextId(), operator);
                 return Result.error("文章不存在或已被删除");
             }
 
@@ -67,25 +85,29 @@ public class AiQuizController {
                 content = text.getContent();
             }
             if (content == null || content.isBlank()) {
+                log.warn("[AI出题] 文章内容为空: textId={}, 操作员={}", request.getTextId(), operator);
                 return Result.error("文章内容为空");
             }
 
             User currentUser = getCurrentUser();
 
             if (aiProviderRuntimeService == null && hiAgentService == null) {
+                log.warn("[AI出题] AI服务未配置: 操作员={}", operator);
                 return Result.error("AI 服务未配置");
             }
 
             // 重新出题：先清空该课文的旧题（含选项 + 答题记录）
             if (Boolean.TRUE.equals(request.getRegenerate())) {
+                log.info("[AI出题] 清空旧题: textId={}, 操作员={}", request.getTextId(), operator);
                 try {
                     textExerciseService.deleteAllExercisesByTextId(request.getTextId());
                 } catch (Exception e) {
-                    log.warn("清空旧题失败: textId={}", request.getTextId(), e);
+                    log.warn("[AI出题] 清空旧题失败: textId={}, 操作员={}", request.getTextId(), operator, e);
                 }
             }
 
             int count = request.getCount() != null ? request.getCount() : 5;
+            log.info("[AI出题] 开始调用AI: textId={}, 标题=\"{}\", 题数={}, 操作员={}", request.getTextId(), text.getTitle(), count, operator);
             String prompt = buildPrompt(text.getTitle(), content, count);
 
             Optional<String> aiResponse = aiProviderRuntimeService != null
@@ -102,11 +124,20 @@ public class AiQuizController {
             }
             String jsonStr = stripCodeFence(responseText);
 
+            // JSON 完整性校验：检测 AI 响应是否被截断
+            if (!isJsonComplete(jsonStr)) {
+                log.error("[AI出题] AI返回JSON不完整(可能超时或输出截断): textId={}, 操作员={}, 长度={}, 末尾200字符={}",
+                        request.getTextId(), operator, jsonStr.length(),
+                        jsonStr.length() > 200 ? jsonStr.substring(jsonStr.length() - 200) : jsonStr);
+                return Result.error("AI 响应超时，请稍后重试或选择较短的文章");
+            }
+
             AiQuizResponseDTO quizResponse;
             try {
                 quizResponse = objectMapper.readValue(jsonStr, AiQuizResponseDTO.class);
             } catch (Exception e) {
-                log.error("AI 返回 JSON 解析失败: {}", jsonStr, e);
+                log.error("[AI出题] AI返回JSON解析失败: textId={}, 操作员={}, 错误={}, 长度={}",
+                        request.getTextId(), operator, e.getMessage(), jsonStr.length());
                 return Result.error("AI 返回格式解析失败");
             }
 
@@ -175,20 +206,33 @@ public class AiQuizController {
                 result.put("qualityMetrics", quizResponse.getQualityMetrics());
             }
 
+            log.info("[AI出题] 出题成功: textId={}, 题目数={}, 操作员={}", request.getTextId(), exercises.size(), operator);
             return Result.success("AI 出题成功", result);
 
         } catch (BusinessException e) {
+            log.warn("[AI出题] 业务异常: textId={}, 操作员={}, 原因={}", request.getTextId(), operator, e.getMessage());
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            log.error("AI 出题失败", e);
+            log.error("[AI出题] 出题失败: textId={}, 操作员={}", request.getTextId(), operator, e);
             return Result.error("AI 出题失败: " + e.getMessage());
         }
     }
 
+    /**
+     * 构建 AI 出题 prompt。超长文章自动截断，防止超过模型上下文窗口。
+     */
     private String buildPrompt(String title, String content, int count) {
+        final int MAX_CONTENT_CHARS = 8000;  // 约 2000-3000 tokens，为输出留足空间
+        String truncated;
+        if (content.length() > MAX_CONTENT_CHARS) {
+            truncated = content.substring(0, MAX_CONTENT_CHARS)
+                    + "\n\n[... 文章过长已截断，共 " + content.length() + " 字符 ...]";
+        } else {
+            truncated = content;
+        }
         return "请为以下文章生成 " + count + " 道选择题。\n\n"
                 + "【文章标题】\n" + title + "\n\n"
-                + "【文章内容】\n" + content;
+                + "【文章内容】\n" + truncated;
     }
 
     private String stripCodeFence(String text) {
@@ -204,6 +248,41 @@ public class AiQuizController {
             }
         }
         return trimmed.strip();
+    }
+
+    /**
+     * 快速检测 JSON 字符串是否结构完整（未被截断）。
+     * 检查：非空、以 { 开头 } 结尾、括号花括号配对。
+     */
+    private boolean isJsonComplete(String json) {
+        if (json == null || json.isBlank()) return false;
+        String trimmed = json.strip();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false;
+        int braceDepth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+            } else {
+                if (c == '"') {
+                    inString = true;
+                } else if (c == '{' || c == '[') {
+                    braceDepth++;
+                } else if (c == '}' || c == ']') {
+                    braceDepth--;
+                    if (braceDepth < 0) return false;
+                }
+            }
+        }
+        return braceDepth == 0 && !inString;
     }
 
     private User getCurrentUser() {
@@ -224,5 +303,38 @@ public class AiQuizController {
         private Long textId;
         private Integer count;
         private Boolean regenerate;
+    }
+
+    /**
+     * 学生端：查自己的做题尝试列表
+     */
+    @GetMapping("/my-attempts")
+    public Result<java.util.List<com.english.entity.StudentAiQuizAttempt>> listMyAttempts(
+            @RequestParam(required = false) Long textId) {
+        try {
+            User user = getCurrentUser();
+            return Result.success(studentAiQuizService.listMyAttempts(user.getId(), textId));
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            log.error("查询学生做题记录失败", e);
+            return Result.error("查询失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 学生端：查自己某次尝试的明细
+     */
+    @GetMapping("/my-attempts/{attemptId}")
+    public Result<Map<String, Object>> getMyAttemptDetail(@PathVariable Long attemptId) {
+        try {
+            User user = getCurrentUser();
+            return Result.success(studentAiQuizService.getMyAttemptDetail(user.getId(), attemptId));
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            log.error("查询学生做题明细失败 attemptId={}", attemptId, e);
+            return Result.error("查询失败，请稍后重试");
+        }
     }
 }

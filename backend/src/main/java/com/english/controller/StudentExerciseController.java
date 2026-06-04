@@ -1,12 +1,15 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.entity.StudentAiQuizAttempt;
+import com.english.entity.StudentAiQuizRecord;
 import com.english.entity.StudentExerciseAnswer;
 import com.english.entity.TextExercise;
 import com.english.entity.User;
 import com.english.entity.Assignment;
 import com.english.exception.BusinessException;
 import com.english.service.AssignmentService;
+import com.english.service.StudentAiQuizService;
 import com.english.service.StudentClassesService;
 import com.english.service.StudentExerciseService;
 import com.english.service.TextExerciseService;
@@ -15,6 +18,7 @@ import com.english.service.ClassService;
 import com.english.service.TextService;
 import com.english.service.UnitService;
 import com.english.mapper.ExerciseOptionMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,6 +68,11 @@ public class StudentExerciseController {
 
     @Autowired
     private UnitService unitService;
+
+    @Autowired
+    private StudentAiQuizService studentAiQuizService;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 提交习题答案
@@ -161,6 +170,9 @@ public class StudentExerciseController {
 
     /**
      * 批量提交 AI 出题答案（返回每题对错 + 解析）
+     * 同时写入：
+     *  - 旧表 student_exercise_answers（保留 assignment / 进度统计兼容）
+     *  - 新表 student_ai_quiz_attempts + student_ai_quiz_records（含题目快照，供管理员端查询）
      */
     @PostMapping("/submit-quiz")
     public Result<Map<String, Object>> submitQuizAnswers(@RequestBody Map<String, Object> requestData,
@@ -180,8 +192,15 @@ public class StudentExerciseController {
                 return Result.error("答案列表不能为空");
             }
 
+            // 前端可选透传：用于关联到出题会话 / 老师布置任务
+            Long sessionId = parseLongOrNull(requestData.get("sessionId"));
+            Long assignmentId = parseLongOrNull(requestData.get("assignmentId"));
+
             List<Map<String, Object>> results = new ArrayList<>();
+            List<StudentAiQuizRecord> snapshotRecords = new ArrayList<>();
             int correctCount = 0;
+            Long textIdForAttempt = null;
+            int questionOrder = 1;
 
             for (Map<String, Object> item : answers) {
                 Object exerciseIdObj = item.get("exerciseId");
@@ -190,18 +209,24 @@ public class StudentExerciseController {
 
                 Long exerciseId = Long.valueOf(exerciseIdObj.toString());
                 String userAnswer = userAnswerObj.toString();
+                Integer timeSpent = parseIntOrNull(item.get("timeSpentSeconds"));
 
                 TextExercise exercise = textExerciseService.getById(exerciseId);
                 if (exercise == null) continue;
 
-                // 查找正确答案
+                // 查找正确答案 + 构建选项快照
                 List<com.english.entity.ExerciseOption> options =
                         exerciseOptionMapper.getOptionsByExerciseId(exerciseId);
                 String correctKey = null;
+                List<Map<String, Object>> optionSnapshot = new ArrayList<>();
                 for (com.english.entity.ExerciseOption opt : options) {
+                    Map<String, Object> o = new HashMap<>();
+                    o.put("key", opt.getOptionKey());
+                    o.put("content", opt.getOptionContent());
+                    o.put("isCorrect", opt.getIsCorrect());
+                    optionSnapshot.add(o);
                     if (Integer.valueOf(1).equals(opt.getIsCorrect())) {
                         correctKey = opt.getOptionKey();
-                        break;
                     }
                 }
 
@@ -216,18 +241,55 @@ public class StudentExerciseController {
                 result.put("analysis", exercise.getAnalysis());
                 results.add(result);
 
-                // 记录答题
+                // 旧表：保留 assignment / 进度统计的兼容性
                 StudentExerciseAnswer answer = new StudentExerciseAnswer();
                 answer.setExerciseId(exerciseId);
                 answer.setStudentId(currentUser.getId());
                 answer.setAnswerContent(userAnswer);
                 answer.setIsCorrect(isCorrect);
-                answer.setTimeSpentSeconds(0);
+                answer.setTimeSpentSeconds(timeSpent != null ? timeSpent : 0);
+                if (assignmentId != null) answer.setAssignmentId(assignmentId);
                 try {
                     studentExerciseService.submitAnswer(answer);
                 } catch (Exception e) {
-                    // 记录失败不阻塞返回
-                    log.warn("记录答题失败: exerciseId={}", exerciseId, e);
+                    log.warn("旧表记录答题失败: exerciseId={}", exerciseId, e);
+                }
+
+                // 新表：构建快照明细
+                if (textIdForAttempt == null) {
+                    textIdForAttempt = exercise.getTextId();
+                }
+                StudentAiQuizRecord record = new StudentAiQuizRecord();
+                record.setExerciseId(exerciseId);
+                record.setQuestionSnapshot(exercise.getQuestion());
+                try {
+                    record.setOptionsSnapshot(objectMapper.writeValueAsString(optionSnapshot));
+                } catch (Exception e) {
+                    log.warn("序列化选项快照失败 exerciseId={}", exerciseId, e);
+                }
+                record.setCorrectAnswer(correctKey);
+                record.setAnalysisSnapshot(exercise.getAnalysis());
+                record.setUserAnswer(userAnswer);
+                record.setIsCorrect(isCorrect);
+                record.setTimeSpentSeconds(timeSpent);
+                record.setQuestionOrder(questionOrder++);
+                snapshotRecords.add(record);
+            }
+
+            // 新表：写入 attempt 汇总 + 明细（失败不阻塞返回，仅记录日志）
+            Long attemptId = null;
+            if (!snapshotRecords.isEmpty() && textIdForAttempt != null) {
+                try {
+                    StudentAiQuizAttempt attempt = new StudentAiQuizAttempt();
+                    attempt.setStudentId(currentUser.getId());
+                    attempt.setTextId(textIdForAttempt);
+                    attempt.setSessionId(sessionId);
+                    attempt.setAssignmentId(assignmentId);
+                    studentAiQuizService.saveAttempt(attempt, snapshotRecords);
+                    attemptId = attempt.getId();
+                } catch (Exception e) {
+                    log.warn("AI 题做题记录写入失败 studentId={} textId={}",
+                            currentUser.getId(), textIdForAttempt, e);
                 }
             }
 
@@ -235,6 +297,7 @@ public class StudentExerciseController {
             response.put("total", results.size());
             response.put("correctCount", correctCount);
             response.put("results", results);
+            response.put("attemptId", attemptId);
             return Result.success(response);
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
@@ -392,6 +455,24 @@ public class StudentExerciseController {
                     throw new BusinessException("无权访问该课文的习题");
                 }
             }
+        }
+    }
+
+    private static Long parseLongOrNull(Object o) {
+        if (o == null) return null;
+        try {
+            return Long.valueOf(o.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static Integer parseIntOrNull(Object o) {
+        if (o == null) return null;
+        try {
+            return Integer.valueOf(o.toString());
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 }

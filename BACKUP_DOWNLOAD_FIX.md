@@ -232,5 +232,5 @@ proxy_request_buffering off;
 ---
 
 **修复日期**：2026-05-10  
-**修复人员**：Claude Code  
+**修复人员**：AI Assistant  
 **验证状态**：待部署验证

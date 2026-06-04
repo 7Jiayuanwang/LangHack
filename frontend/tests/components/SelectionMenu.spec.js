@@ -57,10 +57,9 @@ describe('SelectionMenu.vue', () => {
       expect(wrapper.text()).toContain('划线')
     })
 
-    it('renders share menu item as disabled', () => {
-      const shareItem = wrapper.findAll('.menu-item')[2]
-      expect(shareItem.classes()).toContain('disabled')
-      expect(shareItem.text()).toContain('分享')
+    it('renders annotate menu item', () => {
+      const annotateItem = wrapper.findAll('.menu-item')[2]
+      expect(annotateItem.text()).toContain('批注')
     })
 
     it('renders AI QA menu item', () => {
@@ -113,11 +112,11 @@ describe('SelectionMenu.vue', () => {
       expect(wrapper.emitted('ai-qa').length).toBe(1)
     })
 
-    it('does not emit "share" on disabled share item click (no handler bound)', async () => {
-      const shareItem = wrapper.findAll('.menu-item')[2]
-      await shareItem.trigger('click')
-      // share item has no @click handler, so no event emitted
-      expect(wrapper.emitted('share')).toBeFalsy()
+    it('emits "annotate" when annotate menu item is clicked', async () => {
+      const annotateItem = wrapper.findAll('.menu-item')[2]
+      await annotateItem.trigger('click')
+      expect(wrapper.emitted('annotate')).toBeTruthy()
+      expect(wrapper.emitted('annotate').length).toBe(1)
     })
   })
 

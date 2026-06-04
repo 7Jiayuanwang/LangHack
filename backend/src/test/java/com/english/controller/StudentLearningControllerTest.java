@@ -313,7 +313,7 @@ class StudentLearningControllerTest {
         text.setId(5L);
         when(textMapper.selectById(5L)).thenReturn(text);
 
-        when(learningRecordsService.startReadingSession(1L, 5L, null)).thenReturn(100L);
+        when(learningRecordsService.startReadingSession(1L, 5L, null, null)).thenReturn(100L);
 
         mockMvc.perform(post("/api/student/learning/texts/5/start"))
                 .andExpect(status().isOk())
@@ -397,7 +397,7 @@ class StudentLearningControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").value("学习记录已保存"));
 
-        verify(learningRecordsService).recordLearning(eq(1L), eq("word_study"), eq(10L), eq(60), isNull(), isNull());
+        verify(learningRecordsService).recordLearning(eq(1L), eq("word_study"), eq(10L), eq(60), isNull(), isNull(), isNull());
     }
 
     @Test

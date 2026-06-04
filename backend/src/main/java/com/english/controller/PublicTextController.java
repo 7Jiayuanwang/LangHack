@@ -6,6 +6,8 @@ import com.english.entity.Text;
 import com.english.entity.UserTextRead;
 import com.english.entity.User;
 import com.english.mapper.UserTextReadMapper;
+import com.english.mapper.TextLearningRecordMapper;
+import com.english.entity.TextLearningRecord;
 import com.english.service.ArticleVersionService;
 import com.english.service.TextService;
 import com.english.service.UserService;
@@ -75,6 +77,9 @@ public class PublicTextController {
     private UserTextReadMapper userTextReadMapper;
 
     @Autowired
+    private TextLearningRecordMapper textLearningRecordMapper;
+
+    @Autowired
     private UserService userService;
 
     @Autowired
@@ -108,10 +113,9 @@ public class PublicTextController {
      */
     @GetMapping("/featured")
     public Result<List<Text>> getFeaturedTexts(
-            @RequestParam(defaultValue = "12") int count,
+            @RequestParam(required = false) Integer count,
             @RequestParam(required = false) String difficulty) {
         try {
-            count = Math.min(Math.max(count, 1), 50);
 
             List<Text> featuredTexts = textService.lambdaQuery()
                     .eq(Text::getDeleted, 0)
@@ -175,7 +179,11 @@ public class PublicTextController {
             Collections.shuffle(randomPool);
 
             List<Text> result = new ArrayList<>();
-            if (prioritized.size() >= count) {
+            if (count == null || count <= 0) {
+                // 不限制数量，返回所有推荐文章
+                result.addAll(prioritized);
+                result.addAll(randomPool);
+            } else if (prioritized.size() >= count) {
                 result = prioritized.subList(0, count);
             } else {
                 result.addAll(prioritized);
@@ -191,7 +199,6 @@ public class PublicTextController {
     }
 
     /**
-<<<<<<< HEAD
      * 个性化推荐文章
      */
     @GetMapping("/recommended")
@@ -259,6 +266,26 @@ public class PublicTextController {
         } catch (Exception e) {
             log.error("记录阅读行为失败, textId={}", textId, e);
             return Result.error("记录阅读行为失败");
+        }
+    }
+
+    @PostMapping("/{textId}/version-read")
+    public Result<Void> recordVersionRead(@PathVariable Long textId,
+                                          @RequestParam String version) {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            return Result.success(null);
+        }
+        try {
+            TextLearningRecord record = new TextLearningRecord();
+            record.setStudentId(userId);
+            record.setTextId(textId);
+            record.setContentVersion(version);
+            textLearningRecordMapper.insert(record);
+            return Result.success(null);
+        } catch (Exception e) {
+            log.warn("记录版本阅读失败, textId={}, version={}", textId, version, e);
+            return Result.success(null);
         }
     }
 

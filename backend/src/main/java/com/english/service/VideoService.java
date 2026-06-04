@@ -20,7 +20,7 @@ public interface VideoService extends IService<Video> {
 
     List<Video> getVideosByUploader(Long userId);
 
-    List<Video> getFeaturedVideos(int count);
+    List<Video> getFeaturedVideos(Integer count);
 
     List<Video> getPublicVideos(int page, int size, String keyword);
 

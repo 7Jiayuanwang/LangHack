@@ -367,5 +367,5 @@ AND CONSTRAINT_SCHEMA = 'english_learning';
 
 ## 联系人
 
-- 开发: Claude (AI Assistant)
+- 开发: AI Assistant
 - 日期: 2026-05-05

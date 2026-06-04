@@ -11,6 +11,9 @@
     <div class="menu-item" @click.stop="$emit('underline')" @touchend.stop.prevent="$emit('underline')">
       <el-icon><EditPen /></el-icon> {{ underlineLabel }}
     </div>
+    <div class="menu-item" @click.stop="$emit('translate')" @touchend.stop.prevent="$emit('translate')">
+      <el-icon><MagicStick /></el-icon> 翻译
+    </div>
     <div class="menu-item" @click.stop="$emit('annotate')" @touchend.stop.prevent="$emit('annotate')">
       <el-icon><Comment /></el-icon> 批注
     </div>
@@ -22,7 +25,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { CopyDocument, EditPen, Comment, ChatLineRound } from '@element-plus/icons-vue'
+import { CopyDocument, EditPen, Comment, ChatLineRound, MagicStick } from '@element-plus/icons-vue'
 
 const props = defineProps({
   visible: {
@@ -41,23 +44,32 @@ const props = defineProps({
     default: '划线'
   }
 })
-defineEmits(['copy', 'underline', 'annotate', 'ai-qa'])
+defineEmits(['copy', 'underline', 'translate', 'annotate', 'ai-qa'])
 
 // 防止菜单超出视口右边界：菜单自身宽度约 220px，水平居中后需保留一半安全边距
 const menuStyle = computed(() => {
-  const MENU_HALF_WIDTH = 110 // 菜单宽度的一半（估算值），用于边界钳制
+  const MENU_HALF_WIDTH = 110
   const SAFE_MARGIN = 8
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 375
 
-  // 确保 position 对象合法
   const x = props.position?.x ?? 0
   const y = props.position?.y ?? 0
 
-  // 钳制 x 坐标，使菜单不超出左右边界
   const clampedX = Math.min(
     Math.max(x, MENU_HALF_WIDTH + SAFE_MARGIN),
     viewportWidth - MENU_HALF_WIDTH - SAFE_MARGIN
   )
+
+  // 移动端菜单放在选区上方，避免和系统菜单重叠
+  if (isMobile) {
+    return {
+      left: clampedX + 'px',
+      bottom: `calc(100vh - ${y - 12}px)`,
+      transform: 'translateX(-50%)'
+    }
+  }
+
   return {
     left: clampedX + 'px',
     top: y + 'px'

@@ -473,19 +473,15 @@ public class ExerciseController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> deleteAllExercisesByTextId(@PathVariable Long textId) {
         try {
-            // 验证教师权限：非ADMIN教师只能删除自己创建的课文习题
+            // 验证教师权限：教师可以删除任何课文的习题（重新出题场景）
             com.english.entity.User currentUser = getCurrentUser();
 
             if (!"ADMIN".equals(currentUser.getRole())) {
-                // FIX #3: 改进权限检查逻辑，验证课文本身的权限而非习题
                 com.english.entity.Text text = textService.getTextById(textId);
                 if (text == null) {
                     return Result.error("课文不存在");
                 }
-                Long textCreatedBy = text.getUploadedBy();
-                if (textCreatedBy == null || !textCreatedBy.equals(currentUser.getId())) {
-                    return Result.error("无权删除其他教师创建的课文习题");
-                }
+                // 教师可以删除任何课文的习题，无需检查 uploadedBy
             }
 
             boolean success = textExerciseService.deleteAllExercisesByTextId(textId);
@@ -552,16 +548,12 @@ public class ExerciseController {
         boolean isTeacher = authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_TEACHER".equals(a.getAuthority()));
 
+        // 教师可以访问任何课文的习题（AI出题、自主练习等场景）
         if (isTeacher) {
-            // 教师只能访问自己创建的课文的习题
-            com.english.entity.User currentUser = userService.getUserByUsername(authentication.getName());
-            if (currentUser == null) throw new BusinessException("用户不存在");
-            if (text.getUploadedBy() != null && !text.getUploadedBy().equals(currentUser.getId())) {
-                throw new BusinessException("无权访问其他教师创建的课文习题");
-            }
-        } else {
-            // 学生/普通用户：自主练习不限制访问权限
+            return;  // 允许访问
         }
+
+        // 学生/普通用户：自主练习不限制访问权限
     }
 
     /**

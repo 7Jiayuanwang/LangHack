@@ -10,7 +10,9 @@
             <span>{{ fromSource === 'assignment' ? '返回任务' : '返回' }}</span>
           </button>
           <div class="header-divider"></div>
-          <h2 class="header-title" :title="textTitle">{{ textTitle }}</h2>
+          <div class="header-title-scroll" ref="headerTitleRef">
+            <h2 class="header-title" :class="{ 'scrolling': isTitleOverflow }" :title="textTitle">{{ textTitle }}</h2>
+          </div>
         </div>
         
         <div class="header-right">
@@ -43,8 +45,6 @@
             {{ wordCount }} words
           </span>
         </div>
-        
-        <h1 class="article-title">{{ textTitle }}</h1>
 
         <!-- Redesigned Version Selector -->
         <div class="version-pill-selector" v-if="availableVersions.length > 1">
@@ -99,9 +99,6 @@
               AI 出题（{{ quizQuestions.length }} 题）
             </span>
             <div class="quiz-inline-actions-top">
-              <el-button size="small" @click="regenerateQuiz" :loading="quizLoading">
-                重新出题
-              </el-button>
               <el-button size="small" @click="closeQuiz">收起</el-button>
             </div>
           </div>
@@ -156,6 +153,49 @@
               重新作答
             </el-button>
           </div>
+        </div>
+      </section>
+
+      <!-- Related Articles Section -->
+      <section class="related-articles" v-if="relatedTexts.length > 0">
+        <h3 class="related-title">相关推荐</h3>
+        <div class="related-cards">
+          <article
+            class="article-card"
+            v-for="(item, idx) in relatedTexts"
+            :key="item.id"
+            @click="goToRelatedArticle(item.id)"
+          >
+            <div class="article-cover">
+              <div class="cover-gradient"></div>
+              <div
+                class="cover-image"
+                :style="{
+                  background: item._gradient || relatedGradients[idx % relatedGradients.length],
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }"
+              ></div>
+              <div class="category-badge">
+                <el-icon :size="14"><Reading /></el-icon>
+                <span>文章</span>
+              </div>
+            </div>
+            <div class="article-content">
+              <h2 class="article-title">{{ item.title }}</h2>
+              <p class="article-snippet">{{ item.wordCount }} words</p>
+            </div>
+            <div class="article-footer">
+              <div class="difficulty-pill" :class="item.difficulty">
+                <el-icon :size="14"><component :is="getDiffIcon(item.difficulty)" /></el-icon>
+                <span>{{ getDiffText(item.difficulty) }}</span>
+              </div>
+              <div class="reading-time">
+                <el-icon :size="16"><Timer /></el-icon>
+                <span>{{ Math.ceil((item.wordCount || 0) / 100) }} min</span>
+              </div>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -343,27 +383,6 @@
       </template>
     </el-dialog>
 
-    <!-- 浮动翻译按钮（Markdown 模式下由父页面提供，样式与子组件一致） -->
-    <div
-      v-if="isMarkdown"
-      class="floating-translate-btn"
-      :class="{ 'selecting': isSelectingMode }"
-      :style="{ top: floatingBtnPosition.y + 'px', left: floatingBtnPosition.x + 'px' }"
-      @mousedown="startTranslateBtnDrag"
-      @touchstart.prevent="startTranslateBtnDrag"
-    >
-      <el-tooltip :content="isSelectingMode ? '选择文本后点击翻译' : '点击开始翻译'" placement="left">
-        <button
-          class="translate-fab"
-          :class="isSelectingMode ? 'fab-active' : 'fab-default'"
-        >
-          <span v-if="isSelectingMode" class="fab-icon">✓</span>
-          <span v-else class="fab-icon">译</span>
-          <span class="fab-label">{{ isSelectingMode ? '翻译' : '划词翻译' }}</span>
-        </button>
-      </el-tooltip>
-    </div>
-
     <!-- 文本选择菜单 -->
     <SelectionMenu
       :visible="showSelectionMenu"
@@ -371,6 +390,7 @@
       :underline-label="selectionUnderlineLabel"
       @copy="handleCopy"
       @underline="handleUnderline"
+      @translate="handleTranslateSelection"
       @annotate="handleAnnotate"
       @ai-qa="handleAiQa"
     />
@@ -453,8 +473,8 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment } from '@element-plus/icons-vue'
-import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite } from '@/api/student'
+import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts } from '@element-plus/icons-vue'
+import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, getRelatedTexts } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
 import { marked } from 'marked'
@@ -492,6 +512,16 @@ const unitId = ref(null)
 const courseName = ref('')
 const unitName = ref('')
 const textTitle = ref('')
+const headerTitleRef = ref(null)
+const isTitleOverflow = ref(false)
+
+const checkTitleOverflow = () => {
+  const el = headerTitleRef.value
+  if (el) {
+    isTitleOverflow.value = el.scrollWidth > el.clientWidth
+  }
+}
+
 const textContent = ref('')
 const isMarkdown = ref(false)
 const difficulty = ref('MEDIUM')
@@ -553,18 +583,46 @@ let studyStartTime = null
 // AI 出题相关数据
 const quizLoading = ref(false)
 const quizQuestions = ref([])
+const quizStartedAt = ref(null) // 进入做题界面的时间戳，用于计算每题用时
 let accumulatedTime = 0 // 累计学习时间（秒）
+
+// 相关文章推荐
+const relatedTexts = ref([])
+
+// 相关文章卡片渐变色
+const relatedGradients = [
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
+  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
+  'linear-gradient(135deg, #f5576c 0%, #ff6a00 100%)',
+  'linear-gradient(135deg, #0ba360 0%, #3cba92 100%)',
+]
+const getDiffText = (diff) => {
+  const map = { 'EASY': '简单 EASY', 'MEDIUM': '中等 INT', 'HARD': '困难 HARD' }
+  return map[diff] || diff
+}
+const getDiffIcon = (diff) => {
+  const map = { 'EASY': Medal, 'MEDIUM': Connection, 'HARD': TrendCharts }
+  return map[diff] || Medal
+}
 
 // 翻译相关
 const showTranslateDialog = ref(false)
 const selectedTextForTranslate = ref('')
 const translatedText = ref('')
 const translating = ref(false)
-const isSelectingMode = ref(false)
 
 // 响应式弹窗宽度
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
-const handleWindowResize = () => { windowWidth.value = window.innerWidth }
+const handleWindowResize = () => {
+  windowWidth.value = window.innerWidth
+  checkTitleOverflow()
+}
 let autoStartTimerId = null
 let textContentWatchTimerId = null
 let floatingBtnResetTimerId = null
@@ -586,11 +644,6 @@ const translateDialogWidth = computed(() => {
   if (windowWidth.value < 768) return '230px'
   return '400px'
 })
-
-// 浮动按钮位置和拖动
-const floatingBtnPosition = reactive({ x: typeof window !== 'undefined' ? window.innerWidth - 80 : 800, y: typeof window !== 'undefined' ? window.innerHeight / 2 : 400 })
-const isTranslateBtnDragging = ref(false)
-const translateBtnDragOffset = reactive({ x: 0, y: 0 })
 
 // 选择菜单相关
 const showSelectionMenu = ref(false)
@@ -745,6 +798,7 @@ const loadTextDetail = async () => {
     if (response.code === 200) {
       const data = response.data
       textTitle.value = data.title
+      nextTick(checkTitleOverflow)
       difficulty.value = data.difficulty || 'MEDIUM'
       courseId.value = data.courseId
       unitId.value = data.unitId
@@ -840,6 +894,13 @@ const loadTextDetail = async () => {
 
       // 生成学习建议
       generateLearningSuggestions()
+
+      // 异步加载相关文章推荐（不阻塞主流程）
+      getRelatedTexts(textId.value).then(res => {
+        if (res?.code === 200 && Array.isArray(res.data)) {
+          relatedTexts.value = res.data
+        }
+      }).catch(() => {})
     } else {
       ElMessage.error('获取课文详情失败')
     }
@@ -879,7 +940,7 @@ const generateLearningSuggestions = () => {
 
 const startReading = async () => {
   try {
-    const response = await studentApi.startReading(textId.value, assignmentId.value)
+    const response = await studentApi.startReading(textId.value, assignmentId.value, currentVersion.value)
     if (response.code === 200) {
       currentRecordId.value = response.data
       recording.value = true
@@ -932,9 +993,9 @@ const saveLearningRecord = async () => {
       // 这里我们保存总时间，让后端处理增量逻辑
       const recordPayload = {
         type: 'TEXT_VIEW',
-        duration: studyTime.value, // 保存总学习时间
+        duration: studyTime.value,
         textId: textId.value,
-        // 如果是从任务来的，包含任务ID
+        contentVersion: currentVersion.value,
         ...(assignmentId.value && { assignmentId: assignmentId.value })
       }
 
@@ -965,100 +1026,6 @@ const stopStudyTimer = () => {
   if (studyTimer) {
     clearInterval(studyTimer)
     studyTimer = null
-  }
-}
-
-// 浮动翻译按钮拖动
-let floatingBtnDragHandlers = null
-
-const startTranslateBtnDrag = (event) => {
-  // 支持鼠标和触摸
-  const isTouch = event.type === 'touchstart'
-  if (!isTouch && event.button !== 0) return // 鼠标只响应左键
-
-  const startX = isTouch ? event.touches[0].clientX : event.clientX
-  const startY = isTouch ? event.touches[0].clientY : event.clientY
-  const startTime = Date.now()
-  let hasMoved = false
-
-  isTranslateBtnDragging.value = true
-
-  translateBtnDragOffset.x = startX - floatingBtnPosition.x
-  translateBtnDragOffset.y = startY - floatingBtnPosition.y
-
-  if (isTouch) {
-    event.preventDefault()
-  }
-
-  const handleMove = (e) => {
-    if (isTranslateBtnDragging.value) {
-      const moveX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX
-      const moveY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY
-
-      // 如果移动距离超过5px，认为是拖动
-      const deltaX = Math.abs(moveX - startX)
-      const deltaY = Math.abs(moveY - startY)
-      if (deltaX > 5 || deltaY > 5) {
-        hasMoved = true
-      }
-
-      floatingBtnPosition.x = moveX - translateBtnDragOffset.x
-      floatingBtnPosition.y = moveY - translateBtnDragOffset.y
-    }
-  }
-
-  const handleEnd = (e) => {
-    const endTime = Date.now()
-    const duration = endTime - startTime
-
-    // 移除事件监听
-    document.removeEventListener('mousemove', handleMove)
-    document.removeEventListener('mouseup', handleEnd)
-    document.removeEventListener('touchmove', handleMove)
-    document.removeEventListener('touchend', handleEnd)
-
-    // 如果没有移动，且时间很短（<300ms），认为是点击
-    if (!hasMoved && duration < 300) {
-      isTranslateBtnDragging.value = false
-      // 触发点击事件
-      handleFloatingBtnClick(e)
-    } else {
-      // 延迟重置，避免立即触发点击
-      setTimeout(() => {
-        isTranslateBtnDragging.value = false
-      }, 100)
-    }
-  }
-
-  document.addEventListener('mousemove', handleMove)
-  document.addEventListener('mouseup', handleEnd)
-  document.addEventListener('touchmove', handleMove, { passive: false })
-  document.addEventListener('touchend', handleEnd)
-  floatingBtnDragHandlers = { move: handleMove, end: handleEnd }
-}
-
-// 处理浮动按钮点击
-const handleFloatingBtnClick = (event) => {
-  // 如果刚拖动过，不触发点击
-  if (isTranslateBtnDragging.value) {
-    return
-  }
-  
-  // 获取当前选中的文本
-  const selection = window.getSelection()
-  if (!selection) {
-    ElMessage.warning('请先选择要翻译的文本')
-    return
-  }
-  const text = selection.toString().trim()
-  
-  if (text && text.length > 0) {
-    // 如果已经选中了文本，直接翻译
-    selectedTextForTranslate.value = text
-    translateSelectedText()
-  } else {
-    // 如果没有选中文本，提示用户
-    ElMessage.warning('请先选择要翻译的文本')
   }
 }
 
@@ -1302,6 +1269,16 @@ const goBack = () => {
   }
 }
 
+// 跳转到相关文章
+const goToRelatedArticle = (id) => {
+  const from = route.query.from
+  const query = from ? { from } : {}
+  router.push({ path: `/article/${id}`, query }).then(() => {
+    const scrollEl = document.querySelector('.content-wrapper')
+    if (scrollEl) scrollEl.scrollTop = 0
+  })
+}
+
 // 为 HTML 内容中的英文单词添加点击功能
 // 注意：此函数的输入必须是已经过 DOMPurify.sanitize() 处理的 HTML
 const addClickableWordsToHtml = (sanitizedHtml) => {
@@ -1481,7 +1458,8 @@ const handleAddToVocabulary = async () => {
       definition: selectedWordInfo.value.translation || selectedWordInfo.value.definition || '暂无释义',
       pronunciation: selectedWordInfo.value.phonetic || selectedWordInfo.value.pronunciation || '',
       exampleSentence: selectedWordInfo.value.exampleSentence || selectedWordInfo.value.examples || '',
-      audioUrl: selectedWordInfo.value.audioUrl || selectedWordInfo.value.audio || ''
+      audioUrl: selectedWordInfo.value.audioUrl || selectedWordInfo.value.audio || '',
+      sourceType: 'ARTICLE' // 文章阅读页加入，明确标记来源为文章
     })
 
     if (response.code === 200) {
@@ -1519,6 +1497,19 @@ watch(textContent, () => {
     applySharedUnderlines()
     textContentWatchTimerId = null
   }, 800) // 从 500ms 延长到 800ms，减少重复渲染
+})
+
+// 监听路由参数变化（相关文章点击时复用组件，需重新加载数据）
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    textId.value = newId
+    relatedTexts.value = []
+    quizQuestions.value = []
+    isCompleted.value = false
+    const scrollEl = document.querySelector('.content-wrapper')
+    if (scrollEl) scrollEl.scrollTop = 0
+    loadTextDetail()
+  }
 })
 
 // 处理 Markdown 中的单词点击
@@ -1677,14 +1668,6 @@ onBeforeUnmount(() => {
   // 防御性清理：如果组件在拖拽过程中卸载，确保 document 级监听器被移除
   document.removeEventListener('mousemove', onDrag);
   document.removeEventListener('mouseup', endDrag);
-  // 清理浮动按钮拖拽事件监听
-  if (floatingBtnDragHandlers) {
-    document.removeEventListener('mousemove', floatingBtnDragHandlers.move);
-    document.removeEventListener('mouseup', floatingBtnDragHandlers.end);
-    document.removeEventListener('touchmove', floatingBtnDragHandlers.move);
-    document.removeEventListener('touchend', floatingBtnDragHandlers.end);
-    floatingBtnDragHandlers = null
-  }
 
   // 清理选区交互监听
   document.removeEventListener('mousedown', onDragStart)
@@ -1746,6 +1729,7 @@ onBeforeUnmount(() => {
       type: 'TEXT_VIEW',
       duration: studyTime.value,
       textId: textId.value,
+      contentVersion: currentVersion.value,
       ...(assignmentId.value && { assignmentId: assignmentId.value })
     }
     const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
@@ -1837,8 +1821,6 @@ const clampLargeSelection = (selection) => {
 
 // 处理文本选择（防抖：50ms 延迟防止拖动时频繁触发）
 const handleSelectionChange = () => {
-  if (isTranslateBtnDragging.value) return
-
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || selection.isCollapsed) {
     if (selectionMenuHideTimerId) clearTimeout(selectionMenuHideTimerId)
@@ -2086,6 +2068,17 @@ const handleAiQa = () => {
   })
 }
 
+// 翻译选中文本（从选择菜单触发）
+const handleTranslateSelection = () => {
+  const text = selectedTextContent.value?.trim()
+  if (text && text.length > 0) {
+    selectedTextForTranslate.value = text
+    translateSelectedText()
+  } else {
+    ElMessage.warning('请先选择要翻译的文本')
+  }
+}
+
 // AI 出题相关方法
 const handleAiQuiz = async () => {
   if (!textId.value) {
@@ -2112,6 +2105,7 @@ const handleAiQuiz = async () => {
         showAnswer: false,
         options: q.options || []
       }))
+      quizStartedAt.value = Date.now()
       ElMessage.success(`已加载 ${existData.length} 道题目`)
       return
     }
@@ -2131,6 +2125,7 @@ const handleAiQuiz = async () => {
           showAnswer: false,
           options: q.options || []
         }))
+        quizStartedAt.value = Date.now()
         ElMessage.success(`AI 成功生成 ${quizData.questionCount} 道题目`)
       }
     } else {
@@ -2147,6 +2142,7 @@ const handleAiQuiz = async () => {
 const selectQuizAnswer = (questionIndex, optionKey) => {
   if (quizQuestions.value[questionIndex].showAnswer) return
   quizQuestions.value[questionIndex].userAnswer = optionKey
+  quizQuestions.value[questionIndex]._answeredAt = Date.now()
 }
 
 const submitQuiz = async () => {
@@ -2157,11 +2153,18 @@ const submitQuiz = async () => {
   }
 
   try {
-    const answers = quizQuestions.value.map(q => ({
-      exerciseId: q.id,
-      userAnswer: q.userAnswer
-    }))
-    const res = await submitQuizAnswers(answers)
+    let prevTs = quizStartedAt.value || Date.now()
+    const answers = quizQuestions.value.map(q => {
+      const ts = q._answeredAt || Date.now()
+      const timeSpentSeconds = Math.max(0, Math.round((ts - prevTs) / 1000))
+      prevTs = ts
+      return {
+        exerciseId: q.id,
+        userAnswer: q.userAnswer,
+        timeSpentSeconds
+      }
+    })
+    const res = await submitQuizAnswers({ answers })
     const data = res?.data || res
 
     if (data && data.results) {
@@ -2231,6 +2234,7 @@ const restoreQuizProgress = () => {
       const saved = JSON.parse(raw)
       if (Array.isArray(saved) && saved.length > 0) {
         quizQuestions.value = saved
+        quizStartedAt.value = Date.now()
         localStorage.removeItem(key)
         return true
       }
@@ -2271,6 +2275,7 @@ const regenerateQuiz = async () => {
           showAnswer: false,
           options: q.options || []
         }))
+        quizStartedAt.value = Date.now()
         ElMessage.success(`已重新生成 ${quizData.questionCount} 道题目`)
       }
     } else {
@@ -2528,13 +2533,27 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   background: #e2e8f0;
 }
 
+.header-title-scroll {
+  max-width: 300px;
+  overflow: hidden;
+  position: relative;
+}
+
 .header-title {
   font-size: 16px;
   font-weight: 700;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 300px;
+  display: inline-block;
+  padding-right: 24px;
+}
+
+.header-title.scrolling {
+  animation: header-title-scroll 12s linear infinite;
+}
+
+@keyframes header-title-scroll {
+  0%, 10% { transform: translateX(0); }
+  90%, 100% { transform: translateX(calc(-100% + 300px + 24px)); }
 }
 
 /* Difficulty Pill */
@@ -2737,24 +2756,10 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .version-pill-selector,
 .version-pill-selector *,
 .reader-footer,
-.reader-footer *,
-.floating-translate-btn,
-.floating-translate-btn * {
+.reader-footer * {
   user-select: none !important;
   -webkit-user-select: none !important;
   -webkit-touch-callout: none !important;
-}
-
-.floating-translate-btn,
-.floating-translate-btn button,
-.floating-translate-btn .translate-fab,
-.floating-translate-btn .fab-icon,
-.floating-translate-btn .fab-label,
-.floating-translate-btn span {
-  user-select: none !important;
-  -webkit-user-select: none !important;
-  -webkit-touch-callout: none !important;
-  -webkit-tap-highlight-color: transparent;
 }
 
 .article-body :deep(.interactive-text),
@@ -2773,6 +2778,21 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .markdown-content :deep(p) {
   text-align: justify;
   margin-bottom: 24px;
+}
+
+.markdown-content :deep(ul),
+.markdown-content :deep(ol) {
+  margin: 0 0 24px 0;
+  padding-left: 24px;
+}
+
+.markdown-content :deep(li) {
+  margin-bottom: 8px;
+  line-height: 1.8;
+}
+
+.markdown-content :deep(li p) {
+  margin-bottom: 8px;
 }
 
 .article-body :deep(img),
@@ -3017,6 +3037,180 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   color: #94a3b8;
 }
 
+/* Related Articles */
+.related-articles {
+  margin-top: 48px;
+  padding: 0 8px;
+}
+
+.related-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 16px;
+  padding-left: 4px;
+}
+
+.related-cards {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.related-cards::-webkit-scrollbar {
+  height: 4px;
+}
+
+.related-cards::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+.related-cards .article-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #f1f5f9;
+  flex: 0 0 200px;
+  height: 280px;
+}
+
+@media (hover: hover) {
+  .related-cards .article-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px -4px rgba(0,0,0,0.08);
+  }
+}
+
+.related-cards .article-card:active {
+  transform: scale(0.98);
+}
+
+.related-cards .article-cover {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  overflow: hidden;
+}
+
+.related-cards .cover-image {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.7s ease;
+}
+
+.related-cards .article-card:hover .cover-image {
+  transform: scale(1.05);
+}
+
+.related-cards .cover-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%);
+  z-index: 1;
+}
+
+.related-cards .category-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.related-cards .article-content {
+  padding: 10px 12px 6px;
+  flex: 1;
+}
+
+.related-cards .article-title {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f172a;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  height: calc(2 * 1.3em);
+}
+
+.related-cards .article-snippet {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--app-text-muted, #94a3b8);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.related-cards .article-footer {
+  padding: 0 12px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.related-cards .difficulty-pill {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.related-cards .difficulty-pill.EASY {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.related-cards .difficulty-pill.MEDIUM {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.related-cards .difficulty-pill.HARD {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.related-cards .reading-time {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--app-text-muted, #94a3b8);
+}
+
 .reader-footer {
   margin-top: 80px;
   display: flex;
@@ -3090,8 +3284,31 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   }
 
   .glass-header .header-inner {
-    height: 52px;
-    padding: 0 12px;
+    height: 48px;
+    padding: 0 8px;
+    flex-wrap: nowrap;
+  }
+
+  .glass-header .header-left,
+  .glass-header .header-right {
+    gap: 8px;
+  }
+
+  .glass-header .header-title-scroll {
+    max-width: 150px;
+  }
+
+  .glass-header .header-title {
+    font-size: 13px;
+  }
+
+  .glass-header .header-title.scrolling {
+    animation: header-title-scroll-mobile 12s linear infinite;
+  }
+
+  @keyframes header-title-scroll-mobile {
+    0%, 10% { transform: translateX(0); }
+    90%, 100% { transform: translateX(calc(-100% + 150px + 24px)); }
   }
 
   .article-title {
@@ -3117,9 +3334,6 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     line-height: 1.75;
   }
 
-  .header-title {
-    display: none;
-  }
 
   .article-body :deep(.interactive-text),
   .markdown-content {
@@ -3160,6 +3374,31 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .related-articles {
+    margin-top: 32px;
+  }
+
+  .related-title {
+    font-size: 16px;
+  }
+
+  .related-cards .article-card {
+    flex: 0 0 160px;
+    height: 240px;
+  }
+
+  .related-cards .article-cover {
+    height: 100px;
+  }
+
+  .related-cards .article-title {
+    font-size: 13px;
+  }
+
+  .related-cards .article-snippet {
+    font-size: 11px;
   }
 
   .reader-footer {
@@ -3292,110 +3531,6 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   top: 55px !important;
 }
 
-/* 浮动翻译按钮（Markdown 模式，样式与 components/InteractiveText.vue 保持一致） */
-.floating-translate-btn {
-  position: fixed;
-  z-index: 1000;
-  cursor: move;
-  touch-action: none;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
-  transition: filter 0.2s;
-}
-
-.floating-translate-btn:hover {
-  filter: drop-shadow(0 6px 20px rgba(24, 144, 255, 0.4));
-}
-
-.floating-translate-btn .translate-fab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  gap: 2px;
-  transition: transform 0.2s, box-shadow 0.2s;
-  position: relative;
-  overflow: hidden;
-}
-
-.floating-translate-btn .translate-fab::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  opacity: 0;
-  transition: opacity 0.2s;
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.floating-translate-btn .translate-fab:hover::before { opacity: 1; }
-.floating-translate-btn .translate-fab:active { transform: scale(0.94) !important; }
-
-.floating-translate-btn .fab-default {
-  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
-  box-shadow: 0 4px 14px rgba(24, 144, 255, 0.5), 0 0 0 3px rgba(24, 144, 255, 0.15);
-}
-
-.floating-translate-btn .fab-active {
-  background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
-  box-shadow: 0 4px 14px rgba(82, 196, 26, 0.5), 0 0 0 3px rgba(82, 196, 26, 0.15);
-  animation: md-pulse-active 1.5s ease-in-out infinite;
-}
-
-.floating-translate-btn .fab-icon {
-  font-size: 20px;
-  font-weight: 800;
-  color: #fff;
-  line-height: 1;
-  letter-spacing: -0.5px;
-}
-
-.floating-translate-btn .fab-label {
-  font-size: 9px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 1;
-  white-space: nowrap;
-  letter-spacing: 0.3px;
-}
-
-.floating-translate-btn:hover .translate-fab {
-  transform: scale(1.08) translateY(-2px);
-}
-
-@keyframes md-pulse-active {
-  0%, 100% {
-    box-shadow: 0 4px 14px rgba(82, 196, 26, 0.5), 0 0 0 3px rgba(82, 196, 26, 0.15);
-  }
-  50% {
-    box-shadow: 0 6px 20px rgba(82, 196, 26, 0.65), 0 0 0 6px rgba(82, 196, 26, 0.1);
-  }
-}
-
-@media (max-width: 768px) {
-  .floating-translate-btn .translate-fab {
-    width: 52px;
-    height: 52px;
-    border-radius: 14px;
-  }
-  .floating-translate-btn .fab-icon { font-size: 18px; }
-  .floating-translate-btn .fab-label { font-size: 8px; }
-}
-
-@media (max-width: 480px) {
-  .floating-translate-btn .translate-fab {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-  }
-  .floating-translate-btn .fab-icon { font-size: 17px; }
-}
-
 </style>
 
 <style>
@@ -3454,7 +3589,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .translate-dialog .original-text p,
 .translate-dialog .translated-text p {
-  height: 350px;
+  max-height: 350px;
   overflow-y: auto;
   margin: 0;
   padding: 12px;

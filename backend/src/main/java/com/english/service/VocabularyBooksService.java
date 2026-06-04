@@ -34,6 +34,18 @@ public interface VocabularyBooksService {
     void addToVocabularyWithLevel(Long studentId, Long wordId, String masteryLevel);
 
     /**
+     * 添加单词到生词本并设置掌握程度及来源类型
+     */
+    void addToVocabularyWithLevel(Long studentId, Long wordId, String masteryLevel, String sourceType);
+
+    /**
+     * 当生词本中已存在该词时，如果其来源不是 ARTICLE，则升级为 ARTICLE
+     * 用于"用户在文章页再次加同一个词"场景，把旧的 MANUAL 记录升级，让它能被文章生词列表统计到
+     * @return true 表示进行了升级，false 表示原本就是 ARTICLE 或记录不存在
+     */
+    boolean upgradeSourceTypeToArticle(Long studentId, Long wordId);
+
+    /**
      * 获取生词本列表（分页）
      */
     Map<String, Object> getVocabularyWithPagination(Map<String, Object> params);
@@ -87,4 +99,9 @@ public interface VocabularyBooksService {
      * 获取生词本统计信息
      */
     Map<String, Object> getVocabularyStats(Long studentId);
+
+    /**
+     * 获取复习统计（逾期/待复习数量）
+     */
+    Map<String, Object> getReviewStats(Long studentId);
 }

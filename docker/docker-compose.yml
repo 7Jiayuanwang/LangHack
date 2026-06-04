@@ -218,12 +218,12 @@ services:
       # 应用端口（容器内部）
       SERVER_PORT: ${SERVER_PORT:-8080}
       # 主库
-      DB_URL: ${DB_URL}
-      DB_USERNAME: ${DB_USERNAME}
+      DB_URL: jdbc:mysql://mysql-master:3306/english_learning?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+      DB_USERNAME: ${DB_USERNAME:-root}
       DB_PASSWORD: ${DB_PASSWORD}
-      # 从库（读写分离，可选）
-      DB_SLAVE_URL: ${DB_SLAVE_URL}
-      DB_SLAVE_USERNAME: ${DB_SLAVE_USERNAME:-${DB_USERNAME}}
+      # 从库（读写分离，可选），默认值与主库等同
+      DB_SLAVE_URL: jdbc:mysql://mysql-slave:3306/english_learning?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+      DB_SLAVE_USERNAME: ${DB_SLAVE_USERNAME:-${DB_USERNAME:-root}}
       DB_SLAVE_PASSWORD: ${DB_SLAVE_PASSWORD:-${DB_PASSWORD}}
       # Redis
       REDIS_HOST: redis
@@ -262,6 +262,9 @@ services:
       APP_UPDATE_DOCKER_SOCKET: "${APP_UPDATE_DOCKER_SOCKET:-/var/run/docker.sock}"
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
+      # 零停机热更新（HotDeployController 启动 deployer sidecar 容器时需要）
+      HOT_DEPLOY_HOST_PROJECT: ${HOT_DEPLOY_HOST_PROJECT:-}
+      HOT_DEPLOY_LOG_DIR: /app/hot-deploy-logs
     ports:
       - "${PORT_BACKEND:-8080}:${SERVER_PORT:-8080}"
     volumes:
@@ -270,7 +273,9 @@ services:
       - ../uploads:/app/uploads
       # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
       - ../backups:/app/backups
-      # Docker Socket — 热部署 deployer sidecar 需要
+      # 零停机热更新：与 deployer sidecar 共享日志目录（由 HotDeployController 写读）
+      - ../logs/hot-deploy:/app/hot-deploy-logs
+      # 零停机热更新：挂载宿主机 docker socket，使后端可启动 deployer 兄弟容器
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - langhack-network
