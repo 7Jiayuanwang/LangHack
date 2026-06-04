@@ -766,17 +766,16 @@ VALUES (1, 1, '0 0 2 * * ?', 2, 0, 30, 50, 0, 7);
 -- 4. 自动更新配置表 [原 V8]
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS update_config (
-    id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
-    cron_expr            VARCHAR(64) NOT NULL DEFAULT '0 0 3 * * ?' COMMENT 'Spring cron expression',
-    enabled              TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether scheduled self-update is enabled',
-    git_branch           VARCHAR(64) NOT NULL DEFAULT 'master' COMMENT 'tracked git branch',
-    backup_before_update TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'whether to back up the database before update',
-    last_run_at          DATETIME DEFAULT NULL COMMENT 'last execution time',
-    last_run_status      VARCHAR(16) DEFAULT 'NEVER' COMMENT 'NEVER/RUNNING/SUCCESS/FAILED'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='self-update configuration';
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    enabled         TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether scheduled hot deploy is enabled',
+    cron_expr       VARCHAR(64) NOT NULL DEFAULT '0 0 2 ? * SUN' COMMENT 'Spring cron expression',
+    git_branch      VARCHAR(64) NOT NULL DEFAULT 'master' COMMENT 'tracked git branch',
+    last_run_at     DATETIME DEFAULT NULL COMMENT 'last execution time',
+    last_run_status VARCHAR(16) DEFAULT 'NEVER' COMMENT 'NEVER/RUNNING/SUCCESS/FAILED'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='hot deploy configuration';
 
-INSERT IGNORE INTO update_config (id, cron_expr, enabled, git_branch, backup_before_update, last_run_status)
-VALUES (1, '0 0 3 * * ?', 0, 'master', 1, 'NEVER');
+INSERT IGNORE INTO update_config (id, enabled, cron_expr, git_branch, last_run_status)
+VALUES (1, 0, '0 0 2 ? * SUN', 'master', 'NEVER');
 
 -- V5__monitoring_and_access.sql
 
@@ -3078,7 +3077,7 @@ SET @col_sql = IF(@col_exists = 0,
     'SELECT 1');
 PREPARE stmt FROM @col_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- V27__media_transcoding.sql
+-- V34__media_transcoding.sql
 -- media 表新增异步转码字段（移动端 AV1/HEVC/VP9 → H.264 流水线）
 
 DROP PROCEDURE IF EXISTS _add_col_media_transcode$$
@@ -3119,7 +3118,7 @@ END$$
 CALL _add_idx_media_transcode()$$
 DROP PROCEDURE IF EXISTS _add_idx_media_transcode$$
 
--- V27__ai_feedback.sql
+-- V33__ai_feedback.sql
 -- AI 用户反馈表
 
 CREATE TABLE IF NOT EXISTS ai_feedback (
@@ -3135,6 +3134,7 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     FOREIGN KEY (call_log_id) REFERENCES ai_call_log(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI用户反馈表';
+
 
 -- ────────────────────────────────────────
 -- student_exercise_answers（旧答题记录表，V26 text_exercises 的配套表）
@@ -3210,7 +3210,7 @@ CREATE TABLE IF NOT EXISTS `student_ai_quiz_records` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ═══════════════════════════════════════════════════════════════════════
--- V25__link_users_to_school_directory.sql
+-- V32__link_users_to_school_directory.sql
 -- 将 users 与 school_student / school_teacher 主数据建立显式联系
 -- 注：与 V25__exercise_options_table.sql 同 V25 版本号；本块为后续补录，
 --     全部使用 IF NOT EXISTS / WHERE NULL 包装，保证幂等可重复执行
@@ -3518,3 +3518,61 @@ INSERT IGNORE INTO learner_composite_tags (code, display_name, tag_type, priorit
 
 INSERT IGNORE INTO system_config (config_group, config_key, config_value, description)
 VALUES ('feature_toggle', 'admin.tag_management', 'true', '管理员-标签管理');
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- V39__update_config_hot_deploy_fields.sql
+-- update_config 表新增零停机热部署调度字段（幂等）
+-- ═══════════════════════════════════════════════════════════════════════
+
+DROP PROCEDURE IF EXISTS v39_add_hot_deploy_fields$$
+CREATE PROCEDURE v39_add_hot_deploy_fields()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'update_config'
+                     AND COLUMN_NAME = 'hot_deploy_enabled') THEN
+        ALTER TABLE update_config
+            ADD COLUMN hot_deploy_enabled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否启用定时零停机热部署',
+            ADD COLUMN hot_deploy_cron_expr VARCHAR(100) NULL COMMENT '热部署 cron 表达式',
+            ADD COLUMN hot_deploy_last_run_at DATETIME NULL COMMENT '最近一次热部署执行时间',
+            ADD COLUMN hot_deploy_last_run_status VARCHAR(20) NULL DEFAULT 'NEVER' COMMENT '最近一次热部署状态';
+    END IF;
+END$$
+CALL v39_add_hot_deploy_fields()$$
+DROP PROCEDURE IF EXISTS v39_add_hot_deploy_fields$$
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- V40__cleanup_update_config.sql
+-- 清理 update_config 表 — 移除普通更新字段，热部署字段升为主字段（幂等）
+-- ═══════════════════════════════════════════════════════════════════════
+
+DROP PROCEDURE IF EXISTS v40_cleanup_update_config$$
+CREATE PROCEDURE v40_cleanup_update_config()
+BEGIN
+    -- 将 hot_deploy_* 列合并到主字段
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'update_config'
+                 AND COLUMN_NAME = 'hot_deploy_enabled') THEN
+        UPDATE update_config
+        SET enabled         = COALESCE(hot_deploy_enabled, 0),
+            cron_expr       = COALESCE(hot_deploy_cron_expr, '0 0 2 ? * SUN'),
+            last_run_at     = hot_deploy_last_run_at,
+            last_run_status = COALESCE(hot_deploy_last_run_status, 'NEVER');
+        ALTER TABLE update_config
+            DROP COLUMN hot_deploy_enabled,
+            DROP COLUMN hot_deploy_cron_expr,
+            DROP COLUMN hot_deploy_last_run_at,
+            DROP COLUMN hot_deploy_last_run_status;
+    END IF;
+
+    -- 删除普通更新专用列
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'update_config'
+                 AND COLUMN_NAME = 'backup_before_update') THEN
+        ALTER TABLE update_config DROP COLUMN backup_before_update;
+    END IF;
+END$$
+CALL v40_cleanup_update_config()$$
+DROP PROCEDURE IF EXISTS v40_cleanup_update_config$$

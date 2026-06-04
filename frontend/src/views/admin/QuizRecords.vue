@@ -120,7 +120,7 @@
                 </div>
               </div>
               <div class="record-answer">
-                作答：{{ record.userAnswer || '未作答' }} 正确答案：{{ record.correctAnswer }}
+                作答：{{ record.userAnswer || '未作答' }}　正确答案：{{ record.correctAnswer }}
               </div>
               <div class="record-analysis" v-if="record.analysisSnapshot">
                 <strong>解析：</strong>{{ record.analysisSnapshot }}
@@ -181,7 +181,7 @@ const viewDetail = async (row) => {
   detailLoading.value = true
   detail.value = null
   try {
-    const resp = await getQuizAttemptDetail(row.id)
+    const resp = await getQuizAttemptDetail(row.studentId, row.textId)
     if (resp.code === 200) {
       detail.value = resp.data
     } else {

@@ -6,6 +6,10 @@ app:
   update:
     supported: ${APP_UPDATE_SUPPORTED:true}
     unsupported-reason: ${APP_UPDATE_UNSUPPORTED_REASON:Self-update is not supported in the current deployment mode.}
+    hot-deploy-script: scripts/hot-deploy.sh
+    docker-socket: ${APP_UPDATE_DOCKER_SOCKET:/var/run/docker.sock}
+    project-host-path: ${PROJECT_HOST_PATH:}
+    deployer-image: ${APP_UPDATE_DEPLOYER_IMAGE:langhack-deployer:latest}
   base-url: ${APP_BASE_URL:http://localhost:3000}
 
 # 管理员登录配置

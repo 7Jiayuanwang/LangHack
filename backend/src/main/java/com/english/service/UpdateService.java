@@ -9,9 +9,9 @@ public interface UpdateService {
 
     UpdateConfig saveConfig(UpdateConfig config);
 
-    SseEmitter triggerUpdate(SseEmitter emitter);
+    SseEmitter trigger(SseEmitter emitter, String branch, boolean skipBuild, boolean dryRun);
 
-    void runUpdate();
+    void run();
 
     boolean isSupported();
 

@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.english.datasource.UseMaster;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -118,6 +119,7 @@ public class ConversationService {
         return share;
     }
 
+    @UseMaster
     public Map<String, Object> getSharedConversation(String token, String password) {
         QueryWrapper<ConversationShare> qw = new QueryWrapper<>();
         qw.eq("share_token", token);

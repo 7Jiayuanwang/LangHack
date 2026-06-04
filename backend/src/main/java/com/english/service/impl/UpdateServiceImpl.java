@@ -13,16 +13,15 @@ import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -35,12 +34,13 @@ import java.util.regex.Pattern;
 public class UpdateServiceImpl implements UpdateService {
 
     private static final Pattern GIT_BRANCH_PATTERN = Pattern.compile("^[a-zA-Z0-9._/-]{1,100}$");
+    private static final String DEPLOYER_WORKSPACE = "/project";
 
     private final UpdateConfigMapper updateConfigMapper;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
-    @Value("${app.update.script:scripts/auto-update.sh}")
-    private String updateScript;
+    @Value("${app.update.hot-deploy-script:scripts/hot-deploy.sh}")
+    private String hotDeployScript;
 
     @Value("${app.update.supported:true}")
     private boolean updateSupported;
@@ -48,18 +48,43 @@ public class UpdateServiceImpl implements UpdateService {
     @Value("${app.update.unsupported-reason:Self-update is not supported in the current deployment mode.}")
     private String unsupportedReason;
 
+    @Value("${app.update.docker-socket:/var/run/docker.sock}")
+    private String dockerSocket;
+
+    @Value("${app.update.project-host-path:}")
+    private String projectHostPath;
+
+    @Value("${app.update.deployer-image:langhack-deployer:latest}")
+    private String deployerImage;
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "update-worker");
+        Thread thread = new Thread(runnable, "deploy-worker");
         thread.setDaemon(true);
         return thread;
     });
+
+    @PostConstruct
+    void cleanupStaleStatus() {
+        try {
+            UpdateConfig config = getConfig();
+            if ("RUNNING".equals(config.getLastRunStatus()) && config.getId() != null) {
+                log.warn("Detected stale RUNNING status from previous session, marking as INTERRUPTED");
+                UpdateConfig update = new UpdateConfig();
+                update.setId(config.getId());
+                update.setLastRunStatus("INTERRUPTED");
+                updateConfigMapper.updateById(update);
+            }
+        } catch (Exception e) {
+            log.debug("Skipping stale status cleanup: {}", e.getMessage());
+        }
+    }
 
     @PreDestroy
     public void shutdown() {
         executor.shutdownNow();
         try {
             if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                log.warn("Update executor did not terminate in time");
+                log.warn("Deploy executor did not terminate in time");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -79,7 +104,6 @@ public class UpdateServiceImpl implements UpdateService {
     @Override
     @UseMaster
     public UpdateConfig saveConfig(UpdateConfig config) {
-        ensureSupported();
         if (config == null) {
             throw new BusinessException("Update config is required.");
         }
@@ -88,7 +112,7 @@ public class UpdateServiceImpl implements UpdateService {
         String gitBranch = normalizeToNull(config.getGitBranch());
 
         if (Boolean.TRUE.equals(config.getEnabled()) && cronExpr == null) {
-            throw new BusinessException("Cron expression is required when scheduled updates are enabled.");
+            throw new BusinessException("Cron expression is required when scheduled deploy is enabled.");
         }
 
         if (gitBranch != null && !GIT_BRANCH_PATTERN.matcher(gitBranch).matches()) {
@@ -115,9 +139,6 @@ public class UpdateServiceImpl implements UpdateService {
         if (gitBranch != null) {
             existing.setGitBranch(gitBranch);
         }
-        if (config.getBackupBeforeUpdate() != null) {
-            existing.setBackupBeforeUpdate(config.getBackupBeforeUpdate());
-        }
 
         if (normalizeToNull(existing.getCronExpr()) == null) {
             existing.setCronExpr(createDefaultConfig().getCronExpr());
@@ -127,9 +148,6 @@ public class UpdateServiceImpl implements UpdateService {
         }
         if (existing.getEnabled() == null) {
             existing.setEnabled(false);
-        }
-        if (existing.getBackupBeforeUpdate() == null) {
-            existing.setBackupBeforeUpdate(true);
         }
         if (normalizeToNull(existing.getLastRunStatus()) == null) {
             existing.setLastRunStatus("NEVER");
@@ -145,32 +163,29 @@ public class UpdateServiceImpl implements UpdateService {
 
     @Override
     @UseMaster
-    public SseEmitter triggerUpdate(SseEmitter emitter) {
+    public SseEmitter trigger(SseEmitter emitter, String branch, boolean skipBuild, boolean dryRun) {
         ensureSupported();
 
         if (!isRunning.compareAndSet(false, true)) {
-            throw new BusinessException("An update is already running. Please wait for it to finish.");
+            throw new BusinessException("热部署正在进行中，请等待完成后再试。");
         }
 
         UpdateConfig config = getConfig();
-        emitter.onCompletion(() -> log.debug("Self-update SSE connection completed"));
-        emitter.onTimeout(() -> log.warn("Self-update SSE connection timed out"));
-
         try {
-            executor.submit(() -> runInteractiveUpdate(config, emitter));
+            executor.submit(() -> runInteractive(config, emitter, branch, skipBuild, dryRun));
         } catch (java.util.concurrent.RejectedExecutionException e) {
             isRunning.set(false);
-            log.error("Update task submission rejected", e);
-            throw new BusinessException("Update service is shutting down. Please try again later.");
+            log.error("Deploy task submission rejected", e);
+            throw new BusinessException("部署服务正在关闭，请稍后重试。");
         }
         return emitter;
     }
 
     @Override
     @UseMaster
-    public void runUpdate() {
+    public void run() {
         if (!isSupported()) {
-            log.warn("Skipping self-update: {}", getUnsupportedReason());
+            log.warn("Skipping hot deploy: {}", getUnsupportedReason());
             return;
         }
 
@@ -179,32 +194,45 @@ public class UpdateServiceImpl implements UpdateService {
             return;
         }
         if (!isRunning.compareAndSet(false, true)) {
-            log.warn("Skipping scheduled self-update because another update is running");
+            log.warn("Skipping scheduled hot deploy because another deploy is running");
             return;
         }
 
         setRunning(config.getId());
         boolean success = false;
+        String containerName = "langhack-deployer-sched-" + System.currentTimeMillis();
         try {
-            List<String> command = buildCommand(config);
-            log.info("Scheduled self-update command: {}", command);
-            ProcessBuilder builder = new ProcessBuilder(command);
-            builder.redirectErrorStream(true);
-            Process process = builder.start();
+            List<String> startCmd = buildDeployerCommand(config, null, false, false, containerName);
+            log.info("Scheduled deploy command: {}", startCmd);
+            ProcessBuilder startBuilder = new ProcessBuilder(startCmd);
+            startBuilder.redirectErrorStream(true);
+            Process startProcess = startBuilder.start();
 
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    log.debug("[auto-update] {}", line);
-                }
+            String containerId;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(startProcess.getInputStream()))) {
+                containerId = reader.readLine();
             }
+            int startExit = startProcess.waitFor();
+            if (startExit != 0 || containerId == null || containerId.isBlank()) {
+                log.error("Failed to start deployer container (exit={})", startExit);
+                return;
+            }
+            containerId = containerId.trim();
+            log.info("Deployer container started: {}", containerId);
 
-            success = process.waitFor() == 0;
-            log.info("Scheduled self-update finished, success={}", success);
+            ProcessBuilder waitBuilder = new ProcessBuilder("docker", "wait", containerId);
+            Process waitProcess = waitBuilder.start();
+            String exitCodeStr;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(waitProcess.getInputStream()))) {
+                exitCodeStr = reader.readLine();
+            }
+            waitProcess.waitFor(600, TimeUnit.SECONDS);
+            success = "0".equals(exitCodeStr != null ? exitCodeStr.trim() : "");
+            log.info("Scheduled deploy finished, success={}", success);
         } catch (Exception e) {
-            log.error("Scheduled self-update failed", e);
+            log.error("Scheduled deploy failed", e);
         } finally {
-            finishUpdate(config.getId(), success);
+            finishRun(config.getId(), success);
             isRunning.set(false);
         }
     }
@@ -220,87 +248,115 @@ public class UpdateServiceImpl implements UpdateService {
         return reason == null ? "" : reason;
     }
 
-    private void runInteractiveUpdate(UpdateConfig config, SseEmitter emitter) {
+    private void runInteractive(UpdateConfig config, SseEmitter emitter,
+                                String branch, boolean skipBuild, boolean dryRun) {
         setRunning(config.getId());
         boolean success = false;
-        Process process = null;
+        String containerName = "langhack-deployer-" + System.currentTimeMillis();
         try {
-            List<String> command = buildCommand(config);
-            log.info("Interactive self-update command: {}", command);
-            ProcessBuilder builder = new ProcessBuilder(command);
-            builder.redirectErrorStream(true);
-            process = builder.start();
+            // Phase 1: Start deployer container (detached — survives backend restart)
+            List<String> startCmd = buildDeployerCommand(config, branch, skipBuild, dryRun, containerName);
+            log.info("Interactive deploy — starting deployer: {}", startCmd);
+            ProcessBuilder startBuilder = new ProcessBuilder(startCmd);
+            startBuilder.redirectErrorStream(true);
+            Process startProcess = startBuilder.start();
+
+            String containerId;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(startProcess.getInputStream()))) {
+                containerId = reader.readLine();
+            }
+            int startExit = startProcess.waitFor();
+            if (startExit != 0 || containerId == null || containerId.isBlank()) {
+                emitter.send(SseEmitter.event().name("done")
+                        .data("HOT_DEPLOY_FAILED:Failed to start deployer container (exit=" + startExit + ")"));
+                emitter.complete();
+                return;
+            }
+            containerId = containerId.trim();
+            log.info("Deployer container started: {}", containerId);
+
+            // Phase 2: Stream deployer logs (killing this does NOT kill the deployer)
+            ProcessBuilder logsBuilder = new ProcessBuilder("docker", "logs", "-f", containerId);
+            logsBuilder.redirectErrorStream(true);
+            Process logsProcess = logsBuilder.start();
 
             boolean clientDisconnected = false;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(logsProcess.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     try {
                         emitter.send(SseEmitter.event().data(line));
                     } catch (Exception ignored) {
                         clientDisconnected = true;
-                        if (process != null) {
-                            process.destroyForcibly();
-                        }
+                        logsProcess.destroyForcibly();
                         break;
                     }
                 }
             }
 
-            if (clientDisconnected) {
-                waitForProcessExit(process);
-            } else {
-                int exitCode = process.waitFor();
-                success = exitCode == 0;
+            if (!clientDisconnected) {
+                ProcessBuilder waitBuilder = new ProcessBuilder("docker", "wait", containerId);
+                Process waitProcess = waitBuilder.start();
+                String exitCodeStr;
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(waitProcess.getInputStream()))) {
+                    exitCodeStr = reader.readLine();
+                }
+                waitProcess.waitFor(600, TimeUnit.SECONDS);
+                success = "0".equals(exitCodeStr != null ? exitCodeStr.trim() : "");
                 emitter.send(SseEmitter.event().name("done")
-                        .data(success ? "UPDATE_SUCCESS" : "UPDATE_FAILED:" + exitCode));
+                        .data(success ? "HOT_DEPLOY_SUCCESS" : "HOT_DEPLOY_FAILED:" + exitCodeStr));
                 emitter.complete();
             }
         } catch (Exception e) {
-            log.error("Interactive self-update failed", e);
+            log.error("Interactive deploy failed", e);
             try {
                 emitter.send(SseEmitter.event().name("done")
-                        .data("UPDATE_ERROR:Update execution failed. Check server logs for details."));
+                        .data("HOT_DEPLOY_ERROR:Deployer launch failed. Check server logs."));
                 emitter.complete();
-            } catch (Exception ignored) {
-                // Ignore secondary SSE failures.
-            }
+            } catch (Exception ignored) { }
         } finally {
-            finishUpdate(config.getId(), success);
+            finishRun(config.getId(), success);
             isRunning.set(false);
         }
     }
 
-    private void waitForProcessExit(Process process) throws InterruptedException {
-        if (process != null && !process.waitFor(30, TimeUnit.SECONDS)) {
-            process.destroyForcibly();
-            log.warn("Update process did not exit within 30 seconds after client disconnect");
-        }
-    }
-
-    private List<String> buildCommand(UpdateConfig config) {
-        Path scriptPath = resolveScriptPath();
-        if (!Files.isRegularFile(scriptPath)) {
-            throw new BusinessException("Self-update script not found: " + scriptPath);
+    private List<String> buildDeployerCommand(UpdateConfig config, String branch,
+                                              boolean skipBuild, boolean dryRun,
+                                              String containerName) {
+        String effectiveBranch = (branch != null && !branch.isBlank()) ? branch.trim() : defaultBranch(config);
+        if (!GIT_BRANCH_PATTERN.matcher(effectiveBranch).matches()) {
+            throw new BusinessException("无效的 git 分支名: " + effectiveBranch);
         }
 
-        List<String> command = new ArrayList<>();
-        command.add("bash");
-        command.add(scriptPath.normalize().toString());
-        command.add("--branch");
-        command.add(defaultBranch(config));
-        if (Boolean.TRUE.equals(config.getBackupBeforeUpdate())) {
-            command.add("--backup-before-update");
-        } else {
-            command.add("--no-backup");
-        }
-        return command;
+        List<String> cmd = new ArrayList<>();
+        cmd.add("docker");
+        cmd.add("run");
+        cmd.add("--rm");
+        cmd.add("-d");
+        cmd.add("--name");
+        cmd.add(containerName);
+        cmd.add("-v");
+        cmd.add(dockerSocket + ":/var/run/docker.sock");
+        cmd.add("-v");
+        cmd.add(projectHostPath + ":" + DEPLOYER_WORKSPACE);
+        cmd.add("-w");
+        cmd.add(DEPLOYER_WORKSPACE);
+        cmd.add("-e");
+        cmd.add("HOST_PROJECT_DIR=" + projectHostPath);
+        cmd.add("--network");
+        cmd.add("langhack_langhack-network");
+        cmd.add(deployerImage);
+        cmd.add("bash");
+        cmd.add(hotDeployScript);
+        cmd.add("--branch");
+        cmd.add(effectiveBranch);
+        if (skipBuild) cmd.add("--skip-build");
+        if (dryRun) cmd.add("--dry-run");
+        return cmd;
     }
 
     private void setRunning(Long id) {
-        if (id == null) {
-            return;
-        }
+        if (id == null) return;
         UpdateConfig update = new UpdateConfig();
         update.setId(id);
         update.setLastRunAt(LocalDateTime.now());
@@ -308,10 +364,8 @@ public class UpdateServiceImpl implements UpdateService {
         updateConfigMapper.updateById(update);
     }
 
-    private void finishUpdate(Long id, boolean success) {
-        if (id == null) {
-            return;
-        }
+    private void finishRun(Long id, boolean success) {
+        if (id == null) return;
         UpdateConfig update = new UpdateConfig();
         update.setId(id);
         update.setLastRunAt(LocalDateTime.now());
@@ -321,10 +375,9 @@ public class UpdateServiceImpl implements UpdateService {
 
     private UpdateConfig createDefaultConfig() {
         UpdateConfig config = new UpdateConfig();
-        config.setCronExpr("0 0 3 * * ?");
         config.setEnabled(false);
+        config.setCronExpr("0 0 2 ? * SUN");
         config.setGitBranch("master");
-        config.setBackupBeforeUpdate(true);
         config.setLastRunStatus("NEVER");
         return config;
     }
@@ -337,9 +390,7 @@ public class UpdateServiceImpl implements UpdateService {
     }
 
     private String normalizeToNull(String value) {
-        if (value == null) {
-            return null;
-        }
+        if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
     }
@@ -353,28 +404,14 @@ public class UpdateServiceImpl implements UpdateService {
         if (!updateSupported) {
             return unsupportedReason;
         }
-        if (isWindowsHost()) {
-            return "Self-update is only supported on Linux deployments that can run the bundled bash script.";
+        if (projectHostPath == null || projectHostPath.isBlank()) {
+            return "PROJECT_HOST_PATH environment variable is not set. "
+                 + "Set it to the project's absolute path on the Docker host.";
         }
-
-        Path scriptPath = resolveScriptPath();
-        if (!Files.isRegularFile(scriptPath)) {
-            return "Self-update script not found: " + scriptPath;
+        if (!Files.exists(Paths.get(dockerSocket))) {
+            return "Docker socket not found at " + dockerSocket
+                 + ". Mount /var/run/docker.sock into the backend container.";
         }
-
         return null;
-    }
-
-    private Path resolveScriptPath() {
-        Path scriptPath = Paths.get(updateScript);
-        if (!scriptPath.isAbsolute()) {
-            scriptPath = Paths.get(System.getProperty("user.dir")).resolve(scriptPath);
-        }
-        return scriptPath.normalize();
-    }
-
-    private boolean isWindowsHost() {
-        String osName = System.getProperty("os.name", "");
-        return osName.toLowerCase(Locale.ROOT).contains("win");
     }
 }

@@ -47,11 +47,11 @@ public class DynamicUpdateScheduler {
         if (currentFuture != null && !currentFuture.isCancelled()) {
             currentFuture.cancel(false);
             currentFuture = null;
-            log.info("[UpdateScheduler] Previous self-update schedule cancelled");
+            log.info("[UpdateScheduler] Previous hot-deploy schedule cancelled");
         }
 
         if (!updateService.isSupported()) {
-            log.info("[UpdateScheduler] Self-update disabled: {}", updateService.getUnsupportedReason());
+            log.info("[UpdateScheduler] Hot deploy disabled: {}", updateService.getUnsupportedReason());
             return;
         }
 
@@ -60,17 +60,16 @@ public class DynamicUpdateScheduler {
             return;
         }
 
-        if (!Boolean.TRUE.equals(config.getEnabled())) {
-            log.info("[UpdateScheduler] Self-update scheduler disabled");
-            return;
-        }
-
-        try {
-            currentFuture = taskScheduler.schedule(updateService::runUpdate, new CronTrigger(config.getCronExpr()));
-            log.info("[UpdateScheduler] Registered new schedule: cron={}, branch={}",
-                    config.getCronExpr(), config.getGitBranch());
-        } catch (Exception e) {
-            log.error("[UpdateScheduler] Failed to register schedule", e);
+        if (Boolean.TRUE.equals(config.getEnabled()) && config.getCronExpr() != null) {
+            try {
+                currentFuture = taskScheduler.schedule(updateService::run, new CronTrigger(config.getCronExpr()));
+                log.info("[UpdateScheduler] Registered hot-deploy schedule: cron={}, branch={}",
+                        config.getCronExpr(), config.getGitBranch());
+            } catch (Exception e) {
+                log.error("[UpdateScheduler] Failed to register hot-deploy schedule", e);
+            }
+        } else {
+            log.info("[UpdateScheduler] Hot-deploy scheduler disabled");
         }
     }
 }

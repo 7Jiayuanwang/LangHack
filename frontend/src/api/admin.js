@@ -356,12 +356,28 @@ export function getAiFeedbackSummary() {
   return request({ url: '/api/admin/metrics/ai-feedback-summary', method: 'get' })
 }
 
-// ── 做题记录 ──
-
-export function getQuizAttempts(params) {
-  return request({ url: '/api/admin/quiz-records/attempts', method: 'get', params })
+export function getCetComparison(params) {
+  return request({ url: '/api/admin/metrics/cet-comparison', method: 'get', params })
 }
 
-export function getQuizAttemptDetail(attemptId) {
-  return request({ url: `/api/admin/quiz-records/attempts/${attemptId}`, method: 'get' })
+export function getCetDetailed(params) {
+  return request({ url: '/api/admin/metrics/cet-detailed', method: 'get', params })
+}
+
+// ========== 做题记录管理 ==========
+
+export function getQuizAttempts(params) {
+  return request({
+    url: '/api/admin/quiz-attempts',
+    method: 'get',
+    params
+  })
+}
+
+export function getQuizAttemptDetail(studentId, textId) {
+  return request({
+    url: '/api/admin/quiz-attempts/detail',
+    method: 'get',
+    params: { studentId, textId }
+  })
 }

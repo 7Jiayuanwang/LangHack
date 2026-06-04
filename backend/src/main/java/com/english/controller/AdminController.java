@@ -22,7 +22,10 @@ import com.english.service.UnitWordService;
 import com.english.service.TextExerciseService;
 import com.english.service.ArticleVersionService;
 import com.english.service.ContentTagService;
+import com.english.mapper.StudentExerciseAnswerMapper;
+import com.english.mapper.TextExerciseMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -87,6 +90,15 @@ public class AdminController {
 
     @Autowired
     private ContentTagService contentTagService;
+
+    @Autowired
+    private StudentExerciseAnswerMapper studentExerciseAnswerMapper;
+
+    @Autowired
+    private TextExerciseMapper textExerciseMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @GetMapping("/users")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
@@ -1936,4 +1948,107 @@ public class AdminController {
             return Result.error("删除标签失败");
         }
     }
+
+    // ==================== 做题记录管理 ====================
+
+    @GetMapping("/quiz-attempts")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> listQuizAttempts(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) Long studentId,
+            @RequestParam(required = false) Long textId,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            int offset = (page - 1) * pageSize;
+            StringBuilder where = new StringBuilder("WHERE 1=1 ");
+            List<Object> params = new ArrayList<>();
+            if (studentId != null) { where.append("AND sea.student_id = ? "); params.add(studentId); }
+            if (textId != null) { where.append("AND te.text_id = ? "); params.add(textId); }
+            if (startTime != null && !startTime.isBlank()) { where.append("AND sea.answer_time >= ? "); params.add(startTime); }
+            if (endTime != null && !endTime.isBlank()) { where.append("AND sea.answer_time <= ? "); params.add(endTime); }
+
+            String baseSql =
+                "FROM student_exercise_answers sea " +
+                "JOIN text_exercises te ON sea.exercise_id = te.id " +
+                "LEFT JOIN users u ON sea.student_id = u.id " +
+                "LEFT JOIN texts t ON te.text_id = t.id " +
+                where +
+                "GROUP BY sea.student_id, te.text_id, u.real_name, u.username, t.title ";
+
+            String countSql = "SELECT COUNT(*) FROM (SELECT 1 " + baseSql + ") sub";
+            Long total = jdbcTemplate.queryForObject(countSql, Long.class, params.toArray());
+
+            List<Object> dataParams = new ArrayList<>(params);
+            dataParams.add(pageSize);
+            dataParams.add(offset);
+            String dataSql =
+                "SELECT sea.student_id AS studentId, te.text_id AS textId, " +
+                "u.real_name AS studentRealName, u.username AS studentUsername, " +
+                "t.title AS textTitle, " +
+                "COUNT(sea.id) AS totalQuestions, " +
+                "SUM(CASE WHEN sea.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount, " +
+                "SUM(sea.time_spent_seconds) AS totalTimeSeconds, " +
+                "MAX(sea.answer_time) AS submittedTime " +
+                baseSql +
+                "ORDER BY MAX(sea.answer_time) DESC LIMIT ? OFFSET ?";
+
+            List<Map<String, Object>> list = jdbcTemplate.queryForList(dataSql, dataParams.toArray());
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("list", list);
+            result.put("total", total != null ? total : 0);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("查询做题记录失败", e);
+            return Result.error("查询做题记录失败");
+        }
+    }
+
+    @GetMapping("/quiz-attempts/detail")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> getQuizAttemptDetail(
+            @RequestParam Long studentId,
+            @RequestParam Long textId) {
+        try {
+            String attemptSql =
+                "SELECT sea.student_id AS studentId, te.text_id AS textId, " +
+                "u.real_name AS studentRealName, u.username AS studentUsername, " +
+                "t.title AS textTitle, " +
+                "COUNT(sea.id) AS totalQuestions, " +
+                "SUM(CASE WHEN sea.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount, " +
+                "SUM(sea.time_spent_seconds) AS totalTimeSeconds, " +
+                "MAX(sea.answer_time) AS submittedTime " +
+                "FROM student_exercise_answers sea " +
+                "JOIN text_exercises te ON sea.exercise_id = te.id " +
+                "LEFT JOIN users u ON sea.student_id = u.id " +
+                "LEFT JOIN texts t ON te.text_id = t.id " +
+                "WHERE sea.student_id = ? AND te.text_id = ? " +
+                "GROUP BY sea.student_id, te.text_id, u.real_name, u.username, t.title";
+            List<Map<String, Object>> attempts = jdbcTemplate.queryForList(attemptSql, studentId, textId);
+            Map<String, Object> attempt = attempts.isEmpty() ? new HashMap<>() : attempts.get(0);
+
+            String recordsSql =
+                "SELECT sea.id, sea.exercise_id AS exerciseId, sea.answer_content AS userAnswer, " +
+                "sea.is_correct AS isCorrect, sea.time_spent_seconds AS timeSpentSeconds, " +
+                "sea.answer_time AS submittedTime, " +
+                "te.question AS questionSnapshot, te.exercise_type AS questionType, " +
+                "(SELECT eo.option_key FROM exercise_options eo WHERE eo.exercise_id = te.id AND eo.is_correct = 1 LIMIT 1) AS correctAnswer " +
+                "FROM student_exercise_answers sea " +
+                "JOIN text_exercises te ON sea.exercise_id = te.id " +
+                "WHERE sea.student_id = ? AND te.text_id = ? " +
+                "ORDER BY sea.answer_time ASC";
+            List<Map<String, Object>> records = jdbcTemplate.queryForList(recordsSql, studentId, textId);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("attempt", attempt);
+            result.put("records", records);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("查询做题详情失败 studentId={} textId={}", studentId, textId, e);
+            return Result.error("查询做题详情失败");
+        }
+    }
+
 }
