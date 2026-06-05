@@ -44,9 +44,9 @@ describe('SelectionMenu.vue', () => {
       })
     })
 
-    it('renders four menu items', () => {
+    it('renders five menu items', () => {
       const items = wrapper.findAll('.menu-item')
-      expect(items.length).toBe(4)
+      expect(items.length).toBe(5)
     })
 
     it('renders copy menu item', () => {
@@ -57,8 +57,13 @@ describe('SelectionMenu.vue', () => {
       expect(wrapper.text()).toContain('划线')
     })
 
+    it('renders translate menu item', () => {
+      const translateItem = wrapper.findAll('.menu-item')[2]
+      expect(translateItem.text()).toContain('翻译')
+    })
+
     it('renders annotate menu item', () => {
-      const annotateItem = wrapper.findAll('.menu-item')[2]
+      const annotateItem = wrapper.findAll('.menu-item')[3]
       expect(annotateItem.text()).toContain('批注')
     })
 
@@ -105,15 +110,22 @@ describe('SelectionMenu.vue', () => {
       expect(wrapper.emitted('underline').length).toBe(1)
     })
 
+    it('emits "translate" when translate menu item is clicked', async () => {
+      const translateItem = wrapper.findAll('.menu-item')[2]
+      await translateItem.trigger('click')
+      expect(wrapper.emitted('translate')).toBeTruthy()
+      expect(wrapper.emitted('translate').length).toBe(1)
+    })
+
     it('emits "ai-qa" when AI QA menu item is clicked', async () => {
-      const aiQaItem = wrapper.findAll('.menu-item')[3]
+      const aiQaItem = wrapper.findAll('.menu-item')[4]
       await aiQaItem.trigger('click')
       expect(wrapper.emitted('ai-qa')).toBeTruthy()
       expect(wrapper.emitted('ai-qa').length).toBe(1)
     })
 
     it('emits "annotate" when annotate menu item is clicked', async () => {
-      const annotateItem = wrapper.findAll('.menu-item')[2]
+      const annotateItem = wrapper.findAll('.menu-item')[3]
       await annotateItem.trigger('click')
       expect(wrapper.emitted('annotate')).toBeTruthy()
       expect(wrapper.emitted('annotate').length).toBe(1)
@@ -200,8 +212,14 @@ describe('SelectionMenu.vue', () => {
       expect(wrapper.emitted('underline')).toBeTruthy()
     })
 
+    it('emits "translate" on touchend of translate item', async () => {
+      const translateItem = wrapper.findAll('.menu-item')[2]
+      await translateItem.trigger('touchend')
+      expect(wrapper.emitted('translate')).toBeTruthy()
+    })
+
     it('emits "ai-qa" on touchend of AI QA item', async () => {
-      const aiQaItem = wrapper.findAll('.menu-item')[3]
+      const aiQaItem = wrapper.findAll('.menu-item')[4]
       await aiQaItem.trigger('touchend')
       expect(wrapper.emitted('ai-qa')).toBeTruthy()
     })
