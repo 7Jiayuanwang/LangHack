@@ -211,6 +211,8 @@ public class UpdateServiceImpl implements UpdateService {
             String containerId;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(startProcess.getInputStream()))) {
                 containerId = reader.readLine();
+                // 排空剩余输出，防止进程被 SIGPIPE（exit=141）
+                while (reader.readLine() != null) { }
             }
             int startExit = startProcess.waitFor();
             if (startExit != 0 || containerId == null || containerId.isBlank()) {
