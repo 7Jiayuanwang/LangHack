@@ -57,6 +57,13 @@ public class UpdateServiceImpl implements UpdateService {
     @Value("${app.update.deployer-image:langhack-deployer:latest}")
     private String deployerImage;
 
+    @Value("${app.update.network:langhack_langhack-network}")
+    private String updateNetwork;
+
+    private String networkName() {
+        return updateNetwork;
+    }
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "deploy-worker");
         thread.setDaemon(true);
@@ -347,7 +354,7 @@ public class UpdateServiceImpl implements UpdateService {
         cmd.add("-e");
         cmd.add("HOST_PROJECT_DIR=" + projectHostPath);
         cmd.add("--network");
-        cmd.add("langhack_langhack-network");
+        cmd.add(networkName());
         cmd.add(deployerImage);
         cmd.add("bash");
         cmd.add(hotDeployScript);
