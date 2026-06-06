@@ -16,7 +16,7 @@
     </header>
 
     <!-- 主内容区域 -->
-    <main class="mobile-main" :class="{ 'no-nav': hideNav }">
+    <main class="mobile-main" :class="{ 'no-nav': effectiveHideNav }">
       <div class="content-container" :class="{ 'no-padding': hideHeader }">
         <transition name="fade" mode="out-in">
           <slot><router-view /></slot>
@@ -25,7 +25,7 @@
     </main>
 
     <!-- 底部导航栏 -->
-    <nav class="mobile-nav" v-if="!hideNav">
+    <nav class="mobile-nav" v-if="!effectiveHideNav">
       <div class="nav-container">
         <router-link
           v-for="item in navItems"
@@ -244,6 +244,13 @@ const navItems = computed(() => {
     })
   }
   return items
+})
+
+// 视频播放页和文章详情页一样隐藏底部导航
+const effectiveHideNav = computed(() => {
+  if (props.hideNav) return true
+  const p = route.path
+  return p === '/student/video-player' || p.startsWith('/article/')
 })
 
 // admin 专属：二级管理菜单

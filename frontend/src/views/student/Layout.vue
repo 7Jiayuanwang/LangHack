@@ -5,14 +5,14 @@
 
 
     <!-- 主内容区域 -->
-    <main class="main-content" :class="{ 'no-nav': hideNav }">
+    <main class="main-content" :class="{ 'no-nav': effectiveHideNav }">
       <div class="content-wrapper">
         <slot><router-view /></slot>
       </div>
     </main>
 
     <!-- 底部导航栏 - 小红书风格 -->
-    <nav class="trend-nav" v-if="!hideNav">
+    <nav class="trend-nav" v-if="!effectiveHideNav">
       <div class="nav-wrapper">
         <router-link
           v-for="(item, index) in navigationItems"
@@ -105,6 +105,13 @@ const route = useRoute()
 const userStore = useUserStore()
 const showUserMenu = ref(false)
 const screenWidth = ref(window.innerWidth)
+
+// 视频播放页和文章详情页一样隐藏底部导航
+const effectiveHideNav = computed(() => {
+  if (props.hideNav) return true
+  const p = route.path
+  return p === '/student/video-player' || p.startsWith('/article/')
+})
 // 功能开关：发现页的每个快捷入口 section 都受对应 page_* 开关控制
 // 开关关闭时，对应区块整体隐藏，并禁止推荐卡片跳转到该页面
 const {
