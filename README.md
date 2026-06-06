@@ -126,7 +126,7 @@ LangHack/
 - **多角色系统**：管理员 / 教师 / 学生 / 普通用户 / 运维五类角色与差异化权限
 - **课程与任务管理**：课程、单元、课文、作业与学习进度管理
 - **交互式阅读**：划词释义、音标、同义词、Markdown 内容渲染
-- **SM-2 间隔复习**：生词本与记忆曲线驱动复习
+- **SM-2 间隔复习**：基于 SuperMemo-2 算法的生词本智能复习系统（详见 [`docs/SM2_ALGORITHM_GUIDE.md`](docs/SM2_ALGORITHM_GUIDE.md)）
 - **AI 助教**：翻译、问答、长难句解析与上下文辅助
 - **CAS 单点登录**：统一身份认证、角色映射、管理员审核与自动授权
 - **学校数据集成**：支持 API / ETL 双模式、按学院链式拉取、Lazy 同步、运维配置页 `/ops/school-data` 与数据浏览页 `/ops/school-data-browser`
@@ -160,6 +160,7 @@ LangHack/
 |---|---|
 | `API接口文档.md` | REST API 端点说明 |
 | `DEPLOYMENT.md` | Docker/环境变量/部署运维指南 |
+| `SM2_ALGORITHM_GUIDE.md` | SM-2 间隔复习算法原理与实现说明 |
 | `SCHOOL_DATA_INTEGRATION.md` | 学校数据集成完整方案 |
 | `SCHOOL_DATA_API_SPEC.md` | 学校数据 API 规范与字段约定 |
 | `SCHOOL_DATA_FIX.md` | 学校数据修复记录 |
