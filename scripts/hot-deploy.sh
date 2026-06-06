@@ -16,6 +16,9 @@
 # ==============================================================================
 set -euo pipefail
 
+# 适配 Deployer 容器内以 root 运行 git 的安全目录检查
+git config --global --add safe.directory '*' 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
@@ -26,9 +29,9 @@ ENV_FILE="$PROJECT_ROOT/docker/.env"
 # HOST_PROJECT_DIR 由 UpdateServiceImpl 传入，表示宿主机上的项目绝对路径
 # 构建命令用容器内路径（compose 需要读源文件），运行时命令用宿主机路径（Docker daemon 需要）
 if [ -n "${HOST_PROJECT_DIR:-}" ]; then
-    HOST_DOCKER_DIR="${HOST_PROJECT_DIR}/docker"
+    # docker compose CLI 运行在当前容器内，所有路径需使用容器内路径
     COMPOSE_BUILD_PD="--project-directory $DOCKER_DIR"
-    COMPOSE_RUNTIME_PD="--project-directory $HOST_DOCKER_DIR"
+    COMPOSE_RUNTIME_PD="--project-directory $DOCKER_DIR"
 else
     COMPOSE_BUILD_PD=""
     COMPOSE_RUNTIME_PD=""
