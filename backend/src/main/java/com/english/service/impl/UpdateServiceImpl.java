@@ -51,7 +51,7 @@ public class UpdateServiceImpl implements UpdateService {
     @Value("${app.update.docker-socket:/var/run/docker.sock}")
     private String dockerSocket;
 
-    @Value("${app.update.project-host-path:}")
+    @Value("${app.update.project-host-path:${PROJECT_HOST_PATH:}}")
     private String projectHostPath;
 
     @Value("${app.update.deployer-image:langhack-deployer:latest}")
