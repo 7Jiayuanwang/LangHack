@@ -207,20 +207,18 @@ public class UpdateServiceImpl implements UpdateService {
             ProcessBuilder startBuilder = new ProcessBuilder(startCmd);
             startBuilder.redirectErrorStream(true);
             Process startProcess = startBuilder.start();
-
-            String containerId;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(startProcess.getInputStream()))) {
-                containerId = reader.readLine();
-                // 排空剩余输出，防止进程被 SIGPIPE（exit=141）
-                while (reader.readLine() != null) { }
-            }
+            startProcess.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
             int startExit = startProcess.waitFor();
-            if (startExit != 0 || containerId == null || containerId.isBlank()) {
+            if (startExit != 0) {
                 log.error("Failed to start deployer container (exit={})", startExit);
                 return;
             }
-            containerId = containerId.trim();
-            log.info("Deployer container started: {}", containerId);
+            String containerId = getContainerIdByName(containerName);
+            if (containerId == null || containerId.isBlank()) {
+                log.error("Deployer container not found: {}", containerName);
+                return;
+            }
+            log.info("Deployer container started: {} -> {}", containerName, containerId);
 
             ProcessBuilder waitBuilder = new ProcessBuilder("docker", "wait", containerId);
             Process waitProcess = waitBuilder.start();
@@ -262,20 +260,23 @@ public class UpdateServiceImpl implements UpdateService {
             ProcessBuilder startBuilder = new ProcessBuilder(startCmd);
             startBuilder.redirectErrorStream(true);
             Process startProcess = startBuilder.start();
-
-            String containerId;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(startProcess.getInputStream()))) {
-                containerId = reader.readLine();
-            }
+            // 直接排空所有输出，不读管道。用 docker ps 拿容器 ID，彻底避免 SIGPIPE (exit=141)
+            startProcess.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
             int startExit = startProcess.waitFor();
-            if (startExit != 0 || containerId == null || containerId.isBlank()) {
+            if (startExit != 0) {
                 emitter.send(SseEmitter.event().name("done")
                         .data("HOT_DEPLOY_FAILED:Failed to start deployer container (exit=" + startExit + ")"));
                 emitter.complete();
                 return;
             }
-            containerId = containerId.trim();
-            log.info("Deployer container started: {}", containerId);
+            String containerId = getContainerIdByName(containerName);
+            if (containerId == null || containerId.isBlank()) {
+                emitter.send(SseEmitter.event().name("done")
+                        .data("HOT_DEPLOY_FAILED:Container started but not found: " + containerName));
+                emitter.complete();
+                return;
+            }
+            log.info("Deployer container started: {} -> {}", containerName, containerId);
 
             // Phase 2: Stream deployer logs (killing this does NOT kill the deployer)
             ProcessBuilder logsBuilder = new ProcessBuilder("docker", "logs", "-f", containerId);
@@ -400,6 +401,26 @@ public class UpdateServiceImpl implements UpdateService {
     private String defaultBranch(UpdateConfig config) {
         String branch = config == null ? null : normalizeToNull(config.getGitBranch());
         return branch != null ? branch : createDefaultConfig().getGitBranch();
+    }
+
+    /**
+     * 用 docker ps 按容器名精确查找容器 ID，比读 Process stdout 更可靠。
+     */
+    private String getContainerIdByName(String name) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("docker", "ps", "-a", "-q", "--filter", "name=^" + name + "$");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String id = r.readLine();
+                while (r.readLine() != null) { } // 排空
+                p.waitFor();
+                return id != null ? id.trim() : null;
+            }
+        } catch (Exception e) {
+            log.error("getContainerIdByName({}) failed", name, e);
+            return null;
+        }
     }
 
     private String resolveUnsupportedReason() {
