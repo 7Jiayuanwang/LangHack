@@ -57,7 +57,7 @@ describe('SM-2 过载保护', () => {
 
   describe('batchDueWords', () => {
     it('should return empty result for no words', () => {
-      const result = batchDueWords([])
+      const result = batchDueWords([], { maxDailyReview: 50 })
 
       expect(result.todayBatch).toEqual([])
       expect(result.deferredBatch).toEqual([])
@@ -104,16 +104,15 @@ describe('SM-2 过载保护', () => {
       const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
       const words = [
-        { id: 1, word: 'low', nextReviewTime: oneDayAgo.toISOString(), easinessFactor: 3.0, repetition: 5 },
-        { id: 2, word: 'high', nextReviewTime: threeDaysAgo.toISOString(), easinessFactor: 1.5, repetition: 1 },
-        ...Array.from({ length: 60 }, (_, i) => ({
-          id: i + 3,
-          word: `word${i}`,
-          nextReviewTime: oneDayAgo.toISOString(),
-          easinessFactor: 2.5,
-          repetition: 3
-        }))
-      ]
+       { id: 1, word: 'low', nextReviewTime: oneDayAgo.toISOString(), easinessFactor: 3.0, repetition: 5 },
+       { id: 2, word: 'high', nextReviewTime: threeDaysAgo.toISOString(), easinessFactor: 1.5, repetition: 1 }
+      ].concat(Array.from({ length: 60 }, (_, i) => ({
+       id: i + 3,
+       word: `word${i}`,
+       nextReviewTime: oneDayAgo.toISOString(),
+       easinessFactor: 2.5,
+       repetition: 3
+      })))
 
       const result = batchDueWords(words, { maxDailyReview: 50 })
 

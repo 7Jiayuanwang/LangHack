@@ -41,7 +41,10 @@
     <div class="action-bar-v2">
 
       <div class="secondary-actions">
-        <el-dropdown trigger="click" @command="handleSort">
+ <el-button class="icon-btn-text" @click="showSettings = true">
+ <el-icon><Setting /></el-icon> SM-2 设置
+ </el-button>
+ <el-dropdown trigger="click" @command="handleSort">mmand="handleSort">
           <el-button class="icon-btn-text">
             <el-icon><Sort /></el-icon> {{ getSortLabel(filterForm.sortBy) }}
           </el-button>
@@ -74,7 +77,21 @@
       </div>
     </div>
 
-    <!-- 词汇列表 -->
+    <!-- SM-2 数据监控面板 -->
+ <div v-if="showAnalytics && stats.totalWords > 0" class="analytics-section">
+ <SM2AnalyticsDashboard :words="vocabularyForAnalytics" :show-actions="false" />
+ </div>
+
+ <!-- SM-2 模式对比分析 -->
+ <div v-if="showAnalytics && stats.totalWords > 0" class="comparison-section">
+ <SM2ComparisonPanel
+ :words="vocabularyForAnalytics"
+ @apply="onComparisonApplied"
+ @open-settings="showSettings = true"
+ />
+ </div>
+
+ <!-- 词汇列表 -->
     <div class="vocabulary-grid" v-loading="loading">
       <div
         v-for="item in vocabulary"
@@ -327,8 +344,11 @@
         </div>
       </div>
     </el-dialog>
-  </div>
-</template>
+
+ <!-- SM-2 设置抽屉 -->
+ <SM2SettingsDrawer v-model="showSettings" @changed="onSettingsChanged" />
+ </div>
+</template>emplate>
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
@@ -343,7 +363,8 @@ import {
   Delete, 
   Microphone,
   Finished,
-  ArrowRight
+  ArrowRight,
+ Setting
 } from '@element-plus/icons-vue'
 
 import { calculateSM2 } from '@/utils/sm2'
@@ -357,10 +378,40 @@ import {
 } from '@/api/student'
 import { useUserStore } from '@/store/user'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import { getSettings } from '@/utils/sm2-settings'
+import SM2SettingsDrawer from '@/components/vocabulary/SM2SettingsDrawer.vue'
+import SM2AnalyticsDashboard from '@/components/vocabulary/SM2AnalyticsDashboard.vue'
+import SM2ComparisonPanel from '@/components/vocabulary/SM2ComparisonPanel.vue'
 
 const { isEnabled, load: loadFeatureToggles, isLoaded: toggleLoaded } = useFeatureToggles()
 
 const loading = ref(false)
+// SM-2 设置面板
+const showSettings = ref(false)
+const onSettingsChanged = () => {
+ // 设置变化时刷新数据，让数据监控面板更新
+ loadVocabulary()
+}
+const onComparisonApplied = () => {
+ // 应用对比推荐后刷新设置
+ showAnalytics.value = getSettings().showAnalytics
+}
+
+// 数据监控面板可见性（从用户设置读取）
+const showAnalytics = ref(getSettings().showAnalytics)
+
+// 供数据监控面板使用：转换字段名为统一格式
+const vocabularyForAnalytics = computed(() => {
+ return (vocabulary.value || []).map(w => ({
+ word: w.word,
+ masteryLevel: w.masteryLevel,
+ easinessFactor: w.easinessFactor || 2.5,
+ interval: w.intervalDays || w.interval || 0,
+ reviewCount: w.reviewCount || w.repetition || 0,
+ repetition: w.reviewCount || w.repetition || 0,
+ nextReviewTime: w.nextReviewTime
+ }))
+})
 const searchWord = ref('')
 const vocabulary = ref([])
 const total = ref(0)
