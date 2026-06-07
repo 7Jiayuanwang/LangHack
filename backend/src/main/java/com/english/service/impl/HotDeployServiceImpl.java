@@ -38,8 +38,8 @@ public class HotDeployServiceImpl implements HotDeployService {
     @Value("${app.hot-deploy.host-project:${HOT_DEPLOY_HOST_PROJECT:}}")
     private String hostProjectPath;
 
-    /** deployer 容器使用的镜像（自带 docker-cli + bash + git） */
-    @Value("${app.hot-deploy.deployer-image:docker:24-cli}")
+    /** deployer 容器使用的镜像（自带 docker-cli + bash + git + docker compose） */
+    @Value("${app.hot-deploy.deployer-image:${app.update.deployer-image:langhack-deployer:latest}}")
     private String deployerImage;
 
     /** docker-compose 创建的网络名（与 deploy.sh / hot-deploy.sh 中 NETWORK_NAME 一致） */
@@ -202,8 +202,8 @@ public class HotDeployServiceImpl implements HotDeployService {
         //   -v <HOST_PROJECT>:/workspace
         //   -w /workspace
         //   --entrypoint sh
-        //   docker:24-cli
-        //   -c "apk add --no-cache bash git curl >/dev/null 2>&1 && bash scripts/hot-deploy.sh --deploy-id <id> ..."
+        //   langhack-deployer:latest
+        //   -c "bash scripts/hot-deploy.sh --deploy-id <id> ..."
         List<String> cmd = new ArrayList<>();
         cmd.add("docker");
         cmd.add("run");
@@ -229,8 +229,7 @@ public class HotDeployServiceImpl implements HotDeployService {
 
     private String buildScriptInvocation(HotDeployRequest req, String deployId) {
         StringBuilder sb = new StringBuilder();
-        // alpine docker:cli 基镜像缺 bash/git/curl，先补齐再跑脚本。日志重定向到挂载目录里的 .log。
-        sb.append("apk add --no-cache bash git curl docker-cli-compose >/tmp/apk.log 2>&1; ");
+        // 使用 langhack-deployer 镜像（已预装 bash/git/curl/docker compose）
         sb.append("bash /workspace/scripts/hot-deploy.sh");
         sb.append(" --deploy-id ").append(shellEscape(deployId));
         if (req != null) {
