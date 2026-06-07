@@ -190,7 +190,7 @@ rollback() {
     # 确保 blue 仍在运行
     if ! $DRY_RUN && ! curl -sf -m 3 "$HEALTH_URL_BLUE" >/dev/null 2>&1; then
         log_warn "blue 后端不健康，尝试重启..."
-        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d backend
+        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d --no-deps backend
         wait_healthy "$HEALTH_URL_BLUE" "blue backend (回滚)" || log_error "回滚失败，请手动检查"
     else
         log_ok "blue 后端仍在运行，回滚完成"
@@ -300,8 +300,9 @@ main() {
     log_ok "旧 blue 后端已停止"
 
     # 8. 启动新 blue（使用刚构建的镜像），健康检查后切换 nginx 回 blue
+    # --no-deps：只启动 backend 自身，避免连带重启 mysql-slave 等依赖服务
     log_section "Step 8: 启动新 blue 后端"
-    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d backend
+    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d --no-deps backend
     if ! $DRY_RUN; then
         if ! wait_healthy "$HEALTH_URL_BLUE" "new blue backend"; then
             log_error "新 blue 后端启动失败，保持流量在 green"
