@@ -60,6 +60,12 @@ public class UpdateServiceImpl implements UpdateService {
     @Value("${app.update.network:langhack_langhack-network}")
     private String updateNetwork;
 
+    /** 与 HotDeployServiceImpl 共用的 .done / .log 目录（容器内挂载点） */
+    @Value("${app.hot-deploy.log-dir:/app/hot-deploy-logs}")
+    private String hotDeployLogDir;
+
+    private static final String CURRENT_DEPLOY_FILE = ".current-sse-deploy.id";
+
     private String networkName() {
         return updateNetwork;
     }
@@ -74,15 +80,72 @@ public class UpdateServiceImpl implements UpdateService {
     void cleanupStaleStatus() {
         try {
             UpdateConfig config = getConfig();
-            if ("RUNNING".equals(config.getLastRunStatus()) && config.getId() != null) {
-                log.warn("Detected stale RUNNING status from previous session, marking as INTERRUPTED");
-                UpdateConfig update = new UpdateConfig();
-                update.setId(config.getId());
-                update.setLastRunStatus("INTERRUPTED");
-                updateConfigMapper.updateById(update);
+            if (!"RUNNING".equals(config.getLastRunStatus()) || config.getId() == null) {
+                return;
             }
+            // 后端被 Step 7 杀掉重启时，deployer 可能还在跑。先在后台等 .done 出现，
+            // 再修正状态；最多等 120s（覆盖 Step 8/9 的健康检查时间）
+            Long configId = config.getId();
+            Thread t = new Thread(() -> reconcileAfterRestart(configId), "deploy-reconcile");
+            t.setDaemon(true);
+            t.start();
         } catch (Exception e) {
             log.debug("Skipping stale status cleanup: {}", e.getMessage());
+        }
+    }
+
+    private void reconcileAfterRestart(Long configId) {
+        long deadline = System.currentTimeMillis() + 120_000L;
+        String reconciled = null;
+        while (System.currentTimeMillis() < deadline) {
+            reconciled = reconcileFromDoneFile();
+            if (reconciled != null) break;
+            try { Thread.sleep(2000); } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        String finalStatus = reconciled != null ? reconciled : "INTERRUPTED";
+        log.warn("Stale RUNNING status reconciled to {} (deployId from sentinel)", finalStatus);
+        UpdateConfig update = new UpdateConfig();
+        update.setId(configId);
+        update.setLastRunStatus(finalStatus);
+        try {
+            updateConfigMapper.updateById(update);
+        } catch (Exception e) {
+            log.warn("Failed to persist reconciled status: {}", e.getMessage());
+        }
+    }
+
+    /** 读 sentinel 文件里上次 SSE 部署的 deployId，再读它的 .done 决定真实终态 */
+    private String reconcileFromDoneFile() {
+        try {
+            java.nio.file.Path sentinel = Paths.get(hotDeployLogDir, CURRENT_DEPLOY_FILE);
+            if (!Files.exists(sentinel)) return null;
+            String deployId = Files.readString(sentinel).trim();
+            if (deployId.isEmpty()) return null;
+            java.nio.file.Path done = Paths.get(hotDeployLogDir, deployId + ".done");
+            if (!Files.exists(done)) return null;
+            String body = Files.readString(done);
+            java.util.regex.Matcher m = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]*)\"").matcher(body);
+            if (m.find()) {
+                String s = m.group(1);
+                return s.startsWith("FAILED") ? "FAILED" : "SUCCESS";
+            }
+        } catch (Exception e) {
+            log.debug("reconcileFromDoneFile failed: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /** 把当前 SSE 部署的 deployId 落到固定文件，重启后由 reconcileFromDoneFile 读取 */
+    private void writeCurrentDeploySentinel(String deployId) {
+        try {
+            java.nio.file.Path dir = Paths.get(hotDeployLogDir);
+            Files.createDirectories(dir);
+            Files.writeString(dir.resolve(CURRENT_DEPLOY_FILE), deployId);
+        } catch (Exception e) {
+            log.warn("Failed to write deploy sentinel: {}", e.getMessage());
         }
     }
 
@@ -207,9 +270,11 @@ public class UpdateServiceImpl implements UpdateService {
 
         setRunning(config.getId());
         boolean success = false;
-        String containerName = "langhack-deployer-sched-" + System.currentTimeMillis();
+        String deployId = "hd-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        String containerName = "langhack-deployer-sched-" + deployId;
+        writeCurrentDeploySentinel(deployId);
         try {
-            List<String> startCmd = buildDeployerCommand(config, null, false, false, containerName);
+            List<String> startCmd = buildDeployerCommand(config, null, false, false, containerName, deployId);
             log.info("Scheduled deploy command: {}", startCmd);
             ProcessBuilder startBuilder = new ProcessBuilder(startCmd);
             startBuilder.redirectErrorStream(true);
@@ -259,11 +324,14 @@ public class UpdateServiceImpl implements UpdateService {
                                 String branch, boolean skipBuild, boolean dryRun) {
         setRunning(config.getId());
         boolean success = false;
+        boolean knownOutcome = false; // true 表示已经确定 success 真值；false 表示未知（让 reconcile 兜底）
         boolean asyncCompletion = false; // 防止 finally 和异步任务重复调用 finishRun
-        String containerName = "langhack-deployer-" + System.currentTimeMillis();
+        String deployId = "hd-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        String containerName = "langhack-deployer-" + deployId;
+        writeCurrentDeploySentinel(deployId);
         try {
             // Phase 1: Start deployer container (detached — survives backend restart)
-            List<String> startCmd = buildDeployerCommand(config, branch, skipBuild, dryRun, containerName);
+            List<String> startCmd = buildDeployerCommand(config, branch, skipBuild, dryRun, containerName, deployId);
             log.info("Interactive deploy — starting deployer: {}", startCmd);
             ProcessBuilder startBuilder = new ProcessBuilder(startCmd);
             startBuilder.redirectErrorStream(true);
@@ -275,6 +343,7 @@ public class UpdateServiceImpl implements UpdateService {
                 emitter.send(SseEmitter.event().name("done")
                         .data("HOT_DEPLOY_FAILED:Failed to start deployer container (exit=" + startExit + ")"));
                 emitter.complete();
+                knownOutcome = true; // deployer 都没起来，确定失败
                 return;
             }
             String containerId = getContainerIdByName(containerName);
@@ -282,6 +351,7 @@ public class UpdateServiceImpl implements UpdateService {
                 emitter.send(SseEmitter.event().name("done")
                         .data("HOT_DEPLOY_FAILED:Container started but not found: " + containerName));
                 emitter.complete();
+                knownOutcome = true;
                 return;
             }
             log.info("Deployer container started: {} -> {}", containerName, containerId);
@@ -314,6 +384,7 @@ public class UpdateServiceImpl implements UpdateService {
                 }
                 waitProcess.waitFor(600, TimeUnit.SECONDS);
                 success = "0".equals(exitCodeStr != null ? exitCodeStr.trim() : "");
+                knownOutcome = true;
                 emitter.send(SseEmitter.event().name("done")
                         .data(success ? "HOT_DEPLOY_SUCCESS" : "HOT_DEPLOY_FAILED:" + exitCodeStr));
                 emitter.complete();
@@ -337,7 +408,7 @@ public class UpdateServiceImpl implements UpdateService {
                         isRunning.set(false);
                     } catch (Exception e) {
                         log.error("Background deployer wait failed for {}", containerId, e);
-                        finishRun(config.getId(), false);
+                        // 不写 FAILED — 由重启后的 reconcileFromDoneFile 决定真实状态
                         isRunning.set(false);
                     }
                 });
@@ -350,9 +421,14 @@ public class UpdateServiceImpl implements UpdateService {
                         .data("HOT_DEPLOY_ERROR:Deployer launch failed. Check server logs."));
                 emitter.complete();
             } catch (Exception ignored) { }
+            // 异常路径下结果未知，让 reconcile 决定。但如果 deployer 都没起来 (knownOutcome 没机会设)，
+            // 这里也保持 RUNNING — 重启时 reconcile 找不到 .done 会兜到 INTERRUPTED
         } finally {
             if (!asyncCompletion) {
-                finishRun(config.getId(), success);
+                if (knownOutcome) {
+                    finishRun(config.getId(), success);
+                }
+                // !knownOutcome：JVM 被 Step 7 杀掉等场景，保留 RUNNING，重启后由 reconcile 修正
                 isRunning.set(false);
             }
         }
@@ -360,7 +436,7 @@ public class UpdateServiceImpl implements UpdateService {
 
     private List<String> buildDeployerCommand(UpdateConfig config, String branch,
                                               boolean skipBuild, boolean dryRun,
-                                              String containerName) {
+                                              String containerName, String deployId) {
         String effectiveBranch = (branch != null && !branch.isBlank()) ? branch.trim() : defaultBranch(config);
         if (!GIT_BRANCH_PATTERN.matcher(effectiveBranch).matches()) {
             throw new BusinessException("无效的 git 分支名: " + effectiveBranch);
@@ -388,6 +464,10 @@ public class UpdateServiceImpl implements UpdateService {
         cmd.add(hotDeployScript);
         cmd.add("--branch");
         cmd.add(effectiveBranch);
+        if (deployId != null && !deployId.isBlank()) {
+            cmd.add("--deploy-id");
+            cmd.add(deployId);
+        }
         if (skipBuild) cmd.add("--skip-build");
         if (dryRun) cmd.add("--dry-run");
         return cmd;
