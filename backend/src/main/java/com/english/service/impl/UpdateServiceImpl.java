@@ -259,6 +259,7 @@ public class UpdateServiceImpl implements UpdateService {
                                 String branch, boolean skipBuild, boolean dryRun) {
         setRunning(config.getId());
         boolean success = false;
+        boolean asyncCompletion = false; // 防止 finally 和异步任务重复调用 finishRun
         String containerName = "langhack-deployer-" + System.currentTimeMillis();
         try {
             // Phase 1: Start deployer container (detached — survives backend restart)
@@ -316,6 +317,31 @@ public class UpdateServiceImpl implements UpdateService {
                 emitter.send(SseEmitter.event().name("done")
                         .data(success ? "HOT_DEPLOY_SUCCESS" : "HOT_DEPLOY_FAILED:" + exitCodeStr));
                 emitter.complete();
+            } else {
+                // SSE 断连（后端重启导致），deployer 容器独立运行不受影响
+                // 异步等待 deployer 完成，避免前端误判为失败
+                log.info("SSE client disconnected, deployer {} still running in background", containerId);
+                asyncCompletion = true;
+                executor.submit(() -> {
+                    try {
+                        ProcessBuilder waitBuilder = new ProcessBuilder("docker", "wait", containerId);
+                        Process waitProcess = waitBuilder.start();
+                        String exitCodeStr;
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(waitProcess.getInputStream()))) {
+                            exitCodeStr = reader.readLine();
+                        }
+                        waitProcess.waitFor(600, TimeUnit.SECONDS);
+                        boolean deployOk = "0".equals(exitCodeStr != null ? exitCodeStr.trim() : "");
+                        log.info("Deployer {} finished: success={}", containerId, deployOk);
+                        finishRun(config.getId(), deployOk);
+                        isRunning.set(false);
+                    } catch (Exception e) {
+                        log.error("Background deployer wait failed for {}", containerId, e);
+                        finishRun(config.getId(), false);
+                        isRunning.set(false);
+                    }
+                });
+                emitter.complete();
             }
         } catch (Exception e) {
             log.error("Interactive deploy failed", e);
@@ -325,8 +351,10 @@ public class UpdateServiceImpl implements UpdateService {
                 emitter.complete();
             } catch (Exception ignored) { }
         } finally {
-            finishRun(config.getId(), success);
-            isRunning.set(false);
+            if (!asyncCompletion) {
+                finishRun(config.getId(), success);
+                isRunning.set(false);
+            }
         }
     }
 

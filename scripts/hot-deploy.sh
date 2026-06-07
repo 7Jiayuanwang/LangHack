@@ -25,6 +25,9 @@ DOCKER_DIR="$PROJECT_ROOT/docker"
 LOG_DIR="$PROJECT_ROOT/logs"
 ENV_FILE="$PROJECT_ROOT/docker/.env"
 
+# 确保日志目录存在
+mkdir -p "$LOG_DIR/hot-deploy" 2>/dev/null || true
+
 # ── Deployer Sidecar 模式检测 ────────────────────────────────────────────────
 # HOST_PROJECT_DIR 由 UpdateServiceImpl 传入，表示宿主机上的项目绝对路径
 # 构建命令用容器内路径（compose 需要读源文件），运行时命令用宿主机路径（Docker daemon 需要）
