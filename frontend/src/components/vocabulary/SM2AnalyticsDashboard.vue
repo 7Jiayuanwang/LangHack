@@ -32,9 +32,9 @@
  </div>
  </div>
 
- <!-- 复习次数分类 -->
+ <!-- 掌握进度（按 masteryLevel，与筛选 chip 一致） -->
  <div class="section">
- <div class="section-title">复习进度</div>
+ <div class="section-title">掌握进度</div>
  <div class="progress-bars">
  <div class="progress-item">
  <div class="progress-label">
@@ -80,27 +80,28 @@
  <div class="section-title">EF 难度分布</div>
  <div class="ef-distribution">
  <div class="ef-bar">
+ <template v-for="(count, range) in report.efDistribution.ranges" :key="range">
  <div
- v-for="(count, range) in report.efDistribution.ranges"
- :key="range"
+ v-if="count > 0"
  class="ef-segment"
- :style="{ width: getPercent(count, report.efDistribution.total) + '%' }"
+ :style="{ width: getPercent(count, report.totalWords) + '%' }"
  :class="getEFClass(range)"
  :title="`EF ${range}: ${count} 个`"
  ></div>
+ </template>
  </div>
  <div class="ef-legend">
  <div class="legend-item">
  <span class="legend-dot hard"></span>
- 困难 (EF &lt; 1.8): {{ report.efDistribution.hardWords }}
+ 困难 (EF &lt; 2.0): {{ report.efDistribution.hardWords }}
  </div>
  <div class="legend-item">
  <span class="legend-dot normal"></span>
- 普通: {{ report.efDistribution.normalWords }}
+ 普通 (2.0–3.0): {{ report.efDistribution.normalWords }}
  </div>
  <div class="legend-item">
  <span class="legend-dot easy"></span>
- 简单: {{ report.efDistribution.easyWords }}
+ 简单 (EF ≥ 3.0): {{ report.efDistribution.easyWords }}
  </div>
  </div>
  </div>
@@ -109,16 +110,33 @@
  <!-- 间隔分布 -->
  <div class="section" v-if="report.totalWords > 0">
  <div class="section-title">复习间隔分布</div>
- <div class="interval-grid">
+ <div class="interval-summary">
+ <span>平均 {{ report.intervalDistribution.average }} 天</span>
+ <span>·</span>
+ <span>最长 {{ report.intervalDistribution.maxInterval }} 天</span>
+ </div>
+ <template v-if="hasAnyInterval">
+ <div class="interval-bar">
+ <template v-for="(count, range) in report.intervalDistribution.ranges" :key="range">
  <div
- v-for="(count, range) in report.intervalDistribution.ranges"
- :key="range"
- class="interval-cell"
- >
- <div class="interval-range">{{ range }}天</div>
- <div class="interval-count">{{ count }}</div>
+ v-if="count > 0"
+ class="interval-segment"
+ :style="{ width: getPercent(count, report.intervalDistribution.total) + '%' }"
+ :class="getIntervalClass(range)"
+ :title="`${range}天: ${count} 个`"
+ ></div>
+ </template>
  </div>
+ <div class="interval-legend">
+ <template v-for="(count, range) in report.intervalDistribution.ranges" :key="range">
+ <div v-if="count > 0" class="legend-item">
+ <span class="legend-dot" :class="getIntervalClass(range)"></span>
+ {{ range }}天: {{ count }}
  </div>
+ </template>
+ </div>
+ </template>
+ <div v-else class="interval-empty">所有单词均为新词，尚未生成复习间隔</div>
  </div>
 
  <!-- 智能建议 -->
@@ -147,10 +165,10 @@
  <el-button @click="exportData" :icon="Download">导出 CSV</el-button>
  <el-button @click="refresh" :icon="Refresh">刷新数据</el-button>
  </div>
- <div v-else class="loading-state">
+</div>
+<div v-else class="loading-state">
  <el-icon class="is-loading"><Loading /></el-icon>
  <span>正在分析学习数据..</span>
- </div>
 </div>
 </template>
 
@@ -187,9 +205,25 @@ const getPercent = (part, total) => {
  return Math.round((part / total) * 100)
 }
 
+const hasAnyInterval = computed(() => {
+ if (!report.value) return false
+ return Object.values(report.value.intervalDistribution.ranges).some(c => c > 0 && c !== report.value.intervalDistribution.ranges['0-1'])
+ || (report.value.intervalDistribution.ranges['0-1'] < report.value.totalWords)
+})
+
+const getIntervalClass = (range) => {
+ if (range === '0-1') return 'interval-new'
+ if (range === '2-7') return 'interval-short'
+ if (range === '8-30') return 'interval-medium'
+ return 'interval-long'
+}
+
 const getEFClass = (range) => {
- if (range.startsWith('1.0') || range.startsWith('1.5')) return 'ef-hard'
- if (range.startsWith('4.0')) return 'ef-easy'
+ // 困难: EF < 2.0 (ranges 1.0-1.5, 1.5-2.0)
+ if (range === '1.0-1.5' || range === '1.5-2.0') return 'ef-hard'
+ // 简单: EF >= 3.0 (ranges 3.0-4.0, 4.0-5.0)
+ if (range === '3.0-4.0' || range === '4.0-5.0') return 'ef-easy'
+ // 普通: 2.0-2.5, 2.5-3.0
  return 'ef-normal'
 }
 
@@ -345,7 +379,6 @@ const refresh = () => {
 .ef-segment {
  height: 100%;
  transition: all 0.3s;
- min-width: 2px;
 
  &.ef-hard { background: linear-gradient(90deg, #fca5a5 0%, #f87171 100%); }
  &.ef-normal { background: linear-gradient(90deg, #fde68a 0%, #fbbf24 100%); }
@@ -375,31 +408,52 @@ const refresh = () => {
  &.hard { background: #f87171; }
  &.normal { background: #fbbf24; }
  &.easy { background: #4ade80; }
+ &.interval-new { background: #c0ccda; }
+ &.interval-short { background: #79bbff; }
+ &.interval-medium { background: #409eff; }
+ &.interval-long { background: #067dff; }
 }
 
-.interval-grid {
- display: grid;
- grid-template-columns: repeat(3, 1fr);
+.interval-summary {
+ display: flex;
  gap: 8px;
-}
-
-.interval-cell {
- background: #f5f7fa;
- border-radius: 8px;
- padding: 10px 8px;
- text-align: center;
-}
-
-.interval-range {
- font-size: 11px;
+ font-size: 12px;
  color: #909399;
- margin-bottom: 4px;
+ margin-bottom: 10px;
 }
 
-.interval-count {
- font-size: 16px;
- font-weight: 600;
- color: #303133;
+.interval-bar {
+ display: flex;
+ height: 20px;
+ border-radius: 6px;
+ overflow: hidden;
+ background: #f5f7fa;
+ margin-bottom: 8px;
+}
+
+.interval-segment {
+ height: 100%;
+ transition: all 0.3s;
+
+ &.interval-new { background: #c0ccda; }
+ &.interval-short { background: #79bbff; }
+ &.interval-medium { background: #409eff; }
+ &.interval-long { background: #067dff; }
+}
+
+.interval-legend {
+ display: flex;
+ flex-wrap: wrap;
+ gap: 10px;
+ font-size: 12px;
+ color: #606266;
+}
+
+.interval-empty {
+ font-size: 13px;
+ color: #909399;
+ text-align: center;
+ padding: 12px 0;
 }
 
 .recommendation-list {

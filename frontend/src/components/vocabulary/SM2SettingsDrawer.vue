@@ -86,39 +86,13 @@
  <div class="setting-row">
  <div class="setting-info">
  <div class="setting-label">显示数据监控面板</div>
- <div class="setting-hint">在学习页查看 EF 分布 / 保持率等指标</div>
+ <div class="setting-hint">在学习页查看 EF 分布 / 保持率 / 模式对比等指标</div>
  </div>
  <el-switch
  v-model="settings.showAnalytics"
  @change="onChange"
  active-color="#409eff"
  />
- </div>
- </div>
-
- <!-- A/B 测试模式（仅高级用户） -->
- <div class="setting-group ab-group">
- <div class="setting-row">
- <div class="setting-info">
- <div class="setting-label">
- A/B 对比模式
- <el-tag size="small" type="info" effect="plain">实验</el-tag>
- </div>
- <div class="setting-hint">同时启用困难词 + 过载保护，用于效果对比</div>
- </div>
- <el-switch
- v-model="settings.enableAbTest"
- @change="onChange"
- active-color="#909399"
- />
- </div>
- <div v-if="settings.enableAbTest" class="setting-detail">
- <el-radio-group v-model="settings.abTestVariant" @change="onChange" size="small">
- <el-radio-button label="standard">标准 SM-2</el-radio-button>
- <el-radio-button label="hard">困难词模式</el-radio-button>
- <el-radio-button label="overload">过载保护</el-radio-button>
- <el-radio-button label="hybrid">混合模式</el-radio-button>
- </el-radio-group>
  </div>
  </div>
 
@@ -133,8 +107,8 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { Sunny, Lightning, SetUp, DataAnalysis } from '@element-plus/icons-vue'
-import { getSettings, saveSettings, resetSettings, DEFAULT_SETTINGS } from '@/utils/sm2-settings'
+import { Sunny, Lightning, SetUp } from '@element-plus/icons-vue'
+import { getSettings, saveSettings, resetSettings } from '@/utils/sm2-settings'
 
 const props = defineProps({
  modelValue: { type: Boolean, default: false }
@@ -146,13 +120,6 @@ watch(() => props.modelValue, v => { visible.value = v })
 watch(visible, v => emit('update:modelValue', v))
 
 const settings = ref(getSettings())
-
-// 联动：开启 A/B 测试时自动同步到对应变体
-watch(() => settings.value.enableAbTest, enabled => {
- if (enabled) {
- // 进入 A/B 测试时不修改具体变体，使用用户当前选择
- }
-})
 
 const onChange = () => {
  const saved = saveSettings(settings.value)
@@ -169,7 +136,6 @@ const handleReset = () => {
 const handleClose = () => { visible.value = false }
 
 const modeClass = computed(() => {
- if (settings.value.enableAbTest) return 'mode-hybrid'
  if (settings.value.hardWordMode && settings.value.overloadProtection) return 'mode-hybrid'
  if (settings.value.hardWordMode) return 'mode-hard'
  if (settings.value.overloadProtection) return 'mode-overload'
@@ -182,10 +148,6 @@ const modeIcon = computed(() => {
 })
 
 const modeTitle = computed(() => {
- if (settings.value.enableAbTest) {
- const map = { standard: 'A/B 测试: 标准 SM-2', hard: 'A/B 测试: 困难词', overload: 'A/B 测试: 过载保护', hybrid: 'A/B 测试: 混合' }
- return map[settings.value.abTestVariant] || 'A/B 测试'
- }
  if (settings.value.hardWordMode && settings.value.overloadProtection) return '混合模式'
  if (settings.value.hardWordMode) return '困难词加强模式'
  if (settings.value.overloadProtection) return '过载保护模式'
@@ -193,7 +155,6 @@ const modeTitle = computed(() => {
 })
 
 const modeDesc = computed(() => {
- if (settings.value.enableAbTest) return '对比不同 SM-2 变体的复习效果'
  if (settings.value.hardWordMode && settings.value.overloadProtection) return 'EF 下限 1.0 + 智能分批'
  if (settings.value.hardWordMode) return 'EF 下限 1.0，困难词复习频率提高'
  if (settings.value.overloadProtection) return `单日最多 ${settings.value.maxDailyReview} 个，超限自动分批`

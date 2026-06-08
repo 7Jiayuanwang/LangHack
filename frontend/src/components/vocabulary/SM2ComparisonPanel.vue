@@ -14,16 +14,15 @@
 
  <div v-if="!results" class="ab-intro">
  <el-alert type="info" :closable="false" show-icon>
- <template #title>基于您的生词本模拟不同 SM-2 变体的复习效果</template>
+ <template #title>基于您的真实生词本，在本地模拟不同 SM-2 策略的效果</template>
  <template #default>
- <p>本工具会在内存中模拟 4 种模式（标准 / 困难词 / 过载保护 / 混合）在 30 轮复习中的表现差异，包括：</p>
+ <p>以您当前 {{ props.words.length }} 个单词的 EF / 间隔 / 掌握度为起点，在内存中模拟 4 种模式 30 轮复习后的表现，包括：</p>
  <ul>
- <li>成功率和掌握率</li>
- <li>EF 难度因子演化</li>
- <li>平均复习间隔</li>
- <li>困难词和延期次数</li>
+ <li>成功率 / 掌握率对比</li>
+ <li>EF 难度因子演化趋势</li>
+ <li>平均复习间隔与过载情况</li>
  </ul>
- <p class="ab-note">模拟基于确定性数据，不影响真实生词本状态</p>
+ <p class="ab-note">纯本地计算，不修改任何真实数据。结果越接近真实词库状态越准确。</p>
  </template>
  </el-alert>
  </div>
@@ -173,7 +172,10 @@ const runSimulation = async () => {
  try {
  const inputWords = props.words.map(w => ({
  word: w.word,
- quality: w.masteryLevel === 'MASTERED' ? 5 : (w.masteryLevel === 'LEARNING' ? 3 : 2),
+ quality: w.masteryLevel === 'MASTERED' ? 5
+        : w.masteryLevel === 'FAMILIAR' ? 4
+        : w.masteryLevel === 'LEARNING' ? 3
+        : 2,
  easinessFactor: w.easinessFactor || 2.5,
  repetition: w.reviewCount || w.repetition || 0,
  interval: w.intervalDays || w.interval || 0
@@ -199,14 +201,16 @@ const chartRef = ref(null)
 let chartInstance = null
 
 const renderChart = () => {
- if (!chartRef.value || !window.echarts) return
+ if (!chartRef.value) return
 
  if (chartInstance) {
  chartInstance.dispose()
+ chartInstance = null
  }
 
  // 动态加载 echarts
  import('echarts').then(echarts => {
+ if (!chartRef.value) return
  chartInstance = echarts.init(chartRef.value)
  const option = {
  tooltip: { trigger: 'axis' },
@@ -261,9 +265,7 @@ const openSettings = () => {
 }
 
 onMounted(() => {
- if (props.words.length > 0) {
- runSimulation()
- }
+ // 不自动运行，等用户主动点击"运行模拟"
 })
 </script>
 

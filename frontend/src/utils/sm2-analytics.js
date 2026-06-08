@@ -4,6 +4,13 @@
  * 收集和分析生词本学习数据，用于评估学习效果和算法表现
  */
 
+// 后端 nextReviewTime 格式为 "yyyy-MM-dd HH:mm:ss"，需转为 ISO 8601 保证跨浏览器兼容
+function parseDate(str) {
+  if (!str) return null
+  // 将 "2024-06-01 12:00:00" → "2024-06-01T12:00:00"
+  return new Date(String(str).replace(' ', 'T'))
+}
+
 /**
  * 计算 EF 分布统计
  *
@@ -17,9 +24,9 @@ export function calculateEFDistribution(words) {
       ranges: {},
       average: 0,
       median: 0,
-      hardWords: 0,  // EF < 1.8
-      normalWords: 0,  // 1.8 ≤ EF < 2.3
-      easyWords: 0  // EF ≥ 2.3
+      hardWords: 0,  // EF < 2.0
+      normalWords: 0,  // 2.0 ≤ EF < 3.0
+      easyWords: 0  // EF ≥ 3.0
     }
   }
 
@@ -43,9 +50,10 @@ export function calculateEFDistribution(words) {
     '4.0-5.0': efValues.filter(ef => ef >= 4.0 && ef <= 5.0).length
   }
 
-  const hardWords = efValues.filter(ef => ef < 1.8).length
-  const normalWords = efValues.filter(ef => ef >= 1.8 && ef < 2.3).length
-  const easyWords = efValues.filter(ef => ef >= 2.3).length
+  // 阈值与 EF bar 色块一致：红 < 2.0，黄 2.0-3.0，绿 >= 3.0
+  const hardWords = efValues.filter(ef => ef < 2.0).length
+  const normalWords = efValues.filter(ef => ef >= 2.0 && ef < 3.0).length
+  const easyWords = efValues.filter(ef => ef >= 3.0).length
 
   return {
     total,
@@ -118,7 +126,7 @@ export function estimateRetentionRate(word) {
   if (!word || !word.nextReviewTime) return 1.0
 
   const now = new Date()
-  const nextReview = new Date(word.nextReviewTime)
+  const nextReview = parseDate(word.nextReviewTime)
   const daysUntilReview = (nextReview - now) / (24 * 60 * 60 * 1000)
 
   // 已经过期：保持率下降
@@ -187,25 +195,25 @@ export function generateLearningReport(words, options = {}) {
   const intervalDistribution = calculateIntervalDistribution(words)
   const retentionStats = calculateRetentionStats(words)
 
-  // 复习次数统计
+  // 掌握状态统计（按 masteryLevel，与筛选 chip 含义一致）
   const repetitionStats = {
-    new: words.filter(w => (w.repetition || 0) === 0).length,
-    learning: words.filter(w => (w.repetition || 0) >= 1 && (w.repetition || 0) < 5).length,
-    mature: words.filter(w => (w.repetition || 0) >= 5).length
+    new: words.filter(w => !w.masteryLevel || w.masteryLevel === 'NEW').length,
+    learning: words.filter(w => w.masteryLevel === 'LEARNING' || w.masteryLevel === 'FAMILIAR').length,
+    mature: words.filter(w => w.masteryLevel === 'MASTERED').length
   }
 
   // 到期状态统计
   const now = new Date()
   const dueStats = {
-    overdue: words.filter(w => w.nextReviewTime && new Date(w.nextReviewTime) < now).length,
+    overdue: words.filter(w => w.nextReviewTime && parseDate(w.nextReviewTime) < now).length,
     dueToday: words.filter(w => {
       if (!w.nextReviewTime) return false
-      const nextReview = new Date(w.nextReviewTime)
+      const nextReview = parseDate(w.nextReviewTime)
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
       return nextReview >= today && nextReview < tomorrow
     }).length,
-    upcoming: words.filter(w => w.nextReviewTime && new Date(w.nextReviewTime) > now).length
+    upcoming: words.filter(w => w.nextReviewTime && parseDate(w.nextReviewTime) > now).length
   }
 
   return {
@@ -233,47 +241,82 @@ export function generateLearningReport(words, options = {}) {
  */
 function generateRecommendations(reportData) {
   const recommendations = []
+  const { efDistribution, retentionStats, dueStats, totalWords } = reportData
 
-  // 困难词过多
-  if (reportData.efDistribution.hardWordRatio > 30) {
+  // 词库太小，给新手引导
+  if (totalWords < 10) {
+    recommendations.push({
+      type: 'info',
+      title: '词库较少',
+      message: `当前生词本共 ${totalWords} 个单词。建议积累到 20 个以上，SM-2 间隔算法将逐渐发挥效果。`,
+      action: null
+    })
+    return recommendations
+  }
+
+  // 困难词过多（EF < 2.0 超过 30%）
+  if (efDistribution.hardWordRatio > 30) {
     recommendations.push({
       type: 'warning',
       title: '困难词较多',
-      message: `${reportData.efDistribution.hardWordRatio}% 的单词难度较高（EF < 1.8），建议启用"困难词加强模式"或减少每日新词量。`,
+      message: `${efDistribution.hardWordRatio}% 的单词 EF < 2.0，复习频率偏高。建议开启"困难词加强模式"，或减少每日新词量。`,
       action: 'enableHardWordMode'
     })
   }
 
-  // 记忆保持率低
-  if (reportData.retentionStats.atRiskRatio > 20) {
+  // 记忆保持率低（超过 20% 的词保持率 < 50%）
+  if (retentionStats.atRiskRatio > 20) {
     recommendations.push({
       type: 'error',
-      title: '记忆保持率较低',
-      message: `${reportData.retentionStats.atRiskRatio}% 的单词面临遗忘风险（保持率 < 50%），建议优先复习到期单词。`,
+      title: '遗忘风险高',
+      message: `${retentionStats.atRiskRatio}% 的单词保持率不足 50%，面临遗忘。请优先复习逾期单词。`,
       action: 'reviewOverdueWords'
     })
   }
 
-  // 过载风险
-  if (reportData.dueStats.overdue > 50) {
+  // 逾期积压过多
+  if (dueStats.overdue > 50) {
     recommendations.push({
       type: 'warning',
-      title: '复习负担较重',
-      message: `当前有 ${reportData.dueStats.overdue} 个逾期单词，建议启用"过载保护"自动分批复习。`,
+      title: '复习积压较重',
+      message: `当前有 ${dueStats.overdue} 个逾期单词。建议开启"过载保护"，系统将自动分批安排复习。`,
       action: 'enableOverloadProtection'
     })
   }
 
-  // 学习进展良好
+  // 全是新词（interval=0），还没开始复习
+  const allNew = efDistribution.total > 0 && efDistribution.average >= 2.4 && dueStats.overdue === 0 && dueStats.upcoming === 0
+  if (allNew) {
+    recommendations.push({
+      type: 'info',
+      title: '开始第一轮复习',
+      message: `词库共 ${totalWords} 个单词，尚未开始 SM-2 复习。点击"开始复习"完成第一轮后，系统将自动安排个性化间隔。`,
+      action: null
+    })
+    return recommendations
+  }
+
+  // 即将到期的词较多
+  if (dueStats.dueToday > 10) {
+    recommendations.push({
+      type: 'info',
+      title: '今日复习任务',
+      message: `今天有 ${dueStats.dueToday} 个单词需要复习，建议尽快完成以保持记忆曲线。`,
+      action: null
+    })
+  }
+
+  // 学习状态良好
   if (
-    reportData.efDistribution.hardWordRatio < 15 &&
-    reportData.retentionStats.atRiskRatio < 10 &&
-    reportData.dueStats.overdue < 20
+    recommendations.length === 0 &&
+    efDistribution.hardWordRatio < 15 &&
+    retentionStats.atRiskRatio < 10 &&
+    dueStats.overdue < 20
   ) {
     recommendations.push({
       type: 'success',
       title: '学习状态良好',
-      message: '当前记忆保持率稳定，可适当增加每日新词量。',
+      message: `记忆保持率稳定，平均 EF ${efDistribution.average}，可适当增加每日新词量。`,
       action: null
     })
   }

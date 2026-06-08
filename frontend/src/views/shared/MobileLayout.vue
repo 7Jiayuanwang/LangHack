@@ -267,6 +267,7 @@ const MORE_ITEMS = {
     { path: '/admin/quiz-records',    label: '做题管理', icon: EditPen },
     { path: '/admin/persona-analytics', label: '画像分析', icon: DataAnalysis, featureKey: 'admin.persona_analytics' },
     { path: '/admin/class-cohort',      label: '班级画像', icon: DataLine,     featureKey: 'admin.class_cohort' },
+    { path: '/admin/vocab-learning-stats', label: '生词本统计', icon: DataAnalysis },
     { path: '/admin/tag-management',    label: '标签管理', icon: EditPen,      featureKey: 'admin.tag_management' },
   ],
 }
@@ -335,6 +336,7 @@ const ROUTE_MAP = {
     '/admin/quiz-records':   '做题管理',
     '/admin/persona-analytics': '画像分析',
     '/admin/class-cohort':      '班级队列分析',
+    '/admin/vocab-learning-stats': '生词本学习统计',
     '/admin/tag-management':    '标签管理',
   },
 }

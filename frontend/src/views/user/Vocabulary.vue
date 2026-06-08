@@ -92,7 +92,28 @@
         </el-form>
       </div>
 
-      <div class="vocabulary-list" v-loading="loading">
+       <div class="sm2-toolbar">
+ <el-button
+ @click="sm2SettingsDrawerVisible = true"
+ :icon="SetUp"
+ >SM-2 设置</el-button>
+ <el-tag
+ v-if="sm2CurrentMode"
+ :type="sm2CurrentMode === 'standard' ? 'info' : 'warning'"
+ size="small"
+ effect="plain"
+ >
+ <el-icon style="vertical-align: middle; margin-right: 2px;"><Sunny /></el-icon>
+ 模式: {{ sm2CurrentMode === 'standard' ? '标准' : sm2CurrentMode === 'hard' ? '困难词' : sm2CurrentMode === 'overload' ? '过载保护' : '混合' }}
+ </el-tag>
+ </div>
+
+ <el-tabs v-model="activeTab" class="vocabulary-tabs">
+ <el-tab-pane name="list">
+ <template #label>
+ <span><el-icon><VideoPlay /></el-icon> 单词列表</span>
+ </template>
+ <div class="vocabulary-list" v-loading="loading">
         <div class="list-header">
           <el-checkbox
             v-model="selectAll"
@@ -175,9 +196,28 @@
             >去学习</el-button
           >
         </el-empty>
-      </div>
+ </div>
+ </el-tab-pane>
 
-      <div v-if="total > 0" class="pagination">
+ <el-tab-pane name="analytics">s">
+ <template #label>
+ <span><el-icon><DataAnalysis /></el-icon> 数据分析</span>
+ </template>
+ <div class="tab-pane-content">
+ <SM2AnalyticsDashboard :words="vocabulary" />
+ </div>
+ </el-tab-pane>
+
+ <el-tab-pane name="comparison">
+ <template #label>
+ <span><el-icon><DataAnalysis /></el-icon> 模式对比</span>
+ </template>
+ <div class="tab-pane-content">
+ <SM2ComparisonPanel :words="vocabulary" />
+ </div>
+ </el-tab-pane>
+ </el-tabs>
+ <div v-if="total > 0" class="pagination">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -316,20 +356,25 @@
         >
       </div>
     </el-dialog>
-  </div>
+   <SM2SettingsDrawer v-model="sm2SettingsDrawerVisible" @settings-changed="loadSm2Settings" />
+ </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Check, Delete, VideoPlay } from "@element-plus/icons-vue";
+import { Check, Delete, SetUp, DataAnalysis, Sunny } from "@element-plus/icons-vue";
 import {
   batchOperateVocabulary,
   getVocabulary as getVocabularyApi,
   removeFromVocabulary as removeFromVocabularyApi,
   updateVocabularyMastery,
 } from "@/api/student";
+import { getSettings } from "@/utils/sm2-settings";
+import SM2SettingsDrawer from "@/components/vocabulary/SM2SettingsDrawer.vue";
+import SM2AnalyticsDashboard from "@/components/vocabulary/SM2AnalyticsDashboard.vue";
+import SM2ComparisonPanel from "@/components/vocabulary/SM2ComparisonPanel.vue";
 
 const router = useRouter();
 
@@ -357,6 +402,19 @@ const filterForm = reactive({
 
 const wordDialogVisible = ref(false);
 const selectedWord = ref(null);
+
+const activeTab = ref("list");
+const sm2SettingsDrawerVisible = ref(false);
+const sm2CurrentMode = ref("standard");
+
+const loadSm2Settings = () => {
+ try {
+ const settings = getSettings();
+ sm2CurrentMode.value = settings.mode || "standard";
+ } catch (e) {
+ console.warn("加载 SM-2 设置失败:", e);
+ }
+};
 
 const reviewDialogVisible = ref(false);
 const reviewWords = ref([]);
@@ -639,7 +697,8 @@ const formatDate = (date) => {
 };
 
 onMounted(() => {
-  loadVocabulary();
+  loadSm2Settings();
+ loadVocabulary();
 });
 
 onBeforeUnmount(() => {
@@ -900,5 +959,32 @@ onBeforeUnmount(() => {
 
 .summary-item .unknown {
   color: #f56c6c;
+}
+
+.sm2-toolbar {
+ display: flex;
+ align-items: center;
+ gap: 12px;
+ margin-bottom: 12px;
+ padding: 10px 12px;
+ background: linear-gradient(90deg, #f0f9ff 0%, #fefce8 100%);
+ border-radius: 8px;
+ border: 1px solid #e0f2fe;
+}
+
+.vocabulary-tabs {
+ margin-top: 4px;
+}
+
+.vocabulary-tabs :deep(.el-tabs__nav-wrap::after) {
+ height: 1px;
+}
+
+.vocabulary-tabs :deep(.el-tabs__item) {
+ font-size: 14px;
+}
+
+.tab-pane-content {
+ padding: 16px 4px;
 }
 </style>

@@ -121,15 +121,21 @@ function simulateVariant(words, variant, iterations, options) {
  easinessFactor: state.easinessFactor
  }
 
- const result = calculateSM2(state.quality, state, variant.sm2Options)
+ // 根据当前 EF 估算 quality：EF 越高越容易记住
+ // EF >= 2.5 → quality 4-5；EF 1.5-2.5 → quality 3；EF < 1.5 → quality 2
+ const ef = state.easinessFactor
+ const quality = ef >= 2.5 ? 4 : ef >= 1.5 ? 3 : 2
+
+ const result = calculateSM2(quality, state, variant.sm2Options)
  state.repetition = result.repetition
  state.interval = result.interval
  state.easinessFactor = result.easinessFactor
+ state.quality = quality
  state.lastInterval = before.interval
  state.nextReviewTime = i + result.interval
 
  totalReviews++
- if (state.quality >= 3) totalSuccesses++
+ if (quality >= 3) totalSuccesses++
  else totalFailures++
 
  sumEF += result.easinessFactor
@@ -147,7 +153,7 @@ function simulateVariant(words, variant, iterations, options) {
 
  // 困难词占比
  const hardWords = Array.from(stateMap.values())
- .filter(s => s.easinessFactor < 1.8).length
+ .filter(s => s.easinessFactor < 2.0).length
 
  // 已掌握数量（repetition >= 5）
  const masteredWords = Array.from(stateMap.values())
