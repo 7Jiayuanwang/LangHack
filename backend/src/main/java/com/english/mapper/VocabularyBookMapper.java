@@ -25,4 +25,60 @@ public interface VocabularyBookMapper extends BaseMapper<VocabularyBook> {
     @Select("SELECT COUNT(*) FROM vocabulary_books " +
             "WHERE student_id = #{studentId} AND next_review_time IS NOT NULL")
     int countDueReviews(@Param("studentId") Long studentId);
+
+    // ─── Admin SM-2 统计查询 ───
+
+    /** 全平台各掌握度档位的词条数 */
+    @Select("SELECT mastery_level, COUNT(*) AS cnt FROM vocabulary_books GROUP BY mastery_level")
+    List<Map<String, Object>> selectMasteryLevelDistribution();
+
+    /** 全平台 EF 分布（按 0.5 步长分桶） */
+    @Select("SELECT CONCAT(FLOOR(easiness_factor * 2) / 2, '-', FLOOR(easiness_factor * 2) / 2 + 0.5) AS ef_range, " +
+            "COUNT(*) AS cnt FROM vocabulary_books WHERE easiness_factor IS NOT NULL " +
+            "GROUP BY ef_range ORDER BY MIN(easiness_factor)")
+    List<Map<String, Object>> selectEFDistribution();
+
+    /** 全平台间隔分布（分桶） */
+    @Select("SELECT " +
+            "CASE " +
+            "  WHEN interval_days = 0 THEN '0（新词）' " +
+            "  WHEN interval_days <= 1 THEN '1天' " +
+            "  WHEN interval_days <= 7 THEN '2-7天' " +
+            "  WHEN interval_days <= 30 THEN '8-30天' " +
+            "  WHEN interval_days <= 90 THEN '31-90天' " +
+            "  ELSE '90天+' " +
+            "END AS bucket, " +
+            "COUNT(*) AS cnt " +
+            "FROM vocabulary_books " +
+            "GROUP BY bucket")
+    List<Map<String, Object>> selectIntervalDistribution();
+
+    /** 每个学生的汇总数据（用于排行和分布） */
+    @Select("SELECT vb.student_id, u.username, u.nickname, " +
+            "COUNT(*) AS total_words, " +
+            "SUM(CASE WHEN vb.mastery_level = 'NEW' THEN 1 ELSE 0 END) AS new_count, " +
+            "SUM(CASE WHEN vb.mastery_level IN ('LEARNING','FAMILIAR') THEN 1 ELSE 0 END) AS learning_count, " +
+            "SUM(CASE WHEN vb.mastery_level = 'MASTERED' THEN 1 ELSE 0 END) AS mastered_count, " +
+            "ROUND(AVG(vb.easiness_factor), 2) AS avg_ef, " +
+            "ROUND(AVG(vb.interval_days), 1) AS avg_interval, " +
+            "SUM(vb.review_count) AS total_reviews, " +
+            "SUM(CASE WHEN vb.next_review_time IS NOT NULL AND vb.next_review_time < NOW() THEN 1 ELSE 0 END) AS overdue_count " +
+            "FROM vocabulary_books vb " +
+            "LEFT JOIN users u ON vb.student_id = u.id " +
+            "GROUP BY vb.student_id, u.username, u.nickname " +
+            "ORDER BY total_words DESC")
+    List<Map<String, Object>> selectPerStudentSummary();
+
+    /** 全平台汇总 */
+    @Select("SELECT COUNT(DISTINCT student_id) AS active_students, " +
+            "COUNT(*) AS total_entries, " +
+            "SUM(CASE WHEN mastery_level = 'NEW' THEN 1 ELSE 0 END) AS new_count, " +
+            "SUM(CASE WHEN mastery_level IN ('LEARNING','FAMILIAR') THEN 1 ELSE 0 END) AS learning_count, " +
+            "SUM(CASE WHEN mastery_level = 'MASTERED' THEN 1 ELSE 0 END) AS mastered_count, " +
+            "ROUND(AVG(easiness_factor), 2) AS avg_ef, " +
+            "ROUND(AVG(interval_days), 1) AS avg_interval, " +
+            "SUM(review_count) AS total_reviews, " +
+            "SUM(CASE WHEN next_review_time IS NOT NULL AND next_review_time < NOW() THEN 1 ELSE 0 END) AS overdue_count " +
+            "FROM vocabulary_books")
+    Map<String, Object> selectPlatformSummary();
 }
