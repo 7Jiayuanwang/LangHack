@@ -74,19 +74,19 @@ public interface VocabularyBookMapper extends BaseMapper<VocabularyBook> {
     @Select("SELECT source_type, COUNT(*) AS cnt FROM vocabulary_books GROUP BY source_type")
     List<Map<String, Object>> selectSourceTypeDistribution();
 
-    /** 近 N 天每日新增词数趋势 */
+    /** 按日期范围每日新增词数 */
     @Select("SELECT DATE(added_time) AS day, COUNT(*) AS new_words " +
             "FROM vocabulary_books " +
-            "WHERE added_time >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY) " +
+            "WHERE DATE(added_time) BETWEEN #{start} AND #{end} " +
             "GROUP BY DATE(added_time) ORDER BY day")
-    List<Map<String, Object>> selectDailyNewTrend(@Param("days") int days);
+    List<Map<String, Object>> selectDailyNewTrendByRange(@Param("start") String start, @Param("end") String end);
 
-    /** 近 N 天每日复习人次趋势 */
+    /** 按日期范围每日复习人次 */
     @Select("SELECT DATE(last_reviewed) AS day, COUNT(*) AS review_count " +
             "FROM vocabulary_books " +
-            "WHERE last_reviewed >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY) " +
+            "WHERE DATE(last_reviewed) BETWEEN #{start} AND #{end} " +
             "GROUP BY DATE(last_reviewed) ORDER BY day")
-    List<Map<String, Object>> selectDailyReviewTrend(@Param("days") int days);
+    List<Map<String, Object>> selectDailyReviewTrendByRange(@Param("start") String start, @Param("end") String end);
 
     /** 全平台汇总 */
     @Select("SELECT COUNT(DISTINCT student_id) AS active_students, " +

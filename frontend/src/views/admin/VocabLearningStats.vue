@@ -107,73 +107,140 @@
       <!-- 来源分布 -->
       <div class="chart-card">
         <div class="card-title">词汇来源分布</div>
-        <div class="source-bars">
-          <div v-for="item in sourceItems" :key="item.type" class="source-row">
-            <span class="source-label">{{ item.label }}</span>
-            <div class="source-bar-wrap">
-              <div class="source-bar-fill" :class="item.cls"
-                :style="{ width: pct(item.count, platform.total_entries) + '%' }"></div>
-            </div>
-            <span class="source-count">{{ fmt(item.count) }}</span>
-            <span class="source-pct">{{ pct(item.count, platform.total_entries) }}%</span>
+        <div class="source-pie-wrap">
+          <div class="source-pie">
+            <template v-for="item in sourceItems.filter(i => i.count > 0)" :key="item.type">
+              <div class="pie-seg" :class="item.cls"
+                :style="{ flex: item.count }">
+                <span class="pie-label">{{ item.label }}<br>{{ fmt(item.count) }}</span>
+              </div>
+            </template>
           </div>
-        </div>
-        <div class="source-total" v-if="platform.total_entries">
-          共 {{ fmt(platform.total_entries) }} 条词汇记录
+          <div class="source-legend">
+            <div v-for="item in sourceItems" :key="item.type" class="sl-item" v-show="item.count > 0">
+              <span class="sl-dot" :class="item.cls"></span>
+              <span class="sl-text">{{ item.label }}</span>
+              <span class="sl-pct">{{ pct(item.count, platform.total_entries) }}%</span>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- 复习间隔分布 -->
       <div class="chart-card">
         <div class="card-title">复习间隔分布</div>
-        <div class="interval-grid">
-          <div v-for="item in intervalItems" :key="item.bucket" class="interval-cell"
-            :class="{ active: item.count > 0 }">
-            <div class="ic-bucket">{{ item.bucket }}</div>
-            <div class="ic-count">{{ fmt(item.count) }}</div>
+        <div class="interval-bars">
+          <div v-for="item in intervalItems" :key="item.bucket" class="interval-row"
+            :class="{ empty: item.count === 0 }">
+            <span class="ir-label">{{ item.bucket }}</span>
+            <div class="ir-bar-wrap">
+              <div class="ir-bar-fill" :style="{ width: pct(item.count, maxIntervalCount) + '%' }"></div>
+            </div>
+            <span class="ir-count">{{ fmt(item.count) }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 近7天趋势 -->
-    <div class="trend-card" v-loading="loading">
+    <!-- 学习趋势 -->
+    <div class="trend-card" v-loading="trendLoading">
       <div class="card-title-row">
-        <span class="card-title">近 7 天学习趋势</span>
-        <div class="trend-legend">
-          <span class="tl-item new-line">新增词汇</span>
-          <span class="tl-item review-line">复习次数</span>
+        <span class="card-title">学习趋势</span>
+        <div class="trend-controls">
+          <el-button-group size="small">
+            <el-button :type="trendPreset === 7  ? 'primary' : ''" @click="applyPreset(7)">近7天</el-button>
+            <el-button :type="trendPreset === 14 ? 'primary' : ''" @click="applyPreset(14)">近14天</el-button>
+            <el-button :type="trendPreset === 30 ? 'primary' : ''" @click="applyPreset(30)">近30天</el-button>
+            <el-button :type="trendPreset === 90 ? 'primary' : ''" @click="applyPreset(90)">近90天</el-button>
+          </el-button-group>
+          <el-date-picker
+            v-model="trendDateRange"
+            type="daterange"
+            size="small"
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            :disabled-date="d => d > new Date()"
+            value-format="YYYY-MM-DD"
+            style="width:220px"
+            @change="onDateRangeChange"
+          />
+          <div class="trend-legend">
+            <span class="tl-item new-line">新增词汇</span>
+            <span class="tl-item review-line">复习次数</span>
+          </div>
         </div>
       </div>
-      <div class="trend-body">
-        <div class="trend-labels-y">
-          <span>{{ trendMaxY }}</span>
-          <span>{{ Math.round(trendMaxY / 2) }}</span>
-          <span>0</span>
+
+      <!-- SVG 容器：响应式宽度 -->
+      <div ref="trendRef" class="trend-wrap" @mousemove="onTrendMouseMove" @mouseleave="onTrendMouseLeave">
+        <svg class="trend-svg" :viewBox="`0 0 ${svgVW} ${SVG_VH}`" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="newAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#409eff" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#409eff" stop-opacity="0.02"/>
+            </linearGradient>
+            <linearGradient id="reviewAreaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#e6a23c" stop-opacity="0.2"/>
+              <stop offset="100%" stop-color="#e6a23c" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Y 网格线 + 标签（标签用固定字号，不受 none 拉伸，所以用 foreignObject 不合适；用 textLength 固定） -->
+          <template v-for="g in yGridLines" :key="g.y">
+            <line :x1="PAD_L" :y1="g.y" :x2="svgVW - PAD_R" :y2="g.y"
+              stroke="#ebeef5" :stroke-dasharray="g.dash ? '5,4' : ''" stroke-width="1"/>
+          </template>
+
+          <!-- 面积填充 -->
+          <path v-if="newAreaPath"    :d="newAreaPath"    fill="url(#newAreaGrad)"/>
+          <path v-if="reviewAreaPath" :d="reviewAreaPath" fill="url(#reviewAreaGrad)"/>
+
+          <!-- 折线 -->
+          <path v-if="newLinePath"    :d="newLinePath"
+            fill="none" stroke="#409eff" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
+          <path v-if="reviewLinePath" :d="reviewLinePath"
+            fill="none" stroke="#e6a23c" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
+
+          <!-- 数据点（≤14天显示圆点，≤30天显示数值） -->
+          <template v-for="(p, i) in newDots" :key="'n'+i">
+            <circle v-if="trendDays <= 14" :cx="p.x" :cy="p.y" r="4" fill="#fff" stroke="#409eff" stroke-width="2.5"/>
+          </template>
+          <template v-for="(p, i) in reviewDots" :key="'r'+i">
+            <circle v-if="trendDays <= 14" :cx="p.x" :cy="p.y" r="4" fill="#fff" stroke="#e6a23c" stroke-width="2.5"/>
+          </template>
+
+          <!-- hover 竖线 -->
+          <line v-if="tooltip.visible"
+            :x1="tooltip.svgX" y1="0" :x2="tooltip.svgX" :y2="SVG_VH - PAD_B"
+            stroke="#dcdfe6" stroke-width="1" stroke-dasharray="4,3"/>
+          <circle v-if="tooltip.visible && tooltip.newY != null"
+            :cx="tooltip.svgX" :cy="tooltip.newY" r="5" fill="#409eff"/>
+          <circle v-if="tooltip.visible && tooltip.reviewY != null"
+            :cx="tooltip.svgX" :cy="tooltip.reviewY" r="5" fill="#e6a23c"/>
+        </svg>
+
+        <!-- Y 轴标签（HTML，避免 preserveAspectRatio:none 拉伸字形） -->
+        <div class="y-labels">
+          <span v-for="g in yGridLines" :key="g.label"
+            class="y-label" :style="{ top: g.y + 'px' }">{{ g.label }}</span>
         </div>
-        <div class="trend-chart-wrap">
-          <svg class="trend-svg" viewBox="0 0 700 120" preserveAspectRatio="none">
-            <!-- 格线 -->
-            <line x1="0" y1="0" x2="700" y2="0" stroke="#f0f0f0" stroke-width="1"/>
-            <line x1="0" y1="60" x2="700" y2="60" stroke="#f0f0f0" stroke-width="1"/>
-            <line x1="0" y1="120" x2="700" y2="120" stroke="#f0f0f0" stroke-width="1"/>
-            <!-- 新增词折线 -->
-            <polyline v-if="newTrendPoints.length" :points="newTrendPoints"
-              fill="none" stroke="#409eff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-            <!-- 复习折线 -->
-            <polyline v-if="reviewTrendPoints.length" :points="reviewTrendPoints"
-              fill="none" stroke="#e6a23c" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-            <!-- 数据点 -->
-            <template v-for="(p, i) in newTrendDots" :key="'n'+i">
-              <circle :cx="p.x" :cy="p.y" r="3.5" fill="#409eff"/>
-            </template>
-            <template v-for="(p, i) in reviewTrendDots" :key="'r'+i">
-              <circle :cx="p.x" :cy="p.y" r="3.5" fill="#e6a23c"/>
-            </template>
-          </svg>
-          <div class="trend-labels-x">
-            <span v-for="d in trend7Days" :key="d">{{ d }}</span>
-          </div>
+
+        <!-- X 轴标签 -->
+        <div class="x-labels">
+          <span v-for="tick in xTicks" :key="tick.i"
+            class="x-label" :style="{ left: ((tick.x - PAD_L) / chartW * 100) + '%' }">{{ tick.label }}</span>
+        </div>
+
+        <!-- Tooltip -->
+        <div v-if="tooltip.visible" class="trend-tooltip"
+          :style="{ left: tooltip.elX + 'px', top: tooltip.elY + 'px',
+                    transform: tooltip.elX > containerW * 0.7 ? 'translateX(-110%)' : 'translateX(10px)' }">
+          <div class="tt-date">{{ tooltip.date }}</div>
+          <div class="tt-row new-dot">新增词汇 <strong>{{ tooltip.newVal }}</strong></div>
+          <div class="tt-row review-dot">复习次数 <strong>{{ tooltip.reviewVal }}</strong></div>
         </div>
       </div>
     </div>
@@ -242,12 +309,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 
 const loading = ref(false)
+const trendLoading = ref(false)
 const studentsLoading = ref(false)
 const platform = ref({})
 const masteryDistribution = ref([])
@@ -258,6 +326,10 @@ const dailyNewTrend = ref([])
 const dailyReviewTrend = ref([])
 const students = ref([])
 const searchText = ref('')
+
+// 趋势筛选状态
+const trendPreset = ref(7)
+const trendDateRange = ref(null)   // [start, end] strings or null
 
 const fmt = (n) => (n == null ? 0 : Number(n).toLocaleString())
 const pct = (a, b) => (!b ? 0 : Math.round(a / b * 100))
@@ -300,6 +372,7 @@ const intervalItems = computed(() => {
   intervalDistribution.value.forEach(r => { m[r.bucket] = Number(r.cnt) })
   return INTERVAL_ORDER.map(b => ({ bucket: b, count: m[b] || 0 }))
 })
+const maxIntervalCount = computed(() => Math.max(...intervalItems.value.map(i => i.count), 1))
 
 // 来源分布
 const SOURCE_LABELS = { ARTICLE: '文章阅读', TEXT: '文章阅读', MANUAL: '手动添加' }
@@ -318,33 +391,44 @@ const sourceItems = computed(() => {
   }))
 })
 
-// 近7天趋势 SVG
-const SVG_W = 700, SVG_H = 120
+// 趋势 SVG — 响应式宽度
+const SVG_VH = 200
+const PAD_L = 0, PAD_R = 0, PAD_T = 20, PAD_B = 30
+// svgVW 跟随容器像素宽度（用 ResizeObserver 更新）
+const trendRef  = ref(null)
+const svgVW     = ref(760)
+const containerW = ref(760)
 
-const trend7Days = computed(() => {
-  const days = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    days.push(`${d.getMonth() + 1}/${d.getDate()}`)
-  }
-  return days
-})
+const CHART_H = SVG_VH - PAD_T - PAD_B
+const chartW  = computed(() => svgVW.value - PAD_L - PAD_R)
 
-const trend7DatesISO = computed(() => {
+// 当前区间所有日期（ISO 字符串数组）
+const trendDatesISO = computed(() => {
+  const end   = trendDateRange.value ? trendDateRange.value[1] : isoToday()
+  const start = trendDateRange.value ? trendDateRange.value[0] : offsetDate(end, -(trendPreset.value - 1))
   const dates = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    dates.push(d.toISOString().slice(0, 10))
+  let cur = new Date(start + 'T00:00:00')
+  const last = new Date(end + 'T00:00:00')
+  while (cur <= last) {
+    dates.push(cur.toISOString().slice(0, 10))
+    cur.setDate(cur.getDate() + 1)
   }
   return dates
 })
 
+const trendDays = computed(() => trendDatesISO.value.length)
+
+const isoToday = () => new Date().toISOString().slice(0, 10)
+const offsetDate = (iso, delta) => {
+  const d = new Date(iso + 'T00:00:00')
+  d.setDate(d.getDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
 const buildTrendValues = (raw, key) => {
   const m = {}
   raw.forEach(r => { m[String(r.day).slice(0, 10)] = Number(r[key]) })
-  return trend7DatesISO.value.map(d => m[d] || 0)
+  return trendDatesISO.value.map(d => m[d] || 0)
 }
 
 const newValues    = computed(() => buildTrendValues(dailyNewTrend.value, 'new_words'))
@@ -352,24 +436,74 @@ const reviewValues = computed(() => buildTrendValues(dailyReviewTrend.value, 're
 
 const trendMaxY = computed(() => {
   const all = [...newValues.value, ...reviewValues.value]
-  return Math.max(...all, 1)
+  const raw = Math.max(...all, 1)
+  if (raw <= 5) return 5
+  if (raw <= 10) return 10
+  return Math.ceil(raw / 5) * 5
 })
 
-const toPoints = (values) => {
-  const max = trendMaxY.value
-  const step = SVG_W / (values.length - 1 || 1)
-  return values.map((v, i) => {
-    const x = Math.round(i * step)
-    const y = Math.round(SVG_H - (v / max) * SVG_H)
-    return { x, y }
-  })
+// 将数据索引/值映射到 SVG 坐标
+const chartX = (i) => {
+  const n = trendDays.value
+  return PAD_L + (n <= 1 ? chartW.value / 2 : (i / (n - 1)) * chartW.value)
+}
+const chartY = (v) => PAD_T + CHART_H - (v / trendMaxY.value) * CHART_H
+
+// Y 轴网格线
+const yGridLines = computed(() => {
+  const n = 4
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const ratio = i / n
+    const v = Math.round(trendMaxY.value * ratio)
+    return { y: chartY(v), label: v, dash: i > 0 && i < n }
+  }).reverse()
+})
+
+// X 轴刻度：每 ~70px 一个标签，并按区间设最小 step 防止过密
+const xTicks = computed(() => {
+  const n = trendDays.value
+  if (n === 0) return []
+  const maxTicks = Math.max(7, Math.floor(containerW.value / 70))
+  let step = Math.ceil(n / maxTicks)
+  // 各区间最小 step：保证标签密度合理
+  if (n >= 60) step = Math.max(step, 7)  // 60天以上每周一标
+  else if (n >= 20) step = Math.max(step, 3)  // 20-59天最少3天一标
+  else if (n >= 10) step = Math.max(step, 2)  // 10-19天最少2天一标
+  return trendDatesISO.value
+    .map((iso, i) => {
+      const d = new Date(iso + 'T00:00:00')
+      return { i, x: chartX(i), label: `${d.getMonth() + 1}/${d.getDate()}` }
+    })
+    .filter((_, i) => i % step === 0 || i === n - 1)
+})
+
+// 贝塞尔平滑路径
+const smoothPath = (pts) => {
+  if (pts.length < 2) return ''
+  let d = `M ${pts[0].x} ${pts[0].y}`
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1], cur = pts[i]
+    const cpx = (prev.x + cur.x) / 2
+    d += ` C ${cpx} ${prev.y} ${cpx} ${cur.y} ${cur.x} ${cur.y}`
+  }
+  return d
 }
 
-const newTrendDots    = computed(() => toPoints(newValues.value))
-const reviewTrendDots = computed(() => toPoints(reviewValues.value))
+const buildDots = (values) => values.map((v, i) => ({ x: chartX(i), y: chartY(v) }))
 
-const newTrendPoints    = computed(() => newTrendDots.value.map(p => `${p.x},${p.y}`).join(' '))
-const reviewTrendPoints = computed(() => reviewTrendDots.value.map(p => `${p.x},${p.y}`).join(' '))
+const newDots    = computed(() => buildDots(newValues.value))
+const reviewDots = computed(() => buildDots(reviewValues.value))
+
+const newLinePath    = computed(() => smoothPath(newDots.value))
+const reviewLinePath = computed(() => smoothPath(reviewDots.value))
+
+const areaPath = (pts) => {
+  if (pts.length < 2) return ''
+  const bottom = PAD_T + CHART_H
+  return `${smoothPath(pts)} L ${pts[pts.length - 1].x} ${bottom} L ${pts[0].x} ${bottom} Z`
+}
+const newAreaPath    = computed(() => areaPath(newDots.value))
+const reviewAreaPath = computed(() => areaPath(reviewDots.value))
 
 // 学生表
 const filteredStudents = computed(() => {
@@ -426,6 +560,7 @@ const loadOverview = async () => {
       efDistribution.value       = res.data.efDistribution || []
       intervalDistribution.value = res.data.intervalDistribution || []
       sourceDistribution.value   = res.data.sourceDistribution || []
+      // overview 默认返回近7天趋势，与 trendPreset 初始值一致
       dailyNewTrend.value        = res.data.dailyNewTrend || []
       dailyReviewTrend.value     = res.data.dailyReviewTrend || []
     }
@@ -434,6 +569,39 @@ const loadOverview = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const loadTrend = async (start, end) => {
+  trendLoading.value = true
+  try {
+    const res = await request({
+      url: '/api/admin/vocab-stats/trend',
+      method: 'get',
+      params: { start, end },
+    })
+    if (res?.code === 200) {
+      dailyNewTrend.value    = res.data.dailyNewTrend    || []
+      dailyReviewTrend.value = res.data.dailyReviewTrend || []
+    }
+  } catch (e) {
+    ElMessage.error('加载趋势失败')
+  } finally {
+    trendLoading.value = false
+  }
+}
+
+const applyPreset = (days) => {
+  trendPreset.value = days
+  trendDateRange.value = null
+  const end   = isoToday()
+  const start = offsetDate(end, -(days - 1))
+  loadTrend(start, end)
+}
+
+const onDateRangeChange = (val) => {
+  if (!val) return
+  trendPreset.value = 0   // 清除预设高亮
+  loadTrend(val[0], val[1])
 }
 
 const loadStudents = async () => {
@@ -449,13 +617,59 @@ const loadStudents = async () => {
 }
 
 const loadAll = () => { loadOverview(); loadStudents() }
-onMounted(loadAll)
+
+// ── ResizeObserver：让 svgVW 跟随容器真实像素宽度 ──
+let ro = null
+onMounted(() => {
+  loadAll()
+  ro = new ResizeObserver(entries => {
+    const w = entries[0].contentRect.width
+    if (w > 0) { svgVW.value = w; containerW.value = w }
+  })
+  if (trendRef.value) ro.observe(trendRef.value)
+})
+onBeforeUnmount(() => ro?.disconnect())
+
+// ── Tooltip ──
+const tooltip = ref({ visible: false, date: '', newVal: 0, reviewVal: 0,
+                       svgX: 0, newY: null, reviewY: null, elX: 0, elY: 0 })
+
+const onTrendMouseMove = (e) => {
+  const rect = trendRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const elX = e.clientX - rect.left
+  const elY = e.clientY - rect.top
+  // elX 对应 svgVW 中的坐标（1:1 因为 SVG 宽 == 容器宽）
+  const svgX = elX
+  const n = trendDays.value
+  if (n === 0) return
+  // 找最近数据点索引
+  const step = chartW.value / Math.max(n - 1, 1)
+  const idx = Math.min(Math.max(Math.round((svgX - PAD_L) / step), 0), n - 1)
+  const date = trendDatesISO.value[idx]
+  if (!date) return
+  const d = new Date(date + 'T00:00:00')
+  const snappedX = chartX(idx)
+  tooltip.value = {
+    visible: true,
+    date: `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`,
+    newVal: newValues.value[idx] ?? 0,
+    reviewVal: reviewValues.value[idx] ?? 0,
+    svgX: snappedX,
+    newY: newDots.value[idx]?.y,
+    reviewY: reviewDots.value[idx]?.y,
+    elX,
+    elY: Math.min(elY, SVG_VH - 20),
+  }
+}
+
+const onTrendMouseLeave = () => { tooltip.value.visible = false }
 </script>
 
 <style scoped lang="scss">
 .vocab-stats-page {
   padding: 20px;
-  max-width: 1400px;
+  max-width: 100%;
 }
 
 .page-header {
@@ -471,7 +685,7 @@ onMounted(loadAll)
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .ov-card {
   background: white;
@@ -501,9 +715,12 @@ onMounted(loadAll)
 /* ── 图表行 ── */
 .charts-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 14px;
   margin-bottom: 16px;
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 .chart-card {
@@ -558,28 +775,57 @@ onMounted(loadAll)
 }
 
 /* 来源分布 */
-.source-bars { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
-.source-row { display: flex; align-items: center; gap: 8px; }
-.source-label { width: 60px; font-size: 13px; color: #606266; }
-.source-bar-wrap { flex: 1; height: 14px; background: #f5f7fa; border-radius: 7px; overflow: hidden; }
-.source-bar-fill {
-  height: 100%; border-radius: 7px; transition: width .4s;
-  &.article { background: linear-gradient(90deg,#74b9ff,#0984e3); }
-  &.manual  { background: linear-gradient(90deg,#a29bfe,#6c5ce7); }
+.source-pie-wrap { padding: 8px 0; }
+.source-pie {
+  display: flex;
+  height: 80px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
 }
-.source-count { width: 36px; text-align: right; font-size: 13px; color: #303133; }
-.source-pct   { width: 36px; text-align: right; font-size: 12px; color: #909399; }
-.source-total { font-size: 12px; color: #c0c4cc; text-align: right; margin-top: 4px; }
+.pie-seg {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+  transition: all .3s;
+  &:hover { transform: scale(1.05); filter: brightness(1.1); }
+  &.article { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); }
+  &.manual  { background: linear-gradient(135deg,#f093fb 0%,#f5576c 100%); }
+}
+.pie-label { z-index: 1; text-shadow: 0 1px 2px rgba(0,0,0,.3); line-height: 1.4; }
+.source-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  justify-content: center;
+}
+.sl-item { display: flex; align-items: center; gap: 6px; }
+.sl-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  &.article { background: #667eea; }
+  &.manual  { background: #f5576c; }
+}
+.sl-text { color: #606266; }
+.sl-pct  { color: #909399; font-weight: 600; }
 
-.interval-grid {
-  display: grid; grid-template-columns: repeat(3,1fr); gap: 8px;
+/* 复习间隔分布 */
+.interval-bars { display: flex; flex-direction: column; gap: 8px; }
+.interval-row {
+  display: flex; align-items: center; gap: 8px;
+  &.empty { opacity: .4; }
 }
-.interval-cell {
-  background: #f5f7fa; border-radius: 8px; padding: 8px; text-align: center; opacity: .5;
-  &.active { opacity: 1; background: #ecf5ff; }
+.ir-label { width: 65px; font-size: 12px; color: #606266; white-space: nowrap; }
+.ir-bar-wrap { flex: 1; height: 16px; background: #f5f7fa; border-radius: 8px; overflow: hidden; }
+.ir-bar-fill {
+  height: 100%; background: linear-gradient(90deg,#a0d8f1,#409eff); border-radius: 8px; transition: width .4s;
 }
-.ic-bucket { font-size: 11px; color: #909399; }
-.ic-count  { font-size: 18px; font-weight: 600; color: #303133; }
+.ir-count { width: 32px; text-align: right; font-size: 13px; font-weight: 600; color: #303133; }
 
 /* ── 趋势图 ── */
 .trend-card {
@@ -593,6 +839,12 @@ onMounted(loadAll)
 .card-title-row {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;
 }
+.trend-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .trend-legend { display: flex; gap: 16px; font-size: 12px; }
 .tl-item {
   display: flex; align-items: center; gap: 5px;
@@ -600,17 +852,61 @@ onMounted(loadAll)
   &.new-line::before    { background: #409eff; }
   &.review-line::before { background: #e6a23c; }
 }
-.trend-body { display: flex; gap: 8px; align-items: stretch; }
-.trend-labels-y {
-  display: flex; flex-direction: column; justify-content: space-between;
-  font-size: 11px; color: #c0c4cc; text-align: right; padding-bottom: 20px; min-width: 28px;
+/* 趋势图包裹层 */
+.trend-wrap {
+  position: relative;
+  padding-left: 38px;   /* 为 Y 轴标签留空 */
+  padding-bottom: 24px; /* 为 X 轴标签留空 */
 }
-.trend-chart-wrap { flex: 1; }
-.trend-svg { width: 100%; height: 120px; display: block; }
-.trend-labels-x {
-  display: flex; justify-content: space-between;
-  font-size: 11px; color: #909399; margin-top: 4px; padding: 0 2px;
+.trend-svg { width: 100%; height: 200px; display: block; overflow: visible; }
+
+/* Y 轴标签（HTML 叠加，位置由 top 驱动，left 固定在左边） */
+.y-labels { position: absolute; left: 0; top: 0; pointer-events: none; }
+.y-label {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #c0c4cc;
+  white-space: nowrap;
 }
+
+/* X 轴标签（相对于图表区域 left 百分比） */
+.x-labels {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.x-label {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #909399;
+  white-space: nowrap;
+}
+
+/* Tooltip */
+.trend-tooltip {
+  position: absolute;
+  background: rgba(40, 44, 52, 0.88);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 10;
+  min-width: 120px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  line-height: 1.8;
+}
+.tt-date { font-size: 11px; color: #bdc3c7; margin-bottom: 4px; }
+.tt-row { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+.tt-row::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tt-row.new-dot::before    { background: #409eff; }
+.tt-row.review-dot::before { background: #e6a23c; }
 
 /* ── 学生表 ── */
 .table-card {
