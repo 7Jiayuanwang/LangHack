@@ -13,7 +13,7 @@ const DEFAULT_SETTINGS = {
  maxDailyReview: 50, // 单日最大复习量
  emergencyThreshold: 75, // 紧急过载阈值
  deferDays: 1, // 低优先级单词延期天数
- showAnalytics: true, // 是否在学习页面显示数据监控面板
+ showAnalytics: false, // 是否在学习页面显示数据监控面板
  enableAbTest: false, // 是否启用 A/B 对比模式（用于分析）
  abTestVariant: 'standard' // A/B 测试变体
 }
