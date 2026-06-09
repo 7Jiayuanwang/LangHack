@@ -460,13 +460,13 @@ const updateStats = async () => {
       // 降级：用当前页数据统计（不准确但不崩溃）
       stats.totalWords = total.value
       stats.newWords = vocabulary.value.filter(w => w.masteryLevel === 'NEW').length
-      stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING').length
+      stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING' || w.masteryLevel === 'FAMILIAR').length
       stats.masteredWords = vocabulary.value.filter(w => w.masteryLevel === 'MASTERED').length
     }
   } catch {
     stats.totalWords = total.value
     stats.newWords = vocabulary.value.filter(w => w.masteryLevel === 'NEW').length
-    stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING').length
+    stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING' || w.masteryLevel === 'FAMILIAR').length
     stats.masteredWords = vocabulary.value.filter(w => w.masteryLevel === 'MASTERED').length
   }
 }
@@ -847,7 +847,8 @@ const submitReview = async (quality) => {
   // 更新单词掌握程度：quality < 3 → 学习中；SM-2 成功复习 ≥ 3 次 → 已掌握；其余 → 学习中
   try {
     const newMasteryLevel = (quality < 3) ? 'LEARNING'
-      : (sm2Result.repetition >= 3) ? 'MASTERED'
+      : (sm2Result.repetition >= 5) ? 'MASTERED'
+      : (sm2Result.repetition >= 3) ? 'FAMILIAR'
       : 'LEARNING'
 
     await updateMasteryLevel(wordId, {
@@ -985,7 +986,7 @@ const reviewAccuracy = computed(() => {
 })
 
 const isWordOverdue = (word) => {
-  if (!word?.nextReviewTime) return true
+  if (!word?.nextReviewTime) return false  // 未设复习时间 = 新词，不是"需复习"
   return new Date(word.nextReviewTime) <= new Date()
 }
 
@@ -1009,6 +1010,7 @@ const getMasteryType = (level) => {
   const types = {
     'NEW': 'info',
     'LEARNING': 'warning',
+    'FAMILIAR': 'primary',
     'MASTERED': 'success'
   }
   return types[level] || 'info'
@@ -1018,9 +1020,10 @@ const getMasteryText = (level) => {
   const texts = {
     'NEW': '新词',
     'LEARNING': '学习中',
+    'FAMILIAR': '熟悉',
     'MASTERED': '已掌握'
   }
-  return texts[level] || '未知'
+  return texts[level] || level || '新词'
 }
 
 const getDifficultyType = (difficulty) => {
@@ -1313,8 +1316,9 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
 }
 
-.level-badge.new { background: #e0f2fe; color: #0369a1; }
+.level-badge.new      { background: #e0f2fe; color: #0369a1; }
 .level-badge.learning { background: #fef3c7; color: #b45309; }
+.level-badge.familiar { background: #ede9fe; color: #6d28d9; }
 .level-badge.mastered { background: #dcfce7; color: #15803d; }
 
 .phonetic {

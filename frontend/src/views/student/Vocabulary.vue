@@ -54,6 +54,11 @@
             @click="setFilter('LEARNING')"
           >学习中</span>
           <span
+            class="filter-chip chip-familiar"
+            :class="{ active: filterForm.masteryLevel === 'FAMILIAR' }"
+            @click="setFilter('FAMILIAR')"
+          >熟悉</span>
+          <span
             class="filter-chip chip-mastered"
             :class="{ active: filterForm.masteryLevel === 'MASTERED' }"
             @click="setFilter('MASTERED')"
@@ -577,7 +582,7 @@ const applyStats = (res) => {
   } else {
     stats.totalWords = total.value
     stats.newWords = vocabulary.value.filter(w => w.masteryLevel === 'NEW').length
-    stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING').length
+    stats.learningWords = vocabulary.value.filter(w => w.masteryLevel === 'LEARNING' || w.masteryLevel === 'FAMILIAR').length
     stats.masteredWords = vocabulary.value.filter(w => w.masteryLevel === 'MASTERED').length
   }
 }
@@ -859,7 +864,8 @@ const submitReview = async (quality) => {
 
   try {
     const newMasteryLevel = quality < 3 ? 'LEARNING'
-      : sm2Result.repetition >= 3 ? 'MASTERED'
+      : sm2Result.repetition >= 5 ? 'MASTERED'
+      : sm2Result.repetition >= 3 ? 'FAMILIAR'
       : 'LEARNING'
     await updateMasteryLevel(wordId, { ...sm2Result, masteryLevel: newMasteryLevel, isCorrect: quality >= 3 })
   } catch (error) {
@@ -975,17 +981,17 @@ const reviewAccuracy = computed(() => {
 })
 
 const isWordOverdue = (word) => {
-  if (!word?.nextReviewTime) return true
+  if (!word?.nextReviewTime) return false  // 未设复习时间 = 新词，不是"需复习"
   return new Date(word.nextReviewTime) <= new Date()
 }
 
 // ─── 工具函数 ───
 
 const getMasteryType = (level) =>
-  ({ NEW: 'info', LEARNING: 'warning', MASTERED: 'success' })[level] || 'info'
+  ({ NEW: 'info', LEARNING: 'warning', FAMILIAR: 'primary', MASTERED: 'success' })[level] || 'info'
 
 const getMasteryText = (level) =>
-  ({ NEW: '新词', LEARNING: '学习中', MASTERED: '已掌握' })[level] || '未知'
+  ({ NEW: '新词', LEARNING: '学习中', FAMILIAR: '熟悉', MASTERED: '已掌握' })[level] || level || '新词'
 
 const getDifficultyType = (difficulty) =>
   ({ EASY: 'success', MEDIUM: 'warning', HARD: 'danger' })[difficulty] || 'info'
@@ -1142,6 +1148,7 @@ onBeforeUnmount(() => {
 .filter-chip.active         { background: #1a1a1a; color: white; border-color: #1a1a1a; }
 .filter-chip.chip-new.active      { background: #0ea5e9; border-color: #0ea5e9; }
 .filter-chip.chip-learning.active { background: #f59e0b; border-color: #f59e0b; }
+.filter-chip.chip-familiar.active { background: #8b5cf6; border-color: #8b5cf6; }
 .filter-chip.chip-mastered.active { background: #10b981; border-color: #10b981; }
 
 .search-input { width: 220px; flex-shrink: 0; }
