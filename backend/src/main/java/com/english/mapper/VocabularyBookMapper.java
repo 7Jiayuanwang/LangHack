@@ -62,12 +62,31 @@ public interface VocabularyBookMapper extends BaseMapper<VocabularyBook> {
             "ROUND(AVG(vb.easiness_factor), 2) AS avg_ef, " +
             "ROUND(AVG(vb.interval_days), 1) AS avg_interval, " +
             "SUM(vb.review_count) AS total_reviews, " +
-            "SUM(CASE WHEN vb.next_review_time IS NOT NULL AND vb.next_review_time < NOW() THEN 1 ELSE 0 END) AS overdue_count " +
+            "SUM(CASE WHEN vb.next_review_time IS NOT NULL AND vb.next_review_time < NOW() THEN 1 ELSE 0 END) AS overdue_count, " +
+            "MAX(vb.last_reviewed) AS last_active " +
             "FROM vocabulary_books vb " +
             "LEFT JOIN users u ON vb.student_id = u.id " +
             "GROUP BY vb.student_id, u.username, u.nickname " +
             "ORDER BY total_words DESC")
     List<Map<String, Object>> selectPerStudentSummary();
+
+    /** 来源类型分布 */
+    @Select("SELECT source_type, COUNT(*) AS cnt FROM vocabulary_books GROUP BY source_type")
+    List<Map<String, Object>> selectSourceTypeDistribution();
+
+    /** 近 N 天每日新增词数趋势 */
+    @Select("SELECT DATE(added_time) AS day, COUNT(*) AS new_words " +
+            "FROM vocabulary_books " +
+            "WHERE added_time >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY) " +
+            "GROUP BY DATE(added_time) ORDER BY day")
+    List<Map<String, Object>> selectDailyNewTrend(@Param("days") int days);
+
+    /** 近 N 天每日复习人次趋势 */
+    @Select("SELECT DATE(last_reviewed) AS day, COUNT(*) AS review_count " +
+            "FROM vocabulary_books " +
+            "WHERE last_reviewed >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY) " +
+            "GROUP BY DATE(last_reviewed) ORDER BY day")
+    List<Map<String, Object>> selectDailyReviewTrend(@Param("days") int days);
 
     /** 全平台汇总 */
     @Select("SELECT COUNT(DISTINCT student_id) AS active_students, " +

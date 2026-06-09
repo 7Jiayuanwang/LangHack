@@ -27,6 +27,9 @@ public class AdminVocabStatsController {
         data.put("masteryDistribution", vocabularyBookMapper.selectMasteryLevelDistribution());
         data.put("efDistribution", vocabularyBookMapper.selectEFDistribution());
         data.put("intervalDistribution", vocabularyBookMapper.selectIntervalDistribution());
+        data.put("sourceDistribution", vocabularyBookMapper.selectSourceTypeDistribution());
+        data.put("dailyNewTrend", vocabularyBookMapper.selectDailyNewTrend(7));
+        data.put("dailyReviewTrend", vocabularyBookMapper.selectDailyReviewTrend(7));
         return Result.success(data);
     }
 
