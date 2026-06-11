@@ -32,7 +32,7 @@ public class SystemConfigController {
         SystemConfig globalLimit = systemConfigService.getByKey("upload.max_file_size.global");
         limits.put("globalMaxFileSize", globalLimit != null ? globalLimit.getConfigValue() : "10MB");
 
-        List<SystemConfig> userLimits = systemConfigService.getByGroup("upload.max_file_size.user");
+        List<SystemConfig> userLimits = systemConfigService.listByGroup("upload.max_file_size.user");
         Map<String, String> userLimitMap = new HashMap<>();
         for (SystemConfig config : userLimits) {
             String username = config.getConfigKey().replace("upload.max_file_size.user.", "");
@@ -55,7 +55,7 @@ public class SystemConfigController {
         }
 
         systemConfigService.upsert("security", "upload.max_file_size.global", maxSize, "全局文件上传大小限制");
-        return Result.success("已更新全局上传限制");
+        return Result.success("已更新全局上传限制", null);
     }
 
     /**
@@ -71,7 +71,7 @@ public class SystemConfigController {
 
         String key = "upload.max_file_size.user." + username;
         systemConfigService.upsert("upload.max_file_size.user", key, maxSize, "用户 " + username + " 的上传限制");
-        return Result.success("已更新用户上传限制");
+        return Result.success("已更新用户上传限制", null);
     }
 
     /**
@@ -82,6 +82,6 @@ public class SystemConfigController {
     public Result<Void> deleteUserUploadLimit(@PathVariable String username) {
         String key = "upload.max_file_size.user." + username;
         systemConfigService.deleteByKey(key);
-        return Result.success("已删除用户上传限制");
+        return Result.success("已删除用户上传限制", null);
     }
 }

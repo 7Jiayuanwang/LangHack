@@ -16,6 +16,14 @@ public interface TokenBlacklistService {
     void blacklistToken(String token);
 
     /**
+     * 将 token 加入黑名单（指定过期时间）。
+     *
+     * @param token JWT token 字符串
+     * @param expirationMillis 过期时间（毫秒）
+     */
+    void addToBlacklist(String token, long expirationMillis);
+
+    /**
      * 检查 token 是否在黑名单中。
      * 当 Redis 不可用时降级返回 false（不阻断正常认证流程）。
      *

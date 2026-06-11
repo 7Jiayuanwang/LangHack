@@ -96,6 +96,6 @@ public class RefreshTokenController {
             log.info("Refresh token revoked");
         }
 
-        return Result.success("Token 已撤销");
+        return Result.success("Token 已撤销", null);
     }
 }

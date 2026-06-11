@@ -30,10 +30,11 @@ class WebMvcConfigTest {
     private WebMvcConfig config;
     private final AccessLogInterceptor mockInterceptor = mock(AccessLogInterceptor.class);
     private final AdminMasterInterceptor mockAdminMasterInterceptor = mock(AdminMasterInterceptor.class);
+    private final com.english.interceptor.RateLimitInterceptor mockRateLimitInterceptor = mock(com.english.interceptor.RateLimitInterceptor.class);
 
     @BeforeEach
     void setUp() {
-        config = new WebMvcConfig(mockInterceptor, mockAdminMasterInterceptor);
+        config = new WebMvcConfig(mockInterceptor, mockAdminMasterInterceptor, mockRateLimitInterceptor);
     }
 
     // ==================== Interface Implementation ====================
@@ -274,7 +275,7 @@ class WebMvcConfigTest {
         private final String audioResourcePath;
 
         TestableWebMvcConfig(String audioResourcePath) {
-            super(mock(AccessLogInterceptor.class), mock(AdminMasterInterceptor.class));
+            super(mock(AccessLogInterceptor.class), mock(AdminMasterInterceptor.class), mock(com.english.interceptor.RateLimitInterceptor.class));
             this.audioResourcePath = audioResourcePath;
         }
 
