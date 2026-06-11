@@ -16,7 +16,7 @@ export function register(data) {
   })
 }
 
-export function logout(token) {
+export function logout(token, refreshToken) {
   const normalizedToken = typeof token === 'string'
     ? token.replace(/^Bearer\s+/i, '').trim()
     : ''
@@ -32,7 +32,22 @@ export function logout(token) {
     }
   }
 
+  if (refreshToken) {
+    config.headers = config.headers || {}
+    config.headers['Refresh-Token'] = refreshToken
+  }
+
   return request(config)
+}
+
+export function refreshToken(refreshToken) {
+  return request({
+    url: '/api/auth/refresh',
+    method: 'post',
+    headers: {
+      'Refresh-Token': refreshToken
+    }
+  })
 }
 
 export function getUserInfo() {

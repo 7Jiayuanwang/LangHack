@@ -148,6 +148,13 @@
             <version>3.1.1417</version>
         </dependency>
 
+        <!-- Bucket4j - Rate Limiting -->
+        <dependency>
+            <groupId>com.github.vladimir-bukhtoyarov</groupId>
+            <artifactId>bucket4j-core</artifactId>
+            <version>8.1.1</version>
+        </dependency>
+
         <!-- Spring Boot DevTools for automatic restart -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

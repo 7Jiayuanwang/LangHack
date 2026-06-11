@@ -65,16 +65,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException("密码错误");
         }
 
-        // 生成JWT Token
-        String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
+        // 生成双Token：Access Token(15分钟) + Refresh Token(7天)
+        String accessToken = jwtUtil.generateAccessToken(user.getUsername(), user.getRole());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername());
 
         // 清除密码，避免返回给前端
         user.setPassword(null);
 
         Map<String, Object> result = new HashMap<>();
-        result.put("token", token);
+        result.put("accessToken", accessToken);
+        result.put("refreshToken", refreshToken);
         result.put("user", user);
-        result.put("expiresIn", jwtUtil.getExpiration()); // 与 JWT 配置保持一致
+        result.put("expiresIn", JwtUtil.ACCESS_TOKEN_EXPIRATION_MILLIS / 1000); // 秒
 
         return result;
     }

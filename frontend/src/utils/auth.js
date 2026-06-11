@@ -6,6 +6,8 @@
  */
 
 const TOKEN_KEY = 'token'
+const ACCESS_TOKEN_KEY = 'accessToken'
+const REFRESH_TOKEN_KEY = 'refreshToken'
 const USER_INFO_KEY = 'userInfo'
 const USER_ROLE_KEY = 'userRole'
 
@@ -22,22 +24,38 @@ export function isValidToken(value) {
 }
 
 /**
- * Read the token from localStorage with full validation.
+ * Read the access token from localStorage with full validation.
  * Returns the trimmed token string, or '' if invalid / missing.
  */
 export function getToken() {
   try {
-    const raw = localStorage.getItem(TOKEN_KEY)
+    const raw = localStorage.getItem(ACCESS_TOKEN_KEY) || localStorage.getItem(TOKEN_KEY)
     if (raw !== null && isValidToken(raw)) {
       return raw.trim()
     }
-    // If we read an invalid sentinel, clean it up immediately.
     if (raw !== null) {
       localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(ACCESS_TOKEN_KEY)
     }
     return ''
   } catch (e) {
     console.error('Failed to read token from localStorage:', e)
+    return ''
+  }
+}
+
+export function getRefreshToken() {
+  try {
+    const raw = localStorage.getItem(REFRESH_TOKEN_KEY)
+    if (raw !== null && isValidToken(raw)) {
+      return raw.trim()
+    }
+    if (raw !== null) {
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+    }
+    return ''
+  } catch (e) {
+    console.error('Failed to read refresh token from localStorage:', e)
     return ''
   }
 }
@@ -53,10 +71,25 @@ export function setToken(value) {
     return false
   }
   try {
-    localStorage.setItem(TOKEN_KEY, value.trim())
+    localStorage.setItem(ACCESS_TOKEN_KEY, value.trim())
+    localStorage.removeItem(TOKEN_KEY)
     return true
   } catch (e) {
     console.error('Failed to write token to localStorage:', e)
+    return false
+  }
+}
+
+export function setRefreshToken(value) {
+  if (!isValidToken(value)) {
+    console.warn('Attempted to store invalid refresh token:', value)
+    return false
+  }
+  try {
+    localStorage.setItem(REFRESH_TOKEN_KEY, value.trim())
+    return true
+  } catch (e) {
+    console.error('Failed to write refresh token to localStorage:', e)
     return false
   }
 }
@@ -67,6 +100,7 @@ export function setToken(value) {
 export function removeToken() {
   try {
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(ACCESS_TOKEN_KEY)
   } catch (e) {
     console.warn('Failed to remove token from localStorage:', e)
   }
@@ -76,7 +110,7 @@ export function removeToken() {
  * Remove ALL auth-related keys from localStorage in one shot.
  */
 export function clearAuthStorage() {
-  const keys = [TOKEN_KEY, USER_INFO_KEY, USER_ROLE_KEY]
+  const keys = [TOKEN_KEY, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_INFO_KEY, USER_ROLE_KEY]
   for (const key of keys) {
     try {
       localStorage.removeItem(key)

@@ -169,6 +169,44 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         logger.info("Batch updated {} configs by {}", configs.size(), updatedBy);
     }
 
+    @Override
+    public SystemConfig getByKey(String key) {
+        return mapper.selectOne(new LambdaQueryWrapper<SystemConfig>()
+                .eq(SystemConfig::getConfigKey, key)
+                .last("LIMIT 1"));
+    }
+
+    @Override
+    public void upsert(String group, String key, String value, String description) {
+        int updated = mapper.update(null,
+                new LambdaUpdateWrapper<SystemConfig>()
+                        .eq(SystemConfig::getConfigKey, key)
+                        .set(SystemConfig::getConfigValue, value)
+                        .set(SystemConfig::getUpdatedTime, LocalDateTime.now()));
+
+        if (updated == 0) {
+            SystemConfig config = new SystemConfig();
+            config.setConfigGroup(group);
+            config.setConfigKey(key);
+            config.setConfigValue(value);
+            config.setDescription(description);
+            config.setIsSecret(0);
+            config.setUpdatedTime(LocalDateTime.now());
+            mapper.insert(config);
+        }
+
+        cache.remove(group);
+    }
+
+    @Override
+    public void deleteByKey(String key) {
+        SystemConfig config = getByKey(key);
+        if (config != null) {
+            mapper.delete(new LambdaQueryWrapper<SystemConfig>().eq(SystemConfig::getConfigKey, key));
+            cache.remove(config.getConfigGroup());
+        }
+    }
+
     private static class CacheEntry {
         final Map<String, String> data;
         final long createdAt;

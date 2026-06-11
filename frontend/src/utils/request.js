@@ -1,8 +1,9 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { getAuthHeader } from '@/utils/auth'
+import { getAuthHeader, getRefreshToken, setToken } from '@/utils/auth'
 import { getSsoLoginUrl } from '@/api/sso'
+import { refreshToken } from '@/api/auth'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
@@ -11,6 +12,8 @@ const request = axios.create({
 
 // 防止并发 401 多次触发 logout
 let isLoggingOut = false
+let isRefreshing = false
+let refreshSubscribers = []
 
 const handleLogout = async () => {
   if (isLoggingOut) return
@@ -92,10 +95,47 @@ request.interceptors.response.use(
     }
 
     if (res.code !== 200) {
-      // 401: 未授权，token过期等（只处理一次，由 handleLogout 统一管理）
+      // 401: 未授权，token过期等
       if (res.code === 401) {
-        handleLogout()
-        return Promise.reject({ code: 401, message: '未授权，请重新登录' })
+        const refreshTokenValue = getRefreshToken()
+
+        if (!refreshTokenValue || response.config.url === '/api/auth/refresh') {
+          handleLogout()
+          return Promise.reject({ code: 401, message: '未授权，请重新登录' })
+        }
+
+        if (!isRefreshing) {
+          isRefreshing = true
+          return refreshToken(refreshTokenValue)
+            .then(res => {
+              if (res.code === 200 && res.data?.accessToken) {
+                setToken(res.data.accessToken)
+                const userStore = useUserStore()
+                userStore.token = res.data.accessToken
+
+                refreshSubscribers.forEach(cb => cb(res.data.accessToken))
+                refreshSubscribers = []
+
+                response.config.headers['Authorization'] = `Bearer ${res.data.accessToken}`
+                return request(response.config)
+              }
+              throw new Error('刷新失败')
+            })
+            .catch(() => {
+              handleLogout()
+              return Promise.reject({ code: 401, message: '登录已过期，请重新登录' })
+            })
+            .finally(() => {
+              isRefreshing = false
+            })
+        } else {
+          return new Promise((resolve) => {
+            refreshSubscribers.push((token) => {
+              response.config.headers['Authorization'] = `Bearer ${token}`
+              resolve(request(response.config))
+            })
+          })
+        }
       }
 
       // 4001: 需要前端确认的业务提示（如"文章未公开，是否同时公开？"），直接放行让调用方处理

@@ -1,5 +1,6 @@
 package com.english.config;
 
+import com.english.interceptor.RateLimitInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
@@ -21,15 +22,23 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private final AccessLogInterceptor accessLogInterceptor;
     private final AdminMasterInterceptor adminMasterInterceptor;
+    private final RateLimitInterceptor rateLimitInterceptor;
 
     public WebMvcConfig(AccessLogInterceptor accessLogInterceptor,
-                        AdminMasterInterceptor adminMasterInterceptor) {
+                        AdminMasterInterceptor adminMasterInterceptor,
+                        RateLimitInterceptor rateLimitInterceptor) {
         this.accessLogInterceptor = accessLogInterceptor;
         this.adminMasterInterceptor = adminMasterInterceptor;
+        this.rateLimitInterceptor = rateLimitInterceptor;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // API 频率限制（优先级最高）
+        registry.addInterceptor(rateLimitInterceptor)
+                .addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**")
+                .excludePathPatterns("/api/health");
+
         registry.addInterceptor(accessLogInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/api/ops/monitoring/realtime/stream",

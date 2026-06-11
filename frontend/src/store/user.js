@@ -4,6 +4,8 @@ import {
   isValidToken,
   getToken,
   setToken,
+  getRefreshToken,
+  setRefreshToken,
   clearAuthStorage,
 } from "@/utils/auth";
 
@@ -58,6 +60,7 @@ function validateRole(role) {
 export const useUserStore = defineStore("user", {
   state: () => ({
     token: getToken(),
+    refreshToken: getRefreshToken(),
     userInfo: loadUserInfoFromStorage(),
     userRole: (() => {
       try {
@@ -112,15 +115,15 @@ export const useUserStore = defineStore("user", {
     async login(credentials) {
       try {
         const response = await login(credentials);
-        const { token, user } = response.data || {};
+        const { accessToken, refreshToken, user } = response.data || {};
 
-        if (!token || !user) {
+        if (!accessToken || !refreshToken || !user) {
           return Promise.reject(new Error("登录响应数据异常"));
         }
 
         // 验证 token 不是 "undefined"/"null"/空字符串
-        if (!isValidToken(token)) {
-          console.error("Server returned invalid token:", typeof token, token);
+        if (!isValidToken(accessToken) || !isValidToken(refreshToken)) {
+          console.error("Server returned invalid token");
           return Promise.reject(new Error("登录响应 Token 异常"));
         }
 
@@ -134,17 +137,19 @@ export const useUserStore = defineStore("user", {
         // 先更新 Pinia state
         const prevState = {
           token: this.token,
+          refreshToken: this.refreshToken,
           userInfo: { ...this.userInfo },
           userRole: this.userRole,
         };
 
-        this.token = token;
+        this.token = accessToken;
+        this.refreshToken = refreshToken;
         this.userInfo = user;
         this.userRole = validatedRole;
 
         // 尝试持久化到 localStorage，失败时回滚
         try {
-          if (!setToken(token)) {
+          if (!setToken(accessToken) || !setRefreshToken(refreshToken)) {
             throw new Error("Token validation failed during persist");
           }
           localStorage.setItem("userInfo", JSON.stringify(user));
@@ -153,6 +158,7 @@ export const useUserStore = defineStore("user", {
           console.error("Failed to persist login state:", storageError);
           // 回滚 Pinia state 以保持一致性
           this.token = prevState.token;
+          this.refreshToken = prevState.refreshToken;
           this.userInfo = prevState.userInfo;
           this.userRole = prevState.userRole;
           return Promise.reject(
@@ -167,10 +173,12 @@ export const useUserStore = defineStore("user", {
     },
 
     async logout() {
-      const tokenToRevoke = this.token
+      const tokenToRevoke = this.token;
+      const refreshTokenToRevoke = this.refreshToken;
 
       // 先清理本地状态，确保即使 API 调用失败或延迟，Token 也不会残留
       this.token = "";
+      this.refreshToken = "";
       this.userInfo = {};
       this.userRole = "";
       this.elevatedRole = null;
@@ -189,7 +197,7 @@ export const useUserStore = defineStore("user", {
 
       // 再调用后端 logout API（失败不影响本地已清理的状态）
       try {
-        await logout(tokenToRevoke);
+        await logout(tokenToRevoke, refreshTokenToRevoke);
       } catch (error) {
         console.error("Logout API error (local state already cleared):", error);
       }
