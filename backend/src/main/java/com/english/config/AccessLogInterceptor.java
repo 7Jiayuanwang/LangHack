@@ -2,6 +2,7 @@ package com.english.config;
 
 import com.english.service.impl.AccessLogBufferService;
 import com.english.service.impl.AccessMetricsService;
+import com.english.monitor.UserRequestMonitor;
 import com.english.entity.AccessLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,11 +22,14 @@ public class AccessLogInterceptor implements HandlerInterceptor {
 
     private final AccessLogBufferService bufferService;
     private final AccessMetricsService metricsService;
+    private final UserRequestMonitor userRequestMonitor;
 
     public AccessLogInterceptor(AccessLogBufferService bufferService,
-                                 AccessMetricsService metricsService) {
+                                 AccessMetricsService metricsService,
+                                 UserRequestMonitor userRequestMonitor) {
         this.bufferService = bufferService;
         this.metricsService = metricsService;
+        this.userRequestMonitor = userRequestMonitor;
     }
 
     @Override
@@ -33,7 +37,11 @@ public class AccessLogInterceptor implements HandlerInterceptor {
         request.setAttribute("_startTime", System.currentTimeMillis());
 
         String username = extractUsername();
+        String path = request.getRequestURI();
+
         metricsService.recordRequestStart(username);
+        userRequestMonitor.recordRequest(username, path);
+
         return true;
     }
 

@@ -420,4 +420,35 @@ public class MonitoringController {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    @Autowired
+    private com.english.monitor.DatabasePoolMonitor databasePoolMonitor;
+
+    @Autowired
+    private com.english.monitor.UserRequestMonitor userRequestMonitor;
+
+    /**
+     * 获取数据库连接池指标
+     */
+    @GetMapping("/db-pool")
+    public Result<Map<String, Object>> getDatabasePoolMetrics() {
+        return Result.success(databasePoolMonitor.getPoolMetrics());
+    }
+
+    /**
+     * 获取用户请求量TOP榜
+     */
+    @GetMapping("/user-requests/top")
+    public Result<List<Map<String, Object>>> getTopUsers(
+            @RequestParam(defaultValue = "20") int limit) {
+        return Result.success(userRequestMonitor.getTopUsers(limit));
+    }
+
+    /**
+     * 获取指定用户的请求统计报告
+     */
+    @GetMapping("/user-requests/{username}")
+    public Result<Map<String, Object>> getUserRequestReport(@PathVariable String username) {
+        return Result.success(userRequestMonitor.getUserRequestReport(username));
+    }
 }

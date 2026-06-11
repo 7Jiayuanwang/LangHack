@@ -53,4 +53,25 @@ public class SensitiveDataMasker {
         }
         return idCard.substring(0, 6) + "****" + idCard.substring(idCard.length() - 4);
     }
+
+    /**
+     * 自动检测并脱敏日志消息中的敏感数据
+     */
+    public static String maskSensitiveData(String message) {
+        if (message == null) {
+            return null;
+        }
+
+        String result = message;
+        // 脱敏 password 字段
+        result = result.replaceAll("(password[\"']?\\s*[:=]\\s*[\"']?)([^\"'\\s,}]+)", "$1******");
+        // 脱敏 token 字段
+        result = result.replaceAll("(token[\"']?\\s*[:=]\\s*[\"']?)([^\"'\\s,}]{12,})", "$1****");
+        // 脱敏 secret 字段
+        result = result.replaceAll("(secret[\"']?\\s*[:=]\\s*[\"']?)([^\"'\\s,}]+)", "$1****");
+        // 脱敏手机号（11位数字）
+        result = result.replaceAll("(\\D)(1[3-9]\\d)(\\d{4})(\\d{4})(\\D)", "$1$2****$4$5");
+
+        return result;
+    }
 }
