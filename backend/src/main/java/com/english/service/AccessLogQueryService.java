@@ -104,8 +104,11 @@ public class AccessLogQueryService {
         Long errorCount = accessLogMapper.selectCount(errorWrapper);
 
         // 独立用户数
-        wrapper.select("DISTINCT username");
-        Long uniqueUsers = (long) accessLogMapper.selectList(wrapper).stream()
+        QueryWrapper<AccessLog> userWrapper = new QueryWrapper<>();
+        if (startTime != null) userWrapper.ge("created_time", startTime);
+        if (endTime != null) userWrapper.le("created_time", endTime);
+        userWrapper.select("DISTINCT username");
+        Long uniqueUsers = (long) accessLogMapper.selectList(userWrapper).stream()
                 .map(AccessLog::getUsername)
                 .filter(u -> u != null && !u.isEmpty())
                 .distinct()
