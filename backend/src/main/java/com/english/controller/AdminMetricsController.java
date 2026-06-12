@@ -622,4 +622,47 @@ public class AdminMetricsController {
         if (val == null) return 0L;
         return ((Number) val).longValue();
     }
+
+    @GetMapping("/user-growth")
+    @Cacheable(value = "metrics", key = "'user-growth-' + (#days == null ? 30 : #days)", unless = "#result == null")
+    public Result<Map<String, Object>> getUserGrowth(@RequestParam(defaultValue = "30") int days) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime start = now.minusDays(days - 1).toLocalDate().atStartOfDay();
+
+            List<Map<String, Object>> dailyGrowth = userMapper.selectMaps(
+                    new QueryWrapper<com.english.entity.User>()
+                            .select("DATE(created_time) as date", "COUNT(*) as newUsers")
+                            .ge("created_time", start)
+                            .eq("deleted", 0)
+                            .groupBy("DATE(created_time)")
+                            .orderByAsc("DATE(created_time)"));
+
+            long cumulativeTotal = userMapper.selectCount(
+                    new QueryWrapper<com.english.entity.User>()
+                            .lt("created_time", start)
+                            .eq("deleted", 0));
+
+            List<Map<String, Object>> trend = new ArrayList<>();
+            for (Map<String, Object> day : dailyGrowth) {
+                long newUsers = toLong(day.get("newUsers"));
+                cumulativeTotal += newUsers;
+
+                Map<String, Object> point = new LinkedHashMap<>();
+                point.put("date", day.get("date").toString());
+                point.put("newUsers", newUsers);
+                point.put("totalUsers", cumulativeTotal);
+                trend.add(point);
+            }
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("trend", trend);
+            data.put("currentTotal", cumulativeTotal);
+
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("获取用户增长趋势失败", e);
+            return Result.error("获取用户增长趋势失败");
+        }
+    }
 }

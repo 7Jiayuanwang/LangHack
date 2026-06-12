@@ -3,6 +3,7 @@ package com.english.config;
 import com.english.service.impl.AccessLogBufferService;
 import com.english.service.impl.AccessMetricsService;
 import com.english.entity.AccessLog;
+import com.english.monitor.UserRequestMonitor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -21,11 +22,14 @@ public class AccessLogInterceptor implements HandlerInterceptor {
 
     private final AccessLogBufferService bufferService;
     private final AccessMetricsService metricsService;
+    private final UserRequestMonitor userRequestMonitor;
 
     public AccessLogInterceptor(AccessLogBufferService bufferService,
-                                 AccessMetricsService metricsService) {
+                                 AccessMetricsService metricsService,
+                                 UserRequestMonitor userRequestMonitor) {
         this.bufferService = bufferService;
         this.metricsService = metricsService;
+        this.userRequestMonitor = userRequestMonitor;
     }
 
     @Override
@@ -34,6 +38,7 @@ public class AccessLogInterceptor implements HandlerInterceptor {
 
         String username = extractUsername();
         metricsService.recordRequestStart(username);
+        userRequestMonitor.recordRequest(username);
         return true;
     }
 

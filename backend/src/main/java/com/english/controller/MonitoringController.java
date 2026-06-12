@@ -18,6 +18,8 @@ import com.english.service.impl.ElevationService;
 import com.english.service.impl.InMemoryLogService;
 import com.english.service.impl.SystemMetricsService;
 import com.english.util.JwtUtil;
+import com.english.monitor.DatabasePoolMonitor;
+import com.english.monitor.UserRequestMonitor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -86,6 +88,12 @@ public class MonitoringController {
 
     @Autowired
     private InMemoryLogService inMemoryLogService;
+
+    @Autowired
+    private DatabasePoolMonitor databasePoolMonitor;
+
+    @Autowired
+    private UserRequestMonitor userRequestMonitor;
 
     @GetMapping("/realtime")
     public Result<?> getRealTimeMetrics() {
@@ -419,5 +427,20 @@ public class MonitoringController {
             logger.error("下载日志失败", e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    @GetMapping("/db-pool")
+    public Result<Map<String, Object>> getDatabasePoolMetrics() {
+        return Result.success(databasePoolMonitor.getPoolMetrics());
+    }
+
+    @GetMapping("/user-requests/top")
+    public Result<List<Map<String, Object>>> getTopUsers(@RequestParam(defaultValue = "20") int limit) {
+        return Result.success(userRequestMonitor.getTopUsers(limit));
+    }
+
+    @GetMapping("/user-requests/{username}")
+    public Result<Map<String, Object>> getUserRequestReport(@PathVariable String username) {
+        return Result.success(userRequestMonitor.getUserRequestReport(username));
     }
 }
