@@ -274,3 +274,21 @@ export function getDatabasePoolMetrics() {
 export function getTopUserRequests(limit = 20) {
   return request({ url: '/api/ops/monitoring/user-requests/top', method: 'get', params: { limit } })
 }
+
+// ========== 访问日志可视化 ==========
+
+export function getAccessLogs(params) {
+  return request({ url: '/api/ops/monitoring/access-logs', method: 'get', params })
+}
+
+export function getAccessLogStats(params) {
+  return request({ url: '/api/ops/monitoring/access-logs/stats', method: 'get', params })
+}
+
+export function getAccessTrend(params) {
+  return request({ url: '/api/ops/monitoring/access-logs/trend', method: 'get', params })
+}
+
+export function getResponseTimeDistribution(params) {
+  return request({ url: '/api/ops/monitoring/access-logs/response-time-distribution', method: 'get', params })
+}

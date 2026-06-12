@@ -10,6 +10,7 @@ import com.english.entity.User;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.mapper.*;
+import com.english.service.AccessLogQueryService;
 import com.english.service.TokenBlacklistService;
 import com.english.service.UserService;
 import com.english.service.impl.AccessMetricsService;
@@ -94,6 +95,9 @@ public class MonitoringController {
 
     @Autowired
     private UserRequestMonitor userRequestMonitor;
+
+    @Autowired
+    private AccessLogQueryService accessLogQueryService;
 
     @GetMapping("/realtime")
     public Result<?> getRealTimeMetrics() {
@@ -442,5 +446,98 @@ public class MonitoringController {
     @GetMapping("/user-requests/{username}")
     public Result<Map<String, Object>> getUserRequestReport(@PathVariable String username) {
         return Result.success(userRequestMonitor.getUserRequestReport(username));
+    }
+
+    // ========== Access Log Visualization ==========
+
+    /**
+     * 分页查询访问日志
+     */
+    @GetMapping("/access-logs")
+    public Result<Map<String, Object>> getAccessLogs(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String uri,
+            @RequestParam(required = false) Integer statusCode,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> result = accessLogQueryService.queryAccessLogs(
+                    page, size, username, uri, statusCode, start, end);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("查询访问日志失败", e);
+            return Result.error("查询访问日志失败");
+        }
+    }
+
+    /**
+     * 获取访问日志统计信息
+     */
+    @GetMapping("/access-logs/stats")
+    public Result<Map<String, Object>> getAccessLogStats(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> stats = accessLogQueryService.getAccessLogStats(start, end);
+            return Result.success(stats);
+        } catch (Exception e) {
+            logger.error("获取访问日志统计失败", e);
+            return Result.error("获取访问日志统计失败");
+        }
+    }
+
+    /**
+     * 获取访问趋势数据
+     */
+    @GetMapping("/access-logs/trend")
+    public Result<List<Map<String, Object>>> getAccessTrend(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) :
+                    LocalDateTime.now().minusDays(7);
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : LocalDateTime.now();
+
+            List<Map<String, Object>> trend = accessLogQueryService.getAccessTrend(start, end);
+            return Result.success(trend);
+        } catch (Exception e) {
+            logger.error("获取访问趋势失败", e);
+            return Result.error("获取访问趋势失败");
+        }
+    }
+
+    /**
+     * 获取响应时间分布
+     */
+    @GetMapping("/access-logs/response-time-distribution")
+    public Result<Map<String, Object>> getResponseTimeDistribution(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> distribution = accessLogQueryService.getResponseTimeDistribution(start, end);
+            return Result.success(distribution);
+        } catch (Exception e) {
+            logger.error("获取响应时间分布失败", e);
+            return Result.error("获取响应时间分布失败");
+        }
     }
 }

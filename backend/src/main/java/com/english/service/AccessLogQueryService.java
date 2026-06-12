@@ -1,0 +1,198 @@
+package com.english.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.english.entity.AccessLog;
+import com.english.mapper.AccessLogMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * 访问日志查询服务
+ * 为前端日志管理页面提供访问日志查询功能
+ */
+@Service
+public class AccessLogQueryService {
+
+    @Autowired
+    private AccessLogMapper accessLogMapper;
+
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * 分页查询访问日志
+     */
+    public Map<String, Object> queryAccessLogs(
+            int page,
+            int size,
+            String username,
+            String uri,
+            Integer statusCode,
+            LocalDateTime startTime,
+            LocalDateTime endTime) {
+
+        Page<AccessLog> pageParam = new Page<>(page, size);
+        QueryWrapper<AccessLog> wrapper = new QueryWrapper<>();
+
+        // 构建查询条件
+        if (username != null && !username.trim().isEmpty()) {
+            wrapper.like("username", username.trim());
+        }
+        if (uri != null && !uri.trim().isEmpty()) {
+            wrapper.like("uri", uri.trim());
+        }
+        if (statusCode != null) {
+            wrapper.eq("status_code", statusCode);
+        }
+        if (startTime != null) {
+            wrapper.ge("created_time", startTime);
+        }
+        if (endTime != null) {
+            wrapper.le("created_time", endTime);
+        }
+
+        // 按时间倒序
+        wrapper.orderByDesc("created_time");
+
+        IPage<AccessLog> result = accessLogMapper.selectPage(pageParam, wrapper);
+
+        // 转换为前端需要的格式
+        List<Map<String, Object>> records = result.getRecords().stream()
+                .map(this::convertToMap)
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("records", records);
+        response.put("total", result.getTotal());
+        response.put("current", result.getCurrent());
+        response.put("size", result.getSize());
+        response.put("pages", result.getPages());
+
+        return response;
+    }
+
+    /**
+     * 获取访问日志统计信息
+     */
+    public Map<String, Object> getAccessLogStats(LocalDateTime startTime, LocalDateTime endTime) {
+        QueryWrapper<AccessLog> wrapper = new QueryWrapper<>();
+
+        if (startTime != null) {
+            wrapper.ge("created_time", startTime);
+        }
+        if (endTime != null) {
+            wrapper.le("created_time", endTime);
+        }
+
+        // 总请求数
+        Long totalRequests = accessLogMapper.selectCount(wrapper);
+
+        // 错误数 (4xx + 5xx)
+        QueryWrapper<AccessLog> errorWrapper = new QueryWrapper<>();
+        errorWrapper.ge("status_code", 400);
+        if (startTime != null) errorWrapper.ge("created_time", startTime);
+        if (endTime != null) errorWrapper.le("created_time", endTime);
+        Long errorCount = accessLogMapper.selectCount(errorWrapper);
+
+        // 独立用户数
+        wrapper.select("DISTINCT username");
+        Long uniqueUsers = (long) accessLogMapper.selectList(wrapper).stream()
+                .map(AccessLog::getUsername)
+                .filter(u -> u != null && !u.isEmpty())
+                .distinct()
+                .count();
+
+        // 平均响应时间
+        List<AccessLog> logs = accessLogMapper.selectList(new QueryWrapper<AccessLog>()
+                .ge(startTime != null, "created_time", startTime)
+                .le(endTime != null, "created_time", endTime)
+                .select("response_time_ms"));
+
+        long avgResponseTime = logs.isEmpty() ? 0 :
+                (long) logs.stream()
+                        .mapToLong(log -> log.getResponseTimeMs() != null ? log.getResponseTimeMs() : 0)
+                        .average()
+                        .orElse(0);
+
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("totalRequests", totalRequests);
+        stats.put("errorCount", errorCount);
+        stats.put("uniqueUsers", uniqueUsers);
+        stats.put("avgResponseTimeMs", avgResponseTime);
+        stats.put("errorRate", totalRequests > 0 ?
+                String.format("%.2f", (errorCount * 100.0 / totalRequests)) : "0.00");
+
+        return stats;
+    }
+
+    /**
+     * 获取访问趋势数据（按小时聚合）
+     */
+    public List<Map<String, Object>> getAccessTrend(LocalDateTime startTime, LocalDateTime endTime) {
+        return accessLogMapper.aggregateHourly(startTime, endTime);
+    }
+
+    /**
+     * 获取热门页面排行
+     */
+    public List<Map<String, Object>> getTopPages(LocalDateTime startTime, LocalDateTime endTime, int limit) {
+        return accessLogMapper.topPagesByDateRange(startTime, endTime, limit);
+    }
+
+    /**
+     * 获取响应时间分布
+     */
+    public Map<String, Object> getResponseTimeDistribution(LocalDateTime startTime, LocalDateTime endTime) {
+        List<AccessLog> logs = accessLogMapper.selectList(new QueryWrapper<AccessLog>()
+                .ge(startTime != null, "created_time", startTime)
+                .le(endTime != null, "created_time", endTime)
+                .select("response_time_ms"));
+
+        int fast = 0, normal = 0, slow = 0, verySlow = 0;
+        for (AccessLog log : logs) {
+            Long time = log.getResponseTimeMs();
+            if (time == null) continue;
+            if (time < 100) fast++;
+            else if (time < 500) normal++;
+            else if (time < 2000) slow++;
+            else verySlow++;
+        }
+
+        Map<String, Object> distribution = new LinkedHashMap<>();
+        distribution.put("fast", fast);       // <100ms
+        distribution.put("normal", normal);   // 100-500ms
+        distribution.put("slow", slow);       // 500-2000ms
+        distribution.put("verySlow", verySlow); // >2000ms
+
+        return distribution;
+    }
+
+    /**
+     * 转换实体为Map
+     */
+    private Map<String, Object> convertToMap(AccessLog log) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", log.getId());
+        map.put("userId", log.getUserId());
+        map.put("username", log.getUsername() != null ? log.getUsername() : "匿名");
+        map.put("method", log.getMethod());
+        map.put("uri", log.getUri());
+        map.put("queryString", log.getQueryString());
+        map.put("statusCode", log.getStatusCode());
+        map.put("responseTimeMs", log.getResponseTimeMs());
+        map.put("ipAddress", log.getIpAddress());
+        map.put("userAgent", log.getUserAgent());
+        map.put("createdTime", log.getCreatedTime() != null ?
+                log.getCreatedTime().format(FORMATTER) : null);
+        return map;
+    }
+}
