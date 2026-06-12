@@ -4,16 +4,20 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.AccessLog;
+import com.english.entity.User;
 import com.english.mapper.AccessLogMapper;
+import com.english.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -25,6 +29,9 @@ public class AccessLogQueryService {
 
     @Autowired
     private AccessLogMapper accessLogMapper;
+
+    @Autowired
+    private UserMapper userMapper;
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -45,7 +52,23 @@ public class AccessLogQueryService {
 
         // 构建查询条件
         if (username != null && !username.trim().isEmpty()) {
-            wrapper.like("username", username.trim());
+            String kw = username.trim();
+            // 先按账号名模糊匹配，再按姓名/昵称模糊匹配后取并集
+            QueryWrapper<User> userQ = new QueryWrapper<>();
+            userQ.and(w -> w.like("real_name", kw).or().like("nickname", kw));
+            Set<String> nameMatched = userMapper.selectList(userQ).stream()
+                    .map(User::getUsername)
+                    .filter(u -> u != null && !u.isEmpty())
+                    .collect(Collectors.toSet());
+
+            if (nameMatched.isEmpty()) {
+                // 没有通过姓名命中，直接按账号名 LIKE
+                wrapper.like("username", kw);
+            } else {
+                // 账号名 LIKE 或 IN（姓名命中的账号名列表）
+                List<String> inList = new ArrayList<>(nameMatched);
+                wrapper.and(w -> w.like("username", kw).or().in("username", inList));
+            }
         }
         if (uri != null && !uri.trim().isEmpty()) {
             wrapper.like("uri", uri.trim());

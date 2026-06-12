@@ -142,12 +142,6 @@
         <el-tab-pane name="login">
           <template #label>
             登录统计
-            <el-badge
-              v-if="loginStats.loginFail > 0"
-              :value="loginStats.loginFail"
-              type="danger"
-              style="margin-left:4px"
-            />
           </template>
 
           <!-- 登录汇总 -->
