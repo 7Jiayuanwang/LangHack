@@ -57,6 +57,9 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" :loading="downloadingLogs" @click="handleDownloadLogs">
+            <el-icon><Download /></el-icon> 下载访问日志
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -64,88 +67,164 @@
     <!-- 响应时间分布 -->
     <el-card class="chart-card" v-if="showCharts">
       <div class="chart-header">响应时间分布</div>
+
+      <!-- 百分位摘要 -->
+      <div class="percentile-row">
+        <div class="percentile-item" v-for="p in percentiles" :key="p.label">
+          <span class="percentile-label">{{ p.label }}</span>
+          <span class="percentile-value">{{ p.value }}ms</span>
+        </div>
+      </div>
+
+      <!-- 6档条形图 -->
       <div class="response-time-bars">
-        <div class="time-bar" :style="{ width: getPercentage(distribution.fast) + '%' }">
-          <span class="bar-label">快速 (&lt;100ms)</span>
-          <span class="bar-value">{{ distribution.fast }}</span>
-        </div>
-        <div class="time-bar normal" :style="{ width: getPercentage(distribution.normal) + '%' }">
-          <span class="bar-label">正常 (100-500ms)</span>
-          <span class="bar-value">{{ distribution.normal }}</span>
-        </div>
-        <div class="time-bar slow" :style="{ width: getPercentage(distribution.slow) + '%' }">
-          <span class="bar-label">慢速 (500-2000ms)</span>
-          <span class="bar-value">{{ distribution.slow }}</span>
-        </div>
-        <div class="time-bar very-slow" :style="{ width: getPercentage(distribution.verySlow) + '%' }">
-          <span class="bar-label">很慢 (&gt;2000ms)</span>
-          <span class="bar-value">{{ distribution.verySlow }}</span>
+        <div v-for="bar in distBars" :key="bar.key" class="bar-row">
+          <div class="bar-meta">
+            <span class="bar-range">{{ bar.label }}</span>
+            <span class="bar-count">{{ bar.count }}</span>
+          </div>
+          <div class="bar-track">
+            <div
+              class="bar-fill"
+              :class="bar.cls"
+              :style="{ width: getBarWidth(bar.count) + '%' }"
+            ></div>
+          </div>
+          <span class="bar-pct">{{ getBarPct(bar.count) }}%</span>
         </div>
       </div>
     </el-card>
 
-    <!-- 访问日志表格 -->
+    <!-- 访问日志 + 登录统计 -->
     <el-card class="table-card">
-      <el-table
-        :data="tableData"
-        v-loading="loading"
-        stripe
-        border
-        size="small"
-        max-height="600"
-      >
-        <el-table-column type="index" label="#" width="60" />
-        <el-table-column prop="createdTime" label="时间" width="160" show-overflow-tooltip />
-        <el-table-column prop="username" label="用户" width="120" show-overflow-tooltip />
-        <el-table-column prop="method" label="方法" width="80" />
-        <el-table-column prop="uri" label="URI" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="statusCode" label="状态码" width="80">
-          <template #default="{ row }">
-            <el-tag
-              :type="row.statusCode < 300 ? 'success' : row.statusCode < 400 ? 'info' : row.statusCode < 500 ? 'warning' : 'danger'"
-              size="small"
-            >
-              {{ row.statusCode }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="responseTimeMs" label="响应时间(ms)" width="110" sortable />
-        <el-table-column prop="ipAddress" label="IP地址" width="130" show-overflow-tooltip />
-      </el-table>
+      <el-tabs v-model="activeSubTab">
+        <el-tab-pane label="访问日志" name="logs">
+          <el-table
+            :data="tableData"
+            v-loading="loading"
+            stripe
+            border
+            size="small"
+            max-height="600"
+          >
+            <el-table-column type="index" label="#" width="60" />
+            <el-table-column prop="createdTime" label="时间" width="160" show-overflow-tooltip />
+            <el-table-column prop="username" label="用户" width="120" show-overflow-tooltip />
+            <el-table-column prop="method" label="方法" width="80" />
+            <el-table-column prop="uri" label="URI" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="statusCode" label="状态码" width="80">
+              <template #default="{ row }">
+                <el-tag
+                  :type="row.statusCode < 300 ? 'success' : row.statusCode < 400 ? 'info' : row.statusCode < 500 ? 'warning' : 'danger'"
+                  size="small"
+                >
+                  {{ row.statusCode }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="responseTimeMs" label="响应时间(ms)" width="110" sortable />
+            <el-table-column prop="ipAddress" label="IP地址" width="130" show-overflow-tooltip />
+          </el-table>
 
-      <!-- 分页 -->
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="pagination.current"
-          v-model:page-size="pagination.size"
-          :page-sizes="[20, 50, 100, 200]"
-          :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handlePageChange"
-        />
-      </div>
+          <div class="pagination-container">
+            <el-pagination
+              v-model:current-page="pagination.current"
+              v-model:page-size="pagination.size"
+              :page-sizes="[20, 50, 100, 200]"
+              :total="pagination.total"
+              layout="total, sizes, prev, pager, next, jumper"
+              @size-change="handleSizeChange"
+              @current-change="handlePageChange"
+            />
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane name="login">
+          <template #label>
+            登录统计
+            <el-badge
+              v-if="loginStats.loginFail > 0"
+              :value="loginStats.loginFail"
+              type="danger"
+              style="margin-left:4px"
+            />
+          </template>
+
+          <!-- 登录汇总 -->
+          <div class="login-summary-header">
+            <el-button type="success" size="small" :loading="downloadingLogin" @click="handleDownloadLogin">
+              <el-icon><Download /></el-icon> 下载登录统计
+            </el-button>
+          </div>
+          <div class="login-summary">
+            <div class="login-stat-item success">
+              <div class="login-stat-label">登录成功</div>
+              <div class="login-stat-value">{{ loginStats.loginSuccess || 0 }}</div>
+            </div>
+            <div class="login-stat-item fail">
+              <div class="login-stat-label">登录失败</div>
+              <div class="login-stat-value">{{ loginStats.loginFail || 0 }}</div>
+            </div>
+            <div class="login-stat-item logout">
+              <div class="login-stat-label">退出次数</div>
+              <div class="login-stat-value">{{ loginStats.logoutCount || 0 }}</div>
+            </div>
+          </div>
+
+          <!-- 登录记录表 -->
+          <el-table
+            :data="loginStats.records || []"
+            v-loading="loginLoading"
+            stripe
+            border
+            size="small"
+            max-height="520"
+          >
+            <el-table-column prop="createdTime" label="时间" width="160" show-overflow-tooltip />
+            <el-table-column prop="username" label="用户名" width="140" show-overflow-tooltip />
+            <el-table-column prop="action" label="操作" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.action === '登录' ? 'primary' : 'info'" size="small">
+                  {{ row.action }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="success" label="结果" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.success ? 'success' : 'danger'" size="small">
+                  {{ row.success ? '成功' : '失败' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="ipAddress" label="IP地址" min-width="130" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getAccessLogs, getAccessLogStats, getResponseTimeDistribution } from '@/api/ops'
+import { Download } from '@element-plus/icons-vue'
+import { getAccessLogs, getAccessLogStats, getResponseTimeDistribution, getLoginStats,
+         downloadAccessLogs, downloadLoginStats } from '@/api/ops'
+import { normalizeDownloadResponse, extractBlobErrorMessage, triggerBlobDownload } from '@/utils/blobDownload'
 
-const props = defineProps({
-  loading: Boolean
-})
-
-const emit = defineEmits(['refresh'])
+defineProps({ loading: Boolean })
 
 // ── 状态 ──────────────────────────────────────────────────────────────────────
 const loading = ref(false)
+const loginLoading = ref(false)
+const downloadingLogs = ref(false)
+const downloadingLogin = ref(false)
 const tableData = ref([])
 const stats = ref({})
-const distribution = ref({ fast: 0, normal: 0, slow: 0, verySlow: 0 })
+const distribution = ref({})
+const loginStats = ref({ loginSuccess: 0, loginFail: 0, logoutCount: 0, records: [] })
 const showCharts = ref(false)
+const activeSubTab = ref('logs')
 
 const filters = reactive({
   username: '',
@@ -160,15 +239,38 @@ const pagination = reactive({
   total: 0
 })
 
+// ── 响应时间分布条形图数据 ──────────────────────────────────────────────────
+const distBars = computed(() => [
+  { key: 'under50',   label: '< 50ms',        count: distribution.value.under50   || 0, cls: 'excellent' },
+  { key: 's50to100',  label: '50 – 100ms',    count: distribution.value.s50to100  || 0, cls: 'good' },
+  { key: 's100to200', label: '100 – 200ms',   count: distribution.value.s100to200 || 0, cls: 'normal' },
+  { key: 's200to500', label: '200 – 500ms',   count: distribution.value.s200to500 || 0, cls: 'slow' },
+  { key: 's500to2000',label: '500 – 2000ms',  count: distribution.value.s500to2000|| 0, cls: 'slower' },
+  { key: 'over2000',  label: '> 2000ms',      count: distribution.value.over2000  || 0, cls: 'critical' },
+])
+
+const percentiles = computed(() => [
+  { label: 'P50', value: distribution.value.p50 || 0 },
+  { label: 'P90', value: distribution.value.p90 || 0 },
+  { label: 'P95', value: distribution.value.p95 || 0 },
+  { label: 'P99', value: distribution.value.p99 || 0 },
+])
+
+const distTotal = computed(() => distBars.value.reduce((s, b) => s + b.count, 0))
+
+const getBarWidth = (count) => {
+  if (distTotal.value === 0) return 0
+  return Math.max(1, (count / distTotal.value) * 100)
+}
+
+const getBarPct = (count) => {
+  if (distTotal.value === 0) return '0.0'
+  return (count / distTotal.value * 100).toFixed(1)
+}
+
 // ── 查询参数 ────────────────────────────────────────────────────────────────
-const buildQueryParams = () => {
-  const params = {
-    page: pagination.current,
-    size: pagination.size
-  }
-  if (filters.username) params.username = filters.username
-  if (filters.uri) params.uri = filters.uri
-  if (filters.statusCode) params.statusCode = filters.statusCode
+const buildTimeParams = () => {
+  const params = {}
   if (filters.dateRange && filters.dateRange[0]) {
     params.startTime = filters.dateRange[0]
     params.endTime = filters.dateRange[1]
@@ -176,12 +278,20 @@ const buildQueryParams = () => {
   return params
 }
 
+const buildQueryParams = () => ({
+  page: pagination.current,
+  size: pagination.size,
+  ...(filters.username ? { username: filters.username } : {}),
+  ...(filters.uri ? { uri: filters.uri } : {}),
+  ...(filters.statusCode ? { statusCode: filters.statusCode } : {}),
+  ...buildTimeParams()
+})
+
 // ── API 调用 ────────────────────────────────────────────────────────────────
 const loadAccessLogs = async () => {
   loading.value = true
   try {
-    const params = buildQueryParams()
-    const res = await getAccessLogs(params)
+    const res = await getAccessLogs(buildQueryParams())
     if (res.code === 200) {
       tableData.value = res.data.records || []
       pagination.total = res.data.total || 0
@@ -189,7 +299,7 @@ const loadAccessLogs = async () => {
     } else {
       ElMessage.error(res.message || '查询访问日志失败')
     }
-  } catch (error) {
+  } catch {
     ElMessage.error('查询访问日志失败')
   } finally {
     loading.value = false
@@ -198,45 +308,39 @@ const loadAccessLogs = async () => {
 
 const loadStats = async () => {
   try {
-    const params = {}
-    if (filters.dateRange && filters.dateRange[0]) {
-      params.startTime = filters.dateRange[0]
-      params.endTime = filters.dateRange[1]
-    }
-    const res = await getAccessLogStats(params)
-    if (res.code === 200) {
-      stats.value = res.data
-    }
-  } catch (error) {
-    console.error('获取统计数据失败', error)
+    const res = await getAccessLogStats(buildTimeParams())
+    if (res.code === 200) stats.value = res.data
+  } catch (e) {
+    console.error('获取统计数据失败', e)
   }
 }
 
 const loadDistribution = async () => {
   try {
-    const params = {}
-    if (filters.dateRange && filters.dateRange[0]) {
-      params.startTime = filters.dateRange[0]
-      params.endTime = filters.dateRange[1]
-    }
-    const res = await getResponseTimeDistribution(params)
+    const res = await getResponseTimeDistribution(buildTimeParams())
     if (res.code === 200) {
       distribution.value = res.data
-      const total = distribution.value.fast + distribution.value.normal +
-                     distribution.value.slow + distribution.value.verySlow
-      showCharts.value = total > 0
+      showCharts.value = distTotal.value > 0
     }
-  } catch (error) {
-    console.error('获取响应时间分布失败', error)
+  } catch (e) {
+    console.error('获取响应时间分布失败', e)
+  }
+}
+
+const loadLoginStats = async () => {
+  loginLoading.value = true
+  try {
+    const res = await getLoginStats(buildTimeParams())
+    if (res.code === 200) loginStats.value = res.data
+  } catch (e) {
+    console.error('获取登录统计失败', e)
+  } finally {
+    loginLoading.value = false
   }
 }
 
 const refreshAll = async () => {
-  await Promise.all([
-    loadAccessLogs(),
-    loadStats(),
-    loadDistribution()
-  ])
+  await Promise.all([loadAccessLogs(), loadStats(), loadDistribution(), loadLoginStats()])
 }
 
 // ── 事件处理 ────────────────────────────────────────────────────────────────
@@ -254,27 +358,46 @@ const handleReset = () => {
   refreshAll()
 }
 
-const handlePageChange = () => {
-  loadAccessLogs()
+const handlePageChange = () => loadAccessLogs()
+const handleSizeChange = () => { pagination.current = 1; loadAccessLogs() }
+
+onMounted(refreshAll)
+
+const handleDownloadLogs = async () => {
+  downloadingLogs.value = true
+  try {
+    const raw = await downloadAccessLogs(buildTimeParams())
+    const { blob, filename } = normalizeDownloadResponse(raw, 'access-logs.csv')
+    if (blob.size === 0 || blob.type.startsWith('application/json')) {
+      ElMessage.warning(await extractBlobErrorMessage(blob) || '暂无数据')
+      return
+    }
+    triggerBlobDownload(blob, filename)
+    ElMessage.success('下载成功')
+  } catch {
+    ElMessage.error('下载访问日志失败')
+  } finally {
+    downloadingLogs.value = false
+  }
 }
 
-const handleSizeChange = () => {
-  pagination.current = 1
-  loadAccessLogs()
+const handleDownloadLogin = async () => {
+  downloadingLogin.value = true
+  try {
+    const raw = await downloadLoginStats(buildTimeParams())
+    const { blob, filename } = normalizeDownloadResponse(raw, 'login-stats.csv')
+    if (blob.size === 0 || blob.type.startsWith('application/json')) {
+      ElMessage.warning(await extractBlobErrorMessage(blob) || '暂无数据')
+      return
+    }
+    triggerBlobDownload(blob, filename)
+    ElMessage.success('下载成功')
+  } catch {
+    ElMessage.error('下载登录统计失败')
+  } finally {
+    downloadingLogin.value = false
+  }
 }
-
-// ── 响应时间分布百分比 ──────────────────────────────────────────────────────
-const getPercentage = (value) => {
-  const total = distribution.value.fast + distribution.value.normal +
-                 distribution.value.slow + distribution.value.verySlow
-  if (total === 0) return 0
-  return Math.max(5, (value / total * 100))
-}
-
-// ── 生命周期 ────────────────────────────────────────────────────────────────
-onMounted(() => {
-  refreshAll()
-})
 
 defineExpose({ refreshAll })
 </script>
@@ -300,49 +423,112 @@ defineExpose({ refreshAll })
 .stat-item.info  { background: #f0f9ff; }
 
 .stat-label { font-size: 13px; color: #909399; margin-bottom: 6px; }
-
 .stat-value { font-size: 24px; font-weight: bold; color: #303133; }
 .stat-item.error .stat-value { color: #f56c6c; }
 .stat-item.warn  .stat-value { color: #e6a23c; }
 .stat-item.info  .stat-value { color: #409eff; }
 
 .filter-card { margin-bottom: 20px; }
-.chart-card { margin-bottom: 20px; }
-.table-card { margin-bottom: 20px; }
+.chart-card  { margin-bottom: 20px; }
+.table-card  { margin-bottom: 20px; }
 
-.chart-header {
-  font-size: 15px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 16px;
+/* 百分位摘要 */
+.chart-header { font-size: 15px; font-weight: 600; color: #303133; margin-bottom: 14px; }
+
+.percentile-row {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
 }
 
-.response-time-bars {
+.percentile-item {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 8px 20px;
+  min-width: 80px;
+}
+
+.percentile-label { font-size: 12px; color: #909399; }
+.percentile-value { font-size: 18px; font-weight: 700; color: #303133; margin-top: 2px; }
+
+/* 条形图 */
+.response-time-bars { display: flex; flex-direction: column; gap: 8px; }
+
+.bar-row {
+  display: flex;
+  align-items: center;
   gap: 10px;
 }
 
-.time-bar {
-  min-width: 120px;
-  height: 40px;
-  background: #67c23a;
-  border-radius: 6px;
+.bar-meta {
+  width: 130px;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  color: #fff;
-  font-weight: 600;
-  transition: all 0.3s;
+  flex-shrink: 0;
 }
 
-.time-bar.normal { background: #409eff; }
-.time-bar.slow { background: #e6a23c; }
-.time-bar.very-slow { background: #f56c6c; }
+.bar-range { font-size: 13px; color: #606266; }
+.bar-count { font-size: 13px; font-weight: 600; color: #303133; }
 
-.bar-label { font-size: 13px; }
-.bar-value { font-size: 16px; font-weight: 700; }
+.bar-track {
+  flex: 1;
+  height: 22px;
+  background: #f0f2f5;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.bar-fill.excellent  { background: #67c23a; }
+.bar-fill.good       { background: #95d475; }
+.bar-fill.normal     { background: #409eff; }
+.bar-fill.slow       { background: #e6a23c; }
+.bar-fill.slower     { background: #f08a30; }
+.bar-fill.critical   { background: #f56c6c; }
+
+.bar-pct { width: 48px; font-size: 12px; color: #909399; text-align: right; flex-shrink: 0; }
+
+/* 登录统计 */
+.login-summary-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.login-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.login-stat-item {
+  flex: 1;
+  min-width: 120px;
+  text-align: center;
+  padding: 14px 20px;
+  border-radius: 8px;
+  background: #f5f7fa;
+}
+
+.login-stat-item.success { background: #f0f9eb; }
+.login-stat-item.fail    { background: #fef0f0; }
+.login-stat-item.logout  { background: #f0f9ff; }
+
+.login-stat-label { font-size: 13px; color: #909399; margin-bottom: 4px; }
+.login-stat-value { font-size: 28px; font-weight: bold; color: #303133; }
+.login-stat-item.success .login-stat-value { color: #67c23a; }
+.login-stat-item.fail    .login-stat-value { color: #f56c6c; }
+.login-stat-item.logout  .login-stat-value { color: #409eff; }
 
 .pagination-container {
   margin-top: 16px;
@@ -350,11 +536,6 @@ defineExpose({ refreshAll })
   justify-content: flex-end;
 }
 
-@media (max-width: 1200px) {
-  .stats-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-@media (max-width: 768px) {
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-}
+@media (max-width: 1200px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 768px)  { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>

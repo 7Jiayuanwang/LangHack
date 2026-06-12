@@ -540,4 +540,123 @@ public class MonitoringController {
             return Result.error("获取响应时间分布失败");
         }
     }
+
+    /**
+     * 获取登录/退出统计
+     */
+    @GetMapping("/access-logs/login-stats")
+    public Result<Map<String, Object>> getLoginStats(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime,
+            @RequestParam(defaultValue = "100") int limit) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> stats = accessLogQueryService.getLoginStats(start, end, limit);
+            return Result.success(stats);
+        } catch (Exception e) {
+            logger.error("获取登录统计失败", e);
+            return Result.error("获取登录统计失败");
+        }
+    }
+
+    /**
+     * 下载访问日志（CSV）
+     */
+    @GetMapping("/access-logs/download")
+    public ResponseEntity<ByteArrayResource> downloadAccessLogs(
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String uri,
+            @RequestParam(required = false) Integer statusCode,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> result = accessLogQueryService.queryAccessLogs(1, 10000, username, uri, statusCode, start, end);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> records = (List<Map<String, Object>>) result.get("records");
+
+            StringBuilder sb = new StringBuilder("﻿"); // BOM for Excel
+            sb.append("时间,用户,方法,URI,状态码,响应时间(ms),IP地址\n");
+            for (Map<String, Object> row : records) {
+                sb.append(csvEscape(row.get("createdTime"))).append(',')
+                  .append(csvEscape(row.get("username"))).append(',')
+                  .append(csvEscape(row.get("method"))).append(',')
+                  .append(csvEscape(row.get("uri"))).append(',')
+                  .append(csvEscape(row.get("statusCode"))).append(',')
+                  .append(csvEscape(row.get("responseTimeMs"))).append(',')
+                  .append(csvEscape(row.get("ipAddress"))).append('\n');
+            }
+
+            String filename = "access-logs-" +
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
+            byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                    .contentLength(bytes.length)
+                    .body(new ByteArrayResource(bytes));
+        } catch (Exception e) {
+            logger.error("下载访问日志失败", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 下载登录统计（CSV）
+     */
+    @GetMapping("/access-logs/login-stats/download")
+    public ResponseEntity<ByteArrayResource> downloadLoginStats(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> stats = accessLogQueryService.getLoginStats(start, end, 10000);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> records = (List<Map<String, Object>>) stats.get("records");
+
+            StringBuilder sb = new StringBuilder("﻿");
+            sb.append("时间,用户名,操作,结果,状态码,IP地址\n");
+            for (Map<String, Object> row : records) {
+                sb.append(csvEscape(row.get("createdTime"))).append(',')
+                  .append(csvEscape(row.get("username"))).append(',')
+                  .append(csvEscape(row.get("action"))).append(',')
+                  .append(Boolean.TRUE.equals(row.get("success")) ? "成功" : "失败").append(',')
+                  .append(csvEscape(row.get("statusCode"))).append(',')
+                  .append(csvEscape(row.get("ipAddress"))).append('\n');
+            }
+
+            String filename = "login-stats-" +
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
+            byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                    .contentLength(bytes.length)
+                    .body(new ByteArrayResource(bytes));
+        } catch (Exception e) {
+            logger.error("下载登录统计失败", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    private String csvEscape(Object value) {
+        if (value == null) return "";
+        String s = value.toString();
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
+    }
 }

@@ -151,7 +151,7 @@ public class AccessLogQueryService {
     }
 
     /**
-     * 获取响应时间分布
+     * 获取响应时间分布（6档 + P50/P90/P95/P99）
      */
     public Map<String, Object> getResponseTimeDistribution(LocalDateTime startTime, LocalDateTime endTime) {
         QueryWrapper<AccessLog> wrapper = new QueryWrapper<>();
@@ -159,23 +159,83 @@ public class AccessLogQueryService {
         if (endTime != null) wrapper.le("created_time", endTime);
         List<AccessLog> logs = accessLogMapper.selectList(wrapper);
 
-        int fast = 0, normal = 0, slow = 0, verySlow = 0;
-        for (AccessLog log : logs) {
-            Long time = log.getResponseTimeMs();
-            if (time == null) continue;
-            if (time < 100) fast++;
-            else if (time < 500) normal++;
-            else if (time < 2000) slow++;
-            else verySlow++;
+        int t0 = 0, t50 = 0, t100 = 0, t200 = 0, t500 = 0, t2000 = 0;
+        long[] sorted = logs.stream()
+                .map(AccessLog::getResponseTimeMs)
+                .filter(t -> t != null)
+                .mapToLong(Long::longValue)
+                .sorted()
+                .toArray();
+
+        for (long t : sorted) {
+            if (t < 50) t0++;
+            else if (t < 100) t50++;
+            else if (t < 200) t100++;
+            else if (t < 500) t200++;
+            else if (t < 2000) t500++;
+            else t2000++;
         }
 
+        int n = sorted.length;
         Map<String, Object> distribution = new LinkedHashMap<>();
-        distribution.put("fast", fast);       // <100ms
-        distribution.put("normal", normal);   // 100-500ms
-        distribution.put("slow", slow);       // 500-2000ms
-        distribution.put("verySlow", verySlow); // >2000ms
+        distribution.put("under50", t0);
+        distribution.put("s50to100", t50);
+        distribution.put("s100to200", t100);
+        distribution.put("s200to500", t200);
+        distribution.put("s500to2000", t500);
+        distribution.put("over2000", t2000);
+        distribution.put("p50", n > 0 ? sorted[(int) (n * 0.50)] : 0);
+        distribution.put("p90", n > 0 ? sorted[(int) (n * 0.90)] : 0);
+        distribution.put("p95", n > 0 ? sorted[Math.min((int) (n * 0.95), n - 1)] : 0);
+        distribution.put("p99", n > 0 ? sorted[Math.min((int) (n * 0.99), n - 1)] : 0);
 
         return distribution;
+    }
+
+    /**
+     * 获取登录/退出统计
+     */
+    public Map<String, Object> getLoginStats(LocalDateTime startTime, LocalDateTime endTime, int limit) {
+        QueryWrapper<AccessLog> wrapper = new QueryWrapper<>();
+        wrapper.in("uri", "/api/auth/login", "/api/auth/logout");
+        if (startTime != null) wrapper.ge("created_time", startTime);
+        if (endTime != null) wrapper.le("created_time", endTime);
+        wrapper.orderByDesc("created_time");
+
+        List<AccessLog> logs = accessLogMapper.selectList(wrapper);
+
+        long loginSuccess = logs.stream()
+                .filter(l -> "/api/auth/login".equals(l.getUri())
+                        && l.getStatusCode() != null && l.getStatusCode() < 400)
+                .count();
+        long loginFail = logs.stream()
+                .filter(l -> "/api/auth/login".equals(l.getUri())
+                        && l.getStatusCode() != null && l.getStatusCode() >= 400)
+                .count();
+        long logoutCount = logs.stream()
+                .filter(l -> "/api/auth/logout".equals(l.getUri()))
+                .count();
+
+        List<Map<String, Object>> records = logs.stream()
+                .limit(limit)
+                .map(l -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("username", l.getUsername() != null ? l.getUsername() : "未知");
+                    m.put("action", "/api/auth/login".equals(l.getUri()) ? "登录" : "退出");
+                    m.put("success", l.getStatusCode() != null && l.getStatusCode() < 400);
+                    m.put("statusCode", l.getStatusCode());
+                    m.put("ipAddress", l.getIpAddress());
+                    m.put("createdTime", l.getCreatedTime() != null ? l.getCreatedTime().format(FORMATTER) : null);
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("loginSuccess", loginSuccess);
+        result.put("loginFail", loginFail);
+        result.put("logoutCount", logoutCount);
+        result.put("records", records);
+        return result;
     }
 
     /**

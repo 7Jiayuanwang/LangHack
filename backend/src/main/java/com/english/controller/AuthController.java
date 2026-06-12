@@ -60,7 +60,10 @@ public class AuthController {
     private static final Set<String> ELEVATION_ALLOWED = Set.of("ADMIN", "OPS");
 
     @PostMapping("/login")
-    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest) {
+    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest,
+                                             HttpServletRequest request) {
+        // 让 AccessLogInterceptor 在 afterCompletion 时能拿到用户名（此时 SecurityContext 尚未设置）
+        request.setAttribute("_auth_username", loginRequest.getUsername());
         try {
             Map<String, Object> loginResult = userService.login(loginRequest);
             return Result.success("登录成功", loginResult);
