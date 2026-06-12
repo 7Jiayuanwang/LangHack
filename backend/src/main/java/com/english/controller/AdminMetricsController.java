@@ -624,23 +624,30 @@ public class AdminMetricsController {
     }
 
     @GetMapping("/user-growth")
-    @Cacheable(value = "metrics", key = "'user-growth-' + (#days == null ? 30 : #days)", unless = "#result == null")
-    public Result<Map<String, Object>> getUserGrowth(@RequestParam(defaultValue = "30") int days) {
+    @Cacheable(value = "metrics", key = "'user-growth-' + (#startDate == null ? 'null' : #startDate.toString()) + '-' + (#endDate == null ? 'null' : #endDate.toString())", unless = "#result == null")
+    public Result<Map<String, Object>> getUserGrowth(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         try {
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime start = now.minusDays(days - 1).toLocalDate().atStartOfDay();
+            LocalDate end = endDate != null ? endDate : now.toLocalDate();
+            LocalDate start = startDate != null ? startDate : end.minusDays(29);
+
+            LocalDateTime startDt = start.atStartOfDay();
+            LocalDateTime endDt = end.atTime(LocalTime.MAX);
 
             List<Map<String, Object>> dailyGrowth = userMapper.selectMaps(
                     new QueryWrapper<com.english.entity.User>()
                             .select("DATE(created_time) as date", "COUNT(*) as newUsers")
-                            .ge("created_time", start)
+                            .ge("created_time", startDt)
+                            .le("created_time", endDt)
                             .eq("deleted", 0)
                             .groupBy("DATE(created_time)")
                             .orderByAsc("DATE(created_time)"));
 
             long cumulativeTotal = userMapper.selectCount(
                     new QueryWrapper<com.english.entity.User>()
-                            .lt("created_time", start)
+                            .lt("created_time", startDt)
                             .eq("deleted", 0));
 
             List<Map<String, Object>> trend = new ArrayList<>();

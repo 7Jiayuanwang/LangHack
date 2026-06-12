@@ -266,3 +266,11 @@ export function revokeElevation() {
     method: "post",
   });
 }
+
+export function getDatabasePoolMetrics() {
+  return request({ url: '/api/ops/monitoring/db-pool', method: 'get' })
+}
+
+export function getTopUserRequests(limit = 20) {
+  return request({ url: '/api/ops/monitoring/user-requests/top', method: 'get', params: { limit } })
+}

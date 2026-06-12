@@ -198,6 +198,22 @@
       />
     </div>
 
+    <!-- 用户增长趋势 -->
+    <el-row :gutter="24" class="mt-32">
+      <el-col :span="24">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header">
+              <span class="title-with-dot">用户增长趋势</span>
+              <span class="metric-badge">当前总数 <b>{{ growthMetrics.currentTotal }}</b></span>
+            </div>
+          </template>
+          <v-chart v-if="growthChartOption" :option="growthChartOption" style="height:240px" autoresize />
+          <div v-else class="chart-loading"><el-icon class="is-loading"><Loading /></el-icon> 加载中...</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <!-- 用户活跃度 -->
     <el-row :gutter="24" class="mt-32">
       <el-col :span="24">
@@ -313,7 +329,7 @@ import {
 } from 'echarts/components'
 import {
   getUserActivityMetrics, getLearningBehaviorMetrics,
-  getAiUsageMetrics, getRecommendationMetrics
+  getAiUsageMetrics, getRecommendationMetrics, getUserGrowth
 } from '@/api/admin'
 
 use([CanvasRenderer, LineChart, BarChart, PieChart,
@@ -356,6 +372,7 @@ const activityMetrics = reactive({ dau: 0, mau: 0, totalUsers: 0 })
 const learningMetrics = reactive({ totalReads: 0, totalRecords: 0 })
 const aiMetrics = reactive({ totalCalls: 0, todayCalls: 0, successRate: 0, avgResponseMs: 0 })
 const recMetrics = reactive({ totalViews: 0, totalClicks: 0, totalRefreshes: 0, clickRate: 0 })
+const growthMetrics = reactive({ currentTotal: 0 })
 
 const dauChartOption = ref(null)
 const learningPieOption = ref(null)
@@ -363,6 +380,7 @@ const learningBarOption = ref(null)
 const aiLineOption = ref(null)
 const aiPieOption = ref(null)
 const recLineOption = ref(null)
+const growthChartOption = ref(null)
 
 const cetLoading = ref(false)
 const cetData = ref(null)
@@ -447,13 +465,15 @@ const loadMetrics = async () => {
   aiLineOption.value = null
   aiPieOption.value = null
   recLineOption.value = null
+  growthChartOption.value = null
 
   const params = { startDate: dateRange.startDate, endDate: dateRange.endDate }
-  const [actRes, learnRes, aiRes, recRes] = await Promise.allSettled([
+  const [actRes, learnRes, aiRes, recRes, growthRes] = await Promise.allSettled([
     getUserActivityMetrics(params),
     getLearningBehaviorMetrics(params),
     getAiUsageMetrics(params),
-    getRecommendationMetrics(params)
+    getRecommendationMetrics(params),
+    getUserGrowth(params)
   ])
 
   if (actRes.status === 'fulfilled' && actRes.value?.code === 200) {
@@ -533,6 +553,28 @@ const loadMetrics = async () => {
       yAxis: { type: 'value', min: 0, max: 1, axisLabel: { formatter: v => (v * 100).toFixed(0) + '%' } },
       series: [{ name: '点击率', type: 'line', smooth: true, data: daily.map(t => t.clickRate),
         areaStyle: { color: 'rgba(16,185,129,0.1)' }, lineStyle: { color: '#10b981', width: 2 }, itemStyle: { color: '#10b981' } }]
+    }
+  }
+
+  if (growthRes.status === 'fulfilled' && growthRes.value?.code === 200) {
+    const d = growthRes.value.data
+    growthMetrics.currentTotal = d.currentTotal || 0
+    const trend = d.trend || []
+    growthChartOption.value = {
+      tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+      legend: { data: ['新增用户', '累计用户'], bottom: 0 },
+      grid: { left: 40, right: 40, top: 20, bottom: 50 },
+      xAxis: { type: 'category', data: trend.map(t => t.date.slice(5)), axisLabel: { fontSize: 11 } },
+      yAxis: [
+        { type: 'value', name: '新增', position: 'left', minInterval: 1 },
+        { type: 'value', name: '累计', position: 'right', minInterval: 1 }
+      ],
+      series: [
+        { name: '新增用户', type: 'bar', barMaxWidth: 30, data: trend.map(t => t.newUsers),
+          itemStyle: { color: '#6366f1', borderRadius: [4, 4, 0, 0] } },
+        { name: '累计用户', type: 'line', yAxisIndex: 1, smooth: true, data: trend.map(t => t.totalUsers),
+          lineStyle: { color: '#ec4899', width: 2 }, itemStyle: { color: '#ec4899' } }
+      ]
     }
   }
 }

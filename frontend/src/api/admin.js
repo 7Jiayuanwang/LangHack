@@ -381,3 +381,7 @@ export function getQuizAttemptDetail(studentId, textId) {
     params: { studentId, textId }
   })
 }
+
+export function getUserGrowth(params) {
+  return request({ url: '/api/admin/metrics/user-growth', method: 'get', params })
+}
