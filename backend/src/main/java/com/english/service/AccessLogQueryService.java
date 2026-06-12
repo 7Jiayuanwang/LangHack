@@ -103,22 +103,21 @@ public class AccessLogQueryService {
         if (endTime != null) errorWrapper.le("created_time", endTime);
         Long errorCount = accessLogMapper.selectCount(errorWrapper);
 
-        // 独立用户数
+        // 独立用户数 - 不使用select，避免其他字段为null
         QueryWrapper<AccessLog> userWrapper = new QueryWrapper<>();
         if (startTime != null) userWrapper.ge("created_time", startTime);
         if (endTime != null) userWrapper.le("created_time", endTime);
-        userWrapper.select("DISTINCT username");
         Long uniqueUsers = (long) accessLogMapper.selectList(userWrapper).stream()
                 .map(AccessLog::getUsername)
                 .filter(u -> u != null && !u.isEmpty())
                 .distinct()
                 .count();
 
-        // 平均响应时间
-        List<AccessLog> logs = accessLogMapper.selectList(new QueryWrapper<AccessLog>()
-                .ge(startTime != null, "created_time", startTime)
-                .le(endTime != null, "created_time", endTime)
-                .select("response_time_ms"));
+        // 平均响应时间 - 不使用select，避免字段为null
+        QueryWrapper<AccessLog> timeWrapper = new QueryWrapper<>();
+        if (startTime != null) timeWrapper.ge("created_time", startTime);
+        if (endTime != null) timeWrapper.le("created_time", endTime);
+        List<AccessLog> logs = accessLogMapper.selectList(timeWrapper);
 
         long avgResponseTime = logs.isEmpty() ? 0 :
                 (long) logs.stream()
@@ -155,10 +154,10 @@ public class AccessLogQueryService {
      * 获取响应时间分布
      */
     public Map<String, Object> getResponseTimeDistribution(LocalDateTime startTime, LocalDateTime endTime) {
-        List<AccessLog> logs = accessLogMapper.selectList(new QueryWrapper<AccessLog>()
-                .ge(startTime != null, "created_time", startTime)
-                .le(endTime != null, "created_time", endTime)
-                .select("response_time_ms"));
+        QueryWrapper<AccessLog> wrapper = new QueryWrapper<>();
+        if (startTime != null) wrapper.ge("created_time", startTime);
+        if (endTime != null) wrapper.le("created_time", endTime);
+        List<AccessLog> logs = accessLogMapper.selectList(wrapper);
 
         int fast = 0, normal = 0, slow = 0, verySlow = 0;
         for (AccessLog log : logs) {
