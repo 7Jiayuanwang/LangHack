@@ -52,6 +52,13 @@ public class AccessLogInterceptor implements HandlerInterceptor {
             metricsService.recordRequestEnd();
 
             String username = extractUsername();
+            // 登录请求时 SecurityContext 尚未设置，从 Controller 存入的 attribute 补充
+            if (username == null) {
+                Object attrUser = request.getAttribute("_auth_username");
+                if (attrUser instanceof String) {
+                    username = (String) attrUser;
+                }
+            }
 
             AccessLog log = new AccessLog();
             log.setUsername(username);

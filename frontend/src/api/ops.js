@@ -292,3 +292,25 @@ export function getAccessTrend(params) {
 export function getResponseTimeDistribution(params) {
   return request({ url: '/api/ops/monitoring/access-logs/response-time-distribution', method: 'get', params })
 }
+
+export function getLoginStats(params) {
+  return request({ url: '/api/ops/monitoring/access-logs/login-stats', method: 'get', params })
+}
+
+export function downloadAccessLogs(params) {
+  return request({
+    url: '/api/ops/monitoring/access-logs/download',
+    method: 'get',
+    params,
+    responseType: 'blob'
+  })
+}
+
+export function downloadLoginStats(params) {
+  return request({
+    url: '/api/ops/monitoring/access-logs/login-stats/download',
+    method: 'get',
+    params,
+    responseType: 'blob'
+  })
+}
