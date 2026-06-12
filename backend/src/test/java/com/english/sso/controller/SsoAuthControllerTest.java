@@ -94,6 +94,9 @@ class SsoAuthControllerTest {
     @MockBean
     private com.english.service.impl.ElevationService elevationService;
 
+    @MockBean
+    private com.english.monitor.UserRequestMonitor userRequestMonitor;
+
     @TestConfiguration
     static class MockMyBatisConfig {
         @Bean
