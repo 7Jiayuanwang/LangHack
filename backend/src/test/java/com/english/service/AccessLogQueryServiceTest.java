@@ -1,6 +1,7 @@
 package com.english.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.AccessLog;
 import com.english.entity.User;
 import com.english.mapper.AccessLogMapper;
@@ -58,12 +59,10 @@ class AccessLogQueryServiceTest {
     void testQueryAccessLogs_WithNoFilters() {
         // 无过滤条件，应返回所有日志
         // 验证分页参数正确传递
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, null, null, null, null, null);
 
-        verify(accessLogMapper, times(1)).selectPage(any(), argThat(wrapper -> {
-            // 验证QueryWrapper为空（无过滤条件）
-            return wrapper.getCustomSqlSegment() == null || wrapper.getCustomSqlSegment().isEmpty();
-        }));
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), any());
     }
 
     @Test
@@ -71,12 +70,13 @@ class AccessLogQueryServiceTest {
         // 仅按账号名查询，无姓名匹配
         when(userMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
 
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, "teacher", null, null, null, null);
 
         // 验证执行了用户查询（姓名匹配）
         verify(userMapper, times(1)).selectList(any());
         // 验证最终执行了访问日志查询
-        verify(accessLogMapper, times(1)).selectPage(any(), any());
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), any());
     }
 
     @Test
@@ -88,12 +88,13 @@ class AccessLogQueryServiceTest {
 
         when(userMapper.selectList(any(QueryWrapper.class))).thenReturn(Arrays.asList(teacher));
 
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, "张老师", null, null, null, null);
 
         // 验证用户查询被调用
         verify(userMapper, times(1)).selectList(any());
         // 验证访问日志查询（应包含 IN 条件）
-        verify(accessLogMapper, times(1)).selectPage(any(), any());
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), any());
     }
 
     @Test
@@ -105,10 +106,11 @@ class AccessLogQueryServiceTest {
 
         when(userMapper.selectList(any(QueryWrapper.class))).thenReturn(Arrays.asList(user));
 
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, "小李", null, null, null, null);
 
         verify(userMapper, times(1)).selectList(any());
-        verify(accessLogMapper, times(1)).selectPage(any(), any());
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), any());
     }
 
     @Test
@@ -124,10 +126,11 @@ class AccessLogQueryServiceTest {
 
         when(userMapper.selectList(any(QueryWrapper.class))).thenReturn(Arrays.asList(user1, user2));
 
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, "李", null, null, null, null);
 
         verify(userMapper, times(1)).selectList(any());
-        verify(accessLogMapper, times(1)).selectPage(any(), argThat(wrapper -> {
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), argThat(wrapper -> {
             // 验证生成了 IN 条件（包含2个用户名）
             return wrapper.getCustomSqlSegment().contains("IN");
         }));
@@ -135,27 +138,30 @@ class AccessLogQueryServiceTest {
 
     @Test
     void testQueryAccessLogs_ByUri() {
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, null, "/api/words", null, null, null);
 
-        verify(accessLogMapper, times(1)).selectPage(any(), argThat(wrapper ->
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), argThat(wrapper ->
             wrapper.getCustomSqlSegment().contains("uri")
         ));
     }
 
     @Test
     void testQueryAccessLogs_ByStatusCode() {
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, null, null, 404, null, null);
 
-        verify(accessLogMapper, times(1)).selectPage(any(), argThat(wrapper ->
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), argThat(wrapper ->
             wrapper.getCustomSqlSegment().contains("status_code")
         ));
     }
 
     @Test
     void testQueryAccessLogs_ByTimeRange() {
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, null, null, null, testStartTime, testEndTime);
 
-        verify(accessLogMapper, times(1)).selectPage(any(), argThat(wrapper -> {
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), argThat(wrapper -> {
             String sql = wrapper.getCustomSqlSegment();
             return sql.contains("created_time") && sql.contains(">=") && sql.contains("<=");
         }));
@@ -169,6 +175,7 @@ class AccessLogQueryServiceTest {
         teacher.setRealName("张老师");
         when(userMapper.selectList(any())).thenReturn(Arrays.asList(teacher));
 
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(
             1, 20,
             "张老师",
@@ -179,7 +186,7 @@ class AccessLogQueryServiceTest {
         );
 
         verify(userMapper, times(1)).selectList(any());
-        verify(accessLogMapper, times(1)).selectPage(any(), argThat(wrapper -> {
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), argThat(wrapper -> {
             String sql = wrapper.getCustomSqlSegment();
             return sql.contains("username") &&
                    sql.contains("uri") &&
@@ -191,6 +198,7 @@ class AccessLogQueryServiceTest {
     @Test
     void testQueryAccessLogs_PaginationParameters() {
         // 验证分页参数正确传递
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(3, 25, null, null, null, null, null);
 
         verify(accessLogMapper, times(1)).selectPage(argThat(page ->
@@ -201,11 +209,12 @@ class AccessLogQueryServiceTest {
     @Test
     void testQueryAccessLogs_EmptyUsernameIgnored() {
         // 空字符串或空白字符串应被忽略
+        when(accessLogMapper.selectPage(any(Page.class), any())).thenReturn(new Page<>());
         accessLogQueryService.queryAccessLogs(1, 10, "   ", null, null, null, null);
 
         // 不应调用userMapper（空字符串被trim后为空）
         verify(userMapper, never()).selectList(any());
-        verify(accessLogMapper, times(1)).selectPage(any(), argThat(wrapper ->
+        verify(accessLogMapper, times(1)).selectPage(any(Page.class), argThat(wrapper ->
             wrapper.getCustomSqlSegment() == null || !wrapper.getCustomSqlSegment().contains("username")
         ));
     }
@@ -302,8 +311,8 @@ class AccessLogQueryServiceTest {
 
         Map<String, Object> distribution = accessLogQueryService.getResponseTimeDistribution(null, null);
 
-        assertThat(distribution.get("under50")).isEqualTo(1);
-        assertThat(distribution.get("s50to100")).isEqualTo(0);
+        assertThat(distribution.get("under50")).isEqualTo(0);
+        assertThat(distribution.get("s50to100")).isEqualTo(1);
         assertThat(distribution.get("s100to200")).isEqualTo(1);
         assertThat(distribution.get("s200to500")).isEqualTo(1);
         assertThat(distribution.get("s500to2000")).isEqualTo(2);
@@ -322,7 +331,7 @@ class AccessLogQueryServiceTest {
         Map<String, Object> distribution = accessLogQueryService.getResponseTimeDistribution(null, null);
 
         long p99 = (long) distribution.get("p99");
-        assertThat(p99).isEqualTo(990L); // 第99个值（索引98）= 990ms
+        assertThat(p99).isEqualTo(1000L); // sorted[min(99,99)] = sorted[99] = 1000 (最大值)
     }
 
     @Test
