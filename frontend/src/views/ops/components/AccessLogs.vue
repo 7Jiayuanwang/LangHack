@@ -359,7 +359,7 @@ const handleDownloadLogs = async () => {
   downloadingLogs.value = true
   try {
     const raw = await downloadAccessLogs(buildTimeParams())
-    const { blob, filename } = normalizeDownloadResponse(raw, 'access-logs.csv')
+    const { blob, filename } = await normalizeDownloadResponse(raw, 'access-logs.csv')
     if (blob.size === 0 || blob.type.startsWith('application/json')) {
       ElMessage.warning(await extractBlobErrorMessage(blob) || '暂无数据')
       return
@@ -377,7 +377,7 @@ const handleDownloadLogin = async () => {
   downloadingLogin.value = true
   try {
     const raw = await downloadLoginStats(buildTimeParams())
-    const { blob, filename } = normalizeDownloadResponse(raw, 'login-stats.csv')
+    const { blob, filename } = await normalizeDownloadResponse(raw, 'login-stats.csv')
     if (blob.size === 0 || blob.type.startsWith('application/json')) {
       ElMessage.warning(await extractBlobErrorMessage(blob) || '暂无数据')
       return
