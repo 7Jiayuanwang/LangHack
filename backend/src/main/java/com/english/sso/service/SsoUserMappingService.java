@@ -42,7 +42,7 @@ import java.util.UUID;
 public class SsoUserMappingService {
 
     private static final String DEFAULT_PENDING_USER_MESSAGE =
-            "当前已授予普通用户权限，您仍可正常登录；如需学生/教师等更高权限，请等待管理员审核。";
+            "当前已授予学生权限，您可正常使用学习功能；如需教师等更高权限，请等待管理员审核。";
     private static final String PRIVILEGED_REVIEW_MESSAGE =
             "当前 SSO 身份尚未通过学校目录或角色映射确认，不能自动授予本地高权限角色，请等待管理员审核。";
 
@@ -76,10 +76,10 @@ public class SsoUserMappingService {
     /**
      * 处理 SSO 登录：绑定/创建用户，返回登录结果
      *
-     * 角色同步策略：
-     * - SSO/学校主数据可安全确认角色时，按升权规则同步到数据库
-     * - 无法安全确认时，保留现有角色；首次接入授予 USER 并保留待审批
-     * - 待审批用户重新登录时，优先尝试学校主数据自动升权，其次尝试可自动审批的 SSO 映射
+     * 角色授予策略（默认最小权限）：
+     * - STUDENT 是唯一可自动授予的角色，也是所有兜底场景的默认身份
+     * - TEACHER/OPS/ADMIN 不论来源（SSO 映射或学校主数据目录）都必须经管理员人工确认
+     * - 待审批用户重新登录时，仅可自动审批 STUDENT；高权限角色仍保留待审批
      *
      * @param ssoUserInfo SSO 用户信息
      * @param protocol    SSO 协议类型
@@ -145,12 +145,12 @@ public class SsoUserMappingService {
                 }
 
                 pendingUser.setStatus("ACTIVE");
-                pendingUser.setRole("USER");
+                pendingUser.setRole("STUDENT");
                 userService.updateUser(pendingUser);
                 binding.setLastLoginTime(LocalDateTime.now());
                 bindingMapper.updateById(binding);
                 String token = jwtUtil.generateToken(pendingUser.getUsername(), pendingUser.getRole());
-                log.info("待审批用户以普通用户身份登录: username={}, role={}, bindingId={}", pendingUser.getUsername(), pendingUser.getRole(), binding.getId());
+                log.info("待审批用户以默认 STUDENT 身份登录: username={}, role={}, bindingId={}", pendingUser.getUsername(), pendingUser.getRole(), binding.getId());
                 return SsoLoginResult.successWithPendingApproval(
                         token,
                         pendingUser,
@@ -237,7 +237,7 @@ public class SsoUserMappingService {
                 // 但 SSO 映射的高优先级角色（如 ADMIN）仍可同步
                 boolean shouldSyncRole = isRoleUpgrade(user.getRole(), ssoMappedRole);
                 if (shouldSyncRole) {
-                    // 安全护栏：升权到 ADMIN/OPS 等高权限角色必须走人工确认，
+                    // 安全护栏：升权到 TEACHER/OPS/ADMIN 等高权限角色必须走人工确认，
                     // 不允许 SSO 组变更直接改写 DB 角色（防止 LDAP 配置被误改或劫持导致权限提升）
                     if (roleMappingService.requiresManualConfirmation(ssoMappedRole, memberOf)) {
                         log.warn("SSO 升权到 {} 需人工审批，保留数据库角色: username={}, dbRole={}",
@@ -301,10 +301,10 @@ public class SsoUserMappingService {
             }
 
             existingUser.setStatus("ACTIVE");
-            existingUser.setRole("USER");
+            existingUser.setRole("STUDENT");
             userService.updateUser(existingUser);
             String token = jwtUtil.generateToken(existingUser.getUsername(), existingUser.getRole());
-            log.info("SSO 登录成功（关联已有用户为 USER 待审批）: username={}, role={}, bindingId={}", existingUser.getUsername(), existingUser.getRole(), newBinding.getId());
+            log.info("SSO 登录成功（关联已有用户为默认 STUDENT 待审批）: username={}, role={}, bindingId={}", existingUser.getUsername(), existingUser.getRole(), newBinding.getId());
             return SsoLoginResult.successWithPendingApproval(
                     token,
                     existingUser,
@@ -321,32 +321,30 @@ public class SsoUserMappingService {
         }
         log.info("[SSO全链路] ④ 自动授权未命中，进入原有流程: uid={}", resolveDirectoryUserId(ssoUserInfo));
 
-        // 3. 全新用户：自动识别角色
+        // 3. 全新用户：无法识别角色时，默认自动授予 STUDENT（学生是默认身份，唯一可自动授予）
         if (ssoMappedRole == null) {
-            log.warn("无法识别角色，授予普通用户 USER，并保留待审批状态等待管理员提升权限");
-            User newUser = createUserFromSso(ssoUserInfo, "USER");
-            SsoUserBinding pendingBinding = createBinding(newUser.getId(), ssoUserInfo, protocol, false);
+            log.info("无法识别角色，默认自动授予 STUDENT: username={}", localUsername);
+            User newUser = createUserFromSso(ssoUserInfo, "STUDENT");
+            createBinding(newUser.getId(), ssoUserInfo, protocol, true);
             String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
-            log.info("SSO 登录成功（无法识别角色时授予 USER 且待审批）: username={}, role={}, bindingId={}", newUser.getUsername(), newUser.getRole(), pendingBinding.getId());
-            return SsoLoginResult.successWithPendingApproval(
-                    token,
-                    newUser,
-                    pendingBinding.getId(),
-                    "当前已授予普通用户权限，您仍可正常登录；如需学生/教师等更高权限，请等待管理员审核。"
-            );
+            log.info("SSO 登录成功（无法识别角色时默认授予 STUDENT）: username={}, role={}", newUser.getUsername(), newUser.getRole());
+            return SsoLoginResult.success(token, newUser);
         }
 
-        // 4. 检查是否需要人工确认
+        // 4. 高权限角色（TEACHER/OPS/ADMIN）需人工确认：先默认授予 STUDENT，保留待审批
         if (roleMappingService.requiresManualConfirmation(ssoMappedRole, memberOf)) {
-            log.info("角色 {} 需要人工确认，先授予 USER 并保留待审批", ssoMappedRole);
-            User newUser = createUserFromSso(ssoUserInfo, "USER");
+            log.info("角色 {} 需要人工确认，先默认授予 STUDENT 并保留待审批", ssoMappedRole);
+            User newUser = createUserFromSso(ssoUserInfo, "STUDENT");
             SsoUserBinding pendingBinding = createBinding(newUser.getId(), ssoUserInfo, protocol, false);
+            pendingBinding.setAdminRemark(String.format(
+                    "SSO 角色映射推断为 %s，已默认授予 STUDENT，请管理员确认是否提升权限。", ssoMappedRole));
+            bindingMapper.updateById(pendingBinding);
             String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
             return SsoLoginResult.successWithPendingApproval(
                     token,
                     newUser,
                     pendingBinding.getId(),
-                    "当前已授予普通用户权限，您仍可正常登录；如需更高权限，请等待管理员审核。"
+                    DEFAULT_PENDING_USER_MESSAGE
             );
         }
 
@@ -430,25 +428,8 @@ public class SsoUserMappingService {
             return new RoleUpgradeResult(false);
         }
 
-        // 教师优先：工号查 school_teacher，避免教师被误判为学生
-        if (schoolTeacherMapper != null && isFeatureEnabled("sso.auto_grant_teacher")) {
-            SchoolTeacher teacher = schoolTeacherMapper.selectByTeacherId(username);
-            if (teacher != null && isRoleUpgrade(user.getRole(), "TEACHER")) {
-                if ((user.getRealName() == null || user.getRealName().isEmpty()) && teacher.getTeacherName() != null) {
-                    user.setRealName(teacher.getTeacherName());
-                }
-                user.setRole("TEACHER");
-                user.setStatus("ACTIVE");
-                userService.updateUser(user);
-                if (binding != null) {
-                    binding.setAutoApproved(1);
-                    binding.setLastLoginTime(LocalDateTime.now());
-                    bindingMapper.updateById(binding);
-                }
-                return new RoleUpgradeResult(true);
-            }
-        }
-
+        // 教师不自动升权：命中 school_teacher 也必须经管理员人工确认（TEACHER 属高权限角色），
+        // 此处仅保留学生自动升权；教师线索的待确认处理见 tryAutoGrantFromSchoolDirectory
         if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
             SchoolStudent student = schoolStudentMapper.selectByStudentId(username);
             if (student != null && isRoleUpgrade(user.getRole(), "STUDENT")) {
@@ -488,8 +469,11 @@ public class SsoUserMappingService {
     }
 
     private boolean isElevatedRole(String role) {
+        // 默认身份为 STUDENT，仅 TEACHER/OPS/ADMIN 视为需证据确认的高权限角色
         String normalizedRole = firstNonBlank(role);
-        return normalizedRole != null && !"USER".equals(normalizedRole);
+        return normalizedRole != null
+                && !"USER".equals(normalizedRole)
+                && !"STUDENT".equals(normalizedRole);
     }
 
     private boolean isDisabledStatus(String status) {
@@ -534,81 +518,12 @@ public class SsoUserMappingService {
 
     /**
      * 根据 school_student / school_teacher 主数据自动授权：
-     * - 命中 school_student 且 feature toggle sso.auto_grant_student=true → 创建 STUDENT
-     * - 命中 school_teacher 且 feature toggle sso.auto_grant_teacher=true → 创建 TEACHER
+     * - 命中 school_student 且 feature toggle sso.auto_grant_student=true → 自动授予 STUDENT
+     * - 命中 school_teacher 且 feature toggle sso.auto_grant_teacher=true → 默认授予 STUDENT 并转人工确认 TEACHER
      * - 未命中或未启用 → 返回 null，走原流程
      *
+     * 注意：STUDENT 是唯一可自动授予的角色；TEACHER/OPS/ADMIN 不论来源都必须经管理员人工确认。
      * 返回 SsoLoginResult 表示已处理；返回 null 表示跳过自动授权。
-     */
-/*
-    private SsoLoginResult tryAutoGrantFromSchoolDirectory(SsoUserInfo ssoUserInfo, SsoProtocolType protocol) {
-        if (schoolStudentMapper == null && schoolTeacherMapper == null) {
-            log.info("[SSO全链路] ③ 自动授权跳过: schoolStudentMapper={}, schoolTeacherMapper={}",
-                    schoolStudentMapper != null, schoolTeacherMapper != null);
-            return null;
-        }
-        String uid = resolveDirectoryUserId(ssoUserInfo);
-        if (uid == null) {
-            log.warn("[SSO全链路] ③ 自动授权跳过: ssoUsername 为空");
-            return null;
-        }
-
-        boolean teacherToggle = isFeatureEnabled("sso.auto_grant_teacher");
-        boolean studentToggle = isFeatureEnabled("sso.auto_grant_student");
-        log.info("[SSO全链路] ③ 自动授权检查: uid={}, teacher_toggle={}, student_toggle={}",
-                uid, teacherToggle, studentToggle);
-
-        // 教师优先：工号查 school_teacher，避免教师被误判为学生
-        if (schoolTeacherMapper != null && teacherToggle) {
-            SchoolTeacher st = null;
-            try {
-                st = schoolTeacherMapper.selectByTeacherId(uid);
-            } catch (Exception e) {
-                log.warn("查询 school_teacher 失败 uid={}: {}", uid, e.getMessage());
-            }
-            log.info("[SSO全链路] ③ school_teacher 查询: uid={}, 命中={}", uid, st != null);
-            if (st != null) {
-                log.info("school_teacher 命中，自动授权 TEACHER: uid={}, college={}", uid, st.getCollegeName());
-                if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
-                        && st.getTeacherName() != null) {
-                    ssoUserInfo.setRealName(st.getTeacherName());
-                }
-                User teacher = createUserFromSso(ssoUserInfo, "TEACHER");
-                SsoUserBinding binding = createBinding(teacher.getId(), ssoUserInfo, protocol, true);
-                String token = jwtUtil.generateToken(teacher.getUsername(), teacher.getRole());
-                log.info("SSO 自动授权 TEACHER 成功: username={}, bindingId={}", teacher.getUsername(), binding.getId());
-                return SsoLoginResult.success(token, teacher);
-            }
-        }
-
-        // 学生次之：学号查 school_student
-        if (schoolStudentMapper != null && studentToggle) {
-            SchoolStudent ss = null;
-            try {
-                ss = schoolStudentMapper.selectByStudentId(uid);
-            } catch (Exception e) {
-                log.warn("查询 school_student 失败 uid={}: {}", uid, e.getMessage());
-            }
-            log.info("[SSO全链路] ③ school_student 查询: uid={}, 命中={}", uid, ss != null);
-            if (ss != null) {
-                log.info("school_student 命中，自动授权 STUDENT: uid={}, college={}", uid, ss.getCollegeName());
-                backfillStudentClassInfo(uid, ssoUserInfo.getAttributes());
-                if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
-                        && ss.getStudentName() != null) {
-                    ssoUserInfo.setRealName(ss.getStudentName());
-                }
-                User student = createUserFromSso(ssoUserInfo, "STUDENT");
-                SsoUserBinding binding = createBinding(student.getId(), ssoUserInfo, protocol, true);
-                String token = jwtUtil.generateToken(student.getUsername(), student.getRole());
-                log.info("SSO 自动授权 STUDENT 成功: username={}, bindingId={}", student.getUsername(), binding.getId());
-                return SsoLoginResult.success(token, student);
-            }
-        }
-
-        log.info("[SSO全链路] ③ 自动授权未命中: uid={}, 走原有流程", uid);
-        return null;
-    }
-     * 兼容常见字段名：class / className / classCode / major / majorName / department。
      */
     private SsoLoginResult tryAutoGrantFromSchoolDirectory(SsoUserInfo ssoUserInfo, SsoProtocolType protocol) {
         if (schoolStudentMapper == null && schoolTeacherMapper == null) {
@@ -636,18 +551,23 @@ public class SsoUserMappingService {
             }
             log.info("[SSO全链路] ③ school_teacher 查询: uid={}, matched={}", uid, teacherDirectory != null);
             if (teacherDirectory != null) {
-                log.info("school_teacher 命中，自动授权 TEACHER: uid={}, college={}",
+                log.info("school_teacher 命中，默认授予 STUDENT 并转人工确认 TEACHER: uid={}, college={}",
                         uid, teacherDirectory.getCollegeName());
                 if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
                         && teacherDirectory.getTeacherName() != null) {
                     ssoUserInfo.setRealName(teacherDirectory.getTeacherName());
                 }
-                User teacher = createUserFromSso(ssoUserInfo, "TEACHER");
-                SsoUserBinding binding = createBinding(teacher.getId(), ssoUserInfo, protocol, true);
-                String token = jwtUtil.generateToken(teacher.getUsername(), teacher.getRole());
-                log.info("SSO 自动授权 TEACHER 成功: username={}, bindingId={}",
-                        teacher.getUsername(), binding.getId());
-                return SsoLoginResult.success(token, teacher);
+                User student = createUserFromSso(ssoUserInfo, "STUDENT");
+                SsoUserBinding binding = createBinding(student.getId(), ssoUserInfo, protocol, false);
+                binding.setAdminRemark(String.format(
+                        "命中学校教师目录（学院：%s），已默认授予 STUDENT，请管理员确认是否提升为 TEACHER。",
+                        teacherDirectory.getCollegeName()));
+                bindingMapper.updateById(binding);
+                String token = jwtUtil.generateToken(student.getUsername(), student.getRole());
+                log.info("SSO 命中教师目录但需人工确认，先授予 STUDENT: username={}, bindingId={}",
+                        student.getUsername(), binding.getId());
+                return SsoLoginResult.successWithPendingApproval(
+                        token, student, binding.getId(), DEFAULT_PENDING_USER_MESSAGE);
             }
         }
 

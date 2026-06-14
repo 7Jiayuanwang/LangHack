@@ -260,8 +260,18 @@ class RoleMappingServiceTest {
 
     @Test
     void testRequiresApproval_Teacher() {
+        // TEACHER 经 SSO memberOf 映射推断时需人工确认（与 ADMIN/OPS 同列，防止 LDAP 组被篡改提权）
         List<String> memberOf = Arrays.asList("ou=教师,ou=用户,dc=imau,dc=edu,dc=cn");
-        assertFalse(roleMappingService.requiresManualConfirmation("TEACHER", memberOf));
+        assertTrue(roleMappingService.requiresManualConfirmation("TEACHER", memberOf));
+    }
+
+    @Test
+    void testRequiresApproval_TeacherOverridesWhitelist() {
+        // 即使 TEACHER 在自动审批白名单中（setUp 默认 allowedRoles 含 TEACHER），
+        // 高权限硬校验仍优先 → 强制人工确认，不被白名单豁免
+        assertTrue(autoApprovalConfig.getAllowedRoles().contains("TEACHER"));
+        List<String> memberOf = Arrays.asList("ou=教师,ou=用户,dc=imau,dc=edu,dc=cn");
+        assertTrue(roleMappingService.requiresManualConfirmation("TEACHER", memberOf));
     }
 
     @Test

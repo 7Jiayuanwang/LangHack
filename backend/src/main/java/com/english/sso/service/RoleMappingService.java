@@ -121,15 +121,20 @@ public class RoleMappingService {
     }
 
     /**
-     * 检查角色是否需要人工确认
+     * 检查角色是否需要人工确认。
+     *
+     * <p>ADMIN/OPS/TEACHER 一律强制人工确认：不论来源（SSO memberOf 映射或
+     * school_teacher 学校主数据目录），都不允许自动授予本地高权限角色
+     * （防止 LDAP 配置误改/劫持提权，或主数据目录与本地权限语义不一致导致越权）。
+     * 仅 STUDENT 可自动授予，并作为所有兜底场景的默认身份。</p>
      *
      * @param role     推断的角色
      * @param memberOf 组织单位列表
      * @return true=需要确认, false=自动审批
      */
     public boolean requiresManualConfirmation(String role, List<String> memberOf) {
-        // 高权限角色需要人工确认
-        if ("ADMIN".equals(role) || "OPS".equals(role)) {
+        // 高权限角色需要人工确认（TEACHER 与 ADMIN/OPS 同列，不论来源都强制确认）
+        if ("ADMIN".equals(role) || "OPS".equals(role) || "TEACHER".equals(role)) {
             log.info("高权限角色 {} 需要人工确认", role);
             return true;
         }
