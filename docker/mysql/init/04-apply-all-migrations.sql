@@ -3576,3 +3576,22 @@ BEGIN
 END$$
 CALL v40_cleanup_update_config()$$
 DROP PROCEDURE IF EXISTS v40_cleanup_update_config$$
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- V45__ai_qa_usage_index.sql
+-- 为 ai_call_log 添加复合索引，覆盖按用户+服务+时间的统计查询（幂等）
+-- ═══════════════════════════════════════════════════════════════════════
+
+DROP PROCEDURE IF EXISTS v45_ai_qa_usage_index$$
+CREATE PROCEDURE v45_ai_qa_usage_index()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'ai_call_log'
+                     AND INDEX_NAME = 'idx_triggered_service_success_time') THEN
+        CREATE INDEX idx_triggered_service_success_time
+            ON ai_call_log (triggered_by, service_name, success, created_time);
+    END IF;
+END$$
+CALL v45_ai_qa_usage_index()$$
+DROP PROCEDURE IF EXISTS v45_ai_qa_usage_index$$

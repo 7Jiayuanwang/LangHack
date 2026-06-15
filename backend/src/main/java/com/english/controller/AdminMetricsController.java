@@ -512,6 +512,89 @@ public class AdminMetricsController {
         }
     }
 
+    // ── AI 问答使用次数（按用户） ──────────────────────────────────────────────
+
+    @GetMapping("/ai-qa-usage")
+    public Result<Map<String, Object>> getAiQaUsage(
+            @RequestParam String username) {
+        try {
+            LocalDateTime todayStart = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
+
+            long totalCalls = aiCallLogMapper.countByUserAndServiceTotal(username, "QA");
+            long todayCalls = aiCallLogMapper.countByUserAndServiceToday(username, "QA", todayStart);
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("username", username);
+            data.put("totalCalls", totalCalls);
+            data.put("todayCalls", todayCalls);
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("获取AI问答使用统计失败", e);
+            return Result.error("获取AI问答使用统计失败");
+        }
+    }
+
+    @GetMapping("/ai-qa-usage-trend")
+    public Result<Map<String, Object>> getAiQaUsageTrend(
+            @RequestParam String username,
+            @RequestParam(defaultValue = "6") int days) {
+        try {
+            LocalDate end = LocalDate.now();
+            LocalDate start = end.minusDays(days);
+            LocalDateTime startDt = start.atStartOfDay();
+            LocalDateTime endDt = end.atTime(LocalTime.MAX);
+
+            List<Map<String, Object>> rows = aiCallLogMapper.countDailyByUserAndService(
+                    username, "QA", startDt, endDt);
+
+            // 填充日期范围内无数据的日期
+            Map<String, Long> byDate = new LinkedHashMap<>();
+            for (Map<String, Object> row : rows) {
+                byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("call_count")));
+            }
+
+            List<Map<String, Object>> trend = new ArrayList<>();
+            for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
+                String date = d.format(DATE_FMT);
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("date", date);
+                item.put("count", byDate.getOrDefault(date, 0L));
+                trend.add(item);
+            }
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("username", username);
+            data.put("trend", trend);
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("获取AI问答使用趋势失败", e);
+            return Result.error("获取AI问答使用趋势失败");
+        }
+    }
+
+    // ── 学生用户列表（供下拉选择） ────────────────────────────────────────────
+
+    @GetMapping("/students")
+    public Result<List<Map<String, Object>>> getStudents() {
+        try {
+            List<com.english.entity.User> students = userMapper.selectList(
+                    new QueryWrapper<com.english.entity.User>()
+                            .eq("deleted", 0)
+                            .in("role", "STUDENT", "USER")
+                            .select("username", "real_name", "id"));
+            List<Map<String, Object>> result = students.stream().map(u -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("username", u.getUsername());
+                item.put("realName", u.getRealName() != null ? u.getRealName() : u.getUsername());
+                return item;
+            }).collect(Collectors.toList());
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取学生列表失败", e);
+            return Result.error("获取学生列表失败");
+        }
+    }
+
     // ── 私有辅助方法 ──────────────────────────────────────────────────────────
 
     private long countDistinctStudents(LocalDateTime start, LocalDateTime end) {

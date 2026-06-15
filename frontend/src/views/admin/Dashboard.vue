@@ -293,6 +293,52 @@
       </el-col>
     </el-row>
 
+    <!-- AI 问答使用次数（按用户） -->
+    <el-row :gutter="24" class="mt-32">
+      <el-col :span="24">
+        <el-card class="glass-card shadow-sm">
+          <template #header>
+            <div class="card-header">
+              <span class="title-with-dot">AI 问答使用次数</span>
+              <div class="qa-usage-controls">
+                <el-select
+                  v-model="qaUsageUser"
+                  filterable
+                  placeholder="选择学生..."
+                  size="small"
+                  style="width: 200px"
+                  @change="loadQaUsage"
+                >
+                  <el-option
+                    v-for="s in studentList"
+                    :key="s.username"
+                    :label="`${s.realName} (${s.username})`"
+                    :value="s.username"
+                  />
+                </el-select>
+                <div class="metric-summary" v-if="qaUsageUser">
+                  <span class="metric-badge">今日使用 <b>{{ qaUsage.todayCalls }}</b> 次</span>
+                  <span class="metric-badge">累计使用 <b>{{ qaUsage.totalCalls }}</b> 次</span>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div v-if="!qaUsageUser" class="qa-usage-placeholder">
+            <el-icon :size="32"><ChatLineSquare /></el-icon>
+            <p>请选择一名学生查看其 AI 问答使用统计</p>
+          </div>
+          <div v-else class="qa-usage-detail">
+            <div class="qa-usage-user">
+              <span class="qa-usage-label">当前查看：</span>
+              <strong>{{ qaUsageUser }}</strong>
+            </div>
+            <v-chart v-if="qaTrendOption" :option="qaTrendOption" style="height:200px" autoresize />
+            <div v-else class="chart-loading"><el-icon class="is-loading"><Loading /></el-icon> 加载中...</div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <!-- 推荐效果 -->
     <el-row :gutter="24" class="mt-32">
       <el-col :span="24">
@@ -318,7 +364,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { User, Reading, School, Document, Loading } from '@element-plus/icons-vue'
+import { User, Reading, School, Document, Loading, ChatLineSquare } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -329,7 +375,8 @@ import {
 } from 'echarts/components'
 import {
   getUserActivityMetrics, getLearningBehaviorMetrics,
-  getAiUsageMetrics, getRecommendationMetrics, getUserGrowth
+  getAiUsageMetrics, getRecommendationMetrics, getUserGrowth,
+  getAiQaUsage, getAiQaUsageTrend, getStudents
 } from '@/api/admin'
 
 use([CanvasRenderer, LineChart, BarChart, PieChart,
@@ -384,6 +431,12 @@ const growthChartOption = ref(null)
 
 const cetLoading = ref(false)
 const cetData = ref(null)
+
+// AI 问答使用统计（按用户）
+const qaUsageUser = ref('')
+const studentList = ref([])
+const qaUsage = reactive({ todayCalls: 0, totalCalls: 0 })
+const qaTrendOption = ref(null)
 
 const CHART_COLORS = ['#6366f1', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
@@ -455,6 +508,82 @@ const loadCetData = async () => {
     console.error('加载四六级对比数据失败:', e)
   } finally {
     cetLoading.value = false
+  }
+}
+
+const loadStudents = async () => {
+  try {
+    const res = await getStudents()
+    if (res?.code === 200 && res?.data) {
+      studentList.value = res.data
+    }
+  } catch (e) {
+    console.error('加载学生列表失败:', e)
+  }
+}
+
+const loadQaUsage = async () => {
+  if (!qaUsageUser.value) {
+    qaUsage.todayCalls = 0
+    qaUsage.totalCalls = 0
+    qaTrendOption.value = null
+    return
+  }
+  qaTrendOption.value = null
+  try {
+    const [statsRes, trendRes] = await Promise.allSettled([
+      getAiQaUsage(qaUsageUser.value),
+      getAiQaUsageTrend(qaUsageUser.value)
+    ])
+
+    if (statsRes.status === 'fulfilled' && statsRes.value?.code === 200 && statsRes.value?.data) {
+      const d = statsRes.value.data
+      qaUsage.todayCalls = d.todayCalls ?? 0
+      qaUsage.totalCalls = d.totalCalls ?? 0
+    }
+
+    if (trendRes.status === 'fulfilled' && trendRes.value?.code === 200 && trendRes.value?.data) {
+      const trend = trendRes.value.data.trend || []
+      const dateLabels = trend.map(t => t.date.slice(5))  // MM-DD
+      const counts = trend.map(t => t.count)
+      qaTrendOption.value = {
+        grid: { left: 40, right: 16, top: 16, bottom: 24 },
+        tooltip: { trigger: 'axis' },
+        xAxis: {
+          type: 'category',
+          data: dateLabels,
+          axisLabel: { fontSize: 11, color: '#94a3b8' },
+          axisLine: { lineStyle: { color: '#e2e8f0' } },
+          axisTick: { show: false }
+        },
+        yAxis: {
+          type: 'value',
+          minInterval: 1,
+          axisLabel: { fontSize: 11, color: '#94a3b8' },
+          splitLine: { lineStyle: { color: '#f1f5f9' } }
+        },
+        series: [{
+          type: 'line',
+          data: counts,
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 6,
+          lineStyle: { color: '#6366f1', width: 2 },
+          itemStyle: { color: '#6366f1' },
+          areaStyle: {
+            color: {
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(99, 102, 241, 0.2)' },
+                { offset: 1, color: 'rgba(99, 102, 241, 0.02)' }
+              ]
+            }
+          }
+        }]
+      }
+    }
+  } catch (e) {
+    console.error('加载AI问答使用统计失败:', e)
   }
 }
 
@@ -583,6 +712,7 @@ onMounted(() => {
   loadDashboardData()
   loadCetData()
   loadMetrics()
+  loadStudents()
 })
 </script>
 
@@ -636,6 +766,13 @@ onMounted(() => {
 .metric-summary { display: flex; gap: 8px; flex-wrap: wrap; }
 .metric-badge { font-size: 12px; padding: 3px 10px; border-radius: 100px; background: #f1f5f9; color: #64748b; }
 .metric-badge b { color: #1e293b; font-weight: 700; }
+.qa-usage-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.qa-usage-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; color: #94a3b8; gap: 12px; }
+.qa-usage-placeholder p { margin: 0; font-size: 14px; }
+.qa-usage-detail { padding: 8px 0; }
+.qa-usage-user { font-size: 14px; color: #475569; }
+.qa-usage-label { color: #94a3b8; margin-right: 4px; }
+.qa-usage-user strong { color: #1e293b; }
 .chart-loading { height: 220px; display: flex; align-items: center; justify-content: center; color: #94a3b8; gap: 8px; font-size: 14px; }
 
 .cet-comparison { padding: 8px 0; }
