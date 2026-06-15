@@ -1083,6 +1083,35 @@ CREATE TABLE IF NOT EXISTS sso_user_bindings (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO用户绑定表';
 
+-- V45: 补偿 admin_remark 与新增 admin_role_locked（幂等）
+DROP PROCEDURE IF EXISTS _add_sso_binding_cols;
+CREATE PROCEDURE _add_sso_binding_cols()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'sso_user_bindings'
+          AND COLUMN_NAME  = 'admin_remark'
+    ) THEN
+        ALTER TABLE sso_user_bindings
+            ADD COLUMN admin_remark TEXT COMMENT '管理员备注：记录特殊情况（如用户被删除后重新登录）'
+            AFTER sso_member_of;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'sso_user_bindings'
+          AND COLUMN_NAME  = 'admin_role_locked'
+    ) THEN
+        ALTER TABLE sso_user_bindings
+            ADD COLUMN admin_role_locked TINYINT(1) DEFAULT 0
+                COMMENT '管理员角色锁定: 1=管理员手动审批指定角色，SSO/学校目录不得覆盖'
+            AFTER admin_remark;
+    END IF;
+END;
+CALL _add_sso_binding_cols();
+DROP PROCEDURE IF EXISTS _add_sso_binding_cols;
+
 -- SSO 登录日志表
 CREATE TABLE IF NOT EXISTS sso_login_logs (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
@@ -3759,3 +3788,32 @@ VALUES
     ('student_basic_info', 'xb',    'gender',         'STRING', 'STRING', 'NONE', 0, 'gender'),
     ('student_basic_info', 'lxdh',  'phone',          'STRING', 'STRING', 'NONE', 0, 'phone'),
     ('student_basic_info', 'fdyxm', 'counselor_name', 'STRING', 'STRING', 'NONE', 0, 'counselor name')$$
+
+-- V45 Part 3: sso_user_bindings 新增 admin_remark / admin_role_locked
+
+DROP PROCEDURE IF EXISTS _v45_add_sso_binding_cols$$
+CREATE PROCEDURE _v45_add_sso_binding_cols()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'sso_user_bindings'
+          AND COLUMN_NAME  = 'admin_remark'
+    ) THEN
+        ALTER TABLE sso_user_bindings
+            ADD COLUMN admin_remark TEXT
+            AFTER sso_member_of;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'sso_user_bindings'
+          AND COLUMN_NAME  = 'admin_role_locked'
+    ) THEN
+        ALTER TABLE sso_user_bindings
+            ADD COLUMN admin_role_locked TINYINT(1) DEFAULT 0
+            AFTER admin_remark;
+    END IF;
+END$$
+CALL _v45_add_sso_binding_cols()$$
+DROP PROCEDURE IF EXISTS _v45_add_sso_binding_cols$$
