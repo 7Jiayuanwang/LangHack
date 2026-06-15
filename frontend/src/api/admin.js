@@ -356,6 +356,18 @@ export function getAiFeedbackSummary() {
   return request({ url: '/api/admin/metrics/ai-feedback-summary', method: 'get' })
 }
 
+export function getAiQaUsage(username) {
+  return request({ url: '/api/admin/metrics/ai-qa-usage', method: 'get', params: { username } })
+}
+
+export function getAiQaUsageTrend(username, days = 6) {
+  return request({ url: '/api/admin/metrics/ai-qa-usage-trend', method: 'get', params: { username, days } })
+}
+
+export function getStudents() {
+  return request({ url: '/api/admin/metrics/students', method: 'get' })
+}
+
 export function getCetComparison(params) {
   return request({ url: '/api/admin/metrics/cet-comparison', method: 'get', params })
 }
