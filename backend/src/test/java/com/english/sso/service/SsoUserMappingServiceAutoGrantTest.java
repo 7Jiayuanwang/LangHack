@@ -669,14 +669,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             when(bindingMapper.findByProviderAndSsoUserId("CAS", "2023122066164")).thenReturn(binding);
             when(userService.getUserById(501L)).thenReturn(user);
-            when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
-                    .thenReturn("true");
-            when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
-                    .thenReturn("true");
-            SchoolStudent student = new SchoolStudent();
-            student.setStudentId("2023122066164");
-            student.setStudentName("张三");
-            when(schoolStudentMapper.selectByStudentId("2023122066164")).thenReturn(student);
+            // adminRoleLocked=1 → tryUpgradeFromSchoolDirectory 早退，不读 feature toggle
+            // 也不查 schoolStudentMapper，SSO 无角色映射，直接用数据库角色发 token
             when(roleMappingService.mapRole(anyList())).thenReturn(null);
             when(jwtUtil.generateAccessToken("2023122066164", "USER")).thenReturn("user_token");
             when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
@@ -687,7 +681,6 @@ class SsoUserMappingServiceAutoGrantTest {
             assertFalse(result.isNeedsApproval());
             assertEquals("USER", result.getUser().getRole());
             assertEquals("user_token", result.getToken());
-            // 管理员锁定后不允许 updateUser 修改角色
             verify(userService, never()).updateUser(any(User.class));
         }
 
@@ -708,10 +701,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             when(bindingMapper.findByProviderAndSsoUserId("CAS", "2023122066164")).thenReturn(binding);
             when(userService.getUserById(503L)).thenReturn(user);
-            when(systemConfigService.get("feature_toggle", "sso.auto_grant_teacher", "false"))
-                    .thenReturn("false");
-            when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
-                    .thenReturn("false");
+            // adminRoleLocked=1 → tryUpgradeFromSchoolDirectory 早退，不读 feature toggle
+            // SSO 映射 TEACHER（升权），但 adminRoleLocked 护栏在 SSO 映射逻辑之前生效
             when(roleMappingService.mapRole(anyList())).thenReturn("TEACHER");
             when(jwtUtil.generateAccessToken("T001", "STUDENT")).thenReturn("student_token");
             when(jwtUtil.generateRefreshToken("T001")).thenReturn("mock_refresh_token");
