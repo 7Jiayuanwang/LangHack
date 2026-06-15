@@ -678,7 +678,8 @@ class SsoUserMappingServiceAutoGrantTest {
             student.setStudentName("张三");
             when(schoolStudentMapper.selectByStudentId("2023122066164")).thenReturn(student);
             when(roleMappingService.mapRole(anyList())).thenReturn(null);
-            when(jwtUtil.generateToken("2023122066164", "USER")).thenReturn("user_token");
+            when(jwtUtil.generateAccessToken("2023122066164", "USER")).thenReturn("user_token");
+            when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -712,7 +713,8 @@ class SsoUserMappingServiceAutoGrantTest {
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
                     .thenReturn("false");
             when(roleMappingService.mapRole(anyList())).thenReturn("TEACHER");
-            when(jwtUtil.generateToken("T001", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateAccessToken("T001", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateRefreshToken("T001")).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 

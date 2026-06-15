@@ -1,11 +1,8 @@
--- V32: 将 users 与 school_student / school_teacher 主数据建立显式联系
+-- V42: 将 users 与 school_student / school_teacher 主数据建立显式联系
 --
--- 背景:
---   现有约定为 users.username = school_student.student_id (或 school_teacher.teacher_id)，
---   仅在 SSO 登录路径上隐式生效。本迁移做三件事：
---     1. 规范化历史 student_<学号> 形式的 username，使其能直接命中主数据
---     2. 在 users 上新增明确外键列 school_student_id / school_teacher_id，并回填
---     3. 创建视图 v_user_school_profile，对外聚合学生的学院 / 班级 / 成绩 / 课表 / 师生绑定
+-- 1. 规范化历史 student_<学号> 形式的 username
+-- 2. 在 users 上新增 school_student_id / school_teacher_id 并回填
+-- 3. 创建视图 v_user_school_profile
 
 -- 1) 规范化 username：student_<digits> -> <digits>
 UPDATE users
@@ -13,9 +10,8 @@ SET username = SUBSTRING(username, 9)
 WHERE username REGEXP '^student_[0-9]+$';
 
 -- 2) 幂等新增外键列
-DROP PROCEDURE IF EXISTS v32_add_school_columns;
-DELIMITER $$
-CREATE PROCEDURE v32_add_school_columns()
+DROP PROCEDURE IF EXISTS v42_add_school_columns;
+CREATE PROCEDURE v42_add_school_columns()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                    WHERE TABLE_SCHEMA = DATABASE()
@@ -25,15 +21,13 @@ BEGIN
             ADD COLUMN school_student_id BIGINT NULL COMMENT '关联 school_student.id（学号匹配）' AFTER inner_uid,
             ADD COLUMN school_teacher_id BIGINT NULL COMMENT '关联 school_teacher.id（工号匹配）' AFTER school_student_id;
     END IF;
-END$$
-DELIMITER ;
-CALL v32_add_school_columns();
-DROP PROCEDURE IF EXISTS v32_add_school_columns;
+END;
+CALL v42_add_school_columns();
+DROP PROCEDURE IF EXISTS v42_add_school_columns;
 
 -- 幂等创建索引
-DROP PROCEDURE IF EXISTS v32_add_school_indexes;
-DELIMITER $$
-CREATE PROCEDURE v32_add_school_indexes()
+DROP PROCEDURE IF EXISTS v42_add_school_indexes;
+CREATE PROCEDURE v42_add_school_indexes()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
                    WHERE TABLE_SCHEMA = DATABASE()
@@ -47,10 +41,9 @@ BEGIN
                      AND INDEX_NAME = 'idx_users_school_teacher_id') THEN
         CREATE INDEX idx_users_school_teacher_id ON users(school_teacher_id);
     END IF;
-END$$
-DELIMITER ;
-CALL v32_add_school_indexes();
-DROP PROCEDURE IF EXISTS v32_add_school_indexes;
+END;
+CALL v42_add_school_indexes();
+DROP PROCEDURE IF EXISTS v42_add_school_indexes;
 
 -- 3) 回填外键
 UPDATE users u
