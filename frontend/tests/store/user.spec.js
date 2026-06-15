@@ -189,7 +189,8 @@ describe("User Store", () => {
       expect(localStorage.getItem("token")).toBeNull();
       expect(localStorage.getItem("userInfo")).toBeNull();
       expect(localStorage.getItem("userRole")).toBeNull();
-      expect(logoutApi).toHaveBeenCalledWith("some-token");
+      // logout now accepts (token, refreshToken) - refreshToken may be empty string
+      expect(logoutApi).toHaveBeenCalledWith("some-token", "");
     });
 
     it("should clear state even if API call fails", async () => {
@@ -206,7 +207,7 @@ describe("User Store", () => {
       expect(store.token).toBe("");
       expect(store.userRole).toBe("");
       expect(localStorage.getItem("token")).toBeNull();
-      expect(logoutApi).toHaveBeenCalledWith("some-token");
+      expect(logoutApi).toHaveBeenCalledWith("some-token", "");
     });
   });
 
@@ -309,7 +310,7 @@ describe("User Store", () => {
       expect(store.elevationExpiresAt).toBeNull();
       expect(sessionStorage.getItem("elevatedRole")).toBeNull();
       expect(sessionStorage.getItem("elevationExpiresAt")).toBeNull();
-      expect(logoutApi).toHaveBeenCalledWith("some-token");
+      expect(logoutApi).toHaveBeenCalledWith("some-token", "");
     });
 
     it("OPS should be a valid role in validateRole", () => {

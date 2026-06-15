@@ -140,7 +140,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             mockCreateUser(100L);
             mockCreateBinding(200L);
-            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateAccessToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateRefreshToken(anyString())).thenReturn("mock_refresh_token");
             when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
                     .thenReturn(1);
 
@@ -181,7 +182,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             mockCreateUser(104L);
             mockCreateBinding(204L);
-            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateAccessToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateRefreshToken(anyString())).thenReturn("mock_refresh_token");
             when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
                     .thenReturn(1);
 
@@ -209,7 +211,8 @@ class SsoUserMappingServiceAutoGrantTest {
             when(roleMappingService.mapRole(anyList())).thenReturn(null);
             mockCreateUser(102L);
             mockCreateBinding(202L);
-            when(jwtUtil.generateToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateAccessToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -240,7 +243,8 @@ class SsoUserMappingServiceAutoGrantTest {
             when(roleMappingService.mapRole(anyList())).thenReturn(null);
             mockCreateUser(103L);
             mockCreateBinding(203L);
-            when(jwtUtil.generateToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateAccessToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -286,7 +290,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             mockCreateUser(101L);
             mockCreateBinding(201L);
-            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateAccessToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateRefreshToken(anyString())).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -334,7 +339,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             mockCreateUser(105L);
             mockCreateBinding(205L);
-            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateAccessToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateRefreshToken(anyString())).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -364,7 +370,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             mockCreateUser(100L);
             mockCreateBinding(200L);
-            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateAccessToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateRefreshToken(anyString())).thenReturn("mock_refresh_token");
             when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
                     .thenReturn(1);
 
@@ -409,7 +416,7 @@ class SsoUserMappingServiceAutoGrantTest {
             assertNull(result.getUser());
             assertEquals(401L, result.getBindingId());
             verify(userService, never()).updateUser(any(User.class));
-            verify(jwtUtil, never()).generateToken(eq("2023122066164"), eq("TEACHER"));
+            verify(jwtUtil, never()).generateAccessToken(eq("2023122066164"), eq("TEACHER"));
         }
 
         @Test
@@ -439,7 +446,8 @@ class SsoUserMappingServiceAutoGrantTest {
                 binding.setId(301L);
                 return 1;
             }).when(bindingMapper).insert(any(SsoUserBinding.class));
-            when(jwtUtil.generateToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateAccessToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -489,7 +497,7 @@ class SsoUserMappingServiceAutoGrantTest {
             assertNull(result.getToken());
             assertNull(result.getUser());
             verify(userService, never()).updateUser(any(User.class));
-            verify(jwtUtil, never()).generateToken(eq("2023122066164"), eq("TEACHER"));
+            verify(jwtUtil, never()).generateAccessToken(eq("2023122066164"), eq("TEACHER"));
             verify(bindingMapper).insert(argThat(binding ->
                     binding.getUserId().equals(302L) && binding.getAutoApproved() == 0
             ));
@@ -514,7 +522,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             mockCreateUser(100L);
             mockCreateBinding(200L);
-            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateAccessToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateRefreshToken(anyString())).thenReturn("mock_refresh_token");
             when(schoolStudentMapper.updateClassInfo(anyString(), anyString(), anyString(), anyString()))
                     .thenReturn(1);
 
@@ -539,7 +548,8 @@ class SsoUserMappingServiceAutoGrantTest {
 
             mockCreateUser(100L);
             mockCreateBinding(200L);
-            when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateAccessToken(anyString(), anyString())).thenReturn("mock_jwt_token");
+            when(jwtUtil.generateRefreshToken(anyString())).thenReturn("mock_refresh_token");
 
             ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -577,7 +587,8 @@ class SsoUserMappingServiceAutoGrantTest {
             when(systemConfigService.get("feature_toggle", "sso.auto_grant_student", "false"))
                     .thenReturn("false");
             when(roleMappingService.mapRole(anyList())).thenReturn("STUDENT");
-            when(jwtUtil.generateToken("2023122066164", "TEACHER")).thenReturn("teacher_token");
+            when(jwtUtil.generateAccessToken("2023122066164", "TEACHER")).thenReturn("teacher_token");
+            when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -599,7 +610,8 @@ class SsoUserMappingServiceAutoGrantTest {
                     .thenReturn("false");
             when(roleMappingService.mapRole(anyList())).thenReturn("ADMIN");
             when(roleMappingService.requiresManualConfirmation(eq("ADMIN"), anyList())).thenReturn(true);
-            when(jwtUtil.generateToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateAccessToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 
@@ -622,7 +634,8 @@ class SsoUserMappingServiceAutoGrantTest {
             when(roleMappingService.mapRole(anyList())).thenReturn("STUDENT");
             when(roleMappingService.requiresManualConfirmation(eq("STUDENT"), anyList())).thenReturn(false);
             doNothing().when(userService).updateUser(any(User.class));
-            when(jwtUtil.generateToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateAccessToken("2023122066164", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
 
             SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
 

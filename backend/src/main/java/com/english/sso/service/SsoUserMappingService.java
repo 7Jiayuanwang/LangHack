@@ -118,9 +118,10 @@ public class SsoUserMappingService {
 
                 RoleUpgradeResult upgradeResult = tryUpgradeFromSchoolDirectory(pendingUser, ssoUserInfo, binding);
                 if (upgradeResult.upgraded()) {
-                    String token = jwtUtil.generateToken(pendingUser.getUsername(), pendingUser.getRole());
+                    String accessToken = jwtUtil.generateAccessToken(pendingUser.getUsername(), pendingUser.getRole());
+                    String refreshToken = jwtUtil.generateRefreshToken(pendingUser.getUsername());
                     log.info("待审批用户根据学校数据自动升级并登录成功: username={}, role={}", pendingUser.getUsername(), pendingUser.getRole());
-                    return SsoLoginResult.success(token, pendingUser);
+                    return SsoLoginResult.success(accessToken, refreshToken, pendingUser);
                 }
 
                 if (ssoMappedRole != null && !roleMappingService.requiresManualConfirmation(ssoMappedRole, memberOf)) {
@@ -131,9 +132,10 @@ public class SsoUserMappingService {
                     pendingUser.setRole(ssoMappedRole);
                     pendingUser.setStatus("ACTIVE");
                     userService.updateUser(pendingUser);
-                    String token = jwtUtil.generateToken(pendingUser.getUsername(), pendingUser.getRole());
+                    String accessToken = jwtUtil.generateAccessToken(pendingUser.getUsername(), pendingUser.getRole());
+                    String refreshToken = jwtUtil.generateRefreshToken(pendingUser.getUsername());
                     log.info("SSO 自动审批登录成功: username={}, role={}", pendingUser.getUsername(), pendingUser.getRole());
-                    return SsoLoginResult.success(token, pendingUser);
+                    return SsoLoginResult.success(accessToken, refreshToken, pendingUser);
                 }
 
                 if (isElevatedRole(pendingUser.getRole())) {
@@ -149,10 +151,12 @@ public class SsoUserMappingService {
                 userService.updateUser(pendingUser);
                 binding.setLastLoginTime(LocalDateTime.now());
                 bindingMapper.updateById(binding);
-                String token = jwtUtil.generateToken(pendingUser.getUsername(), pendingUser.getRole());
+                String accessToken = jwtUtil.generateAccessToken(pendingUser.getUsername(), pendingUser.getRole());
+                String refreshToken = jwtUtil.generateRefreshToken(pendingUser.getUsername());
                 log.info("待审批用户以默认 STUDENT 身份登录: username={}, role={}, bindingId={}", pendingUser.getUsername(), pendingUser.getRole(), binding.getId());
                 return SsoLoginResult.successWithPendingApproval(
-                        token,
+                        accessToken,
+                        refreshToken,
                         pendingUser,
                         binding.getId(),
                         DEFAULT_PENDING_USER_MESSAGE
@@ -212,9 +216,10 @@ public class SsoUserMappingService {
 
             RoleUpgradeResult approvedUpgradeResult = tryUpgradeFromSchoolDirectory(user, ssoUserInfo, binding);
             if (approvedUpgradeResult.upgraded()) {
-                String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
+                String accessToken = jwtUtil.generateAccessToken(user.getUsername(), user.getRole());
+                String refreshToken = jwtUtil.generateRefreshToken(user.getUsername());
                 log.info("已审批用户根据学校数据自动升级并登录成功: username={}, role={}", user.getUsername(), user.getRole());
-                return SsoLoginResult.success(token, user);
+                return SsoLoginResult.success(accessToken, refreshToken, user);
             }
 
             // SSO 仅在安全可接受的升权场景下同步角色；否则保留数据库角色
@@ -255,10 +260,11 @@ public class SsoUserMappingService {
             }
 
             // 生成 JWT token（使用数据库中的最新角色）
-            String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
+            String accessToken = jwtUtil.generateAccessToken(user.getUsername(), user.getRole());
+            String refreshToken = jwtUtil.generateRefreshToken(user.getUsername());
 
             log.info("SSO 登录成功: username={}, role={}", user.getUsername(), user.getRole());
-            return SsoLoginResult.success(token, user);
+            return SsoLoginResult.success(accessToken, refreshToken, user);
         }
 
         // 2. 首次登录：检查 users 表是否已有同名用户（可能是之前注册或绑定丢失）
@@ -278,9 +284,10 @@ public class SsoUserMappingService {
             RoleUpgradeResult upgradeResult = tryUpgradeFromSchoolDirectory(existingUser, ssoUserInfo, null);
             if (upgradeResult.upgraded()) {
                 SsoUserBinding newBinding = createBinding(existingUser.getId(), ssoUserInfo, protocol, true);
-                String token = jwtUtil.generateToken(existingUser.getUsername(), existingUser.getRole());
+                String accessToken = jwtUtil.generateAccessToken(existingUser.getUsername(), existingUser.getRole());
+                String refreshToken = jwtUtil.generateRefreshToken(existingUser.getUsername());
                 log.info("SSO 登录成功（关联已有用户并按学校数据升级）: username={}, role={}, bindingId={}", existingUser.getUsername(), existingUser.getRole(), newBinding.getId());
-                return SsoLoginResult.success(token, existingUser);
+                return SsoLoginResult.success(accessToken, refreshToken, existingUser);
             }
 
             if (ssoMappedRole != null && isRoleUpgrade(existingUser.getRole(), ssoMappedRole)
@@ -288,9 +295,10 @@ public class SsoUserMappingService {
                 existingUser.setRole(ssoMappedRole);
                 SsoUserBinding newBinding = createBinding(existingUser.getId(), ssoUserInfo, protocol, true);
                 userService.updateUser(existingUser);
-                String token = jwtUtil.generateToken(existingUser.getUsername(), existingUser.getRole());
+                String accessToken = jwtUtil.generateAccessToken(existingUser.getUsername(), existingUser.getRole());
+                String refreshToken = jwtUtil.generateRefreshToken(existingUser.getUsername());
                 log.info("SSO 登录成功（关联已有用户并按SSO升权）: username={}, role={}, bindingId={}", existingUser.getUsername(), existingUser.getRole(), newBinding.getId());
-                return SsoLoginResult.success(token, existingUser);
+                return SsoLoginResult.success(accessToken, refreshToken, existingUser);
             }
 
             SsoUserBinding newBinding = createBinding(existingUser.getId(), ssoUserInfo, protocol, false);
@@ -303,10 +311,12 @@ public class SsoUserMappingService {
             existingUser.setStatus("ACTIVE");
             existingUser.setRole("STUDENT");
             userService.updateUser(existingUser);
-            String token = jwtUtil.generateToken(existingUser.getUsername(), existingUser.getRole());
+            String accessToken = jwtUtil.generateAccessToken(existingUser.getUsername(), existingUser.getRole());
+            String refreshToken = jwtUtil.generateRefreshToken(existingUser.getUsername());
             log.info("SSO 登录成功（关联已有用户为默认 STUDENT 待审批）: username={}, role={}, bindingId={}", existingUser.getUsername(), existingUser.getRole(), newBinding.getId());
             return SsoLoginResult.successWithPendingApproval(
-                    token,
+                    accessToken,
+                    refreshToken,
                     existingUser,
                     newBinding.getId(),
                     DEFAULT_PENDING_USER_MESSAGE
@@ -326,9 +336,10 @@ public class SsoUserMappingService {
             log.info("无法识别角色，默认自动授予 STUDENT: username={}", localUsername);
             User newUser = createUserFromSso(ssoUserInfo, "STUDENT");
             createBinding(newUser.getId(), ssoUserInfo, protocol, true);
-            String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
+            String accessToken = jwtUtil.generateAccessToken(newUser.getUsername(), newUser.getRole());
+            String refreshToken = jwtUtil.generateRefreshToken(newUser.getUsername());
             log.info("SSO 登录成功（无法识别角色时默认授予 STUDENT）: username={}, role={}", newUser.getUsername(), newUser.getRole());
-            return SsoLoginResult.success(token, newUser);
+            return SsoLoginResult.success(accessToken, refreshToken, newUser);
         }
 
         // 4. 高权限角色（TEACHER/OPS/ADMIN）需人工确认：先默认授予 STUDENT，保留待审批
@@ -339,9 +350,11 @@ public class SsoUserMappingService {
             pendingBinding.setAdminRemark(String.format(
                     "SSO 角色映射推断为 %s，已默认授予 STUDENT，请管理员确认是否提升权限。", ssoMappedRole));
             bindingMapper.updateById(pendingBinding);
-            String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
+            String accessToken = jwtUtil.generateAccessToken(newUser.getUsername(), newUser.getRole());
+            String refreshToken = jwtUtil.generateRefreshToken(newUser.getUsername());
             return SsoLoginResult.successWithPendingApproval(
-                    token,
+                    accessToken,
+                    refreshToken,
                     newUser,
                     pendingBinding.getId(),
                     DEFAULT_PENDING_USER_MESSAGE
@@ -353,10 +366,11 @@ public class SsoUserMappingService {
         User newUser = createUserFromSso(ssoUserInfo, ssoMappedRole);
         createBinding(newUser.getId(), ssoUserInfo, protocol, true);
 
-        String token = jwtUtil.generateToken(newUser.getUsername(), newUser.getRole());
+        String accessToken = jwtUtil.generateAccessToken(newUser.getUsername(), newUser.getRole());
+        String refreshToken = jwtUtil.generateRefreshToken(newUser.getUsername());
 
         log.info("SSO 登录成功（新用户）: username={}, role={}", newUser.getUsername(), newUser.getRole());
-        return SsoLoginResult.success(token, newUser);
+        return SsoLoginResult.success(accessToken, refreshToken, newUser);
     }
 
     private String firstNonBlank(String... values) {
@@ -563,11 +577,12 @@ public class SsoUserMappingService {
                         "命中学校教师目录（学院：%s），已默认授予 STUDENT，请管理员确认是否提升为 TEACHER。",
                         teacherDirectory.getCollegeName()));
                 bindingMapper.updateById(binding);
-                String token = jwtUtil.generateToken(student.getUsername(), student.getRole());
+                String accessToken = jwtUtil.generateAccessToken(student.getUsername(), student.getRole());
+                String refreshToken = jwtUtil.generateRefreshToken(student.getUsername());
                 log.info("SSO 命中教师目录但需人工确认，先授予 STUDENT: username={}, bindingId={}",
                         student.getUsername(), binding.getId());
                 return SsoLoginResult.successWithPendingApproval(
-                        token, student, binding.getId(), DEFAULT_PENDING_USER_MESSAGE);
+                        accessToken, refreshToken, student, binding.getId(), DEFAULT_PENDING_USER_MESSAGE);
             }
         }
 
@@ -589,10 +604,11 @@ public class SsoUserMappingService {
                 }
                 User student = createUserFromSso(ssoUserInfo, "STUDENT");
                 SsoUserBinding binding = createBinding(student.getId(), ssoUserInfo, protocol, true);
-                String token = jwtUtil.generateToken(student.getUsername(), student.getRole());
+                String accessToken = jwtUtil.generateAccessToken(student.getUsername(), student.getRole());
+                String refreshToken = jwtUtil.generateRefreshToken(student.getUsername());
                 log.info("SSO 自动授权 STUDENT 成功: username={}, bindingId={}",
                         student.getUsername(), binding.getId());
-                return SsoLoginResult.success(token, student);
+                return SsoLoginResult.success(accessToken, refreshToken, student);
             }
         }
 
