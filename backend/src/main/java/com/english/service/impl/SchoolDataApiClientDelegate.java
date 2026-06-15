@@ -80,6 +80,9 @@ public class SchoolDataApiClientDelegate implements SchoolDataApiClient {
                         parseSemester(firstNonBlank(params, "semester", "xq"))
                 );
                 break;
+            case "student_basic_info":
+                rows = target.fetchStudentBasicInfos(params);
+                break;
             default:
                 rows = List.of();
                 break;
@@ -135,6 +138,11 @@ public class SchoolDataApiClientDelegate implements SchoolDataApiClient {
     @Override
     public List<Map<String, Object>> fetchTeacherCourses(Map<String, String> params) {
         return delegate().fetchTeacherCourses(params);
+    }
+
+    @Override
+    public List<Map<String, Object>> fetchStudentBasicInfos(Map<String, String> params) {
+        return delegate().fetchStudentBasicInfos(params);
     }
 
     @Override

@@ -7,11 +7,13 @@
         INSERT INTO school_student (
             student_id, student_name, college_name, college_code,
             class_code, class_name, grade, major_name,
+            gender, phone, counselor_name,
             source_course_codes, sync_time, last_exam_sync_time, last_schedule_sync_time,
             sync_source
         ) VALUES (
             #{studentId}, #{studentName}, #{collegeName}, #{collegeCode},
             #{classCode}, #{className}, #{grade}, #{majorName},
+            #{gender}, #{phone}, #{counselorName},
             #{sourceCourseCodes}, #{syncTime}, #{lastExamSyncTime}, #{lastScheduleSyncTime},
             #{syncSource}
         )
@@ -23,6 +25,9 @@
             class_name = COALESCE(#{className}, class_name),
             grade = COALESCE(#{grade}, grade),
             major_name = COALESCE(#{majorName}, major_name),
+            gender = COALESCE(#{gender}, gender),
+            phone = COALESCE(#{phone}, phone),
+            counselor_name = COALESCE(#{counselorName}, counselor_name),
             source_course_codes = COALESCE(#{sourceCourseCodes}, source_course_codes),
             sync_time = #{syncTime},
             last_exam_sync_time = COALESCE(#{lastExamSyncTime}, last_exam_sync_time),

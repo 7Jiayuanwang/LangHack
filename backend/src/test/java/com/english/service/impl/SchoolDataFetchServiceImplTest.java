@@ -135,6 +135,19 @@ class SchoolDataFetchServiceImplTest {
     }
 
     @Test
+    @DisplayName("student_basic_info 路由到 fetchStudentBasicInfos")
+    void fetchRawData_studentBasicInfo_routesToFetchStudentBasicInfos() {
+        Map<String, Object> raw = Map.of("xh", "2023001", "xm", "张三");
+        when(apiClient.fetchStudentBasicInfos(any())).thenReturn(List.of(raw));
+        when(fieldMappingService.applyMapping(eq("student_basic_info"), any())).thenReturn(new java.util.HashMap<>(raw));
+
+        List<Map<String, Object>> result = service.fetchRawData("student_basic_info", null);
+
+        assertEquals(1, result.size());
+        verify(apiClient).fetchStudentBasicInfos(any());
+    }
+
+    @Test
     @DisplayName("旧 fetchRawData 接口应拒绝不完整的上游结果")
     void fetchRawData_incompleteSummary_throwsException() {
         SchoolDataFetchServiceImpl spyService = spy(service);

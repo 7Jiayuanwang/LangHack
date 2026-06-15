@@ -405,7 +405,8 @@ const QUICK_DATA_SOURCES = [
   { label: '选课记录', value: 'course_selection' },
   { label: '等级考试', value: 'level_exam_scores' },
   { label: '教学计划', value: 'teaching_plans' },
-  { label: '学生课表', value: 'student_schedule' }
+  { label: '学生课表', value: 'student_schedule' },
+  { label: '学生基本信息', value: 'student_basic_info' }
 ]
 
 const loading = ref(false)

@@ -3576,3 +3576,186 @@ BEGIN
 END$$
 CALL v40_cleanup_update_config()$$
 DROP PROCEDURE IF EXISTS v40_cleanup_update_config$$
+
+-- V41__add_vocabulary_source_type.sql
+
+DROP PROCEDURE IF EXISTS _add_vocabulary_source_type_v41$$
+CREATE PROCEDURE _add_vocabulary_source_type_v41()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'vocabulary_books'
+                     AND COLUMN_NAME = 'source_type') THEN
+        ALTER TABLE vocabulary_books
+            ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
+            AFTER next_review_time;
+        UPDATE vocabulary_books SET source_type = 'MANUAL' WHERE source_type IS NULL OR source_type = '';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'vocabulary_books'
+                     AND INDEX_NAME = 'idx_vocabulary_source') THEN
+        CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
+    END IF;
+END$$
+CALL _add_vocabulary_source_type_v41()$$
+DROP PROCEDURE IF EXISTS _add_vocabulary_source_type_v41$$
+
+-- V42__link_users_to_school_directory.sql
+
+UPDATE users
+SET username = SUBSTRING(username, 9)
+WHERE username REGEXP '^student_[0-9]+$'$$
+
+DROP PROCEDURE IF EXISTS v42_add_school_columns$$
+CREATE PROCEDURE v42_add_school_columns()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'users'
+                     AND COLUMN_NAME = 'school_student_id') THEN
+        ALTER TABLE users
+            ADD COLUMN school_student_id BIGINT NULL AFTER inner_uid,
+            ADD COLUMN school_teacher_id BIGINT NULL AFTER school_student_id;
+    END IF;
+END$$
+CALL v42_add_school_columns()$$
+DROP PROCEDURE IF EXISTS v42_add_school_columns$$
+
+DROP PROCEDURE IF EXISTS v42_add_school_indexes$$
+CREATE PROCEDURE v42_add_school_indexes()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'users'
+                     AND INDEX_NAME = 'idx_users_school_student_id') THEN
+        CREATE INDEX idx_users_school_student_id ON users(school_student_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'users'
+                     AND INDEX_NAME = 'idx_users_school_teacher_id') THEN
+        CREATE INDEX idx_users_school_teacher_id ON users(school_teacher_id);
+    END IF;
+END$$
+CALL v42_add_school_indexes()$$
+DROP PROCEDURE IF EXISTS v42_add_school_indexes$$
+
+UPDATE users u
+JOIN school_student s ON s.student_id COLLATE utf8mb4_unicode_ci = u.username
+SET u.school_student_id = s.id
+WHERE u.school_student_id IS NULL$$
+
+UPDATE users u
+JOIN school_teacher t ON t.teacher_id COLLATE utf8mb4_unicode_ci = u.username
+SET u.school_teacher_id = t.id
+WHERE u.school_teacher_id IS NULL$$
+
+DROP VIEW IF EXISTS v_user_school_profile$$
+CREATE VIEW v_user_school_profile AS
+SELECT
+    u.id AS user_id, u.username, u.role, u.real_name,
+    s.id AS school_student_id, s.student_id, s.student_name,
+    s.college_name, s.class_code, s.class_name, s.grade, s.major_name,
+    (SELECT COUNT(*) FROM course_selection cs WHERE cs.student_id = s.student_id) AS course_selection_count,
+    (SELECT COUNT(*) FROM teacher_student_binding tsb WHERE tsb.student_id = s.student_id) AS teacher_binding_count,
+    (SELECT MAX(les.exam_date) FROM level_exam_scores les WHERE les.student_id = s.student_id) AS last_exam_date,
+    (SELECT MAX(les.score) FROM level_exam_scores les WHERE les.student_id = s.student_id) AS best_exam_score
+FROM users u
+JOIN school_student s ON s.id = u.school_student_id
+WHERE u.deleted = 0$$
+
+-- V43__ai_feedback.sql
+
+CREATE TABLE IF NOT EXISTS ai_feedback (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    call_log_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    rating TINYINT,
+    is_helpful BOOLEAN,
+    feedback_text TEXT,
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_call_log (call_log_id),
+    INDEX idx_user (user_id),
+    FOREIGN KEY (call_log_id) REFERENCES ai_call_log(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+
+-- V44__media_transcoding.sql
+
+DROP PROCEDURE IF EXISTS _add_col_media_transcode_v44$$
+CREATE PROCEDURE _add_col_media_transcode_v44()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='media'
+                     AND column_name='transcode_status') THEN
+        ALTER TABLE media ADD COLUMN transcode_status VARCHAR(20) NOT NULL DEFAULT 'SKIPPED';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='media'
+                     AND column_name='transcode_error') THEN
+        ALTER TABLE media ADD COLUMN transcode_error VARCHAR(500) NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE table_schema=DATABASE() AND table_name='media'
+                     AND column_name='original_codec') THEN
+        ALTER TABLE media ADD COLUMN original_codec VARCHAR(50) NULL;
+    END IF;
+END$$
+CALL _add_col_media_transcode_v44()$$
+DROP PROCEDURE IF EXISTS _add_col_media_transcode_v44$$
+
+DROP PROCEDURE IF EXISTS _add_idx_media_transcode_v44$$
+CREATE PROCEDURE _add_idx_media_transcode_v44()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE table_schema=DATABASE() AND table_name='media'
+                     AND index_name='idx_transcode_status') THEN
+        ALTER TABLE media ADD INDEX idx_transcode_status (transcode_status);
+    END IF;
+END$$
+CALL _add_idx_media_transcode_v44()$$
+DROP PROCEDURE IF EXISTS _add_idx_media_transcode_v44$$
+
+-- V45__student_basic_info_field_mappings.sql
+-- DS0104 student_basic_info + school_student DDL (2026-06-15)
+
+DROP PROCEDURE IF EXISTS _v45_add_student_extra_cols$$
+CREATE PROCEDURE _v45_add_student_extra_cols()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'school_student'
+                     AND COLUMN_NAME = 'gender') THEN
+        ALTER TABLE school_student
+            ADD COLUMN gender VARCHAR(10) NULL AFTER major_name;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'school_student'
+                     AND COLUMN_NAME = 'phone') THEN
+        ALTER TABLE school_student
+            ADD COLUMN phone VARCHAR(30) NULL AFTER gender;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'school_student'
+                     AND COLUMN_NAME = 'counselor_name') THEN
+        ALTER TABLE school_student
+            ADD COLUMN counselor_name VARCHAR(50) NULL AFTER phone;
+    END IF;
+END$$
+CALL _v45_add_student_extra_cols()$$
+DROP PROCEDURE IF EXISTS _v45_add_student_extra_cols$$
+
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, is_required, remark)
+VALUES
+    ('student_basic_info', 'xh',    'student_id',     'STRING', 'STRING', 'NONE', 1, 'student number (PK)'),
+    ('student_basic_info', 'xm',    'student_name',   'STRING', 'STRING', 'NONE', 1, 'name'),
+    ('student_basic_info', 'yx',    'college_name',   'STRING', 'STRING', 'NONE', 0, 'college/department'),
+    ('student_basic_info', 'zy',    'major_name',     'STRING', 'STRING', 'NONE', 0, 'major'),
+    ('student_basic_info', 'nj',    'grade',          'STRING', 'STRING', 'NONE', 0, 'grade/enrollment year'),
+    ('student_basic_info', 'bj',    'class_name',     'STRING', 'STRING', 'NONE', 0, 'class name'),
+    ('student_basic_info', 'xb',    'gender',         'STRING', 'STRING', 'NONE', 0, 'gender'),
+    ('student_basic_info', 'lxdh',  'phone',          'STRING', 'STRING', 'NONE', 0, 'phone'),
+    ('student_basic_info', 'fdyxm', 'counselor_name', 'STRING', 'STRING', 'NONE', 0, 'counselor name')$$

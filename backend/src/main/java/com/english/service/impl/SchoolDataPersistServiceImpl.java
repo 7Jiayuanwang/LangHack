@@ -149,6 +149,9 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
             case "student_schedule":
                 upsertStudentSchedule(mappedData);
                 break;
+            case "student_basic_info":
+                upsertSchoolStudent(mappedData);
+                break;
             case "school_student":
                 upsertSchoolStudent(mappedData);
                 break;
@@ -559,6 +562,9 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         entity.setClassName(getStringValue(data, "className"));
         entity.setGrade(getStringValue(data, "grade"));
         entity.setMajorName(getStringValue(data, "majorName"));
+        entity.setGender(getStringValue(data, "gender"));
+        entity.setPhone(getStringValue(data, "phone"));
+        entity.setCounselorName(getStringValue(data, "counselorName"));
         entity.setSourceCourseCodes(getStringValue(data, "sourceCourseCodes"));
         entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
         entity.setLastExamSyncTime(getLocalDateTimeValue(data, "lastExamSyncTime"));

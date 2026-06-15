@@ -126,6 +126,8 @@ public class SchoolDataFetchServiceImpl implements SchoolDataFetchService {
                         firstNonBlank(params, "academicYear", "academic_year", "xn", "XN"),
                         normalizeNullableSemester(firstNonBlank(params, "semester", "xq", "XQ"))
                 );
+            case "student_basic_info":
+                return apiClient.fetchStudentBasicInfos(params);
             default:
                 return Collections.emptyList();
         }
