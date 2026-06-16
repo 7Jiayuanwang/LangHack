@@ -351,6 +351,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         labels.put("teacher.school_data_enabled", "教师端学校数据功能（课表/选课/成绩）");
         labels.put("sso.auto_grant_student", "SSO 学号匹配 school_student 自动授权 STUDENT");
         labels.put("sso.auto_grant_teacher", "SSO 工号匹配 school_teacher 自动授权 TEACHER");
+        labels.put("student.video_upload_enabled", "学生端-视频上传功能开关（全局关闭后仅标签内用户可上传）");
         return Collections.unmodifiableMap(labels);
     }
 }

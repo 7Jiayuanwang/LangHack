@@ -12,7 +12,7 @@
           <el-icon><Upload /></el-icon>
           上传课文
         </el-button>
-        <el-button type="warning" @click="showVideoUploadDialog = true">
+        <el-button v-if="canUploadVideo" type="warning" @click="showVideoUploadDialog = true">
           <el-icon><VideoPlay /></el-icon>
           上传视频
         </el-button>
@@ -519,9 +519,14 @@ import { isCoverFileValid } from '@/utils/coverUpload'
 import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
 import { getPublicContentTags } from '@/api/admin'
+import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import { VideoPlay } from '@element-plus/icons-vue'
 
 const router = useRouter()
+
+// 功能开关：视频上传权限
+const { isEnabled, load: loadToggles } = useFeatureToggles()
+const canUploadVideo = computed(() => isEnabled('student.video_upload_enabled'))
 
 // 响应式数据
 const loading = ref(false)
@@ -1309,6 +1314,7 @@ const playVideo = (video) => {
 
 // 生命周期
 onMounted(() => {
+  loadToggles({ authenticated: true })
   loadMyUploads()
   loadMyVideos()
   loadContentTags()
