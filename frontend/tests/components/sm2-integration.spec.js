@@ -49,12 +49,12 @@ describe('SM2 设置抽屉 (Smoke)', () => {
  expect(wrapper.find('.mode-banner').exists()).toBe(true)
  })
 
- it('should have 3 main setting groups + 1 ab-test group', () => {
+ it('should have 3 main setting groups', () => {
  const wrapper = mount(SM2SettingsDrawer, {
  props: { modelValue: true }
  })
  const groups = wrapper.findAll('.setting-group')
- expect(groups.length).toBe(4)
+ expect(groups.length).toBe(3)
  })
 })
 

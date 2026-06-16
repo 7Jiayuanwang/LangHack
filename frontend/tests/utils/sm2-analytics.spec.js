@@ -47,8 +47,8 @@ describe('SM-2 数据监控', () => {
       const result = calculateEFDistribution(words)
 
       expect(result.hardWords).toBe(2)
-      expect(result.normalWords).toBe(1)
-      expect(result.easyWords).toBe(2)
+      expect(result.normalWords).toBe(2)
+      expect(result.easyWords).toBe(1)
       expect(result.hardWordRatio).toBeCloseTo(40, 0)
     })
 
@@ -241,6 +241,7 @@ describe('SM-2 数据监控', () => {
           repetition: 0,
           interval: 0,
           easinessFactor: 2.5,
+          masteryLevel: 'NEW',
           nextReviewTime: now.toISOString()
         },
         {
@@ -248,6 +249,7 @@ describe('SM-2 数据监控', () => {
           repetition: 3,
           interval: 7,
           easinessFactor: 2.0,
+          masteryLevel: 'LEARNING',
           nextReviewTime: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
         },
         {
@@ -255,6 +257,7 @@ describe('SM-2 数据监控', () => {
           repetition: 8,
           interval: 30,
           easinessFactor: 3.0,
+          masteryLevel: 'MASTERED',
           nextReviewTime: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
         }
       ]
@@ -398,6 +401,7 @@ describe('SM-2 数据监控', () => {
           repetition: 0,
           interval: 0,
           easinessFactor: 2.5,
+          masteryLevel: 'NEW',
           nextReviewTime: now.toISOString()
         })),
         // 学习中
@@ -406,6 +410,7 @@ describe('SM-2 数据监控', () => {
           repetition: 2 + (i % 3),
           interval: 5 + (i % 10),
           easinessFactor: 2.0 + Math.random() * 0.5,
+          masteryLevel: 'LEARNING',
           nextReviewTime: new Date(now.getTime() - (i % 3) * 24 * 60 * 60 * 1000).toISOString()
         })),
         // 已掌握
@@ -414,6 +419,7 @@ describe('SM-2 数据监控', () => {
           repetition: 5 + i,
           interval: 30 + i * 2,
           easinessFactor: 2.5 + Math.random() * 1.0,
+          masteryLevel: 'MASTERED',
           nextReviewTime: new Date(now.getTime() + (i + 1) * 24 * 60 * 60 * 1000).toISOString()
         }))
       ]

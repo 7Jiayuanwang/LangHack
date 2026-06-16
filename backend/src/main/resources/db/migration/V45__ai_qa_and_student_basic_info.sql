@@ -9,8 +9,21 @@
 
 -- ── Part 1: ai_call_log 索引 ──────────────────────────────────────────────────
 
-CREATE INDEX IF NOT EXISTS idx_triggered_service_success_time
-    ON ai_call_log (triggered_by, service_name, success, created_time);
+DROP PROCEDURE IF EXISTS v45_ai_qa_usage_index;
+CREATE PROCEDURE v45_ai_qa_usage_index()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'ai_call_log'
+          AND INDEX_NAME = 'idx_triggered_service_success_time'
+    ) THEN
+        CREATE INDEX idx_triggered_service_success_time
+            ON ai_call_log (triggered_by, service_name, success, created_time);
+    END IF;
+END;
+CALL v45_ai_qa_usage_index();
+DROP PROCEDURE IF EXISTS v45_ai_qa_usage_index;
 
 -- ── Part 2: school_student DDL ────────────────────────────────────────────────
 

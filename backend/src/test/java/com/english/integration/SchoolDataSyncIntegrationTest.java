@@ -558,7 +558,7 @@ class SchoolDataSyncIntegrationTest {
             Map<String, Object> overview = syncService.getSyncStatusOverview();
 
             assertNotNull(overview);
-            assertEquals(9, overview.size());
+            assertEquals(10, overview.size());
 
             for (String dataSource : overview.keySet()) {
                 @SuppressWarnings("unchecked")
