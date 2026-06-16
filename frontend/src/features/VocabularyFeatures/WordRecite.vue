@@ -149,10 +149,22 @@
         <div class="word-content">
           <div class="word-header">
             <h3 class="word-text">{{ currentWord.word }}</h3>
-            <button @click="speakWord" class="speak-btn" title="发音">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button
+              @click="toggleAutoSpeak"
+              class="speak-btn"
+              :class="{ muted: !autoSpeakEnabled }"
+              :title="autoSpeakEnabled ? '点击关闭自动发音' : '点击开启自动发音'"
+            >
+              <!-- 开：完整喇叭 + 声波 -->
+              <svg v-if="autoSpeakEnabled" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              </svg>
+              <!-- 关：喇叭 + X 表示静音 -->
+              <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <line x1="23" y1="9" x2="17" y2="15"/>
+                <line x1="17" y1="9" x2="23" y2="15"/>
               </svg>
             </button>
           </div>
@@ -412,6 +424,8 @@ const includeArticleWords = ref(null)
 const articleWords = ref([])
 const articleWordsCount = ref(null)
 const articleWordsLoading = ref(false)
+// quiz 干扰项专用池：合并三本 CSV，避开后端 words 表里的占位释义（source='basic_auto'）
+const distractorPool = ref([])
 // 每日要背的文章生词数量（null=未选；超过可用数量时自动取全部）
 const articleDailyCount = ref(null)
 const articleDailyCountOptions = ref([10, 20, 30, 50, 100])
@@ -432,6 +446,9 @@ const deepReciteTotal = ref(0)
 const inputRef = ref(null)
 const showDeepOptions = ref(false)
 const deepOptions = ref([])
+// 自动发音开关：默认开启；用户在背诵页点喇叭按钮可切换静音，状态持久化到 localStorage
+// key 不与某词库绑定 —— 这是个全局偏好，跨词库一致
+const autoSpeakEnabled = ref(localStorage.getItem('autoSpeakEnabled') !== '0')
 
 const currentVocabularyName = computed(() => {
   const vocab = vocabularies.value.find(v => v.id === selectedVocabulary.value)
@@ -485,9 +502,11 @@ const imageLoadError = () => {
 }
 
 // 单词发音
+// 静音状态下直接 return，避免任何路径（自动 watch / 将来其他位置调用）意外播放
 const speakWord = () => {
   if (!currentWord.value) return
-  
+  if (!autoSpeakEnabled.value) return
+
   // 使用浏览器 Web Speech API
   const utterance = new SpeechSynthesisUtterance(currentWord.value.word)
   utterance.lang = 'en-US'
@@ -496,15 +515,25 @@ const speakWord = () => {
   speechSynthesis.speak(utterance)
 }
 
+// 切换自动发音开关：写 localStorage；切到静音时立刻打断正在播放的声音
+const toggleAutoSpeak = () => {
+  autoSpeakEnabled.value = !autoSpeakEnabled.value
+  localStorage.setItem('autoSpeakEnabled', autoSpeakEnabled.value ? '1' : '0')
+  if (!autoSpeakEnabled.value) {
+    speechSynthesis.cancel()
+  }
+}
+
 // 生成测验选项
 const generateQuizOptions = () => {
   if (!currentWord.value) return
 
   const correctMeaning = currentWord.value.meaning
-  // 干扰项池：CET 词库未掌握的 + 当前文章生词池，足够多样
-  const cetPool = allWords.value.filter(w => w.word !== currentWord.value.word && !w.mastered)
-  const articlePool = articleWords.value.filter(w => w.word !== currentWord.value.word)
-  const otherWords = [...cetPool, ...articlePool]
+  // 所有干扰项统一从三本 CSV 合并池抽取（高考/四级/六级），不再使用当前 allWords 或 articleWords
+  // 这样能彻底避开后端 words 表里 source='basic_auto' 的占位释义
+  const otherWords = distractorPool.value.filter(
+    w => w.word !== currentWord.value.word && w.meaning !== correctMeaning
+  )
 
   // 随机选择3个错误选项
   const shuffled = otherWords.sort(() => Math.random() - 0.5)
@@ -522,11 +551,13 @@ const selectQuizOption = async (selectedMeaning) => {
 
   if (selectedMeaning === currentWord.value.meaning) {
     // 选对：标记为掌握，进入下一个单词
+    // 注意：不要在 await rateWord 后手动 showQuiz=false——rateWord 推进 currentWordIndex 后，
+    // watch(currentWord) 会在 microtask 里把 showQuiz / quizError 重置并重新生成选项。
+    // 旧代码在 await 之后再写 false，会把 watcher 刚刚设的 true 又压回 false，
+    // 导致下一个词出现时选择题选项消失。
     isHandlingWordAction.value = true
     try {
       await rateWord(5)
-      showQuiz.value = false
-      quizError.value = false
     } finally {
       isHandlingWordAction.value = false
     }
@@ -728,12 +759,26 @@ const exitDeepRecite = () => {
 // 监听当前单词变化，自动加载图片、发音、详细信息，并生成选项
 watch(currentWord, (newWord) => {
   if (newWord) {
+    // 如果当前词是占位释义,从 CSV 池查真正释义替换(兜底补救)
+    const m = newWord.meaning || ''
+    if (m.includes('待完善') || m.includes('基础词汇')) {
+      const realDef = distractorPool.value.find(w => w.word.toLowerCase() === newWord.word.toLowerCase())
+      if (realDef && realDef.meaning) {
+        newWord.meaning = realDef.meaning
+        console.log(`[补救] ${newWord.word} 占位释义已替换为: ${realDef.meaning}`)
+      } else {
+        console.warn(`[补救失败] ${newWord.word} 在 CSV 池中也找不到`)
+      }
+    }
+
     loadWordImage(newWord.word)
     fetchWordDetails(newWord.word)
     showMeaning.value = false
     showQuiz.value = false
     quizError.value = false
     generateQuizOptions()
+    // 新单词出场就自动发音；speakWord 内部已根据 autoSpeakEnabled 做静音 guard
+    speakWord()
   }
 })
 
@@ -1051,6 +1096,37 @@ const parseCSV = (csvText) => {
   return words
 }
 
+// 加载 quiz 干扰项池：并行抓三本 CSV，合并、按 word 去重、过滤空/占位释义
+// 失败的 CSV 静默跳过，保证至少有现存内容可用
+const loadDistractorPool = async () => {
+  const files = vocabularies.value.map(v => v.file)
+  try {
+    const results = await Promise.allSettled(
+      files.map(async (file) => {
+        const res = await fetch(file)
+        if (!res.ok) throw new Error(`加载失败: ${file}`)
+        return parseCSV(await res.text())
+      })
+    )
+    const merged = []
+    const seen = new Set()
+    for (const r of results) {
+      if (r.status !== 'fulfilled') continue
+      for (const w of r.value) {
+        if (!w || !w.word || !w.meaning) continue
+        const m = w.meaning.trim()
+        if (!m || m.includes('待完善') || m.includes('基础词汇')) continue
+        if (seen.has(w.word)) continue
+        seen.add(w.word)
+        merged.push({ word: w.word, meaning: m })
+      }
+    }
+    distractorPool.value = merged
+  } catch (error) {
+    console.error('加载干扰项池失败:', error)
+  }
+}
+
 // 加载词库数据
 // 故意不内部调用 loadWords()：tryAutoEnterRecite 会在最后一步统一 loadWords()，
 // 避免 pendingWords 被先以"includeArticleWords=null"算一次、再以恢复后值算一次，
@@ -1079,11 +1155,7 @@ const loadVocabularyData = async (file) => {
         const progress = JSON.parse(savedProgress)
         allWords.value = allWords.value.map(word => {
           const savedWord = progress.find(p => p.word === word.word)
-          if (!savedWord) return word
-          // 旧 ebbinghaus 算法的 interval 单位是分钟（最大 44640），迁移到 SM-2（天）时重置
-          const migratedInterval = (savedWord.interval ?? 0) > 365 ? 0 : (savedWord.interval ?? 0)
-          const migratedCount = (savedWord.interval ?? 0) > 365 ? 0 : (savedWord.reviewCount ?? 0)
-          return { ...word, ...savedWord, interval: migratedInterval, reviewCount: migratedCount }
+          return savedWord ? { ...word, ...savedWord } : word
         })
       }
     }
@@ -1147,7 +1219,12 @@ const loadWords = () => {
 
   // 文章词独立按 articleDailyCount 取，CET 词按 dailyCount 取，最终合并相加
   const articleNeed = includeArticleWords.value ? (articleDailyCount.value || 0) : 0
-  const articlePicks = articleWords.value.slice(0, articleNeed)
+  // 过滤掉占位释义的文章词(源头阻断)
+  const validArticleWords = articleWords.value.filter(w => {
+    const m = w.meaning || ''
+    return !m.includes('待完善') && !m.includes('基础词汇')
+  })
+  const articlePicks = validArticleWords.slice(0, articleNeed)
   const cetPicks = shuffled.slice(0, dailyCount.value)
   const merged = [...articlePicks, ...cetPicks]
   for (let i = merged.length - 1; i > 0; i--) {
@@ -1206,7 +1283,12 @@ const loadMoreWords = async () => {
   }
   // 文章词独立按 articleDailyCount 取，CET 词按 dailyCount 取，最终合并相加
   const articleNeed = includeArticleWords.value ? (articleDailyCount.value || 0) : 0
-  const articlePicks = articleWords.value.slice(0, articleNeed)
+  // 过滤掉占位释义的文章词(源头阻断)
+  const validArticleWords = articleWords.value.filter(w => {
+    const m = w.meaning || ''
+    return !m.includes('待完善') && !m.includes('基础词汇')
+  })
+  const articlePicks = validArticleWords.slice(0, articleNeed)
   const cetPicks = shuffled.slice(0, dailyCount.value)
   const merged = [...articlePicks, ...cetPicks]
   for (let i = merged.length - 1; i > 0; i--) {
@@ -1281,7 +1363,7 @@ const rateWord = async (quality) => {
   } else if (quality === 3) {
     // 一般：按 SM-2 算法继续复习
     const result = calculateSM2(quality, {
-      repetition: word.reviewCount,
+      reviewCount: word.reviewCount,
       interval: word.interval,
       easinessFactor: word.easinessFactor
     })
@@ -1390,6 +1472,9 @@ onMounted(async () => {
       todayReviewed.value = parseInt(savedCount)
     }
   }
+
+  // 并行加载三本 CSV 作为 quiz 干扰项池，去重，过滤空/占位释义
+  loadDistractorPool()
 
   // 之前选过词库 → 试图按已持久化的设置直接进入背诵
   // 三项设置缺任意一项时，停在缺失那一步的向导
@@ -1884,6 +1969,15 @@ onBeforeUnmount(() => {
 
 .speak-btn:active {
   transform: scale(0.95);
+}
+
+/* 静音状态：换成灰色调，传达"已关闭" */
+.speak-btn.muted {
+  background: #c0c4cc;
+}
+
+.speak-btn.muted:hover {
+  background: #a8acb3;
 }
 
 .word-content {

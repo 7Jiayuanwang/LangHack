@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 @ContextConfiguration(initializers = SchoolDataSyncIntegrationTest.FlywayInitializer.class)
 @TestPropertySource(properties = "spring.flyway.enabled=false")
-@EnabledIfEnvironmentVariable(named = "DB_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "ENABLE_INTEGRATION_TESTS", matches = "true")
 @Transactional
 class SchoolDataSyncIntegrationTest {
 

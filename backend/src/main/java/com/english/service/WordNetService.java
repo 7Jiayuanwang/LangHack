@@ -31,6 +31,9 @@ public class WordNetService {
 
     private ObjectMapper objectMapper;
 
+    // CSV 兜底词典缓存(首次调用时加载)
+    private Map<String, String> csvFallbackDict = null;
+
     @PostConstruct
     public void init() {
         try {
@@ -240,23 +243,47 @@ public class WordNetService {
                 }
             }
 
-            // 第三步：ECDICT也没有，创建一个基本的词汇记录
-            Word basicWord = createBasicWord(word);
-            if (basicWord != null) {
-                result = convertDatabaseWordToMap(basicWord);
-                result.put("found", true);
-                result.put("primarySource", "basic_created");
-                result.put("word", word);
-                result.put("wordId", basicWord.getId());
-                result.put("created", true);
-                result.put("definition", "基础词汇，待完善定义");
-            } else {
-                // 创建失败
-                result.put("word", word);
-                result.put("found", false);
-                result.put("error", "无法创建词汇记录");
-                result.put("primarySource", "error");
+            // 第三步：ECDICT 也没有,尝试 CSV 兜底 + AI 翻译兜底
+            String fallbackDefinition = tryGetDefinitionFromFallback(word);
+
+            if (fallbackDefinition != null && !fallbackDefinition.isEmpty()) {
+                // 从兜底途径获取到真实释义,创建数据库记录
+                Word newWord = new Word();
+                newWord.setWord(word.toLowerCase());
+                newWord.setPronunciation("");
+                newWord.setDefinition(fallbackDefinition);
+                newWord.setPartOfSpeech("unknown");
+                newWord.setDifficulty("MEDIUM");
+                newWord.setExampleSentence("");
+                newWord.setAudioUrl("");
+                newWord.setSynonyms("[]");
+                newWord.setAntonyms("[]");
+                newWord.setWordnetId("fallback_" + word.hashCode());
+                newWord.setMultipleDefinitions("[]");
+                newWord.setSource("fallback_auto");
+                newWord.setDeleted(0);
+
+                boolean success = wordService.createWord(newWord);
+                if (success) {
+                    logger.info("通过兜底途径创建词汇成功: {} -> {}", word, fallbackDefinition);
+                    result = convertDatabaseWordToMap(newWord);
+                    result.put("found", true);
+                    result.put("primarySource", "fallback_created");
+                    result.put("word", word);
+                    result.put("wordId", newWord.getId());
+                    result.put("created", true);
+                    return result;
+                } else {
+                    logger.warn("兜底途径获取释义成功但写库失败: {}", word);
+                }
             }
+
+            // 所有途径都失败,返回 not found(不写占位记录)
+            logger.warn("所有途径均无法获取释义: {}", word);
+            result.put("word", word);
+            result.put("found", false);
+            result.put("error", "无法获取词汇释义");
+            result.put("primarySource", "not_found");
 
         } catch (Exception e) {
             logger.error("查询或创建词汇失败: {}", word, e);
@@ -312,44 +339,86 @@ public class WordNetService {
     }
 
     /**
-     * 创建基础词汇记录
+     * 从 CSV 兜底词典或 AI 翻译获取释义
+     * 返回 null 表示所有途径都失败
      */
-    private Word createBasicWord(String word) {
-        try {
-            Word newWord = new Word();
-
-            // 设置基本词汇信息
-            newWord.setWord(word.toLowerCase());
-            newWord.setPronunciation("");
-            newWord.setDefinition("基础词汇，待完善定义");
-            newWord.setPartOfSpeech("unknown");
-            newWord.setDifficulty("MEDIUM");
-            newWord.setExampleSentence("");
-            newWord.setAudioUrl("");
-
-            // 设置JSON字段为空
-            newWord.setSynonyms("[]");
-            newWord.setAntonyms("[]");
-            newWord.setWordnetId("basic_" + word.hashCode());
-            newWord.setMultipleDefinitions("[]");
-            newWord.setSource("basic_auto");
-            newWord.setDeleted(0);
-
-            // 创建数据库记录
-            boolean success = wordService.createWord(newWord);
-
-            if (success) {
-                logger.info("自动创建基础词汇成功: {}", word);
-                return newWord;
-            } else {
-                logger.warn("自动创建基础词汇失败: {}", word);
-                return null;
-            }
-
-        } catch (Exception e) {
-            logger.error("创建基础词汇失败: {}", word, e);
-            return null;
+    private String tryGetDefinitionFromFallback(String word) {
+        // 1. 尝试从三本 CSV 获取(懒加载缓存)
+        if (csvFallbackDict == null) {
+            loadCsvFallbackDict();
         }
+
+        String key = word.toLowerCase().trim();
+        String csvDef = csvFallbackDict.get(key);
+        if (csvDef != null && !csvDef.isEmpty()) {
+            logger.info("从 CSV 兜底词典找到释义: {} -> {}", word, csvDef);
+            return csvDef;
+        }
+
+        // 2. CSV 没有,尝试 AI 翻译
+        if (translateService != null) {
+            try {
+                String translated = translateService.translateEnToCn(word);
+                if (translated != null && !translated.trim().isEmpty()
+                    && !translated.equals(word)) {
+                    logger.info("从 AI 翻译获取释义: {} -> {}", word, translated);
+                    return translated;
+                }
+            } catch (Exception e) {
+                logger.warn("AI 翻译失败: {}", word, e);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 加载三本 CSV 作为兜底词典(六级、四级、高考)
+     */
+    private void loadCsvFallbackDict() {
+        csvFallbackDict = new HashMap<>();
+        String[] csvPaths = {
+            "frontend/public/data/六级核心词汇.csv",
+            "frontend/public/data/四级核心词汇.csv",
+            "frontend/public/data/高考英语必背词汇.csv"
+        };
+
+        for (String relativePath : csvPaths) {
+            try {
+                // 从项目根目录读取(Spring Boot 启动目录)
+                java.io.File file = new java.io.File(relativePath);
+                if (!file.exists()) {
+                    logger.warn("CSV 兜底词典不存在: {}", relativePath);
+                    continue;
+                }
+
+                List<String> lines = java.nio.file.Files.readAllLines(file.toPath(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+
+                // 跳过表头,解析 "word","meaning"
+                for (int i = 1; i < lines.size(); i++) {
+                    String line = lines.get(i).trim();
+                    if (line.isEmpty()) continue;
+
+                    // 简单 CSV 解析: "word","meaning"
+                    java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("\"([^\"]+)\",\"([^\"]+)\"")
+                        .matcher(line);
+                    if (m.find()) {
+                        String w = m.group(1).toLowerCase().trim();
+                        String meaning = m.group(2).trim();
+                        // 第一个出现的优先(六级 > 四级 > 高考)
+                        if (!csvFallbackDict.containsKey(w)) {
+                            csvFallbackDict.put(w, meaning);
+                        }
+                    }
+                }
+                logger.info("加载 CSV 兜底词典: {} ({} 词)", relativePath, lines.size() - 1);
+            } catch (Exception e) {
+                logger.error("加载 CSV 兜底词典失败: {}", relativePath, e);
+            }
+        }
+        logger.info("CSV 兜底词典加载完成,共 {} 词", csvFallbackDict.size());
     }
 
     /**

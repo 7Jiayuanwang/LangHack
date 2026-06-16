@@ -54,8 +54,8 @@ describe('Student Vocabulary.vue', () => {
 
   it('has pageSize based on screen width', () => {
     const wrapper = createWrapper()
-    // pageSize is dynamic: mobile (<768px) = 10, desktop = 100
-    expect([10, 100]).toContain(wrapper.vm.pageSize)
+    // pageSize is dynamic: mobile (<768px) = 10, desktop = 999
+    expect([10, 999]).toContain(wrapper.vm.pageSize)
   })
 
   it('has stats reactive object', () => {
