@@ -38,7 +38,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// TODO resolved: added @MockBean for JwtUtil, SsoProperties, StringRedisTemplate, UserService
 @WebMvcTest(controllers = SsoAuthController.class, excludeAutoConfiguration = {
     org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class
 })

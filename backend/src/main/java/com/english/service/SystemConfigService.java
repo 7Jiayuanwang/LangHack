@@ -35,4 +35,19 @@ public interface SystemConfigService {
      * Batch update configs (updates DB + clears cache)
      */
     void batchUpdate(List<SystemConfig> configs, String updatedBy);
+
+    /**
+     * Get config by key (cross-group search)
+     */
+    SystemConfig getByKey(String key);
+
+    /**
+     * Upsert config (insert or update)
+     */
+    void upsert(String group, String key, String value, String description);
+
+    /**
+     * Delete config by key
+     */
+    void deleteByKey(String key);
 }

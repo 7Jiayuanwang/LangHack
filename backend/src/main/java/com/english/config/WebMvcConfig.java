@@ -1,5 +1,7 @@
 package com.english.config;
 
+import com.english.interceptor.RateLimitInterceptor;
+import com.english.interceptor.UploadSizeLimitInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
@@ -21,15 +23,30 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private final AccessLogInterceptor accessLogInterceptor;
     private final AdminMasterInterceptor adminMasterInterceptor;
+    private final RateLimitInterceptor rateLimitInterceptor;
+    private final UploadSizeLimitInterceptor uploadSizeLimitInterceptor;
 
     public WebMvcConfig(AccessLogInterceptor accessLogInterceptor,
-                        AdminMasterInterceptor adminMasterInterceptor) {
+                        AdminMasterInterceptor adminMasterInterceptor,
+                        RateLimitInterceptor rateLimitInterceptor,
+                        UploadSizeLimitInterceptor uploadSizeLimitInterceptor) {
         this.accessLogInterceptor = accessLogInterceptor;
         this.adminMasterInterceptor = adminMasterInterceptor;
+        this.rateLimitInterceptor = rateLimitInterceptor;
+        this.uploadSizeLimitInterceptor = uploadSizeLimitInterceptor;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // 文件上传大小限制（优先级最高，在频率限制之前）
+        registry.addInterceptor(uploadSizeLimitInterceptor)
+                .addPathPatterns("/api/**/upload", "/api/admin/import-users", "/api/ops/backup/import");
+
+        // API 频率限制
+        registry.addInterceptor(rateLimitInterceptor)
+                .addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**")
+                .excludePathPatterns("/api/health");
+
         registry.addInterceptor(accessLogInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/api/ops/monitoring/realtime/stream",

@@ -10,7 +10,7 @@ ARG MAVEN_MIRROR_URL=
 
 WORKDIR /app
 
-# 配置阿里云 Maven 镜像（加速依赖下载）
+# 配置 Maven 镜像（阿里云镜像 + Maven Central 回退）
 RUN mkdir -p /root/.m2 && \
     echo '<?xml version="1.0" encoding="UTF-8"?>' > /root/.m2/settings.xml && \
     echo '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"' >> /root/.m2/settings.xml && \
@@ -20,18 +20,32 @@ RUN mkdir -p /root/.m2 && \
     echo '  <mirrors>' >> /root/.m2/settings.xml && \
     echo '    <mirror>' >> /root/.m2/settings.xml && \
     echo '      <id>aliyun</id>' >> /root/.m2/settings.xml && \
-    echo '      <mirrorOf>central</mirrorOf>' >> /root/.m2/settings.xml && \
+    echo '      <mirrorOf>external:*,!central</mirrorOf>' >> /root/.m2/settings.xml && \
     echo '      <name>Aliyun Maven</name>' >> /root/.m2/settings.xml && \
     echo '      <url>https://maven.aliyun.com/repository/public</url>' >> /root/.m2/settings.xml && \
     echo '    </mirror>' >> /root/.m2/settings.xml && \
     echo '  </mirrors>' >> /root/.m2/settings.xml && \
+    echo '  <profiles>' >> /root/.m2/settings.xml && \
+    echo '    <profile>' >> /root/.m2/settings.xml && \
+    echo '      <id>central-fallback</id>' >> /root/.m2/settings.xml && \
+    echo '      <repositories>' >> /root/.m2/settings.xml && \
+    echo '        <repository>' >> /root/.m2/settings.xml && \
+    echo '          <id>central</id>' >> /root/.m2/settings.xml && \
+    echo '          <url>https://repo.maven.apache.org/maven2</url>' >> /root/.m2/settings.xml && \
+    echo '        </repository>' >> /root/.m2/settings.xml && \
+    echo '      </repositories>' >> /root/.m2/settings.xml && \
+    echo '    </profile>' >> /root/.m2/settings.xml && \
+    echo '  </profiles>' >> /root/.m2/settings.xml && \
+    echo '  <activeProfiles>' >> /root/.m2/settings.xml && \
+    echo '    <activeProfile>central-fallback</activeProfile>' >> /root/.m2/settings.xml && \
+    echo '  </activeProfiles>' >> /root/.m2/settings.xml && \
     echo '</settings>' >> /root/.m2/settings.xml
 
 # 先复制 pom.xml 并下载依赖，利用 Docker 层缓存
 # 只有 pom.xml 变更时才重新下载依赖，加速后续构建
 COPY pom.xml .
 # 内网构建时动态注入 Nexus mirror 到 Maven settings，再下载依赖
-RUN mkdir -p /root/.m2 && if [ -n "$MAVEN_MIRROR_URL" ]; then echo "<settings><mirrors><mirror><id>nexus</id><mirrorOf>*</mirrorOf><name>Intranet Nexus Mirror</name><url>${MAVEN_MIRROR_URL}</url></mirror></mirrors></settings>" > /root/.m2/settings.xml; fi && mvn dependency:go-offline -B
+RUN mkdir -p /root/.m2 && if [ -n "$MAVEN_MIRROR_URL" ]; then echo "<settings><mirrors><mirror><id>nexus</id><mirrorOf>*</mirrorOf><name>Intranet Nexus Mirror</name><url>${MAVEN_MIRROR_URL}</url></mirror></mirrors></settings>" > /root/.m2/settings.xml; fi && mvn dependency:go-offline -B || true
 
 # 复制源码并打包（跳过单元测试加快 CI 构建速度）
 COPY src ./src

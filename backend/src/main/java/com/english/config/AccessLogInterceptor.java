@@ -2,8 +2,8 @@ package com.english.config;
 
 import com.english.service.impl.AccessLogBufferService;
 import com.english.service.impl.AccessMetricsService;
-import com.english.entity.AccessLog;
 import com.english.monitor.UserRequestMonitor;
+import com.english.entity.AccessLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -37,8 +37,11 @@ public class AccessLogInterceptor implements HandlerInterceptor {
         request.setAttribute("_startTime", System.currentTimeMillis());
 
         String username = extractUsername();
+        String path = request.getRequestURI();
+
         metricsService.recordRequestStart(username);
-        userRequestMonitor.recordRequest(username);
+        userRequestMonitor.recordRequest(username, path);
+
         return true;
     }
 

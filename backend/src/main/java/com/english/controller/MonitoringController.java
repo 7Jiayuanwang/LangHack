@@ -438,11 +438,18 @@ public class MonitoringController {
         return Result.success(databasePoolMonitor.getPoolMetrics());
     }
 
+    /**
+     * 获取用户请求量TOP榜
+     */
     @GetMapping("/user-requests/top")
-    public Result<List<Map<String, Object>>> getTopUsers(@RequestParam(defaultValue = "20") int limit) {
+    public Result<List<Map<String, Object>>> getTopUsers(
+            @RequestParam(defaultValue = "20") int limit) {
         return Result.success(userRequestMonitor.getTopUsers(limit));
     }
 
+    /**
+     * 获取指定用户的请求统计报告
+     */
     @GetMapping("/user-requests/{username}")
     public Result<Map<String, Object>> getUserRequestReport(@PathVariable String username) {
         return Result.success(userRequestMonitor.getUserRequestReport(username));
