@@ -59,6 +59,11 @@ public class SsoUserBinding {
     private String adminRemark;
 
     /**
+     * 管理员角色锁定: 1=管理员手动审批指定角色，SSO/学校目录不得覆盖
+     */
+    private Integer adminRoleLocked;
+
+    /**
      * 是否自动审批: 0=待审批, 1=已审批
      */
     private Integer autoApproved;

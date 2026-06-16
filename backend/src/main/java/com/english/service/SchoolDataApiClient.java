@@ -91,6 +91,14 @@ public interface SchoolDataApiClient {
     List<Map<String, Object>> fetchTeacherCourses(Map<String, String> params);
 
     /**
+     * 获取易辅导系统学生基本信息（DS0104）
+     *
+     * @param params 查询参数（xh 学号、xm 姓名等）
+     * @return 学生基本信息数据列表
+     */
+    List<Map<String, Object>> fetchStudentBasicInfos(Map<String, String> params);
+
+    /**
      * 测试API连通性
      *
      * @return 是否连通

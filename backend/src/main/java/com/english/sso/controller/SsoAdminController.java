@@ -98,8 +98,9 @@ public class SsoAdminController {
             user.setStatus("ACTIVE");
             userService.updateUser(user);
 
-            // 更新绑定状态
+            // 更新绑定状态，并锁定角色防止 SSO/学校目录覆盖管理员决策
             binding.setAutoApproved(1);
+            binding.setAdminRoleLocked(1);
             bindingMapper.updateById(binding);
 
             log.info("审批用户成功: bindingId={}, userId={}, role={}", bindingId, user.getId(), approvedRole);

@@ -647,4 +647,73 @@ class SsoUserMappingServiceAutoGrantTest {
             ));
         }
     }
+
+    @Nested
+    @DisplayName("管理员角色锁定保护")
+    class AdminRoleLockedTests {
+
+        @Test
+        @DisplayName("adminRoleLocked=1 时学校目录命中也不覆盖管理员指定角色")
+        void adminRoleLocked_schoolDirectoryMatch_doesNotOverrideRole() {
+            SsoUserBinding binding = new SsoUserBinding();
+            binding.setId(500L);
+            binding.setUserId(501L);
+            binding.setAutoApproved(1);
+            binding.setAdminRoleLocked(1);
+
+            User user = new User();
+            user.setId(501L);
+            user.setUsername("2023122066164");
+            user.setRole("USER");
+            user.setStatus("ACTIVE");
+
+            when(bindingMapper.findByProviderAndSsoUserId("CAS", "2023122066164")).thenReturn(binding);
+            when(userService.getUserById(501L)).thenReturn(user);
+            // adminRoleLocked=1 → tryUpgradeFromSchoolDirectory 早退，不读 feature toggle
+            // 也不查 schoolStudentMapper，SSO 无角色映射，直接用数据库角色发 token
+            when(roleMappingService.mapRole(anyList())).thenReturn(null);
+            when(jwtUtil.generateAccessToken("2023122066164", "USER")).thenReturn("user_token");
+            when(jwtUtil.generateRefreshToken("2023122066164")).thenReturn("mock_refresh_token");
+
+            SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
+
+            assertNotNull(result);
+            assertFalse(result.isNeedsApproval());
+            assertEquals("USER", result.getUser().getRole());
+            assertEquals("user_token", result.getToken());
+            verify(userService, never()).updateUser(any(User.class));
+        }
+
+        @Test
+        @DisplayName("adminRoleLocked=1 时 SSO 映射角色更高也不覆盖管理员指定角色")
+        void adminRoleLocked_ssoMappedRoleHigher_doesNotOverrideRole() {
+            SsoUserBinding binding = new SsoUserBinding();
+            binding.setId(502L);
+            binding.setUserId(503L);
+            binding.setAutoApproved(1);
+            binding.setAdminRoleLocked(1);
+
+            User user = new User();
+            user.setId(503L);
+            user.setUsername("T001");
+            user.setRole("STUDENT");
+            user.setStatus("ACTIVE");
+
+            when(bindingMapper.findByProviderAndSsoUserId("CAS", "2023122066164")).thenReturn(binding);
+            when(userService.getUserById(503L)).thenReturn(user);
+            // adminRoleLocked=1 → tryUpgradeFromSchoolDirectory 早退，不读 feature toggle
+            // SSO 映射 TEACHER（升权），但 adminRoleLocked 护栏在 SSO 映射逻辑之前生效
+            when(roleMappingService.mapRole(anyList())).thenReturn("TEACHER");
+            when(jwtUtil.generateAccessToken("T001", "STUDENT")).thenReturn("student_token");
+            when(jwtUtil.generateRefreshToken("T001")).thenReturn("mock_refresh_token");
+
+            SsoLoginResult result = ssoUserMappingService.processLogin(ssoUserInfo, SsoProtocolType.CAS);
+
+            assertNotNull(result);
+            assertFalse(result.isNeedsApproval());
+            assertEquals("STUDENT", result.getUser().getRole());
+            assertEquals("student_token", result.getToken());
+            verify(userService, never()).updateUser(any(User.class));
+        }
+    }
 }

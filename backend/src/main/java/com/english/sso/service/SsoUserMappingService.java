@@ -222,22 +222,11 @@ public class SsoUserMappingService {
                 return SsoLoginResult.success(accessToken, refreshToken, user);
             }
 
-            // SSO 仅在安全可接受的升权场景下同步角色；否则保留数据库角色
-            // 但管理员审批的角色应优先，不被 SSO 映射覆盖
-            // 判断依据：binding.autoApproved=1 且 SSO 映射角色 ≠ 数据库角色时，
-            //   仅在从未有过管理员干预（即用户是自动创建的）时才同步
-            //   管理员审批场景：用户原为 PENDING_APPROVAL，管理员手动设置角色并激活
-            //   → 此时不应被 SSO 映射覆盖
-            if (ssoMappedRole != null && !ssoMappedRole.equals(user.getRole())) {
-                // 检查用户是否曾经是待审批状态（管理员干预过）
-                // 如果用户状态为 ACTIVE 且角色不同于 SSO 映射，说明角色可能是管理员指定的
-                // 管理员审批场景：createPendingUser 设置 role=STUDENT, status=PENDING_APPROVAL
-                //   → 管理员审批后设 role=approvedRole, status=ACTIVE
-                //   → 此时 binding.autoApproved=1 是管理员审批时设置的
-                // 自动创建场景：processLogin 第5步自动创建，autoApproved=1 且 status=ACTIVE
-                // 区分方式：管理员审批前 binding.autoApproved=0，审批后改为 1
-                //   自动创建时 autoApproved 一开始就是 1
-                // 更简洁的策略：仅当 SSO 映射角色优先级高于当前角色时才同步（升权不降权）
+            // 管理员显式锁定角色时，SSO 映射同样不得覆盖
+            if (Integer.valueOf(1).equals(binding.getAdminRoleLocked())) {
+                log.info("管理员已锁定角色，跳过 SSO 角色同步: username={}, role={}", user.getUsername(), user.getRole());
+            } else if (ssoMappedRole != null && !ssoMappedRole.equals(user.getRole())) {
+                // 仅当 SSO 映射角色优先级高于当前角色时才同步（升权不降权）
                 // 这样管理员审批的低优先级角色（如 STUDENT）不会被 SSO 映射覆盖
                 // 但 SSO 映射的高优先级角色（如 ADMIN）仍可同步
                 boolean shouldSyncRole = isRoleUpgrade(user.getRole(), ssoMappedRole);
@@ -435,6 +424,11 @@ public class SsoUserMappingService {
 
     private RoleUpgradeResult tryUpgradeFromSchoolDirectory(User user, SsoUserInfo ssoUserInfo, SsoUserBinding binding) {
         if (user == null) {
+            return new RoleUpgradeResult(false);
+        }
+        // 管理员显式锁定角色时，任何自动升权均不允许
+        if (binding != null && Integer.valueOf(1).equals(binding.getAdminRoleLocked())) {
+            log.info("管理员已锁定角色，跳过学校目录自动升权: username={}, role={}", user.getUsername(), user.getRole());
             return new RoleUpgradeResult(false);
         }
         String username = normalizeIdentifier(user.getUsername());

@@ -46,6 +46,15 @@ public class SchoolStudent {
     @TableField("major_name")
     private String majorName;
 
+    @TableField("gender")
+    private String gender;
+
+    @TableField("phone")
+    private String phone;
+
+    @TableField("counselor_name")
+    private String counselorName;
+
     @TableField("source_course_codes")
     private String sourceCourseCodes;
 

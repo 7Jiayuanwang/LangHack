@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.spy;
@@ -132,6 +134,19 @@ class SchoolDataFetchServiceImplTest {
         assertEquals(2, result.getRows().size());
         assertEquals(2, result.getPaginationSummary().getFetchedRowCount());
         verify(apiClient).fetchStudentSchedules("2023001", null, null);
+    }
+
+    @Test
+    @DisplayName("student_basic_info 路由到 fetchStudentBasicInfos")
+    void fetchRawData_studentBasicInfo_routesToFetchStudentBasicInfos() {
+        Map<String, Object> raw = Map.of("xh", "2023001", "xm", "张三");
+        when(apiClient.fetchStudentBasicInfos(any())).thenReturn(List.of(raw));
+        when(fieldMappingService.applyMapping(eq("student_basic_info"), any())).thenReturn(new java.util.HashMap<>(raw));
+
+        List<Map<String, Object>> result = service.fetchRawData("student_basic_info", null);
+
+        assertEquals(1, result.size());
+        verify(apiClient).fetchStudentBasicInfos(any());
     }
 
     @Test

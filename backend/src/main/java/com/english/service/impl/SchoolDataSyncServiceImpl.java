@@ -48,7 +48,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private static final List<String> DATA_SOURCES = List.of(
             "administrative_class", "school_course", "teaching_class",
             "teacher_courses", "course_schedule", "course_selection",
-            "level_exam_scores", "teaching_plans", "student_schedule"
+            "level_exam_scores", "teaching_plans", "student_schedule",
+            "student_basic_info"
     );
 
     /** 防止重入标志 */

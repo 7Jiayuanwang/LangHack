@@ -434,6 +434,9 @@
             <template #default="{ row }">
               <div class="expand-detail">
                 <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="性别">{{ row.gender || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="联系电话">{{ row.phone || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="辅导员">{{ row.counselorName || '-' }}</el-descriptions-item>
                   <el-descriptions-item label="最近成绩同步">{{ row.lastExamSyncTime || '-' }}</el-descriptions-item>
                   <el-descriptions-item label="最近课表同步">{{ row.lastScheduleSyncTime || '-' }}</el-descriptions-item>
                   <el-descriptions-item label="同步来源">{{ row.syncSource || '-' }}</el-descriptions-item>
@@ -621,6 +624,7 @@ const dataSourceLabels = {
   level_exam_scores: '等级考试',
   teaching_plans: '教学计划',
   student_schedule: '学生课表',
+  student_basic_info: '学生基本信息',
   school_student: '链式学生目录',
   school_teacher: '链式教师目录',
   teacher_student_binding: '师生绑定'
@@ -1283,6 +1287,9 @@ function generateCSV(data) {
     planStatus: '计划状态',
     sourceCourseCodes: '来源课程代码',
     sourceType: '来源类型',
+    gender: '性别',
+    phone: '联系电话',
+    counselorName: '辅导员姓名',
     syncSource: '同步来源',
     syncTime: '同步时间',
     lastExamSyncTime: '最近成绩同步',
