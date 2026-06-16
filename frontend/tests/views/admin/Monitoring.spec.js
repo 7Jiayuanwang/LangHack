@@ -18,7 +18,8 @@ const mockGetToken = vi.hoisted(() => vi.fn())
 vi.mock('@/api/monitoring', () => mockMonitoringApi)
 
 vi.mock('@/utils/auth', () => ({
-  getToken: mockGetToken
+  getToken: mockGetToken,
+  getAuthHeader: vi.fn(() => ({}))
 }))
 
 vi.mock('vue-echarts', () => ({

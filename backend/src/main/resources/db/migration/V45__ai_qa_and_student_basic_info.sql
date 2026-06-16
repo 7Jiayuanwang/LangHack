@@ -1,12 +1,18 @@
--- V45: DS0104 学生基本信息接口 + SSO 管理员角色锁定 (2026-06-15)
+-- ═══════════════════════════════════════════════════════════════════════
+-- V45: AI 问答使用统计索引 + DS0104 学生基本信息接口 + SSO 管理员角色锁定
+-- ═══════════════════════════════════════════════════════════════════════
 --
--- Part 1: school_student 新增 gender / phone / counselor_name 三列
--- Part 2: field_mappings seed：student_basic_info 共 9 条映射
--- Part 3: sso_user_bindings 新增 admin_remark / admin_role_locked 两列
---
--- 未来扩展：rxrq/xjzt/xslbmc/xzlx/szxy/sfbys/sfzx/mqzk
+-- Part 1: ai_call_log 复合索引（按用户+服务+成功状态+时间的统计查询）
+-- Part 2: school_student 新增 gender / phone / counselor_name 三列
+-- Part 3: field_mappings seed：student_basic_info 共 9 条映射
+-- Part 4: sso_user_bindings 新增 admin_remark / admin_role_locked 两列
 
--- ── Part 1: school_student DDL ────────────────────────────────────────────────
+-- ── Part 1: ai_call_log 索引 ──────────────────────────────────────────────────
+
+CREATE INDEX IF NOT EXISTS idx_triggered_service_success_time
+    ON ai_call_log (triggered_by, service_name, success, created_time);
+
+-- ── Part 2: school_student DDL ────────────────────────────────────────────────
 
 DROP PROCEDURE IF EXISTS _v45_add_student_extra_cols;
 CREATE PROCEDURE _v45_add_student_extra_cols()
@@ -36,7 +42,7 @@ END;
 CALL _v45_add_student_extra_cols();
 DROP PROCEDURE IF EXISTS _v45_add_student_extra_cols;
 
--- ── Part 2: field_mappings seed ───────────────────────────────────────────────
+-- ── Part 3: field_mappings seed ───────────────────────────────────────────────
 
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, is_required, remark)
 VALUES
@@ -50,7 +56,7 @@ VALUES
     ('student_basic_info', 'lxdh',  'phone',          'STRING', 'STRING', 'NONE', 0, '联系电话'),
     ('student_basic_info', 'fdyxm', 'counselor_name', 'STRING', 'STRING', 'NONE', 0, '辅导员姓名');
 
--- ── Part 3: sso_user_bindings DDL ────────────────────────────────────────────
+-- ── Part 4: sso_user_bindings DDL ────────────────────────────────────────────
 
 DROP PROCEDURE IF EXISTS _v45_add_sso_binding_cols;
 CREATE PROCEDURE _v45_add_sso_binding_cols()
@@ -65,7 +71,6 @@ BEGIN
             ADD COLUMN admin_remark TEXT COMMENT '管理员备注：记录特殊情况（如用户被删除后重新登录）'
             AFTER sso_member_of;
     END IF;
-
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()

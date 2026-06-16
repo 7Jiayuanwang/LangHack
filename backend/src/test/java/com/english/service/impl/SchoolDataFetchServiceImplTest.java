@@ -141,7 +141,6 @@ class SchoolDataFetchServiceImplTest {
     void fetchRawData_studentBasicInfo_routesToFetchStudentBasicInfos() {
         Map<String, Object> raw = Map.of("xh", "2023001", "xm", "张三");
         when(apiClient.fetchStudentBasicInfos(any())).thenReturn(List.of(raw));
-        when(fieldMappingService.applyMapping(eq("student_basic_info"), any())).thenReturn(new java.util.HashMap<>(raw));
 
         List<Map<String, Object>> result = service.fetchRawData("student_basic_info", null);
 
