@@ -6,13 +6,18 @@
  * @param {number} previousState.repetition - Number of successful repetitions (n)
  * @param {number} previousState.interval - Previous interval in days (I)
  * @param {number} previousState.easinessFactor - Previous easiness factor (EF)
+ * @param {Object} options - Optional configuration
+ * @param {boolean} options.hardWordMode - Enable hard word mode (EF min 1.0, default false)
  * @returns {Object} New state { repetition, interval, easinessFactor, nextReviewTime }
  */
-export function calculateSM2(quality, previousState = {}) {
+export function calculateSM2(quality, previousState = {}, options = {}) {
     // 输入验证: quality 必须在 0-5 范围内
     if (typeof quality !== 'number' || quality < 0 || quality > 5 || !Number.isFinite(quality)) {
         throw new Error('Quality must be a finite number between 0 and 5')
     }
+
+    const { hardWordMode = false } = options;
+    const minEF = hardWordMode ? 1.0 : 1.3;  // 困难词加强模式：更低的 EF 下限
 
     let {
         repetition = 0,
@@ -27,7 +32,7 @@ export function calculateSM2(quality, previousState = {}) {
     if (typeof interval !== 'number' || interval < 0 || !Number.isFinite(interval)) {
         interval = 0
     }
-    if (typeof easinessFactor !== 'number' || easinessFactor < 1.3 || easinessFactor > 5.0 || !Number.isFinite(easinessFactor)) {
+    if (typeof easinessFactor !== 'number' || easinessFactor < minEF || easinessFactor > 5.0 || !Number.isFinite(easinessFactor)) {
         easinessFactor = 2.5
     }
 
@@ -59,9 +64,9 @@ export function calculateSM2(quality, previousState = {}) {
     // EF = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
     easinessFactor = easinessFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
 
-    // EF boundaries: 1.3 ≤ EF ≤ 5.0
-    if (easinessFactor < 1.3) {
-        easinessFactor = 1.3;
+    // EF boundaries: minEF ≤ EF ≤ 5.0
+    if (easinessFactor < minEF) {
+        easinessFactor = minEF;
     }
     if (easinessFactor > 5.0) {
         easinessFactor = 5.0;

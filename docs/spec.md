@@ -31,9 +31,11 @@
 - [x] 多维度学习统计（学习时长、词汇掌握、任务完成率）
 
 ### 生词本与间隔复习（SM-2）
-- [x] SM-2 算法实现：`frontend/src/utils/sm2.js`
-- [x] 参数存储：`repetition_count`, `easiness_factor`, `next_review_date`
-- [x] Quality (Q) 评分 0–5，Interval 指数增长
+- [x] SM-2 算法实现：`frontend/src/utils/sm2.js`（标准 SuperMemo-2 算法，2026-06-06 统一废弃旧 ebbinghaus.js）
+- [x] 参数存储：`repetition_count`, `easiness_factor`, `next_review_date`（后端 `vocabulary_books` 表）
+- [x] Quality (Q) 评分 0–5，Interval 指数增长（1天 → 6天 → 15天 → 37天...）
+- [x] 个性化难度因子 (EF 1.3-5.0)，根据实际表现动态调整间隔
+- [x] 详细说明见 [`docs/SM2_ALGORITHM_GUIDE.md`](SM2_ALGORITHM_GUIDE.md)
 
 ### 词典系统
 - [x] 三源查词：本地 DB → ECDICT → WordNet（JWI）

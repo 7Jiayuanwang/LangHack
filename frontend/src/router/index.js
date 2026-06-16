@@ -168,6 +168,12 @@ const routes = [
         meta: { title: "班级队列分析", roles: ["ADMIN"], featureKey: "admin.class_cohort" },
       },
       {
+        path: "vocab-learning-stats",
+        name: "AdminVocabLearningStats",
+        component: () => import("@/views/admin/VocabLearningStats.vue"),
+        meta: { title: "生词本统计", roles: ["ADMIN"] },
+      },
+      {
         path: "tag-management",
         name: "AdminTagManagement",
         component: () => import("@/views/admin/TagManagement.vue"),
