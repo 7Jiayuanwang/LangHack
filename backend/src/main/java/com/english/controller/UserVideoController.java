@@ -3,6 +3,7 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.User;
 import com.english.entity.Video;
+import com.english.service.FeatureToggleService;
 import com.english.service.UserService;
 import com.english.service.VideoService;
 import org.slf4j.Logger;
@@ -34,6 +35,19 @@ public class UserVideoController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private FeatureToggleService featureToggleService;
+
+    /**
+     * 检查当前用户是否有视频上传权限（功能开关 student.video_upload_enabled）
+     */
+    private boolean canUploadVideo(Long userId) {
+        Map<String, Boolean> toggles = featureToggleService.getMergedTogglesForUser(userId);
+        Boolean allowed = toggles.get("student.video_upload_enabled");
+        // 未配置时默认允许（向后兼容），显式 false 时才拒绝
+        return allowed == null || allowed;
+    }
+
     /**
      * 用户上传视频
      */
@@ -45,6 +59,11 @@ public class UserVideoController {
             User user = userService.getUserByUsername(username);
             if (user == null) {
                 return Result.error("用户不存在");
+            }
+
+            // 检查视频上传功能开关（student.video_upload_enabled）
+            if (!canUploadVideo(user.getId())) {
+                return Result.error("您暂无视频上传权限，请联系管理员开通");
             }
 
             String title = (String) videoData.get("title");
