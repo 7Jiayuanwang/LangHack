@@ -8,6 +8,8 @@ import com.english.datasource.UseMaster;
 import com.english.dto.LoginRequest;
 import com.english.entity.User;
 import com.english.mapper.UserMapper;
+import com.english.mapper.SchoolStudentMapper;
+import com.english.entity.SchoolStudent;
 import com.english.service.UserService;
 import com.english.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,10 +23,13 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -38,6 +43,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private SchoolStudentMapper schoolStudentMapper;
 
     /** JwtAuthenticationFilter 中 user:active 缓存的前缀，需保持一致 */
     private static final String USER_ACTIVE_CACHE_PREFIX = "user:active:";
@@ -131,13 +139,56 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         IPage<User> pageResult = page(new Page<>(page, size), queryWrapper);
 
+        // 批量反查 school_student 补充学院/行政班信息
+        List<User> records = pageResult.getRecords();
+        List<Map<String, Object>> enrichedRecords = enrichWithSchoolInfo(records);
+
         Map<String, Object> result = new HashMap<>();
-        result.put("records", pageResult.getRecords());
+        result.put("records", enrichedRecords);
         result.put("total", pageResult.getTotal());
         result.put("pages", pageResult.getPages());
         result.put("current", pageResult.getCurrent());
         result.put("size", pageResult.getSize());
 
+        return result;
+    }
+
+    private List<Map<String, Object>> enrichWithSchoolInfo(List<User> users) {
+        if (users == null || users.isEmpty()) return new ArrayList<>();
+
+        // 收集所有有 school_student_id 的 id
+        Set<Long> ssIds = users.stream()
+                .filter(u -> u.getSchoolStudentId() != null)
+                .map(User::getSchoolStudentId)
+                .collect(Collectors.toSet());
+
+        Map<Long, SchoolStudent> ssMap = new HashMap<>();
+        if (!ssIds.isEmpty()) {
+            QueryWrapper<SchoolStudent> ssWrapper = new QueryWrapper<>();
+            ssWrapper.in("id", ssIds);
+            schoolStudentMapper.selectList(ssWrapper).forEach(ss -> ssMap.put(ss.getId(), ss));
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>(users.size());
+        for (User u : users) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", u.getId());
+            row.put("username", u.getUsername());
+            row.put("realName", u.getRealName());
+            row.put("nickname", u.getNickname());
+            row.put("email", u.getEmail());
+            row.put("role", u.getRole());
+            row.put("createdTime", u.getCreatedTime());
+            row.put("schoolStudentId", u.getSchoolStudentId());
+            if (u.getSchoolStudentId() != null) {
+                SchoolStudent ss = ssMap.get(u.getSchoolStudentId());
+                if (ss != null) {
+                    row.put("collegeName", ss.getCollegeName());
+                    row.put("className", ss.getClassName());
+                }
+            }
+            result.add(row);
+        }
         return result;
     }
 

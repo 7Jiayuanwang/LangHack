@@ -18,10 +18,10 @@ public class RateLimitManager {
     private final Map<String, Bucket> cache = new ConcurrentHashMap<>();
 
     /**
-     * 解析 IP（通用限流）- 每秒10次
+     * 解析 IP（通用限流）- 容量30，greedy 补充30/s（均匀分散，防止 intervally 累积突刺）
      */
     public Bucket resolveBucket(String key) {
-        return cache.computeIfAbsent(key, k -> createNewBucket(10, 1, Duration.ofSeconds(1)));
+        return cache.computeIfAbsent(key, k -> createGreedyBucket(30, 30, Duration.ofSeconds(1)));
     }
 
     /**
@@ -36,6 +36,11 @@ public class RateLimitManager {
      */
     public Bucket resolveRegisterBucket(String key) {
         return cache.computeIfAbsent("register:" + key, k -> createNewBucket(3, 1, Duration.ofHours(1)));
+    }
+
+    private Bucket createGreedyBucket(long capacity, long refillTokens, Duration refillPeriod) {
+        Bandwidth limit = Bandwidth.classic(capacity, Refill.greedy(refillTokens, refillPeriod));
+        return Bucket.builder().addLimit(limit).build();
     }
 
     private Bucket createNewBucket(long capacity, long refillTokens, Duration refillPeriod) {

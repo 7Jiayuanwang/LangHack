@@ -11,6 +11,7 @@ import com.english.dto.LoginRequest;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.mapper.UserMapper;
+import com.english.mapper.SchoolStudentMapper;
 import com.english.service.impl.UserServiceImpl;
 import com.english.util.JwtUtil;
 import org.junit.jupiter.api.BeforeAll;
@@ -61,6 +62,9 @@ class UserServiceTest {
 
     @Mock
     private UserMapper baseMapper;
+
+    @Mock
+    private SchoolStudentMapper schoolStudentMapper;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -715,7 +719,7 @@ class UserServiceTest {
             assertEquals(1L, result.get("current"));
             assertEquals(10L, result.get("size"));
             @SuppressWarnings("unchecked")
-            List<User> records = (List<User>) result.get("records");
+            List<Map<String, Object>> records = (List<Map<String, Object>>) result.get("records");
             assertNotNull(records);
             assertEquals(1, records.size());
         }

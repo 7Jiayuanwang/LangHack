@@ -840,12 +840,37 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
                 || teachingClass.getTeacherId().trim().isEmpty()) {
             return;
         }
+        String teacherId = teachingClass.getTeacherId().trim();
         SchoolTeacher teacher = new SchoolTeacher();
-        teacher.setTeacherId(teachingClass.getTeacherId().trim());
+        teacher.setTeacherId(teacherId);
         teacher.setTeacherName(teachingClass.getTeacherName());
         teacher.setSyncTime(defaultIfNull(teachingClass.getSyncTime(), LocalDateTime.now()));
         teacher.setSyncSource(defaultIfBlank(teachingClass.getSyncSource(), "SCHOOL_API"));
+        // TeachingClass 不含 collegeName；从 course_selection 中按 teacherId 反查 school_student.college_name
+        if (teacher.getCollegeName() == null || teacher.getCollegeName().isEmpty()) {
+            teacher.setCollegeName(resolveCollegeNameFromStudents(teacherId));
+        }
         schoolTeacherMapper.upsertByTeacherId(teacher);
+    }
+
+    private String resolveCollegeNameFromStudents(String teacherId) {
+        try {
+            // student_basic_info 统一了教师工号和学号字段，教师记录以工号存入 school_student.student_id
+            SchoolStudent ss = schoolStudentMapper.selectByStudentId(teacherId);
+            if (ss != null && ss.getCollegeName() != null && !ss.getCollegeName().isEmpty()) {
+                return ss.getCollegeName();
+            }
+            // 降级：通过 teacher_student_binding 中任意绑定学生的 college_name 推断
+            QueryWrapper<com.english.entity.TeacherStudentBinding> bw = new QueryWrapper<>();
+            bw.eq("teacher_id", teacherId).last("LIMIT 1");
+            com.english.entity.TeacherStudentBinding binding = teacherStudentBindingMapper.selectOne(bw);
+            if (binding == null || binding.getStudentId() == null) return null;
+            SchoolStudent studentSs = schoolStudentMapper.selectByStudentId(binding.getStudentId());
+            return studentSs == null ? null : studentSs.getCollegeName();
+        } catch (Exception e) {
+            logger.warn("resolveCollegeNameFromStudents 失败 teacherId={} err={}", teacherId, e.getMessage());
+            return null;
+        }
     }
 
     @Override

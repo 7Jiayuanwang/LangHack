@@ -47,6 +47,16 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="collegeName" label="学院" min-width="120" show-overflow-tooltip>
+          <template #default="scope">
+            {{ scope.row.collegeName || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="className" label="行政班" min-width="130" show-overflow-tooltip>
+          <template #default="scope">
+            {{ scope.row.className || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="createdTime" label="创建时间" width="180">
           <template #default="scope">
             {{ formatTime(scope.row.createdTime) }}
