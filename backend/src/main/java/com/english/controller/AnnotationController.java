@@ -38,8 +38,14 @@ public class AnnotationController {
         if (req.getSelectedText() == null || req.getSelectedText().isBlank()) {
             return Result.error("请选择要批注的文本");
         }
+        if (req.getSelectedText().length() > 2000) {
+            return Result.error("选中文本不能超过2000字");
+        }
         if (req.getNote() == null || req.getNote().isBlank()) {
             return Result.error("批注内容不能为空");
+        }
+        if (req.getNote().length() > 1000) {
+            return Result.error("批注内容不能超过1000字");
         }
         TextAnnotation ann = annotationService.create(req.getTextId(), userId,
                 req.getSelectedText().trim(), req.getNote().trim(), req.getVisibility());

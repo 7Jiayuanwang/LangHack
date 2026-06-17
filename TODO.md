@@ -152,6 +152,7 @@
 - ✅ Bilibili 视频代理
 - ✅ AI 服务商管理面板（增删改查 + 状态监控）
 - ✅ 熔断器保护（Resilience4j）
+- ✅ 翻译长文本自动分块（≤10000字，按句切块，块大小 1500字）
 
 ### 运维功能 ✅ **已完成**
 - ✅ 运维面板（OPS 角色 + 提权机制）
@@ -161,6 +162,19 @@
 - ✅ 数据库自动备份与恢复
 
 ### 待实现功能 🚧
+
+#### 接口安全加固 ✅ **已完成（2026-06-17）**
+- ✅ 标签白名单：`filterValidTags()` 服务层校验 + UserVideoController / UserTextController 必填+白名单双重拦截
+- ✅ 翻译 Prompt Injection 防护：语言代码白名单（en/zh/auto）
+- ✅ 媒体文件访问控制：未审核视频原始文件不可下载
+- ✅ AI 问答 / 批注 / 划线输入长度上限
+- ✅ 字幕 HTML 实体解码（`&gt;&gt;` → `>>`）
+
+#### 流式翻译（优先级：中）
+- ❌ 将 `translate()` 底层改为 `stream: true` Chat Completions 调用（需切换到 `WebClient`）
+- ❌ `TranslateController` 新增 SSE 端点（`/api/translate/stream`），每个分块翻完后 push 结果
+- ❌ 前端用 `EventSource` / fetch ReadableStream 消费流式响应，实现渐进呈现
+- **前置条件**：RestTemplate → WebClient 迁移，或单独为流式接口新建 WebClient Bean
 
 #### 数据指标可视化（优先级：最高 - 比赛答辩前必须完成）
 

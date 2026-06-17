@@ -46,11 +46,17 @@ public class UnderlineController {
             }
             Long textId = Long.valueOf(textIdObj.toString());
             String selectedText = (String) payload.get("selectedText");
+            if (selectedText != null && selectedText.length() > 2000) {
+                return Result.error("划线文本不能超过2000字");
+            }
+            String serializedRange = (String) payload.get("serializedRange");
+            if (serializedRange != null && serializedRange.length() > 5000) {
+                return Result.error("范围数据异常");
+            }
             Object startObj = payload.get("startIndex");
             Object endObj = payload.get("endIndex");
             Integer startIndex = startObj != null ? ((Number) startObj).intValue() : null;
             Integer endIndex = endObj != null ? ((Number) endObj).intValue() : null;
-            String serializedRange = (String) payload.get("serializedRange");
 
             underlineService.createUnderline(userId, textId, selectedText, startIndex, endIndex, serializedRange);
             return Result.success();

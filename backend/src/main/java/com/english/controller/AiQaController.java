@@ -51,6 +51,15 @@ public class AiQaController {
         if (request.getUserQuestion() == null || request.getUserQuestion().trim().isEmpty()) {
             return Result.error("问题不能为空");
         }
+        if (request.getUserQuestion().length() > 500) {
+            return Result.error("问题不能超过500字");
+        }
+        if (request.getSelectedText() != null && request.getSelectedText().length() > 2000) {
+            return Result.error("选中文本不能超过2000字");
+        }
+        if (request.getArticleContext() != null && request.getArticleContext().length() > 5000) {
+            return Result.error("文章上下文不能超过5000字");
+        }
         try {
             String question = request.getUserQuestion().trim();
             String selectedText = request.getSelectedText() != null ? request.getSelectedText().trim() : "";

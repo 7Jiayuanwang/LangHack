@@ -29,6 +29,12 @@ public class TranslateController {
     private final ConcurrentHashMap<String, long[]> rateLimitMap = new ConcurrentHashMap<>();
     private static final int MAX_REQUESTS_PER_MINUTE = 50; // 每用户每分钟最多50次翻译
 
+    // 单次翻译接口的输入上限（超过此值自动分块）
+    private static final int SINGLE_TEXT_MAX = 10000;
+
+    // 批量翻译每条子项的上限
+    private static final int BATCH_ITEM_MAX = 2000;
+
     // 用于触发定期清理的调用计数器（每100次调用清理一次过期条目）
     private final AtomicInteger cleanupCounter = new AtomicInteger(0);
 
@@ -92,6 +98,7 @@ public class TranslateController {
 
     /**
      * 翻译文本（自动检测语言）
+     * 支持中英文互译，超过 1500 字自动分块处理，最大 10000 字。
      */
     @PostMapping("/auto")
     public Result<String> translateAuto(@RequestBody TranslateRequest request,
@@ -100,8 +107,8 @@ public class TranslateController {
         if (request.getText() == null || request.getText().trim().isEmpty()) {
             return Result.error("翻译文本不能为空");
         }
-        if (request.getText().length() > 2000) {
-            return Result.error("翻译文本不能超过2000字");
+        if (request.getText().length() > SINGLE_TEXT_MAX) {
+            return Result.error("翻译文本不能超过" + SINGLE_TEXT_MAX + "字");
         }
         String userId = resolveUserId(authentication, httpRequest);
         if (isRateLimited(userId)) {
@@ -119,6 +126,7 @@ public class TranslateController {
 
     /**
      * 英译中
+     * 支持长文本自动分块，最大 10000 字。
      */
     @PostMapping("/en-to-cn")
     public Result<String> translateEnToCn(@RequestBody TranslateRequest request,
@@ -127,15 +135,15 @@ public class TranslateController {
         if (request.getText() == null || request.getText().trim().isEmpty()) {
             return Result.error("翻译文本不能为空");
         }
-        if (request.getText().length() > 2000) {
-            return Result.error("翻译文本不能超过2000字");
+        if (request.getText().length() > SINGLE_TEXT_MAX) {
+            return Result.error("翻译文本不能超过" + SINGLE_TEXT_MAX + "字");
         }
         String userId = resolveUserId(authentication, httpRequest);
         if (isRateLimited(userId)) {
             return Result.error("翻译请求过于频繁，请1分钟后重试（每分钟限50次）");
         }
         try {
-            String result = translateService.translateEnToCn(request.getText());
+            String result = translateService.translateLong(request.getText(), "en", "zh");
             return Result.success(result);
         } catch (Exception e) {
             log.error("翻译调用外部服务失败 [en-to-cn] user={} textLen={} err={}",
@@ -146,6 +154,7 @@ public class TranslateController {
 
     /**
      * 中译英
+     * 支持长文本自动分块，最大 10000 字。
      */
     @PostMapping("/cn-to-en")
     public Result<String> translateCnToEn(@RequestBody TranslateRequest request,
@@ -154,15 +163,15 @@ public class TranslateController {
         if (request.getText() == null || request.getText().trim().isEmpty()) {
             return Result.error("翻译文本不能为空");
         }
-        if (request.getText().length() > 2000) {
-            return Result.error("翻译文本不能超过2000字");
+        if (request.getText().length() > SINGLE_TEXT_MAX) {
+            return Result.error("翻译文本不能超过" + SINGLE_TEXT_MAX + "字");
         }
         String userId = resolveUserId(authentication, httpRequest);
         if (isRateLimited(userId)) {
             return Result.error("翻译请求过于频繁，请1分钟后重试（每分钟限50次）");
         }
         try {
-            String result = translateService.translateCnToEn(request.getText());
+            String result = translateService.translateLong(request.getText(), "zh", "en");
             return Result.success(result);
         } catch (Exception e) {
             log.error("翻译调用外部服务失败 [cn-to-en] user={} textLen={} err={}",
@@ -174,6 +183,17 @@ public class TranslateController {
     /**
      * 自定义语言翻译
      */
+    // 支持的语言代码：平台默认只支持中英互译（en/zh/auto）。
+    // 如需扩展其他语种，请在此白名单和 TencentTranslateService.mapLanguageCode() 中同步添加，
+    // 并在 API 文档中注明所用翻译后端是否支持对应语言对。
+    private static final java.util.Set<String> ALLOWED_LANG_CODES = java.util.Set.of(
+            "en", "zh", "auto"
+    );
+
+    /**
+     * 自定义语言翻译（目前仅支持 en/zh/auto）
+     * 支持长文本自动分块，最大 10000 字。
+     */
     @PostMapping("/custom")
     public Result<String> translate(@RequestBody CustomTranslateRequest request,
                                     Authentication authentication,
@@ -181,8 +201,8 @@ public class TranslateController {
         if (request.getText() == null || request.getText().trim().isEmpty()) {
             return Result.error("翻译文本不能为空");
         }
-        if (request.getText().length() > 2000) {
-            return Result.error("翻译文本不能超过2000字");
+        if (request.getText().length() > SINGLE_TEXT_MAX) {
+            return Result.error("翻译文本不能超过" + SINGLE_TEXT_MAX + "字");
         }
         // 验证源语言和目标语言
         if (request.getSource() == null || request.getSource().trim().isEmpty()) {
@@ -191,12 +211,18 @@ public class TranslateController {
         if (request.getTarget() == null || request.getTarget().trim().isEmpty()) {
             return Result.error("目标语言不能为空");
         }
+        if (!ALLOWED_LANG_CODES.contains(request.getSource().toLowerCase())) {
+            return Result.error("不支持的源语言代码");
+        }
+        if (!ALLOWED_LANG_CODES.contains(request.getTarget().toLowerCase())) {
+            return Result.error("不支持的目标语言代码");
+        }
         String userId = resolveUserId(authentication, httpRequest);
         if (isRateLimited(userId)) {
             return Result.error("翻译请求过于频繁，请1分钟后重试（每分钟限50次）");
         }
         try {
-            String result = translateService.translate(
+            String result = translateService.translateLong(
                 request.getText(),
                 request.getSource(),
                 request.getTarget()
@@ -226,13 +252,18 @@ public class TranslateController {
             return Result.error("批量翻译每次最多200条");
         }
 
+        String direction = request.getDirection() == null ? "en-to-zh" : request.getDirection();
+        if (!"en-to-zh".equals(direction) && !"zh-to-en".equals(direction)) {
+            return Result.error("direction 只支持 en-to-zh 或 zh-to-en");
+        }
+
         // 验证每条文本长度
         for (String text : request.getTexts()) {
             if (text == null || text.isEmpty()) {
                 return Result.error("文本条目不能为空");
             }
-            if (text.length() > 2000) {
-                return Result.error("单条翻译文本不能超过2000字");
+            if (text.length() > BATCH_ITEM_MAX) {
+                return Result.error("单条翻译文本不能超过" + BATCH_ITEM_MAX + "字");
             }
         }
 
@@ -242,7 +273,6 @@ public class TranslateController {
             return Result.error("请求过于频繁，请稍后重试");
         }
 
-        String direction = request.getDirection() == null ? "en-to-zh" : request.getDirection();
         String src = direction.startsWith("en") ? "en" : "zh";
         String tgt = src.equals("en") ? "zh" : "en";
 

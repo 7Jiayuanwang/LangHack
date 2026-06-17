@@ -3,6 +3,7 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.User;
 import com.english.entity.Video;
+import com.english.service.ContentTagService;
 import com.english.service.FeatureToggleService;
 import com.english.service.UserService;
 import com.english.service.VideoService;
@@ -38,6 +39,9 @@ public class UserVideoController {
     @Autowired
     private FeatureToggleService featureToggleService;
 
+    @Autowired
+    private ContentTagService contentTagService;
+
     /**
      * 检查当前用户是否有视频上传权限（功能开关 student.video_upload_enabled）
      */
@@ -70,6 +74,10 @@ public class UserVideoController {
             Object mediaIdObj = videoData.get("mediaId");
             String description = (String) videoData.getOrDefault("description", "");
             String tags = (String) videoData.getOrDefault("tags", "");
+            String filteredTags = contentTagService.filterValidTags(tags);
+            if (filteredTags.isEmpty()) {
+                return Result.error(tags.trim().isEmpty() ? "标签不能为空" : "所选标签不合法，请从预设标签中选择");
+            }
             String subtitleContent = (String) videoData.get("subtitleContent");
             String subtitleContentZh = (String) videoData.get("subtitleContentZh");
             Object coverMediaIdObj = videoData.get("coverMediaId");
@@ -85,7 +93,7 @@ public class UserVideoController {
             video.setTitle(title);
             video.setMediaId(Long.valueOf(mediaIdObj.toString()));
             video.setDescription(description);
-            video.setTags(tags != null ? tags : "");
+            video.setTags(filteredTags);
             video.setUserId(user.getId());
             video.setIsPublic(0); // 默认不公开，审核通过后再公开
             video.setStatus("PENDING"); // 默认待审核
@@ -197,7 +205,12 @@ public class UserVideoController {
             }
             if (videoData.containsKey("tags")) {
                 Object tagsVal = videoData.get("tags");
-                video.setTags(tagsVal != null ? tagsVal.toString() : "");
+                String rawTags = tagsVal != null ? tagsVal.toString() : "";
+                String filtered = contentTagService.filterValidTags(rawTags);
+                if (!rawTags.trim().isEmpty() && filtered.isEmpty()) {
+                    return Result.error("所选标签不合法，请从预设标签中选择");
+                }
+                video.setTags(filtered);
             }
             if (videoData.containsKey("subtitleContent")) {
                 Object subVal = videoData.get("subtitleContent");

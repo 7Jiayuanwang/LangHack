@@ -470,8 +470,15 @@ function parseVTT(vttText) {
     const startTime = parseTimestamp(timeParts[0].trim())
     const endTime = parseTimestamp(timeParts[1].trim().split(/\s/)[0])
 
-    const text = lines.slice(timestampLineIdx + 1).join(' ').trim()
-    if (!text) continue
+    const rawText = lines.slice(timestampLineIdx + 1).join(' ').trim()
+    if (!rawText) continue
+    const text = rawText
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
 
     cues.push({ startTime, endTime, text })
   }
