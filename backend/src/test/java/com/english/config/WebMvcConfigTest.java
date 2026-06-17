@@ -322,6 +322,23 @@ class WebMvcConfigTest {
             assertNotNull(rateLimitReg);
             verify(rateLimitReg).addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**");
         }
+
+        @Test
+        @DisplayName("access log interceptor should exclude /api/health to avoid polluting top_pages")
+        void addInterceptors_shouldExcludeHealthFromAccessLog() {
+            InterceptorRegistry registry = mock(InterceptorRegistry.class, RETURNS_DEEP_STUBS);
+            java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration> regs =
+                    captureRegistrations(registry);
+
+            config.addInterceptors(registry);
+
+            InterceptorRegistration accessLogReg = regs.get(mockInterceptor);
+            assertNotNull(accessLogReg, "accessLogInterceptor should be added to the registry");
+            verify(accessLogReg).excludePathPatterns("/api/ops/monitoring/realtime/stream",
+                                                    "/api/ops/update/trigger",
+                                                    "/api/health",
+                                                    "/audio/**", "/favicon.ico");
+        }
     }
 
     // ==================== Testable Subclass ====================

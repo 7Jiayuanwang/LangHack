@@ -51,6 +51,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/api/ops/monitoring/realtime/stream",
                                      "/api/ops/update/trigger",
+                                     "/api/health",
                                      "/audio/**", "/favicon.ico");
 
         // Force master datasource for admin/ops paths to avoid read-after-write inconsistency

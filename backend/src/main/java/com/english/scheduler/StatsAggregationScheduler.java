@@ -2,11 +2,9 @@ package com.english.scheduler;
 
 import com.english.mapper.AccessLogMapper;
 import com.english.mapper.AccessStatsDailyMapper;
-import com.english.mapper.AccessStatsHourlyMapper;
 import com.english.mapper.AiCallLogMapper;
 import com.english.mapper.AiCallStatsDailyMapper;
 import com.english.entity.AccessStatsDaily;
-import com.english.entity.AccessStatsHourly;
 import com.english.entity.AiCallStatsDaily;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,48 +22,18 @@ public class StatsAggregationScheduler {
     private static final Logger log = LoggerFactory.getLogger(StatsAggregationScheduler.class);
 
     private final AccessLogMapper accessLogMapper;
-    private final AccessStatsHourlyMapper hourlyMapper;
     private final AccessStatsDailyMapper dailyMapper;
     private final AiCallLogMapper aiCallLogMapper;
     private final AiCallStatsDailyMapper aiCallStatsDailyMapper;
 
     public StatsAggregationScheduler(AccessLogMapper accessLogMapper,
-                                      AccessStatsHourlyMapper hourlyMapper,
                                       AccessStatsDailyMapper dailyMapper,
                                       AiCallLogMapper aiCallLogMapper,
                                       AiCallStatsDailyMapper aiCallStatsDailyMapper) {
         this.accessLogMapper = accessLogMapper;
-        this.hourlyMapper = hourlyMapper;
         this.dailyMapper = dailyMapper;
         this.aiCallLogMapper = aiCallLogMapper;
         this.aiCallStatsDailyMapper = aiCallStatsDailyMapper;
-    }
-
-    @Scheduled(cron = "0 5 * * * ?")
-    public void aggregateHourlyStats() {
-        try {
-            LocalDateTime endTime = LocalDateTime.now().withMinute(0).withSecond(0).withNano(0);
-            LocalDateTime startTime = endTime.minusHours(1);
-
-            List<Map<String, Object>> hourlyData = accessLogMapper.aggregateHourly(startTime, endTime);
-
-            for (Map<String, Object> data : hourlyData) {
-                AccessStatsHourly stats = new AccessStatsHourly();
-                stats.setStatHour(LocalDateTime.parse(data.get("stat_hour").toString().replace(' ', 'T')));
-                stats.setTotalRequests(((Number) data.get("total_requests")).intValue());
-                stats.setUniqueUsers(((Number) data.get("unique_users")).intValue());
-                stats.setAvgResponseTimeMs(((Number) data.get("avg_response_time_ms")).intValue());
-                stats.setMaxResponseTimeMs(((Number) data.get("max_response_time_ms")).intValue());
-                stats.setErrorCount(((Number) data.get("error_count")).intValue());
-                stats.setCreatedTime(LocalDateTime.now());
-
-                hourlyMapper.insert(stats);
-            }
-
-            log.info("聚合小时统计完成: {}", hourlyData.size());
-        } catch (Exception e) {
-            log.error("聚合小时统计失败", e);
-        }
     }
 
     @Scheduled(cron = "0 10 2 * * ?")
