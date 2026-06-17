@@ -5,6 +5,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -262,6 +264,63 @@ class WebMvcConfigTest {
             assertNotNull(
                     WebMvcConfig.class.getMethod("addResourceHandlers", ResourceHandlerRegistry.class),
                     "Should declare addResourceHandlers(ResourceHandlerRegistry)");
+        }
+    }
+
+    // ==================== Interceptor Registration Tests ====================
+
+    @Nested
+    @DisplayName("addInterceptors / interceptor registration")
+    class InterceptorRegistrationTests {
+
+        /**
+         * Mock InterceptorRegistry and capture the InterceptorRegistration
+         * returned for each addInterceptor() call, so tests can verify the
+         * downstream addPathPatterns / excludePathPatterns chain.
+         */
+        private java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration>
+                captureRegistrations(InterceptorRegistry registry) {
+            java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration> map =
+                    new java.util.LinkedHashMap<>();
+            when(registry.addInterceptor(any(org.springframework.web.servlet.HandlerInterceptor.class)))
+                    .thenAnswer(inv -> {
+                        org.springframework.web.servlet.HandlerInterceptor interceptor =
+                                inv.getArgument(0);
+                        InterceptorRegistration reg = mock(InterceptorRegistration.class, RETURNS_DEEP_STUBS);
+                        map.put(interceptor, reg);
+                        return reg;
+                    });
+            return map;
+        }
+
+        @Test
+        @DisplayName("rate limit interceptor should be registered for /api/health (no longer excluded)")
+        void addInterceptors_shouldRegisterRateLimitForHealth() {
+            InterceptorRegistry registry = mock(InterceptorRegistry.class, RETURNS_DEEP_STUBS);
+            java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration> regs =
+                    captureRegistrations(registry);
+
+            config.addInterceptors(registry);
+
+            InterceptorRegistration rateLimitReg = regs.get(mockRateLimitInterceptor);
+            assertNotNull(rateLimitReg, "rateLimitInterceptor should be added to the registry");
+
+            // /api/health must NOT be in the excludePathPatterns list anymore
+            verify(rateLimitReg, never()).excludePathPatterns("/api/health");
+        }
+
+        @Test
+        @DisplayName("rate limit interceptor should still cover /api/auth/login and /api/auth/register")
+        void addInterceptors_shouldKeepAuthPathsInRateLimit() {
+            InterceptorRegistry registry = mock(InterceptorRegistry.class, RETURNS_DEEP_STUBS);
+            java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration> regs =
+                    captureRegistrations(registry);
+
+            config.addInterceptors(registry);
+
+            InterceptorRegistration rateLimitReg = regs.get(mockRateLimitInterceptor);
+            assertNotNull(rateLimitReg);
+            verify(rateLimitReg).addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**");
         }
     }
 

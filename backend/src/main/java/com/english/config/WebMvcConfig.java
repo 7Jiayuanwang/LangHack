@@ -43,9 +43,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**/upload", "/api/admin/import-users", "/api/ops/backup/import");
 
         // API 频率限制
+        // /api/health 复用默认 resolveBucket (10 req/s per IP)，防止裸奔被恶意刷接口拖慢后端
         registry.addInterceptor(rateLimitInterceptor)
-                .addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**")
-                .excludePathPatterns("/api/health");
+                .addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**");
 
         registry.addInterceptor(accessLogInterceptor)
                 .addPathPatterns("/api/**")
