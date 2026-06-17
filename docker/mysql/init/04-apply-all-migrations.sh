@@ -2,6 +2,7 @@
 # 执行 04-apply-all-migrations.sql
 # 文件使用 $$ 作为存储过程分隔符，但无 DELIMITER 指令。
 # 此脚本用 awk 动态插入 DELIMITER $$ / DELIMITER ; 包装后再执行。
+# 同时将过程外的尾随 $$ 还原为 ;，避免普通 SQL 被误当作过程终止符。
 set -e
 
 SQL_FILE="/opt/langhack/04-apply-all-migrations.sql"
@@ -15,8 +16,9 @@ echo "[migrate] 时间: $(date '+%Y-%m-%d %H:%M:%S')"
 #   - DROP PROCEDURE IF EXISTS 开始一个过程组（首次出现时插入 DELIMITER $$）
 #   - CREATE PROCEDURE 标记进入过程体（in_proc=1，内部 ; 不截断语句）
 #   - END$$ 标记退出过程体（in_proc=0）
-#   - CALL ...$$  仍属于过程组，不关闭 delimiter
+#   - CALL ...$$ 仍属于过程组，不关闭 delimiter
 #   - 其他非空非注释行：若在过程组外则插入 DELIMITER ; 关闭过程组
+#   - 过程组外的尾随 $$ 统一转换为 ;
 awk '
 BEGIN { in_proc = 0; delim_set = 0 }
 
@@ -35,6 +37,7 @@ BEGIN { in_proc = 0; delim_set = 0 }
 
 {
     if (delim_set && !in_proc) { print "DELIMITER ;"; delim_set = 0 }
+    if (!in_proc && /\$\$$/) sub(/\$\$$/, ";")
     print
 }
 

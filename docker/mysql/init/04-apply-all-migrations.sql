@@ -3669,7 +3669,7 @@ VALUES
     ('student_basic_info', 'bj',    'class_name',     'STRING', 'STRING', 'NONE', 0, 'class name'),
     ('student_basic_info', 'xb',    'gender',         'STRING', 'STRING', 'NONE', 0, 'gender'),
     ('student_basic_info', 'lxdh',  'phone',          'STRING', 'STRING', 'NONE', 0, 'phone'),
-    ('student_basic_info', 'fdyxm', 'counselor_name', 'STRING', 'STRING', 'NONE', 0, 'counselor name')$$
+    ('student_basic_info', 'fdyxm', 'counselor_name', 'STRING', 'STRING', 'NONE', 0, 'counselor name');
 
 -- Part 4: sso_user_bindings DDL
 DROP PROCEDURE IF EXISTS _v45_add_sso_binding_cols$$
@@ -3727,7 +3727,7 @@ DROP PROCEDURE IF EXISTS _add_vocabulary_source_type_v41$$
 
 UPDATE users
 SET username = SUBSTRING(username, 9)
-WHERE username REGEXP '^student_[0-9]+$'$$
+WHERE username REGEXP '^student_[0-9]+$';
 
 DROP PROCEDURE IF EXISTS v42_add_school_columns$$
 CREATE PROCEDURE v42_add_school_columns()
@@ -3766,14 +3766,14 @@ DROP PROCEDURE IF EXISTS v42_add_school_indexes$$
 UPDATE users u
 JOIN school_student s ON s.student_id COLLATE utf8mb4_unicode_ci = u.username
 SET u.school_student_id = s.id
-WHERE u.school_student_id IS NULL$$
+WHERE u.school_student_id IS NULL;
 
 UPDATE users u
 JOIN school_teacher t ON t.teacher_id COLLATE utf8mb4_unicode_ci = u.username
 SET u.school_teacher_id = t.id
-WHERE u.school_teacher_id IS NULL$$
+WHERE u.school_teacher_id IS NULL;
 
-DROP VIEW IF EXISTS v_user_school_profile$$
+DROP VIEW IF EXISTS v_user_school_profile;
 CREATE VIEW v_user_school_profile AS
 SELECT
     u.id AS user_id, u.username, u.role, u.real_name,
@@ -3785,7 +3785,7 @@ SELECT
     (SELECT MAX(les.score) FROM level_exam_scores les WHERE les.student_id = s.student_id) AS best_exam_score
 FROM users u
 JOIN school_student s ON s.id = u.school_student_id
-WHERE u.deleted = 0$$
+WHERE u.deleted = 0;
 
 -- V43__ai_feedback.sql
 
@@ -3801,7 +3801,7 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     INDEX idx_user (user_id),
     FOREIGN KEY (call_log_id) REFERENCES ai_call_log(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4$$
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- V44__media_transcoding.sql
 

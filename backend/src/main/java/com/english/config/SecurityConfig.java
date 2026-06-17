@@ -139,7 +139,7 @@ public class SecurityConfig {
                 .and()
                 .authorizeRequests()
                 // 健康检查端点保护（必须放在最前面）
-                .antMatchers("/api/health").hasAnyRole("ADMIN", "OPS")
+                .antMatchers("/api/health").permitAll()
                 // 允许访问的接口 - 无需认证
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/public/**").permitAll()
