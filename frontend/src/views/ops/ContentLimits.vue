@@ -62,7 +62,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="jsx">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, Document } from '@element-plus/icons-vue'
