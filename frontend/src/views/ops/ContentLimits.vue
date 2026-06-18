@@ -65,7 +65,7 @@
 <script setup lang="jsx">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, Document } from '@element-plus/icons-vue'
+import { Loading, Document, Picture, VideoPlay } from '@element-plus/icons-vue'
 import { getContentLimits, updateContentLimits, deleteContentLimit } from '@/api/systemConfig'
 
 // ── 子组件：尺寸输入框（数字 + 单位）─────────────────────────────────────────
@@ -149,13 +149,14 @@ const LimitCard = {
     }
 
     return () => (
-      <el-card class="limit-card" shadow="never">
-        <template v-slot:header>
+      <el-card class="limit-card" shadow="never" v-slots={{
+        header: () => (
           <div class="card-header">
-            <el-icon><props.type === 'image' ? 'Picture' : 'VideoPlay' /></el-icon>
+            <el-icon>{props.type === 'image' ? <Picture /> : <VideoPlay />}</el-icon>
             <span>{props.title}</span>
           </div>
-        </template>
+        )
+      }}>
 
         {/* 全局默认行 */}
         <div class="row-item">
