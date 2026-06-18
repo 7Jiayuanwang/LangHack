@@ -242,6 +242,12 @@ const routes = [
         component: () => import("@/views/ops/Logs.vue"),
         meta: { title: "日志管理", roles: ["OPS", "ADMIN"] },
       },
+      {
+        path: "content-limits",
+        name: "OpsContentLimits",
+        component: () => import("@/views/ops/ContentLimits.vue"),
+        meta: { title: "内容限制", roles: ["OPS", "ADMIN"] },
+      },
     ],
   },
   {

@@ -3838,3 +3838,25 @@ BEGIN
 END$$
 CALL _add_idx_media_transcode_v44()$$
 DROP PROCEDURE IF EXISTS _add_idx_media_transcode_v44$$
+
+
+-- ── V46: content_limits 分组初始值 ───────────────────────────────────────────
+INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret) VALUES
+  ('content_limits', 'upload.content_size.image',        '10MB',  '图片上传大小限制（全局默认）', 0),
+  ('content_limits', 'upload.content_size.video',        '512MB', '视频上传大小限制（全局默认）', 0),
+  ('content_limits', 'upload.content_size.excel_import', '10MB',  'Excel批量导入大小限制',        0)$$
+
+
+-- ── V47: 功能开关清理 ─────────────────────────────────────────────────────────
+DELETE FROM system_config WHERE config_group = 'feature_toggle' AND config_key IN (
+  'page_vocabulary','page_videos','page_video_player','page_interactive_text','page_text_learning',
+  'page_admin_backups','page_admin_monitoring',
+  'page_ops_monitoring','page_ops_ai_providers','page_ops_feature_toggles',
+  'page_ops_school_data_config','page_ops_school_data_browser','page_ops_update',
+  'page_teacher_dashboard','page_teacher_courses','page_teacher_my_courses',
+  'page_teacher_classes','page_teacher_assignments',
+  'student.lazy_data_sync','student.lazy_course_selections'
+)$$
+INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret) VALUES
+  ('feature_toggle', 'student.video_upload_enabled',   'true', '学生端-视频上传功能（全局关闭后仅标签内用户可上传）', 0),
+  ('feature_toggle', 'teacher.learner_profile_enabled','true', '教师端-学生学习画像查看功能', 0)$$

@@ -22,6 +22,8 @@ import com.english.service.UnitWordService;
 import com.english.service.TextExerciseService;
 import com.english.service.ArticleVersionService;
 import com.english.service.ContentTagService;
+import com.english.service.SystemConfigService;
+import com.english.util.SizeParseUtil;
 import com.english.mapper.StudentExerciseAnswerMapper;
 import com.english.mapper.TextExerciseMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -99,6 +101,9 @@ public class AdminController {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
 
     @GetMapping("/users")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
@@ -1258,9 +1263,11 @@ public class AdminController {
             return Result.error("上传文件为空");
         }
 
-        // 文件大小限制（10MB）
-        if (file.getSize() > 10 * 1024 * 1024) {
-            return Result.error("文件大小超过限制（最大10MB）");
+        // 文件大小限制（动态读取 content_limits 配置，默认 10MB）
+        String limitVal = systemConfigService.get("content_limits", "upload.content_size.excel_import", "10MB");
+        long maxBytes = SizeParseUtil.parseSize(limitVal, 10 * 1024 * 1024L);
+        if (file.getSize() > maxBytes) {
+            return Result.error("文件大小超过限制（最大" + SizeParseUtil.formatSize(maxBytes) + "）");
         }
 
         // 检查文件类型

@@ -225,6 +225,7 @@ const NAV_ITEMS = {
     { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine,    featureKey: 'ops.school_data_browser' },
     { path: '/ops/logs',            label: '日志', icon: Document    },
     { path: '/ops/update',          label: '部署', icon: VideoPlay   },
+    { path: '/ops/content-limits',  label: '限制', icon: Setting     },
   ],
   admin: [
     { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null, featureKey: 'admin.dashboard' },
@@ -259,6 +260,7 @@ const MORE_ITEMS = {
     { path: '/admin/texts',          label: '课文管理', icon: Reading,  featureKey: 'admin.texts' },
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
+    { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'page_admin_videos' },
     { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
@@ -318,6 +320,8 @@ const ROUTE_MAP = {
     '/ops/school-data':         '学校数据',
     '/ops/school-data-browser':  '数据浏览',
     '/ops/update':          '部署管理',
+    '/ops/content-limits':  '内容大小限制',
+    '/ops/logs':            '日志管理',
   },
   admin: {
     '/admin/dashboard':   '管理概览',

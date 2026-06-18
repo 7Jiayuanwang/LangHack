@@ -5,6 +5,7 @@ import com.english.interceptor.UploadSizeLimitInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
@@ -43,16 +44,16 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**/upload", "/api/admin/import-users", "/api/ops/backup/import");
 
         // API 频率限制：admin/ops 已有 JWT 角色保护，无需 IP 限流
-        registry.addInterceptor(rateLimitInterceptor)
-                .addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**")
-                .excludePathPatterns("/api/admin/**", "/api/ops/**");
+        InterceptorRegistration rateLimitReg = registry.addInterceptor(rateLimitInterceptor);
+        rateLimitReg.addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**");
+        rateLimitReg.excludePathPatterns("/api/admin/**", "/api/ops/**");
 
-        registry.addInterceptor(accessLogInterceptor)
-                .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/ops/monitoring/realtime/stream",
-                                     "/api/ops/update/trigger",
-                                     "/api/health",
-                                     "/audio/**", "/favicon.ico");
+        InterceptorRegistration accessLogReg = registry.addInterceptor(accessLogInterceptor);
+        accessLogReg.addPathPatterns("/api/**");
+        accessLogReg.excludePathPatterns("/api/ops/monitoring/realtime/stream",
+                                         "/api/ops/update/trigger",
+                                         "/api/health",
+                                         "/audio/**", "/favicon.ico");
 
         // Force master datasource for admin/ops paths to avoid read-after-write inconsistency
         registry.addInterceptor(adminMasterInterceptor)

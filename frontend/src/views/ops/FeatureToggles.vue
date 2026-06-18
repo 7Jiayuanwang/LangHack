@@ -450,7 +450,7 @@
 <script setup>
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight, Search, Collection, Select } from '@element-plus/icons-vue'
+import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight, Search, Collection, Select, Key } from '@element-plus/icons-vue'
 import { useFeatureToggles, invalidateFeatureToggleCache } from '@/composables/useFeatureToggles'
 import {
   getSystemConfig, updateSystemConfig,
@@ -472,15 +472,16 @@ const toggles = ref([])
 
 // 角色分组定义（按 configKey 前缀分组）
 const groupDefs = [
-  { key: 'student', label: '学生端', desc: '学生端页面与导航可见性', prefixes: ['page_'], excludePrefixes: ['page_teacher_', 'page_admin_', 'page_ops_'], iconName: 'User' },
-  { key: 'teacher', label: '教师端', desc: '教师端页面与功能',       prefixes: ['page_teacher_'], excludePrefixes: [], iconName: 'Reading' },
-  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',  prefixes: ['admin.', 'page_admin_'], excludePrefixes: [], iconName: 'Management' },
-  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',  prefixes: ['ops.', 'page_ops_'], excludePrefixes: [], iconName: 'Monitor' },
-  { key: 'other',   label: '其他',    desc: '未归类的全局开关',        prefixes: [], excludePrefixes: [], iconName: 'MoreFilled' }
+  { key: 'student', label: '学生端',  desc: '学生端页面与导航可见性',    prefixes: ['page_', 'student.'],        excludePrefixes: ['page_teacher_', 'page_admin_', 'page_ops_'], iconName: 'User' },
+  { key: 'teacher', label: '教师端',  desc: '教师端页面与功能',          prefixes: ['page_teacher_', 'teacher.'], excludePrefixes: [], iconName: 'Reading' },
+  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',      prefixes: ['admin.', 'page_admin_'],     excludePrefixes: [], iconName: 'Management' },
+  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',     prefixes: ['ops.', 'page_ops_'],         excludePrefixes: [], iconName: 'Monitor' },
+  { key: 'sso',     label: 'SSO/认证', desc: 'SSO自动授权与认证策略',    prefixes: ['sso.'],                      excludePrefixes: [], iconName: 'Key' },
+  { key: 'other',   label: '其他',    desc: '未归类的全局开关',           prefixes: [], excludePrefixes: [], iconName: 'MoreFilled' }
 ]
 
 const roleFilter = ref('all')
-const activeGroupPanels = ref(['student', 'teacher', 'admin', 'ops', 'other'])
+const activeGroupPanels = ref(['student', 'teacher', 'admin', 'ops', 'sso', 'other'])
 
 const categorize = (key) => {
   if (!key) return 'other'

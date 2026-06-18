@@ -284,10 +284,10 @@
               <div class="learning-header">
                 <h3>单词学习 - {{ currentUnit?.name || '单元' }}</h3>
                 <div class="learning-actions">
-                  <el-button v-if="isEnabled('page_vocabulary')" type="primary" @click="startWordLearning" :disabled="unitWords.length === 0">
+                  <el-button v-if="isEnabled('page_word_recite')" type="primary" @click="startWordLearning" :disabled="unitWords.length === 0">
                     开始学习
                   </el-button>
-                  <el-button v-if="isEnabled('page_vocabulary')" @click="startWordTest" :disabled="unitWords.length === 0">
+                  <el-button v-if="isEnabled('page_word_recite')" @click="startWordTest" :disabled="unitWords.length === 0">
                     单词测试
                   </el-button>
                 </div>

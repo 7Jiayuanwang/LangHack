@@ -143,3 +143,17 @@ export function deleteFeatureOverride(scope, scopeValue, featureKey) {
     params: { scope, scopeValue, featureKey }
   })
 }
+
+// ---------- 内容大小限制（OPS）----------
+
+export function getContentLimits() {
+  return request({ url: '/api/ops/system-config/content-limits', method: 'get' })
+}
+
+export function updateContentLimits(items) {
+  return request({ url: '/api/ops/system-config/content-limits', method: 'put', data: items })
+}
+
+export function deleteContentLimit(key) {
+  return request({ url: `/api/ops/system-config/content-limits/${encodeURIComponent(key)}`, method: 'delete' })
+}

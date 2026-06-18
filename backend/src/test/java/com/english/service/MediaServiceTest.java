@@ -4,6 +4,7 @@ import com.english.test.TestUtils;
 import com.english.entity.Media;
 import com.english.exception.BusinessException;
 import com.english.mapper.MediaMapper;
+import com.english.service.SystemConfigService;
 import com.english.service.impl.MediaServiceImpl;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
@@ -39,6 +40,9 @@ public class MediaServiceTest {
     @Mock
     private MediaTranscodeService transcodeService;
 
+    @Mock
+    private SystemConfigService systemConfigService;
+
     @InjectMocks
     private MediaServiceImpl mediaService;
 
@@ -47,14 +51,14 @@ public class MediaServiceTest {
         MockitoAnnotations.openMocks(this);
         TestUtils.injectBaseMapper(mediaService, mediaMapper);
         // 使用反射设置私有字段（@Value 注入的字段）
-        java.lang.reflect.Field maxImageSizeField = MediaServiceImpl.class.getDeclaredField("maxImageSize");
+        java.lang.reflect.Field maxImageSizeField = MediaServiceImpl.class.getDeclaredField("defaultMaxImageSize");
         maxImageSizeField.setAccessible(true);
         Long maxImageSizeValue = 10L * 1024 * 1024; // 10MB
         if (maxImageSizeValue != null) {
             maxImageSizeField.set(mediaService, maxImageSizeValue);
         }
 
-        java.lang.reflect.Field maxVideoSizeField = MediaServiceImpl.class.getDeclaredField("maxVideoSize");
+        java.lang.reflect.Field maxVideoSizeField = MediaServiceImpl.class.getDeclaredField("defaultMaxVideoSize");
         maxVideoSizeField.setAccessible(true);
         Long maxVideoSizeValue = 100L * 1024 * 1024; // 100MB
         if (maxVideoSizeValue != null) {
