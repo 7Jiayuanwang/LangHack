@@ -3628,7 +3628,6 @@ BEGIN
 END$$
 CALL v45_ai_qa_usage_index()$$
 DROP PROCEDURE IF EXISTS v45_ai_qa_usage_index$$
-
 -- Part 2: school_student DDL
 DROP PROCEDURE IF EXISTS _v45_add_student_extra_cols$$
 CREATE PROCEDURE _v45_add_student_extra_cols()

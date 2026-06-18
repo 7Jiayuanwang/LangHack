@@ -41,7 +41,6 @@ public class UserVideoController {
 
     @Autowired
     private ContentTagService contentTagService;
-
     /**
      * 检查当前用户是否有视频上传权限（功能开关 student.video_upload_enabled）
      */
