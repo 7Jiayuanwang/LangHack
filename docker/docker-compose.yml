@@ -260,6 +260,7 @@ services:
       PROJECT_HOST_PATH: "${PROJECT_HOST_PATH:-}"
       APP_UPDATE_DEPLOYER_IMAGE: "${APP_UPDATE_DEPLOYER_IMAGE:-langhack-deployer:latest}"
       APP_UPDATE_DOCKER_SOCKET: "${APP_UPDATE_DOCKER_SOCKET:-/var/run/docker.sock}"
+      GIT_TOKEN: "${GIT_TOKEN:-}"
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
       # 零停机热更新（HotDeployController 启动 deployer sidecar 容器时需要）

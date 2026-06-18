@@ -57,6 +57,9 @@ public class UpdateServiceImpl implements UpdateService {
     @Value("${app.update.deployer-image:langhack-deployer:latest}")
     private String deployerImage;
 
+    @Value("${app.update.git-token:}")
+    private String gitToken;
+
     @Value("${app.update.network:langhack_langhack-network}")
     private String updateNetwork;
 
@@ -457,6 +460,10 @@ public class UpdateServiceImpl implements UpdateService {
         cmd.add(DEPLOYER_WORKSPACE);
         cmd.add("-e");
         cmd.add("HOST_PROJECT_DIR=" + projectHostPath);
+        if (gitToken != null && !gitToken.isBlank()) {
+            cmd.add("-e");
+            cmd.add("GIT_TOKEN=" + gitToken);
+        }
         cmd.add("--network");
         cmd.add(networkName());
         cmd.add(deployerImage);

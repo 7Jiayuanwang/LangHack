@@ -10,6 +10,7 @@ app:
     docker-socket: ${APP_UPDATE_DOCKER_SOCKET:/var/run/docker.sock}
     project-host-path: ${PROJECT_HOST_PATH:}
     deployer-image: ${APP_UPDATE_DEPLOYER_IMAGE:langhack-deployer:latest}
+    git-token: ${GIT_TOKEN:}
   base-url: ${APP_BASE_URL:http://localhost:3000}
 
 # 管理员登录配置

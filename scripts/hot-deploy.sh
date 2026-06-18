@@ -255,10 +255,23 @@ main() {
         if [ -n "$REMOTE_URL" ]; then
             log_info "使用指定远程仓库: $REMOTE_URL"
             run git -C "$PROJECT_ROOT" remote set-url origin "$REMOTE_URL"
+        elif [ -n "${GIT_TOKEN:-}" ]; then
+            # 将 HTTPS remote 注入 token，避免容器内无凭据导致认证失败
+            ORIGINAL_REMOTE=$(git -C "$PROJECT_ROOT" remote get-url origin 2>/dev/null || echo "")
+            if [[ "$ORIGINAL_REMOTE" == https://github.com/* ]]; then
+                REPO_PATH="${ORIGINAL_REMOTE#https://github.com/}"
+                TOKEN_REMOTE="https://${GIT_TOKEN}@github.com/${REPO_PATH}"
+                git -C "$PROJECT_ROOT" remote set-url origin "$TOKEN_REMOTE"
+                log_info "已注入 GIT_TOKEN 认证"
+            fi
         fi
         run git -C "$PROJECT_ROOT" fetch origin "$BRANCH"
         run git -C "$PROJECT_ROOT" checkout "$BRANCH"
         run git -C "$PROJECT_ROOT" pull origin "$BRANCH"
+        # 拉取完成后恢复 remote URL（去掉 token）
+        if [ -n "${ORIGINAL_REMOTE:-}" ]; then
+            git -C "$PROJECT_ROOT" remote set-url origin "$ORIGINAL_REMOTE" 2>/dev/null || true
+        fi
     fi
     log_ok "代码已就绪"
 
