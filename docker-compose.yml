@@ -263,6 +263,8 @@ services:
       - ./backups:/app/backups
       # Docker Socket — 热部署 deployer sidecar 需要
       - /var/run/docker.sock:/var/run/docker.sock
+      # 热部署日志目录（与 deployer sidecar 共享，用于实时日志流）
+      - ./logs/hot-deploy:/app/hot-deploy-logs
     networks:
       - langhack-network
     depends_on:
