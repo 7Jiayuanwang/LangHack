@@ -1363,7 +1363,11 @@ esac
 # 构建 deployer 镜像（热部署 sidecar）
 if [ "$BUILD_ONLY" != "true" ]; then
     echo "[INFO] 构建 deployer 镜像..."
-    docker compose --profile deploy build deployer 2>/dev/null || echo "[WARN] deployer 镜像构建跳过（不影响主服务）"
+    if docker compose --profile deploy build deployer; then
+        echo "[INFO] deployer 镜像构建成功"
+    else
+        echo "[ERROR] deployer 镜像构建失败，热部署功能将不可用（主服务不受影响）"
+    fi
 fi
 
 # 启动

@@ -52,6 +52,18 @@ class UpdateServiceImplTest {
     }
 
     @Test
+    @DisplayName("Missing deployer image is reported as unsupported")
+    void missingDeployerImageIsUnsupported(@TempDir Path tempDir) throws IOException {
+        Path fakeSocket = tempDir.resolve("docker.sock");
+        Files.createFile(fakeSocket);
+
+        UpdateServiceImpl service = createServiceWithImage(true, "", fakeSocket.toString(), "/project", false);
+
+        assertFalse(service.isSupported());
+        assertTrue(service.getUnsupportedReason().contains("not found"));
+    }
+
+    @Test
     @DisplayName("All preconditions met — reported as supported")
     void allPreconditionsMetIsSupported(@TempDir Path tempDir) throws IOException {
         Path fakeSocket = tempDir.resolve("docker.sock");
@@ -65,7 +77,18 @@ class UpdateServiceImplTest {
 
     private UpdateServiceImpl createService(boolean supported, String reason,
                                             String dockerSocket, String projectHostPath) {
-        UpdateServiceImpl service = new UpdateServiceImpl(updateConfigMapper);
+        return createServiceWithImage(supported, reason, dockerSocket, projectHostPath, true);
+    }
+
+    private UpdateServiceImpl createServiceWithImage(boolean supported, String reason,
+                                                     String dockerSocket, String projectHostPath,
+                                                     boolean imagePresent) {
+        UpdateServiceImpl service = new UpdateServiceImpl(updateConfigMapper) {
+            @Override
+            protected boolean isDeployerImagePresent() {
+                return imagePresent;
+            }
+        };
         ReflectionTestUtils.setField(service, "hotDeployScript", "scripts/hot-deploy.sh");
         ReflectionTestUtils.setField(service, "updateSupported", supported);
         ReflectionTestUtils.setField(service, "unsupportedReason", reason);

@@ -550,6 +550,24 @@ public class UpdateServiceImpl implements UpdateService {
             return "Docker socket not found at " + dockerSocket
                  + ". Mount /var/run/docker.sock into the backend container.";
         }
+        if (!isDeployerImagePresent()) {
+            return "Deployer image '" + deployerImage + "' not found. "
+                 + "Run: docker compose --profile deploy build deployer";
+        }
         return null;
+    }
+
+    protected boolean isDeployerImagePresent() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    "docker", "image", "inspect", "--format", "{{.Id}}", deployerImage);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            p.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
+            return p.waitFor() == 0;
+        } catch (Exception e) {
+            log.warn("Could not check deployer image presence: {}", e.getMessage());
+            return true; // 无法判断时放行，让 docker run 自然报错
+        }
     }
 }
