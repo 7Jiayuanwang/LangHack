@@ -125,17 +125,6 @@ public class AdminController {
             params.put("keyword", keyword);
 
             Map<String, Object> result = userService.getUsersByPage(params);
-
-            // 不返回密码
-            if (result != null) {
-                Object recordsObj = result.get("records");
-                if (recordsObj instanceof List) {
-                    @SuppressWarnings("unchecked")
-                    List<User> users = (List<User>) recordsObj;
-                    users.forEach(user -> user.setPassword(null));
-                }
-            }
-
             return Result.success(result);
         } catch (Exception e) {
             logger.error("获取用户列表失败", e);
