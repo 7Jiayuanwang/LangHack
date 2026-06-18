@@ -157,3 +157,11 @@ export function updateContentLimits(items) {
 export function deleteContentLimit(key) {
   return request({ url: `/api/ops/system-config/content-limits/${encodeURIComponent(key)}`, method: 'delete' })
 }
+
+export function searchUsersForLimit(keyword, role) {
+  return request({
+    url: '/api/ops/system-config/content-limits/users/search',
+    method: 'get',
+    params: { keyword, role }
+  })
+}

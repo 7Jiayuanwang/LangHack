@@ -126,16 +126,8 @@ public class AdminController {
 
             Map<String, Object> result = userService.getUsersByPage(params);
 
-            // 不返回密码
-            if (result != null) {
-                Object recordsObj = result.get("records");
-                if (recordsObj instanceof List) {
-                    @SuppressWarnings("unchecked")
-                    List<User> users = (List<User>) recordsObj;
-                    users.forEach(user -> user.setPassword(null));
-                }
-            }
-
+            // records 已被 service 层 enrich 为 List<Map>（含学院/行政班），不再包含 password 字段
+            // 此处不再遍历 setPassword，避免对 Map 强转 User 导致 ClassCastException
             return Result.success(result);
         } catch (Exception e) {
             logger.error("获取用户列表失败", e);

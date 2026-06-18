@@ -71,9 +71,14 @@ HEALTH_INTERVAL=3
 BRANCH="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'master')"
 SKIP_BUILD=false
 SKIP_PULL=false
+SKIP_FRONTEND_BUILD=false
 DRY_RUN=false
 REMOTE_URL=""
 DEPLOY_ID=""
+# FRONTEND_CHANGED：frontend/ 目录在 git pull 后是否有变更（自动检测）
+FRONTEND_CHANGED=false
+# 记录上一次部署的 commit，用于变更检测
+LAST_DEPLOY_COMMIT_FILE="$LOG_DIR/.last-deploy-commit"
 
 mkdir -p "$LOG_DIR"
 mkdir -p "$LOG_DIR/hot-deploy"
@@ -93,6 +98,7 @@ parse_args() {
             --branch)   BRANCH="$2"; shift 2 ;;
             --skip-build) SKIP_BUILD=true; shift ;;
             --skip-pull)  SKIP_PULL=true; shift ;;
+            --skip-frontend-build) SKIP_FRONTEND_BUILD=true; shift ;;
             --remote)   REMOTE_URL="$2"; shift 2 ;;
             --dry-run)  DRY_RUN=true; shift ;;
             --deploy-id) DEPLOY_ID="$2"; shift 2 ;;
@@ -110,6 +116,7 @@ usage() {
   --branch <branch>   部署分支（默认: 当前所在分支）
   --skip-build        跳过镜像构建（使用现有镜像）
   --skip-pull         跳过 git pull（使用本地当前代码，GitHub 不可达时使用）
+  --skip-frontend-build  跳过 frontend 镜像构建与容器重建（仅重建后端）
   --remote <url>      指定 git 远程仓库地址（如 Gitee 镜像）
   --dry-run           仅打印操作，不实际执行
   --deploy-id <id>    本次部署的唯一 ID（被 HotDeployController 调用时使用）
@@ -275,10 +282,30 @@ main() {
     fi
     log_ok "代码已就绪"
 
-    # 2. 构建新镜像
+    # 检测 frontend/ 目录是否有变更（相对上次成功部署的 commit）
+    if [ -f "$LAST_DEPLOY_COMMIT_FILE" ]; then
+        if git -C "$PROJECT_ROOT" diff --name-only "$(cat "$LAST_DEPLOY_COMMIT_FILE")" HEAD -- frontend/ 2>/dev/null | grep -q .; then
+            FRONTEND_CHANGED=true
+        fi
+    else
+        # 首次部署（无历史记录）— 保守起见不自动构建
+        FRONTEND_CHANGED=false
+    fi
+    if $FRONTEND_CHANGED; then
+        log_info "检测到 frontend/ 目录有变更，将自动重新构建前端镜像"
+    fi
+
+    # 2. 构建新镜像（后端必建，前端按变更检测 + SKIP_FRONTEND_BUILD 决定）
     if ! $SKIP_BUILD; then
         log_section "Step 2: 构建 green 镜像"
         run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_BUILD_PD build backend
+        if [ "${SKIP_FRONTEND_BUILD:-false}" = "true" ]; then
+            log_info "跳过 frontend 镜像构建（SKIP_FRONTEND_BUILD=true）"
+        elif $FRONTEND_CHANGED; then
+            run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_BUILD_PD build frontend
+        else
+            log_info "跳过 frontend 镜像构建（frontend/ 无变更，可通过 --skip-frontend-build=false 强制构建）"
+        fi
         log_ok "镜像构建完成"
     else
         log_info "跳过镜像构建（--skip-build）"
@@ -328,6 +355,13 @@ main() {
 
     # 9. 切换流量回 blue，停止 green
     log_section "Step 9: 切换流量 → blue，停止 green"
+    # 9a. 仅当 frontend 镜像被重新构建时，才强制重建 frontend 容器让其加载新镜像
+    if $FRONTEND_CHANGED && [ "${SKIP_FRONTEND_BUILD:-false}" != "true" ]; then
+        log_info "重建 frontend 容器加载新镜像..."
+        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d --no-deps --force-recreate frontend
+    else
+        log_info "跳过 frontend 容器重建（镜像未变更）"
+    fi
     switch_nginx_to blue
     run docker compose -f "$GREEN_COMPOSE" down --remove-orphans
     log_ok "green 后端已停止"
@@ -339,7 +373,11 @@ main() {
 
     log_section "部署完成"
     log_ok "零停机热更新成功！"
+    local final_commit
+    final_commit="$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo '')"
     log_info "当前运行版本: $(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+    # 记录本次成功部署的 commit，供下次 frontend 变更检测
+    [ -n "$final_commit" ] && echo "$final_commit" > "$LAST_DEPLOY_COMMIT_FILE" 2>/dev/null || true
     write_done_marker SUCCESS
 }
 

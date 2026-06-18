@@ -2,7 +2,9 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.entity.SystemConfig;
+import com.english.entity.User;
 import com.english.service.SystemConfigService;
+import com.english.service.UserService;
 import com.english.util.SizeParseUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +29,9 @@ public class SystemConfigController {
 
     @Autowired
     private SystemConfigService systemConfigService;
+
+    @Autowired
+    private UserService userService;
 
     // ── 通用上传拦截器限制（已有接口，保留） ───────────────────────────────────
 
@@ -76,7 +81,8 @@ public class SystemConfigController {
 
     /**
      * 获取所有内容大小限制配置。
-     * 返回结构：{ defaults: {image,video,excelImport}, roleOverrides: [{type,role,value,bytes},...] }
+     * 返回结构：{ defaults: {image,video,excelImport}, roleOverrides: [{type,role,value,bytes},...],
+     *            userOverrides: [{type,username,realName,role,value,bytes},...] }
      */
     @GetMapping("/content-limits")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
@@ -89,6 +95,7 @@ public class SystemConfigController {
         defaults.put("excelImport", "10MB");
 
         List<Map<String, Object>> roleOverrides = new ArrayList<>();
+        List<Map<String, Object>> userOverrides = new ArrayList<>();
 
         for (SystemConfig c : all) {
             String key = c.getConfigKey();
@@ -98,7 +105,7 @@ public class SystemConfigController {
             else if ("upload.content_size.excel_import".equals(key)) defaults.put("excelImport", val);
             else if (key.startsWith("upload.content_size.") && key.contains(".role.")) {
                 // upload.content_size.{type}.role.{ROLE}
-                String suffix = key.substring("upload.content_size.".length()); // image.role.TEACHER
+                String suffix = key.substring("upload.content_size.".length());
                 int roleIdx = suffix.indexOf(".role.");
                 if (roleIdx > 0) {
                     String type = suffix.substring(0, roleIdx);
@@ -110,6 +117,24 @@ public class SystemConfigController {
                     item.put("value", val);
                     item.put("bytes", SizeParseUtil.parseSize(val, 0));
                     roleOverrides.add(item);
+                }
+            } else if (key.startsWith("upload.content_size.") && key.contains(".user.")) {
+                // upload.content_size.{type}.user.{username}
+                String suffix = key.substring("upload.content_size.".length());
+                int userIdx = suffix.indexOf(".user.");
+                if (userIdx > 0) {
+                    String type = suffix.substring(0, userIdx);
+                    String username = suffix.substring(userIdx + 6);
+                    User u = userService.getUserByUsername(username);
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("key", key);
+                    item.put("type", type);
+                    item.put("username", username);
+                    item.put("realName", u != null ? u.getRealName() : null);
+                    item.put("role", u != null ? u.getRole() : null);
+                    item.put("value", val);
+                    item.put("bytes", SizeParseUtil.parseSize(val, 0));
+                    userOverrides.add(item);
                 }
             }
         }
@@ -126,15 +151,20 @@ public class SystemConfigController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("defaults", defaultsWithBytes);
         result.put("roleOverrides", roleOverrides);
+        result.put("userOverrides", userOverrides);
         return Result.success(result);
     }
 
     /**
      * 批量保存内容大小限制配置。
      * 请求体：[{ key: "upload.content_size.image", value: "20MB" }, ...]
+     *  key 支持格式：
+     *    - upload.content_size.{image|video|excel_import}            全局默认
+     *    - upload.content_size.{image|video}.role.{ROLE}             角色覆盖
+     *    - upload.content_size.{image|video}.user.{username}         特权用户
      */
     @PutMapping("/content-limits")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Void> updateContentLimits(@RequestBody List<Map<String, String>> items) {
         if (items == null || items.isEmpty()) return Result.error("请求体不能为空");
         for (Map<String, String> item : items) {
@@ -149,16 +179,39 @@ public class SystemConfigController {
     }
 
     /**
-     * 删除角色覆盖条目（恢复为全局默认）。key 必须包含 ".role."
+     * 删除角色覆盖或特权用户条目。key 必须包含 ".role." 或 ".user."
      */
     @DeleteMapping("/content-limits/{key}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Void> deleteContentLimit(@PathVariable String key) {
-        if (!key.startsWith("upload.content_size.") || !key.contains(".role.")) {
-            return Result.error("只能删除角色覆盖条目");
+        if (key == null || !key.startsWith("upload.content_size.")
+                || (!key.contains(".role.") && !key.contains(".user."))) {
+            return Result.error("只能删除角色覆盖或特权用户条目");
         }
         systemConfigService.deleteByKey(key);
-        return Result.success("已删除角色覆盖", null);
+        return Result.success("已删除条目", null);
+    }
+
+    /**
+     * 搜索用户（用于「特权用户」下拉选择）
+     * GET /api/ops/system-config/content-limits/users/search?keyword=xxx&role=STUDENT
+     */
+    @GetMapping("/content-limits/users/search")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<List<Map<String, Object>>> searchUsersForLimit(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String role) {
+        List<User> users = userService.searchUsers(keyword, role);
+        List<Map<String, Object>> data = new ArrayList<>();
+        for (User u : users) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", u.getId());
+            item.put("username", u.getUsername());
+            item.put("realName", u.getRealName());
+            item.put("role", u.getRole());
+            data.add(item);
+        }
+        return Result.success(data);
     }
 
     // ── 工具方法 ───────────────────────────────────────────────────────────────
@@ -168,13 +221,22 @@ public class SystemConfigController {
     }
 
     private String buildDescription(String key) {
+        String typeLabel = null;
         if (key.contains(".role.")) {
             String suffix = key.substring("upload.content_size.".length());
             int i = suffix.indexOf(".role.");
             String type = suffix.substring(0, i);
             String role = suffix.substring(i + 6);
-            return ("image".equals(type) ? "图片" : "video".equals(type) ? "视频" : type)
-                    + "上传限制（" + role + " 角色覆盖）";
+            typeLabel = ("image".equals(type) ? "图片" : "video".equals(type) ? "视频" : type);
+            return typeLabel + "上传限制（" + role + " 角色覆盖）";
+        }
+        if (key.contains(".user.")) {
+            String suffix = key.substring("upload.content_size.".length());
+            int i = suffix.indexOf(".user.");
+            String type = suffix.substring(0, i);
+            String username = suffix.substring(i + 6);
+            typeLabel = ("image".equals(type) ? "图片" : "video".equals(type) ? "视频" : type);
+            return typeLabel + "上传限制（特权用户 " + username + "）";
         }
         if (key.endsWith("image"))        return "图片上传大小限制（全局默认）";
         if (key.endsWith("video"))        return "视频上传大小限制（全局默认）";
