@@ -9,7 +9,7 @@ public interface UpdateService {
 
     UpdateConfig saveConfig(UpdateConfig config);
 
-    SseEmitter trigger(SseEmitter emitter, String branch, boolean skipBuild, boolean dryRun);
+    SseEmitter trigger(SseEmitter emitter, String branch, boolean skipBuild, boolean skipPull, boolean dryRun);
 
     void run();
 

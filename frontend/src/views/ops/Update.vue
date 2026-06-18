@@ -61,6 +61,10 @@
           <el-switch v-model="deployParams.skipBuild" />
           <span class="cron-hint">使用现有镜像，不重新构建</span>
         </el-form-item>
+        <el-form-item label="跳过拉取">
+          <el-switch v-model="deployParams.skipPull" />
+          <span class="cron-hint">使用本地当前代码（GitHub 不可达时使用）</span>
+        </el-form-item>
         <el-form-item label="演练模式">
           <el-switch v-model="deployParams.dryRun" />
           <span class="cron-hint">仅打印操作，不实际执行</span>
@@ -156,7 +160,7 @@ const config = ref({
   gitBranch: 'master',
 })
 
-const deployParams = ref({ branch: '', skipBuild: false, dryRun: false })
+const deployParams = ref({ branch: '', skipBuild: false, skipPull: false, dryRun: false })
 
 const running = ref(false)
 const logs = ref([])
@@ -263,6 +267,7 @@ function startDeploy() {
   const params = new URLSearchParams()
   if (deployParams.value.branch) params.set('branch', deployParams.value.branch)
   if (deployParams.value.skipBuild) params.set('skipBuild', 'true')
+  if (deployParams.value.skipPull)  params.set('skipPull', 'true')
   if (deployParams.value.dryRun) params.set('dryRun', 'true')
   if (token) params.set('token', token)
   const url = environment.resolveApiUrl(`/api/ops/update/trigger?${params}`)

@@ -90,12 +90,13 @@ public class UpdateController {
     public SseEmitter trigger(
             @RequestParam(required = false, defaultValue = "") String branch,
             @RequestParam(required = false, defaultValue = "false") boolean skipBuild,
+            @RequestParam(required = false, defaultValue = "false") boolean skipPull,
             @RequestParam(required = false, defaultValue = "false") boolean dryRun) {
         SseEmitter emitter = new SseEmitter(60 * 60 * 1000L);
         emitter.onTimeout(() -> log.warn("Hot deploy SSE connection timed out"));
         emitter.onCompletion(() -> log.debug("Hot deploy SSE connection completed"));
         try {
-            return updateService.trigger(emitter, branch, skipBuild, dryRun);
+            return updateService.trigger(emitter, branch, skipBuild, skipPull, dryRun);
         } catch (BusinessException e) {
             try {
                 emitter.send(SseEmitter.event().name("done").data("HOT_DEPLOY_ERROR:" + e.getMessage()));

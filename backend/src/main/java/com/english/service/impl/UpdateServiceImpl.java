@@ -240,7 +240,7 @@ public class UpdateServiceImpl implements UpdateService {
 
     @Override
     @UseMaster
-    public SseEmitter trigger(SseEmitter emitter, String branch, boolean skipBuild, boolean dryRun) {
+    public SseEmitter trigger(SseEmitter emitter, String branch, boolean skipBuild, boolean skipPull, boolean dryRun) {
         ensureSupported();
 
         if (!isRunning.compareAndSet(false, true)) {
@@ -249,7 +249,7 @@ public class UpdateServiceImpl implements UpdateService {
 
         UpdateConfig config = getConfig();
         try {
-            executor.submit(() -> runInteractive(config, emitter, branch, skipBuild, dryRun));
+            executor.submit(() -> runInteractive(config, emitter, branch, skipBuild, skipPull, dryRun));
         } catch (java.util.concurrent.RejectedExecutionException e) {
             isRunning.set(false);
             log.error("Deploy task submission rejected", e);
@@ -281,7 +281,7 @@ public class UpdateServiceImpl implements UpdateService {
         String containerName = "langhack-deployer-sched-" + deployId;
         writeCurrentDeploySentinel(deployId);
         try {
-            List<String> startCmd = buildDeployerCommand(config, null, false, false, containerName, deployId);
+            List<String> startCmd = buildDeployerCommand(config, null, false, false, false, containerName, deployId);
             log.info("Scheduled deploy command: {}", startCmd);
             ProcessBuilder startBuilder = new ProcessBuilder(startCmd);
             startBuilder.redirectErrorStream(true);
@@ -328,7 +328,7 @@ public class UpdateServiceImpl implements UpdateService {
     }
 
     private void runInteractive(UpdateConfig config, SseEmitter emitter,
-                                String branch, boolean skipBuild, boolean dryRun) {
+                                String branch, boolean skipBuild, boolean skipPull, boolean dryRun) {
         setRunning(config.getId());
         boolean success = false;
         boolean knownOutcome = false; // true 表示已经确定 success 真值；false 表示未知（让 reconcile 兜底）
@@ -338,7 +338,7 @@ public class UpdateServiceImpl implements UpdateService {
         writeCurrentDeploySentinel(deployId);
         try {
             // Phase 1: Start deployer container (detached — survives backend restart)
-            List<String> startCmd = buildDeployerCommand(config, branch, skipBuild, dryRun, containerName, deployId);
+            List<String> startCmd = buildDeployerCommand(config, branch, skipBuild, skipPull, dryRun, containerName, deployId);
             log.info("Interactive deploy — starting deployer: {}", startCmd);
             ProcessBuilder startBuilder = new ProcessBuilder(startCmd);
             startBuilder.redirectErrorStream(true);
@@ -442,7 +442,7 @@ public class UpdateServiceImpl implements UpdateService {
     }
 
     private List<String> buildDeployerCommand(UpdateConfig config, String branch,
-                                              boolean skipBuild, boolean dryRun,
+                                              boolean skipBuild, boolean skipPull, boolean dryRun,
                                               String containerName, String deployId) {
         String effectiveBranch = (branch != null && !branch.isBlank()) ? branch.trim() : defaultBranch(config);
         if (!GIT_BRANCH_PATTERN.matcher(effectiveBranch).matches()) {
@@ -487,6 +487,7 @@ public class UpdateServiceImpl implements UpdateService {
             cmd.add(deployId);
         }
         if (skipBuild) cmd.add("--skip-build");
+        if (skipPull)  cmd.add("--skip-pull");
         if (dryRun) cmd.add("--dry-run");
         return cmd;
     }
