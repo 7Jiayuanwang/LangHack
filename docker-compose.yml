@@ -237,6 +237,7 @@ services:
       APP_UPDATE_DEPLOYER_IMAGE: "${APP_UPDATE_DEPLOYER_IMAGE:-langhack-deployer:latest}"
       APP_UPDATE_DOCKER_SOCKET: "${APP_UPDATE_DOCKER_SOCKET:-/var/run/docker.sock}"
       GIT_TOKEN: "${GIT_TOKEN:-}"
+      GIT_SSH_KEY_DIR: "${GIT_SSH_KEY_DIR:-}"
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
       # Flyway — 暂时禁用：仓库存在重复版本号 (V25, V27)，需先重命名后再启用

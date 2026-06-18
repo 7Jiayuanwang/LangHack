@@ -11,6 +11,7 @@ app:
     project-host-path: ${PROJECT_HOST_PATH:}
     deployer-image: ${APP_UPDATE_DEPLOYER_IMAGE:langhack-deployer:latest}
     git-token: ${GIT_TOKEN:}
+    git-ssh-key-dir: ${GIT_SSH_KEY_DIR:}
   base-url: ${APP_BASE_URL:http://localhost:3000}
 
 # 管理员登录配置

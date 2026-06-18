@@ -60,6 +60,10 @@ public class UpdateServiceImpl implements UpdateService {
     @Value("${app.update.git-token:}")
     private String gitToken;
 
+    /** 宿主机 SSH key 目录（用于 git@github.com SSH remote），挂载到容器 /root/.ssh */
+    @Value("${app.update.git-ssh-key-dir:}")
+    private String gitSshKeyDir;
+
     @Value("${app.update.network:langhack_langhack-network}")
     private String updateNetwork;
 
@@ -463,6 +467,13 @@ public class UpdateServiceImpl implements UpdateService {
         if (gitToken != null && !gitToken.isBlank()) {
             cmd.add("-e");
             cmd.add("GIT_TOKEN=" + gitToken);
+        }
+        if (gitSshKeyDir != null && !gitSshKeyDir.isBlank()) {
+            // 挂载宿主机 SSH key 目录（只读），并禁用 StrictHostKeyChecking 避免首次连接卡住
+            cmd.add("-v");
+            cmd.add(gitSshKeyDir + ":/root/.ssh:ro");
+            cmd.add("-e");
+            cmd.add("GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null");
         }
         cmd.add("--network");
         cmd.add(networkName());
