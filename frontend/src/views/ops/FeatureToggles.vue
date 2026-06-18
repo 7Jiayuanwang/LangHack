@@ -470,6 +470,28 @@ watch(activeTab, (val) => {
 const loadingGlobal = ref(true)
 const toggles = ref([])
 
+const FEATURE_TOGGLE_CATALOG = [
+  {
+    configKey: 'student.video_upload_enabled',
+    description: '学生端-视频上传功能开关（全局关闭后仅标签内用户可上传）',
+    defaultValue: 'true'
+  }
+]
+
+const PRESET_TAGS = ['视频上传权限']
+
+const toToggleViewModel = (item, fallbackValue = 'false') => {
+  const configValue = item.configValue == null || item.configValue === '' ? fallbackValue : item.configValue
+  return {
+    ...item,
+    configGroup: item.configGroup || 'feature_toggle',
+    configValue,
+    description: item.description || item.configKey,
+    enabled: configValue === 'true',
+    saving: false
+  }
+}
+
 // 角色分组定义（按 configKey 前缀分组）
 const groupDefs = [
   { key: 'student', label: '学生端',  desc: '学生端页面与导航可见性',    prefixes: ['page_', 'student.'],        excludePrefixes: ['page_teacher_', 'page_admin_', 'page_ops_'], iconName: 'User' },
@@ -536,13 +558,27 @@ const loadToggles = async () => {
   loadingGlobal.value = true
   try {
     const res = await getSystemConfig('feature_toggle')
-    if (res?.code === 200 && Array.isArray(res.data)) {
-      toggles.value = res.data.map(item => ({
-        ...item,
-        enabled: item.configValue === 'true',
-        saving: false
-      }))
-    }
+    const backendItems = res?.code === 200 && Array.isArray(res.data) ? res.data : []
+    const backendByKey = new Map(backendItems.map(item => [item.configKey, item]))
+
+    const merged = FEATURE_TOGGLE_CATALOG.map(item => {
+      const backendItem = backendByKey.get(item.configKey)
+      if (backendItem) {
+        backendByKey.delete(item.configKey)
+        return toToggleViewModel({ ...item, ...backendItem }, item.defaultValue)
+      }
+      return toToggleViewModel({
+        configGroup: 'feature_toggle',
+        configKey: item.configKey,
+        configValue: item.defaultValue,
+        description: item.description
+      }, item.defaultValue)
+    })
+
+    toggles.value = [
+      ...merged,
+      ...Array.from(backendByKey.values()).map(item => toToggleViewModel(item))
+    ]
   } catch (e) {
     ElMessage.error('加载功能开关失败')
   } finally {
@@ -579,7 +615,8 @@ const loadAllTags = async () => {
   loadingAllTags.value = true
   try {
     const res = await listAllTags()
-    if (res?.code === 200) allTags.value = res.data || []
+    const backendTags = res?.code === 200 ? (res.data || []) : []
+    allTags.value = Array.from(new Set([...PRESET_TAGS, ...backendTags]))
   } catch (e) {
     ElMessage.error('加载标签列表失败')
   } finally {
