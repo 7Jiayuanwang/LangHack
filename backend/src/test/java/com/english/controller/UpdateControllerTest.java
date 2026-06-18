@@ -109,12 +109,12 @@ class UpdateControllerTest {
     @Test
     @DisplayName("GET /api/ops/update/trigger converts unexpected exception to SSE error event")
     void trigger_unexpectedException_returnsEmitter() {
-        when(updateService.trigger(any(SseEmitter.class), anyString(), anyBoolean(), anyBoolean()))
+        when(updateService.trigger(any(SseEmitter.class), anyString(), anyBoolean(), anyBoolean(), anyBoolean()))
                 .thenThrow(new RuntimeException("db down"));
 
-        SseEmitter emitter = controller.trigger("", false, false);
+        SseEmitter emitter = controller.trigger("", false, false, false);
 
-        verify(updateService).trigger(any(SseEmitter.class), anyString(), anyBoolean(), anyBoolean());
+        verify(updateService).trigger(any(SseEmitter.class), anyString(), anyBoolean(), anyBoolean(), anyBoolean());
         org.junit.jupiter.api.Assertions.assertNotNull(emitter);
     }
 }
