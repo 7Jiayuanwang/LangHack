@@ -801,7 +801,8 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                         throw new BusinessException("数据库恢复失败，备份文件读取或输入异常");
                     }
 
-                    logger.warn("Database restored from backup: {}. Application restart is recommended to refresh cached data.", record.getFilename());
+                    logger.warn("Database restored from backup: {}. Applying schema migrations to repair any drift...", record.getFilename());
+                    applyMigrationsAfterRestore();
                 } finally {
                     if (process.isAlive()) {
                         process.destroyForcibly();
@@ -1864,6 +1865,76 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         DbConnectionInfo(String host, int port) {
             this.host = host;
             this.port = port;
+        }
+    }
+
+    /**
+     * 备份还原后重跑 04-apply-all-migrations.sql，修复 schema drift。
+     * 脚本是幂等的（所有 ALTER 均使用 IF NOT EXISTS 检查），重跑安全。
+     * 迁移文件路径由容器 Dockerfile COPY 固定为 /opt/langhack/04-apply-all-migrations.sql。
+     */
+    private void applyMigrationsAfterRestore() {
+        String migrationsScript = "/docker-entrypoint-initdb.d/04-apply-all-migrations.sh";
+        String migrationsFile   = "/opt/langhack/04-apply-all-migrations.sql";
+
+        boolean scriptExists = new java.io.File(migrationsScript).exists();
+        boolean sqlExists    = new java.io.File(migrationsFile).exists();
+
+        if (!scriptExists && !sqlExists) {
+            logger.warn("[migrate] 迁移脚本不存在（{}），跳过 schema 修复。如在容器外运行则属正常。", migrationsFile);
+            return;
+        }
+
+        try {
+            DbConnectionInfo connInfo = parseJdbcUrl();
+            String databaseName = extractDatabaseName();
+            ProcessBuilder pb;
+
+            if (scriptExists) {
+                pb = new ProcessBuilder("bash", migrationsScript);
+                // 通过 MYSQL_PWD + DB_USERNAME 让脚本以应用账户执行（脚本 v2 支持此模式）
+                pb.environment().put("MYSQL_PWD", dbPassword);
+                pb.environment().put("DB_USERNAME", dbUsername);
+                pb.environment().put("MYSQL_DATABASE", databaseName);
+                pb.environment().put("MYSQL_HOST", connInfo.host);
+                pb.environment().put("MYSQL_PORT", String.valueOf(connInfo.port));
+            } else {
+                String mysqlPath;
+                int lastIdx = mysqldumpPath.lastIndexOf("mysqldump");
+                mysqlPath = lastIdx >= 0
+                        ? mysqldumpPath.substring(0, lastIdx) + "mysql" + mysqldumpPath.substring(lastIdx + "mysqldump".length())
+                        : "mysql";
+                pb = new ProcessBuilder(
+                        mysqlPath,
+                        "-h", connInfo.host, "-P", String.valueOf(connInfo.port),
+                        "-u", dbUsername, "--default-character-set=utf8mb4",
+                        "--execute=source " + migrationsFile,
+                        databaseName
+                );
+                pb.environment().put("MYSQL_PWD", dbPassword);
+            }
+
+            pb.redirectErrorStream(true);
+            Process proc = pb.start();
+            StringBuilder out = new StringBuilder();
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+                String line;
+                while ((line = r.readLine()) != null) out.append(line).append("\n");
+            }
+            boolean done = proc.waitFor(10, TimeUnit.MINUTES);
+            if (!done) {
+                proc.destroyForcibly();
+                logger.error("[migrate] Schema 修复超时");
+                return;
+            }
+            int code = proc.exitValue();
+            if (code != 0) {
+                logger.error("[migrate] Schema 修复失败 (exit {}): {}", code, out);
+            } else {
+                logger.info("[migrate] Schema 修复完成 ✓");
+            }
+        } catch (Exception e) {
+            logger.error("[migrate] Schema 修复异常", e);
         }
     }
 
