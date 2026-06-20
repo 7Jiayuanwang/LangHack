@@ -1869,72 +1869,75 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
     }
 
     /**
-     * 备份还原后重跑 04-apply-all-migrations.sql，修复 schema drift。
-     * 脚本是幂等的（所有 ALTER 均使用 IF NOT EXISTS 检查），重跑安全。
-     * 迁移文件路径由容器 Dockerfile COPY 固定为 /opt/langhack/04-apply-all-migrations.sql。
+     * 备份还原后通过 JDBC 执行关键 schema 修复，防止 schema drift。
+     * 所有语句均幂等（IF NOT EXISTS 检查），重跑安全。
+     * 修复范围：历次迁移中通过 ADD COLUMN 新增、但旧备份不包含的列。
      */
     private void applyMigrationsAfterRestore() {
-        String migrationsScript = "/docker-entrypoint-initdb.d/04-apply-all-migrations.sh";
-        String migrationsFile   = "/opt/langhack/04-apply-all-migrations.sql";
-
-        boolean scriptExists = new java.io.File(migrationsScript).exists();
-        boolean sqlExists    = new java.io.File(migrationsFile).exists();
-
-        if (!scriptExists && !sqlExists) {
-            logger.warn("[migrate] 迁移脚本不存在（{}），跳过 schema 修复。如在容器外运行则属正常。", migrationsFile);
-            return;
-        }
-
-        try {
-            DbConnectionInfo connInfo = parseJdbcUrl();
-            String databaseName = extractDatabaseName();
-            ProcessBuilder pb;
-
-            if (scriptExists) {
-                pb = new ProcessBuilder("bash", migrationsScript);
-                // 通过 MYSQL_PWD + DB_USERNAME 让脚本以应用账户执行（脚本 v2 支持此模式）
-                pb.environment().put("MYSQL_PWD", dbPassword);
-                pb.environment().put("DB_USERNAME", dbUsername);
-                pb.environment().put("MYSQL_DATABASE", databaseName);
-                pb.environment().put("MYSQL_HOST", connInfo.host);
-                pb.environment().put("MYSQL_PORT", String.valueOf(connInfo.port));
-            } else {
-                String mysqlPath;
-                int lastIdx = mysqldumpPath.lastIndexOf("mysqldump");
-                mysqlPath = lastIdx >= 0
-                        ? mysqldumpPath.substring(0, lastIdx) + "mysql" + mysqldumpPath.substring(lastIdx + "mysqldump".length())
-                        : "mysql";
-                pb = new ProcessBuilder(
-                        mysqlPath,
-                        "-h", connInfo.host, "-P", String.valueOf(connInfo.port),
-                        "-u", dbUsername, "--default-character-set=utf8mb4",
-                        "--execute=source " + migrationsFile,
-                        databaseName
-                );
-                pb.environment().put("MYSQL_PWD", dbPassword);
+        logger.info("[migrate] 备份还原完成，开始 schema drift 修复...");
+        try (Connection conn = masterDataSource.getConnection()) {
+            conn.setAutoCommit(true);
+            try (java.sql.Statement stmt = conn.createStatement()) {
+                // 执行一条幂等的存储过程方式修复：通过 information_schema 检查后 ALTER
+                // 只修复对服务可用性影响最大的关键表，其余通过重建镜像时的初始化脚本修复
+                executeMigrationRepair(stmt);
             }
-
-            pb.redirectErrorStream(true);
-            Process proc = pb.start();
-            StringBuilder out = new StringBuilder();
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
-                String line;
-                while ((line = r.readLine()) != null) out.append(line).append("\n");
-            }
-            boolean done = proc.waitFor(10, TimeUnit.MINUTES);
-            if (!done) {
-                proc.destroyForcibly();
-                logger.error("[migrate] Schema 修复超时");
-                return;
-            }
-            int code = proc.exitValue();
-            if (code != 0) {
-                logger.error("[migrate] Schema 修复失败 (exit {}): {}", code, out);
-            } else {
-                logger.info("[migrate] Schema 修复完成 ✓");
-            }
+            logger.info("[migrate] Schema drift 修复完成 ✓");
         } catch (Exception e) {
-            logger.error("[migrate] Schema 修复异常", e);
+            logger.error("[migrate] Schema drift 修复异常，可能需要手动执行迁移脚本", e);
+        }
+    }
+
+    private void executeMigrationRepair(java.sql.Statement stmt) throws Exception {
+        // school_student: gender/phone/counselor_name (V12)
+        addColumnIfNotExists(stmt, "school_student", "gender",
+                "ADD COLUMN gender VARCHAR(10) NULL COMMENT '性别（男/女）' AFTER major_name");
+        addColumnIfNotExists(stmt, "school_student", "phone",
+                "ADD COLUMN phone VARCHAR(30) NULL COMMENT '联系电话' AFTER gender");
+        addColumnIfNotExists(stmt, "school_student", "counselor_name",
+                "ADD COLUMN counselor_name VARCHAR(50) NULL COMMENT '辅导员姓名' AFTER phone");
+
+        // system_config: content_limits seed (V9)
+        stmt.execute("INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret) VALUES" +
+                "('content_limits','upload.content_size.image','10MB','图片上传大小限制（全局默认）',0)," +
+                "('content_limits','upload.content_size.video','512MB','视频上传大小限制（全局默认）',0)," +
+                "('content_limits','upload.content_size.excel_import','10MB','Excel批量导入大小限制',0)," +
+                "('content_limits','upload.content_size.backup_import','2048MB','备份文件导入大小限制',0)");
+
+        // users: school_student_id/school_teacher_id (V8)
+        addColumnIfNotExists(stmt, "users", "school_student_id",
+                "ADD COLUMN school_student_id BIGINT NULL COMMENT '关联 school_student.id（学号匹配）' AFTER inner_uid");
+        addColumnIfNotExists(stmt, "users", "school_teacher_id",
+                "ADD COLUMN school_teacher_id BIGINT NULL COMMENT '关联 school_teacher.id（工号匹配）' AFTER school_student_id");
+
+        // media: transcode fields (V9)
+        addColumnIfNotExists(stmt, "media", "transcode_status",
+                "ADD COLUMN transcode_status VARCHAR(20) NOT NULL DEFAULT 'SKIPPED' COMMENT '转码状态'");
+        addColumnIfNotExists(stmt, "media", "transcode_error",
+                "ADD COLUMN transcode_error VARCHAR(500) NULL COMMENT '转码失败原因'");
+        addColumnIfNotExists(stmt, "media", "original_codec",
+                "ADD COLUMN original_codec VARCHAR(50) NULL COMMENT '上传时原始视频编码'");
+        addColumnIfNotExists(stmt, "media", "file_path",
+                "ADD COLUMN file_path VARCHAR(500) NULL COMMENT '文件系统相对路径' AFTER file_name");
+        addColumnIfNotExists(stmt, "media", "thumbnail_path",
+                "ADD COLUMN thumbnail_path VARCHAR(500) NULL COMMENT '缩略图路径' AFTER file_path");
+
+        // texts: read_count/ielts_content/featured fields (V1/V2)
+        addColumnIfNotExists(stmt, "texts", "read_count",
+                "ADD COLUMN read_count INT NOT NULL DEFAULT 0 COMMENT '阅读次数' AFTER like_count");
+        addColumnIfNotExists(stmt, "texts", "ielts_content",
+                "ADD COLUMN ielts_content TEXT NULL COMMENT 'IELTS版本内容' AFTER academic_content");
+    }
+
+    private void addColumnIfNotExists(java.sql.Statement stmt, String table, String column, String ddl)
+            throws Exception {
+        try (java.sql.ResultSet rs = stmt.executeQuery(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()" +
+                " AND TABLE_NAME='" + table + "' AND COLUMN_NAME='" + column + "'")) {
+            if (rs.next() && rs.getInt(1) == 0) {
+                stmt.execute("ALTER TABLE `" + table + "` " + ddl);
+                logger.info("[migrate] Added column {}.{}", table, column);
+            }
         }
     }
 
