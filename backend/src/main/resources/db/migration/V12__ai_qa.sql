@@ -44,7 +44,7 @@ BEGIN
                      AND TABLE_NAME = 'school_student'
                      AND COLUMN_NAME = 'phone') THEN
         ALTER TABLE school_student
-            ADD COLUMN phone VARCHAR(30) NULL COMMENT '联系电话' AFTER gender;
+            ADD COLUMN phone VARCHAR(50) NULL COMMENT '联系电话（CDSP 返回 MD5 哈希 32 字符）' AFTER gender;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                    WHERE TABLE_SCHEMA = DATABASE()
