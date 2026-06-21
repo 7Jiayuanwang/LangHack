@@ -15,8 +15,16 @@
             #{sourceType}, #{syncTime}
         )
         ON DUPLICATE KEY UPDATE
-            teacher_name = COALESCE(#{teacherName}, teacher_name),
-            student_name = COALESCE(#{studentName}, student_name),
+            teacher_name = CASE
+                WHEN #{teacherName} IS NOT NULL AND #{teacherName} != '' AND #{teacherName} NOT REGEXP '^[0-9]+$'
+                    THEN #{teacherName}
+                ELSE teacher_name
+            END,
+            student_name = CASE
+                WHEN #{studentName} IS NOT NULL AND #{studentName} != '' AND #{studentName} NOT REGEXP '^[0-9]+$'
+                    THEN #{studentName}
+                ELSE student_name
+            END,
             college_name = COALESCE(#{collegeName}, college_name),
             course_name = COALESCE(#{courseName}, course_name),
             course_class_code = COALESCE(#{courseClassCode}, course_class_code),
@@ -73,7 +81,10 @@
                 st.teacher_name
             ) AS teacher_name,
             CASE
-                WHEN b.student_name IS NOT NULL AND b.student_name != '' THEN b.student_name
+                WHEN b.student_name IS NOT NULL
+                     AND b.student_name != ''
+                     AND b.student_name NOT REGEXP '^[0-9]+$'
+                    THEN b.student_name
                 WHEN ss.student_name IS NOT NULL
                      AND ss.student_name != ''
                      AND ss.student_name NOT REGEXP '^[0-9]+$'

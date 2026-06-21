@@ -20,7 +20,11 @@
             #{syncTime}, #{syncSource}
         )
         ON DUPLICATE KEY UPDATE
-            student_name = #{studentName},
+            student_name = CASE
+                WHEN #{studentName} IS NOT NULL AND #{studentName} != '' AND #{studentName} NOT REGEXP '^[0-9]+$'
+                    THEN #{studentName}
+                ELSE student_name
+            END,
             exam_name = #{examName},
             admission_ticket_no = #{admissionTicketNo},
             score = #{score},

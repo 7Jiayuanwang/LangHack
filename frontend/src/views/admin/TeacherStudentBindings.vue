@@ -32,7 +32,7 @@
       <el-table-column label="教师姓名" width="100">
         <template #default="{ row }">
           <span v-if="row.teacherName">{{ row.teacherName }}</span>
-          <el-tooltip v-else content="CDSP 端未提供教师姓名，显示工号" placement="top">
+          <el-tooltip v-else content="暂无可用教师姓名，当前仅显示工号（可能为上游未返回）" placement="top">
             <span class="text-muted">{{ row.teacherId }}</span>
           </el-tooltip>
         </template>
@@ -41,7 +41,7 @@
       <el-table-column label="学生姓名" width="100">
         <template #default="{ row }">
           <span v-if="row.studentName">{{ row.studentName }}</span>
-          <el-tooltip v-else content="CDSP 端未提供学生姓名，显示学号" placement="top">
+          <el-tooltip v-else content="暂无可用学生姓名，当前仅显示学号（可能为上游未返回或脏数据已被抑制）" placement="top">
             <span class="text-muted">{{ row.studentId }}</span>
           </el-tooltip>
         </template>

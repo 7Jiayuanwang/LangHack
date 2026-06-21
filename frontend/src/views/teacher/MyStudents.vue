@@ -19,7 +19,7 @@
         <div class="card-header">
           <span class="student-name">
             <template v-if="item.studentName">{{ item.studentName }}</template>
-            <el-tooltip v-else content="CDSP 端未提供学生姓名，仅显示学号" placement="top">
+            <el-tooltip v-else content="暂无可用学生姓名，当前仅显示学号（可能为上游未返回或脏数据已被抑制）" placement="top">
               <span class="text-muted">学号 {{ item.studentId }}</span>
             </el-tooltip>
           </span>

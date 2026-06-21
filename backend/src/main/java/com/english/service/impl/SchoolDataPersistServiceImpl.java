@@ -356,7 +356,7 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         entity.setSelectionId(selectionId);
         entity.setStudentId(studentId);
         // 学生姓名：优先使用 API 返回值，若为空则从 school_student 或 users 表反查
-        String studentName = firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId), studentId);
+        String studentName = firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId));
         entity.setStudentName(studentName);
         String courseCode = firstNonBlank(getCourseCodeForSelection(data, classId),
                 teachingClass.getCourseCode(),
@@ -523,7 +523,7 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         }
         StudentSchedule entity = new StudentSchedule();
         entity.setStudentId(studentId);
-        entity.setStudentName(firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId), studentId));
+        entity.setStudentName(firstNonBlank(getStringValue(data, "studentName"), resolveStudentName(studentId)));
         entity.setClassId(classId);
         entity.setCourseCode(firstNonBlank(getCourseCodeValue(data),
                 teachingClass == null ? null : teachingClass.getCourseCode(),

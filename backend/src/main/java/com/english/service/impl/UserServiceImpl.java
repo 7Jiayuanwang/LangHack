@@ -25,6 +25,7 @@ import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -156,10 +157,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private List<Map<String, Object>> enrichWithSchoolInfo(List<User> users) {
         if (users == null || users.isEmpty()) return new ArrayList<>();
 
-        // 收集所有有 school_student_id 的 id
         Set<Long> ssIds = users.stream()
                 .filter(u -> u.getSchoolStudentId() != null)
                 .map(User::getSchoolStudentId)
+                .collect(Collectors.toSet());
+        Set<String> usernames = users.stream()
+                .map(User::getUsername)
+                .filter(username -> username != null && !username.isBlank())
                 .collect(Collectors.toSet());
 
         Map<Long, SchoolStudent> ssMap = new HashMap<>();
@@ -167,6 +171,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             QueryWrapper<SchoolStudent> ssWrapper = new QueryWrapper<>();
             ssWrapper.in("id", ssIds);
             schoolStudentMapper.selectList(ssWrapper).forEach(ss -> ssMap.put(ss.getId(), ss));
+        }
+
+        Map<String, SchoolStudent> ssByStudentId = new HashMap<>();
+        if (!usernames.isEmpty()) {
+            QueryWrapper<SchoolStudent> byStudentIdWrapper = new QueryWrapper<>();
+            byStudentIdWrapper.in("student_id", usernames);
+            schoolStudentMapper.selectList(byStudentIdWrapper).forEach(ss -> {
+                if (ss.getStudentId() != null && !ss.getStudentId().isBlank()) {
+                    ssByStudentId.putIfAbsent(ss.getStudentId(), ss);
+                }
+            });
         }
 
         List<Map<String, Object>> result = new ArrayList<>(users.size());
@@ -180,11 +195,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             row.put("role", u.getRole());
             row.put("createdTime", u.getCreatedTime());
             row.put("schoolStudentId", u.getSchoolStudentId());
+
+            SchoolStudent schoolStudent = null;
             if (u.getSchoolStudentId() != null) {
-                SchoolStudent ss = ssMap.get(u.getSchoolStudentId());
-                if (ss != null) {
-                    row.put("collegeName", ss.getCollegeName());
-                    row.put("className", ss.getClassName());
+                schoolStudent = ssMap.get(u.getSchoolStudentId());
+            }
+            if (schoolStudent == null && u.getUsername() != null && !u.getUsername().isBlank()) {
+                schoolStudent = ssByStudentId.get(u.getUsername());
+            }
+            if (schoolStudent != null) {
+                row.put("collegeName", schoolStudent.getCollegeName());
+                row.put("className", schoolStudent.getClassName());
+                if (u.getSchoolStudentId() == null && schoolStudent.getId() != null) {
+                    row.put("schoolStudentId", schoolStudent.getId());
                 }
             }
             result.add(row);
