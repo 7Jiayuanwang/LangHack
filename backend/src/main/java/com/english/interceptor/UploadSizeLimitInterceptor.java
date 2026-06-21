@@ -2,11 +2,13 @@ package com.english.interceptor;
 
 import com.english.dto.Result;
 import com.english.service.SystemConfigService;
+import com.english.util.SizeParseUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,12 +20,16 @@ import javax.servlet.http.HttpServletResponse;
 import java.util.Map;
 
 /**
- * 文件上传大小限制拦截器 - 支持全局和用户级动态限制
+ * 文件上传大小限制拦截器 - 对齐 upload.content_size.* 配置体系
+ * 优先级：用户特权 > 角色覆盖 > 全局默认 > 硬编码兜底
  */
 @Component
 public class UploadSizeLimitInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(UploadSizeLimitInterceptor.class);
+    private static final long DEFAULT_IMAGE_SIZE = 10L  * 1024 * 1024;  // 10MB
+    private static final long DEFAULT_VIDEO_SIZE = 512L * 1024 * 1024;  // 512MB
+    private static final long DEFAULT_BACKUP_IMPORT_SIZE = 2L * 1024 * 1024 * 1024;  // 2GB
 
     @Autowired
     private SystemConfigService systemConfigService;
@@ -36,40 +42,73 @@ public class UploadSizeLimitInterceptor implements HandlerInterceptor {
         if (!(request instanceof MultipartHttpServletRequest)) {
             return true;
         }
-
         MultipartHttpServletRequest multipartRequest = (MultipartHttpServletRequest) request;
         Map<String, MultipartFile> fileMap = multipartRequest.getFileMap();
-
         if (fileMap.isEmpty()) {
             return true;
         }
 
-        // 获取当前用户
         String username = getCurrentUsername();
+        String requestUri = request.getRequestURI();
+        String mediaType = multipartRequest.getParameter("mediaType");
+        long maxBytes = resolveMaxSize(requestUri, mediaType, username);
 
-        // 获取用户特定限制，如果不存在则使用全局限制
-        long maxSizeBytes = getUserMaxFileSize(username);
-
-        // 检查每个上传文件
         for (Map.Entry<String, MultipartFile> entry : fileMap.entrySet()) {
             MultipartFile file = entry.getValue();
-            long fileSize = file.getSize();
-
-            if (fileSize > maxSizeBytes) {
+            if (file.getSize() > maxBytes) {
                 log.warn("文件上传被拒绝: user={}, filename={}, size={} bytes, limit={} bytes",
-                        username, file.getOriginalFilename(), fileSize, maxSizeBytes);
-
-                response.setStatus(413); // Payload Too Large
+                        username, file.getOriginalFilename(), file.getSize(), maxBytes);
+                response.setStatus(413);
                 response.setContentType("application/json;charset=UTF-8");
                 response.getWriter().write(objectMapper.writeValueAsString(
-                    Result.error(413, String.format("文件过大，限制为 %s，实际为 %s",
-                            formatSize(maxSizeBytes), formatSize(fileSize)))
-                ));
+                        Result.error(413, String.format("文件过大，限制为 %s，实际为 %s",
+                                SizeParseUtil.formatSize(maxBytes), SizeParseUtil.formatSize(file.getSize())))));
                 return false;
             }
         }
-
         return true;
+    }
+
+    /**
+     * 按请求类型 + 当前用户解析允许的最大文件大小。
+     * 优先级：用户特权 > 角色覆盖 > 全局默认 > 硬编码兜底
+     */
+    private long resolveMaxSize(String requestUri, String mediaType, String username) {
+        if (isBackupImport(requestUri)) {
+            return resolveConfiguredLimit("upload.content_size.backup_import", username, DEFAULT_BACKUP_IMPORT_SIZE);
+        }
+
+        boolean isVideo = "VIDEO".equalsIgnoreCase(mediaType);
+        String typeKey = isVideo ? "upload.content_size.video" : "upload.content_size.image";
+        long fallback = isVideo ? DEFAULT_VIDEO_SIZE : DEFAULT_IMAGE_SIZE;
+        return resolveConfiguredLimit(typeKey, username, fallback);
+    }
+
+    private long resolveConfiguredLimit(String typeKey, String username, long fallback) {
+        if (username != null) {
+            String userVal = systemConfigService.get("content_limits", typeKey + ".user." + username, null);
+            if (userVal != null) return SizeParseUtil.parseSize(userVal, fallback);
+        }
+
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getAuthorities() != null) {
+                for (GrantedAuthority ga : auth.getAuthorities()) {
+                    String role = ga.getAuthority().replace("ROLE_", "");
+                    String roleVal = systemConfigService.get("content_limits", typeKey + ".role." + role, null);
+                    if (roleVal != null) return SizeParseUtil.parseSize(roleVal, fallback);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("resolveMaxSize 角色查询失败，降级到全局默认: {}", e.getMessage());
+        }
+
+        String globalVal = systemConfigService.get("content_limits", typeKey, null);
+        return SizeParseUtil.parseSize(globalVal, fallback);
+    }
+
+    private boolean isBackupImport(String requestUri) {
+        return requestUri != null && requestUri.endsWith("/api/ops/backup/import");
     }
 
     private String getCurrentUsername() {
@@ -80,68 +119,4 @@ public class UploadSizeLimitInterceptor implements HandlerInterceptor {
         return null;
     }
 
-    private long getUserMaxFileSize(String username) {
-        if (username != null) {
-            String userLimitKey = "upload.max_file_size.user." + username;
-            try {
-                com.english.entity.SystemConfig config = systemConfigService.getByKey(userLimitKey);
-                if (config != null) {
-                    return parseSize(config.getConfigValue());
-                }
-            } catch (Exception e) {
-                log.warn("获取用户上传限制失败: {}", e.getMessage());
-            }
-        }
-
-        // 使用全局限制
-        try {
-            com.english.entity.SystemConfig globalConfig = systemConfigService.getByKey("upload.max_file_size.global");
-            if (globalConfig != null) {
-                return parseSize(globalConfig.getConfigValue());
-            }
-        } catch (Exception e) {
-            log.warn("获取全局上传限制失败: {}", e.getMessage());
-        }
-
-        // 默认 10MB
-        return 10 * 1024 * 1024;
-    }
-
-    private long parseSize(String sizeStr) {
-        if (sizeStr == null || sizeStr.trim().isEmpty()) {
-            return 10 * 1024 * 1024;
-        }
-
-        sizeStr = sizeStr.trim().toUpperCase();
-        long multiplier = 1;
-
-        if (sizeStr.endsWith("KB")) {
-            multiplier = 1024;
-            sizeStr = sizeStr.substring(0, sizeStr.length() - 2);
-        } else if (sizeStr.endsWith("MB")) {
-            multiplier = 1024 * 1024;
-            sizeStr = sizeStr.substring(0, sizeStr.length() - 2);
-        } else if (sizeStr.endsWith("GB")) {
-            multiplier = 1024 * 1024 * 1024;
-            sizeStr = sizeStr.substring(0, sizeStr.length() - 2);
-        }
-
-        try {
-            return Long.parseLong(sizeStr.trim()) * multiplier;
-        } catch (NumberFormatException e) {
-            log.warn("解析文件大小失败: {}", sizeStr);
-            return 10 * 1024 * 1024;
-        }
-    }
-
-    private String formatSize(long bytes) {
-        if (bytes >= 1024 * 1024 * 1024) {
-            return String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024));
-        } else if (bytes >= 1024 * 1024) {
-            return String.format("%.2f MB", bytes / (1024.0 * 1024));
-        } else if (bytes >= 1024) {
-            return String.format("%.2f KB", bytes / 1024.0);
-        }
-        return bytes + " bytes";
-    }
 }

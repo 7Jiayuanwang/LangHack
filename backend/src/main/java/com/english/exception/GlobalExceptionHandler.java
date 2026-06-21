@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 
@@ -131,6 +132,31 @@ public class GlobalExceptionHandler {
     public Result<?> handleAccessDenied(AccessDeniedException e) {
         log.warn("Access denied: {}", e.getMessage());
         return Result.error(403, "权限不足");
+    }
+
+    /**
+     * 上传文件超过限制（multipart.max-file-size / max-request-size 触发）
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.PAYLOAD_TOO_LARGE)
+    public Result<?> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
+        long maxBytes = e.getMaxUploadSize();
+        String humanLimit = humanReadableSize(maxBytes);
+        log.warn("Upload size exceeded: max={} bytes ({})", maxBytes, humanLimit);
+        return Result.error(413, "上传文件超出限制（最大 " + humanLimit + "），请压缩或拆分后重试");
+    }
+
+    private static String humanReadableSize(long bytes) {
+        if (bytes <= 0) return "未知";
+        String[] units = {"B", "KB", "MB", "GB", "TB"};
+        double size = bytes;
+        int idx = 0;
+        while (size >= 1024 && idx < units.length - 1) {
+            size /= 1024;
+            idx++;
+        }
+        return idx == 0 ? String.format("%.0f %s", size, units[idx])
+                        : String.format("%.1f %s", size, units[idx]);
     }
 
     /**
