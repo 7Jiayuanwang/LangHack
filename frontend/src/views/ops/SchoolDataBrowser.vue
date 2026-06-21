@@ -14,7 +14,7 @@
     <!-- 数据概览卡片 -->
     <div class="stats-grid" v-if="overview">
       <div
-        v-for="(count, key) in overviewEntries"
+        v-for="[key, count] in overviewEntries"
         :key="key"
         class="stat-card"
         :class="{ active: activeTab === key }"
