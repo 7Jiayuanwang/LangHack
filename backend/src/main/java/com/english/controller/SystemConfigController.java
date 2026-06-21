@@ -90,9 +90,10 @@ public class SystemConfigController {
         List<SystemConfig> all = systemConfigService.listByGroup(GROUP_CONTENT);
 
         Map<String, String> defaults = new LinkedHashMap<>();
-        defaults.put("image",       "10MB");
-        defaults.put("video",       "512MB");
-        defaults.put("excelImport", "10MB");
+        defaults.put("image",        "10MB");
+        defaults.put("video",        "512MB");
+        defaults.put("excelImport",  "10MB");
+        defaults.put("backupImport", "2048MB");
 
         List<Map<String, Object>> roleOverrides = new ArrayList<>();
         List<Map<String, Object>> userOverrides = new ArrayList<>();
@@ -100,9 +101,10 @@ public class SystemConfigController {
         for (SystemConfig c : all) {
             String key = c.getConfigKey();
             String val = c.getConfigValue();
-            if ("upload.content_size.image".equals(key))        defaults.put("image", val);
-            else if ("upload.content_size.video".equals(key))   defaults.put("video", val);
-            else if ("upload.content_size.excel_import".equals(key)) defaults.put("excelImport", val);
+            if ("upload.content_size.image".equals(key))              defaults.put("image", val);
+            else if ("upload.content_size.video".equals(key))         defaults.put("video", val);
+            else if ("upload.content_size.excel_import".equals(key))  defaults.put("excelImport", val);
+            else if ("upload.content_size.backup_import".equals(key)) defaults.put("backupImport", val);
             else if (key.startsWith("upload.content_size.") && key.contains(".role.")) {
                 // upload.content_size.{type}.role.{ROLE}
                 String suffix = key.substring("upload.content_size.".length());
@@ -238,9 +240,10 @@ public class SystemConfigController {
             typeLabel = ("image".equals(type) ? "图片" : "video".equals(type) ? "视频" : type);
             return typeLabel + "上传限制（特权用户 " + username + "）";
         }
-        if (key.endsWith("image"))        return "图片上传大小限制（全局默认）";
-        if (key.endsWith("video"))        return "视频上传大小限制（全局默认）";
-        if (key.endsWith("excel_import")) return "Excel批量导入大小限制";
+        if (key.endsWith("image"))         return "图片上传大小限制（全局默认）";
+        if (key.endsWith("video"))         return "视频上传大小限制（全局默认）";
+        if (key.endsWith("excel_import"))  return "Excel批量导入大小限制";
+        if (key.endsWith("backup_import")) return "备份文件导入大小限制";
         return key;
     }
 }
