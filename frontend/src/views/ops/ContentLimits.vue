@@ -203,6 +203,36 @@
           >保存</el-button>
         </div>
       </el-card>
+
+      <!-- 备份文件导入（独立卡片，无角色/用户覆盖） -->
+      <el-card class="limit-card limit-card--full" shadow="never" style="margin-top:20px">
+        <template #header>
+          <div class="card-header">
+            <el-icon><Upload /></el-icon>
+            <span>备份文件导入限制</span>
+            <el-tag size="small" type="info" effect="plain" class="cap-tag">上限 10GB</el-tag>
+          </div>
+        </template>
+        <div class="row-item">
+          <div class="row-label">全局默认</div>
+          <div class="row-bar">
+            <el-progress
+              :percentage="pct(backupImportGlobal.bytes, 10737418240)"
+              :stroke-width="10"
+              :color="barColor(backupImportGlobal.bytes, 10737418240)"
+              style="flex:1"
+            />
+            <span class="bar-hint">/ 10GB</span>
+          </div>
+          <SizeInput v-model="editBackupImport" placeholder="2048" />
+          <el-button
+            type="primary"
+            size="small"
+            :loading="savingBackupImport"
+            @click="saveBackupImport"
+          >保存</el-button>
+        </div>
+      </el-card>
     </template>
   </div>
 </template>
@@ -210,7 +240,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, Document, Picture, VideoPlay, User } from '@element-plus/icons-vue'
+import { Loading, Document, Picture, VideoPlay, User, Upload } from '@element-plus/icons-vue'
 import {
   getContentLimits, updateContentLimits, deleteContentLimit, searchUsersForLimit
 } from '@/api/systemConfig'
@@ -222,6 +252,10 @@ const loading = ref(true)
 const savingExcel = ref(false)
 const editExcel = ref('10MB')
 const excelGlobal = reactive({ value: '10MB', bytes: 0 })
+
+const savingBackupImport = ref(false)
+const editBackupImport = ref('2048MB')
+const backupImportGlobal = reactive({ value: '2048MB', bytes: 0 })
 
 const cardDefs = [
   { type: 'image', title: '图片上传限制', icon: Picture,   capBytes: 52428800,  capLabel: '50MB' },
@@ -282,6 +316,8 @@ const load = async () => {
       })
       Object.assign(excelGlobal, d.excelImport || {})
       editExcel.value = excelGlobal.value || '10MB'
+      Object.assign(backupImportGlobal, d.backupImport || {})
+      editBackupImport.value = backupImportGlobal.value || '2048MB'
     }
   } catch (e) {
     ElMessage.error('加载内容大小限制失败')
@@ -411,6 +447,19 @@ const saveExcel = async () => {
     ElMessage.error('保存失败')
   } finally {
     savingExcel.value = false
+  }
+}
+
+const saveBackupImport = async () => {
+  savingBackupImport.value = true
+  try {
+    await updateContentLimits([{ key: 'upload.content_size.backup_import', value: editBackupImport.value }])
+    ElMessage.success('已保存')
+    await load()
+  } catch (e) {
+    ElMessage.error('保存失败')
+  } finally {
+    savingBackupImport.value = false
   }
 }
 

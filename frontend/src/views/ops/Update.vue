@@ -308,9 +308,6 @@ function startDeploy() {
       logs.value.push('[INFO] 后端正在重启，部署仍在进行中...')
       nextTick(() => { if (logBox.value) logBox.value.scrollTop = logBox.value.scrollHeight })
       startReconnectPoll()
-    } else {
-      if (stepIdx < deploySteps.value.length) deploySteps.value[stepIdx].status = 'error'
-      await loadStatus()
     }
   }
 }
