@@ -142,10 +142,29 @@
       <span>按学院链式拉取功能当前已被管理员关闭。</span>
     </div>
 
+    <!-- 快速搜索区 -->
+    <div class="quick-search-bar" v-if="tableData.length > 0">
+      <el-input
+        v-model="quickSearchText"
+        placeholder="快速搜索（学号/姓名/课程/教师等）"
+        size="small"
+        clearable
+        @input="handleQuickSearch"
+        style="width: 300px"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+      <span class="search-hint" v-if="quickSearchText">
+        找到 {{ filteredTableData.length }} / {{ tableData.length }} 条
+      </span>
+    </div>
+
     <!-- 数据导出按钮 -->
     <div class="export-controls" v-if="tableData.length > 0">
       <el-button @click="handleExport" :loading="exporting" type="success" size="small">
-        <el-icon><Download /></el-icon> 导出当前数据 ({{ tableData.length }} 条)
+        <el-icon><Download /></el-icon> 导出当前数据 ({{ filteredTableData.length }} 条)
       </el-button>
       <el-button @click="handleExportAll" :loading="exportingAll" type="primary" size="small">
         <el-icon><Download /></el-icon> 导出全部数据 ({{ total }} 条)
@@ -155,7 +174,7 @@
     <!-- 数据源Tab -->
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="行政班" name="administrative_class">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -192,7 +211,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="课程" name="school_course">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -236,7 +255,7 @@
           <el-icon><InfoFilled /></el-icon>
           <span>官方 9 个数据源中「教师授课」(/api/jssk) 的字段并入教学班表存储，在此 Tab 统一展示。</span>
         </div>
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -261,7 +280,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="课程安排" name="course_schedule">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -284,7 +303,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="选课记录" name="course_selection">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -324,7 +343,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="等级考试" name="level_exam_scores">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -373,7 +392,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="教学计划" name="teaching_plans">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -417,7 +436,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="学生课表" name="student_schedule">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -450,7 +469,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="链式学生目录" name="school_student">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -481,7 +500,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="链式教师目录" name="school_teacher">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -505,7 +524,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="师生绑定" name="teacher_student_binding">
-        <el-table v-loading="loading" :data="tableData" stripe size="small" max-height="500" row-key="id">
+        <el-table v-loading="loading" :data="filteredTableData" stripe size="small" max-height="500" row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-detail">
@@ -607,7 +626,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { InfoFilled, DataLine, Download } from '@element-plus/icons-vue'
+import { InfoFilled, DataLine, Download, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
@@ -676,6 +695,22 @@ const currentPage = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
 const overview = ref(null)
 const filterFields = ref([])
+
+// 快速搜索相关状态
+const quickSearchText = ref('')
+const filteredTableData = computed(() => {
+  if (!quickSearchText.value || quickSearchText.value.trim() === '') {
+    return tableData.value
+  }
+  const searchLower = quickSearchText.value.toLowerCase().trim()
+  return tableData.value.filter(row => {
+    // 搜索所有字符串和数字字段
+    return Object.values(row).some(value => {
+      if (value === null || value === undefined) return false
+      return String(value).toLowerCase().includes(searchLower)
+    })
+  })
+})
 
 // 加载进度相关状态
 const loadingProgress = ref(0)
@@ -883,6 +918,7 @@ async function handleTabChange() {
   if (suppressTabReload.value) {
     return
   }
+  quickSearchText.value = '' // 切换标签页时清空搜索
   currentPage.value = 1
   pageSize.value = DEFAULT_PAGE_SIZE
   currentFilters.value = []
@@ -1152,16 +1188,16 @@ async function handleChainFetch() {
 
 // 导出当前页数据为 CSV
 async function handleExport() {
-  if (!tableData.value.length) {
+  if (!filteredTableData.value.length) {
     ElMessage.warning('没有可导出的数据')
     return
   }
 
   exporting.value = true
   try {
-    const csvContent = generateCSV(tableData.value)
+    const csvContent = generateCSV(filteredTableData.value)
     downloadCSV(csvContent, `${dataSourceLabels[activeTab.value]}_当前页_${new Date().toISOString().slice(0, 10)}.csv`)
-    ElMessage.success(`成功导出 ${tableData.value.length} 条数据`)
+    ElMessage.success(`成功导出 ${filteredTableData.value.length} 条数据`)
   } catch (error) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
@@ -1429,6 +1465,20 @@ onMounted(async () => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.quick-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  margin-bottom: 8px;
+}
+
+.search-hint {
+  font-size: 14px;
+  color: #606266;
+  font-weight: 500;
 }
 
 /* PC端大字号适配 */
