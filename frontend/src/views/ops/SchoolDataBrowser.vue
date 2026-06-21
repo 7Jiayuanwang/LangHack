@@ -701,6 +701,29 @@ const filterFields = ref([])
 const quickSearchText = ref('')
 let searchDebounceTimer = null
 
+// 为每个标签页保存独立的搜索状态
+const tabSearchStates = ref({})
+
+// 保存当前标签页的搜索状态
+function saveTabSearchState() {
+  tabSearchStates.value[activeTab.value] = {
+    searchText: quickSearchText.value,
+    page: currentPage.value
+  }
+}
+
+// 恢复当前标签页的搜索状态
+function restoreTabSearchState() {
+  const state = tabSearchStates.value[activeTab.value]
+  if (state) {
+    quickSearchText.value = state.searchText || ''
+    currentPage.value = state.page || 1
+  } else {
+    quickSearchText.value = ''
+    currentPage.value = 1
+  }
+}
+
 // 防抖搜索函数：用户停止输入 500ms 后触发服务端查询
 function handleQuickSearch() {
   if (searchDebounceTimer) {
@@ -708,7 +731,7 @@ function handleQuickSearch() {
   }
   searchDebounceTimer = setTimeout(() => {
     currentPage.value = 1 // 搜索时重置到第一页
-    loadPageData()
+    loadData()
   }, 500)
 }
 
@@ -716,7 +739,7 @@ function handleQuickSearch() {
 function clearQuickSearch() {
   quickSearchText.value = ''
   currentPage.value = 1
-  loadPageData()
+  loadData()
 }
 
 // 加载进度相关状态
@@ -912,6 +935,10 @@ async function loadData(showProgress = true) {
     const totalCount = Number.isFinite(pageData?.total) ? pageData.total : 0
     tableData.value = records
     total.value = totalCount
+
+    // 数据加载成功后保存当前标签页的搜索状态
+    saveTabSearchState()
+
     if (showProgress) {
       completeProgress(true)
     }
@@ -948,10 +975,16 @@ async function handleTabChange() {
   if (suppressTabReload.value) {
     return
   }
-  quickSearchText.value = '' // 切换标签页时清空搜索
-  currentPage.value = 1
+
+  // 保存当前标签页的搜索状态
+  saveTabSearchState()
+
   pageSize.value = DEFAULT_PAGE_SIZE
   currentFilters.value = []
+
+  // 恢复目标标签页的搜索状态
+  restoreTabSearchState()
+
   await loadFilterFields()
   loadData()
 }
@@ -1003,12 +1036,19 @@ async function switchToTab(tabName, filters = []) {
   if (!Object.prototype.hasOwnProperty.call(dataSourceLabels, tabName)) {
     return
   }
+
+  // 保存当前标签页的搜索状态
+  saveTabSearchState()
+
   suppressTabReload.value = true
   try {
     activeTab.value = tabName
-    currentPage.value = 1
     pageSize.value = DEFAULT_PAGE_SIZE
     currentFilters.value = filters
+
+    // 恢复目标标签页的搜索状态
+    restoreTabSearchState()
+
     await nextTick()
     await loadFilterFields()
     await loadData()
