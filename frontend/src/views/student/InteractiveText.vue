@@ -90,71 +90,83 @@
             正在生成题目...
           </span>
         </button>
+      </section>
 
-        <!-- 出题内容（内嵌展示，不影响阅读）-->
-        <div class="quiz-inline" v-if="quizQuestions.length > 0">
-          <div class="quiz-inline-header">
-            <span class="quiz-inline-title">
+      <!-- 底部出题面板 -->
+      <transition name="quiz-panel-slide">
+        <div class="quiz-bottom-panel" v-if="quizQuestions.length > 0" :style="{ height: quizPanelHeight + 'px' }">
+          <!-- 拖拽调整手柄 -->
+          <div class="quiz-panel-drag-handle" @mousedown="startDragQuizPanel">
+            <div class="drag-bar"></div>
+          </div>
+
+          <!-- 面板头部 -->
+          <div class="quiz-panel-header">
+            <span class="quiz-panel-title">
               <el-icon><Edit /></el-icon>
               AI 出题（{{ quizQuestions.length }} 题）
             </span>
-            <div class="quiz-inline-actions-top">
-              <el-button size="small" @click="closeQuiz">收起</el-button>
+            <div class="quiz-panel-actions">
+              <el-button size="small" @click="toggleQuizPanel">{{ quizPanelCollapsed ? '展开' : '收起' }}</el-button>
+              <el-button size="small" @click="closeQuiz">关闭</el-button>
             </div>
           </div>
 
-          <div class="quiz-content">
-            <div
-              v-for="(q, index) in quizQuestions"
-              :key="index"
-              class="quiz-question"
-            >
-              <div class="question-header">
-                <span class="question-number">{{ index + 1 }}</span>
-                <span class="question-type">{{ q.questionType || '选择题' }}</span>
-              </div>
-              <div class="question-text">{{ q.question }}</div>
-              <div class="question-options">
-                <div
-                  v-for="opt in q.options"
-                  :key="opt.optionKey"
-                  class="option-item"
-                  :class="{
-                    'selected': q.userAnswer === opt.optionKey,
-                    'correct': q.showAnswer && opt.isCorrect === 1,
-                    'wrong': q.showAnswer && q.userAnswer === opt.optionKey && opt.isCorrect !== 1
-                  }"
-                  @click="selectQuizAnswer(index, opt.optionKey)"
-                >
-                  <span class="option-key">{{ opt.optionKey }}</span>
-                  <span class="option-content">{{ opt.optionContent }}</span>
+          <!-- 面板内容 -->
+          <div class="quiz-panel-body" v-show="!quizPanelCollapsed">
+            <div class="quiz-questions-scroll">
+              <div
+                v-for="(q, index) in quizQuestions"
+                :key="index"
+                class="quiz-question"
+              >
+                <div class="question-header">
+                  <span class="question-number">{{ index + 1 }}</span>
+                  <span class="question-type">{{ q.questionType || '选择题' }}</span>
+                </div>
+                <div class="question-text">{{ q.question }}</div>
+                <div class="question-options">
+                  <div
+                    v-for="opt in q.options"
+                    :key="opt.optionKey"
+                    class="option-item"
+                    :class="{
+                      'selected': q.userAnswer === opt.optionKey,
+                      'correct': q.showAnswer && opt.isCorrect === 1,
+                      'wrong': q.showAnswer && q.userAnswer === opt.optionKey && opt.isCorrect !== 1
+                    }"
+                    @click="selectQuizAnswer(index, opt.optionKey)"
+                  >
+                    <span class="option-key">{{ opt.optionKey }}</span>
+                    <span class="option-content">{{ opt.optionContent }}</span>
+                  </div>
+                </div>
+                <div class="question-analysis" v-if="q.showAnswer && q.analysis">
+                  <div class="analysis-label">解析：</div>
+                  <div class="analysis-text">{{ q.analysis }}</div>
                 </div>
               </div>
-              <div class="question-analysis" v-if="q.showAnswer && q.analysis">
-                <div class="analysis-label">解析：</div>
-                <div class="analysis-text">{{ q.analysis }}</div>
-              </div>
+            </div>
+
+            <div class="quiz-actions">
+              <el-button
+                v-if="!allAnswered"
+                type="primary"
+                @click="submitQuiz"
+                :disabled="!hasAnyAnswer"
+              >
+                提交答案
+              </el-button>
+              <el-button
+                v-if="allAnswered"
+                @click="resetQuizAnswers"
+              >
+                重新作答
+              </el-button>
             </div>
           </div>
-
-          <div class="quiz-actions">
-            <el-button
-              v-if="!allAnswered"
-              type="primary"
-              @click="submitQuiz"
-              :disabled="!hasAnyAnswer"
-            >
-              提交答案
-            </el-button>
-            <el-button
-              v-if="allAnswered"
-              @click="resetQuizAnswers"
-            >
-              重新作答
-            </el-button>
-          </div>
         </div>
-      </section>
+      </transition>
 
       <!-- Related Articles Section -->
       <section class="related-articles" v-if="relatedTexts.length > 0">
@@ -584,6 +596,11 @@ let studyStartTime = null
 const quizLoading = ref(false)
 const quizQuestions = ref([])
 const quizStartedAt = ref(null) // 进入做题界面的时间戳，用于计算每题用时
+const quizPanelHeight = ref(350) // 底部面板高度
+const quizPanelCollapsed = ref(false) // 面板是否折叠
+let quizPanelDragging = false
+let quizPanelDragStartY = 0
+let quizPanelDragStartHeight = 0
 let accumulatedTime = 0 // 累计学习时间（秒）
 
 // 相关文章推荐
@@ -2203,7 +2220,44 @@ const showAllAnswers = () => {
   })
 }
 
+// 底部出题面板控制
+let quizPanelSavedHeight = 350
+const toggleQuizPanel = () => {
+  if (quizPanelCollapsed.value) {
+    // 展开：恢复之前的高度
+    quizPanelHeight.value = quizPanelSavedHeight
+  } else {
+    // 收起：保存当前高度，缩小到最小
+    quizPanelSavedHeight = quizPanelHeight.value
+    quizPanelHeight.value = 48
+  }
+  quizPanelCollapsed.value = !quizPanelCollapsed.value
+}
+
+const startDragQuizPanel = (e) => {
+  e.preventDefault()
+  quizPanelDragging = true
+  quizPanelDragStartY = e.clientY
+  quizPanelDragStartHeight = quizPanelHeight.value
+  document.addEventListener('mousemove', onDragQuizPanel)
+  document.addEventListener('mouseup', stopDragQuizPanel)
+}
+
+const onDragQuizPanel = (e) => {
+  if (!quizPanelDragging) return
+  const delta = quizPanelDragStartY - e.clientY
+  const newHeight = Math.max(120, Math.min(window.innerHeight * 0.7, quizPanelDragStartHeight + delta))
+  quizPanelHeight.value = newHeight
+}
+
+const stopDragQuizPanel = () => {
+  quizPanelDragging = false
+  document.removeEventListener('mousemove', onDragQuizPanel)
+  document.removeEventListener('mouseup', stopDragQuizPanel)
+}
+
 const closeQuiz = () => {
+  quizPanelCollapsed.value = false
   // 保存做题进度到 localStorage
   if (quizQuestions.value.length > 0 && textId.value) {
     const key = `quiz_progress_${textId.value}`
@@ -2813,47 +2867,6 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   gap: 24px;
 }
 
-.quiz-inline {
-  width: 100%;
-  background: #fefefe;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.quiz-inline-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.quiz-inline-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #8b5cf6;
-}
-
-.quiz-inline-actions-top {
-  display: flex;
-  gap: 8px;
-}
-
-.quiz-actions {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
-}
-
 .ai-quiz-btn {
   display: flex;
   align-items: center;
@@ -2881,6 +2894,98 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .ai-quiz-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+/* 底部出题面板 */
+.quiz-bottom-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 2px solid #8b5cf6;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  transition: height 0.1s;
+}
+
+.quiz-panel-slide-enter-active,
+.quiz-panel-slide-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.quiz-panel-slide-enter-from,
+.quiz-panel-slide-leave-to {
+  transform: translateY(100%);
+}
+
+.quiz-panel-drag-handle {
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.quiz-panel-drag-handle:hover {
+  background: #e9ecef;
+}
+
+.quiz-panel-drag-handle .drag-bar {
+  width: 40px;
+  height: 4px;
+  background: #c0c4cc;
+  border-radius: 2px;
+}
+
+.quiz-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.quiz-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #8b5cf6;
+}
+
+.quiz-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.quiz-panel-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.quiz-questions-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.quiz-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
 }
 
 .ai-quiz-btn .btn-content {
