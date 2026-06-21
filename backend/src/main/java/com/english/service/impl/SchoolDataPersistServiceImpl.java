@@ -881,7 +881,8 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(studentId.trim());
         if (schoolStudent != null) {
             String schoolStudentName = firstNonBlank(schoolStudent.getStudentName());
-            if (schoolStudentName != null) {
+            // 纯数字视为脏数据（CDSP 早期把学号填入了姓名字段），跳过
+            if (schoolStudentName != null && !schoolStudentName.matches("^[0-9]+$")) {
                 return schoolStudentName;
             }
         }

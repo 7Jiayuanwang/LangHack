@@ -208,4 +208,37 @@ describe('SchoolDataBrowser.vue', () => {
       ]
     })
   })
+
+  it('overviewEntries filters out non-numeric / unknown tab keys', async () => {
+    mockGetSchoolDataOverview.mockResolvedValue({
+      code: 200,
+      data: {
+        administrative_class: 12,
+        // 非数字字段 - 必须被过滤掉（之前会触发 toLocaleString 崩溃）
+        lastUpdated: '2026-06-20',
+        // 未知 tab key - 必须被过滤掉
+        student_basic_info: 5
+      }
+    })
+
+    const wrapper = shallowMount(SchoolDataBrowser)
+    await flushPromises()
+
+    expect(wrapper.vm.overviewEntries).toEqual([['administrative_class', 12]])
+    expect(wrapper.vm.formatCount(12)).toBe('12')
+    expect(wrapper.vm.formatCount('not-a-number')).toBe('0')
+    expect(wrapper.vm.formatCount(null)).toBe('0')
+  })
+
+  it('filterSummary handles malformed groups (missing conditions) without crashing', () => {
+    const wrapper = shallowMount(SchoolDataBrowser)
+    // 模拟 currentFilters 出现脏数据（深拷贝丢失 conditions / 或者后端返回异常）
+    wrapper.vm.currentFilters = [
+      { relation: 'AND' /* conditions 缺失 */ },
+      { relation: 'AND', conditions: null },
+      { relation: 'OR', conditions: [{ field: 'x', label: 'X', operator: 'eq', value: '1' }] }
+    ]
+    expect(() => wrapper.vm.filterSummary).not.toThrow()
+    expect(wrapper.vm.filterSummary).toBe('(X eq 1)')
+  })
 })

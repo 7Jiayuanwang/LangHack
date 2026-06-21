@@ -13,10 +13,10 @@
 
     <!-- 数据概览卡片 -->
     <div class="stats-grid" v-if="overview">
-      <div 
-        v-for="(count, key) in overview" 
-        :key="key" 
-        class="stat-card" 
+      <div
+        v-for="(count, key) in overviewEntries"
+        :key="key"
+        class="stat-card"
         :class="{ active: activeTab === key }"
         @click="activateOverviewTab(key)"
       >
@@ -24,7 +24,7 @@
           <el-icon><DataLine /></el-icon>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ count.toLocaleString() }}</div>
+          <div class="stat-value">{{ formatCount(count) }}</div>
           <div class="stat-label">{{ dataSourceLabels[key] || key }}</div>
         </div>
         <div class="stat-indicator"></div>
@@ -307,7 +307,14 @@
             </template>
           </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
-          <el-table-column prop="studentName" label="姓名" width="90" />
+          <el-table-column label="姓名" width="90">
+            <template #default="{ row }">
+              <span v-if="row.studentName">{{ row.studentName }}</span>
+              <el-tooltip v-else content="CDSP 端未提供学生姓名，仅显示学号" placement="top">
+                <span class="text-muted">学号 {{ row.studentId }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
           <el-table-column prop="courseName" label="课程" min-width="180" />
           <el-table-column prop="teacherName" label="教师" width="90" />
           <el-table-column prop="credits" label="学分" width="70" />
@@ -344,7 +351,14 @@
             </template>
           </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
-          <el-table-column prop="studentName" label="姓名" width="90" />
+          <el-table-column label="姓名" width="90">
+            <template #default="{ row }">
+              <span v-if="row.studentName">{{ row.studentName }}</span>
+              <el-tooltip v-else content="CDSP 端未提供学生姓名，仅显示学号" placement="top">
+                <span class="text-muted">学号 {{ row.studentId }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
           <el-table-column prop="examType" label="类型" width="80" />
           <el-table-column prop="score" label="分数" width="70" />
           <el-table-column prop="isPassed" label="是否通过" width="80">
@@ -419,7 +433,14 @@
             </template>
           </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
-          <el-table-column prop="studentName" label="姓名" width="90" />
+          <el-table-column label="姓名" width="90">
+            <template #default="{ row }">
+              <span v-if="row.studentName">{{ row.studentName }}</span>
+              <el-tooltip v-else content="CDSP 端未提供学生姓名，仅显示学号" placement="top">
+                <span class="text-muted">学号 {{ row.studentId }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
           <el-table-column prop="courseName" label="课程" min-width="180" />
           <el-table-column prop="teacherName" label="教师" width="90" />
           <el-table-column prop="dayOfWeek" label="星期" width="70" />
@@ -615,6 +636,10 @@ const OPERATOR_LABELS = {
   in: '在列表中'
 }
 
+// 数据源展示标签 - 必须与 backend SchoolDataQueryController.getOverview() 一一对应
+// ⚠️ 注意：student_basic_info 是「同步源」而非「浏览表」，其数据落库到 school_student，
+//     因此 stats 卡片显示的是 school_student.count；不要把 student_basic_info 加到这里，
+//     否则 el-tabs 找不到对应 pane 会触发 .map() 错误。
 const dataSourceLabels = {
   administrative_class: '行政班',
   school_course: '课程',
@@ -624,7 +649,6 @@ const dataSourceLabels = {
   level_exam_scores: '等级考试',
   teaching_plans: '教学计划',
   student_schedule: '学生课表',
-  student_basic_info: '学生基本信息',
   school_student: '链式学生目录',
   school_teacher: '链式教师目录',
   teacher_student_binding: '师生绑定'
@@ -691,26 +715,45 @@ const exportingAll = ref(false)
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 200]
 
 const availableFields = computed(() => {
-  return filterFields.value
+  return Array.isArray(filterFields.value) ? filterFields.value : []
 })
 
 const isDerivedLocalTab = computed(() => DERIVED_LOCAL_TABS.has(activeTab.value))
 
+// 只展示后端 getOverview() 返回的、与 dataSourceLabels 对应的数字键值
+// 避免后端多塞非数字字段（如 timestamp / metadata）触发 toLocaleString / .map() 崩溃
+const overviewEntries = computed(() => {
+  if (!overview.value || typeof overview.value !== 'object') return []
+  return Object.entries(overview.value).filter(([key, value]) => {
+    if (!Object.prototype.hasOwnProperty.call(dataSourceLabels, key)) return false
+    return typeof value === 'number' && Number.isFinite(value)
+  })
+})
+
+function formatCount(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '0'
+  return value.toLocaleString()
+}
+
 function availableOperators(fieldName) {
   const fieldDef = availableFields.value.find(field => field.field === fieldName)
-  return (fieldDef?.operators || ['eq']).map(value => ({ value, label: OPERATOR_LABELS[value] || value }))
+  const operators = Array.isArray(fieldDef?.operators) && fieldDef.operators.length > 0
+    ? fieldDef.operators
+    : ['eq']
+  return operators.map(value => ({ value, label: OPERATOR_LABELS[value] || value }))
 }
 
 const filterSummary = computed(() => {
-  if (currentFilters.value.length === 0) return ''
+  if (!Array.isArray(currentFilters.value) || currentFilters.value.length === 0) return ''
   const parts = currentFilters.value.map(group => {
-    const condStrs = group.conditions
-      .filter(c => c.field && c.value)
+    const conditions = Array.isArray(group?.conditions) ? group.conditions : []
+    const condStrs = conditions
+      .filter(c => c && c.field && c.value)
       .map(c => {
         const capability = c.capabilityLabel ? ` [${c.capabilityLabel}]` : ''
-        return `${c.label || c.field} ${c.operator} ${c.value}${capability}`
+        return `${c.label || c.field} ${c.operator || 'eq'} ${c.value}${capability}`
       })
-    return condStrs.length > 0 ? `(${condStrs.join(` ${group.relation} `)})` : ''
+    return condStrs.length > 0 ? `(${condStrs.join(` ${group?.relation || 'AND'} `)})` : ''
   }).filter(s => s)
   return parts.join(' AND ')
 })
@@ -766,7 +809,8 @@ function sleep(ms) {
 async function loadFilterFields() {
   try {
     const res = await getSchoolDataFilterFields(activeTab.value)
-    filterFields.value = res?.data || []
+    const payload = res?.data
+    filterFields.value = Array.isArray(payload) ? payload : []
   } catch (e) {
     console.error('获取筛选字段失败:', e)
     filterFields.value = []
@@ -777,7 +821,8 @@ async function loadOverview() {
   startProgress('正在加载数据概览...')
   try {
     const res = await getSchoolDataOverview()
-    overview.value = res?.data || null
+    const payload = res?.data
+    overview.value = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null
     completeProgress(true)
   } catch (e) {
     console.error('获取数据概览失败:', e)
@@ -793,13 +838,15 @@ async function loadOverview() {
 async function loadData(showProgress = true) {
   loading.value = true
   if (showProgress) {
-    startProgress(`正在加载${dataSourceLabels[activeTab.value]}数据...`)
+    startProgress(`正在加载${dataSourceLabels[activeTab.value] || activeTab.value}数据...`)
   }
   try {
     const res = await querySchoolData(activeTab.value, buildQueryPayload())
     const pageData = res?.data
-    tableData.value = pageData?.records || []
-    total.value = pageData?.total || 0
+    const records = Array.isArray(pageData?.records) ? pageData.records : []
+    const totalCount = Number.isFinite(pageData?.total) ? pageData.total : 0
+    tableData.value = records
+    total.value = totalCount
     if (showProgress) {
       completeProgress(true)
     }
@@ -1014,10 +1061,13 @@ function formatCapability(capabilities = {}) {
 
 function saveFilters() {
   const validGroups = filterGroups.value
-    .map(group => ({
-      relation: group.relation,
-      conditions: group.conditions.filter(c => c.field && c.value)
-    }))
+    .map(group => {
+      const conditions = Array.isArray(group?.conditions) ? group.conditions : []
+      return {
+        relation: group?.relation || 'AND',
+        conditions: conditions.filter(c => c && c.field && c.value)
+      }
+    })
     .filter(group => group.conditions.length > 0)
 
   currentFilters.value = validGroups
@@ -1668,6 +1718,11 @@ onMounted(async () => {
   border: 1px solid #e2e8f0;
   display: flex;
   justify-content: center;
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-style: italic;
 }
 
 .filter-builder {

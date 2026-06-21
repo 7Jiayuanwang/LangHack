@@ -17,7 +17,12 @@
 
       <div v-for="item in students" :key="item.studentId" class="student-card">
         <div class="card-header">
-          <span class="student-name">{{ item.studentName }}</span>
+          <span class="student-name">
+            <template v-if="item.studentName">{{ item.studentName }}</template>
+            <el-tooltip v-else content="CDSP 端未提供学生姓名，仅显示学号" placement="top">
+              <span class="text-muted">学号 {{ item.studentId }}</span>
+            </el-tooltip>
+          </span>
           <div class="card-actions">
             <el-button size="small" type="primary" plain @click="openProfile(item.studentId)">画像</el-button>
             <el-tag size="small" type="info">{{ item.studentId }}</el-tag>
@@ -163,6 +168,12 @@ async function openProfile(studentId) {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 400;
 }
 
 .card-body {

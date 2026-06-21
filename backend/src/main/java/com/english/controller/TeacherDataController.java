@@ -135,7 +135,16 @@ public class TeacherDataController {
             QueryWrapper<SchoolStudent> studentWrapper = new QueryWrapper<>();
             studentWrapper.in("student_id", studentIds);
             studentWrapper.orderByAsc("student_name");
-            return Result.success(schoolStudentMapper.selectList(studentWrapper));
+            List<SchoolStudent> students = schoolStudentMapper.selectList(studentWrapper);
+            // school_student.student_name 在生产数据中 99.99% 是学号本身（脏数据）。
+            // 降级为 NULL：让前端改用 studentId 显示，避免"姓名"列显示学号造成混淆。
+            for (SchoolStudent s : students) {
+                String name = s.getStudentName();
+                if (name != null && name.matches("^[0-9]+$")) {
+                    s.setStudentName(null);
+                }
+            }
+            return Result.success(students);
         } catch (Exception e) {
             logger.error("获取教师学生列表失败", e);
             return Result.error("获取学生列表失败，请稍后重试");
@@ -212,7 +221,16 @@ public class TeacherDataController {
                 wrapper.eq("course_code", courseCode);
             }
             wrapper.orderByDesc("academic_year", "semester").orderByAsc("student_name");
-            return Result.success(courseSelectionMapper.selectList(wrapper));
+            List<CourseSelection> selections = courseSelectionMapper.selectList(wrapper);
+            // course_selection.student_name 在生产数据中可能与 school_student.student_name 一样被填了学号。
+            // 降级为 NULL：避免"姓名"列显示学号造成混淆
+            for (CourseSelection cs : selections) {
+                String name = cs.getStudentName();
+                if (name != null && name.matches("^[0-9]+$")) {
+                    cs.setStudentName(null);
+                }
+            }
+            return Result.success(selections);
         } catch (Exception e) {
             logger.error("获取教师选课记录失败", e);
             return Result.error("获取选课记录失败，请稍后重试");

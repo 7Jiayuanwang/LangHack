@@ -55,4 +55,35 @@
         ORDER BY college_name
     </select>
 
+    <!--
+        分页查询绑定关系并回填姓名：
+        - teacher_name: COALESCE(binding 自身, school_teacher.teacher_name)
+        - student_name: COALESCE(binding 自身, school_student.student_name, school_student.student_id)
+                        注意 school_student.student_name 在生产数据中 99.99% 是学号本身（脏数据），
+                        当它是纯数字时降级为 NULL（前端会显示学号 student_id 而不是学号冒充的姓名）
+    -->
+    <select id="selectPageWithNames" resultType="com.english.entity.TeacherStudentBinding">
+        SELECT
+            b.id, b.teacher_id, b.student_id, b.college_name,
+            b.course_code, b.course_name, b.course_class_code,
+            b.academic_year, b.semester, b.source_type,
+            b.sync_time, b.created_at, b.updated_at,
+            COALESCE(
+                NULLIF(b.teacher_name, ''),
+                st.teacher_name
+            ) AS teacher_name,
+            CASE
+                WHEN b.student_name IS NOT NULL AND b.student_name != '' THEN b.student_name
+                WHEN ss.student_name IS NOT NULL
+                     AND ss.student_name != ''
+                     AND ss.student_name NOT REGEXP '^[0-9]+$'
+                    THEN ss.student_name
+                ELSE NULL
+            END AS student_name
+        FROM teacher_student_binding b
+        LEFT JOIN school_teacher st ON st.teacher_id = b.teacher_id
+        LEFT JOIN school_student ss ON ss.student_id = b.student_id
+        ${ew.customSqlSegment}
+    </select>
+
 </mapper>

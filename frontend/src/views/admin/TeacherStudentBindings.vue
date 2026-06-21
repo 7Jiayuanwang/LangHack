@@ -29,9 +29,23 @@
       <el-table-column type="selection" width="55" />
       <el-table-column prop="collegeName" label="学院" width="150" />
       <el-table-column prop="teacherId" label="教师工号" width="120" />
-      <el-table-column prop="teacherName" label="教师姓名" width="100" />
+      <el-table-column label="教师姓名" width="100">
+        <template #default="{ row }">
+          <span v-if="row.teacherName">{{ row.teacherName }}</span>
+          <el-tooltip v-else content="CDSP 端未提供教师姓名，显示工号" placement="top">
+            <span class="text-muted">{{ row.teacherId }}</span>
+          </el-tooltip>
+        </template>
+      </el-table-column>
       <el-table-column prop="studentId" label="学号" width="140" />
-      <el-table-column prop="studentName" label="学生姓名" width="100" />
+      <el-table-column label="学生姓名" width="100">
+        <template #default="{ row }">
+          <span v-if="row.studentName">{{ row.studentName }}</span>
+          <el-tooltip v-else content="CDSP 端未提供学生姓名，显示学号" placement="top">
+            <span class="text-muted">{{ row.studentId }}</span>
+          </el-tooltip>
+        </template>
+      </el-table-column>
       <el-table-column prop="courseCode" label="课程代码" width="120" />
       <el-table-column prop="courseName" label="课程名称" min-width="150" />
       <el-table-column prop="academicYear" label="学年" width="80" />
@@ -183,6 +197,11 @@ onMounted(() => {
 <style scoped>
 .teacher-student-bindings {
   padding: 20px;
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-style: italic;
 }
 
 .page-header {
