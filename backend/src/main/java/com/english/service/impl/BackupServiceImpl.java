@@ -908,6 +908,14 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                     int exitCode = process.exitValue();
                     if (exitCode != 0) {
                         logger.error("Incremental restore failed with exit code {}: {}", exitCode, output);
+                        // 即使 mysql 退出非 0，仍尝试修复 schema drift
+                        // 原因：mysql streaming 是部分提交的，可能前 N 行已落库但后续行因列数不匹配失败
+                        // 补齐列后，下次重试即可成功，避免用户陷入"反复失败"的死循环
+                        try {
+                            applyMigrationsAfterRestore();
+                        } catch (Exception migrateEx) {
+                            logger.warn("[migrate] schema drift 修复在增量恢复失败路径中执行异常", migrateEx);
+                        }
                         throw new BusinessException("增量恢复失败，请检查日志");
                     }
                     if (inputError.get() != null) {
@@ -915,6 +923,11 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                     }
 
                     logger.info("Database incrementally restored from backup: {}. New data preserved.", record.getFilename());
+
+                    // 修复增量备份与当前 schema 的列差异（与全量恢复 applyMigrationsAfterRestore 对齐）
+                    // 例：增量备份包含 15 列的 sso_user_bindings（含 admin_remark/admin_role_locked），
+                    //     但生产 schema 停留在 V7 原始 13 列时，必须自动补齐列，否则后续 INSERT 失败。
+                    applyMigrationsAfterRestore();
                 } finally {
                     if (process.isAlive()) {
                         process.destroyForcibly();
@@ -1896,6 +1909,15 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                 "ADD COLUMN phone VARCHAR(30) NULL COMMENT '联系电话' AFTER gender");
         addColumnIfNotExists(stmt, "school_student", "counselor_name",
                 "ADD COLUMN counselor_name VARCHAR(50) NULL COMMENT '辅导员姓名' AFTER phone");
+
+        // sso_user_bindings: admin_remark/admin_role_locked (V12 Part 4)
+        // ⚠️ 必须保留 V12 原始列顺序：admin_remark → admin_role_locked，
+        //   且 admin_role_locked 依赖 admin_remark 已存在（AFTER admin_remark），
+        //   否则增量备份（15 列）→ 生产（13 列）触发 "Column count doesn't match"
+        addColumnIfNotExists(stmt, "sso_user_bindings", "admin_remark",
+                "ADD COLUMN admin_remark TEXT COMMENT '管理员备注：记录特殊情况（如用户被删除后重新登录）' AFTER sso_member_of");
+        addColumnIfNotExists(stmt, "sso_user_bindings", "admin_role_locked",
+                "ADD COLUMN admin_role_locked TINYINT(1) DEFAULT 0 COMMENT '管理员角色锁定: 1=管理员手动审批指定角色，SSO/学校目录不得覆盖' AFTER admin_remark");
 
         // system_config: content_limits seed (V9)
         stmt.execute("INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret) VALUES" +
