@@ -1,0 +1,385 @@
+<template>
+  <div class="campaign-form-container">
+    <div class="header">
+      <h2>{{ isEdit ? '编辑活动' : '创建活动' }}</h2>
+      <el-button @click="handleBack">返回</el-button>
+    </div>
+
+    <el-card v-loading="loading">
+      <el-form :model="formData" :rules="rules" ref="formRef" label-width="140px">
+        <el-divider content-position="left">基本信息</el-divider>
+
+        <el-form-item label="活动标题" prop="title">
+          <el-input v-model="formData.title" placeholder="请输入活动标题" maxlength="200" show-word-limit />
+        </el-form-item>
+
+        <el-form-item label="活动描述" prop="description">
+          <el-input
+            v-model="formData.description"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入活动描述"
+            maxlength="2000"
+            show-word-limit
+          />
+        </el-form-item>
+
+        <el-form-item label="活动时间" prop="timeRange">
+          <el-date-picker
+            v-model="formData.timeRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            format="YYYY-MM-DD HH:mm"
+            value-format="YYYY-MM-DD HH:mm:ss"
+          />
+        </el-form-item>
+
+        <el-divider content-position="left">完成规则</el-divider>
+
+        <el-form-item label="完成规则" prop="completionRule">
+          <el-radio-group v-model="formData.completionRule">
+            <el-radio label="ANY">完成任意任务</el-radio>
+            <el-radio label="ALL">完成所有任务</el-radio>
+            <el-radio label="THRESHOLD">完成指定数量任务</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item
+          label="完成任务数"
+          prop="completionThreshold"
+          v-if="formData.completionRule === 'THRESHOLD'"
+        >
+          <el-input-number v-model="formData.completionThreshold" :min="1" :max="100" />
+        </el-form-item>
+
+        <el-divider content-position="left">报名设置</el-divider>
+
+        <el-form-item label="报名模式" prop="enrollmentMode">
+          <el-radio-group v-model="formData.enrollmentMode">
+            <el-radio label="AUTO">自动报名（所有人自动参与）</el-radio>
+            <el-radio label="MANUAL">自主报名（学生主动报名）</el-radio>
+            <el-radio label="INVITE_ONLY">仅邀请（需管理员审核）</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="报名范围" prop="enrollmentScope">
+          <el-radio-group v-model="formData.enrollmentScope" @change="handleScopeChange">
+            <el-radio label="ALL">全部学生</el-radio>
+            <el-radio label="COLLEGE">指定学院</el-radio>
+            <el-radio label="GRADE">指定年级</el-radio>
+            <el-radio label="CLASS">指定班级</el-radio>
+            <el-radio label="CUSTOM">指定学生</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item
+          label="目标选择"
+          v-if="formData.enrollmentScope !== 'ALL'"
+          prop="enrollmentTargetIds"
+        >
+          <el-select
+            v-model="formData.enrollmentTargetIds"
+            multiple
+            filterable
+            :placeholder="getTargetPlaceholder()"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in targetOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="最大参与人数" prop="maxParticipants">
+          <el-input-number v-model="formData.maxParticipants" :min="0" placeholder="0表示不限制" />
+          <span class="form-tip">（0 表示不限制）</span>
+        </el-form-item>
+
+        <el-divider content-position="left">隐私设置</el-divider>
+
+        <el-form-item label="显示具体分数">
+          <el-switch v-model="formData.showScores" />
+          <span class="form-tip">关闭后学生端仅显示排名，不显示具体分数</span>
+        </el-form-item>
+
+        <el-form-item label="显示排名">
+          <el-switch v-model="formData.showRanking" />
+          <span class="form-tip">关闭后学生端无法查看排名信息</span>
+        </el-form-item>
+
+        <el-divider content-position="left">任务配置</el-divider>
+
+        <el-form-item>
+          <el-button type="primary" @click="handleAddTask">添加任务</el-button>
+        </el-form-item>
+
+        <el-table :data="formData.tasks" border style="margin-bottom: 20px">
+          <el-table-column label="任务名称" min-width="150">
+            <template #default="{ row }">
+              <el-input v-model="row.taskName" placeholder="任务名称" />
+            </template>
+          </el-table-column>
+          <el-table-column label="任务类型" width="180">
+            <template #default="{ row }">
+              <el-select v-model="row.taskType" @change="handleTaskTypeChange(row)">
+                <el-option label="阅读时长（分钟）" value="READING_TIME" />
+                <el-option label="单词学习（个）" value="WORD_LEARNING" />
+                <el-option label="文章上传（篇）" value="TEXT_UPLOAD" />
+                <el-option label="问题反馈（次）" value="FEEDBACK" />
+                <el-option label="AI问答（次）" value="AI_QA" />
+                <el-option label="手动录入" value="MANUAL" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="目标值" width="120">
+            <template #default="{ row }">
+              <el-input-number v-model="row.targetValue" :min="1" />
+            </template>
+          </el-table-column>
+          <el-table-column label="完成得分" width="100">
+            <template #default="{ row }">
+              <el-input-number v-model="row.points" :min="1" />
+            </template>
+          </el-table-column>
+          <el-table-column label="必做" width="80">
+            <template #default="{ row }">
+              <el-switch v-model="row.isRequired" />
+            </template>
+          </el-table-column>
+          <el-table-column label="自动采集" width="100">
+            <template #default="{ row }">
+              <el-switch v-model="row.autoCollect" :disabled="row.taskType === 'MANUAL'" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" fixed="right">
+            <template #default="{ $index }">
+              <el-button link type="danger" @click="handleRemoveTask($index)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <el-form-item>
+          <el-button type="primary" @click="handleSubmit" :loading="submitting">保存</el-button>
+          <el-button @click="handleBack">取消</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { getCampaignById, createCampaign, updateCampaign, getTasks } from '@/api/campaign'
+
+const router = useRouter()
+const route = useRoute()
+const formRef = ref(null)
+const loading = ref(false)
+const submitting = ref(false)
+
+const isEdit = computed(() => !!route.params.id)
+
+const formData = reactive({
+  title: '',
+  description: '',
+  timeRange: [],
+  completionRule: 'THRESHOLD',
+  completionThreshold: 1,
+  enrollmentMode: 'MANUAL',
+  enrollmentScope: 'ALL',
+  enrollmentTargetIds: [],
+  maxParticipants: 0,
+  showScores: true,
+  showRanking: true,
+  tasks: []
+})
+
+const targetOptions = ref([])
+
+const rules = {
+  title: [{ required: true, message: '请输入活动标题', trigger: 'blur' }],
+  timeRange: [{ required: true, message: '请选择活动时间', trigger: 'change' }],
+  completionRule: [{ required: true, message: '请选择完成规则', trigger: 'change' }],
+  enrollmentMode: [{ required: true, message: '请选择报名模式', trigger: 'change' }],
+  enrollmentScope: [{ required: true, message: '请选择报名范围', trigger: 'change' }]
+}
+
+const handleAddTask = () => {
+  formData.tasks.push({
+    taskName: '',
+    taskType: 'READING_TIME',
+    taskUnit: 'MINUTES',
+    targetValue: 60,
+    points: 1,
+    isRequired: false,
+    autoCollect: true,
+    sortOrder: formData.tasks.length
+  })
+}
+
+const handleRemoveTask = (index) => {
+  formData.tasks.splice(index, 1)
+}
+
+const handleTaskTypeChange = (row) => {
+  const typeConfig = {
+    READING_TIME: { unit: 'MINUTES', targetValue: 60, autoCollect: true },
+    WORD_LEARNING: { unit: 'COUNT', targetValue: 50, autoCollect: true },
+    TEXT_UPLOAD: { unit: 'COUNT', targetValue: 1, autoCollect: true },
+    FEEDBACK: { unit: 'TIMES', targetValue: 3, autoCollect: true },
+    AI_QA: { unit: 'TIMES', targetValue: 10, autoCollect: true },
+    MANUAL: { unit: 'COUNT', targetValue: 1, autoCollect: false }
+  }
+  const config = typeConfig[row.taskType] || {}
+  row.taskUnit = config.unit
+  row.targetValue = config.targetValue
+  row.autoCollect = config.autoCollect
+}
+
+const handleScopeChange = () => {
+  formData.enrollmentTargetIds = []
+  loadTargetOptions()
+}
+
+const loadTargetOptions = async () => {
+  // 模拟加载选项数据 - 实际应从后端获取
+  // TODO: 实现真实的学院/年级/班级/学生数据加载
+  targetOptions.value = []
+}
+
+const getTargetPlaceholder = () => {
+  const placeholders = {
+    COLLEGE: '请选择学院',
+    GRADE: '请选择年级',
+    CLASS: '请选择班级',
+    CUSTOM: '请选择学生'
+  }
+  return placeholders[formData.enrollmentScope] || '请选择'
+}
+
+const loadData = async () => {
+  if (!isEdit.value) return
+
+  loading.value = true
+  try {
+    const [campaignRes, tasksRes] = await Promise.all([
+      getCampaignById(route.params.id),
+      getTasks(route.params.id)
+    ])
+
+    if (campaignRes.code === 200) {
+      const data = campaignRes.data
+      formData.title = data.title
+      formData.description = data.description
+      formData.timeRange = [data.startTime, data.endTime]
+      formData.completionRule = data.completionRule
+      formData.completionThreshold = data.completionThreshold
+      formData.enrollmentMode = data.enrollmentMode
+      formData.enrollmentScope = data.enrollmentScope
+      formData.enrollmentTargetIds = data.enrollmentTargetIds ? JSON.parse(data.enrollmentTargetIds) : []
+      formData.maxParticipants = data.maxParticipants || 0
+      formData.showScores = data.showScores
+      formData.showRanking = data.showRanking
+    }
+
+    if (tasksRes.code === 200) {
+      formData.tasks = tasksRes.data || []
+    }
+  } catch (error) {
+    ElMessage.error('加载失败: ' + error.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleSubmit = async () => {
+  try {
+    await formRef.value.validate()
+
+    if (formData.tasks.length === 0) {
+      ElMessage.warning('请至少添加一个任务')
+      return
+    }
+
+    submitting.value = true
+
+    const submitData = {
+      title: formData.title,
+      description: formData.description,
+      startTime: formData.timeRange[0],
+      endTime: formData.timeRange[1],
+      completionRule: formData.completionRule,
+      completionThreshold: formData.completionThreshold,
+      enrollmentMode: formData.enrollmentMode,
+      enrollmentScope: formData.enrollmentScope,
+      enrollmentTargetIds: formData.enrollmentTargetIds.length > 0
+        ? JSON.stringify(formData.enrollmentTargetIds)
+        : null,
+      maxParticipants: formData.maxParticipants,
+      showScores: formData.showScores,
+      showRanking: formData.showRanking,
+      tasks: formData.tasks
+    }
+
+    const res = isEdit.value
+      ? await updateCampaign(route.params.id, submitData)
+      : await createCampaign(submitData)
+
+    if (res.code === 200) {
+      ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
+      router.push('/admin/campaigns')
+    } else {
+      ElMessage.error(res.message || '操作失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('操作失败: ' + error.message)
+    }
+  } finally {
+    submitting.value = false
+  }
+}
+
+const handleBack = () => {
+  router.push('/admin/campaigns')
+}
+
+onMounted(() => {
+  loadData()
+})
+</script>
+
+<style scoped>
+.campaign-form-container {
+  padding: 20px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header h2 {
+  margin: 0;
+}
+
+.form-tip {
+  margin-left: 10px;
+  color: #909399;
+  font-size: 12px;
+}
+
+:deep(.el-divider__text) {
+  font-weight: bold;
+  color: #409eff;
+}
+</style>

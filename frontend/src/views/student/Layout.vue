@@ -90,7 +90,8 @@ import {
   Document,
   ChatLineRound,
   School,
-  Clock
+  Clock,
+  Trophy
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -141,6 +142,7 @@ const allNavigationItems = [
   { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, featureKey: 'page_articles' },
   { path: '/student/courses', label: '课程', icon: markRaw(School), badge: null, featureKey: 'page_courses' },
   { path: '/student/words', label: '单词', icon: markRaw(Document), badge: null, featureKey: 'page_word_recite' },
+  { path: '/student/campaigns', label: '活动', icon: markRaw(Trophy), badge: null, featureKey: 'student.campaigns' },
   { path: '/student/my-study', label: '学习', icon: markRaw(Edit), badge: null, featureKey: 'page_my_study' }
 ]
 
@@ -173,7 +175,8 @@ const pageTitle = computed(() => {
     '/student/ai-video': 'AI 视频字幕',
     '/student/ai-qa': 'AI 问答',
     '/student/user-texts': '我的创作',
-    '/student/my-study': '我的学习'
+    '/student/my-study': '我的学习',
+    '/student/campaigns': '学习活动'
   }
   return routeMap[route.path] || route.meta?.title || '英语学习'
 })

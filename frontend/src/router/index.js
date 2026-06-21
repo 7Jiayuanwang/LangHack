@@ -179,6 +179,48 @@ const routes = [
         component: () => import("@/views/admin/TagManagement.vue"),
         meta: { title: "标签管理", roles: ["ADMIN"], featureKey: "admin.tag_management" },
       },
+      {
+        path: "campaigns",
+        name: "AdminCampaigns",
+        component: () => import("@/views/admin/campaigns/CampaignList.vue"),
+        meta: { title: "活动管理", roles: ["ADMIN"], featureKey: "admin.campaigns" },
+      },
+      {
+        path: "campaigns/create",
+        name: "AdminCampaignCreate",
+        component: () => import("@/views/admin/campaigns/CampaignForm.vue"),
+        meta: { title: "创建活动", roles: ["ADMIN"], featureKey: "admin.campaigns" },
+      },
+      {
+        path: "campaigns/:id",
+        name: "AdminCampaignDetail",
+        component: () => import("@/views/admin/campaigns/CampaignDetail.vue"),
+        meta: { title: "活动详情", roles: ["ADMIN"], featureKey: "admin.campaigns" },
+      },
+      {
+        path: "campaigns/:id/edit",
+        name: "AdminCampaignEdit",
+        component: () => import("@/views/admin/campaigns/CampaignForm.vue"),
+        meta: { title: "编辑活动", roles: ["ADMIN"], featureKey: "admin.campaigns" },
+      },
+      {
+        path: "campaigns/:id/stats",
+        name: "AdminCampaignStats",
+        component: () => import("@/views/admin/campaigns/CampaignStats.vue"),
+        meta: { title: "活动统计", roles: ["ADMIN"], featureKey: "admin.campaigns" },
+      },
+      {
+        path: "campaigns/:id/manual-entry",
+        name: "AdminCampaignManualEntry",
+        component: () => import("@/views/admin/campaigns/ManualDataEntry.vue"),
+        meta: { title: "手动录入", roles: ["ADMIN"], featureKey: "admin.campaigns" },
+      },
+      {
+        path: "campaigns/:id/enrollments",
+        name: "AdminCampaignEnrollments",
+        component: () => import("@/views/admin/campaigns/EnrollmentManagement.vue"),
+        meta: { title: "报名管理", roles: ["ADMIN"], featureKey: "admin.campaigns" },
+      },
     ],
   },
   {
@@ -429,6 +471,24 @@ const routes = [
         name: "StudentScores",
         component: () => import("@/views/student/Scores.vue"),
         meta: { title: "等级考试", roles: ["STUDENT", "USER"], featureKey: "page_scores" },
+      },
+      {
+        path: "campaigns",
+        name: "StudentCampaigns",
+        component: () => import("@/views/student/campaigns/CampaignList.vue"),
+        meta: { title: "学习活动", roles: ["STUDENT", "USER"], featureKey: "student.campaigns" },
+      },
+      {
+        path: "campaigns/:id",
+        name: "StudentCampaignDetail",
+        component: () => import("@/views/student/campaigns/CampaignDetail.vue"),
+        meta: { title: "活动详情", roles: ["STUDENT", "USER"], featureKey: "student.campaigns" },
+      },
+      {
+        path: "campaigns/:id/progress",
+        name: "StudentCampaignProgress",
+        component: () => import("@/views/student/campaigns/MyProgress.vue"),
+        meta: { title: "我的进度", roles: ["STUDENT", "USER"], featureKey: "student.campaigns" },
       },
       {
         path: "course-selections",
