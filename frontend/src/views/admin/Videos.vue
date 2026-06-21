@@ -404,20 +404,36 @@ const handleSubmit = async () => {
   try {
     // 上传视频文件
     if (videoFile) {
-      const uploadRes = await uploadMedia(videoFile, 'VIDEO')
-      if (uploadRes.code === 200 && uploadRes.data?.mediaId) {
-        form.mediaId = uploadRes.data.mediaId
-        form.videoUrl = uploadRes.data.url || `/api/media/${uploadRes.data.mediaId}/download`
-      } else {
-        ElMessage.error('视频上传失败'); return
+      try {
+        const uploadRes = await uploadMedia(videoFile, 'VIDEO')
+        if (uploadRes.code === 200 && uploadRes.data?.mediaId) {
+          form.mediaId = uploadRes.data.mediaId
+          form.videoUrl = uploadRes.data.url || `/api/media/${uploadRes.data.mediaId}/download`
+        } else {
+          ElMessage.error(uploadRes.message || '视频上传失败')
+          return
+        }
+      } catch (uploadErr) {
+        // 显示详细的上传错误信息（包括文件过大等）
+        const errorMsg = uploadErr.response?.data?.message || uploadErr.message || '视频上传失败'
+        ElMessage.error(errorMsg)
+        return
       }
     }
     // 上传封面
     if (coverFile) {
-      const coverRes = await uploadMedia(coverFile, 'IMAGE')
-      if (coverRes.code === 200 && coverRes.data?.mediaId) {
-        form.coverMediaId = coverRes.data.mediaId
-        form.coverUrl = coverRes.data.url || `/api/media/${coverRes.data.mediaId}/download`
+      try {
+        const coverRes = await uploadMedia(coverFile, 'IMAGE')
+        if (coverRes.code === 200 && coverRes.data?.mediaId) {
+          form.coverMediaId = coverRes.data.mediaId
+          form.coverUrl = coverRes.data.url || `/api/media/${coverRes.data.mediaId}/download`
+        } else {
+          ElMessage.warning(coverRes.message || '封面上传失败，将使用默认封面')
+        }
+      } catch (uploadErr) {
+        // 封面上传失败不阻塞视频创建，只显示警告
+        const errorMsg = uploadErr.response?.data?.message || uploadErr.message || '封面上传失败'
+        ElMessage.warning(`${errorMsg}，将使用默认封面`)
       }
     }
 
