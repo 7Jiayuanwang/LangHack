@@ -1188,16 +1188,17 @@ async function handleChainFetch() {
 
 // 导出当前页数据为 CSV
 async function handleExport() {
-  if (!filteredTableData.value.length) {
+  const dataToExport = filteredTableData.value
+  if (!dataToExport || !dataToExport.length) {
     ElMessage.warning('没有可导出的数据')
     return
   }
 
   exporting.value = true
   try {
-    const csvContent = generateCSV(filteredTableData.value)
+    const csvContent = generateCSV(dataToExport)
     downloadCSV(csvContent, `${dataSourceLabels[activeTab.value]}_当前页_${new Date().toISOString().slice(0, 10)}.csv`)
-    ElMessage.success(`成功导出 ${filteredTableData.value.length} 条数据`)
+    ElMessage.success(`成功导出 ${dataToExport.length} 条数据`)
   } catch (error) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
