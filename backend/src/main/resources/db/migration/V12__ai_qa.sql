@@ -1,16 +1,18 @@
--- ═══════════════════════════════════════════════════════════════════════
--- V45: AI 问答使用统计索引 + DS0104 学生基本信息接口 + SSO 管理员角色锁定
--- ═══════════════════════════════════════════════════════════════════════
---
--- Part 1: ai_call_log 复合索引（按用户+服务+成功状态+时间的统计查询）
--- Part 2: school_student 新增 gender / phone / counselor_name 三列
--- Part 3: field_mappings seed：student_basic_info 共 9 条映射
--- Part 4: sso_user_bindings 新增 admin_remark / admin_role_locked 两列
+-- ═══════════════════════════════════════════════════════════════
+-- V12: AI 问答使用统计 + 学生基本信息接口 + SSO 管理员角色锁定
+-- 整合自:
+--   V45__ai_qa_and_student_basic_info.sql
+--     (Part 1: ai_call_log 索引
+--      Part 2: school_student 新增 gender/phone/counselor_name
+--      Part 3: field_mappings seed student_basic_info
+--      Part 4: sso_user_bindings 新增 admin_remark/admin_role_locked)
+-- 注：V45__ai_qa_usage_index.sql 已在源目录中删除，不纳入
+-- ═══════════════════════════════════════════════════════════════
 
--- ── Part 1: ai_call_log 索引 ──────────────────────────────────────────────────
+-- ── Part 1: ai_call_log 复合索引（按用户+服务+成功状态+时间的统计查询） ───────
 
-DROP PROCEDURE IF EXISTS v45_ai_qa_usage_index;
-CREATE PROCEDURE v45_ai_qa_usage_index()
+DROP PROCEDURE IF EXISTS _v12_ai_qa_usage_index;
+CREATE PROCEDURE _v12_ai_qa_usage_index()
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.STATISTICS
@@ -22,13 +24,13 @@ BEGIN
             ON ai_call_log (triggered_by, service_name, success, created_time);
     END IF;
 END;
-CALL v45_ai_qa_usage_index();
-DROP PROCEDURE IF EXISTS v45_ai_qa_usage_index;
+CALL _v12_ai_qa_usage_index();
+DROP PROCEDURE IF EXISTS _v12_ai_qa_usage_index;
 
--- ── Part 2: school_student DDL ────────────────────────────────────────────────
+-- ── Part 2: school_student 新增 gender / phone / counselor_name 三列 ─────────
 
-DROP PROCEDURE IF EXISTS _v45_add_student_extra_cols;
-CREATE PROCEDURE _v45_add_student_extra_cols()
+DROP PROCEDURE IF EXISTS _v12_add_student_extra_cols;
+CREATE PROCEDURE _v12_add_student_extra_cols()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                    WHERE TABLE_SCHEMA = DATABASE()
@@ -52,10 +54,10 @@ BEGIN
             ADD COLUMN counselor_name VARCHAR(50) NULL COMMENT '辅导员姓名' AFTER phone;
     END IF;
 END;
-CALL _v45_add_student_extra_cols();
-DROP PROCEDURE IF EXISTS _v45_add_student_extra_cols;
+CALL _v12_add_student_extra_cols();
+DROP PROCEDURE IF EXISTS _v12_add_student_extra_cols;
 
--- ── Part 3: field_mappings seed ───────────────────────────────────────────────
+-- ── Part 3: field_mappings seed：student_basic_info 共 9 条映射 ────────────────
 
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, is_required, remark)
 VALUES
@@ -69,10 +71,10 @@ VALUES
     ('student_basic_info', 'lxdh',  'phone',          'STRING', 'STRING', 'NONE', 0, '联系电话'),
     ('student_basic_info', 'fdyxm', 'counselor_name', 'STRING', 'STRING', 'NONE', 0, '辅导员姓名');
 
--- ── Part 4: sso_user_bindings DDL ────────────────────────────────────────────
+-- ── Part 4: sso_user_bindings 新增 admin_remark / admin_role_locked 两列 ──────
 
-DROP PROCEDURE IF EXISTS _v45_add_sso_binding_cols;
-CREATE PROCEDURE _v45_add_sso_binding_cols()
+DROP PROCEDURE IF EXISTS _v12_add_sso_binding_cols;
+CREATE PROCEDURE _v12_add_sso_binding_cols()
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.COLUMNS
@@ -96,5 +98,5 @@ BEGIN
             AFTER admin_remark;
     END IF;
 END;
-CALL _v45_add_sso_binding_cols();
-DROP PROCEDURE IF EXISTS _v45_add_sso_binding_cols;
+CALL _v12_add_sso_binding_cols();
+DROP PROCEDURE IF EXISTS _v12_add_sso_binding_cols;

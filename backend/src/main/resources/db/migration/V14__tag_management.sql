@@ -1,5 +1,27 @@
--- V38: Seed 9 base learner tag definitions + tag management feature toggle
+-- V14: tag_management — 标签管理领域合并迁移
+-- 源文件: V34 (tag_recalibration_log) + V38 (seed_base_tag_definitions)
+-- 注: V37/V38 中的 feature_toggle 行 (admin.persona_analytics / admin.class_cohort /
+--     student.learner_profile_enabled / admin.tag_management) 已移至 V6 (feature_toggles)
 
+-- ============================================================
+-- Part 1: tag_recalibration_log — 标签阈值校准审计日志
+-- ============================================================
+CREATE TABLE IF NOT EXISTS tag_recalibration_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tag_code VARCHAR(50) NOT NULL,
+    old_threshold VARCHAR(50) NOT NULL,
+    new_threshold VARCHAR(50) NOT NULL,
+    reason VARCHAR(500) DEFAULT NULL,
+    affected_user_count INT DEFAULT 0,
+    operator VARCHAR(50) DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_trl_tag (tag_code),
+    INDEX idx_trl_created (created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Part 2: 9 base learner tag definitions (V38 seed)
+-- ============================================================
 INSERT IGNORE INTO learner_composite_tags (code, display_name, tag_type, priority, rule_definition, action_hint, enabled) VALUES
 ('INACTIVE_RISK', '流失风险', 'risk', 10,
  '{"conditions":[{"source":"metric","field":"activeDays14d","operator":"LT","value":3},{"source":"metric","field":"studyMinutes14d","operator":"GT","value":0}],"combiner":"AND"}',
@@ -36,7 +58,3 @@ INSERT IGNORE INTO learner_composite_tags (code, display_name, tag_type, priorit
 ('REVIEW_CHAMPION', '复习达人', 'positive', 90,
  '{"conditions":[{"source":"metric","field":"snap0OverdueRatio","operator":"LT","value":0.05},{"source":"metric","field":"snap1OverdueRatio","operator":"LT","value":0.05},{"source":"metric","field":"snap2OverdueRatio","operator":"LT","value":0.05}],"combiner":"AND"}',
  '复习习惯非常好', 1);
-
--- Feature toggle for tag management page
-INSERT IGNORE INTO system_config (config_group, config_key, config_value, description)
-VALUES ('feature_toggle', 'admin.tag_management', 'true', '管理员-标签管理');

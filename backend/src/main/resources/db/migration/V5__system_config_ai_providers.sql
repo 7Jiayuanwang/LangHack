@@ -1,8 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════
--- V6: 系统配置 + AI提供商 + 多模型支持
+-- V5: 系统配置 + AI提供商 + 多模型支持 + HiAgent 凭证配置
 -- 整合自: 原 V6 (system_config + 默认配置)
 --         + V7 (ai_provider 表 + 数据迁移)
---         + V11 (ai_provider.app_id)
+--         + V11 (ai_provider.app_id 内联到 V7)
+--         + V13 (system_config.ai_config HiAgent 凭证)
+--         + V13 Part 4 (ai_provider.protocol 协议字段)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -28,12 +30,29 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('ai_translate', 'timeout', '30000', '超时时间(ms)', 0);
 
 -- ────────────────────────────────────────
--- 2. AI 提供商表 + 数据迁移 [原 V7]
+-- 2. AI 提供商表 + 数据迁移 [原 V7 + V11 + V13 Part 4]
 --    app_id 字段已内联 [原 V11]
+--    protocol 字段 [原 V13 Part 4]
 -- ────────────────────────────────────────
+DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
+CREATE PROCEDURE _v5_ai_provider_protocol()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol') THEN
+        ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible' AFTER `service`;
+    END IF;
+    -- Ensure comment is set (idempotent modify)
+    ALTER TABLE `ai_provider`
+        MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
+            COMMENT '协议类型: openai_compatible | hiagent';
+END;
+CALL _v5_ai_provider_protocol();
+DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
+
 CREATE TABLE IF NOT EXISTS `ai_provider` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
     `service` VARCHAR(50) NOT NULL COMMENT 'translate / article / chat',
+    `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible' COMMENT '协议类型: openai_compatible | hiagent',
     `name` VARCHAR(100) NOT NULL COMMENT 'display name',
     `api_url` VARCHAR(500) NOT NULL COMMENT 'provider endpoint',
     `api_key` TEXT NOT NULL COMMENT 'provider api key',
@@ -65,3 +84,15 @@ SELECT
              30000),
     'migrated from system_config'
 WHERE NOT EXISTS (SELECT 1 FROM ai_provider WHERE service = 'translate');
+
+-- ────────────────────────────────────────
+-- 3. HiAgent 凭证 seed 到 ai_config group [原 V13 Part 2]
+--    值默认为空字符串，表示"尚未从前端配置，使用 application.yml 环境变量"
+--    前端面板写入 DB 后，HiAgentServiceImpl 会优先读 DB 值
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('ai_config', 'hiagent_api_url',    '', 'HiAgent API Base URL（留空则使用环境变量 HIAGENT_API_URL）',         0),
+  ('ai_config', 'hiagent_api_key',    '', 'HiAgent 改写应用 API Key（留空则使用环境变量 HIAGENT_API_KEY）',      1),
+  ('ai_config', 'hiagent_app_id',     '', 'HiAgent 改写应用 App ID（留空则使用环境变量 HIAGENT_APP_ID）',        0),
+  ('ai_config', 'hiagent_qa_api_key', '', 'HiAgent 问答应用 API Key（必须与改写凭证不同；留空则用 HIAGENT_QA_API_KEY）', 1),
+  ('ai_config', 'hiagent_qa_app_id',  '', 'HiAgent 问答应用 App ID（必须与改写凭证不同；留空则用 HIAGENT_QA_APP_ID）',  0);

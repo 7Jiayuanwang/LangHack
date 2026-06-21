@@ -1,6 +1,9 @@
 -- ═══════════════════════════════════════════════════════════════
--- V23: 访问监控 + AI调用统计 + 角色扩展 + 演示账号
--- 整合自: V23 (monitoring tables), V24 (OPS role), V25 (demo accounts)
+-- V4: 访问监控 + AI调用统计 + 角色扩展 + 演示账号
+-- 整合自: 原 V23 (access_log, access_stats_hourly, access_stats_daily,
+--          ai_call_log, ai_call_stats_daily)
+--         + V24 (OPS role in users.role enum)
+--         + V25 (teacher/student demo accounts)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────

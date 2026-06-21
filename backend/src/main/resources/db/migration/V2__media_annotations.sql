@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════
--- V3: 媒体表 + 词汇SM-2 + 划线标注 + 媒体路径列
--- 整合自: 原 V3 (media, SM-2, underlines)
---         + V9 (media file_path/thumbnail_path)
+-- V2: 媒体 / 标注 (Media / Annotations)
+-- 整合自: V3, V28, V29
+-- ⚠️ 历史教训: master/slave schema drift 必须用 AFTER 子句
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -33,17 +33,17 @@ CREATE TABLE IF NOT EXISTS media (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='媒体表（图片和视频）';
 
 -- ────────────────────────────────────────
--- 2. 媒体路径列 [原 V9]
---    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
+-- 2. 媒体路径列 [原 V3/V9 — file_path/thumbnail_path]
+--    ⚠️ 必须用 AFTER 子句确保 master/slave 列序一致（防 Error 13146）
 -- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_media_paths;
 CREATE PROCEDURE _add_col_media_paths()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path') THEN
-        ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT 'stored media file path';
+        ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT 'stored media file path' AFTER file_name;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path') THEN
-        ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path';
+        ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path' AFTER file_path;
     END IF;
 END;
 CALL _add_col_media_paths();
@@ -51,6 +51,7 @@ DROP PROCEDURE IF EXISTS _add_col_media_paths;
 
 -- ────────────────────────────────────────
 -- 3. 词汇本添加 SM-2 间隔重复字段 [原 V3]
+--    vocabulary_books 表已存在 V0/V1 创建
 -- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _add_col_sm2;
 CREATE PROCEDURE _add_col_sm2()
@@ -86,3 +87,50 @@ CREATE TABLE IF NOT EXISTS underlines (
     INDEX idx_text_id (text_id),
     INDEX idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户划线标注表';
+
+-- ────────────────────────────────────────
+-- 5. 创建协作批注表 [原 V28]
+-- ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS text_annotations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    text_id BIGINT NOT NULL COMMENT '关联课文ID',
+    user_id BIGINT NOT NULL COMMENT '批注者ID',
+    selected_text TEXT NOT NULL COMMENT '被批注的原文片段',
+    note TEXT NOT NULL COMMENT '批注内容',
+    upvote_count INT DEFAULT 0 COMMENT '点赞数',
+    deleted TINYINT DEFAULT 0,
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_text_id (text_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_text_deleted (text_id, deleted),
+    CONSTRAINT fk_ann_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ann_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作批注表';
+
+-- ────────────────────────────────────────
+-- 6. 创建批注点赞表 [原 V28]
+-- ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS annotation_upvotes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    annotation_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_ann_user (annotation_id, user_id),
+    CONSTRAINT fk_upvote_ann FOREIGN KEY (annotation_id) REFERENCES text_annotations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_upvote_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='批注点赞表';
+
+-- ────────────────────────────────────────
+-- 7. 批注可见性字段 [原 V29]
+--    ⚠️ 必须用 AFTER 子句确保 master/slave 列序一致（防 Error 13146）
+-- ────────────────────────────────────────
+DROP PROCEDURE IF EXISTS _add_col_ann_visibility;
+CREATE PROCEDURE _add_col_ann_visibility()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='text_annotations' AND column_name='visibility') THEN
+        ALTER TABLE text_annotations ADD COLUMN visibility TINYINT NOT NULL DEFAULT 1 COMMENT '可见性: 1=公开, 0=仅自己' AFTER upvote_count;
+    END IF;
+END;
+CALL _add_col_ann_visibility();
+DROP PROCEDURE IF EXISTS _add_col_ann_visibility;
