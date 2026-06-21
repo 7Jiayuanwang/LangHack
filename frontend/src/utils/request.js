@@ -253,12 +253,19 @@ function getHttpErrorMessage(status, responseData) {
     } catch (e) { /* store not available */ }
     return '服务器内部错误'
   }
+
+  // 413 文件过大错误：返回后端详细信息（包含限制大小和实际大小）
+  if (status === 413 && responseData?.message) {
+    return responseData.message
+  }
+
   const httpErrorMap = {
     400: '请求参数错误',
     401: '未授权，请重新登录',
     403: '拒绝访问',
     404: '请求地址不存在',
     409: '请求冲突',
+    413: '上传文件过大，请压缩后重试',
   }
   return httpErrorMap[status] || '请求失败，请稍后重试'
 }

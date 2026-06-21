@@ -404,19 +404,12 @@ const handleSubmit = async () => {
   try {
     // 上传视频文件
     if (videoFile) {
-      try {
-        const uploadRes = await uploadMedia(videoFile, 'VIDEO')
-        if (uploadRes.code === 200 && uploadRes.data?.mediaId) {
-          form.mediaId = uploadRes.data.mediaId
-          form.videoUrl = uploadRes.data.url || `/api/media/${uploadRes.data.mediaId}/download`
-        } else {
-          ElMessage.error(uploadRes.message || '视频上传失败')
-          return
-        }
-      } catch (uploadErr) {
-        // 显示详细的上传错误信息（包括文件过大等）
-        const errorMsg = uploadErr.response?.data?.message || uploadErr.message || '视频上传失败'
-        ElMessage.error(errorMsg)
+      const uploadRes = await uploadMedia(videoFile, 'VIDEO')
+      if (uploadRes.code === 200 && uploadRes.data?.mediaId) {
+        form.mediaId = uploadRes.data.mediaId
+        form.videoUrl = uploadRes.data.url || `/api/media/${uploadRes.data.mediaId}/download`
+      } else {
+        ElMessage.error(uploadRes.message || '视频上传失败')
         return
       }
     }
@@ -432,8 +425,8 @@ const handleSubmit = async () => {
         }
       } catch (uploadErr) {
         // 封面上传失败不阻塞视频创建，只显示警告
-        const errorMsg = uploadErr.response?.data?.message || uploadErr.message || '封面上传失败'
-        ElMessage.warning(`${errorMsg}，将使用默认封面`)
+        // axios 拦截器已显示错误，这里只处理业务逻辑
+        console.warn('封面上传失败，继续创建视频:', uploadErr.message)
       }
     }
 
