@@ -40,17 +40,36 @@ public class CampaignServiceImpl implements CampaignService {
 
     @Override
     public CampaignActivity createCampaign(CampaignActivity campaign) {
-        // 验证时间范围
+        LocalDateTime now = LocalDateTime.now();
+
+        // 验证活动时间范围
         if (campaign.getEndTime().isBefore(campaign.getStartTime())) {
-            throw new RuntimeException("结束时间不能早于开始时间");
+            throw new RuntimeException("活动结束时间不能早于开始时间");
+        }
+
+        // 验证活动开始时间不能早于当前时间
+        if (campaign.getStartTime().isBefore(now)) {
+            throw new RuntimeException("活动开始时间不能早于当前时间");
+        }
+
+        // 验证报名时间范围
+        if (campaign.getEnrollmentStartTime() != null && campaign.getEnrollmentEndTime() != null) {
+            // 报名结束时间不能晚于活动结束时间
+            if (campaign.getEnrollmentEndTime().isAfter(campaign.getEndTime())) {
+                throw new RuntimeException("报名结束时间不能晚于活动结束时间");
+            }
+            // 报名结束时间不能早于报名开始时间
+            if (campaign.getEnrollmentEndTime().isBefore(campaign.getEnrollmentStartTime())) {
+                throw new RuntimeException("报名结束时间不能早于报名开始时间");
+            }
         }
 
         // 设置默认值
         if (campaign.getStatus() == null) {
             campaign.setStatus(CampaignStatus.DRAFT);
         }
-        campaign.setCreatedTime(LocalDateTime.now());
-        campaign.setUpdatedTime(LocalDateTime.now());
+        campaign.setCreatedTime(now);
+        campaign.setUpdatedTime(now);
 
         // 序列化enrollmentTargetIdList为JSON
         if (campaign.getEnrollmentTargetIdList() != null && !campaign.getEnrollmentTargetIdList().isEmpty()) {
@@ -72,11 +91,31 @@ public class CampaignServiceImpl implements CampaignService {
             throw new RuntimeException("活动不存在");
         }
 
-        // 验证时间范围
+        // 合并时间字段（使用新值或保留旧值）
         LocalDateTime startTime = campaign.getStartTime() != null ? campaign.getStartTime() : existing.getStartTime();
         LocalDateTime endTime = campaign.getEndTime() != null ? campaign.getEndTime() : existing.getEndTime();
+        LocalDateTime enrollmentStartTime = campaign.getEnrollmentStartTime() != null
+            ? campaign.getEnrollmentStartTime()
+            : existing.getEnrollmentStartTime();
+        LocalDateTime enrollmentEndTime = campaign.getEnrollmentEndTime() != null
+            ? campaign.getEnrollmentEndTime()
+            : existing.getEnrollmentEndTime();
+
+        // 验证活动时间范围
         if (endTime.isBefore(startTime)) {
-            throw new RuntimeException("结束时间不能早于开始时间");
+            throw new RuntimeException("活动结束时间不能早于开始时间");
+        }
+
+        // 验证报名时间范围
+        if (enrollmentStartTime != null && enrollmentEndTime != null) {
+            // 报名结束时间不能晚于活动结束时间
+            if (enrollmentEndTime.isAfter(endTime)) {
+                throw new RuntimeException("报名结束时间不能晚于活动结束时间");
+            }
+            // 报名结束时间不能早于报名开始时间
+            if (enrollmentEndTime.isBefore(enrollmentStartTime)) {
+                throw new RuntimeException("报名结束时间不能早于报名开始时间");
+            }
         }
 
         campaign.setId(id);

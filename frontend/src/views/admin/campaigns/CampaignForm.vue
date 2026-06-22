@@ -347,6 +347,39 @@ const handleSubmit = async () => {
       return
     }
 
+    // 前端时间验证
+    const now = new Date()
+    const startTime = new Date(formData.timeRange[0])
+    const endTime = new Date(formData.timeRange[1])
+
+    // 验证活动时间范围
+    if (endTime <= startTime) {
+      ElMessage.error('活动结束时间必须晚于开始时间')
+      return
+    }
+
+    // 创建模式：验证活动开始时间不能早于当前时间
+    if (!isEdit.value && startTime < now) {
+      ElMessage.error('活动开始时间不能早于当前时间')
+      return
+    }
+
+    // 验证报名时间
+    if (formData.enrollmentTimeRange.length > 0) {
+      const enrollmentStartTime = new Date(formData.enrollmentTimeRange[0])
+      const enrollmentEndTime = new Date(formData.enrollmentTimeRange[1])
+
+      if (enrollmentEndTime <= enrollmentStartTime) {
+        ElMessage.error('报名结束时间必须晚于报名开始时间')
+        return
+      }
+
+      if (enrollmentEndTime > endTime) {
+        ElMessage.error('报名结束时间不能晚于活动结束时间')
+        return
+      }
+    }
+
     submitting.value = true
 
     const submitData = {

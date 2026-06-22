@@ -59,7 +59,7 @@
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleView(row)">详情</el-button>
-            <el-button link type="primary" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
+            <el-button link type="primary" @click="handleEdit(row)" v-if="row.status === 'DRAFT' || row.status === 'ACTIVE'">编辑</el-button>
             <el-button link type="success" @click="handleStart(row)" v-if="row.status === 'DRAFT'">启动</el-button>
             <el-button link type="warning" @click="handleEnd(row)" v-if="row.status === 'ACTIVE'">结束</el-button>
             <el-button link type="danger" @click="handleDelete(row)" v-if="row.status === 'DRAFT'">删除</el-button>
