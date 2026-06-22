@@ -137,7 +137,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     }
 
     @Override
-    @CacheEvict(value = {"campaign_ranking", "campaign_overview"}, allEntries = true)
+    @CacheEvict(value = {"campaign_ranking", "campaign_overview"}, allEntries = true, cacheManager = "campaignCacheManager")
     public void collectAllCampaignData(Long campaignId) {
         List<CampaignTask> tasks = taskMapper.selectList(
             new QueryWrapper<CampaignTask>().eq("campaign_id", campaignId)
@@ -148,7 +148,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     }
 
     @Override
-    @Cacheable(value = "campaign_ranking", key = "'individual_' + #campaignId + '_' + #current + '_' + #size")
+    @Cacheable(value = "campaign_ranking", key = "'individual_' + #campaignId + '_' + #current + '_' + #size", cacheManager = "campaignCacheManager")
     public Page<CampaignParticipation> getRankingByIndividual(Long campaignId, int current, int size, Map<String, Object> params) {
         Page<CampaignParticipation> page = new Page<>(current, size);
         QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
@@ -223,7 +223,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     }
 
     @Override
-    @Cacheable(value = "campaign_overview", key = "#campaignId")
+    @Cacheable(value = "campaign_overview", key = "#campaignId", cacheManager = "campaignCacheManager")
     public Map<String, Object> getCampaignOverview(Long campaignId) {
         Map<String, Object> overview = new HashMap<>();
         overview.putAll(getParticipationStats(campaignId));

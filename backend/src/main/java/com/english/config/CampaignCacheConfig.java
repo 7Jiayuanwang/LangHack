@@ -13,14 +13,13 @@ import java.util.Arrays;
  * 活动系统缓存配置
  */
 @Configuration
-@EnableCaching
 public class CampaignCacheConfig {
 
     /**
      * 配置缓存管理器
      * 为活动排名等数据配置5分钟TTL的缓存
      */
-    @Bean
+    @Bean(name = "campaignCacheManager")
     public CacheManager campaignCacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(Arrays.asList(
