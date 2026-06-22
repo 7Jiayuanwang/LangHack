@@ -11,6 +11,11 @@ export const deleteCampaign = (id) => request.delete(`/api/admin/campaigns/${id}
 export const startCampaign = (id) => request.put(`/api/admin/campaigns/${id}/start`)
 export const endCampaign = (id) => request.put(`/api/admin/campaigns/${id}/end`)
 
+// 获取报名范围选项
+export const getColleges = () => request.get('/api/admin/campaigns/enrollment-options/colleges')
+export const getGrades = () => request.get('/api/admin/campaigns/enrollment-options/grades')
+export const getClasses = () => request.get('/api/admin/campaigns/enrollment-options/classes')
+
 // 任务管理
 export const getTasks = (campaignId) => request.get(`/api/admin/campaigns/${campaignId}/tasks`)
 export const createTask = (campaignId, data) => request.post(`/api/admin/campaigns/${campaignId}/tasks`, data)

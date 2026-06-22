@@ -31,6 +31,12 @@ public class CampaignActivity {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime endTime;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime enrollmentStartTime;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime enrollmentEndTime;
+
     private CampaignStatus status;
 
     private CompletionRule completionRule;

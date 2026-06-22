@@ -36,6 +36,21 @@
           />
         </el-form-item>
 
+        <el-form-item label="报名时间" prop="enrollmentTimeRange">
+          <el-date-picker
+            v-model="formData.enrollmentTimeRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="报名开始时间"
+            end-placeholder="报名结束时间"
+            format="YYYY-MM-DD HH:mm"
+            value-format="YYYY-MM-DD HH:mm:ss"
+          />
+          <div style="color: #909399; font-size: 12px; margin-top: 4px;">
+            报名时间用于控制学生何时可以报名参加活动，如不设置则默认与活动时间相同
+          </div>
+        </el-form-item>
+
         <el-divider content-position="left">完成规则</el-divider>
 
         <el-form-item label="完成规则" prop="completionRule">
@@ -176,7 +191,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getCampaignById, createCampaign, updateCampaign, getTasks } from '@/api/campaign'
+import { getCampaignById, createCampaign, updateCampaign, getTasks, getColleges, getGrades, getClasses } from '@/api/campaign'
 
 const router = useRouter()
 const route = useRoute()
@@ -190,6 +205,7 @@ const formData = reactive({
   title: '',
   description: '',
   timeRange: [],
+  enrollmentTimeRange: [],
   completionRule: 'THRESHOLD',
   completionThreshold: 1,
   enrollmentMode: 'MANUAL',
@@ -249,9 +265,29 @@ const handleScopeChange = () => {
 }
 
 const loadTargetOptions = async () => {
-  // 模拟加载选项数据 - 实际应从后端获取
-  // TODO: 实现真实的学院/年级/班级/学生数据加载
-  targetOptions.value = []
+  try {
+    targetOptions.value = []
+
+    if (formData.enrollmentScope === 'COLLEGE') {
+      const res = await getColleges()
+      if (res.code === 200) {
+        targetOptions.value = res.data
+      }
+    } else if (formData.enrollmentScope === 'GRADE') {
+      const res = await getGrades()
+      if (res.code === 200) {
+        targetOptions.value = res.data
+      }
+    } else if (formData.enrollmentScope === 'CLASS') {
+      const res = await getClasses()
+      if (res.code === 200) {
+        targetOptions.value = res.data
+      }
+    }
+  } catch (error) {
+    console.error('加载选项失败:', error)
+    ElMessage.error('加载选项失败')
+  }
 }
 
 const getTargetPlaceholder = () => {
@@ -279,6 +315,9 @@ const loadData = async () => {
       formData.title = data.title
       formData.description = data.description
       formData.timeRange = [data.startTime, data.endTime]
+      formData.enrollmentTimeRange = data.enrollmentStartTime && data.enrollmentEndTime
+        ? [data.enrollmentStartTime, data.enrollmentEndTime]
+        : []
       formData.completionRule = data.completionRule
       formData.completionThreshold = data.completionThreshold
       formData.enrollmentMode = data.enrollmentMode
@@ -315,6 +354,8 @@ const handleSubmit = async () => {
       description: formData.description,
       startTime: formData.timeRange[0],
       endTime: formData.timeRange[1],
+      enrollmentStartTime: formData.enrollmentTimeRange.length > 0 ? formData.enrollmentTimeRange[0] : formData.timeRange[0],
+      enrollmentEndTime: formData.enrollmentTimeRange.length > 0 ? formData.enrollmentTimeRange[1] : formData.timeRange[1],
       completionRule: formData.completionRule,
       completionThreshold: formData.completionThreshold,
       enrollmentMode: formData.enrollmentMode,
