@@ -181,20 +181,60 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
         if (myParticipation == null) {
             result.put("enrolled", false);
+            result.put("myRank", null);
+            result.put("totalParticipants", 0);
+            result.put("aroundMe", new ArrayList<>());
             return result;
         }
 
-        // 计算排名
+        // 计算我的排名（得分比我高的人数 + 1）
         QueryWrapper<CampaignParticipation> rankWrapper = new QueryWrapper<>();
         rankWrapper.eq("campaign_id", campaignId);
         rankWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
         rankWrapper.gt("total_score", myParticipation.getTotalScore());
-        long ranking = participationMapper.selectCount(rankWrapper) + 1;
+        long myRank = participationMapper.selectCount(rankWrapper) + 1;
+
+        // 总参与人数
+        QueryWrapper<CampaignParticipation> totalWrapper = new QueryWrapper<>();
+        totalWrapper.eq("campaign_id", campaignId);
+        totalWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        long totalParticipants = participationMapper.selectCount(totalWrapper);
+
+        // 周围排名（前后各2名）
+        QueryWrapper<CampaignParticipation> aroundWrapper = new QueryWrapper<>();
+        aroundWrapper.eq("campaign_id", campaignId);
+        aroundWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        aroundWrapper.orderByDesc("total_score");
+        List<CampaignParticipation> allRanked = participationMapper.selectList(aroundWrapper);
+
+        List<Map<String, Object>> aroundMe = new ArrayList<>();
+        int myIndex = -1;
+        for (int i = 0; i < allRanked.size(); i++) {
+            if (allRanked.get(i).getUserId().equals(userId)) {
+                myIndex = i;
+                break;
+            }
+        }
+        if (myIndex >= 0) {
+            int from = Math.max(0, myIndex - 2);
+            int to = Math.min(allRanked.size() - 1, myIndex + 2);
+            for (int i = from; i <= to; i++) {
+                CampaignParticipation p = allRanked.get(i);
+                Map<String, Object> item = new HashMap<>();
+                item.put("rank", i + 1);
+                item.put("userId", p.getUserId());
+                item.put("totalScore", p.getTotalScore());
+                item.put("isMe", p.getUserId().equals(userId));
+                aroundMe.add(item);
+            }
+        }
 
         result.put("enrolled", true);
-        result.put("ranking", ranking);
+        result.put("myRank", myRank);
+        result.put("totalParticipants", totalParticipants);
         result.put("totalScore", myParticipation.getTotalScore());
         result.put("completedTasks", myParticipation.getCompletedTasks());
+        result.put("aroundMe", aroundMe);
 
         return result;
     }
@@ -239,7 +279,32 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
     @Override
     public Map<String, Object> getMyProgress(Long campaignId, Long userId) {
-        return getMyRanking(campaignId, userId);
+        Map<String, Object> result = new HashMap<>();
+
+        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.eq("user_id", userId);
+        CampaignParticipation myParticipation = participationMapper.selectOne(wrapper);
+
+        if (myParticipation == null) {
+            result.put("enrolled", false);
+            return result;
+        }
+
+        QueryWrapper<CampaignParticipation> rankWrapper = new QueryWrapper<>();
+        rankWrapper.eq("campaign_id", campaignId);
+        rankWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        rankWrapper.gt("total_score", myParticipation.getTotalScore());
+        long myRank = participationMapper.selectCount(rankWrapper) + 1;
+
+        result.put("enrolled", true);
+        result.put("totalScore", myParticipation.getTotalScore());
+        result.put("completedTasks", myParticipation.getCompletedTasks());
+        result.put("completionStatus", myParticipation.getCompletionStatus());
+        result.put("myRank", myRank);
+        result.put("enrollmentStatus", myParticipation.getEnrollmentStatus());
+
+        return result;
     }
 
     @Override
@@ -261,9 +326,14 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             Map<String, Object> taskProgress = new HashMap<>();
             taskProgress.put("taskId", task.getId());
             taskProgress.put("taskName", task.getTaskName());
+            taskProgress.put("taskType", task.getTaskType());
+            taskProgress.put("taskUnit", task.getTaskUnit());
             taskProgress.put("targetValue", task.getTargetValue());
+            taskProgress.put("points", task.getPoints());
+            taskProgress.put("isRequired", task.getIsRequired());
             taskProgress.put("currentValue", completion != null ? completion.getCurrentValue() : BigDecimal.ZERO);
             taskProgress.put("isCompleted", completion != null && completion.getIsCompleted());
+            taskProgress.put("completionCount", completion != null ? completion.getCompletionCount() : 0);
 
             progress.add(taskProgress);
         }
