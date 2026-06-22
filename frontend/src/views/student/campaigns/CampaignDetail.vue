@@ -153,7 +153,7 @@ const loadData = async () => {
   try {
     const res = await getStudentCampaignDetail(route.params.id)
     if (res.code === 200) {
-      campaign.value = res.data.campaign ||
+      campaign.value = res.data.campaign || {}
       tasks.value = res.data.tasks || []
       isEnrolled.value = res.data.isEnrolled || false
       enrollmentStatus.value = res.data.enrollmentStatus || ''
