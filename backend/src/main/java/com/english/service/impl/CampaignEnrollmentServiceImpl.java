@@ -54,8 +54,8 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
             throw new RuntimeException("无法报名：" + String.join("; ", restrictions));
         }
 
-        // 检查人数限制
-        if (campaign.getMaxParticipants() != null) {
+        // 检查人数限制（0 表示不限制）
+        if (campaign.getMaxParticipants() != null && campaign.getMaxParticipants() > 0) {
             QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
             wrapper.eq("campaign_id", campaignId);
             wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);

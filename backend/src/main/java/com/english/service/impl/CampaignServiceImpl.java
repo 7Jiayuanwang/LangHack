@@ -149,9 +149,9 @@ public class CampaignServiceImpl implements CampaignService {
         if (campaign != null && StringUtils.hasText(campaign.getEnrollmentTargetIds())) {
             // 反序列化JSON为List
             try {
-                List<Long> idList = objectMapper.readValue(
+                List<String> idList = objectMapper.readValue(
                     campaign.getEnrollmentTargetIds(),
-                    new TypeReference<List<Long>>() {}
+                    new TypeReference<List<String>>() {}
                 );
                 campaign.setEnrollmentTargetIdList(idList);
             } catch (Exception e) {
@@ -283,7 +283,7 @@ public class CampaignServiceImpl implements CampaignService {
             return false;
         }
 
-        List<Long> targetIds = campaign.getEnrollmentTargetIdList();
+        List<String> targetIds = campaign.getEnrollmentTargetIdList();
         if (targetIds == null || targetIds.isEmpty()) {
             return true;
         }
@@ -300,7 +300,7 @@ public class CampaignServiceImpl implements CampaignService {
                 return true;
             case CUSTOM:
                 // 检查用户ID是否在白名单中
-                return targetIds.contains(userId);
+                return targetIds.contains(String.valueOf(userId));
             default:
                 return false;
         }
