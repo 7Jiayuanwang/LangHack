@@ -191,7 +191,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getCampaignById, createCampaign, updateCampaign, getTasks, getColleges, getGrades, getClasses } from '@/api/campaign'
+import { getCampaignById, createCampaign, updateCampaign, getTasks, createTask, updateTask, deleteTask, getColleges, getGrades, getClasses } from '@/api/campaign'
 
 const router = useRouter()
 const route = useRoute()
@@ -382,7 +382,8 @@ const handleSubmit = async () => {
 
     submitting.value = true
 
-    const submitData = {
+    // 1. 先保存活动基本信息
+    const campaignData = {
       title: formData.title,
       description: formData.description,
       startTime: formData.timeRange[0],
@@ -398,20 +399,56 @@ const handleSubmit = async () => {
         : null,
       maxParticipants: formData.maxParticipants,
       showScores: formData.showScores,
-      showRanking: formData.showRanking,
-      tasks: formData.tasks
+      showRanking: formData.showRanking
     }
 
-    const res = isEdit.value
-      ? await updateCampaign(route.params.id, submitData)
-      : await createCampaign(submitData)
+    const campaignRes = isEdit.value
+      ? await updateCampaign(route.params.id, campaignData)
+      : await createCampaign(campaignData)
 
-    if (res.code === 200) {
-      ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
-      router.push('/admin/campaigns')
+    if (campaignRes.code !== 200) {
+      ElMessage.error(campaignRes.message || '保存活动失败')
+      return
+    }
+
+    const campaignId = isEdit.value ? route.params.id : campaignRes.data.id
+
+    // 2. 保存任务列表
+    // 编辑模式：获取现有任务，对比后决定创建/更新/删除
+    // 创建模式：直接创建所有任务
+    if (isEdit.value) {
+      // 获取现有任务
+      const existingTasksRes = await getTasks(campaignId)
+      const existingTasks = existingTasksRes.data || []
+      const existingTaskIds = new Set(existingTasks.map(t => t.id))
+      const currentTaskIds = new Set(formData.tasks.filter(t => t.id).map(t => t.id))
+
+      // 删除不再存在的任务
+      for (const task of existingTasks) {
+        if (!currentTaskIds.has(task.id)) {
+          await deleteTask(campaignId, task.id)
+        }
+      }
+
+      // 更新或创建任务
+      for (const task of formData.tasks) {
+        if (task.id && existingTaskIds.has(task.id)) {
+          // 更新现有任务
+          await updateTask(campaignId, task.id, task)
+        } else {
+          // 创建新任务
+          await createTask(campaignId, task)
+        }
+      }
     } else {
-      ElMessage.error(res.message || '操作失败')
+      // 创建模式：创建所有任务
+      for (const task of formData.tasks) {
+        await createTask(campaignId, task)
+      }
     }
+
+    ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
+    router.push('/admin/campaigns')
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败: ' + error.message)
