@@ -1,7 +1,7 @@
 package com.english.controller;
 
 import com.english.entity.CampaignParticipation;
-import com.english.result.Result;
+import com.english.dto.Result;
 import com.english.service.CampaignEnrollmentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

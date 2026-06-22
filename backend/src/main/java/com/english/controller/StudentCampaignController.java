@@ -3,7 +3,7 @@ package com.english.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.CampaignActivity;
 import com.english.entity.CampaignParticipation;
-import com.english.result.Result;
+import com.english.dto.Result;
 import com.english.service.CampaignEnrollmentService;
 import com.english.service.CampaignService;
 import com.english.service.CampaignStatsService;

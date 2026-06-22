@@ -2,7 +2,7 @@ package com.english.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.CampaignParticipation;
-import com.english.result.Result;
+import com.english.dto.Result;
 import com.english.service.CampaignStatsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

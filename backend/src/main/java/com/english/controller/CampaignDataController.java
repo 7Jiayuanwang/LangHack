@@ -1,9 +1,14 @@
 package com.english.controller;
 
-import com.english.result.Result;
+import com.english.dto.Result;
 import com.english.service.CampaignDataService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -66,15 +71,22 @@ public class CampaignDataController {
      * 导出活动数据
      */
     @GetMapping("/export")
-    public Result<byte[]> exportCampaignData(
+    public ResponseEntity<Resource> exportCampaignData(
             @PathVariable Long campaignId,
             @RequestParam(defaultValue = "excel") String format) {
         try {
             byte[] data = dataService.exportCampaignData(campaignId, format);
-            return Result.success(data);
+            ByteArrayResource resource = new ByteArrayResource(data);
+
+            String filename = "campaign_" + campaignId + "_data." + format;
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .body(resource);
         } catch (Exception e) {
             log.error("导出活动数据失败", e);
-            return Result.error("导出活动数据失败: " + e.getMessage());
+            return ResponseEntity.badRequest().build();
         }
     }
 
@@ -82,16 +94,23 @@ public class CampaignDataController {
      * 导出排名数据
      */
     @GetMapping("/export-ranking")
-    public Result<byte[]> exportRankingData(
+    public ResponseEntity<Resource> exportRankingData(
             @PathVariable Long campaignId,
             @RequestParam String dimension,
             @RequestParam(defaultValue = "excel") String format) {
         try {
             byte[] data = dataService.exportRankingData(campaignId, dimension, format);
-            return Result.success(data);
+            ByteArrayResource resource = new ByteArrayResource(data);
+
+            String filename = "campaign_" + campaignId + "_ranking_" + dimension + "." + format;
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .body(resource);
         } catch (Exception e) {
             log.error("导出排名数据失败", e);
-            return Result.error("导出排名数据失败: " + e.getMessage());
+            return ResponseEntity.badRequest().build();
         }
     }
 }
