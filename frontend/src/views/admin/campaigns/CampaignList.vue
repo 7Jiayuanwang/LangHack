@@ -8,7 +8,7 @@
     <el-card>
       <el-form :inline="true" :model="queryParams" class="query-form">
         <el-form-item label="活动状态">
-          <el-select v-model="queryParams.status" placeholder="全部" clearable @change="handleQuery">
+          <el-select v-model="queryParams.status" placeholder="全部" clearable @change="handleQuery" style="width: 200px;">
             <el-option label="草稿" value="DRAFT" />
             <el-option label="进行中" value="ACTIVE" />
             <el-option label="已结束" value="ENDED" />
@@ -16,10 +16,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
-          <el-input v-model="queryParams.keyword" placeholder="活动标题" clearable @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.keyword" placeholder="活动标题" clearable @keyup.enter="handleQuery" style="width: 200px;" />
         </el-form-item>
         <el-form-item label="排序方式">
-          <el-select v-model="queryParams.orderBy" placeholder="默认排序" clearable @change="handleQuery" style="width: 160px;">
+          <el-select v-model="queryParams.orderBy" placeholder="默认排序" clearable @change="handleQuery" style="width: 180px;">
             <el-option label="创建时间（新→旧）" value="created_time_desc" />
             <el-option label="创建时间（旧→新）" value="created_time_asc" />
             <el-option label="活动时间（近→远）" value="start_time_desc" />
