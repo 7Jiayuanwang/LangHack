@@ -52,7 +52,7 @@ class CampaignTaskServiceImplTest {
         when(taskMapper.insert(any(CampaignTask.class))).thenReturn(1);
 
         // When
-        CampaignTask result = taskService.createTask(testTask);
+        CampaignTask result = taskService.createTask(1L, testTask);
 
         // Then
         assertNotNull(result);
