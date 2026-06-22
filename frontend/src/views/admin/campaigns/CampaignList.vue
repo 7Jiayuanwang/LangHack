@@ -18,6 +18,15 @@
         <el-form-item label="关键词">
           <el-input v-model="queryParams.keyword" placeholder="活动标题" clearable @keyup.enter="handleQuery" />
         </el-form-item>
+        <el-form-item label="排序方式">
+          <el-select v-model="queryParams.orderBy" placeholder="默认排序" clearable @change="handleQuery" style="width: 160px;">
+            <el-option label="创建时间（新→旧）" value="created_time_desc" />
+            <el-option label="创建时间（旧→新）" value="created_time_asc" />
+            <el-option label="活动时间（近→远）" value="start_time_desc" />
+            <el-option label="活动时间（远→近）" value="start_time_asc" />
+            <el-option label="更新时间（新→旧）" value="updated_time_desc" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleQuery">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
@@ -84,7 +93,8 @@ const campaigns = ref([])
 
 const queryParams = reactive({
   status: '',
-  keyword: ''
+  keyword: '',
+  orderBy: 'created_time_desc'
 })
 
 const pagination = reactive({
@@ -123,6 +133,7 @@ const handleQuery = () => {
 const handleReset = () => {
   queryParams.status = ''
   queryParams.keyword = ''
+  queryParams.orderBy = 'created_time_desc'
   handleQuery()
 }
 

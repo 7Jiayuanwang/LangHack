@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>活动管理测试</title>
+</head>
+<body>
+    <h1>活动管理功能测试</h1>
+    <button onclick="login()">1. 登录</button>
+    <button onclick="createCampaign()">2. 创建活动</button>
+    <button onclick="listCampaigns()">3. 查看活动列表</button>
+    <div id="result" style="margin-top: 20px; white-space: pre-wrap; background: #f5f5f5; padding: 10px;"></div>
+
+    <script>
+        let token = '';
+
+        async function login() {
+            const response = await fetch('http://localhost:8080/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: 'admin', password: 'admin123' })
+            });
+            const data = await response.json();
+            if (data.code === 200) {
+                token = data.data.token;
+                document.getElementById('result').innerText = '登录成功！Token: ' + token.substring(0, 50) + '...';
+            } else {
+                document.getElementById('result').innerText = '登录失败: ' + JSON.stringify(data);
+            }
+        }
+
+        async function createCampaign() {
+            if (!token) {
+                alert('请先登录！');
+                return;
+            }
+
+            const campaignData = {
+                title: "测试活动 " + new Date().toLocaleString(),
+                description: "Docker部署测试",
+                startTime: "2026-06-22T13:00:00",
+                endTime: "2026-06-30T23:59:59",
+                enrollmentStartTime: "2026-06-22T13:00:00",
+                enrollmentEndTime: "2026-06-30T23:59:59",
+                completionRule: "THRESHOLD",
+                completionThreshold: 3,
+                enrollmentMode: "MANUAL",
+                enrollmentScope: "ALL",
+                maxParticipants: 0,
+                showScores: true,
+                showRanking: true
+            };
+
+            const response = await fetch('http://localhost:8080/api/admin/campaigns', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify(campaignData)
+            });
+            const data = await response.json();
+            document.getElementById('result').innerText = '创建活动结果:\n' + JSON.stringify(data, null, 2);
+        }
+
+        async function listCampaigns() {
+            if (!token) {
+                alert('请先登录！');
+                return;
+            }
+
+            const response = await fetch('http://localhost:8080/api/admin/campaigns?current=1&size=10&orderBy=created_time_desc', {
+                method: 'GET',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const data = await response.json();
+            document.getElementById('result').innerText = '活动列表:\n' + JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>

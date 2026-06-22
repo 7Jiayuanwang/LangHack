@@ -95,11 +95,13 @@ public class CampaignController {
             @RequestParam(defaultValue = "1") int current,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String keyword) {
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String orderBy) {
         try {
             Map<String, Object> params = Map.of(
                 "status", status != null ? status : "",
-                "keyword", keyword != null ? keyword : ""
+                "keyword", keyword != null ? keyword : "",
+                "orderBy", orderBy != null ? orderBy : ""
             );
             Page<CampaignActivity> page = campaignService.getCampaigns(current, size, params);
             return Result.success(page);

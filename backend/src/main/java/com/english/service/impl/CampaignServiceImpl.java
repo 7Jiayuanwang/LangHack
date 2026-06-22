@@ -127,19 +127,47 @@ public class CampaignServiceImpl implements CampaignService {
         Page<CampaignActivity> page = new Page<>(current, size);
         QueryWrapper<CampaignActivity> wrapper = new QueryWrapper<>();
 
-        // 筛选条件
-        if (params.containsKey("status")) {
-            wrapper.eq("status", params.get("status"));
+        // 筛选条件 - 只有非空字符串才应用筛选
+        String status = (String) params.get("status");
+        if (status != null && !status.isEmpty()) {
+            wrapper.eq("status", status);
         }
-        if (params.containsKey("keyword")) {
-            String keyword = (String) params.get("keyword");
+
+        String keyword = (String) params.get("keyword");
+        if (keyword != null && !keyword.isEmpty()) {
             wrapper.and(w -> w.like("title", keyword).or().like("description", keyword));
         }
+
         if (params.containsKey("createdBy")) {
             wrapper.eq("created_by", params.get("createdBy"));
         }
 
-        wrapper.orderByDesc("created_time");
+        // 排序处理
+        String orderBy = (String) params.get("orderBy");
+        if (orderBy != null && !orderBy.isEmpty()) {
+            switch (orderBy) {
+                case "created_time_desc":
+                    wrapper.orderByDesc("created_time");
+                    break;
+                case "created_time_asc":
+                    wrapper.orderByAsc("created_time");
+                    break;
+                case "start_time_desc":
+                    wrapper.orderByDesc("start_time");
+                    break;
+                case "start_time_asc":
+                    wrapper.orderByAsc("start_time");
+                    break;
+                case "updated_time_desc":
+                    wrapper.orderByDesc("updated_time");
+                    break;
+                default:
+                    wrapper.orderByDesc("created_time");
+            }
+        } else {
+            wrapper.orderByDesc("created_time");
+        }
+
         return campaignActivityMapper.selectPage(page, wrapper);
     }
 
