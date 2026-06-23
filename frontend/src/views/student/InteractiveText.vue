@@ -34,13 +34,20 @@
     <main class="reader-container">
       <!-- Article Header Section -->
       <header class="article-header">
-        <div v-if="author" class="article-author">
-          <el-icon class="author-icon"><User /></el-icon>
-          <span class="author-name">{{ author.displayName }}</span>
-          <span
-            v-if="author.roleLabel && !author.official"
-            class="author-role"
-          >{{ author.roleLabel }}</span>
+        <div v-if="author" class="article-byline">
+          <div class="byline-avatar" :class="{ 'is-official': author.official }">
+            {{ authorInitial }}
+          </div>
+          <div class="byline-info">
+            <div class="byline-name-row">
+              <span class="byline-name">{{ author.displayName }}</span>
+              <span
+                v-if="author.roleLabel && !author.official"
+                class="byline-role"
+              >{{ author.roleLabel }}</span>
+            </div>
+            <span class="byline-label">{{ author.official ? '平台官方' : '作者' }}</span>
+          </div>
         </div>
         <div class="article-meta">
           <span class="meta-item">
@@ -533,6 +540,11 @@ const courseName = ref('')
 const unitName = ref('')
 const textTitle = ref('')
 const author = ref(null)
+// 作者首字母头像（取显示名第一个字符；官方内容为「官」）
+const authorInitial = computed(() => {
+  const name = (author.value?.displayName || '').trim()
+  return name.charAt(0) || '?'
+})
 const headerTitleRef = ref(null)
 const isTitleOverflow = ref(false)
 
@@ -2712,31 +2724,67 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   margin-bottom: 48px;
 }
 
-.article-author {
+.article-byline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.byline-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #3b82f6, #197fe6);
+  box-shadow: 0 2px 6px rgba(25, 127, 230, 0.25);
+  user-select: none;
+}
+
+.byline-avatar.is-official {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+}
+
+.byline-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.2;
+}
+
+.byline-name-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
+}
+
+.byline-name {
   font-size: 15px;
-}
-
-.article-author .author-icon {
-  color: var(--primary-color, #197fe6);
-  font-size: 18px;
-}
-
-.article-author .author-name {
   font-weight: 700;
   color: var(--text-main, #0f172a);
 }
 
-.article-author .author-role {
-  padding: 2px 10px;
+.byline-role {
+  padding: 1px 9px;
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
   color: #2563eb;
   background: #eff6ff;
+}
+
+.byline-label {
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
 }
 
 .article-meta {
