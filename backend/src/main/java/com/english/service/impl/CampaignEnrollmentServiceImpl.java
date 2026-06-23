@@ -111,16 +111,23 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
     }
 
     @Override
+    public CampaignParticipation getParticipation(Long campaignId, Long userId) {
+        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.eq("user_id", userId);
+        return participationMapper.selectOne(wrapper);
+    }
+
+    @Override
     public Page<CampaignActivity> getEnrollableCampaigns(Long userId, int current, int size, Map<String, Object> params) {
         Page<CampaignActivity> page = new Page<>(current, size);
         QueryWrapper<CampaignActivity> wrapper = new QueryWrapper<>();
 
-        // 只显示进行中的活动
+        // 只显示进行中的活动；启动后立即可见（不考虑报名时间窗口）
         wrapper.eq("status", CampaignStatus.ACTIVE);
 
-        // 时间范围筛选
+        // 时间范围筛选：活动尚未结束
         LocalDateTime now = LocalDateTime.now();
-        wrapper.le("start_time", now);
         wrapper.ge("end_time", now);
 
         if (params.containsKey("keyword")) {

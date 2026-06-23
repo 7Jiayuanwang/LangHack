@@ -157,14 +157,34 @@ public class CampaignController {
 
     /**
      * 获取年级列表（用于活动报名范围选择）
+     * 支持按学院过滤：/grades?collegeNames=学院A,学院B
      */
     @GetMapping("/enrollment-options/grades")
-    public Result<List<Map<String, Object>>> getGrades() {
+    public Result<List<Map<String, Object>>> getGrades(
+            @RequestParam(required = false) String collegeNames) {
         try {
-            String sql = "SELECT DISTINCT grade as label, grade as value " +
-                        "FROM school_student WHERE grade IS NOT NULL ORDER BY grade DESC";
-            List<Map<String, Object>> grades = jdbcTemplate.queryForList(sql);
-            return Result.success(grades);
+            String sql;
+            if (collegeNames != null && !collegeNames.trim().isEmpty()) {
+                // 按指定学院过滤年级
+                String[] colleges = collegeNames.split(",");
+                StringBuilder placeholders = new StringBuilder();
+                for (int i = 0; i < colleges.length; i++) {
+                    if (i > 0) placeholders.append(",");
+                    placeholders.append("?");
+                }
+                sql = "SELECT DISTINCT grade as label, grade as value " +
+                      "FROM school_student WHERE grade IS NOT NULL " +
+                      "AND college_name IN (" + placeholders + ") " +
+                      "ORDER BY grade DESC";
+                List<Map<String, Object>> grades = jdbcTemplate.queryForList(sql, (Object[]) colleges);
+                return Result.success(grades);
+            } else {
+                // 返回所有年级
+                sql = "SELECT DISTINCT grade as label, grade as value " +
+                      "FROM school_student WHERE grade IS NOT NULL ORDER BY grade DESC";
+                List<Map<String, Object>> grades = jdbcTemplate.queryForList(sql);
+                return Result.success(grades);
+            }
         } catch (Exception e) {
             log.error("获取年级列表失败", e);
             return Result.error("获取年级列表失败: " + e.getMessage());

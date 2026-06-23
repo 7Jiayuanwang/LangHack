@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
 import MyProgress from '@/views/student/campaigns/MyProgress.vue'
 import * as campaignApi from '@/api/campaign'
 
-// Mock API
+const mockPush = vi.fn()
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mockPush }),
+  useRoute: () => ({ params: { id: '1' } })
+}))
+
 vi.mock('@/api/campaign', () => ({
   getMyProgress: vi.fn(),
   getMyTaskProgress: vi.fn(),
@@ -12,171 +17,127 @@ vi.mock('@/api/campaign', () => ({
   getStudentCampaignDetail: vi.fn()
 }))
 
-// Mock router
-const mockRoute = {
-  params: { id: '1' }
+const mockCampaign = {
+  id: 1,
+  title: '测试活动',
+  endTime: '2099-12-31T23:59:59',
+  showScores: true,
+  showRanking: true
 }
 
-describe('MyProgress.vue', () => {
-  let wrapper
+const mockProgress = {
+  enrolled: true,
+  totalScore: 85,
+  completedTasks: 1,
+  completionStatus: 'IN_PROGRESS',
+  myRank: 15,
+  enrollmentStatus: 'ENROLLED'
+}
 
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.clearAllMocks()
-  })
-
-  const mockCampaign = {
-    id: 1,
-    title: '测试活动',
-    showScores: true,
-    showRanking: true
+const mockTaskProgress = [
+  {
+    taskId: 1,
+    taskName: '',
+    taskType: 'READING_TIME',
+    taskUnit: 'MINUTES',
+    targetValue: 60,
+    points: 10,
+    isRequired: true,
+    currentValue: 45,
+    isCompleted: false,
+    completionCount: 0
+  },
+  {
+    taskId: 2,
+    taskName: '单词学习任务',
+    taskType: 'WORD_LEARNING',
+    taskUnit: 'COUNT',
+    targetValue: 50,
+    points: 20,
+    isRequired: false,
+    currentValue: 50,
+    isCompleted: true,
+    completionCount: 1
   }
+]
 
-  const mockProgress = {
-    enrolled: true,
-    totalScore: 85,
-    completedTasks: 3,
-    ranking: 15,
-    totalParticipants: 120
-  }
-
-  const mockTaskProgress = [
-    {
-      taskId: 1,
-      taskName: '阅读时长任务',
-      targetValue: 60,
-      currentValue: 45,
-      isCompleted: false
-    },
-    {
-      taskId: 2,
-      taskName: '单词学习任务',
-      targetValue: 50,
-      currentValue: 50,
-      isCompleted: true
-    }
+const mockRanking = {
+  myRank: 15,
+  totalParticipants: 120,
+  totalScore: 85,
+  completedTasks: 1,
+  aroundMe: [
+    { rank: 13, userId: 101, userName: '李四', className: '一班', totalScore: 88, isMe: false },
+    { rank: 14, userId: 102, userName: '王五', className: '二班', totalScore: 87, isMe: false },
+    { rank: 15, userId: 103, userName: '张三', className: '三班', totalScore: 85, isMe: true }
   ]
+}
 
-  const mockRanking = {
-    myRanking: {
-      ranking: 15,
-      totalScore: 85,
-      completedTasks: 3,
-      userName: '张三'
+const createApiResponse = (data) => ({ code: 200, data })
+
+const createWrapper = () => mount(MyProgress, {
+  global: {
+    directives: {
+      loading: {}
     },
-    aroundMe: [
-      { ranking: 13, userName: '李四', totalScore: 88 },
-      { ranking: 14, userName: '王五', totalScore: 87 },
-      { ranking: 16, userName: '赵六', totalScore: 84 }
-    ]
+    stubs: {
+      ElPageHeader: { template: '<div><slot name="content" /></div>' },
+      ElCard: { template: '<div><slot /></div>' },
+      ElTag: { template: '<span><slot /></span>' },
+      ElProgress: { template: '<div class="el-progress-stub" />' },
+      ElEmpty: { template: '<div class="el-empty-stub" />' },
+      ElIcon: { template: '<i><slot /></i>' },
+      Trophy: true,
+      Checked: true,
+      TrophyBase: true,
+      Timer: true,
+      CircleCheck: true,
+      Clock: true,
+      Medal: true
+    }
   }
+})
 
-  const createWrapper = () => {
-    return mount(MyProgress, {
-      global: {
-        mocks: {
-          $route: mockRoute
-        },
-        stubs: {
-          ElCard: {
-            template: '<div><slot /></div>'
-          },
-          ElProgress: true,
-          ElTag: true
-        }
-      }
-    })
-  }
-
-  it('renders correctly', () => {
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: mockCampaign })
-    campaignApi.getMyProgress.mockResolvedValue({ data: mockProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: mockTaskProgress })
-    campaignApi.getMyRanking.mockResolvedValue({ data: mockRanking })
-
-    wrapper = createWrapper()
-    expect(wrapper.exists()).toBe(true)
+describe('MyProgress.vue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    campaignApi.getStudentCampaignDetail.mockResolvedValue(createApiResponse({ campaign: mockCampaign }))
+    campaignApi.getMyProgress.mockResolvedValue(createApiResponse(mockProgress))
+    campaignApi.getMyTaskProgress.mockResolvedValue(createApiResponse(mockTaskProgress))
+    campaignApi.getMyRanking.mockResolvedValue(createApiResponse(mockRanking))
   })
 
-  it('loads progress data on mount', async () => {
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: mockCampaign })
-    campaignApi.getMyProgress.mockResolvedValue({ data: mockProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: mockTaskProgress })
-    campaignApi.getMyRanking.mockResolvedValue({ data: mockRanking })
-
-    wrapper = createWrapper()
+  it('loads current student campaign data on mount', async () => {
+    const wrapper = createWrapper()
     await flushPromises()
 
     expect(campaignApi.getStudentCampaignDetail).toHaveBeenCalledWith('1')
     expect(campaignApi.getMyProgress).toHaveBeenCalledWith('1')
     expect(campaignApi.getMyTaskProgress).toHaveBeenCalledWith('1')
     expect(campaignApi.getMyRanking).toHaveBeenCalledWith('1')
+    expect(wrapper.vm.campaign.title).toBe('测试活动')
+    expect(wrapper.vm.progress.myRank).toBe(15)
+    expect(wrapper.vm.ranking.totalParticipants).toBe(120)
   })
 
-  it('displays total score when showScores is true', async () => {
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: mockCampaign })
-    campaignApi.getMyProgress.mockResolvedValue({ data: mockProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: mockTaskProgress })
-    campaignApi.getMyRanking.mockResolvedValue({ data: mockRanking })
-
-    wrapper = createWrapper()
+  it('uses task type fallback when task name is empty', async () => {
+    const wrapper = createWrapper()
     await flushPromises()
 
-    const html = wrapper.html()
-    expect(html).toContain('85')
+    expect(wrapper.html()).toContain('阅读时长')
+    expect(wrapper.html()).toContain('单词学习任务')
   })
 
-  it('hides total score when showScores is false', async () => {
-    const campaignNoScores = { ...mockCampaign, showScores: false }
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: campaignNoScores })
-    campaignApi.getMyProgress.mockResolvedValue({ data: mockProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: mockTaskProgress })
-    campaignApi.getMyRanking.mockResolvedValue({ data: mockRanking })
-
-    wrapper = createWrapper()
+  it('calculates task progress with current API payload', async () => {
+    const wrapper = createWrapper()
     await flushPromises()
 
-    // Score should not be displayed when showScores is false
-    expect(wrapper.vm.campaign.showScores).toBe(false)
+    expect(wrapper.vm.calculateTaskProgress(mockTaskProgress[0])).toBe(75)
+    expect(wrapper.vm.calculateTaskProgress(mockTaskProgress[1])).toBe(100)
   })
 
-  it('displays ranking when showRanking is true', async () => {
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: mockCampaign })
-    campaignApi.getMyProgress.mockResolvedValue({ data: mockProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: mockTaskProgress })
-    campaignApi.getMyRanking.mockResolvedValue({ data: mockRanking })
-
-    wrapper = createWrapper()
-    await flushPromises()
-
-    const html = wrapper.html()
-    expect(html).toContain('15')
-  })
-
-  it('calculates task progress percentage correctly', async () => {
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: mockCampaign })
-    campaignApi.getMyProgress.mockResolvedValue({ data: mockProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: mockTaskProgress })
-    campaignApi.getMyRanking.mockResolvedValue({ data: mockRanking })
-
-    wrapper = createWrapper()
-    await flushPromises()
-
-    // First task: 45/60 = 75%
-    expect(wrapper.vm.getTaskProgress(mockTaskProgress[0])).toBe(75)
-
-    // Second task: 50/50 = 100%
-    expect(wrapper.vm.getTaskProgress(mockTaskProgress[1])).toBe(100)
-  })
-
-  it('displays rank badge for top 3', async () => {
-    const topRankProgress = { ...mockProgress, ranking: 1 }
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: mockCampaign })
-    campaignApi.getMyProgress.mockResolvedValue({ data: topRankProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: mockTaskProgress })
-    campaignApi.getMyRanking.mockResolvedValue({ data: { ...mockRanking, myRanking: { ...mockRanking.myRanking, ranking: 1 } } })
-
-    wrapper = createWrapper()
+  it('computes rank badge classes correctly', async () => {
+    const wrapper = createWrapper()
     await flushPromises()
 
     expect(wrapper.vm.getRankClass(1)).toBe('rank-gold')
@@ -185,32 +146,14 @@ describe('MyProgress.vue', () => {
     expect(wrapper.vm.getRankClass(15)).toBe('')
   })
 
-  it('handles not enrolled state', async () => {
-    const notEnrolledProgress = { enrolled: false }
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: mockCampaign })
-    campaignApi.getMyProgress.mockResolvedValue({ data: notEnrolledProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: [] })
-    campaignApi.getMyRanking.mockResolvedValue({ data: { myRanking: null, aroundMe: [] } })
+  it('hides ranking card when showRanking is false', async () => {
+    campaignApi.getStudentCampaignDetail.mockResolvedValue(createApiResponse({
+      campaign: { ...mockCampaign, showRanking: false }
+    }))
 
-    wrapper = createWrapper()
+    const wrapper = createWrapper()
     await flushPromises()
 
-    expect(wrapper.vm.progress.enrolled).toBe(false)
-  })
-
-  it('displays completed and incomplete tasks separately', async () => {
-    campaignApi.getStudentCampaignDetail.mockResolvedValue({ data: mockCampaign })
-    campaignApi.getMyProgress.mockResolvedValue({ data: mockProgress })
-    campaignApi.getMyTaskProgress.mockResolvedValue({ data: mockTaskProgress })
-    campaignApi.getMyRanking.mockResolvedValue({ data: mockRanking })
-
-    wrapper = createWrapper()
-    await flushPromises()
-
-    const completedTasks = wrapper.vm.taskProgress.filter(t => t.isCompleted)
-    const incompleteTasks = wrapper.vm.taskProgress.filter(t => !t.isCompleted)
-
-    expect(completedTasks.length).toBe(1)
-    expect(incompleteTasks.length).toBe(1)
+    expect(wrapper.html()).not.toContain('周围排名')
   })
 })

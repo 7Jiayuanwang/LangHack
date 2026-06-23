@@ -85,13 +85,57 @@
             <el-radio label="COLLEGE">指定学院</el-radio>
             <el-radio label="GRADE">指定年级</el-radio>
             <el-radio label="CLASS">指定班级</el-radio>
-            <el-radio label="CUSTOM">指定学生</el-radio>
           </el-radio-group>
         </el-form-item>
 
         <el-form-item
+          label="选择学院"
+          v-if="formData.enrollmentScope === 'COLLEGE'"
+          prop="selectedColleges"
+        >
+          <el-select
+            v-model="formData.selectedColleges"
+            multiple
+            filterable
+            placeholder="请选择学院"
+            style="width: 100%"
+            @change="handleCollegeChange"
+          >
+            <el-option
+              v-for="item in collegeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item
+          label="选择年级"
+          v-if="formData.enrollmentScope === 'COLLEGE'"
+        >
+          <el-select
+            v-model="formData.selectedGrades"
+            multiple
+            filterable
+            placeholder="不选则包含选中学院的所有年级"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in gradeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+          <div style="color: #909399; font-size: 12px; margin-top: 4px;">
+            不选择年级时，默认包含选中学院的所有年级学生
+          </div>
+        </el-form-item>
+
+        <el-form-item
           label="目标选择"
-          v-if="formData.enrollmentScope !== 'ALL'"
+          v-if="formData.enrollmentScope === 'GRADE' || formData.enrollmentScope === 'CLASS'"
           prop="enrollmentTargetIds"
         >
           <el-select
@@ -188,7 +232,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCampaignById, createCampaign, updateCampaign, getTasks, createTask, updateTask, deleteTask, getColleges, getGrades, getClasses } from '@/api/campaign'
@@ -211,6 +255,8 @@ const formData = reactive({
   enrollmentMode: 'MANUAL',
   enrollmentScope: 'ALL',
   enrollmentTargetIds: [],
+  selectedColleges: [],
+  selectedGrades: [],
   maxParticipants: 0,
   showScores: true,
   showRanking: true,
@@ -218,6 +264,8 @@ const formData = reactive({
 })
 
 const targetOptions = ref([])
+const collegeOptions = ref([])
+const gradeOptions = ref([])
 
 const rules = {
   title: [{ required: true, message: '请输入活动标题', trigger: 'blur' }],
@@ -261,17 +309,31 @@ const handleTaskTypeChange = (row) => {
 
 const handleScopeChange = () => {
   formData.enrollmentTargetIds = []
+  formData.selectedColleges = []
+  formData.selectedGrades = []
   loadTargetOptions()
+}
+
+const handleCollegeChange = async () => {
+  // 学院变化时清空年级选择并重新加载年级选项
+  formData.selectedGrades = []
+  if (formData.selectedColleges.length > 0) {
+    await loadGradeOptions(formData.selectedColleges)
+  } else {
+    gradeOptions.value = []
+  }
 }
 
 const loadTargetOptions = async () => {
   try {
     targetOptions.value = []
+    collegeOptions.value = []
+    gradeOptions.value = []
 
     if (formData.enrollmentScope === 'COLLEGE') {
       const res = await getColleges()
       if (res.code === 200) {
-        targetOptions.value = res.data
+        collegeOptions.value = res.data
       }
     } else if (formData.enrollmentScope === 'GRADE') {
       const res = await getGrades()
@@ -290,12 +352,22 @@ const loadTargetOptions = async () => {
   }
 }
 
+const loadGradeOptions = async (collegeNames) => {
+  try {
+    const res = await getGrades(collegeNames.join(','))
+    if (res.code === 200) {
+      gradeOptions.value = res.data
+    }
+  } catch (error) {
+    console.error('加载年级选项失败:', error)
+    ElMessage.error('加载年级选项失败')
+  }
+}
+
 const getTargetPlaceholder = () => {
   const placeholders = {
-    COLLEGE: '请选择学院',
     GRADE: '请选择年级',
-    CLASS: '请选择班级',
-    CUSTOM: '请选择学生'
+    CLASS: '请选择班级'
   }
   return placeholders[formData.enrollmentScope] || '请选择'
 }
@@ -322,7 +394,26 @@ const loadData = async () => {
       formData.completionThreshold = data.completionThreshold
       formData.enrollmentMode = data.enrollmentMode
       formData.enrollmentScope = data.enrollmentScope
-      formData.enrollmentTargetIds = data.enrollmentTargetIds ? JSON.parse(data.enrollmentTargetIds) : []
+
+      // 兼容新旧格式回显
+      if (data.enrollmentTargetIdList && data.enrollmentTargetIdList.length > 0) {
+        const firstItem = data.enrollmentTargetIdList[0]
+        if (data.enrollmentScope === 'COLLEGE' && typeof firstItem === 'object' && firstItem.collegeIds) {
+          // 新格式：{ collegeIds: [...], gradeIds: [...] }
+          formData.selectedColleges = firstItem.collegeIds || []
+          formData.selectedGrades = firstItem.gradeIds || []
+          // 加载选项以便回显
+          await loadTargetOptions()
+          if (formData.selectedColleges.length > 0) {
+            await loadGradeOptions(formData.selectedColleges)
+          }
+        } else {
+          // 旧格式：flat array
+          formData.enrollmentTargetIds = data.enrollmentTargetIdList
+          await loadTargetOptions()
+        }
+      }
+
       formData.maxParticipants = data.maxParticipants || 0
       formData.showScores = data.showScores
       formData.showRanking = data.showRanking
@@ -382,6 +473,21 @@ const handleSubmit = async () => {
 
     submitting.value = true
 
+    // 构造 enrollmentTargetIdList（支持新格式）
+    let enrollmentTargetIdList = []
+    if (formData.enrollmentScope === 'COLLEGE') {
+      // 新格式：{ collegeIds: [...], gradeIds: [...] }
+      if (formData.selectedColleges.length > 0) {
+        enrollmentTargetIdList = [{
+          collegeIds: formData.selectedColleges,
+          gradeIds: formData.selectedGrades
+        }]
+      }
+    } else if (formData.enrollmentScope === 'GRADE' || formData.enrollmentScope === 'CLASS') {
+      // 旧格式：flat array
+      enrollmentTargetIdList = formData.enrollmentTargetIds
+    }
+
     // 1. 先保存活动基本信息
     const campaignData = {
       title: formData.title,
@@ -394,9 +500,7 @@ const handleSubmit = async () => {
       completionThreshold: formData.completionThreshold,
       enrollmentMode: formData.enrollmentMode,
       enrollmentScope: formData.enrollmentScope,
-      enrollmentTargetIds: formData.enrollmentTargetIds.length > 0
-        ? JSON.stringify(formData.enrollmentTargetIds)
-        : null,
+      enrollmentTargetIdList: enrollmentTargetIdList,
       maxParticipants: formData.maxParticipants,
       showScores: formData.showScores,
       showRanking: formData.showRanking

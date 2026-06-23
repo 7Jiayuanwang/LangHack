@@ -38,6 +38,12 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     @Autowired
     private CampaignService campaignService;
 
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private SchoolStudentMapper schoolStudentMapper;
+
     @Override
     public void collectTaskData(Long campaignId, Long taskId) {
         CampaignTask task = taskMapper.selectById(taskId);
@@ -179,33 +185,71 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         wrapper.eq("user_id", userId);
         CampaignParticipation myParticipation = participationMapper.selectOne(wrapper);
 
-        if (myParticipation == null) {
+        if (myParticipation == null || myParticipation.getEnrollmentStatus() != EnrollmentStatus.ENROLLED) {
             result.put("enrolled", false);
             result.put("myRank", null);
             result.put("totalParticipants", 0);
             result.put("aroundMe", new ArrayList<>());
+            result.put("enrollmentStatus", myParticipation != null ? myParticipation.getEnrollmentStatus() : null);
             return result;
         }
 
-        // 计算我的排名（得分比我高的人数 + 1）
         QueryWrapper<CampaignParticipation> rankWrapper = new QueryWrapper<>();
         rankWrapper.eq("campaign_id", campaignId);
         rankWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
         rankWrapper.gt("total_score", myParticipation.getTotalScore());
         long myRank = participationMapper.selectCount(rankWrapper) + 1;
 
-        // 总参与人数
         QueryWrapper<CampaignParticipation> totalWrapper = new QueryWrapper<>();
         totalWrapper.eq("campaign_id", campaignId);
         totalWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
         long totalParticipants = participationMapper.selectCount(totalWrapper);
 
-        // 周围排名（前后各2名）
         QueryWrapper<CampaignParticipation> aroundWrapper = new QueryWrapper<>();
         aroundWrapper.eq("campaign_id", campaignId);
         aroundWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
-        aroundWrapper.orderByDesc("total_score");
+        aroundWrapper.orderByDesc("total_score", "completed_tasks", "id");
         List<CampaignParticipation> allRanked = participationMapper.selectList(aroundWrapper);
+
+        Map<Long, Long> ranksByUserId = new HashMap<>();
+        long currentRank = 0;
+        Integer previousScore = null;
+        for (int i = 0; i < allRanked.size(); i++) {
+            CampaignParticipation participation = allRanked.get(i);
+            Integer totalScore = participation.getTotalScore();
+            if (previousScore == null || !Objects.equals(previousScore, totalScore)) {
+                currentRank = i + 1L;
+                previousScore = totalScore;
+            }
+            ranksByUserId.put(participation.getUserId(), currentRank);
+        }
+
+        Map<Long, User> usersById = new HashMap<>();
+        Map<Long, SchoolStudent> studentsBySchoolId = new HashMap<>();
+        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
+        for (CampaignParticipation participation : allRanked) {
+            Long participantUserId = participation.getUserId();
+            if (participantUserId == null || usersById.containsKey(participantUserId)) {
+                continue;
+            }
+            User user = userService.getUserById(participantUserId);
+            if (user == null) {
+                continue;
+            }
+            usersById.put(participantUserId, user);
+            if (user.getSchoolStudentId() != null) {
+                SchoolStudent schoolStudent = schoolStudentMapper.selectById(user.getSchoolStudentId());
+                if (schoolStudent != null) {
+                    studentsBySchoolId.put(user.getSchoolStudentId(), schoolStudent);
+                }
+            }
+            if (user.getUsername() != null && !user.getUsername().isBlank()) {
+                SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(user.getUsername());
+                if (schoolStudent != null) {
+                    studentsByStudentId.put(user.getUsername(), schoolStudent);
+                }
+            }
+        }
 
         List<Map<String, Object>> aroundMe = new ArrayList<>();
         int myIndex = -1;
@@ -220,9 +264,26 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             int to = Math.min(allRanked.size() - 1, myIndex + 2);
             for (int i = from; i <= to; i++) {
                 CampaignParticipation p = allRanked.get(i);
+                User user = usersById.get(p.getUserId());
+                SchoolStudent schoolStudent = null;
+                if (user != null && user.getSchoolStudentId() != null) {
+                    schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
+                }
+                if (schoolStudent == null && user != null && user.getUsername() != null && !user.getUsername().isBlank()) {
+                    schoolStudent = studentsByStudentId.get(user.getUsername());
+                }
+
+                String userName = user != null && user.getRealName() != null && !user.getRealName().isBlank()
+                    ? user.getRealName()
+                    : user != null && user.getNickname() != null && !user.getNickname().isBlank()
+                        ? user.getNickname()
+                        : user != null ? user.getUsername() : null;
+
                 Map<String, Object> item = new HashMap<>();
-                item.put("rank", i + 1);
+                item.put("rank", ranksByUserId.getOrDefault(p.getUserId(), (long) (i + 1)));
                 item.put("userId", p.getUserId());
+                item.put("userName", userName);
+                item.put("className", schoolStudent != null ? schoolStudent.getClassName() : null);
                 item.put("totalScore", p.getTotalScore());
                 item.put("isMe", p.getUserId().equals(userId));
                 aroundMe.add(item);
@@ -234,6 +295,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         result.put("totalParticipants", totalParticipants);
         result.put("totalScore", myParticipation.getTotalScore());
         result.put("completedTasks", myParticipation.getCompletedTasks());
+        result.put("enrollmentStatus", myParticipation.getEnrollmentStatus());
         result.put("aroundMe", aroundMe);
 
         return result;
@@ -286,8 +348,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         wrapper.eq("user_id", userId);
         CampaignParticipation myParticipation = participationMapper.selectOne(wrapper);
 
-        if (myParticipation == null) {
+        if (myParticipation == null || myParticipation.getEnrollmentStatus() != EnrollmentStatus.ENROLLED) {
             result.put("enrolled", false);
+            result.put("enrollmentStatus", myParticipation != null ? myParticipation.getEnrollmentStatus() : null);
             return result;
         }
 

@@ -73,8 +73,8 @@
         :total="pagination.total"
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
-        @size-change="handleQuery"
-        @current-change="handleQuery"
+        @size-change="handleSizeChange"
+        @current-change="handlePageChange"
         class="pagination"
       />
     </el-card>
@@ -126,6 +126,17 @@ const loadData = async () => {
 }
 
 const handleQuery = () => {
+  pagination.current = 1
+  loadData()
+}
+
+const handlePageChange = (page) => {
+  pagination.current = page
+  loadData()
+}
+
+const handleSizeChange = (size) => {
+  pagination.size = size
   pagination.current = 1
   loadData()
 }

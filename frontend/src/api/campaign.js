@@ -13,7 +13,10 @@ export const endCampaign = (id) => request.put(`/api/admin/campaigns/${id}/end`)
 
 // 获取报名范围选项
 export const getColleges = () => request.get('/api/admin/campaigns/enrollment-options/colleges')
-export const getGrades = () => request.get('/api/admin/campaigns/enrollment-options/grades')
+export const getGrades = (collegeNames) => {
+  const params = collegeNames ? { collegeNames } : {}
+  return request.get('/api/admin/campaigns/enrollment-options/grades', { params })
+}
 export const getClasses = () => request.get('/api/admin/campaigns/enrollment-options/classes')
 
 // 任务管理

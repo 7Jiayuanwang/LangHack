@@ -4,13 +4,16 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.CampaignActivity;
+import com.english.entity.SchoolStudent;
 import com.english.entity.User;
 import com.english.enums.CampaignStatus;
 import com.english.enums.EnrollmentScope;
 import com.english.mapper.CampaignActivityMapper;
+import com.english.mapper.SchoolStudentMapper;
 import com.english.service.CampaignService;
 import com.english.service.UserService;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,8 +22,27 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+/**
+ * 报名范围目标配置（向后兼容新旧 JSON 格式）
+ * <li>旧格式：flat array，如 ["学院A", "学院B"] 或 ["2023", "2022"]
+ * <li>新格式：对象，支持嵌套年级/班级，
+ *   如 { "collegeIds": ["学院A"], "gradeIds": ["2023"] }
+ */
+@lombok.Data
+class EnrollmentTargetConfig {
+    /** 学院 ID / 名称列表 */
+    private List<String> collegeIds = Collections.emptyList();
+    /** 年级 ID / 名称列表 */
+    private List<String> gradeIds = Collections.emptyList();
+    /** 班级 ID / 名称列表 */
+    private List<String> classIds = Collections.emptyList();
+    /** 旧格式 flat list（降级兼容） */
+    private List<String> flatList = Collections.emptyList();
+}
 
 /**
  * 活动管理服务实现
@@ -36,10 +58,18 @@ public class CampaignServiceImpl implements CampaignService {
     private UserService userService;
 
     @Autowired
+    private SchoolStudentMapper schoolStudentMapper;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @Override
     public CampaignActivity createCampaign(CampaignActivity campaign) {
+        // 不支持 CUSTOM 报名范围
+        if (campaign.getEnrollmentScope() == EnrollmentScope.CUSTOM) {
+            throw new RuntimeException("不支持「指定学生」报名范围");
+        }
+
         LocalDateTime now = LocalDateTime.now();
 
         // 验证活动时间范围
@@ -71,12 +101,26 @@ public class CampaignServiceImpl implements CampaignService {
         campaign.setCreatedTime(now);
         campaign.setUpdatedTime(now);
 
-        // 序列化enrollmentTargetIdList为JSON
+        // 序列化 enrollmentTargetIdList 为 JSON（向后兼容新旧格式）
         if (campaign.getEnrollmentTargetIdList() != null && !campaign.getEnrollmentTargetIdList().isEmpty()) {
             try {
-                campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(campaign.getEnrollmentTargetIdList()));
+                // COLLEGE 范围支持嵌套年级 → 序列化为对象格式 { collegeIds, gradeIds }
+                if (campaign.getEnrollmentScope() == EnrollmentScope.COLLEGE
+                        && !campaign.getEnrollmentTargetIdList().isEmpty()
+                        && campaign.getEnrollmentTargetIdList().get(0) instanceof java.util.Map) {
+                    // 前端传了 Map（EnrollmentTargetConfig）结构
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> cfg = (Map<String, Object>) campaign.getEnrollmentTargetIdList().get(0);
+                    EnrollmentTargetConfig config = new EnrollmentTargetConfig();
+                    config.setCollegeIds(toStringList(cfg.get("collegeIds")));
+                    config.setGradeIds(toStringList(cfg.get("gradeIds")));
+                    campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(config));
+                } else {
+                    // 旧格式：flat array（GRADE / CLASS / 旧 COLLEGE）
+                    campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(campaign.getEnrollmentTargetIdList()));
+                }
             } catch (Exception e) {
-                log.error("序列化enrollmentTargetIds失败", e);
+                log.error("序列化 enrollmentTargetIds 失败", e);
             }
         }
 
@@ -89,6 +133,11 @@ public class CampaignServiceImpl implements CampaignService {
         CampaignActivity existing = getCampaignById(id);
         if (existing == null) {
             throw new RuntimeException("活动不存在");
+        }
+
+        // 不支持 CUSTOM 报名范围
+        if (campaign.getEnrollmentScope() == EnrollmentScope.CUSTOM) {
+            throw new RuntimeException("不支持「指定学生」报名范围");
         }
 
         // 合并时间字段（使用新值或保留旧值）
@@ -121,12 +170,26 @@ public class CampaignServiceImpl implements CampaignService {
         campaign.setId(id);
         campaign.setUpdatedTime(LocalDateTime.now());
 
-        // 序列化enrollmentTargetIdList为JSON
-        if (campaign.getEnrollmentTargetIdList() != null) {
+        // 序列化 enrollmentTargetIdList 为 JSON（向后兼容新旧格式）
+        if (campaign.getEnrollmentTargetIdList() != null && !campaign.getEnrollmentTargetIdList().isEmpty()) {
             try {
-                campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(campaign.getEnrollmentTargetIdList()));
+                // COLLEGE 范围支持嵌套年级 → 序列化为对象格式 { collegeIds, gradeIds }
+                if (campaign.getEnrollmentScope() == EnrollmentScope.COLLEGE
+                        && !campaign.getEnrollmentTargetIdList().isEmpty()
+                        && campaign.getEnrollmentTargetIdList().get(0) instanceof java.util.Map) {
+                    // 前端传了 Map（EnrollmentTargetConfig）结构
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> cfg = (Map<String, Object>) campaign.getEnrollmentTargetIdList().get(0);
+                    EnrollmentTargetConfig config = new EnrollmentTargetConfig();
+                    config.setCollegeIds(toStringList(cfg.get("collegeIds")));
+                    config.setGradeIds(toStringList(cfg.get("gradeIds")));
+                    campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(config));
+                } else {
+                    // 旧格式：flat array（GRADE / CLASS / 旧 COLLEGE）
+                    campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(campaign.getEnrollmentTargetIdList()));
+                }
             } catch (Exception e) {
-                log.error("序列化enrollmentTargetIds失败", e);
+                log.error("序列化 enrollmentTargetIds 失败", e);
             }
         }
 
@@ -147,15 +210,27 @@ public class CampaignServiceImpl implements CampaignService {
     public CampaignActivity getCampaignById(Long id) {
         CampaignActivity campaign = campaignActivityMapper.selectById(id);
         if (campaign != null && StringUtils.hasText(campaign.getEnrollmentTargetIds())) {
-            // 反序列化JSON为List
+            // 反序列化 JSON 为 List（向后兼容新旧格式）
             try {
-                List<String> idList = objectMapper.readValue(
-                    campaign.getEnrollmentTargetIds(),
-                    new TypeReference<List<String>>() {}
-                );
-                campaign.setEnrollmentTargetIdList(idList);
+                JsonNode node = objectMapper.readTree(campaign.getEnrollmentTargetIds());
+                if (node.isArray()) {
+                    // 旧格式：flat array，如 ["学院A", "2023"]
+                    List<String> idList = objectMapper.convertValue(node, new TypeReference<List<String>>() {});
+                    campaign.setEnrollmentTargetIdList(idList);
+                } else if (node.isObject()) {
+                    // 新格式：对象，如 { "collegeIds": [...], "gradeIds": [...] }
+                    EnrollmentTargetConfig config = objectMapper.convertValue(node, EnrollmentTargetConfig.class);
+                    // 前端期望收到的结构：单元素 List，包含完整 config Map
+                    List<Object> wrapped = new ArrayList<>();
+                    java.util.Map<String, Object> configMap = new java.util.HashMap<>();
+                    configMap.put("collegeIds", config.getCollegeIds());
+                    configMap.put("gradeIds", config.getGradeIds());
+                    configMap.put("classIds", config.getClassIds());
+                    wrapped.add(configMap);
+                    campaign.setEnrollmentTargetIdList((List) wrapped);
+                }
             } catch (Exception e) {
-                log.error("反序列化enrollmentTargetIds失败", e);
+                log.error("反序列化 enrollmentTargetIds 失败", e);
             }
         }
         return campaign;
@@ -267,10 +342,13 @@ public class CampaignServiceImpl implements CampaignService {
             return false;
         }
 
-        // 检查时间范围
+        // 检查报名时间窗口（而非活动时间窗口）
         LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(campaign.getStartTime()) || now.isAfter(campaign.getEndTime())) {
-            return false;
+        if (campaign.getEnrollmentStartTime() != null && now.isBefore(campaign.getEnrollmentStartTime())) {
+            return false; // 报名未开始
+        }
+        if (campaign.getEnrollmentEndTime() != null && now.isAfter(campaign.getEnrollmentEndTime())) {
+            return false; // 报名已结束
         }
 
         // 检查报名范围
@@ -283,27 +361,132 @@ public class CampaignServiceImpl implements CampaignService {
             return false;
         }
 
-        List<String> targetIds = campaign.getEnrollmentTargetIdList();
-        if (targetIds == null || targetIds.isEmpty()) {
-            return true;
+        // 解析报名范围配置（支持新旧格式）
+        EnrollmentTargetConfig config = parseEnrollmentTargetConfig(campaign);
+        if (config == null) {
+            return true; // 无限制
         }
 
         // 根据不同的范围类型检查
         switch (campaign.getEnrollmentScope()) {
             case COLLEGE:
-                // 检查学院（需要从school_student表获取）
-                // TODO: 实现学院检查逻辑
-                return true;
+                return checkCollegeEnrollment(user, config);
+            case GRADE:
+                return checkGradeEnrollment(user, config);
             case CLASS:
-                // 检查班级
-                // TODO: 实现班级检查逻辑
-                return true;
+                return checkClassEnrollment(user, config);
             case CUSTOM:
-                // 检查用户ID是否在白名单中
-                return targetIds.contains(String.valueOf(userId));
+                // CUSTOM 已在创建时被拒绝，这里降级处理
+                return false;
             default:
                 return false;
         }
+    }
+
+    /**
+     * 解析报名范围配置（兼容新旧格式）
+     */
+    private EnrollmentTargetConfig parseEnrollmentTargetConfig(CampaignActivity campaign) {
+        if (!StringUtils.hasText(campaign.getEnrollmentTargetIds())) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(campaign.getEnrollmentTargetIds());
+            if (node.isObject()) {
+                // 新格式
+                return objectMapper.convertValue(node, EnrollmentTargetConfig.class);
+            } else if (node.isArray()) {
+                // 旧格式：转为 flatList
+                EnrollmentTargetConfig config = new EnrollmentTargetConfig();
+                config.setFlatList(objectMapper.convertValue(node, new TypeReference<List<String>>() {}));
+                return config;
+            }
+        } catch (Exception e) {
+            log.error("解析 enrollmentTargetIds 失败", e);
+        }
+        return null;
+    }
+
+    /**
+     * 检查用户是否符合学院（+ 可选年级）限制
+     */
+    private boolean checkCollegeEnrollment(User user, EnrollmentTargetConfig config) {
+        SchoolStudent student = getSchoolStudent(user);
+        if (student == null) {
+            return false;
+        }
+
+        // 检查学院
+        List<String> collegeIds = !config.getCollegeIds().isEmpty() ? config.getCollegeIds() : config.getFlatList();
+        if (collegeIds.isEmpty() || !collegeIds.contains(student.getCollegeName())) {
+            return false;
+        }
+
+        // 检查年级（可选）
+        if (!config.getGradeIds().isEmpty() && !config.getGradeIds().contains(student.getGrade())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 检查用户是否符合年级限制
+     */
+    private boolean checkGradeEnrollment(User user, EnrollmentTargetConfig config) {
+        SchoolStudent student = getSchoolStudent(user);
+        if (student == null) {
+            return false;
+        }
+
+        List<String> gradeIds = !config.getGradeIds().isEmpty() ? config.getGradeIds() : config.getFlatList();
+        return !gradeIds.isEmpty() && gradeIds.contains(student.getGrade());
+    }
+
+    /**
+     * 检查用户是否符合班级限制
+     */
+    private boolean checkClassEnrollment(User user, EnrollmentTargetConfig config) {
+        SchoolStudent student = getSchoolStudent(user);
+        if (student == null) {
+            return false;
+        }
+
+        List<String> classIds = !config.getClassIds().isEmpty() ? config.getClassIds() : config.getFlatList();
+        return !classIds.isEmpty() && classIds.contains(student.getClassName());
+    }
+
+    /**
+     * 获取用户对应的学生信息
+     */
+    private SchoolStudent getSchoolStudent(User user) {
+        if (user.getSchoolStudentId() != null) {
+            return schoolStudentMapper.selectById(user.getSchoolStudentId());
+        }
+        if (StringUtils.hasText(user.getUsername())) {
+            return schoolStudentMapper.selectByStudentId(user.getUsername());
+        }
+        return null;
+    }
+
+    /**
+     * 辅助方法：Object 转 List<String>
+     */
+    private List<String> toStringList(Object obj) {
+        if (obj == null) {
+            return Collections.emptyList();
+        }
+        if (obj instanceof List) {
+            List<?> list = (List<?>) obj;
+            List<String> result = new ArrayList<>();
+            for (Object item : list) {
+                if (item != null) {
+                    result.add(item.toString());
+                }
+            }
+            return result;
+        }
+        return Collections.emptyList();
     }
 
     @Override
@@ -321,13 +504,13 @@ public class CampaignServiceImpl implements CampaignService {
             restrictions.add("活动未开始或已结束");
         }
 
-        // 检查时间范围
+        // 检查报名时间窗口
         LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(campaign.getStartTime())) {
-            restrictions.add("活动尚未开始");
+        if (campaign.getEnrollmentStartTime() != null && now.isBefore(campaign.getEnrollmentStartTime())) {
+            restrictions.add("报名尚未开始");
         }
-        if (now.isAfter(campaign.getEndTime())) {
-            restrictions.add("活动已结束");
+        if (campaign.getEnrollmentEndTime() != null && now.isAfter(campaign.getEnrollmentEndTime())) {
+            restrictions.add("报名已结束");
         }
 
         // 检查报名范围

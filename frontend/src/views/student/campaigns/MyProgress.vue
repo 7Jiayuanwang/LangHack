@@ -88,7 +88,7 @@
                     <CircleCheck v-if="task.isCompleted" />
                     <Clock v-else />
                   </el-icon>
-                  {{ task.taskName }}
+                  {{ task.taskName || getTaskTypeLabel(task.taskType) || '未命名任务' }}
                   <el-tag v-if="task.isRequired" type="danger" size="small">必做</el-tag>
                 </div>
                 <div class="task-type">

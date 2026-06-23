@@ -28,6 +28,11 @@ public interface CampaignEnrollmentService {
     boolean isEnrolled(Long campaignId, Long userId);
 
     /**
+     * 获取用户报名记录
+     */
+    CampaignParticipation getParticipation(Long campaignId, Long userId);
+
+    /**
      * 获取可报名的活动列表
      */
     Page<CampaignActivity> getEnrollableCampaigns(Long userId, int current, int size, Map<String, Object> params);

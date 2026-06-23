@@ -2,6 +2,7 @@ package com.english.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.CampaignActivity;
+import com.english.entity.CampaignParticipation;
 import com.english.entity.CampaignTask;
 import com.english.entity.User;
 import com.english.dto.Result;
@@ -46,7 +47,10 @@ public class StudentCampaignController {
 
     private Long getCurrentUserId(Authentication authentication) {
         User user = userService.getUserByUsername(authentication.getName());
-        return user != null ? user.getId() : null;
+        if (user == null) {
+            throw new IllegalStateException("当前登录用户不存在");
+        }
+        return user.getId();
     }
 
     /**
@@ -101,7 +105,10 @@ public class StudentCampaignController {
                 return Result.error("活动不存在");
             }
             List<CampaignTask> tasks = taskService.getTasksByCampaign(id);
-            boolean isEnrolled = enrollmentService.isEnrolled(id, userId);
+            CampaignParticipation participation = enrollmentService.getParticipation(id, userId);
+            boolean isEnrolled = participation != null &&
+                (participation.getEnrollmentStatus() == com.english.enums.EnrollmentStatus.ENROLLED ||
+                    participation.getEnrollmentStatus() == com.english.enums.EnrollmentStatus.PENDING);
             boolean canEnroll = campaignService.canUserEnroll(id, userId);
             List<String> restrictions = canEnroll ? List.of() : campaignService.getEnrollmentRestrictions(id, userId);
 
@@ -109,6 +116,7 @@ public class StudentCampaignController {
             data.put("campaign", campaign);
             data.put("tasks", tasks);
             data.put("isEnrolled", isEnrolled);
+            data.put("enrollmentStatus", participation != null ? participation.getEnrollmentStatus() : null);
             data.put("canEnroll", canEnroll);
             data.put("enrollmentMessage", restrictions.isEmpty() ? "" : String.join("；", restrictions));
             return Result.success(data);

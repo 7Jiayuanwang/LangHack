@@ -68,7 +68,7 @@
             <div class="task-header">
               <div class="task-name">
                 <el-icon><Checked v-if="task.isRequired" /><Document v-else /></el-icon>
-                {{ task.taskName }}
+                {{ task.taskName || getTaskTypeLabel(task.taskType) || '未命名任务' }}
                 <el-tag v-if="task.isRequired" type="danger" size="small">必做</el-tag>
               </div>
               <div class="task-score">+{{ task.points }} 分</div>

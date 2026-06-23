@@ -5,7 +5,7 @@
     </div>
 
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
-      <el-tab-pane label="可报名活动" name="available">
+      <el-tab-pane label="进行中活动" name="available">
         <div class="filter-bar">
           <el-input
             v-model="searchKeyword"
