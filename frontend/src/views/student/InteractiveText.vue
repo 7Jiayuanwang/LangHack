@@ -34,7 +34,7 @@
     <main class="reader-container">
       <!-- Article Header Section -->
       <header class="article-header">
-        <div v-if="author" class="article-byline">
+        <div v-if="author" class="article-byline" :class="{ 'clickable': !author.official && author.id }" @click="handleAuthorClick">
           <div class="byline-avatar" :class="{ 'is-official': author.official }">
             <span v-if="author.official">{{ authorInitial }}</span>
             <img v-else :src="author.avatar || DEFAULT_AVATAR" :alt="author.displayName" />
@@ -1117,6 +1117,13 @@ const handleWordClick = (wordData) => {
   nextTick(() => {
     applySharedUnderlines()
   })
+}
+
+// 点击作者头像/名字 → 跳转作者主页
+const handleAuthorClick = () => {
+  if (author.value && !author.value.official && author.value.id) {
+    router.push(`/student/author/${author.value.id}`)
+  }
 }
 
 const handleLearningRecord = async (recordData) => {
@@ -2734,6 +2741,16 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   margin-bottom: 18px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.article-byline.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.article-byline.clickable:hover {
+  transform: translateX(2px);
+  opacity: 0.8;
 }
 
 .byline-avatar {
