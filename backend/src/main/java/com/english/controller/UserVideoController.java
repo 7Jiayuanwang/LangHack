@@ -41,6 +41,9 @@ public class UserVideoController {
 
     @Autowired
     private ContentTagService contentTagService;
+
+    @Autowired
+    private com.english.service.AuthorEnricher authorEnricher;
     /**
      * 检查当前用户是否有视频上传权限（功能开关 student.video_upload_enabled）
      */
@@ -163,6 +166,7 @@ public class UserVideoController {
             }
 
             videoService.incrementViewCount(videoId);
+            authorEnricher.enrichVideo(video);
             return Result.success(video);
         } catch (Exception e) {
             log.error("获取视频详情失败 videoId={}", videoId, e);
