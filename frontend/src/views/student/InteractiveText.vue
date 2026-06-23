@@ -36,7 +36,8 @@
       <header class="article-header">
         <div v-if="author" class="article-byline">
           <div class="byline-avatar" :class="{ 'is-official': author.official }">
-            {{ authorInitial }}
+            <span v-if="author.official">{{ authorInitial }}</span>
+            <img v-else :src="author.avatar || DEFAULT_AVATAR" :alt="author.displayName" />
           </div>
           <div class="byline-info">
             <div class="byline-name-row">
@@ -540,7 +541,9 @@ const courseName = ref('')
 const unitName = ref('')
 const textTitle = ref('')
 const author = ref(null)
-// 作者首字母头像（取显示名第一个字符；官方内容为「官」）
+// 平台默认头像（与导航栏/个人中心一致的兜底图）
+const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+// 作者首字母头像（官方内容显示「官」）
 const authorInitial = computed(() => {
   const name = (author.value?.displayName || '').trim()
   return name.charAt(0) || '?'
@@ -2738,15 +2741,21 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   width: 44px;
   height: 44px;
   border-radius: 50%;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(135deg, #3b82f6, #197fe6);
-  box-shadow: 0 2px 6px rgba(25, 127, 230, 0.25);
+  background: #eef2f7;
   user-select: none;
+}
+
+.byline-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .byline-avatar.is-official {

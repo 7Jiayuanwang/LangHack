@@ -25,6 +25,9 @@ public class AuthorDTO {
     /** 角色中文名：管理员 / 老师 / 学生 */
     private String roleLabel;
 
+    /** 头像 URL（沿用平台用户头像；官方内容为 null，由前端用官方标识兜底） */
+    private String avatar;
+
     /** 是否为平台官方内容（无具体上传者） */
     private boolean official;
 
@@ -45,6 +48,7 @@ public class AuthorDTO {
         dto.role = user.getRole();
         dto.roleLabel = toRoleLabel(user.getRole());
         dto.displayName = resolveDisplayName(user);
+        dto.avatar = user.getAvatar();
         return dto;
     }
 
@@ -112,6 +116,14 @@ public class AuthorDTO {
 
     public void setRoleLabel(String roleLabel) {
         this.roleLabel = roleLabel;
+    }
+
+    public String getAvatar() {
+        return avatar;
+    }
+
+    public void setAvatar(String avatar) {
+        this.avatar = avatar;
     }
 
     public boolean isOfficial() {
