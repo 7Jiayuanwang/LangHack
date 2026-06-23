@@ -34,6 +34,14 @@
     <main class="reader-container">
       <!-- Article Header Section -->
       <header class="article-header">
+        <div v-if="author" class="article-author">
+          <el-icon class="author-icon"><User /></el-icon>
+          <span class="author-name">{{ author.displayName }}</span>
+          <span
+            v-if="author.roleLabel && !author.official"
+            class="author-role"
+          >{{ author.roleLabel }}</span>
+        </div>
         <div class="article-meta">
           <span class="meta-item">
             <el-icon><Clock /></el-icon>
@@ -44,17 +52,6 @@
             <el-icon><Tickets /></el-icon>
             {{ wordCount }} words
           </span>
-          <template v-if="author">
-            <span class="meta-dot">•</span>
-            <span class="meta-item meta-author">
-              <el-icon><User /></el-icon>
-              <span class="author-name">{{ author.displayName }}</span>
-              <span
-                v-if="author.roleLabel && !author.official"
-                class="author-role"
-              >{{ author.roleLabel }}</span>
-            </span>
-          </template>
         </div>
 
         <!-- Redesigned Version Selector -->
@@ -2715,6 +2712,33 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   margin-bottom: 48px;
 }
 
+.article-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 15px;
+}
+
+.article-author .author-icon {
+  color: var(--primary-color, #197fe6);
+  font-size: 18px;
+}
+
+.article-author .author-name {
+  font-weight: 700;
+  color: var(--text-main, #0f172a);
+}
+
+.article-author .author-role {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
 .article-meta {
   display: flex;
   align-items: center;
@@ -2732,20 +2756,6 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .meta-dot {
   opacity: 0.3;
-}
-
-.meta-author .author-name {
-  font-weight: 600;
-  color: var(--text-primary, #0f172a);
-}
-
-.meta-author .author-role {
-  margin-left: 6px;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  color: #2563eb;
-  background: #eff6ff;
 }
 
 .article-title {
