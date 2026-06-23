@@ -89,6 +89,9 @@ public class PublicTextController {
     @Autowired
     private com.english.service.RecommendationService recommendationService;
 
+    @Autowired
+    private com.english.service.AuthorEnricher authorEnricher;
+
     /**
      * 获取所有内容标签（公开接口，学生上传时使用）
      */
@@ -192,6 +195,7 @@ public class PublicTextController {
                 result.addAll(randomPool.subList(0, Math.min(remaining, randomPool.size())));
             }
 
+            authorEnricher.enrichTexts(result);
             return Result.success(result);
         } catch (Exception e) {
             log.error("获取推荐文章失败", e);
@@ -224,7 +228,11 @@ public class PublicTextController {
             }
 
             List<Text> result = recommendationService.recommend(userId, count, excludeIds);
-            return Result.success(result != null ? result : Collections.emptyList());
+            if (result == null) {
+                result = new ArrayList<>();
+            }
+            authorEnricher.enrichTexts(result);
+            return Result.success(result);
         } catch (Exception e) {
             log.error("获取推荐文章失败", e);
             return Result.error("获取推荐文章失败，请稍后重试");
@@ -391,6 +399,7 @@ public class PublicTextController {
                 Collections.shuffle(randomTexts);
             }
 
+            authorEnricher.enrichTexts(randomTexts);
             return Result.success(randomTexts);
         } catch (Exception e) {
             log.error("获取随机课文失败", e);
@@ -516,12 +525,8 @@ public class PublicTextController {
             dto.setMarkdownContent(text.getMarkdownContent());
 
             // 填充上传者（作者）信息：系统内容无上传者，标记为官方内容
-            if (text.getUploadedBy() == null) {
-                dto.setAuthor(AuthorDTO.official());
-            } else {
-                User uploader = userService.getUserById(text.getUploadedBy());
-                dto.setAuthor(AuthorDTO.from(uploader));
-            }
+            authorEnricher.enrichText(text);
+            dto.setAuthor(text.getAuthor());
 
             // 根据内容类型返回相应版本
             if ("MARKDOWN".equals(text.getContentType())) {

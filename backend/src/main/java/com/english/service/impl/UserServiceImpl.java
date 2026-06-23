@@ -101,6 +101,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    public List<User> getUsersByIds(java.util.Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return new ArrayList<>();
+        }
+        // 去重后批量查询，listByIds 由 MyBatis-Plus ServiceImpl 提供
+        Set<Long> distinct = new HashSet<>(ids);
+        List<User> users = listByIds(distinct);
+        return users != null ? users : new ArrayList<>();
+    }
+
+    @Override
     @UseMaster
     public User getUserByUsername(String username) {
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();

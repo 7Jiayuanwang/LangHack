@@ -104,6 +104,10 @@
             <div class="article-content">
               <h2 class="article-title">{{ item.title }}</h2>
               <p class="article-snippet">{{ getSnippet(item._type === 'video' ? item.description : item.content) }}</p>
+              <p v-if="item.author" class="card-author">
+                {{ item.author.displayName }}
+                <span v-if="item.author.roleLabel && !item.author.official" class="card-author-role">{{ item.author.roleLabel }}</span>
+              </p>
             </div>
 
             <!-- Footer Area -->
@@ -837,6 +841,23 @@ onMounted(() => {
   overflow-wrap: break-word;
   /* Fixed 2-line height for consistent card size */
   height: calc(2 * 1.5em);
+}
+
+.card-author {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-author-role {
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
 /* Footer Insights */
