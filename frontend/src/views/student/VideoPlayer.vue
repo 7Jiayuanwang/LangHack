@@ -68,6 +68,16 @@
 
       <!-- Video Info -->
       <div class="video-info">
+        <!-- Uploader / Author -->
+        <div v-if="video.author" class="author-row">
+          <span class="author-label">上传者</span>
+          <span class="author-name">{{ video.author.displayName }}</span>
+          <span
+            v-if="video.author.roleLabel && !video.author.official"
+            class="author-role"
+          >{{ video.author.roleLabel }}</span>
+        </div>
+
         <!-- Actions Container (Keep only associated article if exists) -->
         <div v-if="video.associatedTextId" class="video-actions-container">
           <div class="video-actions">
@@ -1425,6 +1435,31 @@ onBeforeUnmount(() => {
   padding: 20px;
   max-width: 960px;
   margin: 0 auto;
+}
+
+.author-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.author-label {
+  color: #94a3b8;
+}
+
+.author-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.author-role {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
 .title-row {

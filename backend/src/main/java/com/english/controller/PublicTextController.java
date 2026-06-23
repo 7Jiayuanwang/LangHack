@@ -2,6 +2,7 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.dto.TextVersionsDTO;
+import com.english.dto.AuthorDTO;
 import com.english.entity.Text;
 import com.english.entity.UserTextRead;
 import com.english.entity.User;
@@ -513,6 +514,14 @@ public class PublicTextController {
             dto.setLikeCount(text.getLikeCount());
             dto.setContentType(text.getContentType());
             dto.setMarkdownContent(text.getMarkdownContent());
+
+            // 填充上传者（作者）信息：系统内容无上传者，标记为官方内容
+            if (text.getUploadedBy() == null) {
+                dto.setAuthor(AuthorDTO.official());
+            } else {
+                User uploader = userService.getUserById(text.getUploadedBy());
+                dto.setAuthor(AuthorDTO.from(uploader));
+            }
 
             // 根据内容类型返回相应版本
             if ("MARKDOWN".equals(text.getContentType())) {

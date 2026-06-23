@@ -1,8 +1,11 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.dto.AuthorDTO;
 import com.english.entity.Video;
+import com.english.entity.User;
 import com.english.service.VideoService;
+import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +25,9 @@ public class PublicVideoController {
 
     @Autowired
     private VideoService videoService;
+
+    @Autowired
+    private UserService userService;
 
     /**
      * 获取首页推荐视频
@@ -75,6 +81,15 @@ public class PublicVideoController {
             }
 
             videoService.incrementViewCount(videoId);
+
+            // 填充上传者（作者）信息：无上传者标记为官方内容
+            if (video.getUserId() == null) {
+                video.setAuthor(AuthorDTO.official());
+            } else {
+                User uploader = userService.getUserById(video.getUserId());
+                video.setAuthor(AuthorDTO.from(uploader));
+            }
+
             return Result.success(video);
         } catch (Exception e) {
             log.error("获取视频详情失败, videoId={}", videoId, e);

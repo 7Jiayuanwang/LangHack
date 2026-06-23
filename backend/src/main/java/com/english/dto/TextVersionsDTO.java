@@ -15,6 +15,7 @@ public class TextVersionsDTO {
     private Integer likeCount;
     private String contentType;
     private String markdownContent;
+    private AuthorDTO author;
     private Map<String, String> versions;
     private List<String> availableVersions;
 
@@ -117,5 +118,13 @@ public class TextVersionsDTO {
 
     public void setCoverUrl(String coverUrl) {
         this.coverUrl = coverUrl;
+    }
+
+    public AuthorDTO getAuthor() {
+        return author;
+    }
+
+    public void setAuthor(AuthorDTO author) {
+        this.author = author;
     }
 }

@@ -44,6 +44,17 @@
             <el-icon><Tickets /></el-icon>
             {{ wordCount }} words
           </span>
+          <template v-if="author">
+            <span class="meta-dot">•</span>
+            <span class="meta-item meta-author">
+              <el-icon><User /></el-icon>
+              <span class="author-name">{{ author.displayName }}</span>
+              <span
+                v-if="author.roleLabel && !author.official"
+                class="author-role"
+              >{{ author.roleLabel }}</span>
+            </span>
+          </template>
         </div>
 
         <!-- Redesigned Version Selector -->
@@ -485,7 +496,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts } from '@element-plus/icons-vue'
+import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts, User } from '@element-plus/icons-vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, getRelatedTexts } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
@@ -524,6 +535,7 @@ const unitId = ref(null)
 const courseName = ref('')
 const unitName = ref('')
 const textTitle = ref('')
+const author = ref(null)
 const headerTitleRef = ref(null)
 const isTitleOverflow = ref(false)
 
@@ -815,6 +827,7 @@ const loadTextDetail = async () => {
     if (response.code === 200) {
       const data = response.data
       textTitle.value = data.title
+      author.value = data.author || null
       nextTick(checkTitleOverflow)
       difficulty.value = data.difficulty || 'MEDIUM'
       courseId.value = data.courseId
@@ -2719,6 +2732,20 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .meta-dot {
   opacity: 0.3;
+}
+
+.meta-author .author-name {
+  font-weight: 600;
+  color: var(--text-primary, #0f172a);
+}
+
+.meta-author .author-role {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
 .article-title {
