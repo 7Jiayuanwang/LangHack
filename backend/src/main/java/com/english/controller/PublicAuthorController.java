@@ -70,7 +70,7 @@ public class PublicAuthorController {
                     .eq(Video::getUserId, userId)
                     .eq(Video::getIsPublic, 1)
                     .eq(Video::getStatus, "APPROVED")
-                    .orderByDesc(Video::getCreatedAt)
+                    .orderByDesc(Video::getCreatedTime)
                     .list();
             authorEnricher.enrichVideos(videos);
 
