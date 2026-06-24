@@ -453,10 +453,11 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 continue;
             }
 
-            String classKey = schoolStudent.getClassName();
-            ClassStats stats = statsByClass.computeIfAbsent(classKey, k -> new ClassStats(
-                schoolStudent.getClassName(),
-                schoolStudent.getCollegeName()
+            final String className = schoolStudent.getClassName();
+            final String collegeName = schoolStudent.getCollegeName();
+            ClassStats stats = statsByClass.computeIfAbsent(className, k -> new ClassStats(
+                className,
+                collegeName
             ));
 
             stats.totalScore += (participation.getTotalScore() != null ? participation.getTotalScore() : 0);
@@ -532,11 +533,6 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         Map<String, SchoolStudent> studentsByStudentId = schoolStudents.stream()
             .filter(s -> s.getStudentId() != null && !s.getStudentId().isBlank())
             .collect(java.util.stream.Collectors.toMap(SchoolStudent::getStudentId, s -> s, (s1, s2) -> s1));
-                if (schoolStudent != null) {
-                    studentsByStudentId.put(user.getUsername(), schoolStudent);
-                }
-            }
-        }
 
         // 按学院分组统计
         Map<String, CollegeStats> statsByCollege = new HashMap<>();
@@ -559,9 +555,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 continue;
             }
 
-            String collegeKey = schoolStudent.getCollegeName();
-            CollegeStats stats = statsByCollege.computeIfAbsent(collegeKey, k -> new CollegeStats(
-                schoolStudent.getCollegeName()
+            final String collegeName = schoolStudent.getCollegeName();
+            CollegeStats stats = statsByCollege.computeIfAbsent(collegeName, k -> new CollegeStats(
+                collegeName
             ));
 
             stats.totalScore += (participation.getTotalScore() != null ? participation.getTotalScore() : 0);
