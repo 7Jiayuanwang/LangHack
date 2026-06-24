@@ -240,6 +240,7 @@ const categories = [
   { label: '科技', value: 'technology', icon: 'Monitor' },
   { label: '商务', value: 'business', icon: 'TrendCharts' },
   { label: '教育', value: 'education', icon: 'School' },
+  { label: '真题', value: 'exam', icon: 'Document' },
   { label: '生活', value: 'lifestyle', icon: 'Coffee' },
   { label: '文化', value: 'culture', icon: 'Compass' }
 ]
@@ -294,7 +295,7 @@ const toggleSearch = () => {
 }
 
 const getRandomCategory = () => {
-  const cats = categories.filter(c => c.value !== '' && c.value !== 'video' && c.value !== 'recommendation')
+  const cats = categories.filter(c => c.value !== '' && c.value !== 'video' && c.value !== 'recommendation' && c.value !== 'exam')
   return cats[Math.floor(Math.random() * cats.length)].value
 }
 
@@ -360,7 +361,7 @@ const loadFeed = async () => {
     let articleItems = []
     if (articlesRes?.code === 200) {
       articleItems = (Array.isArray(articlesRes.data) ? articlesRes.data : []).map(text => {
-        const cat = getRandomCategory()
+        const cat = text.category || getRandomCategory()
         const contentLength = typeof text.content === 'string' && text.content.length > 0
           ? text.content.length
           : (typeof text.markdownContent === 'string' ? text.markdownContent.length : 0)

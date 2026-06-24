@@ -46,6 +46,9 @@ public class Text {
     @TableField("tags")
     private String tags;
 
+    @TableField("category")
+    private String category;
+
     @TableField("view_count")
     private Integer viewCount;
 
@@ -208,6 +211,14 @@ public class Text {
 
     public void setTags(String tags) {
         this.tags = tags;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public Integer getViewCount() {

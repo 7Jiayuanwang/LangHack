@@ -127,6 +127,17 @@
         <el-input v-model="formData.tags" placeholder="多个标签用逗号分隔" />
       </el-form-item>
 
+      <el-form-item label="类别" prop="category">
+        <el-select v-model="formData.category" placeholder="请选择类别（可选）" clearable style="width: 100%">
+          <el-option label="科技" value="technology" />
+          <el-option label="商务" value="business" />
+          <el-option label="教育" value="education" />
+          <el-option label="真题" value="exam" />
+          <el-option label="生活" value="lifestyle" />
+          <el-option label="文化" value="culture" />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="音频URL" prop="audioUrl">
         <el-input v-model="formData.audioUrl" placeholder="请输入音频URL" />
       </el-form-item>
@@ -225,6 +236,7 @@ const formData = reactive({
   contentType: 'TEXT',
   difficulty: 'MEDIUM',
   tags: '',
+  category: '',
   audioUrl: '',
   coverUrl: '',
   isPublic: 1,
@@ -257,6 +269,7 @@ watch(() => visible.value, (newVal) => {
     formData.contentType = props.textData.contentType || 'TEXT'
     formData.difficulty = props.textData.difficulty || 'MEDIUM'
     formData.tags = props.textData.tags || ''
+    formData.category = props.textData.category || ''
     formData.audioUrl = props.textData.audioUrl || ''
     formData.coverUrl = props.textData.coverUrl || ''
     formData.isPublic = props.textData.isPublic != null ? props.textData.isPublic : 1
@@ -276,6 +289,7 @@ watch(() => visible.value, (newVal) => {
     formData.contentType = 'TEXT'
     formData.difficulty = 'MEDIUM'
     formData.tags = ''
+    formData.category = ''
     formData.audioUrl = ''
     formData.coverUrl = ''
     formData.isPublic = 1
@@ -427,6 +441,7 @@ const handleSubmit = async () => {
         contentType: formData.contentType,
         difficulty: formData.difficulty,
         tags: formData.tags,
+        category: formData.category,
         audioUrl: formData.audioUrl,
         coverUrl: formData.coverUrl,
         isPublic: formData.isPublic,

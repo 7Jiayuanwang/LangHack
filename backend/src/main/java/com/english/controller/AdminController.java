@@ -8,6 +8,8 @@ import com.english.entity.Unit;
 import com.english.entity.User;
 import com.english.entity.Word;
 import com.english.entity.Text;
+import com.english.entity.TextExercise;
+import com.english.entity.ExerciseOption;
 import com.english.entity.Video;
 import com.english.entity.ContentTag;
 import com.english.exception.BusinessException;
@@ -771,6 +773,7 @@ public class AdminController {
             text.setAudioUrl(textData.get("audioUrl") != null ? textData.get("audioUrl").toString() : "");
             text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
+            text.setCategory(textData.get("category") != null ? textData.get("category").toString() : null);
             Object isPublicObj = textData.get("isPublic");
             try {
                 text.setIsPublic(isPublicObj != null ? Integer.parseInt(isPublicObj.toString()) : 1);
@@ -911,6 +914,7 @@ public class AdminController {
             text.setAudioUrl(textData.get("audioUrl") != null ? textData.get("audioUrl").toString() : "");
             text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
+            text.setCategory(textData.get("category") != null ? textData.get("category").toString() : null);
             Object isPublicObj = textData.get("isPublic");
             try {
                 text.setIsPublic(isPublicObj != null ? Integer.parseInt(isPublicObj.toString()) : 1);
@@ -1173,6 +1177,91 @@ public class AdminController {
         } catch (Exception e) {
             logger.error("获取课文详情失败", e);
             return Result.error("获取课文详情失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 更新课文的所有题目（批量替换）
+     */
+    @PutMapping("/texts/{textId}/exercises")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public Result<String> updateTextExercises(@PathVariable Long textId, @RequestBody Map<String, Object> requestData) {
+        try {
+            // 验证课文存在
+            Text text = textService.getTextById(textId);
+            if (text == null || Integer.valueOf(1).equals(text.getDeleted())) {
+                return Result.error("课文不存在或已被删除");
+            }
+
+            Object questionsObj = requestData.get("questions");
+            if (!(questionsObj instanceof List)) {
+                return Result.error("questions 字段必须是数组类型");
+            }
+
+            List<Map<String, Object>> questionsData = (List<Map<String, Object>>) questionsObj;
+            if (questionsData.isEmpty()) {
+                // 清空所有题目
+                textExerciseService.deleteAllExercisesByTextId(textId);
+                return Result.success("已清空所有题目");
+            }
+
+            // 删除旧题目
+            textExerciseService.deleteAllExercisesByTextId(textId);
+
+            // 创建新题目
+            List<TextExercise> exercises = new ArrayList<>();
+            List<List<ExerciseOption>> allOptions = new ArrayList<>();
+            User currentUser = getCurrentUser();
+
+            int orderNum = 1;
+            for (Map<String, Object> qData : questionsData) {
+                String question = (String) qData.get("question");
+                if (question == null || question.trim().isEmpty()) {
+                    return Result.error("题目内容不能为空");
+                }
+
+                TextExercise exercise = new TextExercise();
+                exercise.setTextId(textId);
+                exercise.setQuestion(question);
+                exercise.setExerciseType("MULTIPLE_CHOICE");
+                exercise.setQuestionType((String) qData.getOrDefault("questionType", "选择题"));
+                exercise.setAnalysis((String) qData.get("analysis"));
+                exercise.setOrderNum(orderNum++);
+                exercise.setCreatedBy(currentUser.getId());
+
+                exercises.add(exercise);
+
+                // 处理选项
+                List<ExerciseOption> options = new ArrayList<>();
+                Object optionsObj = qData.get("options");
+                if (optionsObj instanceof List) {
+                    List<Map<String, Object>> optionsData = (List<Map<String, Object>>) optionsObj;
+                    int optOrder = 1;
+                    for (Map<String, Object> oData : optionsData) {
+                        ExerciseOption option = new ExerciseOption();
+                        option.setOptionKey((String) oData.get("optionKey"));
+                        option.setOptionContent((String) oData.get("optionContent"));
+                        Object isCorrectObj = oData.get("isCorrect");
+                        option.setIsCorrect(isCorrectObj instanceof Number ? ((Number) isCorrectObj).intValue() : 0);
+                        option.setOrderNum(optOrder++);
+                        options.add(option);
+                    }
+                }
+                allOptions.add(options);
+            }
+
+            boolean success = textExerciseService.batchCreateExercises(exercises, allOptions);
+            if (success) {
+                logger.info("更新课文题目成功: textId={}, 题目数={}", textId, exercises.size());
+                return Result.success("题目保存成功");
+            } else {
+                return Result.error("题目保存失败");
+            }
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("更新课文题目失败", e);
+            return Result.error("保存失败，请稍后重试");
         }
     }
 
@@ -1537,6 +1626,7 @@ public class AdminController {
                 item.put("contentType", text.getContentType());
                 item.put("difficulty", text.getDifficulty());
                 item.put("tags", text.getTags());
+                item.put("category", text.getCategory());
                 item.put("coverUrl", text.getCoverUrl());
                 item.put("audioUrl", text.getAudioUrl());
                 item.put("status", text.getStatus());
@@ -2048,6 +2138,19 @@ public class AdminController {
             logger.error("查询做题详情失败 studentId={} textId={}", studentId, textId, e);
             return Result.error("查询做题详情失败");
         }
+    }
+
+    private User getCurrentUser() {
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
+            throw new BusinessException("未认证");
+        }
+        User user = userService.getUserByUsername(auth.getName());
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        return user;
     }
 
 }

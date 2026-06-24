@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <input-sql> <output-sql>" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    echo "Usage: $0 <input-sql> <output-sql> [db-name]" >&2
     exit 1
 fi
 
 input_sql="$1"
 output_sql="$2"
+db_name="${3:-${DB_NAME:-english_learning}}"
 
 if [ ! -f "$input_sql" ]; then
     echo "Input SQL file not found: $input_sql" >&2
@@ -18,11 +19,14 @@ fi
 # 支持两种格式：
 #   1. 过程体使用 ; 终止符（Flyway 迁移文件）→ END; 转换为 END$$
 #   2. 过程体使用 $$ 终止符（04-apply-all-migrations.sql）→ 直接添加 DELIMITER 包装
-awk '
+awk -v db="$db_name" '
 BEGIN {
     in_proc = 0; delim_set = 0
     print "SET NAMES utf8mb4;"
 }
+
+# 替换 USE 占位符（仅前10行）
+NR <= 10 { gsub(/\$\{MYSQL_DATABASE\}/, db) }
 
 # 空行和注释行不改变 delimiter 状态
 /^[[:space:]]*$/ || /^[[:space:]]*--/ { print; next }

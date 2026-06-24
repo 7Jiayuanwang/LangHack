@@ -2908,6 +2908,25 @@ CREATE TABLE IF NOT EXISTS `student_ai_quiz_records` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生 AI 题答题明细';
 
 
+-- V11__add_category_to_texts.sql
+
+-- 添加课文类别字段（幂等）
+DROP PROCEDURE IF EXISTS _v11_add_category_to_texts;
+CREATE PROCEDURE _v11_add_category_to_texts()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'texts'
+          AND COLUMN_NAME = 'category'
+    ) THEN
+        ALTER TABLE texts ADD COLUMN category VARCHAR(50) DEFAULT NULL COMMENT '课文类别' AFTER tags;
+    END IF;
+END;
+CALL _v11_add_category_to_texts();
+DROP PROCEDURE IF EXISTS _v11_add_category_to_texts;
+
+
 -- V11__ai_conversation_feedback.sql
 
 -- ═══════════════════════════════════════════════════════════════
