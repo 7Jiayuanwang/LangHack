@@ -72,6 +72,10 @@
                 <p v-if="video.description" class="video-snippet">
                   {{ video.description.substring(0, 80) }}{{ video.description.length > 80 ? '...' : '' }}
                 </p>
+                <p v-if="video.author" class="card-author">
+                  {{ video.author.displayName }}
+                  <span v-if="video.author.roleLabel && !video.author.official" class="card-author-role">{{ video.author.roleLabel }}</span>
+                </p>
               </div>
 
               <div class="video-footer">
@@ -306,6 +310,23 @@ onMounted(() => { loadVideos() })
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.card-author {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-author-role {
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
 .video-footer {

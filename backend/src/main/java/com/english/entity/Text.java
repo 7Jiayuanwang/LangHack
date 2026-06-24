@@ -190,6 +190,18 @@ public class Text {
         this.uploadedBy = uploadedBy;
     }
 
+    /** 上传者（作者）信息，运行时填充，不映射数据库 */
+    @TableField(exist = false)
+    private com.english.dto.AuthorDTO author;
+
+    public com.english.dto.AuthorDTO getAuthor() {
+        return author;
+    }
+
+    public void setAuthor(com.english.dto.AuthorDTO author) {
+        this.author = author;
+    }
+
     public String getTags() {
         return tags;
     }

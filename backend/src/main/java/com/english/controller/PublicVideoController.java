@@ -1,8 +1,11 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.dto.AuthorDTO;
 import com.english.entity.Video;
+import com.english.entity.User;
 import com.english.service.VideoService;
+import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +26,12 @@ public class PublicVideoController {
     @Autowired
     private VideoService videoService;
 
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private com.english.service.AuthorEnricher authorEnricher;
+
     /**
      * 获取首页推荐视频
      */
@@ -31,6 +40,7 @@ public class PublicVideoController {
             @RequestParam(required = false) Integer count) {
         try {
             List<Video> videos = videoService.getFeaturedVideos(count);
+            authorEnricher.enrichVideos(videos);
             return Result.success(videos);
         } catch (Exception e) {
             log.error("获取推荐视频失败", e);
@@ -51,7 +61,11 @@ public class PublicVideoController {
             if (videos != null && !videos.isEmpty()) {
                 Collections.shuffle(videos);
             }
-            return Result.success(videos != null ? videos : new ArrayList<>());
+            if (videos == null) {
+                videos = new ArrayList<>();
+            }
+            authorEnricher.enrichVideos(videos);
+            return Result.success(videos);
         } catch (Exception e) {
             log.error("获取随机视频失败", e);
             return Result.error("获取随机视频失败，请稍后重试");
@@ -75,6 +89,10 @@ public class PublicVideoController {
             }
 
             videoService.incrementViewCount(videoId);
+
+            // 填充上传者（作者）信息：无上传者标记为官方内容
+            authorEnricher.enrichVideo(video);
+
             return Result.success(video);
         } catch (Exception e) {
             log.error("获取视频详情失败, videoId={}", videoId, e);

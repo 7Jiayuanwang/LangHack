@@ -34,6 +34,22 @@
     <main class="reader-container">
       <!-- Article Header Section -->
       <header class="article-header">
+        <div v-if="author" class="article-byline" :class="{ 'clickable': !author.official && author.id }" @click="handleAuthorClick">
+          <div class="byline-avatar" :class="{ 'is-official': author.official }">
+            <span v-if="author.official">{{ authorInitial }}</span>
+            <img v-else :src="author.avatar || DEFAULT_AVATAR" :alt="author.displayName" />
+          </div>
+          <div class="byline-info">
+            <div class="byline-name-row">
+              <span class="byline-name">{{ author.displayName }}</span>
+              <span
+                v-if="author.roleLabel && !author.official"
+                class="byline-role"
+              >{{ author.roleLabel }}</span>
+            </div>
+            <span class="byline-label">{{ author.official ? '平台官方' : '作者' }}</span>
+          </div>
+        </div>
         <div class="article-meta">
           <span class="meta-item">
             <el-icon><Clock /></el-icon>
@@ -485,7 +501,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts } from '@element-plus/icons-vue'
+import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts, User } from '@element-plus/icons-vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, getRelatedTexts } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
@@ -524,6 +540,14 @@ const unitId = ref(null)
 const courseName = ref('')
 const unitName = ref('')
 const textTitle = ref('')
+const author = ref(null)
+// 平台默认头像（与导航栏/个人中心一致的兜底图）
+const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+// 作者首字母头像（官方内容显示「官」）
+const authorInitial = computed(() => {
+  const name = (author.value?.displayName || '').trim()
+  return name.charAt(0) || '?'
+})
 const headerTitleRef = ref(null)
 const isTitleOverflow = ref(false)
 
@@ -815,6 +839,7 @@ const loadTextDetail = async () => {
     if (response.code === 200) {
       const data = response.data
       textTitle.value = data.title
+      author.value = data.author || null
       nextTick(checkTitleOverflow)
       difficulty.value = data.difficulty || 'MEDIUM'
       courseId.value = data.courseId
@@ -1092,6 +1117,13 @@ const handleWordClick = (wordData) => {
   nextTick(() => {
     applySharedUnderlines()
   })
+}
+
+// 点击作者头像/名字 → 跳转作者主页
+const handleAuthorClick = () => {
+  if (author.value && !author.value.official && author.value.id) {
+    router.push(`/student/author/${author.value.id}`)
+  }
 }
 
 const handleLearningRecord = async (recordData) => {
@@ -2700,6 +2732,85 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .article-header {
   margin-bottom: 48px;
+}
+
+.article-byline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.article-byline.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.article-byline.clickable:hover {
+  transform: translateX(2px);
+  opacity: 0.8;
+}
+
+.byline-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: #eef2f7;
+  user-select: none;
+}
+
+.byline-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.byline-avatar.is-official {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+}
+
+.byline-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.2;
+}
+
+.byline-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.byline-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main, #0f172a);
+}
+
+.byline-role {
+  padding: 1px 9px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.byline-label {
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
 }
 
 .article-meta {
