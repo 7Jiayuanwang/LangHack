@@ -221,8 +221,67 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         if (participation != null) {
             participation.setCompletedTasks(completedTaskCount);
             participation.setTotalScore(totalScore);
+
+            // 更新完成状态
+            String newCompletionStatus = calculateCompletionStatus(campaignId, completedTaskCount, totalScore);
+            participation.setCompletionStatus(newCompletionStatus);
+
             participationMapper.updateById(participation);
         }
+    }
+
+    /**
+     * 计算用户的完成状态
+     *
+     * @param campaignId 活动ID
+     * @param completedTaskCount 已完成任务数
+     * @param totalScore 总得分
+     * @return 完成状态：NOT_STARTED（未开始）、IN_PROGRESS（进行中）、COMPLETED（已完成）
+     */
+    private String calculateCompletionStatus(Long campaignId, int completedTaskCount, int totalScore) {
+        // 获取活动完成规则
+        CampaignActivity campaign = campaignService.getCampaignById(campaignId);
+        if (campaign == null) {
+            return "NOT_STARTED";
+        }
+
+        // 如果没有任何得分和完成任务，状态为未开始
+        if (totalScore == 0 && completedTaskCount == 0) {
+            return "NOT_STARTED";
+        }
+
+        // 根据完成规则判断是否完成
+        boolean isCompleted = false;
+
+        switch (campaign.getCompletionRule()) {
+            case ANY:
+                // 完成任意任务即算完成
+                isCompleted = (completedTaskCount > 0);
+                break;
+
+            case ALL:
+                // 完成所有必做任务才算完成
+                QueryWrapper<CampaignTask> allTaskWrapper = new QueryWrapper<>();
+                allTaskWrapper.eq("campaign_id", campaignId);
+                allTaskWrapper.eq("is_required", true);
+                allTaskWrapper.eq("deleted", 0);
+                long requiredTaskCount = taskMapper.selectCount(allTaskWrapper);
+                isCompleted = (completedTaskCount >= requiredTaskCount);
+                break;
+
+            case THRESHOLD:
+                // 完成指定数量的任务才算完成
+                Integer threshold = campaign.getCompletionThreshold();
+                if (threshold != null) {
+                    isCompleted = (completedTaskCount >= threshold);
+                }
+                break;
+
+            default:
+                isCompleted = false;
+        }
+
+        return isCompleted ? "COMPLETED" : "IN_PROGRESS";
     }
 
     @Override
@@ -397,8 +456,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 ? Math.round((double) stats.totalScore / stats.participantCount * 10) / 10.0
                 : 0.0);
             item.put("completionRate", stats.participantCount > 0
-                ? Math.round((double) stats.completedCount / stats.participantCount * 100)
-                : 0);
+                ? String.format("%.1f%%", (double) stats.completedCount / stats.participantCount * 100)
+                : "0.0%");
             result.add(item);
         }
 
@@ -483,8 +542,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 ? Math.round((double) stats.totalScore / stats.participantCount * 10) / 10.0
                 : 0.0);
             item.put("completionRate", stats.participantCount > 0
-                ? Math.round((double) stats.completedCount / stats.participantCount * 100)
-                : 0);
+                ? String.format("%.1f%%", (double) stats.completedCount / stats.participantCount * 100)
+                : "0.0%");
             result.add(item);
         }
 
