@@ -45,17 +45,27 @@ public interface CampaignEnrollmentService {
     /**
      * 批准报名（INVITE_ONLY模式）
      */
-    void approveEnrollment(Long participationId);
+    void approveEnrollment(Long campaignId, Long participationId);
 
     /**
      * 驳回报名
      */
-    void rejectEnrollment(Long participationId, String reason);
+    void rejectEnrollment(Long campaignId, Long participationId, String reason);
 
     /**
      * 获取待审核报名列表
      */
     List<CampaignParticipation> getPendingEnrollments(Long campaignId);
+
+    /**
+     * 获取已通过报名列表
+     */
+    List<CampaignParticipation> getEnrolledList(Long campaignId);
+
+    /**
+     * 获取已驳回报名列表
+     */
+    List<CampaignParticipation> getRejectedList(Long campaignId);
 
     /**
      * 批量添加参与者（管理员）

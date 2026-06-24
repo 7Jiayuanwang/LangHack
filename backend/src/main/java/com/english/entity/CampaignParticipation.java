@@ -48,6 +48,9 @@ public class CampaignParticipation {
     private String userName; // 显示用户名（优先真实姓名，其次昵称，最后用户名）
 
     @TableField(exist = false)
+    private String studentId; // 学号
+
+    @TableField(exist = false)
     private String className; // 班级名称
 
     @TableField(exist = false)

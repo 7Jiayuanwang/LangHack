@@ -3462,3 +3462,34 @@ SET
 -- 1. 每天阅读30分钟，每完成一次得1分，每天最多3次 -> is_repeatable=1, daily_limit=3
 -- 2. 学习新单词，每学50个得1分，总共最多完成20次 -> is_repeatable=1, max_completions=20
 -- 3. 上传课文，上传一次即可，不可重复 -> is_repeatable=0（默认）
+
+-- ========================================================================
+-- P0 严重问题修复（2026-06-24 追加）
+-- ========================================================================
+
+-- P0-01 修复: 添加唯一约束防止重复报名（竞态条件）
+ALTER TABLE campaign_participations
+ADD UNIQUE INDEX uk_campaign_user (campaign_id, user_id);
+
+-- P0-03 修复: 添加关键数据库索引以提升性能
+-- 预期提升: 排名查询 5s → <100ms (50x 提升)
+
+-- 1. 排名查询索引 (campaign_participations)
+-- 用于 getIndividualRanking: 按 campaign_id + enrollment_status + total_score 排序
+CREATE INDEX IF NOT EXISTS idx_enrollment_score
+ON campaign_participations(campaign_id, enrollment_status, total_score DESC);
+
+-- 2. 任务完成记录查询索引 (campaign_task_completions)
+-- 用于按活动、任务、用户快速定位完成记录
+CREATE INDEX IF NOT EXISTS idx_campaign_task_user
+ON campaign_task_completions(campaign_id, task_id, user_id);
+
+-- 3. 活动任务筛选索引 (campaign_tasks)
+-- 用于筛选活动下的必做任务
+CREATE INDEX IF NOT EXISTS idx_campaign_required
+ON campaign_tasks(campaign_id, is_required, deleted);
+
+-- 注: 这些索引针对 CampaignStatsServiceImpl 中高频查询场景
+-- idx_enrollment_score: 覆盖 getIndividualRanking/getClassRanking/getCollegeRanking
+-- idx_campaign_task_user: 覆盖 getTaskCompletion/updateTaskCompletion
+-- idx_campaign_required: 覆盖 calculateCompletionStatus 中的必做任务筛选

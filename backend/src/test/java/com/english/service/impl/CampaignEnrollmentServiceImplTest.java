@@ -144,7 +144,7 @@ class CampaignEnrollmentServiceImplTest {
         when(participationMapper.updateById(any(CampaignParticipation.class))).thenReturn(1);
 
         // When
-        enrollmentService.approveEnrollment(1L);
+        enrollmentService.approveEnrollment(1L, 1L);
 
         // Then
         verify(participationMapper, times(1)).updateById(any(CampaignParticipation.class));
@@ -158,10 +158,38 @@ class CampaignEnrollmentServiceImplTest {
         when(participationMapper.updateById(any(CampaignParticipation.class))).thenReturn(1);
 
         // When
-        enrollmentService.rejectEnrollment(1L, "不符合参与条件");
+        enrollmentService.rejectEnrollment(1L, 1L, "不符合参与条件");
 
         // Then
         verify(participationMapper, times(1)).updateById(any(CampaignParticipation.class));
+    }
+
+    @Test
+    void testApproveEnrollment_WrongCampaign() {
+        // Given
+        testParticipation.setEnrollmentStatus(EnrollmentStatus.PENDING);
+        testParticipation.setCampaignId(2L); // 不同的活动ID
+        when(participationMapper.selectById(1L)).thenReturn(testParticipation);
+
+        // When & Then
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            enrollmentService.approveEnrollment(1L, 1L);
+        });
+        assertEquals("报名记录不属于该活动", exception.getMessage());
+    }
+
+    @Test
+    void testRejectEnrollment_WrongCampaign() {
+        // Given
+        testParticipation.setEnrollmentStatus(EnrollmentStatus.PENDING);
+        testParticipation.setCampaignId(2L); // 不同的活动ID
+        when(participationMapper.selectById(1L)).thenReturn(testParticipation);
+
+        // When & Then
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            enrollmentService.rejectEnrollment(1L, 1L, "不符合参与条件");
+        });
+        assertEquals("报名记录不属于该活动", exception.getMessage());
     }
 
     @Test

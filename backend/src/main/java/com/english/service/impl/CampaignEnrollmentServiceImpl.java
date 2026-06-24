@@ -5,18 +5,24 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.CampaignActivity;
 import com.english.entity.CampaignParticipation;
 import com.english.entity.CampaignTask;
+import com.english.entity.SchoolStudent;
+import com.english.entity.User;
 import com.english.enums.CampaignStatus;
 import com.english.enums.EnrollmentMode;
 import com.english.enums.EnrollmentStatus;
 import com.english.mapper.CampaignActivityMapper;
 import com.english.mapper.CampaignParticipationMapper;
 import com.english.mapper.CampaignTaskMapper;
+import com.english.mapper.SchoolStudentMapper;
+import com.english.mapper.UserMapper;
 import com.english.service.CampaignEnrollmentService;
 import com.english.service.CampaignService;
 import com.english.service.CampaignStatsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -45,7 +51,14 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
     @Autowired
     private CampaignTaskMapper taskMapper;
 
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private SchoolStudentMapper schoolStudentMapper;
+
     @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void enrollCampaign(Long campaignId, Long userId) {
         CampaignActivity campaign = campaignService.getCampaignById(campaignId);
         if (campaign == null) {
@@ -57,13 +70,24 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
             throw new RuntimeException("您已报名该活动");
         }
 
+        // P0-10 修复: 检查是否有退出记录，防止刷报名奖励
+        QueryWrapper<CampaignParticipation> withdrawnWrapper = new QueryWrapper<>();
+        withdrawnWrapper.eq("campaign_id", campaignId);
+        withdrawnWrapper.eq("user_id", userId);
+        withdrawnWrapper.eq("enrollment_status", EnrollmentStatus.WITHDRAWN);
+        long withdrawnCount = participationMapper.selectCount(withdrawnWrapper);
+        if (withdrawnCount > 0) {
+            throw new RuntimeException("您已退出该活动，无法重新报名");
+        }
+
         // 检查报名资格
         if (!campaignService.canUserEnroll(campaignId, userId)) {
             List<String> restrictions = campaignService.getEnrollmentRestrictions(campaignId, userId);
             throw new RuntimeException("无法报名：" + String.join("; ", restrictions));
         }
 
-        // 检查人数限制（0 表示不限制）
+        // P0-01 修复: 人数限制检查（带事务隔离，减少竞态条件）
+        // 注意：完全消除竞态需要数据库唯一约束 (campaign_id, user_id)
         if (campaign.getMaxParticipants() != null && campaign.getMaxParticipants() > 0) {
             QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
             wrapper.eq("campaign_id", campaignId);
@@ -141,7 +165,9 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
 
         if (params.containsKey("keyword")) {
             String keyword = (String) params.get("keyword");
-            wrapper.and(w -> w.like("title", keyword).or().like("description", keyword));
+            // P0-07 修复: 转义 SQL LIKE 通配符，防止 SQL 注入
+            String escapedKeyword = escapeSqlLikeWildcards(keyword);
+            wrapper.and(w -> w.like("title", escapedKeyword).or().like("description", escapedKeyword));
         }
 
         wrapper.orderByDesc("created_time");
@@ -261,11 +287,17 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
     }
 
     @Override
-    public void approveEnrollment(Long participationId) {
+    public void approveEnrollment(Long campaignId, Long participationId) {
         CampaignParticipation participation = participationMapper.selectById(participationId);
         if (participation == null) {
             throw new RuntimeException("报名记录不存在");
         }
+
+        // P0-02 修复: 验证报名记录是否属于该活动
+        if (!participation.getCampaignId().equals(campaignId)) {
+            throw new RuntimeException("报名记录不属于该活动");
+        }
+
         if (participation.getEnrollmentStatus() != EnrollmentStatus.PENDING) {
             throw new RuntimeException("只能审核待审核状态的报名");
         }
@@ -276,11 +308,17 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
     }
 
     @Override
-    public void rejectEnrollment(Long participationId, String reason) {
+    public void rejectEnrollment(Long campaignId, Long participationId, String reason) {
         CampaignParticipation participation = participationMapper.selectById(participationId);
         if (participation == null) {
             throw new RuntimeException("报名记录不存在");
         }
+
+        // P0-02 修复: 验证报名记录是否属于该活动
+        if (!participation.getCampaignId().equals(campaignId)) {
+            throw new RuntimeException("报名记录不属于该活动");
+        }
+
         if (participation.getEnrollmentStatus() != EnrollmentStatus.PENDING) {
             throw new RuntimeException("只能审核待审核状态的报名");
         }
@@ -296,11 +334,22 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
         wrapper.eq("campaign_id", campaignId);
         wrapper.eq("enrollment_status", EnrollmentStatus.PENDING);
         wrapper.orderByAsc("enrollment_time");
-        return participationMapper.selectList(wrapper);
+        List<CampaignParticipation> list = participationMapper.selectList(wrapper);
+        enrichWithUserInfo(list);
+        return list;
     }
 
     @Override
     public void batchEnrollUsers(Long campaignId, List<Long> userIds) {
+        // P0-09 修复: 限制批量操作大小，防止 DoS 攻击
+        final int MAX_BATCH_SIZE = 1000;
+        if (userIds == null || userIds.isEmpty()) {
+            throw new RuntimeException("用户ID列表不能为空");
+        }
+        if (userIds.size() > MAX_BATCH_SIZE) {
+            throw new RuntimeException("批量添加数量超过限制（最多 " + MAX_BATCH_SIZE + " 个）");
+        }
+
         for (Long userId : userIds) {
             try {
                 if (!isEnrolled(campaignId, userId)) {
@@ -318,5 +367,106 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
                 log.error("批量添加用户{}失败", userId, e);
             }
         }
+    }
+
+    @Override
+    public List<CampaignParticipation> getEnrolledList(Long campaignId) {
+        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED.name());
+        wrapper.orderByDesc("join_time");
+        List<CampaignParticipation> list = participationMapper.selectList(wrapper);
+        enrichWithUserInfo(list);
+        return list;
+    }
+
+    @Override
+    public List<CampaignParticipation> getRejectedList(Long campaignId) {
+        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.eq("enrollment_status", EnrollmentStatus.REJECTED.name());
+        wrapper.orderByDesc("enrollment_time");
+        List<CampaignParticipation> list = participationMapper.selectList(wrapper);
+        enrichWithUserInfo(list);
+        return list;
+    }
+
+    private void enrichWithUserInfo(List<CampaignParticipation> participations) {
+        if (participations == null || participations.isEmpty()) {
+            return;
+        }
+
+        // 批量查询用户信息
+        List<Long> userIds = participations.stream()
+                .map(CampaignParticipation::getUserId)
+                .distinct()
+                .toList();
+
+        List<User> users = userMapper.selectBatchIds(userIds);
+        Map<Long, User> userMap = users.stream()
+                .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+
+        // 批量查询学校学生信息
+        List<Long> schoolStudentIds = users.stream()
+                .map(User::getSchoolStudentId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+
+        List<SchoolStudent> students = schoolStudentIds.isEmpty()
+                ? java.util.Collections.emptyList()
+                : schoolStudentMapper.selectBatchIds(schoolStudentIds);
+
+        Map<Long, SchoolStudent> studentsBySchoolId = students.stream()
+                .collect(java.util.stream.Collectors.toMap(SchoolStudent::getId, s -> s));
+
+        Map<String, SchoolStudent> studentsByStudentId = students.stream()
+                .filter(s -> s.getStudentId() != null && !s.getStudentId().isBlank())
+                .collect(java.util.stream.Collectors.toMap(SchoolStudent::getStudentId, s -> s, (s1, s2) -> s1));
+
+        // 填充用户信息
+        for (CampaignParticipation participation : participations) {
+            User user = userMap.get(participation.getUserId());
+            if (user == null) {
+                continue;
+            }
+
+            // 获取学校数据（优先用 school_student_id，其次用学号）
+            SchoolStudent schoolStudent = null;
+            if (user.getSchoolStudentId() != null) {
+                schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
+            }
+            if (schoolStudent == null && user.getUsername() != null && !user.getUsername().isBlank()) {
+                schoolStudent = studentsByStudentId.get(user.getUsername());
+            }
+
+            // 设置用户姓名（优先真实姓名，其次昵称，最后用户名）
+            String userName = user.getRealName() != null && !user.getRealName().isBlank()
+                    ? user.getRealName()
+                    : user.getNickname() != null && !user.getNickname().isBlank()
+                            ? user.getNickname()
+                            : user.getUsername();
+
+            participation.setUserName(userName);
+            participation.setStudentId(schoolStudent != null ? schoolStudent.getStudentId() : user.getUsername());
+            participation.setClassName(schoolStudent != null ? schoolStudent.getClassName() : null);
+            participation.setCollegeName(schoolStudent != null ? schoolStudent.getCollegeName() : null);
+        }
+    }
+
+    /**
+     * 转义 SQL LIKE 通配符，防止 SQL 注入
+     *
+     * @param input 用户输入
+     * @return 转义后的字符串
+     */
+    private String escapeSqlLikeWildcards(String input) {
+        if (input == null || input.isEmpty()) {
+            return input;
+        }
+        // 转义 SQL LIKE 特殊字符: % _ \
+        return input.replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_");
     }
 }

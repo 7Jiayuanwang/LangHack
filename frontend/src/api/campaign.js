@@ -47,6 +47,8 @@ export const exportRankingData = (campaignId, dimension, format) => request.get(
 
 // 报名管理
 export const getPendingEnrollments = (campaignId) => request.get(`/api/admin/campaigns/${campaignId}/enrollments/pending`)
+export const getEnrolledList = (campaignId) => request.get(`/api/admin/campaigns/${campaignId}/enrollments/enrolled`)
+export const getRejectedList = (campaignId) => request.get(`/api/admin/campaigns/${campaignId}/enrollments/rejected`)
 export const approveEnrollment = (campaignId, participationId) => request.put(`/api/admin/campaigns/${campaignId}/enrollments/${participationId}/approve`)
 export const rejectEnrollment = (campaignId, participationId, reason) => request.put(`/api/admin/campaigns/${campaignId}/enrollments/${participationId}/reject`, { reason })
 export const batchEnrollUsers = (campaignId, userIds) => request.post(`/api/admin/campaigns/${campaignId}/enrollments/batch-enroll`, { userIds })

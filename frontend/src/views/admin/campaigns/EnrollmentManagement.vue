@@ -156,6 +156,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getPendingEnrollments,
+  getEnrolledList,
+  getRejectedList,
   approveEnrollment,
   rejectEnrollment,
   batchEnrollUsers
@@ -217,10 +219,10 @@ const loadPendingEnrollments = async () => {
 const loadEnrolledList = async () => {
   loading.value = true
   try {
-    // TODO: 实现获取已通过列表API
-    enrolledList.value = []
+    const res = await getEnrolledList(props.campaignId)
+    enrolledList.value = res.data || []
   } catch (error) {
-    console.error('加载失败:', error)
+    ElMessage.error('加载已通过列表失败: ' + error.message)
   } finally {
     loading.value = false
   }
@@ -229,10 +231,10 @@ const loadEnrolledList = async () => {
 const loadRejectedList = async () => {
   loading.value = true
   try {
-    // TODO: 实现获取已驳回列表API
-    rejectedList.value = []
+    const res = await getRejectedList(props.campaignId)
+    rejectedList.value = res.data || []
   } catch (error) {
-    console.error('加载失败:', error)
+    ElMessage.error('加载已驳回列表失败: ' + error.message)
   } finally {
     loading.value = false
   }

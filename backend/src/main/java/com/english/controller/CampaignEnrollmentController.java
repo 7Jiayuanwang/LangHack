@@ -38,12 +38,40 @@ public class CampaignEnrollmentController {
     }
 
     /**
+     * 获取已通过报名列表
+     */
+    @GetMapping("/enrolled")
+    public Result<List<CampaignParticipation>> getEnrolledList(@PathVariable Long campaignId) {
+        try {
+            List<CampaignParticipation> enrolled = enrollmentService.getEnrolledList(campaignId);
+            return Result.success(enrolled);
+        } catch (Exception e) {
+            log.error("获取已通过报名失败", e);
+            return Result.error("获取已通过报名失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取已驳回报名列表
+     */
+    @GetMapping("/rejected")
+    public Result<List<CampaignParticipation>> getRejectedList(@PathVariable Long campaignId) {
+        try {
+            List<CampaignParticipation> rejected = enrollmentService.getRejectedList(campaignId);
+            return Result.success(rejected);
+        } catch (Exception e) {
+            log.error("获取已驳回报名失败", e);
+            return Result.error("获取已驳回报名失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 批准报名
      */
     @PutMapping("/{participationId}/approve")
     public Result<String> approveEnrollment(@PathVariable Long campaignId, @PathVariable Long participationId) {
         try {
-            enrollmentService.approveEnrollment(participationId);
+            enrollmentService.approveEnrollment(campaignId, participationId);
             return Result.success("已批准");
         } catch (Exception e) {
             log.error("批准报名失败", e);
@@ -61,7 +89,7 @@ public class CampaignEnrollmentController {
             @RequestBody Map<String, String> request) {
         try {
             String reason = request.get("reason");
-            enrollmentService.rejectEnrollment(participationId, reason);
+            enrollmentService.rejectEnrollment(campaignId, participationId, reason);
             return Result.success("已驳回");
         } catch (Exception e) {
             log.error("驳回报名失败", e);

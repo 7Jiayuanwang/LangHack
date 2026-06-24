@@ -42,6 +42,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     private UserService userService;
 
     @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
     private SchoolStudentMapper schoolStudentMapper;
 
     @Autowired
@@ -59,20 +62,30 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             return;
         }
 
-        // 获取所有参与者
-        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
-        wrapper.eq("campaign_id", campaignId);
-        wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
-        List<CampaignParticipation> participants = participationMapper.selectList(wrapper);
+        // P0-06 修复: 分页获取参与者，防止 OOM
+        final int PAGE_SIZE = 500;
+        int pageNum = 1;
+        Page<CampaignParticipation> page;
 
-        for (CampaignParticipation participant : participants) {
-            try {
-                BigDecimal value = collectUserTaskData(campaign, task, participant.getUserId());
-                updateTaskCompletion(campaignId, taskId, participant.getUserId(), value, task.getTargetValue());
-            } catch (Exception e) {
-                log.error("采集用户{}任务{}数据失败", participant.getUserId(), taskId, e);
+        do {
+            page = new Page<>(pageNum, PAGE_SIZE);
+            QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
+            wrapper.eq("campaign_id", campaignId);
+            wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+            page = participationMapper.selectPage(page, wrapper);
+
+            List<CampaignParticipation> participants = page.getRecords();
+            for (CampaignParticipation participant : participants) {
+                try {
+                    BigDecimal value = collectUserTaskData(campaign, task, participant.getUserId());
+                    updateTaskCompletion(campaignId, taskId, participant.getUserId(), value, task.getTargetValue());
+                } catch (Exception e) {
+                    log.error("采集用户{}任务{}数据失败", participant.getUserId(), taskId, e);
+                }
             }
-        }
+
+            pageNum++;
+        } while (page.hasNext());
     }
 
     private BigDecimal collectUserTaskData(CampaignActivity campaign, CampaignTask task, Long userId) {
@@ -313,6 +326,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
     /**
      * 批量填充排名数据的用户信息（姓名、班级、学院）
+     * P0-04 修复: 使用批量查询替代 N+1 查询
      */
     private void enrichRankingWithUserInfo(List<CampaignParticipation> participations) {
         if (participations == null || participations.isEmpty()) {
@@ -326,33 +340,28 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             .distinct()
             .toList();
 
-        Map<Long, User> usersById = new HashMap<>();
-        Map<Long, SchoolStudent> studentsBySchoolId = new HashMap<>();
-        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
+        // P0-04 修复: 一次性批量查询所有用户
+        List<User> users = userMapper.selectBatchIds(userIds);
+        Map<Long, User> usersById = users.stream()
+            .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
 
-        for (Long userId : userIds) {
-            User user = userService.getUserById(userId);
-            if (user == null) {
-                continue;
-            }
-            usersById.put(userId, user);
+        // P0-04 修复: 批量查询所有学校学生信息
+        List<Long> schoolStudentIds = users.stream()
+            .map(User::getSchoolStudentId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
 
-            // 通过 school_student_id 查询学校数据
-            if (user.getSchoolStudentId() != null) {
-                SchoolStudent schoolStudent = schoolStudentMapper.selectById(user.getSchoolStudentId());
-                if (schoolStudent != null) {
-                    studentsBySchoolId.put(user.getSchoolStudentId(), schoolStudent);
-                }
-            }
+        List<SchoolStudent> schoolStudents = schoolStudentIds.isEmpty()
+            ? java.util.Collections.emptyList()
+            : schoolStudentMapper.selectBatchIds(schoolStudentIds);
 
-            // 通过 student_id（学号）查询学校数据
-            if (user.getUsername() != null && !user.getUsername().isBlank()) {
-                SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(user.getUsername());
-                if (schoolStudent != null) {
-                    studentsByStudentId.put(user.getUsername(), schoolStudent);
-                }
-            }
-        }
+        Map<Long, SchoolStudent> studentsBySchoolId = schoolStudents.stream()
+            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getId, s -> s));
+
+        Map<String, SchoolStudent> studentsByStudentId = schoolStudents.stream()
+            .filter(s -> s.getStudentId() != null && !s.getStudentId().isBlank())
+            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getStudentId, s -> s, (s1, s2) -> s1));
 
         // 填充每条记录的用户信息
         for (CampaignParticipation participation : participations) {
@@ -395,38 +404,51 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             return new ArrayList<>();
         }
 
-        // 批量查询用户和学校数据
-        Map<Long, User> usersById = new HashMap<>();
-        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
+        // P0-05 修复: 批量查询用户和学校数据，避免 N+1 查询
+        List<Long> userIds = participations.stream()
+            .map(CampaignParticipation::getUserId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
 
-        for (CampaignParticipation participation : participations) {
-            Long userId = participation.getUserId();
-            if (userId == null || usersById.containsKey(userId)) {
-                continue;
-            }
-            User user = userService.getUserById(userId);
-            if (user == null) {
-                continue;
-            }
-            usersById.put(userId, user);
+        List<User> users = userMapper.selectBatchIds(userIds);
+        Map<Long, User> usersById = users.stream()
+            .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
 
-            if (user.getUsername() != null && !user.getUsername().isBlank()) {
-                SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(user.getUsername());
-                if (schoolStudent != null) {
-                    studentsByStudentId.put(user.getUsername(), schoolStudent);
-                }
-            }
-        }
+        List<Long> schoolStudentIds = users.stream()
+            .map(User::getSchoolStudentId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+
+        List<SchoolStudent> schoolStudents = schoolStudentIds.isEmpty()
+            ? java.util.Collections.emptyList()
+            : schoolStudentMapper.selectBatchIds(schoolStudentIds);
+
+        Map<Long, SchoolStudent> studentsBySchoolId = schoolStudents.stream()
+            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getId, s -> s));
+
+        Map<String, SchoolStudent> studentsByStudentId = schoolStudents.stream()
+            .filter(s -> s.getStudentId() != null && !s.getStudentId().isBlank())
+            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getStudentId, s -> s, (s1, s2) -> s1));
 
         // 按班级分组统计
         Map<String, ClassStats> statsByClass = new HashMap<>();
         for (CampaignParticipation participation : participations) {
             User user = usersById.get(participation.getUserId());
-            if (user == null || user.getUsername() == null) {
+            if (user == null) {
                 continue;
             }
 
-            SchoolStudent schoolStudent = studentsByStudentId.get(user.getUsername());
+            // 获取学校数据（优先用 school_student_id，其次用学号）
+            SchoolStudent schoolStudent = null;
+            if (user.getSchoolStudentId() != null) {
+                schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
+            }
+            if (schoolStudent == null && user.getUsername() != null && !user.getUsername().isBlank()) {
+                schoolStudent = studentsByStudentId.get(user.getUsername());
+            }
+
             if (schoolStudent == null || schoolStudent.getClassName() == null) {
                 continue;
             }
@@ -483,23 +505,33 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             return new ArrayList<>();
         }
 
-        // 批量查询用户和学校数据
-        Map<Long, User> usersById = new HashMap<>();
-        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
+        // P0-05 修复: 批量查询用户和学校数据，避免 N+1 查询
+        List<Long> userIds = participations.stream()
+            .map(CampaignParticipation::getUserId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
 
-        for (CampaignParticipation participation : participations) {
-            Long userId = participation.getUserId();
-            if (userId == null || usersById.containsKey(userId)) {
-                continue;
-            }
-            User user = userService.getUserById(userId);
-            if (user == null) {
-                continue;
-            }
-            usersById.put(userId, user);
+        List<User> users = userMapper.selectBatchIds(userIds);
+        Map<Long, User> usersById = users.stream()
+            .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
 
-            if (user.getUsername() != null && !user.getUsername().isBlank()) {
-                SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(user.getUsername());
+        List<Long> schoolStudentIds = users.stream()
+            .map(User::getSchoolStudentId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+
+        List<SchoolStudent> schoolStudents = schoolStudentIds.isEmpty()
+            ? java.util.Collections.emptyList()
+            : schoolStudentMapper.selectBatchIds(schoolStudentIds);
+
+        Map<Long, SchoolStudent> studentsBySchoolId = schoolStudents.stream()
+            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getId, s -> s));
+
+        Map<String, SchoolStudent> studentsByStudentId = schoolStudents.stream()
+            .filter(s -> s.getStudentId() != null && !s.getStudentId().isBlank())
+            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getStudentId, s -> s, (s1, s2) -> s1));
                 if (schoolStudent != null) {
                     studentsByStudentId.put(user.getUsername(), schoolStudent);
                 }
@@ -510,11 +542,19 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         Map<String, CollegeStats> statsByCollege = new HashMap<>();
         for (CampaignParticipation participation : participations) {
             User user = usersById.get(participation.getUserId());
-            if (user == null || user.getUsername() == null) {
+            if (user == null) {
                 continue;
             }
 
-            SchoolStudent schoolStudent = studentsByStudentId.get(user.getUsername());
+            // 获取学校数据（优先用 school_student_id，其次用学号）
+            SchoolStudent schoolStudent = null;
+            if (user.getSchoolStudentId() != null) {
+                schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
+            }
+            if (schoolStudent == null && user.getUsername() != null && !user.getUsername().isBlank()) {
+                schoolStudent = studentsByStudentId.get(user.getUsername());
+            }
+
             if (schoolStudent == null || schoolStudent.getCollegeName() == null) {
                 continue;
             }
