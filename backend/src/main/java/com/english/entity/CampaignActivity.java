@@ -77,4 +77,23 @@ public class CampaignActivity {
 
     @TableField(exist = false)
     private Integer taskCount; // 任务数量
+
+    @TableField(exist = false)
+    private Boolean isEnrolled; // 当前用户是否已报名
+
+    // "我的活动"列表额外字段
+    @TableField(exist = false)
+    private String completionStatus; // 完成状态: NOT_STARTED, IN_PROGRESS, COMPLETED
+
+    @TableField(exist = false)
+    private Integer totalScore; // 当前总分
+
+    @TableField(exist = false)
+    private Integer completedTasks; // 已完成任务数
+
+    @TableField(exist = false)
+    private Integer totalTasks; // 总任务数
+
+    @TableField(exist = false)
+    private Long myRank; // 我的排名
 }

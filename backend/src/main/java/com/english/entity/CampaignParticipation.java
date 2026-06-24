@@ -42,10 +42,10 @@ public class CampaignParticipation {
 
     // 非数据库字段
     @TableField(exist = false)
-    private String username; // 用户名
+    private String realName; // 真实姓名
 
     @TableField(exist = false)
-    private String realName; // 真实姓名
+    private String userName; // 显示用户名（优先真实姓名，其次昵称，最后用户名）
 
     @TableField(exist = false)
     private String className; // 班级名称

@@ -44,6 +44,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     @Autowired
     private SchoolStudentMapper schoolStudentMapper;
 
+    @Autowired
+    private com.english.mapper.TextMapper textMapper;
+
     @Override
     public void collectTaskData(Long campaignId, Long taskId) {
         CampaignTask task = taskMapper.selectById(taskId);
@@ -82,8 +85,18 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 );
                 return BigDecimal.valueOf(minutes);
 
-            case WORD_LEARNING:
             case TEXT_UPLOAD:
+                // 统计活动期间审核通过的课文数量
+                QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
+                textWrapper.eq("uploaded_by", userId);
+                textWrapper.eq("status", "APPROVED"); // 只统计审核通过的
+                textWrapper.eq("deleted", 0);
+                textWrapper.ge("create_time", campaign.getStartTime()); // 活动开始后上传
+                textWrapper.le("create_time", campaign.getEndTime());   // 活动结束前上传
+                long approvedCount = textMapper.selectCount(textWrapper);
+                return BigDecimal.valueOf(approvedCount);
+
+            case WORD_LEARNING:
             case FEEDBACK:
             case AI_QA:
                 // TODO: 实现其他类型的数据采集
@@ -95,6 +108,12 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     }
 
     private void updateTaskCompletion(Long campaignId, Long taskId, Long userId, BigDecimal value, Integer targetValue) {
+        CampaignTask task = taskMapper.selectById(taskId);
+        if (task == null) {
+            log.error("任务{}不存在", taskId);
+            return;
+        }
+
         QueryWrapper<CampaignTaskCompletion> wrapper = new QueryWrapper<>();
         wrapper.eq("campaign_id", campaignId);
         wrapper.eq("task_id", taskId);
@@ -106,10 +125,61 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             completion.setCampaignId(campaignId);
             completion.setTaskId(taskId);
             completion.setUserId(userId);
+            completion.setCompletionCount(0);
+            completion.setEarnedScore(0);
+            completion.setTodayCompletionCount(0);
         }
 
-        completion.setCurrentValue(value);
-        completion.setIsCompleted(value.compareTo(BigDecimal.valueOf(targetValue)) >= 0);
+        // 检查是否达标
+        boolean reachedTarget = value.compareTo(BigDecimal.valueOf(targetValue)) >= 0;
+
+        if (!reachedTarget) {
+            // 未达标，只更新当前值
+            completion.setCurrentValue(value);
+            completion.setIsCompleted(false);
+        } else {
+            // 达标，处理积分逻辑
+            if (task.getIsRepeatable() != null && task.getIsRepeatable()) {
+                // 可重复任务：检查是否可以继续积分
+                java.time.LocalDate today = java.time.LocalDate.now();
+                java.time.LocalDate lastDate = completion.getLastCompletionDate();
+
+                // 如果日期不同，重置今日计数
+                if (lastDate == null || !lastDate.equals(today)) {
+                    completion.setTodayCompletionCount(0);
+                    completion.setLastCompletionDate(today);
+                }
+
+                // 检查单日限制
+                if (task.getDailyLimit() != null && completion.getTodayCompletionCount() >= task.getDailyLimit()) {
+                    log.info("用户{}任务{}今日已达单日上限{}", userId, taskId, task.getDailyLimit());
+                    return;
+                }
+
+                // 检查总次数限制
+                if (task.getMaxCompletions() != null && completion.getCompletionCount() >= task.getMaxCompletions()) {
+                    log.info("用户{}任务{}已达总完成上限{}", userId, taskId, task.getMaxCompletions());
+                    return;
+                }
+
+                // 可以积分：增加完成次数和积分
+                completion.setCompletionCount(completion.getCompletionCount() + 1);
+                completion.setTodayCompletionCount(completion.getTodayCompletionCount() + 1);
+                completion.setEarnedScore(completion.getEarnedScore() + task.getPoints());
+                completion.setCurrentValue(value);
+                completion.setIsCompleted(true); // 标记为已完成（可重复）
+                completion.setLastCompletionDate(today);
+
+            } else {
+                // 一次性任务：只标记完成一次
+                if (!completion.getIsCompleted()) {
+                    completion.setCompletionCount(1);
+                    completion.setEarnedScore(task.getPoints());
+                    completion.setIsCompleted(true);
+                }
+                completion.setCurrentValue(value);
+            }
+        }
 
         if (completion.getId() == null) {
             completionMapper.insert(completion);
@@ -122,12 +192,25 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     }
 
     private void updateParticipationScore(Long campaignId, Long userId) {
-        // 统计已完成任务数和总得分
+        // 统计用户在所有任务上的总得分
         QueryWrapper<CampaignTaskCompletion> wrapper = new QueryWrapper<>();
         wrapper.eq("campaign_id", campaignId);
         wrapper.eq("user_id", userId);
-        wrapper.eq("is_completed", true);
-        long completedCount = completionMapper.selectCount(wrapper);
+        List<CampaignTaskCompletion> completions = completionMapper.selectList(wrapper);
+
+        int totalScore = 0;
+        int completedTaskCount = 0;
+
+        for (CampaignTaskCompletion completion : completions) {
+            if (completion.getEarnedScore() != null) {
+                totalScore += completion.getEarnedScore();
+            }
+            // 对于可重复任务，只要完成过一次就算"完成"该任务
+            // 对于一次性任务，isCompleted=true 才算完成
+            if (completion.getIsCompleted() != null && completion.getIsCompleted()) {
+                completedTaskCount++;
+            }
+        }
 
         // 更新参与记录
         QueryWrapper<CampaignParticipation> participationWrapper = new QueryWrapper<>();
@@ -136,8 +219,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         CampaignParticipation participation = participationMapper.selectOne(participationWrapper);
 
         if (participation != null) {
-            participation.setCompletedTasks((int) completedCount);
-            participation.setTotalScore((int) completedCount); // 简化：1个任务=1分
+            participation.setCompletedTasks(completedTaskCount);
+            participation.setTotalScore(totalScore);
             participationMapper.updateById(participation);
         }
     }
@@ -161,19 +244,283 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         wrapper.eq("campaign_id", campaignId);
         wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
         wrapper.orderByDesc("total_score", "completed_tasks");
-        return participationMapper.selectPage(page, wrapper);
+        Page<CampaignParticipation> result = participationMapper.selectPage(page, wrapper);
+
+        // 批量填充用户信息（姓名、班级、学院）
+        enrichRankingWithUserInfo(result.getRecords());
+
+        return result;
+    }
+
+    /**
+     * 批量填充排名数据的用户信息（姓名、班级、学院）
+     */
+    private void enrichRankingWithUserInfo(List<CampaignParticipation> participations) {
+        if (participations == null || participations.isEmpty()) {
+            return;
+        }
+
+        // 批量查询用户信息
+        List<Long> userIds = participations.stream()
+            .map(CampaignParticipation::getUserId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+
+        Map<Long, User> usersById = new HashMap<>();
+        Map<Long, SchoolStudent> studentsBySchoolId = new HashMap<>();
+        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
+
+        for (Long userId : userIds) {
+            User user = userService.getUserById(userId);
+            if (user == null) {
+                continue;
+            }
+            usersById.put(userId, user);
+
+            // 通过 school_student_id 查询学校数据
+            if (user.getSchoolStudentId() != null) {
+                SchoolStudent schoolStudent = schoolStudentMapper.selectById(user.getSchoolStudentId());
+                if (schoolStudent != null) {
+                    studentsBySchoolId.put(user.getSchoolStudentId(), schoolStudent);
+                }
+            }
+
+            // 通过 student_id（学号）查询学校数据
+            if (user.getUsername() != null && !user.getUsername().isBlank()) {
+                SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(user.getUsername());
+                if (schoolStudent != null) {
+                    studentsByStudentId.put(user.getUsername(), schoolStudent);
+                }
+            }
+        }
+
+        // 填充每条记录的用户信息
+        for (CampaignParticipation participation : participations) {
+            User user = usersById.get(participation.getUserId());
+            if (user == null) {
+                continue;
+            }
+
+            // 获取学校数据（优先用 school_student_id，其次用学号）
+            SchoolStudent schoolStudent = null;
+            if (user.getSchoolStudentId() != null) {
+                schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
+            }
+            if (schoolStudent == null && user.getUsername() != null && !user.getUsername().isBlank()) {
+                schoolStudent = studentsByStudentId.get(user.getUsername());
+            }
+
+            // 设置用户姓名（优先真实姓名，其次昵称，最后用户名）
+            String userName = user.getRealName() != null && !user.getRealName().isBlank()
+                ? user.getRealName()
+                : user.getNickname() != null && !user.getNickname().isBlank()
+                    ? user.getNickname()
+                    : user.getUsername();
+
+            participation.setUserName(userName);
+            participation.setClassName(schoolStudent != null ? schoolStudent.getClassName() : null);
+            participation.setCollegeName(schoolStudent != null ? schoolStudent.getCollegeName() : null);
+        }
     }
 
     @Override
     public List<Map<String, Object>> getRankingByClass(Long campaignId) {
-        // TODO: 实现班级排名
-        return new ArrayList<>();
+        // 获取所有已报名参与者
+        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        List<CampaignParticipation> participations = participationMapper.selectList(wrapper);
+
+        if (participations.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 批量查询用户和学校数据
+        Map<Long, User> usersById = new HashMap<>();
+        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
+
+        for (CampaignParticipation participation : participations) {
+            Long userId = participation.getUserId();
+            if (userId == null || usersById.containsKey(userId)) {
+                continue;
+            }
+            User user = userService.getUserById(userId);
+            if (user == null) {
+                continue;
+            }
+            usersById.put(userId, user);
+
+            if (user.getUsername() != null && !user.getUsername().isBlank()) {
+                SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(user.getUsername());
+                if (schoolStudent != null) {
+                    studentsByStudentId.put(user.getUsername(), schoolStudent);
+                }
+            }
+        }
+
+        // 按班级分组统计
+        Map<String, ClassStats> statsByClass = new HashMap<>();
+        for (CampaignParticipation participation : participations) {
+            User user = usersById.get(participation.getUserId());
+            if (user == null || user.getUsername() == null) {
+                continue;
+            }
+
+            SchoolStudent schoolStudent = studentsByStudentId.get(user.getUsername());
+            if (schoolStudent == null || schoolStudent.getClassName() == null) {
+                continue;
+            }
+
+            String classKey = schoolStudent.getClassName();
+            ClassStats stats = statsByClass.computeIfAbsent(classKey, k -> new ClassStats(
+                schoolStudent.getClassName(),
+                schoolStudent.getCollegeName()
+            ));
+
+            stats.totalScore += (participation.getTotalScore() != null ? participation.getTotalScore() : 0);
+            stats.participantCount++;
+            if (participation.getCompletionStatus() != null && "COMPLETED".equals(participation.getCompletionStatus())) {
+                stats.completedCount++;
+            }
+        }
+
+        // 转换为列表并排序
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ClassStats stats : statsByClass.values()) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("className", stats.className);
+            item.put("collegeName", stats.collegeName);
+            item.put("totalScore", stats.totalScore);
+            item.put("participantCount", stats.participantCount);
+            item.put("avgScore", stats.participantCount > 0
+                ? Math.round((double) stats.totalScore / stats.participantCount * 10) / 10.0
+                : 0.0);
+            item.put("completionRate", stats.participantCount > 0
+                ? Math.round((double) stats.completedCount / stats.participantCount * 100)
+                : 0);
+            result.add(item);
+        }
+
+        // 按总分降序排序
+        result.sort((a, b) -> {
+            Integer scoreA = (Integer) a.get("totalScore");
+            Integer scoreB = (Integer) b.get("totalScore");
+            return scoreB.compareTo(scoreA);
+        });
+
+        return result;
     }
 
     @Override
     public List<Map<String, Object>> getRankingByCollege(Long campaignId) {
-        // TODO: 实现学院排名
-        return new ArrayList<>();
+        // 获取所有已报名参与者
+        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        List<CampaignParticipation> participations = participationMapper.selectList(wrapper);
+
+        if (participations.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 批量查询用户和学校数据
+        Map<Long, User> usersById = new HashMap<>();
+        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
+
+        for (CampaignParticipation participation : participations) {
+            Long userId = participation.getUserId();
+            if (userId == null || usersById.containsKey(userId)) {
+                continue;
+            }
+            User user = userService.getUserById(userId);
+            if (user == null) {
+                continue;
+            }
+            usersById.put(userId, user);
+
+            if (user.getUsername() != null && !user.getUsername().isBlank()) {
+                SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(user.getUsername());
+                if (schoolStudent != null) {
+                    studentsByStudentId.put(user.getUsername(), schoolStudent);
+                }
+            }
+        }
+
+        // 按学院分组统计
+        Map<String, CollegeStats> statsByCollege = new HashMap<>();
+        for (CampaignParticipation participation : participations) {
+            User user = usersById.get(participation.getUserId());
+            if (user == null || user.getUsername() == null) {
+                continue;
+            }
+
+            SchoolStudent schoolStudent = studentsByStudentId.get(user.getUsername());
+            if (schoolStudent == null || schoolStudent.getCollegeName() == null) {
+                continue;
+            }
+
+            String collegeKey = schoolStudent.getCollegeName();
+            CollegeStats stats = statsByCollege.computeIfAbsent(collegeKey, k -> new CollegeStats(
+                schoolStudent.getCollegeName()
+            ));
+
+            stats.totalScore += (participation.getTotalScore() != null ? participation.getTotalScore() : 0);
+            stats.participantCount++;
+            if (participation.getCompletionStatus() != null && "COMPLETED".equals(participation.getCompletionStatus())) {
+                stats.completedCount++;
+            }
+        }
+
+        // 转换为列表并排序
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (CollegeStats stats : statsByCollege.values()) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("collegeName", stats.collegeName);
+            item.put("totalScore", stats.totalScore);
+            item.put("participantCount", stats.participantCount);
+            item.put("avgScore", stats.participantCount > 0
+                ? Math.round((double) stats.totalScore / stats.participantCount * 10) / 10.0
+                : 0.0);
+            item.put("completionRate", stats.participantCount > 0
+                ? Math.round((double) stats.completedCount / stats.participantCount * 100)
+                : 0);
+            result.add(item);
+        }
+
+        // 按总分降序排序
+        result.sort((a, b) -> {
+            Integer scoreA = (Integer) a.get("totalScore");
+            Integer scoreB = (Integer) b.get("totalScore");
+            return scoreB.compareTo(scoreA);
+        });
+
+        return result;
+    }
+
+    // 内部统计类
+    private static class ClassStats {
+        String className;
+        String collegeName;
+        int totalScore = 0;
+        int participantCount = 0;
+        int completedCount = 0;
+
+        ClassStats(String className, String collegeName) {
+            this.className = className;
+            this.collegeName = collegeName;
+        }
+    }
+
+    private static class CollegeStats {
+        String collegeName;
+        int totalScore = 0;
+        int participantCount = 0;
+        int completedCount = 0;
+
+        CollegeStats(String collegeName) {
+            this.collegeName = collegeName;
+        }
     }
 
     @Override
@@ -311,15 +658,41 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     public Map<String, Object> getParticipationStats(Long campaignId) {
         Map<String, Object> stats = new HashMap<>();
 
-        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
-        wrapper.eq("campaign_id", campaignId);
-        long totalParticipants = participationMapper.selectCount(wrapper);
+        // 查询总参与人数（所有状态）
+        QueryWrapper<CampaignParticipation> totalWrapper = new QueryWrapper<>();
+        totalWrapper.eq("campaign_id", campaignId);
+        long totalParticipants = participationMapper.selectCount(totalWrapper);
 
-        wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
-        long enrolledCount = participationMapper.selectCount(wrapper);
+        // 查询已报名人数（ENROLLED状态）
+        QueryWrapper<CampaignParticipation> enrolledWrapper = new QueryWrapper<>();
+        enrolledWrapper.eq("campaign_id", campaignId);
+        enrolledWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        long enrolledCount = participationMapper.selectCount(enrolledWrapper);
+
+        // 查询已完成人数（COMPLETED状态）
+        QueryWrapper<CampaignParticipation> completedWrapper = new QueryWrapper<>();
+        completedWrapper.eq("campaign_id", campaignId);
+        completedWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        completedWrapper.eq("completion_status", "COMPLETED");
+        long completedParticipants = participationMapper.selectCount(completedWrapper);
+
+        // 查询进行中人数（IN_PROGRESS状态）
+        QueryWrapper<CampaignParticipation> inProgressWrapper = new QueryWrapper<>();
+        inProgressWrapper.eq("campaign_id", campaignId);
+        inProgressWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        inProgressWrapper.eq("completion_status", "IN_PROGRESS");
+        long inProgressParticipants = participationMapper.selectCount(inProgressWrapper);
+
+        // 计算完成率
+        String completionRate = enrolledCount > 0
+            ? String.format("%.1f%%", (double) completedParticipants / enrolledCount * 100)
+            : "0%";
 
         stats.put("totalParticipants", totalParticipants);
         stats.put("enrolledCount", enrolledCount);
+        stats.put("completedParticipants", completedParticipants);
+        stats.put("inProgressParticipants", inProgressParticipants);
+        stats.put("completionRate", completionRate);
 
         return stats;
     }

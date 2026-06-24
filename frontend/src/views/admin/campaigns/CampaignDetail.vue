@@ -79,6 +79,23 @@
           </template>
         </el-table-column>
         <el-table-column prop="points" label="完成得分" width="100" />
+        <el-table-column label="可重复" width="90">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.isRepeatable ? 'success' : 'info'">
+              {{ row.isRepeatable ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="总上限" width="90" v-if="tasks.some(t => t.isRepeatable)">
+          <template #default="{ row }">
+            {{ row.isRepeatable ? (row.maxCompletions || '无限') : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="日上限" width="90" v-if="tasks.some(t => t.isRepeatable)">
+          <template #default="{ row }">
+            {{ row.isRepeatable ? (row.dailyLimit || '无限') : '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="必做" width="80">
           <template #default="{ row }">
             <el-tag size="small" :type="row.isRequired ? 'danger' : 'info'">

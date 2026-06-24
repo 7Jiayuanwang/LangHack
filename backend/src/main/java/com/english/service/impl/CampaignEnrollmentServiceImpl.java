@@ -4,13 +4,16 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.CampaignActivity;
 import com.english.entity.CampaignParticipation;
+import com.english.entity.CampaignTask;
 import com.english.enums.CampaignStatus;
 import com.english.enums.EnrollmentMode;
 import com.english.enums.EnrollmentStatus;
 import com.english.mapper.CampaignActivityMapper;
 import com.english.mapper.CampaignParticipationMapper;
+import com.english.mapper.CampaignTaskMapper;
 import com.english.service.CampaignEnrollmentService;
 import com.english.service.CampaignService;
+import com.english.service.CampaignStatsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,12 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
 
     @Autowired
     private CampaignService campaignService;
+
+    @Autowired
+    private CampaignStatsService campaignStatsService;
+
+    @Autowired
+    private CampaignTaskMapper taskMapper;
 
     @Override
     public void enrollCampaign(Long campaignId, Long userId) {
@@ -136,7 +145,12 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
         }
 
         wrapper.orderByDesc("created_time");
-        return campaignActivityMapper.selectPage(page, wrapper);
+        Page<CampaignActivity> result = campaignActivityMapper.selectPage(page, wrapper);
+
+        // 填充参与人数和当前用户报名状态
+        enrichCampaignList(result.getRecords(), userId);
+
+        return result;
     }
 
     @Override
@@ -164,7 +178,86 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
         }
 
         campaignWrapper.orderByDesc("created_time");
-        return campaignActivityMapper.selectPage(page, campaignWrapper);
+        Page<CampaignActivity> result = campaignActivityMapper.selectPage(page, campaignWrapper);
+
+        // 填充参与人数、报名状态和进度信息
+        enrichCampaignList(result.getRecords(), userId);
+        enrichMyEnrolledProgress(result.getRecords(), userId);
+
+        return result;
+    }
+
+    /**
+     * 填充"我的活动"列表的进度信息（总分、完成任务数、排名等）
+     */
+    private void enrichMyEnrolledProgress(List<CampaignActivity> campaigns, Long userId) {
+        if (campaigns == null || campaigns.isEmpty() || userId == null) {
+            return;
+        }
+
+        for (CampaignActivity campaign : campaigns) {
+            // 获取用户进度数据
+            Map<String, Object> progress = campaignStatsService.getMyProgress(campaign.getId(), userId);
+
+            campaign.setCompletionStatus((String) progress.get("completionStatus"));
+            campaign.setTotalScore((Integer) progress.get("totalScore"));
+            campaign.setCompletedTasks((Integer) progress.get("completedTasks"));
+
+            // 获取活动总任务数
+            QueryWrapper<CampaignTask> taskWrapper = new QueryWrapper<>();
+            taskWrapper.eq("campaign_id", campaign.getId());
+            long totalTasks = taskMapper.selectCount(taskWrapper);
+            campaign.setTotalTasks((int) totalTasks);
+
+            // 排名
+            Object rankObj = progress.get("myRank");
+            if (rankObj instanceof Long) {
+                campaign.setMyRank((Long) rankObj);
+            } else if (rankObj instanceof Integer) {
+                campaign.setMyRank(((Integer) rankObj).longValue());
+            }
+        }
+    }
+
+    /**
+     * 填充活动列表的额外信息（参与人数、当前用户报名状态）
+     */
+    private void enrichCampaignList(List<CampaignActivity> campaigns, Long userId) {
+        if (campaigns == null || campaigns.isEmpty()) {
+            return;
+        }
+
+        List<Long> campaignIds = campaigns.stream()
+            .map(CampaignActivity::getId)
+            .toList();
+
+        // 批量查询每个活动的参与人数
+        for (CampaignActivity campaign : campaigns) {
+            QueryWrapper<CampaignParticipation> countWrapper = new QueryWrapper<>();
+            countWrapper.eq("campaign_id", campaign.getId());
+            countWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+            long count = participationMapper.selectCount(countWrapper);
+            campaign.setParticipantCount((int) count);
+        }
+
+        // 批量查询当前用户的报名状态
+        if (userId != null) {
+            QueryWrapper<CampaignParticipation> userWrapper = new QueryWrapper<>();
+            userWrapper.eq("user_id", userId);
+            userWrapper.in("campaign_id", campaignIds);
+            userWrapper.in("enrollment_status", EnrollmentStatus.ENROLLED, EnrollmentStatus.PENDING);
+            List<CampaignParticipation> userParticipations = participationMapper.selectList(userWrapper);
+
+            // 构建 campaignId -> isEnrolled 的映射
+            java.util.Set<Long> enrolledCampaignIds = userParticipations.stream()
+                .map(CampaignParticipation::getCampaignId)
+                .collect(java.util.stream.Collectors.toSet());
+
+            // 设置每个活动的 isEnrolled 状态
+            for (CampaignActivity campaign : campaigns) {
+                campaign.setIsEnrolled(enrolledCampaignIds.contains(campaign.getId()));
+            }
+        }
     }
 
     @Override

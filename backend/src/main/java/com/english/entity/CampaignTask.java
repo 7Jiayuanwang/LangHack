@@ -33,6 +33,12 @@ public class CampaignTask {
 
     private Boolean autoCollect;
 
+    private Boolean isRepeatable; // 是否可重复完成（重复积分）
+
+    private Integer maxCompletions; // 最大完成次数（NULL=无限制，用于总得分上限控制）
+
+    private Integer dailyLimit; // 单日最大完成次数（NULL=无限制，用于单日得分上限控制）
+
     private Integer sortOrder;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

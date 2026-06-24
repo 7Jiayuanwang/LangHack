@@ -205,6 +205,35 @@
               <el-input-number v-model="row.points" :min="1" />
             </template>
           </el-table-column>
+          <el-table-column label="可重复" width="90">
+            <template #default="{ row }">
+              <el-switch v-model="row.isRepeatable" @change="handleRepeatableChange(row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="总上限" width="110" v-if="formData.tasks.some(t => t.isRepeatable)">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.maxCompletions"
+                :min="0"
+                :disabled="!row.isRepeatable"
+                placeholder="无限"
+                :controls="false"
+                style="width: 90px"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="日上限" width="110" v-if="formData.tasks.some(t => t.isRepeatable)">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.dailyLimit"
+                :min="0"
+                :disabled="!row.isRepeatable"
+                placeholder="无限"
+                :controls="false"
+                style="width: 90px"
+              />
+            </template>
+          </el-table-column>
           <el-table-column label="必做" width="80">
             <template #default="{ row }">
               <el-switch v-model="row.isRequired" />
@@ -284,12 +313,23 @@ const handleAddTask = () => {
     points: 1,
     isRequired: false,
     autoCollect: true,
+    isRepeatable: false,
+    maxCompletions: null,
+    dailyLimit: null,
     sortOrder: formData.tasks.length
   })
 }
 
 const handleRemoveTask = (index) => {
   formData.tasks.splice(index, 1)
+}
+
+const handleRepeatableChange = (row) => {
+  // 切换为不可重复时，清空上限设置
+  if (!row.isRepeatable) {
+    row.maxCompletions = null
+    row.dailyLimit = null
+  }
 }
 
 const handleTaskTypeChange = (row) => {

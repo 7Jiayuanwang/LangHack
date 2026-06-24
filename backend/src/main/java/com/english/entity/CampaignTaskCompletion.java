@@ -25,6 +25,12 @@ public class CampaignTaskCompletion {
 
     private Integer completionCount;
 
+    private Integer earnedScore; // 已获得总积分
+
+    private java.time.LocalDate lastCompletionDate; // 最后一次完成日期
+
+    private Integer todayCompletionCount; // 今日完成次数
+
     private BigDecimal currentValue;
 
     private Boolean isCompleted;

@@ -103,34 +103,47 @@
             </template>
 
             <div class="campaign-info">
+              <!-- 得分和排名 -->
+              <div class="stats-row">
+                <div class="stat-item">
+                  <span class="stat-label">当前得分</span>
+                  <span class="stat-value score">{{ campaign.totalScore || 0 }} 分</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                  <span class="stat-label">我的排名</span>
+                  <span class="stat-value rank">{{ campaign.myRank ? `第 ${campaign.myRank} 名` : '-' }}</span>
+                </div>
+              </div>
+
+              <!-- 任务完成进度 -->
               <div class="progress-section">
-                <div class="progress-label">
-                  <span>完成进度</span>
-                  <span class="score">{{ campaign.totalScore || 0 }} 分</span>
+                <div class="progress-header">
+                  <span class="progress-title">任务完成度</span>
+                  <span class="progress-text">{{ campaign.completedTasks || 0 }} / {{ campaign.totalTasks || 0 }}</span>
                 </div>
                 <el-progress
                   :percentage="calculateProgress(campaign)"
                   :color="getProgressColor(campaign)"
+                  :stroke-width="8"
                 />
-                <div class="progress-detail">
-                  已完成 {{ campaign.completedTasks || 0 }} / {{ campaign.totalTasks || 0 }} 个任务
-                </div>
               </div>
 
+              <!-- 时间信息 -->
               <div class="meta-info">
                 <div class="meta-item">
-                  <el-icon><TrophyBase /></el-icon>
-                  <span>排名: {{ campaign.myRank || '-' }}</span>
+                  <el-icon><Calendar /></el-icon>
+                  <span>剩余时间: {{ getRemainingDays(campaign.endTime) }}</span>
                 </div>
                 <div class="meta-item">
-                  <el-icon><Calendar /></el-icon>
-                  <span>剩余: {{ getRemainingDays(campaign.endTime) }}</span>
+                  <el-icon><User /></el-icon>
+                  <span>{{ campaign.participantCount || 0 }} 人参与</span>
                 </div>
               </div>
 
               <div class="card-footer">
                 <el-button type="primary" @click.stop="handleViewProgress(campaign.id)">
-                  查看进度
+                  查看详情
                 </el-button>
                 <el-button @click.stop="handleWithdraw(campaign)" v-if="campaign.completionStatus !== 'COMPLETED'">
                   退出活动
@@ -262,13 +275,10 @@ const handleEnroll = async (campaign) => {
     if (res.code === 200) {
       ElMessage.success('报名成功')
       loadAvailableCampaigns()
-    } else {
-      ElMessage.error(res.message || '报名失败')
     }
+    // 错误情况由 axios 拦截器统一处理，不需要在这里重复提示
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('报名失败: ' + error.message)
-    }
+    // 只忽略用户取消操作，其他错误已由拦截器处理
   }
 }
 
@@ -284,13 +294,10 @@ const handleWithdraw = async (campaign) => {
     if (res.code === 200) {
       ElMessage.success('已退出活动')
       loadEnrolledCampaigns()
-    } else {
-      ElMessage.error(res.message || '操作失败')
     }
+    // 错误情况由 axios 拦截器统一处理，不需要在这里重复提示
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('操作失败: ' + error.message)
-    }
+    // 只忽略用户取消操作，其他错误已由拦截器处理
   }
 }
 
@@ -433,7 +440,24 @@ onMounted(() => {
 .progress-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-title {
+  font-size: 14px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: #909399;
 }
 
 .progress-label {
@@ -446,11 +470,52 @@ onMounted(() => {
 .score {
   font-weight: bold;
   color: #409eff;
+  font-size: 16px;
+}
+
+.rank {
+  font-weight: bold;
+  color: #e6a23c;
+  font-size: 16px;
 }
 
 .progress-detail {
   font-size: 12px;
   color: #909399;
+}
+
+/* 得分和排名统计行 */
+.stats-row {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #f0f2f5 100%);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 36px;
+  background: #dcdfe6;
 }
 
 .card-footer {
