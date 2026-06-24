@@ -69,7 +69,12 @@
       <!-- Video Info -->
       <div class="video-info">
         <!-- Uploader / Author -->
-        <div v-if="video.author" class="author-row">
+        <div
+          v-if="video.author"
+          class="author-row"
+          :class="{ 'clickable': !video.author.official && video.author.id }"
+          @click="handleAuthorClick"
+        >
           <span class="author-label">上传者</span>
           <span class="author-name">{{ video.author.displayName }}</span>
           <span
@@ -1149,6 +1154,12 @@ const saveAnnotation = () => {
   }
 }
 
+const handleAuthorClick = () => {
+  if (video.value?.author && !video.value.author.official && video.value.author.id) {
+    router.push(`/student/author/${video.value.author.id}`)
+  }
+}
+
 const handleAiQa = () => {
   let context = ''
   try {
@@ -1443,6 +1454,16 @@ onBeforeUnmount(() => {
   gap: 8px;
   margin-bottom: 14px;
   font-size: 14px;
+}
+
+.author-row.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.author-row.clickable:hover {
+  transform: translateX(2px);
+  opacity: 0.8;
 }
 
 .author-label {
