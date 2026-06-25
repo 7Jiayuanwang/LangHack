@@ -104,8 +104,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 textWrapper.eq("uploaded_by", userId);
                 textWrapper.eq("status", "APPROVED"); // 只统计审核通过的
                 textWrapper.eq("deleted", 0);
-                textWrapper.ge("create_time", campaign.getStartTime()); // 活动开始后上传
-                textWrapper.le("create_time", campaign.getEndTime());   // 活动结束前上传
+                textWrapper.ge("created_time", campaign.getStartTime()); // 活动开始后上传
+                textWrapper.le("created_time", campaign.getEndTime());   // 活动结束前上传
                 long approvedCount = textMapper.selectCount(textWrapper);
                 return BigDecimal.valueOf(approvedCount);
 
