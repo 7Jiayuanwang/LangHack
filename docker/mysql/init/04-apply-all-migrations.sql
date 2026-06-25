@@ -3447,3 +3447,31 @@ CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
     INDEX `idx_text_id` (`text_id`),
     INDEX `idx_similarity` (`similarity` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
+
+-- V21__extend_school_student_fields.sql
+DROP PROCEDURE IF EXISTS _v21_extend_student_fields;
+CREATE PROCEDURE _v21_extend_student_fields()
+BEGIN
+    -- 扩展 phone 字段长度
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'phone'
+                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
+        ALTER TABLE school_student
+            MODIFY COLUMN phone VARCHAR(100) NULL COMMENT '联系电话（CDSP 可能返回多个号码拼接）';
+    END IF;
+
+    -- 扩展 counselor_name 字段长度
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'counselor_name'
+                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
+        ALTER TABLE school_student
+            MODIFY COLUMN counselor_name VARCHAR(100) NULL COMMENT '辅导员姓名（可能包含多个辅导员或职务）';
+    END IF;
+END$$
+
+CALL _v21_extend_student_fields()$$
+DROP PROCEDURE IF EXISTS _v21_extend_student_fields$$
