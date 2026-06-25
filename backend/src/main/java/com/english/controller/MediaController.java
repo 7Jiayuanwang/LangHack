@@ -155,7 +155,7 @@ public class MediaController {
                                 && !"anonymousUser".equals(auth.getName())) {
                             User currentUser = userService.getUserByUsername(auth.getName());
                             if (currentUser != null) {
-                                privileged = currentUser.getId().equals(media.getUploadedBy())
+                                privileged = currentUser.getId().equals(video.getUserId())
                                         || "ADMIN".equals(currentUser.getRole());
                             }
                         }
