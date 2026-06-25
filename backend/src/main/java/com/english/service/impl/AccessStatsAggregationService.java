@@ -134,9 +134,9 @@ public class AccessStatsAggregationService {
             daily.setCreatedTime(LocalDateTime.now());
 
             // Check if record already exists for this date (prevent duplicate key error)
-            QueryWrapper<AccessStatsDaily> wrapper = new QueryWrapper<>();
-            wrapper.eq("stat_date", yesterday);
-            AccessStatsDaily existing = dailyMapper.selectOne(wrapper);
+            QueryWrapper<AccessStatsDaily> dailyWrapper = new QueryWrapper<>();
+            dailyWrapper.eq("stat_date", yesterday);
+            AccessStatsDaily existing = dailyMapper.selectOne(dailyWrapper);
 
             if (existing != null) {
                 // Update existing record
