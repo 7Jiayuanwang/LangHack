@@ -70,7 +70,7 @@ public class CampaignActivity {
 
     // 非数据库字段
     @TableField(exist = false)
-    private List<String> enrollmentTargetIdList; // 解析后的ID/名称列表
+    private List<Object> enrollmentTargetIdList; // 解析后的ID/名称列表（元素可能是 String 或 Map）
 
     @TableField(exist = false)
     private Integer participantCount; // 参与人数

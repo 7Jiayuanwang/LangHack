@@ -2,6 +2,7 @@ package com.english.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.CampaignParticipation;
+import com.english.enums.TaskType;
 
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,15 @@ public interface CampaignStatsService {
      * 采集活动所有任务的数据
      */
     void collectAllCampaignData(Long campaignId);
+
+    /**
+     * 为单个用户采集指定类型的任务数据（事件驱动触发）
+     * 仅采集用户已报名的活跃活动中该类型的任务
+     *
+     * @param userId 用户ID
+     * @param taskType 任务类型
+     */
+    void collectUserTasksByTypeAsync(Long userId, TaskType taskType);
 
     /**
      * 获取个人排名（管理员）

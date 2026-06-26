@@ -3,6 +3,7 @@ package com.english.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.*;
+import com.english.enums.CampaignStatus;
 import com.english.enums.EnrollmentStatus;
 import com.english.enums.TaskType;
 import com.english.mapper.*;
@@ -11,10 +12,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 活动统计与排名服务实现（简化版）
@@ -49,6 +52,76 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
     @Autowired
     private com.english.mapper.TextMapper textMapper;
+
+    @Autowired
+    private com.english.mapper.VocabularyBookMapper vocabularyBookMapper;
+
+    @Autowired
+    private com.english.mapper.AiFeedbackMapper aiFeedbackMapper;
+
+    @Autowired
+    private com.english.mapper.AiCallLogMapper aiCallLogMapper;
+
+    @Autowired
+    private CampaignActivityMapper campaignActivityMapper;
+
+    @Override
+    @Async("campaignCollectionExecutor")
+    public void collectUserTasksByTypeAsync(Long userId, TaskType taskType) {
+        try {
+            // 1. Query user's enrolled campaigns
+            List<CampaignParticipation> participations = participationMapper.selectList(
+                new QueryWrapper<CampaignParticipation>()
+                    .eq("user_id", userId)
+                    .eq("enrollment_status", EnrollmentStatus.ENROLLED)
+            );
+
+            if (participations.isEmpty()) {
+                return; // Not enrolled in any campaign
+            }
+
+            // 2. Filter campaigns by ACTIVE status
+            List<Long> campaignIds = participations.stream()
+                .map(CampaignParticipation::getCampaignId)
+                .distinct()
+                .collect(Collectors.toList());
+
+            List<CampaignActivity> activeCampaigns = campaignActivityMapper.selectBatchIds(campaignIds)
+                .stream()
+                .filter(c -> c.getStatus() == CampaignStatus.ACTIVE && c.getDeleted() == 0)
+                .collect(Collectors.toList());
+
+            if (activeCampaigns.isEmpty()) {
+                return; // No active campaigns
+            }
+
+            // 3. For each active campaign, collect matching tasks
+            for (CampaignActivity campaign : activeCampaigns) {
+                List<CampaignTask> tasks = taskMapper.selectList(
+                    new QueryWrapper<CampaignTask>()
+                        .eq("campaign_id", campaign.getId())
+                        .eq("task_type", taskType)
+                        .eq("auto_collect", true)
+                );
+
+                // 4. Collect each task (reuse existing atomic logic)
+                for (CampaignTask task : tasks) {
+                    try {
+                        BigDecimal value = collectUserTaskData(campaign, task, userId);
+                        updateTaskCompletion(campaign.getId(), task.getId(), userId, value, task.getTargetValue());
+                    } catch (Exception e) {
+                        log.error("事件驱动采集失败: userId={}, campaignId={}, taskId={}, taskType={}",
+                            userId, campaign.getId(), task.getId(), taskType, e);
+                    }
+                }
+            }
+
+            log.debug("事件驱动采集完成: userId={}, taskType={}, 活跃活动数={}", userId, taskType, activeCampaigns.size());
+
+        } catch (Exception e) {
+            log.error("事件驱动采集任务失败: userId={}, taskType={}", userId, taskType, e);
+        }
+    }
 
     @Override
     public void collectTaskData(Long campaignId, Long taskId) {
@@ -110,10 +183,45 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 return BigDecimal.valueOf(approvedCount);
 
             case WORD_LEARNING:
+                // 统计活动期间学习/复习的单词数量
+                // 计入：活动期间新增的单词（added_time 落在窗口内）
+                //      或活动期间复习过的单词（last_reviewed 落在窗口内）
+                QueryWrapper<com.english.entity.VocabularyBook> vocabWrapper = new QueryWrapper<>();
+                vocabWrapper.eq("student_id", userId);
+                vocabWrapper.and(w -> w
+                        .between("added_time", campaign.getStartTime(), campaign.getEndTime())
+                        .or()
+                        .between("last_reviewed", campaign.getStartTime(), campaign.getEndTime())
+                );
+                long wordCount = vocabularyBookMapper.selectCount(vocabWrapper);
+                return BigDecimal.valueOf(wordCount);
+
             case FEEDBACK:
+                // 统计活动期间提交的 AI 反馈数量
+                QueryWrapper<com.english.entity.AiFeedback> feedbackWrapper = new QueryWrapper<>();
+                feedbackWrapper.eq("user_id", userId);
+                feedbackWrapper.between("created_time", campaign.getStartTime(), campaign.getEndTime());
+                long feedbackCount = aiFeedbackMapper.selectCount(feedbackWrapper);
+                return BigDecimal.valueOf(feedbackCount);
+
             case AI_QA:
-                // TODO: 实现其他类型的数据采集
-                return BigDecimal.ZERO;
+                // 统计活动期间 AI 问答成功调用次数
+                // ai_call_log.triggered_by 存储的是用户名（username），不是 userId
+                User qaUser = userMapper.selectById(userId);
+                if (qaUser == null || qaUser.getUsername() == null) {
+                    return BigDecimal.ZERO;
+                }
+                QueryWrapper<com.english.entity.AiCallLog> callLogWrapper = new QueryWrapper<>();
+                // 同时匹配 "QA"（AiQaController 主路径）和 "HIAGENT"（HiAgentServiceImpl 回退路径），
+                // 避免漏算 aiProviderRuntimeService 不可用时的回退调用；
+                // 限定 method_name='chatQA' 排除 HiAgent 的翻译/ASR 等非问答调用。
+                callLogWrapper.in("service_name", "QA", "HIAGENT");
+                callLogWrapper.eq("method_name", "chatQA");
+                callLogWrapper.eq("triggered_by", qaUser.getUsername());
+                callLogWrapper.eq("success", true);
+                callLogWrapper.between("created_time", campaign.getStartTime(), campaign.getEndTime());
+                long qaCount = aiCallLogMapper.selectCount(callLogWrapper);
+                return BigDecimal.valueOf(qaCount);
 
             default:
                 return BigDecimal.ZERO;
@@ -141,6 +249,11 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             completion.setCompletionCount(0);
             completion.setEarnedScore(0);
             completion.setTodayCompletionCount(0);
+            completion.setLastCountedValue(BigDecimal.ZERO);
+        }
+        // 兜底：历史数据可能没有 lastCountedValue
+        if (completion.getLastCountedValue() == null) {
+            completion.setLastCountedValue(BigDecimal.ZERO);
         }
 
         // 检查是否达标
@@ -153,35 +266,61 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         } else {
             // 达标，处理积分逻辑
             if (task.getIsRepeatable() != null && task.getIsRepeatable()) {
-                // 可重复任务：检查是否可以继续积分
-                java.time.LocalDate today = java.time.LocalDate.now();
-                java.time.LocalDate lastDate = completion.getLastCompletionDate();
+                // 可重复任务：基于增量计分，避免同一进度被重复加分
+                // 新增完成次数 = (currentValue - lastCountedValue) / targetValue（向下取整）
+                BigDecimal targetDecimal = BigDecimal.valueOf(targetValue);
+                BigDecimal progressDelta = value.subtract(completion.getLastCountedValue());
+                int newCompletions = progressDelta.divide(targetDecimal, 0, java.math.RoundingMode.DOWN).intValue();
 
-                // 如果日期不同，重置今日计数
-                if (lastDate == null || !lastDate.equals(today)) {
-                    completion.setTodayCompletionCount(0);
-                    completion.setLastCompletionDate(today);
+                if (newCompletions <= 0) {
+                    // 没有新增进度，只更新当前值，不加分
+                    completion.setCurrentValue(value);
+                    completion.setIsCompleted(true);
+                } else {
+                    java.time.LocalDate today = java.time.LocalDate.now();
+                    java.time.LocalDate lastDate = completion.getLastCompletionDate();
+
+                    // 如果日期不同，重置今日计数
+                    if (lastDate == null || !lastDate.equals(today)) {
+                        completion.setTodayCompletionCount(0);
+                        completion.setLastCompletionDate(today);
+                    }
+
+                    // 按单日限制裁剪本次可加次数
+                    int allowedByDaily = newCompletions;
+                    if (task.getDailyLimit() != null) {
+                        int remainingToday = task.getDailyLimit() - completion.getTodayCompletionCount();
+                        allowedByDaily = Math.max(0, remainingToday);
+                    }
+
+                    // 按总次数限制裁剪本次可加次数
+                    int allowedByMax = newCompletions;
+                    if (task.getMaxCompletions() != null) {
+                        int remainingTotal = task.getMaxCompletions() - completion.getCompletionCount();
+                        allowedByMax = Math.max(0, remainingTotal);
+                    }
+
+                    int actualNew = Math.min(newCompletions, Math.min(allowedByDaily, allowedByMax));
+
+                    if (actualNew <= 0) {
+                        log.info("用户{}任务{}已达上限（单日/总数），跳过本次加分", userId, taskId);
+                        // 仍更新当前值，但不前移 lastCountedValue，避免上限解除后漏算
+                        completion.setCurrentValue(value);
+                        completion.setIsCompleted(true);
+                    } else {
+                        // 加分：增加完成次数和积分
+                        completion.setCompletionCount(completion.getCompletionCount() + actualNew);
+                        completion.setTodayCompletionCount(completion.getTodayCompletionCount() + actualNew);
+                        completion.setEarnedScore(completion.getEarnedScore() + actualNew * task.getPoints());
+                        // 前移 lastCountedValue 到本次计分覆盖的进度点
+                        BigDecimal countedValue = completion.getLastCountedValue()
+                                .add(targetDecimal.multiply(BigDecimal.valueOf(actualNew)));
+                        completion.setLastCountedValue(countedValue);
+                        completion.setCurrentValue(value);
+                        completion.setIsCompleted(true);
+                        completion.setLastCompletionDate(today);
+                    }
                 }
-
-                // 检查单日限制
-                if (task.getDailyLimit() != null && completion.getTodayCompletionCount() >= task.getDailyLimit()) {
-                    log.info("用户{}任务{}今日已达单日上限{}", userId, taskId, task.getDailyLimit());
-                    return;
-                }
-
-                // 检查总次数限制
-                if (task.getMaxCompletions() != null && completion.getCompletionCount() >= task.getMaxCompletions()) {
-                    log.info("用户{}任务{}已达总完成上限{}", userId, taskId, task.getMaxCompletions());
-                    return;
-                }
-
-                // 可以积分：增加完成次数和积分
-                completion.setCompletionCount(completion.getCompletionCount() + 1);
-                completion.setTodayCompletionCount(completion.getTodayCompletionCount() + 1);
-                completion.setEarnedScore(completion.getEarnedScore() + task.getPoints());
-                completion.setCurrentValue(value);
-                completion.setIsCompleted(true); // 标记为已完成（可重复）
-                completion.setLastCompletionDate(today);
 
             } else {
                 // 一次性任务：只标记完成一次
@@ -189,6 +328,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                     completion.setCompletionCount(1);
                     completion.setEarnedScore(task.getPoints());
                     completion.setIsCompleted(true);
+                    // 一次性任务也前移 lastCountedValue，保持语义一致
+                    completion.setLastCountedValue(value);
                 }
                 completion.setCurrentValue(value);
             }
@@ -273,13 +414,12 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 break;
 
             case ALL:
-                // 完成所有必做任务才算完成
+                // 完成所有任务才算完成（ALL 规则下所有任务都是必做的，不依赖 isRequired 标志）
                 QueryWrapper<CampaignTask> allTaskWrapper = new QueryWrapper<>();
                 allTaskWrapper.eq("campaign_id", campaignId);
-                allTaskWrapper.eq("is_required", true);
                 allTaskWrapper.eq("deleted", 0);
-                long requiredTaskCount = taskMapper.selectCount(allTaskWrapper);
-                isCompleted = (completedTaskCount >= requiredTaskCount);
+                long totalTaskCount = taskMapper.selectCount(allTaskWrapper);
+                isCompleted = (totalTaskCount > 0 && completedTaskCount >= totalTaskCount);
                 break;
 
             case THRESHOLD:
@@ -636,10 +776,17 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             return result;
         }
 
+        // P2 修复: null totalScore 排名错误
+        // 原 rankWrapper.gt("total_score", myTotalScore) 当 myTotalScore=null 时 SQL 恒 false → rank=1（错误）
+        // 修复: null 视为 0，并使用 COALESCE 语义 — 得分比我高的人数 = 得分 > myScore 的人数
+        Integer myTotalScore = myParticipation.getTotalScore();
+        int myScoreForRank = myTotalScore != null ? myTotalScore : 0;
+
         QueryWrapper<CampaignParticipation> rankWrapper = new QueryWrapper<>();
         rankWrapper.eq("campaign_id", campaignId);
         rankWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
-        rankWrapper.gt("total_score", myParticipation.getTotalScore());
+        // 使用 apply 写原生 SQL，COALESCE 处理 null，避免 null 比较恒 false
+        rankWrapper.apply("(COALESCE(total_score, 0) > {0})", myScoreForRank);
         long myRank = participationMapper.selectCount(rankWrapper) + 1;
 
         QueryWrapper<CampaignParticipation> totalWrapper = new QueryWrapper<>();
@@ -650,6 +797,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         QueryWrapper<CampaignParticipation> aroundWrapper = new QueryWrapper<>();
         aroundWrapper.eq("campaign_id", campaignId);
         aroundWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        // P2 修复: 排序时 null totalScore 排末尾（NULLS LAST 语义）
         aroundWrapper.orderByDesc("total_score", "completed_tasks", "id");
         List<CampaignParticipation> allRanked = participationMapper.selectList(aroundWrapper);
 
@@ -659,37 +807,60 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         for (int i = 0; i < allRanked.size(); i++) {
             CampaignParticipation participation = allRanked.get(i);
             Integer totalScore = participation.getTotalScore();
-            if (previousScore == null || !Objects.equals(previousScore, totalScore)) {
+            // null 视为 0 用于排名比较
+            int scoreForCompare = totalScore != null ? totalScore : 0;
+            int prevForCompare = previousScore != null ? previousScore : 0;
+            if (previousScore == null || prevForCompare != scoreForCompare) {
                 currentRank = i + 1L;
                 previousScore = totalScore;
             }
             ranksByUserId.put(participation.getUserId(), currentRank);
         }
 
+        // P2 修复: 批量查询用户和学校信息，避免 N+1 查询
+        List<Long> participantUserIds = allRanked.stream()
+                .map(CampaignParticipation::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
         Map<Long, User> usersById = new HashMap<>();
+        if (!participantUserIds.isEmpty()) {
+            List<User> users = userMapper.selectBatchIds(participantUserIds);
+            // selectBatchIds 不走 @TableLogic，需后置过滤
+            for (User u : users) {
+                if (u != null && (u.getDeleted() == null || u.getDeleted() == 0)) {
+                    usersById.put(u.getId(), u);
+                }
+            }
+        }
+
+        // 批量查询 SchoolStudent（按 schoolStudentId）
+        List<Long> schoolStudentIds = usersById.values().stream()
+                .map(User::getSchoolStudentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
         Map<Long, SchoolStudent> studentsBySchoolId = new HashMap<>();
+        if (!schoolStudentIds.isEmpty()) {
+            List<SchoolStudent> students = schoolStudentMapper.selectBatchIds(schoolStudentIds);
+            for (SchoolStudent s : students) {
+                if (s != null) {
+                    studentsBySchoolId.put(s.getId(), s);
+                }
+            }
+        }
+
+        // 批量查询 SchoolStudent（按 studentId/username）
+        List<String> studentIdStrings = usersById.values().stream()
+                .map(User::getUsername)
+                .filter(u -> u != null && !u.isBlank())
+                .distinct()
+                .toList();
         Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
-        for (CampaignParticipation participation : allRanked) {
-            Long participantUserId = participation.getUserId();
-            if (participantUserId == null || usersById.containsKey(participantUserId)) {
-                continue;
-            }
-            User user = userService.getUserById(participantUserId);
-            if (user == null) {
-                continue;
-            }
-            usersById.put(participantUserId, user);
-            if (user.getSchoolStudentId() != null) {
-                SchoolStudent schoolStudent = schoolStudentMapper.selectById(user.getSchoolStudentId());
-                if (schoolStudent != null) {
-                    studentsBySchoolId.put(user.getSchoolStudentId(), schoolStudent);
-                }
-            }
-            if (user.getUsername() != null && !user.getUsername().isBlank()) {
-                SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(user.getUsername());
-                if (schoolStudent != null) {
-                    studentsByStudentId.put(user.getUsername(), schoolStudent);
-                }
+        for (String sid : studentIdStrings) {
+            SchoolStudent s = schoolStudentMapper.selectByStudentId(sid);
+            if (s != null) {
+                studentsByStudentId.put(sid, s);
             }
         }
 
@@ -745,8 +916,40 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
     @Override
     public List<CampaignParticipation> getRankingAroundMe(Long campaignId, Long userId, int range) {
-        // TODO: 实现周围排名
-        return new ArrayList<>();
+        // 查询当前用户参与记录，确认已报名
+        QueryWrapper<CampaignParticipation> myWrapper = new QueryWrapper<>();
+        myWrapper.eq("campaign_id", campaignId);
+        myWrapper.eq("user_id", userId);
+        CampaignParticipation myParticipation = participationMapper.selectOne(myWrapper);
+
+        if (myParticipation == null || myParticipation.getEnrollmentStatus() != EnrollmentStatus.ENROLLED) {
+            return new ArrayList<>();
+        }
+
+        // 查询所有已报名参与者，按总分降序（null 视为 0 排末尾）
+        QueryWrapper<CampaignParticipation> rankWrapper = new QueryWrapper<>();
+        rankWrapper.eq("campaign_id", campaignId);
+        rankWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        rankWrapper.orderByDesc("total_score", "completed_tasks", "id");
+        List<CampaignParticipation> allRanked = participationMapper.selectList(rankWrapper);
+
+        // 定位当前用户位置
+        int myIndex = -1;
+        for (int i = 0; i < allRanked.size(); i++) {
+            if (allRanked.get(i).getUserId().equals(userId)) {
+                myIndex = i;
+                break;
+            }
+        }
+
+        if (myIndex < 0) {
+            return new ArrayList<>();
+        }
+
+        // 截取 [myIndex - range, myIndex + range] 范围
+        int from = Math.max(0, myIndex - range);
+        int to = Math.min(allRanked.size(), myIndex + range + 1);
+        return allRanked.subList(from, to);
     }
 
     @Override
@@ -822,10 +1025,14 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             return result;
         }
 
+        // P2 修复: null totalScore 排名错误 — null 视为 0，使用 COALESCE 避免 null 比较恒 false
+        Integer myTotalScore = myParticipation.getTotalScore();
+        int myScoreForRank = myTotalScore != null ? myTotalScore : 0;
+
         QueryWrapper<CampaignParticipation> rankWrapper = new QueryWrapper<>();
         rankWrapper.eq("campaign_id", campaignId);
         rankWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
-        rankWrapper.gt("total_score", myParticipation.getTotalScore());
+        rankWrapper.apply("(COALESCE(total_score, 0) > {0})", myScoreForRank);
         long myRank = participationMapper.selectCount(rankWrapper) + 1;
 
         result.put("enrolled", true);

@@ -10,6 +10,7 @@ import com.english.entity.Word;
 import com.english.entity.Text;
 import com.english.entity.Video;
 import com.english.entity.ContentTag;
+import com.english.enums.TaskType;
 import com.english.exception.BusinessException;
 import com.english.service.UserService;
 import com.english.service.CourseService;
@@ -21,6 +22,7 @@ import com.english.service.VideoService;
 import com.english.service.UnitWordService;
 import com.english.service.TextExerciseService;
 import com.english.service.ArticleVersionService;
+import com.english.service.CampaignStatsService;
 import com.english.service.ContentTagService;
 import com.english.service.SystemConfigService;
 import com.english.util.SizeParseUtil;
@@ -104,6 +106,9 @@ public class AdminController {
 
     @Autowired
     private SystemConfigService systemConfigService;
+
+    @Autowired
+    private CampaignStatsService campaignStatsService;
 
     @GetMapping("/users")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
@@ -1616,6 +1621,11 @@ public class AdminController {
             }
 
             textService.updateText(text);
+
+            // 事件驱动: 触发活动数据采集
+            if (text.getUploadedBy() != null) {
+                campaignStatsService.collectUserTasksByTypeAsync(text.getUploadedBy(), TaskType.TEXT_UPLOAD);
+            }
 
             // 触发 AI 版本生成（CET-4、CET-6、学术、中英对照）
             if ("MARKDOWN".equals(text.getContentType())) {

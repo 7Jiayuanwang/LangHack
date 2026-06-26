@@ -1,5 +1,6 @@
 package com.english.controller;
 
+import com.english.dto.BatchEnrollResult;
 import com.english.entity.CampaignParticipation;
 import com.english.dto.Result;
 import com.english.service.CampaignEnrollmentService;
@@ -99,13 +100,24 @@ public class CampaignEnrollmentController {
 
     /**
      * 批量添加参与者
+     * 请求体: { "userIds": [1,2,3], "force": false }
+     * force=false（默认）: 不在报名范围的用户跳过，返回原因
+     * force=true: 强制报名（仍受人数上限约束）
      */
     @PostMapping("/batch-enroll")
-    public Result<String> batchEnrollUsers(@PathVariable Long campaignId, @RequestBody Map<String, List<Long>> request) {
+    public Result<BatchEnrollResult> batchEnrollUsers(@PathVariable Long campaignId, @RequestBody Map<String, Object> request) {
         try {
-            List<Long> userIds = request.get("userIds");
-            enrollmentService.batchEnrollUsers(campaignId, userIds);
-            return Result.success("批量添加成功");
+            Object userIdsObj = request.get("userIds");
+            if (userIdsObj == null) {
+                return Result.error("userIds 不能为空");
+            }
+            @SuppressWarnings("unchecked")
+            List<Long> userIds = ((List<Object>) userIdsObj).stream()
+                    .map(o -> Long.valueOf(o.toString()))
+                    .toList();
+            boolean force = Boolean.TRUE.equals(request.get("force"));
+            BatchEnrollResult result = enrollmentService.batchEnrollUsers(campaignId, userIds, force);
+            return Result.success(result);
         } catch (Exception e) {
             log.error("批量添加参与者失败", e);
             return Result.error("批量添加参与者失败: " + e.getMessage());

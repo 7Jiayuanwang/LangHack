@@ -106,18 +106,31 @@ public class CampaignServiceImpl implements CampaignService {
             try {
                 // COLLEGE 范围支持嵌套年级 → 尝试解析为对象格式 { collegeIds, gradeIds }
                 if (campaign.getEnrollmentScope() == EnrollmentScope.COLLEGE) {
-                    String firstElement = campaign.getEnrollmentTargetIdList().get(0);
-                    // 尝试判断是否为 JSON 对象格式
-                    if (firstElement.trim().startsWith("{")) {
-                        // 前端传了对象结构，反序列化后重新序列化
+                    Object firstElement = campaign.getEnrollmentTargetIdList().get(0);
+                    if (firstElement instanceof Map) {
+                        // 前端传了对象结构 { collegeIds, gradeIds }
                         @SuppressWarnings("unchecked")
-                        Map<String, Object> cfg = objectMapper.readValue(firstElement, Map.class);
+                        Map<String, Object> cfg = (Map<String, Object>) firstElement;
                         EnrollmentTargetConfig config = new EnrollmentTargetConfig();
                         config.setCollegeIds(toStringList(cfg.get("collegeIds")));
                         config.setGradeIds(toStringList(cfg.get("gradeIds")));
                         campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(config));
+                    } else if (firstElement instanceof String) {
+                        String str = (String) firstElement;
+                        if (str.trim().startsWith("{")) {
+                            // 旧前端传的 JSON 字符串对象
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> cfg = objectMapper.readValue(str, Map.class);
+                            EnrollmentTargetConfig config = new EnrollmentTargetConfig();
+                            config.setCollegeIds(toStringList(cfg.get("collegeIds")));
+                            config.setGradeIds(toStringList(cfg.get("gradeIds")));
+                            campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(config));
+                        } else {
+                            // 旧格式：flat array of college names
+                            campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(campaign.getEnrollmentTargetIdList()));
+                        }
                     } else {
-                        // 旧格式：flat array of college names
+                        // 其他类型：直接序列化整个 list
                         campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(campaign.getEnrollmentTargetIdList()));
                     }
                 } else {
@@ -180,18 +193,31 @@ public class CampaignServiceImpl implements CampaignService {
             try {
                 // COLLEGE 范围支持嵌套年级 → 尝试解析为对象格式 { collegeIds, gradeIds }
                 if (campaign.getEnrollmentScope() == EnrollmentScope.COLLEGE) {
-                    String firstElement = campaign.getEnrollmentTargetIdList().get(0);
-                    // 尝试判断是否为 JSON 对象格式
-                    if (firstElement.trim().startsWith("{")) {
-                        // 前端传了对象结构，反序列化后重新序列化
+                    Object firstElement = campaign.getEnrollmentTargetIdList().get(0);
+                    if (firstElement instanceof Map) {
+                        // 前端传了对象结构 { collegeIds, gradeIds }
                         @SuppressWarnings("unchecked")
-                        Map<String, Object> cfg = objectMapper.readValue(firstElement, Map.class);
+                        Map<String, Object> cfg = (Map<String, Object>) firstElement;
                         EnrollmentTargetConfig config = new EnrollmentTargetConfig();
                         config.setCollegeIds(toStringList(cfg.get("collegeIds")));
                         config.setGradeIds(toStringList(cfg.get("gradeIds")));
                         campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(config));
+                    } else if (firstElement instanceof String) {
+                        String str = (String) firstElement;
+                        if (str.trim().startsWith("{")) {
+                            // 旧前端传的 JSON 字符串对象
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> cfg = objectMapper.readValue(str, Map.class);
+                            EnrollmentTargetConfig config = new EnrollmentTargetConfig();
+                            config.setCollegeIds(toStringList(cfg.get("collegeIds")));
+                            config.setGradeIds(toStringList(cfg.get("gradeIds")));
+                            campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(config));
+                        } else {
+                            // 旧格式：flat array of college names
+                            campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(campaign.getEnrollmentTargetIdList()));
+                        }
                     } else {
-                        // 旧格式：flat array of college names
+                        // 其他类型：直接序列化整个 list
                         campaign.setEnrollmentTargetIds(objectMapper.writeValueAsString(campaign.getEnrollmentTargetIdList()));
                     }
                 } else {
@@ -226,7 +252,8 @@ public class CampaignServiceImpl implements CampaignService {
                 if (node.isArray()) {
                     // 旧格式：flat array，如 ["学院A", "2023"]
                     List<String> idList = objectMapper.convertValue(node, new TypeReference<List<String>>() {});
-                    campaign.setEnrollmentTargetIdList(idList);
+                    List<Object> wrapped = new ArrayList<>(idList);
+                    campaign.setEnrollmentTargetIdList(wrapped);
                 } else if (node.isObject()) {
                     // 新格式：对象，如 { "collegeIds": [...], "gradeIds": [...] }
                     EnrollmentTargetConfig config = objectMapper.convertValue(node, EnrollmentTargetConfig.class);
@@ -523,14 +550,44 @@ public class CampaignServiceImpl implements CampaignService {
             restrictions.add("报名已结束");
         }
 
-        // 检查报名范围
+        // 检查报名范围（独立检查，不复用 canUserEnroll，避免时间/状态原因导致误报"不在范围内"）
         if (campaign.getEnrollmentScope() != EnrollmentScope.ALL) {
-            if (!canUserEnroll(campaignId, userId)) {
+            if (!isWithinEnrollmentScope(campaign, userId)) {
                 restrictions.add("您不在活动参与范围内");
             }
         }
 
         return restrictions;
+    }
+
+    /**
+     * 仅检查用户是否在报名范围内（不检查时间窗口和活动状态）。
+     * 用于 getEnrollmentRestrictions 独立判断范围，避免与时间/状态检查耦合导致误报。
+     */
+    private boolean isWithinEnrollmentScope(CampaignActivity campaign, Long userId) {
+        if (campaign.getEnrollmentScope() == EnrollmentScope.ALL) {
+            return true;
+        }
+        User user = userService.getUserById(userId);
+        if (user == null) {
+            return false;
+        }
+        EnrollmentTargetConfig config = parseEnrollmentTargetConfig(campaign);
+        if (config == null) {
+            return true; // 无限制
+        }
+        switch (campaign.getEnrollmentScope()) {
+            case COLLEGE:
+                return checkCollegeEnrollment(user, config);
+            case GRADE:
+                return checkGradeEnrollment(user, config);
+            case CLASS:
+                return checkClassEnrollment(user, config);
+            case CUSTOM:
+                return false;
+            default:
+                return false;
+        }
     }
 
     @Override

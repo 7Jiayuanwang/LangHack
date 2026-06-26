@@ -236,7 +236,10 @@
           </el-table-column>
           <el-table-column label="必做" width="80">
             <template #default="{ row }">
-              <el-switch v-model="row.isRequired" />
+              <el-switch
+                v-model="row.isRequired"
+                :disabled="formData.completionRule === 'ALL'"
+              />
             </template>
           </el-table-column>
           <el-table-column label="自动采集" width="100">
@@ -311,7 +314,7 @@ const handleAddTask = () => {
     taskUnit: 'MINUTES',
     targetValue: 60,
     points: 1,
-    isRequired: false,
+    isRequired: formData.completionRule === 'ALL',
     autoCollect: true,
     isRepeatable: false,
     maxCompletions: null,
@@ -319,6 +322,16 @@ const handleAddTask = () => {
     sortOrder: formData.tasks.length
   })
 }
+
+// 完成规则切换为 ALL 时，自动将所有任务设为必做；切换为 ANY 时，自动取消必做
+watch(() => formData.completionRule, (newRule) => {
+  if (newRule === 'ALL') {
+    formData.tasks.forEach(t => { t.isRequired = true })
+  } else if (newRule === 'ANY') {
+    formData.tasks.forEach(t => { t.isRequired = false })
+  }
+  // THRESHOLD 保持用户自定义
+})
 
 const handleRemoveTask = (index) => {
   formData.tasks.splice(index, 1)

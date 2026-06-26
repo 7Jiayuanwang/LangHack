@@ -1,10 +1,16 @@
 package com.english.scheduled;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.english.entity.CampaignActivity;
+import com.english.enums.CampaignStatus;
+import com.english.mapper.CampaignActivityMapper;
 import com.english.service.CampaignService;
 import com.english.service.CampaignStatsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +29,13 @@ public class CampaignScheduledTasks {
 
     @Autowired
     private CampaignStatsService statsService;
+
+    @Autowired
+    private CampaignActivityMapper campaignActivityMapper;
+
+    @Autowired
+    @Qualifier("campaignCacheManager")
+    private CacheManager campaignCacheManager;
 
     /**
      * 每小时自动采集活跃活动的数据
@@ -121,11 +134,40 @@ public class CampaignScheduledTasks {
         log.info("开始清理过期的活动缓存数据");
 
         try {
-            // TODO: 实现缓存清理逻辑
-            // 清理已归档活动的排名缓存
-            // 清理临时数据等
+            // 查询所有已结束和已归档的活动（不再需要实时排名/概览缓存）
+            List<CampaignActivity> inactiveCampaigns = campaignActivityMapper.selectList(
+                new LambdaQueryWrapper<CampaignActivity>()
+                    .in(CampaignActivity::getStatus, CampaignStatus.ENDED, CampaignStatus.ARCHIVED)
+                    .eq(CampaignActivity::getDeleted, 0)
+            );
 
-            log.info("活动缓存清理完成");
+            if (inactiveCampaigns.isEmpty()) {
+                log.info("当前没有需要清理缓存的活动");
+                return;
+            }
+
+            Cache rankingCache = campaignCacheManager.getCache("campaign_ranking");
+            Cache overviewCache = campaignCacheManager.getCache("campaign_overview");
+            Cache statsCache = campaignCacheManager.getCache("campaign_stats");
+
+            int cleared = 0;
+            for (CampaignActivity campaign : inactiveCampaigns) {
+                Long campaignId = campaign.getId();
+                // 缓存 key 为 campaignId（Long），见 @Cacheable key="#campaignId"
+                if (rankingCache != null) {
+                    rankingCache.evictIfPresent(campaignId);
+                }
+                if (overviewCache != null) {
+                    overviewCache.evictIfPresent(campaignId);
+                }
+                if (statsCache != null) {
+                    statsCache.evictIfPresent(campaignId);
+                }
+                cleared++;
+            }
+
+            log.info("活动缓存清理完成，共清理 {} 个已结束/已归档活动的缓存", cleared);
+
         } catch (Exception e) {
             log.error("活动缓存清理失败", e);
         }

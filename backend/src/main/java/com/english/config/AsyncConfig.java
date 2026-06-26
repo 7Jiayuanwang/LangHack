@@ -133,4 +133,39 @@ public class AsyncConfig {
         scheduler.initialize();
         return scheduler;
     }
+
+    /**
+     * Thread pool executor for event-driven campaign data collection
+     *
+     * Pool sizing:
+     * - Core: 2 threads (collection is DB-bound, not CPU-bound)
+     * - Max: 4 threads (handles burst of concurrent learning activities)
+     * - Queue: 100 (buffer for simultaneous student actions)
+     * - Rejection: CallerRunsPolicy (backpressure, blocks learning API temporarily but prevents OOM)
+     */
+    @Bean(name = "campaignCollectionExecutor")
+    public Executor campaignCollectionExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("campaign-collect-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy() {
+            @Override
+            public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+                log.warn("[Campaign Collection] 队列已满, 任务将同步执行 (active={}, pool={}, queue={})",
+                        executor.getActiveCount(),
+                        executor.getPoolSize(),
+                        executor.getQueue().size());
+                super.rejectedExecution(r, executor);
+            }
+        });
+
+        executor.initialize();
+        log.info("Campaign collection thread pool initialized: core=2, max=4, queue=100");
+        return executor;
+    }
 }

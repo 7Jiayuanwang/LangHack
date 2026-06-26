@@ -33,6 +33,8 @@ public class CampaignTaskCompletion {
 
     private BigDecimal currentValue;
 
+    private BigDecimal lastCountedValue; // 上次计分时的进度值（用于增量计分，避免重复加分）
+
     private Boolean isCompleted;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

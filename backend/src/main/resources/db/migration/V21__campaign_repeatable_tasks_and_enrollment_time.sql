@@ -97,3 +97,19 @@ ON campaign_tasks(campaign_id, is_required, deleted);
 -- idx_enrollment_score: 覆盖 getIndividualRanking/getClassRanking/getCollegeRanking
 -- idx_campaign_task_user: 覆盖 getTaskCompletion/updateTaskCompletion
 -- idx_campaign_required: 覆盖 calculateCompletionStatus 中的必做任务筛选
+
+-- ========================================================================
+-- 可重复任务增量跟踪字段（2026-06-26 追加）
+-- ========================================================================
+-- 问题: 可重复任务每次定时采集都基于 currentValue(绝对总量) 判断达标，
+-- 若 value >= targetValue 则加分，导致同一进度被重复加分。
+-- 修复: 新增 last_counted_value 记录上次计分时的进度值，
+--       新增积分 = (currentValue - lastCountedValue) / targetValue 向下取整。
+
+ALTER TABLE campaign_task_completions
+ADD COLUMN last_counted_value DECIMAL(10,2) DEFAULT 0.0000 COMMENT '上次计分时的进度值（用于增量计分）' AFTER current_value;
+
+-- 为已有的完成记录初始化 last_counted_value = current_value，避免历史数据被重复计分
+UPDATE campaign_task_completions
+SET last_counted_value = current_value
+WHERE last_counted_value = 0 AND current_value > 0;

@@ -3,7 +3,9 @@ package com.english.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.*;
+import com.english.enums.TaskType;
 import com.english.mapper.*;
+import com.english.service.CampaignStatsService;
 import com.english.service.LearningRecordsService;
 import com.english.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +48,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Autowired
     private UnitWordMapper unitWordMapper;
+
+    @Autowired
+    private CampaignStatsService campaignStatsService;
 
     @Autowired
     private VocabularyBookMapper vocabularyBookMapper;
@@ -529,6 +534,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         record.setTotalCount(1);
         record.setCreatedTime(LocalDateTime.now());
         learningRecordMapper.insert(record);
+
+        // 事件驱动: 触发活动数据采集
+        campaignStatsService.collectUserTasksByTypeAsync(studentId, TaskType.WORD_LEARNING);
     }
 
     @Override
@@ -575,6 +583,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
                 recordTextView(record.getStudentId(), record.getTextId(),
                         record.getAssignmentId(), durationSeconds);
             }
+
+            // 事件驱动: 触发活动数据采集
+            campaignStatsService.collectUserTasksByTypeAsync(record.getStudentId(), TaskType.READING_TIME);
         }
     }
 
@@ -591,6 +602,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         record.setCreatedTime(LocalDateTime.now());
 
         learningRecordMapper.insert(record);
+
+        // 事件驱动: 触发活动数据采集
+        campaignStatsService.collectUserTasksByTypeAsync(studentId, TaskType.WORD_LEARNING);
     }
 
     @Override

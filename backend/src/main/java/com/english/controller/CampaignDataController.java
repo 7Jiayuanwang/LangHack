@@ -1,7 +1,9 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.entity.User;
 import com.english.service.CampaignDataService;
+import com.english.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
@@ -10,6 +12,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -28,6 +32,9 @@ public class CampaignDataController {
     @Autowired
     private CampaignDataService dataService;
 
+    @Autowired
+    private UserService userService;
+
     /**
      * 手动录入数据
      */
@@ -40,7 +47,9 @@ public class CampaignDataController {
             Long userId = Long.valueOf(request.get("userId").toString());
             BigDecimal value = new BigDecimal(request.get("value").toString());
             String remark = request.get("remark") != null ? request.get("remark").toString() : null;
-            Long createdBy = 1L; // TODO: 从当前登录用户获取
+
+            // P3 修复: 从当前登录用户获取 createdBy，避免硬编码
+            Long createdBy = getCurrentUserId();
 
             dataService.recordManualData(campaignId, taskId, userId, value, remark, createdBy);
             return Result.success("录入成功");
@@ -48,6 +57,23 @@ public class CampaignDataController {
             log.error("手动录入数据失败", e);
             return Result.error("手动录入数据失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 从 SecurityContext 获取当前登录用户 ID
+     */
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()
+                || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new RuntimeException("未登录");
+        }
+        String username = authentication.getName();
+        User user = userService.getUserByUsername(username);
+        if (user == null) {
+            throw new RuntimeException("当前用户不存在");
+        }
+        return user.getId();
     }
 
     /**

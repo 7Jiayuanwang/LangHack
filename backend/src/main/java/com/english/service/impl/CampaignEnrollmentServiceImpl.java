@@ -257,13 +257,21 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
             .map(CampaignActivity::getId)
             .toList();
 
-        // 批量查询每个活动的参与人数
+        // 批量查询每个活动的参与人数（避免 N+1 查询）
+        List<Map<String, Object>> countRows = participationMapper.countEnrolledByCampaignIds(campaignIds);
+        java.util.Map<Long, Integer> countMap = new java.util.HashMap<>();
+        if (countRows != null) {
+            for (Map<String, Object> row : countRows) {
+                Object cidObj = row.get("campaignId");
+                Object cntObj = row.get("cnt");
+                if (cidObj == null || cntObj == null) continue;
+                Long cid = ((Number) cidObj).longValue();
+                int cnt = ((Number) cntObj).intValue();
+                countMap.put(cid, cnt);
+            }
+        }
         for (CampaignActivity campaign : campaigns) {
-            QueryWrapper<CampaignParticipation> countWrapper = new QueryWrapper<>();
-            countWrapper.eq("campaign_id", campaign.getId());
-            countWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
-            long count = participationMapper.selectCount(countWrapper);
-            campaign.setParticipantCount((int) count);
+            campaign.setParticipantCount(countMap.getOrDefault(campaign.getId(), 0));
         }
 
         // 批量查询当前用户的报名状态
@@ -340,7 +348,10 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
     }
 
     @Override
-    public void batchEnrollUsers(Long campaignId, List<Long> userIds) {
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public com.english.dto.BatchEnrollResult batchEnrollUsers(Long campaignId, List<Long> userIds, boolean force) {
+        com.english.dto.BatchEnrollResult result = new com.english.dto.BatchEnrollResult();
+
         // P0-09 修复: 限制批量操作大小，防止 DoS 攻击
         final int MAX_BATCH_SIZE = 1000;
         if (userIds == null || userIds.isEmpty()) {
@@ -350,23 +361,77 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
             throw new RuntimeException("批量添加数量超过限制（最多 " + MAX_BATCH_SIZE + " 个）");
         }
 
+        CampaignActivity campaign = campaignService.getCampaignById(campaignId);
+        if (campaign == null) {
+            throw new RuntimeException("活动不存在");
+        }
+
+        // 人数上限检查：提前计算剩余名额，避免逐个插入时超额
+        Integer maxParticipants = campaign.getMaxParticipants();
+        int currentEnrolled = 0;
+        if (maxParticipants != null && maxParticipants > 0) {
+            QueryWrapper<CampaignParticipation> countWrapper = new QueryWrapper<>();
+            countWrapper.eq("campaign_id", campaignId);
+            countWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+            currentEnrolled = participationMapper.selectCount(countWrapper).intValue();
+        }
+        result.setMaxParticipants(maxParticipants);
+
         for (Long userId : userIds) {
             try {
-                if (!isEnrolled(campaignId, userId)) {
-                    CampaignParticipation participation = new CampaignParticipation();
-                    participation.setCampaignId(campaignId);
-                    participation.setUserId(userId);
-                    participation.setEnrollmentStatus(EnrollmentStatus.ENROLLED);
-                    participation.setEnrollmentSource("ADMIN");
-                    participation.setEnrollmentTime(LocalDateTime.now());
-                    participation.setCompletionStatus("IN_PROGRESS");
-                    participation.setJoinTime(LocalDateTime.now());
-                    participationMapper.insert(participation);
+                // 检查是否已报名
+                if (isEnrolled(campaignId, userId)) {
+                    result.getAlreadyEnrolledUserIds().add(userId);
+                    continue;
+                }
+
+                // 人数上限检查（逐个插入前再次校验，防止超额）
+                if (maxParticipants != null && maxParticipants > 0) {
+                    if (currentEnrolled >= maxParticipants) {
+                        result.getCapacityExceededUserIds().add(userId);
+                        continue;
+                    }
+                }
+
+                // 报名范围检查（force=false 时不符合范围的用户跳过并记录原因）
+                if (!force && campaign.getEnrollmentScope() != null
+                        && campaign.getEnrollmentScope() != com.english.enums.EnrollmentScope.ALL) {
+                    if (!campaignService.canUserEnroll(campaignId, userId)) {
+                        List<String> restrictions = campaignService.getEnrollmentRestrictions(campaignId, userId);
+                        // 过滤掉"已报名"等无关原因，只保留范围相关
+                        String reason = restrictions.isEmpty()
+                                ? "不在活动参与范围内"
+                                : String.join("; ", restrictions);
+                        result.getOutOfScopeUserIds().add(
+                                new com.english.dto.BatchEnrollResult.UserReason(userId, reason));
+                        continue;
+                    }
+                }
+
+                // 创建参与记录
+                CampaignParticipation participation = new CampaignParticipation();
+                participation.setCampaignId(campaignId);
+                participation.setUserId(userId);
+                participation.setEnrollmentStatus(EnrollmentStatus.ENROLLED);
+                participation.setEnrollmentSource(force ? "ADMIN_FORCE" : "ADMIN");
+                participation.setEnrollmentTime(LocalDateTime.now());
+                participation.setCompletionStatus("IN_PROGRESS");
+                participation.setJoinTime(LocalDateTime.now());
+                participationMapper.insert(participation);
+
+                result.getSuccessUserIds().add(userId);
+                if (maxParticipants != null && maxParticipants > 0) {
+                    currentEnrolled++;
                 }
             } catch (Exception e) {
                 log.error("批量添加用户{}失败", userId, e);
+                result.getFailedUserIds().add(
+                        new com.english.dto.BatchEnrollResult.UserReason(userId, e.getMessage()));
             }
         }
+
+        result.setCurrentCount(currentEnrolled);
+        return result;
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.english.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.english.dto.BatchEnrollResult;
 import com.english.entity.CampaignActivity;
 import com.english.entity.CampaignParticipation;
 
@@ -69,6 +70,8 @@ public interface CampaignEnrollmentService {
 
     /**
      * 批量添加参与者（管理员）
+     * 检查人数上限 + 报名范围；force=false 时不符合范围的用户跳过并返回原因，
+     * force=true 时强制报名（仍受人数上限约束）。
      */
-    void batchEnrollUsers(Long campaignId, List<Long> userIds);
+    BatchEnrollResult batchEnrollUsers(Long campaignId, List<Long> userIds, boolean force);
 }
