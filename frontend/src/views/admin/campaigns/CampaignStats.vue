@@ -47,7 +47,7 @@
         <el-tab-pane label="个人排名" name="individual">
           <div class="tab-actions">
             <el-select
-              v-model="individualFilters.classId"
+              v-model="individualFilters.className"
               placeholder="按班级筛选"
               clearable
               filterable
@@ -56,14 +56,14 @@
             >
               <el-option
                 v-for="cls in classList"
-                :key="cls.id"
-                :label="cls.name"
-                :value="cls.id"
+                :key="cls"
+                :label="cls"
+                :value="cls"
               />
             </el-select>
             <el-select
               v-if="showCollegeFilter"
-              v-model="individualFilters.collegeId"
+              v-model="individualFilters.collegeName"
               placeholder="按学院筛选"
               clearable
               filterable
@@ -72,9 +72,9 @@
             >
               <el-option
                 v-for="college in collegeList"
-                :key="college.id"
-                :label="college.name"
-                :value="college.id"
+                :key="college"
+                :label="college"
+                :value="college"
               />
             </el-select>
             <el-button type="success" @click="handleExport('individual')">导出排名</el-button>
@@ -206,8 +206,8 @@ const classList = ref([])
 const collegeList = ref([])
 
 const individualFilters = reactive({
-  classId: null,
-  collegeId: null
+  className: null,
+  collegeName: null
 })
 
 // 是否显示学院筛选（单学院活动不显示）
@@ -241,11 +241,11 @@ const loadIndividualRanking = async () => {
     }
 
     // 添加筛选参数
-    if (individualFilters.classId) {
-      params.classId = individualFilters.classId
+    if (individualFilters.className) {
+      params.className = individualFilters.className
     }
-    if (individualFilters.collegeId) {
-      params.collegeId = individualFilters.collegeId
+    if (individualFilters.collegeName) {
+      params.collegeName = individualFilters.collegeName
     }
 
     const res = await getIndividualRanking(route.params.id, params)
@@ -269,20 +269,20 @@ const loadIndividualRanking = async () => {
 
 // 从数据中提取班级和学院列表
 const extractFiltersFromData = (records) => {
-  const classMap = new Map()
-  const collegeMap = new Map()
+  const classSet = new Set()
+  const collegeSet = new Set()
 
   records.forEach(record => {
-    if (record.classId && record.className) {
-      classMap.set(record.classId, record.className)
+    if (record.className) {
+      classSet.add(record.className)
     }
-    if (record.collegeId && record.collegeName) {
-      collegeMap.set(record.collegeId, record.collegeName)
+    if (record.collegeName) {
+      collegeSet.add(record.collegeName)
     }
   })
 
-  classList.value = Array.from(classMap.entries()).map(([id, name]) => ({ id, name }))
-  collegeList.value = Array.from(collegeMap.entries()).map(([id, name]) => ({ id, name }))
+  classList.value = Array.from(classSet)
+  collegeList.value = Array.from(collegeSet)
 }
 
 const loadClassRanking = async () => {

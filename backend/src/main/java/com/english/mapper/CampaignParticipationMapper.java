@@ -33,7 +33,7 @@ public interface CampaignParticipationMapper extends BaseMapper<CampaignParticip
     List<Map<String, Object>> countEnrolledByCampaignIds(@Param("campaignIds") List<Long> campaignIds);
 
     /**
-     * 获取个人排名（支持班级和学院筛选）
+     * 获取个人排名（支持班级和学院筛选，按名称过滤）
      */
     @Select({
         "<script>",
@@ -42,15 +42,15 @@ public interface CampaignParticipationMapper extends BaseMapper<CampaignParticip
         "LEFT JOIN school_students ss ON u.school_student_id = ss.id",
         "WHERE p.campaign_id = #{campaignId}",
         "  AND p.enrollment_status = 'ENROLLED'",
-        "  <if test='classId != null'>AND ss.class_id = #{classId}</if>",
-        "  <if test='collegeId != null'>AND ss.college_id = #{collegeId}</if>",
+        "  <if test='className != null and className != \"\"'>AND ss.class_name = #{className}</if>",
+        "  <if test='collegeName != null and collegeName != \"\"'>AND ss.college_name = #{collegeName}</if>",
         "ORDER BY p.total_score DESC, p.completed_tasks DESC",
         "</script>"
     })
     List<CampaignParticipation> selectRankingWithFilters(
         @Param("campaignId") Long campaignId,
-        @Param("classId") Long classId,
-        @Param("collegeId") Long collegeId,
+        @Param("className") String className,
+        @Param("collegeName") String collegeName,
         Page<CampaignParticipation> page
     );
 }

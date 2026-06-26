@@ -54,13 +54,7 @@ public class CampaignParticipation {
     private String className; // 班级名称
 
     @TableField(exist = false)
-    private Long classId; // 班级ID（用于筛选）
-
-    @TableField(exist = false)
     private String collegeName; // 学院名称
-
-    @TableField(exist = false)
-    private Long collegeId; // 学院ID（用于筛选）
 
     @TableField(exist = false)
     private Integer ranking; // 排名

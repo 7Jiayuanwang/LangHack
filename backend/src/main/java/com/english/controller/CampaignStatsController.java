@@ -46,15 +46,15 @@ public class CampaignStatsController {
             @PathVariable Long campaignId,
             @RequestParam(defaultValue = "1") int current,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) Long classId,
-            @RequestParam(required = false) Long collegeId) {
+            @RequestParam(required = false) String className,
+            @RequestParam(required = false) String collegeName) {
         try {
             Map<String, Object> params = new java.util.HashMap<>();
-            if (classId != null) {
-                params.put("classId", classId);
+            if (className != null && !className.isBlank()) {
+                params.put("className", className);
             }
-            if (collegeId != null) {
-                params.put("collegeId", collegeId);
+            if (collegeName != null && !collegeName.isBlank()) {
+                params.put("collegeName", collegeName);
             }
             Page<CampaignParticipation> ranking = statsService.getRankingByIndividual(campaignId, current, size, params);
             return Result.success(ranking);

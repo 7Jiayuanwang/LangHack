@@ -455,13 +455,13 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     public Page<CampaignParticipation> getRankingByIndividual(Long campaignId, int current, int size, Map<String, Object> params) {
         Page<CampaignParticipation> page = new Page<>(current, size);
 
-        Long classId = params.containsKey("classId") ? (Long) params.get("classId") : null;
-        Long collegeId = params.containsKey("collegeId") ? (Long) params.get("collegeId") : null;
+        String className = params.containsKey("className") ? (String) params.get("className") : null;
+        String collegeName = params.containsKey("collegeName") ? (String) params.get("collegeName") : null;
 
         // 如果有筛选条件，使用自定义 SQL；否则使用标准查询
-        if (classId != null || collegeId != null) {
+        if (className != null || collegeName != null) {
             List<CampaignParticipation> records = participationMapper.selectRankingWithFilters(
-                campaignId, classId, collegeId, page
+                campaignId, className, collegeName, page
             );
             page.setRecords(records);
 
@@ -547,12 +547,6 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             participation.setUserName(userName);
             participation.setClassName(schoolStudent != null ? schoolStudent.getClassName() : null);
             participation.setCollegeName(schoolStudent != null ? schoolStudent.getCollegeName() : null);
-
-            // 填充 classId 和 collegeId 用于前端筛选
-            if (schoolStudent != null) {
-                participation.setClassId(schoolStudent.getClassId());
-                participation.setCollegeId(schoolStudent.getCollegeId());
-            }
         }
     }
 
