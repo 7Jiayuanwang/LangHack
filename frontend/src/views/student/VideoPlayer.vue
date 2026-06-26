@@ -379,7 +379,10 @@ let artInstance = null
 const videoUrl = computed(() => {
   if (!video.value) return ''
   const apiBase = import.meta.env.VITE_API_BASE_URL || ''
-  return `${apiBase}/api/media/${video.value.mediaId}/download`
+  const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+  const url = `${apiBase}/api/media/${video.value.mediaId}/download`
+  // 如果有 token，通过 query 参数传递（video 标签无法设置自定义 header）
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
 })
 
 const hasSubtitle = computed(() => {
@@ -795,7 +798,9 @@ const initPlayer = () => {
     }
 
     if (video.value.coverMediaId) {
-      options.poster = `${apiBase}/api/media/${video.value.coverMediaId}/download`
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      const posterUrl = `${apiBase}/api/media/${video.value.coverMediaId}/download`
+      options.poster = token ? `${posterUrl}?token=${encodeURIComponent(token)}` : posterUrl
     }
 
     artInstance = new Artplayer(options)

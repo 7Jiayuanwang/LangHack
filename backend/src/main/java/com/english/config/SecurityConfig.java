@@ -146,8 +146,8 @@ public class SecurityConfig {
                 .antMatchers("/api/sso/**").permitAll() // SSO相关接口允许公开访问
                 .antMatchers(HttpMethod.POST, "/api/errors/report").permitAll()
                 .antMatchers("/api/wordnet/**").permitAll() // 允许公开访问单词查询接口
-                .antMatchers(HttpMethod.GET, "/api/media/**").permitAll() // 媒体文件 GET 公开
-                .antMatchers(HttpMethod.HEAD, "/api/media/**").permitAll() // HEAD 公开（浏览器视频探测需要）
+                .antMatchers(HttpMethod.GET, "/api/media/**").authenticated() // 媒体文件需认证
+                .antMatchers(HttpMethod.HEAD, "/api/media/**").authenticated() // HEAD 需认证
                 .antMatchers("/").permitAll()
                 // 管理员权限（部分只读端点允许 OPS 访问，须放在 /api/admin/** 之前）
                 .antMatchers("/api/admin/users/**", "/api/admin/users").hasAnyRole("ADMIN", "OPS")

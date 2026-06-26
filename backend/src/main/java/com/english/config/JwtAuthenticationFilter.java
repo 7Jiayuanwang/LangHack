@@ -36,6 +36,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/api/ops/update/trigger"
     );
 
+    private static final String MEDIA_DOWNLOAD_PATH_PREFIX = "/api/media/";
+
     /**
      * Redis 缓存前缀和 TTL：缓存用户活跃状态，避免每次请求查库。
      * 缓存值 "1" = 用户有效（存在且未删除），缺失 = 需要重新校验。
@@ -163,7 +165,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 ? requestUri.substring(contextPath.length())
                 : requestUri;
 
-        return path != null && QUERY_TOKEN_ALLOWED_PATHS.contains(path);
+        // 允许精确路径匹配
+        if (path != null && QUERY_TOKEN_ALLOWED_PATHS.contains(path)) {
+            return true;
+        }
+
+        // 允许媒体下载路径：/api/media/{id}/download
+        if (path != null && path.startsWith(MEDIA_DOWNLOAD_PATH_PREFIX) && path.endsWith("/download")) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
