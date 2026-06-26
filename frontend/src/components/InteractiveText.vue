@@ -16,33 +16,44 @@
       </div>
     </div>
 
-    <!-- 翻译结果浮层 -->
-    <div v-if="showTranslateDialog" class="inline-popup-overlay" @click.self="showTranslateDialog = false">
-      <div class="inline-popup translate-popup">
-        <div class="popup-header">
-          <span>翻译结果</span>
-          <button class="popup-close" @click="showTranslateDialog = false">&times;</button>
-        </div>
-        <div class="translate-content" v-if="!translating">
-          <div class="original-text">
+    <!-- 翻译结果弹窗 -->
+    <el-dialog
+      v-model="showTranslateDialog"
+      title="翻译结果"
+      width="min(400px, 92vw)"
+      class="translate-dialog"
+    >
+      <div class="translate-content" v-if="!translating">
+        <div class="original-text">
+          <div class="text-with-tts">
             <h4>原文：</h4>
-            <div class="text-scroll-area">
-              <p>{{ selectedText }}</p>
-            </div>
+            <button class="tts-inline-btn" @click="speakText(selectedText)" :disabled="ttsLoading" title="朗读原文">
+              <el-icon v-if="ttsLoading && ttsCurrentText === selectedText" class="is-loading"><Loading /></el-icon>
+              <el-icon v-else><Headset /></el-icon>
+            </button>
           </div>
-          <div class="translated-text">
-            <h4>译文：</h4>
-            <div class="text-scroll-area">
-              <p>{{ translatedText }}</p>
-            </div>
+          <div class="text-scroll-area">
+            <p>{{ selectedText }}</p>
           </div>
         </div>
-        <div class="loading-content" v-else>
-          <el-icon class="is-loading" :size="40"><Loading /></el-icon>
-          <p style="margin-top: 10px; color: #666;">翻译中...</p>
+        <div class="translated-text">
+          <div class="text-with-tts">
+            <h4>译文：</h4>
+            <button class="tts-inline-btn" @click="speakText(translatedText)" :disabled="ttsLoading" title="朗读译文">
+              <el-icon v-if="ttsLoading && ttsCurrentText === translatedText" class="is-loading"><Loading /></el-icon>
+              <el-icon v-else><Headset /></el-icon>
+            </button>
+          </div>
+          <div class="text-scroll-area">
+            <p>{{ translatedText }}</p>
+          </div>
         </div>
       </div>
-    </div>
+      <div class="loading-content" v-else>
+        <el-icon class="is-loading" :size="40"><Loading /></el-icon>
+        <p style="margin-top: 10px; color: #666;">翻译中...</p>
+      </div>
+    </el-dialog>
 
     <!-- 词汇详情浮层 -->
     <div v-if="showWordDialog" class="inline-popup-overlay" @click.self="handleDialogClose">
@@ -132,7 +143,7 @@
 <script setup>
 import { ref, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, Headset } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 // Props

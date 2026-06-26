@@ -431,6 +431,7 @@
       @underline="handleUnderline"
       @translate="handleTranslateSelection"
       @annotate="handleAnnotate"
+      @speak="handleSpeak"
       @ai-qa="handleAiQa"
     />
 
