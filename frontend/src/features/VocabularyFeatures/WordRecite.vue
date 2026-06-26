@@ -826,17 +826,39 @@ const startDeepRecite = () => {
   }, 100)
 }
 
-const checkDeepAnswer = () => {
+const checkDeepAnswer = async () => {
   if (!currentDeepWord.value || !userInput.value.trim()) return
-  
+
   const isCorrect = userInput.value.trim().toLowerCase() === currentDeepWord.value.word.toLowerCase()
   deepReciteTotal.value++
-  
+
   if (isCorrect) {
     answerStatus.value = 'correct'
     deepReciteCorrect.value++
     deepReciteScore.value = Math.round((deepReciteCorrect.value / deepReciteTotal.value) * 100)
-    
+
+    // 深度背诵答对：标记为已掌握
+    const word = currentDeepWord.value
+    const isArticleWord = word.source === 'article'
+
+    if (isArticleWord) {
+      // 文章词：标记为已掌握
+      try {
+        await updateMasteryLevel(word.wordId, { masteryLevel: 'MASTERED', isCorrect: true })
+        word.mastered = true
+        masteredWords.value++
+      } catch (err) {
+        console.error('文章词标记已掌握失败:', err)
+      }
+    } else {
+      // CET 词：标记为已掌握
+      word.mastered = true
+      word.lastReviewTime = new Date().toISOString()
+      syncWordToDatabase(word, 'MASTERED')
+      saveProgress()
+      masteredWords.value++
+    }
+
     // 延迟后进入下一个单词
     setTimeout(() => {
       userInput.value = ''
@@ -873,12 +895,34 @@ const generateDeepOptions = () => {
   deepOptions.value = allOptions.sort(() => Math.random() - 0.5)
 }
 
-const selectDeepOption = (option) => {
+const selectDeepOption = async (option) => {
   if (option === currentDeepWord.value.word) {
     answerStatus.value = 'correct'
     deepReciteCorrect.value++
     deepReciteScore.value = Math.round((deepReciteCorrect.value / deepReciteTotal.value) * 100)
-    
+
+    // 选择正确选项后：标记为已掌握
+    const word = currentDeepWord.value
+    const isArticleWord = word.source === 'article'
+
+    if (isArticleWord) {
+      // 文章词：标记为已掌握
+      try {
+        await updateMasteryLevel(word.wordId, { masteryLevel: 'MASTERED', isCorrect: true })
+        word.mastered = true
+        masteredWords.value++
+      } catch (err) {
+        console.error('文章词标记已掌握失败:', err)
+      }
+    } else {
+      // CET 词：标记为已掌握
+      word.mastered = true
+      word.lastReviewTime = new Date().toISOString()
+      syncWordToDatabase(word, 'MASTERED')
+      saveProgress()
+      masteredWords.value++
+    }
+
     setTimeout(() => {
       userInput.value = ''
       answerStatus.value = null
@@ -1494,27 +1538,27 @@ const rateWord = async (quality) => {
   word.synced = isArticleWord ? true : false
 
   if (quality === 5) {
-    // 认识：标记为已掌握，不再出现
+    // 认识：标记为学习中（不再直接标记为已掌握，需要通过深度背诵才能真正掌握）
     if (isArticleWord) {
-      // 与单词本"标记为已掌握"保持一致：先等后端写入成功再更新本地 UI 状态
+      // 文章词：更新为学习中状态
       try {
-        const response = await updateMasteryLevel(word.wordId, { masteryLevel: 'MASTERED', isCorrect: true })
+        const response = await updateMasteryLevel(word.wordId, { masteryLevel: 'LEARNING', isCorrect: true })
         if (response?.code !== 200) {
           ElMessage.error('标记失败')
           return
         }
-        word.mastered = true
+        word.mastered = false  // 不再直接标记为已掌握
         word.lastReviewTime = new Date().toISOString()
       } catch (err) {
-        console.error('文章词同步 MASTERED 失败:', err)
+        console.error('文章词同步 LEARNING 失败:', err)
         ElMessage.error('标记失败')
         return
       }
     } else {
-      // CET 词同步到后端数据库
-      word.mastered = true
+      // CET 词：标记为学习中
+      word.mastered = false  // 不再直接标记为已掌握
       word.lastReviewTime = new Date().toISOString()
-      syncWordToDatabase(word, toBackendMasteryLevel(quality))
+      syncWordToDatabase(word, 'LEARNING')  // 改为 LEARNING 状态
     }
   } else if (quality === 0) {
     // 不认识：增加出现频率（增加不认识计数）
@@ -1551,9 +1595,10 @@ const rateWord = async (quality) => {
   localStorage.setItem(`todayReviewed_${currentUserId.value}`, todayReviewed.value.toString())
   localStorage.setItem(`lastReviewDate_${currentUserId.value}`, today)
 
-  if (quality === 5) {
-    masteredWords.value++
-  }
+  // 不再在这里增加 masteredWords，只有深度背诵答对才算掌握
+  // if (quality === 5) {
+  //   masteredWords.value++
+  // }
 
   showMeaning.value = false
 
