@@ -201,10 +201,22 @@
             @click="selectQuizOption(option)"
             class="btn quiz-btn"
             :class="{ 'quiz-btn--wrong': wrongOption === option }"
-            :disabled="isHandlingWordAction"
+            :disabled="isHandlingWordAction || wrongOption !== null"
           >
             {{ option }}
           </button>
+        </div>
+
+        <!-- 答错后显示单词释义 -->
+        <div class="wrong-word-hint" v-if="wrongOption !== null">
+          <div class="hint-header">
+            <span class="hint-icon">💡</span>
+            <span class="hint-title">正确答案</span>
+          </div>
+          <div class="hint-content">
+            <p class="hint-word">{{ currentWord.word }}</p>
+            <p class="hint-meaning">{{ currentWord.meaning }}</p>
+          </div>
         </div>
 
         <!-- 认识 / 不认识操作 -->
@@ -659,7 +671,7 @@ const generateQuizOptions = () => {
 
 // 处理选择题选项
 const selectQuizOption = async (selectedMeaning) => {
-  if (!currentWord.value || isHandlingWordAction.value) return
+  if (!currentWord.value || isHandlingWordAction.value || wrongOption.value !== null) return
 
   if (selectedMeaning === currentWord.value.meaning) {
     // 选对：标记为掌握，进入下一个单词
@@ -683,11 +695,11 @@ const selectQuizOption = async (selectedMeaning) => {
       currentWord.value.synced = false
       saveProgress()
     }
-    // 标记错误选项为红色
+    // 标记错误选项为红色，并显示正确答案提示
     wrongOption.value = selectedMeaning
     setTimeout(() => {
       wrongOption.value = null
-    }, 1500)
+    }, 3000) // 延长到3秒，给用户足够时间记忆
   }
 }
 
@@ -2351,6 +2363,63 @@ onBeforeUnmount(() => {
   border-color: var(--error-color) !important;
   color: var(--error-color) !important;
   animation: shake 0.5s ease-in-out;
+}
+
+.wrong-word-hint {
+  margin: 16px 0;
+  padding: 16px;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 2px solid #fdba74;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hint-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.hint-icon {
+  font-size: 20px;
+}
+
+.hint-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #c2410c;
+}
+
+.hint-content {
+  padding-left: 28px;
+}
+
+.hint-word {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ea580c;
+  margin: 0 0 8px 0;
+  letter-spacing: 0.5px;
+}
+
+.hint-meaning {
+  font-size: 16px;
+  color: #9a3412;
+  margin: 0;
+  line-height: 1.6;
 }
 
 @keyframes shake {
