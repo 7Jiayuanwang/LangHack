@@ -6,6 +6,7 @@ import com.english.entity.CampaignParticipation;
 import com.english.entity.CampaignTaskCompletion;
 import com.english.entity.CampaignActivity;
 import com.english.entity.User;
+import com.english.entity.SchoolStudent;
 import com.english.enums.EnrollmentStatus;
 import com.english.mapper.CampaignManualRecordMapper;
 import com.english.mapper.CampaignTaskMapper;
@@ -13,6 +14,7 @@ import com.english.mapper.CampaignParticipationMapper;
 import com.english.mapper.CampaignTaskCompletionMapper;
 import com.english.mapper.CampaignActivityMapper;
 import com.english.mapper.UserMapper;
+import com.english.mapper.SchoolStudentMapper;
 import com.english.service.CampaignDataService;
 import com.english.service.CampaignStatsService;
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +56,9 @@ public class CampaignDataServiceImpl implements CampaignDataService {
 
     @Autowired
     private CampaignActivityMapper campaignActivityMapper;
+
+    @Autowired
+    private SchoolStudentMapper schoolStudentMapper;
 
     @Autowired
     private CampaignStatsService campaignStatsService;
@@ -319,6 +324,22 @@ public class CampaignDataServiceImpl implements CampaignDataService {
                     }
                 }
 
+                // 批量查询学校学生信息（班级、学院）
+                List<Long> schoolStudentIds = userMap.values().stream()
+                        .map(User::getSchoolStudentId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList();
+                Map<Long, SchoolStudent> schoolStudentMap = new HashMap<>();
+                if (!schoolStudentIds.isEmpty()) {
+                    List<SchoolStudent> schoolStudents = schoolStudentMapper.selectBatchIds(schoolStudentIds);
+                    for (SchoolStudent ss : schoolStudents) {
+                        if (ss != null) {
+                            schoolStudentMap.put(ss.getId(), ss);
+                        }
+                    }
+                }
+
                 int rowIdx = 1;
                 int rank = 0;
                 Integer prevScore = null;
@@ -333,11 +354,15 @@ public class CampaignDataServiceImpl implements CampaignDataService {
                     }
                     Row row = sheet.createRow(rowIdx++);
                     User user = userMap.get(p.getUserId());
+                    SchoolStudent schoolStudent = user != null && user.getSchoolStudentId() != null
+                            ? schoolStudentMap.get(user.getSchoolStudentId())
+                            : null;
+
                     row.createCell(0).setCellValue(rank);
                     row.createCell(1).setCellValue(user != null ? user.getUsername() : "");
                     row.createCell(2).setCellValue(user != null && user.getRealName() != null ? user.getRealName() : "");
-                    row.createCell(3).setCellValue(""); // 班级需要关联查询，简化留空
-                    row.createCell(4).setCellValue(""); // 学院同上
+                    row.createCell(3).setCellValue(schoolStudent != null && schoolStudent.getClassName() != null ? schoolStudent.getClassName() : "");
+                    row.createCell(4).setCellValue(schoolStudent != null && schoolStudent.getCollegeName() != null ? schoolStudent.getCollegeName() : "");
                     row.createCell(5).setCellValue(scoreVal);
                     row.createCell(6).setCellValue(p.getCompletedTasks() != null ? p.getCompletedTasks() : 0);
                     row.createCell(7).setCellValue(p.getCompletionStatus() != null ? p.getCompletionStatus() : "");
