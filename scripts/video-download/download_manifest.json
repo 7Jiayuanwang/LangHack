@@ -1,0 +1,38 @@
+[
+  {
+    "video_id": "0VLAoVGf_74",
+    "title": "How DeepSeek Rewrote the Transformer [MLA]",
+    "tag": "学术英语",
+    "description": "Thanks to KiwiCo for sponsoring today’s video! Go to https://www.kiwico.com/welchlabs and use code WELCHLABS for 50% off your first monthly club crate or for 20% off your first Panda Crate!\n\nMLA/DeepSeek Poster at 17:12  (Free shipping for a limited time with code DEEPSEEK):\nhttps://www.welchlabs.com/resources/mladeepseek-attention-poster-13x19\n\nLimited edition MLA Poster and Signed Book:\nhttps://www.welchlabs.com/resources/deepseek-bundle-mla-poster-and-signed-book-limited-run\n\nImaginary Numbers book is back in stock!\nhttps://www.welchlabs.com/resources/imaginary-numbers-book\n\nSpecial Thanks to Patrons https://www.patreon.com/c/welchlabs\n\nJuan Benet, Ross Hanson, Yan Babitski, AJ Englehardt, Alvin Khaled, Eduardo Barraza, Hitoshi Yamauchi, Jaewon Jung, Mrgoodlight, Shinichi Hayashi, Sid Sarasvati, Dominic Beaumont, Shannon Prater, Ubiquity Ventures, Matias Forti, Brian Henry, Tim Palade, Petar Vecutin, Nicolas baumann, Jason Singh, Robert Riley, vornska, Barry Silverman, Jake Ehrlich\n\nReferences\nDeepSeek-V2 paper: https://arxiv.org/pdf/2405.04434\nDeepSeek-R1 paper: https://arxiv.org/abs/2501.12948\nGreat Article by Ege Erdil: https://epoch.ai/gradient-updates/how-has-deepseek-improved-the-transformer-architecture\nGPT-2 Visualizaiton: https://github.com/TransformerLensOrg/TransformerLens\nManim Animations: https://github.com/stephencwelch/manim_videos\n\nTechnical Notes\n\n1. Note that DeepSeek-V2 paper claims a KV cache size reduction of 93.3%. They don’t exactly publish their methodology, but as far as I can tell it’s something likes this: start with Deepseek-v2 hyperparameters here: https://huggingface.co/deepseek-ai/DeepSeek-V2/blob/main/configuration_deepseek.py. num_hidden_layers=30, num_attention_heads=32, v_head_dim = 128. If DeepSeek-v2 was implemented with traditional MHA, then KV cache size would be 2*32*128*30*2=491,520 B/token. With MLA with a KV cache size of 576, we get a total cache size of 576*30=34,560 B/token. The percent reduction in KV cache size is then equal to (491,520-34,560)/492,520=92.8%. The numbers I present in this video follow the same approach but are for DeepSeek-v3/R1 architecture: https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/config.json. num_hidden_layers=61, num_attention_heads=128, v_head_dim = 128. So traditional MHA cache would be 2*128*128*61*2 = 3,997,696 B/token. MLA reduces this to 576*61*2=70,272 B/token. Tor the DeepSeek-V3/R1 architecture, MLA reduces the KV cache size by a factor of 3,997,696/70,272 =56.9X. \n2. I claim a couple times that MLA allows DeepSeek to generate tokens more than 6x faster than a vanilla transformer. The DeepSeek-V2 paper claims a slightly less than 6x throughput improvement with MLA, but since the V3/R1 architecture is heavier, we expect a larger lift, which is why i claim “more than 6x faster than a vanilla transformer” - in reality it’s probably significantly more than 6x for the V3/R1 architecture.\n3. In all attention patterns and walkthroughs, we’re ignoring the |beginning of sentence| token. “The American flag is red, white, and” actually maps to 10 tokens if we include this starting token, and may attention patterns do assign high values to this token. \n4. We’re ignoring bias terms matrix equations. \n5. We’re ignoring positional embeddings. These are fascinating. See DeepSeek papers and ROPE.",
+    "video_file": "0VLAoVGf_74\\0VLAoVGf_74.mp4",
+    "subs_en": "0VLAoVGf_74\\0VLAoVGf_74.en.vtt",
+    "subs_zh": "0VLAoVGf_74\\0VLAoVGf_74.zh-Hans.vtt"
+  },
+  {
+    "video_id": "h9wH7diGNC0",
+    "title": "Highlights | Czechia 0-3 Mexico | FIFA World Cup 2026™",
+    "tag": "世界杯",
+    "description": "Watch all the highlights from Mexico's 3-0 win over Czechia with goals from Mateo Chávez, Julián Quiñones and Álvaro Fidalgo in the group stage match at the 2026 FIFA World Cup.  #fifaworldcuponyt #Czechia #mexico #quiñones #chávez \n\nCzechia v Mexico | FIFA World Cup 2026™ | June 24 2026 | Post-game\n\nFOLLOW FIFA’S TOURNAMENT CHANNELS BELOW! \n\nFIFA World Cup:\n👉 https://www.instagram.com/fifaworldcup\n👉 https://twitter.com/FIFAWorldCup\n👉 https://www.facebook.com/fifaworldcup\n👉 https://www.tiktok.com/@fifaworldcup\n👉 https://www.threads.com/@fifaworldcup\n👉 https://whatsapp.com/channel/0029Vb78sHK30LKMhYZAwQ3i",
+    "video_file": "h9wH7diGNC0\\h9wH7diGNC0.mp4",
+    "subs_en": "h9wH7diGNC0\\h9wH7diGNC0.en.vtt",
+    "subs_zh": "h9wH7diGNC0\\h9wH7diGNC0.zh-Hans.vtt"
+  },
+  {
+    "video_id": "N-bGWFZVc4U",
+    "title": "Lionel Messi - The Drama of Argentina",
+    "tag": "世界杯",
+    "description": "Lionel Messi has won everything there is to win - except the World Cup. Can he finally lead Argentina to win it? \n\nThis video goes back to the beginning and tells the complete story of Messi's career with Argentina in a dramatic way. It was a tough way until his first ever international trophy, the Copa America 2021.\n\nEnjoy the video and share it:)\n\nInstagram: https://www.instagram.com/magicalmessi_yt\nTwitter: https://twitter.com/Magical__Messi \nFacebook: https://www.facebook.com/magicalmessithechannel\n\nLionel Messi, drama, Argentina, PSG, Paris Saint-Germain, FC Barcelona, football, highlights, goals, skills, GOAT, 2022\n\nMagicalMessi - as magical as Messi",
+    "video_file": "N-bGWFZVc4U\\compressed\\N-bGWFZVc4U.480p.mp4",
+    "subs_en": "N-bGWFZVc4U\\N-bGWFZVc4U.en.vtt",
+    "subs_zh": "N-bGWFZVc4U\\N-bGWFZVc4U.zh-Hans.vtt"
+  },
+  {
+    "video_id": "fs8ZveNZQ8g",
+    "title": "Incredible Orca Hunt | Frozen Planet II | BBC Earth",
+    "tag": "日常对话",
+    "description": "This orca pod uses incredible tactics to hunt seals protected by rafts of ice. Only around 100 orcas in the world use this remarkable technique.\n \nMeet the animals inhabiting our fragile frozen worlds. ❄️ #FrozenPlanet2\n \nFind out where to watch 👉 https://www.bbcearth.com/shows/frozen-planet-2\n\nSubscribe: http://bit.ly/BBCEarthSub \n\n#BBCEarth #FrozenPlanet2\n\nWatch more: \nFrozen Planet II https://bit.ly/FrozenPlanetIIPlaylist\nFrozen Planet II Behind the Scenes https://bit.ly/FrozenPlanetIIBehindTheScenesPlaylist\nPlanet Earth http://bit.ly/PlanetEarthPlaylist \nBlue Planet http://bit.ly/BluePlanetPlaylist \nPlanet Earth II http://bit.ly/PlanetEarthIIPlaylist \n\nFrozen Planet II (2022)\nThis six-part series – narrated by Sir David Attenborough – explores the wildlife found in the world’s coldest regions: the Arctic and Antarctic, high mountains, frozen deserts, snowbound forests, and ice-cold oceans. From polar bears to penguins, and from snow monkeys to Siberian tigers, each species must overcome a unique set of challenges to endure its extreme environment.\n\nWelcome to BBC EARTH! The world is an amazing place full of stories, beauty and natural wonder. Here you'll find 50 years worth of entertaining and thought-provoking natural history content. Dramatic, rare, and exclusive, nature doesn't get more exciting than this.\n\nThis is a commercial page from BBC Studios. Service information and feedback: http://bbcworldwide.com/vod-feedback--contact-details.aspx",
+    "video_file": "fs8ZveNZQ8g\\fs8ZveNZQ8g.mp4",
+    "subs_en": "fs8ZveNZQ8g\\fs8ZveNZQ8g.en.vtt",
+    "subs_zh": "fs8ZveNZQ8g\\fs8ZveNZQ8g.zh-Hans.vtt"
+  }
+]

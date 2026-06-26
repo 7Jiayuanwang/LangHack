@@ -6,6 +6,7 @@
  */
 
 const TOKEN_KEY = 'token'
+const REFRESH_TOKEN_KEY = 'refreshToken'
 const USER_INFO_KEY = 'userInfo'
 const USER_ROLE_KEY = 'userRole'
 
@@ -73,10 +74,60 @@ export function removeToken() {
 }
 
 /**
+ * Read the refresh token from localStorage with full validation.
+ * Returns the trimmed token string, or '' if invalid / missing.
+ */
+export function getRefreshToken() {
+  try {
+    const raw = localStorage.getItem(REFRESH_TOKEN_KEY)
+    if (raw !== null && isValidToken(raw)) {
+      return raw.trim()
+    }
+    if (raw !== null) {
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+    }
+    return ''
+  } catch (e) {
+    console.error('Failed to read refresh token from localStorage:', e)
+    return ''
+  }
+}
+
+/**
+ * Persist a refresh token to localStorage.
+ * Refuses to store falsy / "undefined" / "null" values.
+ * Returns true on success, false if the value was rejected or storage failed.
+ */
+export function setRefreshToken(value) {
+  if (!isValidToken(value)) {
+    console.warn('Attempted to store invalid refresh token:', value)
+    return false
+  }
+  try {
+    localStorage.setItem(REFRESH_TOKEN_KEY, value.trim())
+    return true
+  } catch (e) {
+    console.error('Failed to write refresh token to localStorage:', e)
+    return false
+  }
+}
+
+/**
+ * Remove the refresh token from localStorage.
+ */
+export function removeRefreshToken() {
+  try {
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
+  } catch (e) {
+    console.warn('Failed to remove refresh token from localStorage:', e)
+  }
+}
+
+/**
  * Remove ALL auth-related keys from localStorage in one shot.
  */
 export function clearAuthStorage() {
-  const keys = [TOKEN_KEY, USER_INFO_KEY, USER_ROLE_KEY]
+  const keys = [TOKEN_KEY, REFRESH_TOKEN_KEY, USER_INFO_KEY, USER_ROLE_KEY]
   for (const key of keys) {
     try {
       localStorage.removeItem(key)
@@ -105,4 +156,65 @@ export function getAuthHeader() {
  */
 export function isLoggedIn() {
   return !!getToken()
+}
+
+let proactiveRefreshTimer = null
+
+/**
+ * 主动刷新 access token：在过期前 10 分钟触发刷新。
+ *
+ * @param {number} expiresInMs - access token 有效期（毫秒），通常为 7200000（2小时）
+ *
+ * 调用时机：
+ * - 登录成功后（密码登录 / SSO 回调）
+ * - 401 被动刷新成功后
+ * - 前端 setTokens action 触发时
+ */
+export function startProactiveRefresh(expiresInMs) {
+  stopProactiveRefresh()
+
+  // 提前 10 分钟刷新（600000ms），但最少等待 1 分钟
+  const delay = Math.max(expiresInMs - 600000, 60000)
+
+  proactiveRefreshTimer = setTimeout(async () => {
+    const refreshToken = getRefreshToken()
+    if (!refreshToken) {
+      console.warn('No refresh token available for proactive refresh')
+      return
+    }
+
+    try {
+      // 动态导入避免循环依赖（auth.js ← request.js ← api/auth.js → auth.js）
+      const { refreshToken: refreshTokenApi } = await import('@/api/auth')
+      const response = await refreshTokenApi(refreshToken)
+
+      if (response.data?.accessToken) {
+        setToken(response.data.accessToken)
+
+        // 如果后端返回了新的 refresh token（续期），更新之
+        if (response.data.refreshToken) {
+          setRefreshToken(response.data.refreshToken)
+        }
+
+        // 递归：新 access token 也排定主动刷新
+        const newExpiresIn = response.data.expiresIn || 7200000
+        startProactiveRefresh(newExpiresIn)
+
+        console.log('Proactive token refresh succeeded')
+      }
+    } catch (error) {
+      console.error('Proactive token refresh failed:', error)
+      // 失败不重试，等待 401 被动刷新或用户重新登录
+    }
+  }, delay)
+}
+
+/**
+ * 停止主动刷新定时器（登出 / 新登录时调用）。
+ */
+export function stopProactiveRefresh() {
+  if (proactiveRefreshTimer !== null) {
+    clearTimeout(proactiveRefreshTimer)
+    proactiveRefreshTimer = null
+  }
 }

@@ -251,3 +251,22 @@ data/app-uploads/*
 CLAUDE.md
 agent.md
 docker-compose.green.yml
+
+# Monitoring tools
+.nezha/
+
+# Temporary directories
+Codex
+
+# CodeGraph build artifacts
+.codegraph/*.db-shm
+.codegraph/*.db-wal
+.codegraph/*.lock
+
+# Large seed data (should use Git LFS if needed)
+docker/mysql/init/seed/
+
+# video-download: 本地敏感文件，不上传
+scripts/video-download/token_state.json
+scripts/video-download/config.py
+scripts/video-download/test_single.py

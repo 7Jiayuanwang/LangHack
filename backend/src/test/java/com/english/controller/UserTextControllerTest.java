@@ -35,6 +35,9 @@ class UserTextControllerTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private com.english.service.ContentTagService contentTagService;
+
     @InjectMocks
     private UserTextController userTextController;
 
@@ -42,6 +45,12 @@ class UserTextControllerTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         doNothing().when(unitService).ensureUserUploadUnitExists(anyLong());
+        // Mock filterValidTags to return valid tags
+        when(contentTagService.filterValidTags(anyString())).thenAnswer(invocation -> {
+            String tags = invocation.getArgument(0);
+            if (tags == null || tags.trim().isEmpty()) return "";
+            return tags; // Pass through for test simplicity
+        });
         mockMvc = MockMvcBuilders.standaloneSetup(userTextController).addFilters(TestUtils.authenticationFilter()).build();
     }
 
@@ -65,7 +74,7 @@ class UserTextControllerTest {
         textData.put("title", "My Article");
         textData.put("content", "This is test content");
         textData.put("difficulty", "EASY");
-        textData.put("tags", "test");
+        textData.put("tags", "general");
 
         mockMvc.perform(post("/api/user/texts/upload")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -86,6 +95,7 @@ class UserTextControllerTest {
 
         Map<String, Object> textData = new HashMap<>();
         textData.put("content", "This is test content");
+        textData.put("tags", "general");
 
         mockMvc.perform(post("/api/user/texts/upload")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -104,6 +114,7 @@ class UserTextControllerTest {
 
         Map<String, Object> textData = new HashMap<>();
         textData.put("title", "My Article");
+        textData.put("tags", "general");
 
         mockMvc.perform(post("/api/user/texts/upload")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -143,6 +154,7 @@ class UserTextControllerTest {
         Map<String, Object> textData = new HashMap<>();
         textData.put("title", "My Article");
         textData.put("content", "Content here");
+        textData.put("tags", "general");
 
         mockMvc.perform(post("/api/user/texts/upload")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -169,6 +181,7 @@ class UserTextControllerTest {
         Map<String, Object> textData = new HashMap<>();
         textData.put("title", "My Article");
         textData.put("content", "Content here");
+        textData.put("tags", "general");
 
         mockMvc.perform(post("/api/user/texts/upload")
                         .contentType(MediaType.APPLICATION_JSON)

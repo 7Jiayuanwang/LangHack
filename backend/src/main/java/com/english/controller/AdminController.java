@@ -8,6 +8,8 @@ import com.english.entity.Unit;
 import com.english.entity.User;
 import com.english.entity.Word;
 import com.english.entity.Text;
+import com.english.entity.TextExercise;
+import com.english.entity.ExerciseOption;
 import com.english.entity.Video;
 import com.english.entity.ContentTag;
 import com.english.exception.BusinessException;
@@ -22,7 +24,12 @@ import com.english.service.UnitWordService;
 import com.english.service.TextExerciseService;
 import com.english.service.ArticleVersionService;
 import com.english.service.ContentTagService;
+import com.english.service.SystemConfigService;
+import com.english.util.SizeParseUtil;
+import com.english.mapper.StudentExerciseAnswerMapper;
+import com.english.mapper.TextExerciseMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -88,6 +95,18 @@ public class AdminController {
     @Autowired
     private ContentTagService contentTagService;
 
+    @Autowired
+    private StudentExerciseAnswerMapper studentExerciseAnswerMapper;
+
+    @Autowired
+    private TextExerciseMapper textExerciseMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
+
     @GetMapping("/users")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Object>> getUsers(
@@ -109,16 +128,8 @@ public class AdminController {
 
             Map<String, Object> result = userService.getUsersByPage(params);
 
-            // 不返回密码
-            if (result != null) {
-                Object recordsObj = result.get("records");
-                if (recordsObj instanceof List) {
-                    @SuppressWarnings("unchecked")
-                    List<User> users = (List<User>) recordsObj;
-                    users.forEach(user -> user.setPassword(null));
-                }
-            }
-
+            // records 已被 service 层 enrich 为 List<Map>（含学院/行政班），不再包含 password 字段
+            // 此处不再遍历 setPassword，避免对 Map 强转 User 导致 ClassCastException
             return Result.success(result);
         } catch (Exception e) {
             logger.error("获取用户列表失败", e);
@@ -762,6 +773,7 @@ public class AdminController {
             text.setAudioUrl(textData.get("audioUrl") != null ? textData.get("audioUrl").toString() : "");
             text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
+            text.setCategory(textData.get("category") != null ? textData.get("category").toString() : null);
             Object isPublicObj = textData.get("isPublic");
             try {
                 text.setIsPublic(isPublicObj != null ? Integer.parseInt(isPublicObj.toString()) : 1);
@@ -902,6 +914,7 @@ public class AdminController {
             text.setAudioUrl(textData.get("audioUrl") != null ? textData.get("audioUrl").toString() : "");
             text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
+            text.setCategory(textData.get("category") != null ? textData.get("category").toString() : null);
             Object isPublicObj = textData.get("isPublic");
             try {
                 text.setIsPublic(isPublicObj != null ? Integer.parseInt(isPublicObj.toString()) : 1);
@@ -1168,6 +1181,91 @@ public class AdminController {
     }
 
     /**
+     * 更新课文的所有题目（批量替换）
+     */
+    @PutMapping("/texts/{textId}/exercises")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public Result<String> updateTextExercises(@PathVariable Long textId, @RequestBody Map<String, Object> requestData) {
+        try {
+            // 验证课文存在
+            Text text = textService.getTextById(textId);
+            if (text == null || Integer.valueOf(1).equals(text.getDeleted())) {
+                return Result.error("课文不存在或已被删除");
+            }
+
+            Object questionsObj = requestData.get("questions");
+            if (!(questionsObj instanceof List)) {
+                return Result.error("questions 字段必须是数组类型");
+            }
+
+            List<Map<String, Object>> questionsData = (List<Map<String, Object>>) questionsObj;
+            if (questionsData.isEmpty()) {
+                // 清空所有题目
+                textExerciseService.deleteAllExercisesByTextId(textId);
+                return Result.success("已清空所有题目");
+            }
+
+            // 删除旧题目
+            textExerciseService.deleteAllExercisesByTextId(textId);
+
+            // 创建新题目
+            List<TextExercise> exercises = new ArrayList<>();
+            List<List<ExerciseOption>> allOptions = new ArrayList<>();
+            User currentUser = getCurrentUser();
+
+            int orderNum = 1;
+            for (Map<String, Object> qData : questionsData) {
+                String question = (String) qData.get("question");
+                if (question == null || question.trim().isEmpty()) {
+                    return Result.error("题目内容不能为空");
+                }
+
+                TextExercise exercise = new TextExercise();
+                exercise.setTextId(textId);
+                exercise.setQuestion(question);
+                exercise.setExerciseType("MULTIPLE_CHOICE");
+                exercise.setQuestionType((String) qData.getOrDefault("questionType", "选择题"));
+                exercise.setAnalysis((String) qData.get("analysis"));
+                exercise.setOrderNum(orderNum++);
+                exercise.setCreatedBy(currentUser.getId());
+
+                exercises.add(exercise);
+
+                // 处理选项
+                List<ExerciseOption> options = new ArrayList<>();
+                Object optionsObj = qData.get("options");
+                if (optionsObj instanceof List) {
+                    List<Map<String, Object>> optionsData = (List<Map<String, Object>>) optionsObj;
+                    int optOrder = 1;
+                    for (Map<String, Object> oData : optionsData) {
+                        ExerciseOption option = new ExerciseOption();
+                        option.setOptionKey((String) oData.get("optionKey"));
+                        option.setOptionContent((String) oData.get("optionContent"));
+                        Object isCorrectObj = oData.get("isCorrect");
+                        option.setIsCorrect(isCorrectObj instanceof Number ? ((Number) isCorrectObj).intValue() : 0);
+                        option.setOrderNum(optOrder++);
+                        options.add(option);
+                    }
+                }
+                allOptions.add(options);
+            }
+
+            boolean success = textExerciseService.batchCreateExercises(exercises, allOptions);
+            if (success) {
+                logger.info("更新课文题目成功: textId={}, 题目数={}", textId, exercises.size());
+                return Result.success("题目保存成功");
+            } else {
+                return Result.error("题目保存失败");
+            }
+        } catch (BusinessException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("更新课文题目失败", e);
+            return Result.error("保存失败，请稍后重试");
+        }
+    }
+
+    /**
      * 从单元移除课文
      */
     @DeleteMapping("/units/{unitId}/texts/{textId}")
@@ -1246,9 +1344,11 @@ public class AdminController {
             return Result.error("上传文件为空");
         }
 
-        // 文件大小限制（10MB）
-        if (file.getSize() > 10 * 1024 * 1024) {
-            return Result.error("文件大小超过限制（最大10MB）");
+        // 文件大小限制（动态读取 content_limits 配置，默认 10MB）
+        String limitVal = systemConfigService.get("content_limits", "upload.content_size.excel_import", "10MB");
+        long maxBytes = SizeParseUtil.parseSize(limitVal, 10 * 1024 * 1024L);
+        if (file.getSize() > maxBytes) {
+            return Result.error("文件大小超过限制（最大" + SizeParseUtil.formatSize(maxBytes) + "）");
         }
 
         // 检查文件类型
@@ -1526,6 +1626,7 @@ public class AdminController {
                 item.put("contentType", text.getContentType());
                 item.put("difficulty", text.getDifficulty());
                 item.put("tags", text.getTags());
+                item.put("category", text.getCategory());
                 item.put("coverUrl", text.getCoverUrl());
                 item.put("audioUrl", text.getAudioUrl());
                 item.put("status", text.getStatus());
@@ -1936,4 +2037,120 @@ public class AdminController {
             return Result.error("删除标签失败");
         }
     }
+
+    // ==================== 做题记录管理 ====================
+
+    @GetMapping("/quiz-attempts")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> listQuizAttempts(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) Long studentId,
+            @RequestParam(required = false) Long textId,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            int offset = (page - 1) * pageSize;
+            StringBuilder where = new StringBuilder("WHERE 1=1 ");
+            List<Object> params = new ArrayList<>();
+            if (studentId != null) { where.append("AND sea.student_id = ? "); params.add(studentId); }
+            if (textId != null) { where.append("AND te.text_id = ? "); params.add(textId); }
+            if (startTime != null && !startTime.isBlank()) { where.append("AND sea.answer_time >= ? "); params.add(startTime); }
+            if (endTime != null && !endTime.isBlank()) { where.append("AND sea.answer_time <= ? "); params.add(endTime); }
+
+            String baseSql =
+                "FROM student_exercise_answers sea " +
+                "JOIN text_exercises te ON sea.exercise_id = te.id " +
+                "LEFT JOIN users u ON sea.student_id = u.id " +
+                "LEFT JOIN texts t ON te.text_id = t.id " +
+                where +
+                "GROUP BY sea.student_id, te.text_id, u.real_name, u.username, t.title ";
+
+            String countSql = "SELECT COUNT(*) FROM (SELECT 1 " + baseSql + ") sub";
+            Long total = jdbcTemplate.queryForObject(countSql, Long.class, params.toArray());
+
+            List<Object> dataParams = new ArrayList<>(params);
+            dataParams.add(pageSize);
+            dataParams.add(offset);
+            String dataSql =
+                "SELECT sea.student_id AS studentId, te.text_id AS textId, " +
+                "u.real_name AS studentRealName, u.username AS studentUsername, " +
+                "t.title AS textTitle, " +
+                "COUNT(sea.id) AS totalQuestions, " +
+                "SUM(CASE WHEN sea.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount, " +
+                "SUM(sea.time_spent_seconds) AS totalTimeSeconds, " +
+                "MAX(sea.answer_time) AS submittedTime " +
+                baseSql +
+                "ORDER BY MAX(sea.answer_time) DESC LIMIT ? OFFSET ?";
+
+            List<Map<String, Object>> list = jdbcTemplate.queryForList(dataSql, dataParams.toArray());
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("list", list);
+            result.put("total", total != null ? total : 0);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("查询做题记录失败", e);
+            return Result.error("查询做题记录失败");
+        }
+    }
+
+    @GetMapping("/quiz-attempts/detail")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> getQuizAttemptDetail(
+            @RequestParam Long studentId,
+            @RequestParam Long textId) {
+        try {
+            String attemptSql =
+                "SELECT sea.student_id AS studentId, te.text_id AS textId, " +
+                "u.real_name AS studentRealName, u.username AS studentUsername, " +
+                "t.title AS textTitle, " +
+                "COUNT(sea.id) AS totalQuestions, " +
+                "SUM(CASE WHEN sea.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount, " +
+                "SUM(sea.time_spent_seconds) AS totalTimeSeconds, " +
+                "MAX(sea.answer_time) AS submittedTime " +
+                "FROM student_exercise_answers sea " +
+                "JOIN text_exercises te ON sea.exercise_id = te.id " +
+                "LEFT JOIN users u ON sea.student_id = u.id " +
+                "LEFT JOIN texts t ON te.text_id = t.id " +
+                "WHERE sea.student_id = ? AND te.text_id = ? " +
+                "GROUP BY sea.student_id, te.text_id, u.real_name, u.username, t.title";
+            List<Map<String, Object>> attempts = jdbcTemplate.queryForList(attemptSql, studentId, textId);
+            Map<String, Object> attempt = attempts.isEmpty() ? new HashMap<>() : attempts.get(0);
+
+            String recordsSql =
+                "SELECT sea.id, sea.exercise_id AS exerciseId, sea.answer_content AS userAnswer, " +
+                "sea.is_correct AS isCorrect, sea.time_spent_seconds AS timeSpentSeconds, " +
+                "sea.answer_time AS submittedTime, " +
+                "te.question AS questionSnapshot, te.exercise_type AS questionType, " +
+                "(SELECT eo.option_key FROM exercise_options eo WHERE eo.exercise_id = te.id AND eo.is_correct = 1 LIMIT 1) AS correctAnswer " +
+                "FROM student_exercise_answers sea " +
+                "JOIN text_exercises te ON sea.exercise_id = te.id " +
+                "WHERE sea.student_id = ? AND te.text_id = ? " +
+                "ORDER BY sea.answer_time ASC";
+            List<Map<String, Object>> records = jdbcTemplate.queryForList(recordsSql, studentId, textId);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("attempt", attempt);
+            result.put("records", records);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("查询做题详情失败 studentId={} textId={}", studentId, textId, e);
+            return Result.error("查询做题详情失败");
+        }
+    }
+
+    private User getCurrentUser() {
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
+            throw new BusinessException("未认证");
+        }
+        User user = userService.getUserByUsername(auth.getName());
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        return user;
+    }
+
 }

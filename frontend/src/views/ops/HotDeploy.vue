@@ -222,8 +222,35 @@ const startDeploy = async () => {
       markStepError(0)
     }
   } catch (e) {
-    addLog('[ERROR] 请求失败，请检查后端服务是否运行')
-    addLog('[INFO] 提示：可直接在服务器上运行 scripts/hot-deploy.sh 脚本')
+    addLog('[ERROR] 触发失败 — HTTP 层异常')
+    if (e?.code) addLog(`  错误码: ${e.code}`)
+    if (e?.message) addLog(`  消息: ${e.message}`)
+    if (e?.response?.status) addLog(`  HTTP 状态: ${e.response.status} ${e.response.statusText || ''}`)
+    if (e?.response?.data) {
+      const body = typeof e.response.data === 'string'
+        ? e.response.data
+        : JSON.stringify(e.response.data)
+      addLog(`  响应体: ${body.slice(0, 500)}`)
+    }
+    if (e?.config?.url) addLog(`  请求 URL: ${e.config.url}`)
+    if (e?.config?.timeout) addLog(`  axios timeout: ${e.config.timeout}ms`)
+
+    const isTimeout = e?.code === 'ECONNABORTED' || (e?.message || '').includes('timeout')
+    if (isTimeout) {
+      addLog('[HINT] axios 超时通常意味着 backend 在等 docker run 完成但卡住了')
+      addLog('[HINT] 最可能原因: 服务器拉不下来 docker:24-cli 镜像')
+      addLog('[HINT] 排查: 在服务器跑  docker pull docker:24-cli  看能不能拉')
+    } else if (e?.response?.status === 401 || e?.response?.status === 403) {
+      addLog('[HINT] 权限不足 — 检查当前登录账号是否有 OPS 或 ADMIN 角色')
+    } else if (e?.response?.status === 404) {
+      addLog('[HINT] 接口 404 — backend 可能没启用 HotDeployController（旧版本？）')
+    } else if (e?.response?.status >= 500) {
+      addLog('[HINT] backend 内部错误 — 看 docker logs langhack-backend --tail 100')
+    } else if (!e?.response) {
+      addLog('[HINT] 没收到 HTTP 响应 — 网络中断或 nginx 没在转发 /api/ops/hot-deploy/trigger')
+    }
+
+    addLog('[INFO] 也可直接在服务器跑: bash scripts/hot-deploy.sh')
     deploying.value = false
     markStepError(0)
   }

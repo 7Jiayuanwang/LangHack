@@ -232,7 +232,7 @@ class SchoolDataSyncServiceTest {
     class FullSyncAllTests {
 
         @Test
-        @DisplayName("同步所有9个数据源")
+        @DisplayName("同步所有10个数据源")
         void fullSyncAll_syncsAllDataSources() {
             when(fetchService.fetchRawDataWithSummary(anyString(), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(syncLogMapper.insert(any())).thenReturn(1);
@@ -240,9 +240,9 @@ class SchoolDataSyncServiceTest {
 
             List<SyncLog> results = syncService.fullSyncAll("SCHEDULED", "SYSTEM");
 
-            assertEquals(9, results.size());
-            // student_schedule is skipped (requires student ID), so fetchService is called 8 times
-            verify(fetchService, times(8)).fetchRawDataWithSummary(anyString(), isNull());
+            assertEquals(10, results.size());
+            // student_schedule is skipped (requires student ID), so fetchService is called 9 times
+            verify(fetchService, times(9)).fetchRawDataWithSummary(anyString(), isNull());
         }
 
         @Test
@@ -256,13 +256,14 @@ class SchoolDataSyncServiceTest {
             when(fetchService.fetchRawDataWithSummary(eq("level_exam_scores"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(fetchService.fetchRawDataWithSummary(eq("teaching_plans"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             when(fetchService.fetchRawDataWithSummary(eq("teacher_courses"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
+            when(fetchService.fetchRawDataWithSummary(eq("student_basic_info"), isNull())).thenReturn(fetchResult(Collections.emptyList()));
             // student_schedule is skipped by fullSyncAll — no stub needed
             when(syncLogMapper.insert(any())).thenReturn(1);
             when(syncLogMapper.updateById(any())).thenReturn(1);
 
             List<SyncLog> results = syncService.fullSyncAll("SCHEDULED", "SYSTEM");
 
-            assertEquals(9, results.size());
+            assertEquals(10, results.size());
             assertEquals("FAILED", results.get(1).getStatus());
             assertEquals("SUCCESS", results.get(2).getStatus());
         }
@@ -348,11 +349,12 @@ class SchoolDataSyncServiceTest {
 
             Map<String, Object> overview = syncService.getSyncStatusOverview();
 
-            assertEquals(9, overview.size());
+            assertEquals(10, overview.size());
             assertTrue(overview.containsKey("administrative_class"));
             assertTrue(overview.containsKey("teaching_plans"));
             assertTrue(overview.containsKey("teacher_courses"));
             assertTrue(overview.containsKey("student_schedule"));
+            assertTrue(overview.containsKey("student_basic_info"));
         }
 
         @Test

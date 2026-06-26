@@ -356,12 +356,44 @@ export function getAiFeedbackSummary() {
   return request({ url: '/api/admin/metrics/ai-feedback-summary', method: 'get' })
 }
 
-// ── 做题记录 ──
-
-export function getQuizAttempts(params) {
-  return request({ url: '/api/admin/quiz-records/attempts', method: 'get', params })
+export function getAiQaUsage(username) {
+  return request({ url: '/api/admin/metrics/ai-qa-usage', method: 'get', params: { username } })
 }
 
-export function getQuizAttemptDetail(attemptId) {
-  return request({ url: `/api/admin/quiz-records/attempts/${attemptId}`, method: 'get' })
+export function getAiQaUsageTrend(username, days = 6) {
+  return request({ url: '/api/admin/metrics/ai-qa-usage-trend', method: 'get', params: { username, days } })
+}
+
+export function getStudents() {
+  return request({ url: '/api/admin/metrics/students', method: 'get' })
+}
+
+export function getCetComparison(params) {
+  return request({ url: '/api/admin/metrics/cet-comparison', method: 'get', params })
+}
+
+export function getCetDetailed(params) {
+  return request({ url: '/api/admin/metrics/cet-detailed', method: 'get', params })
+}
+
+// ========== 做题记录管理 ==========
+
+export function getQuizAttempts(params) {
+  return request({
+    url: '/api/admin/quiz-attempts',
+    method: 'get',
+    params
+  })
+}
+
+export function getQuizAttemptDetail(studentId, textId) {
+  return request({
+    url: '/api/admin/quiz-attempts/detail',
+    method: 'get',
+    params: { studentId, textId }
+  })
+}
+
+export function getUserGrowth(params) {
+  return request({ url: '/api/admin/metrics/user-growth', method: 'get', params })
 }

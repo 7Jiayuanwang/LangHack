@@ -17,8 +17,16 @@
 
       <div v-for="item in students" :key="item.studentId" class="student-card">
         <div class="card-header">
-          <span class="student-name">{{ item.studentName }}</span>
-          <el-tag size="small" type="info">{{ item.studentId }}</el-tag>
+          <span class="student-name">
+            <template v-if="item.studentName">{{ item.studentName }}</template>
+            <el-tooltip v-else content="暂无可用学生姓名，当前仅显示学号（可能为上游未返回或脏数据已被抑制）" placement="top">
+              <span class="text-muted">学号 {{ item.studentId }}</span>
+            </el-tooltip>
+          </span>
+          <div class="card-actions">
+            <el-button size="small" type="primary" plain @click="openProfile(item.studentId)">画像</el-button>
+            <el-tag size="small" type="info">{{ item.studentId }}</el-tag>
+          </div>
         </div>
         <div class="card-body">
           <div class="info-row">
@@ -40,15 +48,26 @@
         </div>
       </div>
     </div>
+
+    <!-- 画像抽屉 -->
+    <el-drawer v-model="profileDrawerVisible" title="学习者画像" size="420px">
+      <LearnerProfileCard :profile="currentProfile" :loading="profileLoading" :error="profileError" />
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { getMyStudents } from '@/api/teacher'
+import { getTeacherStudentProfile } from '@/api/learnerProfile'
+import LearnerProfileCard from '@/components/learner/LearnerProfileCard.vue'
 
 const loading = ref(false)
 const students = ref([])
+const profileDrawerVisible = ref(false)
+const currentProfile = ref(null)
+const profileLoading = ref(false)
+const profileError = ref(false)
 
 const now = new Date()
 const currentMonth = now.getMonth() + 1
@@ -86,6 +105,22 @@ async function loadData() {
 onMounted(() => {
   loadData()
 })
+
+async function openProfile(studentId) {
+  profileDrawerVisible.value = true
+  profileLoading.value = true
+  profileError.value = false
+  currentProfile.value = null
+  try {
+    const res = await getTeacherStudentProfile(studentId)
+    currentProfile.value = res?.data || null
+  } catch (e) {
+    console.error('获取画像失败:', e)
+    profileError.value = true
+  } finally {
+    profileLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -123,10 +158,22 @@ onMounted(() => {
   margin-bottom: 8px;
 }
 
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .student-name {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 400;
 }
 
 .card-body {

@@ -99,4 +99,9 @@ public interface VocabularyBooksService {
      * 获取生词本统计信息
      */
     Map<String, Object> getVocabularyStats(Long studentId);
+
+    /**
+     * 获取复习统计（逾期/待复习数量）
+     */
+    Map<String, Object> getReviewStats(Long studentId);
 }

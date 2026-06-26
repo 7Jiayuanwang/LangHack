@@ -93,6 +93,27 @@ class AdminControllerEnhancedTest {
     }
 
     @Test
+    @DisplayName("GET /api/admin/users - enriched map records do not cause cast errors")
+    void getUsers_withEnrichedMapRecords_success() throws Exception {
+        Map<String, Object> row = new HashMap<>();
+        row.put("id", 2L);
+        row.put("username", "student1");
+        row.put("role", "STUDENT");
+        row.put("collegeName", "外国语学院");
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", new ArrayList<>(Collections.singletonList(row)));
+        result.put("total", 1);
+        when(userService.getUsersByPage(anyMap())).thenReturn(result);
+
+        mockMvc.perform(get("/api/admin/users").param("page", "1").param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.records[0].username").value("student1"))
+                .andExpect(jsonPath("$.data.records[0].collegeName").value("外国语学院"));
+    }
+
+    @Test
     @DisplayName("POST /api/admin/users - create user with valid data success")
     void createUser_success() throws Exception {
         when(userService.getUserByUsername("newuser")).thenReturn(null);

@@ -47,6 +47,24 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="collegeName" label="学院" min-width="120" show-overflow-tooltip>
+          <template #default="scope">
+            <span v-if="scope.row.collegeName">{{ scope.row.collegeName }}</span>
+            <el-tooltip v-else-if="!scope.row.schoolStudentId" content="该用户尚未关联学校学生数据">
+              <span class="text-muted">未关联</span>
+            </el-tooltip>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="className" label="行政班" min-width="130" show-overflow-tooltip>
+          <template #default="scope">
+            <span v-if="scope.row.className">{{ scope.row.className }}</span>
+            <el-tooltip v-else-if="!scope.row.schoolStudentId" content="该用户尚未关联学校学生数据">
+              <span class="text-muted">未关联</span>
+            </el-tooltip>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="createdTime" label="创建时间" width="180">
           <template #default="scope">
             {{ formatTime(scope.row.createdTime) }}
@@ -676,5 +694,10 @@ onMounted(() => {
   .search-form :deep(.el-select) {
     width: 100% !important;
   }
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-style: italic;
 }
 </style>

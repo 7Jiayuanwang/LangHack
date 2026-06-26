@@ -1,25 +1,5 @@
 <template>
   <div class="interactive-text">
-    <!-- 可拖动的翻译按钮 -->
-    <div
-      class="floating-translate-btn"
-      :class="{ 'selecting': isSelectingMode }"
-      :style="{ top: floatingBtnPosition.y + 'px', left: floatingBtnPosition.x + 'px' }"
-      @mousedown="startDrag"
-      @touchstart.prevent="startDrag"
-    >
-      <el-tooltip :content="isSelectingMode ? '选择文本后点击翻译' : '点击开始翻译'" placement="left">
-        <button
-          class="translate-fab"
-          :class="isSelectingMode ? 'fab-active' : 'fab-default'"
-        >
-          <span v-if="isSelectingMode" class="fab-icon">✓</span>
-          <span v-else class="fab-icon">译</span>
-          <span class="fab-label">{{ isSelectingMode ? '翻译' : '划词翻译' }}</span>
-        </button>
-      </el-tooltip>
-    </div>
-
     <div
       class="text-content"
       v-if="text"
@@ -36,46 +16,42 @@
       </div>
     </div>
 
-    <!-- 翻译结果弹窗 -->
-    <el-dialog
-      v-model="showTranslateDialog"
-      title="翻译结果"
-      width="min(400px, 92vw)"
-      class="translate-dialog"
-    >
-      <div class="translate-content" v-if="!translating">
-        <div class="original-text">
-          <h4>原文：</h4>
-          <div class="text-scroll-area">
-            <p>{{ selectedText }}</p>
+    <!-- 翻译结果浮层 -->
+    <div v-if="showTranslateDialog" class="inline-popup-overlay" @click.self="showTranslateDialog = false">
+      <div class="inline-popup translate-popup">
+        <div class="popup-header">
+          <span>翻译结果</span>
+          <button class="popup-close" @click="showTranslateDialog = false">&times;</button>
+        </div>
+        <div class="translate-content" v-if="!translating">
+          <div class="original-text">
+            <h4>原文：</h4>
+            <div class="text-scroll-area">
+              <p>{{ selectedText }}</p>
+            </div>
+          </div>
+          <div class="translated-text">
+            <h4>译文：</h4>
+            <div class="text-scroll-area">
+              <p>{{ translatedText }}</p>
+            </div>
           </div>
         </div>
-        <div class="translated-text">
-          <h4>译文：</h4>
-          <div class="text-scroll-area">
-            <p>{{ translatedText }}</p>
-          </div>
+        <div class="loading-content" v-else>
+          <el-icon class="is-loading" :size="40"><Loading /></el-icon>
+          <p style="margin-top: 10px; color: #666;">翻译中...</p>
         </div>
       </div>
-      <div class="loading-content" v-else>
-        <el-icon class="is-loading" :size="40"><Loading /></el-icon>
-        <p style="margin-top: 10px; color: #666;">翻译中...</p>
-      </div>
-      <template #footer>
-        <el-button @click="showTranslateDialog = false">关闭</el-button>
-      </template>
-    </el-dialog>
+    </div>
 
-    <!-- 词汇信息弹窗 -->
-    <el-dialog
-      v-model="showWordDialog"
-      title="词汇详情"
-      width="min(350px, 92vw)"
-      class="word-dialog"
-      align-center
-      :before-close="handleDialogClose"
-    >
-      <div class="word-content" v-if="selectedWordInfo">
+    <!-- 词汇详情浮层 -->
+    <div v-if="showWordDialog" class="inline-popup-overlay" @click.self="handleDialogClose">
+      <div class="inline-popup word-popup">
+        <div class="popup-header">
+          <span>词汇详情</span>
+          <button class="popup-close" @click="handleDialogClose">&times;</button>
+        </div>
+        <div class="word-content" v-if="selectedWordInfo">
         <div class="word-header">
           <div class="word-title-row">
             <h2 class="word-title">{{ selectedWordInfo.word || '未知单词' }}</h2>
@@ -148,7 +124,8 @@
           :sub-title="errorMessage"
         ></el-result>
       </div>
-    </el-dialog>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -695,26 +672,51 @@ onBeforeUnmount(() => {
 </script>
 
 <style>
-/* 全局弹窗样式 - 不受 scoped 限制 */
-.word-dialog.el-dialog,
-.word-dialog.el-dialog__wrapper {
-  margin: 0 !important;
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  width: 85% !important;
-  max-width: 320px !important;
-  max-height: 60vh;
+/* 自定义浮层 - 替代 el-dialog，无遮罩层 */
+.inline-popup-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: transparent;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-
-@media (max-width: 480px) {
-  .word-dialog.el-dialog,
-  .word-dialog.el-dialog__wrapper {
-    width: 90% !important;
-    max-width: 300px !important;
-    max-height: 50vh;
-  }
+.inline-popup {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  max-width: 380px;
+  width: 90vw;
+  max-height: 65vh;
+  overflow-y: auto;
+  z-index: 2001;
+}
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.popup-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.popup-close:hover { color: #0f172a; }
+.inline-popup .translate-content,
+.inline-popup .word-content,
+.inline-popup .loading-content,
+.inline-popup .error-content {
+  padding: 12px 18px 18px;
 }
 </style>
 

@@ -7,22 +7,36 @@
         INSERT INTO school_student (
             student_id, student_name, college_name, college_code,
             class_code, class_name, grade, major_name,
+            gender, phone, counselor_name,
             source_course_codes, sync_time, last_exam_sync_time, last_schedule_sync_time,
             sync_source
         ) VALUES (
             #{studentId}, #{studentName}, #{collegeName}, #{collegeCode},
             #{classCode}, #{className}, #{grade}, #{majorName},
+            #{gender}, #{phone}, #{counselorName},
             #{sourceCourseCodes}, #{syncTime}, #{lastExamSyncTime}, #{lastScheduleSyncTime},
             #{syncSource}
         )
         ON DUPLICATE KEY UPDATE
-            student_name = COALESCE(#{studentName}, student_name),
+            -- 有真实值时覆盖；仅当新值是纯数字（脏数据）时才保留旧值
+            student_name = CASE
+                WHEN #{studentName} IS NOT NULL AND #{studentName} NOT REGEXP '^[0-9]+$'
+                    THEN #{studentName}
+                ELSE student_name
+            END,
             college_name = COALESCE(#{collegeName}, college_name),
             college_code = COALESCE(#{collegeCode}, college_code),
             class_code = COALESCE(#{classCode}, class_code),
-            class_name = COALESCE(#{className}, class_name),
+            class_name = CASE
+                WHEN #{className} IS NOT NULL AND #{className} != ''
+                    THEN #{className}
+                ELSE class_name
+            END,
             grade = COALESCE(#{grade}, grade),
             major_name = COALESCE(#{majorName}, major_name),
+            gender = COALESCE(#{gender}, gender),
+            phone = COALESCE(#{phone}, phone),
+            counselor_name = COALESCE(#{counselorName}, counselor_name),
             source_course_codes = COALESCE(#{sourceCourseCodes}, source_course_codes),
             sync_time = #{syncTime},
             last_exam_sync_time = COALESCE(#{lastExamSyncTime}, last_exam_sync_time),

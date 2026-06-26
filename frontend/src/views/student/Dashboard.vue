@@ -207,8 +207,8 @@
         </div>
       </div>
 
-      <!-- 单词本背诵任务（受 page_vocabulary 开关控制） -->
-      <div v-if="isEnabled('page_vocabulary')" class="trend-section">
+      <!-- 单词本背诵任务（受 page_word_recite 开关控制） -->
+      <div v-if="isEnabled('page_word_recite')" class="trend-section">
         <div class="section-header">
           <h2 class="section-title">单词本背诵</h2>
           <button class="trend-btn secondary" @click="$router.push('/student/vocabulary')">

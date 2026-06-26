@@ -3,10 +3,12 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.Media;
 import com.english.entity.User;
+import com.english.entity.Video;
 import com.english.exception.BusinessException;
 import com.english.service.MediaService;
 import com.english.service.MediaTranscodeService;
 import com.english.service.UserService;
+import com.english.service.VideoService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +57,9 @@ public class MediaController {
 
     @Autowired
     private MediaTranscodeService mediaTranscodeService;
+
+    @Autowired
+    private VideoService videoService;
 
     @PostMapping("/upload")
     @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
@@ -132,6 +137,48 @@ public class MediaController {
             if (media == null) {
                 logger.warn("Media not found or deleted: {}", mediaId);
                 return ResponseEntity.notFound().build();
+            }
+
+            // 若该媒体关联视频，要求视频已审核通过且公开；上传者本人或管理员可跳过此限制
+            if ("VIDEO".equals(media.getMediaType())) {
+                Video video = videoService.lambdaQuery()
+                        .eq(Video::getMediaId, mediaId)
+                        .last("LIMIT 1")
+                        .one();
+                if (video != null) {
+                    boolean approved = "APPROVED".equalsIgnoreCase(video.getStatus())
+                            && Integer.valueOf(1).equals(video.getIsPublic());
+
+                    logger.info("Video access check - mediaId: {}, videoId: {}, status: {}, isPublic: {}, approved: {}",
+                            mediaId, video.getId(), video.getStatus(), video.getIsPublic(), approved);
+
+                    if (!approved) {
+                        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                        boolean privileged = false;
+
+                        logger.info("Video not approved - checking privileges. Auth: {}, authenticated: {}",
+                                auth != null ? auth.getName() : "null",
+                                auth != null && auth.isAuthenticated());
+
+                        if (auth != null && auth.isAuthenticated()
+                                && !"anonymousUser".equals(auth.getName())) {
+                            User currentUser = userService.getUserByUsername(auth.getName());
+                            if (currentUser != null) {
+                                privileged = currentUser.getId().equals(video.getUserId())
+                                        || "ADMIN".equals(currentUser.getRole());
+
+                                logger.info("User found - userId: {}, role: {}, video.userId: {}, privileged: {}",
+                                        currentUser.getId(), currentUser.getRole(), video.getUserId(), privileged);
+                            } else {
+                                logger.warn("Current user not found in database: {}", auth.getName());
+                            }
+                        }
+                        if (!privileged) {
+                            logger.warn("Access denied - user not privileged to view video {}", video.getId());
+                            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        }
+                    }
+                }
             }
 
             String rawFileName = media.getFileName() != null ? media.getFileName() : "media_" + mediaId;

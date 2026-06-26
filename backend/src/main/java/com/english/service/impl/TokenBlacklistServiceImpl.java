@@ -59,6 +59,29 @@ public class TokenBlacklistServiceImpl implements TokenBlacklistService {
     }
 
     @Override
+    public void addToBlacklist(String token, long expirationMillis) {
+        if (token == null || token.trim().isEmpty()) {
+            logger.warn("Attempted to blacklist null or empty token");
+            return;
+        }
+
+        if (expirationMillis <= 0) {
+            logger.debug("Token expiration time invalid, skipping blacklist");
+            return;
+        }
+
+        String key = buildRedisKey(token);
+        localBlacklist.put(key, System.currentTimeMillis() + expirationMillis);
+
+        try {
+            stringRedisTemplate.opsForValue().set(key, "1", expirationMillis, TimeUnit.MILLISECONDS);
+            logger.info("Token blacklisted successfully, TTL={}ms", expirationMillis);
+        } catch (Exception e) {
+            logger.error("Failed to blacklist token in Redis, local fallback remains active", e);
+        }
+    }
+
+    @Override
     public boolean isBlacklisted(String token) {
         if (token == null || token.trim().isEmpty()) {
             return false;

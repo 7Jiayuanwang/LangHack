@@ -100,20 +100,14 @@ public class WordNetServiceTest {
         ecdictResult.put("found", false);
         when(ecdictService.getWordInfo(wordText)).thenReturn(ecdictResult);
 
-        when(wordService.createWord(any(Word.class))).thenAnswer(invocation -> {
-            Word w = invocation.getArgument(0);
-            w.setId(3L);
-            return true;
-        });
-
         Map<String, Object> result = wordNetService.getOrCreateWord(wordText);
 
-        assertEquals(true, result.get("found"));
-        assertEquals("basic_created", result.get("primarySource"));
-        assertEquals(3L, result.get("wordId"));
+        assertEquals(false, result.get("found"));
+        assertEquals("not_found", result.get("primarySource"));
+        assertTrue(result.get("error").toString().contains("无法获取词汇释义"));
 
         verify(wordService, times(1)).getWordByWord(wordText);
-        verify(wordService, times(1)).createWord(any(Word.class));
+        verify(wordService, never()).createWord(any(Word.class));
     }
 
     @Test
@@ -393,6 +387,6 @@ public class WordNetServiceTest {
 
         Map<String, Object> result = wordNetService.getOrCreateWord(wordText);
 
-        assertEquals("error", result.get("primarySource"));
+        assertEquals("not_found", result.get("primarySource"));
     }
 }

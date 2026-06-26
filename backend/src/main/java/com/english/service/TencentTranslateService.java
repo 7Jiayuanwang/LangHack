@@ -455,4 +455,71 @@ public class TencentTranslateService {
         if (body == null) return "null";
         return body.length() > 200 ? body.substring(0, 200) + "...(truncated)" : body;
     }
+
+    // 单块最大字符数，留出 prompt 模板开销后的安全余量
+    private static final int CHUNK_SIZE = 1500;
+
+    /**
+     * 长文本翻译：将文本按句子边界切块，每块独立翻译后拼接。
+     * 适用于超过 CHUNK_SIZE 字符的单次翻译请求。
+     * <p>
+     * 切句策略：按 "。！？.!?\n" 断句，尽量保留语义完整性；
+     * 单句超出限制时强制按字符数截断。
+     */
+    public String translateLong(String text, String source, String target) {
+        if (text == null || text.isEmpty()) return "";
+        if (text.length() <= CHUNK_SIZE) {
+            return translate(text, source, target);
+        }
+
+        List<String> chunks = splitIntoChunks(text, CHUNK_SIZE);
+        StringBuilder result = new StringBuilder();
+        for (String chunk : chunks) {
+            String translated = translate(chunk, source, target);
+            if (result.length() > 0) {
+                // 保留原文中两块之间是否有换行
+                result.append(' ');
+            }
+            result.append(translated);
+        }
+        return result.toString().trim();
+    }
+
+    /**
+     * 按句子边界把文本拆成不超过 maxChars 的块列表。
+     */
+    static List<String> splitIntoChunks(String text, int maxChars) {
+        List<String> chunks = new ArrayList<>();
+        // 以中英文句末标点或换行作为切割点
+        String[] sentences = text.split("(?<=[。！？.!?\\n])");
+        StringBuilder current = new StringBuilder();
+        for (String sentence : sentences) {
+            if (sentence.isEmpty()) continue;
+            // 单句本身超出限制：强制按字符切
+            if (sentence.length() > maxChars) {
+                if (current.length() > 0) {
+                    chunks.add(current.toString());
+                    current.setLength(0);
+                }
+                int pos = 0;
+                while (pos < sentence.length()) {
+                    int end = Math.min(pos + maxChars, sentence.length());
+                    chunks.add(sentence.substring(pos, end));
+                    pos = end;
+                }
+                continue;
+            }
+            if (current.length() + sentence.length() > maxChars) {
+                if (current.length() > 0) {
+                    chunks.add(current.toString());
+                    current.setLength(0);
+                }
+            }
+            current.append(sentence);
+        }
+        if (current.length() > 0) {
+            chunks.add(current.toString());
+        }
+        return chunks;
+    }
 }

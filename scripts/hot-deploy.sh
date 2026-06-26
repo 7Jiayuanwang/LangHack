@@ -16,11 +16,29 @@
 # ==============================================================================
 set -euo pipefail
 
+# 适配 Deployer 容器内以 root 运行 git 的安全目录检查
+git config --global --add safe.directory '*' 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
 LOG_DIR="$PROJECT_ROOT/logs"
 ENV_FILE="$PROJECT_ROOT/docker/.env"
+
+# 确保日志目录存在
+mkdir -p "$LOG_DIR/hot-deploy" 2>/dev/null || true
+
+# ── Deployer Sidecar 模式检测 ────────────────────────────────────────────────
+# HOST_PROJECT_DIR 由 UpdateServiceImpl 传入，表示宿主机上的项目绝对路径
+# 构建命令用容器内路径（compose 需要读源文件），运行时命令用宿主机路径（Docker daemon 需要）
+if [ -n "${HOST_PROJECT_DIR:-}" ]; then
+    # docker compose CLI 运行在当前容器内，所有路径需使用容器内路径
+    COMPOSE_BUILD_PD="--project-directory $DOCKER_DIR"
+    COMPOSE_RUNTIME_PD="--project-directory $DOCKER_DIR"
+else
+    COMPOSE_BUILD_PD=""
+    COMPOSE_RUNTIME_PD=""
+fi
 
 # ── 端口配置 ──────────────────────────────────────────────────────────────────
 BLUE_BACKEND_PORT=8080
@@ -39,8 +57,13 @@ BACKEND_IMAGE="langhack-backend:latest"
 NETWORK_NAME="langhack_langhack-network"
 
 # ── 健康检查 ──────────────────────────────────────────────────────────────────
-HEALTH_URL_BLUE="http://localhost:${BLUE_BACKEND_PORT}/api/health"
-HEALTH_URL_GREEN="http://localhost:${GREEN_BACKEND_PORT}/api/health"
+if [ -n "${HOST_PROJECT_DIR:-}" ]; then
+    HEALTH_URL_BLUE="http://langhack-backend:8080/api/health"
+    HEALTH_URL_GREEN="http://${GREEN_BACKEND_CONTAINER}:8080/api/health"
+else
+    HEALTH_URL_BLUE="http://localhost:${BLUE_BACKEND_PORT}/api/health"
+    HEALTH_URL_GREEN="http://localhost:${GREEN_BACKEND_PORT}/api/health"
+fi
 HEALTH_WAIT_SECS=120
 HEALTH_INTERVAL=3
 
@@ -48,9 +71,14 @@ HEALTH_INTERVAL=3
 BRANCH="$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'master')"
 SKIP_BUILD=false
 SKIP_PULL=false
+SKIP_FRONTEND_BUILD=false
 DRY_RUN=false
 REMOTE_URL=""
 DEPLOY_ID=""
+# FRONTEND_CHANGED：frontend/ 目录在 git pull 后是否有变更（自动检测）
+FRONTEND_CHANGED=false
+# 记录上一次部署的 commit，用于变更检测
+LAST_DEPLOY_COMMIT_FILE="$LOG_DIR/.last-deploy-commit"
 
 mkdir -p "$LOG_DIR"
 mkdir -p "$LOG_DIR/hot-deploy"
@@ -70,6 +98,7 @@ parse_args() {
             --branch)   BRANCH="$2"; shift 2 ;;
             --skip-build) SKIP_BUILD=true; shift ;;
             --skip-pull)  SKIP_PULL=true; shift ;;
+            --skip-frontend-build) SKIP_FRONTEND_BUILD=true; shift ;;
             --remote)   REMOTE_URL="$2"; shift 2 ;;
             --dry-run)  DRY_RUN=true; shift ;;
             --deploy-id) DEPLOY_ID="$2"; shift 2 ;;
@@ -87,6 +116,7 @@ usage() {
   --branch <branch>   部署分支（默认: 当前所在分支）
   --skip-build        跳过镜像构建（使用现有镜像）
   --skip-pull         跳过 git pull（使用本地当前代码，GitHub 不可达时使用）
+  --skip-frontend-build  跳过 frontend 镜像构建与容器重建（仅重建后端）
   --remote <url>      指定 git 远程仓库地址（如 Gitee 镜像）
   --dry-run           仅打印操作，不实际执行
   --deploy-id <id>    本次部署的唯一 ID（被 HotDeployController 调用时使用）
@@ -170,7 +200,7 @@ rollback() {
     # 确保 blue 仍在运行
     if ! $DRY_RUN && ! curl -sf -m 3 "$HEALTH_URL_BLUE" >/dev/null 2>&1; then
         log_warn "blue 后端不健康，尝试重启..."
-        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" up -d backend
+        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d --no-deps backend
         wait_healthy "$HEALTH_URL_BLUE" "blue backend (回滚)" || log_error "回滚失败，请手动检查"
     else
         log_ok "blue 后端仍在运行，回滚完成"
@@ -232,17 +262,50 @@ main() {
         if [ -n "$REMOTE_URL" ]; then
             log_info "使用指定远程仓库: $REMOTE_URL"
             run git -C "$PROJECT_ROOT" remote set-url origin "$REMOTE_URL"
+        elif [ -n "${GIT_TOKEN:-}" ]; then
+            # 将 HTTPS remote 注入 token，避免容器内无凭据导致认证失败
+            ORIGINAL_REMOTE=$(git -C "$PROJECT_ROOT" remote get-url origin 2>/dev/null || echo "")
+            if [[ "$ORIGINAL_REMOTE" == https://github.com/* ]]; then
+                REPO_PATH="${ORIGINAL_REMOTE#https://github.com/}"
+                TOKEN_REMOTE="https://${GIT_TOKEN}@github.com/${REPO_PATH}"
+                git -C "$PROJECT_ROOT" remote set-url origin "$TOKEN_REMOTE"
+                log_info "已注入 GIT_TOKEN 认证"
+            fi
         fi
         run git -C "$PROJECT_ROOT" fetch origin "$BRANCH"
         run git -C "$PROJECT_ROOT" checkout "$BRANCH"
         run git -C "$PROJECT_ROOT" pull origin "$BRANCH"
+        # 拉取完成后恢复 remote URL（去掉 token）
+        if [ -n "${ORIGINAL_REMOTE:-}" ]; then
+            git -C "$PROJECT_ROOT" remote set-url origin "$ORIGINAL_REMOTE" 2>/dev/null || true
+        fi
     fi
     log_ok "代码已就绪"
 
-    # 2. 构建新镜像
+    # 检测 frontend/ 目录是否有变更（相对上次成功部署的 commit）
+    if [ -f "$LAST_DEPLOY_COMMIT_FILE" ]; then
+        if git -C "$PROJECT_ROOT" diff --name-only "$(cat "$LAST_DEPLOY_COMMIT_FILE")" HEAD -- frontend/ 2>/dev/null | grep -q .; then
+            FRONTEND_CHANGED=true
+        fi
+    else
+        # 首次部署（无历史记录）— 保守起见不自动构建
+        FRONTEND_CHANGED=false
+    fi
+    if $FRONTEND_CHANGED; then
+        log_info "检测到 frontend/ 目录有变更，将自动重新构建前端镜像"
+    fi
+
+    # 2. 构建新镜像（后端必建，前端按变更检测 + SKIP_FRONTEND_BUILD 决定）
     if ! $SKIP_BUILD; then
         log_section "Step 2: 构建 green 镜像"
-        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" build backend
+        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_BUILD_PD build backend
+        if [ "${SKIP_FRONTEND_BUILD:-false}" = "true" ]; then
+            log_info "跳过 frontend 镜像构建（SKIP_FRONTEND_BUILD=true）"
+        elif $FRONTEND_CHANGED; then
+            run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_BUILD_PD build frontend
+        else
+            log_info "跳过 frontend 镜像构建（frontend/ 无变更，可通过 --skip-frontend-build=false 强制构建）"
+        fi
         log_ok "镜像构建完成"
     else
         log_info "跳过镜像构建（--skip-build）"
@@ -259,7 +322,7 @@ main() {
 
     # 4. 启动 green 后端
     log_section "Step 4: 启动 green 后端 (port $GREEN_BACKEND_PORT)"
-    run docker compose -f "$GREEN_COMPOSE" up -d backend-green
+    run docker compose -f "$GREEN_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d backend-green
 
     # 5. 健康检查
     log_section "Step 5: 健康检查 green"
@@ -276,12 +339,13 @@ main() {
 
     # 7. 停止旧 blue 后端
     log_section "Step 7: 停止旧 blue 后端"
-    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" stop backend
+    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD stop backend
     log_ok "旧 blue 后端已停止"
 
     # 8. 启动新 blue（使用刚构建的镜像），健康检查后切换 nginx 回 blue
+    # --no-deps：只启动 backend 自身，避免连带重启 mysql-slave 等依赖服务
     log_section "Step 8: 启动新 blue 后端"
-    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" up -d backend
+    run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d --no-deps backend
     if ! $DRY_RUN; then
         if ! wait_healthy "$HEALTH_URL_BLUE" "new blue backend"; then
             log_error "新 blue 后端启动失败，保持流量在 green"
@@ -291,6 +355,13 @@ main() {
 
     # 9. 切换流量回 blue，停止 green
     log_section "Step 9: 切换流量 → blue，停止 green"
+    # 9a. 仅当 frontend 镜像被重新构建时，才强制重建 frontend 容器让其加载新镜像
+    if $FRONTEND_CHANGED && [ "${SKIP_FRONTEND_BUILD:-false}" != "true" ]; then
+        log_info "重建 frontend 容器加载新镜像..."
+        run docker compose -f "$BLUE_COMPOSE" --env-file "$ENV_FILE" $COMPOSE_RUNTIME_PD up -d --no-deps --force-recreate frontend
+    else
+        log_info "跳过 frontend 容器重建（镜像未变更）"
+    fi
     switch_nginx_to blue
     run docker compose -f "$GREEN_COMPOSE" down --remove-orphans
     log_ok "green 后端已停止"
@@ -302,7 +373,11 @@ main() {
 
     log_section "部署完成"
     log_ok "零停机热更新成功！"
+    local final_commit
+    final_commit="$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo '')"
     log_info "当前运行版本: $(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+    # 记录本次成功部署的 commit，供下次 frontend 变更检测
+    [ -n "$final_commit" ] && echo "$final_commit" > "$LAST_DEPLOY_COMMIT_FILE" 2>/dev/null || true
     write_done_marker SUCCESS
 }
 

@@ -279,6 +279,9 @@ public class SchoolDataQueryController {
     public Result<?> querySchoolData(@PathVariable("dataSource") String dataSource,
                                      @RequestBody(required = false) SchoolDataQueryRequest request) {
         SchoolDataQueryRequest queryRequest = request == null ? new SchoolDataQueryRequest() : request;
+        logger.info("[querySchoolData] dataSource={}, page={}, size={}, filterGroups={}",
+                dataSource, queryRequest.getPage(), queryRequest.getSize(),
+                queryRequest.getFilterGroups() == null ? "null" : queryRequest.getFilterGroups().size());
         switch (dataSource) {
             case "administrative_class": {
                 Page<AdministrativeClass> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
@@ -314,7 +317,17 @@ public class SchoolDataQueryController {
                 QueryWrapper<CourseSelection> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
                 wrapper.orderByDesc("academic_year", "semester", "updated_at");
-                return Result.success(courseSelectionMapper.selectPage(pageReq, wrapper));
+                Page<CourseSelection> result = courseSelectionMapper.selectPage(pageReq, wrapper);
+                // CDSP 端 XM/姓名 字段被填了 studentId 自身（脏数据），降级为 NULL 让前端 fallback
+                if (result != null && result.getRecords() != null) {
+                    for (CourseSelection r : result.getRecords()) {
+                        String n = r.getStudentName();
+                        if (n != null && n.matches("^[0-9]+$")) {
+                            r.setStudentName(null);
+                        }
+                    }
+                }
+                return Result.success(result);
             }
             case "level_exam_scores": {
                 Page<LevelExamScore> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
@@ -322,7 +335,20 @@ public class SchoolDataQueryController {
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
                 // 按考试日期降序（最新的在前）
                 wrapper.orderByDesc("exam_date");
-                return Result.success(levelExamScoreMapper.selectPage(pageReq, wrapper));
+                logger.info("[querySchoolData] level_exam_scores wrapper SQL: {}", wrapper.getTargetSql());
+                Page<LevelExamScore> result = levelExamScoreMapper.selectPage(pageReq, wrapper);
+                logger.info("[querySchoolData] level_exam_scores result: total={}, records={}",
+                        result.getTotal(), result.getRecords().size());
+                // CDSP 端 xm 字段 99.99% 填了 studentId 自身（脏数据），降级为 NULL 让前端 fallback 显示学号
+                if (result != null && result.getRecords() != null) {
+                    for (LevelExamScore r : result.getRecords()) {
+                        String n = r.getStudentName();
+                        if (n != null && n.matches("^[0-9]+$")) {
+                            r.setStudentName(null);
+                        }
+                    }
+                }
+                return Result.success(result);
             }
             case "teaching_plans": {
                 Page<TeachingPlan> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
@@ -336,14 +362,33 @@ public class SchoolDataQueryController {
                 QueryWrapper<StudentSchedule> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
                 wrapper.orderByDesc("academic_year", "semester").orderByAsc("day_of_week", "period");
-                return Result.success(studentScheduleMapper.selectPage(pageReq, wrapper));
+                Page<StudentSchedule> result = studentScheduleMapper.selectPage(pageReq, wrapper);
+                // CDSP 端 xm 字段被填了 studentId 自身（脏数据），降级为 NULL 让前端 fallback
+                if (result != null && result.getRecords() != null) {
+                    for (StudentSchedule r : result.getRecords()) {
+                        String n = r.getStudentName();
+                        if (n != null && n.matches("^[0-9]+$")) {
+                            r.setStudentName(null);
+                        }
+                    }
+                }
+                return Result.success(result);
             }
             case "school_student": {
                 Page<SchoolStudent> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
                 QueryWrapper<SchoolStudent> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
                 wrapper.orderByDesc("updated_at");
-                return Result.success(schoolStudentMapper.selectPage(pageReq, wrapper));
+                Page<SchoolStudent> result = schoolStudentMapper.selectPage(pageReq, wrapper);
+                if (result != null && result.getRecords() != null) {
+                    for (SchoolStudent r : result.getRecords()) {
+                        String n = r.getStudentName();
+                        if (n != null && n.matches("^[0-9]+$")) {
+                            r.setStudentName(null);
+                        }
+                    }
+                }
+                return Result.success(result);
             }
             case "school_teacher": {
                 Page<SchoolTeacher> pageReq = new Page<>(queryRequest.getPage(), queryRequest.getSize());
@@ -357,7 +402,7 @@ public class SchoolDataQueryController {
                 QueryWrapper<TeacherStudentBinding> wrapper = new QueryWrapper<>();
                 applyFilterGroups(dataSource, wrapper, queryRequest.getFilterGroups());
                 wrapper.orderByDesc("sync_time");
-                return Result.success(teacherStudentBindingMapper.selectPage(pageReq, wrapper));
+                return Result.success(teacherStudentBindingMapper.selectPageWithNames(pageReq, wrapper));
             }
             default:
                 throw new IllegalArgumentException("不支持的数据源: " + dataSource);

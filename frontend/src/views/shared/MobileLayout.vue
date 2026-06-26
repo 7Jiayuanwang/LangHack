@@ -16,7 +16,7 @@
     </header>
 
     <!-- 主内容区域 -->
-    <main class="mobile-main">
+    <main class="mobile-main" :class="{ 'no-nav': effectiveHideNav }">
       <div class="content-container" :class="{ 'no-padding': hideHeader }">
         <transition name="fade" mode="out-in">
           <slot><router-view /></slot>
@@ -25,7 +25,7 @@
     </main>
 
     <!-- 底部导航栏 -->
-    <nav class="mobile-nav">
+    <nav class="mobile-nav" v-if="!effectiveHideNav">
       <div class="nav-container">
         <router-link
           v-for="item in navItems"
@@ -163,6 +163,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  hideNav: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const router    = useRouter()
@@ -220,8 +224,8 @@ const NAV_ITEMS = {
     { path: '/ops/school-data',         label: '数据', icon: Coin,        featureKey: 'ops.school_data_config' },
     { path: '/ops/school-data-browser',  label: '浏览', icon: DataLine,    featureKey: 'ops.school_data_browser' },
     { path: '/ops/logs',            label: '日志', icon: Document    },
-    { path: '/ops/update',          label: '更新', icon: Refresh     },
-    { path: '/ops/hot-deploy',      label: '热更新', icon: VideoPlay   },
+    { path: '/ops/update',          label: '部署', icon: VideoPlay   },
+    { path: '/ops/content-limits',  label: '限制', icon: Setting     },
   ],
   admin: [
     { path: '/admin/dashboard', label: '概览', icon: DataBoard, badge: null, featureKey: 'admin.dashboard' },
@@ -243,18 +247,30 @@ const navItems = computed(() => {
   return items
 })
 
+// 视频播放页和文章详情页一样隐藏底部导航
+const effectiveHideNav = computed(() => {
+  if (props.hideNav) return true
+  const p = route.path
+  return p === '/student/video-player' || p.startsWith('/article/')
+})
+
 // admin 专属：二级管理菜单
 const MORE_ITEMS = {
   admin: [
     { path: '/admin/texts',          label: '课文管理', icon: Reading,  featureKey: 'admin.texts' },
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
+    { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'page_admin_videos' },
     { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
     { path: '/admin/cet-analysis',   label: '四六级分析', icon: DataAnalysis },
     { path: '/admin/recommendation-analysis', label: '推荐分析', icon: DataLine },
     { path: '/admin/quiz-records',    label: '做题管理', icon: EditPen },
+    { path: '/admin/persona-analytics', label: '画像分析', icon: DataAnalysis, featureKey: 'admin.persona_analytics' },
+    { path: '/admin/class-cohort',      label: '班级画像', icon: DataLine,     featureKey: 'admin.class_cohort' },
+    { path: '/admin/vocab-learning-stats', label: '生词本统计', icon: DataAnalysis },
+    { path: '/admin/tag-management',    label: '标签管理', icon: EditPen,      featureKey: 'admin.tag_management' },
   ],
 }
 
@@ -303,8 +319,9 @@ const ROUTE_MAP = {
     '/ops/feature-toggles': '功能开关',
     '/ops/school-data':         '学校数据',
     '/ops/school-data-browser':  '数据浏览',
-    '/ops/update':          '系统更新',
-    '/ops/hot-deploy':      '零停机热更新',
+    '/ops/update':          '部署管理',
+    '/ops/content-limits':  '内容大小限制',
+    '/ops/logs':            '日志管理',
   },
   admin: {
     '/admin/dashboard':   '管理概览',
@@ -321,6 +338,10 @@ const ROUTE_MAP = {
     '/admin/cet-analysis':   '四六级分析',
     '/admin/recommendation-analysis': '推荐算法分析',
     '/admin/quiz-records':   '做题管理',
+    '/admin/persona-analytics': '画像分析',
+    '/admin/class-cohort':      '班级队列分析',
+    '/admin/vocab-learning-stats': '生词本学习统计',
+    '/admin/tag-management':    '标签管理',
   },
 }
 
@@ -564,6 +585,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   padding-bottom: calc(60px + max(8px, env(safe-area-inset-bottom)));
+}
+
+.mobile-main.no-nav {
+  padding-bottom: 0;
 }
 
 .content-container {

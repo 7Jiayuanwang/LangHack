@@ -368,7 +368,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { calculateEbbinghaus, shouldReviewWord } from './ebbinghaus'
+import { calculateSM2 } from '@/utils/sm2'
 import { updateMasteryLevel, addWordToVocabularyByWord, getVocabularyList } from '@/api/student'
 import { useUserStore } from '@/store/user'
 
@@ -1361,8 +1361,8 @@ const rateWord = async (quality) => {
       syncWordToDatabase(word, toBackendMasteryLevel(quality))
     }
   } else if (quality === 3) {
-    // 一般：按艾宾浩斯算法继续复习
-    const result = calculateEbbinghaus(quality, {
+    // 一般：按 SM-2 算法继续复习
+    const result = calculateSM2(quality, {
       reviewCount: word.reviewCount,
       interval: word.interval,
       easinessFactor: word.easinessFactor

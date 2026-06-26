@@ -169,13 +169,26 @@
       </div>
     </div>
 
-    <!-- 区域5: 热门内容 -->
-    <div class="section-title" style="margin-top: 16px;">热门页面</div>
-    <el-table :data="topPages" size="small" stripe border max-height="300">
-      <el-table-column type="index" label="#" width="50" />
-      <el-table-column prop="uri" label="URI" show-overflow-tooltip />
-      <el-table-column prop="count" label="访问次数" width="120" />
-    </el-table>
+    <!-- 区域6: Top 用户请求 & 热门页面 -->
+    <div class="section-title" style="margin-top: 16px;">访问统计</div>
+    <el-row :gutter="24">
+      <el-col :xs="24" :lg="12">
+        <div class="sub-section-title">Top 用户请求（5分钟窗口）</div>
+        <el-table :data="topUserRequests" size="small" stripe border max-height="300">
+          <el-table-column type="index" label="排名" width="60" />
+          <el-table-column prop="username" label="用户名" show-overflow-tooltip />
+          <el-table-column prop="requests" label="请求次数" width="100" sortable />
+        </el-table>
+      </el-col>
+      <el-col :xs="24" :lg="12">
+        <div class="sub-section-title">热门页面</div>
+        <el-table :data="topPages" size="small" stripe border max-height="300">
+          <el-table-column type="index" label="#" width="60" />
+          <el-table-column prop="uri" label="URI" show-overflow-tooltip />
+          <el-table-column prop="count" label="访问次数" width="100" sortable />
+        </el-table>
+      </el-col>
+    </el-row>
 
   </div>
 </template>
@@ -198,6 +211,7 @@ import {
   getRealTimeMetrics, getSystemMetrics, getHourlyStats, getDailyStats,
   getTopPages, getAiCallsRealtime, getAiCallsDaily, getAiCallsRecent
 } from '@/api/monitoring'
+import { getTopUserRequests } from '@/api/ops'
 
 use([
   CanvasRenderer, LineChart, BarChart,
@@ -217,6 +231,7 @@ const chartTimeRange = ref('24h')
 const hourlyData = ref([])
 const dailyData = ref([])
 const topPages = ref([])
+const topUserRequests = ref([])
 let eventSource = null
 let reconnectTimer = null
 
@@ -444,10 +459,11 @@ const refreshAll = async () => {
       } catch { /* ignore */ }
     })()
 
-    // 次要数据错峰加载（图表/日志/AI），避免 9 个请求同时打后端
+    // 次要数据错峰加载（图表/日志/AI/用户请求），避免多个请求同时打后端
     const secondaryPromise = Promise.all([
       loadChartData(), loadTopPages(), loadAiStats(),
-      loadAiDailyData(), loadAiCallsRecent()
+      loadAiDailyData(), loadAiCallsRecent(),
+      loadTopUserRequests()
     ])
 
     await snapshotPromise
@@ -456,6 +472,17 @@ const refreshAll = async () => {
     ElMessage.error('刷新失败')
   } finally {
     refreshing.value = false
+  }
+}
+
+const loadTopUserRequests = async () => {
+  try {
+    const res = await getTopUserRequests(20)
+    if (res.code === 200) {
+      topUserRequests.value = res.data || []
+    }
+  } catch (err) {
+    console.error('加载Top用户请求失败:', err)
   }
 }
 
@@ -614,6 +641,15 @@ onBeforeUnmount(() => {
   align-items: center;
   padding-left: 12px;
   border-left: 4px solid #409eff;
+}
+
+.sub-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 12px;
+  padding-left: 8px;
+  border-left: 3px solid #6366f1;
 }
 
 .stats-cards {

@@ -164,6 +164,27 @@ final class SchoolDataFieldAlias {
         studentSchedule.put("课程编号", "kcbh");
         all.put("student_schedule", Collections.unmodifiableMap(studentSchedule));
 
+        // 10. student_basic_info — 易辅导系统学生基本信息（DS0104，2026-06-15）
+        Map<String, String> studentBasicInfo = new HashMap<>();
+        studentBasicInfo.put("学号", "xh");
+        studentBasicInfo.put("姓名", "xm");
+        studentBasicInfo.put("性别", "xb");
+        studentBasicInfo.put("院系", "yx");
+        studentBasicInfo.put("专业", "zy");
+        studentBasicInfo.put("年级", "nj");
+        studentBasicInfo.put("班级", "bj");
+        studentBasicInfo.put("联系电话", "lxdh");
+        studentBasicInfo.put("目前状况", "mqzk");
+        studentBasicInfo.put("入学日期", "rxrq");
+        studentBasicInfo.put("是否毕业生", "sfbys");
+        studentBasicInfo.put("是否在校", "sfzx");
+        studentBasicInfo.put("学籍状态", "xjzt");
+        studentBasicInfo.put("学生类别名称", "xslbmc");
+        studentBasicInfo.put("学制类型", "xzlx");
+        studentBasicInfo.put("所在学院", "szxy");
+        studentBasicInfo.put("辅导员姓名", "fdyxm");
+        all.put("student_basic_info", Collections.unmodifiableMap(studentBasicInfo));
+
         CHINESE_TO_ALIAS = Collections.unmodifiableMap(all);
     }
 

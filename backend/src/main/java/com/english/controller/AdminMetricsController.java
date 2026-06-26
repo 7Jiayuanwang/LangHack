@@ -39,7 +39,8 @@ import java.util.stream.Collectors;
 @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
 public class AdminMetricsController {
 
-    private static final Logger log = LoggerFactory.getLogger(AdminMetricsController.class);
+    private static final Logger logger = LoggerFactory.getLogger(AdminMetricsController.class);
+    private static final Logger log = logger;
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     @Autowired
@@ -120,7 +121,7 @@ public class AdminMetricsController {
             data.put("dauTrend", dauTrend);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get user activity metrics", e);
+            logger.error("获取用户活跃度数据失败", e);
             return Result.error("获取用户活跃度数据失败");
         }
     }
@@ -172,7 +173,7 @@ public class AdminMetricsController {
             data.put("dailyTrend", dailyTrend);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get learning behavior metrics", e);
+            logger.error("获取学习行为数据失败", e);
             return Result.error("获取学习行为数据失败");
         }
     }
@@ -254,7 +255,7 @@ public class AdminMetricsController {
             data.put("dailyTrend", dailyTrend);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get AI usage metrics", e);
+            logger.error("获取AI调用统计失败", e);
             return Result.error("获取AI调用统计失败");
         }
     }
@@ -298,16 +299,19 @@ public class AdminMetricsController {
             data.put("dailyTrend", dailyTrend);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get recommendation effectiveness metrics", e);
+            logger.error("获取推荐效果数据失败", e);
             return Result.error("获取推荐效果数据失败");
         }
     }
 
-    // ── CET 四六级对比 ──────────────────────────────────────────────────────
+    // ── 四六级成绩对比 ──────────────────────────────────────────────────────────
 
+    /**
+     * 四六级成绩对比摘要：使用平台 vs 未使用平台的通过率
+     * 仅返回汇总数据，严禁返回个人成绩
+     */
     @GetMapping("/cet-comparison")
-    @Cacheable(value = "metrics", key = "'cet-comparison'", unless = "#result == null || #result.data == null")
-    public Result<Map<String, Object>> getCetComparison() {
+    public Result<?> getCetComparison() {
         try {
             Map<String, Object> row = levelExamScoreMapper.selectCetComparison();
             long totalStudents = toLong(row.get("totalStudents"));
@@ -332,29 +336,31 @@ public class AdminMetricsController {
             unused.put("passed", unusedPassed);
             unused.put("totalStudents", unusedTotal);
 
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("totalScoreRecords", totalStudents);
-            data.put("improvement", improvement);
-            data.put("used", used);
-            data.put("unused", unused);
-            return Result.success(data);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("used", used);
+            result.put("unused", unused);
+            result.put("improvement", improvement);
+            result.put("totalScoreRecords", totalStudents);
+
+            return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get CET comparison metrics", e);
+            logger.error("获取四六级对比数据失败", e);
             return Result.error("获取四六级对比数据失败");
         }
     }
 
-    // ── CET 四六级详细分析 ──────────────────────────────────────────────────
-
+    /**
+     * 四六级成绩详细分析：按考试类型、分数段分布、时间趋势
+     * 仅返回汇总数据，严禁返回个人成绩
+     */
     @GetMapping("/cet-detailed")
-    @Cacheable(value = "metrics", key = "'cet-detailed'", unless = "#result == null || #result.data == null")
-    public Result<Map<String, Object>> getCetDetailed() {
+    public Result<?> getCetDetailed() {
         try {
-            Map<String, Object> data = new LinkedHashMap<>();
+            Map<String, Object> result = new LinkedHashMap<>();
 
             // 按考试类型
             List<Map<String, Object>> byExamType = levelExamScoreMapper.selectCetByExamType();
-            data.put("byExamType", byExamType != null ? byExamType : Collections.emptyList());
+            result.put("byExamType", byExamType != null ? byExamType : Collections.emptyList());
 
             // 分数分布 — 平台用户
             List<Map<String, Object>> distUsed = levelExamScoreMapper.selectCetScoreDistUsed();
@@ -367,7 +373,7 @@ public class AdminMetricsController {
                     scoreDistUsed.add(item);
                 }
             }
-            data.put("scoreDistUsed", scoreDistUsed);
+            result.put("scoreDistUsed", scoreDistUsed);
 
             // 分数分布 — 非平台用户
             List<Map<String, Object>> distUnused = levelExamScoreMapper.selectCetScoreDistUnused();
@@ -380,7 +386,7 @@ public class AdminMetricsController {
                     scoreDistUnused.add(item);
                 }
             }
-            data.put("scoreDistUnused", scoreDistUnused);
+            result.put("scoreDistUnused", scoreDistUnused);
 
             // 历年趋势
             List<Map<String, Object>> rawTrend = levelExamScoreMapper.selectCetTrend();
@@ -395,22 +401,21 @@ public class AdminMetricsController {
                     trend.add(item);
                 }
             }
-            data.put("trend", trend);
+            result.put("trend", trend);
 
-            return Result.success(data);
+            return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get CET detailed metrics", e);
-            return Result.error("获取四六级详细分析数据失败");
+            logger.error("获取四六级详细分析失败", e);
+            return Result.error("获取四六级详细分析失败");
         }
     }
 
     // ── 推荐算法分析 ──────────────────────────────────────────────────────────
 
     @GetMapping("/recommendation")
-    @Cacheable(value = "metrics", key = "'recommendation'", unless = "#result == null || #result.data == null")
-    public Result<Map<String, Object>> getRecommendation() {
+    public Result<?> getRecommendationAnalysis() {
         try {
-            Map<String, Object> data = new LinkedHashMap<>();
+            Map<String, Object> result = new LinkedHashMap<>();
 
             // 覆盖率: 总活跃用户 / CF 用户 / 冷启动用户
             long totalUsers = userMapper.selectCount(
@@ -424,7 +429,7 @@ public class AdminMetricsController {
             coverage.put("total_users", totalUsers);
             coverage.put("cf_users", (long) cfUsers);
             coverage.put("cold_start_users", coldStartUsers);
-            data.put("coverage", coverage);
+            result.put("coverage", coverage);
 
             // 相似度矩阵统计 + 平均相似度
             long textPairs = textSimilarityMatrixMapper.selectCount(null);
@@ -475,7 +480,7 @@ public class AdminMetricsController {
             similarityMatrix.put("high_sim_pairs", highSimPairs);
             similarityMatrix.put("mid_sim_pairs", midSimPairs);
             similarityMatrix.put("low_sim_pairs", lowSimPairs);
-            data.put("similarityMatrix", similarityMatrix);
+            result.put("similarityMatrix", similarityMatrix);
 
             // 推荐配置
             Map<String, Object> config = new LinkedHashMap<>();
@@ -484,7 +489,7 @@ public class AdminMetricsController {
             config.put("coldStartMinReads", coldStartMinReads);
             config.put("textSimilarityThreshold", textSimilarityThreshold);
             config.put("userSimilarityThreshold", userSimilarityThreshold);
-            data.put("config", config);
+            result.put("config", config);
 
             // 交互分数分布
             List<Map<String, Object>> rawDist = interactionScoreMapper.selectScoreDistribution();
@@ -498,12 +503,95 @@ public class AdminMetricsController {
                     interactionDist.add(item);
                 }
             }
-            data.put("interactionDist", interactionDist);
+            result.put("interactionDist", interactionDist);
 
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取推荐算法分析失败", e);
+            return Result.error("获取推荐算法分析失败");
+        }
+    }
+
+    // ── AI 问答使用次数（按用户） ──────────────────────────────────────────────
+
+    @GetMapping("/ai-qa-usage")
+    public Result<Map<String, Object>> getAiQaUsage(
+            @RequestParam String username) {
+        try {
+            LocalDateTime todayStart = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
+
+            long totalCalls = aiCallLogMapper.countByUserAndServiceTotal(username, "QA");
+            long todayCalls = aiCallLogMapper.countByUserAndServiceToday(username, "QA", todayStart);
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("username", username);
+            data.put("totalCalls", totalCalls);
+            data.put("todayCalls", todayCalls);
             return Result.success(data);
         } catch (Exception e) {
-            log.error("Failed to get recommendation metrics", e);
-            return Result.error("获取推荐算法分析数据失败");
+            logger.error("获取AI问答使用统计失败", e);
+            return Result.error("获取AI问答使用统计失败");
+        }
+    }
+
+    @GetMapping("/ai-qa-usage-trend")
+    public Result<Map<String, Object>> getAiQaUsageTrend(
+            @RequestParam String username,
+            @RequestParam(defaultValue = "6") int days) {
+        try {
+            LocalDate end = LocalDate.now();
+            LocalDate start = end.minusDays(days);
+            LocalDateTime startDt = start.atStartOfDay();
+            LocalDateTime endDt = end.atTime(LocalTime.MAX);
+
+            List<Map<String, Object>> rows = aiCallLogMapper.countDailyByUserAndService(
+                    username, "QA", startDt, endDt);
+
+            // 填充日期范围内无数据的日期
+            Map<String, Long> byDate = new LinkedHashMap<>();
+            for (Map<String, Object> row : rows) {
+                byDate.put(String.valueOf(row.get("stat_date")), toLong(row.get("call_count")));
+            }
+
+            List<Map<String, Object>> trend = new ArrayList<>();
+            for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
+                String date = d.format(DATE_FMT);
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("date", date);
+                item.put("count", byDate.getOrDefault(date, 0L));
+                trend.add(item);
+            }
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("username", username);
+            data.put("trend", trend);
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("获取AI问答使用趋势失败", e);
+            return Result.error("获取AI问答使用趋势失败");
+        }
+    }
+
+    // ── 学生用户列表（供下拉选择） ────────────────────────────────────────────
+
+    @GetMapping("/students")
+    public Result<List<Map<String, Object>>> getStudents() {
+        try {
+            List<com.english.entity.User> students = userMapper.selectList(
+                    new QueryWrapper<com.english.entity.User>()
+                            .eq("deleted", 0)
+                            .in("role", "STUDENT", "USER")
+                            .select("username", "real_name", "id"));
+            List<Map<String, Object>> result = students.stream().map(u -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("username", u.getUsername());
+                item.put("realName", u.getRealName() != null ? u.getRealName() : u.getUsername());
+                return item;
+            }).collect(Collectors.toList());
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("获取学生列表失败", e);
+            return Result.error("获取学生列表失败");
         }
     }
 
@@ -616,5 +704,55 @@ public class AdminMetricsController {
     private long toLong(Object val) {
         if (val == null) return 0L;
         return ((Number) val).longValue();
+    }
+
+    @GetMapping("/user-growth")
+    @Cacheable(value = "metrics", key = "'user-growth-' + (#startDate == null ? 'null' : #startDate.toString()) + '-' + (#endDate == null ? 'null' : #endDate.toString())", unless = "#result == null")
+    public Result<Map<String, Object>> getUserGrowth(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDate end = endDate != null ? endDate : now.toLocalDate();
+            LocalDate start = startDate != null ? startDate : end.minusDays(29);
+
+            LocalDateTime startDt = start.atStartOfDay();
+            LocalDateTime endDt = end.atTime(LocalTime.MAX);
+
+            List<Map<String, Object>> dailyGrowth = userMapper.selectMaps(
+                    new QueryWrapper<com.english.entity.User>()
+                            .select("DATE(created_time) as date", "COUNT(*) as newUsers")
+                            .ge("created_time", startDt)
+                            .le("created_time", endDt)
+                            .eq("deleted", 0)
+                            .groupBy("DATE(created_time)")
+                            .orderByAsc("DATE(created_time)"));
+
+            long cumulativeTotal = userMapper.selectCount(
+                    new QueryWrapper<com.english.entity.User>()
+                            .lt("created_time", startDt)
+                            .eq("deleted", 0));
+
+            List<Map<String, Object>> trend = new ArrayList<>();
+            for (Map<String, Object> day : dailyGrowth) {
+                long newUsers = toLong(day.get("newUsers"));
+                cumulativeTotal += newUsers;
+
+                Map<String, Object> point = new LinkedHashMap<>();
+                point.put("date", day.get("date").toString());
+                point.put("newUsers", newUsers);
+                point.put("totalUsers", cumulativeTotal);
+                trend.add(point);
+            }
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("trend", trend);
+            data.put("currentTotal", cumulativeTotal);
+
+            return Result.success(data);
+        } catch (Exception e) {
+            logger.error("获取用户增长趋势失败", e);
+            return Result.error("获取用户增长趋势失败");
+        }
     }
 }

@@ -20,4 +20,16 @@ public interface AiCallLogMapper extends BaseMapper<AiCallLog> {
     List<Map<String, Object>> getRealtimeStats(@Param("todayStart") LocalDateTime todayStart);
 
     int deleteOlderThan(@Param("beforeTime") LocalDateTime beforeTime);
+
+    long countByUserAndServiceTotal(@Param("triggeredBy") String triggeredBy,
+                                     @Param("serviceName") String serviceName);
+
+    long countByUserAndServiceToday(@Param("triggeredBy") String triggeredBy,
+                                     @Param("serviceName") String serviceName,
+                                     @Param("todayStart") LocalDateTime todayStart);
+
+    List<Map<String, Object>> countDailyByUserAndService(@Param("triggeredBy") String triggeredBy,
+                                                          @Param("serviceName") String serviceName,
+                                                          @Param("startTime") LocalDateTime startTime,
+                                                          @Param("endTime") LocalDateTime endTime);
 }

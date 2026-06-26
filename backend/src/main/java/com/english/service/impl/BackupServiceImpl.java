@@ -801,7 +801,8 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                         throw new BusinessException("数据库恢复失败，备份文件读取或输入异常");
                     }
 
-                    logger.warn("Database restored from backup: {}. Application restart is recommended to refresh cached data.", record.getFilename());
+                    logger.warn("Database restored from backup: {}. Applying schema migrations to repair any drift...", record.getFilename());
+                    applyMigrationsAfterRestore();
                 } finally {
                     if (process.isAlive()) {
                         process.destroyForcibly();
@@ -907,6 +908,14 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                     int exitCode = process.exitValue();
                     if (exitCode != 0) {
                         logger.error("Incremental restore failed with exit code {}: {}", exitCode, output);
+                        // 即使 mysql 退出非 0，仍尝试修复 schema drift
+                        // 原因：mysql streaming 是部分提交的，可能前 N 行已落库但后续行因列数不匹配失败
+                        // 补齐列后，下次重试即可成功，避免用户陷入"反复失败"的死循环
+                        try {
+                            applyMigrationsAfterRestore();
+                        } catch (Exception migrateEx) {
+                            logger.warn("[migrate] schema drift 修复在增量恢复失败路径中执行异常", migrateEx);
+                        }
                         throw new BusinessException("增量恢复失败，请检查日志");
                     }
                     if (inputError.get() != null) {
@@ -914,6 +923,11 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
                     }
 
                     logger.info("Database incrementally restored from backup: {}. New data preserved.", record.getFilename());
+
+                    // 修复增量备份与当前 schema 的列差异（与全量恢复 applyMigrationsAfterRestore 对齐）
+                    // 例：增量备份包含 15 列的 sso_user_bindings（含 admin_remark/admin_role_locked），
+                    //     但生产 schema 停留在 V7 原始 13 列时，必须自动补齐列，否则后续 INSERT 失败。
+                    applyMigrationsAfterRestore();
                 } finally {
                     if (process.isAlive()) {
                         process.destroyForcibly();
@@ -1864,6 +1878,88 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         DbConnectionInfo(String host, int port) {
             this.host = host;
             this.port = port;
+        }
+    }
+
+    /**
+     * 备份还原后通过 JDBC 执行关键 schema 修复，防止 schema drift。
+     * 所有语句均幂等（IF NOT EXISTS 检查），重跑安全。
+     * 修复范围：历次迁移中通过 ADD COLUMN 新增、但旧备份不包含的列。
+     */
+    private void applyMigrationsAfterRestore() {
+        logger.info("[migrate] 备份还原完成，开始 schema drift 修复...");
+        try (Connection conn = masterDataSource.getConnection()) {
+            conn.setAutoCommit(true);
+            try (java.sql.Statement stmt = conn.createStatement()) {
+                // 执行一条幂等的存储过程方式修复：通过 information_schema 检查后 ALTER
+                // 只修复对服务可用性影响最大的关键表，其余通过重建镜像时的初始化脚本修复
+                executeMigrationRepair(stmt);
+            }
+            logger.info("[migrate] Schema drift 修复完成 ✓");
+        } catch (Exception e) {
+            logger.error("[migrate] Schema drift 修复异常，可能需要手动执行迁移脚本", e);
+        }
+    }
+
+    private void executeMigrationRepair(java.sql.Statement stmt) throws Exception {
+        // school_student: gender/phone/counselor_name (V12)
+        addColumnIfNotExists(stmt, "school_student", "gender",
+                "ADD COLUMN gender VARCHAR(10) NULL COMMENT '性别（男/女）' AFTER major_name");
+        addColumnIfNotExists(stmt, "school_student", "phone",
+                "ADD COLUMN phone VARCHAR(30) NULL COMMENT '联系电话' AFTER gender");
+        addColumnIfNotExists(stmt, "school_student", "counselor_name",
+                "ADD COLUMN counselor_name VARCHAR(50) NULL COMMENT '辅导员姓名' AFTER phone");
+
+        // sso_user_bindings: admin_remark/admin_role_locked (V12 Part 4)
+        // ⚠️ 必须保留 V12 原始列顺序：admin_remark → admin_role_locked，
+        //   且 admin_role_locked 依赖 admin_remark 已存在（AFTER admin_remark），
+        //   否则增量备份（15 列）→ 生产（13 列）触发 "Column count doesn't match"
+        addColumnIfNotExists(stmt, "sso_user_bindings", "admin_remark",
+                "ADD COLUMN admin_remark TEXT COMMENT '管理员备注：记录特殊情况（如用户被删除后重新登录）' AFTER sso_member_of");
+        addColumnIfNotExists(stmt, "sso_user_bindings", "admin_role_locked",
+                "ADD COLUMN admin_role_locked TINYINT(1) DEFAULT 0 COMMENT '管理员角色锁定: 1=管理员手动审批指定角色，SSO/学校目录不得覆盖' AFTER admin_remark");
+
+        // system_config: content_limits seed (V9)
+        stmt.execute("INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret) VALUES" +
+                "('content_limits','upload.content_size.image','10MB','图片上传大小限制（全局默认）',0)," +
+                "('content_limits','upload.content_size.video','512MB','视频上传大小限制（全局默认）',0)," +
+                "('content_limits','upload.content_size.excel_import','10MB','Excel批量导入大小限制',0)," +
+                "('content_limits','upload.content_size.backup_import','2048MB','备份文件导入大小限制',0)");
+
+        // users: school_student_id/school_teacher_id (V8)
+        addColumnIfNotExists(stmt, "users", "school_student_id",
+                "ADD COLUMN school_student_id BIGINT NULL COMMENT '关联 school_student.id（学号匹配）' AFTER inner_uid");
+        addColumnIfNotExists(stmt, "users", "school_teacher_id",
+                "ADD COLUMN school_teacher_id BIGINT NULL COMMENT '关联 school_teacher.id（工号匹配）' AFTER school_student_id");
+
+        // media: transcode fields (V9)
+        addColumnIfNotExists(stmt, "media", "transcode_status",
+                "ADD COLUMN transcode_status VARCHAR(20) NOT NULL DEFAULT 'SKIPPED' COMMENT '转码状态'");
+        addColumnIfNotExists(stmt, "media", "transcode_error",
+                "ADD COLUMN transcode_error VARCHAR(500) NULL COMMENT '转码失败原因'");
+        addColumnIfNotExists(stmt, "media", "original_codec",
+                "ADD COLUMN original_codec VARCHAR(50) NULL COMMENT '上传时原始视频编码'");
+        addColumnIfNotExists(stmt, "media", "file_path",
+                "ADD COLUMN file_path VARCHAR(500) NULL COMMENT '文件系统相对路径' AFTER file_name");
+        addColumnIfNotExists(stmt, "media", "thumbnail_path",
+                "ADD COLUMN thumbnail_path VARCHAR(500) NULL COMMENT '缩略图路径' AFTER file_path");
+
+        // texts: read_count/ielts_content/featured fields (V1/V2)
+        addColumnIfNotExists(stmt, "texts", "read_count",
+                "ADD COLUMN read_count INT NOT NULL DEFAULT 0 COMMENT '阅读次数' AFTER like_count");
+        addColumnIfNotExists(stmt, "texts", "ielts_content",
+                "ADD COLUMN ielts_content TEXT NULL COMMENT 'IELTS版本内容' AFTER academic_content");
+    }
+
+    private void addColumnIfNotExists(java.sql.Statement stmt, String table, String column, String ddl)
+            throws Exception {
+        try (java.sql.ResultSet rs = stmt.executeQuery(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()" +
+                " AND TABLE_NAME='" + table + "' AND COLUMN_NAME='" + column + "'")) {
+            if (rs.next() && rs.getInt(1) == 0) {
+                stmt.execute("ALTER TABLE `" + table + "` " + ddl);
+                logger.info("[migrate] Added column {}.{}", table, column);
+            }
         }
     }
 

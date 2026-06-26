@@ -22,12 +22,20 @@
             #{syncTime}, #{syncSource}
         )
         ON DUPLICATE KEY UPDATE
-            student_name = #{studentName},
+            student_name = CASE
+                WHEN #{studentName} IS NOT NULL AND #{studentName} != '' AND #{studentName} NOT REGEXP '^[0-9]+$'
+                    THEN #{studentName}
+                ELSE student_name
+            END,
             course_code = #{courseCode},
             course_name = #{courseName},
             class_id = #{classId},
             teacher_id = #{teacherId},
-            teacher_name = #{teacherName},
+            teacher_name = CASE
+                WHEN #{teacherName} IS NOT NULL AND #{teacherName} != '' AND #{teacherName} NOT REGEXP '^[0-9]+$'
+                    THEN #{teacherName}
+                ELSE teacher_name
+            END,
             credits = #{credits},
             academic_year = #{academicYear},
             semester = #{semester},

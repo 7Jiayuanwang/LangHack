@@ -624,16 +624,56 @@ docker exec langhack-mysql-master \
 
 ### 7.4 更新应用
 
+**方式一：Web 界面零停机热部署（推荐）**
+
+前提：已配置 Deployer Sidecar（见下文 7.4.1）。访问运维面板 → 部署管理页面，点击"启动零停机热部署"。
+
+部署过程中后端会自动重启，SSE 连接短暂中断后前端自动恢复 polling 并展示最终结果。
+
+**方式二：命令行热部署**
+
 ```bash
-# 1. 拉取最新代码
+# 在宿主机上直接运行
+./scripts/hot-deploy.sh --branch master
+
+# 演练模式（不实际执行）
+./scripts/hot-deploy.sh --branch master --dry-run
+```
+
+**方式三：传统重建（有短暂停机）**
+
+```bash
 git pull origin main
-
-# 2. 重建并热更新应用容器（零停机时间取决于健康检查设置）
-cd docker && docker compose up -d --build app
-
-# 3. 验证新版本正常运行
+cd docker && docker compose up -d --build backend
 bash ../scripts/check-health.sh
 ```
+
+#### 7.4.1 Deployer Sidecar 配置
+
+零停机热部署通过 Deployer Sidecar 模式实现：后端通过 Docker Socket 启动独立的 deployer 容器执行蓝绿部署。
+
+```bash
+# 1. 构建 deployer 镜像
+docker compose --profile deploy build deployer
+
+# 2. 在两个 .env 中都添加配置（缺一不可！）
+#    项目根 .env（docker-compose.yml 读取）:
+PROJECT_HOST_PATH=/path/to/LangHack    # 项目在宿主机的绝对路径（必填）
+APP_UPDATE_SUPPORTED=true               # 启用热部署（必填）
+#    docker/.env（部署向导/脚本读取）: 添加相同的两行
+
+# 3. 重启后端使配置生效
+docker compose up -d backend
+```
+
+| 环境变量 | 必填 | 默认值 | 说明 |
+|---------|------|--------|------|
+| `PROJECT_HOST_PATH` | 是 | 空 | 项目在宿主机的绝对路径 |
+| `APP_UPDATE_SUPPORTED` | 是 | `true` | 是否启用热部署 |
+| `APP_UPDATE_DEPLOYER_IMAGE` | 否 | `langhack-deployer:latest` | Deployer 镜像名 |
+| `APP_UPDATE_DOCKER_SOCKET` | 否 | `/var/run/docker.sock` | Docker Socket 路径 |
+
+> 详见 `docs/ZERO_DOWNTIME_DEPLOYMENT.md`
 
 ### 7.5 查看容器状态
 

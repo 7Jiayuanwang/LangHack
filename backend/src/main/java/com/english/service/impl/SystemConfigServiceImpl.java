@@ -169,6 +169,44 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         logger.info("Batch updated {} configs by {}", configs.size(), updatedBy);
     }
 
+    @Override
+    public SystemConfig getByKey(String key) {
+        return mapper.selectOne(new LambdaQueryWrapper<SystemConfig>()
+                .eq(SystemConfig::getConfigKey, key)
+                .last("LIMIT 1"));
+    }
+
+    @Override
+    public void upsert(String group, String key, String value, String description) {
+        int updated = mapper.update(null,
+                new LambdaUpdateWrapper<SystemConfig>()
+                        .eq(SystemConfig::getConfigKey, key)
+                        .set(SystemConfig::getConfigValue, value)
+                        .set(SystemConfig::getUpdatedTime, LocalDateTime.now()));
+
+        if (updated == 0) {
+            SystemConfig config = new SystemConfig();
+            config.setConfigGroup(group);
+            config.setConfigKey(key);
+            config.setConfigValue(value);
+            config.setDescription(description);
+            config.setIsSecret(0);
+            config.setUpdatedTime(LocalDateTime.now());
+            mapper.insert(config);
+        }
+
+        cache.remove(group);
+    }
+
+    @Override
+    public void deleteByKey(String key) {
+        SystemConfig config = getByKey(key);
+        if (config != null) {
+            mapper.delete(new LambdaQueryWrapper<SystemConfig>().eq(SystemConfig::getConfigKey, key));
+            cache.remove(config.getConfigGroup());
+        }
+    }
+
     private static class CacheEntry {
         final Map<String, String> data;
         final long createdAt;
@@ -313,6 +351,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         labels.put("teacher.school_data_enabled", "教师端学校数据功能（课表/选课/成绩）");
         labels.put("sso.auto_grant_student", "SSO 学号匹配 school_student 自动授权 STUDENT");
         labels.put("sso.auto_grant_teacher", "SSO 工号匹配 school_teacher 自动授权 TEACHER");
+        labels.put("student.video_upload_enabled", "学生端-视频上传功能开关（全局关闭后仅标签内用户可上传）");
         return Collections.unmodifiableMap(labels);
     }
 }

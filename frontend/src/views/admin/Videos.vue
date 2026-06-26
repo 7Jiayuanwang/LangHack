@@ -409,15 +409,24 @@ const handleSubmit = async () => {
         form.mediaId = uploadRes.data.mediaId
         form.videoUrl = uploadRes.data.url || `/api/media/${uploadRes.data.mediaId}/download`
       } else {
-        ElMessage.error('视频上传失败'); return
+        ElMessage.error(uploadRes.message || '视频上传失败')
+        return
       }
     }
     // 上传封面
     if (coverFile) {
-      const coverRes = await uploadMedia(coverFile, 'IMAGE')
-      if (coverRes.code === 200 && coverRes.data?.mediaId) {
-        form.coverMediaId = coverRes.data.mediaId
-        form.coverUrl = coverRes.data.url || `/api/media/${coverRes.data.mediaId}/download`
+      try {
+        const coverRes = await uploadMedia(coverFile, 'IMAGE')
+        if (coverRes.code === 200 && coverRes.data?.mediaId) {
+          form.coverMediaId = coverRes.data.mediaId
+          form.coverUrl = coverRes.data.url || `/api/media/${coverRes.data.mediaId}/download`
+        } else {
+          ElMessage.warning(coverRes.message || '封面上传失败，将使用默认封面')
+        }
+      } catch (uploadErr) {
+        // 封面上传失败不阻塞视频创建，只显示警告
+        // axios 拦截器已显示错误，这里只处理业务逻辑
+        console.warn('封面上传失败，继续创建视频:', uploadErr.message)
       }
     }
 

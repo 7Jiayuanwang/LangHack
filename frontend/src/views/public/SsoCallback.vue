@@ -35,9 +35,9 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { exchangeSsoToken } from '@/api/sso'
-import { setToken } from '@/utils/auth'
+import { setToken, setRefreshToken, startProactiveRefresh } from '@/utils/auth'
 import PermissionDenied from '@/components/PermissionDenied.vue'
+import { exchangeSsoToken } from '@/api/sso'
 import { mapSsoError } from '@/utils/ssoErrorMapper'
 
 const route = useRoute()
@@ -130,7 +130,7 @@ onMounted(async () => {
       return
     }
 
-    if (!response.data || !response.data.token) {
+    if (!response.data || (!response.data.token && !response.data.accessToken)) {
       showError({
         errorCode: 'SYSTEM_ERROR',
         rawMessage: '登录响应缺少凭证数据'
@@ -138,7 +138,10 @@ onMounted(async () => {
       return
     }
 
-    const { token, user: serverUser } = response.data
+    // 向后兼容：优先使用新字段 accessToken，缺失时回退到旧 token
+    const { token, accessToken, refreshToken, user: serverUser, expiresIn } = response.data
+    const finalAccessToken = accessToken || token
+    const finalRefreshToken = refreshToken
 
     let jwtRole = ''
     let jwtUserInfo = {}
@@ -146,7 +149,7 @@ onMounted(async () => {
       jwtRole = serverUser.role
       jwtUserInfo = serverUser
     } else {
-      const payload = decodeJwtPayload(token)
+      const payload = decodeJwtPayload(finalAccessToken)
       if (payload) {
         jwtRole = payload.role || ''
         jwtUserInfo = {
@@ -165,12 +168,21 @@ onMounted(async () => {
       return
     }
 
-    userStore.token = token
+    userStore.token = finalAccessToken
+    userStore.refreshToken = finalRefreshToken || ''
     userStore.userRole = jwtRole
     userStore.userInfo = jwtUserInfo
-    setToken(token)
+    setToken(finalAccessToken)
+    if (finalRefreshToken) {
+      setRefreshToken(finalRefreshToken)
+    }
     localStorage.setItem('userInfo', JSON.stringify(jwtUserInfo))
     localStorage.setItem('userRole', jwtRole)
+
+    // 启动主动刷新（SSO 登录成功后）
+    if (finalRefreshToken && expiresIn) {
+      startProactiveRefresh(expiresIn)
+    }
 
     let savedRedirect = ''
     try {

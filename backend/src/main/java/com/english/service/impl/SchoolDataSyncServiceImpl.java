@@ -48,7 +48,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
     private static final List<String> DATA_SOURCES = List.of(
             "administrative_class", "school_course", "teaching_class",
             "teacher_courses", "course_schedule", "course_selection",
-            "level_exam_scores", "teaching_plans", "student_schedule"
+            "level_exam_scores", "teaching_plans", "student_schedule",
+            "student_basic_info"
     );
 
     /** 防止重入标志 */
@@ -527,7 +528,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         SchoolStudent schoolStudent = schoolStudentMapper.selectByStudentId(studentId.trim());
         if (schoolStudent != null) {
             String schoolStudentName = firstNonBlank(schoolStudent.getStudentName());
-            if (schoolStudentName != null) {
+            // 纯数字视为脏数据（CDSP 早期把学号填入了姓名字段），跳过
+            if (schoolStudentName != null && !schoolStudentName.matches("^[0-9]+$")) {
                 return schoolStudentName;
             }
         }

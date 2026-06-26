@@ -60,7 +60,10 @@ public class AuthController {
     private static final Set<String> ELEVATION_ALLOWED = Set.of("ADMIN", "OPS");
 
     @PostMapping("/login")
-    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest) {
+    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest,
+                                             HttpServletRequest request) {
+        // 让 AccessLogInterceptor 在 afterCompletion 时能拿到用户名（此时 SecurityContext 尚未设置）
+        request.setAttribute("_auth_username", loginRequest.getUsername());
         try {
             Map<String, Object> loginResult = userService.login(loginRequest);
             return Result.success("登录成功", loginResult);
@@ -274,7 +277,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public Result<String> logout(HttpServletRequest request) {
+    public Result<String> logout(HttpServletRequest request, @RequestBody(required = false) Map<String, String> body) {
         try {
             String authHeader = request.getHeader("Authorization");
             if (authHeader != null && authHeader.startsWith("Bearer ") && authHeader.length() > 7) {
@@ -297,7 +300,15 @@ public class AuthController {
                     log.warn("Failed to resolve logout username or revoke elevation: {}", ex.getMessage());
                 }
                 tokenBlacklistService.blacklistToken(token);
-                log.info("User logged out, token blacklisted, elevation revoked");
+                log.info("User logged out, access token blacklisted, elevation revoked");
+            }
+            // 同时黑名单 refresh token（如果前端传递了）
+            if (body != null) {
+                String refreshToken = body.get("refreshToken");
+                if (refreshToken != null && !refreshToken.trim().isEmpty()) {
+                    tokenBlacklistService.blacklistToken(refreshToken);
+                    log.info("User logged out, refresh token also blacklisted");
+                }
             }
         } catch (Exception e) {
             // 即使黑名单操作失败，仍然返回登出成功（前端会清理本地 token）
@@ -309,11 +320,15 @@ public class AuthController {
     /**
      * 使用 refresh token 换取新的 access token。
      *
-     * 验证链：签名有效 → 非黑名单 → type=refresh → 用户存在且 ACTIVE → 签发新 access token
-     * 降低长期 token 泄漏的风险窗口（30d → 2h）。
+     * <p>验证链：签名有效 → 非黑名单 → type=refresh → 用户存在且 ACTIVE → 签发新 access token。</p>
+     * <p>滑动续期：refresh token 剩余有效期 < 7 天时，签发新 refresh token 并将旧 token 加入黑名单；
+     * 否则保持原 refresh token 不变（减少不必要的轮换）。</p>
+     *
+     * <p>降低长期 token 泄漏的风险窗口（30d → 2h），且持续活跃用户的 refresh token
+     * 自动延长到新的 30 天。</p>
      *
      * 请求体：{"refreshToken": "..."}
-     * 响应：{"accessToken": "..."} 或错误信息
+     * 响应：{"accessToken": "..."} 或 {"accessToken": "...", "refreshToken": "..."}（续期时）
      */
     @PostMapping("/refresh")
     public Result<Map<String, Object>> refresh(@RequestBody Map<String, String> body) {
@@ -352,7 +367,20 @@ public class AuthController {
             String newAccessToken = jwtUtil.generateAccessToken(user.getUsername(), user.getRole());
             Map<String, Object> result = new HashMap<>();
             result.put("accessToken", newAccessToken);
-            log.info("Access token refreshed for user {}", username);
+            result.put("expiresIn", JwtUtil.ACCESS_TOKEN_EXPIRATION_MILLIS);
+
+            // 6. 滑动续期：剩余有效期 < 7 天时，签发新 refresh token 并将旧 token 加入黑名单
+            if (jwtUtil.shouldRotateRefreshToken(refreshToken)) {
+                tokenBlacklistService.blacklistToken(refreshToken);
+                String newRefreshToken = jwtUtil.generateRefreshToken(username);
+                result.put("refreshToken", newRefreshToken);
+                result.put("refreshExpiresIn", JwtUtil.REFRESH_TOKEN_EXPIRATION_MILLIS);
+                log.info("Access token refreshed for user {} (refresh token rotated, was {}ms remaining)",
+                        username, jwtUtil.getTokenRemainingTimeMillis(refreshToken));
+            } else {
+                log.info("Access token refreshed for user {} (refresh token retained, {}ms remaining)",
+                        username, jwtUtil.getTokenRemainingTimeMillis(refreshToken));
+            }
             return Result.success("刷新成功", result);
         } catch (Exception e) {
             log.error("刷新 token 失败", e);

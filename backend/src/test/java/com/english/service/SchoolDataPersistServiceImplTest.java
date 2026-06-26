@@ -96,6 +96,9 @@ class SchoolDataPersistServiceImplTest {
         mapped.put("className", "外语2301");
         mapped.put("grade", "2023");
         mapped.put("majorName", "英语");
+        mapped.put("gender", "男");
+        mapped.put("phone", "13800138000");
+        mapped.put("counselorName", "王老师");
         mapped.put("sourceCourseCodes", "ENG101,ENG102");
         mapped.put("syncTime", syncTime);
         mapped.put("lastExamSyncTime", lastExamSyncTime);
@@ -111,6 +114,9 @@ class SchoolDataPersistServiceImplTest {
         assertEquals("FL2301", entity.getClassCode());
         assertEquals("外语2301", entity.getClassName());
         assertEquals("英语", entity.getMajorName());
+        assertEquals("男", entity.getGender());
+        assertEquals("13800138000", entity.getPhone());
+        assertEquals("王老师", entity.getCounselorName());
         assertEquals(lastExamSyncTime, entity.getLastExamSyncTime());
         assertEquals(lastScheduleSyncTime, entity.getLastScheduleSyncTime());
         assertEquals("CHAIN_SYNC", entity.getSyncSource());

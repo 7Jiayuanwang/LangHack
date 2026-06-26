@@ -6,17 +6,33 @@
         <el-icon><ArrowLeft /></el-icon>
         <span>返回</span>
       </button>
-      <h1 class="header-title">{{ video?.title || '视频播放' }}</h1>
-      <button 
-        v-if="video"
-        class="favorite-btn"
-        :class="{ 'is-favorite': isFavorite }"
-        @click="toggleFavorite"
-        :disabled="favoriteLoading"
-        title="收藏/取消收藏"
-      >
-        <el-icon><StarFilled v-if="isFavorite" /><Star v-else /></el-icon>
-      </button>
+      <h1 class="header-title-scroll" ref="headerTitleRef">
+        <span class="header-title" :class="{ 'scrolling': isTitleOverflow }" :title="video?.title || '视频播放'">{{ video?.title || '视频播放' }}</span>
+      </h1>
+      <div class="header-right">
+        <div class="seg-group seg-group--text">
+          <button
+            class="seg-btn"
+            :class="{ active: transcriptMode === 'video' }"
+            @click="transcriptMode = 'video'"
+          >视频</button>
+          <button
+            class="seg-btn"
+            :class="{ active: transcriptMode === 'article' }"
+            @click="transcriptMode = 'article'"
+          >文章</button>
+        </div>
+        <button
+          v-if="video"
+          class="favorite-btn"
+          :class="{ 'is-favorite': isFavorite }"
+          @click="toggleFavorite"
+          :disabled="favoriteLoading"
+          title="收藏/取消收藏"
+        >
+          <el-icon><StarFilled v-if="isFavorite" /><Star v-else /></el-icon>
+        </button>
+      </div>
     </header>
 
     <!-- Loading -->
@@ -52,45 +68,19 @@
 
       <!-- Video Info -->
       <div class="video-info">
-        <div class="video-header-top">
-          <!-- Left: Title and Metadata -->
-          <div class="header-left">
-            <div class="title-row">
-              <h2 class="video-title">{{ video.title }}</h2>
-            </div>
-            <div class="video-meta">
-              <span class="meta-item">
-                <el-icon><View /></el-icon>
-                {{ video.viewCount || 0 }} 次观看
-              </span>
-              <span class="meta-item">
-                <el-icon><Star /></el-icon>
-                {{ video.likeCount || 0 }} 收藏
-              </span>
-            </div>
-          </div>
-
-          <!-- Right: Mode toggle aligned with title -->
-          <div v-if="hasSubtitle && subtitleCues.length" class="right-controls">
-            <div class="mode-toggle">
-              <button
-                class="mode-btn"
-                :class="{ active: transcriptMode === 'video' }"
-                @click="transcriptMode = 'video'"
-              >
-                <el-icon><VideoPlay /></el-icon>
-                视频
-              </button>
-              <button
-                class="mode-btn"
-                :class="{ active: transcriptMode === 'article' }"
-                @click="transcriptMode = 'article'"
-              >
-                <el-icon><Reading /></el-icon>
-                文章
-              </button>
-            </div>
-          </div>
+        <!-- Uploader / Author -->
+        <div
+          v-if="video.author"
+          class="author-row"
+          :class="{ 'clickable': !video.author.official && video.author.id }"
+          @click="handleAuthorClick"
+        >
+          <span class="author-label">上传者</span>
+          <span class="author-name">{{ video.author.displayName }}</span>
+          <span
+            v-if="video.author.roleLabel && !video.author.official"
+            class="author-role"
+          >{{ video.author.roleLabel }}</span>
         </div>
 
         <!-- Actions Container (Keep only associated article if exists) -->
@@ -133,32 +123,51 @@
         </div>
 
         <!-- ═══ Transcript Content Area ═══ -->
-        <div v-if="hasSubtitle && subtitleCues.length" class="transcript-section">
+        <div v-if="hasSubtitle && transcriptCues.length" class="transcript-section">
           <div class="transcript-header">
             <h3>
               <el-icon><Document /></el-icon>
               {{ transcriptMode === 'video' ? '互动字幕文稿' : '文章阅读模式' }}
             </h3>
             <div class="transcript-header-right">
-              <!-- Display format toggle moved here -->
-              <div class="display-toggle">
+              <!-- 显示格式：字幕列表 / 文章段落 -->
+              <div class="seg-group" role="tablist" aria-label="显示格式">
                 <button
-                  class="display-btn"
+                  class="seg-btn"
                   :class="{ active: displayFormat === 'subtitle' }"
                   @click="displayFormat = 'subtitle'"
+                  title="字幕列表"
                 >
                   <el-icon><ChatLineSquare /></el-icon>
-                  字幕显示
                 </button>
                 <button
-                  class="display-btn"
+                  class="seg-btn"
                   :class="{ active: displayFormat === 'flow' }"
                   @click="displayFormat = 'flow'"
+                  title="文章段落"
                 >
                   <el-icon><Document /></el-icon>
-                  文章显示
                 </button>
               </div>
+
+              <!-- 语言下拉选择（独立于视频内字幕） -->
+              <el-dropdown
+                v-if="hasEnSubtitle && hasZhSubtitle"
+                trigger="click"
+                @command="setTranscriptLang"
+              >
+                <button class="seg-dropdown-btn">
+                  {{ transcriptLang === 'en' ? 'EN' : transcriptLang === 'zh' ? '中' : '双语' }}
+                  <el-icon class="seg-dropdown-caret"><ArrowDown /></el-icon>
+                </button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="en" :class="{ 'is-active': transcriptLang === 'en' }">英文</el-dropdown-item>
+                    <el-dropdown-item command="zh" :class="{ 'is-active': transcriptLang === 'zh' }">中文</el-dropdown-item>
+                    <el-dropdown-item command="both" :class="{ 'is-active': transcriptLang === 'both' }">双语</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </div>
 
@@ -167,7 +176,7 @@
             <!-- Subtitle display: each line as a block -->
             <div v-if="displayFormat === 'subtitle'" ref="transcriptRef" class="transcript-body subtitle-list">
               <div
-                v-for="(cue, index) in subtitleCues"
+                v-for="(cue, index) in transcriptCues"
                 :key="index"
                 :class="['subtitle-item', { active: index === activeCueIndex }]"
                 :data-index="index"
@@ -175,14 +184,14 @@
               >
                 <span class="subtitle-time">{{ formatTimestamp(cue.startTime) }}</span>
                 <span class="subtitle-text">{{ cue.text }}</span>
-                <span v-if="activeSubtitleLang === 'both' && subtitleCuesZh[index]" class="subtitle-text-zh">{{ subtitleCuesZh[index].text }}</span>
+                <span v-if="transcriptLang === 'both' && transcriptCuesZh[index]" class="subtitle-text-zh">{{ transcriptCuesZh[index].text }}</span>
               </div>
             </div>
 
             <!-- Flow display: continuous text -->
             <div v-else ref="transcriptRef" class="transcript-body flow-text">
               <span
-                v-for="(cue, index) in subtitleCues"
+                v-for="(cue, index) in transcriptCues"
                 :key="index"
                 :class="['transcript-cue', { active: index === activeCueIndex }]"
                 :data-index="index"
@@ -199,25 +208,43 @@
             <!-- Subtitle display in article mode -->
             <div v-if="displayFormat === 'subtitle'" class="article-body article-subtitle-list">
               <div
-                v-for="(cue, index) in subtitleCues"
+                v-for="(cue, index) in transcriptCues"
                 :key="index"
                 class="article-subtitle-item"
               >
                 <span class="article-subtitle-time">{{ formatTimestamp(cue.startTime) }}</span>
                 <span class="article-subtitle-text">{{ cue.text }}</span>
-                <span v-if="activeSubtitleLang === 'both' && subtitleCuesZh[index]" class="article-subtitle-text-zh">{{ subtitleCuesZh[index].text }}</span>
+                <span v-if="transcriptLang === 'both' && transcriptCuesZh[index]" class="article-subtitle-text-zh">{{ transcriptCuesZh[index].text }}</span>
               </div>
             </div>
 
-            <!-- Flow display in article mode (InteractiveText) -->
-            <div v-else class="article-body">
-              <InteractiveText
-                :text="subtitleFullText"
-                :text-id="0"
-                :unit-id="0"
-                @word-click="handleWordClick"
-              />
-            </div>
+            <!-- Flow display in article mode -->
+            <template v-else>
+              <!-- 双语模式：流式文本显示 -->
+              <div v-if="transcriptLang === 'both'" ref="transcriptRef" class="transcript-body flow-text">
+                <span
+                  v-for="(cue, index) in transcriptCues"
+                  :key="index"
+                  :class="['transcript-cue', { active: index === activeCueIndex }]"
+                  :data-index="index"
+                  @click="seekToCue(cue)"
+                >
+                  <span class="cue-timestamp">{{ formatTimestamp(cue.startTime) }}</span>
+                  <span class="cue-text">{{ cue.text }}</span>
+                  <span v-if="transcriptCuesZh[index]" class="cue-text-zh">{{ transcriptCuesZh[index].text }}</span>
+                </span>
+              </div>
+
+              <!-- 单语言模式：InteractiveText 沉浸阅读（可点击查词、AI 问答） -->
+              <div v-else class="article-body article-interactive">
+                <InteractiveText
+                  :text="subtitleFullText"
+                  :text-id="0"
+                  :unit-id="0"
+                  @word-click="handleWordClick"
+                />
+              </div>
+            </template>
           </template>
         </div>
       </div>
@@ -225,14 +252,55 @@
 
     <!-- 文本选择菜单 -->
     <SelectionMenu
-      v-if="transcriptMode === 'article'"
       :visible="showSelectionMenu"
       :position="selectionPosition"
       underline-label="划线"
       @copy="handleCopy"
       @underline="handleUnderline"
+      @translate="handleTranslate"
+      @annotate="handleAnnotate"
       @ai-qa="handleAiQa"
     />
+
+    <!-- 翻译对话框 -->
+    <el-dialog
+      v-model="showTranslateDialog"
+      title="翻译"
+      width="500px"
+      :close-on-click-modal="true"
+    >
+      <div class="translate-source">
+        <h4>原文</h4>
+        <p>{{ selectedTextForTranslate }}</p>
+      </div>
+      <div class="translate-result">
+        <h4>译文</h4>
+        <p v-if="translating"><el-icon class="is-loading"><Loading /></el-icon> 翻译中…</p>
+        <p v-else>{{ translatedText }}</p>
+      </div>
+    </el-dialog>
+
+    <!-- 批注对话框 -->
+    <el-dialog
+      v-model="showAnnotateDialog"
+      title="添加批注"
+      width="500px"
+    >
+      <div class="annotate-source">
+        <h4>选中内容</h4>
+        <p>{{ selectedTextForTranslate }}</p>
+      </div>
+      <el-input
+        v-model="annotateContent"
+        type="textarea"
+        :rows="4"
+        placeholder="输入你的批注..."
+      />
+      <template #footer>
+        <el-button @click="showAnnotateDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveAnnotation">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- Bottom Spacer -->
     <div class="bottom-spacer"></div>
@@ -243,12 +311,13 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, View, Star, StarFilled, Reading, ChatLineSquare, Document, VideoPlay, Loading } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowDown, View, Star, StarFilled, Reading, ChatLineSquare, Document, VideoPlay, Loading } from '@element-plus/icons-vue'
 import Artplayer from 'artplayer'
 import { getPublicVideoDetail, getUserVideoDetail } from '@/api/video'
 import { getAdminVideoDetail } from '@/api/admin'
 import { getMediaDetail } from '@/api/media'
 import { checkArticleFavorite, toggleArticleFavorite } from '@/api/student'
+
 import InteractiveText from '@/components/InteractiveText.vue'
 import SelectionMenu from '@/components/SelectionMenu.vue'
 
@@ -259,6 +328,8 @@ const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quickti
 
 const artPlayerRef = ref(null)
 const transcriptRef = ref(null)
+const headerTitleRef = ref(null)
+const isTitleOverflow = ref(false)
 const video = ref(null)
 const loading = ref(true)
 const error = ref(false)
@@ -270,6 +341,11 @@ const transcodeStatus = ref('')
 const playerErrorMsg = ref('')
 const subtitleVisible = ref(true)
 const subtitleCues = ref([])
+// 下方互动字幕（独立于视频内字幕，始终显示英文，不受语言切换影响）
+const transcriptCues = ref([])
+const transcriptCuesZh = ref([])
+// 下方互动字幕语言：'en' | 'zh' | 'both'
+const transcriptLang = ref('en')
 const activeCueIndex = ref(-1)
 const transcriptMode = ref('video') // 'video' | 'article'
 const displayFormat = ref('subtitle') // 'subtitle' | 'flow'
@@ -280,18 +356,55 @@ const selectionPosition = reactive({ x: 0, y: 0 })
 const selectedTextContent = ref('')
 let selectionMenuHideTimerId = null
 
+// ─── 翻译 / 划线 / 批注 ──────────────────────────────
+const showTranslateDialog = ref(false)
+const translating = ref(false)
+const translatedText = ref('')
+const selectedTextForTranslate = ref('')
+const showAnnotateDialog = ref(false)
+const annotateContent = ref('')
+
+// 简单的获取认证 header
+const getAuthHeader = () => {
+  try {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+    return token ? `Bearer ${token}` : ''
+  } catch (e) {
+    return ''
+  }
+}
+
 let artInstance = null
 
 const videoUrl = computed(() => {
   if (!video.value) return ''
   const apiBase = import.meta.env.VITE_API_BASE_URL || ''
-  return `${apiBase}/api/media/${video.value.mediaId}/download`
+  const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+  const url = `${apiBase}/api/media/${video.value.mediaId}/download`
+  // 如果有 token，通过 query 参数传递（video 标签无法设置自定义 header）
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
 })
 
 const hasSubtitle = computed(() => {
   const v = video.value
   return !!((v?.subtitleContent && v.subtitleContent.trim()) || (v?.subtitleContentZh && v.subtitleContentZh.trim()))
 })
+
+const hasEnSubtitle = computed(() => !!video.value?.subtitleContent?.trim())
+const hasZhSubtitle = computed(() => !!video.value?.subtitleContentZh?.trim())
+
+// 切换下方互动字幕语言（独立于视频内字幕）
+const setTranscriptLang = (lang) => {
+  transcriptLang.value = lang
+  if (lang === 'en') {
+    transcriptCues.value = parseVTT(video.value?.subtitleContent || '')
+  } else if (lang === 'zh') {
+    transcriptCues.value = parseVTT(video.value?.subtitleContentZh || '')
+  } else if (lang === 'both') {
+    transcriptCues.value = parseVTT(video.value?.subtitleContent || '')
+    transcriptCuesZh.value = parseVTT(video.value?.subtitleContentZh || '')
+  }
+}
 
 const availableSubtitleLangs = computed(() => {
   const langs = []
@@ -345,9 +458,10 @@ const subtitleBtnLabel = computed(() => {
 })
 
 // Combine all subtitle cues into a single text for article mode
+// 始终使用下方互动字幕（英文），不受视频内字幕语言切换影响
 const subtitleFullText = computed(() => {
-  if (!subtitleCues.value.length) return ''
-  return subtitleCues.value.map(cue => cue.text).join(' ')
+  if (!transcriptCues.value.length) return ''
+  return transcriptCues.value.map(cue => cue.text).join(' ')
 })
 
 // ─── VTT Parser ────────────────────────────────────────────────
@@ -374,8 +488,15 @@ function parseVTT(vttText) {
     const startTime = parseTimestamp(timeParts[0].trim())
     const endTime = parseTimestamp(timeParts[1].trim().split(/\s/)[0])
 
-    const text = lines.slice(timestampLineIdx + 1).join(' ').trim()
-    if (!text) continue
+    const rawText = lines.slice(timestampLineIdx + 1).join(' ').trim()
+    if (!rawText) continue
+    const text = rawText
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
 
     cues.push({ startTime, endTime, text })
   }
@@ -499,6 +620,13 @@ const goBack = () => {
 }
 
 // ─── Video Loading ─────────────────────────────────────────────────────
+const checkTitleOverflow = () => {
+  const el = headerTitleRef.value
+  if (el) {
+    isTitleOverflow.value = el.scrollWidth > el.clientWidth
+  }
+}
+
 const loadVideo = async () => {
   const videoId = route.query.videoId || route.query.id
   const isAdminPreview = route.query.preview === 'admin'
@@ -522,6 +650,7 @@ const loadVideo = async () => {
         : await getPublicVideoDetail(videoId)
     if (res.code === 200 && res.data) {
       video.value = res.data
+      nextTick(() => checkTitleOverflow())
 
       // 清洗字幕内容（去除 <c> 标签、内联时间戳等 SRT 转 VTT 污染）
       if (video.value.subtitleContent) {
@@ -533,9 +662,18 @@ const loadVideo = async () => {
 
       if (video.value.subtitleContent) {
         subtitleCues.value = parseVTT(video.value.subtitleContent)
+        // 下方互动字幕英文数据（独立，不受视频内语言切换影响）
+        transcriptCues.value = parseVTT(video.value.subtitleContent)
       }
       if (video.value.subtitleContentZh) {
         subtitleCuesZh.value = parseVTT(video.value.subtitleContentZh)
+        // 下方互动字幕中文数据
+        transcriptCuesZh.value = parseVTT(video.value.subtitleContentZh)
+      }
+      // 下方互动字幕兜底：如果没有英文，用中文且默认显示中文
+      if (!transcriptCues.value.length && transcriptCuesZh.value.length) {
+        transcriptCues.value = transcriptCuesZh.value
+        transcriptLang.value = 'zh'
       }
       if (availableSubtitleLangs.value.length > 0) {
         activeSubtitleLang.value = availableSubtitleLangs.value[0]
@@ -660,7 +798,9 @@ const initPlayer = () => {
     }
 
     if (video.value.coverMediaId) {
-      options.poster = `${apiBase}/api/media/${video.value.coverMediaId}/download`
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      const posterUrl = `${apiBase}/api/media/${video.value.coverMediaId}/download`
+      options.poster = token ? `${posterUrl}?token=${encodeURIComponent(token)}` : posterUrl
     }
 
     artInstance = new Artplayer(options)
@@ -760,14 +900,15 @@ function updateSubtitleSettingUI() {
 
 // ─── Transcript Sync (Video Mode) ──────────────────────────────
 function updateActiveCue() {
-  if (!artInstance || !subtitleCues.value.length) return
+  if (!artInstance || !transcriptCues.value.length) return
   if (transcriptMode.value !== 'video') return // Only sync in video mode
 
   const currentTime = artInstance.currentTime
   let newIndex = -1
 
-  for (let i = 0; i < subtitleCues.value.length; i++) {
-    const cue = subtitleCues.value[i]
+  // 高亮基于下方互动字幕（始终英文），不受视频内字幕语言切换影响
+  for (let i = 0; i < transcriptCues.value.length; i++) {
+    const cue = transcriptCues.value[i]
     if (currentTime >= cue.startTime && currentTime < cue.endTime) {
       newIndex = i
       break
@@ -810,10 +951,8 @@ function seekToCue(cue) {
 }
 
 // ─── Article Mode: Word Click ──────────────────────────────────
-const handleWordClick = ({ word }) => {
-  // The InteractiveText component handles everything internally
-  // (word dialog, translation, vocabulary, etc.)
-  // This is just for optional custom handling
+const handleWordClick = () => {
+  // InteractiveText 组件内部处理所有单词交互
 }
 
 // ─── Actions ───────────────────────────────────────────────────
@@ -854,11 +993,6 @@ const goToArticle = () => {
 
 // ─── Text Selection Menu (AI QA, Copy, etc) ────────────────
 const handleSelectionChange = () => {
-  if (transcriptMode.value !== 'article') {
-    showSelectionMenu.value = false
-    return
-  }
-
   if (selectionMenuHideTimerId) {
     clearTimeout(selectionMenuHideTimerId)
     selectionMenuHideTimerId = null
@@ -867,7 +1001,20 @@ const handleSelectionChange = () => {
   const selection = window.getSelection()
   const text = selection ? selection.toString().trim() : ''
 
+  // 仅在字幕/文章区域内的选择才显示菜单（避免在 input、视频控件等地方触发）
+  let inTranscript = false
   if (text.length > 0 && selection && selection.rangeCount > 0) {
+    try {
+      const range = selection.getRangeAt(0)
+      let node = range.commonAncestorContainer
+      if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+      inTranscript = !!(node && node.closest && node.closest('.transcript-section'))
+    } catch (e) {
+      inTranscript = false
+    }
+  }
+
+  if (text.length > 0 && inTranscript && selection.rangeCount > 0) {
     selectedTextContent.value = text
     
     // 短暂延迟计算位置，确保 UI 已更新
@@ -914,9 +1061,108 @@ const handleCopy = () => {
 }
 
 const handleUnderline = () => {
-  ElMessage.info('划线功能即将上线')
+  if (!selectedTextContent.value) return
+  try {
+    const selection = window.getSelection()
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0)
+      // 简单的 DOM 高亮：用 span 包裹选区
+      const mark = document.createElement('mark')
+      mark.className = 'video-underline-mark'
+      mark.style.cssText = 'background: rgba(255, 235, 59, 0.4); padding: 1px 2px; border-radius: 2px;'
+      try {
+        range.surroundContents(mark)
+        ElMessage.success('已划线')
+      } catch (e) {
+        // 跨节点选区无法简单 surroundContents，回退
+        ElMessage.warning('请重新选择不跨段的文本')
+      }
+    }
+  } catch (e) {
+    console.error('underline failed', e)
+    ElMessage.error('划线失败')
+  }
   showSelectionMenu.value = false
   window.getSelection()?.removeAllRanges()
+}
+
+// 翻译选中的文本
+const handleTranslate = async () => {
+  const text = selectedTextContent.value?.trim()
+  if (!text) {
+    ElMessage.warning('请先选择要翻译的文本')
+    return
+  }
+  selectedTextForTranslate.value = text
+  showTranslateDialog.value = true
+  translating.value = true
+  translatedText.value = ''
+  showSelectionMenu.value = false
+
+  try {
+    const authHeaderValue = getAuthHeader()
+    const response = await fetch('/api/translate/auto', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {})
+      },
+      body: JSON.stringify({ text })
+    })
+    if (response.ok) {
+      const result = await response.json()
+      if (result.code === 200) {
+        translatedText.value = typeof result.data === 'string' ? result.data : '翻译失败'
+      } else {
+        translatedText.value = result.message || '翻译服务暂时不可用'
+      }
+    } else {
+      translatedText.value = `翻译失败（HTTP ${response.status}）`
+    }
+  } catch (e) {
+    console.error('translate failed', e)
+    translatedText.value = '翻译请求失败：' + (e.message || '网络错误')
+  } finally {
+    translating.value = false
+  }
+}
+
+// 批注（简化版）
+const handleAnnotate = () => {
+  if (!selectedTextContent.value) return
+  selectedTextForTranslate.value = selectedTextContent.value
+  annotateContent.value = ''
+  showAnnotateDialog.value = true
+  showSelectionMenu.value = false
+}
+
+const saveAnnotation = () => {
+  if (!annotateContent.value.trim()) {
+    ElMessage.warning('请输入批注内容')
+    return
+  }
+  // 简化：本地存储批注（按文本内容索引）
+  try {
+    const key = `video_annotations_${video.value?.id || 0}`
+    const annotations = JSON.parse(localStorage.getItem(key) || '[]')
+    annotations.push({
+      text: selectedTextForTranslate.value,
+      note: annotateContent.value.trim(),
+      time: Date.now()
+    })
+    localStorage.setItem(key, JSON.stringify(annotations))
+    ElMessage.success('批注已保存')
+    showAnnotateDialog.value = false
+    window.getSelection()?.removeAllRanges()
+  } catch (e) {
+    ElMessage.error('保存批注失败')
+  }
+}
+
+const handleAuthorClick = () => {
+  if (video.value?.author && !video.value.author.official && video.value.author.id) {
+    router.push(`/student/author/${video.value.author.id}`)
+  }
 }
 
 const handleAiQa = () => {
@@ -959,6 +1205,92 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 互动字幕语言切换 */
+.lang-toggle {
+  display: inline-flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.lang-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 6px;
+  min-width: 32px;
+  transition: all 0.2s;
+}
+.lang-btn:hover {
+  color: #0f172a;
+}
+.lang-btn.active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* 语言下拉选择 */
+.seg-dropdown-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.seg-dropdown-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.seg-dropdown-caret {
+  font-size: 10px;
+  margin-left: 2px;
+}
+
+/* 互动字幕中文译文（双语模式下） */
+.subtitle-text-zh,
+.article-subtitle-text-zh {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}
+/* 翻译/批注对话框内容样式 */
+.translate-source, .translate-result, .annotate-source {
+  margin-bottom: 16px;
+}
+.translate-source h4, .translate-result h4, .annotate-source h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 600;
+}
+.translate-source p, .translate-result p, .annotate-source p {
+  margin: 0;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #0f172a;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.translate-result p {
+  background: #f0f9ff;
+  color: #0c4a6e;
+}
 .video-player-page {
   min-height: 100vh;
   background: #f6f7f8;
@@ -979,6 +1311,14 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .back-btn {
   display: flex;
   align-items: center;
@@ -994,15 +1334,29 @@ onBeforeUnmount(() => {
 }
 .back-btn:hover { background: #f1f5f9; color: #0f172a; }
 
+.header-title-scroll {
+  margin: 0 auto 0 0;
+  max-width: 300px;
+  overflow: hidden;
+  position: relative;
+}
+
 .header-title {
-  margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: #0f172a;
-  flex: 1;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-block;
+  padding-right: 24px;
+}
+
+.header-title.scrolling {
+  animation: header-title-scroll 12s linear infinite;
+}
+
+@keyframes header-title-scroll {
+  0%, 10% { transform: translateX(0); }
+  90%, 100% { transform: translateX(calc(-100% + 300px + 24px)); }
 }
 
 .favorite-btn {
@@ -1099,6 +1453,41 @@ onBeforeUnmount(() => {
   margin: 0 auto;
 }
 
+.author-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.author-row.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.author-row.clickable:hover {
+  transform: translateX(2px);
+  opacity: 0.8;
+}
+
+.author-label {
+  color: #94a3b8;
+}
+
+.author-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.author-role {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
 .title-row {
   display: flex;
   align-items: center;
@@ -1120,11 +1509,9 @@ onBeforeUnmount(() => {
 
 .video-header-top {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 4px;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .header-left {
@@ -1298,7 +1685,68 @@ onBeforeUnmount(() => {
 .transcript-header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ─── 统一 segmented 控件 ─── */
+.seg-group {
+  display: inline-flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  height: 28px;
+  width: 36px;
+  border-radius: 6px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.18s ease;
+}
+
+.seg-btn .el-icon {
+  font-size: 16px;
+}
+
+.seg-btn:hover:not(.active) {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.seg-btn.active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+/* 文字型按钮宽一些，更协调 */
+.seg-group--text .seg-btn {
+  width: auto;
+  min-width: 36px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+@media (max-width: 480px) {
+  .seg-btn {
+    height: 26px;
+    width: 32px;
+  }
+  .seg-btn .el-icon {
+    font-size: 14px;
+  }
 }
 
 /* ─── Display Format Sub-Toggle ─── */
@@ -1468,7 +1916,18 @@ onBeforeUnmount(() => {
 
 .transcript-cue.active .cue-timestamp {
   display: inline;
-  color: #1d4ed8;
+}
+
+.cue-text-zh {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  margin-top: 2px;
+  padding-left: 0;
+}
+
+.transcript-cue .cue-text-zh {
+  padding-left: 0;
 }
 
 .transcript-cue + .transcript-cue::before {
@@ -1477,7 +1936,13 @@ onBeforeUnmount(() => {
 
 /* ─── Article Mode Body ─────────────────────────────────────── */
 .article-body {
-  padding: 12px 20px 20px;
+  padding: 8px 12px 20px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.article-interactive {
+  padding: 8px 12px 20px;
   max-height: 600px;
   overflow-y: auto;
 }

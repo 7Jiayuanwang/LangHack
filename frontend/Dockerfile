@@ -37,7 +37,7 @@ RUN npm run build
 
 # Stage 2: Serve the application with Nginx
 ARG IMAGE_REGISTRY_PREFIX=
-FROM ${IMAGE_REGISTRY_PREFIX}nginx:alpine
+FROM ${IMAGE_REGISTRY_PREFIX}nginx:stable-alpine
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html

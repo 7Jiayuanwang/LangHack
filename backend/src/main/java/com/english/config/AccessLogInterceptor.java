@@ -2,6 +2,7 @@ package com.english.config;
 
 import com.english.service.impl.AccessLogBufferService;
 import com.english.service.impl.AccessMetricsService;
+import com.english.monitor.UserRequestMonitor;
 import com.english.entity.AccessLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,11 +22,14 @@ public class AccessLogInterceptor implements HandlerInterceptor {
 
     private final AccessLogBufferService bufferService;
     private final AccessMetricsService metricsService;
+    private final UserRequestMonitor userRequestMonitor;
 
     public AccessLogInterceptor(AccessLogBufferService bufferService,
-                                 AccessMetricsService metricsService) {
+                                 AccessMetricsService metricsService,
+                                 UserRequestMonitor userRequestMonitor) {
         this.bufferService = bufferService;
         this.metricsService = metricsService;
+        this.userRequestMonitor = userRequestMonitor;
     }
 
     @Override
@@ -33,7 +37,11 @@ public class AccessLogInterceptor implements HandlerInterceptor {
         request.setAttribute("_startTime", System.currentTimeMillis());
 
         String username = extractUsername();
+        String path = request.getRequestURI();
+
         metricsService.recordRequestStart(username);
+        userRequestMonitor.recordRequest(username, path);
+
         return true;
     }
 
@@ -47,6 +55,13 @@ public class AccessLogInterceptor implements HandlerInterceptor {
             metricsService.recordRequestEnd();
 
             String username = extractUsername();
+            // 登录请求时 SecurityContext 尚未设置，从 Controller 存入的 attribute 补充
+            if (username == null) {
+                Object attrUser = request.getAttribute("_auth_username");
+                if (attrUser instanceof String) {
+                    username = (String) attrUser;
+                }
+            }
 
             AccessLog log = new AccessLog();
             log.setUsername(username);

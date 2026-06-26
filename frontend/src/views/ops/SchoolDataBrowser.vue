@@ -13,10 +13,10 @@
 
     <!-- 数据概览卡片 -->
     <div class="stats-grid" v-if="overview">
-      <div 
-        v-for="(count, key) in overview" 
-        :key="key" 
-        class="stat-card" 
+      <div
+        v-for="[key, count] in overviewEntries"
+        :key="key"
+        class="stat-card"
         :class="{ active: activeTab === key }"
         @click="activateOverviewTab(key)"
       >
@@ -24,7 +24,7 @@
           <el-icon><DataLine /></el-icon>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ count.toLocaleString() }}</div>
+          <div class="stat-value">{{ formatCount(count) }}</div>
           <div class="stat-label">{{ dataSourceLabels[key] || key }}</div>
         </div>
         <div class="stat-indicator"></div>
@@ -142,10 +142,30 @@
       <span>按学院链式拉取功能当前已被管理员关闭。</span>
     </div>
 
+    <!-- 快速搜索区 -->
+    <div class="quick-search-bar" v-if="tableData.length > 0 || quickSearchText">
+      <el-input
+        v-model="quickSearchText"
+        placeholder="跨页搜索（学号/姓名/课程/教师等）"
+        size="small"
+        clearable
+        @input="handleQuickSearch"
+        @clear="clearQuickSearch"
+        style="width: 300px"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+      <span class="search-hint" v-if="quickSearchText">
+        搜索 "{{ quickSearchText }}" - 共找到 {{ total }} 条结果
+      </span>
+    </div>
+
     <!-- 数据导出按钮 -->
     <div class="export-controls" v-if="tableData.length > 0">
       <el-button @click="handleExport" :loading="exporting" type="success" size="small">
-        <el-icon><Download /></el-icon> 导出当前数据 ({{ tableData.length }} 条)
+        <el-icon><Download /></el-icon> 导出当前页 ({{ tableData.length }} 条)
       </el-button>
       <el-button @click="handleExportAll" :loading="exportingAll" type="primary" size="small">
         <el-icon><Download /></el-icon> 导出全部数据 ({{ total }} 条)
@@ -307,7 +327,14 @@
             </template>
           </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
-          <el-table-column prop="studentName" label="姓名" width="90" />
+          <el-table-column label="姓名" width="90">
+            <template #default="{ row }">
+              <span v-if="row.studentName">{{ row.studentName }}</span>
+              <el-tooltip v-else content="暂无可用学生姓名，当前仅显示学号（可能为上游未返回或脏数据已被抑制）" placement="top">
+                <span class="text-muted">学号 {{ row.studentId }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
           <el-table-column prop="courseName" label="课程" min-width="180" />
           <el-table-column prop="teacherName" label="教师" width="90" />
           <el-table-column prop="credits" label="学分" width="70" />
@@ -344,7 +371,14 @@
             </template>
           </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
-          <el-table-column prop="studentName" label="姓名" width="90" />
+          <el-table-column label="姓名" width="90">
+            <template #default="{ row }">
+              <span v-if="row.studentName">{{ row.studentName }}</span>
+              <el-tooltip v-else content="暂无可用学生姓名，当前仅显示学号（可能为上游未返回或脏数据已被抑制）" placement="top">
+                <span class="text-muted">学号 {{ row.studentId }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
           <el-table-column prop="examType" label="类型" width="80" />
           <el-table-column prop="score" label="分数" width="70" />
           <el-table-column prop="isPassed" label="是否通过" width="80">
@@ -419,7 +453,14 @@
             </template>
           </el-table-column>
           <el-table-column prop="studentId" label="学号" width="130" />
-          <el-table-column prop="studentName" label="姓名" width="90" />
+          <el-table-column label="姓名" width="90">
+            <template #default="{ row }">
+              <span v-if="row.studentName">{{ row.studentName }}</span>
+              <el-tooltip v-else content="暂无可用学生姓名，当前仅显示学号（可能为上游未返回或脏数据已被抑制）" placement="top">
+                <span class="text-muted">学号 {{ row.studentId }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
           <el-table-column prop="courseName" label="课程" min-width="180" />
           <el-table-column prop="teacherName" label="教师" width="90" />
           <el-table-column prop="dayOfWeek" label="星期" width="70" />
@@ -434,6 +475,9 @@
             <template #default="{ row }">
               <div class="expand-detail">
                 <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="性别">{{ row.gender || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="联系电话">{{ row.phone || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="辅导员">{{ row.counselorName || '-' }}</el-descriptions-item>
                   <el-descriptions-item label="最近成绩同步">{{ row.lastExamSyncTime || '-' }}</el-descriptions-item>
                   <el-descriptions-item label="最近课表同步">{{ row.lastScheduleSyncTime || '-' }}</el-descriptions-item>
                   <el-descriptions-item label="同步来源">{{ row.syncSource || '-' }}</el-descriptions-item>
@@ -583,7 +627,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { InfoFilled, DataLine, Download } from '@element-plus/icons-vue'
+import { InfoFilled, DataLine, Download, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
@@ -612,6 +656,10 @@ const OPERATOR_LABELS = {
   in: '在列表中'
 }
 
+// 数据源展示标签 - 必须与 backend SchoolDataQueryController.getOverview() 一一对应
+// ⚠️ 注意：student_basic_info 是「同步源」而非「浏览表」，其数据落库到 school_student，
+//     因此 stats 卡片显示的是 school_student.count；不要把 student_basic_info 加到这里，
+//     否则 el-tabs 找不到对应 pane 会触发 .map() 错误。
 const dataSourceLabels = {
   administrative_class: '行政班',
   school_course: '课程',
@@ -648,6 +696,51 @@ const currentPage = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
 const overview = ref(null)
 const filterFields = ref([])
+
+// 快速搜索相关状态
+const quickSearchText = ref('')
+let searchDebounceTimer = null
+
+// 为每个标签页保存独立的搜索状态
+const tabSearchStates = ref({})
+
+// 保存当前标签页的搜索状态
+function saveTabSearchState() {
+  tabSearchStates.value[activeTab.value] = {
+    searchText: quickSearchText.value,
+    page: currentPage.value
+  }
+}
+
+// 恢复当前标签页的搜索状态
+function restoreTabSearchState() {
+  const state = tabSearchStates.value[activeTab.value]
+  if (state) {
+    quickSearchText.value = state.searchText || ''
+    currentPage.value = state.page || 1
+  } else {
+    quickSearchText.value = ''
+    currentPage.value = 1
+  }
+}
+
+// 防抖搜索函数：用户停止输入 500ms 后触发服务端查询
+function handleQuickSearch() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+  searchDebounceTimer = setTimeout(() => {
+    currentPage.value = 1 // 搜索时重置到第一页
+    loadData()
+  }, 500)
+}
+
+// 清除搜索
+function clearQuickSearch() {
+  quickSearchText.value = ''
+  currentPage.value = 1
+  loadData()
+}
 
 // 加载进度相关状态
 const loadingProgress = ref(0)
@@ -687,26 +780,45 @@ const exportingAll = ref(false)
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 200]
 
 const availableFields = computed(() => {
-  return filterFields.value
+  return Array.isArray(filterFields.value) ? filterFields.value : []
 })
 
 const isDerivedLocalTab = computed(() => DERIVED_LOCAL_TABS.has(activeTab.value))
 
+// 只展示后端 getOverview() 返回的、与 dataSourceLabels 对应的数字键值
+// 避免后端多塞非数字字段（如 timestamp / metadata）触发 toLocaleString / .map() 崩溃
+const overviewEntries = computed(() => {
+  if (!overview.value || typeof overview.value !== 'object') return []
+  return Object.entries(overview.value).filter(([key, value]) => {
+    if (!Object.prototype.hasOwnProperty.call(dataSourceLabels, key)) return false
+    return typeof value === 'number' && Number.isFinite(value)
+  })
+})
+
+function formatCount(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '0'
+  return value.toLocaleString()
+}
+
 function availableOperators(fieldName) {
   const fieldDef = availableFields.value.find(field => field.field === fieldName)
-  return (fieldDef?.operators || ['eq']).map(value => ({ value, label: OPERATOR_LABELS[value] || value }))
+  const operators = Array.isArray(fieldDef?.operators) && fieldDef.operators.length > 0
+    ? fieldDef.operators
+    : ['eq']
+  return operators.map(value => ({ value, label: OPERATOR_LABELS[value] || value }))
 }
 
 const filterSummary = computed(() => {
-  if (currentFilters.value.length === 0) return ''
+  if (!Array.isArray(currentFilters.value) || currentFilters.value.length === 0) return ''
   const parts = currentFilters.value.map(group => {
-    const condStrs = group.conditions
-      .filter(c => c.field && c.value)
+    const conditions = Array.isArray(group?.conditions) ? group.conditions : []
+    const condStrs = conditions
+      .filter(c => c && c.field && c.value)
       .map(c => {
         const capability = c.capabilityLabel ? ` [${c.capabilityLabel}]` : ''
-        return `${c.label || c.field} ${c.operator} ${c.value}${capability}`
+        return `${c.label || c.field} ${c.operator || 'eq'} ${c.value}${capability}`
       })
-    return condStrs.length > 0 ? `(${condStrs.join(` ${group.relation} `)})` : ''
+    return condStrs.length > 0 ? `(${condStrs.join(` ${group?.relation || 'AND'} `)})` : ''
   }).filter(s => s)
   return parts.join(' AND ')
 })
@@ -748,11 +860,34 @@ function completeProgress(success = true) {
 }
 
 function buildQueryPayload() {
-  return {
+  const payload = {
     page: currentPage.value,
     size: pageSize.value,
-    filterGroups: currentFilters.value
+    filterGroups: [...currentFilters.value]
   }
+
+  // 快速搜索：构造包含所有可搜索字段的 OR 查询组
+  if (quickSearchText.value && quickSearchText.value.trim()) {
+    const searchKeyword = quickSearchText.value.trim()
+    const searchableFields = availableFields.value.filter(f =>
+      f.type === 'STRING' && f.capabilities?.listQuery && f.operators?.includes('contains')
+    )
+
+    if (searchableFields.length > 0) {
+      const searchGroup = {
+        relation: 'OR',
+        conditions: searchableFields.map(field => ({
+          field: field.field,
+          label: field.label,
+          operator: 'contains',
+          value: searchKeyword
+        }))
+      }
+      payload.filterGroups = [searchGroup, ...payload.filterGroups]
+    }
+  }
+
+  return payload
 }
 
 function sleep(ms) {
@@ -762,7 +897,8 @@ function sleep(ms) {
 async function loadFilterFields() {
   try {
     const res = await getSchoolDataFilterFields(activeTab.value)
-    filterFields.value = res?.data || []
+    const payload = res?.data
+    filterFields.value = Array.isArray(payload) ? payload : []
   } catch (e) {
     console.error('获取筛选字段失败:', e)
     filterFields.value = []
@@ -773,7 +909,8 @@ async function loadOverview() {
   startProgress('正在加载数据概览...')
   try {
     const res = await getSchoolDataOverview()
-    overview.value = res?.data || null
+    const payload = res?.data
+    overview.value = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null
     completeProgress(true)
   } catch (e) {
     console.error('获取数据概览失败:', e)
@@ -789,13 +926,19 @@ async function loadOverview() {
 async function loadData(showProgress = true) {
   loading.value = true
   if (showProgress) {
-    startProgress(`正在加载${dataSourceLabels[activeTab.value]}数据...`)
+    startProgress(`正在加载${dataSourceLabels[activeTab.value] || activeTab.value}数据...`)
   }
   try {
     const res = await querySchoolData(activeTab.value, buildQueryPayload())
     const pageData = res?.data
-    tableData.value = pageData?.records || []
-    total.value = pageData?.total || 0
+    const records = Array.isArray(pageData?.records) ? pageData.records : []
+    const totalCount = Number.isFinite(pageData?.total) ? pageData.total : 0
+    tableData.value = records
+    total.value = totalCount
+
+    // 数据加载成功后保存当前标签页的搜索状态
+    saveTabSearchState()
+
     if (showProgress) {
       completeProgress(true)
     }
@@ -832,9 +975,16 @@ async function handleTabChange() {
   if (suppressTabReload.value) {
     return
   }
-  currentPage.value = 1
+
+  // 保存当前标签页的搜索状态
+  saveTabSearchState()
+
   pageSize.value = DEFAULT_PAGE_SIZE
   currentFilters.value = []
+
+  // 恢复目标标签页的搜索状态
+  restoreTabSearchState()
+
   await loadFilterFields()
   loadData()
 }
@@ -886,12 +1036,19 @@ async function switchToTab(tabName, filters = []) {
   if (!Object.prototype.hasOwnProperty.call(dataSourceLabels, tabName)) {
     return
   }
+
+  // 保存当前标签页的搜索状态
+  saveTabSearchState()
+
   suppressTabReload.value = true
   try {
     activeTab.value = tabName
-    currentPage.value = 1
     pageSize.value = DEFAULT_PAGE_SIZE
     currentFilters.value = filters
+
+    // 恢复目标标签页的搜索状态
+    restoreTabSearchState()
+
     await nextTick()
     await loadFilterFields()
     await loadData()
@@ -1010,10 +1167,13 @@ function formatCapability(capabilities = {}) {
 
 function saveFilters() {
   const validGroups = filterGroups.value
-    .map(group => ({
-      relation: group.relation,
-      conditions: group.conditions.filter(c => c.field && c.value)
-    }))
+    .map(group => {
+      const conditions = Array.isArray(group?.conditions) ? group.conditions : []
+      return {
+        relation: group?.relation || 'AND',
+        conditions: conditions.filter(c => c && c.field && c.value)
+      }
+    })
     .filter(group => group.conditions.length > 0)
 
   currentFilters.value = validGroups
@@ -1098,16 +1258,17 @@ async function handleChainFetch() {
 
 // 导出当前页数据为 CSV
 async function handleExport() {
-  if (!tableData.value.length) {
+  const dataToExport = tableData.value
+  if (!dataToExport || !dataToExport.length) {
     ElMessage.warning('没有可导出的数据')
     return
   }
 
   exporting.value = true
   try {
-    const csvContent = generateCSV(tableData.value)
+    const csvContent = generateCSV(dataToExport)
     downloadCSV(csvContent, `${dataSourceLabels[activeTab.value]}_当前页_${new Date().toISOString().slice(0, 10)}.csv`)
-    ElMessage.success(`成功导出 ${tableData.value.length} 条数据`)
+    ElMessage.success(`成功导出 ${dataToExport.length} 条数据`)
   } catch (error) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
@@ -1283,6 +1444,9 @@ function generateCSV(data) {
     planStatus: '计划状态',
     sourceCourseCodes: '来源课程代码',
     sourceType: '来源类型',
+    gender: '性别',
+    phone: '联系电话',
+    counselorName: '辅导员姓名',
     syncSource: '同步来源',
     syncTime: '同步时间',
     lastExamSyncTime: '最近成绩同步',
@@ -1372,6 +1536,20 @@ onMounted(async () => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.quick-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  margin-bottom: 8px;
+}
+
+.search-hint {
+  font-size: 14px;
+  color: #606266;
+  font-weight: 500;
 }
 
 /* PC端大字号适配 */
@@ -1661,6 +1839,11 @@ onMounted(async () => {
   border: 1px solid #e2e8f0;
   display: flex;
   justify-content: center;
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-style: italic;
 }
 
 .filter-builder {

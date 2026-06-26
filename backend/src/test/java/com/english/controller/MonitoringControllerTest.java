@@ -69,6 +69,12 @@ class MonitoringControllerTest {
     @Mock
     private InMemoryLogService inMemoryLogService;
 
+    @Mock
+    private com.english.monitor.DatabasePoolMonitor databasePoolMonitor;
+
+    @Mock
+    private com.english.monitor.UserRequestMonitor userRequestMonitor;
+
     @InjectMocks
     private MonitoringController monitoringController;
 

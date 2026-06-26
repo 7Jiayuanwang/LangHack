@@ -249,68 +249,30 @@
 
 ---
 
-## 五、模块 C：全栈零停机热更新（5 天）
+## 五、模块 C：全栈零停机热部署（✅ 已实现）
 
-> **目标**：`scripts/hot-deploy.sh` 单一入口完成所有热更新
-> **设计文档**：`docs/ZERO_DOWNTIME_DEPLOYMENT.md`（如不存在需先创建）
-> **三层策略**：蓝绿部署（应用） + Shadow Table（DDL） + 滚动升级（基础设施）
+> **状态**：✅ 蓝绿部署 + Deployer Sidecar 已实现（2026-05-29）
+> **设计文档**：`docs/ZERO_DOWNTIME_DEPLOYMENT.md`（v2.0）
 
-### C-1 蓝绿部署引擎（1d）
+### 已完成
 
-| 子任务 | 角色 | 估时 | 输入 | 输出 | 验收 | 依赖 | 状态 | 负责人 |
-|--------|------|------|------|------|------|------|------|--------|
-| C-1.1 docker-compose.blue.yml | DevOps | 0.4d | 现有 `docker-compose.yml` | `docker-compose.blue.yml` 模板 | `backend_blue`/`frontend_blue` 使用不同内部端口 | 无 | ⬜ | — |
-| C-1.2 Nginx upstream 切换 | DevOps | 0.3d | C-1.1 | `scripts/switch-upstream.sh` + Nginx 模板 | reload 而非 restart；切换毫秒级 | ↑ C-1.1 | ⬜ | — |
-| C-1.3 健康检查 + 冒烟测试 | DevOps | 0.3d | C-1.1 | `scripts/smoke-test.sh` | 启动后 30s 内健康检查 + 关键接口验证 | ↑ C-1.1 | ⬜ | — |
+| 子模块 | 实现方式 | 关键文件 |
+|--------|----------|----------|
+| 蓝绿部署脚本 | `scripts/hot-deploy.sh`（308 行），10 步蓝绿流程 | `scripts/hot-deploy.sh` |
+| Deployer Sidecar | 后端通过 Docker Socket 启动独立 deployer 容器 | `docker/deployer/Dockerfile` |
+| 后端 Service | 两阶段执行: `docker run -d` + `docker logs -f` | `UpdateServiceImpl.java` |
+| 后端 API | SSE 流式端点 `/trigger` + `/status` + `/config` + `/deploy-history` | `UpdateController.java` |
+| 前端页面 | 统一部署管理: 配置 + 触发 + SSE 日志 + 步骤进度 | `frontend/src/views/ops/Update.vue` |
+| SSE 断连恢复 | 后端重启时自动 polling 等待新后端 | `Update.vue` |
+| 定时调度 | Spring Cron 动态调度 | `DynamicUpdateScheduler.java` |
 
-**📝 任务说明**
-- **C-1.1**：`docker-compose.blue.yml` 复用现有 `docker-compose.yml` 的服务定义，但 `backend_blue` 用内部端口 8081，`frontend_blue` 用 8081（Nginx 内部）；外部端口仍是 8080/80。两套容器命名带 `_blue` 后缀，与现有 `_green` 区分。共用 MySQL/Redis（不要复制基础设施）。
-- **C-1.2**：Nginx upstream 配置：`upstream backend { server backend_green:8080; server backend_blue:8080 backup; }`。切换时修改 backup 标记 + `nginx -s reload`（非 restart，避免断开现有连接）。脚本含 `-from/-to` 参数显式指定。
-- **C-1.3**：冒烟测试覆盖：① `/actuator/health` 返回 UP；② 关键接口（登录、文章列表）返回 200；③ 数据库连接正常。30 秒内任一失败立即回滚（不切换 upstream）。
+### 未实现（可扩展）
 
-### C-2 Shadow Table 引擎（1.5d）
-
-| 子任务 | 角色 | 估时 | 输入 | 输出 | 验收 | 依赖 | 状态 | 负责人 |
-|--------|------|------|------|------|------|------|------|--------|
-| C-2.1 ShadowTableInterceptor | 后端 | 1d | MyBatis Plugin SPI | `ShadowTableInterceptor.java` 实现双写 | INSERT/UPDATE/DELETE 同时写入主表和影子表 | 无 | ⬜ | — |
-| C-2.2 system_config 开关 | 后端 | 0.2d | 现有 `system_config` 表 | 新增 `shadow_table.{table_name}.enabled` 配置 | 拦截器读取配置决定是否双写 | ↑ C-2.1 | ⬜ | — |
-| C-2.3 RENAME TABLE 切换 | DevOps | 0.3d | C-2.1 | `scripts/shadow-switch.sh` | 数据补齐 → RENAME 原子切换 → 验证 | ↑ C-2.1/2.2 | ⬜ | — |
-
-**📝 任务说明**
-- **C-2.1**：MyBatis Plugin 拦截 `Executor.update()` 方法，匹配影子表配置的目标表名后改写 SQL 同时写入两张表。**关键约束**：必须在同一事务内（确保一致性），失败回滚。避免影响读操作（只拦截写）。注意 ID 自增冲突——影子表用相同 ID 而非新增。
-- **C-2.2**：`system_config` 新增配置项格式：`shadow_table.{table_name}.enabled = true/false`，`shadow_table.{table_name}.shadow_name = users_shadow`。拦截器启动时加载到内存（避免每次 SQL 查 DB），通过 `RefreshScope` 或定时刷新（30s）。
-- **C-2.3**：切换流程：① 检查双写延迟 = 0；② 用 `pt-online-schema-change` 或自定义 SQL 补齐遗漏行；③ `RENAME TABLE users TO users_old, users_shadow TO users`；④ 关闭双写；⑤ 24h 后删除 `users_old`。脚本含 `--dry-run` 选项。
-
-### C-3 滚动升级引擎（0.7d）
-
-| 子任务 | 角色 | 估时 | 输入 | 输出 | 验收 | 依赖 | 状态 | 负责人 |
-|--------|------|------|------|------|------|------|------|--------|
-| C-3.1 主从切换脚本 | DevOps | 0.7d | 现有主从复制配置 | `scripts/rolling-upgrade-mysql.sh` | 从库先升级验证 → 主从切换 → 原主再升 | 无 | ⬜ | — |
-
-**📝 任务说明**
-- **C-3.1**：流程：① 检查复制延迟 `Seconds_Behind_Master=0`；② 停从库 → 升级镜像版本 → 启动 → 重连主库 → 验证复制恢复；③ 应用层切换数据源到从库（通过 `DynamicDataSourceContext`）；④ 升级原主库；⑤ 切换回主库。**风险**：升级期间数据双写不一致，必须开启半同步复制 (`rpl_semi_sync_master_enabled=ON`)。脚本必须含 `--rollback` 回滚选项。参考 `memory/MEMORY.md` 中"从库复制初始化"经验。
-
-### C-4 统一入口脚本（0.7d）
-
-| 子任务 | 角色 | 估时 | 输入 | 输出 | 验收 | 依赖 | 状态 | 负责人 |
-|--------|------|------|------|------|------|------|------|--------|
-| C-4.1 hot-deploy.sh 主体 | DevOps | 0.4d | C-1/2/3 | `scripts/hot-deploy.sh` | `git diff HEAD~1` 自动识别变更类型 | ↑ C-1.2 ‖ C-2.3 ‖ C-3.1 | ⬜ | — |
-| C-4.2 路由编排 + 回滚 | DevOps | 0.3d | C-4.1 | 混合变更编排逻辑 + `rollback.sh` | DB → 蓝绿构建 → 切换；失败自动回滚 | ↑ C-4.1 | ⬜ | — |
-
-**📝 任务说明**
-- **C-4.1**：路由逻辑：① `git diff HEAD~1 --name-only` 收集变更文件；② 按路径前缀匹配（`frontend/` → 前端蓝绿；`backend/` → 后端蓝绿；`backend/src/main/resources/db/migration/V*.sql` → Flyway 或 Shadow Table；`docker-compose.yml`/`.env` → 全量蓝绿）；③ 根据 SQL 类型细分（`grep -i "CREATE TABLE"` → 直接执行；`grep -i "ALTER TABLE.*MODIFY\|ADD INDEX"` → Shadow Table）。⚠️ Bash 注意 `set -eo pipefail` 下外部工具调用必须加 `|| fallback`（见 CLAUDE.md）。
-- **C-4.2**：混合变更编排：DB → 后端蓝绿 → 前端蓝绿 → 验证 → 切换 upstream。失败回滚顺序相反。`rollback.sh` 单独脚本，支持参数 `--to {commit-hash}`。
-
-### C-5 运维面板集成（0.7d）
-
-| 子任务 | 角色 | 估时 | 输入 | 输出 | 验收 | 依赖 | 状态 | 负责人 |
-|--------|------|------|------|------|------|------|------|--------|
-| C-5.1 前端 Tab | 前端 | 0.4d | C-5.2 API | `ops/HotDeploy.vue` + 路由 | 部署历史 + 当前蓝绿状态 + 一键回滚按钮 | ↑ C-5.2 | ⬜ | — |
-| C-5.2 后端 API | 后端 | 0.3d | C-4.1 脚本 | `OpsDeployController` 4 个端点 | trigger / status / history / rollback | ↑ C-4.1 | ⬜ | — |
-
-**📝 任务说明**
-- **C-5.1**：页面布局：顶部状态条（当前蓝/绿哪个对外服务、上次部署时间、健康状态）；中部部署历史表格（commit hash、时间、操作人、状态、回滚按钮）；底部触发区（commit hash 输入 + 触发部署按钮 + 弹窗确认）。
-- **C-5.2**：`OpsDeployController` 4 个端点：① `POST /api/ops/deploy/trigger` 调用 `hot-deploy.sh`（异步执行，返回 jobId）；② `GET /api/ops/deploy/status/{jobId}` 查询进度；③ `GET /api/ops/deploy/history` 部署历史；④ `POST /api/ops/deploy/rollback` 触发回滚。⚠️ **权限严格**：仅 OPS 角色（不能 ADMIN），并需提权对话框（参考现有 `ElevationDialog`）。脚本执行用 `ProcessBuilder`，日志实时写入 DB 供前端轮询。
+| 子模块 | 说明 |
+|--------|------|
+| Shadow Table 引擎 | DDL 变更零停机（MyBatis 拦截器双写 + RENAME TABLE），当前无需求 |
+| 滚动升级引擎 | MySQL/Redis 版本升级（主从切换策略），当前无需求 |
+| 自动变更检测 | `git diff` 自动分类变更类型并路由到对应策略 |
 
 ---
 

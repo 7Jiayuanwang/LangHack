@@ -5,14 +5,14 @@
 
 
     <!-- 主内容区域 -->
-    <main class="main-content">
+    <main class="main-content" :class="{ 'no-nav': effectiveHideNav }">
       <div class="content-wrapper">
         <slot><router-view /></slot>
       </div>
     </main>
 
     <!-- 底部导航栏 - 小红书风格 -->
-    <nav class="trend-nav">
+    <nav class="trend-nav" v-if="!effectiveHideNav">
       <div class="nav-wrapper">
         <router-link
           v-for="(item, index) in navigationItems"
@@ -51,6 +51,13 @@
           <span class="simple-role">{{ roleDisplayName }}</span>
         </div>
         <div class="simple-menu-actions">
+          <button v-if="isEnabled('student.learner_profile_enabled')" class="simple-btn" @click="handleUserAction('profile')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            我的画像
+          </button>
           <button class="simple-btn" @click="handleUserAction('logout')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -86,16 +93,31 @@ import {
   Clock
 } from '@element-plus/icons-vue'
 
+const props = defineProps({
+  hideNav: {
+    type: Boolean,
+    default: false
+  }
+})
+
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const showUserMenu = ref(false)
 const screenWidth = ref(window.innerWidth)
+
+// 视频播放页和文章详情页一样隐藏底部导航
+const effectiveHideNav = computed(() => {
+  if (props.hideNav) return true
+  const p = route.path
+  return p === '/student/video-player' || p.startsWith('/article/')
+})
 // 功能开关：发现页的每个快捷入口 section 都受对应 page_* 开关控制
 // 开关关闭时，对应区块整体隐藏，并禁止推荐卡片跳转到该页面
-const { 
-  toggles: featureToggles, 
+const {
+  toggles: featureToggles,
   load: loadFeatureToggles,
+  isEnabled,
   onChange,
   startAutoRefresh,
   isWebSocketConnected
@@ -215,7 +237,7 @@ const handleUserAction = async (action) => {
 
   switch (action) {
     case 'profile':
-      ElMessage.info('个人资料功能开发中')
+      router.push('/student/my-profile')
       break
     case 'settings':
       ElMessage.info('设置功能开发中')
@@ -387,6 +409,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+}
+
+.main-content.no-nav {
+  padding-bottom: 0;
 }
 
 .content-wrapper {

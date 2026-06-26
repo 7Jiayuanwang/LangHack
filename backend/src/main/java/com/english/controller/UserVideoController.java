@@ -3,6 +3,8 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.User;
 import com.english.entity.Video;
+import com.english.service.ContentTagService;
+import com.english.service.FeatureToggleService;
 import com.english.service.UserService;
 import com.english.service.VideoService;
 import org.slf4j.Logger;
@@ -34,6 +36,24 @@ public class UserVideoController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private FeatureToggleService featureToggleService;
+
+    @Autowired
+    private ContentTagService contentTagService;
+
+    @Autowired
+    private com.english.service.AuthorEnricher authorEnricher;
+    /**
+     * 检查当前用户是否有视频上传权限（功能开关 student.video_upload_enabled）
+     */
+    private boolean canUploadVideo(Long userId) {
+        Map<String, Boolean> toggles = featureToggleService.getMergedTogglesForUser(userId);
+        Boolean allowed = toggles.get("student.video_upload_enabled");
+        // 未配置时默认允许（向后兼容），显式 false 时才拒绝
+        return allowed == null || allowed;
+    }
+
     /**
      * 用户上传视频
      */
@@ -47,10 +67,19 @@ public class UserVideoController {
                 return Result.error("用户不存在");
             }
 
+            // 检查视频上传功能开关（student.video_upload_enabled）
+            if (!canUploadVideo(user.getId())) {
+                return Result.error("您暂无视频上传权限，请联系管理员开通");
+            }
+
             String title = (String) videoData.get("title");
             Object mediaIdObj = videoData.get("mediaId");
             String description = (String) videoData.getOrDefault("description", "");
             String tags = (String) videoData.getOrDefault("tags", "");
+            String filteredTags = contentTagService.filterValidTags(tags);
+            if (filteredTags.isEmpty()) {
+                return Result.error(tags.trim().isEmpty() ? "标签不能为空" : "所选标签不合法，请从预设标签中选择");
+            }
             String subtitleContent = (String) videoData.get("subtitleContent");
             String subtitleContentZh = (String) videoData.get("subtitleContentZh");
             Object coverMediaIdObj = videoData.get("coverMediaId");
@@ -66,7 +95,7 @@ public class UserVideoController {
             video.setTitle(title);
             video.setMediaId(Long.valueOf(mediaIdObj.toString()));
             video.setDescription(description);
-            video.setTags(tags != null ? tags : "");
+            video.setTags(filteredTags);
             video.setUserId(user.getId());
             video.setIsPublic(0); // 默认不公开，审核通过后再公开
             video.setStatus("PENDING"); // 默认待审核
@@ -137,6 +166,7 @@ public class UserVideoController {
             }
 
             videoService.incrementViewCount(videoId);
+            authorEnricher.enrichVideo(video);
             return Result.success(video);
         } catch (Exception e) {
             log.error("获取视频详情失败 videoId={}", videoId, e);
@@ -178,7 +208,12 @@ public class UserVideoController {
             }
             if (videoData.containsKey("tags")) {
                 Object tagsVal = videoData.get("tags");
-                video.setTags(tagsVal != null ? tagsVal.toString() : "");
+                String rawTags = tagsVal != null ? tagsVal.toString() : "";
+                String filtered = contentTagService.filterValidTags(rawTags);
+                if (!rawTags.trim().isEmpty() && filtered.isEmpty()) {
+                    return Result.error("所选标签不合法，请从预设标签中选择");
+                }
+                video.setTags(filtered);
             }
             if (videoData.containsKey("subtitleContent")) {
                 Object subVal = videoData.get("subtitleContent");

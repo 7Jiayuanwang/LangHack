@@ -181,7 +181,7 @@ const viewDetail = async (row) => {
   detailLoading.value = true
   detail.value = null
   try {
-    const resp = await getQuizAttemptDetail(row.id)
+    const resp = await getQuizAttemptDetail(row.studentId, row.textId)
     if (resp.code === 200) {
       detail.value = resp.data
     } else {

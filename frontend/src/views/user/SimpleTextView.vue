@@ -1,25 +1,5 @@
 <template>
   <div class="simple-text-view">
-    <!-- 可拖动的翻译按钮 -->
-    <div
-      class="floating-translate-btn"
-      :class="{ 'selecting': isSelectingMode }"
-      :style="{ top: floatingBtnPosition.y + 'px', left: floatingBtnPosition.x + 'px' }"
-      @mousedown="startDrag"
-      @touchstart.prevent="startDrag"
-    >
-      <el-tooltip :content="isSelectingMode ? '选择文本后点击翻译' : '点击开始翻译'" placement="left" :disabled="isMobile">
-        <button
-          class="translate-fab"
-          :class="isSelectingMode ? 'fab-active' : 'fab-default'"
-        >
-          <span v-if="isSelectingMode" class="fab-icon">✓</span>
-          <span v-else class="fab-icon">译</span>
-          <span class="fab-label">{{ isSelectingMode ? '翻译' : '划词翻译' }}</span>
-        </button>
-      </el-tooltip>
-    </div>
-
     <!-- 页面头部 -->
     <div class="page-header">
       <el-breadcrumb separator="/">
@@ -722,6 +702,14 @@ const handleVersionChange = (versionKey) => {
   textContent.value = versions.value?.[versionKey] || ''
   // 重新处理内容
   processTextContent()
+  // 上报版本阅读记录（仅登录用户，fire-and-forget）
+  if (textId.value && versionKey !== 'original') {
+    request({
+      url: `/api/public/texts/${textId.value}/version-read`,
+      method: 'post',
+      params: { version: versionKey }
+    }).catch(() => {})
+  }
 }
 
 // 清理事件监听

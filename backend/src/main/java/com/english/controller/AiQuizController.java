@@ -124,11 +124,20 @@ public class AiQuizController {
             }
             String jsonStr = stripCodeFence(responseText);
 
+            // JSON 完整性校验：检测 AI 响应是否被截断
+            if (!isJsonComplete(jsonStr)) {
+                log.error("[AI出题] AI返回JSON不完整(可能超时或输出截断): textId={}, 操作员={}, 长度={}, 末尾200字符={}",
+                        request.getTextId(), operator, jsonStr.length(),
+                        jsonStr.length() > 200 ? jsonStr.substring(jsonStr.length() - 200) : jsonStr);
+                return Result.error("AI 响应超时，请稍后重试或选择较短的文章");
+            }
+
             AiQuizResponseDTO quizResponse;
             try {
                 quizResponse = objectMapper.readValue(jsonStr, AiQuizResponseDTO.class);
             } catch (Exception e) {
-                log.error("[AI出题] AI返回JSON解析失败: textId={}, 操作员={}, 原文={}", request.getTextId(), operator, jsonStr, e);
+                log.error("[AI出题] AI返回JSON解析失败: textId={}, 操作员={}, 错误={}, 长度={}",
+                        request.getTextId(), operator, e.getMessage(), jsonStr.length());
                 return Result.error("AI 返回格式解析失败");
             }
 
@@ -209,10 +218,21 @@ public class AiQuizController {
         }
     }
 
+    /**
+     * 构建 AI 出题 prompt。超长文章自动截断，防止超过模型上下文窗口。
+     */
     private String buildPrompt(String title, String content, int count) {
+        final int MAX_CONTENT_CHARS = 8000;  // 约 2000-3000 tokens，为输出留足空间
+        String truncated;
+        if (content.length() > MAX_CONTENT_CHARS) {
+            truncated = content.substring(0, MAX_CONTENT_CHARS)
+                    + "\n\n[... 文章过长已截断，共 " + content.length() + " 字符 ...]";
+        } else {
+            truncated = content;
+        }
         return "请为以下文章生成 " + count + " 道选择题。\n\n"
                 + "【文章标题】\n" + title + "\n\n"
-                + "【文章内容】\n" + content;
+                + "【文章内容】\n" + truncated;
     }
 
     private String stripCodeFence(String text) {
@@ -228,6 +248,41 @@ public class AiQuizController {
             }
         }
         return trimmed.strip();
+    }
+
+    /**
+     * 快速检测 JSON 字符串是否结构完整（未被截断）。
+     * 检查：非空、以 { 开头 } 结尾、括号花括号配对。
+     */
+    private boolean isJsonComplete(String json) {
+        if (json == null || json.isBlank()) return false;
+        String trimmed = json.strip();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false;
+        int braceDepth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+            } else {
+                if (c == '"') {
+                    inString = true;
+                } else if (c == '{' || c == '[') {
+                    braceDepth++;
+                } else if (c == '}' || c == ']') {
+                    braceDepth--;
+                    if (braceDepth < 0) return false;
+                }
+            }
+        }
+        return braceDepth == 0 && !inString;
     }
 
     private User getCurrentUser() {

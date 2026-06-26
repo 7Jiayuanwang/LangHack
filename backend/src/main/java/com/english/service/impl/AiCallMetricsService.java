@@ -88,7 +88,10 @@ public class AiCallMetricsService {
             log.setCreatedTime(LocalDateTime.now());
 
             if (buffer.size() >= MAX_QUEUE_SIZE) {
-                buffer.poll();
+                AiCallLog dropped = buffer.poll();
+                logger.warn("AI调用缓冲队列已满，丢弃最早记录: service={}, method={}",
+                    dropped != null ? dropped.getServiceName() : "unknown",
+                    dropped != null ? dropped.getMethodName() : "unknown");
             }
             buffer.offer(log);
 

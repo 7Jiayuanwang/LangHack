@@ -24,6 +24,60 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Security — 接口安全全面加固 (2026-06-17)
+
+#### 标签白名单校验
+- **`ContentTagService.filterValidTags()`**：新增服务层方法，对照 `content_tags` 表过滤非法标签；白名单 case-insensitive 比较
+- **`UserVideoController`**：upload / update 接口对 tags 做白名单校验 + 必填校验，空标签或全非法标签返回 400
+- **`UserTextController`**：同上，upload / update 两个入口均已加固
+
+#### 翻译接口安全
+- **Prompt Injection 防护**：`/api/translate/custom` 的 `source`/`target` 语言代码改为白名单验证（仅 `en`/`zh`/`auto`），非法值返回 400 而非拼入 AI prompt
+- **批量翻译 direction 白名单**：`/api/translate/batch` 的 `direction` 字段仅接受 `en-to-zh` / `zh-to-en`
+
+#### 媒体文件访问控制
+- **`MediaController` 下载接口**：对 VIDEO 类型媒体文件，检查关联 Video 的审核状态；未审核通过或未公开的视频内容，非 owner/ADMIN 返回 403，防止绕过视频审核直接下载原始文件
+
+#### 输入长度限制
+- **`AiQaController`**：`/chat` 接口新增输入长度上限（question ≤500字、selectedText ≤2000字、articleContext ≤5000字），防止构造超大 prompt 消耗 AI 额度
+- **`AnnotationController`**：创建批注时限制 selectedText ≤2000字、note ≤1000字
+- **`UnderlineController`**：创建划线时限制 selectedText ≤2000字、serializedRange ≤5000字
+
+### Added — 翻译长文本分块处理 (2026-06-17)
+- **`TencentTranslateService.translateLong()`**：新增长文本翻译方法，按中英文句末标点自动切句分块（块大小 1500 字），每块独立翻译后拼接，单句超限时强制按字符截断
+- **`TencentTranslateService.splitIntoChunks()`**：静态工具方法，可独立测试切块逻辑
+- **`/api/translate/en-to-cn`、`/cn-to-en`、`/custom`**：单次翻译上限从 2000 字（硬拒绝）改为 10000 字（自动分块处理），不再向调用方抛出长度错误
+
+### Fixed — 字幕 HTML 实体解码 (2026-06-17)
+- **`VideoPlayer.vue` `parseVTT()`**：字幕文本提取后增加 HTML 实体反转义（`&gt;` → `>`、`&lt;` → `<`、`&amp;` → `&` 等），修复 VTT 说话人标志 `>>` 在字幕文稿中显示为 `&gt;&gt;` 的问题
+
+### Added — SM-2 高级特性 (2026-06-06)
+- **困难词加强模式**：新增 `hardWordMode` 选项，将 EF 下限从 1.3 降至 1.0，使极度困难单词的复习间隔更短
+  - 实现文件：`frontend/src/utils/sm2.js`（新增可选 `options.hardWordMode` 参数）
+  - 测试文件：`frontend/tests/utils/sm2-hard-word-mode.spec.js`（14 个测试用例）
+  - 适用场景：专业术语、形近词、反复遗忘的"老大难"单词
+- **过载保护系统**：自动分批到期单词，避免学习负担过重
+  - 核心文件：`frontend/src/utils/sm2-overload-protection.js`（5 个导出函数）
+  - 功能包括：优先级计算、智能分批、延期调度、提示信息生成
+  - 测试文件：`frontend/tests/utils/sm2-overload-protection.spec.js`（18 个测试用例）
+  - 默认配置：单日最大 50 个，紧急阈值 75 个（超过后降至 40 个）
+- **数据监控与分析**：7 大监控指标 + 智能建议系统
+  - 核心文件：`frontend/src/utils/sm2-analytics.js`（8 个导出函数）
+  - 功能包括：EF 分布、间隔分布、记忆保持率、学习报告、CSV 导出
+  - 测试文件：`frontend/tests/utils/sm2-analytics.spec.js`（18 个测试用例）
+  - 自动生成 4 类建议：困难词预警、遗忘风险、过载保护、学习良好
+
+**测试覆盖**：新增 50 个测试用例，全部通过。总测试量从 1241 增至 1291 条。
+
+### Fixed — 间隔复习算法统一 (2026-06-06)
+- **废弃 ebbinghaus.js**：删除了艾宾浩斯固定间隔实现（`frontend/src/features/VocabularyFeatures/ebbinghaus.js`），统一使用标准 SM-2 算法
+- **WordRecite.vue 算法迁移**：将单词背诵页面的复习算法从 `calculateEbbinghaus`（分钟制固定间隔）切换到 `calculateSM2`（天制动态间隔）
+- **数据迁移守卫**：自动检测并重置 localStorage 中遗留的分钟制间隔数据（`interval > 365`），避免"数年后复习"的荒谬结果
+- **注释修正**：修复 `VocabularyBooksServiceImpl.java:227` 中的错误注释（"艾宾浩斯遗忘曲线调度" → "SM-2 调度"）
+- **文档补充**：新增 `docs/SM2_ALGORITHM_GUIDE.md` 详细说明 SM-2 算法原理、与艾宾浩斯的区别、实现位置、高级特性和使用指南
+
+**背景**：早期代码存在两套并行实现（sm2.js 和 ebbinghaus.js），主路径（Vocabulary.vue）已使用 SM-2，但 WordRecite.vue 仍在使用固定间隔艾宾浩斯算法，且两者间隔单位不兼容（分钟 vs 天）。此次统一消除了算法不一致隐患，对齐主流学习应用标准（Anki、Quizlet、Duolingo 均采用 SM-2 或其变体）。
+
 ## [0.4.0] — 2026-03-02
 
 ### Fixed — 跨平台兼容性

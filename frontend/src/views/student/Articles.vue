@@ -1,23 +1,5 @@
 <template>
   <div class="articles-mobile-page">
-    
-    <!-- Sticky Header -->
-    <header class="articles-toolbar">
-      <div></div>
-      <div class="header-actions">
-        <span v-if="!filterVisible" class="current-filter-label">{{ currentCategoryLabel }}</span>
-        <button class="icon-btn" @click="toggleFilter" :title="filterVisible ? '收起筛选' : '展开筛选'">
-          <el-icon><component :is="filterVisible ? ArrowUp : ArrowDown" /></el-icon>
-        </button>
-        <button class="icon-btn" @click="toggleSearch">
-          <el-icon><Search /></el-icon>
-        </button>
-        <button class="icon-btn notification-btn">
-          <el-icon><Bell /></el-icon>
-          <span class="notification-dot"></span>
-        </button>
-      </div>
-    </header>
 
     <!-- Filter Pills -->
     <transition name="filter-collapse">
@@ -36,25 +18,23 @@
       </div>
     </transition>
 
-    <!-- Search Bar -->
-    <transition name="filter-collapse">
-      <div v-show="searchVisible" class="search-bar">
+    <!-- Main Content Area -->
+    <main class="page-main">
+      <div class="page-content-wrapper">
+
+      <!-- Search Bar -->
+      <div class="search-bar">
         <el-input
           v-model="searchQuery"
-          placeholder="搜索文章标题或内容..."
+          placeholder="搜索文章..."
           clearable
           @keyup.enter="currentPage = 1"
         >
-          <template #prefix>
+          <template #suffix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
       </div>
-    </transition>
-
-    <!-- Main Content Area -->
-    <main class="page-main">
-      <div class="page-content-wrapper">
 
       <!-- Articles Feed -->
       <div class="articles-feed">
@@ -124,6 +104,10 @@
             <div class="article-content">
               <h2 class="article-title">{{ item.title }}</h2>
               <p class="article-snippet">{{ getSnippet(item._type === 'video' ? item.description : item.content) }}</p>
+              <p v-if="item.author" class="card-author">
+                {{ item.author.displayName }}
+                <span v-if="item.author.roleLabel && !item.author.official" class="card-author-role">{{ item.author.roleLabel }}</span>
+              </p>
             </div>
 
             <!-- Footer Area -->
@@ -256,6 +240,7 @@ const categories = [
   { label: '科技', value: 'technology', icon: 'Monitor' },
   { label: '商务', value: 'business', icon: 'TrendCharts' },
   { label: '教育', value: 'education', icon: 'School' },
+  { label: '真题', value: 'exam', icon: 'Document' },
   { label: '生活', value: 'lifestyle', icon: 'Coffee' },
   { label: '文化', value: 'culture', icon: 'Compass' }
 ]
@@ -310,7 +295,7 @@ const toggleSearch = () => {
 }
 
 const getRandomCategory = () => {
-  const cats = categories.filter(c => c.value !== '' && c.value !== 'video' && c.value !== 'recommendation')
+  const cats = categories.filter(c => c.value !== '' && c.value !== 'video' && c.value !== 'recommendation' && c.value !== 'exam')
   return cats[Math.floor(Math.random() * cats.length)].value
 }
 
@@ -376,7 +361,7 @@ const loadFeed = async () => {
     let articleItems = []
     if (articlesRes?.code === 200) {
       articleItems = (Array.isArray(articlesRes.data) ? articlesRes.data : []).map(text => {
-        const cat = getRandomCategory()
+        const cat = text.category || getRandomCategory()
         const contentLength = typeof text.content === 'string' && text.content.length > 0
           ? text.content.length
           : (typeof text.markdownContent === 'string' ? text.markdownContent.length : 0)
@@ -538,9 +523,14 @@ onMounted(() => {
   }
 
   .page-content-wrapper {
+    width: 100%;
     max-width: 960px;
     margin: 0 auto;
     padding: 0 24px;
+  }
+
+  .search-bar {
+    margin-bottom: 8px;
   }
 
   .articles-feed {
@@ -659,17 +649,16 @@ onMounted(() => {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  padding: 12px 0;
+  padding: 6px 0;
 }
 
 .search-bar {
-  position: sticky;
-  top: 0;
-  padding: 12px 12px;
-  background: rgba(246, 247, 248, 0.95);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  padding: 12px 12px 0;
+}
+
+.search-bar :deep(.el-input__wrapper) {
+  border-radius: 999px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
 }
 
 .filter-scroll {
@@ -681,14 +670,14 @@ onMounted(() => {
   -webkit-overflow-scrolling: touch;
 }
 @media (min-width: 768px) {
-  .filter-scroll { justify-content: center; gap: 16px; }
-  .filter-pill { padding: 12px 36px; font-size: 16px; font-weight: 600; }
+  .filter-scroll { justify-content: center; gap: 12px; }
+  .filter-pill { padding: 6px 24px; font-size: 14px; font-weight: 500; }
 }
 .filter-scroll::-webkit-scrollbar { display: none; }
 
 .filter-pill {
   flex-shrink: 0;
-  padding: 8px 14px;
+  padding: 5px 12px;
   border-radius: 999px;
   border: 1px solid #e2e8f0;
   background: white;
@@ -723,6 +712,7 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -852,6 +842,23 @@ onMounted(() => {
   overflow-wrap: break-word;
   /* Fixed 2-line height for consistent card size */
   height: calc(2 * 1.5em);
+}
+
+.card-author {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-author-role {
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
 /* Footer Insights */

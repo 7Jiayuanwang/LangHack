@@ -4,7 +4,12 @@ import {
   isValidToken,
   getToken,
   setToken,
+  getRefreshToken,
+  setRefreshToken,
+  removeRefreshToken,
   clearAuthStorage,
+  startProactiveRefresh,
+  stopProactiveRefresh,
 } from "@/utils/auth";
 
 // 验证 userInfo 结构的有效性
@@ -58,6 +63,7 @@ function validateRole(role) {
 export const useUserStore = defineStore("user", {
   state: () => ({
     token: getToken(),
+    refreshToken: getRefreshToken(),
     userInfo: loadUserInfoFromStorage(),
     userRole: (() => {
       try {
@@ -112,15 +118,19 @@ export const useUserStore = defineStore("user", {
     async login(credentials) {
       try {
         const response = await login(credentials);
-        const { token, user } = response.data || {};
+        const { token, accessToken, refreshToken, user, expiresIn } = response.data || {};
 
-        if (!token || !user) {
+        // 向后兼容：优先使用新字段 accessToken，缺失时回退到旧 token
+        const finalAccessToken = accessToken || token;
+        const finalRefreshToken = refreshToken;
+
+        if (!finalAccessToken || !user) {
           return Promise.reject(new Error("登录响应数据异常"));
         }
 
         // 验证 token 不是 "undefined"/"null"/空字符串
-        if (!isValidToken(token)) {
-          console.error("Server returned invalid token:", typeof token, token);
+        if (!isValidToken(finalAccessToken)) {
+          console.error("Server returned invalid token:", typeof finalAccessToken, finalAccessToken);
           return Promise.reject(new Error("登录响应 Token 异常"));
         }
 
@@ -134,18 +144,23 @@ export const useUserStore = defineStore("user", {
         // 先更新 Pinia state
         const prevState = {
           token: this.token,
+          refreshToken: this.refreshToken,
           userInfo: { ...this.userInfo },
           userRole: this.userRole,
         };
 
-        this.token = token;
+        this.token = finalAccessToken;
+        this.refreshToken = finalRefreshToken || '';
         this.userInfo = user;
         this.userRole = validatedRole;
 
         // 尝试持久化到 localStorage，失败时回滚
         try {
-          if (!setToken(token)) {
+          if (!setToken(finalAccessToken)) {
             throw new Error("Token validation failed during persist");
+          }
+          if (finalRefreshToken && !setRefreshToken(finalRefreshToken)) {
+            throw new Error("Refresh token validation failed during persist");
           }
           localStorage.setItem("userInfo", JSON.stringify(user));
           localStorage.setItem("userRole", validatedRole);
@@ -153,11 +168,17 @@ export const useUserStore = defineStore("user", {
           console.error("Failed to persist login state:", storageError);
           // 回滚 Pinia state 以保持一致性
           this.token = prevState.token;
+          this.refreshToken = prevState.refreshToken;
           this.userInfo = prevState.userInfo;
           this.userRole = prevState.userRole;
           return Promise.reject(
             new Error("登录状态持久化失败，请检查存储空间"),
           );
+        }
+
+        // 启动主动刷新（access token 过期前 10 分钟自动刷新）
+        if (finalRefreshToken && expiresIn) {
+          startProactiveRefresh(expiresIn);
         }
 
         return Promise.resolve(response.data);
@@ -168,9 +189,14 @@ export const useUserStore = defineStore("user", {
 
     async logout() {
       const tokenToRevoke = this.token
+      const refreshTokenToRevoke = this.refreshToken
+
+      // 停止主动刷新定时器
+      stopProactiveRefresh()
 
       // 先清理本地状态，确保即使 API 调用失败或延迟，Token 也不会残留
       this.token = "";
+      this.refreshToken = "";
       this.userInfo = {};
       this.userRole = "";
       this.elevatedRole = null;
@@ -189,7 +215,7 @@ export const useUserStore = defineStore("user", {
 
       // 再调用后端 logout API（失败不影响本地已清理的状态）
       try {
-        await logout(tokenToRevoke);
+        await logout(tokenToRevoke, refreshTokenToRevoke);
       } catch (error) {
         console.error("Logout API error (local state already cleared):", error);
       }
@@ -283,6 +309,36 @@ export const useUserStore = defineStore("user", {
         sessionStorage.removeItem("elevationExpiresAt");
       } catch (e) {
         console.error("Failed to clear elevation state:", e);
+      }
+    },
+
+    /**
+     * 原子替换双 token（401 自动刷新后调用）。
+     * 同时重排主动刷新定时器。
+     */
+    setTokens({ accessToken, refreshToken, expiresIn }) {
+      if (!isValidToken(accessToken)) {
+        console.error('setTokens received invalid accessToken:', accessToken)
+        return
+      }
+
+      this.token = accessToken
+      if (refreshToken) {
+        this.refreshToken = refreshToken
+      }
+
+      try {
+        setToken(accessToken)
+        if (refreshToken) {
+          setRefreshToken(refreshToken)
+        }
+      } catch (e) {
+        console.error('Failed to persist tokens in setTokens:', e)
+      }
+
+      // 重排主动刷新定时器
+      if (this.refreshToken && expiresIn) {
+        startProactiveRefresh(expiresIn)
       }
     },
   },

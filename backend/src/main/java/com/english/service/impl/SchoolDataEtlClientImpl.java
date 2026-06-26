@@ -179,6 +179,11 @@ public class SchoolDataEtlClientImpl implements SchoolDataApiClient {
     }
 
     @Override
+    public List<Map<String, Object>> fetchStudentBasicInfos(Map<String, String> params) {
+        return fetchByDataSource("student_basic_info", params);
+    }
+
+    @Override
     public boolean testConnection() {
         String jdbcUrl = properties.getEtl().getJdbcUrl();
         if (jdbcUrl == null || jdbcUrl.isEmpty()) {

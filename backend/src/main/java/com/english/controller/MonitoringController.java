@@ -10,6 +10,7 @@ import com.english.entity.User;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.english.mapper.*;
+import com.english.service.AccessLogQueryService;
 import com.english.service.TokenBlacklistService;
 import com.english.service.UserService;
 import com.english.service.impl.AccessMetricsService;
@@ -18,6 +19,8 @@ import com.english.service.impl.ElevationService;
 import com.english.service.impl.InMemoryLogService;
 import com.english.service.impl.SystemMetricsService;
 import com.english.util.JwtUtil;
+import com.english.monitor.DatabasePoolMonitor;
+import com.english.monitor.UserRequestMonitor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -86,6 +89,15 @@ public class MonitoringController {
 
     @Autowired
     private InMemoryLogService inMemoryLogService;
+
+    @Autowired
+    private DatabasePoolMonitor databasePoolMonitor;
+
+    @Autowired
+    private UserRequestMonitor userRequestMonitor;
+
+    @Autowired
+    private AccessLogQueryService accessLogQueryService;
 
     @GetMapping("/realtime")
     public Result<?> getRealTimeMetrics() {
@@ -419,5 +431,239 @@ public class MonitoringController {
             logger.error("下载日志失败", e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    @GetMapping("/db-pool")
+    public Result<Map<String, Object>> getDatabasePoolMetrics() {
+        return Result.success(databasePoolMonitor.getPoolMetrics());
+    }
+
+    /**
+     * 获取用户请求量TOP榜
+     */
+    @GetMapping("/user-requests/top")
+    public Result<List<Map<String, Object>>> getTopUsers(
+            @RequestParam(defaultValue = "20") int limit) {
+        return Result.success(userRequestMonitor.getTopUsers(limit));
+    }
+
+    /**
+     * 获取指定用户的请求统计报告
+     */
+    @GetMapping("/user-requests/{username}")
+    public Result<Map<String, Object>> getUserRequestReport(@PathVariable String username) {
+        return Result.success(userRequestMonitor.getUserRequestReport(username));
+    }
+
+    // ========== Access Log Visualization ==========
+
+    /**
+     * 分页查询访问日志
+     */
+    @GetMapping("/access-logs")
+    public Result<Map<String, Object>> getAccessLogs(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String uri,
+            @RequestParam(required = false) Integer statusCode,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> result = accessLogQueryService.queryAccessLogs(
+                    page, size, username, uri, statusCode, start, end);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("查询访问日志失败", e);
+            return Result.error("查询访问日志失败");
+        }
+    }
+
+    /**
+     * 获取访问日志统计信息
+     */
+    @GetMapping("/access-logs/stats")
+    public Result<Map<String, Object>> getAccessLogStats(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> stats = accessLogQueryService.getAccessLogStats(start, end);
+            return Result.success(stats);
+        } catch (Exception e) {
+            logger.error("获取访问日志统计失败", e);
+            return Result.error("获取访问日志统计失败");
+        }
+    }
+
+    /**
+     * 获取访问趋势数据
+     */
+    @GetMapping("/access-logs/trend")
+    public Result<List<Map<String, Object>>> getAccessTrend(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) :
+                    LocalDateTime.now().minusDays(7);
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : LocalDateTime.now();
+
+            List<Map<String, Object>> trend = accessLogQueryService.getAccessTrend(start, end);
+            return Result.success(trend);
+        } catch (Exception e) {
+            logger.error("获取访问趋势失败", e);
+            return Result.error("获取访问趋势失败");
+        }
+    }
+
+    /**
+     * 获取响应时间分布
+     */
+    @GetMapping("/access-logs/response-time-distribution")
+    public Result<Map<String, Object>> getResponseTimeDistribution(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> distribution = accessLogQueryService.getResponseTimeDistribution(start, end);
+            return Result.success(distribution);
+        } catch (Exception e) {
+            logger.error("获取响应时间分布失败", e);
+            return Result.error("获取响应时间分布失败");
+        }
+    }
+
+    /**
+     * 获取登录/退出统计
+     */
+    @GetMapping("/access-logs/login-stats")
+    public Result<Map<String, Object>> getLoginStats(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime,
+            @RequestParam(defaultValue = "100") int limit) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> stats = accessLogQueryService.getLoginStats(start, end, limit);
+            return Result.success(stats);
+        } catch (Exception e) {
+            logger.error("获取登录统计失败", e);
+            return Result.error("获取登录统计失败");
+        }
+    }
+
+    /**
+     * 下载访问日志（CSV）
+     */
+    @GetMapping("/access-logs/download")
+    public ResponseEntity<ByteArrayResource> downloadAccessLogs(
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String uri,
+            @RequestParam(required = false) Integer statusCode,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> result = accessLogQueryService.queryAccessLogs(1, 10000, username, uri, statusCode, start, end);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> records = (List<Map<String, Object>>) result.get("records");
+
+            StringBuilder sb = new StringBuilder("﻿"); // BOM for Excel
+            sb.append("时间,用户,方法,URI,状态码,响应时间(ms),IP地址\n");
+            for (Map<String, Object> row : records) {
+                sb.append(csvEscape(row.get("createdTime"))).append(',')
+                  .append(csvEscape(row.get("username"))).append(',')
+                  .append(csvEscape(row.get("method"))).append(',')
+                  .append(csvEscape(row.get("uri"))).append(',')
+                  .append(csvEscape(row.get("statusCode"))).append(',')
+                  .append(csvEscape(row.get("responseTimeMs"))).append(',')
+                  .append(csvEscape(row.get("ipAddress"))).append('\n');
+            }
+
+            String filename = "access-logs-" +
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
+            byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                    .contentLength(bytes.length)
+                    .body(new ByteArrayResource(bytes));
+        } catch (Exception e) {
+            logger.error("下载访问日志失败", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 下载登录统计（CSV）
+     */
+    @GetMapping("/access-logs/login-stats/download")
+    public ResponseEntity<ByteArrayResource> downloadLoginStats(
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+        try {
+            LocalDateTime start = startTime != null ? LocalDateTime.parse(startTime + " 00:00:00",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+            LocalDateTime end = endTime != null ? LocalDateTime.parse(endTime + " 23:59:59",
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
+
+            Map<String, Object> stats = accessLogQueryService.getLoginStats(start, end, 10000);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> records = (List<Map<String, Object>>) stats.get("records");
+
+            StringBuilder sb = new StringBuilder("﻿");
+            sb.append("时间,用户名,操作,结果,状态码,IP地址\n");
+            for (Map<String, Object> row : records) {
+                sb.append(csvEscape(row.get("createdTime"))).append(',')
+                  .append(csvEscape(row.get("username"))).append(',')
+                  .append(csvEscape(row.get("action"))).append(',')
+                  .append(Boolean.TRUE.equals(row.get("success")) ? "成功" : "失败").append(',')
+                  .append(csvEscape(row.get("statusCode"))).append(',')
+                  .append(csvEscape(row.get("ipAddress"))).append('\n');
+            }
+
+            String filename = "login-stats-" +
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
+            byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                    .contentLength(bytes.length)
+                    .body(new ByteArrayResource(bytes));
+        } catch (Exception e) {
+            logger.error("下载登录统计失败", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    private String csvEscape(Object value) {
+        if (value == null) return "";
+        String s = value.toString();
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
     }
 }

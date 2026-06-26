@@ -11,6 +11,7 @@ import com.english.dto.LoginRequest;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.mapper.UserMapper;
+import com.english.mapper.SchoolStudentMapper;
 import com.english.service.impl.UserServiceImpl;
 import com.english.util.JwtUtil;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,7 +40,7 @@ import static org.mockito.Mockito.*;
  *
  * Key implementation facts:
  * - UserServiceImpl extends ServiceImpl<UserMapper, User>
- * - login() returns Map with "token", "user", "expiresIn" -- NO refreshToken
+ * - login() returns Map with "token" (=accessToken), "accessToken", "refreshToken", "user", "expiresIn", "refreshExpiresIn"
  * - login() checks user.getStatus() == "ACTIVE" before password check
  * - deleteUser() simply calls removeById(id) -> baseMapper.deleteById(id)
  * - createUser() uses getUserByUsername() + getOne() for duplicate checks, save() for insert
@@ -61,6 +62,9 @@ class UserServiceTest {
 
     @Mock
     private UserMapper baseMapper;
+
+    @Mock
+    private SchoolStudentMapper schoolStudentMapper;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -100,8 +104,8 @@ class UserServiceTest {
 
             when(baseMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUser);
             when(passwordEncoder.matches("rawPassword123", "$2a$10$encodedPassword")).thenReturn(true);
-            when(jwtUtil.generateToken("testuser", "USER")).thenReturn("jwt-access-token");
-            when(jwtUtil.getExpiration()).thenReturn(2592000000L);
+            when(jwtUtil.generateAccessToken("testuser", "USER")).thenReturn("jwt-access-token");
+            when(jwtUtil.generateRefreshToken("testuser")).thenReturn("jwt-refresh-token");
 
             // Act
             Map<String, Object> result = userService.login(loginRequest);
@@ -109,10 +113,11 @@ class UserServiceTest {
             // Assert
             assertNotNull(result);
             assertEquals("jwt-access-token", result.get("token"));
+            assertEquals("jwt-access-token", result.get("accessToken"));
+            assertEquals("jwt-refresh-token", result.get("refreshToken"));
             assertEquals(testUser, result.get("user"));
-            assertEquals(2592000000L, result.get("expiresIn"));
-            // login() does NOT return refreshToken
-            assertNull(result.get("refreshToken"));
+            assertEquals(JwtUtil.ACCESS_TOKEN_EXPIRATION_MILLIS, result.get("expiresIn"));
+            assertEquals(JwtUtil.REFRESH_TOKEN_EXPIRATION_MILLIS, result.get("refreshExpiresIn"));
             // password should be cleared before returning
             assertNull(testUser.getPassword());
         }
@@ -180,7 +185,8 @@ class UserServiceTest {
 
             when(baseMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUser);
             when(passwordEncoder.matches("rawPassword123", "$2a$10$encodedPassword")).thenReturn(true);
-            when(jwtUtil.generateToken("testuser", "USER")).thenReturn("token");
+            when(jwtUtil.generateAccessToken("testuser", "USER")).thenReturn("token");
+            when(jwtUtil.generateRefreshToken("testuser")).thenReturn("refresh-token");
 
             // Act
             Map<String, Object> result = userService.login(loginRequest);
@@ -713,7 +719,7 @@ class UserServiceTest {
             assertEquals(1L, result.get("current"));
             assertEquals(10L, result.get("size"));
             @SuppressWarnings("unchecked")
-            List<User> records = (List<User>) result.get("records");
+            List<Map<String, Object>> records = (List<Map<String, Object>>) result.get("records");
             assertNotNull(records);
             assertEquals(1, records.size());
         }

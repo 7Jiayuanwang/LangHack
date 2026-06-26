@@ -3,6 +3,7 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.Text;
 import com.english.entity.User;
+import com.english.service.ContentTagService;
 import com.english.service.UserService;
 import com.english.service.TextService;
 import com.english.service.UnitService;
@@ -39,6 +40,9 @@ public class UserTextController {
     @Autowired
     private UnitService unitService;
 
+    @Autowired
+    private ContentTagService contentTagService;
+
     /**
      * 用户上传课文
      */
@@ -68,6 +72,10 @@ public class UserTextController {
             String contentType = (String) textData.getOrDefault("contentType", "TEXT");
             String difficulty = (String) textData.getOrDefault("difficulty", "MEDIUM");
             String tags = (String) textData.getOrDefault("tags", "");
+            String filteredTags = contentTagService.filterValidTags(tags);
+            if (filteredTags.isEmpty()) {
+                return Result.error(tags.trim().isEmpty() ? "标签不能为空" : "所选标签不合法，请从预设标签中选择");
+            }
             String coverUrl = (String) textData.get("coverUrl");
             String audioUrl = (String) textData.get("audioUrl");
 
@@ -95,7 +103,7 @@ public class UserTextController {
             text.setMarkdownContent(markdownContent);
             text.setContentType(contentType);
             text.setDifficulty(difficulty);
-            text.setTags(tags != null ? tags : "");
+            text.setTags(filteredTags);
             text.setCoverUrl(coverUrl);
             text.setAudioUrl(audioUrl);
             text.setUploadedBy(user.getId());
@@ -240,7 +248,14 @@ public class UserTextController {
             if (textData.containsKey("markdownContent")) text.setMarkdownContent(markdownContentVal != null ? markdownContentVal.toString() : "");
             if (textData.containsKey("contentType")) text.setContentType(contentTypeVal != null ? contentTypeVal.toString() : "TEXT");
             if (textData.containsKey("difficulty")) text.setDifficulty(difficultyVal != null ? difficultyVal.toString() : "MEDIUM");
-            if (textData.containsKey("tags")) text.setTags(tagsVal != null ? tagsVal.toString() : "");
+            if (textData.containsKey("tags")) {
+                String rawTags = tagsVal != null ? tagsVal.toString() : "";
+                String filtered = contentTagService.filterValidTags(rawTags);
+                if (!rawTags.trim().isEmpty() && filtered.isEmpty()) {
+                    return Result.error("所选标签不合法，请从预设标签中选择");
+                }
+                text.setTags(filtered);
+            }
             if (textData.containsKey("coverUrl")) {
                 Object coverUrlVal = textData.get("coverUrl");
                 text.setCoverUrl(coverUrlVal != null ? coverUrlVal.toString() : "");

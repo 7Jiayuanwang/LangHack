@@ -43,6 +43,7 @@ import java.util.Set;
  * - teaching_plans:       https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715289655026466836
  * - teacher_courses:      https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294645677801497
  * - student_schedule:     https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294397274341377
+ * - student_basic_info:  https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0104
  * <p>
  * <b>请求参数规范</b>（详见 docs/SCHOOL_DATA_API_SPEC.md）：
  * <ul>
@@ -195,6 +196,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     @Override
     public List<Map<String, Object>> fetchTeacherCourses(Map<String, String> params) {
         return fetchData("teacher_courses", params);
+    }
+
+    @Override
+    public List<Map<String, Object>> fetchStudentBasicInfos(Map<String, String> params) {
+        return fetchData("student_basic_info", params);
     }
 
     @Override

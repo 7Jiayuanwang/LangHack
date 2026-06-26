@@ -14,6 +14,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import com.english.exception.BusinessException;
+import com.english.service.SystemConfigService;
+import com.english.util.SizeParseUtil;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
 
@@ -41,16 +43,19 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
     private static final Set<String> ALLOWED_VIDEO_EXTENSIONS = Set.of("mp4", "webm", "ogg", "mov", "avi", "mkv");
 
     @Value("${media.upload.max-image-size:10485760}")
-    private long maxImageSize;
+    private long defaultMaxImageSize;
 
     @Value("${media.upload.max-video-size:536870912}")
-    private long maxVideoSize;
+    private long defaultMaxVideoSize;
 
     @Value("${media.upload.storage-path:/app/uploads}")
     private String storagePath;
 
     @Autowired
     private MediaTranscodeService transcodeService;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
 
     @PostConstruct
     public void init() {
@@ -90,10 +95,9 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             }
             String mimeType = file.getContentType();
 
-            long maxSize = "IMAGE".equals(mediaType) ? maxImageSize : maxVideoSize;
+            long maxSize = resolveMaxSize(mediaType, uploadedBy);
             if (file.getSize() > maxSize) {
-                String limit = maxSize / (1024 * 1024) + "MB";
-                throw new BusinessException("文件大小超过限制（最大 " + limit + "）");
+                throw new BusinessException("文件大小超过限制（最大 " + SizeParseUtil.formatSize(maxSize) + "）");
             }
 
             if (!isValidMediaType(mediaType, mimeType, originalFileName)) {
@@ -217,5 +221,44 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
                 logger.warn("Failed to delete file on disk: {}", existing.getFilePath(), e);
             }
         }
+    }
+
+    /**
+     * 按内容类型 + 上传者角色解析允许的最大文件大小。
+     * 优先级：角色覆盖 (content_limits.upload.content_size.{type}.role.{role})
+     *          > 全局默认 (content_limits.upload.content_size.{type})
+     *          > 环境变量兜底
+     */
+    private long resolveMaxSize(String mediaType, Long uploadedBy) {
+        boolean isImage = "IMAGE".equals(mediaType);
+        String typeKey  = isImage ? "upload.content_size.image" : "upload.content_size.video";
+        long   envFallback = isImage ? defaultMaxImageSize : defaultMaxVideoSize;
+
+        // 尝试读取角色覆盖
+        if (uploadedBy != null) {
+            try {
+                com.english.entity.User user = baseMapper.selectById(uploadedBy) != null
+                        ? null : null; // 不走 mapper，改走 SecurityContext 减少 DB 查询
+                // 从 SecurityContext 取角色，避免额外 DB 查询
+                org.springframework.security.core.Authentication auth =
+                        org.springframework.security.core.context.SecurityContextHolder
+                                .getContext().getAuthentication();
+                if (auth != null && auth.getAuthorities() != null) {
+                    for (org.springframework.security.core.GrantedAuthority ga : auth.getAuthorities()) {
+                        String role = ga.getAuthority().replace("ROLE_", "");
+                        String roleKey = typeKey + ".role." + role;
+                        String roleVal = systemConfigService.get("content_limits", roleKey, null);
+                        if (roleVal != null) {
+                            return SizeParseUtil.parseSize(roleVal, envFallback);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("resolveMaxSize 角色覆盖查询失败，降级到全局默认: {}", e.getMessage());
+            }
+        }
+
+        String globalVal = systemConfigService.get("content_limits", typeKey, null);
+        return SizeParseUtil.parseSize(globalVal, envFallback);
     }
 }

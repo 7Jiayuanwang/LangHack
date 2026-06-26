@@ -450,7 +450,7 @@
 <script setup>
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight, Search, Collection, Select } from '@element-plus/icons-vue'
+import { Loading, InfoFilled, Plus, User, Refresh, Monitor, Management, MoreFilled, Reading, ArrowRight, Search, Collection, Select, Key } from '@element-plus/icons-vue'
 import { useFeatureToggles, invalidateFeatureToggleCache } from '@/composables/useFeatureToggles'
 import {
   getSystemConfig, updateSystemConfig,
@@ -470,17 +470,40 @@ watch(activeTab, (val) => {
 const loadingGlobal = ref(true)
 const toggles = ref([])
 
+const FEATURE_TOGGLE_CATALOG = [
+  {
+    configKey: 'student.video_upload_enabled',
+    description: '学生端-视频上传功能开关（全局关闭后仅标签内用户可上传）',
+    defaultValue: 'true'
+  }
+]
+
+const PRESET_TAGS = ['视频上传权限']
+
+const toToggleViewModel = (item, fallbackValue = 'false') => {
+  const configValue = item.configValue == null || item.configValue === '' ? fallbackValue : item.configValue
+  return {
+    ...item,
+    configGroup: item.configGroup || 'feature_toggle',
+    configValue,
+    description: item.description || item.configKey,
+    enabled: configValue === 'true',
+    saving: false
+  }
+}
+
 // 角色分组定义（按 configKey 前缀分组）
 const groupDefs = [
-  { key: 'student', label: '学生端', desc: '学生端页面与导航可见性', prefixes: ['page_'], excludePrefixes: ['page_teacher_', 'page_admin_', 'page_ops_'], iconName: 'User' },
-  { key: 'teacher', label: '教师端', desc: '教师端页面与功能',       prefixes: ['page_teacher_'], excludePrefixes: [], iconName: 'Reading' },
-  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',  prefixes: ['admin.', 'page_admin_'], excludePrefixes: [], iconName: 'Management' },
-  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',  prefixes: ['ops.', 'page_ops_'], excludePrefixes: [], iconName: 'Monitor' },
-  { key: 'other',   label: '其他',    desc: '未归类的全局开关',        prefixes: [], excludePrefixes: [], iconName: 'MoreFilled' }
+  { key: 'student', label: '学生端',  desc: '学生端页面与导航可见性',    prefixes: ['page_', 'student.'],        excludePrefixes: ['page_teacher_', 'page_admin_', 'page_ops_'], iconName: 'User' },
+  { key: 'teacher', label: '教师端',  desc: '教师端页面与功能',          prefixes: ['page_teacher_', 'teacher.'], excludePrefixes: [], iconName: 'Reading' },
+  { key: 'admin',   label: '管理员端', desc: '管理员模块访问与功能',      prefixes: ['admin.', 'page_admin_'],     excludePrefixes: [], iconName: 'Management' },
+  { key: 'ops',     label: '运维端',  desc: '运维工具与数据集成配置',     prefixes: ['ops.', 'page_ops_'],         excludePrefixes: [], iconName: 'Monitor' },
+  { key: 'sso',     label: 'SSO/认证', desc: 'SSO自动授权与认证策略',    prefixes: ['sso.'],                      excludePrefixes: [], iconName: 'Key' },
+  { key: 'other',   label: '其他',    desc: '未归类的全局开关',           prefixes: [], excludePrefixes: [], iconName: 'MoreFilled' }
 ]
 
 const roleFilter = ref('all')
-const activeGroupPanels = ref(['student', 'teacher', 'admin', 'ops', 'other'])
+const activeGroupPanels = ref(['student', 'teacher', 'admin', 'ops', 'sso', 'other'])
 
 const categorize = (key) => {
   if (!key) return 'other'
@@ -535,13 +558,27 @@ const loadToggles = async () => {
   loadingGlobal.value = true
   try {
     const res = await getSystemConfig('feature_toggle')
-    if (res?.code === 200 && Array.isArray(res.data)) {
-      toggles.value = res.data.map(item => ({
-        ...item,
-        enabled: item.configValue === 'true',
-        saving: false
-      }))
-    }
+    const backendItems = res?.code === 200 && Array.isArray(res.data) ? res.data : []
+    const backendByKey = new Map(backendItems.map(item => [item.configKey, item]))
+
+    const merged = FEATURE_TOGGLE_CATALOG.map(item => {
+      const backendItem = backendByKey.get(item.configKey)
+      if (backendItem) {
+        backendByKey.delete(item.configKey)
+        return toToggleViewModel({ ...item, ...backendItem }, item.defaultValue)
+      }
+      return toToggleViewModel({
+        configGroup: 'feature_toggle',
+        configKey: item.configKey,
+        configValue: item.defaultValue,
+        description: item.description
+      }, item.defaultValue)
+    })
+
+    toggles.value = [
+      ...merged,
+      ...Array.from(backendByKey.values()).map(item => toToggleViewModel(item))
+    ]
   } catch (e) {
     ElMessage.error('加载功能开关失败')
   } finally {
@@ -578,7 +615,8 @@ const loadAllTags = async () => {
   loadingAllTags.value = true
   try {
     const res = await listAllTags()
-    if (res?.code === 200) allTags.value = res.data || []
+    const backendTags = res?.code === 200 ? (res.data || []) : []
+    allTags.value = Array.from(new Set([...PRESET_TAGS, ...backendTags]))
   } catch (e) {
     ElMessage.error('加载标签列表失败')
   } finally {

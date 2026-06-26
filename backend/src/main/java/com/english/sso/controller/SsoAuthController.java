@@ -162,7 +162,9 @@ public class SsoAuthController {
 
             Map<String, Object> payload = new HashMap<>();
             payload.put("status", result.isNeedsApproval() ? "PENDING" : "SUCCESS");
-            payload.put("token", result.getToken());
+            payload.put("token", result.getToken()); // 兼容字段 = accessToken
+            payload.put("accessToken", result.getAccessToken());
+            payload.put("refreshToken", result.getRefreshToken());
             payload.put("needsApproval", result.isNeedsApproval() || result.isApprovalPendingAfterLogin());
             payload.put("approvalPendingAfterLogin", result.isApprovalPendingAfterLogin());
             payload.put("bindingId", result.getBindingId());
@@ -251,6 +253,13 @@ public class SsoAuthController {
         if (token == null || token.isBlank()) {
             return errorWithCode(SsoErrorCode.CODE_EXPIRED, "授权码无效或已过期，请重新登录");
         }
+        // 双 token：accessToken/refreshToken 优先；缺失则回退到旧 token（仅 accessToken 的旧路径）
+        String accessToken = payload.get("accessToken") != null
+                ? String.valueOf(payload.get("accessToken"))
+                : token;
+        String refreshToken = payload.get("refreshToken") != null
+                ? String.valueOf(payload.get("refreshToken"))
+                : null;
         String pendingApprovalMessage = payload.get("message") == null ? null : String.valueOf(payload.get("message"));
         Long pendingBindingId = null;
         Object bindingIdValue = payload.get("bindingId");
@@ -260,17 +269,23 @@ public class SsoAuthController {
         Boolean approvalPendingAfterLogin = Boolean.TRUE.equals(payload.get("approvalPendingAfterLogin"));
 
         Map<String, Object> data = new HashMap<>();
-        data.put("token", token);
+        data.put("token", accessToken); // 兼容字段
+        data.put("accessToken", accessToken);
+        if (refreshToken != null) {
+            data.put("refreshToken", refreshToken);
+            data.put("refreshExpiresIn", JwtUtil.REFRESH_TOKEN_EXPIRATION_MILLIS);
+        }
 
         // 从 JWT 中提取用户名，查询完整用户信息返回给前端
         try {
-            String username = jwtUtil.getUsernameFromToken(token);
+            String username = jwtUtil.getUsernameFromToken(accessToken);
             User user = userService.getUserByUsername(username);
             if (user != null) {
                 user.setPassword(null); // 清除密码，避免返回给前端
                 data.put("user", user);
             }
-            data.put("expiresIn", jwtUtil.getExpiration());
+            // accessToken 过期时间（前端用于主动刷新定时器）
+            data.put("expiresIn", JwtUtil.ACCESS_TOKEN_EXPIRATION_MILLIS);
             if (pendingApprovalMessage != null && approvalPendingAfterLogin) {
                 data.put("needsApproval", true);
                 data.put("approvalPendingAfterLogin", true);

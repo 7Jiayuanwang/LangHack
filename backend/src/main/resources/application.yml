@@ -6,6 +6,12 @@ app:
   update:
     supported: ${APP_UPDATE_SUPPORTED:true}
     unsupported-reason: ${APP_UPDATE_UNSUPPORTED_REASON:Self-update is not supported in the current deployment mode.}
+    hot-deploy-script: scripts/hot-deploy.sh
+    docker-socket: ${APP_UPDATE_DOCKER_SOCKET:/var/run/docker.sock}
+    project-host-path: ${PROJECT_HOST_PATH:}
+    deployer-image: ${APP_UPDATE_DEPLOYER_IMAGE:langhack-deployer:latest}
+    git-token: ${GIT_TOKEN:}
+    git-ssh-key-dir: ${GIT_SSH_KEY_DIR:}
   base-url: ${APP_BASE_URL:http://localhost:3000}
 
 # 管理员登录配置
@@ -16,6 +22,7 @@ admin:
 
 server:
   port: 8080
+  server-header: ""
   servlet:
     encoding:
       charset: UTF-8
@@ -43,8 +50,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:512MB}
-      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:512MB}
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:100GB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:100GB}
 
   datasource:
     master:
@@ -152,6 +159,9 @@ recommendation:
     per-user-limit: 10
   item-cf:
     per-seed-limit: 20
+  persona:
+    enabled: ${RECOMMENDATION_PERSONA_ENABLED:false}
+    max-adjustment: 0.12
 
 mybatis-plus:
   configuration:
@@ -320,3 +330,13 @@ school:
       full-sync-on-startup: ${SCHOOL_SYNC_FULL_ON_STARTUP:false}
     cli:
       enabled: ${SCHOOL_DATA_CLI_ENABLED:false}
+
+# 学习者画像
+learner-profile:
+  enabled: ${LEARNER_PROFILE_ENABLED:true}
+  tracking:
+    enabled: ${LEARNER_PROFILE_TRACKING_ENABLED:false}
+  snapshot:
+    enabled: ${LEARNER_PROFILE_SNAPSHOT_ENABLED:false}
+  llm-summary:
+    enabled: ${LEARNER_PROFILE_LLM_SUMMARY_ENABLED:false}

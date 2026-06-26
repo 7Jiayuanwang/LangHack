@@ -1029,6 +1029,9 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'AUTO_UPDATE_BRANCH=%s\n'      "$CFG_AUTO_UPDATE_BRANCH"
         printf 'AUTO_UPDATE_MAINTENANCE=%s\n' "$CFG_AUTO_UPDATE_MAINTENANCE"
         printf 'AUTO_UPDATE_PRE_BACKUP=%s\n'  "$CFG_AUTO_UPDATE_PRE_BACKUP"
+        # 热部署（Deployer Sidecar）
+        printf 'PROJECT_HOST_PATH=%s\n'     "$PROJECT_ROOT"
+        printf 'APP_UPDATE_SUPPORTED=true\n'
         # HTTPS/SSL
         printf 'HTTPS_ENABLED=%s\n' "$CFG_HTTPS_ENABLED"
         if [ "$CFG_HTTPS_ENABLED" = "true" ]; then
@@ -1356,6 +1359,16 @@ case $BUILD_MODE in
         ;;
     3) echo "[INFO] 跳过构建（仅重启）"; BUILD_ONLY=true ;;
 esac
+
+# 构建 deployer 镜像（热部署 sidecar）
+if [ "$BUILD_ONLY" != "true" ]; then
+    echo "[INFO] 构建 deployer 镜像..."
+    if docker compose --profile deploy build deployer; then
+        echo "[INFO] deployer 镜像构建成功"
+    else
+        echo "[ERROR] deployer 镜像构建失败，热部署功能将不可用（主服务不受影响）"
+    fi
+fi
 
 # 启动
 # --wait-timeout 300: 等待依赖的 service_healthy 条件最多 300 秒

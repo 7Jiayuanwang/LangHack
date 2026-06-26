@@ -111,6 +111,12 @@ def check_merged_sql(files: list[Path], issues: list[str]) -> None:
         issues.append("Merged SQL must not create legacy table `course`; use `school_course` directly")
     if re.search(r"REFERENCES\s+`?course`?\s*\(", merged_code, re.I):
         issues.append("Merged SQL must not reference legacy table `course`; use `school_course` directly")
+    for lineno, line in enumerate(merged.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("--"):
+            continue
+        if stripped.endswith("$$") and not re.match(r"^(DROP\s+PROCEDURE\s+IF\s+EXISTS|CREATE\s+PROCEDURE|END\$\$|CALL\s+)", stripped, re.I):
+            issues.append(f"Merged SQL contains plain statement ending with $$ at line {lineno}: {stripped[:120]}")
 
 
 def main() -> int:

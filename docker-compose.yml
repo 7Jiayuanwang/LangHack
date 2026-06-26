@@ -54,7 +54,7 @@ services:
       MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
       TZ: Asia/Shanghai
     ports:
-      - "${PORT_MYSQL:-3306}:3306"
+      - "127.0.0.1:${PORT_MYSQL:-3306}:3306"
     volumes:
       - ./data/mysql-master:/var/lib/mysql
       # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
@@ -114,7 +114,7 @@ services:
       MYSQL_ROLE: slave
       TZ: Asia/Shanghai
     ports:
-      - "${PORT_MYSQL_SLAVE:-3307}:3306"
+      - "127.0.0.1:${PORT_MYSQL_SLAVE:-3307}:3306"
     volumes:
       - ./data/mysql-slave:/var/lib/mysql
       # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
@@ -156,7 +156,7 @@ services:
       --appendonly yes
       ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
     ports:
-      - "${PORT_REDIS:-6379}:6379"
+      - "127.0.0.1:${PORT_REDIS:-6379}:6379"
     volumes:
       - ./data/redis:/data
     networks:
@@ -217,9 +217,9 @@ services:
       # 备份导入 multipart 上限（与 nginx client_max_body_size 2048M 对齐）
       SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:-2048MB}
       SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:-2048MB}
-      # CORS（全局跨域：允许本机 + 局域网所有 IP 访问）
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80,http://localhost:3000,http://127.0.0.1:3000,http://10.213.113.105:3000,http://192.168.81.1:3000,http://192.168.192.1:3000,http://172.24.160.1:3000}
-      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-http://192.168.*.*:*,http://172.*.*.*:*,http://10.*.*.*:*}
+      # CORS（生产环境严格限制 + 开发环境本地回环）
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://langhack.imau.edu.cn,https://isa.imau.edu.cn,http://localhost:3000,http://127.0.0.1:3000}
+      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-}
       # AI 翻译（可选，也可在运维面板配置）
       AI_TRANSLATE_API_URL: ${AI_TRANSLATE_API_URL:-}
       AI_TRANSLATE_API_KEY: ${AI_TRANSLATE_API_KEY:-}
@@ -232,8 +232,12 @@ services:
       # 应用服务器地址（对应官方 web.xml 的 serverName，格式: 协议://域名[:端口]）
       SSO_CAS_SERVER_NAME: ${SSO_CAS_SERVER_NAME:-http://localhost:8080}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8088}
-      APP_UPDATE_SUPPORTED: "false"
-      APP_UPDATE_UNSUPPORTED_REASON: Self-update is disabled in Docker deployments.
+      APP_UPDATE_SUPPORTED: "${APP_UPDATE_SUPPORTED:-true}"
+      PROJECT_HOST_PATH: "${PROJECT_HOST_PATH:-}"
+      APP_UPDATE_DEPLOYER_IMAGE: "${APP_UPDATE_DEPLOYER_IMAGE:-langhack-deployer:latest}"
+      APP_UPDATE_DOCKER_SOCKET: "${APP_UPDATE_DOCKER_SOCKET:-/var/run/docker.sock}"
+      GIT_TOKEN: "${GIT_TOKEN:-}"
+      GIT_SSH_KEY_DIR: "${GIT_SSH_KEY_DIR:-}"
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
       # Flyway — 暂时禁用：仓库存在重复版本号 (V25, V27)，需先重命名后再启用
@@ -257,6 +261,10 @@ services:
       - ./data/app-uploads:/app/uploads
       # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
       - ./backups:/app/backups
+      # Docker Socket — 热部署 deployer sidecar 需要
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 热部署日志目录（与 deployer sidecar 共享，用于实时日志流）
+      - ./logs/hot-deploy:/app/hot-deploy-logs
     networks:
       - langhack-network
     depends_on:
@@ -310,6 +318,22 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ─────────────────────────────────────────────
+  # 热部署 Deployer (按需启动，profiles: deploy)
+  # 构建: docker compose build deployer
+  # 不会随 docker compose up 启动，仅由后端通过 Docker Socket 调用
+  # ─────────────────────────────────────────────
+  deployer:
+    build:
+      context: .
+      dockerfile: docker/deployer/Dockerfile
+      args:
+        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
+    image: langhack-deployer:latest
+    profiles:
+      - deploy
 
 # ─────────────────────────────────────────────
 # 网络

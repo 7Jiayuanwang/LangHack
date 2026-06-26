@@ -112,7 +112,8 @@ public class SchoolDataProperties {
                 new EndpointMapping("level_exam_scores", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0076"),
                 new EndpointMapping("teaching_plans", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715289655026466836"),
                 new EndpointMapping("teacher_courses", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294645677801497"),
-                new EndpointMapping("student_schedule", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294397274341377")
+                new EndpointMapping("student_schedule", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294397274341377"),
+                new EndpointMapping("student_basic_info", "https://cdsp.imau.edu.cn/cdsp/data-api/v2/DS0104")
         );
 
         public String getBaseUrl() {

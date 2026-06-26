@@ -108,7 +108,7 @@ class TranslateControllerTest {
     @Test
     @DisplayName("POST /api/translate/auto - text too long returns error")
     void translateAuto_textTooLong_returnsError() throws Exception {
-        String longText = "a".repeat(2001);
+        String longText = "a".repeat(10001);
         Map<String, String> body = Map.of("text", longText);
 
         mockMvc.perform(post("/api/translate/auto")
@@ -116,7 +116,7 @@ class TranslateControllerTest {
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(500))
-                .andExpect(jsonPath("$.message").value("翻译文本不能超过2000字"));
+                .andExpect(jsonPath("$.message").value("翻译文本不能超过10000字"));
     }
 
     @Test
@@ -140,7 +140,7 @@ class TranslateControllerTest {
     @Test
     @DisplayName("POST /api/translate/en-to-cn - success")
     void translateEnToCn_success() throws Exception {
-        when(translateService.translateEnToCn("Hello")).thenReturn("你好");
+        when(translateService.translateLong("Hello", "en", "zh")).thenReturn("你好");
 
         Map<String, String> body = Map.of("text", "Hello");
 
@@ -170,7 +170,7 @@ class TranslateControllerTest {
     @Test
     @DisplayName("POST /api/translate/cn-to-en - success")
     void translateCnToEn_success() throws Exception {
-        when(translateService.translateCnToEn("你好")).thenReturn("Hello");
+        when(translateService.translateLong("你好", "zh", "en")).thenReturn("Hello");
 
         Map<String, String> body = Map.of("text", "你好");
 
@@ -185,7 +185,7 @@ class TranslateControllerTest {
     @Test
     @DisplayName("POST /api/translate/cn-to-en - service exception returns generic error")
     void translateCnToEn_serviceException_returnsError() throws Exception {
-        when(translateService.translateCnToEn(anyString()))
+        when(translateService.translateLong(anyString(), eq("zh"), eq("en")))
                 .thenThrow(new RuntimeException("timeout"));
 
         Map<String, String> body = Map.of("text", "你好");
@@ -203,16 +203,16 @@ class TranslateControllerTest {
     @Test
     @DisplayName("POST /api/translate/custom - success")
     void translateCustom_success() throws Exception {
-        when(translateService.translate("Hello", "en", "ja")).thenReturn("こんにちは");
+        when(translateService.translateLong("Hello", "en", "zh")).thenReturn("你好");
 
-        Map<String, String> body = Map.of("text", "Hello", "source", "en", "target", "ja");
+        Map<String, String> body = Map.of("text", "Hello", "source", "en", "target", "zh");
 
         mockMvc.perform(post("/api/translate/custom")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data").value("こんにちは"));
+                .andExpect(jsonPath("$.data").value("你好"));
     }
 
     @Test
@@ -263,7 +263,7 @@ class TranslateControllerTest {
     @Test
     @DisplayName("POST /api/translate/custom - text too long returns error")
     void translateCustom_textTooLong_returnsError() throws Exception {
-        String longText = "x".repeat(2001);
+        String longText = "x".repeat(10001);
         Map<String, String> body = Map.of("text", longText, "source", "en", "target", "zh");
 
         mockMvc.perform(post("/api/translate/custom")
@@ -271,7 +271,7 @@ class TranslateControllerTest {
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(500))
-                .andExpect(jsonPath("$.message").value("翻译文本不能超过2000字"));
+                .andExpect(jsonPath("$.message").value("翻译文本不能超过10000字"));
     }
 
     // ========== POST /api/translate/batch ==========

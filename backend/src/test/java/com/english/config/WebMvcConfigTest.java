@@ -5,6 +5,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -30,10 +32,12 @@ class WebMvcConfigTest {
     private WebMvcConfig config;
     private final AccessLogInterceptor mockInterceptor = mock(AccessLogInterceptor.class);
     private final AdminMasterInterceptor mockAdminMasterInterceptor = mock(AdminMasterInterceptor.class);
+    private final com.english.interceptor.RateLimitInterceptor mockRateLimitInterceptor = mock(com.english.interceptor.RateLimitInterceptor.class);
+    private final com.english.interceptor.UploadSizeLimitInterceptor mockUploadSizeLimitInterceptor = mock(com.english.interceptor.UploadSizeLimitInterceptor.class);
 
     @BeforeEach
     void setUp() {
-        config = new WebMvcConfig(mockInterceptor, mockAdminMasterInterceptor);
+        config = new WebMvcConfig(mockInterceptor, mockAdminMasterInterceptor, mockRateLimitInterceptor, mockUploadSizeLimitInterceptor);
     }
 
     // ==================== Interface Implementation ====================
@@ -263,6 +267,80 @@ class WebMvcConfigTest {
         }
     }
 
+    // ==================== Interceptor Registration Tests ====================
+
+    @Nested
+    @DisplayName("addInterceptors / interceptor registration")
+    class InterceptorRegistrationTests {
+
+        /**
+         * Mock InterceptorRegistry and capture the InterceptorRegistration
+         * returned for each addInterceptor() call, so tests can verify the
+         * downstream addPathPatterns / excludePathPatterns chain.
+         */
+        private java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration>
+                captureRegistrations(InterceptorRegistry registry) {
+            java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration> map =
+                    new java.util.LinkedHashMap<>();
+            when(registry.addInterceptor(any(org.springframework.web.servlet.HandlerInterceptor.class)))
+                    .thenAnswer(inv -> {
+                        org.springframework.web.servlet.HandlerInterceptor interceptor =
+                                inv.getArgument(0);
+                        InterceptorRegistration reg = mock(InterceptorRegistration.class, RETURNS_DEEP_STUBS);
+                        map.put(interceptor, reg);
+                        return reg;
+                    });
+            return map;
+        }
+
+        @Test
+        @DisplayName("rate limit interceptor should be registered for /api/health (no longer excluded)")
+        void addInterceptors_shouldRegisterRateLimitForHealth() {
+            InterceptorRegistry registry = mock(InterceptorRegistry.class, RETURNS_DEEP_STUBS);
+            java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration> regs =
+                    captureRegistrations(registry);
+
+            config.addInterceptors(registry);
+
+            InterceptorRegistration rateLimitReg = regs.get(mockRateLimitInterceptor);
+            assertNotNull(rateLimitReg, "rateLimitInterceptor should be added to the registry");
+
+            // /api/health must NOT be in the excludePathPatterns list anymore
+            verify(rateLimitReg, never()).excludePathPatterns("/api/health");
+        }
+
+        @Test
+        @DisplayName("rate limit interceptor should still cover /api/auth/login and /api/auth/register")
+        void addInterceptors_shouldKeepAuthPathsInRateLimit() {
+            InterceptorRegistry registry = mock(InterceptorRegistry.class, RETURNS_DEEP_STUBS);
+            java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration> regs =
+                    captureRegistrations(registry);
+
+            config.addInterceptors(registry);
+
+            InterceptorRegistration rateLimitReg = regs.get(mockRateLimitInterceptor);
+            assertNotNull(rateLimitReg);
+            verify(rateLimitReg).addPathPatterns("/api/auth/login", "/api/auth/register", "/api/**");
+        }
+
+        @Test
+        @DisplayName("access log interceptor should exclude /api/health to avoid polluting top_pages")
+        void addInterceptors_shouldExcludeHealthFromAccessLog() {
+            InterceptorRegistry registry = mock(InterceptorRegistry.class, RETURNS_DEEP_STUBS);
+            java.util.Map<org.springframework.web.servlet.HandlerInterceptor, InterceptorRegistration> regs =
+                    captureRegistrations(registry);
+
+            config.addInterceptors(registry);
+
+            InterceptorRegistration accessLogReg = regs.get(mockInterceptor);
+            assertNotNull(accessLogReg, "accessLogInterceptor should be added to the registry");
+            verify(accessLogReg).excludePathPatterns("/api/ops/monitoring/realtime/stream",
+                                                    "/api/ops/update/trigger",
+                                                    "/api/health",
+                                                    "/audio/**", "/favicon.ico");
+        }
+    }
+
     // ==================== Testable Subclass ====================
 
     /**
@@ -274,7 +352,7 @@ class WebMvcConfigTest {
         private final String audioResourcePath;
 
         TestableWebMvcConfig(String audioResourcePath) {
-            super(mock(AccessLogInterceptor.class), mock(AdminMasterInterceptor.class));
+            super(mock(AccessLogInterceptor.class), mock(AdminMasterInterceptor.class), mock(com.english.interceptor.RateLimitInterceptor.class), mock(com.english.interceptor.UploadSizeLimitInterceptor.class));
             this.audioResourcePath = audioResourcePath;
         }
 

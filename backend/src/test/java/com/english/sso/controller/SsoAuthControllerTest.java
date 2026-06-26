@@ -38,7 +38,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// TODO resolved: added @MockBean for JwtUtil, SsoProperties, StringRedisTemplate, UserService
 @WebMvcTest(controllers = SsoAuthController.class, excludeAutoConfiguration = {
     org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class
 })
@@ -94,6 +93,18 @@ class SsoAuthControllerTest {
     @MockBean
     private com.english.service.impl.ElevationService elevationService;
 
+    @MockBean
+    private com.english.monitor.UserRequestMonitor userRequestMonitor;
+
+    @MockBean
+    private com.english.config.RateLimitManager rateLimitManager;
+
+    @MockBean
+    private com.english.monitor.DatabasePoolMonitor databasePoolMonitor;
+
+    @MockBean
+    private com.english.service.SystemConfigService systemConfigService;
+
     @TestConfiguration
     static class MockMyBatisConfig {
         @Bean
@@ -120,6 +131,15 @@ class SsoAuthControllerTest {
         SsoProperties.CasConfig casConfig = new SsoProperties.CasConfig();
         casConfig.setServerName("http://localhost:8088");
         when(ssoProperties.getCas()).thenReturn(casConfig);
+
+        // Stub RateLimitManager to return mock Bucket (PR#42 RateLimitInterceptor dependency)
+        io.github.bucket4j.Bucket mockBucket = mock(io.github.bucket4j.Bucket.class);
+        io.github.bucket4j.ConsumptionProbe mockProbe = mock(io.github.bucket4j.ConsumptionProbe.class);
+        when(mockProbe.isConsumed()).thenReturn(true);
+        when(mockBucket.tryConsumeAndReturnRemaining(1)).thenReturn(mockProbe);
+        when(rateLimitManager.resolveBucket(anyString())).thenReturn(mockBucket);
+        when(rateLimitManager.resolveLoginBucket(anyString())).thenReturn(mockBucket);
+        when(rateLimitManager.resolveRegisterBucket(anyString())).thenReturn(mockBucket);
 
         mockUserInfo = new SsoUserInfo();
         mockUserInfo.setSsoUserId("2023122066164");

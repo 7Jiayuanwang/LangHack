@@ -224,7 +224,7 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
             // 按字母排序需要在后处理中完成（word 列在另一张表）
             wrapper.orderByDesc("added_time");
         } else if ("nextReviewTime".equals(sortBy)) {
-            // 艾宾浩斯遗忘曲线调度：到期的词优先（NULL视为最高优先级）
+            // SM-2 调度：到期的词优先（NULL视为最高优先级）
             wrapper.orderByAsc("next_review_time");
         } else {
             // 默认：按添加时间降序
@@ -752,6 +752,17 @@ public class VocabularyBooksServiceImpl implements VocabularyBooksService {
             stats.put("weeklyReviews", 0);
         }
 
+        return stats;
+    }
+
+    @Override
+    public Map<String, Object> getReviewStats(Long studentId) {
+        Map<String, Object> stats = new HashMap<>();
+        int overdueCount = vocabularyBookMapper.countOverdueReviews(studentId);
+        int dueCount = vocabularyBookMapper.countDueReviews(studentId);
+        stats.put("overdueCount", overdueCount);
+        stats.put("dueCount", dueCount);
+        stats.put("overdueRatio", dueCount > 0 ? (double) overdueCount / dueCount : 0.0);
         return stats;
     }
 }

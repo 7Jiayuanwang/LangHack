@@ -4,12 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.dto.Result;
 import com.english.entity.TeacherStudentBinding;
+import com.english.entity.User;
 import com.english.mapper.TeacherStudentBindingMapper;
+import com.english.mapper.UserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 师生绑定关系管理控制器
@@ -24,6 +29,9 @@ public class TeacherStudentBindingController {
 
     @Autowired
     private TeacherStudentBindingMapper bindingMapper;
+
+    @Autowired
+    private UserMapper userMapper;
 
     /**
      * 获取师生绑定关系列表
@@ -42,22 +50,48 @@ public class TeacherStudentBindingController {
             QueryWrapper<TeacherStudentBinding> wrapper = new QueryWrapper<>();
 
             if (college != null && !college.trim().isEmpty()) {
-                wrapper.eq("college_name", college.trim());
+                wrapper.eq("b.college_name", college.trim());
             }
             if (teacherId != null && !teacherId.trim().isEmpty()) {
-                wrapper.eq("teacher_id", teacherId.trim());
+                wrapper.eq("b.teacher_id", teacherId.trim());
             }
             if (studentId != null && !studentId.trim().isEmpty()) {
-                wrapper.eq("student_id", studentId.trim());
+                wrapper.eq("b.student_id", studentId.trim());
             }
 
-            wrapper.orderByDesc("created_at");
+            wrapper.orderByDesc("b.created_at");
 
-            Page<TeacherStudentBinding> result = bindingMapper.selectPage(pageReq, wrapper);
+            Page<TeacherStudentBinding> result = bindingMapper.selectPageWithNames(pageReq, wrapper);
+            // 再用 users 表覆盖（users.real_name 优先于 school_teacher/school_student 的脏数据）
+            // 注意：users 表是 utf8mb4_unicode_ci，不能直接 JOIN；分批反查避免 N+1
+            enrichWithUserRealNames(result.getRecords());
             return Result.success(result);
         } catch (Exception e) {
             logger.error("获取师生绑定关系失败", e);
             return Result.error("获取绑定关系失败，请稍后重试");
+        }
+    }
+
+    private void enrichWithUserRealNames(List<TeacherStudentBinding> records) {
+        if (records == null || records.isEmpty()) return;
+        Set<String> usernames = new HashSet<>();
+        for (TeacherStudentBinding b : records) {
+            if (b.getTeacherId() != null && !b.getTeacherId().isBlank()) usernames.add(b.getTeacherId());
+            if (b.getStudentId() != null && !b.getStudentId().isBlank()) usernames.add(b.getStudentId());
+        }
+        if (usernames.isEmpty()) return;
+        // 单次 IN 查询（@TableLogic 自动加 deleted=0）
+        QueryWrapper<User> uw = new QueryWrapper<>();
+        uw.in("username", usernames);
+        uw.select("username", "real_name");
+        Map<String, String> realNameByUsername = userMapper.selectList(uw).stream()
+                .filter(u -> u.getRealName() != null && !u.getRealName().isBlank())
+                .collect(Collectors.toMap(User::getUsername, User::getRealName, (a, b) -> a));
+        for (TeacherStudentBinding b : records) {
+            String teacherReal = realNameByUsername.get(b.getTeacherId());
+            if (teacherReal != null) b.setTeacherName(teacherReal);
+            String studentReal = realNameByUsername.get(b.getStudentId());
+            if (studentReal != null) b.setStudentName(studentReal);
         }
     }
 

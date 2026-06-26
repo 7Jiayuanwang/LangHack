@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { getAuthHeader } from '@/utils/auth'
+import { getAuthHeader, getRefreshToken } from '@/utils/auth'
 import { getSsoLoginUrl } from '@/api/sso'
 
 const request = axios.create({
@@ -11,6 +11,8 @@ const request = axios.create({
 
 // 防止并发 401 多次触发 logout
 let isLoggingOut = false
+// 防止并发 401 多次触发 refresh（共享同一个 promise）
+let refreshingPromise = null
 
 const handleLogout = async () => {
   if (isLoggingOut) return
@@ -58,6 +60,71 @@ const handleLogout = async () => {
   }
 }
 
+/**
+ * 处理 401：先尝试用 refreshToken 自动刷新，失败才 logout。
+ * 并发去重：多个 401 请求共享同一个 refreshingPromise。
+ *
+ * @param {object} failedRequestConfig - 失败的请求配置（用于刷新成功后重试）
+ */
+async function handle401(failedRequestConfig) {
+  // 1. 如果已经有一个刷新流程在进行中，等待它完成后重试原请求
+  if (refreshingPromise !== null) {
+    try {
+      await refreshingPromise
+      // 刷新成功，重试原请求（此时 store 和 localStorage 的 token 已更新，request 拦截器会自动带上新 token）
+      return request(failedRequestConfig)
+    } catch (error) {
+      // 刷新失败（已在下方的 finally 块中执行了 logout），拒绝原请求
+      return Promise.reject({ code: 401, message: '登录已过期，请重新登录' })
+    }
+  }
+
+  // 2. 首个 401：创建刷新流程
+  const currentRefreshToken = getRefreshToken()
+  if (!currentRefreshToken) {
+    // 没有 refreshToken，直接 logout
+    handleLogout()
+    return Promise.reject({ code: 401, message: '登录已过期，请重新登录' })
+  }
+
+  refreshingPromise = (async () => {
+    try {
+      // 动态导入避免循环依赖（request.js ← api/auth.js → request.js）
+      const { refreshToken: refreshTokenApi } = await import('@/api/auth')
+      const response = await refreshTokenApi(currentRefreshToken)
+
+      if (response.code !== 200 || !response.data?.accessToken) {
+        throw new Error('Refresh token response invalid')
+      }
+
+      // 刷新成功：更新 store 和 localStorage
+      const userStore = useUserStore()
+      userStore.setTokens({
+        accessToken: response.data.accessToken,
+        refreshToken: response.data.refreshToken, // 可能为 null（未续期）
+        expiresIn: response.data.expiresIn || 7200000
+      })
+
+      console.log('Token refreshed successfully via 401 handler')
+    } catch (error) {
+      console.error('Token refresh failed, logging out:', error)
+      // 刷新失败：执行 logout
+      handleLogout()
+      throw error
+    } finally {
+      refreshingPromise = null
+    }
+  })()
+
+  try {
+    await refreshingPromise
+    // 刷新成功，重试原请求
+    return request(failedRequestConfig)
+  } catch (error) {
+    return Promise.reject({ code: 401, message: '登录已过期，请重新登录' })
+  }
+}
+
 // 请求拦截器
 request.interceptors.request.use(
   config => {
@@ -92,10 +159,9 @@ request.interceptors.response.use(
     }
 
     if (res.code !== 200) {
-      // 401: 未授权，token过期等（只处理一次，由 handleLogout 统一管理）
+      // 401: 未授权，token过期等 — 先尝试用 refreshToken 自动刷新，失败才 logout
       if (res.code === 401) {
-        handleLogout()
-        return Promise.reject({ code: 401, message: '未授权，请重新登录' })
+        return handle401(response.config)
       }
 
       // 4001: 需要前端确认的业务提示（如"文章未公开，是否同时公开？"），直接放行让调用方处理
@@ -187,12 +253,19 @@ function getHttpErrorMessage(status, responseData) {
     } catch (e) { /* store not available */ }
     return '服务器内部错误'
   }
+
+  // 413 文件过大错误：返回后端详细信息（包含限制大小和实际大小）
+  if (status === 413 && responseData?.message) {
+    return responseData.message
+  }
+
   const httpErrorMap = {
     400: '请求参数错误',
     401: '未授权，请重新登录',
     403: '拒绝访问',
     404: '请求地址不存在',
     409: '请求冲突',
+    413: '上传文件过大，请压缩后重试',
   }
   return httpErrorMap[status] || '请求失败，请稍后重试'
 }

@@ -155,6 +155,30 @@ const routes = [
         component: () => import("@/views/admin/QuizRecords.vue"),
         meta: { title: "做题管理", roles: ["ADMIN"] },
       },
+      {
+        path: "persona-analytics",
+        name: "AdminPersonaAnalytics",
+        component: () => import("@/views/admin/PersonaAnalytics.vue"),
+        meta: { title: "画像分析", roles: ["ADMIN"], featureKey: "admin.persona_analytics" },
+      },
+      {
+        path: "class-cohort",
+        name: "AdminClassCohort",
+        component: () => import("@/views/admin/ClassCohortAnalysis.vue"),
+        meta: { title: "班级队列分析", roles: ["ADMIN"], featureKey: "admin.class_cohort" },
+      },
+      {
+        path: "vocab-learning-stats",
+        name: "AdminVocabLearningStats",
+        component: () => import("@/views/admin/VocabLearningStats.vue"),
+        meta: { title: "生词本统计", roles: ["ADMIN"] },
+      },
+      {
+        path: "tag-management",
+        name: "AdminTagManagement",
+        component: () => import("@/views/admin/TagManagement.vue"),
+        meta: { title: "标签管理", roles: ["ADMIN"], featureKey: "admin.tag_management" },
+      },
     ],
   },
   {
@@ -192,13 +216,7 @@ const routes = [
         path: "update",
         name: "OpsUpdate",
         component: () => import("@/views/ops/Update.vue"),
-        meta: { title: "系统更新", roles: ["OPS", "ADMIN"] },
-      },
-      {
-        path: "hot-deploy",
-        name: "OpsHotDeploy",
-        component: () => import("@/views/ops/HotDeploy.vue"),
-        meta: { title: "零停机热更新", roles: ["OPS", "ADMIN"] },
+        meta: { title: "部署管理", roles: ["OPS", "ADMIN"] },
       },
       {
         path: "feature-toggles",
@@ -223,6 +241,12 @@ const routes = [
         name: "OpsLogs",
         component: () => import("@/views/ops/Logs.vue"),
         meta: { title: "日志管理", roles: ["OPS", "ADMIN"] },
+      },
+      {
+        path: "content-limits",
+        name: "OpsContentLimits",
+        component: () => import("@/views/ops/ContentLimits.vue"),
+        meta: { title: "内容限制", roles: ["OPS", "ADMIN"] },
       },
     ],
   },
@@ -419,6 +443,18 @@ const routes = [
       {
         path: "word-learning",
         redirect: "/student/words?tab=list",
+      },
+      {
+        path: "my-profile",
+        name: "StudentMyProfile",
+        component: () => import("@/views/student/MyProfile.vue"),
+        meta: { title: "我的画像", roles: ["STUDENT", "USER"], featureKey: "student.learner_profile_enabled" },
+      },
+      {
+        path: "author/:id",
+        name: "StudentAuthorProfile",
+        component: () => import("@/views/student/AuthorProfile.vue"),
+        meta: { title: "作者主页", roles: ["STUDENT", "USER", "TEACHER"] },
       },
     ],
   },

@@ -2,10 +2,13 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.dto.TextVersionsDTO;
+import com.english.dto.AuthorDTO;
 import com.english.entity.Text;
 import com.english.entity.UserTextRead;
 import com.english.entity.User;
 import com.english.mapper.UserTextReadMapper;
+import com.english.mapper.TextLearningRecordMapper;
+import com.english.entity.TextLearningRecord;
 import com.english.service.ArticleVersionService;
 import com.english.service.TextService;
 import com.english.service.UserService;
@@ -75,6 +78,9 @@ public class PublicTextController {
     private UserTextReadMapper userTextReadMapper;
 
     @Autowired
+    private TextLearningRecordMapper textLearningRecordMapper;
+
+    @Autowired
     private UserService userService;
 
     @Autowired
@@ -82,6 +88,9 @@ public class PublicTextController {
 
     @Autowired
     private com.english.service.RecommendationService recommendationService;
+
+    @Autowired
+    private com.english.service.AuthorEnricher authorEnricher;
 
     /**
      * 获取所有内容标签（公开接口，学生上传时使用）
@@ -186,6 +195,7 @@ public class PublicTextController {
                 result.addAll(randomPool.subList(0, Math.min(remaining, randomPool.size())));
             }
 
+            authorEnricher.enrichTexts(result);
             return Result.success(result);
         } catch (Exception e) {
             log.error("获取推荐文章失败", e);
@@ -218,7 +228,11 @@ public class PublicTextController {
             }
 
             List<Text> result = recommendationService.recommend(userId, count, excludeIds);
-            return Result.success(result != null ? result : Collections.emptyList());
+            if (result == null) {
+                result = new ArrayList<>();
+            }
+            authorEnricher.enrichTexts(result);
+            return Result.success(result);
         } catch (Exception e) {
             log.error("获取推荐文章失败", e);
             return Result.error("获取推荐文章失败，请稍后重试");
@@ -261,6 +275,26 @@ public class PublicTextController {
         } catch (Exception e) {
             log.error("记录阅读行为失败, textId={}", textId, e);
             return Result.error("记录阅读行为失败");
+        }
+    }
+
+    @PostMapping("/{textId}/version-read")
+    public Result<Void> recordVersionRead(@PathVariable Long textId,
+                                          @RequestParam String version) {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            return Result.success(null);
+        }
+        try {
+            TextLearningRecord record = new TextLearningRecord();
+            record.setStudentId(userId);
+            record.setTextId(textId);
+            record.setContentVersion(version);
+            textLearningRecordMapper.insert(record);
+            return Result.success(null);
+        } catch (Exception e) {
+            log.warn("记录版本阅读失败, textId={}, version={}", textId, version, e);
+            return Result.success(null);
         }
     }
 
@@ -365,6 +399,7 @@ public class PublicTextController {
                 Collections.shuffle(randomTexts);
             }
 
+            authorEnricher.enrichTexts(randomTexts);
             return Result.success(randomTexts);
         } catch (Exception e) {
             log.error("获取随机课文失败", e);
@@ -488,6 +523,10 @@ public class PublicTextController {
             dto.setLikeCount(text.getLikeCount());
             dto.setContentType(text.getContentType());
             dto.setMarkdownContent(text.getMarkdownContent());
+
+            // 填充上传者（作者）信息：系统内容无上传者，标记为官方内容
+            authorEnricher.enrichText(text);
+            dto.setAuthor(text.getAuthor());
 
             // 根据内容类型返回相应版本
             if ("MARKDOWN".equals(text.getContentType())) {

@@ -171,6 +171,9 @@
                   <el-dropdown-item command="requiz" :icon="Edit">
                     重新出题
                   </el-dropdown-item>
+                  <el-dropdown-item command="edit-quiz" :icon="Document">
+                    编辑题目
+                  </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -280,6 +283,98 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 编辑题目对话框 -->
+    <el-dialog
+      v-model="editQuizDialogVisible"
+      title="编辑题目"
+      width="min(900px, 95%)"
+      :close-on-click-modal="false"
+      append-to-body
+      top="3vh"
+    >
+      <div class="edit-quiz-dialog">
+        <div class="edit-quiz-header">
+          <span class="edit-quiz-target">课文：{{ editQuizTarget?.title }}</span>
+          <el-button type="primary" size="small" @click="addQuestion">
+            <el-icon><Plus /></el-icon> 添加题目
+          </el-button>
+        </div>
+
+        <div class="edit-quiz-empty" v-if="editQuizQuestions.length === 0">
+          <el-empty description="暂无题目，点击上方按钮添加" :image-size="80" />
+        </div>
+
+        <div class="edit-quiz-list" v-else>
+          <div
+            v-for="(q, qIdx) in editQuizQuestions"
+            :key="qIdx"
+            class="edit-quiz-item"
+          >
+            <div class="edit-quiz-item-header">
+              <span class="edit-quiz-item-num">题目 {{ qIdx + 1 }}</span>
+              <el-button type="danger" size="small" text @click="removeQuestion(qIdx)">
+                删除
+              </el-button>
+            </div>
+
+            <el-form label-width="70px" size="small">
+              <el-form-item label="题型">
+                <el-input v-model="q.questionType" placeholder="如：主旨大意题、细节信息题" />
+              </el-form-item>
+              <el-form-item label="题目">
+                <el-input v-model="q.question" type="textarea" :rows="2" placeholder="输入题目内容" />
+              </el-form-item>
+              <el-form-item label="解析">
+                <el-input v-model="q.analysis" type="textarea" :rows="2" placeholder="输入题目解析" />
+              </el-form-item>
+            </el-form>
+
+            <div class="edit-quiz-options">
+              <div class="edit-quiz-options-header">
+                <span>选项</span>
+                <el-button size="small" text @click="addOption(q)">添加选项</el-button>
+              </div>
+              <div
+                v-for="(opt, optIdx) in q.options"
+                :key="optIdx"
+                class="edit-quiz-option-row"
+              >
+                <el-input
+                  v-model="opt.optionKey"
+                  style="width: 60px"
+                  placeholder="A"
+                  maxlength="2"
+                />
+                <el-input
+                  v-model="opt.optionContent"
+                  style="flex: 1"
+                  placeholder="选项内容"
+                />
+                <el-radio
+                  v-model="q._correctKey"
+                  :value="opt.optionKey"
+                  @change="(val) => { q._correctKey = val }"
+                >
+                  正确
+                </el-radio>
+                <el-button type="danger" size="small" text @click="removeOption(q, optIdx)">
+                  删除
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="editQuizDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="editQuizSaving" @click="saveQuizQuestions">
+            保存题目
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -290,7 +385,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, RefreshLeft, Refresh, VideoPlay, MoreFilled, Edit } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshLeft, Refresh, VideoPlay, MoreFilled, Edit, Document } from '@element-plus/icons-vue'
 import * as adminApi from '@/api/admin'
 import { generateAiQuiz } from '@/api/aiQuiz'
 import TextEditDialog from '@/components/TextEditDialog.vue'
@@ -538,6 +633,12 @@ const regenTarget = ref(null)
 const regenVersion = ref('ALL')
 const regenSubmitting = ref(false)
 
+// "编辑题目"弹窗状态
+const editQuizDialogVisible = ref(false)
+const editQuizTarget = ref(null)
+const editQuizQuestions = ref([])
+const editQuizSaving = ref(false)
+
 const handleMoreCommand = async (command, row) => {
   if (command === 'regen-open') {
     openRegenDialog(row)
@@ -555,6 +656,8 @@ const handleMoreCommand = async (command, row) => {
     } finally {
       row._requizLoading = false
     }
+  } else if (command === 'edit-quiz') {
+    openEditQuizDialog(row)
   }
 }
 
@@ -583,6 +686,131 @@ const confirmRegenerate = async () => {
   } finally {
     regenSubmitting.value = false
     row._regenLoading = false
+  }
+}
+
+// 编辑题目相关函数
+import { getExercisesByTextId } from '@/api/exercise'
+
+const openEditQuizDialog = async (row) => {
+  editQuizTarget.value = row
+  editQuizDialogVisible.value = true
+  editQuizQuestions.value = []
+
+  try {
+    const resp = await getExercisesByTextId(row.id)
+    const data = resp?.data || resp
+    if (Array.isArray(data) && data.length > 0) {
+      editQuizQuestions.value = data.map(q => ({
+        id: q.id,
+        question: q.question || '',
+        questionType: q.questionType || '选择题',
+        analysis: q.analysis || '',
+        _correctKey: (q.options || []).find(o => o.isCorrect === 1)?.optionKey || '',
+        options: (q.options || []).map(o => ({
+          id: o.id,
+          optionKey: o.optionKey || '',
+          optionContent: o.optionContent || '',
+          isCorrect: o.isCorrect || 0
+        }))
+      }))
+    }
+  } catch (e) {
+    console.warn('加载题目失败:', e)
+  }
+}
+
+const addQuestion = () => {
+  editQuizQuestions.value.push({
+    id: null,
+    question: '',
+    questionType: '选择题',
+    analysis: '',
+    _correctKey: 'A',
+    options: [
+      { id: null, optionKey: 'A', optionContent: '', isCorrect: 0 },
+      { id: null, optionKey: 'B', optionContent: '', isCorrect: 0 },
+      { id: null, optionKey: 'C', optionContent: '', isCorrect: 0 },
+      { id: null, optionKey: 'D', optionContent: '', isCorrect: 0 }
+    ]
+  })
+}
+
+const removeQuestion = (idx) => {
+  editQuizQuestions.value.splice(idx, 1)
+}
+
+const addOption = (q) => {
+  const keys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const usedKeys = q.options.map(o => o.optionKey)
+  const nextKey = keys.split('').find(k => !usedKeys.includes(k)) || String(q.options.length + 1)
+  q.options.push({ id: null, optionKey: nextKey, optionContent: '', isCorrect: 0 })
+}
+
+const removeOption = (q, idx) => {
+  q.options.splice(idx, 1)
+}
+
+const saveQuizQuestions = async () => {
+  // 验证
+  for (let i = 0; i < editQuizQuestions.value.length; i++) {
+    const q = editQuizQuestions.value[i]
+    if (!q.question.trim()) {
+      ElMessage.warning(`题目 ${i + 1} 的题目内容不能为空`)
+      return
+    }
+    if (!q._correctKey) {
+      ElMessage.warning(`题目 ${i + 1} 请选择正确答案`)
+      return
+    }
+    for (let j = 0; j < q.options.length; j++) {
+      if (!q.options[j].optionContent.trim()) {
+        ElMessage.warning(`题目 ${i + 1} 的选项 ${q.options[j].optionKey} 内容不能为空`)
+        return
+      }
+    }
+  }
+
+  editQuizSaving.value = true
+  try {
+    const payload = {
+      textId: editQuizTarget.value.id,
+      questions: editQuizQuestions.value.map(q => ({
+        id: q.id,
+        question: q.question,
+        questionType: q.questionType,
+        analysis: q.analysis,
+        options: q.options.map(o => ({
+          id: o.id,
+          optionKey: o.optionKey,
+          optionContent: o.optionContent,
+          isCorrect: o.optionKey === q._correctKey ? 1 : 0
+        }))
+      }))
+    }
+
+    const baseURL = import.meta.env.VITE_API_BASE_URL || ''
+    const token = localStorage.getItem('token') || ''
+    const resp = await fetch(`${baseURL}/api/admin/texts/${editQuizTarget.value.id}/exercises`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(payload)
+    })
+    const result = await resp.json()
+
+    if (result.code === 200) {
+      ElMessage.success('题目保存成功')
+      editQuizDialogVisible.value = false
+    } else {
+      ElMessage.error(result.message || '保存失败')
+    }
+  } catch (e) {
+    ElMessage.error('保存失败：' + (e.message || '网络异常'))
+  } finally {
+    editQuizSaving.value = false
   }
 }
 
@@ -948,5 +1176,83 @@ defineExpose({ loadTexts })
 .regen-radio-group :deep(.el-radio-button__inner) {
   border-radius: 4px;
   border-left: 1px solid #dcdfe6;
+}
+
+/* "编辑题目"弹窗 */
+.edit-quiz-dialog {
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-quiz-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.edit-quiz-target {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.edit-quiz-empty {
+  padding: 40px 0;
+}
+
+.edit-quiz-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 4px;
+}
+
+.edit-quiz-item {
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fafafa;
+}
+
+.edit-quiz-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.edit-quiz-item-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: #409eff;
+}
+
+.edit-quiz-options {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #dcdfe6;
+}
+
+.edit-quiz-options-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.edit-quiz-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 </style>

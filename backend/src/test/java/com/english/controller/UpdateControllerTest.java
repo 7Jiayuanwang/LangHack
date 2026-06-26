@@ -18,6 +18,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,7 +53,7 @@ class UpdateControllerTest {
     void getStatus_success() throws Exception {
         UpdateConfig config = new UpdateConfig();
         config.setEnabled(true);
-        config.setCronExpr("0 0 3 * * ?");
+        config.setCronExpr("0 0 2 ? * SUN");
         config.setGitBranch("main");
         config.setLastRunStatus("SUCCESS");
 
@@ -63,7 +65,7 @@ class UpdateControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.enabled").value(true))
-                .andExpect(jsonPath("$.data.cronExpr").value("0 0 3 * * ?"))
+                .andExpect(jsonPath("$.data.cronExpr").value("0 0 2 ? * SUN"))
                 .andExpect(jsonPath("$.data.gitBranch").value("main"))
                 .andExpect(jsonPath("$.data.lastRunStatus").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.supported").value(true));
@@ -75,18 +77,17 @@ class UpdateControllerTest {
         UpdateConfig saved = new UpdateConfig();
         saved.setId(1L);
         saved.setEnabled(true);
-        saved.setCronExpr("0 30 2 * * ?");
+        saved.setCronExpr("0 0 2 ? * SUN");
         saved.setGitBranch("main");
-        saved.setBackupBeforeUpdate(true);
 
         when(updateService.saveConfig(any(UpdateConfig.class))).thenReturn(saved);
 
         mockMvc.perform(post("/api/ops/update/config")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"enabled\":true,\"cronExpr\":\"0 30 2 * * ?\",\"gitBranch\":\"main\",\"backupBeforeUpdate\":true}"))
+                        .content("{\"enabled\":true,\"cronExpr\":\"0 0 2 ? * SUN\",\"gitBranch\":\"main\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.cronExpr").value("0 30 2 * * ?"))
+                .andExpect(jsonPath("$.data.cronExpr").value("0 0 2 ? * SUN"))
                 .andExpect(jsonPath("$.data.gitBranch").value("main"));
 
         verify(dynamicUpdateScheduler).reschedule(saved);
@@ -107,13 +108,13 @@ class UpdateControllerTest {
 
     @Test
     @DisplayName("GET /api/ops/update/trigger converts unexpected exception to SSE error event")
-    void triggerUpdate_unexpectedException_returnsEmitter() {
-        when(updateService.triggerUpdate(any(SseEmitter.class)))
+    void trigger_unexpectedException_returnsEmitter() {
+        when(updateService.trigger(any(SseEmitter.class), anyString(), anyBoolean(), anyBoolean(), anyBoolean()))
                 .thenThrow(new RuntimeException("db down"));
 
-        SseEmitter emitter = controller.triggerUpdate();
+        SseEmitter emitter = controller.trigger("", false, false, false);
 
-        verify(updateService).triggerUpdate(any(SseEmitter.class));
+        verify(updateService).trigger(any(SseEmitter.class), anyString(), anyBoolean(), anyBoolean(), anyBoolean());
         org.junit.jupiter.api.Assertions.assertNotNull(emitter);
     }
 }

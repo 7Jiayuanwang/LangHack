@@ -3,6 +3,10 @@
 -- NOTE: 此文件使用 $$ 作为存储过程分隔符，必须通过 04-apply-all-migrations.sh 执行
 --       不可直接 source，否则 DELIMITER 命令报错
 
+USE `${MYSQL_DATABASE}`;
+SET NAMES utf8mb4;
+
+
 -- V0__base_tables.sql
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -30,8 +34,6 @@ CREATE TABLE IF NOT EXISTS `users` (
     `avatar` VARCHAR(255) DEFAULT NULL COMMENT '头像URL',
     `status` VARCHAR(20) DEFAULT 'ACTIVE' COMMENT '状态',
     `inner_uid` VARCHAR(100) DEFAULT NULL COMMENT '用户内部唯一标识符',
-    `school_student_id` BIGINT DEFAULT NULL COMMENT '关联 school_student.id',
-    `school_teacher_id` BIGINT DEFAULT NULL COMMENT '关联 school_teacher.id',
     `hobby` VARCHAR(100) DEFAULT NULL COMMENT '用户兴趣爱好',
     `level` VARCHAR(50) DEFAULT NULL COMMENT '英语水平等级',
     `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
@@ -43,30 +45,8 @@ CREATE TABLE IF NOT EXISTS `users` (
     KEY `idx_role` (`role`),
     KEY `idx_status` (`status`),
     KEY `idx_deleted` (`deleted`),
-    KEY `idx_inner_uid` (`inner_uid`),
-    KEY `idx_users_school_student_id` (`school_student_id`),
-    KEY `idx_users_school_teacher_id` (`school_teacher_id`)
+    KEY `idx_inner_uid` (`inner_uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
-
--- V25: 确保 school_student_id / school_teacher_id 列存在（种子备份可能用旧结构建表）
-DROP PROCEDURE IF EXISTS _add_school_cols$$
-CREATE PROCEDURE _add_school_cols()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE table_schema=DATABASE() AND table_name='users'
-                     AND column_name='school_student_id') THEN
-        ALTER TABLE users ADD COLUMN school_student_id BIGINT DEFAULT NULL COMMENT '关联 school_student.id' AFTER inner_uid;
-        ALTER TABLE users ADD INDEX idx_users_school_student_id (school_student_id);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE table_schema=DATABASE() AND table_name='users'
-                     AND column_name='school_teacher_id') THEN
-        ALTER TABLE users ADD COLUMN school_teacher_id BIGINT DEFAULT NULL COMMENT '关联 school_teacher.id' AFTER school_student_id;
-        ALTER TABLE users ADD INDEX idx_users_school_teacher_id (school_teacher_id);
-    END IF;
-END$$
-CALL _add_school_cols()$$
-DROP PROCEDURE IF EXISTS _add_school_cols$$
 
 -- ────────────────────────────────────────
 -- 课程表
@@ -128,7 +108,6 @@ CREATE TABLE IF NOT EXISTS `texts` (
     `tags` VARCHAR(255) DEFAULT NULL COMMENT '标签，多个用逗号分隔',
     `view_count` INT DEFAULT 0 COMMENT '查看次数',
     `like_count` INT DEFAULT 0 COMMENT '点赞次数',
-    `read_count` INT DEFAULT 0 COMMENT '阅读次数',
     `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
     `status` ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'APPROVED' COMMENT '审核状态',
     `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
@@ -337,17 +316,20 @@ SELECT 'student', '$2a$10$ROg6F9MwwqmBGuuGMspwHula/rcizG318TtEVnYudxuLwTdocaNY.'
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `users` WHERE `username` = 'student');
 
--- V1__scoring_and_assignments.sql
+
+-- V1__user_text_learning.sql
 
 -- ═══════════════════════════════════════════════════════════════
--- V1: 成绩记录表 + 任务扩展
--- 整合自: V5 (score_records), V6 (weight), V7 (ideal_study_time), V17 (unique constraint)
+-- V1: 用户/课文/学习 (User / Text / Learning Records)
+-- 整合自: V1, V2, V10, V11, V17, V21, V22
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
--- 1. 创建成绩记录表 [原 V5]
---    唯一约束 uk_student_assignment_type 已内联 [原 V17]
+-- Part 1: 成绩记录表 + 任务扩展 [原 V1]
+--   - score_records 表 (含内联唯一约束)
+--   - assignments.weight + ideal_study_time_minutes + idx_weight + idx_ideal_study_time
 -- ────────────────────────────────────────
+
 CREATE TABLE IF NOT EXISTS score_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     student_id BIGINT NOT NULL COMMENT '学生ID',
@@ -372,188 +354,226 @@ CREATE TABLE IF NOT EXISTS score_records (
     INDEX idx_created_time (created_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成绩记录表';
 
--- ────────────────────────────────────────
--- 2. 任务表扩展 [原 V6 + V7]
---    使用存储过程 IF NOT EXISTS 防止重复添加列
---    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
--- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_assignments_weight$$
-CREATE PROCEDURE _add_col_assignments_weight()
+DROP PROCEDURE IF EXISTS _v1_assignments_cols;
+CREATE PROCEDURE _v1_assignments_cols()
 BEGIN
-    -- 任务权重（加权平均分）
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='weight') THEN
+    -- 任务权重（加权平均分）[原 V6]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assignments' AND COLUMN_NAME = 'weight') THEN
         ALTER TABLE assignments ADD COLUMN weight DECIMAL(5,2) DEFAULT 1.00
             COMMENT '任务权重（用于计算加权平均分，默认1.00）' AFTER deadline;
     END IF;
-    -- 理想学习时长
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='assignments' AND column_name='ideal_study_time_minutes') THEN
+    -- 理想学习时长 [原 V7]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assignments' AND COLUMN_NAME = 'ideal_study_time_minutes') THEN
         ALTER TABLE assignments ADD COLUMN ideal_study_time_minutes INT DEFAULT 60
             COMMENT '理想学习时长（分钟），默认60分钟' AFTER weight;
     END IF;
-END$$
-CALL _add_col_assignments_weight()$$
-DROP PROCEDURE IF EXISTS _add_col_assignments_weight$$
+END;
+CALL _v1_assignments_cols();
+DROP PROCEDURE IF EXISTS _v1_assignments_cols;
 
--- 索引（幂等：IF NOT EXISTS 检查）
-DROP PROCEDURE IF EXISTS _add_idx_assignments$$
-CREATE PROCEDURE _add_idx_assignments()
+DROP PROCEDURE IF EXISTS _v1_assignments_idx;
+CREATE PROCEDURE _v1_assignments_idx()
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_weight') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assignments' AND INDEX_NAME = 'idx_weight') THEN
         CREATE INDEX idx_weight ON assignments (weight);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE table_schema=DATABASE() AND table_name='assignments' AND index_name='idx_ideal_study_time') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assignments' AND INDEX_NAME = 'idx_ideal_study_time') THEN
         CREATE INDEX idx_ideal_study_time ON assignments (ideal_study_time_minutes);
     END IF;
-END$$
-CALL _add_idx_assignments()$$
-DROP PROCEDURE IF EXISTS _add_idx_assignments$$
-
--- V2__text_and_learning.sql
-
--- ═══════════════════════════════════════════════════════════════
--- V2: 课文增强 + 学习记录
--- 整合自: 原 V2 (text_id, chinese_parallel, markdown, markdown versions, unit_id nullable,
---         text_learning_records, user_text_reads, is_featured)
---         + V10 (featured_priority + index)
---         + V17 (cet4/6/academic_content, uploaded_by, tags, view/like_count, is_public, status)
--- ═══════════════════════════════════════════════════════════════
+END;
+CALL _v1_assignments_idx();
+DROP PROCEDURE IF EXISTS _v1_assignments_idx;
 
 -- ────────────────────────────────────────
--- 1. 学习记录添加课文关联 [原 V2]
---    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
+-- Part 2: 学习记录添加课文关联 [原 V2]
+--   - learning_records.text_id + FK + idx
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_lr_text$$
-CREATE PROCEDURE _add_col_lr_text()
+
+DROP PROCEDURE IF EXISTS _v1_lr_text_col;
+CREATE PROCEDURE _v1_lr_text_col()
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='learning_records' AND column_name='text_id') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'learning_records' AND COLUMN_NAME = 'text_id') THEN
         ALTER TABLE learning_records ADD COLUMN text_id BIGINT COMMENT '关联的课文ID' AFTER word_id;
     END IF;
-END$$
-CALL _add_col_lr_text()$$
-DROP PROCEDURE IF EXISTS _add_col_lr_text$$
+END;
+CALL _v1_lr_text_col();
+DROP PROCEDURE IF EXISTS _v1_lr_text_col;
 
-DROP PROCEDURE IF EXISTS _add_fk_lr_text$$
-CREATE PROCEDURE _add_fk_lr_text()
+DROP PROCEDURE IF EXISTS _v1_lr_text_fk;
+CREATE PROCEDURE _v1_lr_text_fk()
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
-        WHERE table_schema = DATABASE() AND table_name = 'learning_records' AND constraint_name = 'fk_learning_record_text'
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'learning_records' AND CONSTRAINT_NAME = 'fk_learning_record_text'
     ) THEN
         ALTER TABLE learning_records ADD CONSTRAINT fk_learning_record_text
             FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE SET NULL;
     END IF;
-END$$
-CALL _add_fk_lr_text()$$
-DROP PROCEDURE IF EXISTS _add_fk_lr_text$$
+END;
+CALL _v1_lr_text_fk();
+DROP PROCEDURE IF EXISTS _v1_lr_text_fk;
 
-DROP PROCEDURE IF EXISTS _add_index_lr_text$$
-CREATE PROCEDURE _add_index_lr_text()
+DROP PROCEDURE IF EXISTS _v1_lr_text_idx;
+CREATE PROCEDURE _v1_lr_text_idx()
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.STATISTICS
-        WHERE table_schema = DATABASE() AND table_name = 'learning_records' AND index_name = 'idx_text_id'
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'learning_records' AND INDEX_NAME = 'idx_text_id'
     ) THEN
         CREATE INDEX idx_text_id ON learning_records (text_id);
     END IF;
-END$$
-CALL _add_index_lr_text()$$
-DROP PROCEDURE IF EXISTS _add_index_lr_text$$
+END;
+CALL _v1_lr_text_idx();
+DROP PROCEDURE IF EXISTS _v1_lr_text_idx;
 
 -- ────────────────────────────────────────
--- 2. 课文表扩展 — 统一批量添加所有列 [原 V2 + V10 + V17]
+-- Part 3: 课文表扩展 — 按源迁移顺序链式追加列 [原 V2 + V10 + V17 + V22]
+--   列顺序链:
+--     V2  : chinese_parallel_content, markdown_content (AFTER content),
+--           content_type, cet4_markdown_content, cet6_markdown_content,
+--           academic_markdown_content, chinese_parallel_markdown_content,
+--           is_featured, featured_priority, cet4_content (AFTER content),
+--           cet6_content, academic_content, uploaded_by, tags,
+--           view_count, like_count, is_public, status
+--     V10 : cover_url (AFTER chinese_parallel_markdown_content)
+--     V17 : read_count  ← 注意: V17 漏了 texts.read_count (V22 才补)
+--     V22 : texts.read_count (最终补齐)
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_texts_batch$$
-CREATE PROCEDURE _add_col_texts_batch()
+
+DROP PROCEDURE IF EXISTS _v1_texts_cols;
+CREATE PROCEDURE _v1_texts_cols()
 BEGIN
     -- 中英对照内容 [原 V2]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_content') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'chinese_parallel_content') THEN
         ALTER TABLE texts ADD COLUMN chinese_parallel_content TEXT COMMENT '中英对照版本内容';
     END IF;
     -- Markdown 支持 [原 V2]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='markdown_content') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'markdown_content') THEN
         ALTER TABLE texts ADD COLUMN markdown_content LONGTEXT COMMENT 'Markdown格式的课文内容' AFTER content;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='content_type') THEN
-        ALTER TABLE texts ADD COLUMN content_type ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT' COMMENT '内容类型：TEXT-纯文本，MARKDOWN-Markdown格式' AFTER markdown_content;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'content_type') THEN
+        ALTER TABLE texts ADD COLUMN content_type ENUM('TEXT','MARKDOWN') DEFAULT 'TEXT'
+            COMMENT '内容类型：TEXT-纯文本，MARKDOWN-Markdown格式' AFTER markdown_content;
     END IF;
     -- 多难度版本 Markdown [原 V2]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT COMMENT 'CET-4难度的Markdown版本' AFTER chinese_parallel_content;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'cet4_markdown_content') THEN
+        ALTER TABLE texts ADD COLUMN cet4_markdown_content LONGTEXT
+            COMMENT 'CET-4难度的Markdown版本' AFTER chinese_parallel_content;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN cet6_markdown_content LONGTEXT COMMENT 'CET-6难度的Markdown版本' AFTER cet4_markdown_content;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'cet6_markdown_content') THEN
+        ALTER TABLE texts ADD COLUMN cet6_markdown_content LONGTEXT
+            COMMENT 'CET-6难度的Markdown版本' AFTER cet4_markdown_content;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN academic_markdown_content LONGTEXT COMMENT '学术版的Markdown版本' AFTER cet6_markdown_content;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'academic_markdown_content') THEN
+        ALTER TABLE texts ADD COLUMN academic_markdown_content LONGTEXT
+            COMMENT '学术版的Markdown版本' AFTER cet6_markdown_content;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='chinese_parallel_markdown_content') THEN
-        ALTER TABLE texts ADD COLUMN chinese_parallel_markdown_content LONGTEXT COMMENT '中英对照的Markdown版本' AFTER academic_markdown_content;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'chinese_parallel_markdown_content') THEN
+        ALTER TABLE texts ADD COLUMN chinese_parallel_markdown_content LONGTEXT
+            COMMENT '中英对照的Markdown版本' AFTER academic_markdown_content;
     END IF;
     -- 推荐文章标识 [原 V2]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_featured') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'is_featured') THEN
         ALTER TABLE texts ADD COLUMN is_featured TINYINT(1) DEFAULT 0 COMMENT '是否推荐';
     END IF;
     -- 推荐优先级 [原 V10]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='featured_priority') THEN
-        ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0 COMMENT '推荐优先级，值越大越靠前显示（0=默认）';
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'featured_priority') THEN
+        ALTER TABLE texts ADD COLUMN featured_priority INT NOT NULL DEFAULT 0
+            COMMENT '推荐优先级，值越大越靠前显示（0=默认）';
     END IF;
     -- 多难度版本内容（纯文本）[原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet4_content') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'cet4_content') THEN
         ALTER TABLE texts ADD COLUMN cet4_content LONGTEXT COMMENT 'CET-4难度版本内容' AFTER content;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='cet6_content') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'cet6_content') THEN
         ALTER TABLE texts ADD COLUMN cet6_content LONGTEXT COMMENT 'CET-6难度版本内容' AFTER cet4_content;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='academic_content') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'academic_content') THEN
         ALTER TABLE texts ADD COLUMN academic_content LONGTEXT COMMENT '学术版版本内容' AFTER cet6_content;
     END IF;
     -- 上传者 [原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='uploaded_by') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'uploaded_by') THEN
         ALTER TABLE texts ADD COLUMN uploaded_by BIGINT DEFAULT NULL COMMENT '上传者用户ID';
     END IF;
     -- 标签 [原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='tags') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'tags') THEN
         ALTER TABLE texts ADD COLUMN tags VARCHAR(500) DEFAULT NULL COMMENT '标签，逗号分隔';
     END IF;
     -- 浏览/点赞 [原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='view_count') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'view_count') THEN
         ALTER TABLE texts ADD COLUMN view_count INT DEFAULT 0 COMMENT '浏览次数';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='like_count') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'like_count') THEN
         ALTER TABLE texts ADD COLUMN like_count INT DEFAULT 0 COMMENT '点赞次数';
     END IF;
     -- 公开状态 [原 V17]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='is_public') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'is_public') THEN
         ALTER TABLE texts ADD COLUMN is_public TINYINT(1) DEFAULT 1 COMMENT '是否公开（0=否，1=是）';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='texts' AND column_name='status') THEN
-        ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED';
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'status') THEN
+        ALTER TABLE texts ADD COLUMN status VARCHAR(20) DEFAULT 'PUBLISHED'
+            COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED';
     END IF;
-END$$
-CALL _add_col_texts_batch()$$
-DROP PROCEDURE IF EXISTS _add_col_texts_batch$$
+    -- 封面图 URL [原 V10]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'cover_url') THEN
+        ALTER TABLE texts ADD COLUMN cover_url VARCHAR(255) DEFAULT NULL
+            COMMENT '封面图URL' AFTER chinese_parallel_markdown_content;
+    END IF;
+    -- 阅读次数 [原 V17 遗漏 / V22 补齐]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND COLUMN_NAME = 'read_count') THEN
+        ALTER TABLE texts ADD COLUMN read_count INT NOT NULL DEFAULT 0 COMMENT '阅读次数';
+    END IF;
+END;
+CALL _v1_texts_cols();
+DROP PROCEDURE IF EXISTS _v1_texts_cols;
 
 -- 推荐优先级复合索引 [原 V10]
-DROP PROCEDURE IF EXISTS _add_idx_featured_priority$$
-CREATE PROCEDURE _add_idx_featured_priority()
+DROP PROCEDURE IF EXISTS _v1_idx_featured_priority;
+CREATE PROCEDURE _v1_idx_featured_priority()
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.STATISTICS
-        WHERE table_schema = DATABASE() AND table_name = 'texts' AND index_name = 'idx_texts_featured_priority'
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'texts' AND INDEX_NAME = 'idx_texts_featured_priority'
     ) THEN
         CREATE INDEX idx_texts_featured_priority ON texts (is_featured, featured_priority DESC);
     END IF;
-END$$
-CALL _add_idx_featured_priority()$$
-DROP PROCEDURE IF EXISTS _add_idx_featured_priority$$
+END;
+CALL _v1_idx_featured_priority();
+DROP PROCEDURE IF EXISTS _v1_idx_featured_priority;
 
 -- unit_id 改为可空（支持课文从单元中移除）[原 V2]
 ALTER TABLE texts MODIFY COLUMN unit_id BIGINT DEFAULT NULL
     COMMENT '单元ID（可为空，表示未分配到单元）';
 
 -- ────────────────────────────────────────
--- 3. 创建文章学习记录表 [原 V2]
+-- Part 4: 文章学习记录表 + 用户已读记录表 [原 V2]
 -- ────────────────────────────────────────
+
 CREATE TABLE IF NOT EXISTS text_learning_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     student_id BIGINT NOT NULL COMMENT '学生ID',
@@ -569,9 +589,6 @@ CREATE TABLE IF NOT EXISTS text_learning_records (
     INDEX idx_assignment (assignment_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章学习记录表';
 
--- ────────────────────────────────────────
--- 4. 创建用户文章已读记录表 [原 V2]
--- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_text_reads (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
@@ -580,12 +597,99 @@ CREATE TABLE IF NOT EXISTS user_text_reads (
     UNIQUE KEY uk_user_text (user_id, text_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户文章已读记录表';
 
--- V3__media_and_annotations.sql
+-- ────────────────────────────────────────
+-- Part 5: 用户表扩展 [原 V10 + V17 + V22]
+--   列顺序链:
+--     V10 : nickname (AFTER role) + rename avatar_url → avatar
+--     V17 : read_article_count, read_total_times
+--     V22 : 幂等补齐 (同一列)
+-- ────────────────────────────────────────
+
+DROP PROCEDURE IF EXISTS _v1_users_cols;
+CREATE PROCEDURE _v1_users_cols()
+BEGIN
+    -- nickname [原 V10]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'nickname') THEN
+        ALTER TABLE users ADD COLUMN nickname VARCHAR(50) DEFAULT NULL COMMENT '昵称' AFTER role;
+    END IF;
+    -- 已读文章数 [原 V17]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'read_article_count') THEN
+        ALTER TABLE users ADD COLUMN read_article_count INT NOT NULL DEFAULT 0 COMMENT '已读文章数';
+    END IF;
+    -- 累计阅读次数 [原 V17]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'read_total_times') THEN
+        ALTER TABLE users ADD COLUMN read_total_times INT NOT NULL DEFAULT 0 COMMENT '累计阅读次数';
+    END IF;
+END;
+CALL _v1_users_cols();
+DROP PROCEDURE IF EXISTS _v1_users_cols;
+
+-- 重命名 avatar_url → avatar（幂等）[原 V10]
+-- 必须放在 users 加列之后：MySQL 不允许在一条 ALTER 中同时 ADD 和 RENAME 同一表
+DROP PROCEDURE IF EXISTS _v1_users_rename_avatar;
+CREATE PROCEDURE _v1_users_rename_avatar()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'avatar_url')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'avatar') THEN
+        ALTER TABLE users RENAME COLUMN avatar_url TO avatar;
+    END IF;
+END;
+CALL _v1_users_rename_avatar();
+DROP PROCEDURE IF EXISTS _v1_users_rename_avatar;
+
+-- ────────────────────────────────────────
+-- Part 6: user_text_reads 阅读次数统计 [原 V17 + V22 防御性补齐]
+--   V17 首次引入，V22 在历史 DB 未应用时防御性重试
+-- ────────────────────────────────────────
+
+DROP PROCEDURE IF EXISTS _v1_user_text_reads_cols;
+CREATE PROCEDURE _v1_user_text_reads_cols()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_text_reads' AND COLUMN_NAME = 'read_count') THEN
+        ALTER TABLE user_text_reads ADD COLUMN read_count INT NOT NULL DEFAULT 1 COMMENT '阅读次数';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_text_reads' AND COLUMN_NAME = 'last_read_at') THEN
+        ALTER TABLE user_text_reads ADD COLUMN last_read_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '最后阅读时间';
+    END IF;
+END;
+CALL _v1_user_text_reads_cols();
+DROP PROCEDURE IF EXISTS _v1_user_text_reads_cols;
+
+-- ────────────────────────────────────────
+-- Part 7: 清理 sso_config 脏规则 + 修复误映射角色 [原 V11]
+--   - DELETE sso_config WHERE config_key strip 后不含 '='
+--   - UPDATE users 把被 SSO 错误映射为 TEACHER 的 CAS 学生恢复为 STUDENT
+-- ────────────────────────────────────────
+
+DELETE FROM sso_config
+WHERE config_type = 'ROLE_MAPPING'
+  AND REPLACE(config_key, 'sso.role_mapping.', '') NOT LIKE '%=%';
+
+UPDATE users u
+INNER JOIN sso_user_bindings b ON u.id = b.user_id AND b.deleted = 0
+SET u.role = 'STUDENT', u.updated_time = NOW()
+WHERE u.role = 'TEACHER'
+  AND u.sso_bound = 1
+  AND u.deleted = 0
+  AND b.auto_approved = 1
+  AND b.sso_member_of IS NOT NULL
+  AND b.sso_member_of NOT LIKE '%ou=教师%'
+  AND b.sso_member_of NOT LIKE '%ou=teacher%';
+
+
+-- V2__media_annotations.sql
 
 -- ═══════════════════════════════════════════════════════════════
--- V3: 媒体表 + 词汇SM-2 + 划线标注 + 媒体路径列
--- 整合自: 原 V3 (media, SM-2, underlines)
---         + V9 (media file_path/thumbnail_path)
+-- V2: 媒体 / 标注 (Media / Annotations)
+-- 整合自: V3, V28, V29
+-- ⚠️ 历史教训: master/slave schema drift 必须用 AFTER 子句
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -617,26 +721,27 @@ CREATE TABLE IF NOT EXISTS media (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='媒体表（图片和视频）';
 
 -- ────────────────────────────────────────
--- 2. 媒体路径列 [原 V9]
---    注意: Flyway 不支持 DELIMITER 命令，直接定义存储过程
+-- 2. 媒体路径列 [原 V3/V9 — file_path/thumbnail_path]
+--    ⚠️ 必须用 AFTER 子句确保 master/slave 列序一致（防 Error 13146）
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_media_paths$$
+DROP PROCEDURE IF EXISTS _add_col_media_paths;
 CREATE PROCEDURE _add_col_media_paths()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='file_path') THEN
-        ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT 'stored media file path';
+        ALTER TABLE media ADD COLUMN file_path VARCHAR(500) COMMENT 'stored media file path' AFTER file_name;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='media' AND column_name='thumbnail_path') THEN
-        ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path';
+        ALTER TABLE media ADD COLUMN thumbnail_path VARCHAR(500) COMMENT 'stored thumbnail file path' AFTER file_path;
     END IF;
-END$$
-CALL _add_col_media_paths()$$
-DROP PROCEDURE IF EXISTS _add_col_media_paths$$
+END;
+CALL _add_col_media_paths();
+DROP PROCEDURE IF EXISTS _add_col_media_paths;
 
 -- ────────────────────────────────────────
 -- 3. 词汇本添加 SM-2 间隔重复字段 [原 V3]
+--    vocabulary_books 表已存在 V0/V1 创建
 -- ────────────────────────────────────────
-DROP PROCEDURE IF EXISTS _add_col_sm2$$
+DROP PROCEDURE IF EXISTS _add_col_sm2;
 CREATE PROCEDURE _add_col_sm2()
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='repetition') THEN
@@ -651,9 +756,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='vocabulary_books' AND column_name='next_review_time') THEN
         ALTER TABLE vocabulary_books ADD COLUMN next_review_time DATETIME COMMENT 'SM-2 下次复习时间';
     END IF;
-END$$
-CALL _add_col_sm2()$$
-DROP PROCEDURE IF EXISTS _add_col_sm2$$
+END;
+CALL _add_col_sm2();
+DROP PROCEDURE IF EXISTS _add_col_sm2;
 
 -- ────────────────────────────────────────
 -- 4. 创建划线标注表 [原 V3]
@@ -671,12 +776,62 @@ CREATE TABLE IF NOT EXISTS underlines (
     INDEX idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户划线标注表';
 
--- V4__backup_and_update_system.sql
+-- ────────────────────────────────────────
+-- 5. 创建协作批注表 [原 V28]
+-- ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS text_annotations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    text_id BIGINT NOT NULL COMMENT '关联课文ID',
+    user_id BIGINT NOT NULL COMMENT '批注者ID',
+    selected_text TEXT NOT NULL COMMENT '被批注的原文片段',
+    note TEXT NOT NULL COMMENT '批注内容',
+    upvote_count INT DEFAULT 0 COMMENT '点赞数',
+    deleted TINYINT DEFAULT 0,
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_text_id (text_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_text_deleted (text_id, deleted),
+    CONSTRAINT fk_ann_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ann_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作批注表';
+
+-- ────────────────────────────────────────
+-- 6. 创建批注点赞表 [原 V28]
+-- ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS annotation_upvotes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    annotation_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_ann_user (annotation_id, user_id),
+    CONSTRAINT fk_upvote_ann FOREIGN KEY (annotation_id) REFERENCES text_annotations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_upvote_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='批注点赞表';
+
+-- ────────────────────────────────────────
+-- 7. 批注可见性字段 [原 V29]
+--    ⚠️ 必须用 AFTER 子句确保 master/slave 列序一致（防 Error 13146）
+-- ────────────────────────────────────────
+DROP PROCEDURE IF EXISTS _add_col_ann_visibility;
+CREATE PROCEDURE _add_col_ann_visibility()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE table_schema=DATABASE() AND table_name='text_annotations' AND column_name='visibility') THEN
+        ALTER TABLE text_annotations ADD COLUMN visibility TINYINT NOT NULL DEFAULT 1 COMMENT '可见性: 1=公开, 0=仅自己' AFTER upvote_count;
+    END IF;
+END;
+CALL _add_col_ann_visibility();
+DROP PROCEDURE IF EXISTS _add_col_ann_visibility;
+
+
+-- V3__backup_update_system.sql
 
 -- ═══════════════════════════════════════════════════════════════
--- V4: 数据库备份系统 + 自动更新配置
+-- V3: 数据库备份系统 + 自动更新配置 + 热部署合并
 -- 整合自: 原 V4 (backup_records, backup_operation_logs, backup_config)
 --         + V8 (update_config)
+--         + V39 (hot_deploy fields to update_config)
+--         + V40 (cleanup: merge hot_deploy → main, drop legacy cols)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -703,24 +858,22 @@ CREATE TABLE IF NOT EXISTS backup_records (
     INDEX idx_created_time (created_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数据库备份记录表';
 
-SET @backup_category_exists = (
-    SELECT COUNT(*)
-    FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'backup_records'
-      AND COLUMN_NAME = 'category'
-);
-SET @backup_category_sql = IF(
-    @backup_category_exists = 0,
-    'ALTER TABLE backup_records ADD COLUMN category VARCHAR(50) DEFAULT ''SYSTEM'' COMMENT ''备份分类: system_config/user_data/business_data/school_data'' AFTER backup_mode',
-    'SELECT 1'
-);
-PREPARE stmt FROM @backup_category_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ────────────────────────────────────────
+-- 2. 备份记录表补充 category 列 [原 V4]
+-- ────────────────────────────────────────
+DROP PROCEDURE IF EXISTS _v3_backup_category;
+CREATE PROCEDURE _v3_backup_category()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'backup_records' AND COLUMN_NAME = 'category') THEN
+        ALTER TABLE backup_records ADD COLUMN category VARCHAR(50) DEFAULT 'SYSTEM' COMMENT '备份分类: system_config/user_data/business_data/school_data' AFTER backup_mode;
+    END IF;
+END;
+CALL _v3_backup_category();
+DROP PROCEDURE IF EXISTS _v3_backup_category;
 
 -- ────────────────────────────────────────
--- 2. 创建备份操作日志表 [原 V4]
+-- 3. 创建备份操作日志表 [原 V4]
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS backup_operation_logs (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -738,7 +891,7 @@ CREATE TABLE IF NOT EXISTS backup_operation_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='备份操作日志表';
 
 -- ────────────────────────────────────────
--- 3. 创建备份配置表（单行配置模式）[原 V4]
+-- 4. 创建备份配置表（单行配置模式）[原 V4]
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS backup_config (
     id INT NOT NULL DEFAULT 1,
@@ -761,7 +914,7 @@ INSERT IGNORE INTO backup_config (id, auto_backup_enabled, backup_cron, backup_h
 VALUES (1, 1, '0 0 2 * * ?', 2, 0, 30, 50, 0, 7);
 
 -- ────────────────────────────────────────
--- 4. 自动更新配置表 [原 V8]
+-- 5. 自动更新配置表 [原 V8]
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS update_config (
     id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -773,14 +926,76 @@ CREATE TABLE IF NOT EXISTS update_config (
     last_run_status      VARCHAR(16) DEFAULT 'NEVER' COMMENT 'NEVER/RUNNING/SUCCESS/FAILED'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='self-update configuration';
 
-INSERT IGNORE INTO update_config (id, cron_expr, enabled, git_branch, backup_before_update, last_run_status)
-VALUES (1, '0 0 3 * * ?', 0, 'master', 1, 'NEVER');
+INSERT IGNORE INTO update_config (id, cron_expr, enabled, git_branch, last_run_status)
+VALUES (1, '0 0 3 * * ?', 0, 'master', 'NEVER');
 
--- V5__monitoring_and_access.sql
+-- ────────────────────────────────────────
+-- 6. update_config 表新增零停机热部署调度字段 [原 V39]
+-- ────────────────────────────────────────
+DROP PROCEDURE IF EXISTS _v3_add_hot_deploy_fields;
+CREATE PROCEDURE _v3_add_hot_deploy_fields()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'update_config'
+                     AND COLUMN_NAME = 'hot_deploy_enabled') THEN
+        ALTER TABLE update_config
+            ADD COLUMN hot_deploy_enabled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否启用定时零停机热部署' AFTER last_run_status,
+            ADD COLUMN hot_deploy_cron_expr VARCHAR(100) NULL COMMENT '热部署 cron 表达式' AFTER hot_deploy_enabled,
+            ADD COLUMN hot_deploy_last_run_at DATETIME NULL COMMENT '最近一次热部署执行时间' AFTER hot_deploy_cron_expr,
+            ADD COLUMN hot_deploy_last_run_status VARCHAR(20) NULL DEFAULT 'NEVER' COMMENT '最近一次热部署状态' AFTER hot_deploy_last_run_at;
+    END IF;
+END;
+CALL _v3_add_hot_deploy_fields();
+DROP PROCEDURE IF EXISTS _v3_add_hot_deploy_fields;
+
+-- ────────────────────────────────────────
+-- 7. 清理 update_config 表 — 移除普通更新字段，保留热部署字段并重命名为主字段 [原 V40]
+-- ────────────────────────────────────────
+DROP PROCEDURE IF EXISTS _v3_cleanup_update_config;
+CREATE PROCEDURE _v3_cleanup_update_config()
+BEGIN
+    -- 将 hot_deploy_enabled → enabled（如果旧 enabled 列存在则先删除）
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'update_config'
+                 AND COLUMN_NAME = 'hot_deploy_enabled') THEN
+
+        -- 用热部署字段的值覆盖普通更新字段
+        UPDATE update_config
+        SET enabled        = COALESCE(hot_deploy_enabled, 0),
+            cron_expr      = COALESCE(hot_deploy_cron_expr, '0 0 2 ? * SUN'),
+            last_run_at    = hot_deploy_last_run_at,
+            last_run_status = COALESCE(hot_deploy_last_run_status, 'NEVER');
+
+        -- 删除热部署专用列
+        ALTER TABLE update_config
+            DROP COLUMN hot_deploy_enabled,
+            DROP COLUMN hot_deploy_cron_expr,
+            DROP COLUMN hot_deploy_last_run_at,
+            DROP COLUMN hot_deploy_last_run_status;
+    END IF;
+
+    -- 删除普通更新专用列（backup_before_update）
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'update_config'
+                 AND COLUMN_NAME = 'backup_before_update') THEN
+        ALTER TABLE update_config DROP COLUMN backup_before_update;
+    END IF;
+END;
+CALL _v3_cleanup_update_config();
+DROP PROCEDURE IF EXISTS _v3_cleanup_update_config;
+
+
+-- V4__monitoring_access.sql
 
 -- ═══════════════════════════════════════════════════════════════
--- V23: 访问监控 + AI调用统计 + 角色扩展 + 演示账号
--- 整合自: V23 (monitoring tables), V24 (OPS role), V25 (demo accounts)
+-- V4: 访问监控 + AI调用统计 + 角色扩展 + 演示账号
+-- 整合自: 原 V23 (access_log, access_stats_hourly, access_stats_daily,
+--          ai_call_log, ai_call_stats_daily)
+--         + V24 (OPS role in users.role enum)
+--         + V25 (teacher/student demo accounts)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -906,13 +1121,16 @@ UPDATE users SET
     deleted = 0
 WHERE username IN ('teacher', 'student');
 
--- V6__system_config_and_ai_providers.sql
+
+-- V5__system_config_ai_providers.sql
 
 -- ═══════════════════════════════════════════════════════════════
--- V6: 系统配置 + AI提供商 + 多模型支持
+-- V5: 系统配置 + AI提供商 + 多模型支持 + HiAgent 凭证配置
 -- 整合自: 原 V6 (system_config + 默认配置)
 --         + V7 (ai_provider 表 + 数据迁移)
---         + V11 (ai_provider.app_id)
+--         + V11 (ai_provider.app_id 内联到 V7)
+--         + V13 (system_config.ai_config HiAgent 凭证)
+--         + V13 Part 4 (ai_provider.protocol 协议字段)
 -- ═══════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────
@@ -938,12 +1156,29 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('ai_translate', 'timeout', '30000', '超时时间(ms)', 0);
 
 -- ────────────────────────────────────────
--- 2. AI 提供商表 + 数据迁移 [原 V7]
+-- 2. AI 提供商表 + 数据迁移 [原 V7 + V11 + V13 Part 4]
 --    app_id 字段已内联 [原 V11]
+--    protocol 字段 [原 V13 Part 4]
 -- ────────────────────────────────────────
+DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
+CREATE PROCEDURE _v5_ai_provider_protocol()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol') THEN
+        ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible' AFTER `service`;
+    END IF;
+    -- Ensure comment is set (idempotent modify)
+    ALTER TABLE `ai_provider`
+        MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
+            COMMENT '协议类型: openai_compatible | hiagent';
+END;
+CALL _v5_ai_provider_protocol();
+DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
+
 CREATE TABLE IF NOT EXISTS `ai_provider` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
     `service` VARCHAR(50) NOT NULL COMMENT 'translate / article / chat',
+    `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible' COMMENT '协议类型: openai_compatible | hiagent',
     `name` VARCHAR(100) NOT NULL COMMENT 'display name',
     `api_url` VARCHAR(500) NOT NULL COMMENT 'provider endpoint',
     `api_key` TEXT NOT NULL COMMENT 'provider api key',
@@ -976,14 +1211,32 @@ SELECT
     'migrated from system_config'
 WHERE NOT EXISTS (SELECT 1 FROM ai_provider WHERE service = 'translate');
 
--- V7__feature_toggles.sql
+-- ────────────────────────────────────────
+-- 3. HiAgent 凭证 seed 到 ai_config group [原 V13 Part 2]
+--    值默认为空字符串，表示"尚未从前端配置，使用 application.yml 环境变量"
+--    前端面板写入 DB 后，HiAgentServiceImpl 会优先读 DB 值
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('ai_config', 'hiagent_api_url',    '', 'HiAgent API Base URL（留空则使用环境变量 HIAGENT_API_URL）',         0),
+  ('ai_config', 'hiagent_api_key',    '', 'HiAgent 改写应用 API Key（留空则使用环境变量 HIAGENT_API_KEY）',      1),
+  ('ai_config', 'hiagent_app_id',     '', 'HiAgent 改写应用 App ID（留空则使用环境变量 HIAGENT_APP_ID）',        0),
+  ('ai_config', 'hiagent_qa_api_key', '', 'HiAgent 问答应用 API Key（必须与改写凭证不同；留空则用 HIAGENT_QA_API_KEY）', 1),
+  ('ai_config', 'hiagent_qa_app_id',  '', 'HiAgent 问答应用 App ID（必须与改写凭证不同；留空则用 HIAGENT_QA_APP_ID）',  0);
+
+
+-- V6__feature_toggles.sql
 
 -- ═══════════════════════════════════════════════════════════════
--- V7: 文章收藏 + 功能开关 + 个性化开关
--- 整合自: 原 V12 (article_favorites + feature_toggle 配置)
---         + V13 (修复 system_config description 乱码)
+-- V6: 文章收藏 + 功能开关 + 个性化开关
+-- 整合自: 原 V12 (article_favorites + feature_toggle page toggles)
+--         + V13 (system_config description 乱码修复 + admin toggle + teacher/ops toggle)
 --         + V14 (user_tags + feature_override)
+--         + V17 (page_word_recite toggle)
+--         + V37 (learner profile feature toggles)
+--         + V47 (feature toggle cleanup — delete orphans + add missing seeds)
 -- ═══════════════════════════════════════════════════════════════
+
+SET NAMES utf8mb4;
 
 -- ────────────────────────────────────────
 -- 1. 文章收藏表 [原 V12]
@@ -999,8 +1252,7 @@ CREATE TABLE IF NOT EXISTS article_favorites (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章收藏表';
 
 -- ────────────────────────────────────────
--- 2. 功能开关配置 [原 V12 + V13]
---    V13 的 UPDATE 语句紧跟 INSERT IGNORE，确保 description 正确
+-- 2. 学生端功能开关 seed [原 V12 + V13 + V17]
 -- ────────────────────────────────────────
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('feature_toggle', 'page_dashboard', 'true', '学生端-发现页', 0),
@@ -1012,9 +1264,87 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('feature_toggle', 'page_my_study', 'true', '学生端-我的学习页', 0),
 ('feature_toggle', 'page_ai_video', 'false', '学生端-AI视频字幕页（未完善）', 0),
 ('feature_toggle', 'page_ai_qa', 'true', '学生端-AI问答页', 0),
-('feature_toggle', 'page_user_texts', 'true', '学生端-我的上传页', 0);
+('feature_toggle', 'page_user_texts', 'true', '学生端-我的上传页', 0),
+-- V13: 学生端缺失 toggle（补齐全 15 页覆盖）
+('feature_toggle', 'page_courses',           'false', '学生端-课程学习页（开发中）',   0),
+('feature_toggle', 'page_scores',            'true',  '学生端-等级考试成绩页',         0),
+('feature_toggle', 'page_course_selections', 'true',  '学生端-我的选课页',             0),
+('feature_toggle', 'page_text_learning',     'true',  '学生端-课文学习子页',           0),
+('feature_toggle', 'page_schedule',          'true',  '学生端-我的课表页',             0),
+-- V13: 学生端补充页面 toggle
+('feature_toggle', 'page_videos',            'true',  '学生端-视频学习页',             0),
+('feature_toggle', 'page_video_player',      'true',  '学生端-视频播放器页',           0),
+('feature_toggle', 'page_interactive_text',  'true',  '学生端-交互式课文页',           0),
+('feature_toggle', 'page_vocabulary',        'true',  '学生端-词汇学习页',             0),
+('feature_toggle', 'page_ai_qa',             'true',  '学生端-AI问答页',               0),
+('feature_toggle', 'page_articles',          'true',  '学生端-文章阅读页',             0),
+('feature_toggle', 'page_user_texts',        'true',  '学生端-我的课文页',             0),
+-- V17: 补齐背单词页 toggle
+('feature_toggle', 'page_word_recite',       'true',  '学生端-背单词页',               0);
 
--- 修复 description 乱码 [原 V13]
+-- ────────────────────────────────────────
+-- 3. 管理员功能开关 seed [原 V13]
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'admin.dashboard',    'true', '管理员-仪表盘',     0),
+  ('feature_toggle', 'admin.courses',      'true', '管理员-课程管理',   0),
+  ('feature_toggle', 'admin.classes',      'true', '管理员-班级管理',   0),
+  ('feature_toggle', 'admin.users',        'true', '管理员-用户管理',   0),
+  ('feature_toggle', 'admin.units',        'true', '管理员-单元管理',   0),
+  ('feature_toggle', 'admin.words',        'true', '管理员-单词管理',   0),
+  ('feature_toggle', 'admin.texts',        'true', '管理员-课文管理',   0),
+  ('feature_toggle', 'admin.assignments',  'true', '管理员-作业管理',   0),
+  ('feature_toggle', 'admin.sso_approval', 'true', '管理员-SSO 审批',   0);
+
+-- ────────────────────────────────────────
+-- 4. 教师端功能开关 seed [原 V13]
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'page_teacher_dashboard',   'true', '教师端-仪表盘',         0),
+  ('feature_toggle', 'page_teacher_courses',     'true', '教师端-课程管理',       0),
+  ('feature_toggle', 'page_teacher_my_courses',  'true', '教师端-我的课程',       0),
+  ('feature_toggle', 'page_teacher_classes',     'true', '教师端-班级管理',       0),
+  ('feature_toggle', 'page_teacher_assignments', 'true', '教师端-作业管理',       0);
+
+-- ────────────────────────────────────────
+-- 5. 管理员端补充页面 toggle [原 V13]
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'page_admin_videos',      'true', '管理员-视频管理',       0),
+  ('feature_toggle', 'page_admin_backups',     'true', '管理员-备份管理',       0),
+  ('feature_toggle', 'page_admin_monitoring',  'true', '管理员-系统监控',       0);
+
+-- ────────────────────────────────────────
+-- 6. 运维端页面 toggle [原 V13]
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'page_ops_monitoring',           'true', '运维端-系统监控',           0),
+  ('feature_toggle', 'page_ops_ai_providers',         'true', '运维端-AI提供商管理',       0),
+  ('feature_toggle', 'page_ops_feature_toggles',      'true', '运维端-功能开关管理',       0),
+  ('feature_toggle', 'page_ops_school_data_config',   'true', '运维端-学校数据配置',       0),
+  ('feature_toggle', 'page_ops_school_data_browser',  'true', '运维端-学校数据浏览器',     0),
+  ('feature_toggle', 'page_ops_update',               'true', '运维端-系统更新',           0);
+
+-- ────────────────────────────────────────
+-- 7. AI 配置 + 行为开关 [原 V13]
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'student.lazy_course_selections', 'true', '学生端 Lazy 选课记录同步（陈旧度阈值 1 天）', 0),
+  ('feature_toggle', 'teacher.school_data_enabled', 'true', '教师端学校数据功能（课表/选课/成绩）', 0);
+
+-- ────────────────────────────────────────
+-- 8. 学习者画像功能开关 [原 V37]
+-- ────────────────────────────────────────
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+  ('feature_toggle', 'admin.persona_analytics',         'true', '管理员-画像分析',           0),
+  ('feature_toggle', 'admin.class_cohort',              'true', '管理员-班级画像分析',       0),
+  ('feature_toggle', 'student.learner_profile_enabled', 'true', '学生端-我的画像',           0),
+  ('feature_toggle', 'admin.tag_management',            'true', '管理员-标签管理',           0);
+
+-- ────────────────────────────────────────
+-- 9. 修复 description 乱码 [原 V13]
+--    确保所有 feature_toggle 条目的 description 字段被规范化
+-- ────────────────────────────────────────
 UPDATE `system_config` SET `description` = '学生端-发现页'              WHERE `config_key` = 'page_dashboard'   AND `config_group` = 'feature_toggle';
 UPDATE `system_config` SET `description` = '学生端-课程页（开发中）'    WHERE `config_key` = 'page_courses'     AND `config_group` = 'feature_toggle';
 UPDATE `system_config` SET `description` = '学生端-班级/社区页'         WHERE `config_key` = 'page_classes'     AND `config_group` = 'feature_toggle';
@@ -1028,9 +1358,62 @@ UPDATE `system_config` SET `description` = '学生端-我的上传页'          
 UPDATE `system_config` SET `description` = '是否使用 OpenRouter 作为 AI 服务商' WHERE `config_key` = 'use_openrouter'     AND `config_group` = 'ai_config';
 UPDATE `system_config` SET `description` = 'OpenRouter API Key'                   WHERE `config_key` = 'openrouter_api_key' AND `config_group` = 'ai_config';
 UPDATE `system_config` SET `description` = 'OpenRouter 模型 ID'                  WHERE `config_key` = 'openrouter_model'   AND `config_group` = 'ai_config';
+UPDATE `system_config` SET `description` = '学生端-背单词页'                     WHERE `config_group` = 'feature_toggle' AND `config_key` = 'page_word_recite' AND (`description` IS NULL OR `description` = '');
 
 -- ────────────────────────────────────────
--- 3. 个性化功能开关 [原 V14]
+-- 10. 恢复 page_ai_qa 开关 + 清除禁用覆盖 [原 V13 Part 2]
+-- ────────────────────────────────────────
+UPDATE `system_config`
+SET `config_value` = 'true'
+WHERE `config_group` = 'feature_toggle'
+  AND `config_key`   = 'page_ai_qa';
+
+-- 清除所有对 page_ai_qa 的禁用覆盖（tag/user scope）
+DELETE FROM `feature_override` WHERE `feature_key` = 'page_ai_qa';
+
+-- ────────────────────────────────────────
+-- 11. 删除孤立种子 — 无路由守卫或代码消费 [原 V47]
+--     注意：这些键在前面步骤 seed 后必须被删除，以保证最终状态正确
+-- ────────────────────────────────────────
+DELETE FROM system_config WHERE config_group = 'feature_toggle' AND config_key IN (
+  -- 学生端：路由无 featureKey 守卫（页面始终可达），或路由仅为 redirect
+  'page_vocabulary',        -- 消费点改用 page_word_recite（Words 页统一入口）
+  'page_videos',            -- /student/videos 路由无 featureKey，页面始终可达
+  'page_video_player',      -- /student/video-player 路由无 featureKey
+  'page_interactive_text',  -- 无对应路由（文章详情走 /article/:id，不受此 toggle）
+  'page_text_learning',     -- 路由为纯 redirect，无实体页面
+  -- 管理员端：实际在 /ops/ 路由下，不在 /admin/ 下
+  'page_admin_backups',     -- 备份页在 /ops/backups，无 featureKey 守卫
+  'page_admin_monitoring',  -- 监控页在 /ops/monitoring，无 featureKey 守卫
+  -- 运维端：ops 路由均无 featureKey 守卫（ops.school_data_* 另有专用 key）
+  'page_ops_monitoring',
+  'page_ops_ai_providers',
+  'page_ops_feature_toggles',
+  'page_ops_school_data_config',   -- 实际 key 是 ops.school_data_config
+  'page_ops_school_data_browser',  -- 实际 key 是 ops.school_data_browser
+  'page_ops_update',
+  -- 教师端：teacher 路由均无 featureKey 守卫（teacher.school_data_* 另有专用 key）
+  'page_teacher_dashboard',
+  'page_teacher_courses',
+  'page_teacher_my_courses',
+  'page_teacher_classes',
+  'page_teacher_assignments',
+  -- 行为开关：曾规划但无代码消费
+  'student.lazy_data_sync',
+  'student.lazy_course_selections'
+);
+
+-- ────────────────────────────────────────
+-- 12. 补充缺失种子 — 业务代码已消费但未 seed [原 V47]
+-- ────────────────────────────────────────
+INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret) VALUES
+  -- UserVideoController + UserTexts.vue 消费：控制学生能否上传视频
+  ('feature_toggle', 'student.video_upload_enabled', 'true', '学生端-视频上传功能（全局关闭后仅标签内用户可上传）', 0),
+  -- TeacherDataController 消费：控制教师是否可访问学习者画像 API
+  ('feature_toggle', 'teacher.learner_profile_enabled', 'true', '教师端-学生学习画像查看功能', 0);
+
+-- ────────────────────────────────────────
+-- 13. 个性化功能开关 — user_tags + feature_override [原 V14]
 -- ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_tags (
     id           BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1056,11 +1439,27 @@ CREATE TABLE IF NOT EXISTS feature_override (
     INDEX idx_scope_value (scope, scope_value)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- V8__sso_integration.sql
 
--- V15: 统一身份认证 (SSO) 集成
+-- V7__sso_cas.sql
 
--- SSO 用户绑定表
+-- ═══════════════════════════════════════════════════════════════════════
+-- V7: SSO / CAS 统一身份认证
+-- 合并自: V8 (sso_integration) + V16 (enable_sso_auto_grant)
+--
+-- 历史说明:
+--   - V8  引入 SSO 表 (sso_user_bindings / sso_login_logs / sso_config)
+--         并为 users 增加 sso_bound / sso_provider / sso_subject 列
+--   - V16 默认开启 sso.auto_grant_student / sso.auto_grant_teacher 开关
+--         (V14 已 seed = false, V16 改 true)
+--   - 2026-04-19 二次整合: V8 header 从 V15 改为 V8
+--   - 2026-04-22 V14 seed false 后, V16 兜底开启
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 1: SSO 三大表
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- 1.1 SSO 用户绑定表
 CREATE TABLE IF NOT EXISTS sso_user_bindings (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     user_id BIGINT NOT NULL COMMENT '本地用户ID',
@@ -1082,7 +1481,7 @@ CREATE TABLE IF NOT EXISTS sso_user_bindings (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO用户绑定表';
 
--- SSO 登录日志表
+-- 1.2 SSO 登录日志表
 CREATE TABLE IF NOT EXISTS sso_login_logs (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     sso_provider VARCHAR(50) NOT NULL COMMENT 'SSO提供商',
@@ -1098,7 +1497,7 @@ CREATE TABLE IF NOT EXISTS sso_login_logs (
     INDEX idx_login_result (login_result)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO登录日志';
 
--- SSO 配置表
+-- 1.3 SSO 配置表
 CREATE TABLE IF NOT EXISTS sso_config (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     config_key VARCHAR(100) NOT NULL COMMENT '配置键',
@@ -1112,73 +1511,73 @@ CREATE TABLE IF NOT EXISTS sso_config (
     INDEX idx_config_type (config_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SSO配置表';
 
--- 扩展 users 表字段
-SET @sso_bound_exists = (
-    SELECT COUNT(*) FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_bound'
-);
-SET @sso_bound_sql = IF(
-    @sso_bound_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT ''是否通过SSO绑定: 0=否, 1=是''',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sso_bound_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 2: users 表扩展 (sso_bound / sso_provider / sso_subject)
+-- ═══════════════════════════════════════════════════════════════════════
 
-SET @sso_provider_exists = (
-    SELECT COUNT(*) FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_provider'
-);
-SET @sso_provider_sql = IF(
-    @sso_provider_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT ''SSO提供商''',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sso_provider_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+DROP PROCEDURE IF EXISTS _v7_add_sso_bound;
+CREATE PROCEDURE _v7_add_sso_bound()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_bound') THEN
+        ALTER TABLE users ADD COLUMN sso_bound TINYINT(1) DEFAULT 0 COMMENT '是否通过SSO绑定: 0=否, 1=是' AFTER deleted;
+    END IF;
+END;
+CALL _v7_add_sso_bound();
+DROP PROCEDURE IF EXISTS _v7_add_sso_bound;
 
-SET @sso_subject_exists = (
-    SELECT COUNT(*) FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_subject'
-);
-SET @sso_subject_sql = IF(
-    @sso_subject_exists = 0,
-    'ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT ''SSO唯一标识''',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sso_subject_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+DROP PROCEDURE IF EXISTS _v7_add_sso_provider;
+CREATE PROCEDURE _v7_add_sso_provider()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_provider') THEN
+        ALTER TABLE users ADD COLUMN sso_provider VARCHAR(50) COMMENT 'SSO提供商' AFTER sso_bound;
+    END IF;
+END;
+CALL _v7_add_sso_provider();
+DROP PROCEDURE IF EXISTS _v7_add_sso_provider;
 
-SET @idx_sso_bound_exists = (
-    SELECT COUNT(*) FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_bound'
-);
-SET @idx_sso_bound_sql = IF(
-    @idx_sso_bound_exists = 0,
-    'CREATE INDEX idx_sso_bound ON users (sso_bound)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @idx_sso_bound_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+DROP PROCEDURE IF EXISTS _v7_add_sso_subject;
+CREATE PROCEDURE _v7_add_sso_subject()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'sso_subject') THEN
+        ALTER TABLE users ADD COLUMN sso_subject VARCHAR(255) COMMENT 'SSO唯一标识' AFTER sso_provider;
+    END IF;
+END;
+CALL _v7_add_sso_subject();
+DROP PROCEDURE IF EXISTS _v7_add_sso_subject;
 
-SET @idx_sso_subject_exists = (
-    SELECT COUNT(*) FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_subject'
-);
-SET @idx_sso_subject_sql = IF(
-    @idx_sso_subject_exists = 0,
-    'CREATE INDEX idx_sso_subject ON users (sso_provider, sso_subject)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @idx_sso_subject_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 3: users SSO 索引
+-- ═══════════════════════════════════════════════════════════════════════
 
--- 插入默认 SSO 配置
+DROP PROCEDURE IF EXISTS _v7_idx_sso_bound;
+CREATE PROCEDURE _v7_idx_sso_bound()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_bound') THEN
+        CREATE INDEX idx_sso_bound ON users (sso_bound);
+    END IF;
+END;
+CALL _v7_idx_sso_bound();
+DROP PROCEDURE IF EXISTS _v7_idx_sso_bound;
+
+DROP PROCEDURE IF EXISTS _v7_idx_sso_subject;
+CREATE PROCEDURE _v7_idx_sso_subject()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_sso_subject') THEN
+        CREATE INDEX idx_sso_subject ON users (sso_provider, sso_subject);
+    END IF;
+END;
+CALL _v7_idx_sso_subject();
+DROP PROCEDURE IF EXISTS _v7_idx_sso_subject;
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 4: 默认 SSO 配置 (含 role_mapping)
+-- ═══════════════════════════════════════════════════════════════════════
+
 INSERT IGNORE INTO sso_config (config_key, config_value, config_type, description) VALUES
 ('sso.enabled', 'false', 'SYSTEM', 'SSO功能总开关'),
 ('sso.protocol', 'CAS', 'SYSTEM', 'SSO协议类型: CAS 或 OAUTH2'),
@@ -1189,19 +1588,58 @@ INSERT IGNORE INTO sso_config (config_key, config_value, config_type, descriptio
 ('sso.role_mapping.ou=学生', 'STUDENT', 'ROLE_MAPPING', '学生角色映射'),
 ('sso.role_mapping.ou=People', 'STUDENT', 'ROLE_MAPPING', 'CAS containerId 为 People 的用户映射为 STUDENT 角色');
 
--- V9__school_data_sync.sql
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 5: 启用 SSO 自动授权功能开关 (原 V16)
+-- SSO 学号匹配 school_student 自动授权 STUDENT
+-- SSO 工号匹配 school_teacher 自动授权 TEACHER
+-- ═══════════════════════════════════════════════════════════════════════
 
--- ============================================================================
--- Flyway Migration Script: 学校数据同步表结构
--- Version: V100
--- Description: 创建学校数据接入相关的所有表
--- Author: System
--- Date: 2026-04-09
--- ============================================================================
+-- V14 已 seed sso.auto_grant_* = false, 强制更新为 true
+UPDATE `system_config`
+SET `config_value` = 'true'
+WHERE `config_group` = 'feature_toggle'
+  AND `config_key` IN ('sso.auto_grant_student', 'sso.auto_grant_teacher');
 
--- ============================================================================
--- 1. 基础数据层 (Foundation Layer)
--- ============================================================================
+-- 若记录不存在则插入 (幂等)
+INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
+('feature_toggle', 'sso.auto_grant_student', 'true', 'SSO 学号匹配 school_student 自动授权 STUDENT', 0),
+('feature_toggle', 'sso.auto_grant_teacher', 'true', 'SSO 工号匹配 school_teacher 自动授权 TEACHER', 0);
+
+
+-- V8__school_data_cdsp.sql
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- V8: 学校数据 CDSP 集成
+-- 合并自:
+--   - V9  (school_data_sync)        表结构与 field_mappings 基础
+--   - V12 (school_data_and_videos)  system_config seed + field_mappings PDF 对齐
+--         (仅保留 school_* / teaching_plans / student_schedule 部分,
+--          videos / media 部分归入 V2)
+--   - V14 (enhancements)            school_student / school_teacher / teacher_student_binding
+--         (仅保留 school data / binding 部分, similarity_matrix 归入其他迁移)
+--   - V42 (link_users_to_school_directory)  users ↔ school_student / school_teacher 关联
+--
+-- 执行顺序 (依赖关系):
+--   Part 1  : school_* / teaching_* / course_* / level_exam / sync_logs / field_mappings 表 (V9)
+--   Part 2  : student_schedule 表 (V12 Part 1.1)
+--   Part 3  : school_student / school_teacher / teacher_student_binding 表 (V14 Part 1-3)
+--   Part 4  : users.school_student_id / school_teacher_id 列 + 索引 + 回填 + 视图 (V42)
+--   Part 5  : system_config seed (V12 Part 2.1/2.2/2.3)
+--   Part 6  : field_mappings PDF 对齐 seed (V12 Part 3)
+--   Part 7  : school_* 表字段调整 + FK 重声明 (V12, 仅保留 school_* 相关)
+--   Part 8  : feature_toggle seeds (V14 Part 4)
+--   Part 9  : 字段映射补充 (V12 末尾行政班学院/专业代码补充)
+--
+-- 注意:
+--   - Flyway 在本项目生产环境禁用 (flyway.enabled=false),
+--     实际部署走 docker/mysql/init/04-apply-all-migrations.sql
+--   - CI test profile 启用 Flyway
+--   - ADD COLUMN 一律包在 IF NOT EXISTS 存储过程内 (与预处理脚本兼容, 无 DELIMITER)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 1: 基础数据层 + 教学组织层 + 选课成绩层 + 辅助表 (原 V9)
+-- ═══════════════════════════════════════════════════════════════════════
 
 -- 1.1 行政班表
 CREATE TABLE IF NOT EXISTS administrative_class (
@@ -1276,11 +1714,7 @@ CREATE TABLE IF NOT EXISTS school_course (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学校课程基本信息表';
 
--- ============================================================================
--- 2. 教学组织层 (Teaching Organization Layer)
--- ============================================================================
-
--- 2.1 教学班表
+-- 1.3 教学班表
 CREATE TABLE IF NOT EXISTS teaching_class (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     class_id VARCHAR(50) NOT NULL UNIQUE COMMENT '教学班号 (JXBID)',
@@ -1306,7 +1740,7 @@ CREATE TABLE IF NOT EXISTS teaching_class (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教学班信息表';
 
--- 2.2 课程安排表
+-- 1.4 课程安排表
 CREATE TABLE IF NOT EXISTS course_schedule (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     class_id VARCHAR(50) NULL COMMENT '教学班号 (JXBID)',
@@ -1329,11 +1763,7 @@ CREATE TABLE IF NOT EXISTS course_schedule (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程安排信息表';
 
--- ============================================================================
--- 3. 选课与成绩层 (Enrollment & Grade Layer)
--- ============================================================================
-
--- 3.1 选课记录表
+-- 1.5 选课记录表
 CREATE TABLE IF NOT EXISTS course_selection (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     selection_id VARCHAR(50) NOT NULL UNIQUE COMMENT '选课记录ID',
@@ -1374,7 +1804,7 @@ CREATE TABLE IF NOT EXISTS course_selection (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='选课记录表';
 
--- 3.2 等级考试成绩表
+-- 1.6 等级考试成绩表
 CREATE TABLE IF NOT EXISTS level_exam_scores (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     student_id VARCHAR(50) NOT NULL COMMENT '学号',
@@ -1413,7 +1843,7 @@ CREATE TABLE IF NOT EXISTS level_exam_scores (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='等级考试成绩表';
 
--- 4. 教学计划层
+-- 1.7 教学计划主表
 CREATE TABLE IF NOT EXISTS teaching_plans (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     plan_id VARCHAR(30) NOT NULL UNIQUE COMMENT '计划编号',
@@ -1457,6 +1887,7 @@ CREATE TABLE IF NOT EXISTS teaching_plans (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教学计划主表';
 
+-- 1.8 教学计划课程明细表
 CREATE TABLE IF NOT EXISTS teaching_plan_courses (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     detail_id VARCHAR(30) NOT NULL UNIQUE COMMENT '明细编号',
@@ -1483,11 +1914,7 @@ CREATE TABLE IF NOT EXISTS teaching_plan_courses (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教学计划课程明细表';
 
--- ============================================================================
--- 6. 辅助表
--- ============================================================================
-
--- 6.1 同步日志表
+-- 1.9 同步日志表
 CREATE TABLE IF NOT EXISTS sync_logs (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `sync_type` VARCHAR(50) NOT NULL COMMENT '同步类型: FULL/INCREMENTAL',
@@ -1512,7 +1939,7 @@ CREATE TABLE IF NOT EXISTS sync_logs (
     INDEX idx_start_time (`start_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='同步日志表';
 
--- 6.2 字段映射配置表
+-- 1.10 字段映射配置表
 CREATE TABLE IF NOT EXISTS field_mappings (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `data_source` VARCHAR(50) NOT NULL COMMENT '数据源标识',
@@ -1534,129 +1961,9 @@ CREATE TABLE IF NOT EXISTS field_mappings (
     INDEX idx_target_field (`target_field`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='字段映射配置表';
 
--- V10__user_and_text_updates.sql
-
--- ═══════════════════════════════════════════════════════════════
--- V10: 用户 + 文本 + 词汇表字段补丁（整合）
--- 整合自: 原 V10 (users nickname+avatar) + 原 V11 (texts featured + vocabulary_books SM-2)
--- 注意: Flyway 在本项目禁用 (application.yml flyway.enabled=false)，
---       实际生产部署走 docker/mysql/init/04-apply-all-migrations.sql
--- ═══════════════════════════════════════════════════════════════
-
--- ── Part 1: users 表 nickname 列 + avatar_url 重命名 ────────────
--- 原 V10: 添加 users.nickname 列，重命名 users.avatar_url → avatar
--- 原因: User 实体使用 nickname 和 avatar 字段
-
-SET @dbname = DATABASE();
-SET @tablename = 'users';
-
--- nickname
-SET @colname = 'nickname';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = @tablename AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE users ADD COLUMN nickname VARCHAR(50) DEFAULT NULL COMMENT ''昵称'' AFTER role'
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
--- 重命名 avatar_url → avatar（幂等）
-SET @colname = 'avatar';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = @tablename AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE users RENAME COLUMN avatar_url TO avatar'
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
--- ── Part 2: texts 表 featured 字段 + vocabulary_books 表 SM-2 字段 ──
--- 原 V11: 原因: Text 实体有 cover_url/is_featured/featured_priority 字段，
---        VocabularyBook 实体有 repetition/interval_days/easiness_factor/next_review_time
-
--- texts.cover_url
-SET @colname = 'cover_url';
-SET @preparedStatement = (SELECT IF(
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'texts' AND COLUMN_NAME = @colname) > 0,
-    'SELECT 1',
-    'ALTER TABLE texts ADD COLUMN cover_url VARCHAR(255) DEFAULT NULL COMMENT ''封面图URL'' AFTER chinese_parallel_markdown_content'
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-
--- V11__role_mapping_cleanup.sql
-
--- ═══════════════════════════════════════════════════════════════
--- V11: 清理 sso_config 表中无效的角色映射规则，修复被误映射的用户角色
--- 原先曾放在更后的版本号中，现前移并并入正式迁移链
---
--- 问题：sso_config 表中可能存在 config_key='sso.role_mapping.ou' 的脏规则，
--- strip 前缀后 key='ou'，由于旧版 RoleMappingService 使用 contains() 匹配，
--- 'ou' 匹配所有 LDAP DN（都包含 'ou'），导致所有用户被映射为同一角色。
--- 新版改用 DN 组件精确匹配，同时此迁移清理数据库中的脏规则。
--- ═══════════════════════════════════════════════════════════════
-
--- 1. 删除无效的短 key 规则（key strip 后不含 '='，如 'ou'、'dc' 等）
-DELETE FROM sso_config
-WHERE config_type = 'ROLE_MAPPING'
-  AND REPLACE(config_key, 'sso.role_mapping.', '') NOT LIKE '%=%';
-
--- 2. 修复被误映射的用户角色
---    旧代码因 'ou' 规则把所有 CAS 用户映射为 TEACHER
---    修复策略：将被 SSO 错误映射为 TEACHER 但实际是学生的用户恢复为 STUDENT
-UPDATE users u
-INNER JOIN sso_user_bindings b ON u.id = b.user_id AND b.deleted = 0
-SET u.role = 'STUDENT', u.updated_time = NOW()
-WHERE u.role = 'TEACHER'
-  AND u.sso_bound = 1
-  AND u.deleted = 0
-  AND b.auto_approved = 1
-  AND b.sso_member_of IS NOT NULL
-  AND b.sso_member_of NOT LIKE '%ou=教师%'
-  AND b.sso_member_of NOT LIKE '%ou=teacher%';
-
--- V12__school_data_and_videos.sql
-
--- ═══════════════════════════════════════════════════════════════
--- V12: 学校数据集成 + 视频管理表
--- 整合自: V12__school_data_integration.sql + V12__add_videos_table.sql
--- ═══════════════════════════════════════════════════════════════
--- ═══════════════════════════════════════════════════════════════
--- V12: 学校数据集成整合
--- 整合自: V12.1 (字段映射) + V13 (system_config seed)
---       + V14 (student_schedule 表) + V18 (功能开关 seed)
---       + V19 (字段映射) + V20 (API 认证 appId+appSecret)
---       + V20-align (2026-04-21 按 CDSP 官方 PDF 对齐 field_mappings)
---
--- 历史合并说明:
---   - 2026-04-19: 九个补丁 (V12.1/V13/V14/V16/V18/V19/V20) 首次合并入 V12
---   - 2026-04-21: 按官方 PDF 原文修正 field_mappings, 剔除 V12.1/V19 遗留
---     snake_case 冗余映射（FieldMappingServiceImpl 会自动将 target_field
---     转 camelCase, snake_case/camelCase 两套是等价重复）, 合并 V20-align
---   - 2026-05-05: 移除 V16 (course→school_course 重命名) 冗余代码，
---     V9 已正确创建 school_course 表，无需兼容性处理
---   - 2026-05-06: 吸收原 V15/V16 的学校数据 schema 修复，移除零散 fix 版本
---
--- 注意: Flyway 在本项目生产环境禁用 (application.yml flyway.enabled=false),
---       实际生产部署走 docker/mysql/init/04-apply-all-migrations.sql
---       CI test profile 启用 Flyway (application-test.yml)
---
--- 执行顺序:
---   Part 1: Schema 变更
---   Part 2: system_config seed
---   Part 3: field_mappings 数据（按 PDF 原文）
--- ═══════════════════════════════════════════════════════════════
-
--- ═══════════════════════════════════════════════════════════════
--- Part 1.1: 创建 student_schedule 表 (原 V14 Part 1)
--- 存储学生个人课表数据 (/api/xskb)
--- ═══════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 2: 学生个人课表 (原 V12 Part 1.1)
+-- ═══════════════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS student_schedule (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     student_id VARCHAR(50) NOT NULL,
@@ -1683,10 +1990,224 @@ CREATE TABLE IF NOT EXISTS student_schedule (
     INDEX idx_sync_time (sync_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Student schedule info';
 
--- ═══════════════════════════════════════════════════════════════
--- Part 2.1: 数据源配置种子 (原 V13)
--- NOTE: api_app_id / api_app_secret 在 Part 2.3 添加（V20）
--- ═══════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 3: 学校主数据 + 教师学生绑定 (原 V14 Part 1-3)
+-- V14 在 school_student 上加列, V42 链接 users → 保留列添加顺序
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- 3.1 学生主数据 (CDSP 链式拉取产物)
+CREATE TABLE IF NOT EXISTS school_student (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    student_id VARCHAR(50) NOT NULL UNIQUE COMMENT '学号（对应 CDSP xh / XH）',
+    student_name VARCHAR(100) COMMENT '学生姓名（SSO attributes 或手工补全）',
+    college_name VARCHAR(100) NULL COMMENT '学院名称（CDSP kkyx）',
+    college_code VARCHAR(50) COMMENT '学院代码（CDSP 未提供，预留）',
+    class_code VARCHAR(50) COMMENT '行政班号（CAS attributes 补全，首次 NULL）',
+    class_name VARCHAR(100) COMMENT '班级名称（CAS attributes 补全）',
+    grade VARCHAR(20) COMMENT '年级（可用学号前 4 位推断）',
+    major_name VARCHAR(100) COMMENT '专业（CAS attributes 补全）',
+    source_course_codes TEXT COMMENT '发现该学生的课程代码列表（JSON 数组），诊断用',
+    sync_time DATETIME NOT NULL COMMENT '首次同步时间',
+    last_exam_sync_time DATETIME COMMENT '上次四六级成绩同步时间',
+    last_schedule_sync_time DATETIME COMMENT '上次课表同步时间',
+    sync_source VARCHAR(20) NOT NULL DEFAULT 'SCHOOL_API' COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_college (college_name),
+    INDEX idx_grade (grade),
+    INDEX idx_class_code (class_code),
+    INDEX idx_last_exam (last_exam_sync_time),
+    INDEX idx_last_schedule (last_schedule_sync_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 同步的学生主数据（链式拉取产物）';
+
+-- 3.2 教师主数据 (CDSP 链式拉取产物)
+CREATE TABLE IF NOT EXISTS school_teacher (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    teacher_id VARCHAR(50) NOT NULL UNIQUE COMMENT '工号（CDSP rkjsh / skjszgh）',
+    teacher_name VARCHAR(100) COMMENT '教师姓名（CDSP rkjsxm）',
+    college_name VARCHAR(100) NULL COMMENT '学院（来自链式触发学院）',
+    college_code VARCHAR(50) COMMENT '学院代码（预留）',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    last_schedule_sync_time DATETIME COMMENT '上次课表同步时间',
+    sync_source VARCHAR(20) NOT NULL DEFAULT 'SCHOOL_API' COMMENT '同步来源',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_college (college_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 同步的教师主数据';
+
+-- 3.3 V14: 放宽 college_name 为 NULL (兼容空数据)
+DROP PROCEDURE IF EXISTS _v8_school_student_college_nullable;
+CREATE PROCEDURE _v8_school_student_college_nullable()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'college_name'
+                 AND IS_NULLABLE = 'NO') THEN
+        ALTER TABLE school_student MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称（CDSP kkyx）';
+    END IF;
+END;
+CALL _v8_school_student_college_nullable();
+DROP PROCEDURE IF EXISTS _v8_school_student_college_nullable;
+
+DROP PROCEDURE IF EXISTS _v8_school_teacher_college_nullable;
+CREATE PROCEDURE _v8_school_teacher_college_nullable()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_teacher'
+                 AND COLUMN_NAME = 'college_name'
+                 AND IS_NULLABLE = 'NO') THEN
+        ALTER TABLE school_teacher MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院（来自链式触发学院）';
+    END IF;
+END;
+CALL _v8_school_teacher_college_nullable();
+DROP PROCEDURE IF EXISTS _v8_school_teacher_college_nullable;
+
+-- 3.4 教师-学生绑定
+CREATE TABLE IF NOT EXISTS teacher_student_binding (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    teacher_id VARCHAR(50) NOT NULL COMMENT '工号',
+    student_id VARCHAR(50) NOT NULL COMMENT '学号',
+    course_code VARCHAR(50) NOT NULL COMMENT '课程代码 kcdm',
+    course_class_code VARCHAR(50) COMMENT '课程班号 kcbh',
+    academic_year VARCHAR(20) NOT NULL DEFAULT '' COMMENT '学年（NULL 替换为空串以配合 UNIQUE 索引）',
+    semester VARCHAR(10) NOT NULL DEFAULT '' COMMENT '学期（秋/春），NULL 替换为空串',
+    source_type VARCHAR(20) NOT NULL DEFAULT 'CHAIN_SYNC' COMMENT '来源: CHAIN_SYNC / MANUAL',
+    sync_time DATETIME NOT NULL COMMENT '同步时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_teacher_student_course (teacher_id, student_id, course_code, academic_year, semester),
+    INDEX idx_teacher (teacher_id),
+    INDEX idx_student (student_id),
+    INDEX idx_course (course_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教师-学生绑定关系表';
+
+-- 3.5 显示字段 [原 V21: teacher_name/student_name/college_name/course_name + idx_college_name]
+DROP PROCEDURE IF EXISTS _v8_tsb_display_cols;
+CREATE PROCEDURE _v8_tsb_display_cols()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_binding' AND COLUMN_NAME = 'teacher_name') THEN
+        ALTER TABLE teacher_student_binding ADD COLUMN teacher_name VARCHAR(100) NULL
+            COMMENT '教师姓名' AFTER teacher_id;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_binding' AND COLUMN_NAME = 'student_name') THEN
+        ALTER TABLE teacher_student_binding ADD COLUMN student_name VARCHAR(100) NULL
+            COMMENT '学生姓名' AFTER student_id;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_binding' AND COLUMN_NAME = 'college_name') THEN
+        ALTER TABLE teacher_student_binding ADD COLUMN college_name VARCHAR(100) NULL
+            COMMENT '学院名称' AFTER student_id;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_binding' AND COLUMN_NAME = 'course_name') THEN
+        ALTER TABLE teacher_student_binding ADD COLUMN course_name VARCHAR(200) NULL
+            COMMENT '课程名称' AFTER course_code;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_binding' AND INDEX_NAME = 'idx_college_name') THEN
+        ALTER TABLE teacher_student_binding ADD INDEX idx_college_name (college_name);
+    END IF;
+END;
+CALL _v8_tsb_display_cols();
+DROP PROCEDURE IF EXISTS _v8_tsb_display_cols;
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 4: users 关联学校主数据 (原 V42)
+--   - 规范化历史 student_<digits> username → <digits>
+--   - users 加 school_student_id / school_teacher_id
+--   - 回填外键
+--   - 创建 v_user_school_profile 视图
+-- 顺序依赖: school_student / school_teacher 必须在 Part 3 已建
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- 4.1 规范化 username
+UPDATE users
+SET username = SUBSTRING(username, 9)
+WHERE username REGEXP '^student_[0-9]+$';
+
+-- 4.2 幂等新增外键列 (内层 PROCEDURE 已在 V42 验证, 此处保留同款模式)
+DROP PROCEDURE IF EXISTS _v8_add_school_columns;
+CREATE PROCEDURE _v8_add_school_columns()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'users'
+                     AND COLUMN_NAME = 'school_student_id') THEN
+        ALTER TABLE users
+            ADD COLUMN school_student_id BIGINT NULL COMMENT '关联 school_student.id（学号匹配）' AFTER inner_uid,
+            ADD COLUMN school_teacher_id BIGINT NULL COMMENT '关联 school_teacher.id（工号匹配）' AFTER school_student_id;
+    END IF;
+END;
+CALL _v8_add_school_columns();
+DROP PROCEDURE IF EXISTS _v8_add_school_columns;
+
+-- 4.3 幂等创建索引
+DROP PROCEDURE IF EXISTS _v8_add_school_indexes;
+CREATE PROCEDURE _v8_add_school_indexes()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'users'
+                     AND INDEX_NAME = 'idx_users_school_student_id') THEN
+        CREATE INDEX idx_users_school_student_id ON users(school_student_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'users'
+                     AND INDEX_NAME = 'idx_users_school_teacher_id') THEN
+        CREATE INDEX idx_users_school_teacher_id ON users(school_teacher_id);
+    END IF;
+END;
+CALL _v8_add_school_indexes();
+DROP PROCEDURE IF EXISTS _v8_add_school_indexes;
+
+-- 4.4 回填外键
+UPDATE users u
+JOIN school_student s ON s.student_id COLLATE utf8mb4_unicode_ci = u.username
+SET u.school_student_id = s.id
+WHERE u.school_student_id IS NULL;
+
+UPDATE users u
+JOIN school_teacher t ON t.teacher_id COLLATE utf8mb4_unicode_ci = u.username
+SET u.school_teacher_id = t.id
+WHERE u.school_teacher_id IS NULL;
+
+-- 4.5 视图: 聚合学生的学校画像
+DROP VIEW IF EXISTS v_user_school_profile;
+CREATE VIEW v_user_school_profile AS
+SELECT
+    u.id                          AS user_id,
+    u.username                    AS username,
+    u.role                        AS role,
+    u.real_name                   AS real_name,
+    s.id                          AS school_student_id,
+    s.student_id                  AS student_id,
+    s.student_name                AS student_name,
+    s.college_name                AS college_name,
+    s.class_code                  AS class_code,
+    s.class_name                  AS class_name,
+    s.grade                       AS grade,
+    s.major_name                  AS major_name,
+    (SELECT COUNT(*) FROM course_selection cs            WHERE cs.student_id = s.student_id) AS course_selection_count,
+    (SELECT COUNT(*) FROM teacher_student_binding tsb    WHERE tsb.student_id = s.student_id) AS teacher_binding_count,
+    (SELECT MAX(les.exam_date) FROM level_exam_scores les WHERE les.student_id = s.student_id) AS last_exam_date,
+    (SELECT MAX(les.score)     FROM level_exam_scores les WHERE les.student_id = s.student_id) AS best_exam_score
+FROM users u
+JOIN school_student s ON s.id = u.school_student_id
+WHERE u.deleted = 0;
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 5: system_config seed (原 V12 Part 2)
+--   5.1 数据源配置
+--   5.2 功能开关
+--   5.3 API 认证 appId + appSecret 签名
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- 5.1 数据源配置
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('school_data', 'source', 'api', '数据源类型: api 或 etl', 0),
 ('school_data', 'api_base_url', 'https://api.imau.edu.cn', 'API基础URL', 0),
@@ -1708,47 +2229,41 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('school_data', 'sync_batch_size', '500', '批量大小', 0),
 ('school_data', 'sync_timeout_minutes', '60', '同步超时(分钟)', 0);
 
--- ═══════════════════════════════════════════════════════════════
--- Part 2.2: 功能开关 seed (原 V18)
--- ═══════════════════════════════════════════════════════════════
+-- 5.2 功能开关 (运维端 + 学生端课表)
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('feature_toggle', 'ops.school_data_browser', 'true', '运维端学校数据浏览功能（行政班、课程、教学班等）', 0),
 ('feature_toggle', 'ops.school_data_config', 'true', '运维端学校数据源配置功能（API/ETL切换、连接测试）', 0),
 ('feature_toggle', 'page_schedule', 'true', '学生端课表查看功能（从教务系统同步课表数据）', 0);
 
--- ═══════════════════════════════════════════════════════════════
--- Part 2.3: API 认证 appId + appSecret 签名 (原 V20)
--- 官方接口文档: sign = Base64( MD5( appId + appSecret + timestamp ) )
--- 请求头: appId / timestamp / sign
--- ═══════════════════════════════════════════════════════════════
+-- 5.3 API 认证 appId + appSecret 签名
+-- sign = Base64( MD5( appId + appSecret + timestamp ) )
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('school_data', 'api_app_id', '', 'API 应用 ID（由学校数据平台分配，用于签名认证）', 1),
 ('school_data', 'api_app_secret', '', 'API 应用 Secret（由学校数据平台分配，与 appId + timestamp 组合生成签名）', 1);
 
--- 清理旧部署遗留的 api_token（Bearer Token 认证已废弃；全新部署不会有此记录）
+-- 清理旧部署遗留的 api_token (Bearer Token 认证已废弃; 全新部署不会有此记录)
 DELETE FROM `system_config`
 WHERE `config_group` = 'school_data' AND `config_key` = 'api_token';
 
--- ═══════════════════════════════════════════════════════════════
--- Part 3: field_mappings 按 CDSP 官方 PDF 对齐 (原 V20-align)
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 6: field_mappings 按 CDSP 官方 PDF 对齐 (原 V12 Part 3)
 --
--- 基于 9 份 cdsp.imau.edu.cn data-api/v2 官方接口文档原文复核（2026-04-21）：
+-- 基于 9 份 cdsp.imau.edu.cn data-api/v2 官方接口文档原文复核 (2026-04-21):
 --   行政班基本信息 / 课程基本信息 / 本专科生课程信息 / 课程安排信息 /
 --   学生选课 / 本专科生等级考试成绩 / 教学计划信息 / 教师授课 / 学生课表
 --
--- 配套代码:
---   - FieldMappingServiceImpl.applyMapping 大小写不敏感查表
---     (PDF 返回字段 3 个端点 UPPERCASE + 6 个 lowercase)
---   - SchoolDataSyncServiceImpl.upsertEntity: teaching_class 数据源
---     路由到 upsertSchoolCourse (bzkcxx 端点实际返回课程信息，非教学班)
---   - target_field 统一 camelCase, 匹配 Java 实体属性
---
--- 已知限制（非本 part 职责）:
---   - course_selection / teaching_plans 的上游字段仍可能不完整，当前基线
---     通过 DDL 放宽 + service 默认值兜底保证同步不因空值整批失败。
--- ═══════════════════════════════════════════════════════════════
+-- 注意:
+--   - field_mappings 列定义 (V9 Part 1.10): source_field / target_field / converter / remark
+--     (历史 V19 bug 误用 converter_type/description/created_by → INSERT IGNORE 静默失败)
+--   - 本 Part 字段顺序严格按 V9 DDL 12 列定义: data_source, source_field, target_field,
+--     source_type, target_type, converter, converter_config, default_value,
+--     is_required, sort_order, is_active, remark
+--   - V20-align PDF 修正: 剔除 V12.1/V19 遗留 snake_case 冗余映射
+--     (FieldMappingServiceImpl.applyMapping 自动将 target_field 转 camelCase,
+--      snake_case/camelCase 两套是等价重复)
+-- ═══════════════════════════════════════════════════════════════════════
 
--- Step 3.0: 清空 V12 历史遗留的错误 mappings（幂等）
+-- Step 6.0: 清空 V12 历史遗留的错误 mappings (幂等)
 DELETE FROM field_mappings WHERE data_source IN (
     'administrative_class', 'school_course', 'teaching_class',
     'course_schedule', 'course_selection', 'level_exam_scores',
@@ -1757,7 +2272,6 @@ DELETE FROM field_mappings WHERE data_source IN (
 
 -- 1. administrative_class (cdsp_1710949911983374368 / 行政班基本信息)
 -- PDF fields (UPPERCASE): XZBH, BJMC, XSLB, SSXYBM, SSXYMC, SSNJ, BZRGH, BZRXM, ZY, JBNY
--- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('administrative_class', 'XZBH',         'class_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号（英文缩写）'),
 ('administrative_class', '行政班编号',   'class_code',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '行政班编号（中文）'),
@@ -1782,7 +2296,6 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 
 -- 2. school_course (cdsp_1715290945064353805 / 课程基本信息)
 -- PDF fields (lowercase): kcxs, kcdm, kcxf, kcywmc, kcjj, kslx, kkyx, kcmc
--- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('school_course', 'kcdm',       'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码（英文缩写）'),
 ('school_course', '课程代码',   'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程代码（中文）'),
@@ -1802,9 +2315,8 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 ('school_course', '开课院系',   'college_name',      'STRING', 'STRING', 'NONE', NULL, NULL, 0, 8, 1, '开课院系（中文）');
 
 -- 3. teaching_class (cdsp_1721804030860152850 / 本专科生课程信息)
--- 此端点实际返回课程信息（非教学班），代码已路由到 upsertSchoolCourse
+-- 此端点实际返回课程信息 (非教学班), 代码已路由到 upsertSchoolCourse
 -- PDF fields (UPPERCASE): KCXS, KCXF, KKYX, KCJJ, KCYWMC, KCMC, KCH, KSLX
--- 注意：CDSP API 可能返回中文字段名，需同时支持英文缩写和中文字段名
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('teaching_class', 'KCH',          'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（英文缩写）'),
 ('teaching_class', '课程号',       'course_code',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程号（中文）'),
@@ -1825,7 +2337,7 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 
 -- 4. course_schedule (cdsp_1715290377801515044 / 课程安排信息)
 -- PDF fields (lowercase): xkkch, xn, xq, skxqj, skjc, kczc, skdd
--- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
+-- xq 返回中文 "秋"/"春" varchar, target_type=STRING, service 层做中文→Integer 转换
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('course_schedule', 'xkkch',        'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '选课课号（作 class_id）'),
 ('course_schedule', '选课课号',     'class_id',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '选课课号（中文字段名）'),
@@ -1854,8 +2366,8 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 
 -- 5. course_selection (cdsp_1715294802871926794 / 学生选课)
 -- PDF fields (UPPERCASE): XH, KSXZDM, KSXZMC, KCBH
--- 注意：PDF 只返回 4 个字段，远少于 CourseSelection 实体 NOT NULL 列数。
--- KCBH 在链式拉取与历史兼容中按”课程班号”使用，应统一落到 classId。
+-- PDF 只返回 4 个字段, 远少于 CourseSelection 实体 NOT NULL 列数
+-- KCBH 在链式拉取与历史兼容中按"课程班号"使用, 应统一落到 classId
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('course_selection', 'XH',     'student_id',        'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '学号'),
 ('course_selection', 'KCBH',   'class_id',          'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程班号（作 class_id）'),
@@ -1893,13 +2405,12 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 
 -- 8. teacher_courses (cdsp_1715294645677801497 / 教师授课)
 -- PDF fields (lowercase): rkjs, xn, xq, kcdm, kxh, rkjsh, kcmc, kcbh, sfzj, kcbbm, rkjsxm
--- 教师授课数据 upsert 到 TeachingClass 实体（service 代码既有逻辑）
--- 语义（按 PDF 返回示例核对 2026-04-21）:
---   kcdm = 课程代码（如 "594625"，课程本身编码）→ courseCode
---   kcbh = 课程班号（如 "51425977"，某次开班的全局唯一 ID）→ classId (TeachingClass 主键)
---   kxh  = 课序号（班内序号，通常与 kcdm 相同）→ 不入库
---   xq   = 学期，API 返回中文 "秋"/"春" varchar → target_type=STRING 先保留原值，
---          SchoolDataSyncServiceImpl.upsertTeachingClass 读取时再做中文→Integer 转换
+-- 教师授课数据 upsert 到 TeachingClass 实体
+-- 语义 (按 PDF 返回示例核对 2026-04-21):
+--   kcdm = 课程代码 → courseCode
+--   kcbh = 课程班号 → classId (TeachingClass 主键)
+--   kxh  = 课序号 (班内序号, 通常与 kcdm 相同) → 不入库
+--   xq   = 学期, API 返回中文 "秋"/"春" varchar
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('teacher_courses', 'kcbh',   'class_id',      'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1, 1, '课程班号（作 class_id，全局唯一开班 ID）'),
 ('teacher_courses', 'kcdm',   'course_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 1, 2, 1, '课程代码'),
@@ -1913,8 +2424,6 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 -- 9. student_schedule (cdsp_1715294397274341377 / 学生课表)
 -- PDF fields (lowercase): zcdm, skjszgh, jsmc, lsxykh, kcmc, js, skcd, djj, xqj,
 --   xkkh, xh, xq, xn, zcap, kcbh
--- xq 返回中文 "秋"/"春" varchar，target_type=STRING，service 层做中文→Integer 转换
--- 注意：CDSP API 实际返回中文字段名（非英文缩写），需同时支持两种格式
 INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
 ('student_schedule', '学号',           'student_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号（中文字段名）'),
 ('student_schedule', 'xh',            'student_id',     'STRING', 'STRING', 'NONE', NULL, NULL, 1, 1,  1, '学号（英文缩写）'),
@@ -1942,59 +2451,17 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 ('student_schedule', '学期',           'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"，service 层转 Integer（中文字段名）'),
 ('student_schedule', 'xq',            'semester',       'STRING', 'STRING', 'NONE', NULL, NULL, 1, 12, 1, '学期中文 "秋"/"春"，service 层转 Integer（英文缩写）');
 
--- ═══════════════════════════════════════════════════════════════
--- Part 4: 视频管理表
--- ═══════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS `videos` (
-    `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `title` VARCHAR(200) NOT NULL COMMENT '视频标题',
-    `description` TEXT COMMENT '视频简介',
-    `media_id` BIGINT DEFAULT NULL COMMENT '关联的媒体记录ID',
-    `cover_media_id` BIGINT DEFAULT NULL COMMENT '封面媒体ID',
-    `video_url` VARCHAR(500) DEFAULT NULL COMMENT '视频URL（外部链接时使用）',
-    `cover_url` VARCHAR(500) DEFAULT NULL COMMENT '封面URL',
-    `subtitle_content` LONGTEXT COMMENT '字幕内容（SRT/VTT格式）',
-    `subtitle_content_zh` LONGTEXT COMMENT '中文字幕内容（SRT/VTT格式）',
-    `user_id` BIGINT DEFAULT NULL COMMENT '上传者用户ID',
-    `is_public` TINYINT DEFAULT 1 COMMENT '是否公开 0-私有 1-公开',
-    `is_featured` TINYINT(1) DEFAULT 0 COMMENT '是否推荐',
-    `featured_priority` INT DEFAULT 0 COMMENT '推荐优先级',
-    `tags` VARCHAR(500) DEFAULT NULL COMMENT '标签，逗号分隔',
-    `view_count` INT DEFAULT 0 COMMENT '浏览次数',
-    `like_count` INT DEFAULT 0 COMMENT '收藏/点赞次数',
-    `status` VARCHAR(20) DEFAULT 'PUBLISHED' COMMENT '状态：DRAFT/PUBLISHED/ARCHIVED',
-    `associated_text_id` BIGINT DEFAULT NULL COMMENT '关联的课文ID（用于收藏映射）',
-    `transcription_status` VARCHAR(20) DEFAULT NULL COMMENT '转录状态：PENDING/PROCESSING/COMPLETED/FAILED',
-    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_user_id` (`user_id`),
-    KEY `idx_media_id` (`media_id`),
-    KEY `idx_is_public` (`is_public`),
-    KEY `idx_is_featured` (`is_featured`),
-    KEY `idx_status` (`status`),
-    KEY `idx_deleted` (`deleted`),
-    KEY `idx_associated_text_id` (`associated_text_id`),
-    KEY `idx_created_time` (`created_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频表';
-
-SET @videos_subtitle_zh_exists = (
-    SELECT COUNT(*)
-    FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'videos'
-      AND COLUMN_NAME = 'subtitle_content_zh'
-);
-SET @videos_subtitle_zh_sql = IF(
-    @videos_subtitle_zh_exists = 0,
-    'ALTER TABLE videos ADD COLUMN subtitle_content_zh LONGTEXT COMMENT ''中文字幕内容（SRT/VTT格式）'' AFTER subtitle_content',
-    'SELECT 1'
-);
-PREPARE stmt FROM @videos_subtitle_zh_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 7: school_* / teaching_* 表字段调整 (原 V12)
+-- 仅保留与 school_* 相关的部分:
+--   - administrative_class / teaching_plans college_name/major_name 放宽 NULL
+--   - course_selection 放宽多个字段 NULL
+--   - course_schedule 放宽字段 NULL
+--   - teaching_class 放宽字段 NULL
+--   - FK 重声明 (course_schedule → teaching_class ON DELETE SET NULL)
+--   - idx_student_academic / idx_class_academic 索引
+-- videos / media 部分归入 V2
+-- ═══════════════════════════════════════════════════════════════════════
 
 ALTER TABLE administrative_class
     MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称 (YXMC)',
@@ -2031,378 +2498,88 @@ ALTER TABLE teaching_class
     MODIFY COLUMN capacity INT NULL DEFAULT 0 COMMENT '班级容量',
     MODIFY COLUMN class_status VARCHAR(20) NULL DEFAULT 'ACTIVE' COMMENT '课程状态';
 
+-- 清理孤儿 course_schedule (无对应 teaching_class)
 DELETE cs
 FROM course_schedule cs
 LEFT JOIN teaching_class tc ON cs.class_id = tc.class_id
 WHERE cs.class_id IS NOT NULL
   AND tc.class_id IS NULL;
 
+-- 清理孤儿 course_selection (无对应 school_course)
 DELETE csel
 FROM course_selection csel
 LEFT JOIN school_course sc ON csel.course_code = sc.course_code
 WHERE csel.course_code IS NOT NULL
   AND sc.course_code IS NULL;
 
-SET @course_schedule_fk_exists = (
-    SELECT COUNT(*)
-    FROM information_schema.TABLE_CONSTRAINTS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'course_schedule'
-      AND CONSTRAINT_NAME = 'fk_course_schedule_teaching_class'
-      AND CONSTRAINT_TYPE = 'FOREIGN KEY'
-);
-SET @course_schedule_drop_fk_sql = IF(
-    @course_schedule_fk_exists > 0,
-    'ALTER TABLE course_schedule DROP FOREIGN KEY fk_course_schedule_teaching_class',
-    'SELECT 1'
-);
-PREPARE stmt FROM @course_schedule_drop_fk_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- 重建 course_schedule FK (idempotent)
+DROP PROCEDURE IF EXISTS _v8_drop_fk_course_schedule;
+CREATE PROCEDURE _v8_drop_fk_course_schedule()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'course_schedule'
+                 AND CONSTRAINT_NAME = 'fk_course_schedule_teaching_class'
+                 AND CONSTRAINT_TYPE = 'FOREIGN KEY') THEN
+        ALTER TABLE course_schedule DROP FOREIGN KEY fk_course_schedule_teaching_class;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'course_schedule'
+                 AND CONSTRAINT_NAME = 'course_schedule_ibfk_1'
+                 AND CONSTRAINT_TYPE = 'FOREIGN KEY') THEN
+        ALTER TABLE course_schedule DROP FOREIGN KEY course_schedule_ibfk_1;
+    END IF;
+END;
+CALL _v8_drop_fk_course_schedule();
+DROP PROCEDURE IF EXISTS _v8_drop_fk_course_schedule;
 
-SET @course_schedule_fk_exists = (
-    SELECT COUNT(*)
-    FROM information_schema.TABLE_CONSTRAINTS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'course_schedule'
-      AND CONSTRAINT_NAME = 'course_schedule_ibfk_1'
-      AND CONSTRAINT_TYPE = 'FOREIGN KEY'
-);
-SET @course_schedule_drop_fk_sql = IF(
-    @course_schedule_fk_exists > 0,
-    'ALTER TABLE course_schedule DROP FOREIGN KEY course_schedule_ibfk_1',
-    'SELECT 1'
-);
-PREPARE stmt FROM @course_schedule_drop_fk_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+DROP PROCEDURE IF EXISTS _v8_add_fk_course_schedule;
+CREATE PROCEDURE _v8_add_fk_course_schedule()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'course_schedule'
+                     AND CONSTRAINT_NAME = 'fk_course_schedule_teaching_class'
+                     AND CONSTRAINT_TYPE = 'FOREIGN KEY') THEN
+        ALTER TABLE course_schedule ADD CONSTRAINT fk_course_schedule_teaching_class FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END;
+CALL _v8_add_fk_course_schedule();
+DROP PROCEDURE IF EXISTS _v8_add_fk_course_schedule;
 
-SET @course_schedule_fk_exists = (
-    SELECT COUNT(*)
-    FROM information_schema.TABLE_CONSTRAINTS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'course_schedule'
-      AND CONSTRAINT_NAME = 'fk_course_schedule_teaching_class'
-      AND CONSTRAINT_TYPE = 'FOREIGN KEY'
-);
-SET @course_schedule_add_fk_sql = IF(
-    @course_schedule_fk_exists = 0,
-    'ALTER TABLE course_schedule ADD CONSTRAINT fk_course_schedule_teaching_class FOREIGN KEY (class_id) REFERENCES teaching_class(class_id) ON DELETE SET NULL ON UPDATE CASCADE',
-    'SELECT 1'
-);
-PREPARE stmt FROM @course_schedule_add_fk_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- idx_student_academic / idx_class_academic (幂等)
+DROP PROCEDURE IF EXISTS _v8_idx_student_academic;
+CREATE PROCEDURE _v8_idx_student_academic()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'course_selection'
+                     AND INDEX_NAME = 'idx_student_academic') THEN
+        CREATE INDEX idx_student_academic ON course_selection(student_id, academic_year, semester);
+    END IF;
+END;
+CALL _v8_idx_student_academic();
+DROP PROCEDURE IF EXISTS _v8_idx_student_academic;
 
-SET @course_selection_student_academic_exists = (
-    SELECT COUNT(*)
-    FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'course_selection'
-      AND INDEX_NAME = 'idx_student_academic'
-);
-SET @course_selection_student_academic_sql = IF(
-    @course_selection_student_academic_exists = 0,
-    'CREATE INDEX idx_student_academic ON course_selection(student_id, academic_year, semester)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @course_selection_student_academic_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+DROP PROCEDURE IF EXISTS _v8_idx_class_academic;
+CREATE PROCEDURE _v8_idx_class_academic()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'course_schedule'
+                     AND INDEX_NAME = 'idx_class_academic') THEN
+        CREATE INDEX idx_class_academic ON course_schedule(class_id, academic_year, semester);
+    END IF;
+END;
+CALL _v8_idx_class_academic();
+DROP PROCEDURE IF EXISTS _v8_idx_class_academic;
 
-SET @course_schedule_class_academic_exists = (
-    SELECT COUNT(*)
-    FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'course_schedule'
-      AND INDEX_NAME = 'idx_class_academic'
-);
-SET @course_schedule_class_academic_sql = IF(
-    @course_schedule_class_academic_exists = 0,
-    'CREATE INDEX idx_class_academic ON course_schedule(class_id, academic_year, semester)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @course_schedule_class_academic_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 8: Feature Toggle / 学院链式配置 seed (原 V14 Part 4)
+-- 注: sso.auto_grant_student / sso.auto_grant_teacher 由 V7 强制覆盖为 true
+-- ═══════════════════════════════════════════════════════════════════════
 
-
-UPDATE field_mappings
-SET is_active = 0
-WHERE data_source = 'administrative_class'
-  AND source_field IN ('SSXYBM', 'SSXYMC', '所属学院编码', '所属学院名称');
-
-INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
-('administrative_class', 'YXDM',       'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（英文缩写）'),
-('administrative_class', '学院代码',   'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（中文）'),
-('administrative_class', 'YXMC',       'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（英文缩写）'),
-('administrative_class', '学院名称',   'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（中文）'),
-('administrative_class', 'ZYDM',       'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（英文缩写）'),
-('administrative_class', '专业代码',   'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（中文）'),
-('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
-('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
-
--- V13__feature_toggles_and_ai_config.sql
-
--- ═══════════════════════════════════════════════════════════════
--- V13: 功能开关扩展 + AI 配置增强
--- 整合自: V14 (expand_feature_toggles) + V16 (ai_qa_recovery_and_hiagent_config)
---       + V17 (add_page_word_recite_toggle) + V18 (ai_provider_protocol)
--- ═══════════════════════════════════════════════════════════════
-
--- V13: 扩展 feature_toggle 覆盖学生端全量页面 + 管理员模块分级
--- 背景：
---   1. 原 V7 只 seed 了 11 个学生页 toggle，page_scores / page_course_selections 在代码中引用
---      但 DB 未 seed，导致 toggle 失效（默认展示）
---   2. 新增 page_courses / page_text_learning 以支持学生端 Layout 全覆盖
---   3. 新增 9 个 admin.* toggle 支持管理员模块级粒度控制
--- 与 V7/V12 关系：V7 只覆盖部分学生页；V12 添加学校数据相关；V14 补齐剩余
-
-SET NAMES utf8mb4;
-
--- ─────────────────────────────────────────────
--- 学生端 4 个缺失 toggle（补齐全 15 页覆盖）
--- ─────────────────────────────────────────────
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_courses',           'false', '学生端-课程学习页（开发中）',   0),
-  ('feature_toggle', 'page_scores',            'true',  '学生端-等级考试成绩页',         0),
-  ('feature_toggle', 'page_course_selections', 'true',  '学生端-我的选课页',             0),
-  ('feature_toggle', 'page_text_learning',     'true',  '学生端-课文学习子页',           0),
-  ('feature_toggle', 'page_schedule',          'true',  '学生端-我的课表页',             0);
-
--- ─────────────────────────────────────────────
--- 管理员 9 个模块 toggle（分级控制）
--- ─────────────────────────────────────────────
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'admin.dashboard',    'true', '管理员-仪表盘',     0),
-  ('feature_toggle', 'admin.courses',      'true', '管理员-课程管理',   0),
-  ('feature_toggle', 'admin.classes',      'true', '管理员-班级管理',   0),
-  ('feature_toggle', 'admin.users',        'true', '管理员-用户管理',   0),
-  ('feature_toggle', 'admin.units',        'true', '管理员-单元管理',   0),
-  ('feature_toggle', 'admin.words',        'true', '管理员-单词管理',   0),
-  ('feature_toggle', 'admin.texts',        'true', '管理员-课文管理',   0),
-  ('feature_toggle', 'admin.assignments',  'true', '管理员-作业管理',   0),
-  ('feature_toggle', 'admin.sso_approval', 'true', '管理员-SSO 审批',   0);
-
--- ─────────────────────────────────────────────
--- 学生端补充页面 toggle
--- ─────────────────────────────────────────────
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_videos',            'true',  '学生端-视频学习页',             0),
-  ('feature_toggle', 'page_video_player',      'true',  '学生端-视频播放器页',           0),
-  ('feature_toggle', 'page_interactive_text',  'true',  '学生端-交互式课文页',           0),
-  ('feature_toggle', 'page_vocabulary',        'true',  '学生端-词汇学习页',             0),
-  ('feature_toggle', 'page_ai_qa',             'true',  '学生端-AI问答页',               0),
-  ('feature_toggle', 'page_articles',          'true',  '学生端-文章阅读页',             0),
-  ('feature_toggle', 'page_user_texts',        'true',  '学生端-我的课文页',             0);
-
--- ─────────────────────────────────────────────
--- 教师端页面 toggle
--- ─────────────────────────────────────────────
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_teacher_dashboard',   'true', '教师端-仪表盘',         0),
-  ('feature_toggle', 'page_teacher_courses',     'true', '教师端-课程管理',       0),
-  ('feature_toggle', 'page_teacher_my_courses',  'true', '教师端-我的课程',       0),
-  ('feature_toggle', 'page_teacher_classes',     'true', '教师端-班级管理',       0),
-  ('feature_toggle', 'page_teacher_assignments', 'true', '教师端-作业管理',       0);
-
--- ─────────────────────────────────────────────
--- 管理员端补充页面 toggle
--- ─────────────────────────────────────────────
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_admin_videos',      'true', '管理员-视频管理',       0),
-  ('feature_toggle', 'page_admin_backups',     'true', '管理员-备份管理',       0),
-  ('feature_toggle', 'page_admin_monitoring',  'true', '管理员-系统监控',       0);
-
--- ─────────────────────────────────────────────
--- 运维端页面 toggle
--- ─────────────────────────────────────────────
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'page_ops_monitoring',           'true', '运维端-系统监控',           0),
-  ('feature_toggle', 'page_ops_ai_providers',         'true', '运维端-AI提供商管理',       0),
-  ('feature_toggle', 'page_ops_feature_toggles',      'true', '运维端-功能开关管理',       0),
-  ('feature_toggle', 'page_ops_school_data_config',   'true', '运维端-学校数据配置',       0),
-  ('feature_toggle', 'page_ops_school_data_browser',  'true', '运维端-学校数据浏览器',     0),
-  ('feature_toggle', 'page_ops_update',               'true', '运维端-系统更新',           0);
-
--- ═══════════════════════════════════════════════════════════════
--- Part 2: AI 问答恢复 + HiAgent 凭证配置
--- ═══════════════════════════════════════════════════════════════
-
---      或 feature_override 里有对 page_ai_qa 的禁用规则 → 路由守卫拦截 → "进不去"
---   2. HiAgent 改写/问答凭证原本只通过 application.yml + 环境变量注入，
---      违反"所有配置前端可配"的运维诉求 → 把 4+1 个 HiAgent 凭证迁到 system_config.ai_config
---      后端 HiAgentServiceImpl 读值优先 DB，回退到 @Value（环境变量）
--- ═══════════════════════════════════════════════════════════════
-
--- ────────────────────────────────────────
--- 1. 恢复 page_ai_qa 开关为 true（无论之前是何值）
---    并清除 feature_override 里的禁用覆盖
--- ────────────────────────────────────────
-UPDATE `system_config`
-SET `config_value` = 'true'
-WHERE `config_group` = 'feature_toggle'
-  AND `config_key`   = 'page_ai_qa';
-
--- 若历史未 seed，补 seed（INSERT IGNORE 保持幂等）
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`)
-VALUES ('feature_toggle', 'page_ai_qa', 'true', '学生端-AI问答页', 0);
-
--- 清除所有对 page_ai_qa 的禁用覆盖（tag/user scope）
-DELETE FROM `feature_override` WHERE `feature_key` = 'page_ai_qa';
-
--- ────────────────────────────────────────
--- 2. HiAgent 凭证 seed 到 ai_config group（is_secret=1 for keys）
---    值默认为空字符串，表示"尚未从前端配置，使用 application.yml 环境变量"
---    前端面板写入 DB 后，HiAgentServiceImpl 会优先读 DB 值
--- ────────────────────────────────────────
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('ai_config', 'hiagent_api_url',    '', 'HiAgent API Base URL（留空则使用环境变量 HIAGENT_API_URL）',         0),
-  ('ai_config', 'hiagent_api_key',    '', 'HiAgent 改写应用 API Key（留空则使用环境变量 HIAGENT_API_KEY）',      1),
-  ('ai_config', 'hiagent_app_id',     '', 'HiAgent 改写应用 App ID（留空则使用环境变量 HIAGENT_APP_ID）',        0),
-  ('ai_config', 'hiagent_qa_api_key', '', 'HiAgent 问答应用 API Key（必须与改写凭证不同；留空则用 HIAGENT_QA_API_KEY）', 1),
-  ('ai_config', 'hiagent_qa_app_id',  '', 'HiAgent 问答应用 App ID（必须与改写凭证不同；留空则用 HIAGENT_QA_APP_ID）',  0);
-
--- ═══════════════════════════════════════════════════════════════
--- Part 3: 补齐背单词页 toggle
--- ═══════════════════════════════════════════════════════════════
-
---   toggleKey = 'page_word_recite'，但该键从未 seed 到
---   system_config.feature_toggle，导致运维面板"全局开关"列表缺少
---   "背单词"条目 —— 开关与页面无法一一对应。
---
---   同时 router/index.js 中 /student/word-recite 路由守卫缺失
---   featureKey，本迁移配合前端补齐后，达成"开关关闭 → 导航隐藏 +
---   快捷入口隐藏 + 直接访问被拦截"三层联动。
--- ═══════════════════════════════════════════════════════════════
-
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`)
-VALUES ('feature_toggle', 'page_word_recite', 'true', '学生端-背单词页', 0);
-
--- 若历史中存在但描述为空，统一规范化描述
-UPDATE `system_config`
-SET `description` = '学生端-背单词页'
-WHERE `config_group` = 'feature_toggle'
-  AND `config_key` = 'page_word_recite'
-  AND (`description` IS NULL OR `description` = '');
-
--- ═══════════════════════════════════════════════════════════════
--- Part 4: AI 服务商协议类型字段
--- ═══════════════════════════════════════════════════════════════
-
-
-SET @ai_provider_protocol_exists = (
-    SELECT COUNT(*) FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol'
-);
-SET @ai_provider_protocol_sql = IF(
-    @ai_provider_protocol_exists = 0,
-    'ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT ''openai_compatible'' AFTER `service`',
-    'SELECT 1'
-);
-PREPARE stmt FROM @ai_provider_protocol_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-ALTER TABLE `ai_provider`
-    MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
-        COMMENT '协议类型: openai_compatible | hiagent';
-
-
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-  ('feature_toggle', 'student.lazy_course_selections', 'true', '学生端 Lazy 选课记录同步（陈旧度阈值 1 天）', 0),
-  ('feature_toggle', 'teacher.school_data_enabled', 'true', '教师端学校数据功能（课表/选课/成绩）', 0);
-
--- V14__enhancements.sql
-
--- ═══════════════════════════════════════════════════════════════
--- V14: 增强功能
--- 整合自: V22 (chain_fetch_schema) + V24 (similarity_matrix)
---       + V25 (similar_id_indexes) + V26 (optimize_interaction_view)
--- ═══════════════════════════════════════════════════════════════
-
--- Part 1: 按学院链式拉取数据模型
--- ─────────────────────────────────────────────
--- 用途: 支持按学院链式拉取学生/教师数据，配合 SSO 自动授权、
---       教师-学生绑定查询等下游场景
--- Author: System
--- Date: 2026-04-22
--- ============================================================================
-
--- ============================================================================
--- 1. 学生主数据（CDSP 链式拉取产物）
--- ============================================================================
-CREATE TABLE IF NOT EXISTS school_student (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
-    student_id VARCHAR(50) NOT NULL UNIQUE COMMENT '学号（对应 CDSP xh / XH）',
-    student_name VARCHAR(100) COMMENT '学生姓名（SSO attributes 或手工补全）',
-    college_name VARCHAR(100) NULL COMMENT '学院名称（CDSP kkyx）',
-    college_code VARCHAR(50) COMMENT '学院代码（CDSP 未提供，预留）',
-    class_code VARCHAR(50) COMMENT '行政班号（CAS attributes 补全，首次 NULL）',
-    class_name VARCHAR(100) COMMENT '班级名称（CAS attributes 补全）',
-    grade VARCHAR(20) COMMENT '年级（可用学号前 4 位推断）',
-    major_name VARCHAR(100) COMMENT '专业（CAS attributes 补全）',
-    source_course_codes TEXT COMMENT '发现该学生的课程代码列表（JSON 数组），诊断用',
-    sync_time DATETIME NOT NULL COMMENT '首次同步时间',
-    last_exam_sync_time DATETIME COMMENT '上次四六级成绩同步时间',
-    last_schedule_sync_time DATETIME COMMENT '上次课表同步时间',
-    sync_source VARCHAR(20) NOT NULL DEFAULT 'SCHOOL_API' COMMENT '同步来源',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_college (college_name),
-    INDEX idx_grade (grade),
-    INDEX idx_class_code (class_code),
-    INDEX idx_last_exam (last_exam_sync_time),
-    INDEX idx_last_schedule (last_schedule_sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 同步的学生主数据（链式拉取产物）';
-
--- ============================================================================
--- 2. 教师主数据（CDSP 链式拉取产物）
--- ============================================================================
-CREATE TABLE IF NOT EXISTS school_teacher (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
-    teacher_id VARCHAR(50) NOT NULL UNIQUE COMMENT '工号（CDSP rkjsh / skjszgh）',
-    teacher_name VARCHAR(100) COMMENT '教师姓名（CDSP rkjsxm）',
-    college_name VARCHAR(100) NULL COMMENT '学院（来自链式触发学院）',
-    college_code VARCHAR(50) COMMENT '学院代码（预留）',
-    sync_time DATETIME NOT NULL COMMENT '同步时间',
-    last_schedule_sync_time DATETIME COMMENT '上次课表同步时间',
-    sync_source VARCHAR(20) NOT NULL DEFAULT 'SCHOOL_API' COMMENT '同步来源',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_college (college_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='CDSP 同步的教师主数据';
-
-ALTER TABLE school_student
-    MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称（CDSP kkyx）';
-
-ALTER TABLE school_teacher
-    MODIFY COLUMN college_name VARCHAR(100) NULL COMMENT '学院（来自链式触发学院）';
-
--- ============================================================================
--- 3. 教师-学生绑定（链式拉取衍生关联）
--- ============================================================================
-CREATE TABLE IF NOT EXISTS teacher_student_binding (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
-    teacher_id VARCHAR(50) NOT NULL COMMENT '工号',
-    student_id VARCHAR(50) NOT NULL COMMENT '学号',
-    course_code VARCHAR(50) NOT NULL COMMENT '课程代码 kcdm',
-    course_class_code VARCHAR(50) COMMENT '课程班号 kcbh',
-    academic_year VARCHAR(20) NOT NULL DEFAULT '' COMMENT '学年（NULL 替换为空串以配合 UNIQUE 索引）',
-    semester VARCHAR(10) NOT NULL DEFAULT '' COMMENT '学期（秋/春），NULL 替换为空串',
-    source_type VARCHAR(20) NOT NULL DEFAULT 'CHAIN_SYNC' COMMENT '来源: CHAIN_SYNC / MANUAL',
-    sync_time DATETIME NOT NULL COMMENT '同步时间',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_teacher_student_course (teacher_id, student_id, course_code, academic_year, semester),
-    INDEX idx_teacher (teacher_id),
-    INDEX idx_student (student_id),
-    INDEX idx_course (course_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='教师-学生绑定关系表';
-
--- ============================================================================
--- 4. Feature Toggle / 学院链式配置 seed
--- ============================================================================
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('feature_toggle', 'ops.school_data_chain_fetch', 'true', '运维端按学院链式拉取功能开关', 0),
 ('feature_toggle', 'student.lazy_data_sync', 'true', '学生端按需 Lazy 同步四六级/课表', 0),
@@ -2412,6 +2589,7 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('school_data', 'sync_college_chain_colleges', '外国语学院', '链式刷新白名单（逗号分隔学院名）', 0),
 ('school_data', 'sync_college_chain_match_mode', 'eq', '学院名匹配模式（eq=精确 / contains=包含）', 0);
 
+-- 清理历史旧 key (无下划线)
 DELETE FROM `system_config`
 WHERE `config_group` = 'feature_toggle'
   AND `config_key` IN (
@@ -2422,6 +2600,7 @@ WHERE `config_group` = 'feature_toggle'
       'page_user_tests'
   );
 
+-- 标准化 description 与 value
 UPDATE `system_config`
 SET `description` = CASE `config_key`
         WHEN 'ops.school_data_browser' THEN '运维端学校数据浏览功能（行政班、课程、教学班等）'
@@ -2453,438 +2632,119 @@ WHERE `config_group` = 'feature_toggle'
       'sso.auto_grant_teacher'
   );
 
--- Part 4: 相似度矩阵表
--- ─────────────────────────────────────────────
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 9: 字段映射补充 (原 V12 末尾)
+--   - administrative_class 学院代码/名称补充 (YXDM/YXMC, 历史映射替换为新映射)
+--   - teaching_plans 专业代码/名称补充 (zybh/zymc)
+-- 注: PDF 字段实测 YXDM/YXMC 更准确, 旧 SSXYBM/SSXYMC 关闭
+-- ═══════════════════════════════════════════════════════════════════════
 
-SET NAMES utf8mb4;
-SET CHARACTER SET utf8mb4;
+UPDATE field_mappings
+SET is_active = 0
+WHERE data_source = 'administrative_class'
+  AND source_field IN ('SSXYBM', 'SSXYMC', '所属学院编码', '所属学院名称');
 
--- ═══════════════════════════════════════════════════════════════
--- 1. text_similarity_matrix — 文章相似度矩阵
--- ═══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `text_id` BIGINT NOT NULL COMMENT '文章ID',
-    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
-    INDEX `idx_text_id` (`text_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵';
-
--- ═══════════════════════════════════════════════════════════════
--- 2. text_similarity_matrix_tmp — 文章相似度矩阵临时表
---    表结构与 text_similarity_matrix 完全一致
--- ═══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `text_id` BIGINT NOT NULL COMMENT '文章ID',
-    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
-    INDEX `idx_text_id` (`text_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
-
--- ═══════════════════════════════════════════════════════════════
--- 3. user_similarity_matrix — 用户相似度矩阵
--- ═══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS `user_similarity_matrix` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `user_id` BIGINT NOT NULL COMMENT '用户ID',
-    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵';
-
--- ═══════════════════════════════════════════════════════════════
--- 4. user_similarity_matrix_tmp — 用户相似度矩阵临时表
---    表结构与 user_similarity_matrix 完全一致
--- ═══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS `user_similarity_matrix_tmp` (
-    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    `user_id` BIGINT NOT NULL COMMENT '用户ID',
-    `similar_user_id` BIGINT NOT NULL COMMENT '相似用户ID',
-    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY `uk_user_pair` (`user_id`, `similar_user_id`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_similarity` (`similarity` DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户相似度矩阵临时表';
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, converter_config, default_value, is_required, sort_order, is_active, remark) VALUES
+('administrative_class', 'YXDM',       'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（英文缩写）'),
+('administrative_class', '学院代码',   'college_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 4, 1, '学院代码（中文）'),
+('administrative_class', 'YXMC',       'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（英文缩写）'),
+('administrative_class', '学院名称',   'college_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 5, 1, '学院名称（中文）'),
+('administrative_class', 'ZYDM',       'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（英文缩写）'),
+('administrative_class', '专业代码',   'major_code',   'STRING', 'STRING', 'NONE', NULL, NULL, 0, 9, 1, '专业代码（中文）'),
+('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
+('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
 
 
--- ─────────────────────────────────────────────
--- Part 5: 相似度矩阵补充索引
--- ─────────────────────────────────────────────
+-- V9__media_transcoding.sql
 
-SET @idx_text_similarity_exists = (
-    SELECT COUNT(*) FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_similarity_matrix' AND INDEX_NAME = 'idx_similar_text_id'
-);
-SET @idx_text_similarity_sql = IF(
-    @idx_text_similarity_exists = 0,
-    'ALTER TABLE `text_similarity_matrix` ADD INDEX `idx_similar_text_id` (`similar_text_id`)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @idx_text_similarity_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ═══════════════════════════════════════════════════════════════════════
+-- V9: 媒体转码与内容大小限制
+-- 合并自:
+--   - V44 (media_transcoding)    media 表转码状态字段 (transcode_status/error/codec)
+--   - V46 (content_size_limits)  content_limits 配置初始值 (image/video/excel/backup_import)
+--
+-- 历史说明:
+--   - V44 为 media 表新增转码字段, 用于异步 ffmpeg 转码流水线
+--     (移动端兼容性, AV1/HEVC/VP9 → H.264), 默认 SKIPPED
+--   - V46 引入 content_limits 分组配置: 图片/视频/Excel 上传大小初始值
+-- ═══════════════════════════════════════════════════════════════════════
 
-SET @idx_text_similarity_tmp_exists = (
-    SELECT COUNT(*) FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_similarity_matrix_tmp' AND INDEX_NAME = 'idx_similar_text_id'
-);
-SET @idx_text_similarity_tmp_sql = IF(
-    @idx_text_similarity_tmp_exists = 0,
-    'ALTER TABLE `text_similarity_matrix_tmp` ADD INDEX `idx_similar_text_id` (`similar_text_id`)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @idx_text_similarity_tmp_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 1: media 表转码状态字段 (原 V44)
+--   - transcode_status  VARCHAR(20)  NOT NULL DEFAULT 'SKIPPED'
+--   - transcode_error   VARCHAR(500) NULL
+--   - original_codec    VARCHAR(50)  NULL
+-- 索引: idx_transcode_status
+-- ═══════════════════════════════════════════════════════════════════════
 
-SET @idx_user_similarity_exists = (
-    SELECT COUNT(*) FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_similarity_matrix' AND INDEX_NAME = 'idx_similar_user_id'
-);
-SET @idx_user_similarity_sql = IF(
-    @idx_user_similarity_exists = 0,
-    'ALTER TABLE `user_similarity_matrix` ADD INDEX `idx_similar_user_id` (`similar_user_id`)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @idx_user_similarity_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @idx_user_similarity_tmp_exists = (
-    SELECT COUNT(*) FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_similarity_matrix_tmp' AND INDEX_NAME = 'idx_similar_user_id'
-);
-SET @idx_user_similarity_tmp_sql = IF(
-    @idx_user_similarity_tmp_exists = 0,
-    'ALTER TABLE `user_similarity_matrix_tmp` ADD INDEX `idx_similar_user_id` (`similar_user_id`)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @idx_user_similarity_tmp_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- Part 6: 优化用户文本交互视图
--- ─────────────────────────────────────────────
-
--- 源表：
---   - user_text_reads       (user_id,   text_id)
---   - text_learning_records (student_id,text_id)  student_id 对应 user_id
---   - article_favorites     (student_id,text_id)  同上
---   - underlines            (user_id,   text_id)
--- ============================================================================
-
-SET NAMES utf8mb4;
-
-CREATE OR REPLACE VIEW `v_user_text_interaction_scores` AS
-WITH user_text_pairs AS (
-    SELECT user_id,    text_id FROM user_text_reads
-    UNION
-    SELECT student_id, text_id FROM text_learning_records
-    UNION
-    SELECT student_id, text_id FROM article_favorites
-    UNION
-    SELECT user_id,    text_id FROM underlines
-)
-SELECT
-    utp.user_id                                    AS user_id,
-    utp.text_id                                    AS text_id,
-
-    COALESCE(utr.read_at IS NOT NULL, 0)           AS w_read,
-    COALESCE(tlr.is_completed = 1, 0)              AS w_complete,
-    COALESCE(af.id IS NOT NULL, 0)                 AS w_favorite,
-    LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) AS w_duration,
-    COALESCE(sr.correct_rate, 0.0)                 AS w_accuracy,
-    LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) AS w_underline,
-
-    LEAST(
-        COALESCE(utr.read_at IS NOT NULL, 0) * 0.2
-        + COALESCE(tlr.is_completed = 1, 0) * 0.2
-        + COALESCE(af.id IS NOT NULL, 0) * 0.3
-        + LEAST(COALESCE(tlr.duration_seconds, 0) / 600.0, 1.0) * 0.1
-        + COALESCE(sr.correct_rate, 0.0) * 0.1
-        + LEAST(COALESCE(ul.underline_count, 0) / 10.0, 1.0) * 0.1,
-        1.0
-    )                                              AS interaction_score
-
-FROM user_text_pairs utp
-INNER JOIN `users` u ON u.id = utp.user_id AND u.role IN ('STUDENT', 'USER')
-INNER JOIN `texts` t ON t.id = utp.text_id AND t.deleted = 0
-LEFT JOIN `user_text_reads` utr
-    ON utr.user_id = utp.user_id AND utr.text_id = utp.text_id
-LEFT JOIN `text_learning_records` tlr
-    ON tlr.student_id = utp.user_id AND tlr.text_id = utp.text_id
-LEFT JOIN `article_favorites` af
-    ON af.student_id = utp.user_id AND af.text_id = utp.text_id
-LEFT JOIN (
-    SELECT
-        sr.student_id,
-        lr.text_id,
-        CAST(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
-            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.correct_count'), 0) ELSE 0 END) AS DECIMAL(5,2))
-        / NULLIF(SUM(CASE WHEN sr.score_type = 'ASSIGNMENT'
-            THEN COALESCE(JSON_EXTRACT(sr.score_details, '$.total_count'), 0) ELSE 0 END), 0) AS correct_rate
-    FROM score_records sr
-    LEFT JOIN learning_records lr ON lr.assignment_id = sr.assignment_id
-    WHERE sr.score_type = 'ASSIGNMENT'
-    GROUP BY sr.student_id, lr.text_id
-) sr ON sr.student_id = utp.user_id AND sr.text_id = utp.text_id
-LEFT JOIN (
-    SELECT user_id, text_id, COUNT(*) AS underline_count
-    FROM underlines
-    GROUP BY user_id, text_id
-) ul ON ul.user_id = utp.user_id AND ul.text_id = utp.text_id;
-
--- ═══════════════════════════════════════════════════════════════
--- V23: 内容标签表（管理员预设）
--- ═══════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS `content_tags` (
-    `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `name` VARCHAR(50) NOT NULL COMMENT '标签名称',
-    `color` VARCHAR(20) DEFAULT NULL COMMENT '标签颜色（如 #409EFF）',
-    `sort_order` INT DEFAULT 0 COMMENT '排序号，值越小越靠前',
-    `deleted` TINYINT DEFAULT 0 COMMENT '是否删除 0-未删除 1-已删除',
-    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_name` (`name`),
-    KEY `idx_sort_order` (`sort_order`),
-    KEY `idx_deleted` (`deleted`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='内容标签表（管理员预设）';
-
--- 预置常用标签
-INSERT IGNORE INTO `content_tags` (`name`, `color`, `sort_order`) VALUES
-    ('日常对话', '#67C23A', 1),
-    ('商务英语', '#409EFF', 2),
-    ('学术英语', '#E6A23C', 3),
-    ('科技文章', '#909399', 4),
-    ('新闻资讯', '#F56C6C', 5),
-    ('文学小说', '#9B59B6', 6);
-
--- ════════════════════════════════════════════════════════════════
-
--- V21__add_display_fields_to_teacher_student_binding.sql
--- 为 teacher_student_binding 表添加显示字段（教师姓名、学生姓名、学院名称、课程名称）
-
-DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields$$
-CREATE PROCEDURE add_teacher_student_binding_display_fields()
+DROP PROCEDURE IF EXISTS _v9_add_col_media_transcode;
+CREATE PROCEDURE _v9_add_col_media_transcode()
 BEGIN
-    -- Add teacher_name column
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'teacher_student_binding'
-          AND COLUMN_NAME = 'teacher_name'
-    ) THEN
-        ALTER TABLE teacher_student_binding
-            ADD COLUMN teacher_name VARCHAR(100) NULL COMMENT '教师姓名' AFTER teacher_id;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'media'
+                     AND COLUMN_NAME = 'transcode_status') THEN
+        ALTER TABLE media ADD COLUMN transcode_status VARCHAR(20)
+            NOT NULL DEFAULT 'SKIPPED'
+            COMMENT '转码状态: SKIPPED|PENDING|PROCESSING|SUCCESS|FAILED';
     END IF;
-
-    -- Add student_name column
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'teacher_student_binding'
-          AND COLUMN_NAME = 'student_name'
-    ) THEN
-        ALTER TABLE teacher_student_binding
-            ADD COLUMN student_name VARCHAR(100) NULL COMMENT '学生姓名' AFTER student_id;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'media'
+                     AND COLUMN_NAME = 'transcode_error') THEN
+        ALTER TABLE media ADD COLUMN transcode_error VARCHAR(500) NULL
+            COMMENT '转码失败原因（最后 500 字 stderr 摘要）';
     END IF;
-
-    -- Add college_name column
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'teacher_student_binding'
-          AND COLUMN_NAME = 'college_name'
-    ) THEN
-        ALTER TABLE teacher_student_binding
-            ADD COLUMN college_name VARCHAR(100) NULL COMMENT '学院名称' AFTER student_id;
-    END IF;
-
-    -- Add course_name column
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'teacher_student_binding'
-          AND COLUMN_NAME = 'course_name'
-    ) THEN
-        ALTER TABLE teacher_student_binding
-            ADD COLUMN course_name VARCHAR(200) NULL COMMENT '课程名称' AFTER course_code;
-    END IF;
-
-    -- Add index on college_name
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'teacher_student_binding'
-          AND INDEX_NAME = 'idx_college_name'
-    ) THEN
-        CREATE INDEX idx_college_name ON teacher_student_binding(college_name);
-    END IF;
-END$$
-
-CALL add_teacher_student_binding_display_fields()$$
-DROP PROCEDURE IF EXISTS add_teacher_student_binding_display_fields$$
-
--- ════════════════════════════════════════════════════════════════
-
--- V16__enable_sso_auto_grant.sql
--- 默认开启 SSO 自动授权功能开关
-
-UPDATE `system_config`
-SET `config_value` = 'true'
-WHERE `config_group` = 'feature_toggle'
-  AND `config_key` IN ('sso.auto_grant_student', 'sso.auto_grant_teacher');
-
-INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
-('feature_toggle', 'sso.auto_grant_student', 'true', 'SSO 学号匹配 school_student 自动授权 STUDENT', 0),
-('feature_toggle', 'sso.auto_grant_teacher', 'true', 'SSO 工号匹配 school_teacher 自动授权 TEACHER', 0);
-
--- ════════════════════════════════════════════════════════════════
-
--- V17__add_reading_count.sql
--- 为 user_text_reads 表添加阅读次数字段，为 users 表添加阅读统计字段
-
-DROP PROCEDURE IF EXISTS _add_reading_count_cols$$
-CREATE PROCEDURE _add_reading_count_cols()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'user_text_reads'
-          AND COLUMN_NAME = 'read_count'
-    ) THEN
-        ALTER TABLE user_text_reads ADD COLUMN read_count INT NOT NULL DEFAULT 1 COMMENT '阅读次数';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'user_text_reads'
-          AND COLUMN_NAME = 'last_read_at'
-    ) THEN
-        ALTER TABLE user_text_reads ADD COLUMN last_read_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '最后阅读时间';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'users'
-          AND COLUMN_NAME = 'read_article_count'
-    ) THEN
-        ALTER TABLE users ADD COLUMN read_article_count INT NOT NULL DEFAULT 0 COMMENT '已读文章数';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'users'
-          AND COLUMN_NAME = 'read_total_times'
-    ) THEN
-        ALTER TABLE users ADD COLUMN read_total_times INT NOT NULL DEFAULT 0 COMMENT '累计阅读次数';
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'media'
+                     AND COLUMN_NAME = 'original_codec') THEN
+        ALTER TABLE media ADD COLUMN original_codec VARCHAR(50) NULL
+            COMMENT '上传时探测到的原始视频编码（av1/hevc/h264/vp9 等）';
     END IF;
 END;
+CALL _v9_add_col_media_transcode();
+DROP PROCEDURE IF EXISTS _v9_add_col_media_transcode;
 
-CALL _add_reading_count_cols()$$
-DROP PROCEDURE IF EXISTS _add_reading_count_cols$$
-
--- ════════════════════════════════════════════════════════════════
-
--- V18__add_texts_read_count.sql
--- 为 texts 表添加 read_count 字段（修复 Entity 与 DB Schema 不一致）
-
-DROP PROCEDURE IF EXISTS _add_texts_read_count$$
-CREATE PROCEDURE _add_texts_read_count()
+DROP PROCEDURE IF EXISTS _v9_add_idx_media_transcode;
+CREATE PROCEDURE _v9_add_idx_media_transcode()
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'texts'
-          AND COLUMN_NAME = 'read_count'
-    ) THEN
-        ALTER TABLE texts ADD COLUMN read_count INT NOT NULL DEFAULT 0 COMMENT '阅读次数' AFTER like_count;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'media'
+                     AND INDEX_NAME = 'idx_transcode_status') THEN
+        ALTER TABLE media ADD INDEX idx_transcode_status (transcode_status);
     END IF;
-END$$
+END;
+CALL _v9_add_idx_media_transcode();
+DROP PROCEDURE IF EXISTS _v9_add_idx_media_transcode;
 
-CALL _add_texts_read_count()$$
-DROP PROCEDURE IF EXISTS _add_texts_read_count$$
+-- ═══════════════════════════════════════════════════════════════════════
+-- Part 2: content_limits 分组 seed (原 V46)
+--   - 图片上传大小限制 (全局默认)
+--   - 视频上传大小限制 (全局默认)
+--   - Excel 批量导入大小限制
+--   - 备份文件导入大小限制 (2GB，与 nginx client_max_body_size 2048M 对齐)
+-- ═══════════════════════════════════════════════════════════════════════
 
--- ════════════════════════════════════════════════════════════════
-
-
--- V22__fix_reading_count_columns.sql
--- 补齐 read_count 相关字段（V17 遗漏 texts.read_count，且历史 DB 未应用 V17 的 user_text_reads 部分）
-
-DROP PROCEDURE IF EXISTS _fix_reading_count_cols$$
-CREATE PROCEDURE _fix_reading_count_cols()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'texts'
-          AND COLUMN_NAME = 'read_count'
-    ) THEN
-        ALTER TABLE texts ADD COLUMN read_count INT NOT NULL DEFAULT 0 COMMENT '阅读次数';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'user_text_reads'
-          AND COLUMN_NAME = 'read_count'
-    ) THEN
-        ALTER TABLE user_text_reads ADD COLUMN read_count INT NOT NULL DEFAULT 1 COMMENT '阅读次数';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'user_text_reads'
-          AND COLUMN_NAME = 'last_read_at'
-    ) THEN
-        ALTER TABLE user_text_reads ADD COLUMN last_read_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '最后阅读时间';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'users'
-          AND COLUMN_NAME = 'read_article_count'
-    ) THEN
-        ALTER TABLE users ADD COLUMN read_article_count INT NOT NULL DEFAULT 0 COMMENT '已读文章数';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'users'
-          AND COLUMN_NAME = 'read_total_times'
-    ) THEN
-        ALTER TABLE users ADD COLUMN read_total_times INT NOT NULL DEFAULT 0 COMMENT '累计阅读次数';
-    END IF;
-END$$
-
-CALL _fix_reading_count_cols()$$
-DROP PROCEDURE IF EXISTS _fix_reading_count_cols$$
-
--- ════════════════════════════════════════════════════════════════
+INSERT IGNORE INTO system_config (config_group, config_key, config_value, description, is_secret) VALUES
+  ('content_limits', 'upload.content_size.image',              '10MB',   '图片上传大小限制（全局默认）', 0),
+  ('content_limits', 'upload.content_size.video',              '512MB',  '视频上传大小限制（全局默认）', 0),
+  ('content_limits', 'upload.content_size.excel_import',       '10MB',   'Excel批量导入大小限制',        0),
+  ('content_limits', 'upload.content_size.backup_import',      '2048MB', '备份文件导入大小限制',         0);
 
 
--- V26__text_exercises_table.sql
--- 补建 text_exercises 表（历史手动建表，从未纳入迁移脚本）
+-- V10__ai_quiz.sql
+
+-- ═══════════════════════════════════════════════════════════════
+-- V10: AI 出题功能整合
+-- 整合自:
+--   V23__ai_quiz_support.sql        (text_exercises + ai_quiz_session)
+--   V24__hiagent_quiz_credentials.sql (system_config seed)
+--   V25__exercise_options_table.sql (exercise_options)
+--   V26__text_exercises_table.sql   (NO-OP — logic moved to V23, skipped)
+--   V30__student_ai_quiz_records.sql (student_ai_quiz_attempts/records)
+-- ═══════════════════════════════════════════════════════════════
+
+-- ── Part 1: text_exercises 自包含建表（V23 整合） ─────────────────────────────
+-- 生产已有则跳过；fresh DB 测试环境则创建
+
 CREATE TABLE IF NOT EXISTS `text_exercises` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `text_id` BIGINT NOT NULL COMMENT '课文ID',
@@ -2900,20 +2760,18 @@ CREATE TABLE IF NOT EXISTS `text_exercises` (
     INDEX `idx_order_num` (`order_num`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课文习题表';
 
--- V23__ai_quiz_support.sql
--- AI 出题功能支持：text_exercises 加字段 + 新建 ai_quiz_session 表
+-- ── Part 2: text_exercises AI 字段幂等添加（V23 整合） ─────────────────────────
 
-DROP PROCEDURE IF EXISTS _ai_quiz_support$$
-CREATE PROCEDURE _ai_quiz_support()
+DROP PROCEDURE IF EXISTS _v10_ai_quiz_text_exercise_cols;
+CREATE PROCEDURE _v10_ai_quiz_text_exercise_cols()
 BEGIN
-    -- text_exercises 表添加新字段
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'text_exercises'
           AND COLUMN_NAME = 'question_type'
     ) THEN
-        ALTER TABLE text_exercises ADD COLUMN question_type VARCHAR(50) DEFAULT 'MULTIPLE_CHOICE' COMMENT '题目类型';
+        ALTER TABLE text_exercises ADD COLUMN question_type VARCHAR(50) DEFAULT 'MULTIPLE_CHOICE' COMMENT '题目类型' AFTER exercise_type;
     END IF;
 
     IF NOT EXISTS (
@@ -2922,7 +2780,7 @@ BEGIN
           AND TABLE_NAME = 'text_exercises'
           AND COLUMN_NAME = 'analysis'
     ) THEN
-        ALTER TABLE text_exercises ADD COLUMN analysis TEXT COMMENT '题目解析';
+        ALTER TABLE text_exercises ADD COLUMN analysis TEXT COMMENT '题目解析' AFTER question_type;
     END IF;
 
     IF NOT EXISTS (
@@ -2931,37 +2789,30 @@ BEGIN
           AND TABLE_NAME = 'text_exercises'
           AND COLUMN_NAME = 'distractor_analysis'
     ) THEN
-        ALTER TABLE text_exercises ADD COLUMN distractor_analysis JSON COMMENT '干扰项分析';
+        ALTER TABLE text_exercises ADD COLUMN distractor_analysis JSON COMMENT '干扰项分析' AFTER analysis;
     END IF;
+END;
+CALL _v10_ai_quiz_text_exercise_cols();
+DROP PROCEDURE IF EXISTS _v10_ai_quiz_text_exercise_cols;
 
-    -- AI 出题会话表
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.TABLES
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'ai_quiz_session'
-    ) THEN
-        CREATE TABLE ai_quiz_session (
-            id BIGINT AUTO_INCREMENT PRIMARY KEY,
-            text_id BIGINT NOT NULL COMMENT '文章ID',
-            difficulty VARCHAR(50) COMMENT '难度级别',
-            passage_analysis JSON COMMENT '文章分析',
-            quality_metrics JSON COMMENT '质量指标',
-            question_count INT DEFAULT 0 COMMENT '生成题目数量',
-            ai_service VARCHAR(50) COMMENT 'AI服务类型',
-            ai_model VARCHAR(100) COMMENT 'AI模型名称',
-            created_by BIGINT COMMENT '创建者ID',
-            created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-            INDEX idx_text_id (text_id),
-            INDEX idx_created_by (created_by)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI出题会话';
-    END IF;
-END$$
+-- ── Part 3: ai_quiz_session 表（V23 整合） ────────────────────────────────────
 
-CALL _ai_quiz_support()$$
-DROP PROCEDURE IF EXISTS _ai_quiz_support$$
+CREATE TABLE IF NOT EXISTS ai_quiz_session (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    text_id BIGINT NOT NULL COMMENT '文章ID',
+    difficulty VARCHAR(50) COMMENT '难度级别',
+    passage_analysis JSON COMMENT '文章分析',
+    quality_metrics JSON COMMENT '质量指标',
+    question_count INT DEFAULT 0 COMMENT '生成题目数量',
+    ai_service VARCHAR(50) COMMENT 'AI服务类型',
+    ai_model VARCHAR(100) COMMENT 'AI模型名称',
+    created_by BIGINT COMMENT '创建者ID',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_text_id (text_id),
+    INDEX idx_created_by (created_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI出题会话';
 
--- V24__hiagent_quiz_credentials.sql
--- HiAgent 出题凭证配置项（独立于改写/问答凭证）
+-- ── Part 4: HiAgent 出题凭证 seed（V24 整合） ────────────────────────────────
 
 INSERT INTO system_config (config_group, config_key, config_value, description, is_secret)
 VALUES
@@ -2969,9 +2820,7 @@ VALUES
   ('ai_config', 'hiagent_quiz_app_id', '', 'HiAgent 出题应用 App ID（独立于改写/问答凭证）', 0)
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
-
--- V25__exercise_options_table.sql
--- 补建 exercise_options 表（AI 出题选项存储，V23 遗漏）
+-- ── Part 5: exercise_options 表（V25 整合） ───────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS `exercise_options` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -2987,39 +2836,164 @@ CREATE TABLE IF NOT EXISTS `exercise_options` (
   CONSTRAINT `exercise_options_ibfk_1` FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='习题选项表';
 
--- V27__ai_conversation_persistence.sql
--- AI 对话持久化与分享
+-- 注：V26 已 NO-OP（text_exercises 建表逻辑已合并到 Part 1），此处不再单独处理
+
+-- ── Part 6: student_ai_quiz_attempts 做题尝试汇总表（V30 整合） ──────────────
+
+CREATE TABLE IF NOT EXISTS `student_ai_quiz_attempts` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '尝试ID',
+
+    `student_id`    BIGINT NOT NULL COMMENT '学生ID（用户隔离）',
+    `text_id`       BIGINT NOT NULL COMMENT '文章ID',
+    `session_id`    BIGINT NULL     COMMENT 'AI 出题会话ID (ai_quiz_session.id)',
+    `assignment_id` BIGINT NULL     COMMENT '任务ID（可选）',
+
+    `total_questions`    INT          NOT NULL DEFAULT 0    COMMENT '题目总数',
+    `correct_count`      INT          NOT NULL DEFAULT 0    COMMENT '答对数',
+    `score`              DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '得分百分比(0-100)',
+    `total_time_seconds` INT          NOT NULL DEFAULT 0    COMMENT '总用时(秒)',
+
+    `submitted_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '提交时间',
+    `created_time`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    INDEX `idx_aiqa_student`     (`student_id`),
+    INDEX `idx_aiqa_text`        (`text_id`),
+    INDEX `idx_aiqa_student_text`(`student_id`, `text_id`),
+    INDEX `idx_aiqa_submitted`   (`submitted_time`),
+    INDEX `idx_aiqa_session`     (`session_id`),
+
+    CONSTRAINT `fk_aiqa_student` FOREIGN KEY (`student_id`)    REFERENCES `users`(`id`)            ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqa_text`    FOREIGN KEY (`text_id`)       REFERENCES `texts`(`id`)            ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqa_session` FOREIGN KEY (`session_id`)    REFERENCES `ai_quiz_session`(`id`)  ON DELETE SET NULL,
+    CONSTRAINT `fk_aiqa_asn`     FOREIGN KEY (`assignment_id`) REFERENCES `assignments`(`id`)      ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生 AI 题做题尝试汇总';
+
+-- ── Part 7: student_ai_quiz_records 答题明细表（V30 整合） ────────────────────
+
+CREATE TABLE IF NOT EXISTS `student_ai_quiz_records` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '明细ID',
+
+    `attempt_id` BIGINT NOT NULL COMMENT '做题尝试ID',
+
+    -- 冗余字段（避免管理员"按学生/按文章"查询时强制 JOIN attempts）
+    `student_id` BIGINT NOT NULL COMMENT '学生ID（用户隔离）',
+    `text_id`    BIGINT NOT NULL COMMENT '文章ID',
+
+    `exercise_id` BIGINT NULL COMMENT '题目ID（text_exercises.id，regenerate 时可能被删）',
+
+    -- 题目快照（regenerate 删原题后历史仍可读）
+    `question_snapshot`  TEXT        NOT NULL COMMENT '题干快照',
+    `options_snapshot`   JSON        NULL     COMMENT '选项快照 [{"key":"A","content":"...","isCorrect":1},...]',
+    `correct_answer`     VARCHAR(50) NULL     COMMENT '正确答案 key (A/B/C/D)',
+    `analysis_snapshot`  TEXT        NULL     COMMENT '解析快照',
+
+    -- 学生答题
+    `user_answer`        VARCHAR(50) NOT NULL COMMENT '学生答案 key',
+    `is_correct`         TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '是否正确(0/1)',
+    `time_spent_seconds` INT         NULL     COMMENT '本题用时(秒)',
+    `question_order`     INT         NULL     COMMENT '题号（展示顺序）',
+
+    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    INDEX `idx_aiqr_attempt`     (`attempt_id`),
+    INDEX `idx_aiqr_student`     (`student_id`),
+    INDEX `idx_aiqr_text`        (`text_id`),
+    INDEX `idx_aiqr_student_text`(`student_id`, `text_id`),
+    INDEX `idx_aiqr_exercise`    (`exercise_id`),
+
+    CONSTRAINT `fk_aiqr_attempt` FOREIGN KEY (`attempt_id`)  REFERENCES `student_ai_quiz_attempts`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqr_student` FOREIGN KEY (`student_id`)  REFERENCES `users`(`id`)                   ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqr_text`    FOREIGN KEY (`text_id`)     REFERENCES `texts`(`id`)                   ON DELETE CASCADE,
+    CONSTRAINT `fk_aiqr_ex`      FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises`(`id`)          ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生 AI 题答题明细';
+
+
+-- V11__add_category_to_texts.sql
+
+-- 添加课文类别字段（幂等）
+DROP PROCEDURE IF EXISTS _v11_add_category_to_texts;
+CREATE PROCEDURE _v11_add_category_to_texts()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'texts'
+          AND COLUMN_NAME = 'category'
+    ) THEN
+        ALTER TABLE texts ADD COLUMN category VARCHAR(50) DEFAULT NULL COMMENT '课文类别' AFTER tags;
+    END IF;
+END;
+CALL _v11_add_category_to_texts();
+DROP PROCEDURE IF EXISTS _v11_add_category_to_texts;
+
+
+-- V11__ai_conversation_feedback.sql
+
+-- ═══════════════════════════════════════════════════════════════
+-- V11: AI 对话持久化 + 反馈 + text_learning_records 版本追踪
+-- 整合自:
+--   V27__ai_conversation_persistence.sql           (ai_conversations/messages/shares)
+--   V31__add_content_version_to_text_learning_records.sql
+--     (text_learning_records.content_version
+--      + vocabulary_books.source_type
+--      — 已是与 V31 source_type 合并后的最终版本)
+--   V43__ai_feedback.sql                          (ai_feedback 表)
+-- ═══════════════════════════════════════════════════════════════
+
+-- ── Part 1: ai_conversations 对话会话表（V27 整合） ───────────────────────────
 
 CREATE TABLE IF NOT EXISTS ai_conversations (
     id           BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id      BIGINT       NOT NULL,
-    title        VARCHAR(200) COMMENT '对话标题',
+    title        VARCHAR(200) COMMENT '对话标题（自动生成或用户编辑）',
     message_count INT         DEFAULT 0,
     created_time DATETIME     DEFAULT CURRENT_TIMESTAMP,
     updated_time DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted      TINYINT      DEFAULT 0,
     INDEX idx_user_time (user_id, updated_time),
     FOREIGN KEY (user_id) REFERENCES users(id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 对话会话';
+
+-- ── Part 2: ai_conversations 幂等列补齐（V27 整合字段，外加 charset/collation） ─
+
+DROP PROCEDURE IF EXISTS _v11_ai_conversations_charset;
+CREATE PROCEDURE _v11_ai_conversations_charset()
+BEGIN
+    -- 表 charset/collation 幂等修正（生产历史手动建表可能缺 utf8mb4）
+    IF EXISTS (
+        SELECT 1 FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'ai_conversations'
+    ) THEN
+        ALTER TABLE ai_conversations
+            CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    END IF;
+END;
+CALL _v11_ai_conversations_charset();
+DROP PROCEDURE IF EXISTS _v11_ai_conversations_charset;
+
+-- ── Part 3: ai_messages 对话消息表（V27 整合） ───────────────────────────────
 
 CREATE TABLE IF NOT EXISTS ai_messages (
     id              BIGINT PRIMARY KEY AUTO_INCREMENT,
     conversation_id BIGINT       NOT NULL,
     role            ENUM('user','assistant') NOT NULL,
     content         TEXT         NOT NULL,
-    selected_text   TEXT,
-    article_context TEXT,
+    selected_text   TEXT         COMMENT '用户选中的文本（仅 user 消息）',
+    article_context TEXT         COMMENT '文章上下文（仅 user 消息）',
     created_time    DATETIME     DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_conversation (conversation_id, created_time),
     FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 对话消息';
+
+-- ── Part 4: conversation_shares 对话分享表（V27 整合） ────────────────────────
 
 CREATE TABLE IF NOT EXISTS conversation_shares (
     id              BIGINT PRIMARY KEY AUTO_INCREMENT,
     conversation_id BIGINT       NOT NULL,
-    share_token     VARCHAR(64)  UNIQUE NOT NULL,
-    access_password VARCHAR(128),
-    expires_at      DATETIME,
+    share_token     VARCHAR(64)  UNIQUE NOT NULL COMMENT '分享令牌',
+    access_password VARCHAR(128) COMMENT '访问密码（BCrypt 加密，可选）',
+    expires_at      DATETIME     COMMENT '过期时间（NULL = 永久）',
     view_count      INT          DEFAULT 0,
     created_by      BIGINT       NOT NULL,
     created_time    DATETIME     DEFAULT CURRENT_TIMESTAMP,
@@ -3027,98 +3001,82 @@ CREATE TABLE IF NOT EXISTS conversation_shares (
     INDEX idx_conversation (conversation_id),
     FOREIGN KEY (conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 对话分享';
 
--- ═══════════════════════════════════════════════════════════════
--- V28__collaborative_annotations.sql
--- 协作式互动阅读 — 公共批注 + 点赞
--- ═══════════════════════════════════════════════════════════════
+-- ── Part 5: text_learning_records.content_version（V31 Part 1 整合） ──────────
+-- 记录学生阅读的内容版本（CET-4 / CET-6 / Academic / Chinese Parallel）
 
-CREATE TABLE IF NOT EXISTS text_annotations (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    text_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    selected_text TEXT NOT NULL,
-    note TEXT NOT NULL,
-    upvote_count INT DEFAULT 0,
-    deleted TINYINT DEFAULT 0,
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_text_id (text_id),
-    INDEX idx_user_id (user_id),
-    INDEX idx_text_deleted (text_id, deleted),
-    CONSTRAINT fk_ann_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE,
-    CONSTRAINT fk_ann_user FOREIGN KEY (user_id) REFERENCES users(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS annotation_upvotes (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    annotation_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_ann_user (annotation_id, user_id),
-    CONSTRAINT fk_upvote_ann FOREIGN KEY (annotation_id) REFERENCES text_annotations(id) ON DELETE CASCADE,
-    CONSTRAINT fk_upvote_user FOREIGN KEY (user_id) REFERENCES users(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ═══════════════════════════════════════════════════════════════
--- V29__annotation_visibility.sql
--- 批注可见性 — 1=公开（默认），0=仅自己可见
--- 注: MySQL 8 不支持 ALTER TABLE ... ADD COLUMN IF NOT EXISTS（仅 MariaDB），
---     故改用 information_schema + 动态 SQL 的幂等模式。
--- ═══════════════════════════════════════════════════════════════
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS
-                   WHERE TABLE_SCHEMA = DATABASE()
-                     AND TABLE_NAME = 'text_annotations'
-                     AND COLUMN_NAME = 'visibility');
-SET @col_sql = IF(@col_exists = 0,
-    'ALTER TABLE text_annotations ADD COLUMN visibility TINYINT NOT NULL DEFAULT 1 COMMENT ''可见性: 1=公开, 0=仅自己''',
-    'SELECT 1');
-PREPARE stmt FROM @col_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
--- V27__media_transcoding.sql
--- media 表新增异步转码字段（移动端 AV1/HEVC/VP9 → H.264 流水线）
-
-DROP PROCEDURE IF EXISTS _add_col_media_transcode$$
-CREATE PROCEDURE _add_col_media_transcode()
+DROP PROCEDURE IF EXISTS _v11_tlr_content_version;
+CREATE PROCEDURE _v11_tlr_content_version()
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE table_schema=DATABASE() AND table_name='media'
-                     AND column_name='transcode_status') THEN
-        ALTER TABLE media ADD COLUMN transcode_status VARCHAR(20)
-            NOT NULL DEFAULT 'SKIPPED'
-            COMMENT '转码状态: SKIPPED|PENDING|PROCESSING|SUCCESS|FAILED';
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'text_learning_records'
+          AND COLUMN_NAME = 'content_version'
+    ) THEN
+        ALTER TABLE text_learning_records ADD COLUMN content_version VARCHAR(20) DEFAULT NULL
+            COMMENT 'Content version: original/cet4/cet6/academic/chinese_parallel'
+            AFTER text_id;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE table_schema=DATABASE() AND table_name='media'
-                     AND column_name='transcode_error') THEN
-        ALTER TABLE media ADD COLUMN transcode_error VARCHAR(500) NULL
-            COMMENT '转码失败原因（最后 500 字 stderr 摘要）';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE table_schema=DATABASE() AND table_name='media'
-                     AND column_name='original_codec') THEN
-        ALTER TABLE media ADD COLUMN original_codec VARCHAR(50) NULL
-            COMMENT '上传时探测到的原始视频编码（av1/hevc/h264/vp9 等）';
-    END IF;
-END$$
-CALL _add_col_media_transcode()$$
-DROP PROCEDURE IF EXISTS _add_col_media_transcode$$
+END;
+CALL _v11_tlr_content_version();
+DROP PROCEDURE IF EXISTS _v11_tlr_content_version;
 
-DROP PROCEDURE IF EXISTS _add_idx_media_transcode$$
-CREATE PROCEDURE _add_idx_media_transcode()
+DROP PROCEDURE IF EXISTS _v11_tlr_version_idx;
+CREATE PROCEDURE _v11_tlr_version_idx()
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
-                   WHERE table_schema=DATABASE() AND table_name='media'
-                     AND index_name='idx_transcode_status') THEN
-        ALTER TABLE media ADD INDEX idx_transcode_status (transcode_status);
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'text_learning_records'
+          AND INDEX_NAME = 'idx_tlr_student_version'
+    ) THEN
+        CREATE INDEX idx_tlr_student_version ON text_learning_records(student_id, content_version);
     END IF;
-END$$
-CALL _add_idx_media_transcode()$$
-DROP PROCEDURE IF EXISTS _add_idx_media_transcode$$
+END;
+CALL _v11_tlr_version_idx();
+DROP PROCEDURE IF EXISTS _v11_tlr_version_idx;
 
--- V27__ai_feedback.sql
--- AI 用户反馈表
+-- ── Part 6: vocabulary_books.source_type（V31 Part 2 整合） ───────────────────
+-- 生词本来源标记：ARTICLE=文章阅读加入 / MANUAL=手动添加或其他来源
+
+DROP PROCEDURE IF EXISTS _v11_vocab_source_type;
+CREATE PROCEDURE _v11_vocab_source_type()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'vocabulary_books'
+          AND COLUMN_NAME = 'source_type'
+    ) THEN
+        ALTER TABLE vocabulary_books
+            ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
+                COMMENT '来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他'
+                AFTER next_review_time;
+    END IF;
+END;
+CALL _v11_vocab_source_type();
+DROP PROCEDURE IF EXISTS _v11_vocab_source_type;
+
+UPDATE vocabulary_books SET source_type = 'MANUAL' WHERE source_type IS NULL OR source_type = '';
+
+DROP PROCEDURE IF EXISTS _v11_vocab_source_idx;
+CREATE PROCEDURE _v11_vocab_source_idx()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'vocabulary_books'
+          AND INDEX_NAME = 'idx_vocabulary_source'
+    ) THEN
+        CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
+    END IF;
+END;
+CALL _v11_vocab_source_idx();
+DROP PROCEDURE IF EXISTS _v11_vocab_source_idx;
+
+-- ── Part 7: ai_feedback 用户反馈表（V43 整合） ───────────────────────────────
 
 CREATE TABLE IF NOT EXISTS ai_feedback (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -3132,163 +3090,114 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     INDEX idx_user (user_id),
     FOREIGN KEY (call_log_id) REFERENCES ai_call_log(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI用户反馈表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI用户反馈表';
 
--- ────────────────────────────────────────
--- student_exercise_answers（旧答题记录表，V26 text_exercises 的配套表）
--- ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS `student_exercise_answers` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `exercise_id` BIGINT NOT NULL,
-    `student_id` BIGINT NOT NULL,
-    `assignment_id` BIGINT NULL,
-    `answer_content` TEXT NULL,
-    `is_correct` TINYINT(1) NULL,
-    `answer_time` DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
-    `time_spent_seconds` INT NULL,
-    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX `idx_sea_student` (`student_id`),
-    INDEX `idx_sea_exercise` (`exercise_id`),
-    INDEX `idx_sea_assignment` (`assignment_id`),
-    CONSTRAINT `fk_sea_student` FOREIGN KEY (`student_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_sea_exercise` FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises`(`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_sea_assignment` FOREIGN KEY (`assignment_id`) REFERENCES `assignments`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- V30__student_ai_quiz_records.sql
--- 学生 AI 题做题记录（两表设计）
+-- V12__ai_qa.sql
 
-CREATE TABLE IF NOT EXISTS `student_ai_quiz_attempts` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '尝试ID',
-    `student_id`    BIGINT NOT NULL COMMENT '学生ID',
-    `text_id`       BIGINT NOT NULL COMMENT '文章ID',
-    `session_id`    BIGINT NULL     COMMENT 'AI 出题会话ID',
-    `assignment_id` BIGINT NULL     COMMENT '任务ID',
-    `total_questions`    INT          NOT NULL DEFAULT 0    COMMENT '题目总数',
-    `correct_count`      INT          NOT NULL DEFAULT 0    COMMENT '答对数',
-    `score`              DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '得分百分比',
-    `total_time_seconds` INT          NOT NULL DEFAULT 0    COMMENT '总用时(秒)',
-    `submitted_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '提交时间',
-    `created_time`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    INDEX `idx_aiqa_student`     (`student_id`),
-    INDEX `idx_aiqa_text`        (`text_id`),
-    INDEX `idx_aiqa_student_text`(`student_id`, `text_id`),
-    INDEX `idx_aiqa_submitted`   (`submitted_time`),
-    INDEX `idx_aiqa_session`     (`session_id`),
-    CONSTRAINT `fk_aiqa_student` FOREIGN KEY (`student_id`)    REFERENCES `users`(`id`)            ON DELETE CASCADE,
-    CONSTRAINT `fk_aiqa_text`    FOREIGN KEY (`text_id`)       REFERENCES `texts`(`id`)            ON DELETE CASCADE,
-    CONSTRAINT `fk_aiqa_session` FOREIGN KEY (`session_id`)    REFERENCES `ai_quiz_session`(`id`)  ON DELETE SET NULL,
-    CONSTRAINT `fk_aiqa_asn`     FOREIGN KEY (`assignment_id`) REFERENCES `assignments`(`id`)      ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- ═══════════════════════════════════════════════════════════════
+-- V12: AI 问答使用统计 + 学生基本信息接口 + SSO 管理员角色锁定
+-- 整合自:
+--   V45__ai_qa_and_student_basic_info.sql
+--     (Part 1: ai_call_log 索引
+--      Part 2: school_student 新增 gender/phone/counselor_name
+--      Part 3: field_mappings seed student_basic_info
+--      Part 4: sso_user_bindings 新增 admin_remark/admin_role_locked)
+-- 注：V45__ai_qa_usage_index.sql 已在源目录中删除，不纳入
+-- ═══════════════════════════════════════════════════════════════
 
-CREATE TABLE IF NOT EXISTS `student_ai_quiz_records` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '明细ID',
-    `attempt_id` BIGINT NOT NULL COMMENT '做题尝试ID',
-    `student_id` BIGINT NOT NULL COMMENT '学生ID',
-    `text_id`    BIGINT NOT NULL COMMENT '文章ID',
-    `exercise_id` BIGINT NULL COMMENT '题目ID',
-    `question_snapshot`  TEXT        NOT NULL COMMENT '题干快照',
-    `options_snapshot`   JSON        NULL     COMMENT '选项快照',
-    `correct_answer`     VARCHAR(50) NULL     COMMENT '正确答案',
-    `analysis_snapshot`  TEXT        NULL     COMMENT '解析快照',
-    `user_answer`        VARCHAR(50) NOT NULL COMMENT '学生答案',
-    `is_correct`         TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '是否正确',
-    `time_spent_seconds` INT         NULL     COMMENT '本题用时(秒)',
-    `question_order`     INT         NULL     COMMENT '题号',
-    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    INDEX `idx_aiqr_attempt`     (`attempt_id`),
-    INDEX `idx_aiqr_student`     (`student_id`),
-    INDEX `idx_aiqr_text`        (`text_id`),
-    INDEX `idx_aiqr_student_text`(`student_id`, `text_id`),
-    INDEX `idx_aiqr_exercise`    (`exercise_id`),
-    CONSTRAINT `fk_aiqr_attempt` FOREIGN KEY (`attempt_id`)  REFERENCES `student_ai_quiz_attempts`(`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_aiqr_student` FOREIGN KEY (`student_id`)  REFERENCES `users`(`id`)                   ON DELETE CASCADE,
-    CONSTRAINT `fk_aiqr_text`    FOREIGN KEY (`text_id`)     REFERENCES `texts`(`id`)                   ON DELETE CASCADE,
-    CONSTRAINT `fk_aiqr_ex`      FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises`(`id`)          ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- ── Part 1: ai_call_log 复合索引（按用户+服务+成功状态+时间的统计查询） ───────
 
--- ═══════════════════════════════════════════════════════════════════════
--- V25__link_users_to_school_directory.sql
--- 将 users 与 school_student / school_teacher 主数据建立显式联系
--- 注：与 V25__exercise_options_table.sql 同 V25 版本号；本块为后续补录，
---     全部使用 IF NOT EXISTS / WHERE NULL 包装，保证幂等可重复执行
--- ═══════════════════════════════════════════════════════════════════════
+DROP PROCEDURE IF EXISTS _v12_ai_qa_usage_index;
+CREATE PROCEDURE _v12_ai_qa_usage_index()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'ai_call_log'
+          AND INDEX_NAME = 'idx_triggered_service_success_time'
+    ) THEN
+        CREATE INDEX idx_triggered_service_success_time
+            ON ai_call_log (triggered_by, service_name, success, created_time);
+    END IF;
+END;
+CALL _v12_ai_qa_usage_index();
+DROP PROCEDURE IF EXISTS _v12_ai_qa_usage_index;
 
--- 1) 规范化 username：student_<digits> -> <digits>（已规范化的不会再匹配）
-UPDATE users
-SET username = SUBSTRING(username, 9)
-WHERE username REGEXP '^student_[0-9]+$';
+-- ── Part 2: school_student 新增 gender / phone / counselor_name 三列 ─────────
 
--- 2) users 新增 school_student_id（幂等）
-SET @col_exists = (
-    SELECT COUNT(*) FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'school_student_id'
-);
-SET @col_sql = IF(
-    @col_exists = 0,
-    'ALTER TABLE users ADD COLUMN school_student_id BIGINT NULL COMMENT ''关联 school_student.id（学号匹配）'' AFTER inner_uid',
-    'SELECT 1'
-);
-PREPARE stmt FROM @col_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+DROP PROCEDURE IF EXISTS _v12_add_student_extra_cols;
+CREATE PROCEDURE _v12_add_student_extra_cols()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'school_student'
+                     AND COLUMN_NAME = 'gender') THEN
+        ALTER TABLE school_student
+            ADD COLUMN gender VARCHAR(10) NULL COMMENT '性别（男/女）' AFTER major_name;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'school_student'
+                     AND COLUMN_NAME = 'phone') THEN
+        ALTER TABLE school_student
+            ADD COLUMN phone VARCHAR(50) NULL COMMENT '联系电话（CDSP 返回 MD5 哈希 32 字符）' AFTER gender;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'school_student'
+                     AND COLUMN_NAME = 'counselor_name') THEN
+        ALTER TABLE school_student
+            ADD COLUMN counselor_name VARCHAR(50) NULL COMMENT '辅导员姓名' AFTER phone;
+    END IF;
+END;
+CALL _v12_add_student_extra_cols();
+DROP PROCEDURE IF EXISTS _v12_add_student_extra_cols;
 
--- 3) users 新增 school_teacher_id（幂等）
-SET @col_exists = (
-    SELECT COUNT(*) FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'school_teacher_id'
-);
-SET @col_sql = IF(
-    @col_exists = 0,
-    'ALTER TABLE users ADD COLUMN school_teacher_id BIGINT NULL COMMENT ''关联 school_teacher.id（工号匹配）'' AFTER school_student_id',
-    'SELECT 1'
-);
-PREPARE stmt FROM @col_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ── Part 3: field_mappings seed：student_basic_info 共 9 条映射 ────────────────
 
--- 4) 索引（幂等）
-SET @idx_exists = (
-    SELECT COUNT(*) FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_school_student_id'
-);
-SET @idx_sql = IF(
-    @idx_exists = 0,
-    'CREATE INDEX idx_users_school_student_id ON users(school_student_id)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @idx_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, source_type, target_type, converter, is_required, remark)
+VALUES
+    ('student_basic_info', 'xh',    'student_id',     'STRING', 'STRING', 'NONE', 1, '学号（主键）'),
+    ('student_basic_info', 'xm',    'student_name',   'STRING', 'STRING', 'NONE', 1, '姓名'),
+    ('student_basic_info', 'yx',    'college_name',   'STRING', 'STRING', 'NONE', 0, '院系（学院名称）'),
+    ('student_basic_info', 'zy',    'major_name',     'STRING', 'STRING', 'NONE', 0, '专业'),
+    ('student_basic_info', 'nj',    'grade',          'STRING', 'STRING', 'NONE', 0, '年级'),
+    ('student_basic_info', 'bj',    'class_name',     'STRING', 'STRING', 'NONE', 0, '班级'),
+    ('student_basic_info', 'xb',    'gender',         'STRING', 'STRING', 'NONE', 0, '性别'),
+    ('student_basic_info', 'lxdh',  'phone',          'STRING', 'STRING', 'NONE', 0, '联系电话'),
+    ('student_basic_info', 'fdyxm', 'counselor_name', 'STRING', 'STRING', 'NONE', 0, '辅导员姓名');
 
-SET @idx_exists = (
-    SELECT COUNT(*) FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_school_teacher_id'
-);
-SET @idx_sql = IF(
-    @idx_exists = 0,
-    'CREATE INDEX idx_users_school_teacher_id ON users(school_teacher_id)',
-    'SELECT 1'
-);
-PREPARE stmt FROM @idx_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ── Part 4: sso_user_bindings 新增 admin_remark / admin_role_locked 两列 ──────
 
--- 5) 回填外键（幂等：WHERE IS NULL）
---    注：users.username 与 school_student/teacher 的 student_id/teacher_id 可能存在
---    collation 差异（utf8mb4_0900_ai_ci vs utf8mb4_unicode_ci），显式 COLLATE 避免
---    "Illegal mix of collations" 错误。
-UPDATE users u
-JOIN school_student s
-  ON s.student_id COLLATE utf8mb4_unicode_ci = u.username COLLATE utf8mb4_unicode_ci
-SET u.school_student_id = s.id
-WHERE u.school_student_id IS NULL;
+DROP PROCEDURE IF EXISTS _v12_add_sso_binding_cols;
+CREATE PROCEDURE _v12_add_sso_binding_cols()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'sso_user_bindings'
+          AND COLUMN_NAME  = 'admin_remark'
+    ) THEN
+        ALTER TABLE sso_user_bindings
+            ADD COLUMN admin_remark TEXT COMMENT '管理员备注：记录特殊情况（如用户被删除后重新登录）'
+            AFTER sso_member_of;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'sso_user_bindings'
+          AND COLUMN_NAME  = 'admin_role_locked'
+    ) THEN
+        ALTER TABLE sso_user_bindings
+            ADD COLUMN admin_role_locked TINYINT(1) DEFAULT 0
+                COMMENT '管理员角色锁定: 1=管理员手动审批指定角色，SSO/学校目录不得覆盖'
+            AFTER admin_remark;
+    END IF;
+END;
+CALL _v12_add_sso_binding_cols();
+DROP PROCEDURE IF EXISTS _v12_add_sso_binding_cols;
 
-UPDATE users u
-JOIN school_teacher t
-  ON t.teacher_id COLLATE utf8mb4_unicode_ci = u.username COLLATE utf8mb4_unicode_ci
-SET u.school_teacher_id = t.id
-WHERE u.school_teacher_id IS NULL;
 
 -- 6) 学生学校画像视图（DROP + CREATE 幂等）
 DROP VIEW IF EXISTS v_user_school_profile;
@@ -3313,6 +3222,283 @@ SELECT
 FROM users u
 JOIN school_student s ON s.id = u.school_student_id
 WHERE u.deleted = 0;
+
+-- V13__learner_profile.sql
+
+-- V13: learner_profile — 学习者画像领域合并迁移
+-- 源文件: V32 (recommendation_events) + V33 (learner_profile_snapshots)
+--       + V35 (learner_profile_summaries) + V36 (learner_composite_tags)
+
+-- ============================================================
+-- Part 1: recommendation_events — 推荐事件追踪
+-- ============================================================
+CREATE TABLE IF NOT EXISTS recommendation_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    text_id BIGINT NOT NULL,
+    event_type VARCHAR(20) NOT NULL COMMENT 'IMPRESSION/CLICK/DISMISS/BOOKMARK',
+    source VARCHAR(30) DEFAULT NULL COMMENT 'item_cf/user_cf/fallback/persona',
+    position INT DEFAULT NULL COMMENT 'Recommendation list position (0-based)',
+    persona_tags VARCHAR(200) DEFAULT NULL COMMENT 'Active persona tag codes at event time, comma-separated',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_re_user (user_id),
+    INDEX idx_re_text (text_id),
+    INDEX idx_re_user_type (user_id, event_type),
+    INDEX idx_re_created (created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Part 2: learner_profile_snapshots — 学习者画像每日快照
+-- ============================================================
+CREATE TABLE IF NOT EXISTS learner_profile_snapshots (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    snapshot_date DATE NOT NULL,
+    profile_status VARCHAR(10) DEFAULT NULL COMMENT 'ready/partial/empty',
+    risk_level VARCHAR(10) DEFAULT NULL COMMENT 'low/medium/high',
+    active_days_7d INT DEFAULT 0,
+    active_days_14d INT DEFAULT 0,
+    study_minutes_14d INT DEFAULT 0,
+    inactive_days INT DEFAULT 0,
+    new_count INT DEFAULT 0,
+    learning_count INT DEFAULT 0,
+    mastered_count INT DEFAULT 0,
+    weak_ratio DOUBLE DEFAULT 0.0,
+    overdue_review_count INT DEFAULT 0,
+    overdue_review_ratio DOUBLE DEFAULT 0.0,
+    primary_content_version VARCHAR(20) DEFAULT NULL,
+    version_distribution_json VARCHAR(500) DEFAULT NULL COMMENT 'JSON: {"cet4":0.6,"cet6":0.3}',
+    matched_tag_codes VARCHAR(200) DEFAULT NULL COMMENT 'Comma-separated tag codes',
+    tag_scores_json VARCHAR(500) DEFAULT NULL COMMENT 'JSON: tag evaluation details',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_date (user_id, snapshot_date),
+    INDEX idx_lps_user (user_id),
+    INDEX idx_lps_date (snapshot_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Part 3: learner_profile_summaries — LLM 生成的画像摘要
+-- ============================================================
+CREATE TABLE IF NOT EXISTS learner_profile_summaries (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    summary_type VARCHAR(20) NOT NULL COMMENT 'PERSONAL/TEACHER_FACED/CLASS_COHORT',
+    language VARCHAR(10) DEFAULT 'zh' COMMENT 'zh/en',
+    summary_text TEXT NOT NULL,
+    model_id VARCHAR(100) DEFAULT NULL,
+    input_snapshot_id BIGINT DEFAULT NULL,
+    input_tags_json VARCHAR(500) DEFAULT NULL,
+    generation_time_ms INT DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_lps_user (user_id),
+    INDEX idx_lps_type (summary_type),
+    INDEX idx_lps_created (created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Part 4: learner_composite_tags — 可配置的组合标签
+-- ============================================================
+CREATE TABLE IF NOT EXISTS learner_composite_tags (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    tag_type VARCHAR(20) NOT NULL COMMENT 'risk/ability/habit/preference/positive',
+    priority INT DEFAULT 50,
+    rule_definition JSON NOT NULL COMMENT '{"conditions":[...],"combiner":"AND"}',
+    action_hint VARCHAR(200) DEFAULT NULL,
+    enabled TINYINT(1) DEFAULT 1,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- V14__tag_management.sql
+
+-- V14: tag_management — 标签管理领域合并迁移
+-- 源文件: V34 (tag_recalibration_log) + V38 (seed_base_tag_definitions)
+-- 注: V37/V38 中的 feature_toggle 行 (admin.persona_analytics / admin.class_cohort /
+--     student.learner_profile_enabled / admin.tag_management) 已移至 V6 (feature_toggles)
+
+-- ============================================================
+-- Part 1: tag_recalibration_log — 标签阈值校准审计日志
+-- ============================================================
+CREATE TABLE IF NOT EXISTS tag_recalibration_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tag_code VARCHAR(50) NOT NULL,
+    old_threshold VARCHAR(50) NOT NULL,
+    new_threshold VARCHAR(50) NOT NULL,
+    reason VARCHAR(500) DEFAULT NULL,
+    affected_user_count INT DEFAULT 0,
+    operator VARCHAR(50) DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_trl_tag (tag_code),
+    INDEX idx_trl_created (created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Part 2: 9 base learner tag definitions (V38 seed)
+-- ============================================================
+INSERT IGNORE INTO learner_composite_tags (code, display_name, tag_type, priority, rule_definition, action_hint, enabled) VALUES
+('INACTIVE_RISK', '流失风险', 'risk', 10,
+ '{"conditions":[{"source":"metric","field":"activeDays14d","operator":"LT","value":3},{"source":"metric","field":"studyMinutes14d","operator":"GT","value":0}],"combiner":"AND"}',
+ '建议增加学习提醒频率', 1),
+
+('VOCAB_WEAK', '词汇弱势', 'risk', 20,
+ '{"conditions":[{"source":"metric","field":"totalWords","operator":"GTE","value":30},{"source":"metric","field":"weakRatio","operator":"GTE","value":0.6}],"combiner":"AND"}',
+ '建议加强词汇复习', 1),
+
+('REVIEW_OVERDUE', '复习逾期', 'risk', 30,
+ '{"conditions":[{"source":"metric","field":"dueReviewCount","operator":"GT","value":0},{"source":"metric","field":"overdueReviewRatio","operator":"GTE","value":0.5}],"combiner":"AND"}',
+ '请尽快完成待复习词汇', 1),
+
+('CONSISTENT_LEARNER', '学习稳定', 'positive', 40,
+ '{"conditions":[{"source":"metric","field":"activeDays7d","operator":"GTE","value":5}],"combiner":"AND"}',
+ '保持良好的学习节奏', 1),
+
+('CONTENT_LEVEL_STUCK', '版本停滞', 'ability', 50,
+ '{"conditions":[{"source":"metric","field":"textsRead","operator":"GTE","value":40},{"source":"metric","field":"versionDistSize","operator":"EQ","value":1}],"combiner":"AND"}',
+ '建议尝试更高难度版本', 1),
+
+('CONTENT_LEVEL_JUMP', '版本跳跃', 'ability', 60,
+ '{"conditions":[{"source":"metric","field":"activeDays7d","operator":"GTE","value":0}],"combiner":"AND"}',
+ '注意难度跨度是否过大', 0),
+
+('IMPROVING_TREND', '进步趋势', 'positive', 70,
+ '{"conditions":[{"source":"metric","field":"oldActiveDays14d","operator":"GT","value":0},{"source":"metric","field":"trendRatio","operator":"GTE","value":1.3}],"combiner":"AND"}',
+ '学习活跃度明显提升', 1),
+
+('DECLINING_TREND', '下滑趋势', 'risk', 80,
+ '{"conditions":[{"source":"metric","field":"oldActiveDays14d","operator":"GT","value":0},{"source":"metric","field":"trendRatio","operator":"LTE","value":0.6}],"combiner":"AND"}',
+ '学习活跃度出现下降', 1),
+
+('REVIEW_CHAMPION', '复习达人', 'positive', 90,
+ '{"conditions":[{"source":"metric","field":"snap0OverdueRatio","operator":"LT","value":0.05},{"source":"metric","field":"snap1OverdueRatio","operator":"LT","value":0.05},{"source":"metric","field":"snap2OverdueRatio","operator":"LT","value":0.05}],"combiner":"AND"}',
+ '复习习惯非常好', 1);
+
+
+-- V15__reserved_vocabulary.sql
+
+-- ═══════════════════════════════════════════════════════════════
+-- V15: 预留 — 词表 / Vocabulary 扩展
+-- 用途: vocabulary_books / words / word_relations 后续扩展
+-- 说明: 当前无内容，预留给词表相关功能
+-- ═══════════════════════════════════════════════════════════════
+
+-- 预留空迁移 — 当前无 DDL/DML
+SELECT 1;
+
+
+-- V16__reserved_school_data.sql
+
+-- ═══════════════════════════════════════════════════════════════
+-- V16: 预留 — 学校数据扩展
+-- 用途: school_* / teaching_plans / course_selection 后续扩展
+-- 说明: 当前无内容，预留给 CDSP / ETL 相关功能
+-- ═══════════════════════════════════════════════════════════════
+
+-- 预留空迁移 — 当前无 DDL/DML
+SELECT 1;
+
+
+-- V17__reserved_ai_model_routing.sql
+
+-- ═══════════════════════════════════════════════════════════════
+-- V17: 预留 — AI 模型路由 / AI Model Routing
+-- 用途: ai_provider / ai_call_log / 模型选择策略 后续扩展
+-- 说明: 当前无内容，预留给 AI 模型路由相关功能
+-- ═══════════════════════════════════════════════════════════════
+
+-- 预留空迁移 — 当前无 DDL/DML
+SELECT 1;
+
+
+-- V18__reserved_content_ops.sql
+
+-- ═══════════════════════════════════════════════════════════════
+-- V18: 预留 — 内容运营 / Content Operations
+-- 用途: texts / media / articles 内容运营功能扩展
+-- 说明: 当前无内容，预留给内容运营相关功能
+-- ═══════════════════════════════════════════════════════════════
+
+-- 预留空迁移 — 当前无 DDL/DML
+SELECT 1;
+
+
+-- V19__reserved_general.sql
+
+-- ═══════════════════════════════════════════════════════════════
+-- V19: 预留 — 通用扩展 / General Extension
+-- 用途: 跨业务域的通用扩展槽
+-- 说明: 当前无内容，预留给跨域通用功能
+-- ═══════════════════════════════════════════════════════════════
+
+-- 预留空迁移 — 当前无 DDL/DML
+SELECT 1;
+
+
+-- V20__text_similarity_matrix.sql
+
+-- ═══════════════════════════════════════════════════════════════
+-- V20: 文章相似度矩阵表
+-- 用于存储文章之间的相似度关系，支持推荐系统
+-- ═══════════════════════════════════════════════════════════════
+
+-- 1. text_similarity_matrix — 文章相似度矩阵
+CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
+    INDEX `idx_text_id` (`text_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵';
+
+-- 2. text_similarity_matrix_tmp — 文章相似度矩阵临时表
+-- 表结构与 text_similarity_matrix 完全一致，用于批量更新时的数据交换
+CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `similar_text_id` BIGINT NOT NULL COMMENT '相似文章ID',
+    `similarity` DECIMAL(5,4) NOT NULL COMMENT '相似度(0.0000~0.9999)',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_text_pair` (`text_id`, `similar_text_id`),
+    INDEX `idx_text_id` (`text_id`),
+    INDEX `idx_similarity` (`similarity` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
+
+-- V21__extend_school_student_fields.sql
+DROP PROCEDURE IF EXISTS _v21_extend_student_fields;
+CREATE PROCEDURE _v21_extend_student_fields()
+BEGIN
+    -- 扩展 phone 字段长度
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'phone'
+                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
+        ALTER TABLE school_student
+            MODIFY COLUMN phone VARCHAR(100) NULL COMMENT '联系电话（CDSP 可能返回多个号码拼接）';
+    END IF;
+
+    -- 扩展 counselor_name 字段长度
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'counselor_name'
+                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
+        ALTER TABLE school_student
+            MODIFY COLUMN counselor_name VARCHAR(100) NULL COMMENT '辅导员姓名（可能包含多个辅导员或职务）';
+    END IF;
+END$$
+
+CALL _v21_extend_student_fields()$$
+DROP PROCEDURE IF EXISTS _v21_extend_student_fields$$
 
 -- V31__add_vocabulary_source_type.sql
 -- 生词本来源标记：区分文章阅读加入的词和其他来源的词
@@ -3355,3 +3541,4 @@ BEGIN
 END$$
 CALL _idx_vocabulary_source()$$
 DROP PROCEDURE IF EXISTS _idx_vocabulary_source$$
+

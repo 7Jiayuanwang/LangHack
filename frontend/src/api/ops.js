@@ -247,7 +247,8 @@ export function getDeployHistory(limit = 50) {
     params: { limit },
   });
 }
-// triggerUpdate 用原生 EventSource，不走 axios
+// 热部署触发用原生 EventSource，不走 axios
+// 调用方式：new EventSource(`/api/ops/update/trigger?branch=...&skipBuild=...&dryRun=...&token=...`)
 
 // ========== 提权 ==========
 
@@ -264,4 +265,52 @@ export function revokeElevation() {
     url: "/api/auth/revoke-elevation",
     method: "post",
   });
+}
+
+export function getDatabasePoolMetrics() {
+  return request({ url: '/api/ops/monitoring/db-pool', method: 'get' })
+}
+
+export function getTopUserRequests(limit = 20) {
+  return request({ url: '/api/ops/monitoring/user-requests/top', method: 'get', params: { limit } })
+}
+
+// ========== 访问日志可视化 ==========
+
+export function getAccessLogs(params) {
+  return request({ url: '/api/ops/monitoring/access-logs', method: 'get', params })
+}
+
+export function getAccessLogStats(params) {
+  return request({ url: '/api/ops/monitoring/access-logs/stats', method: 'get', params })
+}
+
+export function getAccessTrend(params) {
+  return request({ url: '/api/ops/monitoring/access-logs/trend', method: 'get', params })
+}
+
+export function getResponseTimeDistribution(params) {
+  return request({ url: '/api/ops/monitoring/access-logs/response-time-distribution', method: 'get', params })
+}
+
+export function getLoginStats(params) {
+  return request({ url: '/api/ops/monitoring/access-logs/login-stats', method: 'get', params })
+}
+
+export function downloadAccessLogs(params) {
+  return request({
+    url: '/api/ops/monitoring/access-logs/download',
+    method: 'get',
+    params,
+    responseType: 'blob'
+  })
+}
+
+export function downloadLoginStats(params) {
+  return request({
+    url: '/api/ops/monitoring/access-logs/login-stats/download',
+    method: 'get',
+    params,
+    responseType: 'blob'
+  })
 }
