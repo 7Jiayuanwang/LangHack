@@ -39,7 +39,7 @@ public interface CampaignParticipationMapper extends BaseMapper<CampaignParticip
         "<script>",
         "SELECT p.* FROM campaign_participations p",
         "LEFT JOIN users u ON p.user_id = u.id",
-        "LEFT JOIN school_students ss ON u.school_student_id = ss.id",
+        "LEFT JOIN school_student ss ON u.school_student_id = ss.id",
         "WHERE p.campaign_id = #{campaignId}",
         "  AND p.enrollment_status = 'ENROLLED'",
         "  <if test='className != null and className != \"\"'>AND ss.class_name = #{className}</if>",
