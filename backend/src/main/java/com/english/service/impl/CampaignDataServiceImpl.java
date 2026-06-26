@@ -97,10 +97,11 @@ public class CampaignDataServiceImpl implements CampaignDataService {
                 if (row == null) continue;
 
                 try {
-                    // 读取：学号 | 数值 | 备注
+                    // 读取：学号(0) | 姓名(1，可选) | 完成值(2) | 备注(3，可选)
                     String studentId = getCellValueAsString(row.getCell(0));
-                    String valueStr = getCellValueAsString(row.getCell(1));
-                    String remark = getCellValueAsString(row.getCell(2));
+                    // 姓名列(1)跳过，仅用于人工核对
+                    String valueStr = getCellValueAsString(row.getCell(2));
+                    String remark = getCellValueAsString(row.getCell(3));
 
                     if (studentId == null || studentId.trim().isEmpty()) {
                         errors.add("第" + (i + 1) + "行: 学号为空");
@@ -109,7 +110,7 @@ public class CampaignDataServiceImpl implements CampaignDataService {
                     }
 
                     if (valueStr == null || valueStr.trim().isEmpty()) {
-                        errors.add("第" + (i + 1) + "行: 数值为空");
+                        errors.add("第" + (i + 1) + "行: 完成值为空");
                         failCount++;
                         continue;
                     }
@@ -149,8 +150,10 @@ public class CampaignDataServiceImpl implements CampaignDataService {
             throw new RuntimeException("Excel导入失败: " + e.getMessage());
         }
 
-        result.put("successCount", successCount);
-        result.put("failCount", failCount);
+        result.put("totalRows", successCount + failCount);
+        result.put("successRows", successCount);
+        result.put("failedRows", failCount);
+        result.put("skippedRows", 0); // 当前无跳过逻辑
         result.put("errors", errors);
         result.put("batchId", batchId);
 

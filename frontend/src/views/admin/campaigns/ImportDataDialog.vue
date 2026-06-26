@@ -46,10 +46,11 @@
         :closable="false"
         style="margin-bottom: 20px"
       >
-        <p>1. Excel 文件应包含以下列：学号、姓名、数值、备注（可选）</p>
-        <p>2. 学号必须存在于系统中，否则该行数据将被忽略</p>
-        <p>3. 数值必须为有效数字</p>
-        <p>4. 导入前请确认数据格式正确</p>
+        <p>1. Excel 文件应包含以下列：学号、姓名、完成值、备注（可选）</p>
+        <p>2. <strong>完成值</strong>指任务的实际完成数量，非积分（如：单词学习20个、阅读30分钟）</p>
+        <p>3. 学号必须存在于系统中，否则该行数据将被忽略</p>
+        <p>4. 完成值必须为有效数字</p>
+        <p>5. 导入前请先选择任务，模板会根据任务类型显示对应单位</p>
       </el-alert>
 
       <el-form-item>
@@ -165,11 +166,35 @@ const handleExceed = () => {
 }
 
 const handleDownloadTemplate = () => {
+  if (!formData.taskId) {
+    ElMessage.warning('请先选择任务')
+    return
+  }
+
+  // 找到选中的任务
+  const selectedTask = props.tasks.find(t => t.id === formData.taskId)
+  if (!selectedTask) {
+    ElMessage.error('未找到选中的任务')
+    return
+  }
+
+  // 根据任务类型确定单位和示例值
+  const taskTypeInfo = {
+    'READING_TIME': { unit: '分钟', example1: 30, example2: 45 },
+    'WORD_LEARNING': { unit: '个', example1: 20, example2: 15 },
+    'TEXT_UPLOAD': { unit: '篇', example1: 1, example2: 2 },
+    'FEEDBACK': { unit: '次', example1: 3, example2: 5 },
+    'AI_QA': { unit: '次', example1: 10, example2: 8 }
+  }
+
+  const info = taskTypeInfo[selectedTask.taskType] || { unit: '', example1: 100, example2: 80 }
+  const taskTypeLabel = getTaskTypeLabel(selectedTask.taskType)
+
   // 创建模板数据
   const template = [
-    ['学号', '姓名', '数值', '备注'],
-    ['2021001', '张三', '60', '示例数据'],
-    ['2021002', '李四', '50', '']
+    ['学号', '姓名', `完成值(${info.unit})`, '备注'],
+    ['2021001', '张三', info.example1, `${taskTypeLabel}示例数据`],
+    ['2021002', '李四', info.example2, '']
   ]
 
   // 转换为CSV格式
@@ -178,7 +203,7 @@ const handleDownloadTemplate = () => {
   const url = window.URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = '数据导入模板.csv'
+  link.download = `${selectedTask.taskName}_导入模板.csv`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
