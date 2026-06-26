@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 单词 AI 详细介绍服务实现
@@ -115,7 +116,8 @@ public class WordAiExplanationServiceImpl implements WordAiExplanationService {
         // 优先使用 HiAgent
         if (hiAgentService != null) {
             try {
-                return hiAgentService.chat(prompt);
+                // 使用改写接口的通用方法（虽然不太合适，但能用）
+                return hiAgentService.generateCET4Version(prompt);
             } catch (Exception e) {
                 log.warn("[单词介绍] HiAgent 调用失败，尝试 OpenRouter: {}", e.getMessage());
             }
@@ -123,7 +125,18 @@ public class WordAiExplanationServiceImpl implements WordAiExplanationService {
 
         // 备用 OpenRouter
         if (aiProviderRuntimeService != null) {
-            return aiProviderRuntimeService.sendMessageToAI(prompt);
+            try {
+                Optional<String> result = aiProviderRuntimeService.completeIfConfigured(
+                    "openrouter",
+                    "word-explanation",
+                    prompt
+                );
+                if (result.isPresent()) {
+                    return result.get();
+                }
+            } catch (Exception e) {
+                log.error("[单词介绍] OpenRouter 调用失败: {}", e.getMessage());
+            }
         }
 
         throw new RuntimeException("AI 服务未配置或不可用");
