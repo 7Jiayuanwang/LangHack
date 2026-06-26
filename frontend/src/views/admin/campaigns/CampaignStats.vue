@@ -46,6 +46,37 @@
       <el-tabs v-model="activeTab" @tab-change="handleTabChange">
         <el-tab-pane label="个人排名" name="individual">
           <div class="tab-actions">
+            <el-select
+              v-model="individualFilters.classId"
+              placeholder="按班级筛选"
+              clearable
+              filterable
+              style="width: 200px; margin-right: 10px"
+              @change="loadIndividualRanking"
+            >
+              <el-option
+                v-for="cls in classList"
+                :key="cls.id"
+                :label="cls.name"
+                :value="cls.id"
+              />
+            </el-select>
+            <el-select
+              v-if="showCollegeFilter"
+              v-model="individualFilters.collegeId"
+              placeholder="按学院筛选"
+              clearable
+              filterable
+              style="width: 200px; margin-right: 10px"
+              @change="loadIndividualRanking"
+            >
+              <el-option
+                v-for="college in collegeList"
+                :key="college.id"
+                :label="college.name"
+                :value="college.id"
+              />
+            </el-select>
             <el-button type="success" @click="handleExport('individual')">导出排名</el-button>
           </div>
           <el-table :data="individualRanking" v-loading="loading" stripe>
@@ -143,7 +174,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -171,6 +202,18 @@ const overview = reactive({
 const individualRanking = ref([])
 const classRanking = ref([])
 const collegeRanking = ref([])
+const classList = ref([])
+const collegeList = ref([])
+
+const individualFilters = reactive({
+  classId: null,
+  collegeId: null
+})
+
+// 是否显示学院筛选（单学院活动不显示）
+const showCollegeFilter = computed(() => {
+  return collegeList.value.length > 1
+})
 
 const individualPagination = reactive({
   current: 1,
@@ -192,13 +235,28 @@ const loadOverview = async () => {
 const loadIndividualRanking = async () => {
   loading.value = true
   try {
-    const res = await getIndividualRanking(route.params.id, {
+    const params = {
       current: individualPagination.current,
       size: individualPagination.size
-    })
+    }
+
+    // 添加筛选参数
+    if (individualFilters.classId) {
+      params.classId = individualFilters.classId
+    }
+    if (individualFilters.collegeId) {
+      params.collegeId = individualFilters.collegeId
+    }
+
+    const res = await getIndividualRanking(route.params.id, params)
     if (res.code === 200) {
       individualRanking.value = res.data.records || []
       individualPagination.total = res.data.total || 0
+
+      // 提取班级和学院列表用于筛选
+      if (!classList.value.length || !collegeList.value.length) {
+        extractFiltersFromData(res.data.records || [])
+      }
     } else {
       ElMessage.error(res.message || '加载失败')
     }
@@ -207,6 +265,24 @@ const loadIndividualRanking = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 从数据中提取班级和学院列表
+const extractFiltersFromData = (records) => {
+  const classMap = new Map()
+  const collegeMap = new Map()
+
+  records.forEach(record => {
+    if (record.classId && record.className) {
+      classMap.set(record.classId, record.className)
+    }
+    if (record.collegeId && record.collegeName) {
+      collegeMap.set(record.collegeId, record.collegeName)
+    }
+  })
+
+  classList.value = Array.from(classMap.entries()).map(([id, name]) => ({ id, name }))
+  collegeList.value = Array.from(collegeMap.entries()).map(([id, name]) => ({ id, name }))
 }
 
 const loadClassRanking = async () => {

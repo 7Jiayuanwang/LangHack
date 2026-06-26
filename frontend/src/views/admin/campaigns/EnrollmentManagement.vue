@@ -12,7 +12,7 @@
       <el-tab-pane label="待审核" name="pending">
         <el-table :data="pendingList" v-loading="loading" stripe>
           <el-table-column prop="userName" label="姓名" width="120" />
-          <el-table-column prop="studentId" label="学号" width="120" />
+          <el-table-column prop="studentId" label="学号" width="150" show-overflow-tooltip />
           <el-table-column prop="className" label="班级" min-width="150" />
           <el-table-column prop="collegeName" label="学院" min-width="150" />
           <el-table-column label="报名时间" width="180">
@@ -39,7 +39,7 @@
       <el-tab-pane label="已通过" name="enrolled">
         <el-table :data="enrolledList" v-loading="loading" stripe>
           <el-table-column prop="userName" label="姓名" width="120" />
-          <el-table-column prop="studentId" label="学号" width="120" />
+          <el-table-column prop="studentId" label="学号" width="150" show-overflow-tooltip />
           <el-table-column prop="className" label="班级" min-width="150" />
           <el-table-column prop="collegeName" label="学院" min-width="150" />
           <el-table-column prop="totalScore" label="总得分" width="100" sortable />
@@ -62,7 +62,7 @@
       <el-tab-pane label="已驳回" name="rejected">
         <el-table :data="rejectedList" v-loading="loading" stripe>
           <el-table-column prop="userName" label="姓名" width="120" />
-          <el-table-column prop="studentId" label="学号" width="120" />
+          <el-table-column prop="studentId" label="学号" width="150" show-overflow-tooltip />
           <el-table-column prop="className" label="班级" min-width="150" />
           <el-table-column prop="collegeName" label="学院" min-width="150" />
           <el-table-column label="报名时间" width="180">
@@ -219,7 +219,7 @@ const loadPendingEnrollments = async () => {
 const loadEnrolledList = async () => {
   loading.value = true
   try {
-    const res = await getEnrolledList(props.campaignId)
+    const res = await getEnrolledList(campaignId)
     enrolledList.value = res.data || []
   } catch (error) {
     ElMessage.error('加载已通过列表失败: ' + error.message)
@@ -231,7 +231,7 @@ const loadEnrolledList = async () => {
 const loadRejectedList = async () => {
   loading.value = true
   try {
-    const res = await getRejectedList(props.campaignId)
+    const res = await getRejectedList(campaignId)
     rejectedList.value = res.data || []
   } catch (error) {
     ElMessage.error('加载已驳回列表失败: ' + error.message)

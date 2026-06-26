@@ -45,9 +45,18 @@ public class CampaignStatsController {
     public Result<Page<CampaignParticipation>> getIndividualRanking(
             @PathVariable Long campaignId,
             @RequestParam(defaultValue = "1") int current,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Long collegeId) {
         try {
-            Page<CampaignParticipation> ranking = statsService.getRankingByIndividual(campaignId, current, size, Map.of());
+            Map<String, Object> params = new java.util.HashMap<>();
+            if (classId != null) {
+                params.put("classId", classId);
+            }
+            if (collegeId != null) {
+                params.put("collegeId", collegeId);
+            }
+            Page<CampaignParticipation> ranking = statsService.getRankingByIndividual(campaignId, current, size, params);
             return Result.success(ranking);
         } catch (Exception e) {
             log.error("获取个人排名失败", e);

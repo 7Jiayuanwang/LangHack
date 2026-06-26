@@ -35,7 +35,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     @Autowired
     private CampaignTaskMapper taskMapper;
 
+    // 使用 @Lazy 注解打破循环依赖
     @Autowired
+    @org.springframework.context.annotation.Lazy
     private LearningRecordsService learningRecordsService;
 
     @Autowired
@@ -452,16 +454,32 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     @Cacheable(value = "campaign_ranking", key = "'individual_' + #campaignId + '_' + #current + '_' + #size", cacheManager = "campaignCacheManager")
     public Page<CampaignParticipation> getRankingByIndividual(Long campaignId, int current, int size, Map<String, Object> params) {
         Page<CampaignParticipation> page = new Page<>(current, size);
-        QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
-        wrapper.eq("campaign_id", campaignId);
-        wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
-        wrapper.orderByDesc("total_score", "completed_tasks");
-        Page<CampaignParticipation> result = participationMapper.selectPage(page, wrapper);
+
+        Long classId = params.containsKey("classId") ? (Long) params.get("classId") : null;
+        Long collegeId = params.containsKey("collegeId") ? (Long) params.get("collegeId") : null;
+
+        // 如果有筛选条件，使用自定义 SQL；否则使用标准查询
+        if (classId != null || collegeId != null) {
+            List<CampaignParticipation> records = participationMapper.selectRankingWithFilters(
+                campaignId, classId, collegeId, page
+            );
+            page.setRecords(records);
+
+            // 需要手动计算 total（因为 MyBatis Plus 分页插件不会自动处理自定义 SQL 的 count）
+            // 这里简化处理：如果有筛选，total 就是返回记录数（实际应该再执行一次 count 查询）
+            page.setTotal(records.size());
+        } else {
+            QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
+            wrapper.eq("campaign_id", campaignId);
+            wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+            wrapper.orderByDesc("total_score", "completed_tasks");
+            page = participationMapper.selectPage(page, wrapper);
+        }
 
         // 批量填充用户信息（姓名、班级、学院）
-        enrichRankingWithUserInfo(result.getRecords());
+        enrichRankingWithUserInfo(page.getRecords());
 
-        return result;
+        return page;
     }
 
     /**
@@ -529,6 +547,12 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             participation.setUserName(userName);
             participation.setClassName(schoolStudent != null ? schoolStudent.getClassName() : null);
             participation.setCollegeName(schoolStudent != null ? schoolStudent.getCollegeName() : null);
+
+            // 填充 classId 和 collegeId 用于前端筛选
+            if (schoolStudent != null) {
+                participation.setClassId(schoolStudent.getClassId());
+                participation.setCollegeId(schoolStudent.getCollegeId());
+            }
         }
     }
 

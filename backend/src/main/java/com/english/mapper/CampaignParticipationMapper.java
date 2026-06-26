@@ -1,6 +1,7 @@
 package com.english.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.CampaignParticipation;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -30,4 +31,26 @@ public interface CampaignParticipationMapper extends BaseMapper<CampaignParticip
         "</script>"
     })
     List<Map<String, Object>> countEnrolledByCampaignIds(@Param("campaignIds") List<Long> campaignIds);
+
+    /**
+     * 获取个人排名（支持班级和学院筛选）
+     */
+    @Select({
+        "<script>",
+        "SELECT p.* FROM campaign_participations p",
+        "LEFT JOIN users u ON p.user_id = u.id",
+        "LEFT JOIN school_students ss ON u.school_student_id = ss.id",
+        "WHERE p.campaign_id = #{campaignId}",
+        "  AND p.enrollment_status = 'ENROLLED'",
+        "  <if test='classId != null'>AND ss.class_id = #{classId}</if>",
+        "  <if test='collegeId != null'>AND ss.college_id = #{collegeId}</if>",
+        "ORDER BY p.total_score DESC, p.completed_tasks DESC",
+        "</script>"
+    })
+    List<CampaignParticipation> selectRankingWithFilters(
+        @Param("campaignId") Long campaignId,
+        @Param("classId") Long classId,
+        @Param("collegeId") Long collegeId,
+        Page<CampaignParticipation> page
+    );
 }
