@@ -146,25 +146,26 @@
 
       <!-- 单词卡片 -->
       <div class="word-card" v-if="currentWord">
+        <!-- 自动播放开关 -->
+        <div class="auto-speak-toggle">
+          <label class="toggle-label">
+            <input type="checkbox" v-model="autoSpeakEnabled" @change="onAutoSpeakChange" class="toggle-checkbox">
+            <span class="toggle-text">{{ autoSpeakEnabled ? '自动播放已开启' : '自动播放已关闭' }}</span>
+          </label>
+        </div>
+
         <div class="word-content">
           <div class="word-header">
             <h3 class="word-text clickable-word" @click="showWordDetailDialog">{{ currentWord.word }}</h3>
             <button
-              @click="toggleAutoSpeak"
+              @click="speakWordManually"
               class="speak-btn"
-              :class="{ muted: !autoSpeakEnabled }"
-              :title="autoSpeakEnabled ? '点击关闭自动发音' : '点击开启自动发音'"
+              title="点击播放发音"
             >
-              <!-- 开：完整喇叭 + 声波 -->
-              <svg v-if="autoSpeakEnabled" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <!-- 播放图标 -->
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
-              </svg>
-              <!-- 关：喇叭 + X 表示静音 -->
-              <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                <line x1="23" y1="9" x2="17" y2="15"/>
-                <line x1="17" y1="9" x2="23" y2="15"/>
               </svg>
             </button>
           </div>
@@ -602,6 +603,30 @@ const speakWord = () => {
   utterance.rate = 0.8
   utterance.pitch = 1
   speechSynthesis.speak(utterance)
+}
+
+// 手动播放单词发音（点击按钮时）
+const speakWordManually = () => {
+  if (!currentWord.value) return
+
+  // 使用浏览器 Web Speech API
+  const utterance = new SpeechSynthesisUtterance(currentWord.value.word)
+  utterance.lang = 'en-US'
+  utterance.rate = 0.8
+  utterance.pitch = 1
+  speechSynthesis.speak(utterance)
+}
+
+// 自动播放开关变化时的处理
+const onAutoSpeakChange = () => {
+  localStorage.setItem('autoSpeakEnabled', autoSpeakEnabled.value ? '1' : '0')
+  if (!autoSpeakEnabled.value) {
+    // 关闭自动播放时，停止当前播放
+    speechSynthesis.cancel()
+  } else {
+    // 开启自动播放时，立即播放当前单词
+    speakWord()
+  }
 }
 
 // 切换自动发音开关：写 localStorage；切到静音时立刻打断正在播放的声音
@@ -2053,6 +2078,64 @@ onBeforeUnmount(() => {
   background: var(--gradient-brand);
 }
 
+/* 自动播放开关 */
+.auto-speak-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-checkbox {
+  appearance: none;
+  width: 44px;
+  height: 24px;
+  background: #dcdfe6;
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.toggle-checkbox:checked {
+  background: #409eff;
+}
+
+.toggle-checkbox::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-checkbox:checked::before {
+  transform: translateX(20px);
+}
+
+.toggle-text {
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.toggle-checkbox:checked + .toggle-text {
+  color: #409eff;
+}
+
 /* 单词图片 */
 .word-image-container {
   margin-bottom: 20px;
@@ -2122,15 +2205,6 @@ onBeforeUnmount(() => {
 
 .speak-btn:active {
   transform: scale(0.95);
-}
-
-/* 静音状态：换成灰色调，传达"已关闭" */
-.speak-btn.muted {
-  background: #c0c4cc;
-}
-
-.speak-btn.muted:hover {
-  background: #a8acb3;
 }
 
 .word-content {
