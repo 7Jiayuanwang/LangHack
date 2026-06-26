@@ -194,16 +194,13 @@
           </div>
         </div>
 
-        <div class="quiz-error shake" v-if="quizError">
-          答错了，请重新选择！
-        </div>
-
         <div class="quiz-options" v-if="showQuiz && !showMeaning && quizOptions.length">
           <button
             v-for="(option, index) in quizOptions"
             :key="index"
             @click="selectQuizOption(option)"
             class="btn quiz-btn"
+            :class="{ 'quiz-btn--wrong': wrongOption === option }"
             :disabled="isHandlingWordAction"
           >
             {{ option }}
@@ -494,6 +491,7 @@ const quizOptions = ref([])
 const showQuiz = ref(false)
 const wordDetails = ref(null)
 const quizError = ref(false)
+const wrongOption = ref(null)
 const isHandlingWordAction = ref(false)
 const dailyCount = ref(20)
 const dailyCountSelected = ref(false)
@@ -661,12 +659,12 @@ const generateQuizOptions = () => {
 
 // 处理选择题选项
 const selectQuizOption = async (selectedMeaning) => {
-  if (!currentWord.value || quizError.value || isHandlingWordAction.value) return
+  if (!currentWord.value || isHandlingWordAction.value) return
 
   if (selectedMeaning === currentWord.value.meaning) {
     // 选对：标记为掌握，进入下一个单词
     // 注意：不要在 await rateWord 后手动 showQuiz=false——rateWord 推进 currentWordIndex 后，
-    // watch(currentWord) 会在 microtask 里把 showQuiz / quizError 重置并重新生成选项。
+    // watch(currentWord) 会在 microtask 里把 showQuiz / wrongOption 重置并重新生成选项。
     // 旧代码在 await 之后再写 false，会把 watcher 刚刚设的 true 又压回 false，
     // 导致下一个词出现时选择题选项消失。
     isHandlingWordAction.value = true
@@ -685,9 +683,10 @@ const selectQuizOption = async (selectedMeaning) => {
       currentWord.value.synced = false
       saveProgress()
     }
-    quizError.value = true
+    // 标记错误选项为红色
+    wrongOption.value = selectedMeaning
     setTimeout(() => {
-      quizError.value = false
+      wrongOption.value = null
     }, 1500)
   }
 }
@@ -982,7 +981,7 @@ watch(currentWord, (newWord) => {
     fetchWordDetails(newWord.word)
     showMeaning.value = false
     showQuiz.value = false
-    quizError.value = false
+    wrongOption.value = null
     generateQuizOptions()
     // 新单词出场就自动发音；speakWord 内部已根据 autoSpeakEnabled 做静音 guard
     speakWord()
@@ -2320,20 +2319,6 @@ onBeforeUnmount(() => {
   font-style: italic;
 }
 
-.quiz-error {
-  color: var(--error-color);
-  font-weight: 600;
-  margin-bottom: 12px;
-  text-align: center;
-  background: rgba(245, 108, 108, 0.1);
-  padding: 8px 16px;
-  border-radius: 8px;
-}
-
-.quiz-error.shake {
-  animation: shake 0.5s ease-in-out;
-}
-
 .quiz-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2353,12 +2338,21 @@ onBeforeUnmount(() => {
   background: var(--bg-tertiary);
   color: var(--text-primary);
   border: 1px solid var(--border-light);
+  transition: all 0.3s ease;
 }
 
 .quiz-btn:hover {
   background: var(--bg-secondary);
   border-color: var(--border-color);
 }
+
+.quiz-btn--wrong {
+  background: rgba(245, 108, 108, 0.1) !important;
+  border-color: var(--error-color) !important;
+  color: var(--error-color) !important;
+  animation: shake 0.5s ease-in-out;
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   10%, 50%, 90% { transform: translateX(-6px); }
