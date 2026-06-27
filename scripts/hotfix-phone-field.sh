@@ -23,10 +23,8 @@ if [ ! -f "docker/.env" ]; then
     exit 1
 fi
 
-source docker/.env
-
-# 获取 MySQL root 密码
-MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-}
+# 安全读取 .env：不 source（避免非 shell 值被当成命令执行），只提取需要的变量
+MYSQL_ROOT_PASSWORD=$(grep -E '^MYSQL_ROOT_PASSWORD=' docker/.env 2>/dev/null | head -1 | cut -d'=' -f2-)
 if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
     echo -e "${RED}错误: MYSQL_ROOT_PASSWORD 未设置${NC}"
     exit 1

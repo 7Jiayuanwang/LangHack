@@ -46,6 +46,9 @@ public class Text {
     @TableField("tags")
     private String tags;
 
+    @TableField("category")
+    private String category;
+
     @TableField("view_count")
     private Integer viewCount;
 
@@ -190,12 +193,32 @@ public class Text {
         this.uploadedBy = uploadedBy;
     }
 
+    /** 上传者（作者）信息，运行时填充，不映射数据库 */
+    @TableField(exist = false)
+    private com.english.dto.AuthorDTO author;
+
+    public com.english.dto.AuthorDTO getAuthor() {
+        return author;
+    }
+
+    public void setAuthor(com.english.dto.AuthorDTO author) {
+        this.author = author;
+    }
+
     public String getTags() {
         return tags;
     }
 
     public void setTags(String tags) {
         this.tags = tags;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public Integer getViewCount() {

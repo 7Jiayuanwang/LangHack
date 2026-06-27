@@ -1,0 +1,24 @@
+# YouTube → LangHack 上传队列
+# 格式：URL | 标题(可空) | 分类标识 | description(可空)
+# 以 # 开头的行为注释，空行会被忽略
+# 标题留空时自动用 yt-dlp 获取
+# 分类标识支持: 
+#"daily": "日常对话",
+#"business": "商务英语"，
+#"academic": "学术英语",
+#"tech": "科技文章",
+#"news": "新闻资讯",
+#"literature": "文学小说",
+#"security": "网络安全",
+#"ai": "人工智能",
+#"english_song": "英文歌曲",
+#"world_cup": "世界杯",
+#"cet": "四六级",
+# 未匹配到分类时自动回退到默认标签
+
+https://youtu.be/0VLAoVGf_74?si=hNKxNJejEB6hPZCc| | academic |
+https://youtu.be/h9wH7diGNC0?si=d1A3hSQMdP1L2Klb| | world_cup |
+https://youtu.be/N-bGWFZVc4U?si=iG6CQxaK9UzHAxVm| | world_cup |
+https://youtu.be/fs8ZveNZQ8g?si=0f3SpQQzt35kziY1| | daily |
+
+

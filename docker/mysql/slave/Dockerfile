@@ -9,6 +9,7 @@ FROM ${IMAGE_REGISTRY_PREFIX}mysql:8.0
 # 表结构脚本
 COPY mysql/init/00-base-tables.sql /docker-entrypoint-initdb.d/00-base-tables.sql
 COPY init-db.sh /docker-entrypoint-initdb.d/01-init-db.sh
+COPY mysql/init/01-grant-replication-client-to-root.sh /docker-entrypoint-initdb.d/01-grant-replication-client-to-root.sh
 COPY mysql/init/04-apply-all-migrations.sql /opt/langhack/04-apply-all-migrations.sql
 COPY mysql/init/04-apply-all-migrations.sh /docker-entrypoint-initdb.d/04-apply-all-migrations.sh
 COPY mysql/init/08-v16-school-tables.sql /docker-entrypoint-initdb.d/08-v16-school-tables.sql

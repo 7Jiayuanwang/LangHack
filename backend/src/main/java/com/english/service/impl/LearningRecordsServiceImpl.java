@@ -64,6 +64,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private com.english.service.AuthorEnricher authorEnricher;
+
     @Override
     public int getTodayStudyTime(Long studentId) {
         if (studentId == null) {
@@ -279,6 +282,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             detail.put("audioUrl", text.getAudioUrl());
             detail.put("isPublic", text.getIsPublic());
             detail.put("isFeatured", text.getIsFeatured());
+
+            // 填充上传者（作者）信息：无上传者标记为官方内容
+            authorEnricher.enrichText(text);
+            detail.put("author", text.getAuthor());
 
             // 添加所有可用版本
             Map<String, String> versions = new HashMap<>();

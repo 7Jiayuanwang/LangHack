@@ -171,7 +171,7 @@ apply_migrations() {
     : > "$stderr_log"
 
     prepared_sql=$(mktemp /tmp/langhack-hotv2-migrate.XXXXXX.sql)
-    if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$prepared_sql"; then
+    if ! bash "$PROJECT_ROOT/scripts/prepare-mysql-cli-sql.sh" "$MIGRATION_SQL" "$prepared_sql" "$DB_NAME"; then
         log_error "迁移脚本预处理失败"
         rm -f "$prepared_sql" 2>/dev/null || true
         return 1

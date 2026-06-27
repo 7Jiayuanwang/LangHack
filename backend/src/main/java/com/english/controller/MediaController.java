@@ -148,18 +148,33 @@ public class MediaController {
                 if (video != null) {
                     boolean approved = "APPROVED".equalsIgnoreCase(video.getStatus())
                             && Integer.valueOf(1).equals(video.getIsPublic());
+
+                    logger.info("Video access check - mediaId: {}, videoId: {}, status: {}, isPublic: {}, approved: {}",
+                            mediaId, video.getId(), video.getStatus(), video.getIsPublic(), approved);
+
                     if (!approved) {
                         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
                         boolean privileged = false;
+
+                        logger.info("Video not approved - checking privileges. Auth: {}, authenticated: {}",
+                                auth != null ? auth.getName() : "null",
+                                auth != null && auth.isAuthenticated());
+
                         if (auth != null && auth.isAuthenticated()
                                 && !"anonymousUser".equals(auth.getName())) {
                             User currentUser = userService.getUserByUsername(auth.getName());
                             if (currentUser != null) {
-                                privileged = currentUser.getId().equals(media.getUploadedBy())
+                                privileged = currentUser.getId().equals(video.getUserId())
                                         || "ADMIN".equals(currentUser.getRole());
+
+                                logger.info("User found - userId: {}, role: {}, video.userId: {}, privileged: {}",
+                                        currentUser.getId(), currentUser.getRole(), video.getUserId(), privileged);
+                            } else {
+                                logger.warn("Current user not found in database: {}", auth.getName());
                             }
                         }
                         if (!privileged) {
+                            logger.warn("Access denied - user not privileged to view video {}", video.getId());
                             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
                         }
                     }

@@ -68,6 +68,21 @@
 
       <!-- Video Info -->
       <div class="video-info">
+        <!-- Uploader / Author -->
+        <div
+          v-if="video.author"
+          class="author-row"
+          :class="{ 'clickable': !video.author.official && video.author.id }"
+          @click="handleAuthorClick"
+        >
+          <span class="author-label">上传者</span>
+          <span class="author-name">{{ video.author.displayName }}</span>
+          <span
+            v-if="video.author.roleLabel && !video.author.official"
+            class="author-role"
+          >{{ video.author.roleLabel }}</span>
+        </div>
+
         <!-- Actions Container (Keep only associated article if exists) -->
         <div v-if="video.associatedTextId" class="video-actions-container">
           <div class="video-actions">
@@ -364,7 +379,10 @@ let artInstance = null
 const videoUrl = computed(() => {
   if (!video.value) return ''
   const apiBase = import.meta.env.VITE_API_BASE_URL || ''
-  return `${apiBase}/api/media/${video.value.mediaId}/download`
+  const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+  const url = `${apiBase}/api/media/${video.value.mediaId}/download`
+  // 如果有 token，通过 query 参数传递（video 标签无法设置自定义 header）
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
 })
 
 const hasSubtitle = computed(() => {
@@ -780,7 +798,9 @@ const initPlayer = () => {
     }
 
     if (video.value.coverMediaId) {
-      options.poster = `${apiBase}/api/media/${video.value.coverMediaId}/download`
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      const posterUrl = `${apiBase}/api/media/${video.value.coverMediaId}/download`
+      options.poster = token ? `${posterUrl}?token=${encodeURIComponent(token)}` : posterUrl
     }
 
     artInstance = new Artplayer(options)
@@ -1139,6 +1159,12 @@ const saveAnnotation = () => {
   }
 }
 
+const handleAuthorClick = () => {
+  if (video.value?.author && !video.value.author.official && video.value.author.id) {
+    router.push(`/student/author/${video.value.author.id}`)
+  }
+}
+
 const handleAiQa = () => {
   let context = ''
   try {
@@ -1425,6 +1451,41 @@ onBeforeUnmount(() => {
   padding: 20px;
   max-width: 960px;
   margin: 0 auto;
+}
+
+.author-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.author-row.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.author-row.clickable:hover {
+  transform: translateX(2px);
+  opacity: 0.8;
+}
+
+.author-label {
+  color: #94a3b8;
+}
+
+.author-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.author-role {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
 .title-row {

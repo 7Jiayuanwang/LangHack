@@ -510,6 +510,12 @@ const routes = [
         component: () => import("@/views/student/MyProfile.vue"),
         meta: { title: "我的画像", roles: ["STUDENT", "USER"], featureKey: "student.learner_profile_enabled" },
       },
+      {
+        path: "author/:id",
+        name: "StudentAuthorProfile",
+        component: () => import("@/views/student/AuthorProfile.vue"),
+        meta: { title: "作者主页", roles: ["STUDENT", "USER", "TEACHER"] },
+      },
     ],
   },
   {
