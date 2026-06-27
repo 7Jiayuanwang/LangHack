@@ -156,7 +156,7 @@
 
         <div class="word-content">
           <div class="word-header">
-            <h3 class="word-text clickable-word" @click="showWordDetailDialog">{{ currentWord.word }}</h3>
+            <h3 class="word-text clickable-word" @click="toggleMeaning">{{ currentWord.word }}</h3>
             <button
               @click="speakWordManually"
               class="speak-btn"
@@ -186,10 +186,34 @@
                 <div class="definitions">
                   <div v-for="(def, idx) in meaning.definitions.slice(0, 2)" :key="idx" class="definition-item">
                     <p class="definition">{{ def.definition }}</p>
-                    <p class="example" v-if="def.example">例句：{{ def.example }}</p>
+                    <p class="definition-translation" v-if="def.definitionTranslation">{{ def.definitionTranslation }}</p>
+                    <p class="definition-translation loading" v-else-if="def.translating">翻译中...</p>
+                    <div v-if="def.example" class="example-wrapper">
+                      <p class="example">例句：{{ def.example }}</p>
+                      <p class="example-translation" v-if="def.exampleTranslation">{{ def.exampleTranslation }}</p>
+                    </div>
                   </div>
                 </div>
               </div>
+            </div>
+            <!-- 例句:优先 AI 生成,AI 不可用时用词典 API 自带例句兜底 -->
+            <div class="ai-examples-section" v-if="aiExamples.length > 0 || aiExamplesLoading || dictExamples.length > 0">
+              <div class="ai-examples-title">例句</div>
+              <!-- AI 例句加载中 -->
+              <p class="ai-examples-loading" v-if="aiExamplesLoading && aiExamples.length === 0 && dictExamples.length === 0">例句生成中...</p>
+              <!-- AI 例句 -->
+              <div v-for="(ex, i) in aiExamples" :key="'ai-'+i" class="ai-example-item">
+                <p class="ai-example-en">{{ ex.sentence }}</p>
+                <p class="ai-example-zh" v-if="ex.translation">{{ ex.translation }}</p>
+                <p class="ai-example-zh loading" v-else-if="ex.translating">翻译中...</p>
+              </div>
+              <!-- 词典 API 例句兜底(AI 无结果时) -->
+              <template v-if="!aiExamplesLoading && aiExamples.length === 0">
+                <div v-for="(ex, i) in dictExamples" :key="'dict-'+i" class="ai-example-item">
+                  <p class="ai-example-en">{{ ex.sentence }}</p>
+                  <p class="ai-example-zh" v-if="ex.translation">{{ ex.translation }}</p>
+                </div>
+              </template>
             </div>
           </div>
         </div>
@@ -220,7 +244,7 @@
         </div>
 
         <!-- 认识 / 不认识操作 -->
-        <div class="action-buttons" v-if="!showMeaning">
+        <div class="action-buttons" v-if="!showQuiz">
           <button
             class="btn action-btn action-btn--unknown"
             :disabled="isHandlingWordAction"
@@ -234,17 +258,6 @@
             @click="handleKnowWord"
           >
             认识
-          </button>
-        </div>
-
-        <!-- 查看释义后的下一个按钮 -->
-        <div class="next-word-action" v-if="showMeaning">
-          <button
-            class="btn next-word-btn"
-            :disabled="isHandlingWordAction"
-            @click="handleNextWordAfterMeaning"
-          >
-            下一个单词
           </button>
         </div>
       </div>
@@ -372,81 +385,6 @@
       </template>
     </el-dialog>
 
-    <!-- 单词详情弹窗 -->
-    <el-dialog
-      v-model="showWordDialog"
-      :title="dialogWordInfo?.word || '单词详情'"
-      width="min(500px, 90vw)"
-      class="word-detail-dialog"
-    >
-      <div class="word-detail-content" v-if="dialogWordInfo">
-        <!-- 基本信息 -->
-        <div class="word-basic">
-          <h2 class="dialog-word">{{ dialogWordInfo.word }}</h2>
-          <p class="dialog-phonetic" v-if="dialogWordDetails?.phonetic">{{ dialogWordDetails.phonetic }}</p>
-          <p class="dialog-word-class" v-if="dialogWordDetails?.wordClass">{{ dialogWordDetails.wordClass }}</p>
-          <p class="dialog-meaning">{{ dialogWordInfo.meaning }}</p>
-        </div>
-
-        <!-- 详细信息 -->
-        <div class="word-extended" v-if="dialogWordDetails">
-          <!-- 详细解释 -->
-          <div class="detail-section" v-if="dialogWordDetails.detailedExplanation">
-            <h4 class="section-title">详细解释</h4>
-            <p class="section-content">{{ dialogWordDetails.detailedExplanation }}</p>
-          </div>
-
-          <!-- 词源 -->
-          <div class="detail-section" v-if="dialogWordDetails.etymology">
-            <h4 class="section-title">词源</h4>
-            <p class="section-content">{{ dialogWordDetails.etymology }}</p>
-          </div>
-
-          <!-- 使用例句 -->
-          <div class="detail-section" v-if="dialogWordDetails.usageExamples?.length">
-            <h4 class="section-title">使用例句</h4>
-            <ul class="example-list">
-              <li v-for="(example, idx) in dialogWordDetails.usageExamples" :key="idx">{{ example }}</li>
-            </ul>
-          </div>
-
-          <!-- 同义词 -->
-          <div class="detail-section" v-if="dialogWordDetails.synonyms?.length">
-            <h4 class="section-title">同义词</h4>
-            <div class="word-tags">
-              <span class="word-tag" v-for="(word, idx) in dialogWordDetails.synonyms" :key="idx">{{ word }}</span>
-            </div>
-          </div>
-
-          <!-- 反义词 -->
-          <div class="detail-section" v-if="dialogWordDetails.antonyms?.length">
-            <h4 class="section-title">反义词</h4>
-            <div class="word-tags">
-              <span class="word-tag" v-for="(word, idx) in dialogWordDetails.antonyms" :key="idx">{{ word }}</span>
-            </div>
-          </div>
-
-          <!-- 常见搭配 -->
-          <div class="detail-section" v-if="dialogWordDetails.collocations?.length">
-            <h4 class="section-title">常见搭配</h4>
-            <ul class="collocation-list">
-              <li v-for="(col, idx) in dialogWordDetails.collocations" :key="idx">{{ col }}</li>
-            </ul>
-          </div>
-
-          <!-- 缓存标识 -->
-          <p class="cache-hint" v-if="dialogWordDetails.fromCache">
-            <el-icon><Memo /></el-icon> 来自缓存
-          </p>
-        </div>
-
-        <!-- 加载状态 -->
-        <div class="loading-details" v-else-if="loadingWordDialog">
-          <el-icon class="is-loading" :size="30"><Loading /></el-icon>
-          <p>AI 正在生成详细介绍...</p>
-        </div>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
@@ -454,7 +392,6 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Loading, Memo } from '@element-plus/icons-vue'
 import { calculateSM2 } from '@/utils/sm2'
 import { updateMasteryLevel, addWordToVocabularyByWord, getVocabularyList } from '@/api/student'
 import { getWordExplanation } from '@/api/wordExplanation'
@@ -502,6 +439,25 @@ const wordImageUrl = ref('')
 const quizOptions = ref([])
 const showQuiz = ref(false)
 const wordDetails = ref(null)
+// AI 生成的例句列表:{ sentence, translation, translating } — 用于覆盖 dict-api 没例句的词
+const aiExamples = ref([])
+const aiExamplesLoading = ref(false)
+
+// 词典 API 自带例句兜底:AI 不可用时展示已有的 dict-api 例句
+const dictExamples = computed(() => {
+  if (!wordDetails.value?.meanings) return []
+  const seen = new Set()
+  const out = []
+  for (const m of wordDetails.value.meanings) {
+    for (const d of (m.definitions || [])) {
+      if (d.example && !seen.has(d.example)) {
+        seen.add(d.example)
+        out.push({ sentence: d.example, translation: d.exampleTranslation || '', translating: false })
+      }
+    }
+  }
+  return out.slice(0, 5)
+})
 const quizError = ref(false)
 const wrongOption = ref(null)
 const isHandlingWordAction = ref(false)
@@ -532,11 +488,6 @@ const showDeepOptions = ref(false)
 const deepOptions = ref([])
 const deepReciteScore = ref(0)
 
-// 单词详情弹窗状态
-const showWordDialog = ref(false)
-const dialogWordInfo = ref(null)
-const dialogWordDetails = ref(null)
-const loadingWordDialog = ref(false)
 const userInput = ref('')
 const answerStatus = ref(null)
 const deepReciteCorrect = ref(0)
@@ -715,17 +666,6 @@ const handleDontKnowWord = () => {
   // 不自动切换下一个，等待用户点击"下一个单词"按钮
 }
 
-const handleNextWordAfterMeaning = async () => {
-  if (!currentWord.value || isHandlingWordAction.value) return
-  isHandlingWordAction.value = true
-  try {
-    await rateWord(0)
-    showMeaning.value = false
-  } finally {
-    isHandlingWordAction.value = false
-  }
-}
-
 // 获取单词详细信息
 // 防止"用户连续点认识/不认识 → 多个 fetch 并发 → 慢请求覆盖快请求"导致显示错位
 // 每次发起前自增 token，回写 wordDetails 之前比对，旧请求直接丢弃
@@ -740,11 +680,26 @@ const fetchWordDetails = async (word) => {
     if (myToken !== fetchWordDetailsToken) return
     if (data && data.length > 0) {
       const entry = data[0]
+      // 预初始化翻译字段，避免 Vue 对后续动态新增属性的响应式追踪失效
+      // 同时这里就裁到模板要显示的 2 条/词性，避免少见的多义词触发 batch 200 条上限
+      const meanings = (entry.meanings || []).map(m => ({
+        partOfSpeech: m.partOfSpeech,
+        definitions: (m.definitions || []).slice(0, 2).map(d => ({
+          definition: d.definition,
+          example: d.example || '',
+          definitionTranslation: '',
+          exampleTranslation: '',
+          translating: false
+        }))
+      }))
       wordDetails.value = {
         phonetic: entry.phonetic || entry.phonetics?.[0]?.text || '',
-        meanings: entry.meanings || [],
+        meanings,
         origin: entry.origin || ''
       }
+
+      // 翻译所有释义和例句
+      translateDefinitionsAndExamples()
     } else {
       wordDetails.value = null
     }
@@ -755,53 +710,127 @@ const fetchWordDetails = async (word) => {
   }
 }
 
-// 显示单词详情弹窗
-const showWordDetailDialog = async () => {
-  if (!currentWord.value) return
+// 拉 AI 例句:dict-api 经常缺例句(如 latitude),走后端 WordAiExplanationService 兜底
+// 同样用 token 防并发覆盖;最多取 3 句翻译展示
+let fetchAiExamplesToken = 0
 
-  // 设置基本信息
-  dialogWordInfo.value = {
-    word: currentWord.value.word,
-    meaning: currentWord.value.meaning
-  }
-
-  // 显示弹窗
-  showWordDialog.value = true
-
-  // 异步加载详细信息
-  loadingWordDialog.value = true
-  dialogWordDetails.value = null
-
+const fetchAiExamples = async (word) => {
+  const myToken = ++fetchAiExamplesToken
+  aiExamples.value = []
+  aiExamplesLoading.value = true
   try {
-    const response = await getWordExplanation(currentWord.value.word, false)
+    const resp = await getWordExplanation(word, false)
+    if (myToken !== fetchAiExamplesToken) return
+    const examples = Array.isArray(resp?.data?.usageExamples) ? resp.data.usageExamples : []
+    // 过滤掉演示模式下的占位例句
+    const real = examples.filter(s => s && typeof s === 'string'
+      && !s.startsWith('This is an example sentence with ')
+      && !s.startsWith('Learn to use '))
+    const picks = real.slice(0, 3).map(s => ({ sentence: s, translation: '', translating: true }))
+    aiExamples.value = picks
+    if (picks.length === 0) {
+      aiExamplesLoading.value = false
+      return
+    }
 
-    if (response.code === 200 && response.data) {
-      const data = response.data
-      dialogWordDetails.value = {
-        phonetic: data.phonetic || '',
-        wordClass: data.wordClass || '',
-        detailedExplanation: data.detailedExplanation || '',
-        etymology: data.etymology || '',
-        usageExamples: data.usageExamples || [],
-        synonyms: data.synonyms || [],
-        antonyms: data.antonyms || [],
-        collocations: data.collocations || [],
-        fromCache: data.fromCache
+    // 批量翻译这几条例句
+    try {
+      const transResp = await fetch('/api/translate/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          texts: picks.map(p => p.sentence),
+          direction: 'en-to-zh'
+        })
+      })
+      const transJson = await transResp.json()
+      if (myToken !== fetchAiExamplesToken) return
+      if (transJson.code === 200 && Array.isArray(transJson.data)) {
+        picks.forEach((p, i) => {
+          p.translation = transJson.data[i] || ''
+          p.translating = false
+        })
+      } else {
+        picks.forEach(p => { p.translating = false })
       }
-
-      // 更新基本释义（如果 AI 返回了更好的释义）
-      if (data.basicMeaning) {
-        dialogWordInfo.value.meaning = data.basicMeaning
-      }
-    } else {
-      ElMessage.warning(response.message || '获取单词详情失败')
+    } catch (e) {
+      if (myToken !== fetchAiExamplesToken) return
+      console.error('AI 例句翻译失败:', e)
+      picks.forEach(p => { p.translating = false })
     }
   } catch (error) {
-    console.error('获取单词详情失败:', error)
-    ElMessage.error('获取单词详情失败，请稍后重试')
+    if (myToken !== fetchAiExamplesToken) return
+    console.error('获取 AI 例句失败:', error)
+    aiExamples.value = []
   } finally {
-    loadingWordDialog.value = false
+    if (myToken === fetchAiExamplesToken) aiExamplesLoading.value = false
   }
+}
+
+// 翻译释义和例句
+const translateDefinitionsAndExamples = async () => {
+  if (!wordDetails.value || !wordDetails.value.meanings) return
+
+  const textsToTranslate = []
+  const itemsMap = [] // 记录每个文本对应的 def 和类型（definition 或 example）
+
+  wordDetails.value.meanings.forEach(meaning => {
+    meaning.definitions?.forEach(def => {
+      // 标记翻译中
+      def.translating = true
+
+      // 添加释义到翻译列表
+      textsToTranslate.push(def.definition)
+      itemsMap.push({ def, type: 'definition' })
+
+      // 如果有例句，也添加到翻译列表
+      if (def.example) {
+        textsToTranslate.push(def.example)
+        itemsMap.push({ def, type: 'example' })
+      }
+    })
+  })
+
+  if (textsToTranslate.length === 0) return
+
+  // 批量翻译所有释义和例句
+  try {
+    const response = await fetch('/api/translate/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        texts: textsToTranslate,
+        direction: 'en-to-zh'
+      })
+    })
+    const result = await response.json()
+
+    if (result.code === 200 && result.data) {
+      itemsMap.forEach((item, index) => {
+        const translation = result.data[index] || ''
+        if (item.type === 'definition') {
+          item.def.definitionTranslation = translation
+        } else {
+          item.def.exampleTranslation = translation
+        }
+        item.def.translating = false
+      })
+    } else {
+      itemsMap.forEach(item => {
+        item.def.translating = false
+      })
+    }
+  } catch (error) {
+    console.error('翻译失败:', error)
+    itemsMap.forEach(item => {
+      item.def.translating = false
+    })
+  }
+}
+
+// 切换单词意思显示
+const toggleMeaning = () => {
+  showMeaning.value = !showMeaning.value
 }
 
 // 深度背诵相关函数
@@ -987,6 +1016,7 @@ watch(currentWord, (newWord) => {
 
     loadWordImage(newWord.word)
     fetchWordDetails(newWord.word)
+    fetchAiExamples(newWord.word)
     showMeaning.value = false
     showQuiz.value = false
     wrongOption.value = null
@@ -2222,17 +2252,11 @@ onBeforeUnmount(() => {
 
 .clickable-word {
   cursor: pointer;
-  transition: color 0.2s, text-shadow 0.2s;
-  user-select: none;
+  transition: color 0.2s;
 }
 
 .clickable-word:hover {
   color: #409eff;
-  text-shadow: 0 0 8px rgba(64, 158, 255, 0.3);
-}
-
-.clickable-word:active {
-  transform: scale(0.98);
 }
 
 .speak-btn {
@@ -2320,10 +2344,92 @@ onBeforeUnmount(() => {
   margin: 0 0 4px 0;
 }
 
+.example-wrapper {
+  margin: 8px 0;
+}
+
 .example {
   font-size: 13px;
   color: var(--text-secondary);
+  margin: 0 0 4px 0;
+  font-style: italic;
+}
+
+.definition-translation {
+  font-size: 13px;
+  color: #67c23a;
+  margin: 4px 0 0 0;
+  font-style: normal;
+}
+
+.definition-translation.loading {
+  color: #909399;
+  font-style: italic;
+}
+
+.example-translation {
+  font-size: 13px;
+  color: #67c23a;
   margin: 0;
+  padding-left: 16px;
+}
+
+/* AI 兜底例句区 */
+.ai-examples-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border-light);
+  text-align: left;
+}
+
+.ai-examples-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 10px;
+}
+
+.ai-examples-loading {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  margin: 0;
+}
+
+.ai-examples-empty {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.ai-example-item {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.ai-example-item:last-child {
+  margin-bottom: 0;
+}
+
+.ai-example-en {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.ai-example-zh {
+  font-size: 13px;
+  color: #67c23a;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ai-example-zh.loading {
+  color: var(--text-tertiary);
   font-style: italic;
 }
 
@@ -2947,145 +3053,5 @@ onBeforeUnmount(() => {
   .word-text {
     font-size: 28px;
   }
-}
-
-/* 单词详情弹窗样式 */
-.word-detail-dialog .word-detail-content {
-  padding: 8px 0;
-}
-
-.word-detail-dialog .word-basic {
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.word-detail-dialog .dialog-word {
-  font-size: 28px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0 0 8px 0;
-}
-
-.word-detail-dialog .dialog-phonetic {
-  font-size: 16px;
-  color: #909399;
-  margin: 4px 0;
-  font-style: italic;
-}
-
-.word-detail-dialog .dialog-word-class {
-  display: inline-block;
-  font-size: 13px;
-  color: #409eff;
-  background: #ecf5ff;
-  padding: 2px 8px;
-  border-radius: 4px;
-  margin: 4px 0 8px 0;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-.word-detail-dialog .dialog-meaning {
-  font-size: 16px;
-  color: #606266;
-  margin: 8px 0 0 0;
-  line-height: 1.6;
-}
-
-.word-detail-dialog .word-extended {
-  margin-top: 16px;
-}
-
-.word-detail-dialog .detail-section {
-  margin-bottom: 20px;
-}
-
-.word-detail-dialog .section-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0 0 8px 0;
-  padding-left: 10px;
-  border-left: 3px solid #409eff;
-}
-
-.word-detail-dialog .section-content {
-  font-size: 14px;
-  color: #606266;
-  line-height: 1.8;
-  margin: 0;
-}
-
-.word-detail-dialog .example-list,
-.word-detail-dialog .collocation-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.word-detail-dialog .example-list li,
-.word-detail-dialog .collocation-list li {
-  font-size: 14px;
-  color: #606266;
-  line-height: 1.8;
-  padding: 4px 0 4px 20px;
-  position: relative;
-}
-
-.word-detail-dialog .example-list li::before {
-  content: '•';
-  position: absolute;
-  left: 8px;
-  color: #409eff;
-  font-weight: bold;
-}
-
-.word-detail-dialog .collocation-list li::before {
-  content: '▸';
-  position: absolute;
-  left: 6px;
-  color: #67c23a;
-}
-
-.word-detail-dialog .word-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.word-detail-dialog .word-tag {
-  display: inline-block;
-  padding: 4px 12px;
-  background: #f0f9ff;
-  color: #409eff;
-  border-radius: 16px;
-  font-size: 13px;
-  border: 1px solid #d3e8ff;
-}
-
-.word-detail-dialog .cache-hint {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid #e0e0e0;
-  font-size: 12px;
-  color: #909399;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.word-detail-dialog .loading-details {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 0;
-  color: #909399;
-}
-
-.word-detail-dialog .loading-details p {
-  margin-top: 12px;
-  font-size: 14px;
 }
 </style>

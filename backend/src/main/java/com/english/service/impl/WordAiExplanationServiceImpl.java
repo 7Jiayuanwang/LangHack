@@ -5,12 +5,22 @@ import com.english.entity.WordAiExplanation;
 import com.english.mapper.WordAiExplanationMapper;
 import com.english.service.WordAiExplanationService;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -101,9 +111,34 @@ public class WordAiExplanationServiceImpl implements WordAiExplanationService {
     private WordExplanationDTO createBasicExplanation(String word) {
         WordExplanationDTO dto = new WordExplanationDTO();
         dto.setWord(word);
-        dto.setBasicMeaning("AI 服务暂时不可用，暂无详细介绍");
-        dto.setDetailedExplanation("请配置 AI 服务（HiAgent 或 OpenRouter）以获取完整的单词详细介绍。");
+        dto.setPhonetic("/" + word + "/");
+        dto.setWordClass("n./v./adj.");
+        dto.setBasicMeaning("【当前为演示模式】这是单词 " + word + " 的基本释义");
+
+        // 构建详细说明
+        StringBuilder detail = new StringBuilder();
+        detail.append("💡 **记忆提示**\n\n");
+        detail.append("这个单词的完整详解需要配置 AI 服务。\n\n");
+        detail.append("**快速配置方式：**\n");
+        detail.append("1. 注册 OpenRouter（免费）：https://openrouter.ai/\n");
+        detail.append("2. 在 docker/.env 中配置 OPENROUTER_API_KEY\n");
+        detail.append("3. 重启服务即可获取完整的词源、例句、搭配等内容\n\n");
+        detail.append("在此之前，你仍然可以正常背诵、测试和标记单词。");
+
+        dto.setDetailedExplanation(detail.toString());
+        dto.setEtymology("");
+
+        // 提供基础示例
+        List<String> examples = new ArrayList<>();
+        examples.add("This is an example sentence with " + word + ".");
+        examples.add("Learn to use " + word + " in context.");
+        dto.setUsageExamples(examples);
+
+        dto.setSynonyms(new ArrayList<>());
+        dto.setAntonyms(new ArrayList<>());
+        dto.setCollocations(new ArrayList<>());
         dto.setFromCache(false);
+
         return dto;
     }
 
@@ -141,11 +176,11 @@ public class WordAiExplanationServiceImpl implements WordAiExplanationService {
             }
         }
 
-        // 备用 OpenRouter
+        // 备用：走 ai_provider 表的 translate 服务（复用翻译的 API key）
         if (aiProviderRuntimeService != null) {
             try {
                 Optional<String> result = aiProviderRuntimeService.completeIfConfigured(
-                    "openrouter",
+                    "translate",
                     "word-explanation",
                     prompt
                 );
@@ -153,7 +188,7 @@ public class WordAiExplanationServiceImpl implements WordAiExplanationService {
                     return result.get();
                 }
             } catch (Exception e) {
-                log.error("[单词介绍] OpenRouter 调用失败: {}", e.getMessage());
+                log.error("[单词介绍] ai_provider(translate) 调用失败: {}", e.getMessage());
             }
         }
 
