@@ -167,8 +167,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         // 根据任务类型采集数据
         switch (task.getTaskType()) {
             case READING_TIME:
-                // 获取学习时长（分钟）
-                long minutes = learningRecordsService.getStudyMinutesInRange(
+                // 获取阅读时长（分钟）— 仅统计 TEXT_VIEW 记录，避免把单词学习/复习时长计入阅读任务
+                long minutes = learningRecordsService.getReadingMinutesInRange(
                     userId, campaign.getStartTime(), campaign.getEndTime()
                 );
                 return BigDecimal.valueOf(minutes);
@@ -389,6 +389,10 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     /**
      * 计算用户的完成状态
      *
+     * 完成判定优先级：
+     * 1. 必做任务（isRequired=true）：所有必做任务完成才算 COMPLETED
+     * 2. 无必做任务时，按 completionRule（ANY/ALL/THRESHOLD）判断
+     *
      * @param campaignId 活动ID
      * @param completedTaskCount 已完成任务数
      * @param totalScore 总得分
@@ -406,7 +410,30 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             return "NOT_STARTED";
         }
 
-        // 根据完成规则判断是否完成
+        // 查询活动所有未删除任务
+        QueryWrapper<CampaignTask> taskWrapper = new QueryWrapper<>();
+        taskWrapper.eq("campaign_id", campaignId);
+        taskWrapper.eq("deleted", 0);
+        List<CampaignTask> allTasks = taskMapper.selectList(taskWrapper);
+
+        // 优先基于必做任务判断：所有必做任务完成才算完成
+        List<CampaignTask> requiredTasks = allTasks.stream()
+            .filter(t -> Boolean.TRUE.equals(t.getIsRequired()))
+            .collect(Collectors.toList());
+
+        if (!requiredTasks.isEmpty()) {
+            // 获取用户已完成的任务ID集合
+            QueryWrapper<CampaignTaskCompletion> compWrapper = new QueryWrapper<>();
+            compWrapper.eq("campaign_id", campaignId);
+            // 注意：此方法在 updateParticipationScore 内被调用，无法拿到 userId
+            // 改为通过 completedTaskCount 与必做任务数比较
+            // 必做任务全部完成 = completedTaskCount >= requiredTasks.size()
+            // （completedTaskCount 包含必做 + 可选，所以只要 >= 必做数即可）
+            boolean isCompleted = completedTaskCount >= requiredTasks.size();
+            return isCompleted ? "COMPLETED" : "IN_PROGRESS";
+        }
+
+        // 无必做任务时，按 completionRule 判断
         boolean isCompleted = false;
 
         switch (campaign.getCompletionRule()) {
@@ -416,11 +443,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 break;
 
             case ALL:
-                // 完成所有任务才算完成（ALL 规则下所有任务都是必做的，不依赖 isRequired 标志）
-                QueryWrapper<CampaignTask> allTaskWrapper = new QueryWrapper<>();
-                allTaskWrapper.eq("campaign_id", campaignId);
-                allTaskWrapper.eq("deleted", 0);
-                long totalTaskCount = taskMapper.selectCount(allTaskWrapper);
+                // 完成所有任务才算完成
+                long totalTaskCount = allTasks.size();
                 isCompleted = (totalTaskCount > 0 && completedTaskCount >= totalTaskCount);
                 break;
 
@@ -1087,9 +1111,13 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             taskProgress.put("targetValue", task.getTargetValue());
             taskProgress.put("points", task.getPoints());
             taskProgress.put("isRequired", task.getIsRequired());
+            taskProgress.put("isRepeatable", task.getIsRepeatable());
             taskProgress.put("currentValue", completion != null ? completion.getCurrentValue() : BigDecimal.ZERO);
             taskProgress.put("isCompleted", completion != null && completion.getIsCompleted());
             taskProgress.put("completionCount", completion != null ? completion.getCompletionCount() : 0);
+            // 返回实际已获积分（可重复任务可能多次加分，不能只显示单次 points）
+            taskProgress.put("earnedScore", completion != null && completion.getEarnedScore() != null
+                ? completion.getEarnedScore() : 0);
 
             progress.add(taskProgress);
         }

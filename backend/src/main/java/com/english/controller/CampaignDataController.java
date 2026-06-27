@@ -1,6 +1,7 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.entity.CampaignManualRecord;
 import com.english.entity.User;
 import com.english.service.CampaignDataService;
 import com.english.service.UserService;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -90,6 +92,22 @@ public class CampaignDataController {
         } catch (Exception e) {
             log.error("批量导入失败", e);
             return Result.error("批量导入失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取活动最近录入记录（手动 + 导入）
+     */
+    @GetMapping("/records")
+    public Result<List<CampaignManualRecord>> getRecentRecords(
+            @PathVariable Long campaignId,
+            @RequestParam(defaultValue = "20") int limit) {
+        try {
+            List<CampaignManualRecord> records = dataService.getRecentRecords(campaignId, limit);
+            return Result.success(records);
+        } catch (Exception e) {
+            log.error("获取录入记录失败", e);
+            return Result.error("获取录入记录失败: " + e.getMessage());
         }
     }
 

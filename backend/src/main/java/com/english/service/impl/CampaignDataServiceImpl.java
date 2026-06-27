@@ -161,6 +161,76 @@ public class CampaignDataServiceImpl implements CampaignDataService {
     }
 
     @Override
+    public List<CampaignManualRecord> getRecentRecords(Long campaignId, int limit) {
+        // 查询活动下最近的录入记录（含软删除过滤，按创建时间倒序）
+        QueryWrapper<CampaignManualRecord> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.orderByDesc("created_time");
+        wrapper.last("LIMIT " + Math.max(1, Math.min(limit, 200)));
+        List<CampaignManualRecord> records = manualRecordMapper.selectList(wrapper);
+
+        if (records.isEmpty()) {
+            return records;
+        }
+
+        // 批量填充 userName（users.username）
+        List<Long> userIds = records.stream()
+                .map(CampaignManualRecord::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, User> userMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            for (User u : userMapper.selectBatchIds(userIds)) {
+                if (u != null && (u.getDeleted() == null || u.getDeleted() == 0)) {
+                    userMap.put(u.getId(), u);
+                }
+            }
+        }
+
+        // 批量填充 taskName
+        List<Long> taskIds = records.stream()
+                .map(CampaignManualRecord::getTaskId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, CampaignTask> taskMap = new HashMap<>();
+        if (!taskIds.isEmpty()) {
+            for (CampaignTask t : taskMapper.selectBatchIds(taskIds)) {
+                if (t != null) {
+                    taskMap.put(t.getId(), t);
+                }
+            }
+        }
+
+        // 批量填充 createdByName（录入人姓名，优先 realName，回退 username）
+        List<Long> creatorIds = records.stream()
+                .map(CampaignManualRecord::getCreatedBy)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, User> creatorMap = new HashMap<>();
+        if (!creatorIds.isEmpty()) {
+            for (User u : userMapper.selectBatchIds(creatorIds)) {
+                if (u != null && (u.getDeleted() == null || u.getDeleted() == 0)) {
+                    creatorMap.put(u.getId(), u);
+                }
+            }
+        }
+
+        for (CampaignManualRecord r : records) {
+            User u = userMap.get(r.getUserId());
+            r.setUsername(u != null ? (u.getRealName() != null ? u.getRealName() : u.getUsername()) : "");
+            CampaignTask t = taskMap.get(r.getTaskId());
+            r.setTaskName(t != null ? t.getTaskName() : "");
+            User c = creatorMap.get(r.getCreatedBy());
+            r.setCreatedByName(c != null ? (c.getRealName() != null ? c.getRealName() : c.getUsername()) : "");
+        }
+
+        return records;
+    }
+
+    @Override
     public byte[] exportCampaignData(Long campaignId, String format) {
         // 查询活动下所有任务的手动记录 + 完成记录，导出为 Excel
         try (Workbook workbook = new XSSFWorkbook();
@@ -229,9 +299,11 @@ public class CampaignDataServiceImpl implements CampaignDataService {
                 row.createCell(9).setCellValue(c.getLastUpdateTime() != null ? c.getLastUpdateTime().toString() : "");
             }
 
-            // 自动列宽
-            for (int i = 0; i < 10; i++) {
-                sheet.autoSizeColumn(i);
+            // 预设固定列宽（服务器端无字体信息，autoSizeColumn 失效）
+            // 学号/姓名/任务名称/任务类型/当前值/目标值/已完成次数/已获积分/是否完成/最后更新时间
+            int[] colWidths = {4000, 3000, 5000, 3000, 3000, 3000, 3500, 3000, 2500, 5000};
+            for (int i = 0; i < colWidths.length; i++) {
+                sheet.setColumnWidth(i, colWidths[i]);
             }
 
             workbook.write(baos);
@@ -375,8 +447,11 @@ public class CampaignDataServiceImpl implements CampaignDataService {
             // 添加活动标题到首行注释
             sheet.createFreezePane(0, 1);
 
-            for (int i = 0; i < 8; i++) {
-                sheet.autoSizeColumn(i);
+            // 预设固定列宽（服务器端无字体信息，autoSizeColumn 失效）
+            // 排名/学号/姓名/班级/学院/总分/完成任务数/完成状态
+            int[] colWidths = {2500, 4000, 3000, 4000, 4000, 3000, 3500, 3000};
+            for (int i = 0; i < colWidths.length; i++) {
+                sheet.setColumnWidth(i, colWidths[i]);
             }
 
             workbook.write(baos);

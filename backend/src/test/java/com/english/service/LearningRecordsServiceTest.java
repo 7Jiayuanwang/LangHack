@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.*;
 import com.english.exception.BusinessException;
 import com.english.mapper.*;
+import com.english.service.CampaignStatsService;
 import com.english.service.impl.LearningRecordsServiceImpl;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -55,6 +56,9 @@ class LearningRecordsServiceTest {
 
     @Mock
     private VocabularyBookMapper vocabularyBookMapper;
+
+    @Mock
+    private CampaignStatsService campaignStatsService;
 
     @InjectMocks
     private LearningRecordsServiceImpl learningRecordsService;
@@ -465,6 +469,32 @@ class LearningRecordsServiceTest {
 
             assertTrue(record.getDurationSeconds() <= Integer.MAX_VALUE);
             assertTrue(record.getDurationSeconds() >= 0);
+        }
+
+        /**
+         * 回归测试：completeReadingSession 不应再写入 learning_records.TEXT_VIEW。
+         * 前端已通过 /record/learning 周期性保存增量时长，此处再写会重复计算阅读时长。
+         * 仅应触发活动数据采集（collectUserTasksByTypeAsync）让采集器从 learning_records 汇总。
+         */
+        @Test
+        void shouldNotWriteToLearningRecords_ToAvoidDoubleCounting() {
+            TextLearningRecord record = new TextLearningRecord();
+            record.setId(1L);
+            record.setStudentId(7L);
+            record.setTextId(100L);
+            record.setStartTime(LocalDateTime.now().minusMinutes(5));
+            record.setIsCompleted(0);
+
+            when(textLearningRecordMapper.selectById(1L)).thenReturn(record);
+            when(textLearningRecordMapper.updateById(any())).thenReturn(1);
+
+            learningRecordsService.completeReadingSession(1L);
+
+            // 不应插入或原子更新 learning_records（避免重复计算阅读时长）
+            verify(learningRecordMapper, never()).insert(any());
+            verify(learningRecordMapper, never()).incrementTextViewDuration(anyLong(), anyLong(), any(), anyInt());
+            // 应触发活动数据采集
+            verify(campaignStatsService).collectUserTasksByTypeAsync(eq(7L), any());
         }
     }
 

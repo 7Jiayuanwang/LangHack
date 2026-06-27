@@ -34,6 +34,7 @@ export const collectData = (campaignId) => request.post(`/api/admin/campaigns/${
 
 // 数据录入与导出
 export const recordManualData = (campaignId, data) => request.post(`/api/admin/campaigns/${campaignId}/data/manual`, data)
+export const getRecentRecords = (campaignId, limit = 20) => request.get(`/api/admin/campaigns/${campaignId}/data/records`, { params: { limit } })
 export const importData = (campaignId, taskId, file) => {
   const formData = new FormData()
   formData.append('file', file)

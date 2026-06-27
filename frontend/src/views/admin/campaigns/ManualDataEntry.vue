@@ -79,7 +79,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="taskName" label="任务" min-width="150" />
-        <el-table-column prop="userName" label="学生" width="120" />
+        <el-table-column prop="username" label="学生" width="120" />
         <el-table-column prop="recordValue" label="数值" width="100" />
         <el-table-column prop="recordType" label="类型" width="100">
           <template #default="{ row }">
@@ -107,7 +107,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getTasks, recordManualData } from '@/api/campaign'
+import { getTasks, recordManualData, getRecentRecords } from '@/api/campaign'
+import request from '@/utils/request'
 import ImportDataDialog from './ImportDataDialog.vue'
 
 const router = useRouter()
@@ -148,26 +149,32 @@ const loadTasks = async () => {
 }
 
 const searchUsers = async (query) => {
-  if (!query) {
+  if (!query || query.trim().length < 1) {
     userOptions.value = []
     return
   }
 
   searchLoading.value = true
   try {
-    // TODO: 实现用户搜索API
-    // const res = await searchUsers({ keyword: query })
-    // if (res.code === 200) {
-    //   userOptions.value = res.data || []
-    // }
-
-    // 模拟数据
-    userOptions.value = [
-      { id: 1, studentId: '2021001', username: '张三' },
-      { id: 2, studentId: '2021002', username: '李四' }
-    ]
+    // 调用管理员用户搜索接口（/api/auth/search 已对 ADMIN/TEACHER 开放）
+    // 不传 role — 学生在 DB 中可能是 USER 或 STUDENT，由管理员按学号/姓名自行甄选
+    const res = await request.get('/api/auth/search', {
+      params: { keyword: query.trim() }
+    })
+    if (res.code === 200) {
+      // 后端 User 实体：username = 学号，realName = 姓名
+      userOptions.value = (res.data || []).map(u => ({
+        id: u.id,
+        studentId: u.username,
+        username: u.realName || u.username
+      }))
+    } else {
+      userOptions.value = []
+    }
   } catch (error) {
+    console.error('搜索用户失败:', error)
     ElMessage.error('搜索用户失败: ' + error.message)
+    userOptions.value = []
   } finally {
     searchLoading.value = false
   }
@@ -176,16 +183,17 @@ const searchUsers = async (query) => {
 const loadRecentRecords = async () => {
   loading.value = true
   try {
-    // TODO: 实现获取最近录入记录API
-    // const res = await getRecentRecords(campaignId)
-    // if (res.code === 200) {
-    //   recentRecords.value = res.data || []
-    // }
-
-    // 模拟数据
-    recentRecords.value = []
+    const res = await getRecentRecords(campaignId, 20)
+    if (res.code === 200) {
+      recentRecords.value = res.data || []
+    } else {
+      ElMessage.error(res.message || '加载记录失败')
+      recentRecords.value = []
+    }
   } catch (error) {
     console.error('加载记录失败:', error)
+    ElMessage.error('加载记录失败: ' + error.message)
+    recentRecords.value = []
   } finally {
     loading.value = false
   }

@@ -104,6 +104,8 @@ public class StudentCampaignController {
             if (campaign == null) {
                 return Result.error("活动不存在");
             }
+            // 填充参与人数（瞬态字段 @TableField(exist=false)）
+            campaign.setParticipantCount(enrollmentService.countEnrolledParticipants(id));
             List<CampaignTask> tasks = taskService.getTasksByCampaign(id);
             CampaignParticipation participation = enrollmentService.getParticipation(id, userId);
             boolean isEnrolled = participation != null &&

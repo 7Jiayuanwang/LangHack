@@ -167,6 +167,7 @@ let studyTimer = null
 let completionTimeoutId = null
 let studyStartTime = null
 let accumulatedTime = 0 // 累计学习时间（秒）
+let lastSavedStudyTime = 0 // 已保存到后端的学习时间（秒），用于计算增量避免重复累加
 const REQUIRED_STUDY_TIME = 10 * 60 * 1000 // 10分钟，毫秒
 
 // 计算属性
@@ -242,10 +243,13 @@ const loadTextDetail = async () => {
       if (data?.readTime && data.readTime > 0) {
         studyTime.value = data.readTime
         accumulatedTime = data.readTime // 将已学习时长作为累计时间
+        // 已保存的时长不应再次发送，同步 lastSavedStudyTime 避免首次保存重复累加
+        lastSavedStudyTime = data.readTime
       } else {
         // 确保初始值为0
         studyTime.value = 0
         accumulatedTime = 0
+        lastSavedStudyTime = 0
       }
 
       // 检查是否已经满足学习时长要求
@@ -333,17 +337,19 @@ const pauseReading = async () => {
 const saveLearningRecord = async () => {
   try {
     if (studyTime.value > 0) {
-      // 计算这次要保存的时间增量
-      // 这里我们保存总时间，让后端处理增量逻辑
+      // 计算自上次保存以来的增量，避免重复累加导致时长虚高
+      const increment = studyTime.value - lastSavedStudyTime
+      if (increment <= 0) return
       const recordPayload = {
         type: 'TEXT_VIEW',
-        duration: studyTime.value, // 保存总学习时间
+        duration: increment,
         textId: textId.value,
         // 如果是从任务来的，包含任务ID
         ...(assignmentId.value && { assignmentId: assignmentId.value })
       }
 
       await studentApi.recordLearning(recordPayload)
+      lastSavedStudyTime = studyTime.value
     }
   } catch (error) {
     console.error('保存学习记录失败:', error)
@@ -395,6 +401,20 @@ const markAsCompleted = async () => {
     await ElMessageBox.confirm('确定要将此课文标记为已完成吗？', '确认操作', {
       type: 'warning'
     })
+
+    // ⚠️ 标记完成前先暂停计时并 flush 最后一段增量到 learning_records，
+    // 后端 markTextAsCompleted 只更新 text_learning_records，不写入 learning_records，
+    // 所以此处必须提交未保存的增量，否则最后一段阅读时间会丢失。
+    if (recording.value) {
+      recording.value = false
+      if (studyStartTime) {
+        const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
+        accumulatedTime += currentSessionTime
+        studyStartTime = null
+      }
+    }
+    stopStudyTimer()
+    await saveLearningRecord()
 
     const response = await studentApi.markTextAsCompleted(textId.value, assignmentId.value)
     if (response.code === 200) {

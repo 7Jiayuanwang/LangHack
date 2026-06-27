@@ -74,4 +74,9 @@ public interface CampaignEnrollmentService {
      * force=true 时强制报名（仍受人数上限约束）。
      */
     BatchEnrollResult batchEnrollUsers(Long campaignId, List<Long> userIds, boolean force);
+
+    /**
+     * 统计活动已报名（ENROLLED）参与人数
+     */
+    int countEnrolledParticipants(Long campaignId);
 }

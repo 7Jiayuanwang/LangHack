@@ -274,7 +274,9 @@ const handleEnroll = async (campaign) => {
     const res = await enrollCampaign(campaign.id)
     if (res.code === 200) {
       ElMessage.success('报名成功')
+      // 同时刷新可报名列表和已报名列表，确保新报名的活动立即出现在"我的活动"中
       loadAvailableCampaigns()
+      loadEnrolledCampaigns()
     }
     // 错误情况由 axios 拦截器统一处理，不需要在这里重复提示
   } catch (error) {

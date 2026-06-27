@@ -16,6 +16,12 @@ public interface LearningRecordsService {
     long getStudyMinutesInRange(Long studentId, LocalDateTime from, LocalDateTime to);
 
     /**
+     * 获取指定时间范围内的阅读时长（分钟），仅统计 TEXT_VIEW 记录
+     * 用于活动任务 READING_TIME 采集，避免把单词学习/复习时长计入阅读任务
+     */
+    long getReadingMinutesInRange(Long studentId, LocalDateTime from, LocalDateTime to);
+
+    /**
      * 获取今日学习时长（分钟）
      */
     int getTodayStudyTime(Long studentId);

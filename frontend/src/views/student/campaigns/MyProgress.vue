@@ -114,7 +114,9 @@
             <div class="task-footer">
               <span class="points">
                 <el-icon><Medal /></el-icon>
-                {{ task.isCompleted ? `已获得 ${task.points} 分` : `完成可得 ${task.points} 分` }}
+                {{ task.isCompleted
+                  ? `已获得 ${task.earnedScore != null ? task.earnedScore : task.points} 分`
+                  : `完成可得 ${task.points} 分` }}
               </span>
               <span class="completion-count" v-if="task.completionCount > 0">
                 已完成 {{ task.completionCount }} 次
@@ -263,6 +265,13 @@ const getTaskUnitLabel = (unit) => {
 }
 
 const calculateOverallProgress = () => {
+  // 优先基于必做任务计算完成度（达到基本要求就算完成）
+  const requiredTasks = taskProgress.value.filter(t => t.isRequired)
+  if (requiredTasks.length > 0) {
+    const requiredCompleted = requiredTasks.filter(t => t.isCompleted).length
+    return Math.round((requiredCompleted / requiredTasks.length) * 100)
+  }
+  // 无必做任务时，基于所有任务计算
   const total = taskProgress.value.length || 1
   const completed = taskProgress.value.filter(t => t.isCompleted).length
   return Math.round((completed / total) * 100)

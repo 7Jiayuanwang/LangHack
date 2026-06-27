@@ -20,6 +20,7 @@ import com.english.service.CampaignService;
 import com.english.service.CampaignStatsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,6 +60,7 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
 
     @Override
     @Transactional(isolation = Isolation.READ_COMMITTED)
+    @CacheEvict(value = "campaign_overview", key = "#campaignId", cacheManager = "campaignCacheManager")
     public void enrollCampaign(Long campaignId, Long userId) {
         CampaignActivity campaign = campaignService.getCampaignById(campaignId);
         if (campaign == null) {
@@ -119,6 +121,7 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
     }
 
     @Override
+    @CacheEvict(value = "campaign_overview", key = "#campaignId", cacheManager = "campaignCacheManager")
     public void withdrawCampaign(Long campaignId, Long userId) {
         QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
         wrapper.eq("campaign_id", campaignId);
@@ -181,10 +184,10 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
 
     @Override
     public Page<CampaignActivity> getMyEnrolledCampaigns(Long userId, int current, int size, Map<String, Object> params) {
-        // 获取用户参与的活动ID列表
+        // 获取用户参与的活动ID列表（包含 ENROLLED 和 PENDING，PENDING 为 INVITE_ONLY 待审核状态）
         QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
         wrapper.eq("user_id", userId);
-        wrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        wrapper.in("enrollment_status", EnrollmentStatus.ENROLLED, EnrollmentStatus.PENDING);
         List<CampaignParticipation> participations = participationMapper.selectList(wrapper);
 
         Page<CampaignActivity> page = new Page<>(current, size);
@@ -295,6 +298,7 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
     }
 
     @Override
+    @CacheEvict(value = "campaign_overview", key = "#campaignId", cacheManager = "campaignCacheManager")
     public void approveEnrollment(Long campaignId, Long participationId) {
         CampaignParticipation participation = participationMapper.selectById(participationId);
         if (participation == null) {
@@ -316,6 +320,7 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
     }
 
     @Override
+    @CacheEvict(value = "campaign_overview", key = "#campaignId", cacheManager = "campaignCacheManager")
     public void rejectEnrollment(Long campaignId, Long participationId, String reason) {
         CampaignParticipation participation = participationMapper.selectById(participationId);
         if (participation == null) {
@@ -349,6 +354,7 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
 
     @Override
     @Transactional(isolation = Isolation.READ_COMMITTED)
+    @CacheEvict(value = "campaign_overview", key = "#campaignId", cacheManager = "campaignCacheManager")
     public com.english.dto.BatchEnrollResult batchEnrollUsers(Long campaignId, List<Long> userIds, boolean force) {
         com.english.dto.BatchEnrollResult result = new com.english.dto.BatchEnrollResult();
 
@@ -533,5 +539,19 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
         return input.replace("\\", "\\\\")
                     .replace("%", "\\%")
                     .replace("_", "\\_");
+    }
+
+    @Override
+    public int countEnrolledParticipants(Long campaignId) {
+        if (campaignId == null) {
+            return 0;
+        }
+        // 复用已有的批量统计接口，避免重复实现 SQL
+        List<Map<String, Object>> rows = participationMapper.countEnrolledByCampaignIds(List.of(campaignId));
+        if (rows == null || rows.isEmpty()) {
+            return 0;
+        }
+        Object cntObj = rows.get(0).get("cnt");
+        return cntObj == null ? 0 : ((Number) cntObj).intValue();
     }
 }
