@@ -185,6 +185,11 @@ import {
   collectData,
   exportRankingData
 } from '@/api/campaign'
+import {
+  normalizeDownloadResponse,
+  extractBlobErrorMessage,
+  triggerBlobDownload
+} from '@/utils/blobDownload'
 
 const router = useRouter()
 const route = useRoute()
@@ -353,24 +358,26 @@ const handleCollectData = async () => {
 
 const handleExport = async (dimension) => {
   try {
-    const res = await exportRankingData(route.params.id, dimension, 'excel')
+    const raw = await exportRankingData(route.params.id, dimension, 'excel')
 
-    // 创建下载链接
-    const blob = new Blob([res], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${dimension}_ranking_${Date.now()}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
+    // 兼容拦截器返回的完整 axios response 对象或裸 Blob 两种情况
+    const normalized = await normalizeDownloadResponse(
+      raw,
+      `${dimension}_ranking_${Date.now()}.xlsx`,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
+    // 后端出错时可能返回 JSON 错误体（content-type: application/json）
+    if (normalized.contentType && normalized.contentType.includes('application/json')) {
+      const errMsg = await extractBlobErrorMessage(normalized.blob, '导出失败')
+      ElMessage.error(errMsg)
+      return
+    }
+
+    triggerBlobDownload(normalized.blob, normalized.filename)
     ElMessage.success('导出成功')
   } catch (error) {
-    ElMessage.error('导出失败: ' + error.message)
+    ElMessage.error('导出失败: ' + (error?.message || error))
   }
 }
 
