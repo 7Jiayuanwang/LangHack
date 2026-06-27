@@ -113,3 +113,30 @@ ADD COLUMN last_counted_value DECIMAL(10,2) DEFAULT 0.0000 COMMENT '上次计分
 UPDATE campaign_task_completions
 SET last_counted_value = current_value
 WHERE last_counted_value = 0 AND current_value > 0;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 扩展 school_student 字段长度（整合自 V21__extend_school_student_fields.sql）
+-- 修复 DataIntegrityViolationException: phone/counselor_name VARCHAR(50) → VARCHAR(100)
+-- ═══════════════════════════════════════════════════════════════
+DROP PROCEDURE IF EXISTS _v21_extend_student_fields;
+CREATE PROCEDURE _v21_extend_student_fields()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'phone'
+                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
+        ALTER TABLE school_student
+            MODIFY COLUMN phone VARCHAR(100) NULL COMMENT '联系电话（CDSP 可能返回多个号码拼接）';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'counselor_name'
+                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
+        ALTER TABLE school_student
+            MODIFY COLUMN counselor_name VARCHAR(100) NULL COMMENT '辅导员姓名（可能包含多个辅导员或职务）';
+    END IF;
+END;
+CALL _v21_extend_student_fields();
+DROP PROCEDURE IF EXISTS _v21_extend_student_fields;

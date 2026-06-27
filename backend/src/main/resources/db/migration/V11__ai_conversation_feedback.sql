@@ -160,3 +160,17 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     FOREIGN KEY (call_log_id) REFERENCES ai_call_log(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI用户反馈表';
+
+-- ═══════════════════════════════════════════════════════════════
+-- texts.category 字段（整合自 V11__add_category_to_texts.sql）
+-- ═══════════════════════════════════════════════════════════════
+SET @db = DATABASE();
+SET @col_exists = 0;
+SELECT COUNT(*) INTO @col_exists FROM information_schema.columns
+    WHERE table_schema = @db AND table_name = 'texts' AND column_name = 'category';
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE texts ADD COLUMN category VARCHAR(50) DEFAULT NULL COMMENT ''课文类别'' AFTER tags',
+    'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
