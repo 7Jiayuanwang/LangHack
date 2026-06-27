@@ -71,22 +71,40 @@ public class WordAiExplanationServiceImpl implements WordAiExplanationService {
         return generateAndSaveExplanation(word);
     }
 
-    private WordExplanationDTO generateAndSaveExplanation(String word) throws Exception {
-        // 构建 AI 提示词
-        String prompt = buildPrompt(word);
+    private WordExplanationDTO generateAndSaveExplanation(String word) {
+        try {
+            // 构建 AI 提示词
+            String prompt = buildPrompt(word);
 
-        // 调用 AI 服务
-        String aiResponse = callAiService(prompt);
+            // 调用 AI 服务
+            String aiResponse = callAiService(prompt);
 
-        // 解析 AI 响应
-        WordAiExplanation explanation = parseAiResponse(word, aiResponse);
+            // 解析 AI 响应
+            WordAiExplanation explanation = parseAiResponse(word, aiResponse);
 
-        // 保存到数据库
-        wordAiExplanationMapper.insert(explanation);
+            // 保存到数据库
+            wordAiExplanationMapper.insert(explanation);
 
-        log.info("[单词介绍] 生成并保存成功: word={}", word);
+            log.info("[单词介绍] 生成并保存成功: word={}", word);
 
-        return convertToDTO(explanation, false);
+            return convertToDTO(explanation, false);
+        } catch (Exception e) {
+            log.warn("[单词介绍] AI 服务调用失败: {}, 返回基础信息", e.getMessage());
+            // AI 服务不可用时，返回基础信息
+            return createBasicExplanation(word);
+        }
+    }
+
+    /**
+     * 创建基础单词解释（AI 服务不可用时使用）
+     */
+    private WordExplanationDTO createBasicExplanation(String word) {
+        WordExplanationDTO dto = new WordExplanationDTO();
+        dto.setWord(word);
+        dto.setBasicMeaning("AI 服务暂时不可用，暂无详细介绍");
+        dto.setDetailedExplanation("请配置 AI 服务（HiAgent 或 OpenRouter）以获取完整的单词详细介绍。");
+        dto.setFromCache(false);
+        return dto;
     }
 
     private String buildPrompt(String word) {
