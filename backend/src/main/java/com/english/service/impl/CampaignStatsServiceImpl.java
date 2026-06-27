@@ -451,7 +451,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     }
 
     @Override
-    @Cacheable(value = "campaign_ranking", key = "'individual_' + #campaignId + '_' + #current + '_' + #size", cacheManager = "campaignCacheManager")
+    @Cacheable(value = "campaign_ranking", key = "'individual_' + #campaignId + '_' + #current + '_' + #size + '_' + (#params?.get('className') ?: '') + '_' + (#params?.get('collegeName') ?: '')", cacheManager = "campaignCacheManager")
     public Page<CampaignParticipation> getRankingByIndividual(Long campaignId, int current, int size, Map<String, Object> params) {
         Page<CampaignParticipation> page = new Page<>(current, size);
 
