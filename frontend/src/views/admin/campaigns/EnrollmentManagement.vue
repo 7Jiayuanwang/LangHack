@@ -154,6 +154,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import request from '@/utils/request'
 import {
   getPendingEnrollments,
   getEnrolledList,
@@ -306,20 +307,28 @@ const confirmReject = async () => {
 }
 
 const searchUsers = async (query) => {
-  if (!query) {
+  if (!query || query.trim().length < 1) {
     userOptions.value = []
     return
   }
 
   searchLoading.value = true
   try {
-    // TODO: 实现用户搜索API
-    userOptions.value = [
-      { id: 1, studentId: '2021001', username: '张三' },
-      { id: 2, studentId: '2021002', username: '李四' }
-    ]
+    const res = await request.get('/api/auth/search', {
+      params: { keyword: query.trim() }
+    })
+    if (res.code === 200) {
+      userOptions.value = (res.data || []).map(u => ({
+        id: u.id,
+        studentId: u.username,
+        username: u.realName || u.username
+      }))
+    } else {
+      userOptions.value = []
+    }
   } catch (error) {
     ElMessage.error('搜索用户失败: ' + error.message)
+    userOptions.value = []
   } finally {
     searchLoading.value = false
   }

@@ -76,6 +76,13 @@ public class CampaignDataServiceImpl implements CampaignDataService {
         record.setCreatedTime(LocalDateTime.now());
 
         manualRecordMapper.insert(record);
+
+        // 录入完成后立即更新任务完成度和积分
+        try {
+            campaignStatsService.applyManualRecord(campaignId, taskId, userId, value);
+        } catch (Exception e) {
+            log.error("手动录入后更新积分失败: campaignId={}, taskId={}, userId={}", campaignId, taskId, userId, e);
+        }
     }
 
     @Override
@@ -138,6 +145,13 @@ public class CampaignDataServiceImpl implements CampaignDataService {
 
                     manualRecordMapper.insert(record);
                     successCount++;
+
+                    // 每条导入记录同步更新积分
+                    try {
+                        campaignStatsService.applyManualRecord(campaignId, taskId, userId, value);
+                    } catch (Exception ex) {
+                        log.warn("导入行{}更新积分失败: {}", i + 1, ex.getMessage());
+                    }
 
                 } catch (Exception e) {
                     errors.add("第" + (i + 1) + "行: " + e.getMessage());

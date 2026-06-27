@@ -202,4 +202,19 @@ public class StudentCampaignController {
             return Result.error("获取我的排名失败: " + e.getMessage());
         }
     }
+
+    /**
+     * 获取我的积分明细
+     */
+    @GetMapping("/{id}/score-details")
+    public Result<List<Map<String, Object>>> getMyScoreDetails(@PathVariable Long id, Authentication authentication) {
+        try {
+            Long userId = getCurrentUserId(authentication);
+            List<Map<String, Object>> details = statsService.getMyScoreDetails(id, userId);
+            return Result.success(details);
+        } catch (Exception e) {
+            log.error("获取积分明细失败", e);
+            return Result.error("获取积分明细失败: " + e.getMessage());
+        }
+    }
 }

@@ -1,9 +1,11 @@
 package com.english.controller;
 
 import com.english.dto.Result;
+import com.english.entity.CampaignActivity;
 import com.english.entity.CampaignManualRecord;
 import com.english.entity.User;
 import com.english.service.CampaignDataService;
+import com.english.service.CampaignService;
 import com.english.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +21,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -36,6 +42,11 @@ public class CampaignDataController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private CampaignService campaignService;
+
+    private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
     /**
      * 手动录入数据
@@ -122,12 +133,14 @@ public class CampaignDataController {
             byte[] data = dataService.exportCampaignData(campaignId, format);
             ByteArrayResource resource = new ByteArrayResource(data);
 
-            String ext = "xlsx".equalsIgnoreCase(format) || "excel".equalsIgnoreCase(format) ? "xlsx" : format;
-            String filename = "campaign_" + campaignId + "_data." + ext;
+            String title = getCampaignTitle(campaignId);
+            String ts = LocalDateTime.now().format(TS_FMT);
+            String filename = title + "_数据_" + ts + ".xlsx";
 
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + encodeFilename(filename) + "\"")
                     .body(resource);
         } catch (Exception e) {
             log.error("导出活动数据失败", e);
@@ -147,16 +160,36 @@ public class CampaignDataController {
             byte[] data = dataService.exportRankingData(campaignId, dimension, format);
             ByteArrayResource resource = new ByteArrayResource(data);
 
-            String ext = "xlsx".equalsIgnoreCase(format) || "excel".equalsIgnoreCase(format) ? "xlsx" : format;
-            String filename = "campaign_" + campaignId + "_ranking_" + dimension + "." + ext;
+            String title = getCampaignTitle(campaignId);
+            String ts = LocalDateTime.now().format(TS_FMT);
+            String dimLabel = switch (dimension.toUpperCase()) {
+                case "CLASS"   -> "班级排名";
+                case "COLLEGE" -> "学院排名";
+                default        -> "个人排名";
+            };
+            String filename = title + "_" + dimLabel + "_" + ts + ".xlsx";
 
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + encodeFilename(filename) + "\"")
                     .body(resource);
         } catch (Exception e) {
             log.error("导出排名数据失败", e);
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    private String getCampaignTitle(Long campaignId) {
+        CampaignActivity campaign = campaignService.getCampaignById(campaignId);
+        if (campaign == null || campaign.getTitle() == null || campaign.getTitle().isBlank()) {
+            return "活动" + campaignId;
+        }
+        // 移除文件名中的非法字符
+        return campaign.getTitle().replaceAll("[\\\\/:*?\"<>|]", "_");
+    }
+
+    private String encodeFilename(String filename) {
+        return URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }

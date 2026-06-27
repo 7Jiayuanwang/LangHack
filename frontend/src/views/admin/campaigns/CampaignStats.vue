@@ -361,9 +361,10 @@ const handleExport = async (dimension) => {
     const raw = await exportRankingData(route.params.id, dimension, 'excel')
 
     // 兼容拦截器返回的完整 axios response 对象或裸 Blob 两种情况
+    const dimLabel = { individual: '个人排名', class: '班级排名', college: '学院排名' }[dimension] || '排名'
     const normalized = await normalizeDownloadResponse(
       raw,
-      `${dimension}_ranking_${Date.now()}.xlsx`,
+      `活动_${dimLabel}_${Date.now()}.xlsx`,
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
@@ -393,15 +394,40 @@ const getRankClass = (rank) => {
 }
 
 const calculateProgress = (row) => {
-  // 假设总任务数从overview获取
-  const totalTasks = overview.totalTasks || 10
-  return Math.round((row.completedTasks / totalTasks) * 100)
+  const requiredCount = overview.requiredTaskCount || 0
+  const completionRule = overview.completionRule || 'ALL'
+  const threshold = overview.completionThreshold || 0
+  const totalTasks = overview.taskCount || 0
+  const completedTasks = row.completedTasks || 0
+
+  // 有必做任务：进度 = 已完成任务数 / 必做任务数（必做全完成即100%）
+  if (requiredCount > 0) {
+    return Math.min(Math.round((completedTasks / requiredCount) * 100), 100)
+  }
+
+  // 完成任意一个即算完成：用状态映射
+  if (completionRule === 'ANY') {
+    const statusMap = { COMPLETED: 100, IN_PROGRESS: 50, NOT_STARTED: 0 }
+    return statusMap[row.completionStatus] ?? 0
+  }
+
+  // 达到阈值模式：进度 = 已完成 / 阈值
+  if (completionRule === 'THRESHOLD' && threshold > 0) {
+    return Math.min(Math.round((completedTasks / threshold) * 100), 100)
+  }
+
+  // 全部完成模式（或兜底）：进度 = 已完成 / 总任务数
+  if (totalTasks > 0) {
+    return Math.min(Math.round((completedTasks / totalTasks) * 100), 100)
+  }
+
+  return 0
 }
 
 const getProgressColor = (row) => {
-  const progress = calculateProgress(row)
-  if (progress >= 100) return '#67c23a'
-  if (progress >= 50) return '#409eff'
+  const status = row.completionStatus
+  if (status === 'COMPLETED') return '#67c23a'
+  if (status === 'IN_PROGRESS') return '#409eff'
   return '#e6a23c'
 }
 

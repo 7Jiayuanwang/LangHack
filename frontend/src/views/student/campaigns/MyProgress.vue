@@ -128,6 +128,49 @@
         </div>
       </el-card>
 
+      <!-- 积分明细 -->
+      <el-card class="score-details-card">
+        <h3>积分明细</h3>
+        <div v-if="scoreDetails.length === 0" class="score-empty">
+          <el-empty description="暂无积分记录" :image-size="60" />
+        </div>
+        <div v-else class="score-detail-list">
+          <div
+            v-for="item in scoreDetails"
+            :key="item.taskId"
+            class="score-detail-item"
+          >
+            <div class="score-detail-header">
+              <div class="score-task-name">
+                <el-icon><Medal /></el-icon>
+                {{ item.taskName || getTaskTypeLabel(item.taskType) }}
+              </div>
+              <div class="score-earned" :class="{ 'has-score': item.earnedScore > 0 }">
+                +{{ item.earnedScore }} 分
+              </div>
+            </div>
+            <div class="score-detail-meta">
+              <el-tag size="small" effect="plain">{{ getTaskTypeLabel(item.taskType) }}</el-tag>
+              <span v-if="item.completionCount > 0" class="meta-item">完成 {{ item.completionCount }} 次</span>
+              <span v-if="item.lastUpdateTime" class="meta-item">最近更新: {{ formatDate(item.lastUpdateTime) }}</span>
+            </div>
+            <div v-if="item.recentRecords && item.recentRecords.length > 0" class="record-list">
+              <div class="record-list-title">手动录入记录</div>
+              <div
+                v-for="(rec, idx) in item.recentRecords"
+                :key="idx"
+                class="record-entry"
+              >
+                <span class="record-value">+{{ rec.value }} {{ getTaskUnitLabel(item.taskUnit) }}</span>
+                <span class="record-type">{{ rec.type === 'MANUAL' ? '手动' : '批量导入' }}</span>
+                <span class="record-time">{{ formatDate(rec.createdTime) }}</span>
+                <span v-if="rec.remark" class="record-remark">{{ rec.remark }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
       <!-- 排名信息 -->
       <el-card class="ranking-card" v-if="campaign.showRanking">
         <h3>我的排名</h3>
@@ -180,7 +223,8 @@ import {
   getStudentCampaignDetail,
   getMyProgress,
   getMyTaskProgress,
-  getMyRanking
+  getMyRanking,
+  getMyScoreDetails
 } from '@/api/campaign'
 
 const router = useRouter()
@@ -191,15 +235,17 @@ const campaign = ref({})
 const progress = ref({})
 const taskProgress = ref([])
 const ranking = ref({})
+const scoreDetails = ref([])
 
 const loadData = async () => {
   loading.value = true
   try {
-    const [campaignRes, progressRes, tasksRes, rankingRes] = await Promise.all([
+    const [campaignRes, progressRes, tasksRes, rankingRes, scoreRes] = await Promise.all([
       getStudentCampaignDetail(route.params.id),
       getMyProgress(route.params.id),
       getMyTaskProgress(route.params.id),
-      getMyRanking(route.params.id)
+      getMyRanking(route.params.id),
+      getMyScoreDetails(route.params.id)
     ])
 
     if (campaignRes.code === 200) {
@@ -213,6 +259,9 @@ const loadData = async () => {
     }
     if (rankingRes.code === 200) {
       ranking.value = rankingRes.data || {}
+    }
+    if (scoreRes.code === 200) {
+      scoreDetails.value = scoreRes.data || []
     }
   } catch (error) {
     ElMessage.error('加载失败: ' + error.message)
@@ -308,6 +357,17 @@ const getRankClass = (rank) => {
   if (rank === 2) return 'rank-silver'
   if (rank === 3) return 'rank-bronze'
   return ''
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 onMounted(() => {
@@ -628,5 +688,115 @@ onMounted(() => {
     flex-direction: column;
     gap: 10px;
   }
+}
+
+.score-details-card h3 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #303133;
+}
+
+.score-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.score-detail-item {
+  padding: 16px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.score-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.score-task-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.score-earned {
+  font-size: 18px;
+  font-weight: bold;
+  color: #909399;
+}
+
+.score-earned.has-score {
+  color: #67c23a;
+}
+
+.score-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.meta-item {
+  font-size: 12px;
+  color: #909399;
+}
+
+.record-list {
+  border-top: 1px solid #ebeef5;
+  padding-top: 10px;
+}
+
+.record-list-title {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.record-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: #606266;
+  border-bottom: 1px dashed #f0f0f0;
+}
+
+.record-entry:last-child {
+  border-bottom: none;
+}
+
+.record-value {
+  color: #409eff;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.record-type {
+  color: #909399;
+  min-width: 60px;
+}
+
+.record-time {
+  color: #c0c4cc;
+  font-size: 12px;
+}
+
+.record-remark {
+  color: #606266;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-empty {
+  padding: 20px 0;
 }
 </style>

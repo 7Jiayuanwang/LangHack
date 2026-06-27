@@ -104,18 +104,22 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                         .eq("campaign_id", campaign.getId())
                         .eq("task_type", taskType)
                         .eq("auto_collect", true)
+                        .orderByAsc("target_value")  // 按目标值升序，先完成低标准任务
                 );
 
-                // 4. Collect each task (reuse existing atomic logic)
-                for (CampaignTask task : tasks) {
-                    try {
-                        BigDecimal value = collectUserTaskData(campaign, task, userId);
-                        updateTaskCompletion(campaign.getId(), task.getId(), userId, value, task.getTargetValue());
-                    } catch (Exception e) {
-                        log.error("事件驱动采集失败: userId={}, campaignId={}, taskId={}, taskType={}",
-                            userId, campaign.getId(), task.getId(), taskType, e);
-                    }
+                if (tasks.isEmpty()) continue;
+
+                // 采集该类型在活动时间窗口内的总进度值（只采集一次，各任务共享）
+                BigDecimal totalValue = BigDecimal.ZERO;
+                try {
+                    totalValue = collectUserTaskData(campaign, tasks.get(0), userId);
+                } catch (Exception e) {
+                    log.error("采集数据失败: userId={}, campaignId={}, taskType={}", userId, campaign.getId(), taskType, e);
+                    continue;
                 }
+
+                // 分层分配：totalValue 从低标准任务依次向高标准任务分配，不重复计算
+                distributeValueToTieredTasks(campaign.getId(), tasks, userId, totalValue);
             }
 
             log.debug("事件驱动采集完成: userId={}, taskType={}, 活跃活动数={}", userId, taskType, activeCampaigns.size());
@@ -466,11 +470,64 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     @Override
     @CacheEvict(value = {"campaign_ranking", "campaign_overview"}, allEntries = true, cacheManager = "campaignCacheManager")
     public void collectAllCampaignData(Long campaignId) {
-        List<CampaignTask> tasks = taskMapper.selectList(
-            new QueryWrapper<CampaignTask>().eq("campaign_id", campaignId)
+        CampaignActivity campaign = campaignService.getCampaignById(campaignId);
+        if (campaign == null) return;
+
+        List<CampaignTask> allTasks = taskMapper.selectList(
+            new QueryWrapper<CampaignTask>().eq("campaign_id", campaignId).eq("auto_collect", true)
         );
+        if (allTasks.isEmpty()) return;
+
+        // 按类型分组，同类型按 targetValue 升序，支持多任务分层完成
+        Map<TaskType, List<CampaignTask>> tasksByType = allTasks.stream()
+            .collect(java.util.stream.Collectors.groupingBy(CampaignTask::getTaskType));
+
+        final int PAGE_SIZE = 500;
+        int pageNum = 1;
+        Page<CampaignParticipation> page;
+
+        do {
+            page = new Page<>(pageNum, PAGE_SIZE);
+            QueryWrapper<CampaignParticipation> pWrapper = new QueryWrapper<>();
+            pWrapper.eq("campaign_id", campaignId);
+            pWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+            page = participationMapper.selectPage(page, pWrapper);
+
+            for (CampaignParticipation participant : page.getRecords()) {
+                Long userId = participant.getUserId();
+                for (Map.Entry<TaskType, List<CampaignTask>> entry : tasksByType.entrySet()) {
+                    List<CampaignTask> typeTasks = entry.getValue().stream()
+                        .sorted(java.util.Comparator.comparing(CampaignTask::getTargetValue))
+                        .collect(Collectors.toList());
+                    try {
+                        BigDecimal totalValue = collectUserTaskData(campaign, typeTasks.get(0), userId);
+                        distributeValueToTieredTasks(campaignId, typeTasks, userId, totalValue);
+                    } catch (Exception e) {
+                        log.error("全量采集失败: userId={}, campaignId={}, taskType={}",
+                            userId, campaignId, entry.getKey(), e);
+                    }
+                }
+            }
+            pageNum++;
+        } while (page.hasNext());
+    }
+
+    /**
+     * 将总进度值按目标值升序分层分配给同类型的多个任务。
+     *
+     * 规则（以阅读时长为例，有两个任务 30分钟/10分 和 60分钟/20分）：
+     * - totalValue=45 → 30分钟任务完成(+10分)，60分钟任务进行中(0分)
+     * - totalValue=70 → 30分钟任务完成(+10分)，60分钟任务完成(+20分)
+     * - updateTaskCompletion 内部用 lastCountedValue 防止同一进度被重复计分
+     */
+    private void distributeValueToTieredTasks(Long campaignId, List<CampaignTask> tasks,
+                                               Long userId, BigDecimal totalValue) {
         for (CampaignTask task : tasks) {
-            collectTaskData(campaignId, task.getId());
+            try {
+                updateTaskCompletion(campaignId, task.getId(), userId, totalValue, task.getTargetValue());
+            } catch (Exception e) {
+                log.error("分层任务更新失败: campaignId={}, taskId={}, userId={}", campaignId, task.getId(), userId, e);
+            }
         }
     }
 
@@ -1043,11 +1100,27 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         Map<String, Object> overview = new HashMap<>();
         overview.putAll(getParticipationStats(campaignId));
 
-        // 任务统计
+        // 全部任务数
         long taskCount = taskMapper.selectCount(
-            new QueryWrapper<CampaignTask>().eq("campaign_id", campaignId)
+            new QueryWrapper<CampaignTask>().eq("campaign_id", campaignId).eq("deleted", 0)
         );
         overview.put("taskCount", taskCount);
+
+        // 必做任务数
+        long requiredTaskCount = taskMapper.selectCount(
+            new QueryWrapper<CampaignTask>()
+                .eq("campaign_id", campaignId)
+                .eq("is_required", 1)
+                .eq("deleted", 0)
+        );
+        overview.put("requiredTaskCount", requiredTaskCount);
+
+        // 完成规则（供前端进度条计算）
+        CampaignActivity campaign = campaignService.getCampaignById(campaignId);
+        if (campaign != null) {
+            overview.put("completionRule", campaign.getCompletionRule());
+            overview.put("completionThreshold", campaign.getCompletionThreshold());
+        }
 
         return overview;
     }
@@ -1123,5 +1196,97 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         }
 
         return progress;
+    }
+
+    @Autowired
+    private CampaignManualRecordMapper manualRecordMapper;
+
+    @Override
+    public void applyManualRecord(Long campaignId, Long taskId, Long userId, BigDecimal value) {
+        CampaignTask task = taskMapper.selectById(taskId);
+        if (task == null) {
+            log.warn("applyManualRecord: 任务{}不存在，跳过", taskId);
+            return;
+        }
+
+        // 获取当前完成记录（若无则从0开始）
+        QueryWrapper<CampaignTaskCompletion> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.eq("task_id", taskId);
+        wrapper.eq("user_id", userId);
+        CampaignTaskCompletion completion = completionMapper.selectOne(wrapper);
+
+        BigDecimal currentValue = (completion != null && completion.getCurrentValue() != null)
+            ? completion.getCurrentValue() : BigDecimal.ZERO;
+
+        // 手动录入值直接追加到当前进度
+        BigDecimal newValue = currentValue.add(value);
+
+        updateTaskCompletion(campaignId, taskId, userId, newValue, task.getTargetValue());
+        log.debug("applyManualRecord: campaignId={}, taskId={}, userId={}, delta={}, newTotal={}",
+            campaignId, taskId, userId, value, newValue);
+    }
+
+    @Override
+    public List<Map<String, Object>> getMyScoreDetails(Long campaignId, Long userId) {
+        List<Map<String, Object>> details = new ArrayList<>();
+
+        List<CampaignTask> tasks = taskMapper.selectList(
+            new QueryWrapper<CampaignTask>().eq("campaign_id", campaignId).eq("deleted", 0)
+        );
+
+        // 批量查手动录入记录（该用户在该活动下的全部）
+        QueryWrapper<com.english.entity.CampaignManualRecord> mrWrapper = new QueryWrapper<>();
+        mrWrapper.eq("campaign_id", campaignId);
+        mrWrapper.eq("user_id", userId);
+        mrWrapper.eq("deleted", 0);
+        mrWrapper.orderByDesc("created_time");
+        List<com.english.entity.CampaignManualRecord> allManualRecords =
+            manualRecordMapper.selectList(mrWrapper);
+        Map<Long, List<com.english.entity.CampaignManualRecord>> manualByTask = allManualRecords.stream()
+            .collect(Collectors.groupingBy(com.english.entity.CampaignManualRecord::getTaskId));
+
+        for (CampaignTask task : tasks) {
+            QueryWrapper<CampaignTaskCompletion> cw = new QueryWrapper<>();
+            cw.eq("campaign_id", campaignId);
+            cw.eq("task_id", task.getId());
+            cw.eq("user_id", userId);
+            CampaignTaskCompletion completion = completionMapper.selectOne(cw);
+
+            Map<String, Object> item = new HashMap<>();
+            item.put("taskId", task.getId());
+            item.put("taskName", task.getTaskName());
+            item.put("taskType", task.getTaskType());
+            item.put("taskUnit", task.getTaskUnit());
+            item.put("targetValue", task.getTargetValue());
+            item.put("points", task.getPoints());
+            item.put("isRepeatable", task.getIsRepeatable());
+            item.put("currentValue", completion != null ? completion.getCurrentValue() : java.math.BigDecimal.ZERO);
+            item.put("earnedScore", completion != null && completion.getEarnedScore() != null
+                ? completion.getEarnedScore() : 0);
+            item.put("completionCount", completion != null ? completion.getCompletionCount() : 0);
+            item.put("isCompleted", completion != null && Boolean.TRUE.equals(completion.getIsCompleted()));
+            item.put("lastUpdateTime", completion != null ? completion.getLastUpdateTime() : null);
+
+            // 最近5条手动录入记录作为积分来源说明
+            List<com.english.entity.CampaignManualRecord> taskRecords =
+                manualByTask.getOrDefault(task.getId(), java.util.Collections.emptyList());
+            List<Map<String, Object>> recordSummaries = taskRecords.stream()
+                .limit(5)
+                .map(r -> {
+                    Map<String, Object> rec = new HashMap<>();
+                    rec.put("value", r.getRecordValue());
+                    rec.put("type", r.getRecordType());
+                    rec.put("remark", r.getRemark());
+                    rec.put("createdTime", r.getCreatedTime());
+                    return rec;
+                })
+                .collect(Collectors.toList());
+            item.put("recentRecords", recordSummaries);
+
+            details.add(item);
+        }
+
+        return details;
     }
 }

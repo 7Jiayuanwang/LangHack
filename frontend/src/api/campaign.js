@@ -69,3 +69,4 @@ export const withdrawCampaign = (id) => request.delete(`/api/student/campaigns/$
 export const getMyProgress = (id) => request.get(`/api/student/campaigns/${id}/progress`)
 export const getMyTaskProgress = (id) => request.get(`/api/student/campaigns/${id}/tasks`)
 export const getMyRanking = (id) => request.get(`/api/student/campaigns/${id}/ranking`)
+export const getMyScoreDetails = (id) => request.get(`/api/student/campaigns/${id}/score-details`)

@@ -32,6 +32,17 @@ public interface CampaignStatsService {
     void collectUserTasksByTypeAsync(Long userId, TaskType taskType);
 
     /**
+     * 手动录入/导入数据后直接更新指定任务的完成进度（同步执行，无需自动采集）
+     * 用于 MANUAL 类型任务，value 为本次录入值，直接追加到当前进度
+     *
+     * @param campaignId 活动ID
+     * @param taskId     任务ID
+     * @param userId     用户ID
+     * @param value      录入值（追加）
+     */
+    void applyManualRecord(Long campaignId, Long taskId, Long userId, java.math.BigDecimal value);
+
+    /**
      * 获取个人排名（管理员）
      */
     Page<CampaignParticipation> getRankingByIndividual(Long campaignId, int current, int size, Map<String, Object> params);
@@ -75,4 +86,10 @@ public interface CampaignStatsService {
      * 获取我的任务进度列表
      */
     List<Map<String, Object>> getMyTaskProgress(Long campaignId, Long userId);
+
+    /**
+     * 获取我的积分明细（学生端）
+     * 返回每个任务的得分详情及手动录入记录
+     */
+    List<Map<String, Object>> getMyScoreDetails(Long campaignId, Long userId);
 }
