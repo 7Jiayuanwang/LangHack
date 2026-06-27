@@ -20,7 +20,7 @@ RUN mkdir -p /root/.m2 && \
     echo '  <mirrors>' >> /root/.m2/settings.xml && \
     echo '    <mirror>' >> /root/.m2/settings.xml && \
     echo '      <id>aliyun</id>' >> /root/.m2/settings.xml && \
-    echo '      <mirrorOf>external:*,!central</mirrorOf>' >> /root/.m2/settings.xml && \
+    echo '      <mirrorOf>*</mirrorOf>' >> /root/.m2/settings.xml && \
     echo '      <name>Aliyun Maven</name>' >> /root/.m2/settings.xml && \
     echo '      <url>https://maven.aliyun.com/repository/public</url>' >> /root/.m2/settings.xml && \
     echo '    </mirror>' >> /root/.m2/settings.xml && \
