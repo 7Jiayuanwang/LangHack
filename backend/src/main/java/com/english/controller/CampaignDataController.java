@@ -104,7 +104,8 @@ public class CampaignDataController {
             byte[] data = dataService.exportCampaignData(campaignId, format);
             ByteArrayResource resource = new ByteArrayResource(data);
 
-            String filename = "campaign_" + campaignId + "_data." + format;
+            String ext = "xlsx".equalsIgnoreCase(format) || "excel".equalsIgnoreCase(format) ? "xlsx" : format;
+            String filename = "campaign_" + campaignId + "_data." + ext;
 
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
@@ -128,7 +129,8 @@ public class CampaignDataController {
             byte[] data = dataService.exportRankingData(campaignId, dimension, format);
             ByteArrayResource resource = new ByteArrayResource(data);
 
-            String filename = "campaign_" + campaignId + "_ranking_" + dimension + "." + format;
+            String ext = "xlsx".equalsIgnoreCase(format) || "excel".equalsIgnoreCase(format) ? "xlsx" : format;
+            String filename = "campaign_" + campaignId + "_ranking_" + dimension + "." + ext;
 
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
