@@ -73,7 +73,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
         </button>
         <button
-          v-for="p in favTotalPages"
+          v-for="p in favPageList"
           :key="p"
           class="page-btn page-number"
           :class="{ active: favPage === p }"
@@ -82,6 +82,18 @@
         <button class="page-btn" :disabled="favPage === favTotalPages" @click="favPage++">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>
         </button>
+        <div class="page-jump">
+          <input
+            v-model="favJumpInput"
+            type="number"
+            min="1"
+            :max="favTotalPages"
+            class="page-jump-input"
+            @keyup.enter="jumpFavPage"
+            placeholder="页"
+          />
+          <button class="page-btn page-jump-btn" @click="jumpFavPage">跳转</button>
+        </div>
       </div>
     </div>
 
@@ -149,7 +161,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
         </button>
         <button
-          v-for="p in historyTotalPages"
+          v-for="p in historyPageList"
           :key="p"
           class="page-btn page-number"
           :class="{ active: historyPage === p }"
@@ -158,6 +170,18 @@
         <button class="page-btn" :disabled="historyPage === historyTotalPages" @click="historyPage++">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>
         </button>
+        <div class="page-jump">
+          <input
+            v-model="historyJumpInput"
+            type="number"
+            min="1"
+            :max="historyTotalPages"
+            class="page-jump-input"
+            @keyup.enter="jumpHistoryPage"
+            placeholder="页"
+          />
+          <button class="page-btn page-jump-btn" @click="jumpHistoryPage">跳转</button>
+        </div>
       </div>
     </div>
   </div>
@@ -223,6 +247,29 @@ const overview = ref(null)
 
 const favTotalPages = computed(() => Math.ceil(favTotal.value / PAGE_SIZE) || 1)
 const historyTotalPages = computed(() => Math.ceil(historyTotal.value / PAGE_SIZE) || 1)
+const PAGE_WINDOW = 5
+const buildPageList = (total, current) => {
+  if (total <= PAGE_WINDOW) return Array.from({ length: total }, (_, i) => i + 1)
+  let start = current - Math.floor(PAGE_WINDOW / 2)
+  start = Math.max(1, Math.min(start, total - PAGE_WINDOW + 1))
+  return Array.from({ length: PAGE_WINDOW }, (_, i) => start + i)
+}
+const favPageList = computed(() => buildPageList(favTotalPages.value, favPage.value))
+const historyPageList = computed(() => buildPageList(historyTotalPages.value, historyPage.value))
+const favJumpInput = ref('')
+const historyJumpInput = ref('')
+const jumpFavPage = () => {
+  const n = parseInt(favJumpInput.value, 10)
+  if (!Number.isFinite(n)) { favJumpInput.value = ''; return }
+  favPage.value = Math.max(1, Math.min(n, favTotalPages.value))
+  favJumpInput.value = ''
+}
+const jumpHistoryPage = () => {
+  const n = parseInt(historyJumpInput.value, 10)
+  if (!Number.isFinite(n)) { historyJumpInput.value = ''; return }
+  historyPage.value = Math.max(1, Math.min(n, historyTotalPages.value))
+  historyJumpInput.value = ''
+}
 
 const paginatedFavorites = computed(() => favorites.value)
 const paginatedHistory = computed(() => history.value)
@@ -605,6 +652,48 @@ onMounted(() => {
   border-color: #1d4ed8;
   color: #fff;
   box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+}
+
+.page-btn.ellipsis {
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
+  opacity: 1;
+  color: #94a3b8;
+}
+
+.page-jump {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.page-jump-input {
+  width: 56px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.page-jump-input:focus {
+  border-color: #1d4ed8;
+}
+
+.page-jump-input::-webkit-inner-spin-button,
+.page-jump-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.page-jump-btn {
+  padding: 0 10px;
+  font-size: 13px;
 }
 
 .page-number { font-weight: 600; }

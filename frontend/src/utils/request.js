@@ -11,8 +11,40 @@ const request = axios.create({
 
 // 防止并发 401 多次触发 logout
 let isLoggingOut = false
-// 防止并发 401 多次触发 refresh（共享同一个 promise）
+// 防止并发刷新（401 / 启动刷新 / 主动刷新 共用同一个 promise）
 let refreshingPromise = null
+
+/**
+ * 调用 /auth/refresh，并发去重。同一时刻只有一个真实请求；
+ * 其他调用方共享同一个 promise，避免「刚轮换的 refresh token 撞黑名单」。
+ *
+ * @param {string} currentRefreshToken
+ * @returns {Promise<object>} 后端返回的 data（含 accessToken / refreshToken）
+ */
+export function refreshAccessTokenShared(currentRefreshToken) {
+  if (refreshingPromise) return refreshingPromise
+
+  refreshingPromise = (async () => {
+    try {
+      const { refreshToken: refreshTokenApi } = await import('@/api/auth')
+      const response = await refreshTokenApi(currentRefreshToken)
+      if (response.code !== 200 || !response.data?.accessToken) {
+        throw new Error('Refresh token response invalid')
+      }
+      const userStore = useUserStore()
+      userStore.setTokens({
+        accessToken: response.data.accessToken,
+        refreshToken: response.data.refreshToken,
+        expiresIn: response.data.expiresIn || 7200000
+      })
+      return response.data
+    } finally {
+      refreshingPromise = null
+    }
+  })()
+
+  return refreshingPromise
+}
 
 const handleLogout = async () => {
   if (isLoggingOut) return
@@ -67,60 +99,18 @@ const handleLogout = async () => {
  * @param {object} failedRequestConfig - 失败的请求配置（用于刷新成功后重试）
  */
 async function handle401(failedRequestConfig) {
-  // 1. 如果已经有一个刷新流程在进行中，等待它完成后重试原请求
-  if (refreshingPromise !== null) {
-    try {
-      await refreshingPromise
-      // 刷新成功，重试原请求（此时 store 和 localStorage 的 token 已更新，request 拦截器会自动带上新 token）
-      return request(failedRequestConfig)
-    } catch (error) {
-      // 刷新失败（已在下方的 finally 块中执行了 logout），拒绝原请求
-      return Promise.reject({ code: 401, message: '登录已过期，请重新登录' })
-    }
-  }
-
-  // 2. 首个 401：创建刷新流程
   const currentRefreshToken = getRefreshToken()
   if (!currentRefreshToken) {
-    // 没有 refreshToken，直接 logout
     handleLogout()
     return Promise.reject({ code: 401, message: '登录已过期，请重新登录' })
   }
 
-  refreshingPromise = (async () => {
-    try {
-      // 动态导入避免循环依赖（request.js ← api/auth.js → request.js）
-      const { refreshToken: refreshTokenApi } = await import('@/api/auth')
-      const response = await refreshTokenApi(currentRefreshToken)
-
-      if (response.code !== 200 || !response.data?.accessToken) {
-        throw new Error('Refresh token response invalid')
-      }
-
-      // 刷新成功：更新 store 和 localStorage
-      const userStore = useUserStore()
-      userStore.setTokens({
-        accessToken: response.data.accessToken,
-        refreshToken: response.data.refreshToken, // 可能为 null（未续期）
-        expiresIn: response.data.expiresIn || 7200000
-      })
-
-      console.log('Token refreshed successfully via 401 handler')
-    } catch (error) {
-      console.error('Token refresh failed, logging out:', error)
-      // 刷新失败：执行 logout
-      handleLogout()
-      throw error
-    } finally {
-      refreshingPromise = null
-    }
-  })()
-
   try {
-    await refreshingPromise
-    // 刷新成功，重试原请求
+    await refreshAccessTokenShared(currentRefreshToken)
     return request(failedRequestConfig)
   } catch (error) {
+    console.error('Token refresh failed, logging out:', error)
+    handleLogout()
     return Promise.reject({ code: 401, message: '登录已过期，请重新登录' })
   }
 }
@@ -171,11 +161,13 @@ request.interceptors.response.use(
 
       // 非 401 的业务错误：仅展示预定义的错误信息，防止后端敏感信息泄露
       const errorMessage = getBusinessErrorMessage(res.code, res.message)
-      ElMessage({
-        message: errorMessage,
-        type: 'error',
-        duration: 5 * 1000
-      })
+      if (!response.config?.skipErrorHandler) {
+        ElMessage({
+          message: errorMessage,
+          type: 'error',
+          duration: 5 * 1000
+        })
+      }
 
       return Promise.reject({ code: res.code, message: errorMessage })
     } else {
@@ -184,6 +176,18 @@ request.interceptors.response.use(
   },
   error => {
     console.error('Response error:', error)
+
+    const status = error.response?.status
+    const reqUrl = error.config?.url || 'unknown'
+
+    // HTTP 401：Spring Security 在 token 缺失/失效时直接返回 401。
+    // 走与业务码 401 相同的 refreshToken 流程，避免误报"未授权，请重新登录"。
+    // 排除 refreshToken/login 自身的 401，防止递归。
+    if (status === 401 && error.config && !error.config._retry401 &&
+        !reqUrl.includes('/auth/refresh') && !reqUrl.includes('/auth/login')) {
+      error.config._retry401 = true
+      return handle401(error.config)
+    }
 
     let message = error.message
     // 超时 / 网络断连的友好提示
@@ -211,8 +215,6 @@ request.interceptors.response.use(
       }
     }
     if (!error.config?.skipErrorHandler) {
-      const reqUrl = error.config?.url || 'unknown'
-      const status = error.response?.status
       if (status) {
         console.warn(`[HTTP ${status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
         // Map HTTP status codes to friendly messages

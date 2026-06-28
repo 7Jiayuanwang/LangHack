@@ -119,7 +119,7 @@ spring:
       # - Never hardcode in source code or configuration files
       # - Production deployment: Generate with: openssl rand -base64 32
       secret: ${JWT_SECRET:your_dummy_jwt_secret_for_local_development_at_least_32_chars_long}
-      expiration: 2592000000 # 30天 (30 * 24 * 60 * 60 * 1000)
+      expiration: 604800000 # 7天 (7 * 24 * 60 * 60 * 1000)
 
   flyway:
     enabled: false  # Flyway disabled (manual database migration management)

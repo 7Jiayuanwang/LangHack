@@ -6,7 +6,7 @@ import "element-plus/dist/index.css";
 import * as ElementPlusIconsVue from "@element-plus/icons-vue";
 import App from "./App.vue";
 import router from "./router";
-import { clearAuthStorage, getAuthHeader } from "@/utils/auth";
+import { clearAuthStorage, getAuthHeader, refreshOnAppStart } from "@/utils/auth";
 import { environment } from "@/utils/environment";
 import "./styles/mobile.scss";
 
@@ -216,3 +216,6 @@ window.addEventListener("unhandledrejection", (event) => {
 
 // 挂载应用
 app.mount("#app");
+
+// 应用启动后主动刷新一次 refresh token，重置 7 天有效期（不阻塞挂载）
+refreshOnAppStart();

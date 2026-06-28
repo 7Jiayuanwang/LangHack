@@ -51,6 +51,7 @@ export function refreshToken(refreshToken) {
   return request({
     url: '/api/auth/refresh',
     method: 'post',
-    data: { refreshToken }
+    data: { refreshToken },
+    skipErrorHandler: true
   })
 }

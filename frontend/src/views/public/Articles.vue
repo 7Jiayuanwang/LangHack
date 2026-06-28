@@ -127,7 +127,7 @@
             </svg>
           </button>
           <button
-            v-for="page in totalPages"
+            v-for="page in pageList"
             :key="page"
             class="page-btn page-number"
             :class="{ active: currentPage === page }"
@@ -140,6 +140,18 @@
               <polyline points="9,18 15,12 9,6"/>
             </svg>
           </button>
+          <div class="page-jump">
+            <input
+              v-model="jumpInput"
+              type="number"
+              min="1"
+              :max="totalPages"
+              class="page-jump-input"
+              @keyup.enter="jumpToPage"
+              placeholder="页"
+            />
+            <button class="page-btn page-jump-btn" @click="jumpToPage">跳转</button>
+          </div>
         </div>
 
         <!-- Bottom Safe Area Spacer -->
@@ -196,6 +208,21 @@ const pageSize = 5
 
 
 const totalPages = computed(() => Math.ceil(allArticles.value.length / pageSize))
+const PAGE_WINDOW = 5
+const pageList = computed(() => {
+  const total = totalPages.value
+  if (total <= PAGE_WINDOW) return Array.from({ length: total }, (_, i) => i + 1)
+  let start = currentPage.value - Math.floor(PAGE_WINDOW / 2)
+  start = Math.max(1, Math.min(start, total - PAGE_WINDOW + 1))
+  return Array.from({ length: PAGE_WINDOW }, (_, i) => start + i)
+})
+const jumpInput = ref('')
+const jumpToPage = () => {
+  const n = parseInt(jumpInput.value, 10)
+  if (!Number.isFinite(n)) { jumpInput.value = ''; return }
+  goToPage(Math.max(1, Math.min(n, totalPages.value)))
+  jumpInput.value = ''
+}
 const articles = computed(() => {
   const start = (currentPage.value - 1) * pageSize
   return allArticles.value.slice(start, start + pageSize)
@@ -813,6 +840,48 @@ onMounted(() => {
   border-color: #1d4ed8;
   color: white;
   box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+}
+
+.page-btn.ellipsis {
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
+  opacity: 1;
+  color: #94a3b8;
+}
+
+.page-jump {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.page-jump-input {
+  width: 56px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.page-jump-input:focus {
+  border-color: #1d4ed8;
+}
+
+.page-jump-input::-webkit-inner-spin-button,
+.page-jump-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.page-jump-btn {
+  padding: 0 10px;
+  font-size: 13px;
 }
 
 .page-number {

@@ -184,22 +184,10 @@ export function startProactiveRefresh(expiresInMs) {
     }
 
     try {
-      // 动态导入避免循环依赖（auth.js ← request.js ← api/auth.js → auth.js）
-      const { refreshToken: refreshTokenApi } = await import('@/api/auth')
-      const response = await refreshTokenApi(refreshToken)
-
-      if (response.data?.accessToken) {
-        setToken(response.data.accessToken)
-
-        // 如果后端返回了新的 refresh token（续期），更新之
-        if (response.data.refreshToken) {
-          setRefreshToken(response.data.refreshToken)
-        }
-
-        // 递归：新 access token 也排定主动刷新
-        const newExpiresIn = response.data.expiresIn || 7200000
-        startProactiveRefresh(newExpiresIn)
-
+      const { refreshAccessTokenShared } = await import('@/utils/request')
+      const data = await refreshAccessTokenShared(refreshToken)
+      if (data?.accessToken) {
+        startProactiveRefresh(data.expiresIn || 7200000)
         console.log('Proactive token refresh succeeded')
       }
     } catch (error) {
@@ -216,5 +204,26 @@ export function stopProactiveRefresh() {
   if (proactiveRefreshTimer !== null) {
     clearTimeout(proactiveRefreshTimer)
     proactiveRefreshTimer = null
+  }
+}
+
+/**
+ * 应用启动时主动刷新一次 refresh token，实现「每次进入页面重置 7 天有效期」。
+ * - 无 refresh token（未登录）静默跳过
+ * - 网络/后端异常静默忽略，不阻塞应用启动
+ */
+export async function refreshOnAppStart() {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return
+  try {
+    // 复用 request.js 的去重锁，避免与 handle401 并发触发「刚黑名单的 token 再次提交」
+    const { refreshAccessTokenShared } = await import('@/utils/request')
+    const data = await refreshAccessTokenShared(refreshToken)
+    if (data?.accessToken) {
+      startProactiveRefresh(data.expiresIn || 7200000)
+      console.log('Token refreshed on app start')
+    }
+  } catch (e) {
+    console.warn('Token refresh on app start failed (silently ignored):', e)
   }
 }
