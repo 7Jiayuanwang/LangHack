@@ -170,6 +170,10 @@ public class SecurityConfig {
                 .antMatchers("/api/user/feature-toggles").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN", "OPS")
                 // 普通用户权限
                 .antMatchers("/api/user/**").hasAnyRole("USER", "STUDENT", "TEACHER", "ADMIN")
+                // TTS 语音合成 — 音频文件公开访问，合成接口需认证
+                .antMatchers(HttpMethod.GET, "/api/tts/audio/**").permitAll()
+                .antMatchers(HttpMethod.GET, "/api/tts/voices").permitAll()
+                .antMatchers(HttpMethod.POST, "/api/tts/synthesize").authenticated()
                 // 翻译 API — 已有 IP 限流保护，允许未登录用户使用
                 .antMatchers("/api/translate/**").permitAll()
                 .antMatchers("/api/asr/**").authenticated()

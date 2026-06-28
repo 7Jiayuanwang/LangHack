@@ -146,25 +146,26 @@
 
       <!-- 单词卡片 -->
       <div class="word-card" v-if="currentWord">
+        <!-- 自动播放开关 -->
+        <div class="auto-speak-toggle">
+          <label class="toggle-label">
+            <input type="checkbox" v-model="autoSpeakEnabled" @change="onAutoSpeakChange" class="toggle-checkbox">
+            <span class="toggle-text">{{ autoSpeakEnabled ? '自动播放已开启' : '自动播放已关闭' }}</span>
+          </label>
+        </div>
+
         <div class="word-content">
           <div class="word-header">
-            <h3 class="word-text">{{ currentWord.word }}</h3>
+            <h3 class="word-text clickable-word" @click="toggleMeaning">{{ currentWord.word }}</h3>
             <button
-              @click="toggleAutoSpeak"
+              @click="speakWordManually"
               class="speak-btn"
-              :class="{ muted: !autoSpeakEnabled }"
-              :title="autoSpeakEnabled ? '点击关闭自动发音' : '点击开启自动发音'"
+              title="点击播放发音"
             >
-              <!-- 开：完整喇叭 + 声波 -->
-              <svg v-if="autoSpeakEnabled" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <!-- 播放图标 -->
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
-              </svg>
-              <!-- 关：喇叭 + X 表示静音 -->
-              <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                <line x1="23" y1="9" x2="17" y2="15"/>
-                <line x1="17" y1="9" x2="23" y2="15"/>
               </svg>
             </button>
           </div>
@@ -185,16 +186,36 @@
                 <div class="definitions">
                   <div v-for="(def, idx) in meaning.definitions.slice(0, 2)" :key="idx" class="definition-item">
                     <p class="definition">{{ def.definition }}</p>
-                    <p class="example" v-if="def.example">例句：{{ def.example }}</p>
+                    <p class="definition-translation" v-if="def.definitionTranslation">{{ def.definitionTranslation }}</p>
+                    <p class="definition-translation loading" v-else-if="def.translating">翻译中...</p>
+                    <div v-if="def.example" class="example-wrapper">
+                      <p class="example">例句：{{ def.example }}</p>
+                      <p class="example-translation" v-if="def.exampleTranslation">{{ def.exampleTranslation }}</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+            <!-- 例句:优先 AI 生成,AI 不可用时用词典 API 自带例句兜底 -->
+            <div class="ai-examples-section" v-if="aiExamples.length > 0 || aiExamplesLoading || dictExamples.length > 0">
+              <div class="ai-examples-title">例句</div>
+              <!-- AI 例句加载中 -->
+              <p class="ai-examples-loading" v-if="aiExamplesLoading && aiExamples.length === 0 && dictExamples.length === 0">例句生成中...</p>
+              <!-- AI 例句 -->
+              <div v-for="(ex, i) in aiExamples" :key="'ai-'+i" class="ai-example-item">
+                <p class="ai-example-en">{{ ex.sentence }}</p>
+                <p class="ai-example-zh" v-if="ex.translation">{{ ex.translation }}</p>
+                <p class="ai-example-zh loading" v-else-if="ex.translating">翻译中...</p>
+              </div>
+              <!-- 词典 API 例句兜底(AI 无结果时) -->
+              <template v-if="!aiExamplesLoading && aiExamples.length === 0">
+                <div v-for="(ex, i) in dictExamples" :key="'dict-'+i" class="ai-example-item">
+                  <p class="ai-example-en">{{ ex.sentence }}</p>
+                  <p class="ai-example-zh" v-if="ex.translation">{{ ex.translation }}</p>
+                </div>
+              </template>
+            </div>
           </div>
-        </div>
-
-        <div class="quiz-error shake" v-if="quizError">
-          答错了，请重新选择！
         </div>
 
         <div class="quiz-options" v-if="showQuiz && !showMeaning && quizOptions.length">
@@ -203,14 +224,27 @@
             :key="index"
             @click="selectQuizOption(option)"
             class="btn quiz-btn"
-            :disabled="isHandlingWordAction"
+            :class="{ 'quiz-btn--wrong': wrongOption === option }"
+            :disabled="isHandlingWordAction || wrongOption !== null"
           >
             {{ option }}
           </button>
         </div>
 
+        <!-- 答错后显示单词释义 -->
+        <div class="wrong-word-hint" v-if="wrongOption !== null">
+          <div class="hint-header">
+            <span class="hint-icon">💡</span>
+            <span class="hint-title">正确答案</span>
+          </div>
+          <div class="hint-content">
+            <p class="hint-word">{{ currentWord.word }}</p>
+            <p class="hint-meaning">{{ currentWord.meaning }}</p>
+          </div>
+        </div>
+
         <!-- 认识 / 不认识操作 -->
-        <div class="action-buttons" v-if="!showMeaning">
+        <div class="action-buttons" v-if="!showQuiz">
           <button
             class="btn action-btn action-btn--unknown"
             :disabled="isHandlingWordAction"
@@ -224,17 +258,6 @@
             @click="handleKnowWord"
           >
             认识
-          </button>
-        </div>
-
-        <!-- 查看释义后的下一个按钮 -->
-        <div class="next-word-action" v-if="showMeaning">
-          <button
-            class="btn next-word-btn"
-            :disabled="isHandlingWordAction"
-            @click="handleNextWordAfterMeaning"
-          >
-            下一个单词
           </button>
         </div>
       </div>
@@ -361,6 +384,7 @@
         </div>
       </template>
     </el-dialog>
+
   </div>
 </template>
 
@@ -370,6 +394,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { calculateSM2 } from '@/utils/sm2'
 import { updateMasteryLevel, addWordToVocabularyByWord, getVocabularyList } from '@/api/student'
+import { getWordExplanation } from '@/api/wordExplanation'
 import { useUserStore } from '@/store/user'
 
 const router = useRouter()
@@ -414,7 +439,27 @@ const wordImageUrl = ref('')
 const quizOptions = ref([])
 const showQuiz = ref(false)
 const wordDetails = ref(null)
+// AI 生成的例句列表:{ sentence, translation, translating } — 用于覆盖 dict-api 没例句的词
+const aiExamples = ref([])
+const aiExamplesLoading = ref(false)
+
+// 词典 API 自带例句兜底:AI 不可用时展示已有的 dict-api 例句
+const dictExamples = computed(() => {
+  if (!wordDetails.value?.meanings) return []
+  const seen = new Set()
+  const out = []
+  for (const m of wordDetails.value.meanings) {
+    for (const d of (m.definitions || [])) {
+      if (d.example && !seen.has(d.example)) {
+        seen.add(d.example)
+        out.push({ sentence: d.example, translation: d.exampleTranslation || '', translating: false })
+      }
+    }
+  }
+  return out.slice(0, 5)
+})
 const quizError = ref(false)
+const wrongOption = ref(null)
 const isHandlingWordAction = ref(false)
 const dailyCount = ref(20)
 const dailyCountSelected = ref(false)
@@ -438,14 +483,16 @@ const draftArticleDailyCount = ref(0)
 const showDeepRecite = ref(false)
 const deepReciteWords = ref([])
 const currentDeepWordIndex = ref(0)
+const deepReciteInput = ref('')
+const showDeepOptions = ref(false)
+const deepOptions = ref([])
+const deepReciteScore = ref(0)
+
 const userInput = ref('')
 const answerStatus = ref(null)
-const deepReciteScore = ref(0)
 const deepReciteCorrect = ref(0)
 const deepReciteTotal = ref(0)
 const inputRef = ref(null)
-const showDeepOptions = ref(false)
-const deepOptions = ref([])
 // 自动发音开关：默认开启；用户在背诵页点喇叭按钮可切换静音，状态持久化到 localStorage
 // key 不与某词库绑定 —— 这是个全局偏好，跨词库一致
 const autoSpeakEnabled = ref(localStorage.getItem('autoSpeakEnabled') !== '0')
@@ -515,6 +562,30 @@ const speakWord = () => {
   speechSynthesis.speak(utterance)
 }
 
+// 手动播放单词发音（点击按钮时）
+const speakWordManually = () => {
+  if (!currentWord.value) return
+
+  // 使用浏览器 Web Speech API
+  const utterance = new SpeechSynthesisUtterance(currentWord.value.word)
+  utterance.lang = 'en-US'
+  utterance.rate = 0.8
+  utterance.pitch = 1
+  speechSynthesis.speak(utterance)
+}
+
+// 自动播放开关变化时的处理
+const onAutoSpeakChange = () => {
+  localStorage.setItem('autoSpeakEnabled', autoSpeakEnabled.value ? '1' : '0')
+  if (!autoSpeakEnabled.value) {
+    // 关闭自动播放时，停止当前播放
+    speechSynthesis.cancel()
+  } else {
+    // 开启自动播放时，立即播放当前单词
+    speakWord()
+  }
+}
+
 // 切换自动发音开关：写 localStorage；切到静音时立刻打断正在播放的声音
 const toggleAutoSpeak = () => {
   autoSpeakEnabled.value = !autoSpeakEnabled.value
@@ -547,12 +618,12 @@ const generateQuizOptions = () => {
 
 // 处理选择题选项
 const selectQuizOption = async (selectedMeaning) => {
-  if (!currentWord.value || quizError.value || isHandlingWordAction.value) return
+  if (!currentWord.value || isHandlingWordAction.value || wrongOption.value !== null) return
 
   if (selectedMeaning === currentWord.value.meaning) {
     // 选对：标记为掌握，进入下一个单词
     // 注意：不要在 await rateWord 后手动 showQuiz=false——rateWord 推进 currentWordIndex 后，
-    // watch(currentWord) 会在 microtask 里把 showQuiz / quizError 重置并重新生成选项。
+    // watch(currentWord) 会在 microtask 里把 showQuiz / wrongOption 重置并重新生成选项。
     // 旧代码在 await 之后再写 false，会把 watcher 刚刚设的 true 又压回 false，
     // 导致下一个词出现时选择题选项消失。
     isHandlingWordAction.value = true
@@ -571,10 +642,11 @@ const selectQuizOption = async (selectedMeaning) => {
       currentWord.value.synced = false
       saveProgress()
     }
-    quizError.value = true
+    // 标记错误选项为红色，并显示正确答案提示
+    wrongOption.value = selectedMeaning
     setTimeout(() => {
-      quizError.value = false
-    }, 1500)
+      wrongOption.value = null
+    }, 3000) // 延长到3秒，给用户足够时间记忆
   }
 }
 
@@ -594,17 +666,6 @@ const handleDontKnowWord = () => {
   // 不自动切换下一个，等待用户点击"下一个单词"按钮
 }
 
-const handleNextWordAfterMeaning = async () => {
-  if (!currentWord.value || isHandlingWordAction.value) return
-  isHandlingWordAction.value = true
-  try {
-    await rateWord(0)
-    showMeaning.value = false
-  } finally {
-    isHandlingWordAction.value = false
-  }
-}
-
 // 获取单词详细信息
 // 防止"用户连续点认识/不认识 → 多个 fetch 并发 → 慢请求覆盖快请求"导致显示错位
 // 每次发起前自增 token，回写 wordDetails 之前比对，旧请求直接丢弃
@@ -619,11 +680,26 @@ const fetchWordDetails = async (word) => {
     if (myToken !== fetchWordDetailsToken) return
     if (data && data.length > 0) {
       const entry = data[0]
+      // 预初始化翻译字段，避免 Vue 对后续动态新增属性的响应式追踪失效
+      // 同时这里就裁到模板要显示的 2 条/词性，避免少见的多义词触发 batch 200 条上限
+      const meanings = (entry.meanings || []).map(m => ({
+        partOfSpeech: m.partOfSpeech,
+        definitions: (m.definitions || []).slice(0, 2).map(d => ({
+          definition: d.definition,
+          example: d.example || '',
+          definitionTranslation: '',
+          exampleTranslation: '',
+          translating: false
+        }))
+      }))
       wordDetails.value = {
         phonetic: entry.phonetic || entry.phonetics?.[0]?.text || '',
-        meanings: entry.meanings || [],
+        meanings,
         origin: entry.origin || ''
       }
+
+      // 翻译所有释义和例句
+      translateDefinitionsAndExamples()
     } else {
       wordDetails.value = null
     }
@@ -632,6 +708,129 @@ const fetchWordDetails = async (word) => {
     console.error('获取单词详情失败:', error)
     wordDetails.value = null
   }
+}
+
+// 拉 AI 例句:dict-api 经常缺例句(如 latitude),走后端 WordAiExplanationService 兜底
+// 同样用 token 防并发覆盖;最多取 3 句翻译展示
+let fetchAiExamplesToken = 0
+
+const fetchAiExamples = async (word) => {
+  const myToken = ++fetchAiExamplesToken
+  aiExamples.value = []
+  aiExamplesLoading.value = true
+  try {
+    const resp = await getWordExplanation(word, false)
+    if (myToken !== fetchAiExamplesToken) return
+    const examples = Array.isArray(resp?.data?.usageExamples) ? resp.data.usageExamples : []
+    // 过滤掉演示模式下的占位例句
+    const real = examples.filter(s => s && typeof s === 'string'
+      && !s.startsWith('This is an example sentence with ')
+      && !s.startsWith('Learn to use '))
+    const picks = real.slice(0, 3).map(s => ({ sentence: s, translation: '', translating: true }))
+    aiExamples.value = picks
+    if (picks.length === 0) {
+      aiExamplesLoading.value = false
+      return
+    }
+
+    // 批量翻译这几条例句
+    try {
+      const transResp = await fetch('/api/translate/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          texts: picks.map(p => p.sentence),
+          direction: 'en-to-zh'
+        })
+      })
+      const transJson = await transResp.json()
+      if (myToken !== fetchAiExamplesToken) return
+      if (transJson.code === 200 && Array.isArray(transJson.data)) {
+        picks.forEach((p, i) => {
+          p.translation = transJson.data[i] || ''
+          p.translating = false
+        })
+      } else {
+        picks.forEach(p => { p.translating = false })
+      }
+    } catch (e) {
+      if (myToken !== fetchAiExamplesToken) return
+      console.error('AI 例句翻译失败:', e)
+      picks.forEach(p => { p.translating = false })
+    }
+  } catch (error) {
+    if (myToken !== fetchAiExamplesToken) return
+    console.error('获取 AI 例句失败:', error)
+    aiExamples.value = []
+  } finally {
+    if (myToken === fetchAiExamplesToken) aiExamplesLoading.value = false
+  }
+}
+
+// 翻译释义和例句
+const translateDefinitionsAndExamples = async () => {
+  if (!wordDetails.value || !wordDetails.value.meanings) return
+
+  const textsToTranslate = []
+  const itemsMap = [] // 记录每个文本对应的 def 和类型（definition 或 example）
+
+  wordDetails.value.meanings.forEach(meaning => {
+    meaning.definitions?.forEach(def => {
+      // 标记翻译中
+      def.translating = true
+
+      // 添加释义到翻译列表
+      textsToTranslate.push(def.definition)
+      itemsMap.push({ def, type: 'definition' })
+
+      // 如果有例句，也添加到翻译列表
+      if (def.example) {
+        textsToTranslate.push(def.example)
+        itemsMap.push({ def, type: 'example' })
+      }
+    })
+  })
+
+  if (textsToTranslate.length === 0) return
+
+  // 批量翻译所有释义和例句
+  try {
+    const response = await fetch('/api/translate/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        texts: textsToTranslate,
+        direction: 'en-to-zh'
+      })
+    })
+    const result = await response.json()
+
+    if (result.code === 200 && result.data) {
+      itemsMap.forEach((item, index) => {
+        const translation = result.data[index] || ''
+        if (item.type === 'definition') {
+          item.def.definitionTranslation = translation
+        } else {
+          item.def.exampleTranslation = translation
+        }
+        item.def.translating = false
+      })
+    } else {
+      itemsMap.forEach(item => {
+        item.def.translating = false
+      })
+    }
+  } catch (error) {
+    console.error('翻译失败:', error)
+    itemsMap.forEach(item => {
+      item.def.translating = false
+    })
+  }
+}
+
+// 切换单词意思显示
+const toggleMeaning = () => {
+  showMeaning.value = !showMeaning.value
 }
 
 // 深度背诵相关函数
@@ -663,17 +862,39 @@ const startDeepRecite = () => {
   }, 100)
 }
 
-const checkDeepAnswer = () => {
+const checkDeepAnswer = async () => {
   if (!currentDeepWord.value || !userInput.value.trim()) return
-  
+
   const isCorrect = userInput.value.trim().toLowerCase() === currentDeepWord.value.word.toLowerCase()
   deepReciteTotal.value++
-  
+
   if (isCorrect) {
     answerStatus.value = 'correct'
     deepReciteCorrect.value++
     deepReciteScore.value = Math.round((deepReciteCorrect.value / deepReciteTotal.value) * 100)
-    
+
+    // 深度背诵答对：标记为已掌握
+    const word = currentDeepWord.value
+    const isArticleWord = word.source === 'article'
+
+    if (isArticleWord) {
+      // 文章词：标记为已掌握
+      try {
+        await updateMasteryLevel(word.wordId, { masteryLevel: 'MASTERED', isCorrect: true })
+        word.mastered = true
+        masteredWords.value++
+      } catch (err) {
+        console.error('文章词标记已掌握失败:', err)
+      }
+    } else {
+      // CET 词：标记为已掌握
+      word.mastered = true
+      word.lastReviewTime = new Date().toISOString()
+      syncWordToDatabase(word, 'MASTERED')
+      saveProgress()
+      masteredWords.value++
+    }
+
     // 延迟后进入下一个单词
     setTimeout(() => {
       userInput.value = ''
@@ -710,12 +931,34 @@ const generateDeepOptions = () => {
   deepOptions.value = allOptions.sort(() => Math.random() - 0.5)
 }
 
-const selectDeepOption = (option) => {
+const selectDeepOption = async (option) => {
   if (option === currentDeepWord.value.word) {
     answerStatus.value = 'correct'
     deepReciteCorrect.value++
     deepReciteScore.value = Math.round((deepReciteCorrect.value / deepReciteTotal.value) * 100)
-    
+
+    // 选择正确选项后：标记为已掌握
+    const word = currentDeepWord.value
+    const isArticleWord = word.source === 'article'
+
+    if (isArticleWord) {
+      // 文章词：标记为已掌握
+      try {
+        await updateMasteryLevel(word.wordId, { masteryLevel: 'MASTERED', isCorrect: true })
+        word.mastered = true
+        masteredWords.value++
+      } catch (err) {
+        console.error('文章词标记已掌握失败:', err)
+      }
+    } else {
+      // CET 词：标记为已掌握
+      word.mastered = true
+      word.lastReviewTime = new Date().toISOString()
+      syncWordToDatabase(word, 'MASTERED')
+      saveProgress()
+      masteredWords.value++
+    }
+
     setTimeout(() => {
       userInput.value = ''
       answerStatus.value = null
@@ -773,9 +1016,10 @@ watch(currentWord, (newWord) => {
 
     loadWordImage(newWord.word)
     fetchWordDetails(newWord.word)
+    fetchAiExamples(newWord.word)
     showMeaning.value = false
     showQuiz.value = false
-    quizError.value = false
+    wrongOption.value = null
     generateQuizOptions()
     // 新单词出场就自动发音；speakWord 内部已根据 autoSpeakEnabled 做静音 guard
     speakWord()
@@ -1331,27 +1575,27 @@ const rateWord = async (quality) => {
   word.synced = isArticleWord ? true : false
 
   if (quality === 5) {
-    // 认识：标记为已掌握，不再出现
+    // 认识：标记为学习中（不再直接标记为已掌握，需要通过深度背诵才能真正掌握）
     if (isArticleWord) {
-      // 与单词本"标记为已掌握"保持一致：先等后端写入成功再更新本地 UI 状态
+      // 文章词：更新为学习中状态
       try {
-        const response = await updateMasteryLevel(word.wordId, { masteryLevel: 'MASTERED', isCorrect: true })
+        const response = await updateMasteryLevel(word.wordId, { masteryLevel: 'LEARNING', isCorrect: true })
         if (response?.code !== 200) {
           ElMessage.error('标记失败')
           return
         }
-        word.mastered = true
+        word.mastered = false  // 不再直接标记为已掌握
         word.lastReviewTime = new Date().toISOString()
       } catch (err) {
-        console.error('文章词同步 MASTERED 失败:', err)
+        console.error('文章词同步 LEARNING 失败:', err)
         ElMessage.error('标记失败')
         return
       }
     } else {
-      // CET 词同步到后端数据库
-      word.mastered = true
+      // CET 词：标记为学习中
+      word.mastered = false  // 不再直接标记为已掌握
       word.lastReviewTime = new Date().toISOString()
-      syncWordToDatabase(word, toBackendMasteryLevel(quality))
+      syncWordToDatabase(word, 'LEARNING')  // 改为 LEARNING 状态
     }
   } else if (quality === 0) {
     // 不认识：增加出现频率（增加不认识计数）
@@ -1388,9 +1632,10 @@ const rateWord = async (quality) => {
   localStorage.setItem(`todayReviewed_${currentUserId.value}`, todayReviewed.value.toString())
   localStorage.setItem(`lastReviewDate_${currentUserId.value}`, today)
 
-  if (quality === 5) {
-    masteredWords.value++
-  }
+  // 不再在这里增加 masteredWords，只有深度背诵答对才算掌握
+  // if (quality === 5) {
+  //   masteredWords.value++
+  // }
 
   showMeaning.value = false
 
@@ -1915,6 +2160,64 @@ onBeforeUnmount(() => {
   background: var(--gradient-brand);
 }
 
+/* 自动播放开关 */
+.auto-speak-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-checkbox {
+  appearance: none;
+  width: 44px;
+  height: 24px;
+  background: #dcdfe6;
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.toggle-checkbox:checked {
+  background: #409eff;
+}
+
+.toggle-checkbox::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-checkbox:checked::before {
+  transform: translateX(20px);
+}
+
+.toggle-text {
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.toggle-checkbox:checked + .toggle-text {
+  color: #409eff;
+}
+
 /* 单词图片 */
 .word-image-container {
   margin-bottom: 20px;
@@ -1947,6 +2250,15 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
+.clickable-word {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.clickable-word:hover {
+  color: #409eff;
+}
+
 .speak-btn {
   background: #409eff;
   border: none;
@@ -1969,15 +2281,6 @@ onBeforeUnmount(() => {
 
 .speak-btn:active {
   transform: scale(0.95);
-}
-
-/* 静音状态：换成灰色调，传达"已关闭" */
-.speak-btn.muted {
-  background: #c0c4cc;
-}
-
-.speak-btn.muted:hover {
-  background: #a8acb3;
 }
 
 .word-content {
@@ -2041,25 +2344,93 @@ onBeforeUnmount(() => {
   margin: 0 0 4px 0;
 }
 
+.example-wrapper {
+  margin: 8px 0;
+}
+
 .example {
   font-size: 13px;
   color: var(--text-secondary);
-  margin: 0;
+  margin: 0 0 4px 0;
   font-style: italic;
 }
 
-.quiz-error {
-  color: var(--error-color);
-  font-weight: 600;
+.definition-translation {
+  font-size: 13px;
+  color: #67c23a;
+  margin: 4px 0 0 0;
+  font-style: normal;
+}
+
+.definition-translation.loading {
+  color: #909399;
+  font-style: italic;
+}
+
+.example-translation {
+  font-size: 13px;
+  color: #67c23a;
+  margin: 0;
+  padding-left: 16px;
+}
+
+/* AI 兜底例句区 */
+.ai-examples-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border-light);
+  text-align: left;
+}
+
+.ai-examples-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 10px;
+}
+
+.ai-examples-loading {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  margin: 0;
+}
+
+.ai-examples-empty {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.ai-example-item {
   margin-bottom: 12px;
-  text-align: center;
-  background: rgba(245, 108, 108, 0.1);
-  padding: 8px 16px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
   border-radius: 8px;
 }
 
-.quiz-error.shake {
-  animation: shake 0.5s ease-in-out;
+.ai-example-item:last-child {
+  margin-bottom: 0;
+}
+
+.ai-example-en {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.ai-example-zh {
+  font-size: 13px;
+  color: #67c23a;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ai-example-zh.loading {
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 
 .quiz-options {
@@ -2081,12 +2452,78 @@ onBeforeUnmount(() => {
   background: var(--bg-tertiary);
   color: var(--text-primary);
   border: 1px solid var(--border-light);
+  transition: all 0.3s ease;
 }
 
 .quiz-btn:hover {
   background: var(--bg-secondary);
   border-color: var(--border-color);
 }
+
+.quiz-btn--wrong {
+  background: rgba(245, 108, 108, 0.1) !important;
+  border-color: var(--error-color) !important;
+  color: var(--error-color) !important;
+  animation: shake 0.5s ease-in-out;
+}
+
+.wrong-word-hint {
+  margin: 16px 0;
+  padding: 16px;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 2px solid #fdba74;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hint-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.hint-icon {
+  font-size: 20px;
+}
+
+.hint-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #c2410c;
+}
+
+.hint-content {
+  padding-left: 28px;
+}
+
+.hint-word {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ea580c;
+  margin: 0 0 8px 0;
+  letter-spacing: 0.5px;
+}
+
+.hint-meaning {
+  font-size: 16px;
+  color: #9a3412;
+  margin: 0;
+  line-height: 1.6;
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   10%, 50%, 90% { transform: translateX(-6px); }

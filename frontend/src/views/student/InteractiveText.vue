@@ -27,6 +27,17 @@
           <button v-if="canFavorite" class="favorite-btn" :class="{ 'is-favorite': isFavorite }" @click="addToFavorite">
             <el-icon><Star v-if="!isFavorite" /><StarFilled v-else /></el-icon>
           </button>
+          <button 
+            class="tts-header-btn" 
+            :class="{ 'is-playing': ttsPlaying }"
+            @click="handleFullArticleTts"
+            :disabled="ttsLoading"
+            title="朗读全文"
+          >
+            <el-icon v-if="ttsLoading" class="is-loading"><Loading /></el-icon>
+            <el-icon v-else-if="ttsPlaying"><VideoPause /></el-icon>
+            <el-icon v-else><Headset /></el-icon>
+          </button>
         </div>
       </div>
     </header>
@@ -420,6 +431,7 @@
       @underline="handleUnderline"
       @translate="handleTranslateSelection"
       @annotate="handleAnnotate"
+      @speak="handleSpeak"
       @ai-qa="handleAiQa"
     />
 
@@ -657,6 +669,12 @@ const getDiffIcon = (diff) => {
 const showTranslateDialog = ref(false)
 const selectedTextForTranslate = ref('')
 const translatedText = ref('')
+
+// TTS 语音合成相关
+const ttsPlaying = ref(false)
+const ttsLoading = ref(false)
+const ttsCurrentText = ref('')
+let ttsAudio = null
 const translating = ref(false)
 
 // 响应式弹窗宽度
@@ -1117,6 +1135,126 @@ const translateSelectedText = async () => {
   }
 }
 
+// ═══════════════ TTS 语音合成功能 ═══════════════
+
+/**
+ * 调用后端 TTS 合成接口并播放音频。
+ * 支持缓存：相同文本只会调用一次 API。
+ */
+const speakText = async (text) => {
+  if (!text || text.trim().length === 0) {
+    ElMessage.warning('没有可朗读的文本')
+    return
+  }
+
+  // 如果正在播放同一段文本，暂停
+  if (ttsPlaying.value && ttsCurrentText.value === text) {
+    stopTtsPlayback()
+    return
+  }
+
+  // 停止之前的播放
+  stopTtsPlayback()
+
+  ttsLoading.value = true
+  ttsCurrentText.value = text
+
+  try {
+    const authHeaderValue = getAuthHeader()
+    const response = await fetch('/api/tts/synthesize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authHeaderValue ? { 'Authorization': authHeaderValue } : {})
+      },
+      body: JSON.stringify({ text: text.trim() })
+    })
+
+    if (response.ok) {
+      const result = await response.json()
+      if (result.code === 200 && result.data?.audioUrl) {
+        // 创建 Audio 对象并播放
+        ttsAudio = new Audio(result.data.audioUrl)
+        ttsAudio.addEventListener('play', () => {
+          ttsPlaying.value = true
+        })
+        ttsAudio.addEventListener('ended', () => {
+          ttsPlaying.value = false
+          ttsCurrentText.value = ''
+        })
+        ttsAudio.addEventListener('error', () => {
+          ttsPlaying.value = false
+          ttsCurrentText.value = ''
+          ElMessage.error('音频播放失败')
+        })
+        await ttsAudio.play()
+      } else {
+        ElMessage.error(result.message || '语音合成失败')
+      }
+    } else if (response.status === 401 || response.status === 403) {
+      ElMessage.warning('请先登录后使用朗读功能')
+    } else {
+      ElMessage.error('语音合成服务暂不可用')
+    }
+  } catch (error) {
+    console.error('TTS failed:', error)
+    ElMessage.error('语音合成失败，请稍后重试')
+  } finally {
+    ttsLoading.value = false
+  }
+}
+
+/**
+ * 停止当前 TTS 播放。
+ */
+const stopTtsPlayback = () => {
+  if (ttsAudio) {
+    ttsAudio.pause()
+    ttsAudio.currentTime = 0
+    ttsAudio = null
+  }
+  ttsPlaying.value = false
+  ttsCurrentText.value = ''
+}
+
+/**
+ * 全文朗读按钮处理。
+ */
+const handleFullArticleTts = () => {
+  if (ttsPlaying.value) {
+    stopTtsPlayback()
+    return
+  }
+  
+  if (!textContent.value) {
+    ElMessage.warning('暂无课文内容')
+    return
+  }
+  
+  // 清理文本中的 Markdown/HTML 标记
+  const cleanText = textContent.value
+    .replace(/<[^>]*>/g, '')
+    .replace(/[#*_~`]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  
+  speakText(cleanText)
+}
+
+/**
+ * 选中文本朗读（SelectionMenu 的 speak 事件）。
+ */
+const handleSpeak = () => {
+  const selection = window.getSelection()
+  const text = selection ? selection.toString().trim() : ''
+  
+  if (text && text.length > 0) {
+    speakText(text)
+  } else {
+    ElMessage.warning('请先选择要朗读的文本')
+  }
+}
+
 const handleWordClick = (wordData) => {
   // 单词点击导致 Vue 重新渲染 span 时会抹掉 Rangy 注入的划线 wrapper。
   // 等 DOM 更新后重新应用划线以恢复高亮。
@@ -1483,12 +1621,12 @@ const onImageError = () => {
   imageError.value = true
 }
 
-// 播放单词音频
+// 播放单词音频（优先预置音频，无则 TTS 合成）
 let currentAudio = null
 const playWordAudio = () => {
   if (selectedWordInfo.value) {
     const audioUrl = selectedWordInfo.value.audioUrl || selectedWordInfo.value.audio
-    // 检查audioUrl非空且为字符串类型
+    // 优先使用预置音频
     if (audioUrl && typeof audioUrl === 'string' && audioUrl.trim()) {
       if (currentAudio) {
         currentAudio.pause()
@@ -1496,9 +1634,13 @@ const playWordAudio = () => {
       }
       currentAudio = new Audio(audioUrl)
       currentAudio.play().catch(err => {
-        console.error('播放音频失败:', err)
-        ElMessage.error('播放音频失败')
+        console.error('预置音频播放失败，尝试 TTS:', err)
+        // 预置音频失败，回退到 TTS
+        speakText(selectedWordInfo.value.word)
       })
+    } else {
+      // 没有预置音频，使用 TTS
+      speakText(selectedWordInfo.value.word)
     }
   }
 }
@@ -1728,6 +1870,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  // 清理 TTS 播放
+  stopTtsPlayback()
+
   // 移除事件监听
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('scroll', handleScroll);

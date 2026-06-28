@@ -220,6 +220,15 @@ ai:
     model: ${AI_TRANSLATE_MODEL:Qwen/Qwen2.5-7B-Instruct}
     timeout: ${AI_TRANSLATE_TIMEOUT:30000}
 
+# TTS 语音合成 (SiliconFlow CosyVoice2)
+tts:
+  api-url: ${TTS_API_URL:https://api.siliconflow.cn/v1/audio/speech}
+  api-key: ${TTS_API_KEY:${AI_TRANSLATE_API_KEY:}}
+  model: ${TTS_MODEL:FunAudioLLM/CosyVoice2-0.5B}
+  voice: ${TTS_VOICE:FunAudioLLM/CosyVoice2-0.5B:alex}
+  cache-dir: ${TTS_CACHE_DIR:/app/uploads/tts}
+  timeout: ${TTS_TIMEOUT:60000}
+
 async:
   version-generator:
     core-pool-size: 8
