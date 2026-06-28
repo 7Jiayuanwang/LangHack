@@ -52,7 +52,8 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 ('feature_toggle', 'page_articles',          'true',  '学生端-文章阅读页',             0),
 ('feature_toggle', 'page_user_texts',        'true',  '学生端-我的课文页',             0),
 -- V17: 补齐背单词页 toggle
-('feature_toggle', 'page_word_recite',       'true',  '学生端-背单词页',               0);
+('feature_toggle', 'page_word_recite',       'true',  '学生端-背单词页',               0),
+	('feature_toggle', 'student.campaigns',      'true',  '学生端-活动页',                 0);
 
 -- ────────────────────────────────────────
 -- 3. 管理员功能开关 seed [原 V13]
@@ -66,7 +67,8 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
   ('feature_toggle', 'admin.words',        'true', '管理员-单词管理',   0),
   ('feature_toggle', 'admin.texts',        'true', '管理员-课文管理',   0),
   ('feature_toggle', 'admin.assignments',  'true', '管理员-作业管理',   0),
-  ('feature_toggle', 'admin.sso_approval', 'true', '管理员-SSO 审批',   0);
+  ('feature_toggle', 'admin.sso_approval', 'true', '管理员-SSO 审批',   0),
+  ('feature_toggle', 'admin.campaigns',   'true', '管理员-活动管理',   0);
 
 -- ────────────────────────────────────────
 -- 4. 教师端功能开关 seed [原 V13]
