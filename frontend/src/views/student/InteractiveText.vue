@@ -638,6 +638,7 @@ let quizPanelDragging = false
 let quizPanelDragStartY = 0
 let quizPanelDragStartHeight = 0
 let accumulatedTime = 0 // 累计学习时间（秒）
+let lastSavedStudyTime = 0 // 已保存到后端的学习时间（秒），用于计算增量避免重复累加
 
 // 相关文章推荐
 const relatedTexts = ref([])
@@ -945,10 +946,13 @@ const loadTextDetail = async () => {
       if (data.readTime && data.readTime > 0) {
         studyTime.value = data.readTime
         accumulatedTime = data.readTime // 将已学习时长作为累计时间
+        // 已保存的时长不应再次发送，同步 lastSavedStudyTime 避免首次保存重复累加
+        lastSavedStudyTime = data.readTime
       } else {
         // 确保初始值为0
         studyTime.value = 0
         accumulatedTime = 0
+        lastSavedStudyTime = 0
       }
 
 
@@ -1049,17 +1053,19 @@ const pauseReading = async () => {
 const saveLearningRecord = async () => {
   try {
     if (studyTime.value > 0) {
-      // 计算这次要保存的时间增量
-      // 这里我们保存总时间，让后端处理增量逻辑
+      // 计算自上次保存以来的增量，避免重复累加导致时长虚高
+      const increment = studyTime.value - lastSavedStudyTime
+      if (increment <= 0) return
       const recordPayload = {
         type: 'TEXT_VIEW',
-        duration: studyTime.value,
+        duration: increment,
         textId: textId.value,
         contentVersion: currentVersion.value,
         ...(assignmentId.value && { assignmentId: assignmentId.value })
       }
 
       await studentApi.recordLearning(recordPayload)
+      lastSavedStudyTime = studyTime.value
     }
   } catch (error) {
     console.error('保存学习记录失败:', error)
@@ -1280,6 +1286,20 @@ const handleLearningRecord = async (recordData) => {
 const handleCompleteReading = async () => {
   try {
     completing.value = true
+
+    // ⚠️ 完成前先暂停计时并 flush 最后一段增量到 learning_records。
+    // 后端 completeReadingSession 不再同步写入 learning_records（避免重复计算），
+    // 所如此处必须把未保存的增量提交上去，否则最后一段阅读时间会丢失。
+    if (recording.value) {
+      recording.value = false
+      if (studyStartTime) {
+        const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
+        accumulatedTime += currentSessionTime
+        studyStartTime = null
+      }
+    }
+    stopStudyTimer()
+    await saveLearningRecord()
 
     if (currentRecordId.value) {
       // 正常路径：通过 recordId 完成阅读会话
@@ -1917,25 +1937,30 @@ onBeforeUnmount(() => {
         studyStartTime = null
       }
     }
-    // 使用 fetch keepalive 确保页面卸载时请求可靠发送
-    const keepaliveAuth = getAuthHeader()
-    const payload = {
-      type: 'TEXT_VIEW',
-      duration: studyTime.value,
-      textId: textId.value,
-      contentVersion: currentVersion.value,
-      ...(assignmentId.value && { assignmentId: assignmentId.value })
+    // 计算增量，避免重复累加
+    const increment = studyTime.value - lastSavedStudyTime
+    if (increment > 0) {
+      // 使用 fetch keepalive 确保页面卸载时请求可靠发送
+      const keepaliveAuth = getAuthHeader()
+      const payload = {
+        type: 'TEXT_VIEW',
+        duration: increment,
+        textId: textId.value,
+        contentVersion: currentVersion.value,
+        ...(assignmentId.value && { assignmentId: assignmentId.value })
+      }
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+      fetch(`${baseUrl}/api/student/learning/record/learning`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(keepaliveAuth ? { 'Authorization': keepaliveAuth } : {})
+        },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(() => {})
+      lastSavedStudyTime = studyTime.value
     }
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-    fetch(`${baseUrl}/api/student/learning/record/learning`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(keepaliveAuth ? { 'Authorization': keepaliveAuth } : {})
-      },
-      body: JSON.stringify(payload),
-      keepalive: true
-    }).catch(() => {})
   }
 
   // 清理音频资源

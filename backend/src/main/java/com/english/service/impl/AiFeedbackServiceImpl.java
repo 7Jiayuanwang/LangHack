@@ -1,8 +1,10 @@
 package com.english.service.impl;
 
 import com.english.entity.AiFeedback;
+import com.english.enums.TaskType;
 import com.english.mapper.AiFeedbackMapper;
 import com.english.service.AiFeedbackService;
+import com.english.service.CampaignStatsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -17,6 +19,9 @@ public class AiFeedbackServiceImpl implements AiFeedbackService {
     @Autowired
     private AiFeedbackMapper aiFeedbackMapper;
 
+    @Autowired
+    private CampaignStatsService campaignStatsService;
+
     @Override
     @CacheEvict(value = "metrics", key = "'ai-feedback-summary'")
     public void submitFeedback(Long callLogId, Long userId, Boolean isHelpful, Integer rating, String feedbackText) {
@@ -27,6 +32,9 @@ public class AiFeedbackServiceImpl implements AiFeedbackService {
         feedback.setRating(rating);
         feedback.setFeedbackText(feedbackText);
         aiFeedbackMapper.insert(feedback);
+
+        // 事件驱动: 触发活动数据采集
+        campaignStatsService.collectUserTasksByTypeAsync(userId, TaskType.FEEDBACK);
     }
 
     @Override

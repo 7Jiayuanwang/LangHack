@@ -1,9 +1,14 @@
 package com.english.service.impl;
 
 import com.english.entity.AiCallLog;
+import com.english.entity.User;
+import com.english.enums.TaskType;
 import com.english.mapper.AiCallLogMapper;
+import com.english.service.CampaignStatsService;
+import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
@@ -33,6 +38,12 @@ public class AiCallMetricsService {
     private final ConcurrentLinkedQueue<AiCallLog> buffer = new ConcurrentLinkedQueue<>();
     private final AiCallLogMapper aiCallLogMapper;
     private final StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private CampaignStatsService campaignStatsService;
 
     public AiCallMetricsService(AiCallLogMapper aiCallLogMapper,
                                  StringRedisTemplate redisTemplate) {
@@ -140,6 +151,27 @@ public class AiCallMetricsService {
             try {
                 aiCallLogMapper.batchInsert(batch);
                 logger.debug("Flushed {} AI call logs to DB", batch.size());
+
+                // 事件驱动: 触发活动数据采集（仅针对成功的 QA 调用）
+                for (AiCallLog log : batch) {
+                    if (log.getSuccess() &&
+                        ("QA".equals(log.getServiceName()) || "HIAGENT".equals(log.getServiceName())) &&
+                        "chatQA".equals(log.getMethodName())) {
+
+                        String username = log.getTriggeredBy();
+                        if (username != null) {
+                            try {
+                                User user = userService.getUserByUsername(username);
+                                if (user != null) {
+                                    campaignStatsService.collectUserTasksByTypeAsync(user.getId(), TaskType.AI_QA);
+                                }
+                            } catch (Exception e) {
+                                logger.error("触发活动数据采集失败: username={}, service={}, method={}",
+                                    username, log.getServiceName(), log.getMethodName(), e);
+                            }
+                        }
+                    }
+                }
             } catch (Exception e) {
                 logger.warn("Failed to flush AI call logs, {} records lost", batch.size(), e);
             }

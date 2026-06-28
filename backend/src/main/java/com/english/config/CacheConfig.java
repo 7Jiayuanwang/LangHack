@@ -56,6 +56,7 @@ public class CacheConfig extends CachingConfigurerSupport {
     }
 
     @Bean
+    @org.springframework.context.annotation.Primary
     public CacheManager cacheManager(RedisConnectionFactory factory) {
         ObjectMapper om = new ObjectMapper();
         om.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());

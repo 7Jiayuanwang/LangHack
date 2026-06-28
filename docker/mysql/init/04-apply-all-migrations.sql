@@ -2908,25 +2908,6 @@ CREATE TABLE IF NOT EXISTS `student_ai_quiz_records` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生 AI 题答题明细';
 
 
--- V11__add_category_to_texts.sql
-
--- 添加课文类别字段（幂等）
-DROP PROCEDURE IF EXISTS _v11_add_category_to_texts;
-CREATE PROCEDURE _v11_add_category_to_texts()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'texts'
-          AND COLUMN_NAME = 'category'
-    ) THEN
-        ALTER TABLE texts ADD COLUMN category VARCHAR(50) DEFAULT NULL COMMENT '课文类别' AFTER tags;
-    END IF;
-END;
-CALL _v11_add_category_to_texts();
-DROP PROCEDURE IF EXISTS _v11_add_category_to_texts;
-
-
 -- V11__ai_conversation_feedback.sql
 
 -- ═══════════════════════════════════════════════════════════════
@@ -3092,6 +3073,20 @@ CREATE TABLE IF NOT EXISTS ai_feedback (
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI用户反馈表';
 
+-- ═══════════════════════════════════════════════════════════════
+-- texts.category 字段（整合自 V11__add_category_to_texts.sql）
+-- ═══════════════════════════════════════════════════════════════
+SET @db = DATABASE();
+SET @col_exists = 0;
+SELECT COUNT(*) INTO @col_exists FROM information_schema.columns
+    WHERE table_schema = @db AND table_name = 'texts' AND column_name = 'category';
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE texts ADD COLUMN category VARCHAR(50) DEFAULT NULL COMMENT ''课文类别'' AFTER tags',
+    'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 
 -- V12__ai_qa.sql
 
@@ -3198,30 +3193,6 @@ END;
 CALL _v12_add_sso_binding_cols();
 DROP PROCEDURE IF EXISTS _v12_add_sso_binding_cols;
 
-
--- 6) 学生学校画像视图（DROP + CREATE 幂等）
-DROP VIEW IF EXISTS v_user_school_profile;
-CREATE VIEW v_user_school_profile AS
-SELECT
-    u.id                          AS user_id,
-    u.username                    AS username,
-    u.role                        AS role,
-    u.real_name                   AS real_name,
-    s.id                          AS school_student_id,
-    s.student_id                  AS student_id,
-    s.student_name                AS student_name,
-    s.college_name                AS college_name,
-    s.class_code                  AS class_code,
-    s.class_name                  AS class_name,
-    s.grade                       AS grade,
-    s.major_name                  AS major_name,
-    (SELECT COUNT(*) FROM course_selection cs            WHERE cs.student_id = s.student_id) AS course_selection_count,
-    (SELECT COUNT(*) FROM teacher_student_binding tsb    WHERE tsb.student_id = s.student_id) AS teacher_binding_count,
-    (SELECT MAX(les.exam_date) FROM level_exam_scores les WHERE les.student_id = s.student_id) AS last_exam_date,
-    (SELECT MAX(les.score)     FROM level_exam_scores les WHERE les.student_id = s.student_id) AS best_exam_score
-FROM users u
-JOIN school_student s ON s.id = u.school_student_id
-WHERE u.deleted = 0;
 
 -- V13__learner_profile.sql
 
@@ -3438,14 +3409,136 @@ SELECT 1;
 SELECT 1;
 
 
--- V20__text_similarity_matrix.sql
+-- V20__campaign_system.sql
+
+-- V21__campaign_system.sql
+-- 活动发布与统计系统
+-- 创建日期: 2026-06-21
+
+-- 1. 活动主表
+CREATE TABLE campaign_activities (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(200) NOT NULL COMMENT '活动标题',
+    description TEXT COMMENT '活动描述',
+    start_time DATETIME NOT NULL COMMENT '开始时间',
+    end_time DATETIME NOT NULL COMMENT '结束时间',
+    status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT/ACTIVE/ENDED/ARCHIVED',
+    completion_rule VARCHAR(50) DEFAULT 'THRESHOLD' COMMENT '完成规则: ANY/ALL/THRESHOLD',
+    completion_threshold INT DEFAULT 1 COMMENT '完成阈值（THRESHOLD模式）',
+
+    -- 报名设置
+    enrollment_mode VARCHAR(20) DEFAULT 'AUTO' COMMENT '报名模式: AUTO/MANUAL/INVITE_ONLY',
+    enrollment_scope VARCHAR(20) DEFAULT 'ALL' COMMENT '报名范围: ALL/COLLEGE/GRADE/CLASS/CUSTOM',
+    enrollment_target_ids TEXT COMMENT '允许报名的ID列表（JSON数组）',
+    max_participants INT COMMENT '最大参与人数（NULL=不限制）',
+
+    -- 隐私设置
+    show_scores TINYINT(1) DEFAULT 1 COMMENT '是否显示具体分数',
+    show_ranking TINYINT(1) DEFAULT 1 COMMENT '是否显示排名',
+
+    created_by BIGINT COMMENT '创建者用户ID',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT(1) DEFAULT 0,
+
+    INDEX idx_status (status),
+    INDEX idx_time_range (start_time, end_time),
+    INDEX idx_enrollment_mode (enrollment_mode),
+    INDEX idx_created_by (created_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动主表';
+
+-- 2. 活动任务表
+CREATE TABLE campaign_tasks (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    campaign_id BIGINT NOT NULL COMMENT '活动ID',
+    task_name VARCHAR(100) NOT NULL COMMENT '任务名称',
+    task_type VARCHAR(50) NOT NULL COMMENT '任务类型: READING_TIME/WORD_LEARNING/TEXT_UPLOAD/FEEDBACK/AI_QA/MANUAL',
+    task_unit VARCHAR(20) COMMENT '任务单位: MINUTES/COUNT/TIMES',
+    target_value INT NOT NULL COMMENT '目标值（如阅读60分钟、学习50个单词）',
+    points INT DEFAULT 1 COMMENT '完成得分',
+    is_required TINYINT(1) DEFAULT 0 COMMENT '是否必做',
+    auto_collect TINYINT(1) DEFAULT 1 COMMENT '是否自动采集数据',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT(1) DEFAULT 0,
+
+    INDEX idx_campaign (campaign_id),
+    INDEX idx_task_type (task_type),
+    FOREIGN KEY (campaign_id) REFERENCES campaign_activities(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动任务表';
+
+-- 3. 参与记录表
+CREATE TABLE campaign_participations (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    campaign_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    enrollment_status VARCHAR(20) DEFAULT 'ENROLLED' COMMENT '报名状态: PENDING/ENROLLED/REJECTED/WITHDRAWN',
+    enrollment_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '报名时间',
+    enrollment_source VARCHAR(20) DEFAULT 'MANUAL' COMMENT '报名来源: MANUAL/AUTO/ADMIN',
+
+    total_score INT DEFAULT 0 COMMENT '总得分',
+    completed_tasks INT DEFAULT 0 COMMENT '已完成任务数',
+    completion_status VARCHAR(20) DEFAULT 'IN_PROGRESS' COMMENT '状态: NOT_STARTED/IN_PROGRESS/COMPLETED',
+
+    join_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_campaign_user (campaign_id, user_id),
+    INDEX idx_campaign (campaign_id),
+    INDEX idx_user (user_id),
+    INDEX idx_enrollment_status (enrollment_status),
+    INDEX idx_score (total_score DESC),
+    FOREIGN KEY (campaign_id) REFERENCES campaign_activities(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动参与记录';
+
+-- 4. 任务完成记录表
+CREATE TABLE campaign_task_completions (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    campaign_id BIGINT NOT NULL,
+    task_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    completion_count INT DEFAULT 0 COMMENT '完成次数',
+    current_value DECIMAL(10,2) DEFAULT 0 COMMENT '当前值（如已读45分钟）',
+    is_completed TINYINT(1) DEFAULT 0 COMMENT '是否达标',
+    last_update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_campaign_task_user (campaign_id, task_id, user_id),
+    INDEX idx_campaign (campaign_id),
+    INDEX idx_task (task_id),
+    INDEX idx_user (user_id),
+    FOREIGN KEY (campaign_id) REFERENCES campaign_activities(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES campaign_tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务完成明细';
+
+-- 5. 手动数据录入表
+CREATE TABLE campaign_manual_records (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    campaign_id BIGINT NOT NULL,
+    task_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    record_value DECIMAL(10,2) NOT NULL COMMENT '录入值',
+    record_type VARCHAR(20) DEFAULT 'MANUAL' COMMENT 'MANUAL/IMPORT',
+    import_batch_id VARCHAR(50) COMMENT '批量导入批次ID',
+    remark TEXT COMMENT '备注',
+    created_by BIGINT COMMENT '录入人',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT(1) DEFAULT 0,
+
+    INDEX idx_campaign (campaign_id),
+    INDEX idx_task (task_id),
+    INDEX idx_user (user_id),
+    INDEX idx_import_batch (import_batch_id),
+    FOREIGN KEY (campaign_id) REFERENCES campaign_activities(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES campaign_tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='手动数据录入';
 
 -- ═══════════════════════════════════════════════════════════════
--- V20: 文章相似度矩阵表
--- 用于存储文章之间的相似度关系，支持推荐系统
+-- 文章相似度矩阵（整合自 V20__text_similarity_matrix.sql）
 -- ═══════════════════════════════════════════════════════════════
-
--- 1. text_similarity_matrix — 文章相似度矩阵
 CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     `text_id` BIGINT NOT NULL COMMENT '文章ID',
@@ -3458,8 +3551,6 @@ CREATE TABLE IF NOT EXISTS `text_similarity_matrix` (
     INDEX `idx_similarity` (`similarity` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵';
 
--- 2. text_similarity_matrix_tmp — 文章相似度矩阵临时表
--- 表结构与 text_similarity_matrix 完全一致，用于批量更新时的数据交换
 CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     `text_id` BIGINT NOT NULL COMMENT '文章ID',
@@ -3472,11 +3563,132 @@ CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
     INDEX `idx_similarity` (`similarity` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章相似度矩阵临时表';
 
--- V21__extend_school_student_fields.sql
+
+-- V21__campaign_repeatable_tasks_and_enrollment_time.sql
+
+-- V21__campaign_repeatable_tasks_and_enrollment_time.sql
+-- 活动任务重复积分功能 + 报名时间字段
+-- 创建日期: 2026-06-24
+
+-- Part 1: 为活动表添加报名时间字段
+ALTER TABLE campaign_activities
+ADD COLUMN enrollment_start_time DATETIME NULL COMMENT '报名开始时间' AFTER end_time,
+ADD COLUMN enrollment_end_time DATETIME NULL COMMENT '报名结束时间' AFTER enrollment_start_time;
+
+-- 为已有活动设置默认报名时间（与活动时间一致）
+UPDATE campaign_activities
+SET enrollment_start_time = start_time,
+    enrollment_end_time = end_time
+WHERE enrollment_start_time IS NULL;
+
+-- Part 2: 为 campaign_tasks 表添加重复积分相关字段
+ALTER TABLE campaign_tasks
+ADD COLUMN is_repeatable TINYINT(1) DEFAULT 0 COMMENT '是否可重复完成（重复积分）' AFTER auto_collect,
+ADD COLUMN max_completions INT DEFAULT NULL COMMENT '最大完成次数（NULL=无限制，用于总得分上限控制）' AFTER is_repeatable,
+ADD COLUMN daily_limit INT DEFAULT NULL COMMENT '单日最大完成次数（NULL=无限制，用于单日得分上限控制）' AFTER max_completions;
+
+-- Part 3: 为 campaign_task_completions 表添加每日完成记录追踪
+ALTER TABLE campaign_task_completions
+ADD COLUMN earned_score INT DEFAULT 0 COMMENT '已获得总积分' AFTER completion_count,
+ADD COLUMN last_completion_date DATE COMMENT '最后一次完成日期' AFTER earned_score,
+ADD COLUMN today_completion_count INT DEFAULT 0 COMMENT '今日完成次数' AFTER last_completion_date;
+
+-- Part 4: 添加索引优化查询性能
+ALTER TABLE campaign_task_completions
+ADD INDEX idx_user_task_date (user_id, task_id, last_completion_date);
+
+-- Part 5: 数据修复 - 为已完成的任务补充 completion_count 和 earned_score
+UPDATE campaign_task_completions ctc
+JOIN campaign_tasks ct ON ctc.task_id = ct.id
+SET
+  ctc.completion_count = IF(ctc.is_completed = 1 AND ctc.completion_count = 0, 1, ctc.completion_count),
+  ctc.earned_score = IF(ctc.is_completed = 1 AND ctc.earned_score = 0, ct.points, ctc.earned_score)
+WHERE ctc.is_completed = 1
+  AND (ctc.completion_count = 0 OR ctc.earned_score = 0);
+
+-- Part 6: 重新计算所有参与记录的总得分和完成任务数
+UPDATE campaign_participations cp
+SET
+  cp.total_score = (
+    SELECT COALESCE(SUM(ctc.earned_score), 0)
+    FROM campaign_task_completions ctc
+    WHERE ctc.campaign_id = cp.campaign_id
+      AND ctc.user_id = cp.user_id
+  ),
+  cp.completed_tasks = (
+    SELECT COUNT(*)
+    FROM campaign_task_completions ctc
+    WHERE ctc.campaign_id = cp.campaign_id
+      AND ctc.user_id = cp.user_id
+      AND ctc.is_completed = 1
+  );
+
+-- 注释说明
+-- is_repeatable = 1: 任务可重复完成，每次达标都积分
+-- max_completions: 限制总完成次数，例如设置为 10 表示最多完成10次就不再积分
+-- daily_limit: 限制单日完成次数，例如设置为 3 表示每天最多完成3次
+-- earned_score: 用户在此任务上已累计获得的总积分（= completion_count * points）
+-- today_completion_count: 今日已完成次数，每日0点后首次完成时自动重置
+--
+-- 示例场景：
+-- 1. 每天阅读30分钟，每完成一次得1分，每天最多3次 -> is_repeatable=1, daily_limit=3
+-- 2. 学习新单词，每学50个得1分，总共最多完成20次 -> is_repeatable=1, max_completions=20
+-- 3. 上传课文，上传一次即可，不可重复 -> is_repeatable=0（默认）
+
+-- ========================================================================
+-- P0 严重问题修复（2026-06-24 追加）
+-- ========================================================================
+
+-- P0-01 修复: 添加唯一约束防止重复报名（竞态条件）
+ALTER TABLE campaign_participations
+ADD UNIQUE INDEX uk_campaign_user (campaign_id, user_id);
+
+-- P0-03 修复: 添加关键数据库索引以提升性能
+-- 预期提升: 排名查询 5s → <100ms (50x 提升)
+
+-- 1. 排名查询索引 (campaign_participations)
+-- 用于 getIndividualRanking: 按 campaign_id + enrollment_status + total_score 排序
+CREATE INDEX IF NOT EXISTS idx_enrollment_score
+ON campaign_participations(campaign_id, enrollment_status, total_score DESC);
+
+-- 2. 任务完成记录查询索引 (campaign_task_completions)
+-- 用于按活动、任务、用户快速定位完成记录
+CREATE INDEX IF NOT EXISTS idx_campaign_task_user
+ON campaign_task_completions(campaign_id, task_id, user_id);
+
+-- 3. 活动任务筛选索引 (campaign_tasks)
+-- 用于筛选活动下的必做任务
+CREATE INDEX IF NOT EXISTS idx_campaign_required
+ON campaign_tasks(campaign_id, is_required, deleted);
+
+-- 注: 这些索引针对 CampaignStatsServiceImpl 中高频查询场景
+-- idx_enrollment_score: 覆盖 getIndividualRanking/getClassRanking/getCollegeRanking
+-- idx_campaign_task_user: 覆盖 getTaskCompletion/updateTaskCompletion
+-- idx_campaign_required: 覆盖 calculateCompletionStatus 中的必做任务筛选
+
+-- ========================================================================
+-- 可重复任务增量跟踪字段（2026-06-26 追加）
+-- ========================================================================
+-- 问题: 可重复任务每次定时采集都基于 currentValue(绝对总量) 判断达标，
+-- 若 value >= targetValue 则加分，导致同一进度被重复加分。
+-- 修复: 新增 last_counted_value 记录上次计分时的进度值，
+--       新增积分 = (currentValue - lastCountedValue) / targetValue 向下取整。
+
+ALTER TABLE campaign_task_completions
+ADD COLUMN last_counted_value DECIMAL(10,2) DEFAULT 0.0000 COMMENT '上次计分时的进度值（用于增量计分）' AFTER current_value;
+
+-- 为已有的完成记录初始化 last_counted_value = current_value，避免历史数据被重复计分
+UPDATE campaign_task_completions
+SET last_counted_value = current_value
+WHERE last_counted_value = 0 AND current_value > 0;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 扩展 school_student 字段长度（整合自 V21__extend_school_student_fields.sql）
+-- 修复 DataIntegrityViolationException: phone/counselor_name VARCHAR(50) → VARCHAR(100)
+-- ═══════════════════════════════════════════════════════════════
 DROP PROCEDURE IF EXISTS _v21_extend_student_fields;
 CREATE PROCEDURE _v21_extend_student_fields()
 BEGIN
-    -- 扩展 phone 字段长度
     IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
@@ -3485,8 +3697,6 @@ BEGIN
         ALTER TABLE school_student
             MODIFY COLUMN phone VARCHAR(100) NULL COMMENT '联系电话（CDSP 可能返回多个号码拼接）';
     END IF;
-
-    -- 扩展 counselor_name 字段长度
     IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
@@ -3495,55 +3705,14 @@ BEGIN
         ALTER TABLE school_student
             MODIFY COLUMN counselor_name VARCHAR(100) NULL COMMENT '辅导员姓名（可能包含多个辅导员或职务）';
     END IF;
-END$$
+END;
+CALL _v21_extend_student_fields();
+DROP PROCEDURE IF EXISTS _v21_extend_student_fields;
 
-CALL _v21_extend_student_fields()$$
-DROP PROCEDURE IF EXISTS _v21_extend_student_fields$$
-
--- V31__add_vocabulary_source_type.sql
--- 生词本来源标记：区分文章阅读加入的词和其他来源的词
--- 注：本地原编号 V26 与远端 V26__text_exercises_table.sql 冲突，rebase 时改为 V31
-
-DROP PROCEDURE IF EXISTS _add_vocabulary_source_type$$
-CREATE PROCEDURE _add_vocabulary_source_type()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE table_schema = DATABASE()
-          AND table_name = 'vocabulary_books'
-          AND column_name = 'source_type'
-    ) THEN
-        ALTER TABLE vocabulary_books
-        ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
-        COMMENT '来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他'
-        AFTER next_review_time;
-    END IF;
-END$$
-CALL _add_vocabulary_source_type()$$
-DROP PROCEDURE IF EXISTS _add_vocabulary_source_type$$
-
--- 历史数据全部标记为 MANUAL（旧数据无法确定来源）
-UPDATE vocabulary_books SET source_type = 'MANUAL'
-WHERE source_type IS NULL OR source_type = '';
-
--- 给 student_id + source_type 加索引，提升按来源查询的性能
-DROP PROCEDURE IF EXISTS _idx_vocabulary_source$$
-CREATE PROCEDURE _idx_vocabulary_source()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.STATISTICS
-        WHERE table_schema = DATABASE()
-          AND table_name = 'vocabulary_books'
-          AND index_name = 'idx_vocabulary_source'
-    ) THEN
-        CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
-    END IF;
-END$$
-CALL _idx_vocabulary_source()$$
-DROP PROCEDURE IF EXISTS _idx_vocabulary_source$$
 
 -- V22__word_ai_explanations.sql
--- AI 生成的单词详细介绍
+
+-- V22: word_ai_explanations - AI 生成的单词详细介绍
 
 CREATE TABLE IF NOT EXISTS word_ai_explanations (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -3563,3 +3732,17 @@ CREATE TABLE IF NOT EXISTS word_ai_explanations (
     KEY idx_created_time (created_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 生成的单词详细介绍';
 
+
+-- V31__add_vocabulary_source_type.sql
+
+-- 生词本来源标记：ARTICLE=文章阅读加入 / MANUAL=手动添加或其他来源
+ALTER TABLE vocabulary_books
+ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
+COMMENT '来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他'
+AFTER next_review_time;
+
+-- 已有历史数据全部标记为 MANUAL（旧数据无法确定来源）
+UPDATE vocabulary_books SET source_type = 'MANUAL' WHERE source_type IS NULL OR source_type = '';
+
+-- 给 student_id + source_type 加索引，提升按来源查询的性能
+CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);

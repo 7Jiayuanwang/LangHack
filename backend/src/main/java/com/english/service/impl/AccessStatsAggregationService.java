@@ -133,8 +133,21 @@ public class AccessStatsAggregationService {
             daily.setTopPages(topPagesJson);
             daily.setCreatedTime(LocalDateTime.now());
 
-            dailyMapper.insert(daily);
-            logger.info("Aggregated daily access stats for {}", yesterday);
+            // Check if record already exists for this date (prevent duplicate key error)
+            QueryWrapper<AccessStatsDaily> dailyWrapper = new QueryWrapper<>();
+            dailyWrapper.eq("stat_date", yesterday);
+            AccessStatsDaily existing = dailyMapper.selectOne(dailyWrapper);
+
+            if (existing != null) {
+                // Update existing record
+                daily.setId(existing.getId());
+                dailyMapper.updateById(daily);
+                logger.info("Updated existing daily access stats for {}", yesterday);
+            } else {
+                // Insert new record
+                dailyMapper.insert(daily);
+                logger.info("Aggregated daily access stats for {}", yesterday);
+            }
         } catch (Exception e) {
             logger.error("Failed to aggregate daily access stats", e);
         }

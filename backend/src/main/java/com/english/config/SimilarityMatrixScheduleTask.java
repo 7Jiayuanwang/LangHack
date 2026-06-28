@@ -52,6 +52,9 @@ public class SimilarityMatrixScheduleTask {
             return;
         }
 
+        log.info("[SimilarityMatrix] Step2.5: 清理残留的旧表（防止 RENAME 失败）...");
+        similarityMatrixMapper.dropOldTextIfExists();
+
         log.info("[SimilarityMatrix] Step3: 执行原子 RENAME TABLE 切换...");
         similarityMatrixMapper.atomicRenameToShadowText();
         log.info("[SimilarityMatrix] RENAME TABLE 执行成功");
@@ -76,6 +79,9 @@ public class SimilarityMatrixScheduleTask {
             log.warn("[SimilarityMatrix] tmp 表未插入任何数据，跳过切换");
             return;
         }
+
+        log.info("[SimilarityMatrix] Step2.5: 清理残留的旧表（防止 RENAME 失败）...");
+        similarityMatrixMapper.dropOldUserIfExists();
 
         log.info("[SimilarityMatrix] Step3: 执行原子 RENAME TABLE 切换...");
         similarityMatrixMapper.atomicRenameToShadowUser();

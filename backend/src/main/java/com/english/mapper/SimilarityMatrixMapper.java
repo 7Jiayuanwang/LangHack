@@ -25,6 +25,12 @@ public interface SimilarityMatrixMapper {
     int truncateTmpText();
 
     /**
+     * 清理残留的旧表（防止 RENAME 失败）
+     */
+    @Update("DROP TABLE IF EXISTS text_similarity_matrix_old")
+    int dropOldTextIfExists();
+
+    /**
      * 重算文章相似度矩阵并插入 tmp 表
      *
      * 余弦相似度：cos(t1, t2) = Σ(s1_i × s2_i) / (√Σs1_i² × √Σs2_i²)
@@ -84,6 +90,12 @@ public interface SimilarityMatrixMapper {
 
     @Update("TRUNCATE TABLE user_similarity_matrix_tmp")
     int truncateTmpUser();
+
+    /**
+     * 清理残留的旧表（防止 RENAME 失败）
+     */
+    @Update("DROP TABLE IF EXISTS user_similarity_matrix_old")
+    int dropOldUserIfExists();
 
     /**
      * 重算用户相似度矩阵并插入 tmp 表

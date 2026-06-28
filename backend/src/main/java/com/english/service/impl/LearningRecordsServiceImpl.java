@@ -3,7 +3,9 @@ package com.english.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.entity.*;
+import com.english.enums.TaskType;
 import com.english.mapper.*;
+import com.english.service.CampaignStatsService;
 import com.english.service.LearningRecordsService;
 import com.english.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +48,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Autowired
     private UnitWordMapper unitWordMapper;
+
+    @Autowired
+    private CampaignStatsService campaignStatsService;
 
     @Autowired
     private VocabularyBookMapper vocabularyBookMapper;
@@ -536,6 +541,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         record.setTotalCount(1);
         record.setCreatedTime(LocalDateTime.now());
         learningRecordMapper.insert(record);
+
+        // 事件驱动: 触发活动数据采集
+        campaignStatsService.collectUserTasksByTypeAsync(studentId, TaskType.WORD_LEARNING);
     }
 
     @Override
@@ -576,12 +584,12 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
             textLearningRecordMapper.updateById(record);
 
-            // 同步写入/累加 learning_records 中的 TEXT_VIEW 记录，
-            // 以确保任务进度判断可以正确读取到阅读数据
-            if (record.getTextId() != null && record.getStudentId() != null && durationSeconds > 0) {
-                recordTextView(record.getStudentId(), record.getTextId(),
-                        record.getAssignmentId(), durationSeconds);
-            }
+            // ⚠️ 不再在此处同步写入 learning_records.TEXT_VIEW：
+            // 前端 InteractiveText.vue 已通过 /record/learning 周期性保存增量时长到 learning_records，
+            // 此处再用墙上时钟时长（startTime→now）写入会与已保存时长重叠，导致阅读时长重复计算。
+            // text_learning_records 表仍保留会话级记录用于其他用途。
+            // 事件驱动: 触发活动数据采集（采集时会从 learning_records 汇总 TEXT_VIEW 时长）
+            campaignStatsService.collectUserTasksByTypeAsync(record.getStudentId(), TaskType.READING_TIME);
         }
     }
 
@@ -598,6 +606,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         record.setCreatedTime(LocalDateTime.now());
 
         learningRecordMapper.insert(record);
+
+        // 事件驱动: 触发活动数据采集
+        campaignStatsService.collectUserTasksByTypeAsync(studentId, TaskType.WORD_LEARNING);
     }
 
     @Override
@@ -1208,6 +1219,12 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     @Override
     public long getStudyMinutesInRange(Long studentId, LocalDateTime from, LocalDateTime to) {
         long totalSeconds = learningRecordMapper.sumDurationSecondsBetween(studentId, from, to);
+        return totalSeconds / 60;
+    }
+
+    @Override
+    public long getReadingMinutesInRange(Long studentId, LocalDateTime from, LocalDateTime to) {
+        long totalSeconds = learningRecordMapper.sumReadingSecondsBetween(studentId, from, to);
         return totalSeconds / 60;
     }
 
