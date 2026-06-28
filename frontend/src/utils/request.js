@@ -185,6 +185,18 @@ request.interceptors.response.use(
   error => {
     console.error('Response error:', error)
 
+    const status = error.response?.status
+    const reqUrl = error.config?.url || 'unknown'
+
+    // HTTP 401：Spring Security 在 token 缺失/失效时直接返回 401。
+    // 走与业务码 401 相同的 refreshToken 流程，避免误报"未授权，请重新登录"。
+    // 排除 refreshToken/login 自身的 401，防止递归。
+    if (status === 401 && error.config && !error.config._retry401 &&
+        !reqUrl.includes('/auth/refresh') && !reqUrl.includes('/auth/login')) {
+      error.config._retry401 = true
+      return handle401(error.config)
+    }
+
     let message = error.message
     // 超时 / 网络断连的友好提示
     if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
@@ -211,8 +223,6 @@ request.interceptors.response.use(
       }
     }
     if (!error.config?.skipErrorHandler) {
-      const reqUrl = error.config?.url || 'unknown'
-      const status = error.response?.status
       if (status) {
         console.warn(`[HTTP ${status}] ${error.config?.method?.toUpperCase() || 'GET'} ${reqUrl}`, error.response?.data)
         // Map HTTP status codes to friendly messages
