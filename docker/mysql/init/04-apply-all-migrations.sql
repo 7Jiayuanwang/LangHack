@@ -3199,6 +3199,30 @@ CALL _v12_add_sso_binding_cols();
 DROP PROCEDURE IF EXISTS _v12_add_sso_binding_cols;
 
 
+-- 6) 学生学校画像视图（DROP + CREATE 幂等）
+DROP VIEW IF EXISTS v_user_school_profile;
+CREATE VIEW v_user_school_profile AS
+SELECT
+    u.id                          AS user_id,
+    u.username                    AS username,
+    u.role                        AS role,
+    u.real_name                   AS real_name,
+    s.id                          AS school_student_id,
+    s.student_id                  AS student_id,
+    s.student_name                AS student_name,
+    s.college_name                AS college_name,
+    s.class_code                  AS class_code,
+    s.class_name                  AS class_name,
+    s.grade                       AS grade,
+    s.major_name                  AS major_name,
+    (SELECT COUNT(*) FROM course_selection cs            WHERE cs.student_id = s.student_id) AS course_selection_count,
+    (SELECT COUNT(*) FROM teacher_student_binding tsb    WHERE tsb.student_id = s.student_id) AS teacher_binding_count,
+    (SELECT MAX(les.exam_date) FROM level_exam_scores les WHERE les.student_id = s.student_id) AS last_exam_date,
+    (SELECT MAX(les.score)     FROM level_exam_scores les WHERE les.student_id = s.student_id) AS best_exam_score
+FROM users u
+JOIN school_student s ON s.id = u.school_student_id
+WHERE u.deleted = 0;
+
 -- V13__learner_profile.sql
 
 -- V13: learner_profile — 学习者画像领域合并迁移
@@ -3475,3 +3499,67 @@ END$$
 
 CALL _v21_extend_student_fields()$$
 DROP PROCEDURE IF EXISTS _v21_extend_student_fields$$
+
+-- V31__add_vocabulary_source_type.sql
+-- 生词本来源标记：区分文章阅读加入的词和其他来源的词
+-- 注：本地原编号 V26 与远端 V26__text_exercises_table.sql 冲突，rebase 时改为 V31
+
+DROP PROCEDURE IF EXISTS _add_vocabulary_source_type$$
+CREATE PROCEDURE _add_vocabulary_source_type()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE table_schema = DATABASE()
+          AND table_name = 'vocabulary_books'
+          AND column_name = 'source_type'
+    ) THEN
+        ALTER TABLE vocabulary_books
+        ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
+        COMMENT '来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他'
+        AFTER next_review_time;
+    END IF;
+END$$
+CALL _add_vocabulary_source_type()$$
+DROP PROCEDURE IF EXISTS _add_vocabulary_source_type$$
+
+-- 历史数据全部标记为 MANUAL（旧数据无法确定来源）
+UPDATE vocabulary_books SET source_type = 'MANUAL'
+WHERE source_type IS NULL OR source_type = '';
+
+-- 给 student_id + source_type 加索引，提升按来源查询的性能
+DROP PROCEDURE IF EXISTS _idx_vocabulary_source$$
+CREATE PROCEDURE _idx_vocabulary_source()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE table_schema = DATABASE()
+          AND table_name = 'vocabulary_books'
+          AND index_name = 'idx_vocabulary_source'
+    ) THEN
+        CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
+    END IF;
+END$$
+CALL _idx_vocabulary_source()$$
+DROP PROCEDURE IF EXISTS _idx_vocabulary_source$$
+
+-- V22__word_ai_explanations.sql
+-- AI 生成的单词详细介绍
+
+CREATE TABLE IF NOT EXISTS word_ai_explanations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    word VARCHAR(100) NOT NULL COMMENT '单词',
+    phonetic VARCHAR(100) DEFAULT NULL COMMENT '音标',
+    word_class VARCHAR(50) DEFAULT NULL COMMENT '词性',
+    basic_meaning TEXT DEFAULT NULL COMMENT '基本释义',
+    detailed_explanation TEXT DEFAULT NULL COMMENT 'AI 生成的详细解释',
+    etymology TEXT DEFAULT NULL COMMENT '词源',
+    usage_examples TEXT DEFAULT NULL COMMENT '使用例句（JSON 数组）',
+    synonyms TEXT DEFAULT NULL COMMENT '同义词（JSON 数组）',
+    antonyms TEXT DEFAULT NULL COMMENT '反义词（JSON 数组）',
+    collocations TEXT DEFAULT NULL COMMENT '常见搭配（JSON 数组）',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_word (word),
+    KEY idx_created_time (created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 生成的单词详细介绍';
+
