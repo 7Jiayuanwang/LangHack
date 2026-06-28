@@ -181,7 +181,11 @@ public class PublicTextController {
             List<Text> randomPool = new ArrayList<>(featuredTexts.stream()
                     .filter(t -> t.getFeaturedPriority() == null || t.getFeaturedPriority() == 0)
                     .collect(Collectors.toList()));
+            // 按 id 先稳定排序，再用 3 小时时间窗口的种子洗牌：
+            // 同一 3 小时窗口内顺序固定，跨窗口自动变化一次。
             randomPool.sort(Comparator.comparing(Text::getId));
+            long windowSeed = System.currentTimeMillis() / (3L * 60 * 60 * 1000);
+            Collections.shuffle(randomPool, new java.util.Random(windowSeed));
 
             List<Text> result = new ArrayList<>();
             if (count == null || count <= 0) {
