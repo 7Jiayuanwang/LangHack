@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Collections;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 /**
@@ -180,7 +181,7 @@ public class PublicTextController {
             List<Text> randomPool = new ArrayList<>(featuredTexts.stream()
                     .filter(t -> t.getFeaturedPriority() == null || t.getFeaturedPriority() == 0)
                     .collect(Collectors.toList()));
-            Collections.shuffle(randomPool);
+            randomPool.sort(Comparator.comparing(Text::getId));
 
             List<Text> result = new ArrayList<>();
             if (count == null || count <= 0) {
