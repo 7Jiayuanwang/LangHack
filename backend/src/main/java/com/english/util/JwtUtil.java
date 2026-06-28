@@ -26,14 +26,13 @@ public class JwtUtil {
 
     /** Access token 过期时间（2 小时），用于 refresh token 机制 */
     public static final long ACCESS_TOKEN_EXPIRATION_MILLIS = 7200000L;
-    /** Refresh token 过期时间（30 天），用于 refresh token 机制 */
-    public static final long REFRESH_TOKEN_EXPIRATION_MILLIS = 2592000000L;
+    /** Refresh token 过期时间（7 天） */
+    public static final long REFRESH_TOKEN_EXPIRATION_MILLIS = 604800000L;
     /**
-     * Refresh token 剩余有效期低于此阈值时触发续期（7 天）。
-     * 用于滑动续期：持续活跃用户每次 refresh 时 refresh token 自动延长到新的 30 天。
-     * 仅在真正 30 天未使用才过期。
+     * Refresh token 滑动续期：每次刷新都重置过期时间为 7 天，
+     * 用户只要保持活跃即不掉登录；连续 7 天未访问才真正过期。
      */
-    public static final long REFRESH_TOKEN_ROTATE_THRESHOLD_MILLIS = 604800000L;
+    public static final long REFRESH_TOKEN_ROTATE_THRESHOLD_MILLIS = REFRESH_TOKEN_EXPIRATION_MILLIS;
 
     /** Claim key: token 类型 */
     private static final String CLAIM_TOKEN_TYPE = "type";
@@ -103,9 +102,9 @@ public class JwtUtil {
     }
 
     /**
-     * 生成 refresh token（30 天过期），不含 role claim（避免权限随 refresh token 泄漏）。
+     * 生成 refresh token（7 天过期），不含 role claim（避免权限随 refresh token 泄漏）。
      * 用法：/api/auth/refresh 端点接收此 token，签发新的 access token。
-     * 续期策略：剩余有效期 < 7 天（{@link #REFRESH_TOKEN_ROTATE_THRESHOLD_MILLIS}）时才重新签发并黑名单旧 token。
+     * 续期策略：每次刷新都重新签发并黑名单旧 token，实现「每次访问重置 7 天」滑动续期。
      */
     public String generateRefreshToken(String username) {
         Map<String, Object> claims = new HashMap<>();
@@ -128,8 +127,9 @@ public class JwtUtil {
     /**
      * 判断 refresh token 是否需要续期（滑动续期）。
      *
-     * <p>仅当 refresh token 剩余有效期 < {@link #REFRESH_TOKEN_ROTATE_THRESHOLD_MILLIS}（7 天）
-     * 时返回 true。/refresh 端点据此决定是否签发新的 refresh token 并将旧 token 加入黑名单。</p>
+     * <p>只要 refresh token 未过期且为 refresh 类型，每次都返回 true，
+     * 实现「每次刷新重置 7 天」的滑动续期。/refresh 端点据此签发新 refresh token
+     * 并将旧 token 加入黑名单。</p>
      *
      * <p>非 refresh token 或已过期 token 返回 false（调用方应另行拒绝）。</p>
      */
@@ -137,8 +137,7 @@ public class JwtUtil {
         if (!isRefreshToken(token)) {
             return false;
         }
-        long remaining = getTokenRemainingTimeMillis(token);
-        return remaining > 0 && remaining < REFRESH_TOKEN_ROTATE_THRESHOLD_MILLIS;
+        return getTokenRemainingTimeMillis(token) > 0;
     }
 
     private String createToken(Map<String, Object> claims, String subject) {
