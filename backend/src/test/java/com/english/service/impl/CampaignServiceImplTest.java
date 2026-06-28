@@ -113,15 +113,12 @@ class CampaignServiceImplTest {
 
     @Test
     void testDeleteCampaign_Success() {
-        // Given
         when(campaignActivityMapper.selectById(1L)).thenReturn(testCampaign);
-        when(campaignActivityMapper.updateById(any(CampaignActivity.class))).thenReturn(1);
+        when(campaignActivityMapper.deleteById(1L)).thenReturn(1);
 
-        // When
         campaignService.deleteCampaign(1L);
 
-        // Then
-        verify(campaignActivityMapper, times(1)).updateById(any(CampaignActivity.class));
+        verify(campaignActivityMapper, times(1)).deleteById(1L);
     }
 
     @Test
@@ -146,8 +143,8 @@ class CampaignServiceImplTest {
         // Given
         testCampaign.setEnrollmentScope(EnrollmentScope.ALL);
         testCampaign.setStatus(CampaignStatus.ACTIVE);
-        testCampaign.setStartTime(LocalDateTime.now().minusDays(1));
-        testCampaign.setEndTime(LocalDateTime.now().plusDays(10));
+        testCampaign.setEnrollmentStartTime(LocalDateTime.now().minusDays(1));
+        testCampaign.setEnrollmentEndTime(LocalDateTime.now().plusDays(10));
         when(campaignActivityMapper.selectById(1L)).thenReturn(testCampaign);
 
         // When
@@ -161,8 +158,8 @@ class CampaignServiceImplTest {
     void testCanUserEnroll_ExpiredCampaign_ReturnsFalse() {
         // Given
         testCampaign.setStatus(CampaignStatus.ACTIVE);
-        testCampaign.setStartTime(LocalDateTime.now().minusDays(30));
-        testCampaign.setEndTime(LocalDateTime.now().minusDays(1));
+        testCampaign.setEnrollmentStartTime(LocalDateTime.now().minusDays(30));
+        testCampaign.setEnrollmentEndTime(LocalDateTime.now().minusDays(1));
         when(campaignActivityMapper.selectById(1L)).thenReturn(testCampaign);
 
         // When

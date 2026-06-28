@@ -60,6 +60,9 @@ class LearningRecordsServiceTest {
     @Mock
     private CampaignStatsService campaignStatsService;
 
+    @Mock
+    private com.english.service.AuthorEnricher authorEnricher;
+
     @InjectMocks
     private LearningRecordsServiceImpl learningRecordsService;
 

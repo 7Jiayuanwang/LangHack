@@ -61,7 +61,8 @@ class CampaignEnrollmentServiceImplTest {
         // Given
         when(campaignService.getCampaignById(1L)).thenReturn(testCampaign);
         when(campaignService.canUserEnroll(1L, 100L)).thenReturn(true);
-        when(participationMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+        // isEnrolled uses selectCount, not selectOne
+        when(participationMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         when(participationMapper.insert(any(CampaignParticipation.class))).thenReturn(1);
 
         // When
@@ -77,7 +78,8 @@ class CampaignEnrollmentServiceImplTest {
         testCampaign.setEnrollmentMode(EnrollmentMode.INVITE_ONLY);
         when(campaignService.getCampaignById(1L)).thenReturn(testCampaign);
         when(campaignService.canUserEnroll(1L, 100L)).thenReturn(true);
-        when(participationMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+        // isEnrolled uses selectCount; withdrawn check also uses selectCount
+        when(participationMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         when(participationMapper.insert(any(CampaignParticipation.class))).thenReturn(1);
 
         // When
@@ -89,10 +91,9 @@ class CampaignEnrollmentServiceImplTest {
 
     @Test
     void testEnrollCampaign_AlreadyEnrolled() {
-        // Given
+        // Given — isEnrolled calls selectCount first; returns >0 → throws before canUserEnroll
         when(campaignService.getCampaignById(1L)).thenReturn(testCampaign);
-        when(campaignService.canUserEnroll(1L, 100L)).thenReturn(true);
-        when(participationMapper.selectOne(any(QueryWrapper.class))).thenReturn(testParticipation);
+        when(participationMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L);
 
         // When & Then
         assertThrows(RuntimeException.class, () -> {
@@ -102,9 +103,13 @@ class CampaignEnrollmentServiceImplTest {
 
     @Test
     void testEnrollCampaign_NotEligible() {
-        // Given
+        // Given — isEnrolled + withdrawn check both call selectCount (return 0 to pass),
+        // then canUserEnroll returns false → getEnrollmentRestrictions called for message
         when(campaignService.getCampaignById(1L)).thenReturn(testCampaign);
+        when(participationMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         when(campaignService.canUserEnroll(1L, 100L)).thenReturn(false);
+        when(campaignService.getEnrollmentRestrictions(1L, 100L))
+                .thenReturn(java.util.Collections.singletonList("活动未开放报名"));
 
         // When & Then
         assertThrows(RuntimeException.class, () -> {
@@ -194,8 +199,8 @@ class CampaignEnrollmentServiceImplTest {
 
     @Test
     void testIsEnrolled_True() {
-        // Given
-        when(participationMapper.selectOne(any(QueryWrapper.class))).thenReturn(testParticipation);
+        // Given — isEnrolled uses selectCount > 0
+        when(participationMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L);
 
         // When
         boolean result = enrollmentService.isEnrolled(1L, 100L);
@@ -207,7 +212,7 @@ class CampaignEnrollmentServiceImplTest {
     @Test
     void testIsEnrolled_False() {
         // Given
-        when(participationMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+        when(participationMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
 
         // When
         boolean result = enrollmentService.isEnrolled(1L, 100L);

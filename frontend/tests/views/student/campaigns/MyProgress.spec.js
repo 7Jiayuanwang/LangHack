@@ -14,7 +14,8 @@ vi.mock('@/api/campaign', () => ({
   getMyProgress: vi.fn(),
   getMyTaskProgress: vi.fn(),
   getMyRanking: vi.fn(),
-  getStudentCampaignDetail: vi.fn()
+  getStudentCampaignDetail: vi.fn(),
+  getMyScoreDetails: vi.fn()
 }))
 
 const mockCampaign = {
@@ -105,6 +106,7 @@ describe('MyProgress.vue', () => {
     campaignApi.getMyProgress.mockResolvedValue(createApiResponse(mockProgress))
     campaignApi.getMyTaskProgress.mockResolvedValue(createApiResponse(mockTaskProgress))
     campaignApi.getMyRanking.mockResolvedValue(createApiResponse(mockRanking))
+    campaignApi.getMyScoreDetails.mockResolvedValue(createApiResponse([]))
   })
 
   it('loads current student campaign data on mount', async () => {

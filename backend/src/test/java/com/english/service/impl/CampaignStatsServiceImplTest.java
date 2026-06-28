@@ -9,6 +9,7 @@ import com.english.mapper.CampaignParticipationMapper;
 import com.english.mapper.CampaignTaskCompletionMapper;
 import com.english.mapper.CampaignTaskMapper;
 import com.english.mapper.SchoolStudentMapper;
+import com.english.mapper.UserMapper;
 import com.english.service.CampaignService;
 import com.english.service.LearningRecordsService;
 import com.english.service.UserService;
@@ -56,6 +57,9 @@ class CampaignStatsServiceImplTest {
     private UserService userService;
 
     @Mock
+    private UserMapper userMapper;
+
+    @Mock
     private SchoolStudentMapper schoolStudentMapper;
 
     @InjectMocks
@@ -69,7 +73,7 @@ class CampaignStatsServiceImplTest {
 
         assertFalse((Boolean) result.get("enrolled"));
         assertNull(result.get("myRank"));
-        assertEquals(0L, result.get("totalParticipants"));
+        assertEquals(0, result.get("totalParticipants"));
         assertEquals(List.of(), result.get("aroundMe"));
         assertNull(result.get("enrollmentStatus"));
         verify(participationMapper).selectOne(any(QueryWrapper.class));
@@ -85,7 +89,7 @@ class CampaignStatsServiceImplTest {
 
         assertFalse((Boolean) result.get("enrolled"));
         assertNull(result.get("myRank"));
-        assertEquals(0L, result.get("totalParticipants"));
+        assertEquals(0, result.get("totalParticipants"));
         assertEquals(List.of(), result.get("aroundMe"));
         assertEquals(EnrollmentStatus.PENDING, result.get("enrollmentStatus"));
         verify(participationMapper).selectOne(any(QueryWrapper.class));
@@ -107,15 +111,22 @@ class CampaignStatsServiceImplTest {
         when(participationMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L, 5L);
         when(participationMapper.selectList(any(QueryWrapper.class))).thenReturn(allRanked);
 
-        when(userService.getUserById(101L)).thenReturn(createUser(101L, "u101", "昵称101", "真实姓名101", 11L));
-        when(userService.getUserById(102L)).thenReturn(createUser(102L, "u102", "昵称102", null, 12L));
-        when(userService.getUserById(103L)).thenReturn(createUser(103L, "2023003", null, null, null));
-        when(userService.getUserById(104L)).thenReturn(createUser(104L, "u104", null, null, 14L));
-        when(userService.getUserById(105L)).thenReturn(createUser(105L, "u105", null, null, null));
+        // Current implementation batch-loads users via userMapper.selectBatchIds
+        when(userMapper.selectBatchIds(any())).thenReturn(java.util.Arrays.asList(
+            createUser(101L, "u101", "昵称101", "真实姓名101", 11L),
+            createUser(102L, "u102", "昵称102", null, 12L),
+            createUser(103L, "2023003", null, null, null),
+            createUser(104L, "u104", null, null, 14L),
+            createUser(105L, "u105", null, null, null)
+        ));
 
-        when(schoolStudentMapper.selectById(11L)).thenReturn(createStudent(11L, "2023001", "一班"));
-        when(schoolStudentMapper.selectById(12L)).thenReturn(createStudent(12L, "2023002", "二班"));
-        when(schoolStudentMapper.selectById(14L)).thenReturn(createStudent(14L, "2023004", "四班"));
+        // Batch-loaded school students by schoolStudentId
+        when(schoolStudentMapper.selectBatchIds(any())).thenReturn(java.util.Arrays.asList(
+            createStudent(11L, "2023001", "一班"),
+            createStudent(12L, "2023002", "二班"),
+            createStudent(14L, "2023004", "四班")
+        ));
+        // Fallback path: lookup by username as studentId
         when(schoolStudentMapper.selectByStudentId("2023003")).thenReturn(createStudent(13L, "2023003", "三班"));
 
         Map<String, Object> result = statsService.getMyRanking(1L, 103L);

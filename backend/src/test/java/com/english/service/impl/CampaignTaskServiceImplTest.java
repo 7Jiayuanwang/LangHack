@@ -1,8 +1,11 @@
 package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.english.entity.CampaignActivity;
 import com.english.entity.CampaignTask;
+import com.english.enums.CompletionRule;
 import com.english.enums.TaskType;
+import com.english.mapper.CampaignActivityMapper;
 import com.english.mapper.CampaignTaskMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +30,9 @@ class CampaignTaskServiceImplTest {
     @Mock
     private CampaignTaskMapper taskMapper;
 
+    @Mock
+    private CampaignActivityMapper campaignActivityMapper;
+
     @InjectMocks
     private CampaignTaskServiceImpl taskService;
 
@@ -48,41 +54,35 @@ class CampaignTaskServiceImplTest {
 
     @Test
     void testCreateTask_Success() {
-        // Given
+        when(campaignActivityMapper.selectById(1L)).thenReturn(createCampaign(CompletionRule.THRESHOLD));
         when(taskMapper.insert(any(CampaignTask.class))).thenReturn(1);
 
-        // When
         CampaignTask result = taskService.createTask(1L, testTask);
 
-        // Then
         assertNotNull(result);
         verify(taskMapper, times(1)).insert(any(CampaignTask.class));
     }
 
     @Test
     void testUpdateTask_Success() {
-        // Given
-        when(taskMapper.selectById(1L)).thenReturn(testTask);
+        when(taskMapper.selectById(1L)).thenReturn(testTask, testTask);
+        when(campaignActivityMapper.selectById(100L)).thenReturn(createCampaign(CompletionRule.THRESHOLD));
         when(taskMapper.updateById(any(CampaignTask.class))).thenReturn(1);
 
         CampaignTask updateData = new CampaignTask();
         updateData.setTaskName("更新后的阅读任务");
         updateData.setTargetValue(90);
 
-        // When
         CampaignTask result = taskService.updateTask(1L, updateData);
 
-        // Then
         assertNotNull(result);
         verify(taskMapper, times(1)).updateById(any(CampaignTask.class));
     }
 
     @Test
     void testUpdateTask_NotFound() {
-        // Given
         when(taskMapper.selectById(1L)).thenReturn(null);
 
-        // When & Then
         assertThrows(RuntimeException.class, () -> {
             taskService.updateTask(1L, testTask);
         });
@@ -90,23 +90,18 @@ class CampaignTaskServiceImplTest {
 
     @Test
     void testDeleteTask_Success() {
-        // Given
         when(taskMapper.selectById(1L)).thenReturn(testTask);
         when(taskMapper.deleteById(1L)).thenReturn(1);
 
-        // When
         taskService.deleteTask(1L);
 
-        // Then
         verify(taskMapper, times(1)).deleteById(1L);
     }
 
     @Test
     void testDeleteTask_NotFound() {
-        // Given
         when(taskMapper.selectById(1L)).thenReturn(null);
 
-        // When & Then
         assertThrows(RuntimeException.class, () -> {
             taskService.deleteTask(1L);
         });
@@ -114,13 +109,10 @@ class CampaignTaskServiceImplTest {
 
     @Test
     void testGetTaskById_Success() {
-        // Given
         when(taskMapper.selectById(1L)).thenReturn(testTask);
 
-        // When
         CampaignTask result = taskService.getTaskById(1L);
 
-        // Then
         assertNotNull(result);
         assertEquals("阅读任务", result.getTaskName());
         verify(taskMapper, times(1)).selectById(1L);
@@ -128,7 +120,6 @@ class CampaignTaskServiceImplTest {
 
     @Test
     void testGetTasksByCampaign_Success() {
-        // Given
         CampaignTask task2 = new CampaignTask();
         task2.setId(2L);
         task2.setCampaignId(100L);
@@ -138,10 +129,8 @@ class CampaignTaskServiceImplTest {
         List<CampaignTask> tasks = Arrays.asList(testTask, task2);
         when(taskMapper.selectList(any(QueryWrapper.class))).thenReturn(tasks);
 
-        // When
         List<CampaignTask> result = taskService.getTasksByCampaign(100L);
 
-        // Then
         assertNotNull(result);
         assertEquals(2, result.size());
         verify(taskMapper, times(1)).selectList(any(QueryWrapper.class));
@@ -149,14 +138,18 @@ class CampaignTaskServiceImplTest {
 
     @Test
     void testGetTasksByCampaign_Empty() {
-        // Given
         when(taskMapper.selectList(any(QueryWrapper.class))).thenReturn(Arrays.asList());
 
-        // When
         List<CampaignTask> result = taskService.getTasksByCampaign(100L);
 
-        // Then
         assertNotNull(result);
         assertTrue(result.isEmpty());
+    }
+
+    private CampaignActivity createCampaign(CompletionRule rule) {
+        CampaignActivity campaign = new CampaignActivity();
+        campaign.setId(100L);
+        campaign.setCompletionRule(rule);
+        return campaign;
     }
 }

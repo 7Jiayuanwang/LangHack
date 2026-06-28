@@ -44,9 +44,9 @@ describe('SelectionMenu.vue', () => {
       })
     })
 
-    it('renders five menu items', () => {
+    it('renders six menu items', () => {
       const items = wrapper.findAll('.menu-item')
-      expect(items.length).toBe(5)
+      expect(items.length).toBe(6)
     })
 
     it('renders copy menu item', () => {
@@ -67,8 +67,14 @@ describe('SelectionMenu.vue', () => {
       expect(annotateItem.text()).toContain('批注')
     })
 
+    it('renders speak menu item', () => {
+      const speakItem = wrapper.findAll('.menu-item')[4]
+      expect(speakItem.text()).toContain('朗读')
+    })
+
     it('renders AI QA menu item', () => {
-      expect(wrapper.text()).toContain('AI 问答')
+      const aiQaItem = wrapper.findAll('.menu-item')[5]
+      expect(aiQaItem.text()).toContain('AI 问答')
     })
   })
 
@@ -117,8 +123,15 @@ describe('SelectionMenu.vue', () => {
       expect(wrapper.emitted('translate').length).toBe(1)
     })
 
+    it('emits "speak" when speak menu item is clicked', async () => {
+      const speakItem = wrapper.findAll('.menu-item')[4]
+      await speakItem.trigger('click')
+      expect(wrapper.emitted('speak')).toBeTruthy()
+      expect(wrapper.emitted('speak').length).toBe(1)
+    })
+
     it('emits "ai-qa" when AI QA menu item is clicked', async () => {
-      const aiQaItem = wrapper.findAll('.menu-item')[4]
+      const aiQaItem = wrapper.findAll('.menu-item')[5]
       await aiQaItem.trigger('click')
       expect(wrapper.emitted('ai-qa')).toBeTruthy()
       expect(wrapper.emitted('ai-qa').length).toBe(1)
@@ -218,8 +231,14 @@ describe('SelectionMenu.vue', () => {
       expect(wrapper.emitted('translate')).toBeTruthy()
     })
 
+    it('emits "speak" on touchend of speak item', async () => {
+      const speakItem = wrapper.findAll('.menu-item')[4]
+      await speakItem.trigger('touchend')
+      expect(wrapper.emitted('speak')).toBeTruthy()
+    })
+
     it('emits "ai-qa" on touchend of AI QA item', async () => {
-      const aiQaItem = wrapper.findAll('.menu-item')[4]
+      const aiQaItem = wrapper.findAll('.menu-item')[5]
       await aiQaItem.trigger('touchend')
       expect(wrapper.emitted('ai-qa')).toBeTruthy()
     })

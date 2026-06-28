@@ -6,8 +6,12 @@ import com.english.dto.Result;
 import com.english.entity.Text;
 import com.english.entity.User;
 import com.english.entity.UserTextRead;
+import com.english.mapper.TextLearningRecordMapper;
 import com.english.mapper.UserTextReadMapper;
 import com.english.service.ArticleVersionService;
+import com.english.service.AuthorEnricher;
+import com.english.service.ContentTagService;
+import com.english.service.RecommendationService;
 import com.english.service.TextService;
 import com.english.service.UserService;
 import com.english.util.TestHelper;
@@ -41,7 +45,19 @@ class PublicTextControllerTest {
     private UserTextReadMapper userTextReadMapper;
 
     @Mock
+    private TextLearningRecordMapper textLearningRecordMapper;
+
+    @Mock
     private UserService userService;
+
+    @Mock
+    private ContentTagService contentTagService;
+
+    @Mock
+    private RecommendationService recommendationService;
+
+    @Mock
+    private AuthorEnricher authorEnricher;
 
     @InjectMocks
     private PublicTextController publicTextController;
@@ -136,8 +152,8 @@ class PublicTextControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/public/texts/{textId}/read - already read text does not insert duplicate")
-    void markTextAsRead_alreadyRead_noInsert() throws Exception {
+    @DisplayName("POST /api/public/texts/{textId}/read - already read text increments count")
+    void markTextAsRead_alreadyRead_incrementsCount() throws Exception {
         TestHelper.createMockAuthentication("student1", "USER");
         User user = TestHelper.createMockUser(1L, "student1", "USER");
         when(userService.getUserByUsername("student1")).thenReturn(user);
@@ -146,12 +162,14 @@ class PublicTextControllerTest {
         existingRead.setUserId(1L);
         existingRead.setTextId(1L);
         when(userTextReadMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingRead);
+        when(userTextReadMapper.incrementReadCount(1L, 1L)).thenReturn(1);
 
         mockMvc.perform(post("/api/public/texts/1/read"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
         verify(userTextReadMapper, never()).insert(any(UserTextRead.class));
+        verify(userTextReadMapper).incrementReadCount(1L, 1L);
     }
 
     @Test
@@ -250,7 +268,7 @@ class PublicTextControllerTest {
         text.setViewCount(10);
         text.setLikeCount(5);
 
-        when(textService.getTextById(1L)).thenReturn(text);
+        when(textService.getTextById(1L)).thenReturn(text, text);
         doNothing().when(textService).incrementViewCount(1L);
         doNothing().when(articleVersionService).checkAndGenerateVersions(1L);
 
@@ -258,7 +276,11 @@ class PublicTextControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.id").value(1))
-                .andExpect(jsonPath("$.data.title").value("Test Article"));
+                .andExpect(jsonPath("$.data.title").value("Test Article"))
+                .andExpect(jsonPath("$.data.versions.original").value("Hello world"));
+
+        verify(textService, times(2)).getTextById(1L);
+        verify(authorEnricher).enrichText(text);
     }
 
     @Test
@@ -297,7 +319,7 @@ class PublicTextControllerTest {
         text.setContentType("TEXT");
         text.setViewCount(5);
 
-        when(textService.getTextById(3L)).thenReturn(text);
+        when(textService.getTextById(3L)).thenReturn(text, text);
         doNothing().when(textService).incrementViewCount(3L);
         doNothing().when(articleVersionService).checkAndGenerateVersions(3L);
 
@@ -305,7 +327,11 @@ class PublicTextControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.id").value(3))
-                .andExpect(jsonPath("$.data.title").value("Public User Text"));
+                .andExpect(jsonPath("$.data.title").value("Public User Text"))
+                .andExpect(jsonPath("$.data.versions.original").value("Some content"));
+
+        verify(textService, times(2)).getTextById(3L);
+        verify(authorEnricher).enrichText(text);
     }
 
     @Test
@@ -318,7 +344,7 @@ class PublicTextControllerTest {
         text.setViewCount(0);
         text.setLikeCount(0);
 
-        when(textService.getTextById(4L)).thenReturn(text);
+        when(textService.getTextById(4L)).thenReturn(text, text);
         doNothing().when(textService).incrementViewCount(4L);
         doNothing().when(articleVersionService).checkAndGenerateVersions(4L);
 
@@ -328,6 +354,9 @@ class PublicTextControllerTest {
                 .andExpect(jsonPath("$.data.contentType").value("MARKDOWN"))
                 .andExpect(jsonPath("$.data.versions.original").value("# Hello"))
                 .andExpect(jsonPath("$.data.versions.cet4").value("# CET4 Hello"));
+
+        verify(textService, times(2)).getTextById(4L);
+        verify(authorEnricher).enrichText(text);
     }
 
     @Test
