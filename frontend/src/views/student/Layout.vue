@@ -58,6 +58,12 @@
             </svg>
             我的画像
           </button>
+          <button class="simple-btn" @click="handleUserAction('feedback')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            问题反馈
+          </button>
           <button class="simple-btn" @click="handleUserAction('logout')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -70,8 +76,6 @@
       </div>
     </div>
 
-    <!-- HiAgent 问题反馈气泡 -->
-    <HiagentFeedback />
   </div>
 </template>
 
@@ -82,7 +86,6 @@ import { useUserStore } from '@/store/user'
 import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
-import HiagentFeedback from '@/components/HiagentFeedback.vue'
 import {
   DataBoard,
   Reading,
@@ -244,6 +247,9 @@ const handleUserAction = async (action) => {
       break
     case 'settings':
       ElMessage.info('设置功能开发中')
+      break
+    case 'feedback':
+      window.open('https://agent.imau.edu.cn:32400/product/llm/chat/d90d4st4shh0g7ro58rg', '_blank')
       break
     case 'logout':
       try {

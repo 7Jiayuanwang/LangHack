@@ -111,6 +111,7 @@
                 <template v-else>
                   <el-dropdown-item command="profile">个人资料</el-dropdown-item>
                   <el-dropdown-item command="settings">设置</el-dropdown-item>
+                  <el-dropdown-item command="feedback">问题反馈</el-dropdown-item>
                   <!-- admin 专属：系统设置 -->
                   <el-dropdown-item v-if="role === 'admin'" command="system">系统设置</el-dropdown-item>
                   <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
@@ -130,8 +131,6 @@
       @success="onElevationSuccess"
     />
 
-    <!-- HiAgent 问题反馈气泡（仅教师端显示） -->
-    <HiagentFeedback v-if="role === 'teacher'" />
   </div>
 </template>
 
@@ -143,7 +142,6 @@ import { getSsoLogoutUrl, getSsoStatus } from '@/api/sso'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ElevationDialog from '@/components/ElevationDialog.vue'
-import HiagentFeedback from '@/components/HiagentFeedback.vue'
 import {
   DataBoard, School, Edit, Reading,
   Upload, Document, House,
@@ -401,6 +399,9 @@ const handleCommand = async (command) => {
       break
     case 'settings':
       ElMessage.info('设置功能开发中')
+      break
+    case 'feedback':
+      window.open('https://agent.imau.edu.cn:32400/product/llm/chat/d90d4st4shh0g7ro58rg', '_blank')
       break
     case 'system':  // admin 专属
       ElMessage.info('系统设置功能开发中')
