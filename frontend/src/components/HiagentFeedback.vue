@@ -20,11 +20,11 @@ import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 const props = defineProps({
   appKey: {
     type: String,
-    default: 'd83urt96rdh3v9agk58g'
+    default: 'd90d4st4shh0g7ro58rg'
   },
   baseUrl: {
     type: String,
-    default: 'https://agent.imau.edu.cn:32300'
+    default: 'https://agent.imau.edu.cn:32400'
   }
 })
 
