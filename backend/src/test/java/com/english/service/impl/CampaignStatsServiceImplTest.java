@@ -126,7 +126,10 @@ class CampaignStatsServiceImplTest {
             createStudent(12L, "2023002", "二班"),
             createStudent(14L, "2023004", "四班")
         ));
-        // Fallback path: lookup by username as studentId
+        // Fallback path: lookup by username as studentId.
+        // Implementation calls selectByStudentId for every participant's username;
+        // use any() to avoid strict-stubbing argument mismatch, then override for "2023003".
+        when(schoolStudentMapper.selectByStudentId(any())).thenReturn(null);
         when(schoolStudentMapper.selectByStudentId("2023003")).thenReturn(createStudent(13L, "2023003", "三班"));
 
         Map<String, Object> result = statsService.getMyRanking(1L, 103L);
