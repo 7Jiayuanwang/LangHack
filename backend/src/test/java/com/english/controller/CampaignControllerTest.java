@@ -6,6 +6,7 @@ import com.english.enums.EnrollmentMode;
 import com.english.service.CampaignService;
 import com.english.test.TestUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 import org.springframework.http.MediaType;
@@ -37,7 +38,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CampaignControllerTest {
 
     private MockMvc mockMvc;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .findAndRegisterModules()
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @Mock
     private CampaignService campaignService;
