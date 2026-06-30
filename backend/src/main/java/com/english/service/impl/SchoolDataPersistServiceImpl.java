@@ -128,8 +128,18 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
             case "school_course":
                 upsertSchoolCourse(mappedData);
                 break;
+            // FIXME(2026-06-30): CDSP teaching_class 端点 (cdsp_1721804030860152850)
+            // 返回的是课程目录数据（课程号/课程名称/学分/学时/开课院系），不含 classId/teacherId。
+            // 原先路由到 upsertTeachingClass 会导致 Column 'class_id' cannot be null。
+            // 教学班实例数据实际来自 teacher_courses 端点 (cdsp_1715294645677801497)。
+            // 如果回滚出问题，删除下面三行，取消注释旧路由即可。
+            // === 旧路由（保留备查）===
+            // case "teaching_class":
+            //     upsertTeachingClass(mappedData);
+            //     break;
+            // === 旧路由 END ===
             case "teaching_class":
-                upsertTeachingClass(mappedData);
+                upsertSchoolCourse(mappedData);
                 break;
             case "course_schedule":
                 upsertCourseSchedule(mappedData);
