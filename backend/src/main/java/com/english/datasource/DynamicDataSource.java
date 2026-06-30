@@ -41,6 +41,9 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
     /** 上次标记不可用的时间戳，用于控制探测频率 */
     private final AtomicLong slaveUnavailableSince = new AtomicLong(0);
 
+    /** 权限不足导致无法 SHOW REPLICA STATUS 时只警告一次，避免日志刷屏 */
+    private final AtomicBoolean privilegeWarnLogged = new AtomicBoolean(false);
+
     /** 后台探测线程 */
     private ScheduledExecutorService probeScheduler;
 
@@ -191,6 +194,9 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
                           ioRunning, sqlRunning, lagObj);
                 return true;
             } catch (SQLException e) {
+                if (isPrivilegeError(e)) {
+                    return handlePrivilegeFallback(conn, e);
+                }
                 // MySQL 8.0 旧版本用 SHOW SLAVE STATUS
                 try (Statement stmt = conn.createStatement();
                      ResultSet rs = stmt.executeQuery("SHOW SLAVE STATUS")) {
@@ -206,10 +212,51 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
                         return false;
                     }
                     return true;
+                } catch (SQLException e2) {
+                    if (isPrivilegeError(e2)) {
+                        return handlePrivilegeFallback(conn, e2);
+                    }
+                    throw e2;
                 }
             }
         } catch (SQLException e) {
             log.warn("[DataSource] Cannot connect to slave: {}. Falling back to MASTER.", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 判断是否为权限不足类异常（MySQL error 1227 / 1142 / SQLState 42000 + access denied）。
+     * 这类异常不代表从库不可用，只代表当前账号无 REPLICATION CLIENT 权限。
+     */
+    private boolean isPrivilegeError(SQLException e) {
+        int code = e.getErrorCode();
+        if (code == 1227 || code == 1142 || code == 1045) {
+            return true;
+        }
+        String msg = e.getMessage();
+        return msg != null && (msg.contains("REPLICATION CLIENT")
+                || msg.contains("Access denied")
+                || msg.contains("command denied"));
+    }
+
+    /**
+     * 权限不足时的降级策略：执行一次 SELECT 1 确认从库可连接；
+     * 成功则视为可用（失去复制延迟监控，但读写分离仍生效）。
+     */
+    private boolean handlePrivilegeFallback(Connection conn, SQLException origin) {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT 1")) {
+            if (rs.next() && privilegeWarnLogged.compareAndSet(false, true)) {
+                log.warn("[DataSource] Slave account lacks REPLICATION CLIENT privilege ({}). " +
+                         "Skipping replication lag check; routing reads to slave based on connectivity only. " +
+                         "Grant 'REPLICATION CLIENT ON *.*' to enable full health monitoring.",
+                         origin.getMessage());
+            }
+            return true;
+        } catch (SQLException probe) {
+            log.warn("[DataSource] Slave connectivity probe failed after privilege error: {}. Falling back to MASTER.",
+                     probe.getMessage());
             return false;
         }
     }
