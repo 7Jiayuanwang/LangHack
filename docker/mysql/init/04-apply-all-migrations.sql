@@ -3749,3 +3749,37 @@ UPDATE vocabulary_books SET source_type = 'MANUAL' WHERE source_type IS NULL OR 
 
 -- 给 student_id + source_type 加索引，提升按来源查询的性能
 CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
+
+
+-- V32__extend_school_student_varchar.sql
+
+-- 扩展 school_student 表 VARCHAR 字段长度
+-- 背景: CDSP student_basic_info API 返回的 counselor_name / phone 可能是多人/多号码拼接，
+--       且 phone 现为 SHA-256 哈希（64 字符）。V12 建表时为 VARCHAR(50)，V21 扩展到 VARCHAR(100)，
+--       V32 进一步扩到 phone VARCHAR(255) / counselor_name VARCHAR(500)。
+-- 使用存储过程做幂等判断，重复执行不报错。
+DROP PROCEDURE IF EXISTS _v32_extend_student_fields;
+CREATE PROCEDURE _v32_extend_student_fields()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'counselor_name'
+                 AND CHARACTER_MAXIMUM_LENGTH < 500) THEN
+        ALTER TABLE school_student
+            MODIFY COLUMN counselor_name VARCHAR(500) NULL
+            COMMENT '辅导员姓名（CDSP 可能返回逗号分隔的多位辅导员）';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'school_student'
+                 AND COLUMN_NAME = 'phone'
+                 AND CHARACTER_MAXIMUM_LENGTH < 255) THEN
+        ALTER TABLE school_student
+            MODIFY COLUMN phone VARCHAR(255) NULL
+            COMMENT '联系电话（CDSP 返回加密哈希：MD5 32字符 / SHA-256 64字符）';
+    END IF;
+END;
+CALL _v32_extend_student_fields();
+DROP PROCEDURE IF EXISTS _v32_extend_student_fields;

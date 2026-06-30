@@ -1584,24 +1584,27 @@ if [ ! -f "$MIGRATION_SQL" ]; then
     exit 1
 fi
 
-# 版本同步强制检查：Flyway 文件数必须与合并脚本一致，否则阻塞部署
+# 版本同步强制检查：Flyway 目录里的每个 V*.sql 都必须在合并脚本中存在对应的头部块，
+# 否则阻塞部署（避免新增 Flyway 文件忘记同步到 04-apply-all-migrations.sql）。
 flyway_count=$(ls "$FLYWAY_DIR"/V*.sql 2>/dev/null | wc -l | tr -d ' \n\r' || echo 0)
-merged_count=$(grep -cE '^-- V[0-9]+__.*\.sql$' "$MIGRATION_SQL" 2>/dev/null | tr -d ' \n\r' || echo 0)
-if [ "$flyway_count" -gt "$merged_count" ]; then
+missing_versions=""
+for f in "$FLYWAY_DIR"/V*.sql; do
+    fname=$(basename "$f")
+    if ! grep -qF -e "-- ${fname}" "$MIGRATION_SQL" 2>/dev/null; then
+        missing_versions="${missing_versions}${fname}\n"
+    fi
+done
+if [ -n "$missing_versions" ]; then
     echo "[ERROR] ══════════════════════════════════════════════════════"
     echo "[ERROR] 迁移脚本版本不同步，部署终止"
-    echo "[ERROR]   Flyway 文件数: ${flyway_count}"
-    echo "[ERROR]   合并脚本版本: ${merged_count}"
-    echo "[ERROR] 缺失版本块："
-    for f in "$FLYWAY_DIR"/V*.sql; do
-        vn=$(basename "$f" | grep -oE '^V[0-9]+' || true)
-        grep -q "^--   ${vn}__" "$MIGRATION_SQL" 2>/dev/null || echo "[ERROR]   [缺失] $f"
-    done
-    echo "[ERROR] 请将新迁移同步到 docker/mysql/init/04-apply-all-migrations.sql 后重新部署"
+    echo "[ERROR] 以下 Flyway 文件在合并脚本中找不到对应的头部块："
+    printf "[ERROR]   %b" "$missing_versions"
+    echo "[ERROR] 请将这些迁移内容追加到 docker/mysql/init/04-apply-all-migrations.sql 后重新部署"
+    echo "[ERROR]   每个 V 文件需要一行以 '-- V<n>__<name>.sql' 开头的头部块"
     echo "[ERROR] ══════════════════════════════════════════════════════"
     exit 1
 else
-    echo "[OK] 迁移版本同步检查通过（Flyway: ${flyway_count}, 合并脚本: ${merged_count}）"
+    echo "[OK] 迁移版本同步检查通过（Flyway: ${flyway_count} 个文件均已合并）"
 fi
 
 # 从头部列表提取最高版本号用于日志
