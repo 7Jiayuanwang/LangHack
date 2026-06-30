@@ -579,7 +579,7 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         // phone: CDSP 返回加密哈希（MD5 32字符 / SHA-256 64字符），V32 迁移扩展至 VARCHAR(255)
         entity.setPhone(truncateTo(getStringValue(data, "phone"), 255, "phone"));
         // counselor_name: CDSP 返回逗号分隔的辅导员列表，V21→VARCHAR(100)，V32→VARCHAR(500)
-        entity.setCounselorName(truncateTo(getStringValue(data, "counselorName"), 100, "counselorName"));
+        entity.setCounselorName(truncateTo(getStringValue(data, "counselorName"), 500, "counselorName"));
         entity.setSourceCourseCodes(getStringValue(data, "sourceCourseCodes"));
         entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
         entity.setLastExamSyncTime(getLocalDateTimeValue(data, "lastExamSyncTime"));
