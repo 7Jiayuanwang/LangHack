@@ -573,8 +573,8 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
         entity.setGrade(getStringValue(data, "grade"));
         entity.setMajorName(getStringValue(data, "majorName"));
         entity.setGender(getStringValue(data, "gender"));
-        entity.setPhone(getStringValue(data, "phone"));
-        entity.setCounselorName(getStringValue(data, "counselorName"));
+        entity.setPhone(truncateTo(getStringValue(data, "phone"), 100, "phone"));
+        entity.setCounselorName(truncateTo(getStringValue(data, "counselorName"), 100, "counselorName"));
         entity.setSourceCourseCodes(getStringValue(data, "sourceCourseCodes"));
         entity.setSyncTime(getLocalDateTimeValue(data, "syncTime"));
         entity.setLastExamSyncTime(getLocalDateTimeValue(data, "lastExamSyncTime"));
@@ -1049,6 +1049,16 @@ public class SchoolDataPersistServiceImpl implements SchoolDataPersistService {
 
     private String defaultString(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private String truncateTo(String value, int maxLength, String fieldLabel) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        String truncated = value.substring(0, maxLength);
+        logger.warn("字段 {} 值过长（{} 字符），已截断至 {} 字符。原始值前段: {}",
+                fieldLabel, value.length(), maxLength, truncated);
+        return truncated;
     }
 
     private String truncateRecordForLog(Map<String, Object> record) {
