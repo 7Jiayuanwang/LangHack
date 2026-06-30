@@ -276,6 +276,18 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             }
             return;
         }
+        // student_basic_info 的 studentName (CDSP 字段"姓名") 经常为 null，
+        // upsertSchoolStudent 已用学号兜底，此处降级为 DEBUG 避免日志噪音
+        if ("student_basic_info".equals(dataSource)
+                && "studentName".equals(normalizedTarget)) {
+            String key = dataSource + ":" + normalizedTarget;
+            int count = REQUIRED_NULL_WARNINGS.computeIfAbsent(key, ignored -> new AtomicInteger()).incrementAndGet();
+            if (count <= 1) {
+                logger.info("Field '{}' is null for data source '{}' — using studentId as fallback (suppressed after 1st occurrence)",
+                        sourceField, dataSource);
+            }
+            return;
+        }
         logger.warn("Required field '{}' is null for data source: {}", sourceField, dataSource);
     }
 
