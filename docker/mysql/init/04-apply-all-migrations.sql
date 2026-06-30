@@ -3686,7 +3686,8 @@ WHERE last_counted_value = 0 AND current_value > 0;
 
 -- ═══════════════════════════════════════════════════════════════
 -- 扩展 school_student 字段长度（整合自 V21__extend_school_student_fields.sql）
--- 修复 DataIntegrityViolationException: phone/counselor_name VARCHAR(50) → VARCHAR(100)
+-- 修复 DataIntegrityViolationException: phone/counselor_name VARCHAR(50) → VARCHAR(255/500)
+-- V32 进一步扩展: phone → VARCHAR(255), counselor_name → VARCHAR(500)
 -- ═══════════════════════════════════════════════════════════════
 DROP PROCEDURE IF EXISTS _v21_extend_student_fields;
 CREATE PROCEDURE _v21_extend_student_fields()
@@ -3695,17 +3696,17 @@ BEGIN
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
                  AND COLUMN_NAME = 'phone'
-                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
+                 AND CHARACTER_MAXIMUM_LENGTH < 255) THEN
         ALTER TABLE school_student
-            MODIFY COLUMN phone VARCHAR(100) NULL COMMENT '联系电话（CDSP 可能返回多个号码拼接）';
+            MODIFY COLUMN phone VARCHAR(255) NULL COMMENT '联系电话（CDSP 返回加密哈希：MD5 32字符 / SHA-256 64字符）';
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
                  AND COLUMN_NAME = 'counselor_name'
-                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
+                 AND CHARACTER_MAXIMUM_LENGTH < 500) THEN
         ALTER TABLE school_student
-            MODIFY COLUMN counselor_name VARCHAR(100) NULL COMMENT '辅导员姓名（可能包含多个辅导员或职务）';
+            MODIFY COLUMN counselor_name VARCHAR(500) NULL COMMENT '辅导员姓名（可能包含多位辅导员逗号分隔）';
     END IF;
 END;
 CALL _v21_extend_student_fields();

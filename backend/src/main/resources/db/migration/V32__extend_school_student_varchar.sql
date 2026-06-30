@@ -21,15 +21,16 @@ BEGIN
             COMMENT '辅导员姓名（CDSP 可能返回逗号分隔的多位辅导员）';
     END IF;
 
-    -- phone: 同样可能返回多个号码拼接
+    -- phone: CDSP 现返回 SHA-256 哈希（64 字符），远超过 V12 建表的 VARCHAR(50)。
+    -- V21 扩至 VARCHAR(100)，V32 扩至 VARCHAR(255) 以覆盖任意哈希长度。
     IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
                  AND COLUMN_NAME = 'phone'
-                 AND CHARACTER_MAXIMUM_LENGTH < 200) THEN
+                 AND CHARACTER_MAXIMUM_LENGTH < 255) THEN
         ALTER TABLE school_student
-            MODIFY COLUMN phone VARCHAR(200) NULL
-            COMMENT '联系电话（CDSP 可能返回多个号码拼接）';
+            MODIFY COLUMN phone VARCHAR(255) NULL
+            COMMENT '联系电话（CDSP 返回加密哈希：MD5 32字符 / SHA-256 64字符）';
     END IF;
 END;
 CALL _v32_extend_student_fields();
