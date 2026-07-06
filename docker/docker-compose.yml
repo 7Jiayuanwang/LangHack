@@ -164,7 +164,7 @@ services:
   # Redis 缓存
   # ─────────────────────────────────────────────
   redis:
-    image: ${IMAGE_REGISTRY_PREFIX:-}redis:6-alpine
+    image: ${IMAGE_REGISTRY_PREFIX:-}redis:7-alpine
     container_name: langhack-redis
     restart: unless-stopped
     logging: *default-logging

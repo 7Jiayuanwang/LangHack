@@ -140,7 +140,7 @@ services:
   # Redis 缓存
   # ─────────────────────────────────────────────
   redis:
-    image: redis:6-alpine
+    image: redis:7-alpine
     container_name: langhack-redis
     restart: unless-stopped
     logging: *default-logging

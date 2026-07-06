@@ -14,7 +14,7 @@ echo ""
 # 期望的镜像列表（与 sync-docker-images.sh 保持一致）
 EXPECTED_IMAGES=(
     "mysql:8.0"
-    "redis:6-alpine"
+    "redis:7-alpine"
     "maven:3.8-openjdk-17"
     "eclipse-temurin:17-jre-alpine"
     "node:20-alpine"

@@ -37,7 +37,7 @@ FORCE_SYNC=false
 IMAGES=(
     # ── 基础设施服务 ──
     "mysql:8.0"                      # MySQL 主从库
-    "redis:6-alpine"                 # Redis 缓存
+    "redis:7-alpine"                 # Redis 缓存（升级自 6-alpine：修复 CVE-2026-25243 / CVE-2026-23631）
 
     # ── 后端构建 & 运行 ──
     "maven:3.8-openjdk-17"           # 后端构建阶段（backend/Dockerfile stage 1）
