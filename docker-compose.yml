@@ -140,7 +140,7 @@ services:
   # Redis 缓存
   # ─────────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    image: ${IMAGE_REGISTRY_PREFIX:-}redis:7-alpine
     container_name: langhack-redis
     restart: unless-stopped
     logging: *default-logging
@@ -177,6 +177,8 @@ services:
       dockerfile: Dockerfile
       args:
         IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
+        MAVEN_MIRROR_URL: ${MAVEN_MIRROR_URL:-}
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
     container_name: langhack-backend
     restart: unless-stopped
     logging: *default-logging
@@ -293,6 +295,8 @@ services:
       dockerfile: Dockerfile
       args:
         IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
         VITE_API_BASE_URL: ""
         VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
         VITE_ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}

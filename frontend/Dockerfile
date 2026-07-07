@@ -25,6 +25,15 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
+# 使用国内 Alpine 镜像源（留空则使用阿里云公网源）
+RUN if [ -n "$ALPINE_MIRROR" ]; then \
+      ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2); \
+      printf '%s\n' "${ALPINE_MIRROR%/}/v${ALPINE_VER}/main" "${ALPINE_MIRROR%/}/v${ALPINE_VER}/community" > /etc/apk/repositories; \
+    else \
+      echo "https://mirrors.aliyun.com/alpine/v3.23/main" > /etc/apk/repositories; \
+      echo "https://mirrors.aliyun.com/alpine/v3.23/community" >> /etc/apk/repositories; \
+    fi
+
 # Install all dependencies (including devDependencies for vite build)
 # 内网构建时通过 NPM_REGISTRY 参数指向内网 Nexus npm 代理仓库
 RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi && npm ci --include=dev

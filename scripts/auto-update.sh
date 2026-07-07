@@ -152,7 +152,7 @@ BACKEND_PORT="${PORT_BACKEND:-8080}"
 FRONTEND_PORT="${PORT_FRONTEND:-3000}"
 
 # ── 镜像源探测与降级 ──────────────────────────────────
-# 探测公共 Docker Hub 是否可达
+# 探测公共 Docker 镜像源是否可达
 probe_public_docker() {
     timeout 10 docker pull "${1:-node:20-alpine}" >/dev/null 2>&1
 }
@@ -168,28 +168,28 @@ probe_local_registry() {
 resolve_build_environment() {
     local env_image_source="${IMAGE_SOURCE_MODE:-auto}"
     local env_local_registry="${LOCAL_REGISTRY:-}"
+    local env_public_registry_prefix="${PUBLIC_REGISTRY_PREFIX:-docker.1panel.live/library/}"
+    local public_probe_image="${env_public_registry_prefix}${PUBLIC_IMAGE_PROBE:-node:20-alpine}"
 
-    # 如果 .env 中已有明确配置（非 auto），直接使用
     if [ "$env_image_source" = "local" ] && [ -n "${IMAGE_REGISTRY_PREFIX:-}" ]; then
         log "INFO: 使用本地 registry: $IMAGE_REGISTRY_PREFIX"
         return 0
     fi
     if [ "$env_image_source" = "public" ]; then
-        export IMAGE_REGISTRY_PREFIX=""
-        log "INFO: 使用公共镜像"
+        export IMAGE_REGISTRY_PREFIX="$env_public_registry_prefix"
+        log "INFO: 使用国内公网镜像: $IMAGE_REGISTRY_PREFIX"
         return 0
     fi
 
-    # auto 模式：探测
     log "INFO: 自动探测镜像源..."
-    if probe_public_docker; then
-        export IMAGE_REGISTRY_PREFIX=""
-        log "INFO: 公共镜像可用，使用公共镜像"
+    if probe_public_docker "$public_probe_image"; then
+        export IMAGE_REGISTRY_PREFIX="$env_public_registry_prefix"
+        log "INFO: 国内公网镜像可用，使用国内公网镜像: $IMAGE_REGISTRY_PREFIX"
     elif [ -n "$env_local_registry" ] && probe_local_registry "$env_local_registry"; then
         export IMAGE_REGISTRY_PREFIX="${env_local_registry%/}/"
-        log "INFO: 公共镜像不可达，降级到本地 registry: $IMAGE_REGISTRY_PREFIX"
+        log "INFO: 国内公网镜像不可达，降级到本地 registry: $IMAGE_REGISTRY_PREFIX"
     else
-        log "WARN: 公共镜像和本地 registry 均不可达，使用 .env 中的配置"
+        log "WARN: 国内公网镜像和本地 registry 均不可达，使用 .env 中的配置"
     fi
 }
 
@@ -215,10 +215,10 @@ resolve_mirror_urls() {
             log "INFO: 内网构建模式，使用 .env 中的镜像源配置"
             ;;
         public)
-            log "INFO: 公网构建模式，清空内网镜像源"
-            export MAVEN_MIRROR_URL=""
-            export NPM_REGISTRY=""
-            export ALPINE_MIRROR=""
+            log "INFO: 公网构建模式，使用国内公网镜像源"
+            export MAVEN_MIRROR_URL="${MAVEN_MIRROR_URL:-https://maven.aliyun.com/repository/public}"
+            export NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
+            export ALPINE_MIRROR="${ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}"
             ;;
         auto|"")
             if [ -n "$nexus_base" ] && probe_nexus "$nexus_base/repository/maven-public/" 2>/dev/null; then

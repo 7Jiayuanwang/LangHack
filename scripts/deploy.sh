@@ -260,39 +260,44 @@ resolve_image_registry_prefix() {
     local mode="$1"
     local local_registry="$2"
     local probe_image="$3"
+    local public_registry_prefix="$4"
+    local public_probe_image="$probe_image"
     RESOLVED_IMAGE_REGISTRY_PREFIX=""
-    RESOLVED_IMAGE_SOURCE_LABEL="公共镜像"
+    RESOLVED_IMAGE_SOURCE_LABEL="国内公网镜像"
+
+    if [ -n "$public_registry_prefix" ]; then
+        public_probe_image="${public_registry_prefix}${probe_image}"
+    fi
 
     case "${mode,,}" in
         public)
-            RESOLVED_IMAGE_REGISTRY_PREFIX=""
-            RESOLVED_IMAGE_SOURCE_LABEL="公共镜像（强制）"
+            RESOLVED_IMAGE_REGISTRY_PREFIX="$public_registry_prefix"
+            RESOLVED_IMAGE_SOURCE_LABEL="国内公网镜像（强制）"
             ;;
         local)
             RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
             RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry})"
             ;;
         auto|"")
-            if probe_public_image "$probe_image"; then
-                echo "  [OK] 公共镜像源可用"
-                RESOLVED_IMAGE_REGISTRY_PREFIX=""
-                RESOLVED_IMAGE_SOURCE_LABEL="公共镜像（自动）"
+            if probe_public_image "$public_probe_image"; then
+                echo "  [OK] 国内公网镜像源可用"
+                RESOLVED_IMAGE_REGISTRY_PREFIX="$public_registry_prefix"
+                RESOLVED_IMAGE_SOURCE_LABEL="国内公网镜像（自动）"
             else
-                echo "  [WARN] 公共镜像不可达，尝试本地 registry: $local_registry"
-                # 验证本地 registry 是否可达
+                echo "  [WARN] 国内公网镜像不可达，尝试本地 registry: $local_registry"
                 if probe_local_registry "$local_registry" "$probe_image"; then
                     echo "  [OK] 本地 registry 可用"
                     RESOLVED_IMAGE_REGISTRY_PREFIX="$(normalize_registry_prefix "$local_registry")"
-                    RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry}, 公共镜像不可达自动降级)"
+                    RESOLVED_IMAGE_SOURCE_LABEL="本地 registry (${local_registry}, 国内公网镜像不可达自动降级)"
                 else
-                    echo "  [ERROR] 公共镜像和本地 registry 都不可用"
-                    echo "  [ERROR] 公共镜像: 不可达"
+                    echo "  [ERROR] 国内公网镜像和本地 registry 都不可用"
+                    echo "  [ERROR] 国内公网镜像: 不可达"
                     echo "  [ERROR] 本地 registry ($local_registry): 不可达或镜像不存在"
                     echo ""
                     echo "  [修复建议]:"
                     echo "    1. 检查网络连接"
                     echo "    2. 同步镜像到本地 registry: bash scripts/sync-docker-images.sh --registry $local_registry"
-                    echo "    3. 或强制使用公共镜像: 在 .env 中设置 IMAGE_SOURCE_MODE=public"
+                    echo "    3. 或强制使用国内公网镜像: 在 .env 中设置 IMAGE_SOURCE_MODE=public"
                     exit 1
                 fi
             fi
@@ -304,7 +309,7 @@ resolve_image_registry_prefix() {
     esac
 
     if [ -z "$RESOLVED_IMAGE_REGISTRY_PREFIX" ]; then
-        echo "  [INFO] Docker 镜像前缀: (空，使用公共镜像)"
+        echo "  [INFO] Docker 镜像前缀: (空，使用默认 Docker Hub)"
     else
         echo "  [INFO] Docker 镜像前缀: $RESOLVED_IMAGE_REGISTRY_PREFIX"
     fi
@@ -887,13 +892,14 @@ if [ "$SKIP_ENV" = false ]; then
         local) IMAGE_SOURCE_DEFAULT_IDX=3 ;;
         *) IMAGE_SOURCE_DEFAULT_IDX=1 ;;
     esac
-    ask_choice "镜像源模式:" "自动降级 (公共不可达时切换本地 registry)|强制公共镜像|强制本地 registry" IMAGE_SOURCE_CHOICE "$IMAGE_SOURCE_DEFAULT_IDX"
+    ask_choice "镜像源模式:" "自动降级 (国内公网镜像不可达时切换本地 registry)|强制国内公网镜像|强制本地 registry" IMAGE_SOURCE_CHOICE "$IMAGE_SOURCE_DEFAULT_IDX"
     case "$IMAGE_SOURCE_CHOICE" in
         1) CFG_IMAGE_SOURCE_MODE="auto" ;;
         2) CFG_IMAGE_SOURCE_MODE="public" ;;
         3) CFG_IMAGE_SOURCE_MODE="local" ;;
     esac
     ask_value "本地 registry 地址" "$(load_env_value "LOCAL_REGISTRY" "localhost:5000")" CFG_LOCAL_REGISTRY
+    ask_value "国内公网 Docker 镜像前缀" "$(load_env_value "PUBLIC_REGISTRY_PREFIX" "docker.1panel.live/library/")" CFG_PUBLIC_REGISTRY_PREFIX
     ask_value "公共镜像探测镜像" "$(load_env_value "PUBLIC_IMAGE_PROBE" "node:20-alpine")" CFG_PUBLIC_IMAGE_PROBE
     CFG_IMAGE_REGISTRY_PREFIX=""
 
@@ -1015,12 +1021,13 @@ if [ "$SKIP_ENV" = false ]; then
         printf 'PORT_REDIS=6379\n'
         printf 'IMAGE_SOURCE_MODE=%s\n' "${CFG_IMAGE_SOURCE_MODE:-auto}"
         printf 'LOCAL_REGISTRY=%s\n' "${CFG_LOCAL_REGISTRY:-localhost:5000}"
+        printf 'PUBLIC_REGISTRY_PREFIX=%s\n' "${CFG_PUBLIC_REGISTRY_PREFIX:-docker.1panel.live/library/}"
         printf 'IMAGE_REGISTRY_PREFIX=%s\n' "${CFG_IMAGE_REGISTRY_PREFIX:-}"
         printf 'PUBLIC_IMAGE_PROBE=%s\n' "${CFG_PUBLIC_IMAGE_PROBE:-node:20-alpine}"
         printf 'BUILD_NETWORK_ENV=%s\n' "${CFG_BUILD_NETWORK_ENV:-public}"
-        [ -n "${CFG_NPM_REGISTRY:-}" ]     && printf 'NPM_REGISTRY=%s\n'     "$CFG_NPM_REGISTRY"     || printf '# NPM_REGISTRY=\n'
-        [ -n "${CFG_MAVEN_MIRROR_URL:-}" ] && printf 'MAVEN_MIRROR_URL=%s\n' "$CFG_MAVEN_MIRROR_URL" || printf '# MAVEN_MIRROR_URL=\n'
-        [ -n "${CFG_ALPINE_MIRROR:-}" ]    && printf 'ALPINE_MIRROR=%s\n'    "$CFG_ALPINE_MIRROR"    || printf '# ALPINE_MIRROR=\n'
+        printf 'NPM_REGISTRY=%s\n' "${CFG_NPM_REGISTRY:-https://registry.npmmirror.com}"
+        printf 'MAVEN_MIRROR_URL=%s\n' "${CFG_MAVEN_MIRROR_URL:-https://maven.aliyun.com/repository/public}"
+        printf 'ALPINE_MIRROR=%s\n' "${CFG_ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}"
         printf 'BACKUP_ENABLED=%s\n'     "$CFG_BACKUP_ENABLED"
         printf 'BACKUP_DIR=%s\n'         "$CFG_BACKUP_DIR"
         printf 'BACKUP_RETENTION_DAYS=%s\n' "$CFG_BACKUP_RETENTION"
@@ -1114,12 +1121,13 @@ PORT_HTTPS_VAL=$(load_env_value "PORT_HTTPS" "443" "$ENV_FILE")
 SSL_DOMAIN_VAL=$(load_env_value "SSL_DOMAIN" "" "$ENV_FILE")
 IMAGE_SOURCE_MODE_VAL="${IMAGE_SOURCE_MODE:-$(load_env_value "IMAGE_SOURCE_MODE" "auto" "$ENV_FILE")}"
 LOCAL_REGISTRY_VAL="${LOCAL_REGISTRY:-$(load_env_value "LOCAL_REGISTRY" "localhost:5000" "$ENV_FILE")}"
+PUBLIC_REGISTRY_PREFIX_VAL="${PUBLIC_REGISTRY_PREFIX:-$(load_env_value "PUBLIC_REGISTRY_PREFIX" "docker.1panel.live/library/" "$ENV_FILE")}"
 PUBLIC_IMAGE_PROBE_VAL="${PUBLIC_IMAGE_PROBE:-$(load_env_value "PUBLIC_IMAGE_PROBE" "node:20-alpine" "$ENV_FILE")}"
 echo "  [OK] 环境变量检查通过"
 
 echo ""
 echo "  [ Docker 镜像源 ]"
-resolve_image_registry_prefix "$IMAGE_SOURCE_MODE_VAL" "$LOCAL_REGISTRY_VAL" "$PUBLIC_IMAGE_PROBE_VAL"
+resolve_image_registry_prefix "$IMAGE_SOURCE_MODE_VAL" "$LOCAL_REGISTRY_VAL" "$PUBLIC_IMAGE_PROBE_VAL" "$PUBLIC_REGISTRY_PREFIX_VAL"
 set_env_value "$ENV_FILE" "IMAGE_REGISTRY_PREFIX" "$RESOLVED_IMAGE_REGISTRY_PREFIX"
 
 # ══════════════════════════════════════════════════════

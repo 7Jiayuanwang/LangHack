@@ -345,7 +345,7 @@ if [ $FAILED -gt 0 ]; then
     printf '  - %s\n' "${FAILED_IMAGES[@]}"
     echo ""
     echo "[提示] 失败原因可能是:"
-    echo "  1. 网络连接问题（无法访问 Docker Hub）"
+    echo "  1. 网络连接问题（无法访问上游公网镜像源）"
     echo "  2. 本地 registry 存储空间不足"
     echo "  3. 镜像名称或标签错误"
     echo ""
