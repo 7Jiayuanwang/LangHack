@@ -84,6 +84,7 @@ import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
+import { recordExternalFeedbackClick } from '@/api/student'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
@@ -249,6 +250,8 @@ const handleUserAction = async (action) => {
       ElMessage.info('设置功能开发中')
       break
     case 'feedback':
+      // fire-and-forget 上报点击（用于活动 FEEDBACK 任务计数），不阻塞跳转
+      recordExternalFeedbackClick()
       window.open('https://agent.imau.edu.cn:32400/product/llm/chat/d90d4st4shh0g7ro58rg', '_blank')
       break
     case 'logout':

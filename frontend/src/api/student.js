@@ -739,3 +739,11 @@ export function submitAiFeedback(data) {
     data
   }).catch(() => {})
 }
+
+// 外部"问题反馈"入口点击上报（跳 HiAgent 网页对话前 fire-and-forget）
+export function recordExternalFeedbackClick() {
+  return request({
+    url: '/api/student/feedback/external-click',
+    method: 'post'
+  }).catch(() => {})
+}

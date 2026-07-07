@@ -16,6 +16,7 @@
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { recordExternalFeedbackClick } from '@/api/student'
 
 const props = defineProps({
   appKey: {
@@ -314,6 +315,8 @@ function attachDrag(el) {
 
 function handleBubbleClick() {
   if (dragging.value) return
+  // fire-and-forget 上报点击（用于活动 FEEDBACK 任务计数），不阻塞跳转
+  recordExternalFeedbackClick()
   window.open(getFullPageUrl(), '_blank')
 }
 

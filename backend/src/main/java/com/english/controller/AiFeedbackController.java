@@ -41,6 +41,21 @@ public class AiFeedbackController {
         return Result.success();
     }
 
+    /**
+     * 外部问题反馈入口点击上报：学生在导航/个人区点击"问题反馈"跳 HiAgent 网页时前端 fire-and-forget 上报。
+     * 会写入一条 ai_feedback（含哨兵 feedbackText），进入活动 FEEDBACK 任务计数。
+     */
+    @PostMapping("/api/student/feedback/external-click")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
+    public Result<Void> recordExternalFeedbackClick(Authentication authentication) {
+        User user = userService.getUserByUsername(authentication.getName());
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+        aiFeedbackService.submitExternalFeedbackClick(user.getId(), user.getUsername());
+        return Result.success();
+    }
+
     @GetMapping("/api/admin/metrics/ai-feedback-summary")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
     public Result<Map<String, Object>> getFeedbackSummary() {
