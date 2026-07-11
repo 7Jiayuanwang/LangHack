@@ -147,7 +147,7 @@
       <!-- 单词卡片 -->
       <div class="word-card" v-if="currentWord">
         <!-- 自动播放开关 -->
-        <div class="auto-speak-toggle">
+        <div class="auto-speak-toggle" v-if="!isMobile">
           <label class="toggle-label">
             <input type="checkbox" v-model="autoSpeakEnabled" @change="onAutoSpeakChange" class="toggle-checkbox">
             <span class="toggle-text">{{ autoSpeakEnabled ? '自动播放已开启' : '自动播放已关闭' }}</span>
@@ -158,6 +158,7 @@
           <div class="word-header">
             <h3 class="word-text clickable-word" @click="toggleMeaning">{{ currentWord.word }}</h3>
             <button
+              v-if="!isMobile"
               @click="speakWordManually"
               class="speak-btn"
               title="点击播放发音"
@@ -402,6 +403,7 @@ const userStore = useUserStore()
 
 // 获取当前用户 ID
 const currentUserId = computed(() => userStore.userInfo?.id || 'anonymous')
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false)
 
 // 词库配置
 const vocabularies = ref([
@@ -495,7 +497,7 @@ const deepReciteTotal = ref(0)
 const inputRef = ref(null)
 // 自动发音开关：默认开启；用户在背诵页点喇叭按钮可切换静音，状态持久化到 localStorage
 // key 不与某词库绑定 —— 这是个全局偏好，跨词库一致
-const autoSpeakEnabled = ref(localStorage.getItem('autoSpeakEnabled') !== '0')
+const autoSpeakEnabled = ref(!isMobile.value && localStorage.getItem('autoSpeakEnabled') !== '0')
 
 const currentVocabularyName = computed(() => {
   const vocab = vocabularies.value.find(v => v.id === selectedVocabulary.value)
@@ -552,6 +554,7 @@ const imageLoadError = () => {
 // 静音状态下直接 return，避免任何路径（自动 watch / 将来其他位置调用）意外播放
 const speakWord = () => {
   if (!currentWord.value) return
+  if (isMobile.value) return
   if (!autoSpeakEnabled.value) return
 
   // 使用浏览器 Web Speech API
@@ -565,6 +568,7 @@ const speakWord = () => {
 // 手动播放单词发音（点击按钮时）
 const speakWordManually = () => {
   if (!currentWord.value) return
+  if (isMobile.value) return
 
   // 使用浏览器 Web Speech API
   const utterance = new SpeechSynthesisUtterance(currentWord.value.word)
@@ -576,6 +580,10 @@ const speakWordManually = () => {
 
 // 自动播放开关变化时的处理
 const onAutoSpeakChange = () => {
+  if (isMobile.value) {
+    autoSpeakEnabled.value = false
+    return
+  }
   localStorage.setItem('autoSpeakEnabled', autoSpeakEnabled.value ? '1' : '0')
   if (!autoSpeakEnabled.value) {
     // 关闭自动播放时，停止当前播放
@@ -1708,6 +1716,10 @@ const handleVisibilityChange = () => {
 }
 
 onMounted(async () => {
+  isMobile.value = window.innerWidth < 768
+  if (isMobile.value) {
+    autoSpeakEnabled.value = false
+  }
   // 加载今日背诵进度
   const today = new Date().toDateString()
   const savedDate = localStorage.getItem(`lastReviewDate_${currentUserId.value}`)

@@ -27,17 +27,6 @@
           <button v-if="canFavorite" class="favorite-btn" :class="{ 'is-favorite': isFavorite }" @click="addToFavorite">
             <el-icon><Star v-if="!isFavorite" /><StarFilled v-else /></el-icon>
           </button>
-          <button 
-            class="tts-header-btn" 
-            :class="{ 'is-playing': ttsPlaying }"
-            @click="handleFullArticleTts"
-            :disabled="ttsLoading"
-            title="朗读全文"
-          >
-            <el-icon v-if="ttsLoading" class="is-loading"><Loading /></el-icon>
-            <el-icon v-else-if="ttsPlaying"><VideoPause /></el-icon>
-            <el-icon v-else><Headset /></el-icon>
-          </button>
         </div>
       </div>
     </header>
@@ -431,7 +420,6 @@
       @underline="handleUnderline"
       @translate="handleTranslateSelection"
       @annotate="handleAnnotate"
-      @speak="handleSpeak"
       @ai-qa="handleAiQa"
     />
 
