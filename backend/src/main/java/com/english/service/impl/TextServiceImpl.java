@@ -270,7 +270,10 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
     }
 
     // 新增用户课文相关方法实现
+    // 读己写场景：用户"我的上传"页在管理员审核 / 用户上传后立即刷新，
+    // 走从库会因主从复制延迟或复制中断而丢失最近几条记录，强制主库。
     @Override
+    @UseMaster
     public List<Text> getTextsByUploader(Long uploaderId) {
         if (uploaderId == null) {
             return new ArrayList<>();
