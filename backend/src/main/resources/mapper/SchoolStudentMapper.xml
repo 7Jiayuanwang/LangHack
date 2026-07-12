@@ -80,15 +80,21 @@
     </select>
 
     <select id="countDistinctClassName" resultType="long">
-        SELECT COUNT(DISTINCT class_name)
-        FROM school_student
-        WHERE class_name IS NOT NULL AND class_name != ''
+        SELECT COUNT(DISTINCT ss.class_name)
+        FROM school_student ss
+        JOIN users u
+          ON u.username = ss.student_id COLLATE utf8mb4_unicode_ci
+         AND u.deleted = 0
+        WHERE ss.class_name IS NOT NULL AND ss.class_name != ''
     </select>
 
     <select id="countDistinctCollegeName" resultType="long">
-        SELECT COUNT(DISTINCT college_name)
-        FROM school_student
-        WHERE college_name IS NOT NULL AND college_name != ''
+        SELECT COUNT(DISTINCT ss.college_name)
+        FROM school_student ss
+        JOIN users u
+          ON u.username = ss.student_id COLLATE utf8mb4_unicode_ci
+         AND u.deleted = 0
+        WHERE ss.college_name IS NOT NULL AND ss.college_name != ''
     </select>
 
 </mapper>
