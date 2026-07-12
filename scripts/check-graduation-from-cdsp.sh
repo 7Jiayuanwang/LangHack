@@ -122,21 +122,70 @@ echo -e "   ${GREEN}✓ 成功${NC}"
 
 # ─── 5. 展示全部字段 ─────────────────────────────
 echo ""
-echo -e "${YELLOW}3. 第一条记录的完整字段:${NC}"
+echo -e "${YELLOW}3. 原始 JSON 结构（前 800 字符）:${NC}"
+head -c 800 "${CDSP_OUT}"
 echo ""
 
 FIRST=$(python3 -c "
-import json
-d=json.load(open('${CDSP_OUT}'))
-rows=d.get('data',d).get('rows',d.get('data',[])) if isinstance(d,dict) else d
-rows=rows if isinstance(rows,list) else []
-if rows: print(json.dumps(rows[0],ensure_ascii=False,indent=2))
-else: print('NO_DATA')
+import json, sys
+
+with open('${CDSP_OUT}') as f:
+    d = json.load(f)
+
+# CDSP 返回格式多样，尝试所有已知形状提取 rows
+rows = None
+
+# Shape A: 直接是数组 [{...}, ...]
+if isinstance(d, list):
+    rows = d
+
+# Shape B: {'data': [...]}
+elif isinstance(d, dict) and 'data' in d:
+    inner = d['data']
+    if isinstance(inner, list):
+        rows = inner
+    elif isinstance(inner, dict) and 'rows' in inner:
+        rows = inner['rows']
+
+# Shape C: {'rows': [...]}
+elif isinstance(d, dict) and 'rows' in d:
+    rows = d['rows']
+
+# Shape D: {'code': 200, 'result': [...]}  etc — 打印所有 keys 方便排查
+if rows is None and isinstance(d, dict):
+    top_keys = list(d.keys())
+    print('TOP_KEYS:' + ','.join(top_keys))
+    # 递归找第一个 list 值
+    def find_list(obj, depth=0):
+        if depth > 3: return None
+        if isinstance(obj, list): return obj
+        if isinstance(obj, dict):
+            for v in obj.values():
+                r = find_list(v, depth+1)
+                if r: return r
+        return None
+    rows = find_list(d)
+
+if rows is None:
+    print('NO_DATA')
+else:
+    rows = [r for r in rows if isinstance(r, dict)]
+    if rows:
+        print(json.dumps(rows[0], ensure_ascii=False, indent=2))
+    else:
+        print('EMPTY_ROWS')
 " 2>/dev/null)
 
-if [ "${FIRST}" = "NO_DATA" ] || [ -z "${FIRST}" ]; then
-    echo -e "${RED}无数据${NC}"; exit 1
+if [ "${FIRST}" = "NO_DATA" ] || [ "${FIRST}" = "EMPTY_ROWS" ] || [ -z "${FIRST}" ]; then
+    echo ""
+    echo -e "${RED}未提取到行数据，请根据上方原始 JSON 结构手动确认${NC}"
+    if echo "${FIRST}" | grep -q '^TOP_KEYS:'; then
+        echo -e "${YELLOW}JSON 顶层 keys: ${FIRST#TOP_KEYS:}${NC}"
+    fi
+    exit 1
 fi
+echo ""
+echo -e "${YELLOW}第一条记录:${NC}"
 echo "${FIRST}"
 
 # ─── 6. 毕业/学籍字段检测 ─────────────────────────
