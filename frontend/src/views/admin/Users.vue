@@ -3,7 +3,14 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>用户管理</span>
+          <span class="header-title">用户管理</span>
+          <span v-if="stats" class="header-stats">
+            在册 <b>{{ formatCount(stats.rosterActiveClassCount) }}</b> 个行政班
+            · 涉及 <b>{{ formatCount(stats.rosterActiveCollegeCount) }}</b> 个学院
+            <el-divider direction="vertical" />
+            系统覆盖 <b>{{ formatCount(stats.coveredClassCount) }}</b> 个班
+            · <b>{{ formatCount(stats.coveredCollegeCount) }}</b> 个学院
+          </span>
           <div class="header-buttons">
             <el-button type="success" @click="showImportDialog">批量导入</el-button>
             <el-button type="primary" @click="showAddDialog">添加用户</el-button>
@@ -267,7 +274,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, MoreFilled, Delete, UploadFilled } from '@element-plus/icons-vue'
-import { getUsers, createUser, updateUser, deleteUser as deleteUserApi, importUsers } from '@/api/admin'
+import { getUsers, createUser, updateUser, deleteUser as deleteUserApi, importUsers, getUserStats } from '@/api/admin'
 import request from '@/utils/request'
 
 // 响应式数据
@@ -278,6 +285,17 @@ const saving = ref(false)
 const loading = ref(false)
 const userFormRef = ref()
 const ssoEnabled = ref(false)
+
+// header 统计（行政班/学院）
+const stats = ref(null)
+const loadStats = async () => {
+  try {
+    stats.value = await getUserStats()
+  } catch (err) {
+    console.warn('用户统计信息加载失败', err)
+  }
+}
+const formatCount = (v) => (v == null ? '-' : Number(v).toLocaleString())
 
 // 批量导入相关
 const importDialogVisible = ref(false)
@@ -553,6 +571,7 @@ const submitImport = async () => {
 onMounted(() => {
   loadFeatureToggles()
   loadUsers()
+  loadStats()
 })
 </script>
 
@@ -596,6 +615,32 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.card-header .header-title {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.card-header .header-stats {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--el-text-color-secondary);
+  text-align: center;
+}
+
+.card-header .header-stats b {
+  color: var(--el-color-primary);
+  font-weight: 600;
+  margin: 0 2px;
+}
+
+@media (max-width: 768px) {
+  .card-header .header-stats {
+    display: none;
+  }
 }
 
 .card-header span {

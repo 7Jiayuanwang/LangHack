@@ -53,4 +53,14 @@ public interface SchoolStudentMapper extends BaseMapper<SchoolStudent> {
      * 按学号查询（便于 SSO 匹配）。
      */
     SchoolStudent selectByStudentId(@Param("studentId") String studentId);
+
+    /**
+     * 系统覆盖的行政班数（school_student 里 class_name 去重非空计数）。
+     */
+    long countDistinctClassName();
+
+    /**
+     * 系统覆盖的学院数（school_student 里 college_name 去重非空计数）。
+     */
+    long countDistinctCollegeName();
 }

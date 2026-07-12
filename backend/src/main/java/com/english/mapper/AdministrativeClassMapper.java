@@ -14,4 +14,14 @@ public interface AdministrativeClassMapper extends BaseMapper<AdministrativeClas
      * 按class_code唯一键UPSERT
      */
     void upsertByClassCode(AdministrativeClass entity);
+
+    /**
+     * 有效行政班总数（class_status = 'ACTIVE'）
+     */
+    long countActiveClasses();
+
+    /**
+     * 有效行政班涉及的学院数（去重 college_name）
+     */
+    long countActiveDistinctColleges();
 }

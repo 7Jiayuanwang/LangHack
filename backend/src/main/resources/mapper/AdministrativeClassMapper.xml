@@ -37,4 +37,20 @@
             sync_source = #{syncSource}
     </insert>
 
+    <!-- 有效行政班总数 -->
+    <select id="countActiveClasses" resultType="long">
+        SELECT COUNT(*) FROM administrative_class WHERE class_status = 'ACTIVE'
+    </select>
+
+    <!-- 有效行政班涉及学院数（去重，排除 CDSP 未回填的占位符 '未知学院'/UNKNOWN） -->
+    <select id="countActiveDistinctColleges" resultType="long">
+        SELECT COUNT(DISTINCT college_name)
+        FROM administrative_class
+        WHERE class_status = 'ACTIVE'
+          AND college_name IS NOT NULL
+          AND college_name != ''
+          AND college_name != '未知学院'
+          AND (college_code IS NULL OR college_code != 'UNKNOWN')
+    </select>
+
 </mapper>

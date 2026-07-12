@@ -9,6 +9,7 @@ import com.english.dto.LoginRequest;
 import com.english.entity.User;
 import com.english.mapper.UserMapper;
 import com.english.mapper.SchoolStudentMapper;
+import com.english.mapper.AdministrativeClassMapper;
 import com.english.entity.SchoolStudent;
 import com.english.service.UserService;
 import com.english.util.JwtUtil;
@@ -47,6 +48,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private SchoolStudentMapper schoolStudentMapper;
+
+    @Autowired
+    private AdministrativeClassMapper administrativeClassMapper;
 
     /** JwtAuthenticationFilter 中 user:active 缓存的前缀，需保持一致 */
     private static final String USER_ACTIVE_CACHE_PREFIX = "user:active:";
@@ -432,6 +436,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         stats.put("totalStudents", studentCount);
         stats.put("totalActive",   activeCount);
         stats.put("totalUsers",    adminCount + teacherCount + studentCount);
+
+        // 校园名册与在册行政班统计（用户管理页 header 展示）
+        try {
+            stats.put("rosterActiveClassCount",   administrativeClassMapper.countActiveClasses());
+            stats.put("rosterActiveCollegeCount", administrativeClassMapper.countActiveDistinctColleges());
+            stats.put("coveredClassCount",        schoolStudentMapper.countDistinctClassName());
+            stats.put("coveredCollegeCount",      schoolStudentMapper.countDistinctCollegeName());
+        } catch (Exception e) {
+            // 名册表尚未同步时给 0 兜底，不影响原有 stats
+            stats.putIfAbsent("rosterActiveClassCount",   0L);
+            stats.putIfAbsent("rosterActiveCollegeCount", 0L);
+            stats.putIfAbsent("coveredClassCount",        0L);
+            stats.putIfAbsent("coveredCollegeCount",      0L);
+        }
         return stats;
     }
 
