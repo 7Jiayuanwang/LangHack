@@ -149,14 +149,17 @@ while [ "${PAGE}" -le "${MAX_PAGES}" ]; do
 # {{APPEND_UPSERT_AND_SUMMARY}}
 
     # Python 解析 value[] → 生成 UPSERT SQL → 管道到 mysql
-    N=$(python3 <<PY
+    # 输出 "RAW FILTERED" 两个数：RAW 判分页结束，FILTERED 是本页命中过滤要 UPSERT 的行数
+    STATS=$(python3 <<PY
 import json, sys, io
 
 with open("${CDSP_OUT}") as f:
     d = json.load(f)
 rows = d.get("value") if isinstance(d, dict) else None
 if not isinstance(rows, list):
-    print(0)
+    # 结构异常时打印 raw JSON 前 300 字给排错
+    sys.stderr.write("[RAW_HEAD] " + open("${CDSP_OUT}").read()[:300] + "\n")
+    print("0 0")
     sys.exit(0)
 
 def esc(v):
@@ -186,7 +189,7 @@ with open("${CDSP_OUT}.sql", "w") as out:
             "NOW()",
         ]) + ")")
     if not parts:
-        print(0); sys.exit(0)
+        print(f"{len(rows)} 0"); sys.exit(0)
     out.write(",\n".join(parts))
     out.write("\nON DUPLICATE KEY UPDATE "
               "student_name=VALUES(student_name), "
@@ -197,21 +200,25 @@ with open("${CDSP_OUT}.sql", "w") as out:
               "current_status=VALUES(current_status), "
               "enrollment_date=VALUES(enrollment_date), "
               "fetched_at=VALUES(fetched_at);\n")
-print(len(parts))
+print(f"{len(rows)} {len(parts)}")
 PY
 )
 
-    if [ "${N}" = "0" ]; then
-        echo -e "${GREEN}0 rows, 到达末页${NC}"
+    RAW="${STATS%% *}"
+    N="${STATS##* }"
+
+    if [ -s "${CDSP_OUT}.sql" ]; then
+        run_sql < "${CDSP_OUT}.sql"
+        rm -f "${CDSP_OUT}.sql"
+    fi
+    TOTAL=$((TOTAL + N))
+    echo -e "${GREEN}raw=${RAW} 命中=${N} (累计 ${TOTAL})${NC}"
+
+    # 只有 CDSP 这页真的少于 pageSize (或 0)，才是数据结束
+    if [ "${RAW}" -lt "${PAGE_SIZE}" ]; then
+        echo -e "${GREEN}CDSP 返回 ${RAW} < ${PAGE_SIZE}，到达末页${NC}"
         break
     fi
-    run_sql < "${CDSP_OUT}.sql"
-    rm -f "${CDSP_OUT}.sql"
-    TOTAL=$((TOTAL + N))
-    echo -e "${GREEN}${N} rows (累计 ${TOTAL})${NC}"
-
-    # 不足一页 → 结束
-    if [ "${N}" -lt "${PAGE_SIZE}" ]; then break; fi
     PAGE=$((PAGE + 1))
     sleep "${SLEEP}"
 done
