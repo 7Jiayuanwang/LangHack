@@ -60,7 +60,8 @@ fi
 
 run_sql() {
     docker exec -i "${MYSQL_CONTAINER}" \
-        mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" "${MYSQL_DB}" "$@"
+        mysql --default-character-set=utf8mb4 \
+        -uroot -p"${MYSQL_ROOT_PASSWORD}" "${MYSQL_DB}" "$@"
 }
 
 # ─── 0. 预检 ─────────────────────────────
@@ -150,7 +151,8 @@ mkdir -p "${BACKUP_DIR}"
 BACKUP_FILE="${BACKUP_DIR}/users-$(date +%Y%m%d-%H%M%S).sql.gz"
 echo -e "${YELLOW}4. 备份 users 表 → ${BACKUP_FILE}${NC}"
 docker exec -i "${MYSQL_CONTAINER}" \
-    mysqldump -uroot -p"${MYSQL_ROOT_PASSWORD}" \
+    mysqldump --default-character-set=utf8mb4 \
+    -uroot -p"${MYSQL_ROOT_PASSWORD}" \
     --single-transaction --skip-lock-tables --set-gtid-purged=OFF \
     "${MYSQL_DB}" users 2>/dev/null \
     | gzip > "${BACKUP_FILE}"
