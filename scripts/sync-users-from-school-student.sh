@@ -92,7 +92,7 @@ TOTAL_ROSTER=$(run_sql -sN <<<'SELECT COUNT(*) FROM school_student;')
 PENDING=$(run_sql -sN <<EOF
 SELECT COUNT(*)
 FROM school_student ss
-LEFT JOIN users u ON u.username = ss.student_id
+LEFT JOIN users u ON u.username = ss.student_id COLLATE utf8mb4_unicode_ci
 WHERE u.id IS NULL
   AND CHAR_LENGTH(ss.student_id) >= 4
   AND LEFT(ss.student_id, 4) >= '${MIN_GRADE}';
@@ -101,7 +101,7 @@ EOF
 SOFTDEL_HIT=$(run_sql -sN <<EOF
 SELECT COUNT(*)
 FROM school_student ss
-JOIN users u ON u.username = ss.student_id AND u.deleted = 1
+JOIN users u ON u.username = ss.student_id COLLATE utf8mb4_unicode_ci AND u.deleted = 1
 WHERE CHAR_LENGTH(ss.student_id) >= 4
   AND LEFT(ss.student_id, 4) >= '${MIN_GRADE}';
 EOF
@@ -120,7 +120,7 @@ echo -e "${YELLOW}2. 样例 (前 5 条):${NC}"
 run_sql <<EOF
 SELECT ss.student_id, ss.student_name, ss.college_name, ss.class_name
 FROM school_student ss
-LEFT JOIN users u ON u.username = ss.student_id
+LEFT JOIN users u ON u.username = ss.student_id COLLATE utf8mb4_unicode_ci
 WHERE u.id IS NULL
   AND CHAR_LENGTH(ss.student_id) >= 4
   AND LEFT(ss.student_id, 4) >= '${MIN_GRADE}'
@@ -170,7 +170,7 @@ DELTA=$(( USERS_AFTER - USERS_BEFORE ))
 REMAIN=$(run_sql -sN <<EOF
 SELECT COUNT(*)
 FROM school_student ss
-LEFT JOIN users u ON u.username = ss.student_id
+LEFT JOIN users u ON u.username = ss.student_id COLLATE utf8mb4_unicode_ci
 WHERE u.id IS NULL
   AND CHAR_LENGTH(ss.student_id) >= 4
   AND LEFT(ss.student_id, 4) >= '${MIN_GRADE}';
