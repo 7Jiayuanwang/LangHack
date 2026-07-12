@@ -172,6 +172,8 @@ with open("${CDSP_OUT}.sql", "w") as out:
     for r in rows:
         xh = r.get("学号")
         if not xh: continue
+        # 只保留学号前 4 位 >= 2021 的，与 sync-users 的过滤一致
+        if len(xh) < 4 or xh[:4] < "2021": continue
         parts.append("(" + ",".join([
             esc(xh),
             esc(r.get("姓名")),
