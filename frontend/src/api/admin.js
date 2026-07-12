@@ -364,8 +364,8 @@ export function getAiQaUsageTrend(username, days = 6) {
   return request({ url: '/api/admin/metrics/ai-qa-usage-trend', method: 'get', params: { username, days } })
 }
 
-export function getStudents() {
-  return request({ url: '/api/admin/metrics/students', method: 'get' })
+export function getStudents(params) {
+  return request({ url: '/api/admin/metrics/students', method: 'get', params })
 }
 
 export function getCetComparison(params) {

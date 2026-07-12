@@ -1,6 +1,7 @@
 package com.english.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.dto.Result;
 import com.english.entity.Text;
 import com.english.mapper.AiCallLogMapper;
@@ -575,14 +576,23 @@ public class AdminMetricsController {
     // ── 学生用户列表（供下拉选择） ────────────────────────────────────────────
 
     @GetMapping("/students")
-    public Result<List<Map<String, Object>>> getStudents() {
+    public Result<List<Map<String, Object>>> getStudents(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "20") int limit) {
         try {
-            List<com.english.entity.User> students = userMapper.selectList(
+            limit = Math.min(Math.max(limit, 1), 50);
+            QueryWrapper<com.english.entity.User> qw =
                     new QueryWrapper<com.english.entity.User>()
                             .eq("deleted", 0)
                             .in("role", "STUDENT", "USER")
-                            .select("username", "real_name", "id"));
-            List<Map<String, Object>> result = students.stream().map(u -> {
+                            .select("username", "real_name", "id");
+            if (keyword != null && !keyword.isBlank()) {
+                qw.and(w -> w.like("username", keyword).or().like("real_name", keyword));
+            }
+            qw.orderByAsc("username");
+            var page = new Page<com.english.entity.User>(1, limit);
+            var pageResult = userMapper.selectPage(page, qw);
+            List<Map<String, Object>> result = pageResult.getRecords().stream().map(u -> {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("username", u.getUsername());
                 item.put("realName", u.getRealName() != null ? u.getRealName() : u.getUsername());

@@ -304,9 +304,13 @@
                 <el-select
                   v-model="qaUsageUser"
                   filterable
-                  placeholder="选择学生..."
+                  remote
+                  reserve-keyword
+                  :remote-method="searchStudents"
+                  :loading="studentLoading"
+                  placeholder="输入学号或姓名搜索..."
                   size="small"
-                  style="width: 200px"
+                  style="width: 220px"
                   @change="loadQaUsage"
                 >
                   <el-option
@@ -511,15 +515,27 @@ const loadCetData = async () => {
   }
 }
 
-const loadStudents = async () => {
-  try {
-    const res = await getStudents()
-    if (res?.code === 200 && res?.data) {
-      studentList.value = res.data
+const studentLoading = ref(false)
+let studentSearchTimer = null
+const searchStudents = (query) => {
+  if (studentSearchTimer) clearTimeout(studentSearchTimer)
+  studentSearchTimer = setTimeout(async () => {
+    if (!query || query.length < 1) {
+      studentList.value = []
+      return
     }
-  } catch (e) {
-    console.error('加载学生列表失败:', e)
-  }
+    studentLoading.value = true
+    try {
+      const res = await getStudents({ keyword: query, limit: 20 })
+      if (res?.code === 200 && res?.data) {
+        studentList.value = res.data
+      }
+    } catch (e) {
+      console.error('搜索学生失败:', e)
+    } finally {
+      studentLoading.value = false
+    }
+  }, 300)
 }
 
 const loadQaUsage = async () => {
@@ -712,7 +728,6 @@ onMounted(() => {
   loadDashboardData()
   loadCetData()
   loadMetrics()
-  loadStudents()
 })
 </script>
 
