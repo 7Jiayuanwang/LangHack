@@ -5,9 +5,6 @@
         <div class="card-header">
           <span class="header-title">用户管理</span>
           <span v-if="stats" class="header-stats">
-            在册 <b>{{ formatCount(stats.rosterActiveClassCount) }}</b> 个行政班
-            · 涉及 <b>{{ formatCount(stats.rosterActiveCollegeCount) }}</b> 个学院
-            <el-divider direction="vertical" />
             系统覆盖 <b>{{ formatCount(stats.coveredClassCount) }}</b> 个班
             · <b>{{ formatCount(stats.coveredCollegeCount) }}</b> 个学院
           </span>
@@ -290,7 +287,10 @@ const ssoEnabled = ref(false)
 const stats = ref(null)
 const loadStats = async () => {
   try {
-    stats.value = await getUserStats()
+    const res = await getUserStats()
+    if (res?.data) {
+      stats.value = res.data
+    }
   } catch (err) {
     console.warn('用户统计信息加载失败', err)
   }
