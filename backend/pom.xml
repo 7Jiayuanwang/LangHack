@@ -189,6 +189,12 @@
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
 
+        <!-- Caffeine 缓存实现（提供真正的 TTL 过期，替代无过期的 ConcurrentMapCache） -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Resilience4j 熔断器 -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>
