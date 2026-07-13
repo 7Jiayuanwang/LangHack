@@ -27,7 +27,7 @@
         <div class="card-bg-icon"><el-icon><School /></el-icon></div>
         <div class="card-body">
           <div class="label">班级数量</div>
-          <div class="value">{{ stats.totalClasses }}</div>
+          <div class="value">{{ stats.coveredClassCount }}</div>
           <div class="card-footer">
             <span class="trend">教学单元</span>
           </div>
@@ -415,7 +415,7 @@ const onCustomRangeChange = (val) => {
   loadMetrics()
 }
 
-const stats = reactive({ totalUsers: 0, totalCourses: 0, totalClasses: 0, totalWords: 0 })
+const stats = reactive({ totalUsers: 0, totalCourses: 0, totalClasses: 0, coveredClassCount: 0, totalWords: 0 })
 const userStats = reactive({ admin: 0, teacher: 0, student: 0 })
 const recentActivities = ref([])
 
@@ -491,6 +491,7 @@ const loadDashboardData = async () => {
       stats.totalUsers = r.totalUsers || 0
       stats.totalCourses = r.totalCourses || 0
       stats.totalClasses = r.totalClasses || 0
+      stats.coveredClassCount = r.coveredClassCount || 0
       stats.totalWords = r.totalWords || 0
       userStats.admin = r.totalAdmins || 0
       userStats.teacher = r.totalTeachers || 0
