@@ -668,20 +668,32 @@ DROP PROCEDURE IF EXISTS _v1_user_text_reads_cols;
 --   - UPDATE users 把被 SSO 错误映射为 TEACHER 的 CAS 学生恢复为 STUDENT
 -- ────────────────────────────────────────
 
-DELETE FROM sso_config
-WHERE config_type = 'ROLE_MAPPING'
-  AND REPLACE(config_key, 'sso.role_mapping.', '') NOT LIKE '%=%';
+DROP PROCEDURE IF EXISTS _v1_clean_sso_config;
+CREATE PROCEDURE _v1_clean_sso_config()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.TABLES
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sso_config') THEN
+        DELETE FROM sso_config
+        WHERE config_type = 'ROLE_MAPPING'
+          AND REPLACE(config_key, 'sso.role_mapping.', '') NOT LIKE '%=%';
+    END IF;
 
-UPDATE users u
-INNER JOIN sso_user_bindings b ON u.id = b.user_id AND b.deleted = 0
-SET u.role = 'STUDENT', u.updated_time = NOW()
-WHERE u.role = 'TEACHER'
-  AND u.sso_bound = 1
-  AND u.deleted = 0
-  AND b.auto_approved = 1
-  AND b.sso_member_of IS NOT NULL
-  AND b.sso_member_of NOT LIKE '%ou=教师%'
-  AND b.sso_member_of NOT LIKE '%ou=teacher%';
+    IF EXISTS (SELECT 1 FROM information_schema.TABLES
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sso_user_bindings') THEN
+        UPDATE users u
+        INNER JOIN sso_user_bindings b ON u.id = b.user_id AND b.deleted = 0
+        SET u.role = 'STUDENT', u.updated_time = NOW()
+        WHERE u.role = 'TEACHER'
+          AND u.sso_bound = 1
+          AND u.deleted = 0
+          AND b.auto_approved = 1
+          AND b.sso_member_of IS NOT NULL
+          AND b.sso_member_of NOT LIKE '%ou=教师%'
+          AND b.sso_member_of NOT LIKE '%ou=teacher%';
+    END IF;
+END;
+CALL _v1_clean_sso_config();
+DROP PROCEDURE IF EXISTS _v1_clean_sso_config;
 
 
 -- V2__media_annotations.sql
@@ -1159,21 +1171,22 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 -- 2. AI 提供商表 + 数据迁移 [原 V7 + V11 + V13 Part 4]
 --    app_id 字段已内联 [原 V11]
 --    protocol 字段 [原 V13 Part 4]
+--    注意: 存储过程需在 CREATE TABLE 之后调用，此处仅定义
 -- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
 CREATE PROCEDURE _v5_ai_provider_protocol()
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol') THEN
-        ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible' AFTER `service`;
+    IF EXISTS (SELECT 1 FROM information_schema.TABLES
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol') THEN
+            ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible' AFTER `service`;
+        END IF;
+        ALTER TABLE `ai_provider`
+            MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
+                COMMENT '协议类型: openai_compatible | hiagent';
     END IF;
-    -- Ensure comment is set (idempotent modify)
-    ALTER TABLE `ai_provider`
-        MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
-            COMMENT '协议类型: openai_compatible | hiagent';
 END;
-CALL _v5_ai_provider_protocol();
-DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
 
 CREATE TABLE IF NOT EXISTS `ai_provider` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1192,6 +1205,10 @@ CREATE TABLE IF NOT EXISTS `ai_provider` (
     `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `updated_by` VARCHAR(50)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI provider configuration';
+
+-- 表创建后执行 protocol 字段修正
+CALL _v5_ai_provider_protocol();
+DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
 
 INSERT IGNORE INTO `ai_provider`
     (`id`, `service`, `name`, `api_url`, `api_key`, `model`, `weight`, `enabled`, `timeout_ms`, `remark`)
@@ -1371,7 +1388,17 @@ WHERE `config_group` = 'feature_toggle'
   AND `config_key`   = 'page_ai_qa';
 
 -- 清除所有对 page_ai_qa 的禁用覆盖（tag/user scope）
-DELETE FROM `feature_override` WHERE `feature_key` = 'page_ai_qa';
+-- 注意: feature_override 表在后面才创建，此处需条件执行
+DROP PROCEDURE IF EXISTS _v6_clean_feature_override;
+CREATE PROCEDURE _v6_clean_feature_override()
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.TABLES
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feature_override') THEN
+        DELETE FROM `feature_override` WHERE `feature_key` = 'page_ai_qa';
+    END IF;
+END;
+CALL _v6_clean_feature_override();
+DROP PROCEDURE IF EXISTS _v6_clean_feature_override;
 
 -- ────────────────────────────────────────
 -- 11. 删除孤立种子 — 无路由守卫或代码消费 [原 V47]
@@ -3418,7 +3445,7 @@ SELECT 1;
 -- 创建日期: 2026-06-21
 
 -- 1. 活动主表
-CREATE TABLE campaign_activities (
+CREATE TABLE IF NOT EXISTS campaign_activities (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     title VARCHAR(200) NOT NULL COMMENT '活动标题',
     description TEXT COMMENT '活动描述',
@@ -3450,7 +3477,7 @@ CREATE TABLE campaign_activities (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动主表';
 
 -- 2. 活动任务表
-CREATE TABLE campaign_tasks (
+CREATE TABLE IF NOT EXISTS campaign_tasks (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL COMMENT '活动ID',
     task_name VARCHAR(100) NOT NULL COMMENT '任务名称',
@@ -3470,7 +3497,7 @@ CREATE TABLE campaign_tasks (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动任务表';
 
 -- 3. 参与记录表
-CREATE TABLE campaign_participations (
+CREATE TABLE IF NOT EXISTS campaign_participations (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -3495,7 +3522,7 @@ CREATE TABLE campaign_participations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动参与记录';
 
 -- 4. 任务完成记录表
-CREATE TABLE campaign_task_completions (
+CREATE TABLE IF NOT EXISTS campaign_task_completions (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     task_id BIGINT NOT NULL,
@@ -3515,7 +3542,7 @@ CREATE TABLE campaign_task_completions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务完成明细';
 
 -- 5. 手动数据录入表
-CREATE TABLE campaign_manual_records (
+CREATE TABLE IF NOT EXISTS campaign_manual_records (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     task_id BIGINT NOT NULL,
@@ -3573,9 +3600,22 @@ CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
 -- 创建日期: 2026-06-24
 
 -- Part 1: 为活动表添加报名时间字段
-ALTER TABLE campaign_activities
-ADD COLUMN enrollment_start_time DATETIME NULL COMMENT '报名开始时间' AFTER end_time,
-ADD COLUMN enrollment_end_time DATETIME NULL COMMENT '报名结束时间' AFTER enrollment_start_time;
+DROP PROCEDURE IF EXISTS _v21_04_enrollment_time;
+CREATE PROCEDURE _v21_04_enrollment_time()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'campaign_activities'
+          AND COLUMN_NAME = 'enrollment_start_time'
+    ) THEN
+        ALTER TABLE campaign_activities
+            ADD COLUMN enrollment_start_time DATETIME NULL COMMENT '报名开始时间' AFTER end_time,
+            ADD COLUMN enrollment_end_time DATETIME NULL COMMENT '报名结束时间' AFTER enrollment_start_time;
+    END IF;
+END;
+CALL _v21_04_enrollment_time();
+DROP PROCEDURE IF EXISTS _v21_04_enrollment_time;
 
 -- 为已有活动设置默认报名时间（与活动时间一致）
 UPDATE campaign_activities
@@ -3584,20 +3624,59 @@ SET enrollment_start_time = start_time,
 WHERE enrollment_start_time IS NULL;
 
 -- Part 2: 为 campaign_tasks 表添加重复积分相关字段
-ALTER TABLE campaign_tasks
-ADD COLUMN is_repeatable TINYINT(1) DEFAULT 0 COMMENT '是否可重复完成（重复积分）' AFTER auto_collect,
-ADD COLUMN max_completions INT DEFAULT NULL COMMENT '最大完成次数（NULL=无限制，用于总得分上限控制）' AFTER is_repeatable,
-ADD COLUMN daily_limit INT DEFAULT NULL COMMENT '单日最大完成次数（NULL=无限制，用于单日得分上限控制）' AFTER max_completions;
+DROP PROCEDURE IF EXISTS _v21_04_task_repeatable;
+CREATE PROCEDURE _v21_04_task_repeatable()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'campaign_tasks'
+          AND COLUMN_NAME = 'is_repeatable'
+    ) THEN
+        ALTER TABLE campaign_tasks
+            ADD COLUMN is_repeatable TINYINT(1) DEFAULT 0 COMMENT '是否可重复完成（重复积分）' AFTER auto_collect,
+            ADD COLUMN max_completions INT DEFAULT NULL COMMENT '最大完成次数（NULL=无限制，用于总得分上限控制）' AFTER is_repeatable,
+            ADD COLUMN daily_limit INT DEFAULT NULL COMMENT '单日最大完成次数（NULL=无限制，用于单日得分上限控制）' AFTER max_completions;
+    END IF;
+END;
+CALL _v21_04_task_repeatable();
+DROP PROCEDURE IF EXISTS _v21_04_task_repeatable;
 
 -- Part 3: 为 campaign_task_completions 表添加每日完成记录追踪
-ALTER TABLE campaign_task_completions
-ADD COLUMN earned_score INT DEFAULT 0 COMMENT '已获得总积分' AFTER completion_count,
-ADD COLUMN last_completion_date DATE COMMENT '最后一次完成日期' AFTER earned_score,
-ADD COLUMN today_completion_count INT DEFAULT 0 COMMENT '今日完成次数' AFTER last_completion_date;
+DROP PROCEDURE IF EXISTS _v21_04_completion_fields;
+CREATE PROCEDURE _v21_04_completion_fields()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'campaign_task_completions'
+          AND COLUMN_NAME = 'earned_score'
+    ) THEN
+        ALTER TABLE campaign_task_completions
+            ADD COLUMN earned_score INT DEFAULT 0 COMMENT '已获得总积分' AFTER completion_count,
+            ADD COLUMN last_completion_date DATE COMMENT '最后一次完成日期' AFTER earned_score,
+            ADD COLUMN today_completion_count INT DEFAULT 0 COMMENT '今日完成次数' AFTER last_completion_date;
+    END IF;
+END;
+CALL _v21_04_completion_fields();
+DROP PROCEDURE IF EXISTS _v21_04_completion_fields;
 
 -- Part 4: 添加索引优化查询性能
-ALTER TABLE campaign_task_completions
-ADD INDEX idx_user_task_date (user_id, task_id, last_completion_date);
+DROP PROCEDURE IF EXISTS _v21_04_task_date_idx;
+CREATE PROCEDURE _v21_04_task_date_idx()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'campaign_task_completions'
+          AND INDEX_NAME = 'idx_user_task_date'
+    ) THEN
+        ALTER TABLE campaign_task_completions
+            ADD INDEX idx_user_task_date (user_id, task_id, last_completion_date);
+    END IF;
+END;
+CALL _v21_04_task_date_idx();
+DROP PROCEDURE IF EXISTS _v21_04_task_date_idx;
 
 -- Part 5: 数据修复 - 为已完成的任务补充 completion_count 和 earned_score
 UPDATE campaign_task_completions ctc
@@ -3642,26 +3721,46 @@ SET
 -- ========================================================================
 
 -- P0-01 修复: 添加唯一约束防止重复报名（竞态条件）
-ALTER TABLE campaign_participations
-ADD UNIQUE INDEX uk_campaign_user (campaign_id, user_id);
+-- 注意: V20 建表时已定义 UNIQUE KEY uk_campaign_user，此处改为幂等
+DROP PROCEDURE IF EXISTS _v21_04_add_uk_campaign_user;
+CREATE PROCEDURE _v21_04_add_uk_campaign_user()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'campaign_participations'
+          AND INDEX_NAME = 'uk_campaign_user'
+    ) THEN
+        ALTER TABLE campaign_participations
+            ADD UNIQUE INDEX uk_campaign_user (campaign_id, user_id);
+    END IF;
+END;
+CALL _v21_04_add_uk_campaign_user();
+DROP PROCEDURE IF EXISTS _v21_04_add_uk_campaign_user;
 
 -- P0-03 修复: 添加关键数据库索引以提升性能
 -- 预期提升: 排名查询 5s → <100ms (50x 提升)
 
 -- 1. 排名查询索引 (campaign_participations)
 -- 用于 getIndividualRanking: 按 campaign_id + enrollment_status + total_score 排序
-CREATE INDEX IF NOT EXISTS idx_enrollment_score
-ON campaign_participations(campaign_id, enrollment_status, total_score DESC);
-
--- 2. 任务完成记录查询索引 (campaign_task_completions)
--- 用于按活动、任务、用户快速定位完成记录
-CREATE INDEX IF NOT EXISTS idx_campaign_task_user
-ON campaign_task_completions(campaign_id, task_id, user_id);
-
--- 3. 活动任务筛选索引 (campaign_tasks)
--- 用于筛选活动下的必做任务
-CREATE INDEX IF NOT EXISTS idx_campaign_required
-ON campaign_tasks(campaign_id, is_required, deleted);
+DROP PROCEDURE IF EXISTS _v21_04_idx_enrollment_score;
+CREATE PROCEDURE _v21_04_idx_enrollment_score()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaign_participations' AND INDEX_NAME = 'idx_enrollment_score') THEN
+        CREATE INDEX idx_enrollment_score ON campaign_participations(campaign_id, enrollment_status, total_score DESC);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaign_task_completions' AND INDEX_NAME = 'idx_campaign_task_user') THEN
+        CREATE INDEX idx_campaign_task_user ON campaign_task_completions(campaign_id, task_id, user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaign_tasks' AND INDEX_NAME = 'idx_campaign_required') THEN
+        CREATE INDEX idx_campaign_required ON campaign_tasks(campaign_id, is_required, deleted);
+    END IF;
+END;
+CALL _v21_04_idx_enrollment_score();
+DROP PROCEDURE IF EXISTS _v21_04_idx_enrollment_score;
 
 -- 注: 这些索引针对 CampaignStatsServiceImpl 中高频查询场景
 -- idx_enrollment_score: 覆盖 getIndividualRanking/getClassRanking/getCollegeRanking
@@ -3676,8 +3775,21 @@ ON campaign_tasks(campaign_id, is_required, deleted);
 -- 修复: 新增 last_counted_value 记录上次计分时的进度值，
 --       新增积分 = (currentValue - lastCountedValue) / targetValue 向下取整。
 
-ALTER TABLE campaign_task_completions
-ADD COLUMN last_counted_value DECIMAL(10,2) DEFAULT 0.0000 COMMENT '上次计分时的进度值（用于增量计分）' AFTER current_value;
+DROP PROCEDURE IF EXISTS _v21_04_last_counted;
+CREATE PROCEDURE _v21_04_last_counted()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'campaign_task_completions'
+          AND COLUMN_NAME = 'last_counted_value'
+    ) THEN
+        ALTER TABLE campaign_task_completions
+            ADD COLUMN last_counted_value DECIMAL(10,2) DEFAULT 0.0000 COMMENT '上次计分时的进度值（用于增量计分）' AFTER current_value;
+    END IF;
+END;
+CALL _v21_04_last_counted();
+DROP PROCEDURE IF EXISTS _v21_04_last_counted;
 
 -- 为已有的完成记录初始化 last_counted_value = current_value，避免历史数据被重复计分
 UPDATE campaign_task_completions
@@ -3739,16 +3851,41 @@ CREATE TABLE IF NOT EXISTS word_ai_explanations (
 -- V31__add_vocabulary_source_type.sql
 
 -- 生词本来源标记：ARTICLE=文章阅读加入 / MANUAL=手动添加或其他来源
-ALTER TABLE vocabulary_books
-ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
-COMMENT '来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他'
-AFTER next_review_time;
+-- 注意: V11 已用存储过程安全添加过此列和索引，此处改为幂等写法
+DROP PROCEDURE IF EXISTS _v31_add_source_type;
+CREATE PROCEDURE _v31_add_source_type()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'vocabulary_books'
+          AND COLUMN_NAME = 'source_type'
+    ) THEN
+        ALTER TABLE vocabulary_books
+            ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
+            COMMENT '来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他'
+            AFTER next_review_time;
+    END IF;
+END;
+CALL _v31_add_source_type();
+DROP PROCEDURE IF EXISTS _v31_add_source_type;
 
--- 已有历史数据全部标记为 MANUAL（旧数据无法确定来源）
 UPDATE vocabulary_books SET source_type = 'MANUAL' WHERE source_type IS NULL OR source_type = '';
 
--- 给 student_id + source_type 加索引，提升按来源查询的性能
-CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
+DROP PROCEDURE IF EXISTS _v31_add_source_idx;
+CREATE PROCEDURE _v31_add_source_idx()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'vocabulary_books'
+          AND INDEX_NAME = 'idx_vocabulary_source'
+    ) THEN
+        CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
+    END IF;
+END;
+CALL _v31_add_source_idx();
+DROP PROCEDURE IF EXISTS _v31_add_source_idx;
 
 
 -- V32__extend_school_student_varchar.sql
