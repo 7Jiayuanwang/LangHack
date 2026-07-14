@@ -241,6 +241,21 @@ export function getClasses(params) {
 
 // ========== 内容审核相关 ==========
 
+export function getAutoApproveSettings() {
+  return request({
+    url: '/api/admin/content-review/auto-approve',
+    method: 'get'
+  })
+}
+
+export function setAutoApproveSettings(settings) {
+  return request({
+    url: '/api/admin/content-review/auto-approve',
+    method: 'put',
+    data: settings
+  })
+}
+
 export function getReviewTexts(params) {
   return request({
     url: '/api/admin/content-review/texts',

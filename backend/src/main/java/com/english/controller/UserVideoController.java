@@ -5,6 +5,7 @@ import com.english.entity.User;
 import com.english.entity.Video;
 import com.english.service.ContentTagService;
 import com.english.service.FeatureToggleService;
+import com.english.service.SystemConfigService;
 import com.english.service.UserService;
 import com.english.service.VideoService;
 import org.slf4j.Logger;
@@ -41,6 +42,9 @@ public class UserVideoController {
 
     @Autowired
     private ContentTagService contentTagService;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
 
     @Autowired
     private com.english.service.AuthorEnricher authorEnricher;
@@ -97,8 +101,9 @@ public class UserVideoController {
             video.setDescription(description);
             video.setTags(filteredTags);
             video.setUserId(user.getId());
-            video.setIsPublic(0); // 默认不公开，审核通过后再公开
-            video.setStatus("PENDING"); // 默认待审核
+            boolean autoApprove = "true".equals(systemConfigService.get("feature_toggle", "content.video_auto_approve"));
+            video.setIsPublic(autoApprove ? 1 : 0);
+            video.setStatus(autoApprove ? "APPROVED" : "PENDING");
             if (subtitleContent != null && !subtitleContent.trim().isEmpty()) {
                 video.setSubtitleContent(subtitleContent);
             }
@@ -224,8 +229,9 @@ public class UserVideoController {
                 video.setSubtitleContentZh(subZhVal != null ? subZhVal.toString() : null);
             }
 
-            // 修改后内容需要重新审核
-            video.setStatus("PENDING");
+            // 修改后根据免审核开关决定状态
+            boolean autoApprove = "true".equals(systemConfigService.get("feature_toggle", "content.video_auto_approve"));
+            video.setStatus(autoApprove ? "APPROVED" : "PENDING");
 
             videoService.updateById(video);
             return Result.success("更新成功");

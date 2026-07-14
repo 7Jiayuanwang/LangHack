@@ -1576,6 +1576,35 @@ public class AdminController {
     // ========== 内容审核相关 ==========
 
     /**
+     * 获取免审核开关状态
+     */
+    @GetMapping("/content-review/auto-approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Boolean>> getAutoApproveSettings() {
+        Map<String, Boolean> result = new HashMap<>();
+        result.put("textAutoApprove", "true".equals(systemConfigService.get("feature_toggle", "content.text_auto_approve")));
+        result.put("videoAutoApprove", "true".equals(systemConfigService.get("feature_toggle", "content.video_auto_approve")));
+        return Result.success(result);
+    }
+
+    /**
+     * 设置免审核开关
+     */
+    @PutMapping("/content-review/auto-approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<String> setAutoApproveSettings(@RequestBody Map<String, Boolean> settings) {
+        if (settings.containsKey("textAutoApprove")) {
+            systemConfigService.set("feature_toggle", "content.text_auto_approve",
+                    String.valueOf(settings.get("textAutoApprove")), "admin");
+        }
+        if (settings.containsKey("videoAutoApprove")) {
+            systemConfigService.set("feature_toggle", "content.video_auto_approve",
+                    String.valueOf(settings.get("videoAutoApprove")), "admin");
+        }
+        return Result.success("设置成功");
+    }
+
+    /**
      * 获取用户上传的课文列表（内容审核）
      */
     @GetMapping("/content-review/texts")

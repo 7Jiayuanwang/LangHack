@@ -16,6 +16,25 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 免审核开关 -->
+    <div class="auto-approve-bar">
+      <span class="auto-approve-label">课文免审核</span>
+      <el-switch
+        v-model="textAutoApprove"
+        @change="handleTextAutoApproveChange"
+        active-text="开"
+        inactive-text="关"
+      />
+      <span class="auto-approve-label" style="margin-left: 24px">视频免审核</span>
+      <el-switch
+        v-model="videoAutoApprove"
+        @change="handleVideoAutoApproveChange"
+        active-text="开"
+        inactive-text="关"
+      />
+      <span class="auto-approve-hint">开启后，新上传的内容自动通过审核</span>
+    </div>
+
     <!-- 统计卡片 -->
     <div class="stats-cards">
       <div class="stat-card stat-pending" @click="filterByStatus('PENDING')">
@@ -328,7 +347,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search, Select, CloseBold, View, VideoPlay } from '@element-plus/icons-vue'
 import * as adminApi from '@/api/admin'
-import { getContentTags } from '@/api/admin'
+import { getContentTags, getAutoApproveSettings, setAutoApproveSettings } from '@/api/admin'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 
 const router = useRouter()
@@ -349,6 +368,9 @@ const currentDetail = ref(null)
 
 const textStats = reactive({ pendingCount: 0, approvedCount: 0, rejectedCount: 0 })
 const videoStats = reactive({ pendingCount: 0, approvedCount: 0, rejectedCount: 0 })
+
+const textAutoApprove = ref(false)
+const videoAutoApprove = ref(false)
 
 const pagination = reactive({
   current: 1,
@@ -625,11 +647,55 @@ const formatTime = (time) => {
   return new Date(time).toLocaleString('zh-CN')
 }
 
+// 免审核开关
+const loadAutoApproveSettings = async () => {
+  try {
+    const res = await getAutoApproveSettings()
+    if (res.code === 200 && res.data) {
+      textAutoApprove.value = res.data.textAutoApprove || false
+      videoAutoApprove.value = res.data.videoAutoApprove || false
+    }
+  } catch (e) {
+    // 静默
+  }
+}
+
+const handleTextAutoApproveChange = async (val) => {
+  try {
+    const res = await setAutoApproveSettings({ textAutoApprove: val })
+    if (res.code === 200) {
+      ElMessage.success(val ? '课文免审核已开启' : '课文免审核已关闭')
+    } else {
+      textAutoApprove.value = !val
+      ElMessage.error(res.message || '设置失败')
+    }
+  } catch (e) {
+    textAutoApprove.value = !val
+    ElMessage.error('设置失败')
+  }
+}
+
+const handleVideoAutoApproveChange = async (val) => {
+  try {
+    const res = await setAutoApproveSettings({ videoAutoApprove: val })
+    if (res.code === 200) {
+      ElMessage.success(val ? '视频免审核已开启' : '视频免审核已关闭')
+    } else {
+      videoAutoApprove.value = !val
+      ElMessage.error(res.message || '设置失败')
+    }
+  } catch (e) {
+    videoAutoApprove.value = !val
+    ElMessage.error('设置失败')
+  }
+}
+
 // 生命周期
 onMounted(() => {
   loadData()
   loadOtherStats()
   loadAvailableTags()
+  loadAutoApproveSettings()
 })
 
 const loadAvailableTags = async () => {
@@ -671,6 +737,29 @@ defineExpose({ loadData })
 
 .review-tabs {
   margin-bottom: 16px;
+}
+
+.auto-approve-bar {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f0f9ff;
+  border: 1px solid #b3d8ff;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.auto-approve-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  margin-right: 8px;
+}
+
+.auto-approve-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: #909399;
 }
 
 .tab-badge {

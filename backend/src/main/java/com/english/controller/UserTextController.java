@@ -4,6 +4,7 @@ import com.english.dto.Result;
 import com.english.entity.Text;
 import com.english.entity.User;
 import com.english.service.ContentTagService;
+import com.english.service.SystemConfigService;
 import com.english.service.UserService;
 import com.english.service.TextService;
 import com.english.service.UnitService;
@@ -42,6 +43,9 @@ public class UserTextController {
 
     @Autowired
     private ContentTagService contentTagService;
+
+    @Autowired
+    private SystemConfigService systemConfigService;
 
     /**
      * 用户上传课文
@@ -110,7 +114,8 @@ public class UserTextController {
 
             // 学生上传默认公开
             text.setIsPublic(1);
-            text.setStatus("PENDING"); // 默认待审核
+            boolean autoApprove = "true".equals(systemConfigService.get("feature_toggle", "content.text_auto_approve"));
+            text.setStatus(autoApprove ? "APPROVED" : "PENDING");
             text.setViewCount(0);
             text.setLikeCount(0);
 
@@ -265,8 +270,9 @@ public class UserTextController {
                 text.setAudioUrl(audioUrlVal != null ? audioUrlVal.toString() : "");
             }
 
-            // 修改后内容需要重新审核
-            text.setStatus("PENDING");
+            // 修改后根据免审核开关决定状态
+            boolean autoApprove = "true".equals(systemConfigService.get("feature_toggle", "content.text_auto_approve"));
+            text.setStatus(autoApprove ? "APPROVED" : "PENDING");
 
             textService.updateById(text);
             return Result.success("更新成功");
