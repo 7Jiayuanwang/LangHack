@@ -39,11 +39,12 @@ public interface CampaignParticipationMapper extends BaseMapper<CampaignParticip
         "<script>",
         "SELECT p.* FROM campaign_participations p",
         "LEFT JOIN users u ON p.user_id = u.id",
-        "LEFT JOIN school_student ss ON u.school_student_id = ss.id",
+        "LEFT JOIN school_student ss ON ss.id = u.school_student_id",
+        "LEFT JOIN school_student ss_by_username ON ss_by_username.student_id = u.username COLLATE utf8mb4_unicode_ci",
         "WHERE p.campaign_id = #{campaignId}",
         "  AND p.enrollment_status = 'ENROLLED'",
-        "  <if test='className != null and className != \"\"'>AND ss.class_name = #{className}</if>",
-        "  <if test='collegeName != null and collegeName != \"\"'>AND ss.college_name = #{collegeName}</if>",
+        "  <if test='className != null and className != \"\"'>AND COALESCE(ss.class_name, ss_by_username.class_name) = #{className}</if>",
+        "  <if test='collegeName != null and collegeName != \"\"'>AND COALESCE(ss.college_name, ss_by_username.college_name) = #{collegeName}</if>",
         "ORDER BY p.total_score DESC, p.completed_tasks DESC",
         "</script>"
     })

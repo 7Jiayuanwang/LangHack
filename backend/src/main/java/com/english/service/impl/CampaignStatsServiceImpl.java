@@ -572,53 +572,23 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             return;
         }
 
-        // 批量查询用户信息
-        List<Long> userIds = participations.stream()
+        List<User> users = loadActiveUsersByIds(participations.stream()
             .map(CampaignParticipation::getUserId)
             .filter(Objects::nonNull)
             .distinct()
-            .toList();
-
-        // P0-04 修复: 一次性批量查询所有用户
-        List<User> users = userMapper.selectBatchIds(userIds);
+            .toList());
         Map<Long, User> usersById = users.stream()
-            .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+            .collect(Collectors.toMap(User::getId, u -> u));
 
-        // P0-04 修复: 批量查询所有学校学生信息
-        List<Long> schoolStudentIds = users.stream()
-            .map(User::getSchoolStudentId)
-            .filter(Objects::nonNull)
-            .distinct()
-            .toList();
+        SchoolStudentLookup lookup = buildSchoolStudentLookup(users);
 
-        List<SchoolStudent> schoolStudents = schoolStudentIds.isEmpty()
-            ? java.util.Collections.emptyList()
-            : schoolStudentMapper.selectBatchIds(schoolStudentIds);
-
-        Map<Long, SchoolStudent> studentsBySchoolId = schoolStudents.stream()
-            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getId, s -> s));
-
-        Map<String, SchoolStudent> studentsByStudentId = schoolStudents.stream()
-            .filter(s -> s.getStudentId() != null && !s.getStudentId().isBlank())
-            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getStudentId, s -> s, (s1, s2) -> s1));
-
-        // 填充每条记录的用户信息
         for (CampaignParticipation participation : participations) {
             User user = usersById.get(participation.getUserId());
             if (user == null) {
                 continue;
             }
 
-            // 获取学校数据（优先用 school_student_id，其次用学号）
-            SchoolStudent schoolStudent = null;
-            if (user.getSchoolStudentId() != null) {
-                schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
-            }
-            if (schoolStudent == null && user.getUsername() != null && !user.getUsername().isBlank()) {
-                schoolStudent = studentsByStudentId.get(user.getUsername());
-            }
-
-            // 设置用户姓名（优先真实姓名，其次昵称，最后用户名）
+            SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
             String userName = user.getRealName() != null && !user.getRealName().isBlank()
                 ? user.getRealName()
                 : user.getNickname() != null && !user.getNickname().isBlank()
@@ -629,6 +599,73 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             participation.setClassName(schoolStudent != null ? schoolStudent.getClassName() : null);
             participation.setCollegeName(schoolStudent != null ? schoolStudent.getCollegeName() : null);
         }
+    }
+
+    private record SchoolStudentLookup(
+        Map<Long, SchoolStudent> bySchoolId,
+        Map<String, SchoolStudent> byStudentId
+    ) {}
+
+    private List<User> loadActiveUsersByIds(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return userMapper.selectBatchIds(userIds).stream()
+            .filter(Objects::nonNull)
+            .filter(u -> u.getDeleted() == null || u.getDeleted() == 0)
+            .toList();
+    }
+
+    private SchoolStudentLookup buildSchoolStudentLookup(List<User> users) {
+        if (users == null || users.isEmpty()) {
+            return new SchoolStudentLookup(Collections.emptyMap(), Collections.emptyMap());
+        }
+
+        List<Long> schoolStudentIds = users.stream()
+            .map(User::getSchoolStudentId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+
+        Map<Long, SchoolStudent> studentsBySchoolId = schoolStudentIds.isEmpty()
+            ? Collections.emptyMap()
+            : schoolStudentMapper.selectBatchIds(schoolStudentIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(SchoolStudent::getId, s -> s));
+
+        List<String> usernames = users.stream()
+            .map(User::getUsername)
+            .filter(username -> username != null && !username.isBlank())
+            .distinct()
+            .toList();
+
+        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
+        if (!usernames.isEmpty()) {
+            QueryWrapper<SchoolStudent> byStudentIdWrapper = new QueryWrapper<>();
+            byStudentIdWrapper.in("student_id", usernames);
+            schoolStudentMapper.selectList(byStudentIdWrapper).forEach(ss -> {
+                if (ss.getStudentId() != null && !ss.getStudentId().isBlank()) {
+                    studentsByStudentId.putIfAbsent(ss.getStudentId(), ss);
+                }
+            });
+        }
+
+        return new SchoolStudentLookup(studentsBySchoolId, studentsByStudentId);
+    }
+
+    private SchoolStudent resolveSchoolStudent(User user, SchoolStudentLookup lookup) {
+        if (user == null || lookup == null) {
+            return null;
+        }
+
+        SchoolStudent schoolStudent = null;
+        if (user.getSchoolStudentId() != null) {
+            schoolStudent = lookup.bySchoolId().get(user.getSchoolStudentId());
+        }
+        if (schoolStudent == null && user.getUsername() != null && !user.getUsername().isBlank()) {
+            schoolStudent = lookup.byStudentId().get(user.getUsername());
+        }
+        return schoolStudent;
     }
 
     @Override
@@ -650,26 +687,11 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             .distinct()
             .toList();
 
-        List<User> users = userMapper.selectBatchIds(userIds);
+        List<User> users = loadActiveUsersByIds(userIds);
         Map<Long, User> usersById = users.stream()
-            .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+            .collect(Collectors.toMap(User::getId, u -> u));
 
-        List<Long> schoolStudentIds = users.stream()
-            .map(User::getSchoolStudentId)
-            .filter(Objects::nonNull)
-            .distinct()
-            .toList();
-
-        List<SchoolStudent> schoolStudents = schoolStudentIds.isEmpty()
-            ? java.util.Collections.emptyList()
-            : schoolStudentMapper.selectBatchIds(schoolStudentIds);
-
-        Map<Long, SchoolStudent> studentsBySchoolId = schoolStudents.stream()
-            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getId, s -> s));
-
-        Map<String, SchoolStudent> studentsByStudentId = schoolStudents.stream()
-            .filter(s -> s.getStudentId() != null && !s.getStudentId().isBlank())
-            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getStudentId, s -> s, (s1, s2) -> s1));
+        SchoolStudentLookup lookup = buildSchoolStudentLookup(users);
 
         // 按班级分组统计
         Map<String, ClassStats> statsByClass = new HashMap<>();
@@ -679,15 +701,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 continue;
             }
 
-            // 获取学校数据（优先用 school_student_id，其次用学号）
-            SchoolStudent schoolStudent = null;
-            if (user.getSchoolStudentId() != null) {
-                schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
-            }
-            if (schoolStudent == null && user.getUsername() != null && !user.getUsername().isBlank()) {
-                schoolStudent = studentsByStudentId.get(user.getUsername());
-            }
-
+            SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
             if (schoolStudent == null || schoolStudent.getClassName() == null) {
                 continue;
             }
@@ -752,26 +766,11 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             .distinct()
             .toList();
 
-        List<User> users = userMapper.selectBatchIds(userIds);
+        List<User> users = loadActiveUsersByIds(userIds);
         Map<Long, User> usersById = users.stream()
-            .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+            .collect(Collectors.toMap(User::getId, u -> u));
 
-        List<Long> schoolStudentIds = users.stream()
-            .map(User::getSchoolStudentId)
-            .filter(Objects::nonNull)
-            .distinct()
-            .toList();
-
-        List<SchoolStudent> schoolStudents = schoolStudentIds.isEmpty()
-            ? java.util.Collections.emptyList()
-            : schoolStudentMapper.selectBatchIds(schoolStudentIds);
-
-        Map<Long, SchoolStudent> studentsBySchoolId = schoolStudents.stream()
-            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getId, s -> s));
-
-        Map<String, SchoolStudent> studentsByStudentId = schoolStudents.stream()
-            .filter(s -> s.getStudentId() != null && !s.getStudentId().isBlank())
-            .collect(java.util.stream.Collectors.toMap(SchoolStudent::getStudentId, s -> s, (s1, s2) -> s1));
+        SchoolStudentLookup lookup = buildSchoolStudentLookup(users);
 
         // 按学院分组统计
         Map<String, CollegeStats> statsByCollege = new HashMap<>();
@@ -781,15 +780,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 continue;
             }
 
-            // 获取学校数据（优先用 school_student_id，其次用学号）
-            SchoolStudent schoolStudent = null;
-            if (user.getSchoolStudentId() != null) {
-                schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
-            }
-            if (schoolStudent == null && user.getUsername() != null && !user.getUsername().isBlank()) {
-                schoolStudent = studentsByStudentId.get(user.getUsername());
-            }
-
+            SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
             if (schoolStudent == null || schoolStudent.getCollegeName() == null) {
                 continue;
             }
@@ -922,46 +913,10 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        Map<Long, User> usersById = new HashMap<>();
-        if (!participantUserIds.isEmpty()) {
-            List<User> users = userMapper.selectBatchIds(participantUserIds);
-            // selectBatchIds 不走 @TableLogic，需后置过滤
-            for (User u : users) {
-                if (u != null && (u.getDeleted() == null || u.getDeleted() == 0)) {
-                    usersById.put(u.getId(), u);
-                }
-            }
-        }
-
-        // 批量查询 SchoolStudent（按 schoolStudentId）
-        List<Long> schoolStudentIds = usersById.values().stream()
-                .map(User::getSchoolStudentId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        Map<Long, SchoolStudent> studentsBySchoolId = new HashMap<>();
-        if (!schoolStudentIds.isEmpty()) {
-            List<SchoolStudent> students = schoolStudentMapper.selectBatchIds(schoolStudentIds);
-            for (SchoolStudent s : students) {
-                if (s != null) {
-                    studentsBySchoolId.put(s.getId(), s);
-                }
-            }
-        }
-
-        // 批量查询 SchoolStudent（按 studentId/username）
-        List<String> studentIdStrings = usersById.values().stream()
-                .map(User::getUsername)
-                .filter(u -> u != null && !u.isBlank())
-                .distinct()
-                .toList();
-        Map<String, SchoolStudent> studentsByStudentId = new HashMap<>();
-        for (String sid : studentIdStrings) {
-            SchoolStudent s = schoolStudentMapper.selectByStudentId(sid);
-            if (s != null) {
-                studentsByStudentId.put(sid, s);
-            }
-        }
+        List<User> users = loadActiveUsersByIds(participantUserIds);
+        Map<Long, User> usersById = users.stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+        SchoolStudentLookup lookup = buildSchoolStudentLookup(users);
 
         List<Map<String, Object>> aroundMe = new ArrayList<>();
         int myIndex = -1;
@@ -977,13 +932,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             for (int i = from; i <= to; i++) {
                 CampaignParticipation p = allRanked.get(i);
                 User user = usersById.get(p.getUserId());
-                SchoolStudent schoolStudent = null;
-                if (user != null && user.getSchoolStudentId() != null) {
-                    schoolStudent = studentsBySchoolId.get(user.getSchoolStudentId());
-                }
-                if (schoolStudent == null && user != null && user.getUsername() != null && !user.getUsername().isBlank()) {
-                    schoolStudent = studentsByStudentId.get(user.getUsername());
-                }
+                SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
 
                 String userName = user != null && user.getRealName() != null && !user.getRealName().isBlank()
                     ? user.getRealName()
