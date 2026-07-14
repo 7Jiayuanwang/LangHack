@@ -110,7 +110,7 @@ public class UserTextController {
 
             // 学生上传默认公开
             text.setIsPublic(1);
-            text.setStatus("APPROVED"); // 上传即通过，无需审核
+            text.setStatus("PENDING"); // 默认待审核
             text.setViewCount(0);
             text.setLikeCount(0);
 
@@ -265,8 +265,8 @@ public class UserTextController {
                 text.setAudioUrl(audioUrlVal != null ? audioUrlVal.toString() : "");
             }
 
-            // 修改后直接通过，无需重新审核
-            text.setStatus("APPROVED");
+            // 修改后内容需要重新审核
+            text.setStatus("PENDING");
 
             textService.updateById(text);
             return Result.success("更新成功");
