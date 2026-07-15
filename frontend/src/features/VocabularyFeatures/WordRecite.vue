@@ -554,6 +554,9 @@ const speakWord = () => {
   if (!currentWord.value) return
   if (!autoSpeakEnabled.value) return
 
+  // 先停止上一个单词的发音，避免快速切换时声音重叠
+  speechSynthesis.cancel()
+
   // 使用浏览器 Web Speech API
   const utterance = new SpeechSynthesisUtterance(currentWord.value.word)
   utterance.lang = 'en-US'
@@ -565,6 +568,9 @@ const speakWord = () => {
 // 手动播放单词发音（点击按钮时）
 const speakWordManually = () => {
   if (!currentWord.value) return
+
+  // 先停止当前正在播放的语音，立即播放新单词
+  speechSynthesis.cancel()
 
   // 使用浏览器 Web Speech API
   const utterance = new SpeechSynthesisUtterance(currentWord.value.word)
