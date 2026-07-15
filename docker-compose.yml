@@ -240,10 +240,8 @@ services:
       GIT_SSH_KEY_DIR: "${GIT_SSH_KEY_DIR:-}"
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
-      # Flyway — 暂时禁用：仓库存在重复版本号 (V25, V27)，需先重命名后再启用
-      # 历史迁移已由 docker/mysql/init/04-apply-all-migrations.sql 落库
+      # Flyway — 禁用：重复版本号 (V15) 冲突，迁移手动管理
       SPRING_FLYWAY_ENABLED: "false"
-      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "false"
       # School Data Integration
       SCHOOL_DATA_SOURCE: ${SCHOOL_DATA_SOURCE:-api}
       SCHOOL_API_BASE_URL: ${SCHOOL_API_BASE_URL:-}
