@@ -218,10 +218,10 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                     return BigDecimal.ZERO;
                 }
                 QueryWrapper<com.english.entity.AiCallLog> callLogWrapper = new QueryWrapper<>();
-                // 同时匹配 "QA"（AiQaController 主路径）和 "HIAGENT"（HiAgentServiceImpl 回退路径），
-                // 避免漏算 aiProviderRuntimeService 不可用时的回退调用；
-                // 限定 method_name='chatQA' 排除 HiAgent 的翻译/ASR 等非问答调用。
-                callLogWrapper.in("service_name", "QA", "HIAGENT");
+                // 匹配所有 AI 问答来源：
+                // "QA" = HiAgent 回退路径（AiQaController 记录）
+                // 其余 = AiProviderRuntimeService 路径（Provider 内部记录）
+                // 统一通过 method_name='chatQA' 限定为问答调用
                 callLogWrapper.eq("method_name", "chatQA");
                 callLogWrapper.eq("triggered_by", qaUser.getUsername());
                 callLogWrapper.eq("success", true);

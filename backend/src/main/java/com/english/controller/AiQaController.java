@@ -1,5 +1,6 @@
 package com.english.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.english.dto.Result;
 import com.english.entity.AiConversation;
 import com.english.mapper.AiCallLogMapper;
@@ -84,10 +85,9 @@ public class AiQaController {
 
             if (answer == null) {
                 answer = hiAgentService.chatQA(question, selectedText, articleContext);
+                // 仅在 HiAgent 回退路径记录，Provider 路径由其内部记录，避免重复计数
+                aiCallMetricsService.recordSuccess("QA", "chatQA", startTime, username);
             }
-
-            // 记录 AI 调用成功（异步写入 ai_call_log）
-            aiCallMetricsService.recordSuccess("QA", "chatQA", startTime, username);
 
             // 持久化对话（仅当用户已登录且 auth 不为 null）
             Long conversationId = request.getConversationId();
@@ -122,8 +122,18 @@ public class AiQaController {
         String username = auth != null ? auth.getName() : "anonymous";
         LocalDateTime todayStart = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
 
-        long totalCalls = aiCallLogMapper.countByUserAndServiceTotal(username, "QA");
-        long todayCalls = aiCallLogMapper.countByUserAndServiceToday(username, "QA", todayStart);
+        QueryWrapper<com.english.entity.AiCallLog> totalWrapper = new QueryWrapper<>();
+        totalWrapper.eq("method_name", "chatQA");
+        totalWrapper.eq("triggered_by", username);
+        totalWrapper.eq("success", true);
+        long totalCalls = aiCallLogMapper.selectCount(totalWrapper);
+
+        QueryWrapper<com.english.entity.AiCallLog> todayWrapper = new QueryWrapper<>();
+        todayWrapper.eq("method_name", "chatQA");
+        todayWrapper.eq("triggered_by", username);
+        todayWrapper.eq("success", true);
+        todayWrapper.ge("created_time", todayStart);
+        long todayCalls = aiCallLogMapper.selectCount(todayWrapper);
 
         Map<String, Object> data = new HashMap<>();
         data.put("totalCalls", totalCalls);

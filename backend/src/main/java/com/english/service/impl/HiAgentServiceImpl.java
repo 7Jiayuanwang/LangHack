@@ -260,9 +260,7 @@ public class HiAgentServiceImpl implements HiAgentService {
             try {
                 String conversationId = createConversationWithQACredentials();
                 String result = chatQueryWithQACredentials(conversationId, prompt);
-                if (aiCallMetricsService != null) {
-                    aiCallMetricsService.recordSuccess("HIAGENT", "chatQA", startTime, user);
-                }
+                // 不在此处记录 metrics，由 AiQaController 统一记录，避免重复计数
                 return result;
             } catch (Exception e) {
                 lastException = e;
