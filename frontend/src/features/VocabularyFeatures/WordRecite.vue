@@ -244,7 +244,7 @@
         </div>
 
         <!-- 认识 / 不认识操作 -->
-        <div class="action-buttons" v-if="!showQuiz">
+        <div class="action-buttons" v-if="!showMeaning">
           <button
             class="btn action-btn action-btn--unknown"
             :disabled="isHandlingWordAction"
@@ -663,7 +663,16 @@ const handleKnowWord = async () => {
 const handleDontKnowWord = () => {
   if (!currentWord.value || isHandlingWordAction.value) return
   showMeaning.value = true
-  // 不自动切换下一个，等待用户点击"下一个单词"按钮
+  isHandlingWordAction.value = true
+  // 显示释义 3 秒后自动标记为不认识并进入下一个单词
+  setTimeout(async () => {
+    try {
+      await rateWord(0)
+    } finally {
+      showMeaning.value = false
+      isHandlingWordAction.value = false
+    }
+  }, 3000)
 }
 
 // 获取单词详细信息
