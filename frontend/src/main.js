@@ -218,4 +218,96 @@ window.addEventListener("unhandledrejection", (event) => {
 app.mount("#app");
 
 // 应用启动后主动刷新一次 refresh token，重置 7 天有效期（不阻塞挂载）
+
+const happySentence = [
+"太棒啦，学习进度又前进一大步✨",
+"坚持超难得，你真的很自律！",
+"今日努力已达标，继续保持状态",
+"单词/任务稳稳拿下，越来越厉害",
+"认真学习的样子超亮眼~",
+"星光不负赶路人，你超优秀",
+"慢慢来，你走的每一步都算数",
+"今日蓄力，来日一鸣惊人",
+"小小成就，大大成长",
+"持之以恒，终有所成",
+"日积月累，终将质变",
+"愿你提笔从容自信，合笔如愿以偿"
+];
+// 全局标记：防止同时弹出多个成就弹窗
+let isShowingAchieve = false;
+
+function getRandText(){
+    return happySentence[Math.floor(Math.random()*happySentence.length)];
+}
+
+function makeStar(boxDom){
+    for(let i=0;i<18;i++){
+        let s=document.createElement('div');
+        s.className='star-item';
+        s.style.setProperty('--tx',(Math.random()-0.5)*130+'px');
+        s.style.setProperty('--ty',(Math.random()-0.5)*130+'px');
+        boxDom.appendChild(s);
+        setTimeout(()=>s.remove(),1300);
+    }
+}
+
+function showAchieve(title,desc){
+    // 判断：如果已有弹窗正在展示，直接终止，不重复弹出
+    if(isShowingAchieve) return;
+    isShowingAchieve = true;
+
+    let mask=document.createElement('div');
+    mask.className='achievement-mask';
+    let box=document.createElement('div');
+    box.className='ach-box';
+    box.innerHTML=`<div class="ach-title">${title}</div><div class="ach-desc">${desc}</div><div class="ach-happy">${getRandText()}</div>`;
+    mask.appendChild(box);
+    document.body.appendChild(mask);
+    mask.style.display='flex';
+
+    // 新增：点击遮罩黑色区域手动关闭弹窗
+    mask.addEventListener('click', (e) => {
+        // 点击弹窗内部不关闭，只点击外层黑色遮罩才关闭
+        if(e.target === mask){
+            mask.remove();
+            isShowingAchieve = false;
+        }
+    });
+
+    makeStar(box);
+    // 计时自动关闭，重置弹窗状态标记
+    setTimeout(()=>{
+        mask.remove();
+        isShowingAchieve = false;
+    },2900);
+}
+
+// 所有成就触发函数挂载到window，全局任意Vue组件直接调用
+window.taskFinishAchieve = () => showAchieve("任务提交成功✅","本次学习任务圆满完成");
+window.firstStudy = () => showAchieve("初入学海","完成第一次线上学习任务");
+window.day1 = () => showAchieve("学习启程","开启属于你的学习之旅");
+window.day3 = () => showAchieve("勤学萌新","连续3天准时打卡学习");
+window.day7 = () => showAchieve("自律达人","连续一周坚持学习不断档");
+window.day15 = () => showAchieve("学习先锋","连续半月稳定学习超厉害");
+window.day30 = () => showAchieve("月度学霸","整整三十天从未间断");
+window.day60 = () => showAchieve("深耕学者","两个月持之以恒坚持学习");
+window.day90 = () => showAchieve("学识积淀","百日坚持，厚积薄发");
+window.word50 = () => showAchieve("单词入门","累计熟记50个实用单词");
+window.word100 = () => showAchieve("百词小能手","成功攻克100个单词大关");
+window.word200 = () => showAchieve("词汇新星","累计背诵单词突破200");
+window.word500 = () => showAchieve("词汇达人","掌握五百单词，词汇量起飞");
+window.word1000 = () => showAchieve("单词宗师","千词在手，外语无忧");
+window.word2000 = () => showAchieve("词汇大神","两千词汇储备，从容应对");
+window.task10 = () => showAchieve("小有收获","累计完成10项学习任务");
+window.task30 = () => showAchieve("稳步前行","累计完成30项学习任务");
+window.task50 = () => showAchieve("实干学习者","累计完成50项学习任务");
+window.task100 = () => showAchieve("任务达人","圆满完成百项学习任务");
+window.task200 = () => showAchieve("学习劳模","累计完成200项学习任务");
+window.earlyBird = () => showAchieve("早起学霸","清晨早起优先完成学习任务");
+window.nightScholar = () => showAchieve("深夜勤学","深夜依旧坚持充实自己");
+window.fullAttendance = () => showAchieve("全勤学子","当月学习打卡全勤无缺席");
+window.perfectScore = () => showAchieve("满分学霸","单次任务取得满分佳绩");
+window.noMistake = () => showAchieve("细心达人","全程作答零失误");
+window.sprintLearner = () => showAchieve("高效速学","快速高质量完成学习内容");
+
 refreshOnAppStart();
