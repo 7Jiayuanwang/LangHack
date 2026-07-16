@@ -84,13 +84,14 @@ public class StudentWordController {
     public Result<String> addToVocabulary(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
+        Long studentId = null;
+        Long wordId = null;
         try {
-            Long studentId = getCurrentStudentId(authentication);
+            studentId = getCurrentStudentId(authentication);
             Object wordIdObj = request.get("wordId");
             if (wordIdObj == null) {
                 return Result.error("wordId不能为空");
             }
-            Long wordId;
             try {
                 wordId = Long.valueOf(wordIdObj.toString());
             } catch (NumberFormatException e) {
@@ -103,7 +104,6 @@ public class StudentWordController {
 
             // 检查是否已存在
             if (vocabularyBooksService.existsByStudentAndWord(studentId, wordId)) {
-                // 单词已在生词本中，保持现有状态不变
                 learningRecordsService.recordVocabularyAdd(studentId, wordId);
                 return Result.success("单词已在生词本中");
             }
@@ -117,9 +117,13 @@ public class StudentWordController {
             return Result.success("已添加到生词本");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            if (studentId != null && wordId != null) {
+                learningRecordsService.recordVocabularyAdd(studentId, wordId);
+            }
+            return Result.success("单词已在生词本中");
         } catch (Exception e) {
             logger.error("添加生词失败", e);
-
             return Result.error("添加生词失败，请稍后重试");
         }
     }
