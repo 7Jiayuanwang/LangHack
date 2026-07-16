@@ -176,11 +176,13 @@ const handleEnroll = async () => {
     if (res.code === 200) {
       ElMessage.success('报名成功')
       loadData()
-    } else {
-      ElMessage.error(res.message || '报名失败')
     }
   } catch (error) {
-    ElMessage.error('报名失败: ' + error.message)
+    if (error.message && error.message.includes('已报名')) {
+      ElMessage.warning('您已报名该活动')
+      isEnrolled.value = true
+      enrollmentStatus.value = 'ENROLLED'
+    }
   } finally {
     enrolling.value = false
   }

@@ -137,6 +137,9 @@ public class StudentCampaignController {
             Long userId = getCurrentUserId(authentication);
             enrollmentService.enrollCampaign(id, userId);
             return Result.success("报名成功");
+        } catch (RuntimeException e) {
+            log.warn("报名被拒绝: campaignId={}, reason={}", id, e.getMessage());
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             log.error("报名失败", e);
             return Result.error("报名失败: " + e.getMessage());
