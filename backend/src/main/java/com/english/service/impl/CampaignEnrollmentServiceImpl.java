@@ -202,7 +202,8 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
         QueryWrapper<CampaignActivity> campaignWrapper = new QueryWrapper<>();
         campaignWrapper.in("id", campaignIds);
 
-        if (params.containsKey("status")) {
+        if (params.containsKey("status") && params.get("status") != null
+                && !params.get("status").toString().isEmpty()) {
             campaignWrapper.eq("status", params.get("status"));
         }
 
