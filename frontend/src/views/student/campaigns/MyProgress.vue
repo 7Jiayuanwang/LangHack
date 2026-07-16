@@ -118,8 +118,14 @@
                   ? `已获得 ${task.earnedScore != null ? task.earnedScore : task.points} 分`
                   : `完成可得 ${task.points} 分` }}
               </span>
+              <span class="cumulative">
+                累计{{ getCumulativeLabel(task) }}
+              </span>
               <span class="completion-count" v-if="task.completionCount > 0">
                 已完成 {{ task.completionCount }} 次
+              </span>
+              <span class="last-update" v-if="task.lastCompletionDate || task.lastUpdateTime">
+                最近完成: {{ formatShortDate(task.lastCompletionDate || task.lastUpdateTime) }}
               </span>
             </div>
           </div>
@@ -139,6 +145,8 @@
             v-for="item in scoreDetails"
             :key="item.taskId"
             class="score-detail-item"
+            :class="{ expanded: expandedTask === item.taskId }"
+            @click="toggleExpand(item.taskId)"
           >
             <div class="score-detail-header">
               <div class="score-task-name">
@@ -152,9 +160,27 @@
             <div class="score-detail-meta">
               <el-tag size="small" effect="plain">{{ getTaskTypeLabel(item.taskType) }}</el-tag>
               <span v-if="item.completionCount > 0" class="meta-item">完成 {{ item.completionCount }} 次</span>
-              <span v-if="item.lastUpdateTime" class="meta-item">最近更新: {{ formatDate(item.lastUpdateTime) }}</span>
+              <span v-if="item.lastUpdateTime" class="meta-item">最近更新: {{ formatDate(item.lastCompletionDate || item.lastUpdateTime) }}</span>
             </div>
-            <div v-if="item.recentRecords && item.recentRecords.length > 0" class="record-list">
+            <div v-if="expandedTask === item.taskId" class="score-detail-expand">
+              <div class="expand-row">
+                <span class="expand-label">总上限:</span>
+                <span class="expand-value">{{ item.maxCompletions ? item.maxCompletions + ' 次' : '无限制' }}</span>
+              </div>
+              <div class="expand-row">
+                <span class="expand-label">日上限:</span>
+                <span class="expand-value">{{ item.dailyLimit ? item.dailyLimit + ' 次' : '无限制' }}</span>
+              </div>
+              <div class="expand-row">
+                <span class="expand-label">今日完成:</span>
+                <span class="expand-value">{{ item.todayCompletionCount || 0 }} 次</span>
+              </div>
+              <div class="expand-row">
+                <span class="expand-label">累计完成:</span>
+                <span class="expand-value">{{ item.completionCount || 0 }} 次</span>
+              </div>
+            </div>
+            <div v-if="item.recentRecords && item.recentRecords.length > 0 && expandedTask === item.taskId" class="record-list">
               <div class="record-list-title">手动录入记录</div>
               <div
                 v-for="(rec, idx) in item.recentRecords"
@@ -236,6 +262,11 @@ const progress = ref({})
 const taskProgress = ref([])
 const ranking = ref({})
 const scoreDetails = ref([])
+const expandedTask = ref(null)
+
+const toggleExpand = (taskId) => {
+  expandedTask.value = expandedTask.value === taskId ? null : taskId
+}
 
 const loadData = async () => {
   loading.value = true
@@ -361,13 +392,47 @@ const getRankClass = (rank) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN', {
+  const str = String(dateStr)
+  if (str.length === 10 && str.includes('-')) {
+    const [y, m, d] = str.split('-')
+    return `${y}/${m}/${d}`
+  }
+  return new Date(str).toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+const formatShortDate = (dateStr) => {
+  if (!dateStr) return '-'
+  const str = String(dateStr)
+  // 纯日期格式 (yyyy-MM-dd)，不带时间
+  if (str.length === 10 && str.includes('-')) {
+    const [, m, d] = str.split('-')
+    return `${m}/${d}`
+  }
+  const d = new Date(str)
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hour = String(d.getHours()).padStart(2, '0')
+  const minute = String(d.getMinutes()).padStart(2, '0')
+  return `${month}/${day} ${hour}:${minute}`
+}
+
+const getCumulativeLabel = (task) => {
+  const val = task.currentValue || 0
+  const labels = {
+    READING_TIME: `阅读 ${val} 分钟`,
+    WORD_LEARNING: `学习 ${val} 个`,
+    TEXT_UPLOAD: `上传 ${val} 篇`,
+    AI_QA: `问答 ${val} 次`,
+    FEEDBACK: `反馈 ${val} 条`,
+    MANUAL: `完成 ${val}`
+  }
+  return labels[task.taskType] || `完成 ${val}`
 }
 
 onMounted(() => {
@@ -546,7 +611,19 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 13px;
+  color: #909399;
+}
+
+.last-update {
+  font-size: 12px;
+  color: #c0c4cc;
+}
+
+.cumulative {
+  font-size: 12px;
   color: #909399;
 }
 
@@ -707,6 +784,41 @@ onMounted(() => {
   border: 1px solid #e4e7ed;
   border-radius: 8px;
   background: #fafafa;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.score-detail-item:active {
+  background: #f0f0f0;
+}
+
+.score-detail-item.expanded {
+  border-color: #409eff;
+  background: #f5f9ff;
+}
+
+.score-detail-expand {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px dashed #dcdfe6;
+}
+
+.expand-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.expand-label {
+  color: #909399;
+}
+
+.expand-value {
+  color: #303133;
+  font-weight: 500;
 }
 
 .score-detail-header {

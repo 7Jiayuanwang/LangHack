@@ -1140,6 +1140,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             // 返回实际已获积分（可重复任务可能多次加分，不能只显示单次 points）
             taskProgress.put("earnedScore", completion != null && completion.getEarnedScore() != null
                 ? completion.getEarnedScore() : 0);
+            taskProgress.put("lastUpdateTime", completion != null ? completion.getLastUpdateTime() : null);
+            taskProgress.put("lastCompletionDate", completion != null ? completion.getLastCompletionDate() : null);
 
             progress.add(taskProgress);
         }
@@ -1210,12 +1212,16 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             item.put("targetValue", task.getTargetValue());
             item.put("points", task.getPoints());
             item.put("isRepeatable", task.getIsRepeatable());
+            item.put("maxCompletions", task.getMaxCompletions());
+            item.put("dailyLimit", task.getDailyLimit());
             item.put("currentValue", completion != null ? completion.getCurrentValue() : java.math.BigDecimal.ZERO);
             item.put("earnedScore", completion != null && completion.getEarnedScore() != null
                 ? completion.getEarnedScore() : 0);
             item.put("completionCount", completion != null ? completion.getCompletionCount() : 0);
+            item.put("todayCompletionCount", completion != null ? completion.getTodayCompletionCount() : 0);
             item.put("isCompleted", completion != null && Boolean.TRUE.equals(completion.getIsCompleted()));
             item.put("lastUpdateTime", completion != null ? completion.getLastUpdateTime() : null);
+            item.put("lastCompletionDate", completion != null ? completion.getLastCompletionDate() : null);
 
             // 最近5条手动录入记录作为积分来源说明
             List<com.english.entity.CampaignManualRecord> taskRecords =
