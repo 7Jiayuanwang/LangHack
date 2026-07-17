@@ -63,6 +63,20 @@ public interface CampaignStatsService {
     Map<String, Object> getMyRanking(Long campaignId, Long userId);
 
     /**
+     * 获取我的排名（学生端，支持按周查询）
+     * @param weekStart 周起始日（周一，格式 YYYY-MM-DD），null 表示全时段
+     */
+    Map<String, Object> getMyRanking(Long campaignId, Long userId, String weekStart);
+
+    /**
+     * 获取每周优秀个人和班级
+     * @param campaignId 活动ID
+     * @param weekStart 周起始日（周一），null 表示当周
+     * @param topN 取前几名，默认3
+     */
+    Map<String, Object> getWeeklyAwards(Long campaignId, String weekStart, Integer topN);
+
+    /**
      * 获取我周围的排名
      */
     List<CampaignParticipation> getRankingAroundMe(Long campaignId, Long userId, int range);

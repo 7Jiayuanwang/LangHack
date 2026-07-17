@@ -67,6 +67,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     @Autowired
     private CampaignActivityMapper campaignActivityMapper;
 
+    @Autowired
+    private CampaignWeeklyScoreMapper weeklyScoreMapper;
+
     @Override
     @Async("campaignCollectionExecutor")
     public void collectUserTasksByTypeAsync(Long userId, TaskType taskType) {
@@ -317,7 +320,10 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                         // 加分：增加完成次数和积分
                         completion.setCompletionCount(completion.getCompletionCount() + actualNew);
                         completion.setTodayCompletionCount(completion.getTodayCompletionCount() + actualNew);
-                        completion.setEarnedScore(completion.getEarnedScore() + actualNew * task.getPoints());
+                        int scoreIncrement = actualNew * task.getPoints();
+                        completion.setEarnedScore(completion.getEarnedScore() + scoreIncrement);
+                        // 记录本周积分
+                        recordWeeklyScore(campaignId, userId, scoreIncrement);
                         // 前移 lastCountedValue 到本次计分覆盖的进度点
                         BigDecimal countedValue = completion.getLastCountedValue()
                                 .add(targetDecimal.multiply(BigDecimal.valueOf(actualNew)));
@@ -336,6 +342,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                     completion.setIsCompleted(true);
                     // 一次性任务也前移 lastCountedValue，保持语义一致
                     completion.setLastCountedValue(value);
+                    // 记录本周积分
+                    recordWeeklyScore(campaignId, userId, task.getPoints());
                 }
                 completion.setCurrentValue(value);
             }
@@ -532,7 +540,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     }
 
     @Override
-    @Cacheable(value = "campaign_ranking", key = "'individual_' + #campaignId + '_' + #current + '_' + #size + '_' + (#params?.get('className') ?: '') + '_' + (#params?.get('collegeName') ?: '')", cacheManager = "campaignCacheManager")
+    @Cacheable(value = "campaign_ranking", key = "'individual_' + #campaignId + '_' + #current + '_' + #size + '_' + (#params?.get('className') ?: '') + '_' + (#params?.get('collegeName') ?: '') + '_' + (#params?.get('weekStart') ?: '')", cacheManager = "campaignCacheManager")
     public Page<CampaignParticipation> getRankingByIndividual(Long campaignId, int current, int size, Map<String, Object> params) {
         Page<CampaignParticipation> page = new Page<>(current, size);
 
@@ -962,6 +970,158 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         return result;
     }
 
+    /**
+     * 获取我的排名（支持按周查询）
+     * @param campaignId 活动ID
+     * @param userId 用户ID
+     * @param weekStart 周起始日（周一），null 表示全时段
+     */
+    public Map<String, Object> getMyRanking(Long campaignId, Long userId, String weekStart) {
+        if (weekStart == null || weekStart.isEmpty()) {
+            return getMyRanking(campaignId, userId);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        try {
+            java.time.LocalDate weekDate = java.time.LocalDate.parse(weekStart);
+
+            // 检查用户是否已报名
+            QueryWrapper<CampaignParticipation> myWrapper = new QueryWrapper<>();
+            myWrapper.eq("campaign_id", campaignId);
+            myWrapper.eq("user_id", userId);
+            CampaignParticipation myParticipation = participationMapper.selectOne(myWrapper);
+
+            if (myParticipation == null || myParticipation.getEnrollmentStatus() != EnrollmentStatus.ENROLLED) {
+                result.put("enrolled", false);
+                result.put("myRank", null);
+                result.put("totalParticipants", 0);
+                result.put("totalScore", 0);
+                result.put("weekStart", weekStart);
+                result.put("aroundMe", new ArrayList<>());
+                return result;
+            }
+
+            // 从 weekly_scores 表聚合当周得分
+            // 获取所有 ENROLLED 参与者
+            QueryWrapper<CampaignParticipation> enrolledWrapper = new QueryWrapper<>();
+            enrolledWrapper.eq("campaign_id", campaignId);
+            enrolledWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+            List<CampaignParticipation> allParticipations = participationMapper.selectList(enrolledWrapper);
+            List<Long> allUserIds = allParticipations.stream()
+                    .map(CampaignParticipation::getUserId).distinct().collect(Collectors.toList());
+
+            // 批量查当周积分
+            Map<Long, Integer> weeklyScoresByUser = new HashMap<>();
+            if (!allUserIds.isEmpty()) {
+                List<List<Long>> batches = partition(allUserIds, 200);
+                for (List<Long> batch : batches) {
+                    QueryWrapper<CampaignWeeklyScore> wsWrapper = new QueryWrapper<>();
+                    wsWrapper.eq("campaign_id", campaignId);
+                    wsWrapper.eq("week_start", weekDate);
+                    wsWrapper.in("user_id", batch);
+                    List<CampaignWeeklyScore> weeklyScores = weeklyScoreMapper.selectList(wsWrapper);
+                    for (CampaignWeeklyScore ws : weeklyScores) {
+                        weeklyScoresByUser.merge(ws.getUserId(), ws.getScore(), Integer::sum);
+                    }
+                }
+            }
+
+            int myWeeklyScore = weeklyScoresByUser.getOrDefault(userId, 0);
+
+            // 按周得分排序
+            List<Map.Entry<Long, Integer>> sortedEntries = weeklyScoresByUser.entrySet().stream()
+                    .sorted(Map.Entry.<Long, Integer>comparingByValue().reversed())
+                    .collect(Collectors.toList());
+
+            // 计算排名
+            long myRank = 1;
+            for (Map.Entry<Long, Integer> entry : sortedEntries) {
+                if (entry.getValue() > myWeeklyScore) {
+                    myRank++;
+                } else {
+                    break;
+                }
+            }
+            // 如果用户得分为0且不在排名列表中，排名为参与人数+1
+            if (!weeklyScoresByUser.containsKey(userId) && myWeeklyScore == 0) {
+                myRank = allParticipations.size();
+            }
+            // 确保排名不超过总参与人数
+            if (myRank > allParticipations.size()) {
+                myRank = allParticipations.size();
+            }
+
+            // 获取用户信息
+            List<User> users = loadActiveUsersByIds(
+                    sortedEntries.stream().map(Map.Entry::getKey).distinct().collect(Collectors.toList()));
+            Map<Long, User> usersById = users.stream()
+                    .collect(Collectors.toMap(User::getId, u -> u));
+            SchoolStudentLookup lookup = buildSchoolStudentLookup(users);
+
+            // 构建 aroundMe（找到用户位置，取前后各2人）
+            List<Map<String, Object>> aroundMe = new ArrayList<>();
+            int myIndex = -1;
+            for (int i = 0; i < sortedEntries.size(); i++) {
+                if (sortedEntries.get(i).getKey().equals(userId)) {
+                    myIndex = i;
+                    break;
+                }
+            }
+
+            int totalInRanking = sortedEntries.size();
+            if (myIndex < 0) {
+                myIndex = totalInRanking; // 用户不在排名中（得分0），放在末尾
+            }
+
+            int from = Math.max(0, myIndex - 2);
+            int to = Math.min(totalInRanking - 1, myIndex + 2);
+            for (int i = from; i <= to; i++) {
+                Map.Entry<Long, Integer> entry = sortedEntries.get(i);
+                Long uid = entry.getKey();
+                Integer score = entry.getValue();
+                User user = usersById.get(uid);
+                SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
+
+                Map<String, Object> item = new HashMap<>();
+                item.put("rank", i + 1);
+                item.put("userId", uid);
+                item.put("userName", user != null && user.getRealName() != null && !user.getRealName().isBlank()
+                        ? user.getRealName()
+                        : user != null ? user.getNickname() : null);
+                item.put("className", schoolStudent != null ? schoolStudent.getClassName() : null);
+                item.put("totalScore", score);
+                item.put("isMe", uid.equals(userId));
+                aroundMe.add(item);
+            }
+
+            result.put("enrolled", true);
+            result.put("myRank", myRank);
+            result.put("totalParticipants", allParticipations.size());
+            result.put("totalScore", myWeeklyScore);
+            result.put("completedTasks", myParticipation.getCompletedTasks());
+            result.put("enrollmentStatus", myParticipation.getEnrollmentStatus());
+            result.put("weekStart", weekStart);
+            result.put("aroundMe", aroundMe);
+        } catch (Exception e) {
+            log.error("获取周排名失败: campaignId={}, userId={}, weekStart={}", campaignId, userId, weekStart, e);
+            result.put("enrolled", false);
+            result.put("error", e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * 列表分区工具方法
+     */
+    private <T> List<List<T>> partition(List<T> list, int size) {
+        List<List<T>> partitions = new ArrayList<>();
+        for (int i = 0; i < list.size(); i += size) {
+            partitions.add(list.subList(i, Math.min(i + size, list.size())));
+        }
+        return partitions;
+    }
+
     @Override
     public List<CampaignParticipation> getRankingAroundMe(Long campaignId, Long userId, int range) {
         // 查询当前用户参与记录，确认已报名
@@ -1243,5 +1403,117 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         }
 
         return details;
+    }
+
+    /**
+     * 记录本周积分到 campaign_weekly_scores
+     */
+    private void recordWeeklyScore(Long campaignId, Long userId, int scoreIncrement) {
+        try {
+            java.time.LocalDate weekStart = java.time.LocalDate.now()
+                    .with(java.time.DayOfWeek.MONDAY);
+            weeklyScoreMapper.addWeeklyScore(campaignId, userId, weekStart, scoreIncrement);
+        } catch (Exception e) {
+            log.warn("记录周积分失败: campaignId={}, userId={}, increment={}", campaignId, userId, scoreIncrement, e);
+        }
+    }
+
+    /**
+     * 获取每周优秀个人和班级
+     * @param campaignId 活动ID
+     * @param weekStart 周起始日（周一），null 表示当周
+     * @param topN 取前几名，默认3
+     */
+    public Map<String, Object> getWeeklyAwards(Long campaignId, String weekStart, Integer topN) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            java.time.LocalDate weekDate;
+            if (weekStart == null || weekStart.isEmpty()) {
+                weekDate = java.time.LocalDate.now().with(java.time.DayOfWeek.MONDAY);
+            } else {
+                weekDate = java.time.LocalDate.parse(weekStart);
+            }
+
+            int limit = topN != null && topN > 0 ? topN : 3;
+
+            // 查询当周所有积分记录
+            QueryWrapper<CampaignWeeklyScore> wrapper = new QueryWrapper<>();
+            wrapper.eq("campaign_id", campaignId);
+            wrapper.eq("week_start", weekDate);
+            List<CampaignWeeklyScore> weeklyScores = weeklyScoreMapper.selectList(wrapper);
+
+            // 按用户聚合得分
+            Map<Long, Integer> userScores = new HashMap<>();
+            for (CampaignWeeklyScore ws : weeklyScores) {
+                userScores.merge(ws.getUserId(), ws.getScore(), Integer::sum);
+            }
+
+            // 排序取前N优秀个人
+            List<Map.Entry<Long, Integer>> sortedUsers = userScores.entrySet().stream()
+                    .sorted(Map.Entry.<Long, Integer>comparingByValue().reversed())
+                    .limit(limit)
+                    .collect(Collectors.toList());
+
+            // 批量查询用户信息
+            List<Long> topUserIds = sortedUsers.stream().map(Map.Entry::getKey).collect(Collectors.toList());
+            List<User> users = loadActiveUsersByIds(topUserIds);
+            Map<Long, User> usersById = users.stream().collect(Collectors.toMap(User::getId, u -> u));
+            SchoolStudentLookup lookup = buildSchoolStudentLookup(users);
+
+            List<Map<String, Object>> topIndividuals = new ArrayList<>();
+            int rank = 1;
+            for (Map.Entry<Long, Integer> entry : sortedUsers) {
+                User user = usersById.get(entry.getKey());
+                SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
+                Map<String, Object> item = new HashMap<>();
+                item.put("rank", rank++);
+                item.put("userId", entry.getKey());
+                item.put("userName", user != null && user.getRealName() != null && !user.getRealName().isBlank()
+                        ? user.getRealName() : user != null ? user.getNickname() : "未知");
+                item.put("className", schoolStudent != null ? schoolStudent.getClassName() : null);
+                item.put("collegeName", schoolStudent != null ? schoolStudent.getCollegeName() : null);
+                item.put("score", entry.getValue());
+                topIndividuals.add(item);
+            }
+
+            // 按班级聚合
+            Map<String, Integer> classScores = new HashMap<>();
+            Map<String, String> classCollege = new HashMap<>();
+            for (CampaignWeeklyScore ws : weeklyScores) {
+                User user = usersById.get(ws.getUserId());
+                SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
+                if (schoolStudent == null) continue;
+                String className = schoolStudent.getClassName();
+                if (className == null || className.isBlank()) continue;
+                classScores.merge(className, ws.getScore(), Integer::sum);
+                if (schoolStudent.getCollegeName() != null) {
+                    classCollege.putIfAbsent(className, schoolStudent.getCollegeName());
+                }
+            }
+
+            List<Map.Entry<String, Integer>> sortedClasses = classScores.entrySet().stream()
+                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                    .limit(limit)
+                    .collect(Collectors.toList());
+
+            List<Map<String, Object>> topClasses = new ArrayList<>();
+            rank = 1;
+            for (Map.Entry<String, Integer> entry : sortedClasses) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("rank", rank++);
+                item.put("className", entry.getKey());
+                item.put("collegeName", classCollege.getOrDefault(entry.getKey(), ""));
+                item.put("score", entry.getValue());
+                topClasses.add(item);
+            }
+
+            result.put("weekStart", weekDate.toString());
+            result.put("topIndividuals", topIndividuals);
+            result.put("topClasses", topClasses);
+        } catch (Exception e) {
+            log.error("获取周优秀失败: campaignId={}, weekStart={}", campaignId, weekStart, e);
+            result.put("error", e.getMessage());
+        }
+        return result;
     }
 }

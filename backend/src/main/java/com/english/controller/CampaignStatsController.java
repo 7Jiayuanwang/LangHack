@@ -47,7 +47,8 @@ public class CampaignStatsController {
             @RequestParam(defaultValue = "1") int current,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String className,
-            @RequestParam(required = false) String collegeName) {
+            @RequestParam(required = false) String collegeName,
+            @RequestParam(required = false) String weekStart) {
         try {
             Map<String, Object> params = new java.util.HashMap<>();
             if (className != null && !className.isBlank()) {
@@ -56,11 +57,30 @@ public class CampaignStatsController {
             if (collegeName != null && !collegeName.isBlank()) {
                 params.put("collegeName", collegeName);
             }
+            if (weekStart != null && !weekStart.isBlank()) {
+                params.put("weekStart", weekStart);
+            }
             Page<CampaignParticipation> ranking = statsService.getRankingByIndividual(campaignId, current, size, params);
             return Result.success(ranking);
         } catch (Exception e) {
             log.error("获取个人排名失败", e);
             return Result.error("获取个人排名失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取每周优秀个人和班级
+     */
+    @GetMapping("/weekly-awards")
+    public Result<Map<String, Object>> getWeeklyAwards(@PathVariable Long campaignId,
+                                                        @RequestParam(required = false) String weekStart,
+                                                        @RequestParam(required = false, defaultValue = "3") Integer topN) {
+        try {
+            Map<String, Object> awards = statsService.getWeeklyAwards(campaignId, weekStart, topN);
+            return Result.success(awards);
+        } catch (Exception e) {
+            log.error("获取周优秀失败", e);
+            return Result.error("获取周优秀失败: " + e.getMessage());
         }
     }
 

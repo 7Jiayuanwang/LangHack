@@ -77,6 +77,17 @@
                 :value="college"
               />
             </el-select>
+            <el-date-picker
+              v-model="individualWeek"
+              type="week"
+              format="YYYY 第 ww 周"
+              placeholder="按周筛选"
+              value-format="YYYY-MM-DD"
+              clearable
+              size="default"
+              style="width: 180px; margin-right: 10px"
+              @change="loadIndividualRanking"
+            />
             <el-button type="success" @click="handleExport('individual')">导出排名</el-button>
           </div>
           <el-table :data="individualRanking" v-loading="loading" stripe>
@@ -168,6 +179,51 @@
             </el-table-column>
           </el-table>
         </el-tab-pane>
+
+        <el-tab-pane label="每周优秀" name="weeklyAwards">
+          <div class="tab-actions">
+            <el-date-picker
+              v-model="awardsWeek"
+              type="week"
+              format="YYYY 第 ww 周"
+              placeholder="选择周"
+              value-format="YYYY-MM-DD"
+              clearable
+              size="default"
+              style="width: 180px"
+              @change="loadWeeklyAwards"
+            />
+          </div>
+          <div v-if="weeklyAwards.topIndividuals && weeklyAwards.topIndividuals.length" class="awards-container">
+            <div class="award-panel">
+              <h4>🏅 优秀个人</h4>
+              <el-table :data="weeklyAwards.topIndividuals" stripe>
+                <el-table-column label="排名" width="80">
+                  <template #default="{ row }">
+                    <span class="rank-badge" :class="getRankClass(row.rank)">{{ row.rank }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="userName" label="姓名" min-width="150" />
+                <el-table-column prop="className" label="班级" min-width="200" />
+                <el-table-column prop="score" label="本周得分" width="120" sortable />
+              </el-table>
+            </div>
+            <div class="award-panel" style="margin-top:20px">
+              <h4>🏆 优秀班级</h4>
+              <el-table :data="weeklyAwards.topClasses" stripe>
+                <el-table-column label="排名" width="80">
+                  <template #default="{ row }">
+                    <span class="rank-badge" :class="getRankClass(row.rank)">{{ row.rank }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="className" label="班级" min-width="250" />
+                <el-table-column prop="collegeName" label="学院" min-width="200" />
+                <el-table-column prop="score" label="本周得分" width="120" sortable />
+              </el-table>
+            </div>
+          </div>
+          <el-empty v-else description="暂无本周数据" />
+        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>
@@ -183,7 +239,8 @@ import {
   getClassRanking,
   getCollegeRanking,
   collectData,
-  exportRankingData
+  exportRankingData,
+  getAdminWeeklyAwards
 } from '@/api/campaign'
 import {
   normalizeDownloadResponse,
@@ -214,6 +271,25 @@ const individualFilters = reactive({
   className: null,
   collegeName: null
 })
+
+const individualWeek = ref(null)
+
+// 周优秀
+const awardsWeek = ref(null)
+const weeklyAwards = ref({})
+
+const loadWeeklyAwards = async () => {
+  try {
+    const params = {}
+    if (awardsWeek.value) params.weekStart = awardsWeek.value
+    const res = await getAdminWeeklyAwards(route.params.id, params)
+    if (res.code === 200) {
+      weeklyAwards.value = res.data || {}
+    }
+  } catch (e) {
+    console.error('加载周优秀失败', e)
+  }
+}
 
 // 是否显示学院筛选（单学院活动不显示）
 const showCollegeFilter = computed(() => {
@@ -251,6 +327,9 @@ const loadIndividualRanking = async () => {
     }
     if (individualFilters.collegeName) {
       params.collegeName = individualFilters.collegeName
+    }
+    if (individualWeek.value) {
+      params.weekStart = individualWeek.value
     }
 
     const res = await getIndividualRanking(route.params.id, params)

@@ -68,5 +68,9 @@ export const withdrawCampaign = (id) => request.delete(`/api/student/campaigns/$
 // 进度查询
 export const getMyProgress = (id) => request.get(`/api/student/campaigns/${id}/progress`)
 export const getMyTaskProgress = (id) => request.get(`/api/student/campaigns/${id}/tasks`)
-export const getMyRanking = (id) => request.get(`/api/student/campaigns/${id}/ranking`)
+export const getMyRanking = (id, params) => request.get(`/api/student/campaigns/${id}/ranking`, { params })
 export const getMyScoreDetails = (id) => request.get(`/api/student/campaigns/${id}/score-details`)
+
+// 每周优秀个人和班级
+export const getWeeklyAwards = (id, params) => request.get(`/api/student/campaigns/${id}/weekly-awards`, { params })
+export const getAdminWeeklyAwards = (campaignId, params) => request.get(`/api/admin/campaigns/${campaignId}/stats/weekly-awards`, { params })
