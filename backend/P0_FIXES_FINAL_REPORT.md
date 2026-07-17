@@ -358,5 +358,5 @@ idx_campaign_required: campaign_id, is_required, deleted  ✅
 
 **完成时间**: 2026-06-24 23:30  
 **部署验证**: 2026-06-24 23:48  
-**负责人**: Claude  
+**负责人**: Dev Team
 **审核状态**: 待人工审核

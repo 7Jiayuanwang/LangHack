@@ -207,5 +207,5 @@ similarityMatrixMapper.atomicRenameToShadowText();
 
 **修复完成时间**: 2026-06-25 17:09  
 **验证状态**: 编译通过 + 运行时部署成功  
-**负责人**: Claude  
+**负责人**: Dev Team  
 **下一步**: 等待生产环境运行验证 (24-48 小时)

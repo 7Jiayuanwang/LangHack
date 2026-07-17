@@ -213,5 +213,5 @@ langhack-redis          Up 40 seconds (healthy)   6379:6379
 
 ---
 
-**测试人员**: Claude  
+**测试人员**: Dev Team
 **批准**: 待用户确认

@@ -304,4 +304,4 @@ GET /api/admin/campaigns/2/stats/ranking/college
 ---
 
 **更新日期**：2026-06-24  
-**负责人**：Claude
+**负责人**：Dev Team

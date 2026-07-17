@@ -219,5 +219,5 @@ GET /api/admin/campaigns/2/stats/ranking/class
 ---
 
 **测试日期**：2026-06-24  
-**测试人员**：Claude  
+**测试人员**：Dev Team
 **状态**：✅ 通过
