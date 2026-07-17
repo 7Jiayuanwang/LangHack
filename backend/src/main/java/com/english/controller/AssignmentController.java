@@ -253,9 +253,7 @@ public class AssignmentController {
             if (requestBody.get("deadline") != null && !requestBody.get("deadline").toString().isEmpty()) {
                 try {
                     String deadlineStr = requestBody.get("deadline").toString();
-                    // 前端发送的格式是 "YYYY-MM-DD HH:mm:ss"，需要正确解析
-                    java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-                    java.time.LocalDateTime deadline = java.time.LocalDateTime.parse(deadlineStr, formatter);
+                    java.time.LocalDateTime deadline = parseFlexibleDateTime(deadlineStr);
                     assignment.setDeadline(deadline);
                 } catch (Exception e) {
                     logger.error("解析截止时间失败: {}", requestBody.get("deadline"), e);
@@ -596,5 +594,25 @@ public class AssignmentController {
      */
     private Long getCurrentStudentId(Authentication authentication) {
         return getCurrentUserId(authentication);
+    }
+
+    private java.time.LocalDateTime parseFlexibleDateTime(String str) {
+        // 标准格式: yyyy-MM-dd HH:mm:ss
+        try {
+            return java.time.LocalDateTime.parse(str, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        } catch (Exception ignored) {}
+        // ISO 格式: 2026-07-20T23:59:59 或带毫秒
+        try {
+            return java.time.LocalDateTime.parse(str, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        } catch (Exception ignored) {}
+        // ISO 带时区: 2026-07-20T23:59:59.000Z
+        try {
+            return java.time.ZonedDateTime.parse(str).withZoneSameInstant(java.time.ZoneId.of("Asia/Shanghai")).toLocalDateTime();
+        } catch (Exception ignored) {}
+        // ISO Instant 格式
+        try {
+            return java.time.LocalDateTime.ofInstant(java.time.Instant.parse(str), java.time.ZoneId.of("Asia/Shanghai"));
+        } catch (Exception ignored) {}
+        throw new IllegalArgumentException("无法解析日期时间: " + str);
     }
 }
