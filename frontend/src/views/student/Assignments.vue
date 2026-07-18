@@ -4,7 +4,23 @@
       <template #header>
         <div class="card-header">
           <span>我的任务</span>
-          <div style="display: flex; gap: 12px;">
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="搜索任务标题（全部已发布任务）"
+              clearable
+              @clear="handleSearchClear"
+              @keyup.enter="handleSearch"
+              style="width: 280px;"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <el-button type="primary" @click="handleSearch" :loading="searchLoading">
+              <el-icon><Search /></el-icon>
+              搜索
+            </el-button>
             <el-select v-model="filterStatus" placeholder="筛选状态" clearable @change="loadAssignments">
               <el-option label="全部" value="" />
               <el-option label="未开始" value="not-started" />
@@ -60,17 +76,34 @@
         </div>
       </div>
 
+      <!-- 搜索结果提示 -->
+      <el-alert
+        v-if="isSearchMode"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px;"
+      >
+        <template #title>
+          搜索 "{{ searchKeyword }}" 的结果，共 {{ assignments.length }} 个任务
+          <el-button type="primary" link size="small" @click="handleSearchClear">返回我的任务</el-button>
+        </template>
+      </el-alert>
+
       <!-- 移动端卡片列表 -->
       <div class="mobile-assignment-list" v-if="isMobile">
-        <div 
-          v-for="assignment in assignments" 
-          :key="assignment.id" 
+        <div
+          v-for="assignment in assignments"
+          :key="assignment.id"
           class="mobile-assignment-card"
-          :class="{ 'is-completed': assignment.status === 'completed', 'is-expired': assignment.status === 'expired' }"
+          :class="{ 'is-completed': assignment.status === 'completed', 'is-expired': assignment.status === 'expired', 'is-searched': assignment.isAssigned === false }"
           @click="handleTitleClick(assignment)"
         >
           <div class="card-top">
-            <h3 class="card-title">{{ assignment.title }}</h3>
+            <h3 class="card-title">
+              {{ assignment.title }}
+              <el-tag v-if="assignment.isAssigned === false" type="info" size="small" class="search-result-tag">搜索结果</el-tag>
+            </h3>
             <el-tag :type="getStatusType(assignment.status)" size="small">
               {{ getStatusText(assignment.status) }}
             </el-tag>
@@ -146,6 +179,7 @@
             :style="{ cursor: 'pointer', color: '#409EFF' }"
           >
             {{ scope.row.title }}
+            <el-tag v-if="scope.row.isAssigned === false" type="info" size="small" class="search-result-tag">搜索结果</el-tag>
           </span>
         </template>
       </el-table-column>
@@ -401,7 +435,7 @@
 import { ref, reactive, onMounted, watch, onActivated, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import {Check, Clock, Histogram, Loading, Microphone, Warning, OfficeBuilding, Notebook} from '@element-plus/icons-vue'
+import {Check, Clock, Histogram, Loading, Microphone, Search, Warning, OfficeBuilding, Notebook} from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 // 响应式窗口宽度
@@ -448,6 +482,9 @@ const wordCardDialogVisible = ref(false)
 const currentWord = ref({})
 const activeTab = ref('')
 const showStats = ref(false)
+const searchKeyword = ref('')
+const isSearchMode = ref(false)
+const searchLoading = ref(false)
 
 // 统计数据
 const stats = reactive({
@@ -457,15 +494,44 @@ const stats = reactive({
   expiredCount: 0
 })
 
+// 搜索处理方法
+const handleSearch = async () => {
+  const keyword = searchKeyword.value?.trim()
+  if (!keyword) {
+    ElMessage.warning('请输入搜索关键词')
+    return
+  }
+  isSearchMode.value = true
+  searchLoading.value = true
+  try {
+    await loadAssignments()
+  } finally {
+    searchLoading.value = false
+  }
+}
+
+const handleSearchClear = () => {
+  searchKeyword.value = ''
+  isSearchMode.value = false
+  loadAssignments()
+}
+
 // 方法
 const loadAssignments = async () => {
   try {
+    const params = {
+      status: filterStatus.value || undefined
+    }
+
+    // 如果处于搜索模式，添加 keyword 参数
+    if (isSearchMode.value && searchKeyword.value.trim()) {
+      params.keyword = searchKeyword.value.trim()
+    }
+
     const response = await request({
       url: '/api/student/assignments',
       method: 'get',
-      params: {
-        status: filterStatus.value || undefined
-      }
+      params
     })
 
     if (response && response.code === 200) {
@@ -1532,6 +1598,11 @@ onUnmounted(() => {
   background: linear-gradient(to right, #fef0f0, #fff);
 }
 
+.mobile-assignment-card.is-searched {
+  border-left: 4px solid #909399;
+  background: linear-gradient(to right, #f4f4f5, #fff);
+}
+
 .card-top {
   display: flex;
   justify-content: space-between;
@@ -1547,6 +1618,11 @@ onUnmounted(() => {
   color: #303133;
   flex: 1;
   line-height: 1.4;
+}
+
+.search-result-tag {
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
 .card-info {
