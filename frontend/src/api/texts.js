@@ -28,3 +28,21 @@ export function getFeaturedTexts(count = 10) {
     params: { count }
   })
 }
+
+/**
+ * 搜索所有已审核公开文章（不限精选状态）
+ * @param {string} keyword  搜索关键词
+ * @param {number} page     页码
+ * @param {number} size     每页数量
+ * @param {string} difficulty 难度过滤（可选）
+ */
+export function searchArticles(keyword, page = 1, size = 20, difficulty = '') {
+  const params = { page, size }
+  if (keyword) params.keyword = keyword
+  if (difficulty) params.difficulty = difficulty
+  return request({
+    url: '/api/public/texts/search',
+    method: 'get',
+    params
+  })
+}

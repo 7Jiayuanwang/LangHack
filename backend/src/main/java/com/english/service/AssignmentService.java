@@ -112,4 +112,9 @@ public interface AssignmentService extends IService<Assignment> {
      * 根据单元ID获取任务列表
      */
     List<Map<String, Object>> getAssignmentsByUnitId(Long unitId, Long studentId);
+
+    /**
+     * 搜索所有已发布任务（不限班级，按标题关键词搜索）
+     */
+    Map<String, Object> searchAllPublishedAssignments(String keyword, Long studentId, String status);
 }

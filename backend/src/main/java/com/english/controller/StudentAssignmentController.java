@@ -45,10 +45,17 @@ public class StudentAssignmentController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long courseId,
             @RequestParam(required = false) Long unitId,
+            @RequestParam(required = false) String keyword,
             Authentication authentication) {
 
         try {
             Long studentId = getCurrentStudentId(authentication);
+
+            // 如果有关键词搜索，搜索所有已发布任务（不限班级）
+            if (keyword != null && !keyword.trim().isEmpty()) {
+                Map<String, Object> result = assignmentsService.searchAllPublishedAssignments(keyword.trim(), studentId, status);
+                return Result.success(result);
+            }
 
             // 如果指定了单元ID，获取该单元的任务
             if (unitId != null) {

@@ -26,14 +26,17 @@
       <div class="search-bar">
         <el-input
           v-model="searchQuery"
-          placeholder="搜索文章..."
+          placeholder="搜索文章标题、内容、标签..."
           clearable
-          @keyup.enter="currentPage = 1"
         >
           <template #suffix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
+        <div v-if="isSearchMode" class="search-result-hint">
+          <span v-if="isSearching">搜索中...</span>
+          <span v-else>找到 {{ searchTotal }} 篇文章（含全部文章）</span>
+        </div>
       </div>
 
       <!-- Articles Feed -->
@@ -181,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -191,7 +194,7 @@ import {
 } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import { getFeaturedVideos } from '@/api/video'
-import { getRecommendedTexts } from '@/api/texts'
+import { getRecommendedTexts, searchArticles } from '@/api/texts'
 import { recordRecommendationEvent } from '@/api/student'
 
 const router = useRouter()
@@ -207,6 +210,11 @@ const currentPage = ref(1)
 const pageSize = 5
 const searchQuery = ref('')
 const searchVisible = ref(false)
+// 服务端搜索结果（搜索全部已审核文章，不限精选）
+const serverSearchResults = ref([])
+const isSearching = ref(false)
+const searchTotal = ref(0)
+let searchTimer = null
 // 本会话中已展示过的推荐文章 ID — 传给后端用于"换一批"时排除
 const shownRecommendedIds = ref([])
 
@@ -227,7 +235,58 @@ const jumpToPage = () => {
   goToPage(Math.max(1, Math.min(n, totalPages.value)))
   jumpInput.value = ''
 }
+
+// 是否处于搜索模式
+const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
+
+// 服务端搜索（防抖）
+const doServerSearch = async (keyword) => {
+  if (!keyword.trim()) {
+    serverSearchResults.value = []
+    searchTotal.value = 0
+    isSearching.value = false
+    return
+  }
+  isSearching.value = true
+  try {
+    const res = await searchArticles(keyword.trim(), 1, 100)
+    if (res?.code === 200 && res.data) {
+      serverSearchResults.value = (res.data.articles || []).map(text => ({
+        ...text,
+        _type: 'article',
+        coverGradient: getRandomGradient(),
+        readingTime: Math.max(1, Math.ceil((text.content?.length || 0) / 800))
+      }))
+      searchTotal.value = res.data.total || 0
+    }
+  } catch (e) {
+    console.error('搜索文章失败:', e)
+    serverSearchResults.value = []
+  } finally {
+    isSearching.value = false
+  }
+}
+
+watch(searchQuery, (val) => {
+  clearTimeout(searchTimer)
+  const kw = val.trim()
+  if (!kw) {
+    serverSearchResults.value = []
+    searchTotal.value = 0
+    currentPage.value = 1
+    return
+  }
+  searchTimer = setTimeout(() => {
+    currentPage.value = 1
+    doServerSearch(kw)
+  }, 400)
+})
+
 const filteredItems = computed(() => {
+  // 搜索模式：返回服务端搜索结果（全部已审核文章，不限精选）
+  if (isSearchMode.value) {
+    return serverSearchResults.value
+  }
   if (selectedCategory.value === 'recommendation') {
     return recommendedArticles.value
   }
@@ -238,14 +297,6 @@ const filteredItems = computed(() => {
     } else {
       result = result.filter(item => item.category === selectedCategory.value)
     }
-  }
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase()
-    result = result.filter(item =>
-      item.title?.toLowerCase().includes(q) ||
-      item.content?.toLowerCase().includes(q) ||
-      item.description?.toLowerCase().includes(q)
-    )
   }
   return result
 })
@@ -686,6 +737,13 @@ onMounted(() => {
 .search-bar :deep(.el-input__wrapper) {
   border-radius: 999px !important;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+}
+
+.search-result-hint {
+  text-align: center;
+  font-size: 12px;
+  color: #909399;
+  padding: 6px 0 2px;
 }
 
 .filter-scroll {

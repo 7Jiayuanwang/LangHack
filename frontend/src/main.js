@@ -311,3 +311,73 @@ window.noMistake = () => showAchieve("细心达人","全程作答零失误");
 window.sprintLearner = () => showAchieve("高效速学","快速高质量完成学习内容");
 
 refreshOnAppStart();
+
+// ==================== 全局成就检查器 ====================
+// 在任务完成、单词学习等关键操作后调用，检查并弹出成就弹窗
+window.checkAchievements = async function() {
+  // 防止短时间内重复检查
+  if (window._achievementChecking) return;
+  window._achievementChecking = true;
+
+  try {
+    const apiBase = window.location.origin;
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+
+    if (!token) {
+      window._achievementChecking = false;
+      return;
+    }
+
+    const response = await fetch('/api/student/stats/achievements', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      window._achievementChecking = false;
+      return;
+    }
+
+    const result = await response.json();
+    const data = result?.data;
+    if (!data || !data.achievementList) {
+      window._achievementChecking = false;
+      return;
+    }
+
+    const achievementList = data.achievementList || [];
+    const unlockedList = achievementList.filter(a => a.unlocked);
+
+    // 从 localStorage 获取已弹窗过的成就
+    let shownAchievements = [];
+    try {
+      shownAchievements = JSON.parse(localStorage.getItem('shownAchievements') || '[]');
+    } catch (e) {
+      shownAchievements = [];
+    }
+
+    // 找出还没弹窗过的成就
+    const newAchievements = unlockedList.filter(a => !shownAchievements.includes(a.key));
+
+    if (newAchievements.length > 0) {
+      // 只弹出第一个新成就
+      const firstNew = newAchievements[0];
+      if (window[firstNew.key]) {
+        window[firstNew.key]();
+      }
+
+      // 标记所有新成就为已弹窗
+      const updatedShown = [...new Set([...shownAchievements, ...newAchievements.map(a => a.key)])];
+      try {
+        localStorage.setItem('shownAchievements', JSON.stringify(updatedShown));
+      } catch (e) {
+        // ignore
+      }
+    }
+  } catch (e) {
+    // 静默失败，不影响正常使用
+  } finally {
+    setTimeout(() => {
+      window._achievementChecking = false;
+    }, 3000); // 3秒冷却，防止频繁触发
+  }
+};

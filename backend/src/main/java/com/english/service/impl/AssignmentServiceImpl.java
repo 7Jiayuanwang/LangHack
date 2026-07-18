@@ -1285,4 +1285,98 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
         return result;
     }
+
+    @Override
+    public Map<String, Object> searchAllPublishedAssignments(String keyword, Long studentId, String status) {
+        // 搜索所有已发布的任务（不限班级），按标题关键词模糊匹配
+        QueryWrapper<Assignment> wrapper = new QueryWrapper<>();
+        wrapper.eq("status", "PUBLISHED");
+        wrapper.eq("deleted", 0);
+
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            wrapper.like("title", keyword.trim());
+        }
+
+        wrapper.orderByDesc("created_time");
+
+        List<Assignment> assignments = list(wrapper);
+
+        // 获取学生加入的班级ID列表（用于标记是否为已推荐任务）
+        List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
+
+        // 为每个任务添加详细信息
+        List<Map<String, Object>> enrichedAssignments = new ArrayList<>();
+        for (Assignment assignment : assignments) {
+            Map<String, Object> assignmentMap = new HashMap<>();
+
+            // 基本信息
+            assignmentMap.put("id", assignment.getId());
+            assignmentMap.put("title", assignment.getTitle());
+            assignmentMap.put("description", assignment.getDescription());
+            assignmentMap.put("deadline", assignment.getDeadline());
+            assignmentMap.put("createdTime", assignment.getCreatedTime());
+            assignmentMap.put("classId", assignment.getClassId());
+            assignmentMap.put("unitId", assignment.getUnitId());
+
+            // 获取班级名称
+            Class clazz = classMapper.selectById(assignment.getClassId());
+            assignmentMap.put("className", clazz != null ? clazz.getName() : "未知班级");
+
+            // 获取单元名称
+            Unit unit = unitMapper.selectById(assignment.getUnitId());
+            assignmentMap.put("unitName", unit != null ? unit.getName() : "未知单元");
+
+            // 判断是否为已推荐任务（学生所在班级的任务）
+            boolean isAssigned = classIds != null && classIds.contains(assignment.getClassId());
+            assignmentMap.put("isAssigned", isAssigned);
+
+            // 计算学习进度（仅对已推荐的任务计算进度，其他任务进度为0）
+            if (isAssigned) {
+                double progress = calculateAssignmentProgress(assignment.getId(), studentId);
+                assignmentMap.put("progress", Math.round(progress));
+
+                // 计算任务状态
+                String assignmentStatus = calculateAssignmentStatus(progress, assignment.getDeadline(),
+                        assignment, studentId);
+                if (status != null && !status.isEmpty() && !status.equals(assignmentStatus)) {
+                    continue; // 如果指定了状态筛选，跳过不匹配的任务
+                }
+                assignmentMap.put("status", assignmentStatus);
+
+                // 统计信息
+                List<Word> assignmentWords = getAssignmentWords(assignment);
+                List<com.english.entity.Text> assignmentTexts = getAssignmentTexts(assignment);
+
+                assignmentMap.put("totalWords", assignmentWords.size());
+                assignmentMap.put("learnedWords", calculateWordsLearnedInAssignment(assignment.getId(), studentId));
+                assignmentMap.put("totalTexts", assignmentTexts.size());
+                assignmentMap.put("readTexts", calculateTextsReadInAssignment(assignment.getId(), studentId));
+                assignmentMap.put("studyTime", calculateStudyTimeInAssignment(assignment.getId(), studentId));
+                assignmentMap.put("assignmentType", getAssignmentType(assignment));
+            } else {
+                // 未推荐的任务：进度为0，状态为 not-started
+                assignmentMap.put("progress", 0);
+                assignmentMap.put("status", "not-started");
+                assignmentMap.put("totalWords", 0);
+                assignmentMap.put("learnedWords", 0);
+                assignmentMap.put("totalTexts", 0);
+                assignmentMap.put("readTexts", 0);
+                assignmentMap.put("studyTime", 0);
+                assignmentMap.put("assignmentType", getAssignmentType(assignment));
+
+                // 如果指定了状态筛选，未推荐任务只显示 not-started
+                if (status != null && !status.isEmpty() && !status.equals("not-started")) {
+                    continue;
+                }
+            }
+
+            enrichedAssignments.add(assignmentMap);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("assignments", enrichedAssignments);
+        result.put("total", enrichedAssignments.size());
+
+        return result;
+    }
 }

@@ -59,8 +59,8 @@ spring:
       # Local dev: set DB_URL, DB_USERNAME, DB_PASSWORD in your environment or .env file
       # Production: MUST be set via environment variables, no defaults
       jdbc-url: ${DB_URL:jdbc:mysql://localhost:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true&allowMultiQueries=true}
-      username: ${DB_USERNAME}
-      password: ${DB_PASSWORD}
+      username: ${DB_USERNAME:root}
+      password: ${DB_PASSWORD:}
       driver-class-name: com.mysql.cj.jdbc.Driver
       # HikariCP pool settings (must be at same level for @ConfigurationProperties binding)
       pool-name: master-pool
@@ -122,8 +122,9 @@ spring:
       expiration: 604800000 # 7天 (7 * 24 * 60 * 60 * 1000)
 
   flyway:
-    enabled: false  # Flyway disabled (manual database migration management)
-    baseline-on-migrate: false
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
     locations: classpath:db/migration
     group: true
     out-of-order: true # Allow out-of-order migration file execution for Java migrations
