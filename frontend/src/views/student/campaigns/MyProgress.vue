@@ -199,7 +199,20 @@
 
       <!-- 排名信息 -->
       <el-card class="ranking-card" v-if="campaign.showRanking">
-        <h3>我的排名</h3>
+        <div class="ranking-header">
+          <h3>我的排名</h3>
+          <el-date-picker
+            v-model="selectedWeek"
+            type="week"
+            format="YYYY 第 ww 周"
+            placeholder="选择周"
+            value-format="YYYY-MM-DD"
+            :clearable="true"
+            size="small"
+            style="width: 180px"
+            @change="onWeekChange"
+          />
+        </div>
         <div class="ranking-content">
           <div class="my-rank-box">
             <div class="rank-badge" :class="getRankClass(ranking.myRank)">
@@ -264,6 +277,32 @@ const ranking = ref({})
 const scoreDetails = ref([])
 const expandedTask = ref(null)
 
+// 周选择器：默认当前周周一
+const getCurrentMonday = () => {
+  const d = new Date()
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  const monday = new Date(d.setDate(diff))
+  return monday.toISOString().slice(0, 10)
+}
+const selectedWeek = ref(getCurrentMonday())
+
+const onWeekChange = (val) => {
+  loadRanking(val)
+}
+
+const loadRanking = async (weekStart) => {
+  try {
+    const params = weekStart ? { weekStart } : {}
+    const rankingRes = await getMyRanking(route.params.id, params)
+    if (rankingRes.code === 200) {
+      ranking.value = rankingRes.data || {}
+    }
+  } catch (error) {
+    console.error('加载排名失败', error)
+  }
+}
+
 const toggleExpand = (taskId) => {
   expandedTask.value = expandedTask.value === taskId ? null : taskId
 }
@@ -271,11 +310,10 @@ const toggleExpand = (taskId) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const [campaignRes, progressRes, tasksRes, rankingRes, scoreRes] = await Promise.all([
+    const [campaignRes, progressRes, tasksRes, scoreRes] = await Promise.all([
       getStudentCampaignDetail(route.params.id),
       getMyProgress(route.params.id),
       getMyTaskProgress(route.params.id),
-      getMyRanking(route.params.id),
       getMyScoreDetails(route.params.id)
     ])
 
@@ -288,9 +326,6 @@ const loadData = async () => {
     if (tasksRes.code === 200) {
       taskProgress.value = tasksRes.data || []
     }
-    if (rankingRes.code === 200) {
-      ranking.value = rankingRes.data || {}
-    }
     if (scoreRes.code === 200) {
       scoreDetails.value = scoreRes.data || []
     }
@@ -299,6 +334,8 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
+  // 加载初始排名（默认当周）
+  loadRanking(selectedWeek.value)
 }
 
 const handleBack = () => {
@@ -463,9 +500,21 @@ onMounted(() => {
 }
 
 .overview-card h3,
-.tasks-card h3,
-.ranking-card h3 {
+.tasks-card h3 {
   margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #303133;
+}
+
+.ranking-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.ranking-header h3 {
+  margin: 0;
   font-size: 18px;
   color: #303133;
 }

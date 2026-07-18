@@ -270,3 +270,4 @@ docker/mysql/init/seed/
 scripts/video-download/token_state.json
 scripts/video-download/config.py
 scripts/video-download/test_single.py
+.git-rewrite/

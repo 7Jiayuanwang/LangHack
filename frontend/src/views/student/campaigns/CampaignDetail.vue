@@ -85,6 +85,34 @@
         </div>
       </el-card>
 
+      <!-- 本周之星 -->
+      <el-card class="weekly-awards-card" v-if="weeklyAwards.topIndividuals && weeklyAwards.topIndividuals.length">
+        <h3>🏆 本周之星</h3>
+        <div class="weekly-awards-content">
+          <div class="award-section" v-if="weeklyAwards.topIndividuals.length">
+            <h4>优秀个人</h4>
+            <div class="award-list">
+              <div v-for="item in weeklyAwards.topIndividuals" :key="'ind-'+item.userId" class="award-item">
+                <span class="award-rank" :class="'rank-'+item.rank">{{ item.rank }}</span>
+                <span class="award-name">{{ item.userName }}</span>
+                <span class="award-class" v-if="item.className">{{ item.className }}</span>
+                <span class="award-score">{{ item.score }} 分</span>
+              </div>
+            </div>
+          </div>
+          <div class="award-section" v-if="weeklyAwards.topClasses.length">
+            <h4>优秀班级</h4>
+            <div class="award-list">
+              <div v-for="item in weeklyAwards.topClasses" :key="'cls-'+item.className" class="award-item">
+                <span class="award-rank" :class="'rank-'+item.rank">{{ item.rank }}</span>
+                <span class="award-name">{{ item.className }}</span>
+                <span class="award-score">{{ item.score }} 分</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
       <!-- 报名状态和操作 -->
       <el-card class="action-card" v-if="!isEnrolled">
         <div class="enroll-section">
@@ -134,7 +162,7 @@ import { ElMessage } from 'element-plus'
 import {
   Calendar, User, Trophy, Connection, Document, Checked, InfoFilled
 } from '@element-plus/icons-vue'
-import { getStudentCampaignDetail, enrollCampaign } from '@/api/campaign'
+import { getStudentCampaignDetail, enrollCampaign, getWeeklyAwards } from '@/api/campaign'
 
 const router = useRouter()
 const route = useRoute()
@@ -147,6 +175,18 @@ const isEnrolled = ref(false)
 const enrollmentStatus = ref('')
 const canEnroll = ref(true)
 const enrollmentMessage = ref('')
+const weeklyAwards = ref({})
+
+const loadWeeklyAwards = async () => {
+  try {
+    const res = await getWeeklyAwards(route.params.id)
+    if (res.code === 200) {
+      weeklyAwards.value = res.data || {}
+    }
+  } catch (e) {
+    // 静默失败，周优秀非核心功能
+  }
+}
 
 const loadData = async () => {
   loading.value = true
@@ -167,6 +207,7 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
+  loadWeeklyAwards()
 }
 
 const handleEnroll = async () => {
@@ -404,9 +445,87 @@ onMounted(() => {
   padding: 20px;
 }
 
+.weekly-awards-card {
+  margin-top: 20px;
+}
+
+.weekly-awards-card h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: #303133;
+}
+
+.weekly-awards-content {
+  display: flex;
+  gap: 24px;
+}
+
+.award-section {
+  flex: 1;
+}
+
+.award-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 15px;
+  color: #606266;
+  border-bottom: 1px solid #ebeef5;
+  padding-bottom: 6px;
+}
+
+.award-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.award-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.award-rank {
+  font-weight: bold;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #fff;
+  background: #909399;
+}
+
+.award-rank.rank-1 { background: #f56c6c; }
+.award-rank.rank-2 { background: #e6a23c; }
+.award-rank.rank-3 { background: #67c23a; }
+
+.award-name {
+  font-weight: 500;
+  color: #303133;
+}
+
+.award-class {
+  font-size: 13px;
+  color: #909399;
+}
+
+.award-score {
+  margin-left: auto;
+  font-weight: 600;
+  color: #409eff;
+}
+
 @media (max-width: 768px) {
   .info-grid {
     grid-template-columns: 1fr;
+  }
+  .weekly-awards-content {
+    flex-direction: column;
   }
 }
 </style>

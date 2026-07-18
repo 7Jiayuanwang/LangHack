@@ -192,17 +192,36 @@ public class StudentCampaignController {
     }
 
     /**
-     * 获取我的排名
+     * 获取我的排名（支持按周查询）
+     * @param weekStart 周起始日（周一，格式 YYYY-MM-DD），可选
      */
     @GetMapping("/{id}/ranking")
-    public Result<Map<String, Object>> getMyRanking(@PathVariable Long id, Authentication authentication) {
+    public Result<Map<String, Object>> getMyRanking(@PathVariable Long id,
+                                                     @RequestParam(required = false) String weekStart,
+                                                     Authentication authentication) {
         try {
             Long userId = getCurrentUserId(authentication);
-            Map<String, Object> ranking = statsService.getMyRanking(id, userId);
+            Map<String, Object> ranking = statsService.getMyRanking(id, userId, weekStart);
             return Result.success(ranking);
         } catch (Exception e) {
             log.error("获取我的排名失败", e);
             return Result.error("获取我的排名失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取每周优秀个人和班级
+     */
+    @GetMapping("/{id}/weekly-awards")
+    public Result<Map<String, Object>> getWeeklyAwards(@PathVariable Long id,
+                                                        @RequestParam(required = false) String weekStart,
+                                                        @RequestParam(required = false, defaultValue = "3") Integer topN) {
+        try {
+            Map<String, Object> awards = statsService.getWeeklyAwards(id, weekStart, topN);
+            return Result.success(awards);
+        } catch (Exception e) {
+            log.error("获取周优秀失败", e);
+            return Result.error("获取周优秀失败: " + e.getMessage());
         }
     }
 

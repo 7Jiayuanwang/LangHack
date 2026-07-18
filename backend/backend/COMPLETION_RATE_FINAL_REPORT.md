@@ -416,4 +416,4 @@ participation.setCompletionStatus(newStatus);
 
 **任务状态**：✅ **已完成**  
 **完成时间**：2026-06-24 17:35  
-**负责人**：Claude
+**负责人**：Dev Team
