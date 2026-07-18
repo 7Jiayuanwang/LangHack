@@ -215,6 +215,9 @@ services:
     environment:
       TZ: Asia/Shanghai
       SPRING_PROFILES_ACTIVE: sso
+      # Flyway 已在 Docker init 脚本 (04-apply-all-migrations.sql) 中执行完毕，
+      # 禁用 Spring Boot 内置 Flyway 避免 V15 版本冲突（Java migration + SQL migration）
+      SPRING_FLYWAY_ENABLED: "false"
       # 应用端口（容器内部）
       SERVER_PORT: ${SERVER_PORT:-8080}
       # 主库

@@ -209,6 +209,54 @@ public class PublicTextController {
     }
 
     /**
+     * 搜索所有已审核公开文章（不限精选状态）
+     * 支持按标题、内容、标签关键词搜索，带分页
+     */
+    @GetMapping("/search")
+    public Result<Map<String, Object>> searchArticles(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String difficulty) {
+        try {
+            if (page < 1) page = 1;
+            if (size < 1) size = 10;
+            if (size > 100) size = 100;
+
+            List<Text> texts = textService.getPublicTexts(page, size, difficulty, keyword);
+            authorEnricher.enrichTexts(texts);
+
+            // 获取总数（不分页）
+            com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Text> countWrapper =
+                    new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
+            countWrapper.eq("deleted", 0);
+            countWrapper.eq("is_public", 1);
+            countWrapper.eq("status", "APPROVED");
+            if (keyword != null && !keyword.trim().isEmpty()) {
+                countWrapper.and(w -> w
+                    .like("title", keyword)
+                    .or().like("content", keyword)
+                    .or().like("tags", keyword)
+                );
+            }
+            if (difficulty != null && !difficulty.trim().isEmpty()) {
+                countWrapper.eq("difficulty", difficulty);
+            }
+            long total = textService.count(countWrapper);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("articles", texts);
+            result.put("total", total);
+            result.put("page", page);
+            result.put("size", size);
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("搜索文章失败", e);
+            return Result.error("搜索失败，请稍后重试");
+        }
+    }
+
+    /**
      * 个性化推荐文章
      */
     @GetMapping("/recommended")
