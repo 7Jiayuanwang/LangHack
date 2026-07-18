@@ -993,10 +993,11 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
         Map<String, Object> achievements = new HashMap<>();
 
-        // 连续学习天数（简化实现）
-        achievements.put("consecutiveDays", calculateConsecutiveDays(studentId));
+        // 连续学习天数
+        int consecutiveDays = calculateConsecutiveDays(studentId);
+        achievements.put("consecutiveDays", consecutiveDays);
 
-        // 总学习单词数
+        // 总学习记录数（粗略估算为单词数，后续可精确查询生词本）
         QueryWrapper<LearningRecord> wrapper = new QueryWrapper<>();
         wrapper.eq("student_id", studentId);
         long totalRecords = learningRecordMapper.selectCount(wrapper);
@@ -1008,15 +1009,94 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
                 .select("COALESCE(SUM(duration_seconds), 0) as total_time");
 
         List<Map<String, Object>> timeResults = learningRecordMapper.selectMaps(timeWrapper);
+        long totalStudySeconds = 0;
         if (timeResults != null && !timeResults.isEmpty()) {
             Map<String, Object> timeResult = timeResults.get(0);
             Number totalTime = (Number) timeResult.get("total_time");
-            achievements.put("totalStudyHours", totalTime != null ? (int) Math.min(totalTime.longValue() / 3600, Integer.MAX_VALUE) : 0);
-        } else {
-            achievements.put("totalStudyHours", 0);
+            totalStudySeconds = totalTime != null ? totalTime.longValue() : 0;
+        }
+        achievements.put("totalStudyHours", (int) Math.min(totalStudySeconds / 3600, Integer.MAX_VALUE));
+
+        // 已完成任务数（统计该学生在 learning_records 中涉及的不同 assignment_id 数量）
+        try {
+            QueryWrapper<LearningRecord> arWrapper = new QueryWrapper<>();
+            arWrapper.eq("student_id", studentId);
+            arWrapper.isNotNull("assignment_id");
+            arWrapper.gt("assignment_id", 0);
+            arWrapper.select("DISTINCT assignment_id");
+            long completedAssignments = learningRecordMapper.selectCount(arWrapper);
+            achievements.put("completedAssignments", (int) completedAssignments);
+        } catch (Exception e) {
+            achievements.put("completedAssignments", 0);
         }
 
+        // 生词本中已掌握的单词数
+        try {
+            QueryWrapper<com.english.entity.VocabularyBook> vbWrapper = new QueryWrapper<>();
+            vbWrapper.eq("student_id", studentId);
+            vbWrapper.ge("mastery_level", 4);
+            long masteredWords = vocabularyBookMapper.selectCount(vbWrapper);
+            achievements.put("masteredWords", (int) masteredWords);
+        } catch (Exception e) {
+            achievements.put("masteredWords", 0);
+        }
+
+        // 生词本中的总单词数
+        try {
+            QueryWrapper<com.english.entity.VocabularyBook> vbTotalWrapper = new QueryWrapper<>();
+            vbTotalWrapper.eq("student_id", studentId);
+            long totalVocabWords = vocabularyBookMapper.selectCount(vbTotalWrapper);
+            achievements.put("totalVocabWords", (int) totalVocabWords);
+        } catch (Exception e) {
+            achievements.put("totalVocabWords", 0);
+        }
+
+        // 生成分级成就列表（所有可能成就 + 是否已解锁状态）
+        List<Map<String, Object>> achievementList = new ArrayList<>();
+        int completedAssignments = (int) achievements.getOrDefault("completedAssignments", 0);
+        int masteredWordsCount = (int) achievements.getOrDefault("masteredWords", 0);
+        int totalVocab = (int) achievements.getOrDefault("totalVocabWords", 0);
+
+        // 打卡类成就
+        achievementList.add(buildAchievement("firstStudy", "初入学海", "完成第一次线上学习任务", "📖", totalRecords > 0));
+        achievementList.add(buildAchievement("day1", "学习启程", "开启属于你的学习之旅", "🚀", consecutiveDays >= 1));
+        achievementList.add(buildAchievement("day3", "勤学萌新", "连续3天准时打卡学习", "🌱", consecutiveDays >= 3));
+        achievementList.add(buildAchievement("day7", "自律达人", "连续一周坚持学习不断档", "🏆", consecutiveDays >= 7));
+        achievementList.add(buildAchievement("day15", "学习先锋", "连续半月稳定学习超厉害", "⭐", consecutiveDays >= 15));
+        achievementList.add(buildAchievement("day30", "月度学霸", "整整三十天从未间断", "👑", consecutiveDays >= 30));
+        achievementList.add(buildAchievement("day60", "深耕学者", "两个月持之以恒坚持学习", "🎓", consecutiveDays >= 60));
+        achievementList.add(buildAchievement("day90", "学识积淀", "百日坚持，厚积薄发", "💎", consecutiveDays >= 90));
+
+        // 单词类成就
+        achievementList.add(buildAchievement("word50", "单词入门", "累计熟记50个实用单词", "📝", masteredWordsCount >= 50));
+        achievementList.add(buildAchievement("word100", "百词小能手", "成功攻克100个单词大关", "💪", masteredWordsCount >= 100));
+        achievementList.add(buildAchievement("word200", "词汇新星", "累计背诵单词突破200", "🌟", masteredWordsCount >= 200));
+        achievementList.add(buildAchievement("word500", "词汇达人", "掌握五百单词，词汇量起飞", "🔥", masteredWordsCount >= 500));
+        achievementList.add(buildAchievement("word1000", "单词宗师", "千词在手，外语无忧", "🏅", masteredWordsCount >= 1000));
+        achievementList.add(buildAchievement("word2000", "词汇大神", "两千词汇储备，从容应对", "🎖️", masteredWordsCount >= 2000));
+
+        // 任务类成就
+        achievementList.add(buildAchievement("task10", "小有收获", "累计完成10项学习任务", "✅", completedAssignments >= 10));
+        achievementList.add(buildAchievement("task30", "稳步前行", "累计完成30项学习任务", "📊", completedAssignments >= 30));
+        achievementList.add(buildAchievement("task50", "实干学习者", "累计完成50项学习任务", "💼", completedAssignments >= 50));
+        achievementList.add(buildAchievement("task100", "任务达人", "圆满完成百项学习任务", "🎯", completedAssignments >= 100));
+        achievementList.add(buildAchievement("task200", "学习劳模", "累计完成200项学习任务", "🏭", completedAssignments >= 200));
+
+        achievements.put("achievementList", achievementList);
+        achievements.put("unlockedCount", achievementList.stream().filter(a -> (boolean) a.get("unlocked")).count());
+        achievements.put("totalAchievements", achievementList.size());
+
         return achievements;
+    }
+
+    private Map<String, Object> buildAchievement(String key, String title, String desc, String icon, boolean unlocked) {
+        Map<String, Object> ach = new HashMap<>();
+        ach.put("key", key);
+        ach.put("title", title);
+        ach.put("desc", desc);
+        ach.put("icon", icon);
+        ach.put("unlocked", unlocked);
+        return ach;
     }
 
     @Override

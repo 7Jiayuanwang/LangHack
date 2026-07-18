@@ -6,9 +6,19 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
-import { onErrorCaptured } from 'vue'
+import { onErrorCaptured, onMounted } from 'vue'
 
 const router = useRouter()
+
+// 应用启动时触发打卡类成就检查
+onMounted(() => {
+  // 延迟执行，确保应用完全初始化
+  setTimeout(() => {
+    if (typeof window !== 'undefined' && window.checkAchievements) {
+      window.checkAchievements()
+    }
+  }, 2000)
+})
 
 // 全局错误捕获 - 仅记录日志，不向用户弹出通用提示
 // 各业务组件应自行处理错误并展示合适的反馈

@@ -302,6 +302,41 @@
         </div>
       </div>
 
+      <!-- 成就展示 -->
+      <div class="trend-section">
+        <div class="section-header">
+          <h2 class="section-title">
+            <span class="section-icon">🏆</span> 学习成就
+          </h2>
+          <span class="achievement-summary" v-if="achievementStats.totalAchievements">
+            已解锁 {{ achievementStats.unlockedCount }} / {{ achievementStats.totalAchievements }}
+          </span>
+        </div>
+
+        <div class="achievement-grid" v-loading="achievementLoading">
+          <div
+            v-for="ach in achievementList"
+            :key="ach.key"
+            class="achievement-card"
+            :class="{ unlocked: ach.unlocked, locked: !ach.unlocked }"
+          >
+            <div class="ach-icon">{{ ach.icon }}</div>
+            <div class="ach-info">
+              <h4 class="ach-title">{{ ach.title }}</h4>
+              <p class="ach-desc">{{ ach.desc }}</p>
+            </div>
+            <div class="ach-status">
+              <span v-if="ach.unlocked" class="ach-badge unlocked-badge">已解锁</span>
+              <span v-else class="ach-badge locked-badge">未解锁</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!achievementLoading && achievementList.length === 0" class="empty-state">
+          <p class="empty-text">开始学习，解锁你的第一个成就吧！</p>
+        </div>
+      </div>
+
       <!-- 学习推荐和今日统计 -->
       <div class="trend-section">
         <div class="dual-content">
@@ -376,7 +411,8 @@ import {
   getStudentDashboard,
   getTodayLearningStats,
   getVocabularyStats,
-  getReadingHistory
+  getReadingHistory,
+  getAchievementStats
 } from '@/api/student'
 
 const router = useRouter()
@@ -428,6 +464,14 @@ const readingStats = reactive({
   totalCount: 0,      // 总阅读次数
   totalArticles: 0    // 总阅读篇数
 })
+
+// 成就数据
+const achievementList = ref([])
+const achievementStats = reactive({
+  totalAchievements: 0,
+  unlockedCount: 0
+})
+const achievementLoading = ref(false)
 
 const vocabularyProgress = computed(() => {
   if (vocabularyStats.totalWords === 0) return 0
@@ -492,6 +536,60 @@ const loadReadingStats = async () => {
     }
   } catch (error) {
     console.error('加载阅读统计失败:', error)
+  }
+}
+
+// 加载成就数据
+const loadAchievements = async () => {
+  achievementLoading.value = true
+  try {
+    const response = await getAchievementStats()
+    if (response?.code === 200 && response?.data) {
+      achievementList.value = response.data.achievementList || []
+      achievementStats.totalAchievements = response.data.totalAchievements || 0
+      achievementStats.unlockedCount = response.data.unlockedCount || 0
+
+      // 检查是否有新解锁的成就需要弹窗
+      checkNewAchievements(response.data)
+    }
+  } catch (error) {
+    console.error('加载成就数据失败:', error)
+  } finally {
+    achievementLoading.value = false
+  }
+}
+
+// 检查新成就并触发弹窗
+const checkNewAchievements = (data) => {
+  const achievementList = data.achievementList || []
+  // 只对已解锁的成就检查是否需要弹窗
+  const unlockedList = achievementList.filter(a => a.unlocked)
+
+  // 从 localStorage 获取已弹窗过的成就
+  let shownAchievements = []
+  try {
+    shownAchievements = JSON.parse(localStorage.getItem('shownAchievements') || '[]')
+  } catch (e) {
+    shownAchievements = []
+  }
+
+  // 找出还没弹窗过的成就
+  const newAchievements = unlockedList.filter(a => !shownAchievements.includes(a.key))
+
+  if (newAchievements.length > 0 && typeof window !== 'undefined') {
+    // 只弹出第一个新成就
+    const firstNew = newAchievements[0]
+    if (window[firstNew.key]) {
+      window[firstNew.key]()
+    }
+
+    // 标记所有新成就为已弹窗
+    const updatedShown = [...new Set([...shownAchievements, ...newAchievements.map(a => a.key)])]
+    try {
+      localStorage.setItem('shownAchievements', JSON.stringify(updatedShown))
+    } catch (e) {
+      // ignore
+    }
   }
 }
 
@@ -651,6 +749,7 @@ onMounted(() => {
   loadDailyWordReciteProgress()
   loadVocabularyStats()
   loadReadingStats()
+  loadAchievements()
   // 共享 feature-toggles 缓存（路由守卫与 Layout 已在加载；此处仅兜底）
   try {
     if (!isLoaded()) {
@@ -1555,5 +1654,112 @@ onMounted(() => {
 :deep(.el-loading-spinner .circular) {
   width: 32px;
   height: 32px;
+}
+
+/* 成就展示区域 */
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.achievement-summary {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.achievement-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-light);
+  transition: all 0.3s ease;
+}
+
+.achievement-card.unlocked {
+  border-color: #ffc800;
+  background: linear-gradient(135deg, rgba(255, 200, 0, 0.08), rgba(255, 255, 255, 0.9));
+  box-shadow: 0 2px 12px rgba(255, 200, 0, 0.15);
+}
+
+.achievement-card.locked {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+.achievement-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.ach-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ach-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ach-info .ach-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ach-info .ach-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ach-status {
+  flex-shrink: 0;
+}
+
+.ach-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.unlocked-badge {
+  background: linear-gradient(135deg, #ffc800, #ff8c00);
+  color: #fff;
+}
+
+.locked-badge {
+  background: var(--bg-tertiary);
+  color: var(--text-quaternary);
+}
+
+.section-icon {
+  font-size: 18px;
+  margin-right: 4px;
+}
+
+@media (max-width: 640px) {
+  .achievement-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -908,6 +908,10 @@ const markWordAsCompleted = async (word) => {
 
       // 如果任务完成，询问是否返回
       if (completionRate >= 100) {
+        // 触发成就检查
+        if (typeof window !== 'undefined' && window.checkAchievements) {
+          window.checkAchievements()
+        }
         safeTimeout(() => {
           ElMessage({
             message: '恭喜！任务已全部完成',
