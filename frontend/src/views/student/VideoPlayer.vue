@@ -316,7 +316,7 @@ import Artplayer from 'artplayer'
 import { getPublicVideoDetail, getUserVideoDetail } from '@/api/video'
 import { getAdminVideoDetail } from '@/api/admin'
 import { getMediaDetail } from '@/api/media'
-import { checkArticleFavorite, toggleArticleFavorite } from '@/api/student'
+import { checkArticleFavorite, toggleArticleFavorite, recordLearning } from '@/api/student'
 
 import InteractiveText from '@/components/InteractiveText.vue'
 import SelectionMenu from '@/components/SelectionMenu.vue'
@@ -375,6 +375,12 @@ const getAuthHeader = () => {
 }
 
 let artInstance = null
+
+// 视频观看计时 & 学习记录上报
+let videoStudyTime = 0
+let lastSavedVideoTime = 0
+let videoTimerInterval = null
+let saveRecordInterval = null
 
 const videoUrl = computed(() => {
   if (!video.value) return ''
@@ -833,6 +839,10 @@ const initPlayer = () => {
       updateActiveCue()
     })
 
+    artInstance.on('video:play', () => { startVideoTimer() })
+    artInstance.on('video:pause', () => { stopVideoTimer() })
+    artInstance.on('video:ended', () => { stopVideoTimer(); saveVideoLearningRecord() })
+
     artInstance.on('video:error', () => {
       const videoEl = artInstance?.video
       if (videoEl?.error) {
@@ -1190,12 +1200,52 @@ const handleAiQa = () => {
   })
 }
 
+const saveVideoLearningRecord = async () => {
+  const increment = videoStudyTime - lastSavedVideoTime
+  if (increment <= 0) return
+  try {
+    await recordLearning({
+      type: 'VIDEO_VIEW',
+      duration: increment,
+      textId: video.value?.associatedTextId || null
+    })
+    lastSavedVideoTime = videoStudyTime
+  } catch (e) {
+    console.error('保存视频学习记录失败:', e)
+  }
+}
+
+const startVideoTimer = () => {
+  if (videoTimerInterval) return
+  videoTimerInterval = setInterval(() => { videoStudyTime++ }, 1000)
+  if (!saveRecordInterval) {
+    saveRecordInterval = setInterval(saveVideoLearningRecord, 60000)
+  }
+}
+
+const stopVideoTimer = () => {
+  if (videoTimerInterval) {
+    clearInterval(videoTimerInterval)
+    videoTimerInterval = null
+  }
+}
+
+const cleanupVideoTimer = () => {
+  stopVideoTimer()
+  if (saveRecordInterval) {
+    clearInterval(saveRecordInterval)
+    saveRecordInterval = null
+  }
+  saveVideoLearningRecord()
+}
+
 onMounted(() => {
   loadVideo()
   document.addEventListener('selectionchange', handleSelectionChange)
 })
 
 onBeforeUnmount(() => {
+  cleanupVideoTimer()
   document.removeEventListener('selectionchange', handleSelectionChange)
   if (artInstance) {
     artInstance.destroy()

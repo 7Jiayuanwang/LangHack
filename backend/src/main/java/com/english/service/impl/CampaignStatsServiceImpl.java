@@ -65,6 +65,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     private com.english.mapper.AiCallLogMapper aiCallLogMapper;
 
     @Autowired
+    private com.english.mapper.VideoMapper videoMapper;
+
+    @Autowired
     private CampaignActivityMapper campaignActivityMapper;
 
     @Autowired
@@ -174,7 +177,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         // 根据任务类型采集数据
         switch (task.getTaskType()) {
             case READING_TIME:
-                // 获取阅读时长（分钟）— 仅统计 TEXT_VIEW 记录，避免把单词学习/复习时长计入阅读任务
+                // 获取阅读+视频时长（分钟）— 统计 TEXT_VIEW 和 VIDEO_VIEW 记录
                 long minutes = learningRecordsService.getReadingMinutesInRange(
                     userId, campaign.getStartTime(), campaign.getEndTime()
                 );
@@ -184,12 +187,22 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 // 统计活动期间审核通过的课文数量
                 QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
                 textWrapper.eq("uploaded_by", userId);
-                textWrapper.eq("status", "APPROVED"); // 只统计审核通过的
+                textWrapper.eq("status", "APPROVED");
                 textWrapper.eq("deleted", 0);
-                textWrapper.ge("created_time", campaign.getStartTime()); // 活动开始后上传
-                textWrapper.le("created_time", campaign.getEndTime());   // 活动结束前上传
+                textWrapper.ge("created_time", campaign.getStartTime());
+                textWrapper.le("created_time", campaign.getEndTime());
                 long approvedCount = textMapper.selectCount(textWrapper);
-                return BigDecimal.valueOf(approvedCount);
+
+                // 统计活动期间审核通过的视频数量
+                QueryWrapper<com.english.entity.Video> videoWrapper = new QueryWrapper<>();
+                videoWrapper.eq("user_id", userId);
+                videoWrapper.eq("status", "APPROVED");
+                videoWrapper.eq("deleted", 0);
+                videoWrapper.ge("created_time", campaign.getStartTime());
+                videoWrapper.le("created_time", campaign.getEndTime());
+                long approvedVideoCount = videoMapper.selectCount(videoWrapper);
+
+                return BigDecimal.valueOf(approvedCount + approvedVideoCount);
 
             case WORD_LEARNING:
                 // 统计活动期间学习/复习的单词数量
