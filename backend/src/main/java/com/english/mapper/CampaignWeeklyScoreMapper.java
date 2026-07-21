@@ -21,5 +21,5 @@ public interface CampaignWeeklyScoreMapper extends BaseMapper<CampaignWeeklyScor
     int addWeeklyScore(@Param("campaignId") Long campaignId,
                        @Param("userId") Long userId,
                        @Param("weekStart") java.time.LocalDate weekStart,
-                       @Param("scoreIncrement") int scoreIncrement);
+                       @Param("scoreIncrement") java.math.BigDecimal scoreIncrement);
 }

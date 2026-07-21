@@ -5,6 +5,7 @@ import com.english.enums.EnrollmentStatus;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -28,7 +29,7 @@ public class CampaignParticipation {
 
     private String enrollmentSource;
 
-    private Integer totalScore;
+    private BigDecimal totalScore;
 
     private Integer completedTasks;
 

@@ -9,6 +9,7 @@ import com.english.dto.Result;
 import com.english.service.CampaignEnrollmentService;
 import com.english.service.CampaignService;
 import com.english.service.CampaignStatsService;
+import com.english.service.CampaignStreakService;
 import com.english.service.CampaignTaskService;
 import com.english.service.UserService;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,9 @@ public class StudentCampaignController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private CampaignStreakService streakService;
 
     private Long getCurrentUserId(Authentication authentication) {
         User user = userService.getUserByUsername(authentication.getName());
@@ -237,6 +241,55 @@ public class StudentCampaignController {
         } catch (Exception e) {
             log.error("获取积分明细失败", e);
             return Result.error("获取积分明细失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取我的积分流水（账单式）
+     */
+    @GetMapping("/{id}/score-logs")
+    public Result<List<Map<String, Object>>> getMyScoreLogs(@PathVariable Long id, Authentication authentication) {
+        try {
+            Long userId = getCurrentUserId(authentication);
+            List<Map<String, Object>> logs = statsService.getScoreLogs(id, userId);
+            return Result.success(logs);
+        } catch (Exception e) {
+            log.error("获取积分流水失败", e);
+            return Result.error("获取积分流水失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取我的连续学习加成信息
+     */
+    @GetMapping("/{id}/streak")
+    public Result<Map<String, Object>> getMyStreak(@PathVariable Long id, Authentication authentication) {
+        try {
+            Long userId = getCurrentUserId(authentication);
+            int streakDays = streakService.getStreakDays(id, userId);
+            java.math.BigDecimal multiplier = streakService.getCurrentMultiplier(id, userId);
+            Map<String, Object> data = new HashMap<>();
+            data.put("streakDays", streakDays);
+            data.put("currentMultiplier", multiplier);
+            return Result.success(data);
+        } catch (Exception e) {
+            log.error("获取连续学习信息失败", e);
+            return Result.error("获取连续学习信息失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取班级今日活跃人数（热力图数据）
+     */
+    @GetMapping("/{id}/class-activity-today")
+    public Result<Map<String, Object>> getClassActivityToday(@PathVariable Long id, Authentication authentication) {
+        try {
+            Long userId = getCurrentUserId(authentication);
+            Map<String, Object> data = statsService.getClassActivityToday(id, userId);
+            return Result.success(data);
+        } catch (Exception e) {
+            log.error("获取班级活跃信息失败", e);
+            return Result.error("获取班级活跃信息失败: " + e.getMessage());
         }
     }
 }

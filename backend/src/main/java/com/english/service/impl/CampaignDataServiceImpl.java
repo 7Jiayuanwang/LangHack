@@ -308,7 +308,7 @@ public class CampaignDataServiceImpl implements CampaignDataService {
                 row.createCell(4).setCellValue(c.getCurrentValue() != null ? c.getCurrentValue().doubleValue() : 0);
                 row.createCell(5).setCellValue(task != null && task.getTargetValue() != null ? task.getTargetValue() : 0);
                 row.createCell(6).setCellValue(c.getCompletionCount() != null ? c.getCompletionCount() : 0);
-                row.createCell(7).setCellValue(c.getEarnedScore() != null ? c.getEarnedScore() : 0);
+                row.createCell(7).setCellValue(c.getEarnedScore() != null ? c.getEarnedScore().doubleValue() : 0);
                 row.createCell(8).setCellValue(c.getIsCompleted() != null && c.getIsCompleted() ? "是" : "否");
                 row.createCell(9).setCellValue(c.getLastUpdateTime() != null ? c.getLastUpdateTime().toString() : "");
             }
@@ -431,13 +431,13 @@ public class CampaignDataServiceImpl implements CampaignDataService {
 
                 int rowIdx = 1;
                 int rank = 0;
-                Integer prevScore = null;
+                java.math.BigDecimal prevScore = null;
                 for (int i = 0; i < participations.size(); i++) {
                     CampaignParticipation p = participations.get(i);
-                    Integer score = p.getTotalScore();
-                    int scoreVal = score != null ? score : 0;
-                    int prevVal = prevScore != null ? prevScore : 0;
-                    if (prevScore == null || prevVal != scoreVal) {
+                    java.math.BigDecimal score = p.getTotalScore();
+                    java.math.BigDecimal scoreVal = score != null ? score : java.math.BigDecimal.ZERO;
+                    java.math.BigDecimal prevVal = prevScore != null ? prevScore : java.math.BigDecimal.ZERO;
+                    if (prevScore == null || prevVal.compareTo(scoreVal) != 0) {
                         rank = i + 1;
                         prevScore = score;
                     }
@@ -452,7 +452,7 @@ public class CampaignDataServiceImpl implements CampaignDataService {
                     row.createCell(2).setCellValue(user != null && user.getRealName() != null ? user.getRealName() : "");
                     row.createCell(3).setCellValue(schoolStudent != null && schoolStudent.getClassName() != null ? schoolStudent.getClassName() : "");
                     row.createCell(4).setCellValue(schoolStudent != null && schoolStudent.getCollegeName() != null ? schoolStudent.getCollegeName() : "");
-                    row.createCell(5).setCellValue(scoreVal);
+                    row.createCell(5).setCellValue(scoreVal.doubleValue());
                     row.createCell(6).setCellValue(p.getCompletedTasks() != null ? p.getCompletedTasks() : 0);
                     row.createCell(7).setCellValue(p.getCompletionStatus() != null ? p.getCompletionStatus() : "");
                 }

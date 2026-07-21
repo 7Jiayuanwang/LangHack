@@ -171,6 +171,61 @@
           <span class="form-tip">关闭后学生端无法查看排名信息</span>
         </el-form-item>
 
+        <el-divider content-position="left">排名与成绩设置</el-divider>
+
+        <el-form-item label="连续学习加成">
+          <el-switch v-model="formData.streakEnabled" />
+          <span class="form-tip">启用后学生连续学习可获得积分加成</span>
+        </el-form-item>
+
+        <el-form-item label="重置周期（天）" v-if="formData.streakEnabled">
+          <el-input-number v-model="formData.streakResetDays" :min="3" :max="30" :step="1" />
+          <span class="form-tip">连续天数每隔多少天归零重来（默认7天）</span>
+        </el-form-item>
+
+        <el-form-item label="周期起始日期" v-if="formData.streakEnabled">
+          <el-date-picker v-model="formData.streakStartDate" type="date" placeholder="选择起始日期" value-format="YYYY-MM-DD" />
+          <span class="form-tip">加成周期从哪天开始计算（不填则使用活动开始时间）</span>
+        </el-form-item>
+
+        <el-form-item label="加成阶梯配置" v-if="formData.streakEnabled">
+          <div class="streak-tiers">
+            <div v-for="(tier, index) in formData.streakTiers" :key="index" class="streak-tier-row">
+              <span class="tier-label">连续第</span>
+              <el-input-number v-model="tier.day" :min="2" :max="30" :step="1" size="small" style="width: 80px" />
+              <span class="tier-label">天，加成</span>
+              <el-input-number v-model="tier.percent" :min="1" :max="200" :step="5" size="small" style="width: 100px" />
+              <span class="tier-label">%</span>
+              <el-button type="danger" size="small" text @click="removeStreakTier(index)">删除</el-button>
+            </div>
+            <el-button type="primary" size="small" @click="addStreakTier">+ 添加阶梯</el-button>
+            <div class="form-tip" style="margin-top: 8px">
+              例如：连续第2天加成5%，连续第5天加成20%。未设置的天数按上一阶梯值生效。
+            </div>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="班级排名模式">
+          <el-radio-group v-model="formData.classRankingMode">
+            <el-radio label="WEIGHTED">归一化加权（人均积分 + 参与率）</el-radio>
+            <el-radio label="AVG_SCORE">纯人均积分排序</el-radio>
+            <el-radio label="TOTAL_SCORE">总积分排序</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="人均积分权重" v-if="formData.classRankingMode === 'WEIGHTED'">
+          <el-slider v-model="formData.classAvgWeightPercent" :min="10" :max="90" :step="10"
+            :format-tooltip="(val) => `人均${val}% : 参与率${100-val}%`" />
+          <span class="form-tip">人均积分 {{ formData.classAvgWeightPercent }}% / 参与率 {{ 100 - formData.classAvgWeightPercent }}%</span>
+        </el-form-item>
+
+        <el-form-item label="参与率计算方式" v-if="formData.classRankingMode === 'WEIGHTED'">
+          <el-radio-group v-model="formData.participationCalcMode">
+            <el-radio label="HEAD_COUNT">活跃人数占比（本周至少学1天即算）</el-radio>
+            <el-radio label="DENSITY">活跃天数密度（按天计算，区分度更高）</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
         <el-divider content-position="left">任务配置</el-divider>
 
         <el-form-item>
@@ -292,6 +347,22 @@ const formData = reactive({
   maxParticipants: 0,
   showScores: true,
   showRanking: true,
+  streakEnabled: true,
+  streakMaxMultiplier: 1.30,
+  streakResetDays: 7,
+  streakStartDate: null,
+  streakTiers: [
+    { day: 2, percent: 5 },
+    { day: 3, percent: 10 },
+    { day: 4, percent: 15 },
+    { day: 5, percent: 20 },
+    { day: 6, percent: 25 },
+    { day: 7, percent: 30 }
+  ],
+  streakConfig: null,
+  classRankingMode: 'WEIGHTED',
+  classAvgWeightPercent: 60,
+  participationCalcMode: 'DENSITY',
   tasks: []
 })
 
@@ -305,6 +376,17 @@ const rules = {
   completionRule: [{ required: true, message: '请选择完成规则', trigger: 'change' }],
   enrollmentMode: [{ required: true, message: '请选择报名模式', trigger: 'change' }],
   enrollmentScope: [{ required: true, message: '请选择报名范围', trigger: 'change' }]
+}
+
+const addStreakTier = () => {
+  const lastDay = formData.streakTiers.length > 0
+    ? formData.streakTiers[formData.streakTiers.length - 1].day + 1
+    : 2
+  formData.streakTiers.push({ day: lastDay, percent: (lastDay - 1) * 5 })
+}
+
+const removeStreakTier = (index) => {
+  formData.streakTiers.splice(index, 1)
 }
 
 const handleAddTask = () => {
@@ -470,6 +552,23 @@ const loadData = async () => {
       formData.maxParticipants = data.maxParticipants || 0
       formData.showScores = data.showScores
       formData.showRanking = data.showRanking
+      formData.streakEnabled = data.streakEnabled !== false
+      formData.streakMaxMultiplier = data.streakMaxMultiplier || 1.30
+      formData.streakResetDays = data.streakResetDays || 7
+      formData.streakStartDate = data.streakStartDate || null
+      formData.streakConfig = data.streakConfig || null
+      // 解析阶梯配置
+      if (data.streakConfig) {
+        try {
+          const tiers = JSON.parse(data.streakConfig)
+          formData.streakTiers = tiers.map(t => ({ day: t.day, percent: Math.round((parseFloat(t.multiplier) - 1) * 100) }))
+        } catch (e) {
+          // 保持默认
+        }
+      }
+      formData.classRankingMode = data.classRankingMode || 'WEIGHTED'
+      formData.classAvgWeightPercent = data.classAvgWeight ? Math.round(data.classAvgWeight * 100) : 60
+      formData.participationCalcMode = data.participationCalcMode || 'DENSITY'
     }
 
     if (tasksRes.code === 200) {
@@ -556,7 +655,23 @@ const handleSubmit = async () => {
       enrollmentTargetIdList: enrollmentTargetIdList,
       maxParticipants: formData.maxParticipants,
       showScores: formData.showScores,
-      showRanking: formData.showRanking
+      showRanking: formData.showRanking,
+      streakEnabled: formData.streakEnabled,
+      streakMaxMultiplier: formData.streakTiers.length > 0
+        ? Math.max(...formData.streakTiers.map(t => 1 + t.percent / 100))
+        : formData.streakMaxMultiplier,
+      streakResetDays: formData.streakResetDays,
+      streakStartDate: formData.streakStartDate || null,
+      streakConfig: JSON.stringify(
+        formData.streakTiers
+          .slice()
+          .sort((a, b) => a.day - b.day)
+          .map(t => ({ day: t.day, multiplier: (1 + t.percent / 100).toFixed(2) }))
+      ),
+      classRankingMode: formData.classRankingMode,
+      classAvgWeight: formData.classAvgWeightPercent / 100,
+      classParticipationWeight: (100 - formData.classAvgWeightPercent) / 100,
+      participationCalcMode: formData.participationCalcMode
     }
 
     const campaignRes = isEdit.value
@@ -644,6 +759,23 @@ onMounted(() => {
   margin-left: 10px;
   color: #909399;
   font-size: 12px;
+}
+
+.streak-tiers {
+  width: 100%;
+}
+
+.streak-tier-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tier-label {
+  font-size: 13px;
+  color: #606266;
+  white-space: nowrap;
 }
 
 :deep(.el-divider__text) {
