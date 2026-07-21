@@ -204,11 +204,28 @@ public class User {
     public void setSchoolTeacherId(Long schoolTeacherId) {
         this.schoolTeacherId = schoolTeacherId;
     }
+
     @TableField("read_article_count")
     private Integer readArticleCount = 0;
 
+    @TableField("total_read_time")
+    private Integer totalReadTime = 0;
+
     @TableField("read_total_times")
     private Integer readTotalTimes = 0;
+
+    @TableField("completed_quizzes")
+    private Integer completedQuizzes = 0;
+
+    @TableField("correct_answers")
+    private Integer correctAnswers = 0;
+
+    @TableField("study_days")
+    private Integer studyDays = 0;
+
+    @TableField("last_study_time")
+    private LocalDateTime lastStudyTime;
+
     public Integer getReadArticleCount() {
         return readArticleCount;
     }
@@ -217,11 +234,51 @@ public class User {
         this.readArticleCount = readArticleCount;
     }
 
+    public Integer getTotalReadTime() {
+        return totalReadTime;
+    }
+
+    public void setTotalReadTime(Integer totalReadTime) {
+        this.totalReadTime = totalReadTime;
+    }
+
     public Integer getReadTotalTimes() {
         return readTotalTimes;
     }
 
     public void setReadTotalTimes(Integer readTotalTimes) {
         this.readTotalTimes = readTotalTimes;
+    }
+
+    public Integer getCompletedQuizzes() {
+        return completedQuizzes;
+    }
+
+    public void setCompletedQuizzes(Integer completedQuizzes) {
+        this.completedQuizzes = completedQuizzes;
+    }
+
+    public Integer getCorrectAnswers() {
+        return correctAnswers;
+    }
+
+    public void setCorrectAnswers(Integer correctAnswers) {
+        this.correctAnswers = correctAnswers;
+    }
+
+    public Integer getStudyDays() {
+        return studyDays;
+    }
+
+    public void setStudyDays(Integer studyDays) {
+        this.studyDays = studyDays;
+    }
+
+    public LocalDateTime getLastStudyTime() {
+        return lastStudyTime;
+    }
+
+    public void setLastStudyTime(LocalDateTime lastStudyTime) {
+        this.lastStudyTime = lastStudyTime;
     }
 }

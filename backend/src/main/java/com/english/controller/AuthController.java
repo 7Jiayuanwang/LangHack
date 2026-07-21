@@ -62,17 +62,18 @@ public class AuthController {
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest,
                                              HttpServletRequest request) {
-        // 让 AccessLogInterceptor 在 afterCompletion 时能拿到用户名（此时 SecurityContext 尚未设置）
         request.setAttribute("_auth_username", loginRequest.getUsername());
+        log.info("登录请求开始: username={}", loginRequest.getUsername());
         try {
+            log.info("调用 userService.login: username={}", loginRequest.getUsername());
             Map<String, Object> loginResult = userService.login(loginRequest);
+            log.info("登录成功: username={}", loginRequest.getUsername());
             return Result.success("登录成功", loginResult);
         } catch (BusinessException e) {
-            // 业务异常（账号/密码错误等）：透传用户友好消息
+            log.warn("登录业务异常: username={}, message={}", loginRequest.getUsername(), e.getMessage());
             return Result.error(e.getMessage());
         } catch (Exception e) {
-            // 非预期异常（IO/SQL等）：不泄露内部细节
-            log.error("登录失败", e);
+            log.error("登录失败: username={}, error={}", loginRequest.getUsername(), e.getMessage(), e);
             return Result.error("登录失败，请稍后重试");
         }
     }
