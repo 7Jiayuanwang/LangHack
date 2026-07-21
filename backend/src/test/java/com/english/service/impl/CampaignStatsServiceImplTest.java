@@ -209,7 +209,7 @@ class CampaignStatsServiceImplTest {
         participation.setCampaignId(1L);
         participation.setUserId(userId);
         participation.setEnrollmentStatus(status);
-        participation.setTotalScore(totalScore);
+        participation.setTotalScore(totalScore != null ? new java.math.BigDecimal(totalScore) : null);
         participation.setCompletedTasks(completedTasks);
         return participation;
     }
