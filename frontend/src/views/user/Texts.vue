@@ -110,22 +110,24 @@
       </el-card>
     </div>
 
-    <div v-if="total > 0" class="pagination-container">
-      <el-pagination
-        v-model:current-page="currentPage"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[12, 24, 48]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="loadTexts"
-        @current-change="loadTexts"
-      />
+    <!-- 无限滚动加载提示 -->
+    <div ref="sentinel" class="scroll-sentinel">
+      <div v-if="loadingMore" class="load-more-hint">
+        <span class="load-more-spinner"></span>
+        加载中...
+      </div>
+      <div v-else-if="hasMore && texts.length > 0" class="load-more-hint">
+        上滑加载更多
+      </div>
+      <div v-else-if="!hasMore && texts.length > 0" class="load-more-hint">
+        — 已经到底了 —
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Search, Reading } from "@element-plus/icons-vue";
@@ -138,9 +140,14 @@ const loading = ref(false);
 const courses = ref([]);
 const units = ref([]);
 const texts = ref([]);
-const total = ref(0);
-const currentPage = ref(1);
-const pageSize = ref(12);
+const allTexts = ref([]);
+const displayCount = ref(12);
+const loadingMore = ref(false);
+const hasMore = computed(() => displayCount.value < allTexts.value.length);
+const sentinel = ref(null);
+let observer = null;
+
+const BATCH_SIZE = 12;
 
 const selectedCourse = ref("");
 const selectedUnit = ref("");
@@ -217,8 +224,8 @@ const loadTexts = async () => {
   loading.value = true;
   try {
     const params = {
-      page: currentPage.value,
-      size: pageSize.value,
+      page: 1,
+      size: 999,
     };
     if (selectedDifficulty.value) params.difficulty = selectedDifficulty.value;
     if (selectedCourse.value) params.courseId = selectedCourse.value;
@@ -233,28 +240,48 @@ const loadTexts = async () => {
 
     if (response?.code === 200 && response.data) {
       if (Array.isArray(response.data)) {
-        texts.value = response.data;
-        total.value = response.data.length;
+        allTexts.value = response.data;
       } else if (Array.isArray(response.data?.records)) {
-        texts.value = response.data.records;
-        total.value = response.data?.total || texts.value.length;
+        allTexts.value = response.data.records;
       } else {
-        texts.value = [];
-        total.value = 0;
+        allTexts.value = [];
       }
     } else {
-      texts.value = [];
-      total.value = 0;
+      allTexts.value = [];
     }
+    displayCount.value = BATCH_SIZE;
+    texts.value = allTexts.value.slice(0, displayCount.value);
   } catch (error) {
     ElMessage.error("获取课文列表失败");
     console.error(error);
+    allTexts.value = [];
     texts.value = [];
-    total.value = 0;
   } finally {
     loading.value = false;
   }
 };
+
+// 无限滚动：触底加载更多
+const loadMore = () => {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  setTimeout(() => {
+    displayCount.value = Math.min(displayCount.value + BATCH_SIZE, allTexts.value.length)
+    texts.value = allTexts.value.slice(0, displayCount.value)
+    loadingMore.value = false
+  }, 300)
+}
+
+const setupIntersectionObserver = () => {
+  if (!sentinel.value) return
+  if (observer) observer.disconnect()
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
+      loadMore()
+    }
+  }, { threshold: 0.1 })
+  observer.observe(sentinel.value)
+}
 
 const studyText = (text) => {
   router.push({
@@ -291,7 +318,7 @@ const getDifficultyText = (difficulty) => {
 
 const handleCourseChange = async (courseId) => {
   selectedUnit.value = "";
-  currentPage.value = 1;
+  displayCount.value = BATCH_SIZE;
   await loadUnits(courseId);
   await loadTexts();
 };
@@ -310,6 +337,15 @@ onMounted(async () => {
   }
 
   await loadTexts();
+  // 数据加载完毕后设置无限滚动哨兵
+  setTimeout(() => setupIntersectionObserver(), 100);
+});
+
+onBeforeUnmount(() => {
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
 });
 </script>
 
