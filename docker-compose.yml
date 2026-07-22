@@ -190,7 +190,7 @@ services:
           memory: 2G
     environment:
       TZ: Asia/Shanghai
-      SPRING_PROFILES_ACTIVE: sso
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       # 主库
       DB_URL: jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
       DB_USERNAME: ${DB_USERNAME}

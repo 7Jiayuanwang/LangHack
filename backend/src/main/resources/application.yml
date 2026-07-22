@@ -150,6 +150,9 @@ recommendation:
   weight:
     item-cf: 0.6
     user-cf: 0.4
+    manual-featured-prior: 3.0
+    script-import-prior: 0.15
+    normal-text-prior: 1.0
   similarity:
     text-threshold: 0.2
     user-threshold: 0.3
@@ -163,6 +166,12 @@ recommendation:
   persona:
     enabled: ${RECOMMENDATION_PERSONA_ENABLED:false}
     max-adjustment: 0.12
+  quality-prior:
+    manual-uploaders: ${RECOMMENDATION_MANUAL_UPLOADERS:41,43,44,46,48}
+    script-uploaders: ${RECOMMENDATION_SCRIPT_UPLOADERS:24,420}
+    script-source-domains: ${RECOMMENDATION_SCRIPT_SOURCE_DOMAINS:theguardian.com,time.com,newsweek.com,nytimes.com,scientificamerican.com,phys.org,futurity.org}
+    script-import-hours: ${RECOMMENDATION_SCRIPT_IMPORT_HOURS:21,22,23,0,1,2,3,4,8,9,10}
+    manual-featured-min-priority: ${RECOMMENDATION_MANUAL_FEATURED_MIN_PRIORITY:1}
 
 mybatis-plus:
   configuration:
