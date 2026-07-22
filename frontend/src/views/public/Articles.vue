@@ -119,38 +119,17 @@
         </template>
       </div>
 
-        <!-- Pagination -->
-        <div class="pagination" :style="{ visibility: totalPages > 1 ? 'visible' : 'hidden' }">
-          <button class="page-btn" :disabled="currentPage === 1" @click="prevPage">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15,18 9,12 15,6"/>
-            </svg>
-          </button>
-          <button
-            v-for="page in pageList"
-            :key="page"
-            class="page-btn page-number"
-            :class="{ active: currentPage === page }"
-            @click="goToPage(page)"
-          >
-            {{ page }}
-          </button>
-          <button class="page-btn" :disabled="currentPage === totalPages" @click="nextPage">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9,18 15,12 9,6"/>
-            </svg>
-          </button>
-          <div class="page-jump">
-            <input
-              v-model="jumpInput"
-              type="number"
-              min="1"
-              :max="totalPages"
-              class="page-jump-input"
-              @keyup.enter="jumpToPage"
-              placeholder="页"
-            />
-            <button class="page-btn page-jump-btn" @click="jumpToPage">跳转</button>
+        <!-- Infinite Scroll Sentinel -->
+        <div ref="sentinel" class="scroll-sentinel">
+          <div v-if="loadingMore" class="load-more-hint">
+            <span class="load-more-spinner"></span>
+            加载中...
+          </div>
+          <div v-else-if="hasMore" class="load-more-hint">
+            上滑加载更多
+          </div>
+          <div v-else-if="allArticles.length > 0" class="load-more-hint load-more-end">
+            — 已经到底了 —
           </div>
         </div>
 
@@ -189,7 +168,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getAuthHeader } from '@/utils/auth'
@@ -204,28 +183,15 @@ const allArticles = ref([])
 const selectedCategory = ref('')
 const loadError = ref(false)
 const currentPage = ref(1)
-const pageSize = 5
+const BATCH_SIZE = 10
+const displayCount = ref(BATCH_SIZE)
+const loadingMore = ref(false)
+const sentinel = ref(null)
+let observer = null
 
-
-const totalPages = computed(() => Math.ceil(allArticles.value.length / pageSize))
-const PAGE_WINDOW = 5
-const pageList = computed(() => {
-  const total = totalPages.value
-  if (total <= PAGE_WINDOW) return Array.from({ length: total }, (_, i) => i + 1)
-  let start = currentPage.value - Math.floor(PAGE_WINDOW / 2)
-  start = Math.max(1, Math.min(start, total - PAGE_WINDOW + 1))
-  return Array.from({ length: PAGE_WINDOW }, (_, i) => start + i)
-})
-const jumpInput = ref('')
-const jumpToPage = () => {
-  const n = parseInt(jumpInput.value, 10)
-  if (!Number.isFinite(n)) { jumpInput.value = ''; return }
-  goToPage(Math.max(1, Math.min(n, totalPages.value)))
-  jumpInput.value = ''
-}
+const hasMore = computed(() => displayCount.value < allArticles.value.length)
 const articles = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return allArticles.value.slice(start, start + pageSize)
+  return allArticles.value.slice(0, displayCount.value)
 })
 
 const categories = [
@@ -256,18 +222,29 @@ const getRandomGradient = () => {
 
 const selectCategory = (val) => {
   selectedCategory.value = val
-  currentPage.value = 1
+  displayCount.value = BATCH_SIZE
   loadArticles()
 }
 
-const goToPage = (page) => {
-  if (page < 1 || page > totalPages.value) return
-  currentPage.value = page
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+const loadMore = () => {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  setTimeout(() => {
+    displayCount.value += BATCH_SIZE
+    loadingMore.value = false
+  }, 300)
 }
 
-const prevPage = () => goToPage(currentPage.value - 1)
-const nextPage = () => goToPage(currentPage.value + 1)
+const setupObserver = () => {
+  if (observer) observer.disconnect()
+  nextTick(() => {
+    if (!sentinel.value) return
+    observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) loadMore()
+    }, { rootMargin: '200px' })
+    observer.observe(sentinel.value)
+  })
+}
 
 const getRandomCategory = () => {
   const cats = categories.filter(c => c.value !== '')
@@ -360,6 +337,11 @@ const handleLogin = () => {
 
 onMounted(() => {
   loadArticles()
+  setupObserver()
+})
+
+onBeforeUnmount(() => {
+  if (observer) observer.disconnect()
 })
 </script>
 
@@ -405,8 +387,8 @@ onMounted(() => {
     padding: 0;
   }
 
-  .pagination {
-    display: none;
+  .scroll-sentinel {
+    display: flex;
   }
 
   .bottom-nav {
@@ -798,94 +780,32 @@ onMounted(() => {
   100% { background-position: 400px 0; }
 }
 
-/* --- Pagination --- */
-.pagination {
+/* --- Infinite Scroll --- */
+.scroll-sentinel {
   display: flex;
   justify-content: center;
-  align-items: center;
-  gap: 6px;
   padding: 16px 0;
-  flex-wrap: wrap;
 }
 
-.page-btn {
-  min-width: 36px;
-  height: 36px;
-  padding: 0 10px;
-  border-radius: 50px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  color: #475569;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
+.load-more-hint {
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.page-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.page-btn:not(:disabled):hover {
-  border-color: #1d4ed8;
-  color: #1d4ed8;
-}
-
-.page-btn.active {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: white;
-  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
-}
-
-.page-btn.ellipsis {
-  border-color: transparent;
-  background: transparent;
-  cursor: default;
-  opacity: 1;
+  gap: 8px;
   color: #94a3b8;
-}
-
-.page-jump {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: 8px;
-}
-
-.page-jump-input {
-  width: 56px;
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 13px;
-  text-align: center;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.page-jump-input:focus {
-  border-color: #1d4ed8;
-}
-
-.page-jump-input::-webkit-inner-spin-button,
-.page-jump-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.page-jump-btn {
-  padding: 0 10px;
   font-size: 13px;
 }
 
-.page-number {
-  font-weight: 600;
+.load-more-end {
+  color: #cbd5e1;
+}
+
+.load-more-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
 }
 
 .bottom-spacer {
@@ -954,8 +874,7 @@ onMounted(() => {
 .article-card,
 .filter-pill,
 .nav-item,
-.article-card,
-.page-btn {
+.article-card {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
