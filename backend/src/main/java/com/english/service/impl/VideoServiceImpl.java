@@ -180,16 +180,20 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
 
         List<Video> result = new ArrayList<>();
         if (count == null || count <= 0) {
-            // 不限制数量，返回所有推荐视频
-            result.addAll(prioritized);
-            result.addAll(randomPool);
-        } else if (prioritized.size() >= count) {
-            result = prioritized.subList(0, count);
-        } else {
-            result.addAll(prioritized);
-            int remaining = count - prioritized.size();
-            result.addAll(randomPool.subList(0, Math.min(remaining, randomPool.size())));
-        }
+    result.addAll(prioritized);
+    result.addAll(randomPool);
+} else {
+    result.addAll(prioritized);
+    int remaining = count - prioritized.size();
+    if (remaining > 0 && !randomPool.isEmpty()) {
+        int takeNum = Math.min(remaining, randomPool.size());
+        result.addAll(randomPool.subList(0, takeNum));
+    }
+    // 强制截断，防止总数超量
+    if (result.size() > count) {
+        result = new ArrayList<>(result.subList(0, count));
+    }
+}
 
         return result;
     }
