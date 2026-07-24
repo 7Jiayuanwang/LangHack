@@ -618,10 +618,35 @@ BEGIN
                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'read_article_count') THEN
         ALTER TABLE users ADD COLUMN read_article_count INT NOT NULL DEFAULT 0 COMMENT '已读文章数';
     END IF;
+    -- 总阅读时长 [原 V37]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'total_read_time') THEN
+        ALTER TABLE users ADD COLUMN total_read_time INT NOT NULL DEFAULT 0 COMMENT '总阅读时长(分钟)';
+    END IF;
     -- 累计阅读次数 [原 V17]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'read_total_times') THEN
         ALTER TABLE users ADD COLUMN read_total_times INT NOT NULL DEFAULT 0 COMMENT '累计阅读次数';
+    END IF;
+    -- 完成测验数 [原 V37]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'completed_quizzes') THEN
+        ALTER TABLE users ADD COLUMN completed_quizzes INT NOT NULL DEFAULT 0 COMMENT '完成测验数';
+    END IF;
+    -- 正确答题数 [原 V37]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'correct_answers') THEN
+        ALTER TABLE users ADD COLUMN correct_answers INT NOT NULL DEFAULT 0 COMMENT '正确答题数';
+    END IF;
+    -- 学习天数 [原 V37]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'study_days') THEN
+        ALTER TABLE users ADD COLUMN study_days INT NOT NULL DEFAULT 0 COMMENT '学习天数';
+    END IF;
+    -- 最后学习时间 [原 V37]
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'last_study_time') THEN
+        ALTER TABLE users ADD COLUMN last_study_time DATETIME DEFAULT NULL COMMENT '最后学习时间';
     END IF;
 END;
 CALL _v1_users_cols();
