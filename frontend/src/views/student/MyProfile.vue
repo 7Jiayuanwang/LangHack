@@ -55,6 +55,26 @@
         </div>
       </div>
 
+      <div class="section" v-if="profile.achievements && profile.achievements.achievementList && profile.achievements.achievementList.length > 0">
+        <h3>学习成就</h3>
+        <div class="achievement-summary">
+          已解锁 {{ profile.achievements.unlockedCount || 0 }} / {{ profile.achievements.totalAchievements || profile.achievements.achievementList.length }} 项成就
+        </div>
+        <div class="achievement-list">
+          <el-tooltip
+            v-for="ach in unlockedAchievements"
+            :key="ach.key"
+            :content="ach.desc"
+            placement="top"
+          >
+            <div class="achievement-item">
+              <span class="achievement-icon">{{ ach.icon }}</span>
+              <span class="achievement-title">{{ ach.title }}</span>
+            </div>
+          </el-tooltip>
+        </div>
+      </div>
+
       <div class="section" v-if="profile.naturalLanguageSummary">
         <h3>AI 学习总结</h3>
         <div class="summary-text">{{ profile.naturalLanguageSummary }}</div>
@@ -64,11 +84,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { getMyProfile } from '@/api/learnerProfile'
 
 const loading = ref(false)
 const profile = ref(null)
+
+const unlockedAchievements = computed(() => {
+  if (!profile.value?.achievements?.achievementList) return []
+  return profile.value.achievements.achievementList.filter(a => a.unlocked)
+})
 
 const versionLabel = (v) => {
   const labels = { original: '原文', cet4: 'CET-4', cet6: 'CET-6', academic: '考研', chinese_parallel: '中英对照' }
@@ -122,6 +147,29 @@ onMounted(() => {
 }
 .badge-tag {
   font-size: 14px;
+}
+.achievement-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.achievement-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.achievement-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-secondary, #f5f7fa);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.achievement-icon {
+  font-size: 16px;
 }
 .summary-text {
   font-size: 14px;
