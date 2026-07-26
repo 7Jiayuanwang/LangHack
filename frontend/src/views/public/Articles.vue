@@ -20,8 +20,23 @@
     </header>
 
     <!-- Main Content Area -->
-    <main class="page-main">
-      <div class="page-content-wrapper">
+    <main
+      ref="pageMain"
+      class="page-main"
+      @touchstart.passive="onTouchStart"
+      @touchmove.passive="onTouchMove"
+      @touchend="onTouchEnd"
+    >
+      <!-- Pull-to-Refresh Indicator -->
+      <div class="pull-refresh-indicator" :class="{ 'is-refreshing': isRefreshing, 'is-pulling': isPulling }" :style="{ transform: `translateY(${pullDistance}px)` }">
+        <div class="pull-refresh-content">
+          <span v-if="isRefreshing" class="pull-refresh-spinner"></span>
+          <span v-else class="pull-refresh-arrow" :style="{ transform: pullDistance > pullThreshold ? 'rotate(180deg)' : 'rotate(0deg)' }">↓</span>
+          <span class="pull-refresh-text">{{ pullHintText }}</span>
+        </div>
+      </div>
+
+      <div class="page-content-wrapper" :style="{ transform: `translateY(${pullDistance}px)`, transition: isPulling ? 'none' : 'transform 0.3s ease' }">
         <!-- Filter Pills -->
         <div class="filter-bar">
           <div class="filter-scroll">
@@ -168,8 +183,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getAuthHeader } from '@/utils/auth'
 import { useUserStore } from '@/store/user'
@@ -178,6 +193,86 @@ const router = useRouter()
 const userStore = useUserStore()
 // 登录用户由外层 Layout (ArticlesHost) 提供顶/底栏，隐藏组件自带的游客 chrome
 const isLoggedIn = computed(() => !!userStore.token)
+
+// ── Scroll Position & Data Cache (恢复滚动位置) ──
+const CACHE_KEY = 'public_articles_cache'
+const SCROLL_KEY = 'public_articles_scroll'
+const NAV_FLAG_KEY = 'public_articles_nav_to_detail'
+
+const saveScrollState = () => {
+  const scrollTop = pageMain.value?.scrollTop || 0
+  try {
+    sessionStorage.setItem(SCROLL_KEY, String(scrollTop))
+    sessionStorage.setItem(NAV_FLAG_KEY, '1')
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+      allArticles: allArticles.value,
+      selectedCategory: selectedCategory.value,
+      displayCount: displayCount.value,
+    }))
+  } catch (e) { /* quota exceeded or private mode */ }
+}
+
+const restoreScrollState = () => {
+  try {
+    const cached = sessionStorage.getItem(CACHE_KEY)
+    if (!cached) return false
+    const data = JSON.parse(cached)
+    if (!data || !Array.isArray(data.allArticles)) return false
+    // 如果缓存数据为空，不恢复，强制重新加载
+    if (data.allArticles.length === 0) return false
+    allArticles.value = data.allArticles
+    selectedCategory.value = data.selectedCategory || ''
+    displayCount.value = data.displayCount || BATCH_SIZE
+    return true
+  } catch (e) { return false }
+}
+
+const restoreScrollPosition = () => {
+  try {
+    const saved = sessionStorage.getItem(SCROLL_KEY)
+    if (!saved) return
+    const target = parseInt(saved, 10) || 0
+    if (target <= 0) return
+
+    // 使用 requestAnimationFrame + 重试机制，确保 DOM 渲染完毕后再恢复
+    const tryRestore = (attempts = 0) => {
+      if (!pageMain.value) return
+      pageMain.value.scrollTop = target
+      // 如果 DOM 高度不够（内容还没渲染完），短暂延迟后重试
+      if (pageMain.value.scrollTop < target - 5 && attempts < 10) {
+        setTimeout(() => tryRestore(attempts + 1), 50)
+      }
+    }
+    // 等待 DOM 更新后执行（用 setTimeout 0 + rAF 兜底）
+    setTimeout(() => {
+      requestAnimationFrame(() => tryRestore())
+    }, 0)
+  } catch (e) { /* ignore */ }
+}
+
+const clearCache = () => {
+  try {
+    sessionStorage.removeItem(CACHE_KEY)
+    sessionStorage.removeItem(SCROLL_KEY)
+    sessionStorage.removeItem(NAV_FLAG_KEY)
+  } catch (e) { /* ignore */ }
+}
+
+// ── Pull-to-Refresh State ──
+const pageMain = ref(null)
+const isPulling = ref(false)
+const isRefreshing = ref(false)
+const pullDistance = ref(0)
+const pullThreshold = 60
+let touchStartY = 0
+let touchStartX = 0
+
+const pullHintText = computed(() => {
+  if (isRefreshing.value) return '正在刷新...'
+  if (pullDistance.value > pullThreshold) return '松开刷新'
+  return '下拉刷新'
+})
+
 const loading = ref(true)
 const allArticles = ref([])
 const selectedCategory = ref('')
@@ -336,9 +431,91 @@ const handleLogin = () => {
 }
 
 onMounted(() => {
+  // 仅在从文章详情页返回时恢复缓存（NAV_FLAG_KEY 标记存在）
+  // 浏览器刷新时 sessionStorage 虽保留，但 NAV_FLAG 不存在，强制重新加载
+  const hasNavFlag = sessionStorage.getItem(NAV_FLAG_KEY)
+  sessionStorage.removeItem(NAV_FLAG_KEY)
+
+  if (hasNavFlag) {
+    const restored = restoreScrollState()
+    if (restored) {
+      loading.value = false
+      nextTick(() => {
+        restoreScrollPosition()
+        setupObserver()
+      })
+      return
+    }
+  }
+  // 首次加载 / 浏览器刷新 / 无缓存：清除旧缓存并请求新数据
+  clearCache()
   loadArticles()
   setupObserver()
 })
+
+// keep-alive 激活时：浏览器不保留 detach/reattach 后的滚动位置，需手动恢复
+onActivated(() => {
+  // 重新设置 IntersectionObserver（可能在 deactivated 时被断开）
+  setupObserver()
+  // 恢复滚动位置（keep-alive detach DOM 会导致 scrollTop 归零）
+  restoreScrollPosition()
+})
+
+// keep-alive 停用时：保存滚动位置并断开 observer 避免后台触发
+onDeactivated(() => {
+  saveScrollState()
+  if (observer) observer.disconnect()
+})
+
+// 离开页面前保存滚动位置和已加载数据
+onBeforeRouteLeave((to, from) => {
+  if (to.path.startsWith('/article/')) {
+    saveScrollState()
+  } else {
+    clearCache()
+  }
+})
+
+// ── Pull-to-Refresh Touch Handlers ──
+const onTouchStart = (e) => {
+  if (isRefreshing.value) return
+  const touch = e.touches[0]
+  touchStartY = touch.clientY
+  touchStartX = touch.clientX
+}
+
+const onTouchMove = (e) => {
+  if (isRefreshing.value) return
+  const touch = e.touches[0]
+  const deltaY = touch.clientY - touchStartY
+  const deltaX = touch.clientX - touchStartX
+
+  const scrollTop = pageMain.value?.scrollTop || 0
+  if (scrollTop > 0 || deltaY < 0) {
+    isPulling.value = false
+    pullDistance.value = 0
+    return
+  }
+
+  if (Math.abs(deltaX) > Math.abs(deltaY)) return
+
+  isPulling.value = true
+  pullDistance.value = Math.min(deltaY * 0.4, 120)
+}
+
+const onTouchEnd = async () => {
+  if (!isPulling.value) return
+  isPulling.value = false
+
+  if (pullDistance.value > pullThreshold) {
+    isRefreshing.value = true
+    pullDistance.value = pullThreshold
+    displayCount.value = BATCH_SIZE
+    await loadArticles()
+    isRefreshing.value = false
+  }
+  pullDistance.value = 0
+}
 
 onBeforeUnmount(() => {
   if (observer) observer.disconnect()
@@ -544,6 +721,50 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* --- Pull-to-Refresh --- */
+.pull-refresh-indicator {
+  position: absolute;
+  top: -50px;
+  left: 0;
+  right: 0;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+.pull-refresh-indicator.is-pulling { transition: none; }
+.pull-refresh-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+}
+.pull-refresh-arrow {
+  display: inline-block;
+  font-size: 16px;
+  transition: transform 0.3s ease;
+}
+.pull-refresh-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+.pull-refresh-text { user-select: none; }
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .articles-feed {
