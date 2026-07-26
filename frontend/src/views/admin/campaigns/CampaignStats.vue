@@ -274,8 +274,17 @@ const individualFilters = reactive({
 
 const individualWeek = ref(null)
 
+const getCurrentMonday = () => {
+  const d = new Date()
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  const monday = new Date(d)
+  monday.setDate(diff)
+  return monday.toISOString().slice(0, 10)
+}
+
 // 周优秀
-const awardsWeek = ref(null)
+const awardsWeek = ref(getCurrentMonday())
 const weeklyAwards = ref({})
 
 const loadWeeklyAwards = async () => {
@@ -408,6 +417,8 @@ const handleTabChange = (tab) => {
     loadClassRanking()
   } else if (tab === 'college' && collegeRanking.value.length === 0) {
     loadCollegeRanking()
+  } else if (tab === 'weeklyAwards' && !weeklyAwards.value.topIndividuals) {
+    loadWeeklyAwards()
   }
 }
 
