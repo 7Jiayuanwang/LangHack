@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.english.entity.CampaignWeeklyScore;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+
+import java.util.List;
 
 /**
  * 活动每周积分 Mapper
@@ -22,4 +25,11 @@ public interface CampaignWeeklyScoreMapper extends BaseMapper<CampaignWeeklyScor
                        @Param("userId") Long userId,
                        @Param("weekStart") java.time.LocalDate weekStart,
                        @Param("scoreIncrement") java.math.BigDecimal scoreIncrement);
+
+    /**
+     * 有周积分记录的周起始日列表（周一，降序）
+     */
+    @Select("SELECT DATE_FORMAT(week_start, '%Y-%m-%d') FROM campaign_weekly_scores " +
+            "WHERE campaign_id = #{campaignId} GROUP BY week_start ORDER BY week_start DESC")
+    List<String> selectWeekStarts(@Param("campaignId") Long campaignId);
 }
