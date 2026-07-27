@@ -566,6 +566,24 @@ export function getReadingHistory(params) {
   })
 }
 
+// ==================== 文章点赞相关API ====================
+
+// 点赞/取消点赞文章
+export function toggleArticleLike(textId) {
+  return request({
+    url: `/api/student/learning/likes/${textId}`,
+    method: 'post'
+  })
+}
+
+// 检查文章点赞状态
+export function checkArticleLike(textId) {
+  return request({
+    url: `/api/student/learning/likes/${textId}/check`,
+    method: 'get'
+  })
+}
+
 // 默认导出所有API方法
 export function createUnderline(data) {
   return request({
@@ -641,6 +659,9 @@ const studentApi = {
   checkArticleFavorite,
   getFavoriteArticles,
   getReadingHistory,
+  // 点赞
+  toggleArticleLike,
+  checkArticleLike,
   // 学生课表
   getStudentSchedule,
   refreshStudentSchedule,

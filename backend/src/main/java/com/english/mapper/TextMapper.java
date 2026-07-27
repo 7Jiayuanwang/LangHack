@@ -21,4 +21,19 @@ public interface TextMapper extends BaseMapper<Text> {
      */
     @Update("UPDATE texts SET unit_id = NULL WHERE unit_id = #{unitId}")
     int clearUnitReference(@Param("unitId") Long unitId);
+
+    @Update("UPDATE texts SET like_count = COALESCE(like_count, 0) + 1 WHERE id = #{textId}")
+    int incrementLikeCount(@Param("textId") Long textId);
+
+    @Update("UPDATE texts SET like_count = GREATEST(COALESCE(like_count, 0) - 1, 0) WHERE id = #{textId}")
+    int decrementLikeCount(@Param("textId") Long textId);
+
+    @Update("UPDATE texts SET collect_count = COALESCE(collect_count, 0) + 1 WHERE id = #{textId}")
+    int incrementCollectCount(@Param("textId") Long textId);
+
+    @Update("UPDATE texts SET collect_count = GREATEST(COALESCE(collect_count, 0) - 1, 0) WHERE id = #{textId}")
+    int decrementCollectCount(@Param("textId") Long textId);
+
+    @Update("UPDATE texts SET view_count = COALESCE(view_count, 0) + 1 WHERE id = #{textId}")
+    int incrementViewCount(@Param("textId") Long textId);
 }
