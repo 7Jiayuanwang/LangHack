@@ -983,7 +983,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
         Map<String, Object> result = new HashMap<>();
         try {
-            java.time.LocalDate weekDate = java.time.LocalDate.parse(weekStart);
+            // 周选择器可能传周日/周中任意日，统一归一到周一（与 campaign_weekly_scores.week_start 对齐）
+            java.time.LocalDate weekDate = resolveWeekMonday(weekStart);
 
             // 检查用户是否已报名
             QueryWrapper<CampaignParticipation> myWrapper = new QueryWrapper<>();
@@ -996,8 +997,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 result.put("myRank", null);
                 result.put("totalParticipants", 0);
                 result.put("totalScore", 0);
-                result.put("weekStart", weekStart);
+                result.put("weekStart", weekDate.toString());
                 result.put("aroundMe", new ArrayList<>());
+                result.put("availableWeeks", weeklyScoreMapper.selectWeekStarts(campaignId));
                 return result;
             }
 
@@ -1100,8 +1102,14 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             result.put("totalScore", myWeeklyScore);
             result.put("completedTasks", myParticipation.getCompletedTasks());
             result.put("enrollmentStatus", myParticipation.getEnrollmentStatus());
-            result.put("weekStart", weekStart);
+            result.put("weekStart", weekDate.toString());
             result.put("aroundMe", aroundMe);
+            try {
+                result.put("availableWeeks", weeklyScoreMapper.selectWeekStarts(campaignId));
+            } catch (Exception ex) {
+                log.warn("加载有积分周列表失败: campaignId={}", campaignId, ex);
+                result.put("availableWeeks", new ArrayList<>());
+            }
         } catch (Exception e) {
             log.error("获取周排名失败: campaignId={}, userId={}, weekStart={}", campaignId, userId, weekStart, e);
             result.put("enrolled", false);
@@ -1419,6 +1427,17 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     }
 
     /**
+     * 将任意日期归一到该周周一（ISO，周一为一周起始）。
+     * Element Plus 周选择器在部分环境下会回传周日，必须归一后才能命中 week_start。
+     */
+    private java.time.LocalDate resolveWeekMonday(String weekStart) {
+        if (weekStart == null || weekStart.isBlank()) {
+            return java.time.LocalDate.now().with(java.time.DayOfWeek.MONDAY);
+        }
+        return java.time.LocalDate.parse(weekStart.trim()).with(java.time.DayOfWeek.MONDAY);
+    }
+
+    /**
      * 获取每周优秀个人和班级
      * @param campaignId 活动ID
      * @param weekStart 周起始日（周一），null 表示当周
@@ -1427,12 +1446,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     public Map<String, Object> getWeeklyAwards(Long campaignId, String weekStart, Integer topN) {
         Map<String, Object> result = new HashMap<>();
         try {
-            java.time.LocalDate weekDate;
-            if (weekStart == null || weekStart.isEmpty()) {
-                weekDate = java.time.LocalDate.now().with(java.time.DayOfWeek.MONDAY);
-            } else {
-                weekDate = java.time.LocalDate.parse(weekStart);
-            }
+            java.time.LocalDate weekDate = resolveWeekMonday(weekStart);
 
             int limit = topN != null && topN > 0 ? topN : 3;
 
