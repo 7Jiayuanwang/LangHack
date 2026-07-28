@@ -55,6 +55,9 @@ public class Text {
     @TableField("like_count")
     private Integer likeCount;
 
+    @TableField("collect_count")
+    private Integer collectCount;
+
     @TableField("is_public")
     private Integer isPublic;
 
@@ -235,6 +238,14 @@ public class Text {
 
     public void setLikeCount(Integer likeCount) {
         this.likeCount = likeCount;
+    }
+
+    public Integer getCollectCount() {
+        return collectCount;
+    }
+
+    public void setCollectCount(Integer collectCount) {
+        this.collectCount = collectCount;
     }
 
     public Integer getIsPublic() {
