@@ -201,8 +201,10 @@ const NAV_FLAG_KEY = 'public_articles_nav_to_detail'
 
 const saveScrollState = () => {
   const scrollTop = pageMain.value?.scrollTop || 0
+  const wrapperScrollTop = getContentWrapper()?.scrollTop || 0
   try {
     sessionStorage.setItem(SCROLL_KEY, String(scrollTop))
+    sessionStorage.setItem(WRAPPER_SCROLL_KEY, String(wrapperScrollTop))
     sessionStorage.setItem(NAV_FLAG_KEY, '1')
     sessionStorage.setItem(CACHE_KEY, JSON.stringify({
       allArticles: allArticles.value,
@@ -254,8 +256,17 @@ const clearCache = () => {
   try {
     sessionStorage.removeItem(CACHE_KEY)
     sessionStorage.removeItem(SCROLL_KEY)
+    sessionStorage.removeItem(WRAPPER_SCROLL_KEY)
     sessionStorage.removeItem(NAV_FLAG_KEY)
   } catch (e) { /* ignore */ }
+}
+
+// ── Scroll Position Memory (keep-alive) ──
+// 不再依赖 let 变量跨 activate/deactivate 传递——改用 sessionStorage
+const WRAPPER_SCROLL_KEY = 'public_articles_wrapper_scroll'
+
+const getContentWrapper = () => {
+  return pageMain.value?.closest('.content-wrapper') || null
 }
 
 // ── Pull-to-Refresh State ──
@@ -410,6 +421,8 @@ const readArticle = (article) => {
       }
     })
     .catch(error => console.error('记录文章阅读失败:', error))
+  // 在导航前保存滚动位置到 sessionStorage（此时 DOM 还在，scrollTop 有效）
+  saveScrollState()
   router.push({
     path: `/article/${article.id}`,
     query: { from: 'articles' }
@@ -455,10 +468,40 @@ onMounted(() => {
 
 // keep-alive 激活时：浏览器不保留 detach/reattach 后的滚动位置，需手动恢复
 onActivated(() => {
-  // 重新设置 IntersectionObserver（可能在 deactivated 时被断开）
   setupObserver()
-  // 恢复滚动位置（keep-alive detach DOM 会导致 scrollTop 归零）
-  restoreScrollPosition()
+  // 从 sessionStorage 恢复滚动位置（不依赖组件实例 let 变量）
+  const targetScroll = parseInt(sessionStorage.getItem(SCROLL_KEY) || '0', 10)
+  const targetWrapperScroll = parseInt(sessionStorage.getItem(WRAPPER_SCROLL_KEY) || '0', 10)
+  if (targetScroll > 0 || targetWrapperScroll > 0) {
+    nextTick(() => {
+      setTimeout(() => {
+        requestAnimationFrame(() => {
+          if (pageMain.value && targetScroll > 0) {
+            const tryRestoreMain = (attempts = 0) => {
+              if (!pageMain.value) return
+              pageMain.value.scrollTop = targetScroll
+              if (pageMain.value.scrollTop < targetScroll - 5 && attempts < 15) {
+                setTimeout(() => tryRestoreMain(attempts + 1), 50)
+              }
+            }
+            tryRestoreMain()
+          }
+          const wrapper = getContentWrapper()
+          if (wrapper && targetWrapperScroll > 0) {
+            const tryRestoreWrapper = (attempts = 0) => {
+              const w = getContentWrapper()
+              if (!w) return
+              w.scrollTop = targetWrapperScroll
+              if (w.scrollTop < targetWrapperScroll - 5 && attempts < 15) {
+                setTimeout(() => tryRestoreWrapper(attempts + 1), 50)
+              }
+            }
+            tryRestoreWrapper()
+          }
+        })
+      }, 0)
+    })
+  }
 })
 
 // keep-alive 停用时：保存滚动位置并断开 observer 避免后台触发
@@ -470,6 +513,7 @@ onDeactivated(() => {
 // 离开页面前保存滚动位置和已加载数据
 onBeforeRouteLeave((to, from) => {
   if (to.path.startsWith('/article/')) {
+    // 在 DOM 被 detach 之前保存滚动位置到 sessionStorage
     saveScrollState()
   } else {
     clearCache()
