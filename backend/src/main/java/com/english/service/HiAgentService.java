@@ -1,8 +1,5 @@
 package com.english.service;
 
-/**
- * HiAgent AI service interface for article generation and rewriting
- */
 public interface HiAgentService {
 
     /**
@@ -44,4 +41,14 @@ public interface HiAgentService {
      * AI Quiz: generate multiple-choice questions for an article using quiz-specific credentials
      */
     String generateQuiz(String title, String content, int count);
+
+    /**
+     * Create a conversation using QA credentials (exposed for streaming controller)
+     */
+    String createConversationForQA() throws Exception;
+
+    /**
+     * Stream chat query using QA credentials — returns SSE event stream
+     */
+    org.springframework.http.ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> chatQueryStreamingWithQACredentials(String conversationId, String prompt) throws Exception;
 }
