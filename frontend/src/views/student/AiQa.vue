@@ -1,5 +1,5 @@
 <template>
-  <AiQaPage api-path="/api/student/ai-qa/chat" back-label="返回阅读" />
+  <AiQaPage api-path="/api/student/ai-qa/chat/stream" back-label="返回阅读" />
 </template>
 
 <script setup>
