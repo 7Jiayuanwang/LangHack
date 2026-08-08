@@ -117,6 +117,24 @@ public class AiQaController {
         }
     }
 
+    @PostMapping("/chat/stream")
+public org.springframework.http.ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> chatStream(
+        @RequestBody ChatRequest request,
+        Authentication auth) throws Exception {
+
+    if (request.getUserQuestion() == null || request.getUserQuestion().trim().isEmpty()) {
+        throw new com.english.exception.BusinessException("问题不能为空");
+    }
+
+    String prompt = buildChatPrompt(
+            request.getUserQuestion().trim(),
+            request.getSelectedText() != null ? request.getSelectedText().trim() : "",
+            request.getArticleContext() != null ? request.getArticleContext().trim() : "");
+
+    String conversationId = hiAgentService.createConversationForQA();
+    return hiAgentService.chatQueryStreamingWithQACredentials(conversationId, prompt);
+}
+
     @GetMapping("/usage/stats")
     public Result<Map<String, Object>> usageStats(Authentication auth) {
         String username = auth != null ? auth.getName() : "anonymous";
