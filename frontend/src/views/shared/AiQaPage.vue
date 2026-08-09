@@ -569,7 +569,7 @@ onBeforeUnmount(() => {
 .typing-dots span:nth-child(3) { animation-delay: 0.3s; }
 .loading-text { color: #64748b; font-size: 14px; }
 
-.qa-bottom-bar { flex-shrink: 0; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid rgba(226, 232, 240, 
+.qa-bottom-bar { flex-shrink: 0; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid rgba(226, 232, 240, 0.6); padding: 14px 16px; }
 .quick-actions { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: none; }
 .quick-actions::-webkit-scrollbar { display: none; }
 .action-pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(59, 130, 246, 0.15); background: rgba(248, 250, 252, 0.92); color: #1e293b; border-radius: 999px; padding: 10px 14px; white-space: nowrap; font-size: 13px; font-weight: 600; cursor: pointer; }
