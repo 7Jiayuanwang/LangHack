@@ -135,9 +135,16 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
                 logger.info("[classSync] 创建班级: name={}, kcbh={}", className, kcbh);
             }
 
-            // 2.3 查学生选课记录
+            // 2.3 查学生选课记录（通过 course_code + teacher_id 关联）
             QueryWrapper<CourseSelection> selWrapper = new QueryWrapper<>();
-            selWrapper.eq("class_id", kcbh);
+            selWrapper.eq("course_code", courseCode);
+            selWrapper.eq("teacher_id", tc.getTeacherId());
+            if (tc.getAcademicYear() != null) {
+                selWrapper.eq("academic_year", tc.getAcademicYear());
+            }
+            if (tc.getSemester() != null) {
+                selWrapper.eq("semester", tc.getSemester());
+            }
             List<CourseSelection> selections = courseSelectionMapper.selectList(selWrapper);
 
             if (selections.isEmpty()) {
