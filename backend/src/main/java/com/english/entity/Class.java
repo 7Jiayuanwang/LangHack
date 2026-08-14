@@ -26,6 +26,9 @@ public class Class {
     @TableLogic(value = "0", delval = "1")
     private Integer deleted;
 
+    @TableField("school_class_id")
+    private String schoolClassId;
+
     // 关联对象 - 用于查询时展示课程和教师信息
     @TableField(exist = false)
     private Course course;
@@ -92,6 +95,14 @@ public class Class {
 
     public void setDeleted(Integer deleted) {
         this.deleted = deleted;
+    }
+
+    public String getSchoolClassId() {
+        return schoolClassId;
+    }
+
+    public void setSchoolClassId(String schoolClassId) {
+        this.schoolClassId = schoolClassId;
     }
 
     public Course getCourse() {
