@@ -611,6 +611,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     private int resolveMaxPages(String dataSource) {
+        // course_selection 全表可达 90 万+ 条（约 900 页），CDSP 不支持过滤参数，
+        // 只能全量拉取后在本地按课程班号建班，故放宽上限至 1200 页。
+        if ("course_selection".equals(dataSource)) return 1200;
         if ("teacher_courses".equals(dataSource)) return 300;
         if ("course_schedule".equals(dataSource)) return 200;
         return 100;
