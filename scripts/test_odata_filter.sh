@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 用官方 OData 语法测试选课接口过滤 - 修正版
-# 关键修正: 每个 $ 参数单独用 --data-urlencode 传, 避免 & 粘连和空格变+
+# OData $filter 测试 - 关键修正: 空格必须用 %20 而非 +
+# OData 里 + 是加号运算符, 会导致 "Edm.Boolean/Decimal not compatible" 错误
 set -e
 
-SEL_URL="https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294802871926794"  # 学生选课
+SEL_URL="https://cdsp.imau.edu.cn/cdsp/data-api/v2/cdsp_1715294802871926794"
 
 ENV_FILE="/data/LangHack/docker/.env"
 [ -f "$ENV_FILE" ] || ENV_FILE="/data/LangHack/.env"
@@ -14,15 +14,15 @@ echo "appId = ${APP_ID}"
 
 gen_sign() { printf '%s' "${APP_ID}${APP_SECRET}${1}" | md5sum | cut -d' ' -f1 | tr -d '\n' | base64 -w0; }
 
-# 用 curl -G + 多个 --data-urlencode, 每个参数独立编码
-# 传参: call "参数1=值1" "参数2=值2" ...
-call() {
-  local ts sign; ts=$(date +%s%3N); sign=$(gen_sign "$ts")
-  local args=()
-  for kv in "$@"; do
-    args+=(--data-urlencode "$kv")
-  done
-  curl -s -G "${SEL_URL}" "${args[@]}" \
+# 用 python 做严格 URL 编码(空格→%20, 单引号保留或编码),然后直接拼到 URL
+# filter_expr 传原始表达式如: 课程班号 eq 256726307
+enc() { python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"; }
+
+# 直接构造完整 URL(参数已编码), 不让 curl 再编码
+call_raw() {
+  local full_url="$1" ts sign
+  ts=$(date +%s%3N); sign=$(gen_sign "$ts")
+  curl -s "$full_url" \
     -H "appId: ${APP_ID}" -H "timestamp: ${ts}" -H "sign: ${sign}" -H "Accept: application/json"
 }
 show() { python3 -c "
@@ -37,29 +37,35 @@ except Exception as e: print('  解析失败:', e)
 "; }
 
 echo
-echo "===== 测试1: 课程班号 eq (数字,不带引号) ====="
-call "\$filter=课程班号 eq 256726307" | show
+echo "===== 测试1: 课程班号 eq 数字 (空格=%20) ====="
+F=$(enc "课程班号 eq 256726307")
+echo "  编码后 filter = $F"
+call_raw "${SEL_URL}?\$filter=${F}" | show
 
 echo
-echo "===== 测试2: 课程班号 eq (带引号) ====="
-call "\$filter=课程班号 eq '256726307'" | show
+echo "===== 测试2: 课程班号 eq 带引号 ====="
+F=$(enc "课程班号 eq '256726307'")
+call_raw "${SEL_URL}?\$filter=${F}" | show
 
 echo
 echo "===== 测试3: 学号 eq ====="
-call "\$filter=学号 eq '2021112010808'" | show
+F=$(enc "学号 eq '2021112010808'")
+call_raw "${SEL_URL}?\$filter=${F}" | show
 
 echo
-echo "===== 测试4: \$count=true (单独) ====="
-call "\$count=true" "\$top=1" | python3 -c "import sys,json;d=json.load(sys.stdin);print('  @api.count =',d.get('@api.count'))" 2>/dev/null
+echo "===== 测试4: \$count=true ====="
+call_raw "${SEL_URL}?\$count=true&\$top=1" | python3 -c "import sys,json;d=json.load(sys.stdin);print('  @api.count =',d.get('@api.count'))" 2>/dev/null
 
 echo
-echo "===== 测试5: \$orderby 课程班号 desc (单独参数) ====="
-call "\$orderby=课程班号 desc" "\$top=5" | show
+echo "===== 测试5: \$orderby 课程班号 desc ====="
+O=$(enc "课程班号 desc")
+call_raw "${SEL_URL}?\$orderby=${O}&\$top=5" | show
 
 echo
-echo "===== 测试6: 课程班号 gt (大于, 试范围过滤) ====="
-call "\$filter=课程班号 gt 256000000" "\$top=5" | show
+echo "===== 测试6: 课程班号 gt 范围过滤 ====="
+F=$(enc "课程班号 gt 256000000")
+call_raw "${SEL_URL}?\$filter=${F}&\$top=5" | show
 
 echo
 echo "============================================="
-echo "判读: 哪个测试返回了 value 数组且是目标数据 → 该语法可用"
+echo "判读: 若测试1返回256726307的学生 → \$filter可用,方案彻底解决"
