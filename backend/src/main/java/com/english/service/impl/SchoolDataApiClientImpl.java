@@ -442,8 +442,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 HttpEntity<Void> entity = new HttpEntity<>(headers);
 
                 logger.info("学校数据 API 请求中 url={} attempt={}/{}", url, attempt, retryAttempts);
+                // 关键：用 URI 对象传入，避免 RestTemplate(String) 对已编码 URL(%20/%E8..) 二次编码
+                // 导致 CDSP 返回 "The URI is malformed"。URI.create 把 URL 视为已是最终形态。
+                java.net.URI requestUri = java.net.URI.create(url);
                 ResponseEntity<String> response = restTemplate.exchange(
-                        url, HttpMethod.GET, entity, String.class);
+                        requestUri, HttpMethod.GET, entity, String.class);
 
                 if (response.getBody() == null || response.getBody().isEmpty()) {
                     logger.warn("学校数据 API 响应体为空 url={} status={}", url, response.getStatusCode());
