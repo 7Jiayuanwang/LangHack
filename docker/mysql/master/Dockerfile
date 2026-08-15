@@ -16,6 +16,6 @@ COPY mysql/init/08-v16-school-tables.sql /docker-entrypoint-initdb.d/08-v16-scho
 COPY mysql/master/my.cnf /etc/mysql/conf.d/master.cnf
 
 # 复制 seed 目录（生产全量备份），供 03-import-backup.sh 自动加载
-COPY mysql/init/seed/ /docker-entrypoint-initdb.d/seed/
+#COPY mysql/init/seed/ /docker-entrypoint-initdb.d/seed/
 
 RUN chmod +x /docker-entrypoint-initdb.d/*.sh

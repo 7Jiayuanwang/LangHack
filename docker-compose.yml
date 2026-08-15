@@ -1,355 +1,102 @@
-name: LangHack
-
-# ─────────────────────────────────────────────
-# 全局日志配置（防止日志无限增长耗尽磁盘）
-# ─────────────────────────────────────────────
-x-logging: &default-logging
-  driver: json-file
-  options:
-    max-size: "50m"
-    max-file: "5"
-
-services:
-
-  # ─────────────────────────────────────────────
-  # MySQL 主库
-  # ─────────────────────────────────────────────
+﻿services:
   mysql-master:
-    build:
-      context: ./docker
-      dockerfile: mysql/master/Dockerfile
-      args:
-        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
-    image: langhack-mysql-master:latest
+    image: mysql:8.0
     container_name: langhack-mysql-master
     restart: unless-stopped
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
-    # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
-    # （MySQL 8.0 会忽略 world-writable 的 .cnf 文件）
-    command: >
-      --server-id=1
-      --log-bin=mysql-bin
-      --binlog-format=ROW
-      --binlog-expire-logs-seconds=604800
-      --max-binlog-size=100M
-      --gtid-mode=ON
-      --enforce-gtid-consistency=ON
-      --innodb-buffer-pool-size=1G
-      --innodb-buffer-pool-instances=2
-      --innodb-log-file-size=256M
-      --innodb-flush-log-at-trx-commit=1
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --max-allowed-packet=256M
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
-      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
-      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: langhack
+      MYSQL_REPLICATION_USER: repl
+      MYSQL_REPLICATION_PASSWORD: replpass
     ports:
-      - "127.0.0.1:${PORT_MYSQL:-3306}:3306"
+      - "3306:3306"
     volumes:
-      - ./data/mysql-master:/var/lib/mysql
-      # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
-      # 仅挂载动态数据：历史备份目录 + ECDICT 词典 CSV（体积大且非 git 追踪）
-      - ./database:/docker-entrypoint-initdb.d/seed:ro
-      - ./backups:/docker-entrypoint-initdb.d/seed-backups:ro
-      - ./ECDICT-master/ecdict.csv:/docker-entrypoint-initdb.d/ecdict.csv:ro
-    networks:
-      - langhack-network
+      - mysql-master-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p123456"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 180s  # 增加到 3 分钟，给初始化脚本足够时间（备份导入 + ECDICT）
+      retries: 5
+    networks:
+      - langhack-network
 
-  # ─────────────────────────────────────────────
-  # MySQL 从库（只读副本）
-  # ─────────────────────────────────────────────
   mysql-slave:
-    build:
-      context: ./docker
-      dockerfile: mysql/slave/Dockerfile
-      args:
-        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
-    image: langhack-mysql-slave:latest
+    image: mysql:8.0
     container_name: langhack-mysql-slave
     restart: unless-stopped
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
-    # 使用 command 传递配置，绕过 Windows Docker bind-mount 权限问题
-    # 注意: super-read-only 不能在 my.cnf 或 command 中设置，否则阻塞 init 脚本
-    # (ERROR 1290) — 在 init-replication.sh 末尾通过 SET GLOBAL 动态启用
-    command: >
-      --server-id=2
-      --relay-log=relay-bin
-      --relay-log-purge=ON
-      --gtid-mode=ON
-      --enforce-gtid-consistency=ON
-      --log-bin=mysql-slave-bin
-      --log-slave-updates=ON
-      --innodb-buffer-pool-size=1G
-      --innodb-flush-log-at-trx-commit=2
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --max-allowed-packet=256M
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER}
-      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
-      MYSQL_ROLE: slave
-      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: langhack
+      MYSQL_REPLICATION_USER: repl
+      MYSQL_REPLICATION_PASSWORD: replpass
     ports:
-      - "127.0.0.1:${PORT_MYSQL_SLAVE:-3307}:3306"
+      - "3307:3306"
     volumes:
-      - ./data/mysql-slave:/var/lib/mysql
-      # init 脚本已通过 Dockerfile COPY 打包进镜像，避免 Windows bind-mount 缓存问题
-      # 从库通过 MYSQL_ROLE=slave 跳过所有数据导入（数据由主从复制同步）
+      - mysql-slave-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - langhack-network
-    depends_on:
-      mysql-master:
-        condition: service_healthy
-    healthcheck:
-      # 仅检查 MySQL 进程存活，不强制要求复制运行
-      # 复制状态三层保障：
-      #   1) entrypoint-wrapper.sh 每次启动时主动检查/修复
-      #   2) deploy.sh / auto-update.sh 后置兜底
-      #   3) DynamicDataSource 运行时降级（回退主库）
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 360s  # entrypoint-wrapper 会等待 MySQL 就绪 + 复制初始化，给足够时间
 
-  # ─────────────────────────────────────────────
-  # Redis 缓存
-  # ─────────────────────────────────────────────
   redis:
-    image: ${IMAGE_REGISTRY_PREFIX:-}redis:7-alpine
+    image: redis:7-alpine
     container_name: langhack-redis
     restart: unless-stopped
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 128M
-    command: >
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
-      --appendonly yes
-      ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
     ports:
-      - "127.0.0.1:${PORT_REDIS:-6379}:6379"
-    volumes:
-      - ./data/redis:/data
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - langhack-network
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a ${REDIS_PASSWORD}} ping | grep -q PONG"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
 
-  # ─────────────────────────────────────────────
-  # Spring Boot 后端应用
-  # ─────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      args:
-        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
-        MAVEN_MIRROR_URL: ${MAVEN_MIRROR_URL:-}
-        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
     container_name: langhack-backend
     restart: unless-stopped
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 6G
-        reservations:
-          memory: 2G
-    environment:
-      TZ: Asia/Shanghai
-      SPRING_PROFILES_ACTIVE: sso
-      # 主库
-      DB_URL: jdbc:mysql://mysql-master:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      # 从库（读写分离，可选）
-      DB_SLAVE_URL: jdbc:mysql://mysql-slave:3306/english_learning?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
-      DB_SLAVE_USERNAME: ${DB_SLAVE_USERNAME:-${DB_USERNAME}}
-      DB_SLAVE_PASSWORD: ${DB_SLAVE_PASSWORD:-${DB_PASSWORD}}
-      # Redis
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      # 认证 & AI
-      JWT_SECRET: ${JWT_SECRET}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-      TUTOR_API_BASE_URL: ${TUTOR_API_BASE_URL}
-      # HiAgent (文章版本生成 + AI问答)
-      HIAGENT_API_KEY: ${HIAGENT_API_KEY:-}
-      HIAGENT_APP_ID: ${HIAGENT_APP_ID:-}
-      HIAGENT_API_URL: ${HIAGENT_API_URL:-https://agent.imau.edu.cn:32300/api/proxy/api/v1}
-      HIAGENT_QA_API_KEY: ${HIAGENT_QA_API_KEY:-}
-      HIAGENT_QA_APP_ID: ${HIAGENT_QA_APP_ID:-}
-      # 备份
-      BACKUP_DIR: /app/backups
-      MYSQLDUMP_PATH: mysqldump
-      # 备份导入 multipart 上限（与 nginx client_max_body_size 2048M 对齐）
-      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:-2048MB}
-      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:-2048MB}
-      # CORS（生产环境严格限制 + 开发环境本地回环）
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://langhack.imau.edu.cn,https://isa.imau.edu.cn,http://localhost:3000,http://127.0.0.1:3000}
-      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-}
-      # AI 翻译（可选，也可在运维面板配置）
-      AI_TRANSLATE_API_URL: ${AI_TRANSLATE_API_URL:-}
-      AI_TRANSLATE_API_KEY: ${AI_TRANSLATE_API_KEY:-}
-      AI_TRANSLATE_MODEL: ${AI_TRANSLATE_MODEL:-}
-      # SSO Configuration
-      SSO_ENABLED: ${SSO_ENABLED:-true}
-      SSO_PROTOCOL: ${SSO_PROTOCOL:-CAS}
-      SSO_CAS_ENABLED: ${SSO_CAS_ENABLED:-true}
-      SSO_CAS_SERVER_URL: ${SSO_CAS_SERVER_URL:-https://ids.imau.edu.cn/authserver}
-      # 应用服务器地址（对应官方 web.xml 的 serverName，格式: 协议://域名[:端口]）
-      SSO_CAS_SERVER_NAME: ${SSO_CAS_SERVER_NAME:-http://localhost:8080}
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8088}
-      APP_UPDATE_SUPPORTED: "${APP_UPDATE_SUPPORTED:-true}"
-      PROJECT_HOST_PATH: "${PROJECT_HOST_PATH:-}"
-      APP_UPDATE_DEPLOYER_IMAGE: "${APP_UPDATE_DEPLOYER_IMAGE:-langhack-deployer:latest}"
-      APP_UPDATE_DOCKER_SOCKET: "${APP_UPDATE_DOCKER_SOCKET:-/var/run/docker.sock}"
-      GIT_TOKEN: "${GIT_TOKEN:-}"
-      GIT_SSH_KEY_DIR: "${GIT_SSH_KEY_DIR:-}"
-      # 管理员叩门密钥（前后端必须一致）
-      ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
-      # Flyway — 启用：重复版本号 (V25/V27) 已在 fd2c670 清理
-      # 已有数据库通过 baseline-on-migrate 接管；新机器走 init SQL + Flyway 增量迁移
-      SPRING_FLYWAY_ENABLED: "true"
-      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
-      SPRING_FLYWAY_BASELINE_VERSION: "0"
-      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
-      SPRING_FLYWAY_OUT_OF_ORDER: "true"
-      # School Data Integration
-      SCHOOL_DATA_SOURCE: ${SCHOOL_DATA_SOURCE:-api}
-      SCHOOL_API_BASE_URL: ${SCHOOL_API_BASE_URL:-}
-      # 官方认证: appId + appSecret 签名
-      SCHOOL_API_APP_ID: ${SCHOOL_API_APP_ID:-}
-      SCHOOL_API_APP_SECRET: ${SCHOOL_API_APP_SECRET:-}
-      SCHOOL_ETL_JDBC_URL: ${SCHOOL_ETL_JDBC_URL:-}
-      SCHOOL_ETL_USERNAME: ${SCHOOL_ETL_USERNAME:-}
-      SCHOOL_ETL_PASSWORD: ${SCHOOL_ETL_PASSWORD:-}
-      SCHOOL_SYNC_ENABLED: ${SCHOOL_SYNC_ENABLED:-false}
     ports:
-      - "${PORT_BACKEND:-8080}:8080"
-    volumes:
-      - ./data/app-logs:/app/logs
-      - ./data/app-uploads:/app/uploads
-      # 备份目录绑定到宿主机，防止 docker compose down -v 丢失数据
-      - ./backups:/app/backups
-      # Docker Socket — 热部署 deployer sidecar 需要
-      - /var/run/docker.sock:/var/run/docker.sock
-      # 热部署日志目录（与 deployer sidecar 共享，用于实时日志流）
-      - ./logs/hot-deploy:/app/hot-deploy-logs
-    networks:
-      - langhack-network
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-master:3306/langhack?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=123456
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=com.mysql.cj.jdbc.Driver
+      - SPRING_DATASOURCE_DYNAMIC_PRIMARY=master
+      - SPRING_DATASOURCE_DYNAMIC_STRICT=false
     depends_on:
       mysql-master:
-        condition: service_healthy   # 主库进程必须存活（阻塞）
+        condition: service_healthy
       mysql-slave:
-        condition: service_started   # 从库容器启动即可；复制状态由后置复制初始化与运行时降级共同处理
+        condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 90s
+    networks:
+      - langhack-network
 
-  # ─────────────────────────────────────────────
-  # Vue 3 前端 (Nginx 反向代理)
-  # ─────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
-        NPM_REGISTRY: ${NPM_REGISTRY:-}
-        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
-        VITE_API_BASE_URL: ""
-        VITE_TUTOR_API_BASE_URL: ${VITE_TUTOR_API_BASE_URL:-/tutor}
-        VITE_ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
-        VITE_ADMIN_PORTAL_PATH: ${ADMIN_PORTAL_PATH:-admin-portal}
     container_name: langhack-frontend
     restart: unless-stopped
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 64M
     ports:
-      - "${PORT_FRONTEND:-80}:80"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "3000:80"
+    depends_on:
+      - backend
     networks:
       - langhack-network
-    depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "test -f /usr/share/nginx/html/maintenance.flag || curl -sf http://localhost:80/ || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
-  # ─────────────────────────────────────────────
-  # 热部署 Deployer (按需启动，profiles: deploy)
-  # 构建: docker compose build deployer
-  # 不会随 docker compose up 启动，仅由后端通过 Docker Socket 调用
-  # ─────────────────────────────────────────────
-  deployer:
-    build:
-      context: .
-      dockerfile: docker/deployer/Dockerfile
-      args:
-        IMAGE_REGISTRY_PREFIX: ${IMAGE_REGISTRY_PREFIX:-}
-        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
-    image: langhack-deployer:latest
-    profiles:
-      - deploy
+volumes:
+  mysql-master-data:
+  mysql-slave-data:
 
-# ─────────────────────────────────────────────
-# 网络
-# ─────────────────────────────────────────────
 networks:
   langhack-network:
     driver: bridge
-
-# ─────────────────────────────────────────────
-# 持久化卷
-# ─────────────────────────────────────────────
-volumes: {}

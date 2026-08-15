@@ -497,6 +497,10 @@ const routes = [
         meta: { title: "我的选课", roles: ["STUDENT", "USER"], featureKey: "page_course_selections" },
       },
       {
+        path: "word-association",
+        redirect: "/student/words?tab=association",
+      },
+      {
         path: "word-test",
         redirect: "/student/words?tab=list",
       },

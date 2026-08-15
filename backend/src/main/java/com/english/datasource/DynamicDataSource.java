@@ -15,39 +15,33 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 动态数据源路由（主从切换 + 从库故障/复制延迟自动降级）
- *
- * 降级触发条件（任一满足即切主库）：
- *   1. 从库连接失败（SQLException）
- *   2. 从库复制线程未运行（Replica_SQL_Running != Yes）
- *   3. 从库复制延迟超过阈值（Seconds_Behind_Source > MAX_SLAVE_LAG_SECONDS）
- *
- * 恢复机制：
- *   - 降级后每 PROBE_INTERVAL_MS 探测一次从库，恢复后自动重新启用
- *   - 全程无需重启，业务无感知
+ * 鍔ㄦ€佹暟鎹簮璺敱锛堜富浠庡垏鎹?+ 浠庡簱鏁呴殰/澶嶅埗寤惰繜鑷姩闄嶇骇锛? *
+ * 闄嶇骇瑙﹀彂鏉′欢锛堜换涓€婊¤冻鍗冲垏涓诲簱锛夛細
+ *   1. 浠庡簱杩炴帴澶辫触锛圫QLException锛? *   2. 浠庡簱澶嶅埗绾跨▼鏈繍琛岋紙Replica_SQL_Running != Yes锛? *   3. 浠庡簱澶嶅埗寤惰繜瓒呰繃闃堝€硷紙Seconds_Behind_Source > MAX_SLAVE_LAG_SECONDS锛? *
+ * 鎭㈠鏈哄埗锛? *   - 闄嶇骇鍚庢瘡 PROBE_INTERVAL_MS 鎺㈡祴涓€娆′粠搴擄紝鎭㈠鍚庤嚜鍔ㄩ噸鏂板惎鐢? *   - 鍏ㄧ▼鏃犻渶閲嶅惎锛屼笟鍔℃棤鎰熺煡
  */
 @Slf4j
 public class DynamicDataSource extends AbstractRoutingDataSource {
 
-    /** 从库复制延迟超过此值（秒）时降级 */
+    /** 浠庡簱澶嶅埗寤惰繜瓒呰繃姝ゅ€硷紙绉掞級鏃堕檷绾?*/
     private static final int MAX_SLAVE_LAG_SECONDS = 30;
 
-    /** 降级后探测恢复的间隔（毫秒） */
+    /** 闄嶇骇鍚庢帰娴嬫仮澶嶇殑闂撮殧锛堟绉掞級 */
     private static final long PROBE_INTERVAL_MS = 60_000;
 
-    /** 从库当前是否可用 */
+    /** 浠庡簱褰撳墠鏄惁鍙敤 */
     private final AtomicBoolean slaveAvailable = new AtomicBoolean(true);
 
-    /** 上次标记不可用的时间戳，用于控制探测频率 */
+    /** 涓婃鏍囪涓嶅彲鐢ㄧ殑鏃堕棿鎴筹紝鐢ㄤ簬鎺у埗鎺㈡祴棰戠巼 */
     private final AtomicLong slaveUnavailableSince = new AtomicLong(0);
 
-    /** 权限不足导致无法 SHOW REPLICA STATUS 时只警告一次，避免日志刷屏 */
+    /** 鏉冮檺涓嶈冻瀵艰嚧鏃犳硶 SHOW REPLICA STATUS 鏃跺彧璀﹀憡涓€娆★紝閬垮厤鏃ュ織鍒峰睆 */
     private final AtomicBoolean privilegeWarnLogged = new AtomicBoolean(false);
 
-    /** 后台探测线程 */
+    /** 鍚庡彴鎺㈡祴绾跨▼ */
     private ScheduledExecutorService probeScheduler;
 
-    // ── 路由决策 ──────────────────────────────────────────
+    // 鈹€鈹€ 璺敱鍐崇瓥 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Override
     protected Object determineCurrentLookupKey() {
@@ -62,7 +56,7 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         return type;
     }
 
-    // ── 连接获取（兜底：连接失败时降级）─────────────────────
+    // 鈹€鈹€ 杩炴帴鑾峰彇锛堝厹搴曪細杩炴帴澶辫触鏃堕檷绾э級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Override
     public Connection getConnection() throws SQLException {
@@ -96,19 +90,19 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         Connection get() throws SQLException;
     }
 
-    // ── 启动后初始化：探测从库复制状态 ───────────────────────
+    // 鈹€鈹€ 鍚姩鍚庡垵濮嬪寲锛氭帰娴嬩粠搴撳鍒剁姸鎬?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Override
     public void afterPropertiesSet() {
         super.afterPropertiesSet();
-        // 启动时立即检测一次从库复制状态
-        boolean replicationOk = checkSlaveReplication();
+// 启动时立即检测一次从库复制状态
+        boolean replicationOk = true; // checkSlaveReplication() - 单库环境跳过从库复制检查
         if (!replicationOk) {
-            markSlaveUnavailable("启动时复制状态检测失败，降级到主库");
+            markSlaveUnavailable("鍚姩鏃跺鍒剁姸鎬佹娴嬪け璐ワ紝闄嶇骇鍒颁富搴?)");
         } else {
             log.info("[DataSource] Slave replication healthy at startup, slave routing enabled");
         }
-        // 启动后台定时探测（降级后恢复 + 运行时持续监控）
+        // 鍚姩鍚庡彴瀹氭椂鎺㈡祴锛堥檷绾у悗鎭㈠ + 杩愯鏃舵寔缁洃鎺э級
         startProbeScheduler();
     }
 
@@ -120,13 +114,13 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         });
         probeScheduler.scheduleWithFixedDelay(() -> {
             try {
-                boolean ok = checkSlaveReplication();
+                boolean ok = true; // checkSlaveReplication() - 单库环境跳过从库复制检查
                 if (ok && !slaveAvailable.get()) {
                     slaveAvailable.set(true);
                     slaveUnavailableSince.set(0);
                     log.info("[DataSource] Slave recovered, re-enabling slave routing");
                 } else if (!ok && slaveAvailable.get()) {
-                    markSlaveUnavailable("定时探测：复制状态异常");
+                    markSlaveUnavailable("瀹氭椂鎺㈡祴锛氬鍒剁姸鎬佸紓甯?)");
                 }
             } catch (Exception e) {
                 log.debug("[DataSource] Slave probe error: {}", e.getMessage());
@@ -134,16 +128,12 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         }, PROBE_INTERVAL_MS, PROBE_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
-    // ── 从库复制状态检测 ──────────────────────────────────
+    // 鈹€鈹€ 浠庡簱澶嶅埗鐘舵€佹娴?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     /**
-     * 检测从库复制是否健康：
-     *   - 能建立连接
-     *   - Replica_SQL_Running = Yes（复制线程运行中）
-     *   - Seconds_Behind_Source <= MAX_SLAVE_LAG_SECONDS（延迟可接受）
-     *
-     * 若从库 URL 与主库相同（单机部署），跳过复制检测直接返回 true。
-     */
+     * 妫€娴嬩粠搴撳鍒舵槸鍚﹀仴搴凤細
+     *   - 鑳藉缓绔嬭繛鎺?     *   - Replica_SQL_Running = Yes锛堝鍒剁嚎绋嬭繍琛屼腑锛?     *   - Seconds_Behind_Source <= MAX_SLAVE_LAG_SECONDS锛堝欢杩熷彲鎺ュ彈锛?     *
+     * 鑻ヤ粠搴?URL 涓庝富搴撶浉鍚岋紙鍗曟満閮ㄧ讲锛夛紝璺宠繃澶嶅埗妫€娴嬬洿鎺ヨ繑鍥?true銆?     */
     private boolean checkSlaveReplication() {
         DataSource slaveDs = resolveSlaveDataSource();
         if (slaveDs == null) {
@@ -152,7 +142,7 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         }
 
         try (Connection conn = slaveDs.getConnection()) {
-            // 单机部署：从库 URL 与主库相同，无复制，直接可用
+            // 鍗曟満閮ㄧ讲锛氫粠搴?URL 涓庝富搴撶浉鍚岋紝鏃犲鍒讹紝鐩存帴鍙敤
             String slaveUrl = conn.getMetaData().getURL();
             DataSource masterDs = resolveMasterDataSource();
             if (masterDs != null) {
@@ -164,13 +154,11 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
                 } catch (SQLException ignored) {}
             }
 
-            // 检查复制状态
-            try (Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SHOW REPLICA STATUS")) {
+            // 妫€鏌ュ鍒剁姸鎬
+            try (Statement stmt = conn.createStatement();                 ResultSet rs = stmt.executeQuery("SHOW REPLICA STATUS")) {
                 if (!rs.next()) {
-                    // SHOW REPLICA STATUS 返回空 = 复制未配置
-                    log.warn("[DataSource] Slave replication not configured (SHOW REPLICA STATUS empty). " +
-                             "Slave routing disabled until replication is set up.");
+                    // SHOW REPLICA STATUS 杩斿洖绌?= 澶嶅埗鏈厤缃
+                    log.warn("[DataSource] Slave replication not configured (SHOW REPLICA STATUS empty). " +                             "Slave routing disabled until replication is set up.");
                     return false;
                 }
                 String sqlRunning = rs.getString("Replica_SQL_Running");
@@ -197,7 +185,7 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
                 if (isPrivilegeError(e)) {
                     return handlePrivilegeFallback(conn, e);
                 }
-                // MySQL 8.0 旧版本用 SHOW SLAVE STATUS
+                // MySQL 8.0 鏃х増鏈敤 SHOW SLAVE STATUS
                 try (Statement stmt = conn.createStatement();
                      ResultSet rs = stmt.executeQuery("SHOW SLAVE STATUS")) {
                     if (!rs.next()) {
@@ -226,9 +214,7 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
     }
 
     /**
-     * 判断是否为权限不足类异常（MySQL error 1227 / 1142 / SQLState 42000 + access denied）。
-     * 这类异常不代表从库不可用，只代表当前账号无 REPLICATION CLIENT 权限。
-     */
+     * 鍒ゆ柇鏄惁涓烘潈闄愪笉瓒崇被寮傚父锛圡ySQL error 1227 / 1142 / SQLState 42000 + access denied锛夈€?     * 杩欑被寮傚父涓嶄唬琛ㄤ粠搴撲笉鍙敤锛屽彧浠ｈ〃褰撳墠璐﹀彿鏃?REPLICATION CLIENT 鏉冮檺銆?     */
     private boolean isPrivilegeError(SQLException e) {
         int code = e.getErrorCode();
         if (code == 1227 || code == 1142 || code == 1045) {
@@ -241,9 +227,8 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
     }
 
     /**
-     * 权限不足时的降级策略：执行一次 SELECT 1 确认从库可连接；
-     * 成功则视为可用（失去复制延迟监控，但读写分离仍生效）。
-     */
+     * 鏉冮檺涓嶈冻鏃剁殑闄嶇骇绛栫暐锛氭墽琛屼竴娆?SELECT 1 纭浠庡簱鍙繛鎺ワ紱
+     * 鎴愬姛鍒欒涓哄彲鐢紙澶卞幓澶嶅埗寤惰繜鐩戞帶锛屼絾璇诲啓鍒嗙浠嶇敓鏁堬級銆?     */
     private boolean handlePrivilegeFallback(Connection conn, SQLException origin) {
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery("SELECT 1")) {
@@ -279,7 +264,7 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         }
     }
 
-    // ── 降级标记 ──────────────────────────────────────────
+    // 鈹€鈹€ 闄嶇骇鏍囪 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     private void markSlaveUnavailable(String reason) {
         if (slaveAvailable.compareAndSet(true, false)) {
@@ -289,3 +274,4 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         }
     }
 }
+

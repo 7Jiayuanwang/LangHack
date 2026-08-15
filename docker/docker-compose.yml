@@ -214,7 +214,7 @@ services:
           memory: 2G
     environment:
       TZ: Asia/Shanghai
-      SPRING_PROFILES_ACTIVE: sso
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
       # Flyway 已在 Docker init 脚本 (04-apply-all-migrations.sql) 中执行完毕，
       # 禁用 Spring Boot 内置 Flyway 避免 V15 版本冲突（Java migration + SQL migration）
       SPRING_FLYWAY_ENABLED: "false"
@@ -224,6 +224,15 @@ services:
       DB_URL: jdbc:mysql://mysql-master:3306/english_learning?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
       DB_USERNAME: ${DB_USERNAME:-root}
       DB_PASSWORD: ${DB_PASSWORD}
+      # Spring Boot 主从数据源配置（DataSourceConfig 从 spring.datasource.master/slave 读取）
+      SPRING_DATASOURCE_MASTER_JDBC_URL: jdbc:mysql://mysql-master:3306/english_learning?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_MASTER_USERNAME: ${DB_USERNAME:-root}
+      SPRING_DATASOURCE_MASTER_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATASOURCE_MASTER_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+      SPRING_DATASOURCE_SLAVE_JDBC_URL: jdbc:mysql://mysql-master:3306/english_learning?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_SLAVE_USERNAME: ${DB_USERNAME:-root}
+      SPRING_DATASOURCE_SLAVE_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATASOURCE_SLAVE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
       # 从库（读写分离，可选），默认值与主库等同
       DB_SLAVE_URL: jdbc:mysql://mysql-slave:3306/english_learning?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
       DB_SLAVE_USERNAME: ${DB_SLAVE_USERNAME:-${DB_USERNAME:-root}}
@@ -234,6 +243,8 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       # 认证 & AI
       JWT_SECRET: ${JWT_SECRET}
+      SPRING_SECURITY_JWT_SECRET: ${JWT_SECRET}
+      SPRING_SECURITY_JWT_EXPIRATION: ${JWT_EXPIRATION:-604800000}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       TUTOR_API_BASE_URL: ${TUTOR_API_BASE_URL}
       # HiAgent (文章版本生成 + AI问答)
