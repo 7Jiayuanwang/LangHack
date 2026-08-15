@@ -34,6 +34,7 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
     private CourseSelectionMapper courseSelectionMapper;
 
     @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("schoolDataApiClientDelegate")
     private com.english.service.SchoolDataApiClient schoolDataApiClient;
 
     @Autowired
