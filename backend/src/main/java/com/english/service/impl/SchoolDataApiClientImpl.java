@@ -577,9 +577,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             url.append("?");
             params.forEach((key, value) -> {
                 if (value != null && !value.isEmpty()) {
-                    url.append(key)  // ✅ key 不编码，保留 $top/$skip 等 OData 参数
+                    url.append(key)  // ✅ key 不编码，保留 $top/$skip/$filter 等 OData 参数
                        .append("=")
-                       .append(URLEncoder.encode(value, StandardCharsets.UTF_8))
+                       .append(encodeODataValue(value))
                        .append("&");
                 }
             });
@@ -590,6 +590,18 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         }
 
         return url.toString();
+    }
+
+    /**
+     * OData 参数值编码。
+     * <p>
+     * <b>关键</b>：OData $filter 表达式中的空格必须编码为 %20，绝不能是 +。
+     * 因为在 OData 语法里 + 是加号运算符，会导致
+     * "The types 'Edm.Boolean' and 'Edm.Decimal' are not compatible" 错误。
+     * JDK 的 URLEncoder.encode 默认把空格编成 +，故这里替换为 %20。
+     */
+    private String encodeODataValue(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private String fingerprintPage(List<Map<String, Object>> pageRows) {

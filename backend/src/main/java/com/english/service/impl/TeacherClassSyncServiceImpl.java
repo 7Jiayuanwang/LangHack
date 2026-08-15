@@ -34,6 +34,9 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
     private CourseSelectionMapper courseSelectionMapper;
 
     @Autowired
+    private com.english.service.SchoolDataApiClient schoolDataApiClient;
+
+    @Autowired
     private CourseMapper courseMapper;
 
     @Autowired
@@ -142,29 +145,24 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
                 }
             }
 
-            // 2.3 查学生选课记录（通过 course_code + teacher_id 关联）
-            QueryWrapper<CourseSelection> selWrapper = new QueryWrapper<>();
-            selWrapper.eq("course_code", courseCode);
-            selWrapper.eq("teacher_id", tc.getTeacherId());
-            if (tc.getAcademicYear() != null) {
-                selWrapper.eq("academic_year", tc.getAcademicYear());
-            }
-            if (tc.getSemester() != null) {
-                selWrapper.eq("semester", tc.getSemester());
-            }
-            List<CourseSelection> selections = courseSelectionMapper.selectList(selWrapper);
-
-            if (selections.isEmpty()) {
-                continue;
-            }
-
-            // 2.4 匹配学生并加入班级
-            Set<String> studentIds = selections.stream()
-                    .map(CourseSelection::getStudentId)
-                    .filter(s -> s != null && !s.isEmpty())
-                    .collect(Collectors.toSet());
+            // 2.3 按课程班号(kcbh)实时从 CDSP 拉选课学生（$filter=课程班号 eq kcbh）
+            //     CDSP 选课接口不支持原生参数过滤，但支持 OData $filter，
+            //     课程班号是 numeric，值不加引号。拉不到再回退查本地库。
+            Set<String> studentIds = fetchStudentIdsByKcbh(kcbh);
 
             if (studentIds.isEmpty()) {
+                // 回退：查本地 course_selection（用 class_id/课程班号关联）
+                QueryWrapper<CourseSelection> selWrapper = new QueryWrapper<>();
+                selWrapper.eq("class_id", kcbh);
+                List<CourseSelection> selections = courseSelectionMapper.selectList(selWrapper);
+                studentIds = selections.stream()
+                        .map(CourseSelection::getStudentId)
+                        .filter(s -> s != null && !s.isEmpty())
+                        .collect(Collectors.toSet());
+            }
+
+            if (studentIds.isEmpty()) {
+                warnings.add(String.format("班级[%s]未拉取到选课学生", kcbh));
                 continue;
             }
 
@@ -214,6 +212,46 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         logger.info("[classSync] 完成: created={}, skipped={}, studentsAdded={}, studentsSkipped={}",
                 classesCreated, classesSkipped, studentsAdded, studentsSkipped);
         return result;
+    }
+
+    /**
+     * 按课程班号(kcbh)从 CDSP 选课接口实时拉取学生学号。
+     * 使用 OData $filter=课程班号 eq {kcbh}（numeric，值不加引号）。
+     * 拉取失败或为空时返回空集合，由调用方回退到本地库。
+     */
+    private Set<String> fetchStudentIdsByKcbh(String kcbh) {
+        Set<String> studentIds = new LinkedHashSet<>();
+        if (kcbh == null || kcbh.trim().isEmpty()) {
+            return studentIds;
+        }
+        try {
+            Map<String, String> params = new LinkedHashMap<>();
+            params.put("$filter", "课程班号 eq " + kcbh.trim());
+            List<Map<String, Object>> rows = schoolDataApiClient.fetchCourseSelections(params);
+            if (rows != null) {
+                for (Map<String, Object> row : rows) {
+                    String xh = extractStudentId(row);
+                    if (xh != null && !xh.isEmpty()) {
+                        studentIds.add(xh);
+                    }
+                }
+            }
+            logger.info("[classSync] kcbh={} 从CDSP拉到{}个学生", kcbh, studentIds.size());
+        } catch (Exception e) {
+            logger.warn("[classSync] kcbh={} 从CDSP拉取选课失败，将回退本地库: {}", kcbh, e.getMessage());
+        }
+        return studentIds;
+    }
+
+    /**
+     * 从选课记录 map 中提取学号，兼容中文 key「学号」、英文别名 studentId/xh/XH。
+     */
+    private String extractStudentId(Map<String, Object> row) {
+        Object v = row.get("studentId");
+        if (v == null) v = row.get("学号");
+        if (v == null) v = row.get("XH");
+        if (v == null) v = row.get("xh");
+        return v == null ? null : String.valueOf(v).trim();
     }
 
     /**
