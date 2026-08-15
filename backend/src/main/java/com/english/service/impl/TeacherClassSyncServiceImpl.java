@@ -111,28 +111,35 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
             // 2.1 查/建平台课程
             Long courseId = findOrCreateCourse(courseCode, courseName, userId);
 
-            // 2.2 查/建平台班级
-            QueryWrapper<Class> existClassWrapper = new QueryWrapper<>();
-            existClassWrapper.eq("school_class_id", kcbh);
-            existClassWrapper.eq("deleted", 0);
-            Class existingClass = classMapper.selectOne(existClassWrapper);
-
+            // 2.2 查/建平台班级（含恢复已软删除的班级）
             Long classId;
+            Class existingClass = findClassBySchoolId(kcbh, false);
+
             if (existingClass != null) {
                 classId = existingClass.getId();
                 classesSkipped++;
             } else {
-                String className = buildClassName(courseName, tc.getClassName(), kcbh);
-                Class newClass = new Class();
-                newClass.setName(className);
-                newClass.setCourseId(courseId);
-                newClass.setTeacherId(userId);
-                newClass.setSchoolClassId(kcbh);
-                newClass.setDescription(buildDescription(tc));
-                classMapper.insert(newClass);
-                classId = newClass.getId();
-                classesCreated++;
-                logger.info("[classSync] 创建班级: name={}, kcbh={}", className, kcbh);
+                // 检查是否有软删除的同 school_class_id 班级，有则恢复
+                Class deletedClass = findClassBySchoolId(kcbh, true);
+                if (deletedClass != null) {
+                    String className = buildClassName(courseName, tc.getClassName(), kcbh);
+                    classMapper.restoreClass(deletedClass.getId(), className, courseId, userId, buildDescription(tc));
+                    classId = deletedClass.getId();
+                    classesCreated++;
+                    logger.info("[classSync] 恢复已删除班级: kcbh={}", kcbh);
+                } else {
+                    String className = buildClassName(courseName, tc.getClassName(), kcbh);
+                    Class newClass = new Class();
+                    newClass.setName(className);
+                    newClass.setCourseId(courseId);
+                    newClass.setTeacherId(userId);
+                    newClass.setSchoolClassId(kcbh);
+                    newClass.setDescription(buildDescription(tc));
+                    classMapper.insert(newClass);
+                    classId = newClass.getId();
+                    classesCreated++;
+                    logger.info("[classSync] 创建班级: name={}, kcbh={}", className, kcbh);
+                }
             }
 
             // 2.3 查学生选课记录（通过 course_code + teacher_id 关联）
@@ -209,14 +216,34 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         return result;
     }
 
+    /**
+     * 查找班级：onlyDeleted=false 查未删除（走正常逻辑），=true 查已删除（绕过 @TableLogic）
+     */
+    private Class findClassBySchoolId(String schoolClassId, boolean onlyDeleted) {
+        if (onlyDeleted) {
+            return classMapper.selectDeletedBySchoolClassId(schoolClassId);
+        }
+        QueryWrapper<Class> wrapper = new QueryWrapper<>();
+        wrapper.eq("school_class_id", schoolClassId);
+        wrapper.last("LIMIT 1");
+        return classMapper.selectOne(wrapper);
+    }
+
     private Long findOrCreateCourse(String courseCode, String courseName, Long teacherId) {
         if (courseCode != null && !courseCode.isEmpty()) {
             QueryWrapper<Course> wrapper = new QueryWrapper<>();
             wrapper.eq("school_course_code", courseCode);
-            wrapper.eq("deleted", 0);
             Course existing = courseMapper.selectOne(wrapper);
             if (existing != null) {
                 return existing.getId();
+            }
+            // 检查是否有已软删除的同 course_code 课程，恢复它
+            Course deleted = courseMapper.selectDeletedBySchoolCourseCode(courseCode);
+            if (deleted != null) {
+                String name = (courseName != null ? courseName : "未命名课程");
+                courseMapper.restoreById(deleted.getId(), name);
+                logger.info("[classSync] 恢复已删除课程: code={}", courseCode);
+                return deleted.getId();
             }
         }
 
