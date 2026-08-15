@@ -1,5 +1,6 @@
 package com.english.controller;
 
+import com.english.mapper.TextMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -30,6 +31,9 @@ import com.english.service.SystemConfigService;
 import com.english.util.SizeParseUtil;
 import com.english.mapper.StudentExerciseAnswerMapper;
 import com.english.mapper.TextExerciseMapper;
+import com.english.mapper.TextMapper;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,6 +60,8 @@ import java.security.SecureRandom;
 @RequestMapping("/api/admin")
 public class AdminController {
 
+    @Autowired
+    private TextMapper textMapper;
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
     @Value("${sso.enabled:false}")

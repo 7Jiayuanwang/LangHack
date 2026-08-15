@@ -3,6 +3,7 @@ package com.english.dto.learner;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class StudentFacingProfileDto {
@@ -15,4 +16,5 @@ public class StudentFacingProfileDto {
     private String targetExamLevel;
     private List<LearnerTagDto> positiveTags;
     private String naturalLanguageSummary;
+    private Map<String, Object> achievements;
 }

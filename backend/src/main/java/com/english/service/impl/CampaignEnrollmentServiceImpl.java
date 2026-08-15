@@ -230,7 +230,8 @@ public class CampaignEnrollmentServiceImpl implements CampaignEnrollmentService 
             Map<String, Object> progress = campaignStatsService.getMyProgress(campaign.getId(), userId);
 
             campaign.setCompletionStatus((String) progress.get("completionStatus"));
-            campaign.setTotalScore((Integer) progress.get("totalScore"));
+            Object totalScoreObj = progress.get("totalScore");
+            campaign.setTotalScore(totalScoreObj != null ? new java.math.BigDecimal(totalScoreObj.toString()) : java.math.BigDecimal.ZERO);
             campaign.setCompletedTasks((Integer) progress.get("completedTasks"));
 
             // 获取活动总任务数

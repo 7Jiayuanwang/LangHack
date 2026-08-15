@@ -65,10 +65,22 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     private com.english.mapper.AiCallLogMapper aiCallLogMapper;
 
     @Autowired
+    private com.english.mapper.VideoMapper videoMapper;
+
+    @Autowired
     private CampaignActivityMapper campaignActivityMapper;
 
     @Autowired
     private CampaignWeeklyScoreMapper weeklyScoreMapper;
+
+    @Autowired
+    private CampaignStreakService streakService;
+
+    @Autowired
+    private CampaignStreakRecordMapper streakRecordMapper;
+
+    @Autowired
+    private com.english.mapper.CampaignScoreLogMapper scoreLogMapper;
 
     @Override
     @Async("campaignCollectionExecutor")
@@ -174,7 +186,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         // 根据任务类型采集数据
         switch (task.getTaskType()) {
             case READING_TIME:
-                // 获取阅读时长（分钟）— 仅统计 TEXT_VIEW 记录，避免把单词学习/复习时长计入阅读任务
+                // 获取阅读+视频时长（分钟）— 统计 TEXT_VIEW 和 VIDEO_VIEW 记录
                 long minutes = learningRecordsService.getReadingMinutesInRange(
                     userId, campaign.getStartTime(), campaign.getEndTime()
                 );
@@ -184,12 +196,22 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 // 统计活动期间审核通过的课文数量
                 QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
                 textWrapper.eq("uploaded_by", userId);
-                textWrapper.eq("status", "APPROVED"); // 只统计审核通过的
+                textWrapper.eq("status", "APPROVED");
                 textWrapper.eq("deleted", 0);
-                textWrapper.ge("created_time", campaign.getStartTime()); // 活动开始后上传
-                textWrapper.le("created_time", campaign.getEndTime());   // 活动结束前上传
+                textWrapper.ge("created_time", campaign.getStartTime());
+                textWrapper.le("created_time", campaign.getEndTime());
                 long approvedCount = textMapper.selectCount(textWrapper);
-                return BigDecimal.valueOf(approvedCount);
+
+                // 统计活动期间审核通过的视频数量
+                QueryWrapper<com.english.entity.Video> videoWrapper = new QueryWrapper<>();
+                videoWrapper.eq("user_id", userId);
+                videoWrapper.eq("status", "APPROVED");
+                videoWrapper.eq("deleted", 0);
+                videoWrapper.ge("created_time", campaign.getStartTime());
+                videoWrapper.le("created_time", campaign.getEndTime());
+                long approvedVideoCount = videoMapper.selectCount(videoWrapper);
+
+                return BigDecimal.valueOf(approvedCount + approvedVideoCount);
 
             case WORD_LEARNING:
                 // 统计活动期间学习/复习的单词数量
@@ -256,7 +278,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             completion.setTaskId(taskId);
             completion.setUserId(userId);
             completion.setCompletionCount(0);
-            completion.setEarnedScore(0);
+            completion.setEarnedScore(java.math.BigDecimal.ZERO);
             completion.setTodayCompletionCount(0);
             completion.setLastCountedValue(BigDecimal.ZERO);
         }
@@ -320,10 +342,22 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                         // 加分：增加完成次数和积分
                         completion.setCompletionCount(completion.getCompletionCount() + actualNew);
                         completion.setTodayCompletionCount(completion.getTodayCompletionCount() + actualNew);
-                        int scoreIncrement = actualNew * task.getPoints();
-                        completion.setEarnedScore(completion.getEarnedScore() + scoreIncrement);
+                        int baseScoreIncrement = actualNew * task.getPoints();
+                        // 应用连续学习加成系数
+                        java.math.BigDecimal multiplier = streakService.getCurrentMultiplier(campaignId, userId);
+                        java.math.BigDecimal finalScore = multiplier.multiply(java.math.BigDecimal.valueOf(baseScoreIncrement))
+                                .setScale(2, java.math.RoundingMode.HALF_UP);
+                        java.math.BigDecimal currentEarned = completion.getEarnedScore() != null
+                                ? completion.getEarnedScore() : java.math.BigDecimal.ZERO;
+                        completion.setEarnedScore(currentEarned.add(finalScore));
+                        // 记录积分流水
+                        logScore(campaignId, userId, task.getId(), task.getTaskName(),
+                                "TASK_COMPLETE", baseScoreIncrement, multiplier, finalScore,
+                                streakService.getStreakDays(campaignId, userId));
                         // 记录本周积分
-                        recordWeeklyScore(campaignId, userId, scoreIncrement);
+                        recordWeeklyScore(campaignId, userId, finalScore);
+                        // 记录当日活跃（用于连续天数计算）
+                        streakService.recordDailyActive(campaignId, userId);
                         // 前移 lastCountedValue 到本次计分覆盖的进度点
                         BigDecimal countedValue = completion.getLastCountedValue()
                                 .add(targetDecimal.multiply(BigDecimal.valueOf(actualNew)));
@@ -338,12 +372,23 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 // 一次性任务：只标记完成一次
                 if (!completion.getIsCompleted()) {
                     completion.setCompletionCount(1);
-                    completion.setEarnedScore(task.getPoints());
+                    // 应用连续学习加成系数
+                    java.math.BigDecimal multiplier = streakService.getCurrentMultiplier(campaignId, userId);
+                    int basePoints = task.getPoints();
+                    java.math.BigDecimal earnedPoints = multiplier.multiply(java.math.BigDecimal.valueOf(basePoints))
+                            .setScale(2, java.math.RoundingMode.HALF_UP);
+                    completion.setEarnedScore(earnedPoints);
                     completion.setIsCompleted(true);
                     // 一次性任务也前移 lastCountedValue，保持语义一致
                     completion.setLastCountedValue(value);
+                    // 记录积分流水
+                    logScore(campaignId, userId, task.getId(), task.getTaskName(),
+                            "TASK_COMPLETE", basePoints, multiplier, earnedPoints,
+                            streakService.getStreakDays(campaignId, userId));
                     // 记录本周积分
-                    recordWeeklyScore(campaignId, userId, task.getPoints());
+                    recordWeeklyScore(campaignId, userId, earnedPoints);
+                    // 记录当日活跃（用于连续天数计算）
+                    streakService.recordDailyActive(campaignId, userId);
                 }
                 completion.setCurrentValue(value);
             }
@@ -366,12 +411,12 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         wrapper.eq("user_id", userId);
         List<CampaignTaskCompletion> completions = completionMapper.selectList(wrapper);
 
-        int totalScore = 0;
+        java.math.BigDecimal totalScore = java.math.BigDecimal.ZERO;
         int completedTaskCount = 0;
 
         for (CampaignTaskCompletion completion : completions) {
             if (completion.getEarnedScore() != null) {
-                totalScore += completion.getEarnedScore();
+                totalScore = totalScore.add(completion.getEarnedScore());
             }
             // 对于可重复任务，只要完成过一次就算"完成"该任务
             // 对于一次性任务，isCompleted=true 才算完成
@@ -410,7 +455,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
      * @param totalScore 总得分
      * @return 完成状态：NOT_STARTED（未开始）、IN_PROGRESS（进行中）、COMPLETED（已完成）
      */
-    private String calculateCompletionStatus(Long campaignId, int completedTaskCount, int totalScore) {
+    private String calculateCompletionStatus(Long campaignId, int completedTaskCount, java.math.BigDecimal totalScore) {
         // 获取活动完成规则
         CampaignActivity campaign = campaignService.getCampaignById(campaignId);
         if (campaign == null) {
@@ -418,7 +463,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         }
 
         // 如果没有任何得分和完成任务，状态为未开始
-        if (totalScore == 0 && completedTaskCount == 0) {
+        if (totalScore.compareTo(java.math.BigDecimal.ZERO) == 0 && completedTaskCount == 0) {
             return "NOT_STARTED";
         }
 
@@ -678,6 +723,11 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
     @Override
     public List<Map<String, Object>> getRankingByClass(Long campaignId) {
+        CampaignActivity campaign = campaignService.getCampaignById(campaignId);
+        if (campaign == null) {
+            return new ArrayList<>();
+        }
+
         // 获取所有已报名参与者
         QueryWrapper<CampaignParticipation> wrapper = new QueryWrapper<>();
         wrapper.eq("campaign_id", campaignId);
@@ -688,7 +738,6 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             return new ArrayList<>();
         }
 
-        // P0-05 修复: 批量查询用户和学校数据，避免 N+1 查询
         List<Long> userIds = participations.stream()
             .map(CampaignParticipation::getUserId)
             .filter(Objects::nonNull)
@@ -721,12 +770,73 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 collegeName
             ));
 
-            stats.totalScore += (participation.getTotalScore() != null ? participation.getTotalScore() : 0);
+            stats.totalScore += (participation.getTotalScore() != null ? participation.getTotalScore().doubleValue() : 0);
             stats.participantCount++;
+            if (participation.getTotalScore() != null && participation.getTotalScore().compareTo(java.math.BigDecimal.ZERO) > 0) {
+                stats.activeCount++;
+            }
             if (participation.getCompletionStatus() != null && "COMPLETED".equals(participation.getCompletionStatus())) {
                 stats.completedCount++;
             }
         }
+
+        // 计算参与率：查询各班级在 school_student 表中的实际总人数
+        Map<String, Long> classTotalStudents = new HashMap<>();
+        for (String className : statsByClass.keySet()) {
+            QueryWrapper<SchoolStudent> ssWrapper = new QueryWrapper<>();
+            ssWrapper.eq("class_name", className);
+            long total = schoolStudentMapper.selectCount(ssWrapper);
+            classTotalStudents.put(className, Math.max(total, 1));
+        }
+
+        // 计算班级活跃天数密度（本周）
+        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.DayOfWeek.MONDAY);
+        String participationCalcMode = campaign.getParticipationCalcMode() != null
+                ? campaign.getParticipationCalcMode() : "DENSITY";
+
+        // 查询本周连续学习记录来计算活跃天数
+        Map<String, Integer> classActiveDays = new HashMap<>();
+        Map<String, Integer> classActivePersons = new HashMap<>();
+
+        QueryWrapper<CampaignStreakRecord> streakWrapper = new QueryWrapper<>();
+        streakWrapper.eq("campaign_id", campaignId);
+        streakWrapper.eq("week_start", weekStart);
+        List<CampaignStreakRecord> streakRecords = streakRecordMapper.selectList(streakWrapper);
+
+        // 将 streak 记录按用户 → 班级映射
+        for (CampaignStreakRecord sr : streakRecords) {
+            User user = usersById.get(sr.getUserId());
+            if (user == null) continue;
+            SchoolStudent ss = resolveSchoolStudent(user, lookup);
+            if (ss == null || ss.getClassName() == null) continue;
+
+            String className = ss.getClassName();
+            List<String> dates = parseJsonStringList(sr.getActiveDates());
+            int days = dates.size();
+            classActiveDays.merge(className, days, Integer::sum);
+            if (days > 0) {
+                classActivePersons.merge(className, 1, Integer::sum);
+            }
+        }
+
+        // 计算人均积分，找出最高值用于归一化
+        double maxAvgScore = 0;
+        Map<String, Double> avgScoreByClass = new HashMap<>();
+        for (Map.Entry<String, ClassStats> entry : statsByClass.entrySet()) {
+            ClassStats stats = entry.getValue();
+            double avg = stats.participantCount > 0
+                    ? (double) stats.totalScore / stats.participantCount : 0;
+            avgScoreByClass.put(entry.getKey(), avg);
+            maxAvgScore = Math.max(maxAvgScore, avg);
+        }
+
+        // 确定排名模式和权重
+        String rankingMode = campaign.getClassRankingMode() != null
+                ? campaign.getClassRankingMode() : "WEIGHTED";
+        double avgWeight = campaign.getClassAvgWeight() != null
+                ? campaign.getClassAvgWeight().doubleValue() : 0.6;
+        double partWeight = campaign.getClassParticipationWeight() != null
+                ? campaign.getClassParticipationWeight().doubleValue() : 0.4;
 
         // 转换为列表并排序
         List<Map<String, Object>> result = new ArrayList<>();
@@ -736,19 +846,48 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             item.put("collegeName", stats.collegeName);
             item.put("totalScore", stats.totalScore);
             item.put("participantCount", stats.participantCount);
-            item.put("avgScore", stats.participantCount > 0
-                ? Math.round((double) stats.totalScore / stats.participantCount * 10) / 10.0
-                : 0.0);
+
+            double avgScore = avgScoreByClass.getOrDefault(stats.className, 0.0);
+            item.put("avgScore", Math.round(avgScore * 10) / 10.0);
+
+            long totalStudents = classTotalStudents.getOrDefault(stats.className, 1L);
+            item.put("totalStudents", totalStudents);
+
+            // 计算参与率
+            double participationRate;
+            if ("HEAD_COUNT".equals(participationCalcMode)) {
+                int activePersons = classActivePersons.getOrDefault(stats.className, 0);
+                participationRate = (double) activePersons / totalStudents;
+            } else {
+                int activeDays = classActiveDays.getOrDefault(stats.className, 0);
+                participationRate = (double) activeDays / (totalStudents * 7);
+            }
+            participationRate = Math.min(participationRate, 1.0);
+            item.put("participationRate", Math.round(participationRate * 1000) / 10.0);
+
             item.put("completionRate", stats.participantCount > 0
                 ? String.format("%.1f%%", (double) stats.completedCount / stats.participantCount * 100)
                 : "0.0%");
+
+            // 计算综合得分
+            double compositeScore;
+            if ("WEIGHTED".equals(rankingMode) && maxAvgScore > 0) {
+                double normalizedAvg = avgScore / maxAvgScore;
+                compositeScore = normalizedAvg * avgWeight + participationRate * partWeight;
+            } else if ("TOTAL_SCORE".equals(rankingMode)) {
+                compositeScore = stats.totalScore;
+            } else {
+                compositeScore = avgScore;
+            }
+            item.put("compositeScore", Math.round(compositeScore * 1000) / 1000.0);
+
             result.add(item);
         }
 
-        // 按总分降序排序
+        // 按综合得分降序排序
         result.sort((a, b) -> {
-            Integer scoreA = (Integer) a.get("totalScore");
-            Integer scoreB = (Integer) b.get("totalScore");
+            Double scoreA = (Double) a.get("compositeScore");
+            Double scoreB = (Double) b.get("compositeScore");
             return scoreB.compareTo(scoreA);
         });
 
@@ -798,7 +937,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 collegeName
             ));
 
-            stats.totalScore += (participation.getTotalScore() != null ? participation.getTotalScore() : 0);
+            stats.totalScore += (participation.getTotalScore() != null ? participation.getTotalScore().doubleValue() : 0);
             stats.participantCount++;
             if (participation.getCompletionStatus() != null && "COMPLETED".equals(participation.getCompletionStatus())) {
                 stats.completedCount++;
@@ -835,9 +974,10 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     private static class ClassStats {
         String className;
         String collegeName;
-        int totalScore = 0;
+        double totalScore = 0;
         int participantCount = 0;
         int completedCount = 0;
+        int activeCount = 0;
 
         ClassStats(String className, String collegeName) {
             this.className = className;
@@ -877,14 +1017,14 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         // P2 修复: null totalScore 排名错误
         // 原 rankWrapper.gt("total_score", myTotalScore) 当 myTotalScore=null 时 SQL 恒 false → rank=1（错误）
         // 修复: null 视为 0，并使用 COALESCE 语义 — 得分比我高的人数 = 得分 > myScore 的人数
-        Integer myTotalScore = myParticipation.getTotalScore();
-        int myScoreForRank = myTotalScore != null ? myTotalScore : 0;
+        java.math.BigDecimal myTotalScore2 = myParticipation.getTotalScore();
+        java.math.BigDecimal myScoreForRank2 = myTotalScore2 != null ? myTotalScore2 : java.math.BigDecimal.ZERO;
 
         QueryWrapper<CampaignParticipation> rankWrapper = new QueryWrapper<>();
         rankWrapper.eq("campaign_id", campaignId);
         rankWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
         // 使用 apply 写原生 SQL，COALESCE 处理 null，避免 null 比较恒 false
-        rankWrapper.apply("(COALESCE(total_score, 0) > {0})", myScoreForRank);
+        rankWrapper.apply("(COALESCE(total_score, 0) > {0})", myScoreForRank2);
         long myRank = participationMapper.selectCount(rankWrapper) + 1;
 
         QueryWrapper<CampaignParticipation> totalWrapper = new QueryWrapper<>();
@@ -901,16 +1041,15 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
         Map<Long, Long> ranksByUserId = new HashMap<>();
         long currentRank = 0;
-        Integer previousScore = null;
+        java.math.BigDecimal previousScore = null;
         for (int i = 0; i < allRanked.size(); i++) {
             CampaignParticipation participation = allRanked.get(i);
-            Integer totalScore = participation.getTotalScore();
-            // null 视为 0 用于排名比较
-            int scoreForCompare = totalScore != null ? totalScore : 0;
-            int prevForCompare = previousScore != null ? previousScore : 0;
-            if (previousScore == null || prevForCompare != scoreForCompare) {
+            java.math.BigDecimal pTotalScore = participation.getTotalScore();
+            java.math.BigDecimal scoreForCompare = pTotalScore != null ? pTotalScore : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal prevForCompare = previousScore != null ? previousScore : java.math.BigDecimal.ZERO;
+            if (previousScore == null || prevForCompare.compareTo(scoreForCompare) != 0) {
                 currentRank = i + 1L;
-                previousScore = totalScore;
+                previousScore = pTotalScore;
             }
             ranksByUserId.put(participation.getUserId(), currentRank);
         }
@@ -983,7 +1122,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
         Map<String, Object> result = new HashMap<>();
         try {
-            java.time.LocalDate weekDate = java.time.LocalDate.parse(weekStart);
+            // 周选择器可能传周日/周中任意日，统一归一到周一（与 campaign_weekly_scores.week_start 对齐）
+            java.time.LocalDate weekDate = resolveWeekMonday(weekStart);
 
             // 检查用户是否已报名
             QueryWrapper<CampaignParticipation> myWrapper = new QueryWrapper<>();
@@ -996,8 +1136,9 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 result.put("myRank", null);
                 result.put("totalParticipants", 0);
                 result.put("totalScore", 0);
-                result.put("weekStart", weekStart);
+                result.put("weekStart", weekDate.toString());
                 result.put("aroundMe", new ArrayList<>());
+                result.put("availableWeeks", weeklyScoreMapper.selectWeekStarts(campaignId));
                 return result;
             }
 
@@ -1021,7 +1162,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                     wsWrapper.in("user_id", batch);
                     List<CampaignWeeklyScore> weeklyScores = weeklyScoreMapper.selectList(wsWrapper);
                     for (CampaignWeeklyScore ws : weeklyScores) {
-                        weeklyScoresByUser.merge(ws.getUserId(), ws.getScore(), Integer::sum);
+                        weeklyScoresByUser.merge(ws.getUserId(), ws.getScore() != null ? ws.getScore().intValue() : 0, Integer::sum);
                     }
                 }
             }
@@ -1100,8 +1241,14 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             result.put("totalScore", myWeeklyScore);
             result.put("completedTasks", myParticipation.getCompletedTasks());
             result.put("enrollmentStatus", myParticipation.getEnrollmentStatus());
-            result.put("weekStart", weekStart);
+            result.put("weekStart", weekDate.toString());
             result.put("aroundMe", aroundMe);
+            try {
+                result.put("availableWeeks", weeklyScoreMapper.selectWeekStarts(campaignId));
+            } catch (Exception ex) {
+                log.warn("加载有积分周列表失败: campaignId={}", campaignId, ex);
+                result.put("availableWeeks", new ArrayList<>());
+            }
         } catch (Exception e) {
             log.error("获取周排名失败: campaignId={}, userId={}, weekStart={}", campaignId, userId, weekStart, e);
             result.put("enrolled", false);
@@ -1250,8 +1397,8 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         }
 
         // P2 修复: null totalScore 排名错误 — null 视为 0，使用 COALESCE 避免 null 比较恒 false
-        Integer myTotalScore = myParticipation.getTotalScore();
-        int myScoreForRank = myTotalScore != null ? myTotalScore : 0;
+        java.math.BigDecimal myTotalScore = myParticipation.getTotalScore();
+        java.math.BigDecimal myScoreForRank = myTotalScore != null ? myTotalScore : java.math.BigDecimal.ZERO;
 
         QueryWrapper<CampaignParticipation> rankWrapper = new QueryWrapper<>();
         rankWrapper.eq("campaign_id", campaignId);
@@ -1408,7 +1555,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     /**
      * 记录本周积分到 campaign_weekly_scores
      */
-    private void recordWeeklyScore(Long campaignId, Long userId, int scoreIncrement) {
+    private void recordWeeklyScore(Long campaignId, Long userId, java.math.BigDecimal scoreIncrement) {
         try {
             java.time.LocalDate weekStart = java.time.LocalDate.now()
                     .with(java.time.DayOfWeek.MONDAY);
@@ -1416,6 +1563,52 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         } catch (Exception e) {
             log.warn("记录周积分失败: campaignId={}, userId={}, increment={}", campaignId, userId, scoreIncrement, e);
         }
+    }
+
+    private void logScore(Long campaignId, Long userId, Long taskId, String taskName,
+                          String action, int baseScore, java.math.BigDecimal multiplier,
+                          java.math.BigDecimal finalScore, int streakDays) {
+        try {
+            com.english.entity.CampaignScoreLog logEntry = new com.english.entity.CampaignScoreLog();
+            logEntry.setCampaignId(campaignId);
+            logEntry.setUserId(userId);
+            logEntry.setTaskId(taskId);
+            logEntry.setTaskName(taskName);
+            logEntry.setAction(action);
+            logEntry.setBaseScore(new java.math.BigDecimal(baseScore));
+            logEntry.setMultiplier(multiplier);
+            logEntry.setFinalScore(finalScore);
+            logEntry.setStreakDays(streakDays);
+            if (multiplier.compareTo(java.math.BigDecimal.ONE) > 0) {
+                logEntry.setRemark("连续学习第" + streakDays + "天，加成" + multiplier + "倍");
+            }
+            scoreLogMapper.insert(logEntry);
+        } catch (Exception e) {
+            log.warn("记录积分流水失败: campaignId={}, userId={}", campaignId, userId, e);
+        }
+    }
+
+    private List<String> parseJsonStringList(String json) {
+        if (json == null || json.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 将任意日期归一到该周周一（ISO，周一为一周起始）。
+     * Element Plus 周选择器在部分环境下会回传周日，必须归一后才能命中 week_start。
+     */
+    private java.time.LocalDate resolveWeekMonday(String weekStart) {
+        if (weekStart == null || weekStart.isBlank()) {
+            return java.time.LocalDate.now().with(java.time.DayOfWeek.MONDAY);
+        }
+        return java.time.LocalDate.parse(weekStart.trim()).with(java.time.DayOfWeek.MONDAY);
     }
 
     /**
@@ -1427,12 +1620,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
     public Map<String, Object> getWeeklyAwards(Long campaignId, String weekStart, Integer topN) {
         Map<String, Object> result = new HashMap<>();
         try {
-            java.time.LocalDate weekDate;
-            if (weekStart == null || weekStart.isEmpty()) {
-                weekDate = java.time.LocalDate.now().with(java.time.DayOfWeek.MONDAY);
-            } else {
-                weekDate = java.time.LocalDate.parse(weekStart);
-            }
+            java.time.LocalDate weekDate = resolveWeekMonday(weekStart);
 
             int limit = topN != null && topN > 0 ? topN : 3;
 
@@ -1443,14 +1631,14 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
             List<CampaignWeeklyScore> weeklyScores = weeklyScoreMapper.selectList(wrapper);
 
             // 按用户聚合得分
-            Map<Long, Integer> userScores = new HashMap<>();
+            Map<Long, Double> userScores = new HashMap<>();
             for (CampaignWeeklyScore ws : weeklyScores) {
-                userScores.merge(ws.getUserId(), ws.getScore(), Integer::sum);
+                userScores.merge(ws.getUserId(), ws.getScore() != null ? ws.getScore().doubleValue() : 0.0, Double::sum);
             }
 
             // 排序取前N优秀个人
-            List<Map.Entry<Long, Integer>> sortedUsers = userScores.entrySet().stream()
-                    .sorted(Map.Entry.<Long, Integer>comparingByValue().reversed())
+            List<Map.Entry<Long, Double>> sortedUsers = userScores.entrySet().stream()
+                    .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
                     .limit(limit)
                     .collect(Collectors.toList());
 
@@ -1462,7 +1650,7 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
 
             List<Map<String, Object>> topIndividuals = new ArrayList<>();
             int rank = 1;
-            for (Map.Entry<Long, Integer> entry : sortedUsers) {
+            for (Map.Entry<Long, Double> entry : sortedUsers) {
                 User user = usersById.get(entry.getKey());
                 SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
                 Map<String, Object> item = new HashMap<>();
@@ -1476,34 +1664,17 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
                 topIndividuals.add(item);
             }
 
-            // 按班级聚合
-            Map<String, Integer> classScores = new HashMap<>();
-            Map<String, String> classCollege = new HashMap<>();
-            for (CampaignWeeklyScore ws : weeklyScores) {
-                User user = usersById.get(ws.getUserId());
-                SchoolStudent schoolStudent = resolveSchoolStudent(user, lookup);
-                if (schoolStudent == null) continue;
-                String className = schoolStudent.getClassName();
-                if (className == null || className.isBlank()) continue;
-                classScores.merge(className, ws.getScore(), Integer::sum);
-                if (schoolStudent.getCollegeName() != null) {
-                    classCollege.putIfAbsent(className, schoolStudent.getCollegeName());
-                }
-            }
-
-            List<Map.Entry<String, Integer>> sortedClasses = classScores.entrySet().stream()
-                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                    .limit(limit)
-                    .collect(Collectors.toList());
-
+            // 按班级排名：复用管理员配置的加权排名逻辑
+            List<Map<String, Object>> classRanking = getRankingByClass(campaignId);
             List<Map<String, Object>> topClasses = new ArrayList<>();
-            rank = 1;
-            for (Map.Entry<String, Integer> entry : sortedClasses) {
+            int classRank = 1;
+            for (Map<String, Object> classItem : classRanking) {
+                if (classRank > limit) break;
                 Map<String, Object> item = new HashMap<>();
-                item.put("rank", rank++);
-                item.put("className", entry.getKey());
-                item.put("collegeName", classCollege.getOrDefault(entry.getKey(), ""));
-                item.put("score", entry.getValue());
+                item.put("rank", classRank++);
+                item.put("className", classItem.get("className"));
+                item.put("collegeName", classItem.get("collegeName"));
+                item.put("score", classItem.get("compositeScore"));
                 topClasses.add(item);
             }
 
@@ -1513,6 +1684,134 @@ public class CampaignStatsServiceImpl implements CampaignStatsService {
         } catch (Exception e) {
             log.error("获取周优秀失败: campaignId={}, weekStart={}", campaignId, weekStart, e);
             result.put("error", e.getMessage());
+        }
+        return result;
+    }
+
+    @Override
+    public Map<String, Object> getClassActivityToday(Long campaignId, Long userId) {
+        Map<String, Object> data = new HashMap<>();
+
+        // 找到当前用户的班级
+        User user = userService.getUserById(userId);
+        if (user == null) {
+            data.put("activeToday", 0);
+            data.put("totalStudents", 0);
+            data.put("className", "");
+            return data;
+        }
+
+        SchoolStudent mySchoolStudent = null;
+        if (user.getSchoolStudentId() != null) {
+            mySchoolStudent = schoolStudentMapper.selectById(user.getSchoolStudentId());
+        }
+        if (mySchoolStudent == null && user.getUsername() != null) {
+            QueryWrapper<SchoolStudent> ssw = new QueryWrapper<>();
+            ssw.eq("student_id", user.getUsername());
+            mySchoolStudent = schoolStudentMapper.selectOne(ssw);
+        }
+
+        if (mySchoolStudent == null || mySchoolStudent.getClassName() == null) {
+            data.put("activeToday", 0);
+            data.put("totalStudents", 0);
+            data.put("className", "");
+            return data;
+        }
+
+        String className = mySchoolStudent.getClassName();
+        data.put("className", className);
+
+        // 班级总人数
+        QueryWrapper<SchoolStudent> countWrapper = new QueryWrapper<>();
+        countWrapper.eq("class_name", className);
+        long totalStudents = schoolStudentMapper.selectCount(countWrapper);
+        data.put("totalStudents", totalStudents);
+
+        // 今日活跃人数：查询本周期在该活动中有记录的人
+        java.time.LocalDate today = java.time.LocalDate.now();
+        // 计算周期起始日（与 CampaignStreakServiceImpl 逻辑一致）
+        java.time.LocalDate weekStart;
+        CampaignActivity activityForPeriod = campaignService.getCampaignById(campaignId);
+        if (activityForPeriod != null) {
+            int resetDays = activityForPeriod.getStreakResetDays() != null
+                    ? activityForPeriod.getStreakResetDays() : 7;
+            java.time.LocalDate anchor;
+            if (activityForPeriod.getStreakStartDate() != null) {
+                anchor = activityForPeriod.getStreakStartDate();
+            } else if (activityForPeriod.getStartTime() != null) {
+                anchor = activityForPeriod.getStartTime().toLocalDate();
+            } else {
+                anchor = today.with(java.time.DayOfWeek.MONDAY);
+            }
+            long daysSinceAnchor = today.toEpochDay() - anchor.toEpochDay();
+            long periodsElapsed = daysSinceAnchor >= 0 ? daysSinceAnchor / resetDays : 0;
+            weekStart = anchor.plusDays(periodsElapsed * resetDays);
+        } else {
+            weekStart = today.with(java.time.DayOfWeek.MONDAY);
+        }
+
+        QueryWrapper<CampaignStreakRecord> streakWrapper = new QueryWrapper<>();
+        streakWrapper.eq("campaign_id", campaignId);
+        streakWrapper.eq("week_start", weekStart);
+        List<CampaignStreakRecord> records = streakRecordMapper.selectList(streakWrapper);
+
+        // 查找同班同学的 streak 记录
+        // 先获取该活动所有参与者的用户列表
+        QueryWrapper<CampaignParticipation> pWrapper = new QueryWrapper<>();
+        pWrapper.eq("campaign_id", campaignId);
+        pWrapper.eq("enrollment_status", EnrollmentStatus.ENROLLED);
+        List<CampaignParticipation> participations = participationMapper.selectList(pWrapper);
+
+        Set<Long> classUserIds = new HashSet<>();
+        List<Long> allUserIds = participations.stream()
+                .map(CampaignParticipation::getUserId)
+                .filter(Objects::nonNull).distinct().toList();
+        List<User> allUsers = loadActiveUsersByIds(allUserIds);
+        SchoolStudentLookup lookup = buildSchoolStudentLookup(allUsers);
+
+        for (User u : allUsers) {
+            SchoolStudent ss = resolveSchoolStudent(u, lookup);
+            if (ss != null && className.equals(ss.getClassName())) {
+                classUserIds.add(u.getId());
+            }
+        }
+
+        String todayStr = today.toString();
+        int activeToday = 0;
+        for (CampaignStreakRecord sr : records) {
+            if (!classUserIds.contains(sr.getUserId())) continue;
+            List<String> dates = parseJsonStringList(sr.getActiveDates());
+            if (dates.contains(todayStr)) {
+                activeToday++;
+            }
+        }
+
+        data.put("activeToday", activeToday);
+        return data;
+    }
+
+    @Override
+    public List<Map<String, Object>> getScoreLogs(Long campaignId, Long userId) {
+        QueryWrapper<com.english.entity.CampaignScoreLog> wrapper = new QueryWrapper<>();
+        wrapper.eq("campaign_id", campaignId);
+        wrapper.eq("user_id", userId);
+        wrapper.orderByDesc("created_time");
+        wrapper.last("LIMIT 100");
+        List<com.english.entity.CampaignScoreLog> logs = scoreLogMapper.selectList(wrapper);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (com.english.entity.CampaignScoreLog log : logs) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", log.getId());
+            item.put("taskName", log.getTaskName());
+            item.put("action", log.getAction());
+            item.put("baseScore", log.getBaseScore());
+            item.put("multiplier", log.getMultiplier());
+            item.put("finalScore", log.getFinalScore());
+            item.put("streakDays", log.getStreakDays());
+            item.put("remark", log.getRemark());
+            item.put("createdTime", log.getCreatedTime());
+            result.add(item);
         }
         return result;
     }

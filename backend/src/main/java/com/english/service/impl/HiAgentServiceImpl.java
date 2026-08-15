@@ -533,6 +533,59 @@ public class HiAgentServiceImpl implements HiAgentService {
         throw new BusinessException("AI Q&A 服务返回结果解析失败");
     }
 
+    // ==================== 流式对话（SSE Streaming） ====================
+
+@Override
+public String createConversationForQA() throws Exception {
+    return createConversationWithQACredentials();
+}
+
+@Override
+public ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> chatQueryStreamingWithQACredentials(String conversationId, String prompt) throws Exception {
+    String url = effectiveApiUrl() + "/chat_query_v2";
+
+    HttpHeaders reqHeaders = createQAHeaders();
+    reqHeaders.set("Accept", "text/event-stream");
+
+    Map<String, Object> body = new HashMap<>();
+    body.put("AppConversationID", conversationId);
+    body.put("Query", prompt);
+    body.put("UserID", config.getUserId());
+    body.put("ResponseMode", "streaming");
+
+    HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, reqHeaders);
+    log.debug("Sending HiAgent Q&A streaming query for conversation {}", conversationId);
+
+    ResponseEntity<org.springframework.core.io.Resource> response = restTemplate.exchange(
+            url, HttpMethod.POST, entity, org.springframework.core.io.Resource.class);
+
+    if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+        throw new BusinessException("AI Q&A 流式服务响应失败: " + response.getStatusCode());
+    }
+
+    java.io.InputStream inputStream = response.getBody().getInputStream();
+
+    HttpHeaders respHeaders = new HttpHeaders();
+    respHeaders.set("Content-Type", "text/event-stream");
+    respHeaders.set("Cache-Control", "no-cache");
+    respHeaders.set("Connection", "keep-alive");
+
+    org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody streamBody = outputStream -> {
+        byte[] buffer = new byte[1024];
+        int bytesRead;
+        try {
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+                outputStream.flush();
+            }
+        } finally {
+            inputStream.close();
+        }
+    };
+
+    return ResponseEntity.ok().headers(respHeaders).body(streamBody);
+}
+
     // ==================== AI 出题（Quiz）====================
 
     /**

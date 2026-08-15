@@ -3,6 +3,7 @@ package com.english.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -22,7 +23,7 @@ public class CampaignWeeklyScore {
 
     private LocalDate weekStart;
 
-    private Integer score;
+    private BigDecimal score;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdTime;

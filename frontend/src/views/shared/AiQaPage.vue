@@ -216,13 +216,12 @@ const loadConversations = async () => {
     const res = await getConversations(1, 50)
     if (res?.code === 200) {
       conversations.value = res.data?.records || []
-      // auto-open sidebar when user has prior conversations and no article context
       if (conversations.value.length > 0 && !selectedText.value) {
         sidebarOpen.value = true
       }
     }
   } catch (e) {
-    // 静默失败，不影响主功能
+    // 静默失败
   }
 }
 
@@ -305,6 +304,9 @@ const formatTime = (t) => {
 
 const fillQuestion = (q) => { inputMessage.value = q.label }
 
+// ============================================================
+// 核心修改：sendMessage 支持 SSE 流式输出
+// ============================================================
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || loading.value) return
 
@@ -314,6 +316,12 @@ const sendMessage = async () => {
   loading.value = true
   scrollToBottom()
 
+  // 添加空的 AI 消息占位，后续流式拼接
+  const aiMsgIndex = messages.value.length
+  messages.value.push({ role: 'assistant', content: '' })
+
+  let rawText = ''
+
   try {
     const authHeaderValue = getAuthHeader()
     abortController = new AbortController()
@@ -322,44 +330,102 @@ const sendMessage = async () => {
       signal: abortController.signal,
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
         ...(authHeaderValue ? { Authorization: authHeaderValue } : {})
       },
       body: JSON.stringify({
         userQuestion: userMsg,
         selectedText: selectedText.value,
         articleContext: route.query.context || '',
-        conversationId: currentConversationId.value
+        conversationId: currentConversationId.value,
+        ResponseMode: 'streaming'
       })
     })
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 
-    let data
-    try {
-      data = await response.json()
-    } catch (parseError) {
-      messages.value.push({ role: 'assistant', content: '抱歉，AI服务暂时不可用。请稍后再试。' })
-      return
-    }
+    const contentType = response.headers.get('content-type') || ''
 
-    if (data?.code === 200 && data?.data?.response && typeof data.data.response === 'string') {
-      const htmlResponse = DOMPurify.sanitize(marked(data.data.response))
-      messages.value.push({ role: 'assistant', content: htmlResponse })
-      // 更新当前对话 ID（首次提问时后端创建新对话）
-      if (data.data.conversationId && !currentConversationId.value) {
-        currentConversationId.value = data.data.conversationId
-        await loadConversations()
+    if (contentType.includes('text/event-stream') || contentType.includes('stream')) {
+      // ===== SSE 流式处理 =====
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+
+          if (line.startsWith('data:')) {
+            const data = line.slice(5).trim()
+            if (!data || data === '[DONE]') continue
+
+            try {
+              const json = JSON.parse(data)
+              const event = json.event
+
+              if (event === 'message' && json.answer) {
+                rawText += json.answer
+                messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText))
+                scrollToBottom()
+              } else if (event === 'message_end') {
+                if (json.conversation_id && !currentConversationId.value) {
+                  currentConversationId.value = json.conversation_id
+                  await loadConversations()
+                }
+              }
+            } catch (e) {
+              if (data) {
+                rawText += data
+                messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText))
+                scrollToBottom()
+              }
+            }
+          }
+        }
       }
+
+      if (!rawText) {
+        messages.value[aiMsgIndex].content = '抱歉，未收到有效响应。'
+      }
+
     } else {
-      messages.value.push({ role: 'assistant', content: data?.message || '抱歉，未收到有效响应。' })
+      // ===== 兼容：普通 JSON 响应 =====
+      let jsonData
+      try {
+        jsonData = await response.json()
+      } catch (parseError) {
+        messages.value[aiMsgIndex].content = '抱歉，AI服务暂时不可用。请稍后再试。'
+        return
+      }
+      if (jsonData?.code === 200 && jsonData?.data?.response) {
+        messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(jsonData.data.response))
+        if (jsonData.data.conversationId && !currentConversationId.value) {
+          currentConversationId.value = jsonData.data.conversationId
+          await loadConversations()
+        }
+      } else {
+        messages.value[aiMsgIndex].content = jsonData?.message || '抱歉，未收到有效响应。'
+      }
     }
   } catch (error) {
     if (error?.name !== 'AbortError') {
-      messages.value.push({ role: 'assistant', content: '抱歉，AI服务暂时不可用。请稍后再试。' })
+      if (rawText) {
+        messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText + '\n\n---\n*（连接中断）*'))
+      } else {
+        messages.value[aiMsgIndex].content = '抱歉，AI服务暂时不可用。请稍后再试。'
+      }
     }
   } finally {
     loading.value = false
-    try { if (abortController) abortController.abort() } catch (e) { /* ignore */ } finally { abortController = null }
+    abortController = null
     scrollToBottom()
   }
 }
@@ -391,7 +457,6 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
-/* 历史侧边栏 */
 .history-sidebar {
   width: 280px;
   flex-shrink: 0;
@@ -410,20 +475,8 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #f1f5f9;
 }
 
-.sidebar-title {
-  font-weight: 700;
-  font-size: 15px;
-  color: #1e293b;
-}
-
-.sidebar-close {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 4px;
-}
+.sidebar-title { font-weight: 700; font-size: 15px; color: #1e293b; }
+.sidebar-close { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 4px; }
 
 .new-conv-btn {
   margin: 12px;
@@ -437,71 +490,19 @@ onBeforeUnmount(() => {
   cursor: pointer;
   text-align: center;
 }
-
 .new-conv-btn:hover { background: #dbeafe; }
 
-.conv-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 8px;
-}
-
-.conv-item {
-  padding: 10px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  position: relative;
-  margin-bottom: 4px;
-}
-
+.conv-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
+.conv-item { padding: 10px 12px; border-radius: 10px; cursor: pointer; position: relative; margin-bottom: 4px; }
 .conv-item:hover { background: #f8fafc; }
 .conv-item.active { background: #eff6ff; }
-
-.conv-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding-right: 24px;
-}
-
-.conv-meta {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 2px;
-}
-
-.conv-delete {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  cursor: pointer;
-  opacity: 0;
-  font-size: 14px;
-  padding: 2px;
-}
-
+.conv-title { font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 24px; }
+.conv-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.conv-delete { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; opacity: 0; font-size: 14px; padding: 2px; }
 .conv-item:hover .conv-delete { opacity: 1; }
+.conv-empty { text-align: center; color: #94a3b8; font-size: 13px; padding: 24px; }
 
-.conv-empty {
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-  padding: 24px;
-}
-
-/* 主区域 */
-.qa-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+.qa-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
 .qa-header {
   flex-shrink: 0;
@@ -512,89 +513,25 @@ onBeforeUnmount(() => {
   z-index: 50;
 }
 
-.qa-header-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  padding-top: max(env(safe-area-inset-top, 12px), 12px);
-}
+.qa-header-inner { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; padding-top: max(env(safe-area-inset-top, 12px), 12px); }
+.header-left-group, .header-right-group { display: flex; align-items: center; gap: 8px; }
 
-.header-left-group, .header-right-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.qa-sidebar-btn, .qa-share-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #f1f5f9;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  font-size: 18px;
-}
-
+.qa-sidebar-btn, .qa-share-btn { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #f1f5f9; border: none; color: #64748b; cursor: pointer; font-size: 18px; }
 .qa-sidebar-btn:hover, .qa-share-btn:hover { background: #e2e8f0; color: #197fe6; }
 
-.qa-back-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: none;
-  color: #64748b;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
+.qa-back-btn { display: flex; align-items: center; gap: 4px; background: none; border: none; color: #64748b; font-size: 14px; font-weight: 500; cursor: pointer; transition: color 0.2s; }
 .qa-back-btn:hover { color: #197fe6; }
 
-.qa-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(25, 127, 230, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #197fe6;
-  border: 1px solid white;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-}
+.qa-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(25, 127, 230, 0.1); display: flex; align-items: center; justify-content: center; color: #197fe6; border: 1px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 
-/* 分享表单 */
 .share-form { display: flex; flex-direction: column; gap: 16px; }
 .share-field label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
 .share-link-box { background: #f8fafc; border-radius: 8px; padding: 12px; }
 .share-link-label { font-size: 12px; color: #64748b; margin-bottom: 6px; }
 .share-link-text { font-size: 12px; color: #1e293b; word-break: break-all; margin-bottom: 8px; }
 
-/* 以下样式与原版相同 */
-.qa-context-bar {
-  flex-shrink: 0;
-  padding: 12px 16px;
-  background: #f6f7f8;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.4);
-}
-
-.context-card {
-  display: flex;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-  border: 1px solid rgba(226, 232, 240, 0.6);
-}
-
+.qa-context-bar { flex-shrink: 0; padding: 12px 16px; background: #f6f7f8; border-bottom: 1px solid rgba(226, 232, 240, 0.4); }
+.context-card { display: flex; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); border-radius: 14px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.04); border: 1px solid rgba(226, 232, 240, 0.6); }
 .context-accent { width: 4px; background: linear-gradient(180deg, #197fe6, #3b82f6); flex-shrink: 0; }
 .context-body { padding: 10px 14px; flex: 1; min-width: 0; }
 .context-label { display: flex; align-items: center; gap: 6px; color: #197fe6; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
@@ -632,7 +569,7 @@ onBeforeUnmount(() => {
 .typing-dots span:nth-child(3) { animation-delay: 0.3s; }
 .loading-text { color: #64748b; font-size: 14px; }
 
-.qa-bottom-bar { flex-shrink: 0; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid rgba(226, 232, 240, 0.7); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.qa-bottom-bar { flex-shrink: 0; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid rgba(226, 232, 240, 0.6); padding: 14px 16px; }
 .quick-actions { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: none; }
 .quick-actions::-webkit-scrollbar { display: none; }
 .action-pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(59, 130, 246, 0.15); background: rgba(248, 250, 252, 0.92); color: #1e293b; border-radius: 999px; padding: 10px 14px; white-space: nowrap; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -654,4 +591,4 @@ onBeforeUnmount(() => {
 @media (max-width: 640px) {
   .history-sidebar { position: absolute; left: 0; top: 0; bottom: 0; z-index: 200; box-shadow: 4px 0 16px rgba(0,0,0,0.1); }
 }
-</style>
+</style>                                                                                                                                                                    

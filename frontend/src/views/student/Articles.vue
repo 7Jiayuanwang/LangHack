@@ -19,8 +19,23 @@
     </transition>
 
     <!-- Main Content Area -->
-    <main class="page-main">
-      <div class="page-content-wrapper">
+    <main
+      ref="pageMain"
+      class="page-main"
+      @touchstart.passive="onTouchStart"
+      @touchmove.passive="onTouchMove"
+      @touchend="onTouchEnd"
+    >
+      <!-- Pull-to-Refresh Indicator -->
+      <div class="pull-refresh-indicator" :class="{ 'is-refreshing': isRefreshing, 'is-pulling': isPulling }" :style="{ transform: `translateY(${pullDistance}px)` }">
+        <div class="pull-refresh-content">
+          <span v-if="isRefreshing" class="pull-refresh-spinner"></span>
+          <span v-else class="pull-refresh-arrow" :style="{ transform: pullDistance > pullThreshold ? 'rotate(180deg)' : 'rotate(0deg)' }">↓</span>
+          <span class="pull-refresh-text">{{ pullHintText }}</span>
+        </div>
+      </div>
+
+      <div class="page-content-wrapper" :style="{ transform: `translateY(${pullDistance}px)`, transition: isPulling ? 'none' : 'transform 0.3s ease' }">
 
       <!-- Search Bar -->
       <div class="search-bar">
@@ -132,34 +147,17 @@
         </template>
       </div>
 
-      <!-- Pagination -->
-      <div class="pagination" :style="{ visibility: totalPages > 1 ? 'visible' : 'hidden' }">
-        <button class="page-btn" :disabled="currentPage === 1" @click="prevPage">
-          <el-icon><ArrowLeft /></el-icon>
-        </button>
-        <button
-          v-for="page in pageList"
-          :key="page"
-          class="page-btn page-number"
-          :class="{ active: currentPage === page }"
-          @click="goToPage(page)"
-        >
-          {{ page }}
-        </button>
-        <button class="page-btn" :disabled="currentPage === totalPages" @click="nextPage">
-          <el-icon><ArrowRight /></el-icon>
-        </button>
-        <div class="page-jump">
-          <input
-            v-model="jumpInput"
-            type="number"
-            min="1"
-            :max="totalPages"
-            class="page-jump-input"
-            @keyup.enter="jumpToPage"
-            placeholder="页"
-          />
-          <button class="page-btn page-jump-btn" @click="jumpToPage">跳转</button>
+      <!-- Infinite Scroll Sentinel -->
+      <div ref="sentinel" class="scroll-sentinel">
+        <div v-if="loadingMore" class="load-more-hint">
+          <span class="load-more-spinner"></span>
+          加载中...
+        </div>
+        <div v-else-if="hasMore" class="load-more-hint">
+          上滑加载更多
+        </div>
+        <div v-else-if="filteredItems.length > 0" class="load-more-hint load-more-end">
+          — 已经到底了 —
         </div>
       </div>
 
@@ -184,13 +182,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch, nextTick } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Search, Bell, DocumentRemove, Timer, VideoPlay, View,
   TrendCharts, Connection, Reading, Medal,
-  ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Refresh
+  ArrowUp, ArrowDown, Refresh
 } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import { getFeaturedVideos } from '@/api/video'
@@ -200,6 +198,91 @@ import { recordRecommendationEvent } from '@/api/student'
 const router = useRouter()
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
+// ── Scroll Position & Data Cache (恢复滚动位置) ──
+const CACHE_KEY = 'student_articles_cache'
+const SCROLL_KEY = 'student_articles_scroll'
+const NAV_FLAG_KEY = 'student_articles_nav_to_detail'
+
+const saveScrollState = () => {
+  const scrollTop = pageMain.value?.scrollTop || 0
+  try {
+    sessionStorage.setItem(SCROLL_KEY, String(scrollTop))
+    sessionStorage.setItem(NAV_FLAG_KEY, '1')
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+      allItems: allItems.value,
+      recommendedArticles: recommendedArticles.value,
+      selectedCategory: selectedCategory.value,
+      displayCount: displayCount.value,
+      searchQuery: searchQuery.value,
+      shownRecommendedIds: shownRecommendedIds.value,
+    }))
+  } catch (e) { /* quota exceeded or private mode */ }
+}
+
+const restoreScrollState = () => {
+  try {
+    const cached = sessionStorage.getItem(CACHE_KEY)
+    if (!cached) return false
+    const data = JSON.parse(cached)
+    if (!data || !Array.isArray(data.allItems)) return false
+    // 如果缓存数据为空，不恢复，强制重新加载
+    if (data.allItems.length === 0) return false
+    allItems.value = data.allItems
+    recommendedArticles.value = data.recommendedArticles || []
+    selectedCategory.value = data.selectedCategory || ''
+    displayCount.value = data.displayCount || BATCH_SIZE
+    searchQuery.value = data.searchQuery || ''
+    shownRecommendedIds.value = data.shownRecommendedIds || []
+    return true
+  } catch (e) { return false }
+}
+
+const restoreScrollPosition = () => {
+  try {
+    const saved = sessionStorage.getItem(SCROLL_KEY)
+    if (!saved) return
+    const target = parseInt(saved, 10) || 0
+    if (target <= 0) return
+
+    // 使用 requestAnimationFrame + 重试机制，确保 DOM 渲染完毕后再恢复
+    const tryRestore = (attempts = 0) => {
+      if (!pageMain.value) return
+      pageMain.value.scrollTop = target
+      // 如果 DOM 高度不够（内容还没渲染完），短暂延迟后重试
+      if (pageMain.value.scrollTop < target - 5 && attempts < 10) {
+        setTimeout(() => tryRestore(attempts + 1), 50)
+      }
+    }
+    // 等待 DOM 更新后执行（用 setTimeout 0 + rAF 兜底）
+    setTimeout(() => {
+      requestAnimationFrame(() => tryRestore())
+    }, 0)
+  } catch (e) { /* ignore */ }
+}
+
+const clearCache = () => {
+  try {
+    sessionStorage.removeItem(CACHE_KEY)
+    sessionStorage.removeItem(SCROLL_KEY)
+    sessionStorage.removeItem(NAV_FLAG_KEY)
+  } catch (e) { /* ignore */ }
+}
+
+// ── Pull-to-Refresh State ──
+const pageMain = ref(null)
+const isPulling = ref(false)
+const isRefreshing = ref(false)
+const pullDistance = ref(0)
+const pullThreshold = 60
+let touchStartY = 0
+let touchStartX = 0
+
+const pullHintText = computed(() => {
+  if (isRefreshing.value) return '正在刷新...'
+  if (pullDistance.value > pullThreshold) return '松开刷新'
+  return '下拉刷新'
+})
+
 const loading = ref(true)
 const allItems = ref([])
 const recommendedArticles = ref([])
@@ -207,7 +290,11 @@ const selectedCategory = ref('')
 const filterVisible = ref(true)
 const loadError = ref(false)
 const currentPage = ref(1)
-const pageSize = 5
+const BATCH_SIZE = 10
+const displayCount = ref(BATCH_SIZE)
+const loadingMore = ref(false)
+const sentinel = ref(null)
+let observer = null
 const searchQuery = ref('')
 const searchVisible = ref(false)
 // 服务端搜索结果（搜索全部已审核文章，不限精选）
@@ -219,22 +306,7 @@ let searchTimer = null
 const shownRecommendedIds = ref([])
 
 
-const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize))
-const PAGE_WINDOW = 5
-const pageList = computed(() => {
-  const total = totalPages.value
-  if (total <= PAGE_WINDOW) return Array.from({ length: total }, (_, i) => i + 1)
-  let start = currentPage.value - Math.floor(PAGE_WINDOW / 2)
-  start = Math.max(1, Math.min(start, total - PAGE_WINDOW + 1))
-  return Array.from({ length: PAGE_WINDOW }, (_, i) => start + i)
-})
-const jumpInput = ref('')
-const jumpToPage = () => {
-  const n = parseInt(jumpInput.value, 10)
-  if (!Number.isFinite(n)) { jumpInput.value = ''; return }
-  goToPage(Math.max(1, Math.min(n, totalPages.value)))
-  jumpInput.value = ''
-}
+const hasMore = computed(() => displayCount.value < filteredItems.value.length)
 
 // 是否处于搜索模式
 const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
@@ -273,11 +345,11 @@ watch(searchQuery, (val) => {
   if (!kw) {
     serverSearchResults.value = []
     searchTotal.value = 0
-    currentPage.value = 1
+    displayCount.value = BATCH_SIZE
     return
   }
   searchTimer = setTimeout(() => {
-    currentPage.value = 1
+    displayCount.value = BATCH_SIZE
     doServerSearch(kw)
   }, 400)
 })
@@ -301,8 +373,7 @@ const filteredItems = computed(() => {
   return result
 })
 const articles = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredItems.value.slice(start, start + pageSize)
+  return filteredItems.value.slice(0, displayCount.value)
 })
 
 // 筛选栏开关
@@ -349,21 +420,32 @@ const getRandomGradient = () => {
 
 const selectCategory = (val) => {
   selectedCategory.value = val
-  currentPage.value = 1
+  displayCount.value = BATCH_SIZE
   if (val === 'recommendation') {
     shownRecommendedIds.value = []
     loadRecommended()
   }
 }
 
-const goToPage = (page) => {
-  if (page < 1 || page > totalPages.value) return
-  currentPage.value = page
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+const loadMore = () => {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  setTimeout(() => {
+    displayCount.value += BATCH_SIZE
+    loadingMore.value = false
+  }, 300)
 }
 
-const prevPage = () => goToPage(currentPage.value - 1)
-const nextPage = () => goToPage(currentPage.value + 1)
+const setupObserver = () => {
+  if (observer) observer.disconnect()
+  nextTick(() => {
+    if (!sentinel.value) return
+    observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) loadMore()
+    }, { rootMargin: '200px' })
+    observer.observe(sentinel.value)
+  })
+}
 
 const toggleSearch = () => {
   searchVisible.value = !searchVisible.value
@@ -479,6 +561,7 @@ const loadFeed = async () => {
   } catch (error) {
     console.error('加载推荐内容失败:', error)
     allItems.value = []
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -563,7 +646,108 @@ const getDifficultyIcon = (diff) => {
 }
 
 onMounted(() => {
+  // 仅在从文章详情/视频页返回时恢复缓存（NAV_FLAG_KEY 标记存在）
+  // 浏览器刷新时 sessionStorage 虽保留，但 NAV_FLAG 不存在，强制重新加载
+  const hasNavFlag = sessionStorage.getItem(NAV_FLAG_KEY)
+  sessionStorage.removeItem(NAV_FLAG_KEY)
+
+  if (hasNavFlag) {
+    const restored = restoreScrollState()
+    if (restored) {
+      loading.value = false
+      nextTick(() => {
+        restoreScrollPosition()
+        setupObserver()
+      })
+      return
+    }
+  }
+  // 首次加载 / 浏览器刷新 / 无缓存：清除旧缓存并请求新数据
+  clearCache()
   loadFeed()
+  setupObserver()
+})
+
+// keep-alive 激活时：浏览器不保留 detach/reattach 后的滚动位置，需手动恢复
+onActivated(() => {
+  // 重新设置 IntersectionObserver（可能在 deactivated 时被断开）
+  setupObserver()
+  // 恢复滚动位置（keep-alive detach DOM 会导致 scrollTop 归零）
+  restoreScrollPosition()
+})
+
+// keep-alive 停用时：保存滚动位置并断开 observer 避免后台触发
+onDeactivated(() => {
+  saveScrollState()
+  if (observer) observer.disconnect()
+})
+
+// 离开页面前保存滚动位置和已加载数据
+onBeforeRouteLeave((to, from) => {
+  // 只在前往文章详情页 or 视频播放页时保存（其他页面不保存，避免内存浪费）
+  if (to.path.startsWith('/article/') || to.path.startsWith('/student/video-player')) {
+    saveScrollState()
+  } else {
+    clearCache()
+  }
+})
+
+// ── Pull-to-Refresh Touch Handlers ──
+const onTouchStart = (e) => {
+  if (isRefreshing.value) return
+  const touch = e.touches[0]
+  touchStartY = touch.clientY
+  touchStartX = touch.clientX
+}
+
+const onTouchMove = (e) => {
+  if (isRefreshing.value) return
+  const touch = e.touches[0]
+  const deltaY = touch.clientY - touchStartY
+  const deltaX = touch.clientX - touchStartX
+
+  // 只在列表滚动到顶部且向下拉时触发
+  const scrollTop = pageMain.value?.scrollTop || 0
+  if (scrollTop > 0 || deltaY < 0) {
+    isPulling.value = false
+    pullDistance.value = 0
+    return
+  }
+
+  // 水平滑动幅度大于垂直则忽略（避免与横向滚动冲突）
+  if (Math.abs(deltaX) > Math.abs(deltaY)) return
+
+  isPulling.value = true
+  // 添加阻尼效果：拉得越远阻力越大
+  pullDistance.value = Math.min(deltaY * 0.4, 120)
+}
+
+const onTouchEnd = async () => {
+  if (!isPulling.value) return
+  isPulling.value = false
+
+  if (pullDistance.value > pullThreshold) {
+    // 触发刷新
+    isRefreshing.value = true
+    pullDistance.value = pullThreshold // 保持在阈值位置显示刷新动画
+    await doRefresh()
+    isRefreshing.value = false
+  }
+  pullDistance.value = 0
+}
+
+const doRefresh = async () => {
+  // 重置分页
+  displayCount.value = BATCH_SIZE
+  if (selectedCategory.value === 'recommendation') {
+    await loadRecommended({ resetExclusions: true })
+  } else {
+    await loadFeed()
+  }
+}
+
+onBeforeUnmount(() => {
+  if (observer) observer.disconnect()
 })
 </script>
 
@@ -620,8 +804,7 @@ onMounted(() => {
     align-content: start;
   }
 
-  .bottom-spacer,
-  .pagination {
+  .bottom-spacer {
     display: none;
   }
 
@@ -776,8 +959,7 @@ onMounted(() => {
 .filter-pill:active { transform: scale(0.96); }
 
 .filter-pill,
-.article-card,
-.page-btn {
+.article-card {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
@@ -799,6 +981,8 @@ onMounted(() => {
   overflow-y: auto;
   scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
+  position: relative;
+  overflow-x: hidden;
 }
 
 .page-content-wrapper {
@@ -1053,94 +1237,84 @@ onMounted(() => {
   100% { background-position: 400px 0; }
 }
 
-/* --- Pagination --- */
-.pagination {
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* --- Infinite Scroll --- */
+.scroll-sentinel {
   display: flex;
   justify-content: center;
-  align-items: center;
-  gap: 6px;
   padding: 16px 0;
-  flex-wrap: wrap;
 }
 
-.page-btn {
-  min-width: 36px;
-  height: 36px;
-  padding: 0 10px;
-  border-radius: 50px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  color: #475569;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
+/* --- Pull-to-Refresh Indicator --- */
+.pull-refresh-indicator {
+  position: absolute;
+  top: -50px;
+  left: 0;
+  right: 0;
+  height: 50px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: transform 0.3s ease;
+  pointer-events: none;
+  z-index: 10;
 }
 
-.page-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.pull-refresh-indicator.is-pulling {
+  transition: none;
 }
 
-.page-btn:not(:disabled):hover {
-  border-color: #1d4ed8;
-  color: #1d4ed8;
-}
-
-.page-btn.active {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: white;
-  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
-}
-
-.page-btn.ellipsis {
-  border-color: transparent;
-  background: transparent;
-  cursor: default;
-  opacity: 1;
-  color: #94a3b8;
-}
-
-.page-jump {
+.pull-refresh-content {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 8px;
-}
-
-.page-jump-input {
-  width: 56px;
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  gap: 8px;
+  color: #64748b;
   font-size: 13px;
-  text-align: center;
-  outline: none;
-  transition: border-color 0.2s;
+  font-weight: 500;
 }
 
-.page-jump-input:focus {
-  border-color: #1d4ed8;
+.pull-refresh-arrow {
+  display: inline-block;
+  font-size: 16px;
+  transition: transform 0.3s ease;
 }
 
-.page-jump-input::-webkit-inner-spin-button,
-.page-jump-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+.pull-refresh-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
 }
 
-.page-jump-btn {
-  padding: 0 10px;
+.pull-refresh-text {
+  user-select: none;
+}
+
+.load-more-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #94a3b8;
   font-size: 13px;
 }
 
-.page-number {
-  font-weight: 600;
+.load-more-end {
+  color: #cbd5e1;
+}
+
+.load-more-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
 }
 
 .bottom-spacer {

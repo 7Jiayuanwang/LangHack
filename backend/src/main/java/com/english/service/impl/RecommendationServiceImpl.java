@@ -22,12 +22,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -73,6 +76,27 @@ public class RecommendationServiceImpl implements RecommendationService {
 
     @Value("${recommendation.persona.max-adjustment:0.12}")
     private double personaMaxAdjustment;
+
+    @Value("${recommendation.weight.manual-featured-prior:3.0}")
+    private double manualFeaturedPrior;
+
+    @Value("${recommendation.weight.script-import-prior:0.15}")
+    private double scriptImportPrior;
+
+    @Value("${recommendation.weight.normal-text-prior:1.0}")
+    private double normalTextPrior;
+
+    @Value("${recommendation.quality-prior.manual-featured-min-priority:1}")
+    private int manualFeaturedMinPriority;
+
+    @Value("${recommendation.quality-prior.script-uploaders:24,420}")
+    private String scriptUploadersRaw;
+
+    @Value("${recommendation.quality-prior.script-source-domains:theguardian.com,time.com,newsweek.com,nytimes.com,scientificamerican.com,phys.org,futurity.org}")
+    private String scriptSourceDomainsRaw;
+
+    @Value("${recommendation.quality-prior.script-import-hours:21,22,23,0,1,2,3,4,8,9,10}")
+    private String scriptImportHoursRaw;
 
     @Autowired
     private TextSimilarityMatrixMapper textSimilarityMatrixMapper;
@@ -120,6 +144,7 @@ public class RecommendationServiceImpl implements RecommendationService {
             accumulateUserCfScores(userId, excludeSet, scoreMap);
 
             applyPersonaRerank(scoreMap, signals);
+            applyQualityPriorRerank(scoreMap);
 
             LinkedHashSet<Long> topIds = scoreMap.entrySet().stream()
                     .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
@@ -300,6 +325,124 @@ public class RecommendationServiceImpl implements RecommendationService {
         log.debug("[Persona] 重排完成, candidates={}", scoreMap.size());
     }
 
+private void applyQualityPriorRerank(Map<Long, Double> scoreMap) {
+    if (scoreMap.isEmpty()) {
+        return;
+    }
+
+    Map<Long, Text> textMap = textService.listByIds(new HashSet<>(scoreMap.keySet())).stream()
+            .collect(Collectors.toMap(Text::getId, t -> t));
+
+    for (Map.Entry<Long, Double> entry : scoreMap.entrySet()) {
+        Text text = textMap.get(entry.getKey());
+        if (text == null) {
+            continue;
+        }
+        entry.setValue(entry.getValue() * computeQualityPrior(text));
+    }
+}
+
+private double computeQualityPrior(Text text) {
+    if (isManualFeatured(text)) {
+        return manualFeaturedPrior;
+    }
+    if (isScriptImport(text)) {
+        return scriptImportPrior;
+    }
+    return normalTextPrior;
+}
+
+private boolean isManualFeatured(Text text) {
+    Integer featured = text.getIsFeatured();
+    Integer priority = text.getFeaturedPriority();
+    return featured != null
+            && featured == 1
+            && priority != null
+            && priority >= manualFeaturedMinPriority;
+}
+
+private boolean isScriptImport(Text text) {
+    boolean byUploader = text.getUploadedBy() != null
+            && parseLongSet(scriptUploadersRaw).contains(text.getUploadedBy());
+
+    String host = extractSourceHost(text.getMarkdownContent());
+    boolean bySource = host != null && matchesScriptSource(host, parseStringSet(scriptSourceDomainsRaw));
+    boolean byHour = text.getCreatedAt() != null
+            && parseIntSet(scriptImportHoursRaw).contains(text.getCreatedAt().getHour());
+
+    return byUploader || (bySource && byHour);
+}
+
+private boolean matchesScriptSource(String host, Set<String> configuredDomains) {
+    for (String domain : configuredDomains) {
+        if (host.equals(domain) || host.endsWith("." + domain)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+private String extractSourceHost(String markdownContent) {
+    if (markdownContent == null || markdownContent.isEmpty()) {
+        return null;
+    }
+    for (String line : markdownContent.split("\\R")) {
+        String trimmed = line.trim();
+        if (trimmed.startsWith("> 来源:") || trimmed.startsWith("> Source:")) {
+            int idx = trimmed.indexOf(':');
+            if (idx < 0 || idx + 1 >= trimmed.length()) {
+                return null;
+            }
+            String url = trimmed.substring(idx + 1).trim();
+            try {
+                String host = URI.create(url).getHost();
+                if (host == null) {
+                    return null;
+                }
+                host = host.toLowerCase(Locale.ROOT);
+                return host.startsWith("www.") ? host.substring(4) : host;
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+    }
+    return null;
+}
+
+private Set<Long> parseLongSet(String raw) {
+    if (raw == null || raw.trim().isEmpty()) {
+        return Collections.emptySet();
+    }
+    return Arrays.stream(raw.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .map(Long::valueOf)
+            .collect(Collectors.toSet());
+}
+
+private Set<Integer> parseIntSet(String raw) {
+    if (raw == null || raw.trim().isEmpty()) {
+        return Collections.emptySet();
+    }
+    return Arrays.stream(raw.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .map(Integer::valueOf)
+            .collect(Collectors.toSet());
+}
+
+private Set<String> parseStringSet(String raw) {
+    if (raw == null || raw.trim().isEmpty()) {
+        return Collections.emptySet();
+    }
+    return Arrays.stream(raw.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .map(s -> s.toLowerCase(Locale.ROOT))
+            .map(s -> s.startsWith("www.") ? s.substring(4) : s)
+            .collect(Collectors.toSet());
+}
+    
     private PersonaSignals loadPersonaSignals(Long userId) {
         LearnerProfileDto profile = learnerProfileService.getUserProfile(userId);
         if (profile == null || "empty".equals(profile.getProfileStatus())) {

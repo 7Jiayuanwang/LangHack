@@ -36,6 +36,29 @@
         </div>
       </div>
 
+      <!-- Achievements Section -->
+      <div v-if="unlockedAchievements.length > 0" class="achievements-section">
+        <div class="achievements-header">
+          <h3>学习成就</h3>
+          <span class="achievements-count">
+            已解锁 {{ unlockedAchievements.length }} / {{ totalAchievements }} 项
+          </span>
+        </div>
+        <div class="achievements-list">
+          <el-tooltip
+            v-for="ach in unlockedAchievements"
+            :key="ach.key"
+            :content="ach.desc"
+            placement="top"
+          >
+            <div class="achievement-badge">
+              <span class="achievement-badge-icon">{{ ach.icon }}</span>
+              <span class="achievement-badge-title">{{ ach.title }}</span>
+            </div>
+          </el-tooltip>
+        </div>
+      </div>
+
       <!-- Content Tabs -->
       <div class="content-tabs">
         <button
@@ -134,6 +157,17 @@ const activeTab = ref('texts')
 
 const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+
+const unlockedAchievements = computed(() => {
+  if (!authorData.value?.achievements?.achievementList) return []
+  return authorData.value.achievements.achievementList.filter(a => a.unlocked)
+})
+
+const totalAchievements = computed(() => {
+  return authorData.value?.achievements?.totalAchievements
+    || authorData.value?.achievements?.achievementList?.length
+    || 0
+})
 
 // 加载作者主页数据
 const loadAuthorProfile = async () => {
@@ -312,6 +346,55 @@ onMounted(() => {
 .author-stats {
   display: flex;
   gap: 32px;
+}
+
+.achievements-section {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin: 16px 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.achievements-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.achievements-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.achievements-count {
+  font-size: 13px;
+  color: #909399;
+}
+
+.achievements-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.achievement-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #f5f7fa;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #303133;
+  cursor: default;
+}
+
+.achievement-badge-icon {
+  font-size: 16px;
 }
 
 .stat-item {

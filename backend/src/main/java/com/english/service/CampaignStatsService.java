@@ -106,4 +106,14 @@ public interface CampaignStatsService {
      * 返回每个任务的得分详情及手动录入记录
      */
     List<Map<String, Object>> getMyScoreDetails(Long campaignId, Long userId);
+
+    /**
+     * 获取班级今日活跃人数（热力图数据）
+     */
+    Map<String, Object> getClassActivityToday(Long campaignId, Long userId);
+
+    /**
+     * 获取积分流水账单（时间倒序）
+     */
+    List<Map<String, Object>> getScoreLogs(Long campaignId, Long userId);
 }

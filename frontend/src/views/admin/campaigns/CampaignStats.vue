@@ -274,14 +274,39 @@ const individualFilters = reactive({
 
 const individualWeek = ref(null)
 
+// 周选择器可能回传周日；库表 week_start 为周一，必须归一
+const toMonday = (input) => {
+  let y, m, day
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}/.test(input)) {
+    ;[y, m, day] = input.slice(0, 10).split('-').map(Number)
+  } else {
+    const d = input ? new Date(input) : new Date()
+    if (Number.isNaN(d.getTime())) return null
+    y = d.getFullYear()
+    m = d.getMonth() + 1
+    day = d.getDate()
+  }
+  const utc = new Date(Date.UTC(y, m - 1, day, 12, 0, 0))
+  const dow = utc.getUTCDay()
+  const diff = dow === 0 ? -6 : 1 - dow
+  utc.setUTCDate(utc.getUTCDate() + diff)
+  const yy = utc.getUTCFullYear()
+  const mm = String(utc.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(utc.getUTCDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
 // 周优秀
-const awardsWeek = ref(null)
+const awardsWeek = ref(toMonday())
 const weeklyAwards = ref({})
 
 const loadWeeklyAwards = async () => {
   try {
     const params = {}
-    if (awardsWeek.value) params.weekStart = awardsWeek.value
+    if (awardsWeek.value) {
+      awardsWeek.value = toMonday(awardsWeek.value)
+      params.weekStart = awardsWeek.value
+    }
     const res = await getAdminWeeklyAwards(route.params.id, params)
     if (res.code === 200) {
       weeklyAwards.value = res.data || {}
@@ -329,6 +354,7 @@ const loadIndividualRanking = async () => {
       params.collegeName = individualFilters.collegeName
     }
     if (individualWeek.value) {
+      individualWeek.value = toMonday(individualWeek.value)
       params.weekStart = individualWeek.value
     }
 
@@ -408,6 +434,8 @@ const handleTabChange = (tab) => {
     loadClassRanking()
   } else if (tab === 'college' && collegeRanking.value.length === 0) {
     loadCollegeRanking()
+  } else if (tab === 'weeklyAwards' && !weeklyAwards.value.topIndividuals) {
+    loadWeeklyAwards()
   }
 }
 

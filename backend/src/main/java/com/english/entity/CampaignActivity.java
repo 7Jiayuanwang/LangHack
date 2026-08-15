@@ -8,6 +8,7 @@ import com.english.enums.EnrollmentScope;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -57,6 +58,25 @@ public class CampaignActivity {
 
     private Boolean showRanking;
 
+    // 激励系统配置
+    private Boolean streakEnabled;
+
+    private String streakConfig;
+
+    private BigDecimal streakMaxMultiplier;
+
+    private Integer streakResetDays;
+
+    private java.time.LocalDate streakStartDate;
+
+    private String classRankingMode;
+
+    private BigDecimal classAvgWeight;
+
+    private BigDecimal classParticipationWeight;
+
+    private String participationCalcMode;
+
     private Long createdBy;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -86,7 +106,7 @@ public class CampaignActivity {
     private String completionStatus; // 完成状态: NOT_STARTED, IN_PROGRESS, COMPLETED
 
     @TableField(exist = false)
-    private Integer totalScore; // 当前总分
+    private java.math.BigDecimal totalScore; // 当前总分
 
     @TableField(exist = false)
     private Integer completedTasks; // 已完成任务数

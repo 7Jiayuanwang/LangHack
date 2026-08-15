@@ -45,7 +45,7 @@ public interface LearningRecordMapper extends BaseMapper<LearningRecord> {
                                    @Param("until") LocalDateTime until);
 
     @Select("SELECT COALESCE(SUM(LEAST(duration_seconds, 7200)), 0) FROM learning_records " +
-            "WHERE student_id = #{studentId} AND record_type = 'TEXT_VIEW' " +
+            "WHERE student_id = #{studentId} AND record_type IN ('TEXT_VIEW', 'VIDEO_VIEW') " +
             "AND created_time >= #{since} AND created_time < #{until}")
     long sumReadingSecondsBetween(@Param("studentId") Long studentId,
                                   @Param("since") LocalDateTime since,

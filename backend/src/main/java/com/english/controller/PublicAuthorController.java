@@ -6,6 +6,7 @@ import com.english.entity.Text;
 import com.english.entity.User;
 import com.english.entity.Video;
 import com.english.service.AuthorEnricher;
+import com.english.service.LearningRecordsService;
 import com.english.service.TextService;
 import com.english.service.UserService;
 import com.english.service.VideoService;
@@ -39,6 +40,9 @@ public class PublicAuthorController {
 
     @Autowired
     private AuthorEnricher authorEnricher;
+
+    @Autowired
+    private LearningRecordsService learningRecordsService;
 
     /**
      * 获取作者主页信息（作者信息 + 其公开的文章和视频）
@@ -80,6 +84,7 @@ public class PublicAuthorController {
             result.put("videos", videos);
             result.put("totalTexts", texts.size());
             result.put("totalVideos", videos.size());
+            result.put("achievements", learningRecordsService.getAchievementStats(userId));
 
             return Result.success(result);
         } catch (Exception e) {

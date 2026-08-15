@@ -137,6 +137,21 @@ public class PublicTextController {
                     .orderByDesc(Text::getCreatedAt)
                     .list();
 
+            if (featuredTexts.isEmpty()) {
+                featuredTexts = textService.lambdaQuery()
+                        .eq(Text::getDeleted, 0)
+                        .and(w -> w
+                            .isNull(Text::getUploadedBy)
+                            .or(sub -> sub
+                                .isNotNull(Text::getUploadedBy)
+                                .eq(Text::getIsPublic, 1)
+                                .eq(Text::getStatus, "APPROVED")
+                            )
+                        )
+                        .orderByDesc(Text::getCreatedAt)
+                        .list();
+            }
+
             if (difficulty != null && !difficulty.trim().isEmpty()) {
                 featuredTexts = featuredTexts.stream()
                         .filter(text -> difficulty.equals(text.getDifficulty()))
