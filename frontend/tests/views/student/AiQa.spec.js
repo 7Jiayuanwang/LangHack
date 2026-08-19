@@ -40,7 +40,7 @@ describe('Student AiQa.vue (wrapper)', () => {
   it('passes correct api-path to AiQaPage', () => {
     const wrapper = createWrapper()
     const child = wrapper.findComponent({ name: 'AiQaPage' })
-    expect(child.props('apiPath')).toBe('/api/student/ai-qa/chat')
+    expect(child.props('apiPath')).toBe('/api/student/ai-qa/chat/stream')
   })
 
   it('passes correct back-label to AiQaPage', () => {

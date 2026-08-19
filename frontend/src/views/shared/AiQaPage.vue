@@ -170,6 +170,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
+import { createSseParser } from '@/utils/sse'
 import {
   getConversations, getConversationDetail, deleteConversation, shareConversation
 } from '@/api/conversation'
@@ -337,8 +338,7 @@ const sendMessage = async () => {
         userQuestion: userMsg,
         selectedText: selectedText.value,
         articleContext: route.query.context || '',
-        conversationId: currentConversationId.value,
-        ResponseMode: 'streaming'
+        conversationId: currentConversationId.value
       })
     })
 
@@ -350,46 +350,40 @@ const sendMessage = async () => {
       // ===== SSE 流式处理 =====
       const reader = response.body.getReader()
       const decoder = new TextDecoder('utf-8')
-      let buffer = ''
+      let streamError = ''
+      let completedConversationId = null
+      const parser = createSseParser(({ event, data }) => {
+        // message/message_end remain supported during rolling deployments.
+        if (event === 'delta' || event === 'message') {
+          const content = typeof data === 'string'
+            ? data
+            : data?.content || data?.answer || data?.Answer || ''
+          if (content) {
+            rawText += content
+            messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText))
+            scrollToBottom()
+          }
+        } else if (event === 'error') {
+          streamError = typeof data === 'string' ? data : data?.message || 'AI服务暂时不可用'
+        } else if (event === 'done') {
+          completedConversationId = data?.conversationId || null
+        }
+      })
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+        parser.feed(decoder.decode(value, { stream: true }))
+      }
+      parser.feed(decoder.decode())
+      parser.end()
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop()
-
-        for (const line of lines) {
-          if (!line.trim()) continue
-
-          if (line.startsWith('data:')) {
-            const data = line.slice(5).trim()
-            if (!data || data === '[DONE]') continue
-
-            try {
-              const json = JSON.parse(data)
-              const event = json.event
-
-              if (event === 'message' && json.answer) {
-                rawText += json.answer
-                messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText))
-                scrollToBottom()
-              } else if (event === 'message_end') {
-                if (json.conversation_id && !currentConversationId.value) {
-                  currentConversationId.value = json.conversation_id
-                  await loadConversations()
-                }
-              }
-            } catch (e) {
-              if (data) {
-                rawText += data
-                messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText))
-                scrollToBottom()
-              }
-            }
-          }
+      if (streamError) throw new Error(streamError)
+      if (completedConversationId) {
+        if (!currentConversationId.value) {
+          currentConversationId.value = completedConversationId
         }
+        await loadConversations()
       }
 
       if (!rawText) {

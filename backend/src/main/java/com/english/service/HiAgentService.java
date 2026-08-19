@@ -1,5 +1,7 @@
 package com.english.service;
 
+import java.util.function.Consumer;
+
 public interface HiAgentService {
 
     /**
@@ -48,7 +50,12 @@ public interface HiAgentService {
     String createConversationForQA() throws Exception;
 
     /**
-     * Stream chat query using QA credentials — returns SSE event stream
+     * Stream a QA query, persist the completed answer through the callback, and return platform SSE events.
      */
-    org.springframework.http.ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> chatQueryStreamingWithQACredentials(String conversationId, String prompt) throws Exception;
+    org.springframework.http.ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody>
+            chatQueryStreamingWithQACredentials(
+                    String conversationId,
+                    String prompt,
+                    Long platformConversationId,
+                    Consumer<String> completionHandler);
 }
