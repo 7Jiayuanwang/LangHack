@@ -118,22 +118,54 @@ public class AiQaController {
     }
 
     @PostMapping("/chat/stream")
-public org.springframework.http.ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> chatStream(
-        @RequestBody ChatRequest request,
-        Authentication auth) throws Exception {
+    public org.springframework.http.ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody>
+            chatStream(@RequestBody ChatRequest request, Authentication auth) throws Exception {
+        if (request.getUserQuestion() == null || request.getUserQuestion().trim().isEmpty()) {
+            throw new com.english.exception.BusinessException("问题不能为空");
+        }
+        if (request.getUserQuestion().length() > 500) {
+            throw new com.english.exception.BusinessException("问题不能超过500字");
+        }
+        if (request.getSelectedText() != null && request.getSelectedText().length() > 2000) {
+            throw new com.english.exception.BusinessException("选中文本不能超过2000字");
+        }
+        if (request.getArticleContext() != null && request.getArticleContext().length() > 5000) {
+            throw new com.english.exception.BusinessException("文章上下文不能超过5000字");
+        }
+        if (auth == null) {
+            throw new com.english.exception.BusinessException("请先登录");
+        }
 
-    if (request.getUserQuestion() == null || request.getUserQuestion().trim().isEmpty()) {
-        throw new com.english.exception.BusinessException("问题不能为空");
+        String question = request.getUserQuestion().trim();
+        String selectedText = request.getSelectedText() != null ? request.getSelectedText().trim() : "";
+        String articleContext = request.getArticleContext() != null
+                ? request.getArticleContext().trim() : "";
+        String username = auth.getName();
+        Long userId = userService.getUserByUsername(username).getId();
+        long startTime = aiCallMetricsService.startTimer();
+
+        Long conversationId = request.getConversationId();
+        if (conversationId == null) {
+            conversationId = conversationService.createConversation(userId, question).getId();
+        }
+        final Long platformConversationId = conversationId;
+
+        // addMessage also verifies that an existing conversation belongs to this user.
+        conversationService.addMessage(
+                platformConversationId, userId, "user", question, selectedText, articleContext);
+
+        String prompt = buildChatPrompt(question, selectedText, articleContext);
+        String upstreamConversationId = hiAgentService.createConversationForQA();
+        return hiAgentService.chatQueryStreamingWithQACredentials(
+                upstreamConversationId,
+                prompt,
+                platformConversationId,
+                answer -> {
+                    conversationService.addMessage(
+                            platformConversationId, userId, "assistant", answer, null, null);
+                    aiCallMetricsService.recordSuccess("QA", "chatQA", startTime, username);
+                });
     }
-
-    String prompt = buildChatPrompt(
-            request.getUserQuestion().trim(),
-            request.getSelectedText() != null ? request.getSelectedText().trim() : "",
-            request.getArticleContext() != null ? request.getArticleContext().trim() : "");
-
-    String conversationId = hiAgentService.createConversationForQA();
-    return hiAgentService.chatQueryStreamingWithQACredentials(conversationId, prompt);
-}
 
     @GetMapping("/usage/stats")
     public Result<Map<String, Object>> usageStats(Authentication auth) {
@@ -181,4 +213,3 @@ public org.springframework.http.ResponseEntity<org.springframework.web.servlet.m
         private Long conversationId;
     }
 }
-

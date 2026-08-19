@@ -12,9 +12,21 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpRequest;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RequestCallback;
+import org.springframework.web.client.ResponseExtractor;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -291,6 +303,72 @@ class HiAgentServiceTest {
 
         String result = hiAgentService.generateCET4VersionMarkdown("# Original");
         assertEquals("# CET-4 Markdown", result);
+    }
+
+    // ==================== Streaming Q&A ====================
+
+    @Test
+    void chatQueryStreaming_executesUpstreamRequestWhileWritingResponse() throws Exception {
+        when(config.getQaApiKey()).thenReturn("qa-key");
+        when(config.getQaAppId()).thenReturn("qa-app");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getUserId()).thenReturn("test-user");
+
+        ClientHttpRequest upstreamRequest = mock(ClientHttpRequest.class);
+        ByteArrayOutputStream upstreamRequestBody = new ByteArrayOutputStream();
+        org.springframework.http.HttpHeaders upstreamRequestHeaders =
+                new org.springframework.http.HttpHeaders();
+        when(upstreamRequest.getHeaders()).thenReturn(upstreamRequestHeaders);
+        when(upstreamRequest.getBody()).thenReturn(upstreamRequestBody);
+
+        ClientHttpResponse upstreamResponse = mock(ClientHttpResponse.class);
+        when(upstreamResponse.getStatusCode()).thenReturn(HttpStatus.OK);
+        when(upstreamResponse.getBody()).thenReturn(new ByteArrayInputStream(
+                ("data: {\"event\":\"message\",\"answer\":\"hello\"}\n\n"
+                        + "data: {\"event\":\"message_end\"}\n\n")
+                        .getBytes(StandardCharsets.UTF_8)));
+
+        when(restTemplate.execute(
+                eq(URI.create("https://test.api.com/v1/chat_query_v2")),
+                eq(HttpMethod.POST),
+                any(RequestCallback.class),
+                any(ResponseExtractor.class)))
+                .thenAnswer(invocation -> {
+                    RequestCallback requestCallback = invocation.getArgument(2);
+                    ResponseExtractor<?> responseExtractor = invocation.getArgument(3);
+                    requestCallback.doWithRequest(upstreamRequest);
+                    return responseExtractor.extractData(upstreamResponse);
+                });
+
+        AtomicReference<String> completedAnswer = new AtomicReference<>();
+        ResponseEntity<StreamingResponseBody> response =
+                hiAgentService.chatQueryStreamingWithQACredentials(
+                        "conv-stream", "prompt", 42L, completedAnswer::set);
+
+        verify(restTemplate, never()).execute(
+                any(URI.class), any(HttpMethod.class),
+                any(RequestCallback.class), any(ResponseExtractor.class));
+        assertEquals(MediaType.TEXT_EVENT_STREAM, response.getHeaders().getContentType());
+        assertEquals("no", response.getHeaders().getFirst("X-Accel-Buffering"));
+
+        ByteArrayOutputStream browserResponse = new ByteArrayOutputStream();
+        assertNotNull(response.getBody());
+        response.getBody().writeTo(browserResponse);
+
+        assertEquals("event: delta\ndata: {\"content\":\"hello\"}\n\n"
+                        + "event: done\ndata: {\"conversationId\":42}\n\n",
+                browserResponse.toString(StandardCharsets.UTF_8));
+        assertEquals("hello", completedAnswer.get());
+        assertEquals("qa-key", upstreamRequestHeaders.getFirst("Apikey"));
+        assertEquals(MediaType.TEXT_EVENT_STREAM,
+                upstreamRequestHeaders.getAccept().get(0));
+        assertTrue(upstreamRequestBody.toString(StandardCharsets.UTF_8)
+                .contains("\"ResponseMode\":\"streaming\""));
+        verify(restTemplate).execute(
+                eq(URI.create("https://test.api.com/v1/chat_query_v2")),
+                eq(HttpMethod.POST),
+                any(RequestCallback.class),
+                any(ResponseExtractor.class));
     }
 
     // ==================== Destroy ====================
