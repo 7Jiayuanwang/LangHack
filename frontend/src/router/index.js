@@ -520,6 +520,12 @@ const routes = [
         component: () => import("@/views/student/AuthorProfile.vue"),
         meta: { title: "作者主页", roles: ["STUDENT", "USER", "TEACHER"] },
       },
+      {
+        path: "follow-list/:id",
+        name: "StudentFollowList",
+        component: () => import("@/views/student/FollowList.vue"),
+        meta: { title: "关注列表", roles: ["STUDENT", "USER", "TEACHER"] },
+      },
     ],
   },
   {

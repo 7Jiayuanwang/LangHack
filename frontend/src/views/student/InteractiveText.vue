@@ -1497,14 +1497,14 @@ const goBack = () => {
     // 从任务页面跳转来的，返回任务页面
     router.push('/student/assignments')
   } else if (from === 'articles') {
-    // 从文章列表来的，跳转到外部文章页
-    window.location.href = getArticlesPath()
+    // 从文章列表来的，使用路由返回以保持 keep-alive 缓存和滚动位置
+    router.push(getArticlesPath())
   } else if (window.history.length > 1) {
     // 其他情况，使用默认返回
     router.go(-1)
   } else {
-    // 无历史记录时，跳转到外部文章列表
-    window.location.href = getArticlesPath()
+    // 无历史记录时，跳转到文章列表
+    router.push(getArticlesPath())
   }
 }
 

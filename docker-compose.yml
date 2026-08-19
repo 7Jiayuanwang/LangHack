@@ -242,9 +242,9 @@ services:
       GIT_SSH_KEY_DIR: "${GIT_SSH_KEY_DIR:-}"
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
-      # Flyway — 启用：重复版本号 (V25/V27) 已在 fd2c670 清理
-      # 已有数据库通过 baseline-on-migrate 接管；新机器走 init SQL + Flyway 增量迁移
-      SPRING_FLYWAY_ENABLED: "true"
+      # Flyway — 禁用：V11 版本号冲突（jar 内含 V11__ai_conversation_feedback + V11__add_category_to_texts）
+      # 数据库已通过 docker init SQL 初始化，无需 Flyway 增量迁移
+      SPRING_FLYWAY_ENABLED: "false"
       SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
       SPRING_FLYWAY_BASELINE_VERSION: "0"
       SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"

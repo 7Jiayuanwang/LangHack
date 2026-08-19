@@ -23,7 +23,7 @@
       ref="pageMain"
       class="page-main"
       @touchstart.passive="onTouchStart"
-      @touchmove.passive="onTouchMove"
+      @touchmove="onTouchMove"
       @touchend="onTouchEnd"
     >
       <!-- Pull-to-Refresh Indicator -->
@@ -203,10 +203,26 @@ const CACHE_KEY = 'student_articles_cache'
 const SCROLL_KEY = 'student_articles_scroll'
 const NAV_FLAG_KEY = 'student_articles_nav_to_detail'
 
+// 实时节流保存滚动位置（每 300ms），确保导航前总有最新值
+let scrollSaveTimer = null
+const trackScroll = () => {
+  if (scrollSaveTimer) return
+  scrollSaveTimer = setTimeout(() => {
+    scrollSaveTimer = null
+    const s = pageMain.value?.scrollTop || 0
+    if (s > 0) {
+      sessionStorage.setItem(SCROLL_KEY, String(s))
+    }
+  }, 300)
+}
+
 const saveScrollState = () => {
   const scrollTop = pageMain.value?.scrollTop || 0
   try {
-    sessionStorage.setItem(SCROLL_KEY, String(scrollTop))
+    // 只有 scrollTop > 0 时才覆盖（避免 DOM detach 后的 0 覆盖有效值）
+    if (scrollTop > 0) {
+      sessionStorage.setItem(SCROLL_KEY, String(scrollTop))
+    }
     sessionStorage.setItem(NAV_FLAG_KEY, '1')
     sessionStorage.setItem(CACHE_KEY, JSON.stringify({
       allItems: allItems.value,
@@ -244,19 +260,17 @@ const restoreScrollPosition = () => {
     const target = parseInt(saved, 10) || 0
     if (target <= 0) return
 
-    // 使用 requestAnimationFrame + 重试机制，确保 DOM 渲染完毕后再恢复
     const tryRestore = (attempts = 0) => {
       if (!pageMain.value) return
       pageMain.value.scrollTop = target
-      // 如果 DOM 高度不够（内容还没渲染完），短暂延迟后重试
-      if (pageMain.value.scrollTop < target - 5 && attempts < 10) {
-        setTimeout(() => tryRestore(attempts + 1), 50)
+      if (pageMain.value.scrollTop < target - 5 && attempts < 50) {
+        requestAnimationFrame(() => tryRestore(attempts + 1))
       }
     }
-    // 等待 DOM 更新后执行（用 setTimeout 0 + rAF 兜底）
-    setTimeout(() => {
-      requestAnimationFrame(() => tryRestore())
-    }, 0)
+    // 立即尝试 + rAF + setTimeout 兜底
+    tryRestore()
+    requestAnimationFrame(() => tryRestore())
+    setTimeout(() => tryRestore(), 50)
   } catch (e) { /* ignore */ }
 }
 
@@ -273,9 +287,10 @@ const pageMain = ref(null)
 const isPulling = ref(false)
 const isRefreshing = ref(false)
 const pullDistance = ref(0)
-const pullThreshold = 60
+const pullThreshold = 40
 let touchStartY = 0
 let touchStartX = 0
+let pullLocked = false
 
 const pullHintText = computed(() => {
   if (isRefreshing.value) return '正在刷新...'
@@ -442,7 +457,7 @@ const setupObserver = () => {
     if (!sentinel.value) return
     observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) loadMore()
-    }, { rootMargin: '200px' })
+    }, { root: pageMain.value, rootMargin: '200px' })
     observer.observe(sentinel.value)
   })
 }
@@ -569,6 +584,8 @@ const loadFeed = async () => {
 
 const handleItemClick = (item) => {
   if (item._type === 'video') {
+    // 在导航前保存滚动位置到 sessionStorage
+    saveScrollState()
     router.push({ path: '/student/video-player', query: { videoId: item.id } })
     return
   }
@@ -591,6 +608,8 @@ const handleItemClick = (item) => {
   const authHeader = getAuthHeader()
   const headers = authHeader ? { Authorization: authHeader } : {}
   fetch(`${apiBase}/api/public/texts/${numericId}/read`, { method: 'POST', headers }).catch(() => {})
+  // 在导航前保存滚动位置到 sessionStorage（此时 DOM 还在，scrollTop 有效）
+  saveScrollState()
   router.push({
     path: `/article/${numericId}`,
     query: {
@@ -646,6 +665,10 @@ const getDifficultyIcon = (diff) => {
 }
 
 onMounted(() => {
+  // 注册 scroll 实时追踪
+  nextTick(() => {
+    if (pageMain.value) pageMain.value.addEventListener('scroll', trackScroll, { passive: true })
+  })
   // 仅在从文章详情/视频页返回时恢复缓存（NAV_FLAG_KEY 标记存在）
   // 浏览器刷新时 sessionStorage 虽保留，但 NAV_FLAG 不存在，强制重新加载
   const hasNavFlag = sessionStorage.getItem(NAV_FLAG_KEY)
@@ -670,15 +693,30 @@ onMounted(() => {
 
 // keep-alive 激活时：浏览器不保留 detach/reattach 后的滚动位置，需手动恢复
 onActivated(() => {
-  // 重新设置 IntersectionObserver（可能在 deactivated 时被断开）
   setupObserver()
-  // 恢复滚动位置（keep-alive detach DOM 会导致 scrollTop 归零）
-  restoreScrollPosition()
+  // 重新绑定 scroll 追踪
+  if (pageMain.value) pageMain.value.addEventListener('scroll', trackScroll, { passive: true })
+
+  const targetScroll = parseInt(sessionStorage.getItem(SCROLL_KEY) || '0', 10)
+  if (targetScroll > 0 && pageMain.value) {
+    const doRestore = (attempt = 0) => {
+      if (!pageMain.value) return
+      pageMain.value.scrollTop = targetScroll
+      if (pageMain.value.scrollTop < targetScroll - 5 && attempt < 50) {
+        requestAnimationFrame(() => doRestore(attempt + 1))
+      }
+    }
+    // 立即尝试 + 两个延迟时间点兜底
+    doRestore()
+    requestAnimationFrame(() => doRestore())
+    setTimeout(() => doRestore(), 50)
+  }
 })
 
-// keep-alive 停用时：保存滚动位置并断开 observer 避免后台触发
+// keep-alive 停用时：断开 observer 避免后台触发
+// 注意：不在此处调用 saveScrollState()，因为 DOM detach 后 scrollTop 已被重置为 0
+// 正确的保存时机是 onBeforeRouteLeave（DOM 还在时）和 trackScroll（实时节流保存）
 onDeactivated(() => {
-  saveScrollState()
   if (observer) observer.disconnect()
 })
 
@@ -686,6 +724,7 @@ onDeactivated(() => {
 onBeforeRouteLeave((to, from) => {
   // 只在前往文章详情页 or 视频播放页时保存（其他页面不保存，避免内存浪费）
   if (to.path.startsWith('/article/') || to.path.startsWith('/student/video-player')) {
+    // 在 DOM 被 detach 之前保存滚动位置到 sessionStorage
     saveScrollState()
   } else {
     clearCache()
@@ -698,6 +737,7 @@ const onTouchStart = (e) => {
   const touch = e.touches[0]
   touchStartY = touch.clientY
   touchStartX = touch.clientX
+  pullLocked = false
 }
 
 const onTouchMove = (e) => {
@@ -708,18 +748,29 @@ const onTouchMove = (e) => {
 
   // 只在列表滚动到顶部且向下拉时触发
   const scrollTop = pageMain.value?.scrollTop || 0
-  if (scrollTop > 0 || deltaY < 0) {
-    isPulling.value = false
-    pullDistance.value = 0
+  if (scrollTop > 2 || deltaY < 0) {
+    if (isPulling.value) {
+      isPulling.value = false
+      pullDistance.value = 0
+    }
     return
   }
 
-  // 水平滑动幅度大于垂直则忽略（避免与横向滚动冲突）
-  if (Math.abs(deltaX) > Math.abs(deltaY)) return
+  // 首次判断方向：如果水平滑动明显大于垂直，则锁定为非下拉
+  if (!pullLocked && Math.abs(deltaX) + Math.abs(deltaY) > 10) {
+    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      pullLocked = true
+      return
+    }
+  }
+  if (pullLocked) return
 
-  isPulling.value = true
-  // 添加阻尼效果：拉得越远阻力越大
-  pullDistance.value = Math.min(deltaY * 0.4, 120)
+  // 进入下拉状态，阻止浏览器默认滚动/overscroll
+  if (deltaY > 5 && scrollTop <= 2) {
+    isPulling.value = true
+    pullDistance.value = Math.min(deltaY * 0.55, 120)
+    if (e.cancelable) e.preventDefault()
+  }
 }
 
 const onTouchEnd = async () => {
@@ -727,9 +778,8 @@ const onTouchEnd = async () => {
   isPulling.value = false
 
   if (pullDistance.value > pullThreshold) {
-    // 触发刷新
     isRefreshing.value = true
-    pullDistance.value = pullThreshold // 保持在阈值位置显示刷新动画
+    pullDistance.value = pullThreshold
     await doRefresh()
     isRefreshing.value = false
   }
@@ -983,6 +1033,7 @@ onBeforeUnmount(() => {
   -webkit-overflow-scrolling: touch;
   position: relative;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
 }
 
 .page-content-wrapper {
