@@ -1399,7 +1399,10 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
                 List<Map<String, Object>> rawSels;
                 try {
-                    rawSels = apiClient.fetchCourseSelections(Map.of("KCBH", kcbh));
+                    // CDSP 不支持原生 KCBH 参数(报IY1103)，改用 OData $filter 按课程班号精确拉取。
+                    // 课程班号是 numeric，值不加引号。空格由 buildUrl 的 encodeODataValue 编码为 %20。
+                    rawSels = apiClient.fetchCourseSelections(
+                            Map.of("$filter", "课程班号 eq " + kcbh));
                 } catch (Exception e) {
                     selectionFetchFailureCount++;
                     failedSelectionClasses.add(kcbh);
