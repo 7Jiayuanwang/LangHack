@@ -10,6 +10,71 @@
       </el-button>
     </div>
 
+    <!-- 一键同步外语院（独立入口，与下方通用配置分开） -->
+    <div class="fl-sync-card">
+      <div class="fl-sync-main">
+        <div class="fl-sync-info">
+          <div class="fl-sync-title">
+            <el-icon><Promotion /></el-icon>
+            <span>一键同步外语院数据</span>
+          </div>
+          <p class="fl-sync-desc">
+            直接拉取「{{ FOREIGN_LANGUAGE_COLLEGE }}」的课程 / 学生 / 教师 / 绑定关系，班级统一挂到「用户上传内容」课程。
+          </p>
+        </div>
+        <el-button
+          type="primary"
+          size="large"
+          class="fl-sync-btn"
+          :loading="flSyncing"
+          :disabled="!chainFetchEnabled || !canRunQuickActions"
+          @click="handleSyncForeignLanguageCollege"
+        >
+          <el-icon><Promotion /></el-icon> 一键同步外语院
+        </el-button>
+      </div>
+      <el-alert
+        v-if="!chainFetchEnabled"
+        type="info"
+        :closable="false"
+        show-icon
+        class="fl-sync-alert"
+        title="按学院链式拉取功能当前已关闭（feature toggle: ops.school_data_chain_fetch）。"
+      />
+      <el-alert
+        v-else-if="!canRunQuickActions"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="fl-sync-alert"
+        title="请先在下方完成学校数据源配置并测试连接成功后，再执行一键同步。"
+      />
+
+      <div v-if="flResult" class="quick-result-card fl-sync-result">
+        <div class="quick-result-title">同步结果</div>
+        <div class="quick-result-grid">
+          <div><span>状态：</span>{{ chainStatusText(flResult.status) }}</div>
+          <div><span>学院：</span>{{ flResult.collegeName }}</div>
+          <div><span>课程数：</span>{{ flResult.courseCount || 0 }}</div>
+          <div><span>学生数：</span>{{ flResult.studentCount || 0 }}</div>
+          <div><span>教师数：</span>{{ flResult.teacherCount || 0 }}</div>
+          <div><span>绑定数：</span>{{ flResult.bindingCount || 0 }}</div>
+        </div>
+        <div v-if="flResult.errorMessage" class="quick-result-error">{{ flResult.errorMessage }}</div>
+        <div v-if="chainErrors(flResult).length > 0" class="quick-result-issues">
+          <div class="quick-result-issues-title">错误</div>
+          <div v-for="item in chainErrors(flResult)" :key="`fl-error-${item}`" class="quick-result-issue-item">{{ item }}</div>
+        </div>
+        <div v-if="chainWarnings(flResult).length > 0" class="quick-result-issues warnings">
+          <div class="quick-result-issues-title">警告</div>
+          <div v-for="item in chainWarnings(flResult)" :key="`fl-warning-${item}`" class="quick-result-issue-item">{{ item }}</div>
+        </div>
+        <div v-if="flResult.status && flResult.status !== 'FAILED'" class="quick-result-actions">
+          <el-button size="small" @click="openFlResultInBrowser">查看本地数据</el-button>
+        </div>
+      </div>
+    </div>
+
     <!-- 配置状态警告横幅 -->
     <div class="banners-area">
       <el-alert
@@ -383,7 +448,7 @@ import { ElMessage } from 'element-plus'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   Refresh, Loading, QuestionFilled, InfoFilled,
-  Connection, Check, CircleCheckFilled, CircleCloseFilled
+  Connection, Check, CircleCheckFilled, CircleCloseFilled, Promotion
 } from '@element-plus/icons-vue'
 import {
   getSchoolDataConfig,
@@ -480,6 +545,11 @@ const chainFetchForm = reactive({
 })
 const quickResult = ref(null)
 const chainResult = ref(null)
+
+// 一键同步外语院（独立入口，独立状态，不复用下方通用卡片）
+const FOREIGN_LANGUAGE_COLLEGE = '外国语学院'
+const flSyncing = ref(false)
+const flResult = ref(null)
 const { isEnabled: isFeatureEnabled, load: loadFeatureToggles } = useFeatureToggles()
 const chainFetchEnabled = computed(() => isFeatureEnabled('ops.school_data_chain_fetch'))
 
@@ -822,6 +892,68 @@ const handleQuickChainFetch = async () => {
   }
 }
 
+const handleSyncForeignLanguageCollege = async () => {
+  if (!canRunQuickActions.value) {
+    ElMessage.warning('请先完成配置并测试连接')
+    return
+  }
+  if (!chainFetchEnabled.value) {
+    ElMessage.warning('按学院链式拉取功能已关闭')
+    return
+  }
+  flSyncing.value = true
+  flResult.value = null
+
+  let loadingInstance = ElMessage({
+    message: `正在一键同步「${FOREIGN_LANGUAGE_COLLEGE}」数据，请稍候...`,
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
+
+  try {
+    const res = await chainFetchStudentsByCollege({
+      collegeName: FOREIGN_LANGUAGE_COLLEGE,
+      matchMode: 'eq',
+      persist: true
+    })
+    if (res?.code === 200 && res.data) {
+      flResult.value = res.data
+      if (flResult.value?.status === 'FAILED') {
+        ElMessage.error(flResult.value.errorMessage || '一键同步失败，请查看诊断信息')
+      } else if (flResult.value?.status === 'PARTIAL') {
+        ElMessage.warning(flResult.value.errorMessage || '一键同步已完成，但存在异常')
+      } else {
+        ElMessage.success('外语院数据一键同步完成')
+      }
+    } else {
+      throw new Error(res?.message || '一键同步失败')
+    }
+  } catch (error) {
+    flResult.value = { errorMessage: error.message || '一键同步失败' }
+    ElMessage.error(flResult.value.errorMessage)
+  } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
+    flSyncing.value = false
+  }
+}
+
+const openFlResultInBrowser = () => {
+  const result = flResult.value
+  if (!result || result.status === 'FAILED') {
+    return
+  }
+  router.push({
+    path: '/ops/school-data-browser',
+    query: {
+      tab: resolveChainResultTab(result),
+      collegeName: result.collegeName || FOREIGN_LANGUAGE_COLLEGE
+    }
+  })
+}
+
 const chainStatusText = (status) => CHAIN_STATUS_LABELS[status] || '未知'
 
 const chainErrors = (result) => (Array.isArray(result?.errors) ? result.errors : [])
@@ -931,6 +1063,73 @@ onMounted(async () => {
 
 .banners-area {
   margin-bottom: 24px;
+}
+
+.fl-sync-card {
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  border: 1px solid #c7d2fe;
+  border-radius: 20px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 25px rgba(79, 70, 229, 0.08);
+}
+
+.fl-sync-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.fl-sync-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #3730a3;
+}
+
+.fl-sync-desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #4338ca;
+  opacity: 0.85;
+  line-height: 1.6;
+  max-width: 640px;
+}
+
+.fl-sync-btn {
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 0 28px;
+}
+
+.fl-sync-alert {
+  margin-top: 16px;
+  border-radius: 12px;
+}
+
+.fl-sync-result {
+  margin-top: 16px;
+  background: #fff;
+  padding: 16px 18px;
+}
+
+@media (max-width: 768px) {
+  .fl-sync-card {
+    padding: 16px;
+  }
+
+  .fl-sync-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fl-sync-btn {
+    width: 100%;
+  }
 }
 
 .premium-alert {
