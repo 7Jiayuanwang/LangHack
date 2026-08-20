@@ -1,8 +1,37 @@
 # ─────────────────────────────────────────────
-# 运行阶段（直接使用本地已打好的jar，不在容器内编译）
-# jar包由云电脑预先打好：english-learning-platform-1.0.0.jar
+# 构建阶段（容器内用 Maven 编译，依赖走内网 Nexus）
 # ─────────────────────────────────────────────
 ARG IMAGE_REGISTRY_PREFIX=
+FROM ${IMAGE_REGISTRY_PREFIX}maven:3.8-openjdk-17 AS builder
+
+# Maven 内网镜像源（留空=使用 pom 默认；内网填入 Nexus maven-public 地址）
+ARG MAVEN_MIRROR_URL=
+
+WORKDIR /build
+
+# 若配置了内网 Nexus，生成指向它的 settings.xml
+RUN if [ -n "$MAVEN_MIRROR_URL" ]; then \
+        mkdir -p /root/.m2; \
+        printf '%s\n' \
+          '<settings>' \
+          '  <mirrors><mirror>' \
+          '    <id>nexus</id><mirrorOf>*</mirrorOf>' \
+          "    <url>${MAVEN_MIRROR_URL}</url>" \
+          '  </mirror></mirrors>' \
+          '</settings>' > /root/.m2/settings.xml; \
+    fi
+
+# 先拷 pom 预热依赖缓存（利用 Docker 层缓存，源码变动不必重下依赖）
+COPY pom.xml ./
+RUN mvn -B dependency:go-offline -DskipTests || true
+
+# 拷源码并打包
+COPY src ./src
+RUN mvn -B clean package -DskipTests
+
+# ─────────────────────────────────────────────
+# 运行阶段
+# ─────────────────────────────────────────────
 FROM ${IMAGE_REGISTRY_PREFIX}eclipse-temurin:17-jre-alpine
 
 # Alpine 内网镜像源（留空=使用官方源；内网填入 Nexus Alpine 代理地址）
@@ -11,8 +40,8 @@ ARG ALPINE_MIRROR=
 WORKDIR /app
 
 # 安装 curl（healthcheck）、tzdata（时区）、mysql-client + mariadb-connector-c（mysqldump 备份/恢复）
-RUN if [ -n "$ALPINE_MIRROR" ]; then \
-        ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2); \
+RUN ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2) \
+    && if [ -n "$ALPINE_MIRROR" ]; then \
         printf '%s\n' "${ALPINE_MIRROR%/}/v${ALPINE_VER}/main" "${ALPINE_MIRROR%/}/v${ALPINE_VER}/community" > /etc/apk/repositories; \
     else \
         printf '%s\n' \
@@ -31,8 +60,8 @@ RUN if [ -n "$ALPINE_MIRROR" ]; then \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone
 
-# 直接复制本地已打好的可执行 jar（不在容器内跑maven编译）
-COPY english-learning-platform-1.0.0.jar app.jar
+# 从构建阶段复制编译好的可执行 jar
+COPY --from=builder /build/target/english-learning-platform-1.0.0.jar app.jar
 
 # 自定义 Java 安全属性：从禁用列表中移除 rsa_pkcs1_sha1
 COPY java-security.properties /app/java-security.properties
