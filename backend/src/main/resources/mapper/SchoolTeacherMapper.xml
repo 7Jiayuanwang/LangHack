@@ -24,4 +24,22 @@
         SELECT * FROM school_teacher WHERE teacher_id = #{teacherId} LIMIT 1
     </select>
 
+    <select id="selectByCollege" resultType="com.english.entity.SchoolTeacher">
+        SELECT * FROM school_teacher
+        <where>
+            teacher_id IS NOT NULL AND teacher_id != ''
+            <if test="collegeName != null and collegeName != ''">
+                <choose>
+                    <when test="contains">
+                        AND college_name LIKE CONCAT('%', #{collegeName}, '%')
+                    </when>
+                    <otherwise>
+                        AND college_name = #{collegeName}
+                    </otherwise>
+                </choose>
+            </if>
+        </where>
+        ORDER BY teacher_id
+    </select>
+
 </mapper>

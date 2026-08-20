@@ -52,6 +52,12 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
     @Override
     @Transactional
     public Map<String, Object> syncClassesForTeacher(Long userId) {
+        return syncClassesForTeacher(userId, null, null);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> syncClassesForTeacher(Long userId, String academicYear, String semester) {
         Map<String, Object> result = new LinkedHashMap<>();
         int classesCreated = 0;
         int classesSkipped = 0;
@@ -69,23 +75,29 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         String teacherWorkId = teacher.getUsername();
         logger.info("[classSync] 开始同步: userId={}, username={}", userId, teacherWorkId);
 
-        // 计算当前学年学期：8月及以后为秋季(1)，2月及以后为春季(2)
-        java.time.LocalDate today = java.time.LocalDate.now();
-        int year = today.getYear();
-        int month = today.getMonthValue();
+        // 学年学期：优先用入参指定值，否则按当前日期推算（8月及以后=秋季(1)，2月及以后=春季(2)）
         String currentAcademicYear;
         int currentSemester;
-        if (month >= 8) {
-            currentAcademicYear = String.valueOf(year);
-            currentSemester = 1;
-        } else if (month >= 2) {
-            currentAcademicYear = String.valueOf(year - 1);
-            currentSemester = 2;
+        Integer specifiedSemester = normalizeSemesterToInt(semester);
+        if (academicYear != null && !academicYear.trim().isEmpty() && specifiedSemester != null) {
+            currentAcademicYear = academicYear.trim();
+            currentSemester = specifiedSemester;
         } else {
-            currentAcademicYear = String.valueOf(year - 1);
-            currentSemester = 1;
+            java.time.LocalDate today = java.time.LocalDate.now();
+            int year = today.getYear();
+            int month = today.getMonthValue();
+            if (month >= 8) {
+                currentAcademicYear = String.valueOf(year);
+                currentSemester = 1;
+            } else if (month >= 2) {
+                currentAcademicYear = String.valueOf(year - 1);
+                currentSemester = 2;
+            } else {
+                currentAcademicYear = String.valueOf(year - 1);
+                currentSemester = 1;
+            }
         }
-        logger.info("[classSync] 当前学期: academicYear={}, semester={}", currentAcademicYear, currentSemester);
+        logger.info("[classSync] 目标学期: academicYear={}, semester={}", currentAcademicYear, currentSemester);
 
         // 1. 查询该教师在 teaching_class 中当前学期的教学班
         QueryWrapper<TeachingClass> tcWrapper = new QueryWrapper<>();
@@ -302,6 +314,29 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         courseMapper.insert(course);
         logger.info("[classSync] 创建课程: name={}, code={}", courseName, courseCode);
         return course.getId();
+    }
+
+    /** 学期归一化为 Integer：秋/1→1，春/2→2，其余→null（表示未指定）。 */
+    private Integer normalizeSemesterToInt(String semester) {
+        if (semester == null) {
+            return null;
+        }
+        String s = semester.trim();
+        if (s.isEmpty()) {
+            return null;
+        }
+        if ("1".equals(s) || "秋".equals(s)) {
+            return 1;
+        }
+        if ("2".equals(s) || "春".equals(s)) {
+            return 2;
+        }
+        try {
+            int v = Integer.parseInt(s);
+            return (v == 1 || v == 2) ? v : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private String buildClassName(String courseName, String className, String kcbh) {

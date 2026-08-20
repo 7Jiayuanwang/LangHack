@@ -99,13 +99,19 @@ public interface SchoolDataSyncService {
      * 3. 学号去重 → school_student
      * 3.5 teacher × student (课程) 笛卡尔积 → teacher_student_binding
      *
-     * @param collegeName 学院名称（CDSP kkyx，如"外国语学院"）
-     * @param matchMode   学院名匹配模式，eq=精确，contains=模糊
-     * @param persist     是否落库，false 时只返回统计用于试跑
+     * @param collegeName  学院名称（CDSP kkyx，如"外国语学院"）
+     * @param matchMode    学院名匹配模式，eq=精确，contains=模糊
+     * @param persist      是否落库，false 时只返回统计用于试跑
+     * @param academicYear 学年（单起始年份，如 "2026" 表示 2026-2027 学年）。
+     *                     非空时以 OData $filter=学年 eq {academicYear} 收窄 teacher_courses，
+     *                     避免拉取历年全表；为空时不限学年（旧行为）。
+     * @param semester     学期（"秋"=上学期 / "春"=下学期）。非空时客户端按学期再筛
+     *                     （CDSP 对 $filter 学期语法未验证，故客户端过滤保证正确）。
      * @return 结果统计：courseCount / studentCount / teacherCount / bindingCount /
      *         upstreamKcbhSupported / matchedCourseCodes
      */
-    Map<String, Object> chainFetchStudentsByCollege(String collegeName, String matchMode, boolean persist);
+    Map<String, Object> chainFetchStudentsByCollege(String collegeName, String matchMode, boolean persist,
+                                                    String academicYear, String semester);
 
     /**
      * 按需同步并返回指定学生的四六级成绩（Lazy 策略）。
