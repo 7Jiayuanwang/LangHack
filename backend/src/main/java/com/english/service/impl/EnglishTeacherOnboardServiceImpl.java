@@ -198,7 +198,7 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
         for (Map.Entry<String, Long> e : teacherUserIds.entrySet()) {
             Long uid = e.getValue();
             try {
-                Map<String, Object> r = teacherClassSyncService.syncClassesForTeacher(uid, year, targetSemester);
+                Map<String, Object> r = teacherClassSyncService.syncClassesForTeacher(uid, year, targetSemester, keyword);
                 teacherSynced++;
                 totalClassesCreated += toInt(r.get("classesCreated"));
                 totalStudentsAdded += toInt(r.get("studentsAdded"));

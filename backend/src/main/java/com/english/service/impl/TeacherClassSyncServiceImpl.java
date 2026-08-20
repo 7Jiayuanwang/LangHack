@@ -66,6 +66,13 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
     @Override
     @Transactional
     public Map<String, Object> syncClassesForTeacher(Long userId, String academicYear, String semester) {
+        return syncClassesForTeacher(userId, academicYear, semester, null);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> syncClassesForTeacher(Long userId, String academicYear, String semester, String courseKeyword) {
+        String kwFilter = (courseKeyword == null || courseKeyword.trim().isEmpty()) ? null : courseKeyword.trim();
         Map<String, Object> result = new LinkedHashMap<>();
         int classesCreated = 0;
         int classesSkipped = 0;
@@ -135,6 +142,13 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
 
             if (kcbh == null || kcbh.isEmpty()) {
                 warnings.add("教学班缺少 class_id(kcbh)，跳过");
+                classesSkipped++;
+                continue;
+            }
+
+            // 课程名关键词过滤：只建含关键词（如"英语"）的教学班，
+            // 避免教师名下的德语/通识/专业课被连带建班
+            if (kwFilter != null && (courseName == null || !courseName.contains(kwFilter))) {
                 classesSkipped++;
                 continue;
             }
