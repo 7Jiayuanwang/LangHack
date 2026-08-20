@@ -49,6 +49,14 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
     @Autowired
     private StudentClassMapper studentClassMapper;
 
+    @Autowired
+    private com.english.mapper.SchoolStudentMapper schoolStudentMapper;
+
+    @Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    private static final String SSO_PROVIDER = "cas";
+
     @Override
     @Transactional
     public Map<String, Object> syncClassesForTeacher(Long userId) {
@@ -99,6 +107,10 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         }
         logger.info("[classSync] 目标学期: academicYear={}, semester={}", currentAcademicYear, currentSemester);
 
+        // 仅当目标学期为 2026 秋季时，允许为未注册学生自动建号
+        boolean allowCreateStudents = "2026".equals(currentAcademicYear) && currentSemester == 1;
+        int studentsCreated = 0;
+
         // 1. 查询该教师在 teaching_class 中当前学期的教学班
         QueryWrapper<TeachingClass> tcWrapper = new QueryWrapper<>();
         tcWrapper.eq("teacher_id", teacherWorkId);
@@ -127,10 +139,39 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
                 continue;
             }
 
-            // 2.1 班级统一绑定到“用户上传内容”课程（不再为每个学校课程创建空课程）
-            Long courseId = USER_UPLOAD_COURSE_ID;
+            // 2.1 先按课程班号(kcbh)实时从 CDSP 拉选课学生（$filter=课程班号 eq kcbh）
+            //     CDSP 选课接口不支持原生参数过滤，但支持 OData $filter，
+            //     课程班号是 numeric，值不加引号。拉不到再回退查本地库。
+            //     ★ 拉不到任何选课学生的教学班不建班（避免生成空班）。
+            Map<String, String> studentNames = new LinkedHashMap<>();
+            Set<String> studentIds = fetchStudentIdsByKcbh(kcbh, studentNames);
 
-            // 2.2 查/建平台班级（含恢复已软删除的班级）
+            if (studentIds.isEmpty()) {
+                // 回退：查本地 course_selection（用 class_id/课程班号关联）
+                QueryWrapper<CourseSelection> selWrapper = new QueryWrapper<>();
+                selWrapper.eq("class_id", kcbh);
+                List<CourseSelection> selections = courseSelectionMapper.selectList(selWrapper);
+                for (CourseSelection cs : selections) {
+                    String sid = cs.getStudentId();
+                    if (sid != null && !sid.isEmpty()) {
+                        studentIds.add(sid);
+                        String nm = firstNonBlankName(cs.getStudentName());
+                        if (nm != null) {
+                            studentNames.putIfAbsent(sid, nm);
+                        }
+                    }
+                }
+            }
+
+            if (studentIds.isEmpty()) {
+                // 无选课学生：不建班（若之前已存在同 kcbh 班级则保留，不动）
+                warnings.add(String.format("班级[%s]未拉取到选课学生，跳过建班", kcbh));
+                classesSkipped++;
+                continue;
+            }
+
+            // 2.2 确认有学生后，查/建平台班级（含恢复已软删除的班级），统一挂到“用户上传内容”课程
+            Long courseId = USER_UPLOAD_COURSE_ID;
             Long classId;
             Class existingClass = findClassBySchoolId(kcbh, false);
 
@@ -138,7 +179,6 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
                 classId = existingClass.getId();
                 classesSkipped++;
             } else {
-                // 检查是否有软删除的同 school_class_id 班级，有则恢复
                 Class deletedClass = findClassBySchoolId(kcbh, true);
                 if (deletedClass != null) {
                     String className = buildClassName(courseName, tc.getClassName(), kcbh);
@@ -161,28 +201,7 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
                 }
             }
 
-            // 2.3 按课程班号(kcbh)实时从 CDSP 拉选课学生（$filter=课程班号 eq kcbh）
-            //     CDSP 选课接口不支持原生参数过滤，但支持 OData $filter，
-            //     课程班号是 numeric，值不加引号。拉不到再回退查本地库。
-            Set<String> studentIds = fetchStudentIdsByKcbh(kcbh);
-
-            if (studentIds.isEmpty()) {
-                // 回退：查本地 course_selection（用 class_id/课程班号关联）
-                QueryWrapper<CourseSelection> selWrapper = new QueryWrapper<>();
-                selWrapper.eq("class_id", kcbh);
-                List<CourseSelection> selections = courseSelectionMapper.selectList(selWrapper);
-                studentIds = selections.stream()
-                        .map(CourseSelection::getStudentId)
-                        .filter(s -> s != null && !s.isEmpty())
-                        .collect(Collectors.toSet());
-            }
-
-            if (studentIds.isEmpty()) {
-                warnings.add(String.format("班级[%s]未拉取到选课学生", kcbh));
-                continue;
-            }
-
-            // 批量查询 users 表找平台用户
+            // 2.3 批量查询 users 表找平台用户
             QueryWrapper<User> userWrapper = new QueryWrapper<>();
             userWrapper.in("username", studentIds);
             userWrapper.eq("deleted", 0);
@@ -191,9 +210,28 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
             Map<String, Long> usernameToUserId = matchedUsers.stream()
                     .collect(Collectors.toMap(User::getUsername, User::getId, (a, b) -> a));
 
-            int notFoundCount = studentIds.size() - usernameToUserId.size();
-            if (notFoundCount > 0) {
-                warnings.add(String.format("班级[%s]有%d名学生未在平台注册，已跳过", kcbh, notFoundCount));
+            // 未在平台注册的学生：仅 2026 秋季允许自动建号，其余学期沿用旧逻辑（跳过）
+            Set<String> notFound = new LinkedHashSet<>(studentIds);
+            notFound.removeAll(usernameToUserId.keySet());
+            if (!notFound.isEmpty()) {
+                if (allowCreateStudents) {
+                    int created = 0;
+                    for (String sid : notFound) {
+                        Long newId = createStudentAccount(sid, studentNames.get(sid));
+                        if (newId != null) {
+                            usernameToUserId.put(sid, newId);
+                            created++;
+                        }
+                    }
+                    studentsCreated += created;
+                    logger.info("[classSync] 班级[{}] 为{}名未注册学生自动建号(成功{})", kcbh, notFound.size(), created);
+                    int stillMissing = notFound.size() - created;
+                    if (stillMissing > 0) {
+                        warnings.add(String.format("班级[%s]有%d名学生建号失败，已跳过", kcbh, stillMissing));
+                    }
+                } else {
+                    warnings.add(String.format("班级[%s]有%d名学生未在平台注册，已跳过", kcbh, notFound.size()));
+                }
             }
 
             for (Long studentUserId : usernameToUserId.values()) {
@@ -218,6 +256,7 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         result.put("classesSkipped", classesSkipped);
         result.put("studentsAdded", studentsAdded);
         result.put("studentsSkipped", studentsSkipped);
+        result.put("studentsCreated", studentsCreated);
         result.put("totalTeachingClasses", teachingClasses.size());
         result.put("academicYear", currentAcademicYear);
         result.put("semester", currentSemester == 1 ? "秋" : "春");
@@ -225,8 +264,8 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
             result.put("warnings", warnings);
         }
 
-        logger.info("[classSync] 完成: created={}, skipped={}, studentsAdded={}, studentsSkipped={}",
-                classesCreated, classesSkipped, studentsAdded, studentsSkipped);
+        logger.info("[classSync] 完成: created={}, skipped={}, studentsAdded={}, studentsCreated={}, studentsSkipped={}",
+                classesCreated, classesSkipped, studentsAdded, studentsCreated, studentsSkipped);
         return result;
     }
 
@@ -235,7 +274,7 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
      * 使用 OData $filter=课程班号 eq {kcbh}（numeric，值不加引号）。
      * 拉取失败或为空时返回空集合，由调用方回退到本地库。
      */
-    private Set<String> fetchStudentIdsByKcbh(String kcbh) {
+    private Set<String> fetchStudentIdsByKcbh(String kcbh, Map<String, String> studentNames) {
         Set<String> studentIds = new LinkedHashSet<>();
         if (kcbh == null || kcbh.trim().isEmpty()) {
             return studentIds;
@@ -249,6 +288,12 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
                     String xh = extractStudentId(row);
                     if (xh != null && !xh.isEmpty()) {
                         studentIds.add(xh);
+                        if (studentNames != null) {
+                            String name = extractStudentName(row);
+                            if (name != null && !name.isEmpty()) {
+                                studentNames.putIfAbsent(xh, name);
+                            }
+                        }
                     }
                 }
             }
@@ -268,6 +313,72 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         if (v == null) v = row.get("XH");
         if (v == null) v = row.get("xh");
         return v == null ? null : String.valueOf(v).trim();
+    }
+
+    /**
+     * 从选课记录 map 中提取学生姓名，兼容中文 key「姓名」、英文别名 studentName/xm/XM。
+     */
+    private String extractStudentName(Map<String, Object> row) {
+        Object v = row.get("studentName");
+        if (v == null) v = row.get("姓名");
+        if (v == null) v = row.get("XM");
+        if (v == null) v = row.get("xm");
+        String name = v == null ? null : String.valueOf(v).trim();
+        // 纯数字视为脏数据（CDSP 早期把学号填入了姓名字段）
+        if (name != null && name.matches("^[0-9]+$")) {
+            return null;
+        }
+        return name;
+    }
+
+    /**
+     * 为未注册学生创建 SSO-only STUDENT 账号（随机密码不可本地登录，走 SSO 绑定）。
+     * 姓名优先用 CDSP 选课记录，缺失时回退 school_student 表，再兜底用学号。
+     * @return 新建用户的 id；已存在或创建失败返回 null。
+     */
+    private Long createStudentAccount(String studentId, String cdspName) {
+        String realName = firstNonBlankName(cdspName);
+        if (realName == null) {
+            SchoolStudent ss = null;
+            try {
+                ss = schoolStudentMapper.selectByStudentId(studentId);
+            } catch (Exception ignored) {
+            }
+            if (ss != null) {
+                realName = firstNonBlankName(ss.getStudentName());
+            }
+        }
+        if (realName == null) {
+            realName = studentId;
+        }
+        try {
+            User user = new User();
+            user.setUsername(studentId);
+            user.setPassword(UUID.randomUUID().toString());
+            user.setRealName(realName);
+            user.setNickname(realName);
+            user.setRole("STUDENT");
+            user.setStatus("ACTIVE");
+            user.setSsoBound(1);
+            user.setSsoProvider(SSO_PROVIDER);
+            userService.createUser(user);
+            return user.getId();
+        } catch (Exception e) {
+            logger.warn("[classSync] 建学生账号失败 studentId={} err={}", studentId, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 姓名去空白 + 过滤纯数字脏数据；无效返回 null。 */
+    private String firstNonBlankName(String name) {
+        if (name == null) {
+            return null;
+        }
+        String v = name.trim();
+        if (v.isEmpty() || v.matches("^[0-9]+$")) {
+            return null;
+        }
+        return v;
     }
 
     /**
