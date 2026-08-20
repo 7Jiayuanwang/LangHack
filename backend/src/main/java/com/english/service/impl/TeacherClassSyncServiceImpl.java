@@ -21,6 +21,9 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
 
     private static final Logger logger = LoggerFactory.getLogger(TeacherClassSyncServiceImpl.class);
 
+    /** “用户上传内容”固定课程 ID：学校数据同步的班级统一挂到此课程下，不再为每个学校课程创建空课程 */
+    private static final Long USER_UPLOAD_COURSE_ID = 999L;
+
     @Autowired
     private UserService userService;
 
@@ -112,8 +115,8 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
                 continue;
             }
 
-            // 2.1 查/建平台课程
-            Long courseId = findOrCreateCourse(courseCode, courseName, userId);
+            // 2.1 班级统一绑定到“用户上传内容”课程（不再为每个学校课程创建空课程）
+            Long courseId = USER_UPLOAD_COURSE_ID;
 
             // 2.2 查/建平台班级（含恢复已软删除的班级）
             Long classId;
@@ -268,6 +271,11 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         return classMapper.selectOne(wrapper);
     }
 
+    /**
+     * @deprecated 已停用：班级现统一绑定到“用户上传内容”课程（{@link #USER_UPLOAD_COURSE_ID}），
+     * 不再为每个学校课程创建独立课程。保留此方法以备将来需要恢复按课程建课的逻辑。
+     */
+    @Deprecated
     private Long findOrCreateCourse(String courseCode, String courseName, Long teacherId) {
         if (courseCode != null && !courseCode.isEmpty()) {
             QueryWrapper<Course> wrapper = new QueryWrapper<>();
