@@ -35,6 +35,9 @@ fi
 echo "appId=${APP_ID}  appSecret=${APP_SECRET:0:4}****"
 echo "待测大学英语1(1300130) 2026秋 课程班号: ${KCBH_LIST}"
 
+# 已知有学生的老班（大学英语3, 有62人），用于验证 course_selection 接口 + $filter 是否本就生效
+KNOWN_GOOD_KCBH="${KNOWN_GOOD_KCBH:-256737822}"
+
 gen_sign() { printf '%s' "${APP_ID}${APP_SECRET}${1}" | md5sum | cut -d' ' -f1 | tr -d '\n' | base64 -w0; }
 urlenc() { python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"; }
 call() {
@@ -42,6 +45,39 @@ call() {
   curl -s -X GET "$1" -H "appId: ${APP_ID}" -H "timestamp: ${ts}" -H "sign: ${sign}" -H "Accept: application/json"
 }
 
+show_students() { python3 -c "
+import sys,json,collections
+try:
+    d=json.load(sys.stdin); v=d.get('value',[]); cnt=d.get('@api.count') or d.get('@odata.count')
+except Exception as e:
+    print('  解析失败/非JSON:', e); sys.exit(0)
+print('  返回条数:', len(v), '| @count:', cnt)
+if not v: sys.exit(0)
+def sid(r):
+    for k in ('学号','studentId','XH','xh'):
+        if r.get(k): return str(r[k]).strip()
+    return ''
+print('  字段名样本:', list(v[0].keys()))
+yrs=collections.Counter(s[:4] for s in (sid(r) for r in v) if s)
+print('  学号年份前缀分布:', dict(yrs))
+# 学年学期分布（看这批选课记录属于哪个学期）
+terms=collections.Counter()
+for r in v[:200]:
+    xn=r.get('学年') or r.get('xn'); xq=r.get('学期') or r.get('xq')
+    terms[(str(xn),str(xq))]+=1
+print('  学年学期分布:', dict(terms))
+"; }
+
+echo
+echo "########## 对照测试1：选课接口不带过滤（验证接口+鉴权是否通） ##########"
+call "${CS_URL}?\$top=5" | show_students
+
+echo
+echo "########## 对照测试2：已知有学生的老班 kcbh=${KNOWN_GOOD_KCBH}（验证 \$filter 是否生效） ##########"
+call "${CS_URL}?\$filter=$(urlenc "课程班号 eq ${KNOWN_GOOD_KCBH}")&\$top=200" | show_students
+
+echo
+echo "########## 主测试：大学英语1 的 2026秋 各班 ##########"
 for kcbh in $KCBH_LIST; do
   echo
   echo "===== 课程班号 kcbh=${kcbh} ====="
@@ -75,5 +111,8 @@ done
 
 echo
 echo "========== 判读 =========="
-echo " - 若返回学号里有 2026 开头 → CDSP 有新生数据，是我们同步/建号漏了 → 需重拉"
-echo " - 若返回全是老学号(2025/2024...) 或返回空 → CDSP 选课数据里就没有2026新生 → 是上游数据问题，非代码问题"
+echo " 对照1(不带过滤)：有数据 → 接口+鉴权正常；空 → 接口/鉴权本身有问题"
+echo " 对照2(老班)：能返回62人左右 → \$filter 生效，说明主测试的空是‘真没数据’"
+echo "            若对照2也返回空 → 是 \$filter/字段名问题，不是没数据（需换过滤方式）"
+echo " 主测试：全空 且 对照2正常 → CDSP 里大学英语1(2026秋)确实还没有选课学生（上游数据未生成）"
+echo "        → 结论：不是代码问题，是学校新生选课/分班数据还没放出来，需等或催教务"
