@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
 import java.util.Map;
+import com.english.dto.ArticleFilterDTO;
 
 public interface TextService extends IService<Text> {
     Map<String, Object> getTextsByPage(Map<String, Object> params);
@@ -38,4 +39,6 @@ public interface TextService extends IService<Text> {
      * 原子递增点赞次数
      */
     void incrementLikeCount(Long textId);
+
+    List<Text> getArticles(ArticleFilterDTO filter);
 }
