@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Text;
+import com.english.dto.ArticleFilterDTO;
 import com.english.mapper.TextMapper;
 import com.english.service.TextService;
 import org.springframework.stereotype.Service;
@@ -138,6 +139,15 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (text.getUnitId() != null) {
             updateWrapper.set("unit_id", text.getUnitId());
         }
+        if (text.getArticleType() != null) {
+            updateWrapper.set("article_type", text.getArticleType().name());
+        }
+        if (text.getBookVolume() != null) {
+            updateWrapper.set("book_volume", text.getBookVolume());
+        }
+        if (text.getUnitNum() != null) {
+            updateWrapper.set("unit_num", text.getUnitNum());
+        }
         if (text.getTitle() != null) {
             updateWrapper.set("title", text.getTitle());
         }
@@ -216,6 +226,22 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         queryWrapper.eq("deleted", 0);
         queryWrapper.orderByDesc("created_time");
         return list(queryWrapper);
+    }
+
+    @Override
+    public List<Text> getArticles(ArticleFilterDTO filter) {
+        QueryWrapper<Text> wrapper = new QueryWrapper<>();
+        if (filter != null && filter.getArticleType() != null) {
+            wrapper.eq("article_type", filter.getArticleType().name());
+        }
+        if (filter != null && filter.getBookVolume() != null && !filter.getBookVolume().trim().isEmpty()) {
+            wrapper.eq("book_volume", filter.getBookVolume().trim());
+        }
+        if (filter != null && filter.getUnitNum() != null) {
+            wrapper.eq("unit_num", filter.getUnitNum());
+        }
+        wrapper.eq("deleted", 0).eq("status", "APPROVED").orderByAsc("book_volume", "unit_num", "order_num");
+        return list(wrapper);
     }
 
     @Override

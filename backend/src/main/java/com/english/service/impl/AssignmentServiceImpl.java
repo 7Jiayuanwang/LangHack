@@ -121,10 +121,8 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             throw new BusinessException("单元ID不能为空");
         }
 
-        // 默认状态为PUBLISHED，确保学生可以看到任务
-        if (assignment.getStatus() == null) {
-            assignment.setStatus("PUBLISHED");
-        }
+        // 新建作业即为发布状态；教师端的阅读作业走 create-with-content 也必须遵循同一规则。
+        assignment.setStatus("PUBLISHED");
 
         save(assignment);
     }

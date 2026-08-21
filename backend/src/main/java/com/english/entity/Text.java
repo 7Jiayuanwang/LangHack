@@ -13,6 +13,15 @@ public class Text {
     @TableField("unit_id")
     private Long unitId;
 
+    @TableField("article_type")
+    private ArticleType articleType;
+
+    @TableField("book_volume")
+    private String bookVolume;
+
+    @TableField("unit_num")
+    private Integer unitNum;
+
     @TableField("title")
     private String title;
 
@@ -117,6 +126,30 @@ public class Text {
 
     public void setUnitId(Long unitId) {
         this.unitId = unitId;
+    }
+
+    public ArticleType getArticleType() {
+        return articleType;
+    }
+
+    public void setArticleType(ArticleType articleType) {
+        this.articleType = articleType;
+    }
+
+    public String getBookVolume() {
+        return bookVolume;
+    }
+
+    public void setBookVolume(String bookVolume) {
+        this.bookVolume = bookVolume;
+    }
+
+    public Integer getUnitNum() {
+        return unitNum;
+    }
+
+    public void setUnitNum(Integer unitNum) {
+        this.unitNum = unitNum;
     }
 
     public String getTitle() {
