@@ -16,7 +16,7 @@
         <el-table-column prop="name" label="班级名称" min-width="150" />
         <el-table-column label="课序号" min-width="150">
           <template #default="scope">
-            {{ scope.row.courseSequence || scope.row.course?.name || '-' }}
+            {{ scope.row.courseSequence || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="任课教师" min-width="120">
