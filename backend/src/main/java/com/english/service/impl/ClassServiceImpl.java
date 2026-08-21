@@ -65,6 +65,8 @@ public class ClassServiceImpl extends ServiceImpl<ClassMapper, Class> implements
             classMap.put("teacherId", classInfo.getTeacherId());
             classMap.put("description", classInfo.getDescription());
             classMap.put("createdTime", classInfo.getCreatedTime());
+            classMap.put("schoolClassId", classInfo.getSchoolClassId());
+            classMap.put("courseCode", classInfo.getCourseCode());
 
             // 添加课程信息
             if (classInfo.getCourse() != null) {

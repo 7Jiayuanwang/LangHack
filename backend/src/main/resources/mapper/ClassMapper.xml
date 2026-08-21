@@ -11,6 +11,8 @@
         <result property="description" column="description"/>
         <result property="createdTime" column="created_time"/>
         <result property="joinTime" column="join_time"/>
+        <result property="schoolClassId" column="school_class_id"/>
+        <result property="courseCode" column="school_course_code"/>
 
         <!-- 关联课程信息 -->
         <association property="course" javaType="com.english.entity.Course">
@@ -38,6 +40,7 @@
             c.teacher_id,
             c.description,
             c.created_time,
+            c.school_class_id,
             co.id as course_id_assoc,
             co.name as course_name,
             co.description as course_description,
@@ -45,10 +48,12 @@
             u.username as teacher_username,
             u.nickname as teacher_nickname,
             u.real_name as teacher_real_name,
-            u.email as teacher_email
+            u.email as teacher_email,
+            tc.course_code as school_course_code
         FROM classes c
         LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
         LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
+        LEFT JOIN teaching_class tc ON c.school_class_id = tc.class_id COLLATE utf8mb4_unicode_ci
         WHERE c.deleted = 0
         <if test="courseId != null">
             AND c.course_id = #{courseId}

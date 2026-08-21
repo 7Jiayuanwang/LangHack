@@ -114,8 +114,8 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
         }
         logger.info("[classSync] 目标学期: academicYear={}, semester={}", currentAcademicYear, currentSemester);
 
-        // 仅当目标学期为 2026 秋季时，允许为未注册学生自动建号
-        boolean allowCreateStudents = "2026".equals(currentAcademicYear) && currentSemester == 1;
+        // 为拉取到的未注册学生自动建 SSO 账号（与教师建号一致：SSO-only、随机密码、走统一身份认证登录）。
+        // 不再硬编码学期——建号跟随本次同步的目标学年学期（由运维页面「一键接入」选择的学年学期传入）。
         int studentsCreated = 0;
 
         // 1. 查询该教师在 teaching_class 中当前学期的教学班
@@ -224,27 +224,23 @@ public class TeacherClassSyncServiceImpl implements TeacherClassSyncService {
             Map<String, Long> usernameToUserId = matchedUsers.stream()
                     .collect(Collectors.toMap(User::getUsername, User::getId, (a, b) -> a));
 
-            // 未在平台注册的学生：仅 2026 秋季允许自动建号，其余学期沿用旧逻辑（跳过）
+            // 未在平台注册的学生：自动建 SSO 账号后再绑班（覆盖大一新生等尚未注册的情况）
             Set<String> notFound = new LinkedHashSet<>(studentIds);
             notFound.removeAll(usernameToUserId.keySet());
             if (!notFound.isEmpty()) {
-                if (allowCreateStudents) {
-                    int created = 0;
-                    for (String sid : notFound) {
-                        Long newId = createStudentAccount(sid, studentNames.get(sid));
-                        if (newId != null) {
-                            usernameToUserId.put(sid, newId);
-                            created++;
-                        }
+                int created = 0;
+                for (String sid : notFound) {
+                    Long newId = createStudentAccount(sid, studentNames.get(sid));
+                    if (newId != null) {
+                        usernameToUserId.put(sid, newId);
+                        created++;
                     }
-                    studentsCreated += created;
-                    logger.info("[classSync] 班级[{}] 为{}名未注册学生自动建号(成功{})", kcbh, notFound.size(), created);
-                    int stillMissing = notFound.size() - created;
-                    if (stillMissing > 0) {
-                        warnings.add(String.format("班级[%s]有%d名学生建号失败，已跳过", kcbh, stillMissing));
-                    }
-                } else {
-                    warnings.add(String.format("班级[%s]有%d名学生未在平台注册，已跳过", kcbh, notFound.size()));
+                }
+                studentsCreated += created;
+                logger.info("[classSync] 班级[{}] 为{}名未注册学生自动建号(成功{})", kcbh, notFound.size(), created);
+                int stillMissing = notFound.size() - created;
+                if (stillMissing > 0) {
+                    warnings.add(String.format("班级[%s]有%d名学生建号失败，已跳过", kcbh, stillMissing));
                 }
             }
 
