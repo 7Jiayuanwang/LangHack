@@ -122,7 +122,22 @@ uniq(lambda c: c['kxh'],                         "只看 课序号(kxh)")
 uniq(lambda c: (c['kcdm'], c['kxh']),            "课程代码(kcdm) + 课序号(kxh)")
 uniq(lambda c: (c['kcdm'], c['kcmc'], c['kxh']), "课程代码 + 课程名 + 课序号")
 uniq(lambda c: c['kcbh'],                        "课程班号(kcbh) —— 我们现在内部用的")
-uniq(lambda c: (c['kcdm'], c['kxh'], c['rkjsh']),"课程代码 + 课序号 + 教师号")
+uniq(lambda c: (c['rkjsh'], c['kcdm'], c['kxh']),"教师号 + 课程代码 + 课序号  ★核心：一个教师一门课下课序号是否唯一")
+
+# ★ 专项：按 (教师+课程) 分组，检查组内 课序号 是否唯一
+print("\n---------- 专项：一个教师的一门课，课序号是否唯一？ ----------")
+grp=collections.defaultdict(list)          # (rkjsh,kcdm) -> [kxh...]
+for c in C:
+    grp[(c['rkjsh'], c['kcdm'])].append(c['kxh'])
+bad=[]                                       # 组内课序号有重复的
+for key,kxhs in grp.items():
+    dup={k:v for k,v in collections.Counter(kxhs).items() if v>1}
+    if dup: bad.append((key,dup))
+print(f"  (教师,课程) 分组总数: {len(grp)}")
+print(f"  组内课序号出现重复的分组数: {len(bad)}  "
+      f"→ {'✅ 每个教师的每门课，课序号都唯一' if not bad else '❌ 存在组内重复'}")
+for (rkjsh,kcdm),dup in bad[:8]:
+    print(f"    教师{rkjsh} 课程{kcdm}: 重复课序号 {dup}")
 
 # kxh 与 kcbh 的对应关系：一个 kxh 是否可能对应多个 kcbh
 kxh_to_kcbh=collections.defaultdict(set)
