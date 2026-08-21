@@ -40,9 +40,9 @@ public class Class {
     @TableField(exist = false)
     private LocalDateTime joinTime;
 
-    // 学校课程号（来自 teaching_class.course_code，按 school_class_id 关联），仅用于展示核对
+    // 学校课序号（来自 teaching_class.course_sequence，按 school_class_id 关联），仅用于展示核对
     @TableField(exist = false)
-    private String courseCode;
+    private String courseSequence;
 
     // Getters and Setters
     public Long getId() {
@@ -109,12 +109,12 @@ public class Class {
         this.schoolClassId = schoolClassId;
     }
 
-    public String getCourseCode() {
-        return courseCode;
+    public String getCourseSequence() {
+        return courseSequence;
     }
 
-    public void setCourseCode(String courseCode) {
-        this.courseCode = courseCode;
+    public void setCourseSequence(String courseSequence) {
+        this.courseSequence = courseSequence;
     }
 
     public Course getCourse() {

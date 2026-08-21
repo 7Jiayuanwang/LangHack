@@ -116,12 +116,16 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
             String teacherId = stringValue(m.get("teacherId"));
             String teacherName = stringValue(m.get("teacherName"));
 
+            // 课序号(kxh)未配置字段映射，applyMapping 会跳过，需从原始 raw 直接取（CDSP 返回中文 key「课序号」）
+            String courseSequence = firstRaw(raw, "课序号", "kxh", "KXH");
+
             // 写 teaching_class（供 syncClassesForTeacher 读取）
             if (matchedClassIds.add(classId)) {
                 matchedClassCount++;
                 Map<String, Object> tcData = new LinkedHashMap<>();
                 tcData.put("classId", classId);
                 tcData.put("className", stringValue(m.get("className")));
+                tcData.put("courseSequence", courseSequence);
                 tcData.put("courseCode", stringValue(m.get("courseCode")));
                 tcData.put("courseName", courseName);
                 tcData.put("teacherId", teacherId);
@@ -244,6 +248,7 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
         com.english.entity.TeachingClass entity = new com.english.entity.TeachingClass();
         entity.setClassId(stringValue(data.get("classId")));
         entity.setClassName(stringValue(data.get("className")));
+        entity.setCourseSequence(stringValue(data.get("courseSequence")));
         entity.setCourseCode(stringValue(data.get("courseCode")));
         entity.setCourseName(stringValue(data.get("courseName")));
         entity.setTeacherId(stringValue(data.get("teacherId")));
@@ -277,6 +282,20 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
 
     private String stringValue(Object v) {
         return v == null ? "" : String.valueOf(v).trim();
+    }
+
+    /** 从原始 raw map 里按多个候选 key 取第一个非空值（用于未配置字段映射的字段，如课序号 kxh）。 */
+    private String firstRaw(Map<String, Object> raw, String... keys) {
+        if (raw == null) {
+            return "";
+        }
+        for (String k : keys) {
+            Object v = raw.get(k);
+            if (v != null && !String.valueOf(v).trim().isEmpty()) {
+                return String.valueOf(v).trim();
+            }
+        }
+        return "";
     }
 
     private int toInt(Object v) {

@@ -12,7 +12,7 @@
         <result property="createdTime" column="created_time"/>
         <result property="joinTime" column="join_time"/>
         <result property="schoolClassId" column="school_class_id"/>
-        <result property="courseCode" column="school_course_code"/>
+        <result property="courseSequence" column="school_course_sequence"/>
 
         <!-- 关联课程信息 -->
         <association property="course" javaType="com.english.entity.Course">
@@ -49,7 +49,7 @@
             u.nickname as teacher_nickname,
             u.real_name as teacher_real_name,
             u.email as teacher_email,
-            tc.course_code as school_course_code
+            tc.course_sequence as school_course_sequence
         FROM classes c
         LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
         LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
