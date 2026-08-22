@@ -100,6 +100,28 @@
         </el-select>
       </el-form-item>
 
+      <!-- 文章分类：课内/课外 -->
+      <el-form-item label="文章分类" prop="articleType">
+        <el-radio-group v-model="formData.articleType">
+          <el-radio value="OUTER">课外读物</el-radio>
+          <el-radio value="INNER">课内教材课文</el-radio>
+        </el-radio-group>
+      </el-form-item>
+
+      <!-- 课内教材：册号和单元 -->
+      <template v-if="formData.articleType === 'INNER'">
+        <el-form-item label="册号" prop="bookVolume">
+          <el-select v-model="formData.bookVolume" placeholder="选择册号" clearable style="width: 100%">
+            <el-option v-for="vol in bookVolumes" :key="vol" :label="vol" :value="vol" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="单元编号" prop="unitNum">
+          <el-select v-model="formData.unitNum" placeholder="选择单元" clearable style="width: 100%">
+            <el-option v-for="n in unitNumbers" :key="n" :label="`Unit ${n}`" :value="n" />
+          </el-select>
+        </el-form-item>
+      </template>
+
       <el-form-item label="内容格式" prop="contentType">
         <el-radio-group v-model="formData.contentType">
           <el-radio value="TEXT">纯文本</el-radio>
@@ -229,6 +251,9 @@ const units = ref([])
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
 
+const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '综合教程4']
+const unitNumbers = Array.from({ length: 6 }, (_, i) => i + 1)
+
 const formData = reactive({
   id: null,
   title: '',
@@ -241,7 +266,10 @@ const formData = reactive({
   coverUrl: '',
   isPublic: 1,
   courseId: null,
-  unitId: props.unitId
+  unitId: props.unitId,
+  articleType: 'OUTER',
+  bookVolume: null,
+  unitNum: null
 })
 
 const rules = {
@@ -275,6 +303,9 @@ watch(() => visible.value, (newVal) => {
     formData.isPublic = props.textData.isPublic != null ? props.textData.isPublic : 1
     formData.courseId = props.textData.courseId || null
     formData.unitId = props.textData.unitId || props.unitId
+    formData.articleType = props.textData.articleType || 'OUTER'
+    formData.bookVolume = props.textData.bookVolume || null
+    formData.unitNum = props.textData.unitNum || null
 
     // 如果有courseId，加载对应的单元
     if (props.textData.courseId) {
@@ -295,6 +326,9 @@ watch(() => visible.value, (newVal) => {
     formData.isPublic = 1
     formData.courseId = null
     formData.unitId = props.unitId
+    formData.articleType = 'OUTER'
+    formData.bookVolume = null
+    formData.unitNum = null
   }
 
   // 加载课程列表（仅在没有传入unitId时）
@@ -445,7 +479,10 @@ const handleSubmit = async () => {
         audioUrl: formData.audioUrl,
         coverUrl: formData.coverUrl,
         isPublic: formData.isPublic,
-        unitId: formData.unitId
+        unitId: formData.unitId,
+        articleType: formData.articleType,
+        bookVolume: formData.articleType === 'INNER' ? formData.bookVolume : null,
+        unitNum: formData.articleType === 'INNER' ? formData.unitNum : null
       }
 
       if (isEdit.value) {

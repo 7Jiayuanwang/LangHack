@@ -714,7 +714,10 @@ public class AdminController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String tag,
-            @RequestParam(required = false) Integer featured) {
+            @RequestParam(required = false) Integer featured,
+            @RequestParam(required = false) String articleType,
+            @RequestParam(required = false) String bookVolume,
+            @RequestParam(required = false) Integer unitNum) {
         try {
             // 分页参数边界校验
             page = Math.max(1, page);
@@ -733,6 +736,9 @@ public class AdminController {
             if (difficulty != null) params.put("difficulty", difficulty);
             if (tag != null) params.put("tag", tag);
             if (featured != null) params.put("featured", featured);
+            if (articleType != null) params.put("articleType", articleType);
+            if (bookVolume != null) params.put("bookVolume", bookVolume);
+            if (unitNum != null) params.put("unitNum", unitNum);
 
             Map<String, Object> result = textService.getTextsByPage(params);
             return Result.success(result);
