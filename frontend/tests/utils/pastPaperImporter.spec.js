@@ -57,4 +57,16 @@ describe('past paper importer', () => {
     expect(paper.questions[0].answers).toEqual([0, 2])
     expect(paper.questions[1].items[0].answer).toBe(1)
   })
+
+  it('supports extended word-bank and paragraph answer letters', () => {
+    const paper = parsePaperJson(JSON.stringify({
+      title: 'Extended answer letters',
+      questions: [
+        { type: 'cloze', stem: 'One ____.', options: Array.from({ length: 15 }, (_, index) => `word-${index}`), answers: ['N'], analysis: 'Cloze.' },
+        { type: 'matching', stem: 'Match.', options: Array.from({ length: 12 }, (_, index) => `paragraph-${index}`), items: [{ id: '36', prompt: 'Statement', answer: 'L' }], analysis: 'Match.' }
+      ]
+    }), { category: 'cet4' })
+    expect(paper.questions[0].answers).toEqual([13])
+    expect(paper.questions[1].items[0].answer).toBe(11)
+  })
 })

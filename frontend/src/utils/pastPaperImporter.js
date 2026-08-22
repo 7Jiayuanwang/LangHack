@@ -8,8 +8,8 @@ const clean = (value = '') => value
   .trim()
 
 const answerIndex = (value) => {
-  if (Number.isInteger(value) && value >= 0 && value <= 3) return value
-  const letter = String(value || '').trim().toUpperCase().match(/[A-D]/)?.[0]
+  if (Number.isInteger(value) && value >= 0 && value < 26) return value
+  const letter = String(value || '').trim().toUpperCase().match(/[A-Z]/)?.[0]
   return letter ? letter.charCodeAt(0) - 65 : -1
 }
 
@@ -51,7 +51,7 @@ export function validatePaper(input, fallback = {}) {
       normalized.options = question.options?.map(clean)
       normalized.answer = answerIndex(question.answer)
       if (normalized.options?.length !== 4 || normalized.options.some(option => !option)) throw new Error(`第 ${index + 1} 题必须有完整的 A-D 四个选项`)
-      if (normalized.answer < 0) throw new Error(`第 ${index + 1} 题答案必须是 A、B、C 或 D`)
+      if (normalized.answer < 0 || normalized.answer > 3) throw new Error(`第 ${index + 1} 题答案必须是 A、B、C 或 D`)
     } else if (type === 'cloze') {
       normalized.options = question.options?.map(clean)
       normalized.answers = (question.answers || []).map(answerIndex)
@@ -120,7 +120,35 @@ export function parsePaperMarkdown(text, fallback) {
     }
   }
 
-  return validatePaper({ title, date, duration, questions }, fallback)
+  if (questions.length) return validatePaper({ title, date, duration, questions }, fallback)
+  return parseMineruMarkdown(text, { ...fallback, title, date, duration })
+}
+
+// MinerU exports exam questions as inline `1. A) ... B) ...` blocks and puts
+// answers in a table near the end. Convert that common OCR shape to our schema.
+function parseMineruMarkdown(text, fallback) {
+  const answerText = text.slice(Math.max(text.lastIndexOf('答案速查'), text.lastIndexOf('答案')))
+  const answerMap = new Map()
+  for (const match of answerText.matchAll(/(?:^|[<td>\s])([0-9]{1,3})\s*[.、：:]?\s*([A-D])\b/gi)) {
+    answerMap.set(Number(match[1]), match[2].toUpperCase())
+  }
+  const questions = []
+  const optionPattern = /(?:^|\n)\s*(\d{1,3})[.、]\s*A[)）.]\s*(.*?)\s+B[)）.]\s*(.*?)\s+C[)）.]\s*(.*?)\s+D[)）.]\s*([^\n]+?)(?=\s*\n\s*\d{1,3}[.、]|\s*\n\s*##|$)/gs
+  for (const match of text.slice(0, Math.max(0, text.lastIndexOf('答案速查'))).matchAll(optionPattern)) {
+    const number = Number(match[1])
+    const answer = answerMap.get(number)
+    if (!answer) continue
+    questions.push({
+      number,
+      section: 'MinerU 识别题目',
+      stem: `第 ${number} 题`,
+      options: [match[2], match[3], match[4], match[5]].map(clean),
+      answer,
+      analysis: '该题由 MinerU 原始资料转换，原文未提供逐题解析。'
+    })
+  }
+  if (!questions.length) throw new Error('未识别到 MinerU 题目。请确认文件包含“题号 + A) B) C) D)”以及文末答案。')
+  return validatePaper({ ...fallback, questions }, {})
 }
 
 export async function parsePaperFile(file, fallback) {
