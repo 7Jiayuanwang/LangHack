@@ -42,6 +42,7 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
     private final com.english.mapper.TeachingClassMapper teachingClassMapper;
+    private final com.english.mapper.SchoolCourseMapper schoolCourseMapper;
 
     public EnglishTeacherOnboardServiceImpl(
             @Qualifier("schoolDataApiClientDelegate") SchoolDataApiClient apiClient,
@@ -49,13 +50,15 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
             TeacherClassSyncService teacherClassSyncService,
             UserService userService,
             PasswordEncoder passwordEncoder,
-            com.english.mapper.TeachingClassMapper teachingClassMapper) {
+            com.english.mapper.TeachingClassMapper teachingClassMapper,
+            com.english.mapper.SchoolCourseMapper schoolCourseMapper) {
         this.apiClient = apiClient;
         this.fieldMappingService = fieldMappingService;
         this.teacherClassSyncService = teacherClassSyncService;
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.teachingClassMapper = teachingClassMapper;
+        this.schoolCourseMapper = schoolCourseMapper;
     }
 
     @Override
@@ -245,12 +248,16 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
     }
 
     private void upsertTeachingClass(Map<String, Object> data) {
+        String courseCode = stringValue(data.get("courseCode"));
+        String courseName = stringValue(data.get("courseName"));
+        ensureSchoolCourseExists(courseCode, courseName);
+
         com.english.entity.TeachingClass entity = new com.english.entity.TeachingClass();
         entity.setClassId(stringValue(data.get("classId")));
         entity.setClassName(stringValue(data.get("className")));
         entity.setCourseSequence(stringValue(data.get("courseSequence")));
-        entity.setCourseCode(stringValue(data.get("courseCode")));
-        entity.setCourseName(stringValue(data.get("courseName")));
+        entity.setCourseCode(courseCode);
+        entity.setCourseName(courseName);
         entity.setTeacherId(stringValue(data.get("teacherId")));
         entity.setTeacherName(stringValue(data.get("teacherName")));
         entity.setAcademicYear(stringValue(data.get("academicYear")));
@@ -260,6 +267,24 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
         entity.setSyncTime((LocalDateTime) data.get("syncTime"));
         entity.setSyncSource(stringValue(data.get("syncSource")));
         teachingClassMapper.upsertByClassId(entity);
+    }
+
+    private void ensureSchoolCourseExists(String courseCode, String courseName) {
+        if (courseCode == null || courseCode.isEmpty()) {
+            return;
+        }
+        com.english.entity.SchoolCourse existing = schoolCourseMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<com.english.entity.SchoolCourse>()
+                        .eq("course_code", courseCode).last("LIMIT 1"));
+        if (existing != null) {
+            return;
+        }
+        com.english.entity.SchoolCourse sc = new com.english.entity.SchoolCourse();
+        sc.setCourseCode(courseCode);
+        sc.setCourseName(courseName);
+        sc.setSyncTime(LocalDateTime.now());
+        sc.setSyncSource("TEACHER_COURSE_ONBOARD");
+        schoolCourseMapper.insert(sc);
     }
 
     /** 学期归一化为 "秋"/"春"/""；兼容 1/2 数字。 */
