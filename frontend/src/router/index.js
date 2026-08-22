@@ -156,6 +156,12 @@ const routes = [
         meta: { title: "做题管理", roles: ["ADMIN"] },
       },
       {
+        path: "past-papers",
+        name: "AdminPastPapers",
+        component: () => import("@/views/student/PastPapers.vue"),
+        meta: { title: "真题管理", roles: ["ADMIN"] },
+      },
+      {
         path: "persona-analytics",
         name: "AdminPersonaAnalytics",
         component: () => import("@/views/admin/PersonaAnalytics.vue"),
@@ -393,6 +399,12 @@ const routes = [
         name: "StudentWords",
         component: () => import("@/views/student/Words.vue"),
         meta: { title: "单词", roles: ["STUDENT", "USER"], featureKey: "page_word_recite" },
+      },
+      {
+        path: "past-papers",
+        name: "StudentPastPapers",
+        component: () => import("@/views/student/PastPapers.vue"),
+        meta: { title: "历年真题", roles: ["STUDENT", "USER"] },
       },
       {
         path: "word-recite",

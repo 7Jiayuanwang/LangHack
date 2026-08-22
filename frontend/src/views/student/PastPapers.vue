@@ -1,0 +1,307 @@
+<template>
+  <div class="papers-page">
+    <header class="papers-header">
+      <button v-if="activePaper" class="icon-button" type="button" aria-label="返回试卷列表" @click="leavePaper">
+        <el-icon><ArrowLeft /></el-icon>
+      </button>
+      <div>
+        <h1>{{ activePaper ? activePaper.title : '历年真题' }}</h1>
+        <p>{{ activePaper ? `${answeredCount}/${activePaper.questions.length} 题已作答` : '练习、交卷并查看逐题解析' }}</p>
+      </div>
+      <button v-if="!activePaper && isAdmin" class="import-button" type="button" @click="importVisible = true">
+        <el-icon><Upload /></el-icon>
+        导入
+      </button>
+    </header>
+
+    <main v-if="!activePaper" class="paper-library">
+      <div class="category-tabs" role="tablist" aria-label="考试类别">
+        <button
+          v-for="category in examCategories"
+          :key="category.key"
+          type="button"
+          role="tab"
+          :aria-selected="selectedCategory === category.key"
+          :class="{ active: selectedCategory === category.key }"
+          @click="selectedCategory = category.key"
+        >
+          {{ category.shortLabel }}
+        </button>
+      </div>
+
+      <section class="category-intro">
+        <span class="category-mark">{{ currentCategory.shortLabel }}</span>
+        <div>
+          <h2>{{ currentCategory.label }}</h2>
+          <p>{{ currentCategory.description }}</p>
+        </div>
+      </section>
+
+      <section class="paper-list" aria-label="试卷列表">
+        <article v-for="paper in filteredPapers" :key="paper.id" class="paper-item">
+          <div class="paper-main">
+            <div class="paper-title-row">
+              <h3>{{ paper.title }}</h3>
+              <span :class="['status', paper.status]">{{ paper.status === 'ready' ? '可作答' : '待校对导入' }}</span>
+              <span v-if="paper.serverManaged" class="status custom">共享题库</span>
+            </div>
+            <p>{{ paper.status === 'ready' ? `${paper.questions.length} 道题 · 约 ${paper.duration} 分钟${paper.scope ? ` · ${paper.scope}` : ''}` : '扫描版资料已收到，题目正在结构化校对' }}</p>
+            <div v-if="getSavedResult(paper.id)" class="saved-result">
+              上次得分 {{ getSavedResult(paper.id).score }}/{{ paper.questions.length }}
+            </div>
+          </div>
+          <div class="paper-actions">
+            <button v-if="paper.serverManaged && isAdmin" class="delete-button" type="button" aria-label="删除共享试卷" @click="removePaper(paper)">
+              <el-icon><Delete /></el-icon>
+            </button>
+            <button class="start-button" type="button" :disabled="paper.status !== 'ready'" @click="startPaper(paper)">
+              {{ getSavedResult(paper.id) ? '再次练习' : '开始做题' }}
+              <el-icon><ArrowRight /></el-icon>
+            </button>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <main v-else class="exam-area">
+      <div class="progress-line" aria-hidden="true"><span :style="{ width: `${progress}%` }"></span></div>
+
+      <section class="question-card">
+        <div class="question-meta">
+          <span>{{ currentQuestion.section }}</span>
+          <span>第 {{ currentIndex + 1 }} / {{ activePaper.questions.length }} 题</span>
+        </div>
+        <p v-if="currentQuestion.passage" class="passage">{{ currentQuestion.passage }}</p>
+        <h2>{{ currentQuestion.stem }}</h2>
+
+        <div class="options" role="radiogroup" :aria-label="currentQuestion.stem">
+          <button
+            v-for="(option, index) in currentQuestion.options"
+            :key="option"
+            type="button"
+            :class="optionClass(index)"
+            :disabled="submitted"
+            @click="selectAnswer(index)"
+          >
+            <span class="option-letter">{{ optionLetter(index) }}</span>
+            <span>{{ option }}</span>
+          </button>
+        </div>
+
+        <div v-if="submitted" class="analysis-panel">
+          <div class="analysis-title">
+            <el-icon><CircleCheck v-if="answers[currentQuestion.id] === currentQuestion.answer" /><CircleClose v-else /></el-icon>
+            {{ answers[currentQuestion.id] === currentQuestion.answer ? '回答正确' : `正确答案：${optionLetter(currentQuestion.answer)}` }}
+          </div>
+          <p>{{ currentQuestion.analysis }}</p>
+        </div>
+      </section>
+
+      <footer class="exam-actions">
+        <button type="button" class="secondary-button" :disabled="currentIndex === 0" @click="currentIndex--">上一题</button>
+        <button v-if="currentIndex < activePaper.questions.length - 1" type="button" class="primary-button" @click="currentIndex++">下一题</button>
+        <button v-else-if="!submitted" type="button" class="primary-button" :disabled="answeredCount === 0" @click="submitPaper">交卷</button>
+        <button v-else type="button" class="primary-button" @click="leavePaper">查看试卷列表</button>
+      </footer>
+
+      <div v-if="submitted" class="score-bar" aria-live="polite">
+        本次得分 <strong>{{ score }}/{{ activePaper.questions.length }}</strong>
+      </div>
+    </main>
+
+    <PastPaperImportDialog v-model="importVisible" @imported="loadImportedPapers" />
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowLeft, ArrowRight, CircleCheck, CircleClose, Delete, Upload } from '@element-plus/icons-vue'
+import { examCategories, pastPapers } from '@/data/pastPapers'
+import PastPaperImportDialog from '@/components/past-papers/PastPaperImportDialog.vue'
+import { deleteSharedPastPaper, getSharedPastPapers } from '@/api/pastPapers'
+import { useUserStore } from '@/store/user'
+
+const STORAGE_KEY = 'langhack-past-paper-results'
+const selectedCategory = ref('cet4')
+const activePaper = ref(null)
+const currentIndex = ref(0)
+const answers = ref({})
+const submitted = ref(false)
+const importVisible = ref(false)
+const sharedPapers = ref([])
+const userStore = useUserStore()
+const savedResults = ref(readSavedResults())
+
+const currentCategory = computed(() => examCategories.find(item => item.key === selectedCategory.value))
+const isAdmin = computed(() => userStore.userRole === 'ADMIN')
+const allPapers = computed(() => [...sharedPapers.value, ...pastPapers])
+const filteredPapers = computed(() => allPapers.value.filter(item => item.category === selectedCategory.value))
+const currentQuestion = computed(() => activePaper.value?.questions[currentIndex.value])
+const answeredCount = computed(() => Object.keys(answers.value).length)
+const progress = computed(() => activePaper.value ? (answeredCount.value / activePaper.value.questions.length) * 100 : 0)
+const score = computed(() => activePaper.value?.questions.reduce((total, question) => total + (answers.value[question.id] === question.answer ? 1 : 0), 0) || 0)
+
+function readSavedResults() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function getSavedResult(paperId) {
+  return savedResults.value[paperId]
+}
+
+async function loadImportedPapers() {
+  try {
+    const response = await getSharedPastPapers()
+    sharedPapers.value = response?.data || []
+  } catch (error) {
+    console.warn('无法读取共享题库:', error)
+  }
+}
+
+async function removePaper(paper) {
+  try {
+    await ElMessageBox.confirm(`确定删除“${paper.title}”吗？所有学生将无法继续访问。`, '删除共享试卷', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await deleteSharedPastPaper(paper.id)
+    await loadImportedPapers()
+    ElMessage.success('试卷已删除')
+  } catch {
+    // User cancelled.
+  }
+}
+
+function startPaper(paper) {
+  if (paper.status !== 'ready') return
+  activePaper.value = paper
+  currentIndex.value = 0
+  answers.value = {}
+  submitted.value = false
+}
+
+function selectAnswer(index) {
+  answers.value = { ...answers.value, [currentQuestion.value.id]: index }
+}
+
+function optionLetter(index) {
+  return String.fromCharCode(65 + index)
+}
+
+function optionClass(index) {
+  const selected = answers.value[currentQuestion.value.id] === index
+  return {
+    'option-button': true,
+    selected,
+    correct: submitted.value && index === currentQuestion.value.answer,
+    wrong: submitted.value && selected && index !== currentQuestion.value.answer
+  }
+}
+
+async function submitPaper() {
+  if (answeredCount.value < activePaper.value.questions.length) {
+    try {
+      await ElMessageBox.confirm(`还有 ${activePaper.value.questions.length - answeredCount.value} 题未作答，仍要交卷吗？`, '确认交卷', {
+        confirmButtonText: '交卷',
+        cancelButtonText: '继续作答'
+      })
+    } catch {
+      return
+    }
+  }
+  submitted.value = true
+  savedResults.value = {
+    ...savedResults.value,
+    [activePaper.value.id]: { score: score.value, total: activePaper.value.questions.length, submittedAt: Date.now() }
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(savedResults.value))
+  ElMessage.success(`已交卷，得分 ${score.value}/${activePaper.value.questions.length}`)
+  currentIndex.value = 0
+}
+
+async function leavePaper() {
+  if (!submitted.value && answeredCount.value > 0) {
+    try {
+      await ElMessageBox.confirm('当前答案尚未交卷，离开后不会保存。', '离开试卷', {
+        confirmButtonText: '确认离开',
+        cancelButtonText: '继续作答'
+      })
+    } catch {
+      return
+    }
+  }
+  activePaper.value = null
+  answers.value = {}
+  submitted.value = false
+}
+
+onMounted(loadImportedPapers)
+</script>
+
+<style scoped>
+.papers-page { height: 100%; min-height: 0; display: flex; flex-direction: column; background: #f5f7fa; color: #1f2937; }
+.papers-header { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 18px 20px 14px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+.papers-header h1 { margin: 0; font-size: 22px; line-height: 1.3; }
+.papers-header p { margin: 3px 0 0; color: #6b7280; font-size: 13px; }
+.import-button { margin-left: auto; min-height: 40px; padding: 0 14px; border: 1px solid #1d4ed8; border-radius: 6px; background: #fff; color: #1d4ed8; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.icon-button { width: 40px; height: 40px; border: 0; background: transparent; display: grid; place-items: center; font-size: 20px; cursor: pointer; }
+.paper-library, .exam-area { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; padding-bottom: 100px; }
+.category-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; background: #e9edf3; border-radius: 8px; max-width: 620px; margin: 0 auto 18px; }
+.category-tabs button { min-height: 42px; border: 0; border-radius: 6px; background: transparent; color: #64748b; font-weight: 600; cursor: pointer; }
+.category-tabs button.active { background: #fff; color: #1d4ed8; box-shadow: 0 1px 4px rgba(15,23,42,.12); }
+.category-intro { max-width: 760px; margin: 0 auto 14px; display: flex; align-items: center; gap: 14px; }
+.category-mark { width: 52px; height: 52px; display: grid; place-items: center; flex: 0 0 auto; background: #1d4ed8; color: #fff; border-radius: 8px; font-weight: 700; }
+.category-intro h2 { margin: 0 0 3px; font-size: 18px; }
+.category-intro p { margin: 0; color: #64748b; font-size: 13px; }
+.paper-list { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
+.paper-item { padding: 18px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; gap: 16px; }
+.paper-main { flex: 1; min-width: 0; }
+.paper-title-row { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.paper-item h3 { margin: 0; font-size: 16px; }
+.paper-item p { margin: 7px 0 0; color: #64748b; font-size: 13px; }
+.status { font-size: 11px; padding: 3px 7px; border-radius: 999px; white-space: nowrap; }
+.status.ready { background: #dcfce7; color: #166534; }
+.status.pending { background: #f1f5f9; color: #64748b; }
+.status.custom { background: #eff6ff; color: #1d4ed8; }
+.saved-result { margin-top: 8px; color: #1d4ed8; font-size: 13px; font-weight: 600; }
+.paper-actions { display: flex; align-items: center; gap: 8px; }
+.delete-button { width: 42px; height: 42px; flex: 0 0 auto; border: 1px solid #fecaca; border-radius: 6px; background: #fff; color: #dc2626; display: grid; place-items: center; cursor: pointer; }
+.start-button, .primary-button, .secondary-button { min-height: 42px; border-radius: 6px; padding: 0 16px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.start-button, .primary-button { border: 1px solid #1d4ed8; background: #1d4ed8; color: #fff; }
+.secondary-button { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.exam-area { max-width: 820px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.progress-line { height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-bottom: 14px; }
+.progress-line span { display: block; height: 100%; background: #1d4ed8; transition: width .2s ease; }
+.question-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 22px; }
+.question-meta { display: flex; justify-content: space-between; gap: 12px; color: #64748b; font-size: 13px; }
+.passage { margin: 20px 0 14px; padding: 14px; background: #f8fafc; border-left: 3px solid #94a3b8; line-height: 1.75; }
+.question-card h2 { margin: 18px 0; font-size: 18px; line-height: 1.6; }
+.options { display: grid; gap: 10px; }
+.option-button { width: 100%; min-height: 52px; text-align: left; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; color: #334155; cursor: pointer; line-height: 1.5; }
+.option-button.selected { border-color: #1d4ed8; background: #eff6ff; }
+.option-button.correct { border-color: #16a34a; background: #f0fdf4; }
+.option-button.wrong { border-color: #dc2626; background: #fef2f2; }
+.option-letter { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: #edf1f5; font-weight: 700; }
+.analysis-panel { margin-top: 18px; padding: 15px; background: #f8fafc; border-left: 3px solid #1d4ed8; }
+.analysis-title { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.analysis-panel p { margin: 8px 0 0; line-height: 1.65; color: #475569; }
+.exam-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.score-bar { margin-top: 12px; text-align: center; color: #334155; }
+.score-bar strong { color: #1d4ed8; font-size: 20px; }
+@media (max-width: 560px) {
+  .papers-header { padding: 14px 12px 10px; }
+  .paper-library, .exam-area { padding: 12px 12px 96px; }
+  .paper-item { align-items: stretch; flex-direction: column; padding: 15px; }
+  .start-button { width: 100%; }
+  .paper-actions { width: 100%; }
+  .paper-actions .start-button { flex: 1; }
+  .question-card { padding: 16px; }
+}
+</style>
