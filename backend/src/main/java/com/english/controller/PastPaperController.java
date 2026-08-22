@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PastPaperController {
     private static final Set<String> CATEGORIES = new HashSet<>(Arrays.asList("cet4", "cet6", "postgraduate"));
+    private static final Set<String> QUESTION_TYPES = new HashSet<>(Arrays.asList("single_choice", "cloze", "matching", "translation", "writing"));
     private final PastPaperMapper pastPaperMapper;
     private final ObjectMapper objectMapper;
 
@@ -71,10 +72,23 @@ public class PastPaperController {
         for (int index = 0; index < questions.size(); index++) {
             JsonNode question = questions.get(index);
             if (text(question, "stem").isEmpty()) throw new IllegalArgumentException("第" + (index + 1) + "题缺少题干");
+            String type = text(question, "type");
+            if (type.isEmpty()) type = "single_choice";
+            if (!QUESTION_TYPES.contains(type)) throw new IllegalArgumentException("第" + (index + 1) + "题题型无效");
             JsonNode options = question.get("options");
-            if (options == null || !options.isArray() || options.size() != 4) throw new IllegalArgumentException("第" + (index + 1) + "题必须有A-D四个选项");
-            int answer = question.path("answer").asInt(-1);
-            if (answer < 0 || answer > 3) throw new IllegalArgumentException("第" + (index + 1) + "题答案无效");
+            if ("single_choice".equals(type)) {
+                if (options == null || !options.isArray() || options.size() != 4) throw new IllegalArgumentException("第" + (index + 1) + "题必须有A-D四个选项");
+                int answer = question.path("answer").asInt(-1);
+                if (answer < 0 || answer > 3) throw new IllegalArgumentException("第" + (index + 1) + "题答案无效");
+            } else if ("cloze".equals(type)) {
+                JsonNode answers = question.get("answers");
+                if (options == null || !options.isArray() || options.size() == 0 || answers == null || !answers.isArray() || answers.size() == 0) throw new IllegalArgumentException("第" + (index + 1) + "题完形内容不完整");
+            } else if ("matching".equals(type)) {
+                JsonNode items = question.get("items");
+                if (options == null || !options.isArray() || options.size() == 0 || items == null || !items.isArray() || items.size() == 0) throw new IllegalArgumentException("第" + (index + 1) + "题匹配内容不完整");
+            } else if (text(question, "referenceAnswer").isEmpty()) {
+                throw new IllegalArgumentException("第" + (index + 1) + "题缺少参考答案");
+            }
             if (text(question, "analysis").isEmpty()) throw new IllegalArgumentException("第" + (index + 1) + "题缺少解析");
         }
     }
@@ -95,4 +109,3 @@ public class PastPaperController {
         return node.path(field).asText("").trim();
     }
 }
-

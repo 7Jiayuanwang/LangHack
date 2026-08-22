@@ -42,4 +42,19 @@ describe('past paper importer', () => {
     expect(() => parsePaperMarkdown(markdown.replace('D. Option four', ''), { category: 'cet6' }))
       .toThrow('完整 A-D')
   })
+
+  it('validates cloze, matching, translation and writing questions', () => {
+    const paper = parsePaperJson(JSON.stringify({
+      title: '全题型试卷',
+      questions: [
+        { type: 'cloze', stem: 'One ____ two ____.', options: ['one', 'two', 'three'], answers: ['A', 'C'], analysis: 'Cloze analysis.' },
+        { type: 'matching', stem: 'Match them.', options: ['P1', 'P2'], items: [{ id: '1', prompt: 'Statement', answer: 'B' }], analysis: 'Matching analysis.' },
+        { type: 'translation', stem: 'Translate it.', referenceAnswer: '译文', analysis: 'Translation analysis.' },
+        { type: 'writing', stem: 'Write an essay.', referenceAnswer: 'Sample essay.', analysis: 'Writing rubric.' }
+      ]
+    }), { category: 'cet6' })
+    expect(paper.questions.map(question => question.type)).toEqual(['cloze', 'matching', 'translation', 'writing'])
+    expect(paper.questions[0].answers).toEqual([0, 2])
+    expect(paper.questions[1].items[0].answer).toBe(1)
+  })
 })

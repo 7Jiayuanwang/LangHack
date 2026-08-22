@@ -47,7 +47,7 @@
             </div>
             <p>{{ paper.status === 'ready' ? `${paper.questions.length} 道题 · 约 ${paper.duration} 分钟${paper.scope ? ` · ${paper.scope}` : ''}` : '扫描版资料已收到，题目正在结构化校对' }}</p>
             <div v-if="getSavedResult(paper.id)" class="saved-result">
-              上次得分 {{ getSavedResult(paper.id).score }}/{{ paper.questions.length }}
+              上次客观题得分 {{ getSavedResult(paper.id).score }}/{{ getSavedResult(paper.id).total }}
             </div>
           </div>
           <div class="paper-actions">
@@ -74,7 +74,7 @@
         <p v-if="currentQuestion.passage" class="passage">{{ currentQuestion.passage }}</p>
         <h2>{{ currentQuestion.stem }}</h2>
 
-        <div class="options" role="radiogroup" :aria-label="currentQuestion.stem">
+        <div v-if="questionType === 'single_choice'" class="options" role="radiogroup" :aria-label="currentQuestion.stem">
           <button
             v-for="(option, index) in currentQuestion.options"
             :key="option"
@@ -88,11 +88,47 @@
           </button>
         </div>
 
+        <div v-else-if="questionType === 'cloze'" class="structured-answers">
+          <label v-for="(_, index) in currentQuestion.answers" :key="index">
+            第 {{ index + 1 }} 空
+            <select :value="answerValue?.[index] ?? ''" :disabled="submitted" @change="setArrayAnswer(index, $event.target.value)">
+              <option value="">请选择</option>
+              <option v-for="(option, optionIndex) in currentQuestion.options" :key="optionIndex" :value="optionIndex">{{ optionLetter(optionIndex) }}. {{ option }}</option>
+            </select>
+          </label>
+        </div>
+
+        <div v-else-if="questionType === 'matching'" class="structured-answers">
+          <label v-for="item in currentQuestion.items" :key="item.id">
+            <span>{{ item.prompt }}</span>
+            <select :value="answerValue?.[item.id] ?? ''" :disabled="submitted" @change="setMatchingAnswer(item.id, $event.target.value)">
+              <option value="">请选择对应段落</option>
+              <option v-for="(option, optionIndex) in currentQuestion.options" :key="optionIndex" :value="optionIndex">{{ optionLetter(optionIndex) }}. {{ option }}</option>
+            </select>
+          </label>
+        </div>
+
+        <textarea
+          v-else
+          class="subjective-answer"
+          :value="answerValue || ''"
+          :disabled="submitted"
+          :placeholder="questionType === 'writing' ? '在这里完成作文' : '在这里输入译文'"
+          @input="setTextAnswer($event.target.value)"
+        ></textarea>
+
         <div v-if="submitted" class="analysis-panel">
           <div class="analysis-title">
-            <el-icon><CircleCheck v-if="answers[currentQuestion.id] === currentQuestion.answer" /><CircleClose v-else /></el-icon>
-            {{ answers[currentQuestion.id] === currentQuestion.answer ? '回答正确' : `正确答案：${optionLetter(currentQuestion.answer)}` }}
+            <template v-if="isSubjective(currentQuestion)">参考答案与评分要点</template>
+            <template v-else>
+              <el-icon><CircleCheck v-if="isCorrect(currentQuestion)" /><CircleClose v-else /></el-icon>
+              {{ isCorrect(currentQuestion) ? '回答正确' : '答案需要订正' }}
+            </template>
           </div>
+          <p v-if="isSubjective(currentQuestion)" class="reference-answer">{{ currentQuestion.referenceAnswer }}</p>
+          <p v-else-if="questionType === 'cloze'">正确答案：{{ currentQuestion.answers.map(index => optionLetter(index)).join('、') }}</p>
+          <p v-else-if="questionType === 'matching'">正确答案：{{ currentQuestion.items.map(item => `${item.id}-${optionLetter(item.answer)}`).join('、') }}</p>
+          <p v-else>正确答案：{{ optionLetter(currentQuestion.answer) }}</p>
           <p>{{ currentQuestion.analysis }}</p>
         </div>
       </section>
@@ -105,7 +141,8 @@
       </footer>
 
       <div v-if="submitted" class="score-bar" aria-live="polite">
-        本次得分 <strong>{{ score }}/{{ activePaper.questions.length }}</strong>
+        客观题得分 <strong>{{ score }}/{{ objectiveCount }}</strong>
+        <span v-if="subjectiveCount"> · {{ subjectiveCount }} 道主观题请对照参考答案自评</span>
       </div>
     </main>
 
@@ -138,9 +175,13 @@ const isAdmin = computed(() => userStore.userRole === 'ADMIN')
 const allPapers = computed(() => [...sharedPapers.value, ...pastPapers])
 const filteredPapers = computed(() => allPapers.value.filter(item => item.category === selectedCategory.value))
 const currentQuestion = computed(() => activePaper.value?.questions[currentIndex.value])
-const answeredCount = computed(() => Object.keys(answers.value).length)
+const questionType = computed(() => currentQuestion.value?.type || 'single_choice')
+const answerValue = computed(() => answers.value[currentQuestion.value?.id])
+const answeredCount = computed(() => activePaper.value?.questions.filter(isAnswered).length || 0)
 const progress = computed(() => activePaper.value ? (answeredCount.value / activePaper.value.questions.length) * 100 : 0)
-const score = computed(() => activePaper.value?.questions.reduce((total, question) => total + (answers.value[question.id] === question.answer ? 1 : 0), 0) || 0)
+const objectiveCount = computed(() => activePaper.value?.questions.filter(question => !isSubjective(question)).length || 0)
+const subjectiveCount = computed(() => (activePaper.value?.questions.length || 0) - objectiveCount.value)
+const score = computed(() => activePaper.value?.questions.reduce((total, question) => total + (!isSubjective(question) && isCorrect(question) ? 1 : 0), 0) || 0)
 
 function readSavedResults() {
   try {
@@ -190,6 +231,40 @@ function selectAnswer(index) {
   answers.value = { ...answers.value, [currentQuestion.value.id]: index }
 }
 
+function setArrayAnswer(index, value) {
+  const next = [...(answerValue.value || [])]
+  next[index] = value === '' ? null : Number(value)
+  answers.value = { ...answers.value, [currentQuestion.value.id]: next }
+}
+
+function setMatchingAnswer(itemId, value) {
+  answers.value = { ...answers.value, [currentQuestion.value.id]: { ...(answerValue.value || {}), [itemId]: value === '' ? null : Number(value) } }
+}
+
+function setTextAnswer(value) {
+  answers.value = { ...answers.value, [currentQuestion.value.id]: value }
+}
+
+function isSubjective(question) {
+  return ['translation', 'writing'].includes(question.type)
+}
+
+function isAnswered(question) {
+  const value = answers.value[question.id]
+  if ((question.type || 'single_choice') === 'cloze') return Array.isArray(value) && value.length === question.answers.length && value.every(item => Number.isInteger(item))
+  if (question.type === 'matching') return question.items.every(item => Number.isInteger(value?.[item.id]))
+  if (isSubjective(question)) return typeof value === 'string' && value.trim().length > 0
+  return Number.isInteger(value)
+}
+
+function isCorrect(question) {
+  const value = answers.value[question.id]
+  if ((question.type || 'single_choice') === 'single_choice') return value === question.answer
+  if (question.type === 'cloze') return question.answers.every((answer, index) => value?.[index] === answer)
+  if (question.type === 'matching') return question.items.every(item => value?.[item.id] === item.answer)
+  return false
+}
+
 function optionLetter(index) {
   return String.fromCharCode(65 + index)
 }
@@ -218,10 +293,10 @@ async function submitPaper() {
   submitted.value = true
   savedResults.value = {
     ...savedResults.value,
-    [activePaper.value.id]: { score: score.value, total: activePaper.value.questions.length, submittedAt: Date.now() }
+    [activePaper.value.id]: { score: score.value, total: objectiveCount.value, subjectiveCount: subjectiveCount.value, submittedAt: Date.now() }
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(savedResults.value))
-  ElMessage.success(`已交卷，得分 ${score.value}/${activePaper.value.questions.length}`)
+  ElMessage.success(`已交卷，客观题得分 ${score.value}/${objectiveCount.value}`)
   currentIndex.value = 0
 }
 
@@ -284,6 +359,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .passage { margin: 20px 0 14px; padding: 14px; background: #f8fafc; border-left: 3px solid #94a3b8; line-height: 1.75; }
 .question-card h2 { margin: 18px 0; font-size: 18px; line-height: 1.6; }
 .options { display: grid; gap: 10px; }
+.structured-answers { display: grid; gap: 12px; }
+.structured-answers label { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(180px, 260px); align-items: center; gap: 12px; line-height: 1.5; }
+.structured-answers select { min-height: 42px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px 10px; background: #fff; }
+.subjective-answer { width: 100%; min-height: 220px; resize: vertical; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px; font: inherit; line-height: 1.7; }
+.reference-answer { white-space: pre-wrap; padding: 10px; background: #fff; }
 .option-button { width: 100%; min-height: 52px; text-align: left; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; color: #334155; cursor: pointer; line-height: 1.5; }
 .option-button.selected { border-color: #1d4ed8; background: #eff6ff; }
 .option-button.correct { border-color: #16a34a; background: #f0fdf4; }
@@ -303,5 +383,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .paper-actions { width: 100%; }
   .paper-actions .start-button { flex: 1; }
   .question-card { padding: 16px; }
+  .structured-answers label { grid-template-columns: 1fr; }
 }
 </style>

@@ -1,4 +1,5 @@
 const CATEGORY_VALUES = new Set(['cet4', 'cet6', 'postgraduate'])
+const QUESTION_TYPES = new Set(['single_choice', 'cloze', 'matching', 'translation', 'writing'])
 
 const clean = (value = '') => value
   .replace(/!\[[^\]]*]\([^)]*\)/g, '')
@@ -31,25 +32,41 @@ export function validatePaper(input, fallback = {}) {
   const prefix = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   paper.id = input.id?.startsWith('custom-') ? input.id : prefix
   paper.questions = input.questions.map((question, index) => {
-    const options = question.options?.map(clean)
-    const answer = answerIndex(question.answer)
+    const type = question.type || 'single_choice'
     if (!clean(question.stem)) throw new Error(`第 ${index + 1} 题缺少题干`)
-    if (!Array.isArray(options) || options.length !== 4 || options.some(option => !option)) {
-      throw new Error(`第 ${index + 1} 题必须有完整的 A-D 四个选项`)
-    }
-    if (answer < 0) throw new Error(`第 ${index + 1} 题答案必须是 A、B、C 或 D`)
+    if (!QUESTION_TYPES.has(type)) throw new Error(`第 ${index + 1} 题题型无效`)
     if (!clean(question.analysis)) throw new Error(`第 ${index + 1} 题缺少解析`)
 
-    return {
+    const normalized = {
       id: `${paper.id}-q-${index + 1}`,
       number: question.number || index + 1,
+      type,
       section: clean(question.section || '选择题'),
       passage: clean(question.passage),
       stem: clean(question.stem),
-      options,
-      answer,
       analysis: clean(question.analysis)
     }
+
+    if (type === 'single_choice') {
+      normalized.options = question.options?.map(clean)
+      normalized.answer = answerIndex(question.answer)
+      if (normalized.options?.length !== 4 || normalized.options.some(option => !option)) throw new Error(`第 ${index + 1} 题必须有完整的 A-D 四个选项`)
+      if (normalized.answer < 0) throw new Error(`第 ${index + 1} 题答案必须是 A、B、C 或 D`)
+    } else if (type === 'cloze') {
+      normalized.options = question.options?.map(clean)
+      normalized.answers = (question.answers || []).map(answerIndex)
+      const blankCount = (normalized.stem.match(/_{2,}/g) || []).length
+      if (!normalized.options?.length || normalized.options.some(option => !option)) throw new Error(`第 ${index + 1} 题缺少完形词库`)
+      if (!blankCount || normalized.answers.length !== blankCount || normalized.answers.some(answer => answer < 0 || answer >= normalized.options.length)) throw new Error(`第 ${index + 1} 题完形答案数量必须与空格数量一致`)
+    } else if (type === 'matching') {
+      normalized.options = question.options?.map(clean)
+      normalized.items = (question.items || []).map((item, itemIndex) => ({ id: item.id || `${itemIndex + 1}`, prompt: clean(item.prompt), answer: answerIndex(item.answer) }))
+      if (!normalized.options?.length || !normalized.items.length || normalized.items.some(item => !item.prompt || item.answer < 0 || item.answer >= normalized.options.length)) throw new Error(`第 ${index + 1} 题段落匹配内容不完整`)
+    } else {
+      normalized.referenceAnswer = clean(question.referenceAnswer)
+      if (!normalized.referenceAnswer) throw new Error(`第 ${index + 1} 题缺少参考答案`)
+    }
+    return normalized
   })
   return paper
 }
@@ -112,4 +129,3 @@ export async function parsePaperFile(file, fallback) {
   if (file.name.toLowerCase().endsWith('.md')) return parsePaperMarkdown(text, fallback)
   throw new Error('仅支持 .md 和 .json 文件')
 }
-
