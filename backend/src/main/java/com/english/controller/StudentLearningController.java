@@ -11,6 +11,7 @@ import com.english.entity.Text;
 import com.english.entity.TextSimilarityMatrix;
 import com.english.entity.UnitWord;
 import com.english.entity.ArticleFavorite;
+import com.english.entity.ArticleLike;
 import com.english.mapper.TextSimilarityMatrixMapper;
 import com.english.mapper.ClassMapper;
 import com.english.mapper.UnitMapper;
@@ -20,6 +21,7 @@ import com.english.mapper.TextMapper;
 import com.english.entity.TextLearningRecord;
 import com.english.mapper.TextLearningRecordMapper;
 import com.english.mapper.ArticleFavoriteMapper;
+import com.english.mapper.ArticleLikeMapper;
 import com.english.exception.BusinessException;
 import com.english.service.*;
 import org.slf4j.Logger;
@@ -92,6 +94,9 @@ public class StudentLearningController {
 
     @Autowired
     private ArticleFavoriteMapper articleFavoriteMapper;
+
+    @Autowired
+    private ArticleLikeMapper articleLikeMapper;
 
     @Autowired
     private TextSimilarityMatrixMapper textSimilarityMatrixMapper;
@@ -270,6 +275,9 @@ public class StudentLearningController {
 
             // 触发异步版本生成（如果缺失）
             articleVersionService.checkAndGenerateVersions(textId);
+
+            // 自增浏览量
+            textMapper.incrementViewCount(textId);
 
             Map<String, Object> detail = learningRecordsService.getTextDetailWithAnnotation(studentId, textId,
                     assignmentId);
@@ -1581,6 +1589,7 @@ public class StudentLearningController {
             Map<String, Object> result = new HashMap<>();
             if (existing != null) {
                 articleFavoriteMapper.deleteById(existing.getId());
+                textMapper.decrementCollectCount(textId);
                 result.put("isFavorite", false);
                 result.put("message", "已取消收藏");
             } else {
@@ -1589,9 +1598,12 @@ public class StudentLearningController {
                 fav.setTextId(textId);
                 fav.setCreatedTime(LocalDateTime.now());
                 articleFavoriteMapper.insert(fav);
+                textMapper.incrementCollectCount(textId);
                 result.put("isFavorite", true);
                 result.put("message", "已添加到收藏");
             }
+            Text updatedText = textMapper.selectById(textId);
+            result.put("favoriteCount", updatedText != null && updatedText.getCollectCount() != null ? updatedText.getCollectCount() : 0);
             return Result.success(result);
         } catch (Exception e) {
             logger.error("收藏操作失败", e);
@@ -1611,6 +1623,8 @@ public class StudentLearningController {
             wrapper.eq("student_id", studentId).eq("text_id", textId);
             Map<String, Object> result = new HashMap<>();
             result.put("isFavorite", articleFavoriteMapper.selectCount(wrapper) > 0);
+            Text text = textMapper.selectById(textId);
+            result.put("favoriteCount", text != null && text.getCollectCount() != null ? text.getCollectCount() : 0);
             return Result.success(result);
         } catch (Exception e) {
             logger.error("检查收藏状态失败", e);
@@ -1764,5 +1778,68 @@ public class StudentLearningController {
             logger.debug("推荐埋点记录失败（非阻塞）: {}", e.getMessage());
         }
         return Result.success();
+    }
+
+    /**
+     * 点赞/取消点赞文章（toggle）
+     */
+    @PostMapping("/likes/{textId}")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
+    public Result<Map<String, Object>> toggleLike(@PathVariable Long textId, Authentication authentication) {
+        try {
+            Long userId = getCurrentStudentId(authentication);
+            if (textId == null || textId <= 0) {
+                return Result.error("文章ID无效");
+            }
+
+            QueryWrapper<ArticleLike> wrapper = new QueryWrapper<>();
+            wrapper.eq("user_id", userId).eq("text_id", textId);
+            ArticleLike existing = articleLikeMapper.selectOne(wrapper);
+
+            Map<String, Object> result = new HashMap<>();
+            if (existing != null) {
+                articleLikeMapper.deleteById(existing.getId());
+                textMapper.decrementLikeCount(textId);
+                result.put("isLiked", false);
+                result.put("message", "已取消点赞");
+            } else {
+                ArticleLike like = new ArticleLike();
+                like.setUserId(userId);
+                like.setTextId(textId);
+                like.setCreatedTime(LocalDateTime.now());
+                articleLikeMapper.insert(like);
+                textMapper.incrementLikeCount(textId);
+                result.put("isLiked", true);
+                result.put("message", "点赞成功");
+            }
+
+            Text text = textMapper.selectById(textId);
+            result.put("likeCount", text != null ? (text.getLikeCount() != null ? text.getLikeCount() : 0) : 0);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("点赞操作失败", e);
+            return Result.error("点赞操作失败");
+        }
+    }
+
+    /**
+     * 检查文章点赞状态
+     */
+    @GetMapping("/likes/{textId}/check")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
+    public Result<Map<String, Object>> checkLike(@PathVariable Long textId, Authentication authentication) {
+        try {
+            Long userId = getCurrentStudentId(authentication);
+            QueryWrapper<ArticleLike> wrapper = new QueryWrapper<>();
+            wrapper.eq("user_id", userId).eq("text_id", textId);
+            Map<String, Object> result = new HashMap<>();
+            result.put("isLiked", articleLikeMapper.selectCount(wrapper) > 0);
+            Text text = textMapper.selectById(textId);
+            result.put("likeCount", text != null ? (text.getLikeCount() != null ? text.getLikeCount() : 0) : 0);
+            return Result.success(result);
+        } catch (Exception e) {
+            logger.error("检查点赞状态失败", e);
+            return Result.error("检查点赞状态失败");
+        }
     }
 }

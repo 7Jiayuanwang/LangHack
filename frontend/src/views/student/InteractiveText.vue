@@ -26,6 +26,14 @@
           </button>
           <button v-if="canFavorite" class="favorite-btn" :class="{ 'is-favorite': isFavorite }" @click="addToFavorite">
             <el-icon><Star v-if="!isFavorite" /><StarFilled v-else /></el-icon>
+            <span class="action-count">{{ favoriteCount || 0 }}</span>
+          </button>
+          <button class="like-btn" :class="{ 'is-liked': isLiked }" @click="toggleLike">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path v-if="isLiked" fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              <path v-else fill="none" stroke="currentColor" stroke-width="2" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            <span class="action-count">{{ likeCount || 0 }}</span>
           </button>
         </div>
       </div>
@@ -59,6 +67,10 @@
           <span class="meta-item">
             <el-icon><Tickets /></el-icon>
             {{ wordCount }} words
+          </span>
+          <span class="meta-dot">•</span>
+          <span class="meta-item">
+            浏览 {{ viewCount }} 次
           </span>
         </div>
 
@@ -502,7 +514,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts, User } from '@element-plus/icons-vue'
-import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, getRelatedTexts } from '@/api/student'
+import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, toggleArticleLike, checkArticleLike, getRelatedTexts } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
 import { marked } from 'marked'
@@ -566,6 +578,10 @@ const learnedWordsCount = ref(0)
 const studyTime = ref(0)
 const isCompleted = ref(false)
 const isFavorite = ref(false)
+const favoriteCount = ref(0)
+const isLiked = ref(false)
+const likeCount = ref(0)
+const viewCount = ref(0)
 const isPublic = ref(0)
 const isFeatured = ref(0)
 const recording = ref(false)
@@ -849,6 +865,7 @@ const loadTextDetail = async () => {
       author.value = data.author || null
       nextTick(checkTitleOverflow)
       difficulty.value = data.difficulty || 'MEDIUM'
+      viewCount.value = data.viewCount || data.view_count || 0
       courseId.value = data.courseId
       unitId.value = data.unitId
       courseName.value = data.courseName || '未知课程'
@@ -856,7 +873,18 @@ const loadTextDetail = async () => {
 
       // 检查收藏状态
       checkArticleFavorite(textId.value).then(res => {
-        if (res?.code === 200) isFavorite.value = !!res.data?.isFavorite
+        if (res?.code === 200) {
+          isFavorite.value = !!res.data?.isFavorite
+          favoriteCount.value = res.data?.favoriteCount || 0
+        }
+      }).catch(() => {})
+
+      // 检查点赞状态
+      checkArticleLike(textId.value).then(res => {
+        if (res?.code === 200) {
+          isLiked.value = !!res.data?.isLiked
+          likeCount.value = res.data?.likeCount || 0
+        }
       }).catch(() => {})
 
       // 从后端获取学习进度和时长
@@ -1345,11 +1373,27 @@ const addToFavorite = async () => {
     const response = await toggleArticleFavorite(textId.value)
     if (response.code === 200) {
       isFavorite.value = response.data.isFavorite
+      favoriteCount.value = response.data.favoriteCount || 0
       ElMessage.success(response.data.message || (isFavorite.value ? '已添加到收藏' : '已取消收藏'))
     }
   } catch (error) {
     console.error('收藏课文失败:', error)
     ElMessage.error('收藏操作失败')
+  }
+}
+
+const toggleLike = async () => {
+  try {
+    if (!textId.value) return
+    const response = await toggleArticleLike(textId.value)
+    if (response.code === 200) {
+      isLiked.value = response.data.isLiked
+      likeCount.value = response.data.likeCount || 0
+      ElMessage.success(response.data.message || (isLiked.value ? '已点赞' : '已取消点赞'))
+    }
+  } catch (error) {
+    console.error('点赞操作失败:', error)
+    ElMessage.error('点赞操作失败')
   }
 }
 
@@ -1453,14 +1497,14 @@ const goBack = () => {
     // 从任务页面跳转来的，返回任务页面
     router.push('/student/assignments')
   } else if (from === 'articles') {
-    // 从文章列表来的，跳转到外部文章页
-    window.location.href = getArticlesPath()
+    // 从文章列表来的，使用路由返回以保持 keep-alive 缓存和滚动位置
+    router.push(getArticlesPath())
   } else if (window.history.length > 1) {
     // 其他情况，使用默认返回
     router.go(-1)
   } else {
-    // 无历史记录时，跳转到外部文章列表
-    window.location.href = getArticlesPath()
+    // 无历史记录时，跳转到文章列表
+    router.push(getArticlesPath())
   }
 }
 
@@ -2844,6 +2888,46 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .favorite-btn.is-favorite {
   color: #f59e0b;
+}
+
+.favorite-btn .action-count,
+.like-btn .action-count {
+  font-size: 12px;
+  margin-left: 2px;
+}
+
+.like-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.like-btn:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.like-btn.is-liked {
+  color: #ef4444;
+}
+
+.like-btn.is-liked svg {
+  animation: likePopIn 0.3s ease;
+}
+
+@keyframes likePopIn {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
 }
 
 .annotation-header-btn {

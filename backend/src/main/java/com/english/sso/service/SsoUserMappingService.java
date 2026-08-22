@@ -436,6 +436,35 @@ public class SsoUserMappingService {
             return new RoleUpgradeResult(false);
         }
 
+        // 教师目录直授（开关 sso.grant_teacher_direct=true）：命中 school_teacher 时，
+        // 对预建/已有的 TEACHER 账号确认 TEACHER 角色，避免被高权限证据校验降级为待人工审核。
+        // 默认关闭；关闭时教师仍需管理员人工确认（见 tryAutoGrantFromSchoolDirectory）。
+        if (schoolTeacherMapper != null && isFeatureEnabled("sso.grant_teacher_direct")) {
+            SchoolTeacher teacherDirectory = null;
+            try {
+                teacherDirectory = schoolTeacherMapper.selectByTeacherId(username);
+            } catch (Exception e) {
+                log.warn("查询 school_teacher 失败 username={}: {}", username, e.getMessage());
+            }
+            if (teacherDirectory != null && !isRoleUpgrade("TEACHER", user.getRole())) {
+                if ((user.getRealName() == null || user.getRealName().isEmpty())
+                        && teacherDirectory.getTeacherName() != null) {
+                    user.setRealName(teacherDirectory.getTeacherName());
+                }
+                user.setRole("TEACHER");
+                user.setStatus("ACTIVE");
+                userService.updateUser(user);
+                if (binding != null) {
+                    binding.setAutoApproved(1);
+                    binding.setLastLoginTime(LocalDateTime.now());
+                    bindingMapper.updateById(binding);
+                }
+                log.info("命中教师目录且已启用教师直授，确认 TEACHER 角色: username={}, college={}",
+                        username, teacherDirectory.getCollegeName());
+                return new RoleUpgradeResult(true);
+            }
+        }
+
         // 教师不自动升权：命中 school_teacher 也必须经管理员人工确认（TEACHER 属高权限角色），
         // 此处仅保留学生自动升权；教师线索的待确认处理见 tryAutoGrantFromSchoolDirectory
         if (schoolStudentMapper != null && isFeatureEnabled("sso.auto_grant_student")) {
@@ -559,12 +588,23 @@ public class SsoUserMappingService {
             }
             log.info("[SSO全链路] ③ school_teacher 查询: uid={}, matched={}", uid, teacherDirectory != null);
             if (teacherDirectory != null) {
-                log.info("school_teacher 命中，默认授予 STUDENT 并转人工确认 TEACHER: uid={}, college={}",
-                        uid, teacherDirectory.getCollegeName());
                 if ((ssoUserInfo.getRealName() == null || ssoUserInfo.getRealName().isEmpty())
                         && teacherDirectory.getTeacherName() != null) {
                     ssoUserInfo.setRealName(teacherDirectory.getTeacherName());
                 }
+                // 开关 sso.grant_teacher_direct=true 时，命中教师目录直接授予 TEACHER（默认关，属安全敏感行为）
+                if (isFeatureEnabled("sso.grant_teacher_direct")) {
+                    log.info("school_teacher 命中且已启用教师直授，直接授予 TEACHER: uid={}, college={}",
+                            uid, teacherDirectory.getCollegeName());
+                    User teacher = createUserFromSso(ssoUserInfo, "TEACHER");
+                    createBinding(teacher.getId(), ssoUserInfo, protocol, true);
+                    String accessToken = jwtUtil.generateAccessToken(teacher.getUsername(), teacher.getRole());
+                    String refreshToken = jwtUtil.generateRefreshToken(teacher.getUsername());
+                    log.info("SSO 命中教师目录，直接授予 TEACHER: username={}", teacher.getUsername());
+                    return SsoLoginResult.success(accessToken, refreshToken, teacher);
+                }
+                log.info("school_teacher 命中，默认授予 STUDENT 并转人工确认 TEACHER: uid={}, college={}",
+                        uid, teacherDirectory.getCollegeName());
                 User student = createUserFromSso(ssoUserInfo, "STUDENT");
                 SsoUserBinding binding = createBinding(student.getId(), ssoUserInfo, protocol, false);
                 binding.setAdminRemark(String.format(

@@ -49,6 +49,12 @@ public class SchoolDataSyncController {
     @Autowired
     private com.english.service.SchoolDataArchiveService archiveService;
 
+    @Autowired
+    private com.english.service.TeacherAccountProvisionService teacherAccountProvisionService;
+
+    @Autowired
+    private com.english.service.EnglishTeacherOnboardService englishTeacherOnboardService;
+
     // =========================================================================
     // 同步操作
     // =========================================================================
@@ -167,18 +173,67 @@ public class SchoolDataSyncController {
     public Result<Map<String, Object>> chainStudentsByCollege(
             @RequestParam String collegeName,
             @RequestParam(defaultValue = "eq") String matchMode,
-            @RequestParam(defaultValue = "true") boolean persist) {
+            @RequestParam(defaultValue = "true") boolean persist,
+            @RequestParam(required = false) String academicYear,
+            @RequestParam(required = false) String semester) {
         if (!isChainFetchEnabled()) {
             return Result.error("按学院链式拉取功能当前已关闭");
         }
-        logger.info("手动触发链式拉取: collegeName={}, matchMode={}, persist={}",
-                collegeName, matchMode, persist);
+        logger.info("手动触发链式拉取: collegeName={}, matchMode={}, persist={}, academicYear={}, semester={}",
+                collegeName, matchMode, persist, academicYear, semester);
         try {
-            Map<String, Object> result = syncService.chainFetchStudentsByCollege(collegeName, matchMode, persist);
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege(
+                    collegeName, matchMode, persist, academicYear, semester);
             return Result.success("链式拉取完成", result);
         } catch (Exception e) {
             logger.error("链式拉取失败: collegeName={}", collegeName, e);
             return Result.error(e.getMessage() != null ? e.getMessage() : "链式拉取失败");
+        }
+    }
+
+    /**
+     * 按学院批量开通教师账号（SSO-only，直接授予 TEACHER 角色）
+     * POST /api/admin/sync/teachers/provision-accounts
+     *
+     * 依据 school_teacher 目录（需先执行链式同步）批量创建本地 TEACHER 账号，
+     * 账号无本地密码，只能通过统一身份认证（SSO）登录；已存在同名账号则跳过。
+     */
+    @PostMapping("/teachers/provision-accounts")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<Map<String, Object>> provisionTeacherAccounts(
+            @RequestParam String collegeName,
+            @RequestParam(defaultValue = "eq") String matchMode) {
+        logger.info("手动触发批量开通教师账号: collegeName={}, matchMode={}", collegeName, matchMode);
+        try {
+            Map<String, Object> result =
+                    teacherAccountProvisionService.provisionTeacherAccountsByCollege(collegeName, matchMode);
+            return Result.success("批量开通教师账号完成", result);
+        } catch (Exception e) {
+            logger.error("批量开通教师账号失败: collegeName={}", collegeName, e);
+            return Result.error(e.getMessage() != null ? e.getMessage() : "批量开通教师账号失败");
+        }
+    }
+
+    /**
+     * 一键接入英语教师：按学年学期从 teacher_courses 拉取课程名含关键词（默认英语）的授课记录，
+     * 写 teaching_class → 建 TEACHER 账号 → 逐个教师触发班级+学生绑定。
+     * POST /api/admin/sync/teachers/onboard-by-course
+     */
+    @PostMapping("/teachers/onboard-by-course")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS')")
+    public Result<Map<String, Object>> onboardEnglishTeachers(
+            @RequestParam String academicYear,
+            @RequestParam String semester,
+            @RequestParam(defaultValue = "英语") String courseKeyword) {
+        logger.info("手动触发英语教师一键接入: academicYear={}, semester={}, courseKeyword={}",
+                academicYear, semester, courseKeyword);
+        try {
+            Map<String, Object> result =
+                    englishTeacherOnboardService.onboardEnglishTeachers(academicYear, semester, courseKeyword);
+            return Result.success("英语教师一键接入完成", result);
+        } catch (Exception e) {
+            logger.error("英语教师一键接入失败: academicYear={}, semester={}", academicYear, semester, e);
+            return Result.error(e.getMessage() != null ? e.getMessage() : "英语教师一键接入失败");
         }
     }
 

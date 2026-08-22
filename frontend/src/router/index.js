@@ -509,6 +509,10 @@ const routes = [
         meta: { title: "我的选课", roles: ["STUDENT", "USER"], featureKey: "page_course_selections" },
       },
       {
+        path: "word-association",
+        redirect: "/student/words?tab=association",
+      },
+      {
         path: "word-test",
         redirect: "/student/words?tab=list",
       },
@@ -527,6 +531,12 @@ const routes = [
         name: "StudentAuthorProfile",
         component: () => import("@/views/student/AuthorProfile.vue"),
         meta: { title: "作者主页", roles: ["STUDENT", "USER", "TEACHER"] },
+      },
+      {
+        path: "follow-list/:id",
+        name: "StudentFollowList",
+        component: () => import("@/views/student/FollowList.vue"),
+        meta: { title: "关注列表", roles: ["STUDENT", "USER", "TEACHER"] },
       },
     ],
   },

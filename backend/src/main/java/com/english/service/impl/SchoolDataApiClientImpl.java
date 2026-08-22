@@ -442,8 +442,11 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
                 HttpEntity<Void> entity = new HttpEntity<>(headers);
 
                 logger.info("学校数据 API 请求中 url={} attempt={}/{}", url, attempt, retryAttempts);
+                // 关键：用 URI 对象传入，避免 RestTemplate(String) 对已编码 URL(%20/%E8..) 二次编码
+                // 导致 CDSP 返回 "The URI is malformed"。URI.create 把 URL 视为已是最终形态。
+                java.net.URI requestUri = java.net.URI.create(url);
                 ResponseEntity<String> response = restTemplate.exchange(
-                        url, HttpMethod.GET, entity, String.class);
+                        requestUri, HttpMethod.GET, entity, String.class);
 
                 if (response.getBody() == null || response.getBody().isEmpty()) {
                     logger.warn("学校数据 API 响应体为空 url={} status={}", url, response.getStatusCode());
@@ -577,9 +580,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
             url.append("?");
             params.forEach((key, value) -> {
                 if (value != null && !value.isEmpty()) {
-                    url.append(key)  // ✅ key 不编码，保留 $top/$skip 等 OData 参数
+                    url.append(key)  // ✅ key 不编码，保留 $top/$skip/$filter 等 OData 参数
                        .append("=")
-                       .append(URLEncoder.encode(value, StandardCharsets.UTF_8))
+                       .append(encodeODataValue(value))
                        .append("&");
                 }
             });
@@ -590,6 +593,18 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
         }
 
         return url.toString();
+    }
+
+    /**
+     * OData 参数值编码。
+     * <p>
+     * <b>关键</b>：OData $filter 表达式中的空格必须编码为 %20，绝不能是 +。
+     * 因为在 OData 语法里 + 是加号运算符，会导致
+     * "The types 'Edm.Boolean' and 'Edm.Decimal' are not compatible" 错误。
+     * JDK 的 URLEncoder.encode 默认把空格编成 +，故这里替换为 %20。
+     */
+    private String encodeODataValue(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private String fingerprintPage(List<Map<String, Object>> pageRows) {
@@ -611,6 +626,9 @@ public class SchoolDataApiClientImpl implements SchoolDataApiClient {
     }
 
     private int resolveMaxPages(String dataSource) {
+        // course_selection 全表可达 90 万+ 条（约 900 页），CDSP 不支持过滤参数，
+        // 只能全量拉取后在本地按课程班号建班，故放宽上限至 1200 页。
+        if ("course_selection".equals(dataSource)) return 1200;
         if ("teacher_courses".equals(dataSource)) return 300;
         if ("course_schedule".equals(dataSource)) return 200;
         return 100;

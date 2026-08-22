@@ -563,7 +563,7 @@ class SchoolDataSyncServiceTest {
             doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
             doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
 
-            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true, null, null);
 
             assertNotNull(result);
             assertEquals(2, result.get("courseCount"));
@@ -613,7 +613,7 @@ class SchoolDataSyncServiceTest {
             doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
             doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
 
-            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true, null, null);
 
             assertNotNull(result);
             assertEquals(false, result.get("upstreamKcbhSupported"));
@@ -658,7 +658,7 @@ class SchoolDataSyncServiceTest {
             doNothing().when(courseSelectionMapper).upsertBySelectionId(any());
             doNothing().when(teacherStudentBindingMapper).upsertBinding(any());
 
-            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true, null, null);
 
             assertNotNull(result);
             assertEquals(1, result.get("studentCount"));
@@ -674,7 +674,7 @@ class SchoolDataSyncServiceTest {
         void chainFetch_noMatchingCourses_returnsZeroCounts() {
             when(apiClient.fetchSchoolCourses(any())).thenReturn(Collections.emptyList());
 
-            Map<String, Object> result = syncService.chainFetchStudentsByCollege("不存在的学院", "eq", true);
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("不存在的学院", "eq", true, null, null);
 
             assertNotNull(result);
             assertEquals(0, result.get("courseCount"));
@@ -698,7 +698,7 @@ class SchoolDataSyncServiceTest {
 
             when(apiClient.fetchTeacherCourses(any())).thenReturn(Collections.emptyList());
 
-            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", false);
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", false, null, null);
 
             assertNotNull(result);
             assertEquals(1, result.get("courseCount"));
@@ -716,7 +716,7 @@ class SchoolDataSyncServiceTest {
             when(fieldMappingService.applyMapping(eq("school_course"), any()))
                     .thenReturn(new HashMap<>(Map.of("courseCode", "ENG101")));
 
-            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true);
+            Map<String, Object> result = syncService.chainFetchStudentsByCollege("外国语学院", "eq", true, null, null);
 
             assertNotNull(result);
             assertEquals("FAILED", result.get("status"));

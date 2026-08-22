@@ -8,6 +8,7 @@ import com.english.entity.LearnerProfileSummary;
 import com.english.entity.User;
 import com.english.service.LearnerProfileService;
 import com.english.service.LearnerProfileSummaryService;
+import com.english.service.LearningRecordsService;
 import com.english.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -33,6 +34,9 @@ public class StudentProfileController {
 
     @Autowired(required = false)
     private LearnerProfileSummaryService summaryService;
+
+    @Autowired
+    private LearningRecordsService learningRecordsService;
 
     @GetMapping("/me")
     public Result<StudentFacingProfileDto> getMyProfile(Authentication auth) {
@@ -76,6 +80,8 @@ public class StudentProfileController {
                 dto.setNaturalLanguageSummary(summary.getSummaryText());
             }
         }
+
+        dto.setAchievements(learningRecordsService.getAchievementStats(user.getId()));
 
         return Result.success(dto);
     }

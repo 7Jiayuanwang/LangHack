@@ -120,6 +120,25 @@
           </el-radio-group>
         </el-form-item>
 
+        <el-form-item v-if="assignmentForm.assignmentType === 'TEXTS'" label="文章分类" prop="articleType">
+          <el-radio-group v-model="assignmentForm.articleType" @change="onArticleTypeChange">
+            <el-radio value="INNER">课内教材课文</el-radio>
+            <el-radio value="OUTER">课外读物</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <template v-if="assignmentForm.assignmentType === 'TEXTS' && assignmentForm.articleType === 'INNER'">
+          <el-form-item label="册号">
+            <el-select v-model="assignmentForm.bookVolume" placeholder="选择册号" clearable @change="loadArticles">
+              <el-option v-for="volume in bookVolumes" :key="volume" :label="volume" :value="volume" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="Unit">
+            <el-select v-model="assignmentForm.unitNum" placeholder="选择单元" clearable @change="loadArticles">
+              <el-option v-for="unit in unitNumbers" :key="unit" :label="`Unit ${unit}`" :value="unit" />
+            </el-select>
+          </el-form-item>
+        </template>
+
         <!-- 选择课文 -->
         <el-form-item v-if="assignmentForm.assignmentType === 'TEXTS'" label="选择课文" prop="textIds">
           <div v-loading="loadingUnitContent" class="content-selector">
@@ -311,6 +330,8 @@ const unitContent = ref({
   texts: [],
   words: []
 })
+const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '综合教程4']
+const unitNumbers = Array.from({ length: 6 }, (_, index) => index + 1)
 
 // 筛选表单
 const filterForm = reactive({
@@ -325,6 +346,9 @@ const assignmentForm = reactive({
   classId: null,
   unitId: null,
   assignmentType: 'UNIT',
+  articleType: 'OUTER',
+  bookVolume: null,
+  unitNum: null,
   textIds: [],
   wordIds: [],
   description: '',
@@ -623,6 +647,9 @@ const editAssignment = async (assignment) => {
     classId: assignment.classId,
     unitId: assignment.unitId,
     assignmentType: assignment.assignmentType || 'UNIT',
+    articleType: assignment.articleType || 'OUTER',
+    bookVolume: assignment.bookVolume || null,
+    unitNum: assignment.unitNum || null,
     textIds: Array.isArray(assignment.textIds) ? [...assignment.textIds] : [],
     wordIds: Array.isArray(assignment.wordIds) ? [...assignment.wordIds] : [],
     description: assignment.description,
@@ -649,6 +676,9 @@ const resetAssignmentForm = () => {
     classId: null,
     unitId: null,
     assignmentType: 'UNIT',
+    articleType: 'OUTER',
+    bookVolume: null,
+    unitNum: null,
     textIds: [],
     wordIds: [],
     description: '',
@@ -700,7 +730,9 @@ const loadUnitContent = async (unitId) => {
 
 // 单元变化事件
 const onUnitChange = async (unitId) => {
-  if (unitId && assignmentForm.assignmentType !== 'UNIT') {
+  if (assignmentForm.assignmentType === 'TEXTS') {
+    await loadArticles()
+  } else if (unitId && assignmentForm.assignmentType !== 'UNIT') {
     await loadUnitContent(unitId)
   } else {
     unitContent.value = { texts: [], words: [] }
@@ -718,6 +750,36 @@ const onAssignmentTypeChange = async (assignmentType) => {
   // 清空已选择的内容
   assignmentForm.textIds = []
   assignmentForm.wordIds = []
+  if (assignmentType === 'TEXTS') {
+    await loadArticles()
+  }
+}
+
+const onArticleTypeChange = async () => {
+  assignmentForm.textIds = []
+  await loadArticles()
+}
+
+const loadArticles = async () => {
+  if (assignmentForm.assignmentType !== 'TEXTS') return
+  const params = new URLSearchParams({ articleType: assignmentForm.articleType || 'OUTER' })
+  if (assignmentForm.articleType === 'INNER') {
+    if (assignmentForm.bookVolume) params.append('bookVolume', assignmentForm.bookVolume)
+    if (assignmentForm.unitNum) params.append('unitNum', assignmentForm.unitNum)
+  }
+  const headers = {}
+  const authHeader = getAuthHeader()
+  if (authHeader) headers.Authorization = authHeader
+  try {
+    const response = await fetch(`/api/assignments/articles?${params.toString()}`, { headers })
+    const data = await response.json()
+    unitContent.value = { ...unitContent.value, texts: data.code === 200 ? (data.data || []) : [] }
+    if (data.code !== 200) ElMessage.error(data.message || '加载文章失败')
+  } catch (error) {
+    console.error('加载文章失败:', error)
+    unitContent.value = { ...unitContent.value, texts: [] }
+    ElMessage.error('加载文章失败')
+  }
 }
 
 const saveAssignment = async () => {
@@ -782,6 +844,9 @@ const saveAssignment = async () => {
               classId: assignmentForm.classId,
               unitId: assignmentForm.unitId,
               assignmentType: assignmentForm.assignmentType,
+              articleType: assignmentForm.articleType,
+              bookVolume: assignmentForm.bookVolume,
+              unitNum: assignmentForm.unitNum,
               textIds: assignmentForm.textIds,
               wordIds: assignmentForm.wordIds,
               description: assignmentForm.description,

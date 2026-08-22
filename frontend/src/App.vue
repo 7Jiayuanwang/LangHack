@@ -1,14 +1,31 @@
 <template>
   <div id="app">
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <keep-alive :include="cachedViews">
+        <component :is="Component" />
+      </keep-alive>
+    </router-view>
   </div>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
-import { onErrorCaptured, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { onErrorCaptured, onMounted, ref, watch, nextTick } from 'vue'
 
 const router = useRouter()
+const route = useRoute()
+
+// 缓存文章列表页——从文章详情返回时保持滚动位置
+const cachedViews = ref(['ArticlesHost'])
+
+// 当导航离开文章详情页到非文章页面时，移除缓存
+watch(() => route.name, (newName, oldName) => {
+  // 从文章列表离开到非文章详情的路由时，清除缓存（如去登录、管理页面等）
+  if (oldName === 'Articles' && newName !== 'ArticleDetail') {
+    cachedViews.value = []
+    nextTick(() => { cachedViews.value = ['ArticlesHost'] })
+  }
+})
 
 // 应用启动时触发打卡类成就检查
 onMounted(() => {

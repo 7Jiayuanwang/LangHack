@@ -7,6 +7,7 @@ import com.english.entity.*;
 import com.english.mapper.*;
 import com.english.service.LearnerProfileService;
 import com.english.service.SystemConfigService;
+import com.english.service.TeacherClassSyncService;
 import com.english.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +62,9 @@ public class TeacherDataController {
 
     @Autowired
     private LearnerProfileService learnerProfileService;
+
+    @Autowired
+    private TeacherClassSyncService teacherClassSyncService;
 
     @Autowired
     private com.english.mapper.UserMapper userMapper;
@@ -308,6 +312,34 @@ public class TeacherDataController {
         } catch (Exception e) {
             logger.error("获取教师统计数据失败", e);
             return Result.error("获取统计数据失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 同步学校班级数据到平台班级体系
+     * POST /api/teacher/sync-classes
+     */
+    @PostMapping("/sync-classes")
+    @PreAuthorize("hasAnyRole('TEACHER')")
+    public Result<Map<String, Object>> syncClasses(Authentication authentication) {
+        try {
+            if (!isTeacherSchoolDataEnabled()) {
+                return Result.error("教师端学校数据功能已关闭");
+            }
+            User user = userService.getUserByUsername(authentication.getName());
+            if (user == null) {
+                return Result.error("用户信息不存在");
+            }
+            Map<String, Object> syncResult = teacherClassSyncService.syncClassesForTeacher(user.getId());
+            Boolean success = (Boolean) syncResult.get("success");
+            if (Boolean.TRUE.equals(success)) {
+                return Result.success(syncResult);
+            } else {
+                return Result.error((String) syncResult.get("message"));
+            }
+        } catch (Exception e) {
+            logger.error("同步学校班级失败", e);
+            return Result.error("同步班级失败，请稍后重试");
         }
     }
 

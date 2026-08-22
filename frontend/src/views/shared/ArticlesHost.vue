@@ -13,6 +13,8 @@ import StudentLayout from '@/views/student/Layout.vue'
 import PublicArticles from '@/views/public/Articles.vue'
 import StudentArticles from '@/views/student/Articles.vue'
 
+defineOptions({ name: 'ArticlesHost' })
+
 const userStore = useUserStore()
 
 // 所有已登录角色统一使用 StudentArticles，保证文章列表体验一致

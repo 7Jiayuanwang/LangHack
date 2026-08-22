@@ -25,6 +25,14 @@
           <span v-if="authorData.author.roleLabel" class="author-role-badge">{{ authorData.author.roleLabel }}</span>
         </div>
         <div class="author-stats">
+          <div class="stat-item" @click="goToFollowList('following')" style="cursor:pointer">
+            <span class="stat-value">{{ followCounts.followingCount }}</span>
+            <span class="stat-label">关注</span>
+          </div>
+          <div class="stat-item" @click="goToFollowList('followers')" style="cursor:pointer">
+            <span class="stat-value">{{ followCounts.followersCount }}</span>
+            <span class="stat-label">粉丝</span>
+          </div>
           <div class="stat-item">
             <span class="stat-value">{{ authorData.totalTexts }}</span>
             <span class="stat-label">文章</span>
@@ -33,6 +41,39 @@
             <span class="stat-value">{{ authorData.totalVideos }}</span>
             <span class="stat-label">视频</span>
           </div>
+        </div>
+        <div v-if="!isOwnProfile" class="follow-btn-wrapper">
+          <button
+            class="follow-btn"
+            :class="{ 'is-following': isFollowing }"
+            :disabled="followLoading"
+            @click="handleFollow"
+          >
+            {{ isFollowing ? '已关注' : '+ 关注' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Achievements Section -->
+      <div v-if="unlockedAchievements.length > 0" class="achievements-section">
+        <div class="achievements-header">
+          <h3>学习成就</h3>
+          <span class="achievements-count">
+            已解锁 {{ unlockedAchievements.length }} / {{ totalAchievements }} 项
+          </span>
+        </div>
+        <div class="achievements-list">
+          <el-tooltip
+            v-for="ach in unlockedAchievements"
+            :key="ach.key"
+            :content="ach.desc"
+            placement="top"
+          >
+            <div class="achievement-badge">
+              <span class="achievement-badge-icon">{{ ach.icon }}</span>
+              <span class="achievement-badge-title">{{ ach.title }}</span>
+            </div>
+          </el-tooltip>
         </div>
       </div>
 
@@ -123,9 +164,12 @@ import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage, ElIcon } from 'element-plus'
 import { Loading, Warning, Document, VideoPlay, View } from '@element-plus/icons-vue'
+import { followUser, unfollowUser, getFollowStatus, getFollowCounts } from '@/api/follow'
+import { useUserStore } from '@/store/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(true)
 const error = ref(null)
@@ -134,6 +178,26 @@ const activeTab = ref('texts')
 
 const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+
+// Follow state
+const isFollowing = ref(false)
+const followLoading = ref(false)
+const followCounts = ref({ followingCount: 0, followersCount: 0 })
+const isOwnProfile = computed(() => {
+  const userId = route.params.id
+  return userStore.userInfo?.id && String(userStore.userInfo.id) === String(userId)
+})
+
+const unlockedAchievements = computed(() => {
+  if (!authorData.value?.achievements?.achievementList) return []
+  return authorData.value.achievements.achievementList.filter(a => a.unlocked)
+})
+
+const totalAchievements = computed(() => {
+  return authorData.value?.achievements?.totalAchievements
+    || authorData.value?.achievements?.achievementList?.length
+    || 0
+})
 
 // 加载作者主页数据
 const loadAuthorProfile = async () => {
@@ -204,8 +268,56 @@ const handleVideoClick = (video) => {
   })
 }
 
+// Follow/Unfollow handlers
+const handleFollow = async () => {
+  if (followLoading.value) return
+  followLoading.value = true
+  try {
+    const userId = route.params.id
+    if (isFollowing.value) {
+      await unfollowUser(userId)
+      isFollowing.value = false
+      followCounts.value.followersCount = Math.max(0, followCounts.value.followersCount - 1)
+      ElMessage.success('已取消关注')
+    } else {
+      await followUser(userId)
+      isFollowing.value = true
+      followCounts.value.followersCount += 1
+      ElMessage.success('关注成功')
+    }
+  } catch (err) {
+    ElMessage.error(err.message || '操作失败')
+  } finally {
+    followLoading.value = false
+  }
+}
+
+const loadFollowData = async () => {
+  const userId = route.params.id
+  try {
+    const [statusRes, countsRes] = await Promise.all([
+      getFollowStatus(userId).catch(() => null),
+      getFollowCounts(userId)
+    ])
+    if (statusRes?.data) {
+      isFollowing.value = statusRes.data.isFollowing
+    }
+    if (countsRes?.data) {
+      followCounts.value = countsRes.data
+    }
+  } catch (err) {
+    console.error('加载关注数据失败:', err)
+  }
+}
+
+const goToFollowList = (type) => {
+  const userId = route.params.id
+  router.push(`/student/follow-list/${userId}?type=${type}`)
+}
+
 onMounted(() => {
   loadAuthorProfile()
+  loadFollowData()
 })
 </script>
 
@@ -312,6 +424,90 @@ onMounted(() => {
 .author-stats {
   display: flex;
   gap: 32px;
+}
+
+.follow-btn-wrapper {
+  margin-top: 16px;
+}
+
+.follow-btn {
+  padding: 8px 32px;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #409eff;
+  color: #fff;
+}
+
+.follow-btn:hover {
+  background: #66b1ff;
+}
+
+.follow-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.follow-btn.is-following {
+  background: #f0f0f0;
+  color: #606266;
+}
+
+.follow-btn.is-following:hover {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+
+.achievements-section {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin: 16px 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.achievements-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.achievements-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.achievements-count {
+  font-size: 13px;
+  color: #909399;
+}
+
+.achievements-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.achievement-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #f5f7fa;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #303133;
+  cursor: default;
+}
+
+.achievement-badge-icon {
+  font-size: 16px;
 }
 
 .stat-item {

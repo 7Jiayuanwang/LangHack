@@ -137,3 +137,20 @@ export function incrementalSyncAllSchoolData(params) {
 export function chainFetchStudentsByCollege(params) {
   return request({ url: '/api/admin/sync/chain/students-by-college', method: 'post', params, timeout: 1800000 })
 }
+
+/**
+ * 按学院批量开通教师账号（SSO-only，直接授予 TEACHER 角色）
+ * POST /api/admin/sync/teachers/provision-accounts?collegeName=外国语学院&matchMode=eq
+ */
+export function provisionTeacherAccounts(params) {
+  return request({ url: '/api/admin/sync/teachers/provision-accounts', method: 'post', params, timeout: 600000 })
+}
+
+/**
+ * 一键接入英语教师（按学年学期 + 课程名关键词）
+ * 拉 teacher_courses → 写 teaching_class → 建 TEACHER 账号 → 逐个绑定班级学生
+ * POST /api/admin/sync/teachers/onboard-by-course?academicYear=2026&semester=秋&courseKeyword=英语
+ */
+export function onboardEnglishTeachers(params) {
+  return request({ url: '/api/admin/sync/teachers/onboard-by-course', method: 'post', params, timeout: 1800000 })
+}

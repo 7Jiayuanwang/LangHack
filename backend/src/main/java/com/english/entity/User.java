@@ -226,6 +226,12 @@ public class User {
     @TableField("last_study_time")
     private LocalDateTime lastStudyTime;
 
+    @TableField("following_count")
+    private Integer followingCount = 0;
+
+    @TableField("followers_count")
+    private Integer followersCount = 0;
+
     public Integer getReadArticleCount() {
         return readArticleCount;
     }
@@ -280,5 +286,21 @@ public class User {
 
     public void setLastStudyTime(LocalDateTime lastStudyTime) {
         this.lastStudyTime = lastStudyTime;
+    }
+
+    public Integer getFollowingCount() {
+        return followingCount;
+    }
+
+    public void setFollowingCount(Integer followingCount) {
+        this.followingCount = followingCount;
+    }
+
+    public Integer getFollowersCount() {
+        return followersCount;
+    }
+
+    public void setFollowersCount(Integer followersCount) {
+        this.followersCount = followersCount;
     }
 }

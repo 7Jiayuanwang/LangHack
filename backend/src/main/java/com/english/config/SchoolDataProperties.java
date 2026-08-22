@@ -504,8 +504,30 @@ public class SchoolDataProperties {
         /** 学院匹配模式：eq 精确 / contains 模糊 */
         private String matchMode = "eq";
 
+        /** 学年（单起始年份，如 2026），空=不限学年（拉全部年份，慎用） */
+        private String academicYear = "";
+
+        /** 学期（秋/春），空=不限学期 */
+        private String semester = "";
+
         public boolean isEnabled() {
             return enabled;
+        }
+
+        public String getAcademicYear() {
+            return academicYear;
+        }
+
+        public void setAcademicYear(String academicYear) {
+            this.academicYear = academicYear;
+        }
+
+        public String getSemester() {
+            return semester;
+        }
+
+        public void setSemester(String semester) {
+            this.semester = semester;
         }
 
         public void setEnabled(boolean enabled) {

@@ -17,12 +17,19 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -531,6 +538,203 @@ public class HiAgentServiceImpl implements HiAgentService {
         String bodyPreview = truncateForLog(response.getBody());
         log.error("Unexpected HiAgent Q&A response structure: {}", bodyPreview);
         throw new BusinessException("AI Q&A 服务返回结果解析失败");
+    }
+
+    // ==================== 流式对话（SSE Streaming） ====================
+
+    @Override
+    public String createConversationForQA() throws Exception {
+        return createConversationWithQACredentials();
+    }
+
+    @Override
+    public ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody>
+            chatQueryStreamingWithQACredentials(
+                    String conversationId,
+                    String prompt,
+                    Long platformConversationId,
+                    Consumer<String> completionHandler) {
+        URI uri = URI.create(effectiveApiUrl() + "/chat_query_v2");
+
+        HttpHeaders requestHeaders = createQAHeaders();
+        requestHeaders.setAccept(java.util.Collections.singletonList(MediaType.TEXT_EVENT_STREAM));
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("AppConversationID", conversationId);
+        requestBody.put("Query", prompt);
+        requestBody.put("UserID", config.getUserId());
+        requestBody.put("ResponseMode", "streaming");
+
+        org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody streamBody = outputStream -> {
+            StringBuilder completeAnswer = new StringBuilder();
+            log.debug("Sending HiAgent Q&A streaming query for conversation {}", conversationId);
+            Boolean completed = restTemplate.execute(
+                    uri,
+                    HttpMethod.POST,
+                    request -> {
+                        request.getHeaders().putAll(requestHeaders);
+                        objectMapper.writeValue(request.getBody(), requestBody);
+                    },
+                    response -> {
+                        if (response.getStatusCode() != HttpStatus.OK) {
+                            Map<String, Object> error = new HashMap<>();
+                            error.put("message", "AI 问答服务暂时不可用，请稍后重试");
+                            writePlatformSseEvent(outputStream, "error", error);
+                            return false;
+                        }
+
+                        return forwardNormalizedSse(response.getBody(), outputStream, completeAnswer);
+                    });
+
+            if (Boolean.TRUE.equals(completed)) {
+                try {
+                    if (completeAnswer.length() == 0) {
+                        Map<String, Object> error = new HashMap<>();
+                        error.put("message", "AI 问答服务未返回有效内容");
+                        writePlatformSseEvent(outputStream, "error", error);
+                        return;
+                    }
+                    if (completionHandler != null) {
+                        completionHandler.accept(completeAnswer.toString());
+                    }
+                    Map<String, Object> done = new HashMap<>();
+                    if (platformConversationId != null) {
+                        done.put("conversationId", platformConversationId);
+                    }
+                    writePlatformSseEvent(outputStream, "done", done);
+                } catch (Exception persistenceError) {
+                    log.error("Failed to persist completed AI Q&A conversation {}: {}",
+                            platformConversationId, persistenceError.getMessage(), persistenceError);
+                    Map<String, Object> error = new HashMap<>();
+                    error.put("message", "回答已生成，但保存历史对话失败");
+                    writePlatformSseEvent(outputStream, "error", error);
+                }
+            }
+        };
+
+        HttpHeaders responseHeaders = new HttpHeaders();
+        responseHeaders.setContentType(MediaType.TEXT_EVENT_STREAM);
+        responseHeaders.setCacheControl("no-cache");
+        responseHeaders.set("X-Accel-Buffering", "no");
+
+        return ResponseEntity.ok().headers(responseHeaders).body(streamBody);
+    }
+
+    private boolean forwardNormalizedSse(
+            InputStream inputStream,
+            OutputStream outputStream,
+            StringBuilder completeAnswer) throws IOException {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String eventName = null;
+            StringBuilder data = new StringBuilder();
+            Boolean terminalResult = null;
+            String line;
+
+            while ((line = reader.readLine()) != null) {
+                if (line.isEmpty()) {
+                    if (data.length() > 0 && terminalResult == null) {
+                        terminalResult = emitNormalizedEvent(
+                                eventName, data.toString(), outputStream, completeAnswer);
+                    }
+                    eventName = null;
+                    data.setLength(0);
+                    continue;
+                }
+
+                if (line.startsWith(":")) {
+                    continue;
+                }
+                if (line.startsWith("event:")) {
+                    eventName = line.substring(6).trim();
+                } else if (line.startsWith("data:")) {
+                    if (data.length() > 0) {
+                        data.append('\n');
+                    }
+                    data.append(line.substring(5).trim());
+                } else {
+                    // Some HiAgent gateways return NDJSON even when streaming was requested.
+                    if (data.length() > 0) {
+                        data.append('\n');
+                    }
+                    data.append(line.trim());
+                }
+            }
+
+            if (data.length() > 0 && terminalResult == null) {
+                terminalResult = emitNormalizedEvent(
+                        eventName, data.toString(), outputStream, completeAnswer);
+            }
+            return terminalResult == null || terminalResult;
+        }
+    }
+
+    private Boolean emitNormalizedEvent(
+            String sseEventName,
+            String data,
+            OutputStream outputStream,
+            StringBuilder completeAnswer)
+            throws IOException {
+        if ("[DONE]".equals(data)) {
+            return Boolean.TRUE;
+        }
+
+        JsonNode payload = null;
+        try {
+            payload = objectMapper.readTree(data);
+        } catch (Exception ignored) {
+            // Plain-text chunks are valid fallback data and are forwarded as deltas below.
+        }
+
+        String upstreamEvent = sseEventName;
+        if ((upstreamEvent == null || upstreamEvent.isBlank()) && payload != null) {
+            upstreamEvent = payload.path("event").asText("");
+        }
+
+        if ("message_end".equals(upstreamEvent) || "done".equals(upstreamEvent)) {
+            return Boolean.TRUE;
+        }
+        if ("error".equals(upstreamEvent)) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("message", extractFirstText(payload, "message", "error"));
+            writePlatformSseEvent(outputStream, "error", error);
+            return Boolean.FALSE;
+        }
+
+        String content = payload == null
+                ? data
+                : extractFirstText(payload, "answer", "Answer", "content", "delta");
+        if ((content == null || content.isEmpty()) && payload != null && payload.path("data").isObject()) {
+            content = extractFirstText(payload.path("data"), "answer", "Answer", "content", "delta");
+        }
+        if (content != null && !content.isEmpty()) {
+            completeAnswer.append(content);
+            Map<String, Object> delta = new HashMap<>();
+            delta.put("content", content);
+            writePlatformSseEvent(outputStream, "delta", delta);
+        }
+        return null;
+    }
+
+    private String extractFirstText(JsonNode payload, String... fieldNames) {
+        if (payload == null) {
+            return "AI 问答服务返回了无法解析的错误";
+        }
+        for (String fieldName : fieldNames) {
+            JsonNode value = payload.get(fieldName);
+            if (value != null && value.isValueNode() && !value.asText().isEmpty()) {
+                return value.asText();
+            }
+        }
+        return "";
+    }
+
+    private void writePlatformSseEvent(OutputStream outputStream, String eventName, Object data)
+            throws IOException {
+        String event = "event: " + eventName + "\n"
+                + "data: " + objectMapper.writeValueAsString(data) + "\n\n";
+        outputStream.write(event.getBytes(StandardCharsets.UTF_8));
+        outputStream.flush();
     }
 
     // ==================== AI 出题（Quiz）====================

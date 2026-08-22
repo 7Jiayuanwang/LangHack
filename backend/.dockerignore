@@ -18,7 +18,7 @@
 target/
 out/
 build/
-*.jar
+# *.jar  # 已注释：需要将预编译好的 english-learning-platform-1.0.0.jar 包含进构建上下文
 *.war
 *.ear
 

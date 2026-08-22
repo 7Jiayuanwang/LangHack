@@ -1,6 +1,7 @@
 package com.english.controller;
 
 import com.english.dto.AssignmentContent;
+import com.english.dto.ArticleFilterDTO;
 import com.english.dto.Result;
 import com.english.entity.Assignment;
 import com.english.entity.Text;
@@ -58,6 +59,15 @@ public class AssignmentController {
 
     @Autowired
     private UnitService unitService;
+
+    @Autowired
+    private TextService textService;
+
+    @GetMapping("/articles")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public Result<List<Text>> getArticleOptions(@ModelAttribute ArticleFilterDTO filter) {
+        return Result.success(textService.getArticles(filter));
+    }
 
     /**
      * 分页查询任务列表

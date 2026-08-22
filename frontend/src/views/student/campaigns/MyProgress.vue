@@ -300,7 +300,7 @@
           <el-date-picker
             v-model="selectedWeek"
             type="week"
-            format="YYYY 第 ww 周"
+            format="YYYY-MM-DD 起一周"
             placeholder="选择周"
             value-format="YYYY-MM-DD"
             :clearable="true"
@@ -309,14 +309,27 @@
             @change="onWeekChange"
           />
         </div>
+        <div v-if="availableWeeks.length" class="available-weeks">
+          <span class="available-weeks-label">有数据的周：</span>
+          <el-button
+            v-for="w in availableWeeks"
+            :key="w"
+            size="small"
+            :type="selectedWeek === w ? 'primary' : 'default'"
+            @click="selectAvailableWeek(w)"
+          >
+            {{ formatWeekLabel(w) }}
+          </el-button>
+        </div>
         <div class="ranking-content">
           <div class="my-rank-box">
             <div class="rank-badge" :class="getRankClass(ranking.myRank)">
               {{ ranking.myRank || '-' }}
             </div>
             <div class="rank-info">
-              <div class="rank-label">当前排名</div>
+              <div class="rank-label">{{ selectedWeek ? '本周排名' : '总排名' }}</div>
               <div class="rank-total">共 {{ ranking.totalParticipants || 0 }} 人参与</div>
+              <div class="rank-week" v-if="ranking.weekStart">周起始 {{ ranking.weekStart }}</div>
             </div>
           </div>
 
@@ -341,6 +354,11 @@
               </div>
             </div>
           </div>
+          <el-empty
+            v-else-if="selectedWeek"
+            :description="emptyWeekHint"
+            :image-size="80"
+          />
         </div>
       </el-card>
     </div>
@@ -388,27 +406,78 @@ const formatScore = (val) => {
 }
 const weeklyAwards = ref({})
 const expandedTask = ref(null)
+const availableWeeks = ref([])
 
-// 周选择器：默认当前周周一
-const getCurrentMonday = () => {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  const monday = new Date(d.setDate(diff))
-  return monday.toISOString().slice(0, 10)
+// 归一到周一（YYYY-MM-DD）。周选择器常回传周日，而库表 week_start 存周一
+const toMonday = (input) => {
+  let y, m, day
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}/.test(input)) {
+    ;[y, m, day] = input.slice(0, 10).split('-').map(Number)
+  } else {
+    const d = input ? new Date(input) : new Date()
+    if (Number.isNaN(d.getTime())) return null
+    y = d.getFullYear()
+    m = d.getMonth() + 1
+    day = d.getDate()
+  }
+  // 用 UTC 正午构造，避免时区把日期拨到前一天
+  const utc = new Date(Date.UTC(y, m - 1, day, 12, 0, 0))
+  const dow = utc.getUTCDay() // 0=Sun ... 1=Mon
+  const diff = dow === 0 ? -6 : 1 - dow
+  utc.setUTCDate(utc.getUTCDate() + diff)
+  const yy = utc.getUTCFullYear()
+  const mm = String(utc.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(utc.getUTCDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
 }
-const selectedWeek = ref(getCurrentMonday())
+const selectedWeek = ref(toMonday())
+
+const formatWeekLabel = (weekStart) => {
+  if (!weekStart) return ''
+  const [y, m, d] = weekStart.split('-')
+  return `${m}/${d}周`
+}
+
+const emptyWeekHint = computed(() => {
+  if (availableWeeks.value.length) {
+    return `该周（${selectedWeek.value || ''}）暂无积分，请点上方有数据的周查看`
+  }
+  return '该周暂无积分记录'
+})
+
+const selectAvailableWeek = (weekStart) => {
+  selectedWeek.value = weekStart
+  loadRanking(weekStart)
+}
 
 const onWeekChange = (val) => {
-  loadRanking(val)
+  const monday = val ? toMonday(val) : null
+  selectedWeek.value = monday
+  loadRanking(monday)
 }
 
-const loadRanking = async (weekStart) => {
+const loadRanking = async (weekStart, { autoFallback = false } = {}) => {
   try {
     const params = weekStart ? { weekStart } : {}
     const rankingRes = await getMyRanking(route.params.id, params)
     if (rankingRes.code === 200) {
       ranking.value = rankingRes.data || {}
+      if (Array.isArray(rankingRes.data?.availableWeeks)) {
+        availableWeeks.value = rankingRes.data.availableWeeks
+      }
+      // 当前周无积分时，自动跳到最近有数据的周（避免卡在空周）
+      const around = ranking.value.aroundMe || []
+      if (
+        autoFallback &&
+        weekStart &&
+        around.length === 0 &&
+        availableWeeks.value.length &&
+        !availableWeeks.value.includes(weekStart)
+      ) {
+        const latest = availableWeeks.value[0]
+        selectedWeek.value = latest
+        await loadRanking(latest)
+      }
     }
   } catch (error) {
     console.error('加载排名失败', error)
@@ -462,8 +531,8 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
-  // 加载初始排名（默认当周）
-  loadRanking(selectedWeek.value)
+  // 加载初始排名（默认当周；无数据则回退到最近有积分的周）
+  loadRanking(selectedWeek.value, { autoFallback: true })
 }
 
 const handleBack = () => {
@@ -651,13 +720,32 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .ranking-header h3 {
   margin: 0;
   font-size: 18px;
   color: #303133;
+}
+
+.available-weeks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.available-weeks-label {
+  font-size: 13px;
+  color: #909399;
+}
+
+.rank-week {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.85;
 }
 
 .overview-header {
@@ -821,6 +909,12 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.rank-week {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.85;
 }
 
 .ranking-content {

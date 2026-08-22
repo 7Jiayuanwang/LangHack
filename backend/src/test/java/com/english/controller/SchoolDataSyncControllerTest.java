@@ -175,7 +175,7 @@ class SchoolDataSyncControllerTest {
             result.put("teacherCount", 8);
             result.put("bindingCount", 600);
 
-            when(syncService.chainFetchStudentsByCollege("外国语学院", "eq", true))
+            when(syncService.chainFetchStudentsByCollege(eq("外国语学院"), eq("eq"), eq(true), any(), any()))
                     .thenReturn(result);
 
             mockMvc.perform(post("/api/admin/sync/chain/students-by-college")
@@ -193,7 +193,7 @@ class SchoolDataSyncControllerTest {
         void chainFetch_failure() throws Exception {
             when(systemConfigService.get("feature_toggle", "ops.school_data_chain_fetch", "true"))
                     .thenReturn("true");
-            when(syncService.chainFetchStudentsByCollege("外国语学院", "eq", true))
+            when(syncService.chainFetchStudentsByCollege(eq("外国语学院"), eq("eq"), eq(true), any(), any()))
                     .thenThrow(new RuntimeException("分页异常"));
 
             mockMvc.perform(post("/api/admin/sync/chain/students-by-college")
