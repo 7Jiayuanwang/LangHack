@@ -1498,7 +1498,11 @@ const goBack = () => {
     router.push('/student/assignments')
   } else if (from === 'articles') {
     // 从文章列表来的，使用路由返回以保持 keep-alive 缓存和滚动位置
-    router.push(getArticlesPath())
+    if (window.history.length > 1) {
+      router.back()
+    } else {
+      router.push(getArticlesPath())
+    }
   } else if (window.history.length > 1) {
     // 其他情况，使用默认返回
     router.go(-1)

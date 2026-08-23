@@ -80,7 +80,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
+import { ref, computed, onMounted, onUnmounted, markRaw, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
@@ -125,6 +125,7 @@ const {
   isEnabled,
   onChange,
   startAutoRefresh,
+  stopAutoRefresh,
   isWebSocketConnected
 } = useFeatureToggles()
 const ssoEnabled = ref(false)
@@ -301,10 +302,17 @@ onMounted(() => {
   // 加载功能开关配置 — 与路由守卫共享 useFeatureToggles 缓存（sessionStorage 5 min TTL）
   // 任意已登录用户走 /api/user/feature-toggles（三层合并：全局→标签→用户级）
   const authenticated = !!userStore.token
+  const syncFeatureToggleRefresh = () => {
+    if (route.path.startsWith('/article/')) {
+      stopAutoRefresh()
+    } else {
+      startAutoRefresh({ authenticated, interval: 2 * 60 * 1000 })
+    }
+  }
   loadFeatureToggles({ authenticated }).then(() => {
-    // 启动自动刷新，每2分钟检查一次
-    startAutoRefresh({ authenticated, interval: 2 * 60 * 1000 })
+    syncFeatureToggleRefresh()
   }).catch(() => {})
+  const stopRouteWatch = watch(() => route.path, syncFeatureToggleRefresh)
 
   // 监听功能开关变更，提供实时反馈
   const cleanupListener = onChange((changes) => {
@@ -337,6 +345,7 @@ onMounted(() => {
   // 组件卸载时清理监听器
   onUnmounted(() => {
     cleanupListener?.()
+    stopRouteWatch()
   })
 })
 

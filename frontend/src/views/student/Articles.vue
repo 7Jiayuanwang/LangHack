@@ -571,12 +571,16 @@ const loadFeed = async () => {
     })
     while (vi < videoItems.length) merged.push(videoItems[vi++])
 
-    allItems.value = merged
-    if (merged.length === 0) loadError.value = true
+    // 空响应不能清空当前列表，避免接口短暂异常让已读文章消失。
+    if (merged.length > 0) {
+      allItems.value = merged
+    } else if (allItems.value.length === 0) {
+      loadError.value = true
+    }
   } catch (error) {
     console.error('加载推荐内容失败:', error)
-    allItems.value = []
-    loadError.value = true
+    // 保留已有文章，失败时只显示错误状态，不删除当前列表。
+    if (allItems.value.length === 0) loadError.value = true
   } finally {
     loading.value = false
   }

@@ -180,6 +180,12 @@ const routes = [
         meta: { title: "标签管理", roles: ["ADMIN"], featureKey: "admin.tag_management" },
       },
       {
+        path: "notifications",
+        name: "AdminNotifications",
+        component: () => import("@/views/admin/NotificationManagement.vue"),
+        meta: { title: "通知管理", roles: ["ADMIN"] },
+      },
+      {
         path: "campaigns",
         name: "AdminCampaigns",
         component: () => import("@/views/admin/campaigns/CampaignList.vue"),

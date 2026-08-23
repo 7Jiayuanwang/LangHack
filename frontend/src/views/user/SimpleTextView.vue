@@ -4,7 +4,7 @@
     <div class="page-header">
       <el-breadcrumb separator="/">
         <el-breadcrumb-item>
-          <a :href="breadcrumbParent.path">{{ breadcrumbParent.label }}</a>
+          <router-link :to="breadcrumbParent.path">{{ breadcrumbParent.label }}</router-link>
         </el-breadcrumb-item>
         <el-breadcrumb-item>{{ textTitle }}</el-breadcrumb-item>
       </el-breadcrumb>
@@ -687,12 +687,16 @@ const getDifficultyText = (difficulty) => {
 const goBack = () => {
   const from = route.query.from
   if (from === 'articles') {
-    window.location.href = getArticlesPath()
+    if (window.history.length > 1) {
+      router.back()
+    } else {
+      router.push(getArticlesPath())
+    }
   } else if (window.history.length > 1) {
     router.back()
   } else {
     // 无历史记录时，跳转到公开文章页
-    window.location.href = getArticlesPath()
+    router.push(getArticlesPath())
   }
 }
 

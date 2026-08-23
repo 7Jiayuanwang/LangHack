@@ -1,35 +1,23 @@
-<template>
+﻿<template>
   <div id="app">
     <router-view v-slot="{ Component }">
       <keep-alive :include="cachedViews">
         <component :is="Component" />
       </keep-alive>
     </router-view>
+    <NotificationPopup />
   </div>
 </template>
 
 <script setup>
-import { useRouter, useRoute } from 'vue-router'
-import { onErrorCaptured, onMounted, ref, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { onErrorCaptured, onMounted, ref } from 'vue'
+import NotificationPopup from '@/components/NotificationPopup.vue'
 
 const router = useRouter()
-const route = useRoute()
-
-// 缓存文章列表页——从文章详情返回时保持滚动位置
 const cachedViews = ref(['ArticlesHost'])
 
-// 当导航离开文章详情页到非文章页面时，移除缓存
-watch(() => route.name, (newName, oldName) => {
-  // 从文章列表离开到非文章详情的路由时，清除缓存（如去登录、管理页面等）
-  if (oldName === 'Articles' && newName !== 'ArticleDetail') {
-    cachedViews.value = []
-    nextTick(() => { cachedViews.value = ['ArticlesHost'] })
-  }
-})
-
-// 应用启动时触发打卡类成就检查
 onMounted(() => {
-  // 延迟执行，确保应用完全初始化
   setTimeout(() => {
     if (typeof window !== 'undefined' && window.checkAchievements) {
       window.checkAchievements()
@@ -37,89 +25,67 @@ onMounted(() => {
   }, 2000)
 })
 
-// 全局错误捕获 - 仅记录日志，不向用户弹出通用提示
-// 各业务组件应自行处理错误并展示合适的反馈
 onErrorCaptured((error, instance, info) => {
-  console.error('捕获到组件错误:', {
-    message: error.message,
-    stack: error.stack,
-    componentInfo: info,
-    componentName: instance?.$options?.name || '未知组件'
-  })
-  // 返回 false 阻止错误继续传播，避免白屏
+  console.error('Captured component error', { message: error.message, stack: error.stack, componentInfo: info, componentName: instance?.$options?.name || 'unknown' })
   return false
 })
 
-// 路由错误处理
 router.onError((error) => {
-  console.error('路由错误:', error)
-
-  // 重复导航，忽略
+  console.error('Router error:', error)
   if (error.name === 'NavigationDuplicated') return
-
-  // Vite 部署后旧 chunk / CSS 资源不存在，自动刷新加载新资源
-  // 涵盖：Failed to fetch dynamically imported module / Unable to preload CSS
-  if (
-    error.message?.includes('Failed to fetch dynamically imported module') ||
-    error.message?.includes('Importing a module script failed') ||
-    error.message?.includes('Unable to preload CSS') ||
-    error.message?.includes('dynamically imported module')
-  ) {
-    console.warn('检测到资源更新，正在刷新页面...')
+  if (error.message?.includes('Failed to fetch dynamically imported module') || error.message?.includes('Importing a module script failed') || error.message?.includes('Unable to preload CSS') || error.message?.includes('dynamically imported module')) {
     window.location.reload()
   }
-  // 其他路由错误仅记录日志，不弹出提示（避免移动端被错误弹窗阻塞）
-})
-</script>
+})</script>
 
 <style>
-/* 深邃蓝绿风格高级配色 - 现代商务 */
+/* 娣遍們钃濈豢椋庢牸楂樼骇閰嶈壊 - 鐜颁唬鍟嗗姟 */
 :root {
-  /* 主品牌色 - 深邃蓝绿 */
-  --primary-color: #0066CC;       /* 深蓝 */
-  --primary-light: #0088EE;       /* 浅蓝 */
-  --primary-dark: #0055A5;        /* 深海蓝 */
+  /* 涓诲搧鐗岃壊 - 娣遍們钃濈豢 */
+  --primary-color: #0066CC;       /* 娣辫摑 */
+  --primary-light: #0088EE;       /* 娴呰摑 */
+  --primary-dark: #0055A5;        /* 娣辨捣钃?*/
   --primary-gradient: linear-gradient(135deg, #0066CC 0%, #00A8CC 50%, #00C4A7 100%);
 
-  /* 现代辅助色 */
-  --accent-color: #00A8CC;        /* 青蓝色 */
-  --secondary-color: #00C4A7;      /* 青绿色 */
-  --vibrant-teal: #00E5CC;         /* 鲜青绿 */
-  --soft-blue: #4A90E2;           /* 柔和蓝 */
+  /* 鐜颁唬杈呭姪鑹?*/
+  --accent-color: #00A8CC;        /* 闈掕摑鑹?*/
+  --secondary-color: #00C4A7;      /* 闈掔豢鑹?*/
+  --vibrant-teal: #00E5CC;         /* 椴滈潚缁?*/
+  --soft-blue: #4A90E2;           /* 鏌斿拰钃?*/
 
-  /* 现代功能色 */
-  --success-color: #00C896;       /* 成功绿 */
-  --success-dark: #00A078;        /* 深成功绿 */
-  --warning-color: #FFB347;       /* 警告金 */
-  --warning-dark: #E6A23C;        /* 深警告金 */
-  --error-color: #FF5757;         /* 错误红 */
-  --error-dark: #E64242;          /* 深错误红 */
-  --info-color: #4A90E2;          /* 信息蓝 */
-  --info-dark: #3A7AD2;           /* 深信息蓝 */
+  /* 鐜颁唬鍔熻兘鑹?*/
+  --success-color: #00C896;       /* 鎴愬姛缁?*/
+  --success-dark: #00A078;        /* 娣辨垚鍔熺豢 */
+  --warning-color: #FFB347;       /* 璀﹀憡閲?*/
+  --warning-dark: #E6A23C;        /* 娣辫鍛婇噾 */
+  --error-color: #FF5757;         /* 閿欒绾?*/
+  --error-dark: #E64242;          /* 娣遍敊璇孩 */
+  --info-color: #4A90E2;          /* 淇℃伅钃?*/
+  --info-dark: #3A7AD2;           /* 娣变俊鎭摑 */
 
-  /* 深色背景色系 */
-  --bg-primary: #FFFFFF;          /* 纯白 */
-  --bg-secondary: #F7FAFC;        /* 极浅蓝灰 */
-  --bg-tertiary: #F1F5F9;         /* 浅蓝灰 */
-  --bg-overlay: rgba(0, 10, 20, 0.45); /* 深色遮罩 */
-  --bg-modal: rgba(255, 255, 255, 0.98); /* 模态背景 */
+  /* 娣辫壊鑳屾櫙鑹茬郴 */
+  --bg-primary: #FFFFFF;          /* 绾櫧 */
+  --bg-secondary: #F7FAFC;        /* 鏋佹祬钃濈伆 */
+  --bg-tertiary: #F1F5F9;         /* 娴呰摑鐏?*/
+  --bg-overlay: rgba(0, 10, 20, 0.45); /* 娣辫壊閬僵 */
+  --bg-modal: rgba(255, 255, 255, 0.98); /* 妯℃€佽儗鏅?*/
 
-  /* 深色文字色系 */
-  --text-primary: #0F172A;        /* 深蓝灰主文字 */
-  --text-secondary: #475569;      /* 蓝灰次文字 */
-  --text-tertiary: #64748B;       /* 蓝灰三级文字 */
-  --text-quaternary: #94A3B8;     /* 浅蓝灰四级文字 */
-  --text-placeholder: #CBD5E1;    /* 浅蓝灰占位符 */
-  --text-on-primary: #FFFFFF;     /* 主色上文字 */
-  --text-accent: var(--primary-color); /* 强调文字 */
+  /* 娣辫壊鏂囧瓧鑹茬郴 */
+  --text-primary: #0F172A;        /* 娣辫摑鐏颁富鏂囧瓧 */
+  --text-secondary: #475569;      /* 钃濈伆娆℃枃瀛?*/
+  --text-tertiary: #64748B;       /* 钃濈伆涓夌骇鏂囧瓧 */
+  --text-quaternary: #94A3B8;     /* 娴呰摑鐏板洓绾ф枃瀛?*/
+  --text-placeholder: #CBD5E1;    /* 娴呰摑鐏板崰浣嶇 */
+  --text-on-primary: #FFFFFF;     /* 涓昏壊涓婃枃瀛?*/
+  --text-accent: var(--primary-color); /* 寮鸿皟鏂囧瓧 */
 
-  /* 深色边框系统 */
-  --border-color: #E2E8F0;        /* 蓝灰标准边框 */
-  --border-light: #F1F5F9;        /* 蓝灰浅边框 */
-  --border-dark: #CBD5E1;         /* 蓝灰深边框 */
-  --separator-color: #F8FAFC;     /* 浅蓝灰分割线 */
+  /* 娣辫壊杈规绯荤粺 */
+  --border-color: #E2E8F0;        /* 钃濈伆鏍囧噯杈规 */
+  --border-light: #F1F5F9;        /* 钃濈伆娴呰竟妗?*/
+  --border-dark: #CBD5E1;         /* 钃濈伆娣辫竟妗?*/
+  --separator-color: #F8FAFC;     /* 娴呰摑鐏板垎鍓茬嚎 */
 
-  /* 深色阴影系统 - 现代商务 */
+  /* 娣辫壊闃村奖绯荤粺 - 鐜颁唬鍟嗗姟 */
   --shadow-sm: 0 1px 2px 0 rgba(0, 10, 20, 0.06);
   --shadow-md: 0 4px 6px -1px rgba(0, 10, 20, 0.12), 0 2px 4px -1px rgba(0, 10, 20, 0.08);
   --shadow-lg: 0 10px 15px -3px rgba(0, 10, 20, 0.15), 0 4px 6px -2px rgba(0, 10, 20, 0.10);
@@ -127,22 +93,22 @@ router.onError((error) => {
   --shadow-brand: 0 4px 20px rgba(0, 102, 204, 0.25);
   --shadow-nav: 0 -2px 10px rgba(0, 10, 20, 0.08);
 
-  /* 深色渐变系统 */
+  /* 娣辫壊娓愬彉绯荤粺 */
   --gradient-brand: linear-gradient(135deg, #0066CC 0%, #00A8CC 100%);
   --gradient-hero: linear-gradient(135deg, #0066CC 0%, #00A8CC 50%, #00C4A7 100%);
   --gradient-subtle: linear-gradient(180deg, #FFFFFF 0%, #F7FAFC 100%);
   --gradient-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 252, 0.95) 100%);
 
-  /* 特殊效果 */
+  /* 鐗规畩鏁堟灉 */
   --glass-bg: rgba(255, 255, 255, 0.8);
   --glass-border: rgba(255, 255, 255, 0.18);
 
-  /* 兼容变量 - Admin/Teacher Layout 引用 */
-  --surface-color: #FFFFFF;                                               /* 等价 --bg-primary */
-  --border-medium: #CBD5E1;                                               /* 等价 --border-dark */
-  --shadow-light: 0 1px 3px 0 rgba(0, 10, 20, 0.08);                    /* 轻阴影 */
-  --gradient-accent: linear-gradient(135deg, #0066CC 0%, #00A8CC 100%); /* Admin 标题渐变 */
-  --gradient-secondary: linear-gradient(135deg, #00A8CC 0%, #00C4A7 100%); /* Teacher 标题渐变 */
+  /* 鍏煎鍙橀噺 - Admin/Teacher Layout 寮曠敤 */
+  --surface-color: #FFFFFF;                                               /* 绛変环 --bg-primary */
+  --border-medium: #CBD5E1;                                               /* 绛変环 --border-dark */
+  --shadow-light: 0 1px 3px 0 rgba(0, 10, 20, 0.08);                    /* 杞婚槾褰?*/
+  --gradient-accent: linear-gradient(135deg, #0066CC 0%, #00A8CC 100%); /* Admin 鏍囬娓愬彉 */
+  --gradient-secondary: linear-gradient(135deg, #00A8CC 0%, #00C4A7 100%); /* Teacher 鏍囬娓愬彉 */
 }
 
 * {
@@ -165,12 +131,11 @@ html, body {
   height: 100vh;
   height: 100dvh;
   width: 100vw;
-  /* 不设 overflow:hidden，避免阻断公开页（/articles 等）的原生滚动
-     各布局组件自行管理内部滚动区域 */
+  /* 涓嶈 overflow:hidden锛岄伩鍏嶉樆鏂叕寮€椤碉紙/articles 绛夛級鐨勫師鐢熸粴鍔?     鍚勫竷灞€缁勪欢鑷绠＄悊鍐呴儴婊氬姩鍖哄煙 */
   background: var(--bg-secondary);
 }
 
-/* 滚动条 */
+/* 婊氬姩鏉?*/
 ::-webkit-scrollbar {
   width: 4px;
 }
@@ -184,7 +149,7 @@ html, body {
   border-radius: 2px;
 }
 
-/* 过渡动画 */
+/* 杩囨浮鍔ㄧ敾 */
 .fade-enter-active, .fade-leave-active {
   transition: opacity 0.3s ease;
 }
@@ -207,10 +172,7 @@ html, body {
   opacity: 0;
 }
 
-/* student/Layout.vue 的 .trend-header 在文章页设置 pageTitle='' 时不需要显示，
-   但其他 student 页面仍需要 header。
-   改为通过 student Layout 内部的 scoped 样式控制，
-   此全局规则改为只隐藏顶层 #app 下不属于任何 Layout 的裸 .trend-header（实际不存在）。
-   注意：student/Layout.vue 的 .trend-header 受 scoped 作用域保护不受此影响，
-   此规则已无实际作用，保留仅用于兼容旧遗留标记。 */
+/* student/Layout.vue 鐨?.trend-header 鍦ㄦ枃绔犻〉璁剧疆 pageTitle='' 鏃朵笉闇€瑕佹樉绀猴紝
+   浣嗗叾浠?student 椤甸潰浠嶉渶瑕?header銆?   鏀逛负閫氳繃 student Layout 鍐呴儴鐨?scoped 鏍峰紡鎺у埗锛?   姝ゅ叏灞€瑙勫垯鏀逛负鍙殣钘忛《灞?#app 涓嬩笉灞炰簬浠讳綍 Layout 鐨勮８ .trend-header锛堝疄闄呬笉瀛樺湪锛夈€?   娉ㄦ剰锛歴tudent/Layout.vue 鐨?.trend-header 鍙?scoped 浣滅敤鍩熶繚鎶や笉鍙楁褰卞搷锛?   姝よ鍒欏凡鏃犲疄闄呬綔鐢紝淇濈暀浠呯敤浜庡吋瀹规棫閬楃暀鏍囪銆?*/
 </style>
+
