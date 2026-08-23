@@ -100,6 +100,28 @@
         </el-select>
       </el-form-item>
 
+      <!-- 课内/课外分类 -->
+      <el-form-item label="文章分类" prop="articleType">
+        <el-select v-model="formData.articleType" placeholder="请选择分类">
+          <el-option label="课外读物" value="OUTER" />
+          <el-option label="课内教材课文" value="INNER" />
+        </el-select>
+      </el-form-item>
+
+      <!-- 册号（仅课内显示） -->
+      <el-form-item v-if="formData.articleType === 'INNER'" label="册号" prop="bookVolume">
+        <el-select v-model="formData.bookVolume" placeholder="请选择册号">
+          <el-option v-for="v in bookVolumes" :key="v" :label="v" :value="v" />
+        </el-select>
+      </el-form-item>
+
+      <!-- 单元（仅课内显示） -->
+      <el-form-item v-if="formData.articleType === 'INNER'" label="单元" prop="unitNum">
+        <el-select v-model="formData.unitNum" placeholder="请选择单元">
+          <el-option v-for="n in unitNumbers" :key="n" :label="'Unit ' + n" :value="n" />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="内容格式" prop="contentType">
         <el-radio-group v-model="formData.contentType">
           <el-radio value="TEXT">纯文本</el-radio>
@@ -241,8 +263,14 @@ const formData = reactive({
   coverUrl: '',
   isPublic: 1,
   courseId: null,
-  unitId: props.unitId
+  unitId: props.unitId,
+  articleType: 'OUTER',
+  bookVolume: '',
+  unitNum: null
 })
+
+const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '综合教程4']
+const unitNumbers = [1, 2, 3, 4, 5, 6]
 
 const rules = {
   title: [

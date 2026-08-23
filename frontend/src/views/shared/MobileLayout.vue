@@ -201,6 +201,7 @@ const NAV_ITEMS = {
     { path: '/teacher/dashboard',        label: '首页', icon: DataBoard, badge: null },
     { path: '/teacher/classes',          label: '班级', icon: School,    badge: null },
     { path: '/teacher/assignments',      label: '任务', icon: Edit,      badge: null },
+    { path: '/teacher/texts',            label: '课文', icon: Reading,   badge: null },
     { path: '/teacher/my-courses',       label: '授课', icon: Notebook,  badge: null },
     { path: '/teacher/word-progress',    label: '单词进度', icon: DataLine, badge: null },
     { path: '/teacher/courses',          label: '课程', icon: Reading,   badge: null },

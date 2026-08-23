@@ -706,7 +706,7 @@ public class AdminController {
      * 获取课文列表
      */
     @GetMapping("/texts")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<Map<String, Object>> getTexts(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -714,7 +714,10 @@ public class AdminController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String tag,
-            @RequestParam(required = false) Integer featured) {
+            @RequestParam(required = false) Integer featured,
+            @RequestParam(required = false) String articleType,
+            @RequestParam(required = false) String bookVolume,
+            @RequestParam(required = false) Integer unitNum) {
         try {
             // 分页参数边界校验
             page = Math.max(1, page);
@@ -733,6 +736,9 @@ public class AdminController {
             if (difficulty != null) params.put("difficulty", difficulty);
             if (tag != null) params.put("tag", tag);
             if (featured != null) params.put("featured", featured);
+            if (articleType != null) params.put("articleType", articleType);
+            if (bookVolume != null) params.put("bookVolume", bookVolume);
+            if (unitNum != null) params.put("unitNum", unitNum);
 
             Map<String, Object> result = textService.getTextsByPage(params);
             return Result.success(result);
@@ -748,7 +754,7 @@ public class AdminController {
      * 创建课文
      */
     @PostMapping("/texts")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     @org.springframework.transaction.annotation.Transactional
     public Result<Map<String, Object>> createText(@RequestBody Map<String, Object> textData) {
         try {
@@ -901,7 +907,7 @@ public class AdminController {
         }
     }
     @PutMapping("/texts/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> updateText(@PathVariable Long id, @RequestBody Map<String, Object> textData) {
         try {
             Text text = new Text();
@@ -967,7 +973,7 @@ public class AdminController {
      * version 取值：CET4、CET6、ACADEMIC、PARALLEL、ALL（缺省 ALL，大小写不敏感）。
      */
     @PostMapping("/texts/{id}/regenerate-versions")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> regenerateTextVersions(@PathVariable Long id,
                                                  @RequestParam(required = false, defaultValue = "ALL") String version) {
         String adminUser = "unknown";
@@ -1009,7 +1015,7 @@ public class AdminController {
      * 切换课文推荐状态
      */
     @PutMapping("/texts/{id}/featured")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> toggleFeatured(@PathVariable Long id,
                                          @RequestParam(required = false) Integer featured,
                                          @RequestParam(required = false, defaultValue = "false") Boolean forcePublic) {
@@ -1049,7 +1055,7 @@ public class AdminController {
      * 设置课文推荐优先级
      */
     @PutMapping("/texts/{id}/featured-priority")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> setFeaturedPriority(@PathVariable Long id,
                                               @RequestParam Integer priority) {
         try {
@@ -1071,7 +1077,7 @@ public class AdminController {
      * 删除课文
      */
     @DeleteMapping("/texts/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> deleteText(@PathVariable Long id) {
         try {
             textService.deleteText(id);
@@ -1126,7 +1132,7 @@ public class AdminController {
      * 将课文添加到单元
      */
     @PostMapping("/units/{unitId}/texts/{textId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> addTextToUnit(@PathVariable Long unitId, @PathVariable Long textId) {
         try {
             // 检查课文是否存在
@@ -1157,7 +1163,7 @@ public class AdminController {
      * 获取课文详情（包含习题）
      */
     @GetMapping("/texts/{textId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<Map<String, Object>> getTextDetailWithExercises(@PathVariable Long textId) {
         try {
             // 获取课文信息

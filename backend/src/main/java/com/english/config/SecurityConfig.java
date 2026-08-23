@@ -157,6 +157,9 @@ public class SecurityConfig {
                 .antMatchers("/api/admin/sync/**").hasAnyRole("ADMIN", "OPS")
                 // 数据指标：OPS 也可访问
                 .antMatchers("/api/admin/metrics/**").hasAnyRole("ADMIN", "OPS")
+                // 课文管理：教师也可访问（教师端上传课文功能）
+                .antMatchers("/api/admin/texts/**").hasAnyRole("ADMIN", "TEACHER")
+                .antMatchers("/api/admin/texts").hasAnyRole("ADMIN", "TEACHER")
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
                 // 运维权限 — backup download 由 DownloadTokenFilter 处理（支持临时 token 直链下载）
                 .antMatchers(HttpMethod.GET, "/api/ops/backup/*/download").permitAll()

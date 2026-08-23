@@ -43,6 +43,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         Long unitId = params.get("unitId") != null ? Long.valueOf(params.get("unitId").toString()) : null;
         String tag = (String) params.get("tag");
         Integer featured = params.get("featured") != null ? ((Number) params.get("featured")).intValue() : null;
+        String articleType = params.get("articleType") != null ? params.get("articleType").toString() : null;
+        String bookVolume = params.get("bookVolume") != null ? params.get("bookVolume").toString() : null;
+        Integer unitNum = params.get("unitNum") != null ? ((Number) params.get("unitNum")).intValue() : null;
 
         Page<Text> pageParam = new Page<>(page, size);
         QueryWrapper<Text> queryWrapper = new QueryWrapper<>();
@@ -71,6 +74,17 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
 
         if (featured != null) {
             queryWrapper.eq("is_featured", featured);
+        }
+
+        // 课内/课外分类筛选
+        if (articleType != null && !articleType.trim().isEmpty()) {
+            queryWrapper.eq("article_type", articleType);
+        }
+        if (bookVolume != null && !bookVolume.trim().isEmpty()) {
+            queryWrapper.eq("book_volume", bookVolume);
+        }
+        if (unitNum != null) {
+            queryWrapper.eq("unit_num", unitNum);
         }
 
         // 如果指定了unitId，则按unitId过滤；否则显示所有课文（包括未分配的）
