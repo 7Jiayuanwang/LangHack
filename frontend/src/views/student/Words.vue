@@ -7,6 +7,9 @@
       <el-tab-pane label="生词本" name="list">
         <Vocabulary v-if="activeTab === 'list'" />
       </el-tab-pane>
+      <el-tab-pane label="联想" name="association">
+        <WordAssociation v-if="activeTab === 'association'" />
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -16,11 +19,12 @@ import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WordRecite from '@/features/VocabularyFeatures/WordRecite.vue'
 import Vocabulary from '@/views/student/Vocabulary.vue'
+import WordAssociation from '@/views/student/WordAssociation.vue'
 
 const route = useRoute()
 const router = useRouter()
 
-const validTabs = ['recite', 'list']
+const validTabs = ['recite', 'list', 'association']
 const initialTab = validTabs.includes(route.query.tab) ? route.query.tab : 'recite'
 const activeTab = ref(initialTab)
 

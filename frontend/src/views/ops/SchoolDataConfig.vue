@@ -10,6 +10,80 @@
       </el-button>
     </div>
 
+    <!-- 一键同步外语院（独立入口，与下方通用配置分开） -->
+    <div class="fl-sync-card">
+      <div class="fl-sync-main">
+        <div class="fl-sync-info">
+          <div class="fl-sync-title">
+            <el-icon><UserFilled /></el-icon>
+            <span>一键接入英语教师</span>
+          </div>
+          <p class="fl-sync-desc">
+            按指定学年学期，从「教师授课」数据中筛选课程名称含关键词（默认「英语」）的教学班，
+            自动建立任课教师账号（SSO 登录）并逐个绑定其班级与选课学生。
+          </p>
+          <div class="fl-sync-term">
+            <span class="fl-sync-term-label">授课时间：</span>
+            <el-select v-model="flTermForm.academicYear" size="small" style="width: 130px" placeholder="学年">
+              <el-option
+                v-for="y in academicYearOptions"
+                :key="y"
+                :label="`${y}-${Number(y) + 1} 学年`"
+                :value="y"
+              />
+            </el-select>
+            <el-select v-model="flTermForm.semester" size="small" style="width: 110px" placeholder="学期">
+              <el-option label="秋季（上）" value="秋" />
+              <el-option label="春季（下）" value="春" />
+            </el-select>
+            <el-input v-model="flTermForm.courseKeyword" size="small" style="width: 140px" placeholder="课程名关键词" />
+            <span class="fl-sync-term-hint">仅拉取该学期、课程名含关键词的授课数据</span>
+          </div>
+        </div>
+        <div class="fl-sync-btns">
+          <el-button
+            type="primary"
+            size="large"
+            class="fl-sync-btn"
+            :loading="flOnboarding"
+            :disabled="!canRunQuickActions"
+            @click="handleOnboardEnglishTeachers"
+          >
+            <el-icon><UserFilled /></el-icon> 一键接入英语教师
+          </el-button>
+        </div>
+      </div>
+      <el-alert
+        v-if="!canRunQuickActions"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="fl-sync-alert"
+        title="请先在下方完成学校数据源配置并测试连接成功后，再执行一键接入。"
+      />
+
+      <div v-if="flOnboardResult" class="quick-result-card fl-sync-result">
+        <div class="quick-result-title">接入结果</div>
+        <div class="quick-result-grid">
+          <div><span>学年学期：</span>{{ flOnboardResult.academicYear }} {{ flOnboardResult.semester }}</div>
+          <div><span>课程关键词：</span>{{ flOnboardResult.courseKeyword }}</div>
+          <div><span>上游拉取行数：</span>{{ flOnboardResult.upstreamRowCount || 0 }}</div>
+          <div><span>命中教学班：</span>{{ flOnboardResult.matchedClassCount || 0 }}</div>
+          <div><span>教师数：</span>{{ flOnboardResult.teacherCount || 0 }}</div>
+          <div><span>新建账号：</span>{{ flOnboardResult.teacherCreated || 0 }}</div>
+          <div><span>已存在跳过：</span>{{ flOnboardResult.teacherExisted || 0 }}</div>
+          <div><span>建号失败：</span>{{ flOnboardResult.teacherFailed || 0 }}</div>
+          <div><span>已同步教师：</span>{{ flOnboardResult.teacherSynced || 0 }}</div>
+          <div><span>创建班级：</span>{{ flOnboardResult.totalClassesCreated || 0 }}</div>
+          <div><span>绑定学生：</span>{{ flOnboardResult.totalStudentsAdded || 0 }}</div>
+        </div>
+        <div v-if="flOnboardResult.message" class="quick-result-issues warnings">
+          <div class="quick-result-issue-item">{{ flOnboardResult.message }}</div>
+        </div>
+        <div v-if="flOnboardResult.errorMessage" class="quick-result-error">{{ flOnboardResult.errorMessage }}</div>
+      </div>
+    </div>
+
     <!-- 配置状态警告横幅 -->
     <div class="banners-area">
       <el-alert
@@ -383,7 +457,7 @@ import { ElMessage } from 'element-plus'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   Refresh, Loading, QuestionFilled, InfoFilled,
-  Connection, Check, CircleCheckFilled, CircleCloseFilled
+  Connection, Check, CircleCheckFilled, CircleCloseFilled, UserFilled
 } from '@element-plus/icons-vue'
 import {
   getSchoolDataConfig,
@@ -394,7 +468,8 @@ import {
   incrementalSyncSchoolDataFiltered,
   fullSyncAllSchoolData,
   incrementalSyncAllSchoolData,
-  chainFetchStudentsByCollege
+  chainFetchStudentsByCollege,
+  onboardEnglishTeachers
 } from '@/api/schoolData'
 
 const QUICK_DATA_SOURCES = [
@@ -408,6 +483,18 @@ const QUICK_DATA_SOURCES = [
   { label: '学生课表', value: 'student_schedule' },
   { label: '学生基本信息', value: 'student_basic_info' }
 ]
+
+// 依据当前日期推算学年学期：单起始年份 + 秋(上)/春(下)。
+// 8月~次年1月 → 秋季学期，学年=当年；2月~7月 → 春季学期，学年=上一年。
+function resolveCurrentTerm() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  if (month >= 8 || month === 1) {
+    return { academicYear: String(month === 1 ? year - 1 : year), semester: '秋' }
+  }
+  return { academicYear: String(year - 1), semester: '春' }
+}
 
 const loading = ref(false)
 const router = useRouter()
@@ -480,6 +567,28 @@ const chainFetchForm = reactive({
 })
 const quickResult = ref(null)
 const chainResult = ref(null)
+
+// 一键同步外语院（独立入口，独立状态，不复用下方通用卡片）
+// 一键接入英语教师（独立入口，独立状态）
+const flOnboarding = ref(false)
+const flOnboardResult = ref(null)
+
+// 授课时间选择（学年/学期/课程关键词，默认当前学期 + 英语）
+const currentTerm = resolveCurrentTerm()
+const flTermForm = reactive({
+  academicYear: currentTerm.academicYear,
+  semester: currentTerm.semester === '' ? '秋' : currentTerm.semester,
+  courseKeyword: '英语'
+})
+// 生成最近若干个学年选项（单起始年份）
+const academicYearOptions = computed(() => {
+  const base = Number(currentTerm.academicYear) || new Date().getFullYear()
+  const years = []
+  for (let y = base + 1; y >= base - 5; y--) {
+    years.push(String(y))
+  }
+  return years
+})
 const { isEnabled: isFeatureEnabled, load: loadFeatureToggles } = useFeatureToggles()
 const chainFetchEnabled = computed(() => isFeatureEnabled('ops.school_data_chain_fetch'))
 
@@ -822,6 +931,56 @@ const handleQuickChainFetch = async () => {
   }
 }
 
+const handleOnboardEnglishTeachers = async () => {
+  if (!canRunQuickActions.value) {
+    ElMessage.warning('请先完成配置并测试连接')
+    return
+  }
+  if (!flTermForm.academicYear || !flTermForm.semester) {
+    ElMessage.warning('请选择学年和学期')
+    return
+  }
+  flOnboarding.value = true
+  flOnboardResult.value = null
+
+  let loadingInstance = ElMessage({
+    message: `正在接入 ${flTermForm.academicYear} ${flTermForm.semester} 学期的「${flTermForm.courseKeyword}」教师，请稍候...`,
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
+
+  try {
+    const res = await onboardEnglishTeachers({
+      academicYear: flTermForm.academicYear,
+      semester: flTermForm.semester,
+      courseKeyword: flTermForm.courseKeyword || '英语'
+    })
+    if (res?.code === 200 && res.data) {
+      flOnboardResult.value = res.data
+      const tc = res.data.teacherCount || 0
+      if (tc === 0) {
+        ElMessage.warning(res.data.message || '未匹配到符合条件的教师授课记录')
+      } else {
+        ElMessage.success(
+          `接入完成：教师 ${tc} 名（新建 ${res.data.teacherCreated || 0}），` +
+          `班级 ${res.data.totalClassesCreated || 0}，绑定学生 ${res.data.totalStudentsAdded || 0}`
+        )
+      }
+    } else {
+      throw new Error(res?.message || '一键接入英语教师失败')
+    }
+  } catch (error) {
+    flOnboardResult.value = { errorMessage: error.message || '一键接入英语教师失败' }
+    ElMessage.error(flOnboardResult.value.errorMessage)
+  } finally {
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
+    flOnboarding.value = false
+  }
+}
+
 const chainStatusText = (status) => CHAIN_STATUS_LABELS[status] || '未知'
 
 const chainErrors = (result) => (Array.isArray(result?.errors) ? result.errors : [])
@@ -931,6 +1090,103 @@ onMounted(async () => {
 
 .banners-area {
   margin-bottom: 24px;
+}
+
+.fl-sync-card {
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  border: 1px solid #c7d2fe;
+  border-radius: 20px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 25px rgba(79, 70, 229, 0.08);
+}
+
+.fl-sync-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.fl-sync-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #3730a3;
+}
+
+.fl-sync-desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #4338ca;
+  opacity: 0.85;
+  line-height: 1.6;
+  max-width: 640px;
+}
+
+.fl-sync-term {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.fl-sync-term-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #3730a3;
+}
+
+.fl-sync-term-hint {
+  font-size: 12px;
+  color: #6366f1;
+  opacity: 0.8;
+}
+
+.fl-sync-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fl-sync-btn {
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 0 28px;
+}
+
+.fl-sync-alert {
+  margin-top: 16px;
+  border-radius: 12px;
+}
+
+.fl-sync-result {
+  margin-top: 16px;
+  background: #fff;
+  padding: 16px 18px;
+}
+
+@media (max-width: 768px) {
+  .fl-sync-card {
+    padding: 16px;
+  }
+
+  .fl-sync-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fl-sync-btns {
+    flex-direction: column;
+  }
+
+  .fl-sync-btn {
+    width: 100%;
+  }
 }
 
 .premium-alert {

@@ -4,7 +4,9 @@
       <template #header>
         <div class="card-header">
           <span>班级管理</span>
-<!--          <el-button type="primary" @click="showCreateDialog">创建班级</el-button>-->
+          <div>
+            <el-button type="success" :loading="syncing" @click="syncSchoolClasses">同步学校班级</el-button>
+          </div>
         </div>
       </template>
 
@@ -12,9 +14,9 @@
       <div class="table-wrapper">
       <el-table :data="classes" stripe>
         <el-table-column prop="name" label="班级名称" min-width="150" />
-        <el-table-column label="所属课程" min-width="150">
+        <el-table-column label="课序号" min-width="150">
           <template #default="scope">
-            {{ scope.row.course?.name || '-' }}
+            {{ scope.row.courseSequence || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="任课教师" min-width="120">
@@ -211,6 +213,7 @@ const dialogVisible = ref(false)
 const studentsDialogVisible = ref(false)
 const isEdit = ref(false)
 const saving = ref(false)
+const syncing = ref(false)
 const currentClassStudents = ref([])
 const classFormRef = ref()
 const studentCountCache = reactive(new Map())
@@ -277,6 +280,50 @@ const loadClasses = async () => {
   } catch (error) {
     console.error('加载班级列表失败:', error)
     ElMessage.error('加载班级列表失败')
+  }
+}
+
+const syncSchoolClasses = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '将从学校数据同步教学班到平台班级，已存在的班级不会重复创建。确认同步？',
+      '同步学校班级',
+      { confirmButtonText: '确认同步', cancelButtonText: '取消', type: 'info' }
+    )
+  } catch {
+    return
+  }
+
+  syncing.value = true
+  try {
+    const headers = { 'Content-Type': 'application/json' }
+    const authHeader = getAuthHeader()
+    if (authHeader) headers['Authorization'] = authHeader
+
+    const response = await fetch('/api/teacher/sync-classes', {
+      method: 'POST',
+      headers
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      if (data.code === 200) {
+        const r = data.data
+        ElMessage.success(
+          `同步完成：新建班级 ${r.classesCreated} 个，添加学生 ${r.studentsAdded} 人`
+        )
+        await loadClasses()
+      } else {
+        ElMessage.error(data.message || '同步失败')
+      }
+    } else {
+      ElMessage.error('同步请求失败')
+    }
+  } catch (error) {
+    console.error('同步学校班级失败:', error)
+    ElMessage.error('同步失败，请稍后重试')
+  } finally {
+    syncing.value = false
   }
 }
 

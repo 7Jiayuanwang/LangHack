@@ -158,33 +158,8 @@ public class PublicTextController {
                         .collect(Collectors.toList());
             }
 
-            Long userId = getCurrentUserId();
-
-            if (userId != null) {
-                // Defensive check: mapper call may fail due to user deletion or database issues
-                List<Long> readTextIds;
-                try {
-                    readTextIds = userTextReadMapper.selectReadTextIds(userId);
-                    if (readTextIds == null) {
-                        readTextIds = new ArrayList<>();
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to retrieve user read texts, userId={}", userId, e);
-                    readTextIds = new ArrayList<>();
-                }
-
-                final List<Long> finalReadTextIds = readTextIds;
-                List<Text> unreadTexts = featuredTexts.stream()
-                        .filter(t -> !finalReadTextIds.contains(t.getId()))
-                        .collect(Collectors.toList());
-
-                if (unreadTexts.size() < 6 && !featuredTexts.isEmpty()) {
-                    userTextReadMapper.deleteByUserId(userId);
-                    unreadTexts = new ArrayList<>(featuredTexts);
-                }
-
-                featuredTexts = unreadTexts;
-            }
+            // No longer filter out read articles – keep all featured texts visible
+            // so that returning from an article doesn't remove it from the list.
 
             // 有优先级(>0)的文章按优先级降序排在前面，priority=0 的文章随机填充剩余位置
             List<Text> prioritized = featuredTexts.stream()

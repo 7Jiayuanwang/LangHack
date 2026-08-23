@@ -26,6 +26,9 @@ public class Class {
     @TableLogic(value = "0", delval = "1")
     private Integer deleted;
 
+    @TableField("school_class_id")
+    private String schoolClassId;
+
     // 关联对象 - 用于查询时展示课程和教师信息
     @TableField(exist = false)
     private Course course;
@@ -36,6 +39,10 @@ public class Class {
     // 学生加入时间（仅用于学生端查询）
     @TableField(exist = false)
     private LocalDateTime joinTime;
+
+    // 学校课序号（来自 teaching_class.course_sequence，按 school_class_id 关联），仅用于展示核对
+    @TableField(exist = false)
+    private String courseSequence;
 
     // Getters and Setters
     public Long getId() {
@@ -92,6 +99,22 @@ public class Class {
 
     public void setDeleted(Integer deleted) {
         this.deleted = deleted;
+    }
+
+    public String getSchoolClassId() {
+        return schoolClassId;
+    }
+
+    public void setSchoolClassId(String schoolClassId) {
+        this.schoolClassId = schoolClassId;
+    }
+
+    public String getCourseSequence() {
+        return courseSequence;
+    }
+
+    public void setCourseSequence(String courseSequence) {
+        this.courseSequence = courseSequence;
     }
 
     public Course getCourse() {

@@ -26,6 +26,10 @@ public class TeachingClass {
     @TableField("class_name")
     private String className;
 
+    /** 课序号(CDSP kxh)，同一教师同一课程下唯一，供与教务处核对 */
+    @TableField("course_sequence")
+    private String courseSequence;
+
     @TableField("course_code")
     private String courseCode;
 

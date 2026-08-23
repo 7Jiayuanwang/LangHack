@@ -230,7 +230,8 @@ public class SchoolDataSyncScheduler {
             for (String college : cc.getColleges()) {
                 if (college == null || college.trim().isEmpty()) continue;
                 try {
-                    Map<String, Object> result = syncService.chainFetchStudentsByCollege(college.trim(), cc.getMatchMode(), true);
+                    Map<String, Object> result = syncService.chainFetchStudentsByCollege(
+                            college.trim(), cc.getMatchMode(), true, cc.getAcademicYear(), cc.getSemester());
                     logger.info("链式刷新完成 college={}, result={}", college, result);
                 } catch (Exception e) {
                     logger.error("链式刷新单学院失败 college={}", college, e);

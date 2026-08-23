@@ -31,6 +31,9 @@ public class Course {
     @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
+    @TableField("school_course_code")
+    private String schoolCourseCode;
+
     // Getters and Setters
     public Long getId() {
         return id;
@@ -102,5 +105,13 @@ public class Course {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getSchoolCourseCode() {
+        return schoolCourseCode;
+    }
+
+    public void setSchoolCourseCode(String schoolCourseCode) {
+        this.schoolCourseCode = schoolCourseCode;
     }
 }

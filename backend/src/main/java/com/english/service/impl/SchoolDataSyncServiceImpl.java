@@ -567,6 +567,27 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         return value == null || value.trim().isEmpty() ? fallback : value;
     }
 
+    /**
+     * 链式拉取学期过滤用：把 1/秋 → "秋"，2/春 → "春"，其余/空 → ""（不过滤）。
+     * 与 CDSP teacher_courses 返回的中文学期值对齐，用于客户端按学期筛选。
+     */
+    private String normalizeChainSemester(String value) {
+        if (value == null) {
+            return "";
+        }
+        String v = value.trim();
+        if (v.isEmpty()) {
+            return "";
+        }
+        if ("1".equals(v) || "秋".equals(v)) {
+            return "秋";
+        }
+        if ("2".equals(v) || "春".equals(v)) {
+            return "春";
+        }
+        return v;
+    }
+
     private Integer normalizeSemesterValue(String value) {
         if (value == null) {
             return null;
@@ -1210,14 +1231,21 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> chainFetchStudentsByCollege(String collegeName, String matchMode, boolean persist) {
+    public Map<String, Object> chainFetchStudentsByCollege(String collegeName, String matchMode, boolean persist,
+                                                           String academicYear, String semester) {
         if (collegeName == null || collegeName.trim().isEmpty()) {
             throw new BusinessException("学院名称不能为空");
         }
         String normalizedCollege = collegeName.trim();
         String mode = defaultString(matchMode, "eq").toLowerCase(Locale.ROOT);
+        // 学年：单起始年份（如 2026）。用于 OData $filter 服务端收窄 teacher_courses。
+        String filterYear = academicYear == null ? "" : academicYear.trim();
+        // 学期：秋/春，客户端过滤（CDSP $filter 学期语法未验证）。空表示不限学期。
+        String filterSemester = normalizeChainSemester(semester);
         LocalDateTime syncTime = LocalDateTime.now();
-        logger.info("[chainFetch] 开始: collegeName={}, matchMode={}, persist={}", normalizedCollege, mode, persist);
+        logger.info("[chainFetch] 开始: collegeName={}, matchMode={}, persist={}, academicYear={}, semester={}",
+                normalizedCollege, mode, persist, filterYear.isEmpty() ? "全部" : filterYear,
+                filterSemester.isEmpty() ? "全部" : filterSemester);
         List<String> warnings = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         Map<String, Object> stepStats = new LinkedHashMap<>();
@@ -1338,26 +1366,41 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         int selectionMissingStudentIdCount = 0;
         int courseSelectionPersistErrors = 0;
 
-        for (String kcdm : matchedCourseCodes) {
-            // 2.5: teacher_courses 按 kcdm 拉 → 得到 (kcbh, rkjsh, rkjsxm, xn, xq)
+        // 2.5: teacher_courses 一次性按【学年】OData $filter 拉取（CDSP 只认 $filter，不认 kcdm/xn/xq query 参数），
+        //      在内存里按 课程代码→课程班号 分组。避免旧逻辑"每门课各拉一次历年全表"导致的百万级拉取。
+        Map<String, Map<String, List<Map<String, Object>>>> tcByCourseThenClass = new LinkedHashMap<>();
+        Set<String> matchedCourseCodeSet = new LinkedHashSet<>(matchedCourseCodes);
+        if (!matchedCourseCodes.isEmpty()) {
             List<Map<String, Object>> rawTcs;
             try {
-                rawTcs = apiClient.fetchTeacherCourses(Map.of("kcdm", kcdm));
+                Map<String, String> tcParams = new LinkedHashMap<>();
+                if (!filterYear.isEmpty()) {
+                    // 值为 numeric，不加引号；空格由 encodeODataValue 编码
+                    tcParams.put("$filter", "学年 eq " + filterYear);
+                }
+                rawTcs = apiClient.fetchTeacherCourses(tcParams);
             } catch (Exception e) {
-                teacherFetchFailureCount++;
-                failedTeacherCourses.add(kcdm);
-                appendIssue(errors, String.format("teacher_courses 拉取失败: courseCode=%s, err=%s", kcdm, defaultString(e.getMessage(), e.getClass().getSimpleName())));
-                logger.warn("[chainFetch] 拉取 teacher_courses 失败 kcdm={} err={}", kcdm, e.getMessage());
-                continue;
+                rawTcs = Collections.emptyList();
+                teacherFetchFailureCount = matchedCourseCodes.size();
+                failedTeacherCourses.addAll(matchedCourseCodes);
+                appendIssue(errors, String.format("teacher_courses 拉取失败: year=%s, err=%s",
+                        filterYear.isEmpty() ? "全部" : filterYear,
+                        defaultString(e.getMessage(), e.getClass().getSimpleName())));
+                logger.warn("[chainFetch] 拉取 teacher_courses 失败 year={} err={}", filterYear, e.getMessage());
             }
             if (rawTcs == null) rawTcs = Collections.emptyList();
-            teacherFetchRowCount += rawTcs.size();
-
-            // 客户端过滤：CDSP 可能忽略 kcdm 过滤，确保只保留当前课程记录
-            Map<String, List<Map<String, Object>>> tcByClassCode = new LinkedHashMap<>();
+            teacherFetchRowCount = rawTcs.size();
             for (Map<String, Object> tc : rawTcs) {
                 Map<String, Object> mapped = fieldMappingService.applyMapping("teacher_courses", tc);
-                if (!kcdm.equals(getCourseCodeValue(mapped))) {
+                String tcKcdm = getCourseCodeValue(mapped);
+                // 只保留本学院命中的课程
+                if (tcKcdm == null || !matchedCourseCodeSet.contains(tcKcdm)) {
+                    teacherCourseMismatchCount++;
+                    continue;
+                }
+                // 学期客户端过滤（CDSP $filter 学期语法未验证，客户端筛保证正确）
+                if (!filterSemester.isEmpty()
+                        && !filterSemester.equals(normalizeChainSemester(stringValue(mapped.get("semester"))))) {
                     teacherCourseMismatchCount++;
                     continue;
                 }
@@ -1366,8 +1409,19 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                     teacherMissingClassIdCount++;
                     continue;
                 }
-                tcByClassCode.computeIfAbsent(kcbh, k -> new ArrayList<>()).add(mapped);
+                tcByCourseThenClass
+                        .computeIfAbsent(tcKcdm, k -> new LinkedHashMap<>())
+                        .computeIfAbsent(kcbh, k -> new ArrayList<>())
+                        .add(mapped);
             }
+            logger.info("[chainFetch] teacher_courses 拉取: year={}, semester={}, upstreamRows={}, matchedCourses={}",
+                    filterYear.isEmpty() ? "全部" : filterYear, filterSemester.isEmpty() ? "全部" : filterSemester,
+                    teacherFetchRowCount, tcByCourseThenClass.size());
+        }
+
+        for (String kcdm : matchedCourseCodes) {
+            Map<String, List<Map<String, Object>>> tcByClassCode =
+                    tcByCourseThenClass.getOrDefault(kcdm, Collections.emptyMap());
             matchedClassCodes.addAll(tcByClassCode.keySet());
 
             // 2: 对每个 kcbh 拉 course_selection
@@ -1399,7 +1453,10 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
 
                 List<Map<String, Object>> rawSels;
                 try {
-                    rawSels = apiClient.fetchCourseSelections(Map.of("KCBH", kcbh));
+                    // CDSP 不支持原生 KCBH 参数(报IY1103)，改用 OData $filter 按课程班号精确拉取。
+                    // 课程班号是 numeric，值不加引号。空格由 buildUrl 的 encodeODataValue 编码为 %20。
+                    rawSels = apiClient.fetchCourseSelections(
+                            Map.of("$filter", "课程班号 eq " + kcbh));
                 } catch (Exception e) {
                     selectionFetchFailureCount++;
                     failedSelectionClasses.add(kcbh);
@@ -1650,6 +1707,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
         result.put("collegeName", normalizedCollege);
         result.put("matchMode", mode);
         result.put("persist", persist);
+        result.put("academicYear", filterYear);
+        result.put("semester", filterSemester);
         result.put("courseCount", matchedCourses.size());
         result.put("studentCount", studentIds.size());
         result.put("teacherCount", teacherMap.size());

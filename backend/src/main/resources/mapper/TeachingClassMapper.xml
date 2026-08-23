@@ -5,16 +5,17 @@
     <!-- 教学班 UPSERT：按 class_id 唯一键 -->
     <insert id="upsertByClassId" parameterType="com.english.entity.TeachingClass" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO teaching_class (
-            class_id, class_name, course_code, course_name,
+            class_id, class_name, course_sequence, course_code, course_name,
             teacher_id, teacher_name, academic_year, semester,
             capacity, enrolled_count, class_status, sync_time, sync_source
         ) VALUES (
-            #{classId}, #{className}, #{courseCode}, #{courseName},
+            #{classId}, #{className}, #{courseSequence}, #{courseCode}, #{courseName},
             #{teacherId}, #{teacherName}, #{academicYear}, #{semester},
             #{capacity}, #{enrolledCount}, #{classStatus}, #{syncTime}, #{syncSource}
         )
         ON DUPLICATE KEY UPDATE
             class_name = #{className},
+            course_sequence = #{courseSequence},
             course_code = #{courseCode},
             course_name = #{courseName},
             teacher_id = #{teacherId},
