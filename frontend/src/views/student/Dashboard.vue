@@ -101,6 +101,8 @@
       </div>
     </div>
 
+    <FollowSummary />
+
     <!-- 主要内容区域 -->
     <div class="content-section">
       <!-- 我的课程 - 现代卡片设计（受 page_courses 开关控制） -->
@@ -406,6 +408,7 @@ import { ref, reactive, onMounted, computed } from "vue"
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
+import FollowSummary from '@/components/FollowSummary.vue'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   getStudentDashboard,

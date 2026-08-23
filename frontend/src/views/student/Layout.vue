@@ -58,6 +58,13 @@
             </svg>
             我的画像
           </button>
+          <button v-if="userStore.userInfo?.id" class="simple-btn" @click="handleUserAction('author-home')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M4 21a8 8 0 0 1 16 0"/>
+            </svg>
+            个人主页
+          </button>
           <button class="simple-btn" @click="handleUserAction('feedback')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -246,6 +253,11 @@ const handleUserAction = async (action) => {
   switch (action) {
     case 'profile':
       router.push('/student/my-profile')
+      break
+    case 'author-home':
+      if (userStore.userInfo?.id) {
+        router.push(`/student/author/${userStore.userInfo.id}`)
+      }
       break
     case 'settings':
       ElMessage.info('设置功能开发中')

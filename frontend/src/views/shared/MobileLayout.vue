@@ -109,6 +109,10 @@
                 </template>
                 <!-- 其他角色通用菜单 -->
                 <template v-else>
+                  <el-dropdown-item
+                    v-if="['user', 'teacher'].includes(props.role) && userStore.userInfo?.id"
+                    command="author-home"
+                  >个人主页</el-dropdown-item>
                   <el-dropdown-item command="profile">个人资料</el-dropdown-item>
                   <el-dropdown-item command="settings">设置</el-dropdown-item>
                   <el-dropdown-item command="feedback">问题反馈</el-dropdown-item>
@@ -397,6 +401,11 @@ const handleDropdownVisible = (visible) => {
 
 const handleCommand = async (command) => {
   switch (command) {
+    case 'author-home':
+      if (userStore.userInfo?.id) {
+        router.push(`/student/author/${userStore.userInfo.id}`)
+      }
+      break
     case 'profile':
       ElMessage.info('个人资料功能开发中')
       break

@@ -84,6 +84,8 @@ public class PublicAuthorController {
             result.put("videos", videos);
             result.put("totalTexts", texts.size());
             result.put("totalVideos", videos.size());
+            result.put("followingCount", user.getFollowingCount() == null ? 0 : user.getFollowingCount());
+            result.put("followersCount", user.getFollowersCount() == null ? 0 : user.getFollowersCount());
             result.put("achievements", learningRecordsService.getAchievementStats(userId));
 
             return Result.success(result);
