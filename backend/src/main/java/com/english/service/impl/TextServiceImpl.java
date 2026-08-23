@@ -43,6 +43,10 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         Long unitId = params.get("unitId") != null ? Long.valueOf(params.get("unitId").toString()) : null;
         String tag = (String) params.get("tag");
         Integer featured = params.get("featured") != null ? ((Number) params.get("featured")).intValue() : null;
+        String articleType = (String) params.get("articleType");
+        String bookVolume = (String) params.get("bookVolume");
+        Object unitNumObj = params.get("unitNum");
+        Integer unitNum = unitNumObj != null ? Integer.valueOf(unitNumObj.toString()) : null;
 
         Page<Text> pageParam = new Page<>(page, size);
         QueryWrapper<Text> queryWrapper = new QueryWrapper<>();
@@ -71,6 +75,19 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
 
         if (featured != null) {
             queryWrapper.eq("is_featured", featured);
+        }
+
+        // 按文章分类筛选（课内/课外）
+        if (articleType != null && !articleType.trim().isEmpty()) {
+            queryWrapper.eq("article_type", articleType.trim());
+        }
+        // 课内教材：按册号筛选
+        if (bookVolume != null && !bookVolume.trim().isEmpty()) {
+            queryWrapper.eq("book_volume", bookVolume.trim());
+        }
+        // 课内教材：按单元编号筛选
+        if (unitNum != null) {
+            queryWrapper.eq("unit_num", unitNum);
         }
 
         // 如果指定了unitId，则按unitId过滤；否则显示所有课文（包括未分配的）
