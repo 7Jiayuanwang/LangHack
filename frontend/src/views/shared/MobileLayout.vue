@@ -263,6 +263,7 @@ const MORE_ITEMS = {
     { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/campaigns',      label: '活动管理', icon: Trophy,   featureKey: 'admin.campaigns' },
+    { path: '/admin/notifications',  label: '通知管理', icon: ChatLineRound },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
     { path: '/admin/cet-analysis',   label: '四六级分析', icon: DataAnalysis },
     { path: '/admin/recommendation-analysis', label: '推荐分析', icon: DataLine },
@@ -344,6 +345,7 @@ const ROUTE_MAP = {
     '/admin/class-cohort':      '班级队列分析',
     '/admin/vocab-learning-stats': '生词本学习统计',
     '/admin/tag-management':    '标签管理',
+    '/admin/notifications':     '通知管理',
   },
 }
 

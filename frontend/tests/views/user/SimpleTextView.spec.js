@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 
+const mockBack = vi.fn()
+const mockPush = vi.fn()
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ back: vi.fn() }),
+  useRouter: () => ({ back: mockBack, push: mockPush }),
   useRoute: () => ({
     params: { id: '1' },
-    query: { textId: '1' },
+    query: { textId: '1', from: 'articles' },
     path: '/text/1'
   })
 }))
@@ -226,6 +229,16 @@ describe('SimpleTextView.vue', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.goBack).toBeDefined()
     expect(typeof wrapper.vm.goBack).toBe('function')
+  })
+
+  it('returns to the existing articles history entry', () => {
+    const wrapper = createWrapper()
+    vi.spyOn(window.history, 'length', 'get').mockReturnValue(2)
+
+    wrapper.vm.goBack()
+
+    expect(mockBack).toHaveBeenCalledTimes(1)
+    expect(mockPush).not.toHaveBeenCalled()
   })
 
   it('resetWordDialog is defined and callable', () => {
