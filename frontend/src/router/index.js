@@ -336,6 +336,12 @@ const routes = [
         meta: { title: "任务管理", roles: ["TEACHER"] },
       },
       {
+        path: "texts",
+        name: "TeacherTexts",
+        component: () => import("@/views/teacher/Texts.vue"),
+        meta: { title: "课文管理", roles: ["TEACHER"] },
+      },
+      {
         path: "my-courses",
         name: "TeacherMyCourses",
         component: () => import("@/views/teacher/MyCourses.vue"),
