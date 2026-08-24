@@ -7,12 +7,14 @@ import com.english.service.FollowService;
 import com.english.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 
 @RestController
 @RequestMapping("/api/user/follow")
+@PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN', 'USER')")
 public class FollowController {
 
     @Autowired
@@ -104,6 +106,7 @@ public class FollowController {
             item.put("id", u.getId());
             item.put("username", u.getUsername());
             item.put("nickname", u.getNickname());
+            item.put("realName", u.getRealName());
             item.put("avatar", u.getAvatar());
             item.put("role", u.getRole());
             userList.add(item);

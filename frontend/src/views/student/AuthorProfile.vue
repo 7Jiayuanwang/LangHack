@@ -26,11 +26,11 @@
         </div>
         <div class="author-stats">
           <div class="stat-item" @click="goToFollowList('following')" style="cursor:pointer">
-            <span class="stat-value">{{ followCounts.followingCount }}</span>
+            <span class="stat-value">{{ followCounts.followingCount ?? authorData.followingCount ?? 0 }}</span>
             <span class="stat-label">关注</span>
           </div>
           <div class="stat-item" @click="goToFollowList('followers')" style="cursor:pointer">
-            <span class="stat-value">{{ followCounts.followersCount }}</span>
+            <span class="stat-value">{{ followCounts.followersCount ?? authorData.followersCount ?? 0 }}</span>
             <span class="stat-label">粉丝</span>
           </div>
           <div class="stat-item">
@@ -208,6 +208,10 @@ const loadAuthorProfile = async () => {
     const res = await axios.get(`${apiBase}/api/public/authors/${userId}`)
     if (res.data.code === 200) {
       authorData.value = res.data.data
+      followCounts.value = {
+        followingCount: res.data.data.followingCount || 0,
+        followersCount: res.data.data.followersCount || 0
+      }
     } else {
       error.value = res.data.message || '加载失败'
     }
@@ -312,7 +316,7 @@ const loadFollowData = async () => {
 
 const goToFollowList = (type) => {
   const userId = route.params.id
-  router.push(`/student/follow-list/${userId}?type=${type}`)
+  router.push(`/student/${type === 'followers' ? 'followers' : 'following'}/${userId}`)
 }
 
 onMounted(() => {

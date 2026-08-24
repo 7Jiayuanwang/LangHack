@@ -84,6 +84,24 @@
         :rules="assignmentRules"
         label-width="80px"
       >
+        <!-- 快捷模板 -->
+        <el-form-item v-if="!isEdit" label="快捷模板">
+          <div class="template-list">
+            <div
+              v-for="tpl in assignmentTemplates"
+              :key="tpl.key"
+              class="template-card"
+              :class="{ active: activeTemplate === tpl.key }"
+              @click="applyTemplate(tpl)"
+            >
+              <div class="template-icon">{{ tpl.icon }}</div>
+              <div class="template-name">{{ tpl.name }}</div>
+              <div class="template-desc">{{ tpl.desc }}</div>
+            </div>
+          </div>
+          <div class="template-tip">点击模板可自动填充任务类型和学习时长，再选班级、单元和内容即可发布</div>
+        </el-form-item>
+
         <el-form-item label="任务标题" prop="title">
           <el-input v-model="assignmentForm.title" placeholder="请输入任务标题" />
         </el-form-item>
@@ -162,6 +180,20 @@
             </el-checkbox-group>
             <el-empty v-if="!loadingUnitContent && unitContent.texts.length === 0" description="该单元暂无课文" />
           </div>
+        </el-form-item>
+
+        <!-- 单词组数设置 -->
+        <el-form-item v-if="assignmentForm.assignmentType === 'WORDS'" label="单词组数">
+          <el-input-number
+            v-model="assignmentForm.wordGroupCount"
+            :min="1"
+            :max="10"
+            :step="1"
+            @change="autoSelectWordsByGroup"
+          />
+          <span style="margin-left: 12px; font-size: 12px; color: #909399;">
+            每组15个单词，共需 {{ assignmentForm.wordGroupCount * 15 }} 个
+          </span>
         </el-form-item>
 
         <!-- 选择单词 -->
@@ -333,6 +365,30 @@ const unitContent = ref({
 const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '综合教程4']
 const unitNumbers = Array.from({ length: 6 }, (_, index) => index + 1)
 
+// 快捷任务模板
+const activeTemplate = ref('')
+const assignmentTemplates = [
+  {
+    key: 'reading',
+    name: '读课文',
+    icon: '📖',
+    desc: '指定课文阅读，建议10分钟',
+    assignmentType: 'TEXTS',
+    articleType: 'OUTER',
+    idealStudyTimeMinutes: 10,
+    title: '课文阅读任务'
+  },
+  {
+    key: 'words',
+    name: '背单词',
+    icon: '📝',
+    desc: '分组背诵，每组不少于15个',
+    assignmentType: 'WORDS',
+    idealStudyTimeMinutes: 15,
+    title: '单词背诵任务'
+  }
+]
+
 // 筛选表单
 const filterForm = reactive({
   classId: null,
@@ -354,7 +410,8 @@ const assignmentForm = reactive({
   description: '',
   deadline: null,
   weight: 1.0,  // 添加权重字段，默认1.0
-  idealStudyTimeMinutes: 60  // 添加理想学习时长字段，默认60分钟
+  idealStudyTimeMinutes: 60,  // 添加理想学习时长字段，默认60分钟
+  wordGroupCount: 1  // 单词组数，默认1组
 })
 
 // 表单验证规则
@@ -655,7 +712,8 @@ const editAssignment = async (assignment) => {
     description: assignment.description,
     deadline: assignment.deadline ? new Date(assignment.deadline) : null,
     weight: assignment.weight || 1.0,  // 添加权重
-    idealStudyTimeMinutes: assignment.idealStudyTimeMinutes || 60  // 添加理想学习时长
+    idealStudyTimeMinutes: assignment.idealStudyTimeMinutes || 60,  // 添加理想学习时长
+    wordGroupCount: assignment.wordGroupCount || 1  // 单词组数
   })
 
   // 加载对应班级的单元列表
@@ -684,9 +742,50 @@ const resetAssignmentForm = () => {
     description: '',
     deadline: null,
     weight: 1.0,  // 重置权重
-    idealStudyTimeMinutes: 60  // 重置理想学习时长
+    idealStudyTimeMinutes: 60,  // 重置理想学习时长
+    wordGroupCount: 1  // 重置单词组数
   })
   unitContent.value = { texts: [], words: [] }
+  activeTemplate.value = ''
+}
+
+// 应用快捷模板
+const applyTemplate = async (tpl) => {
+  activeTemplate.value = tpl.key
+  // 填充模板预设值
+  assignmentForm.assignmentType = tpl.assignmentType
+  assignmentForm.articleType = tpl.articleType || 'OUTER'
+  assignmentForm.idealStudyTimeMinutes = tpl.idealStudyTimeMinutes
+  assignmentForm.title = tpl.title
+  assignmentForm.wordGroupCount = tpl.key === 'words' ? 1 : 1
+  // 清空已选内容
+  assignmentForm.textIds = []
+  assignmentForm.wordIds = []
+  assignmentForm.bookVolume = null
+  assignmentForm.unitNum = null
+  // 加载对应内容
+  if (tpl.assignmentType === 'TEXTS') {
+    await loadArticles()
+  } else if (tpl.assignmentType === 'WORDS' && assignmentForm.unitId) {
+    await loadUnitContent(assignmentForm.unitId)
+    autoSelectWordsByGroup()
+  } else {
+    unitContent.value = { texts: [], words: [] }
+  }
+}
+
+// 根据组数自动选取单词（每组15个）
+const autoSelectWordsByGroup = () => {
+  const wordsPerGroup = 15
+  const needCount = assignmentForm.wordGroupCount * wordsPerGroup
+  const availableWords = unitContent.value.words || []
+  if (availableWords.length === 0) return
+  // 自动选取前 needCount 个单词
+  const selected = availableWords.slice(0, Math.min(needCount, availableWords.length)).map(w => w.id)
+  assignmentForm.wordIds = selected
+  // 更新任务描述
+  const actualGroups = Math.ceil(selected.length / wordsPerGroup)
+  assignmentForm.description = `背诵第1-${actualGroups}组单词，共${selected.length}个，每组不少于15个单词。`
 }
 
 // 加载单元内容
@@ -734,6 +833,9 @@ const onUnitChange = async (unitId) => {
     await loadArticles()
   } else if (unitId && assignmentForm.assignmentType !== 'UNIT') {
     await loadUnitContent(unitId)
+    if (assignmentForm.assignmentType === 'WORDS') {
+      autoSelectWordsByGroup()
+    }
   } else {
     unitContent.value = { texts: [], words: [] }
   }
@@ -752,6 +854,8 @@ const onAssignmentTypeChange = async (assignmentType) => {
   assignmentForm.wordIds = []
   if (assignmentType === 'TEXTS') {
     await loadArticles()
+  } else if (assignmentType === 'WORDS') {
+    autoSelectWordsByGroup()
   }
 }
 
@@ -1144,6 +1248,60 @@ onMounted(async () => {
 
 .filter-bar {
   margin-bottom: 20px;
+}
+
+/* 快捷模板样式 */
+.template-list {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.template-card {
+  flex: 1;
+  min-width: 140px;
+  padding: 16px;
+  border: 2px solid #e4e7ed;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.25s;
+  text-align: center;
+  background: #fff;
+}
+
+.template-card:hover {
+  border-color: #409eff;
+  background: #f5f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+}
+
+.template-card.active {
+  border-color: #409eff;
+  background: #ecf5ff;
+}
+
+.template-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.template-name {
+  font-weight: bold;
+  font-size: 15px;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.template-desc {
+  font-size: 12px;
+  color: #909399;
+}
+
+.template-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 8px;
 }
 
 .progress-overview {

@@ -109,6 +109,10 @@
                 </template>
                 <!-- 其他角色通用菜单 -->
                 <template v-else>
+                  <el-dropdown-item
+                    v-if="['user', 'teacher'].includes(props.role) && userStore.userInfo?.id"
+                    command="author-home"
+                  >个人主页</el-dropdown-item>
                   <el-dropdown-item command="profile">个人资料</el-dropdown-item>
                   <el-dropdown-item command="settings">设置</el-dropdown-item>
                   <el-dropdown-item command="feedback">问题反馈</el-dropdown-item>
@@ -264,10 +268,12 @@ const MORE_ITEMS = {
     { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/campaigns',      label: '活动管理', icon: Trophy,   featureKey: 'admin.campaigns' },
+    { path: '/admin/notifications',  label: '通知管理', icon: ChatLineRound },
     { path: '/admin/sso-pending',    label: 'SSO审批', icon: User,     featureKey: 'admin.sso_approval' },
     { path: '/admin/cet-analysis',   label: '四六级分析', icon: DataAnalysis },
     { path: '/admin/recommendation-analysis', label: '推荐分析', icon: DataLine },
     { path: '/admin/quiz-records',    label: '做题管理', icon: EditPen },
+    { path: '/admin/past-papers',     label: '真题管理', icon: Reading },
     { path: '/admin/persona-analytics', label: '画像分析', icon: DataAnalysis, featureKey: 'admin.persona_analytics' },
     { path: '/admin/class-cohort',      label: '班级画像', icon: DataLine,     featureKey: 'admin.class_cohort' },
     { path: '/admin/vocab-learning-stats', label: '生词本统计', icon: DataAnalysis },
@@ -339,10 +345,12 @@ const ROUTE_MAP = {
     '/admin/cet-analysis':   '四六级分析',
     '/admin/recommendation-analysis': '推荐算法分析',
     '/admin/quiz-records':   '做题管理',
+    '/admin/past-papers':    '真题管理',
     '/admin/persona-analytics': '画像分析',
     '/admin/class-cohort':      '班级队列分析',
     '/admin/vocab-learning-stats': '生词本学习统计',
     '/admin/tag-management':    '标签管理',
+    '/admin/notifications':     '通知管理',
   },
 }
 
@@ -396,6 +404,11 @@ const handleDropdownVisible = (visible) => {
 
 const handleCommand = async (command) => {
   switch (command) {
+    case 'author-home':
+      if (userStore.userInfo?.id) {
+        router.push(`/student/author/${userStore.userInfo.id}`)
+      }
+      break
     case 'profile':
       ElMessage.info('个人资料功能开发中')
       break

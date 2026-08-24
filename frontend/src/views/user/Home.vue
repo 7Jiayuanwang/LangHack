@@ -36,6 +36,8 @@
       </el-col>
     </el-row>
 
+    <FollowSummary />
+
     <el-card class="quick-actions-card">
       <template #header>
         <span>快捷入口</span>
@@ -185,6 +187,7 @@
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/store/user";
+import FollowSummary from "@/components/FollowSummary.vue";
 import { getStudentDashboard, getTodayLearningStats } from "@/api/student";
 
 const router = useRouter();

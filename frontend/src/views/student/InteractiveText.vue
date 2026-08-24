@@ -57,6 +57,16 @@
             </div>
             <span class="byline-label">{{ author.official ? '平台官方' : '作者' }}</span>
           </div>
+          <button
+            v-if="!author.official && author.id && !isOwnAuthor"
+            class="author-follow-btn"
+            :class="{ 'is-following': isFollowingAuthor }"
+            :disabled="followingAuthor"
+            type="button"
+            @click.stop="toggleAuthorFollow"
+          >
+            {{ isFollowingAuthor ? '已关注' : '+ 关注' }}
+          </button>
         </div>
         <div class="article-meta">
           <span class="meta-item">
@@ -520,6 +530,8 @@ import { generateAiQuiz } from '@/api/aiQuiz'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
+import { useUserStore } from '@/store/user'
+import { followUser, unfollowUser, getFollowStatus } from '@/api/follow'
 
 // 配置 DOMPurify：允许 img 标签及其属性，允许 data-word 自定义属性
 const SANITIZE_CONFIG = {
@@ -542,6 +554,7 @@ import rangy from '@/utils/rangy'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 // 响应式数据
 const textId = ref(Number(route.params.id || route.query.textId) || 0)
@@ -553,6 +566,9 @@ const courseName = ref('')
 const unitName = ref('')
 const textTitle = ref('')
 const author = ref(null)
+const isFollowingAuthor = ref(false)
+const followingAuthor = ref(false)
+const isOwnAuthor = computed(() => String(author.value?.id || '') === String(userStore.userInfo?.id || ''))
 // 平台默认头像（与导航栏/个人中心一致的兜底图）
 const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 // 作者首字母头像（官方内容显示「官」）
@@ -863,6 +879,7 @@ const loadTextDetail = async () => {
       const data = response.data
       textTitle.value = data.title
       author.value = data.author || null
+      loadAuthorFollowState()
       nextTick(checkTitleOverflow)
       difficulty.value = data.difficulty || 'MEDIUM'
       viewCount.value = data.viewCount || data.view_count || 0
@@ -1286,6 +1303,36 @@ const handleAuthorClick = () => {
   }
 }
 
+const loadAuthorFollowState = async () => {
+  if (!author.value?.id || author.value.official || isOwnAuthor.value) return
+  try {
+    const response = await getFollowStatus(author.value.id)
+    isFollowingAuthor.value = Boolean(response?.data?.isFollowing)
+  } catch (error) {
+    console.error('加载作者关注状态失败:', error)
+  }
+}
+
+const toggleAuthorFollow = async () => {
+  if (!author.value?.id || followingAuthor.value) return
+  followingAuthor.value = true
+  try {
+    if (isFollowingAuthor.value) {
+      await unfollowUser(author.value.id)
+      isFollowingAuthor.value = false
+      ElMessage.success('已取消关注')
+    } else {
+      await followUser(author.value.id)
+      isFollowingAuthor.value = true
+      ElMessage.success('关注成功')
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '关注操作失败')
+  } finally {
+    followingAuthor.value = false
+  }
+}
+
 const handleLearningRecord = async (recordData) => {
   try {
     // 只处理课文观看记录，忽略单词点击
@@ -1498,7 +1545,11 @@ const goBack = () => {
     router.push('/student/assignments')
   } else if (from === 'articles') {
     // 从文章列表来的，使用路由返回以保持 keep-alive 缓存和滚动位置
-    router.push(getArticlesPath())
+    if (window.history.length > 1) {
+      router.back()
+    } else {
+      router.push(getArticlesPath())
+    }
   } else if (window.history.length > 1) {
     // 其他情况，使用默认返回
     router.go(-1)
@@ -3027,6 +3078,34 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   flex-direction: column;
   gap: 3px;
   line-height: 1.2;
+}
+
+.author-follow-btn {
+  margin-left: auto;
+  min-width: 76px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.author-follow-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.author-follow-btn.is-following {
+  border-color: #d1d5db;
+  background: #fff;
+  color: #4b5563;
+}
+
+.author-follow-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .byline-name-row {

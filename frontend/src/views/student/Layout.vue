@@ -58,6 +58,13 @@
             </svg>
             我的画像
           </button>
+          <button v-if="userStore.userInfo?.id" class="simple-btn" @click="handleUserAction('author-home')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M4 21a8 8 0 0 1 16 0"/>
+            </svg>
+            个人主页
+          </button>
           <button class="simple-btn" @click="handleUserAction('feedback')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -80,7 +87,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
+import { ref, computed, onMounted, onUnmounted, markRaw, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getSsoStatus, getSsoLogoutUrl } from '@/api/sso'
@@ -125,6 +132,7 @@ const {
   isEnabled,
   onChange,
   startAutoRefresh,
+  stopAutoRefresh,
   isWebSocketConnected
 } = useFeatureToggles()
 const ssoEnabled = ref(false)
@@ -146,6 +154,7 @@ const allNavigationItems = [
   { path: '/student/articles', label: '文章', icon: markRaw(ChatLineRound), badge: null, featureKey: 'page_articles' },
   { path: '/student/courses', label: '课程', icon: markRaw(School), badge: null, featureKey: 'page_courses' },
   { path: '/student/words', label: '单词', icon: markRaw(Document), badge: null, featureKey: 'page_word_recite' },
+  { path: '/student/past-papers', label: '真题', icon: markRaw(Reading), badge: null, featureKey: null },
   { path: '/student/campaigns', label: '活动', icon: markRaw(Trophy), badge: null, featureKey: 'student.campaigns' },
   { path: '/student/my-study', label: '学习', icon: markRaw(Edit), badge: null, featureKey: 'page_my_study' }
 ]
@@ -174,6 +183,7 @@ const pageTitle = computed(() => {
     '/student/articles': '',
     '/articles': '',
     '/student/words': '单词',
+    '/student/past-papers': '历年真题',
     '/student/vocabulary': '单词本',
     '/student/word-recite': '单词背诵',
     '/student/ai-video': 'AI 视频字幕',
@@ -246,6 +256,11 @@ const handleUserAction = async (action) => {
     case 'profile':
       router.push('/student/my-profile')
       break
+    case 'author-home':
+      if (userStore.userInfo?.id) {
+        router.push(`/student/author/${userStore.userInfo.id}`)
+      }
+      break
     case 'settings':
       ElMessage.info('设置功能开发中')
       break
@@ -301,10 +316,17 @@ onMounted(() => {
   // 加载功能开关配置 — 与路由守卫共享 useFeatureToggles 缓存（sessionStorage 5 min TTL）
   // 任意已登录用户走 /api/user/feature-toggles（三层合并：全局→标签→用户级）
   const authenticated = !!userStore.token
+  const syncFeatureToggleRefresh = () => {
+    if (route.path.startsWith('/article/')) {
+      stopAutoRefresh()
+    } else {
+      startAutoRefresh({ authenticated, interval: 2 * 60 * 1000 })
+    }
+  }
   loadFeatureToggles({ authenticated }).then(() => {
-    // 启动自动刷新，每2分钟检查一次
-    startAutoRefresh({ authenticated, interval: 2 * 60 * 1000 })
+    syncFeatureToggleRefresh()
   }).catch(() => {})
+  const stopRouteWatch = watch(() => route.path, syncFeatureToggleRefresh)
 
   // 监听功能开关变更，提供实时反馈
   const cleanupListener = onChange((changes) => {
@@ -337,6 +359,7 @@ onMounted(() => {
   // 组件卸载时清理监听器
   onUnmounted(() => {
     cleanupListener?.()
+    stopRouteWatch()
   })
 })
 

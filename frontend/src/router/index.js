@@ -156,6 +156,12 @@ const routes = [
         meta: { title: "做题管理", roles: ["ADMIN"] },
       },
       {
+        path: "past-papers",
+        name: "AdminPastPapers",
+        component: () => import("@/views/student/PastPapers.vue"),
+        meta: { title: "真题管理", roles: ["ADMIN"] },
+      },
+      {
         path: "persona-analytics",
         name: "AdminPersonaAnalytics",
         component: () => import("@/views/admin/PersonaAnalytics.vue"),
@@ -178,6 +184,12 @@ const routes = [
         name: "AdminTagManagement",
         component: () => import("@/views/admin/TagManagement.vue"),
         meta: { title: "标签管理", roles: ["ADMIN"], featureKey: "admin.tag_management" },
+      },
+      {
+        path: "notifications",
+        name: "AdminNotifications",
+        component: () => import("@/views/admin/NotificationManagement.vue"),
+        meta: { title: "通知管理", roles: ["ADMIN"] },
       },
       {
         path: "campaigns",
@@ -401,6 +413,12 @@ const routes = [
         meta: { title: "单词", roles: ["STUDENT", "USER"], featureKey: "page_word_recite" },
       },
       {
+        path: "past-papers",
+        name: "StudentPastPapers",
+        component: () => import("@/views/student/PastPapers.vue"),
+        meta: { title: "历年真题", roles: ["STUDENT", "USER"] },
+      },
+      {
         path: "word-recite",
         redirect: "/student/words?tab=recite",
       },
@@ -527,9 +545,20 @@ const routes = [
         meta: { title: "作者主页", roles: ["STUDENT", "USER", "TEACHER"] },
       },
       {
+        path: "following/:id",
+        name: "StudentFollowingList",
+        component: () => import("@/views/student/FollowingList.vue"),
+        meta: { title: "关注列表", roles: ["STUDENT", "USER", "TEACHER"] },
+      },
+      {
+        path: "followers/:id",
+        name: "StudentFollowersList",
+        component: () => import("@/views/student/FollowersList.vue"),
+        meta: { title: "粉丝列表", roles: ["STUDENT", "USER", "TEACHER"] },
+      },
+      {
         path: "follow-list/:id",
-        name: "StudentFollowList",
-        component: () => import("@/views/student/FollowList.vue"),
+        redirect: (to) => `/student/${to.query.type === "followers" ? "followers" : "following"}/${to.params.id}`,
         meta: { title: "关注列表", roles: ["STUDENT", "USER", "TEACHER"] },
       },
     ],
