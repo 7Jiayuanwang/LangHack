@@ -9,6 +9,7 @@ import com.english.entity.Unit;
 import com.english.entity.User;
 import com.english.entity.Word;
 import com.english.entity.Text;
+import com.english.entity.ArticleType;
 import com.english.entity.TextExercise;
 import com.english.entity.ExerciseOption;
 import com.english.entity.Video;
@@ -799,6 +800,24 @@ public class AdminController {
                 text.setIsPublic(1);
             }
 
+            // 课内/课外分类字段
+            String articleTypeStr = textData.get("articleType") != null ? textData.get("articleType").toString() : "OUTER";
+            try {
+                text.setArticleType(ArticleType.valueOf(articleTypeStr));
+            } catch (IllegalArgumentException e) {
+                logger.debug("articleType 格式错误，使用默认值 OUTER");
+                text.setArticleType(ArticleType.OUTER);
+            }
+            text.setBookVolume(textData.get("bookVolume") != null ? textData.get("bookVolume").toString() : null);
+            Object unitNumObj = textData.get("unitNum");
+            if (unitNumObj != null) {
+                try {
+                    text.setUnitNum(Integer.parseInt(unitNumObj.toString()));
+                } catch (NumberFormatException e) {
+                    logger.debug("unitNum 格式错误，使用默认值 null");
+                }
+            }
+
             // 先校验习题数据（在持久化课文之前），避免课文已入库但习题校验失败
             List<com.english.entity.TextExercise> preValidatedExercises = new ArrayList<>();
             List<List<com.english.entity.ExerciseOption>> preValidatedOptions = new ArrayList<>();
@@ -945,6 +964,26 @@ public class AdminController {
             } catch (NumberFormatException e) {
                 logger.debug("orderNum 格式错误，使用默认值 0");
                 text.setOrderNum(0);
+            }
+
+            // 课内/课外分类字段
+            if (textData.get("articleType") != null) {
+                try {
+                    text.setArticleType(ArticleType.valueOf(textData.get("articleType").toString()));
+                } catch (IllegalArgumentException e) {
+                    logger.debug("articleType 格式错误，忽略");
+                }
+            }
+            if (textData.get("bookVolume") != null) {
+                text.setBookVolume(textData.get("bookVolume").toString());
+            }
+            Object unitNumObj = textData.get("unitNum");
+            if (unitNumObj != null) {
+                try {
+                    text.setUnitNum(Integer.parseInt(unitNumObj.toString()));
+                } catch (NumberFormatException e) {
+                    logger.debug("unitNum 格式错误，忽略");
+                }
             }
 
             textService.updateText(text);

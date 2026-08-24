@@ -430,7 +430,7 @@ const tagFilter = ref([])
 const availableTags = ref([])
 const activeStatFilter = ref(null) // null | 'EASY' | 'MEDIUM' | 'HARD' | 'FEATURED'
 
-const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '综合教程4']
+const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '理解当代中国']
 const unitNumbers = [1, 2, 3, 4, 5, 6]
 
 // 分页数据
