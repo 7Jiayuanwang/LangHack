@@ -539,9 +539,20 @@ const routes = [
         meta: { title: "作者主页", roles: ["STUDENT", "USER", "TEACHER"] },
       },
       {
+        path: "following/:id",
+        name: "StudentFollowingList",
+        component: () => import("@/views/student/FollowingList.vue"),
+        meta: { title: "关注列表", roles: ["STUDENT", "USER", "TEACHER"] },
+      },
+      {
+        path: "followers/:id",
+        name: "StudentFollowersList",
+        component: () => import("@/views/student/FollowersList.vue"),
+        meta: { title: "粉丝列表", roles: ["STUDENT", "USER", "TEACHER"] },
+      },
+      {
         path: "follow-list/:id",
-        name: "StudentFollowList",
-        component: () => import("@/views/student/FollowList.vue"),
+        redirect: (to) => `/student/${to.query.type === "followers" ? "followers" : "following"}/${to.params.id}`,
         meta: { title: "关注列表", roles: ["STUDENT", "USER", "TEACHER"] },
       },
     ],

@@ -4,22 +4,7 @@
       <button class="back-btn" @click="router.back()">
         <el-icon><ArrowLeft /></el-icon>
       </button>
-      <div class="tabs">
-        <button
-          class="tab-btn"
-          :class="{ active: activeType === 'following' }"
-          @click="switchType('following')"
-        >
-          关注 ({{ followingTotal }})
-        </button>
-        <button
-          class="tab-btn"
-          :class="{ active: activeType === 'followers' }"
-          @click="switchType('followers')"
-        >
-          粉丝 ({{ followersTotal }})
-        </button>
-      </div>
+      <h1 class="page-title">{{ activeType === 'following' ? '关注列表' : '粉丝列表' }}</h1>
     </div>
 
     <div v-if="loading" class="loading-wrapper">
@@ -43,7 +28,7 @@
           :alt="user.nickname || user.username"
         />
         <div class="user-info">
-          <span class="user-name">{{ user.nickname || user.username }}</span>
+          <span class="user-name">{{ user.nickname || user.realName || user.username }}</span>
           <span class="user-role">{{ getRoleLabel(user.role) }}</span>
         </div>
       </div>
@@ -60,29 +45,23 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElIcon } from 'element-plus'
 import { ArrowLeft, Loading } from '@element-plus/icons-vue'
-import { getFollowingList, getFollowersList, getFollowCounts } from '@/api/follow'
+import { getFollowingList, getFollowersList } from '@/api/follow'
 
 const route = useRoute()
 const router = useRouter()
 
 const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 
-const activeType = ref(route.query.type || 'following')
+const activeType = computed(() => {
+  if (route.name === 'StudentFollowersList' || route.query.type === 'followers') return 'followers'
+  return 'following'
+})
 const loading = ref(false)
 const userList = ref([])
 const currentPage = ref(1)
 const totalPages = ref(0)
-const followingTotal = ref(0)
-const followersTotal = ref(0)
 
 const hasMore = computed(() => currentPage.value < totalPages.value)
-
-const switchType = (type) => {
-  activeType.value = type
-  currentPage.value = 1
-  userList.value = []
-  loadList()
-}
 
 const loadList = async () => {
   loading.value = true
@@ -112,19 +91,6 @@ const loadMore = () => {
   loadList()
 }
 
-const loadCounts = async () => {
-  try {
-    const userId = route.params.id
-    const res = await getFollowCounts(userId)
-    if (res?.data) {
-      followingTotal.value = res.data.followingCount
-      followersTotal.value = res.data.followersCount
-    }
-  } catch (err) {
-    console.error('Load follow counts failed:', err)
-  }
-}
-
 const goToProfile = (userId) => {
   router.push(`/student/author/${userId}`)
 }
@@ -135,7 +101,6 @@ const getRoleLabel = (role) => {
 }
 
 onMounted(() => {
-  loadCounts()
   loadList()
 })
 </script>
@@ -159,6 +124,15 @@ onMounted(() => {
   z-index: 10;
 }
 
+.page-title {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #303133;
+  text-align: center;
+}
+
 .back-btn {
   background: none;
   border: none;
@@ -166,30 +140,6 @@ onMounted(() => {
   cursor: pointer;
   color: #303133;
   padding: 4px;
-}
-
-.tabs {
-  display: flex;
-  gap: 8px;
-  flex: 1;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 8px;
-  background: #f5f7fa;
-  color: #606266;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-btn.active {
-  background: #409eff;
-  color: #fff;
 }
 
 .loading-wrapper {
