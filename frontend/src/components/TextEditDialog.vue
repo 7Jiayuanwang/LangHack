@@ -269,7 +269,7 @@ const formData = reactive({
   unitNum: null
 })
 
-const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '综合教程4']
+const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '理解当代中国']
 const unitNumbers = [1, 2, 3, 4, 5, 6]
 
 const rules = {
@@ -473,7 +473,10 @@ const handleSubmit = async () => {
         audioUrl: formData.audioUrl,
         coverUrl: formData.coverUrl,
         isPublic: formData.isPublic,
-        unitId: formData.unitId
+        unitId: formData.unitId,
+        articleType: formData.articleType,
+        bookVolume: formData.bookVolume,
+        unitNum: formData.unitNum
       }
 
       if (isEdit.value) {

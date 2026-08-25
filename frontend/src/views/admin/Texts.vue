@@ -20,19 +20,19 @@
           </el-select>
         </el-form-item>
         <el-form-item label="分类">
-          <el-select v-model="searchForm.articleType" placeholder="课内/课外" clearable style="width: 140px" @change="handleSearch">
+          <el-select v-model="searchForm.articleType" placeholder="全部" clearable style="width: 130px" @change="handleSearch">
             <el-option label="课内教材" value="INNER" />
             <el-option label="课外读物" value="OUTER" />
           </el-select>
         </el-form-item>
         <el-form-item v-if="searchForm.articleType === 'INNER'" label="册号">
-          <el-select v-model="searchForm.bookVolume" placeholder="选择册号" clearable style="width: 140px" @change="handleSearch">
-            <el-option v-for="vol in bookVolumes" :key="vol" :label="vol" :value="vol" />
+          <el-select v-model="searchForm.bookVolume" placeholder="全部" clearable style="width: 130px" @change="handleSearch">
+            <el-option v-for="v in bookVolumes" :key="v" :label="v" :value="v" />
           </el-select>
         </el-form-item>
         <el-form-item v-if="searchForm.articleType === 'INNER'" label="单元">
-          <el-select v-model="searchForm.unitNum" placeholder="选择单元" clearable style="width: 120px" @change="handleSearch">
-            <el-option v-for="n in unitNumbers" :key="n" :label="`Unit ${n}`" :value="n" />
+          <el-select v-model="searchForm.unitNum" placeholder="全部" clearable style="width: 100px" @change="handleSearch">
+            <el-option v-for="n in unitNumbers" :key="n" :label="'Unit ' + n" :value="n" />
           </el-select>
         </el-form-item>
         <el-form-item label="标签">
@@ -106,15 +106,6 @@
             <el-tag :type="getDifficultyType(row.difficulty)">
               {{ getDifficultyText(row.difficulty) }}
             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="分类" width="160">
-          <template #default="{ row }">
-            <div v-if="row.articleType === 'INNER'" class="article-type-inner">
-              <el-tag type="warning" size="small">课内</el-tag>
-              <span class="type-detail">{{ row.bookVolume || '-' }} / Unit{{ row.unitNum || '-' }}</span>
-            </div>
-            <el-tag v-else type="info" size="small">课外</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="isFeatured" label="推荐" width="80" align="center">
@@ -427,20 +418,20 @@ const selectedText = ref(null)
 const selectedUnitId = ref(null)
 const router = useRouter()
 
-const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '综合教程4']
-const unitNumbers = Array.from({ length: 6 }, (_, i) => i + 1)
-
 // 搜索表单
 const searchForm = reactive({
   keyword: '',
   difficulty: '',
   articleType: '',
   bookVolume: '',
-  unitNum: ''
+  unitNum: null
 })
 const tagFilter = ref([])
 const availableTags = ref([])
 const activeStatFilter = ref(null) // null | 'EASY' | 'MEDIUM' | 'HARD' | 'FEATURED'
+
+const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '理解当代中国']
+const unitNumbers = [1, 2, 3, 4, 5, 6]
 
 // 分页数据
 const pagination = reactive({
@@ -502,10 +493,10 @@ const loadTexts = async () => {
     if (searchForm.articleType) {
       params.articleType = searchForm.articleType
     }
-    if (searchForm.articleType === 'INNER' && searchForm.bookVolume) {
+    if (searchForm.bookVolume) {
       params.bookVolume = searchForm.bookVolume
     }
-    if (searchForm.articleType === 'INNER' && searchForm.unitNum) {
+    if (searchForm.unitNum) {
       params.unitNum = searchForm.unitNum
     }
 
@@ -1026,17 +1017,6 @@ defineExpose({ loadTexts })
   font-size: 13px;
   color: #606266;
   line-height: 1.4;
-}
-
-.article-type-inner {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.type-detail {
-  font-size: 12px;
-  color: #909399;
 }
 
 .pagination {
