@@ -74,7 +74,17 @@
         <p v-if="currentQuestion.passage" class="passage">{{ currentQuestion.passage }}</p>
         <h2>{{ currentQuestion.stem }}</h2>
 
-        <div v-if="questionType === 'single_choice'" class="options" role="radiogroup" :aria-label="currentQuestion.stem">
+        <div v-if="isListeningQuestion" class="listening-player">
+          <div class="listening-label">听力材料</div>
+          <audio ref="audioElement" :src="currentQuestion.audioUrl || activePaper.audioUrl" controls preload="metadata"></audio>
+          <label>倍速
+            <select v-model.number="playbackRate" @change="syncPlaybackRate">
+              <option :value="0.5">0.5x</option><option :value="0.75">0.75x</option><option :value="1">1x</option><option :value="1.25">1.25x</option><option :value="1.5">1.5x</option><option :value="2">2x</option>
+            </select>
+          </label>
+        </div>
+
+        <div v-if="questionType === 'single_choice' || questionType === 'listening'" class="options" role="radiogroup" :aria-label="currentQuestion.stem">
           <button
             v-for="(option, index) in currentQuestion.options"
             :key="option"
@@ -84,7 +94,7 @@
             @click="selectAnswer(index)"
           >
             <span class="option-letter">{{ optionLetter(index) }}</span>
-            <span>{{ option }}</span>
+            <span>{{ cleanOptionText(option) }}</span>
           </button>
         </div>
 
@@ -151,7 +161,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, CircleCheck, CircleClose, Delete, Upload } from '@element-plus/icons-vue'
 import { examCategories, pastPapers } from '@/data/pastPapers'
@@ -175,6 +185,19 @@ const isAdmin = computed(() => userStore.userRole === 'ADMIN')
 const allPapers = computed(() => [...sharedPapers.value, ...pastPapers])
 const filteredPapers = computed(() => allPapers.value.filter(item => item.category === selectedCategory.value))
 const currentQuestion = computed(() => activePaper.value?.questions[currentIndex.value])
+const audioElement = ref(null)
+const playbackRate = ref(1)
+// 是否听力题：兼容两种判断方式
+// 1) type === 'listening'（后端正确标记的听力题）
+// 2) section 包含"听力"（题库导入时即便 type 是 single_choice，section 标了"听力理解"也算）
+// 注意：不靠 audioUrl 兜底——因为后端导入时把试卷级 audioUrl 复制到了每道题，会误判
+const isListeningQuestion = computed(() => {
+  const q = currentQuestion.value
+  if (!q) return false
+  if (q.type === 'listening') return true
+  if (typeof q.section === 'string' && q.section.includes('听力')) return true
+  return false
+})
 const questionType = computed(() => currentQuestion.value?.type || 'single_choice')
 const answerValue = computed(() => answers.value[currentQuestion.value?.id])
 const answeredCount = computed(() => activePaper.value?.questions.filter(isAnswered).length || 0)
@@ -225,7 +248,43 @@ function startPaper(paper) {
   currentIndex.value = 0
   answers.value = {}
   submitted.value = false
+  playbackRate.value = 1
 }
+
+function syncPlaybackRate() {
+  if (audioElement.value) audioElement.value.playbackRate = playbackRate.value
+}
+
+// 清洗选项里被错误拼接的"下一题引导语"——解决旧数据里把
+// "Minimum base salary. Questions 22 to 25 are based on the passage you have just heard."
+// 当作选项内容显示的问题。规则：选项末尾若出现 "Questions XX to YY are based on..."
+// 或 "听下一段对话/独白" 这类指令，切掉。
+function cleanOptionText(text) {
+  if (!text) return text
+  return text
+    // 英文引导语：匹配 ". Questions 22 to 25 are based on ..." 或 "## Questions 19 to 21 are based on ..."
+    .replace(/\.?\s*(?:##\s*)?Questions?\s+\d+\s+(?:to|and)\s+\d+\s+are\s+based\s+on.*$/is, '')
+    .replace(/\.?\s*(?:##\s*)?Questions?\s+\d+\s+are\s+based\s+on.*$/is, '')
+    .replace(/\.?\s*(?:#{1,3}\s*)?(?:Part|Section)\s+[A-Z0-9]+\b.*$/is, '')
+    .replace(/\.?\s*={2,}\s*第?\s*\d+\s*页\s*={2,}.*$/is, '')
+    .replace(/[.。]?\s*(?:公众号|微信公众(?:号|平台)?)[：:]?\s*[^\s]+\s*$/i, '')
+    // 中文引导语："听下一段对话/独白" 等
+    .replace(/\.?\s*(?:##\s*)?听(?:下)?一?段?(?:对话|独白|短文)[^。]*[。]?\s*$/i, '')
+    .replace(/\.?\s*听(?:下)?一?段?(?:对话|独白|短文)[^。]*[。]?\s*$/i, '')
+    .trim()
+}
+
+watch([currentIndex, activePaper, isListeningQuestion], async () => {
+  await nextTick()
+  // 切换题目时，若当前不是听力题则自动暂停并停止播放，避免录音继续响
+  if (!isListeningQuestion.value && audioElement.value) {
+    audioElement.value.pause()
+    audioElement.value.currentTime = 0
+    audioElement.value.src = ''
+  } else {
+    syncPlaybackRate()
+  }
+})
 
 function selectAnswer(index) {
   answers.value = { ...answers.value, [currentQuestion.value.id]: index }
@@ -259,7 +318,7 @@ function isAnswered(question) {
 
 function isCorrect(question) {
   const value = answers.value[question.id]
-  if ((question.type || 'single_choice') === 'single_choice') return value === question.answer
+  if (['single_choice', 'listening'].includes(question.type || 'single_choice')) return value === question.answer
   if (question.type === 'cloze') return question.answers.every((answer, index) => value?.[index] === answer)
   if (question.type === 'matching') return question.items.every(item => value?.[item.id] === item.answer)
   return false
@@ -358,6 +417,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .question-meta { display: flex; justify-content: space-between; gap: 12px; color: #64748b; font-size: 13px; }
 .passage { margin: 20px 0 14px; padding: 14px; background: #f8fafc; border-left: 3px solid #94a3b8; line-height: 1.75; }
 .question-card h2 { margin: 18px 0; font-size: 18px; line-height: 1.6; }
+.listening-player { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 14px 0 18px; padding: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; }
+.listening-player audio { flex: 1 1 360px; min-width: 240px; height: 40px; }
+.listening-label { color: #1d4ed8; font-weight: 700; }
+.listening-player label { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 13px; }
+.listening-player select { min-height: 34px; border: 1px solid #93c5fd; border-radius: 5px; padding: 4px 8px; background: #fff; }
 .options { display: grid; gap: 10px; }
 .structured-answers { display: grid; gap: 12px; }
 .structured-answers label { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(180px, 260px); align-items: center; gap: 12px; line-height: 1.5; }

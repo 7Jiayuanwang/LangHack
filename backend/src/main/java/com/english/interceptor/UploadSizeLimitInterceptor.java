@@ -29,6 +29,7 @@ public class UploadSizeLimitInterceptor implements HandlerInterceptor {
     private static final Logger log = LoggerFactory.getLogger(UploadSizeLimitInterceptor.class);
     private static final long DEFAULT_IMAGE_SIZE = 10L  * 1024 * 1024;  // 10MB
     private static final long DEFAULT_VIDEO_SIZE = 512L * 1024 * 1024;  // 512MB
+    private static final long DEFAULT_AUDIO_SIZE = 512L * 1024 * 1024; // 512MB
     private static final long DEFAULT_BACKUP_IMPORT_SIZE = 2L * 1024 * 1024 * 1024;  // 2GB
 
     @Autowired
@@ -79,8 +80,9 @@ public class UploadSizeLimitInterceptor implements HandlerInterceptor {
         }
 
         boolean isVideo = "VIDEO".equalsIgnoreCase(mediaType);
-        String typeKey = isVideo ? "upload.content_size.video" : "upload.content_size.image";
-        long fallback = isVideo ? DEFAULT_VIDEO_SIZE : DEFAULT_IMAGE_SIZE;
+        boolean isAudio = "AUDIO".equalsIgnoreCase(mediaType);
+        String typeKey = isVideo ? "upload.content_size.video" : isAudio ? "upload.content_size.audio" : "upload.content_size.image";
+        long fallback = isVideo ? DEFAULT_VIDEO_SIZE : isAudio ? DEFAULT_AUDIO_SIZE : DEFAULT_IMAGE_SIZE;
         return resolveConfiguredLimit(typeKey, username, fallback);
     }
 

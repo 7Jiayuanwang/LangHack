@@ -4,9 +4,12 @@ import request from '@/utils/request'
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024  // 10 MB
 const MAX_VIDEO_SIZE = 512 * 1024 * 1024  // 512 MB
 
-// 允许的文件类型
+// 允许的文件类型（兼容浏览器对 .mp3 返回 audio/mpeg / audio/mp3 / 空字符串三种情况）
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg']
+const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/mpga', 'audio/wav', 'audio/wave', 'audio/x-wav', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/x-m4a', 'audio/aac']
+// 扩展名白名单，作为 file.type 缺失或非标准时的兜底判断
+const ALLOWED_AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'webm', 'mp4', 'm4a', 'aac']
 
 /**
  * 验证文件是否满足上传要求
@@ -31,8 +34,15 @@ function validateFile(file, mediaType) {
   }
 
   // 检查文件类型
-  const allowedTypes = mediaType === 'IMAGE' ? ALLOWED_IMAGE_TYPES : ALLOWED_VIDEO_TYPES
-  if (!allowedTypes.includes(file.type)) {
+  const allowedTypes = mediaType === 'IMAGE' ? ALLOWED_IMAGE_TYPES : mediaType === 'AUDIO' ? ALLOWED_AUDIO_TYPES : ALLOWED_VIDEO_TYPES
+  // file.type 在浏览器/系统/扩展名差异下可能为空或非标准值；若 audio 类型先按扩展名兜底
+  if (mediaType === 'AUDIO' && (!file.type || !allowedTypes.includes(file.type))) {
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    if (!ALLOWED_AUDIO_EXTS.includes(ext)) {
+      const typeList = allowedTypes.join(', ')
+      return `不支持的文件类型，仅支持: ${typeList}`
+    }
+  } else if (!allowedTypes.includes(file.type)) {
     const typeList = allowedTypes.join(', ')
     return `不支持的文件类型，仅支持: ${typeList}`
   }
@@ -53,8 +63,8 @@ export function uploadMedia(file, mediaType) {
   }
 
   // 验证 mediaType 值
-  if (mediaType !== 'IMAGE' && mediaType !== 'VIDEO') {
-    return Promise.reject(new Error('媒体类型只能是 IMAGE 或 VIDEO'))
+  if (!['IMAGE', 'VIDEO', 'AUDIO'].includes(mediaType)) {
+    return Promise.reject(new Error('媒体类型只能是 IMAGE、VIDEO 或 AUDIO'))
   }
 
   // 前端文件验证

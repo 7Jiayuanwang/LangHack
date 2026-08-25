@@ -41,12 +41,15 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
 
     private static final Set<String> ALLOWED_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
     private static final Set<String> ALLOWED_VIDEO_EXTENSIONS = Set.of("mp4", "webm", "ogg", "mov", "avi", "mkv");
+    private static final Set<String> ALLOWED_AUDIO_EXTENSIONS = Set.of("mp3", "wav", "ogg", "webm", "m4a", "aac");
 
     @Value("${media.upload.max-image-size:10485760}")
     private long defaultMaxImageSize;
 
     @Value("${media.upload.max-video-size:536870912}")
     private long defaultMaxVideoSize;
+    @Value("${media.upload.max-audio-size:536870912}")
+    private long defaultMaxAudioSize;
 
     @Value("${media.upload.storage-path:/app/uploads}")
     private String storagePath;
@@ -62,6 +65,7 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
         try {
             Files.createDirectories(Paths.get(storagePath, "video"));
             Files.createDirectories(Paths.get(storagePath, "image"));
+            Files.createDirectories(Paths.get(storagePath, "audio"));
         } catch (IOException e) {
             logger.error("Failed to create upload directories", e);
         }
@@ -114,18 +118,19 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             media.setCreatedAt(LocalDateTime.now());
             media.setUpdatedAt(LocalDateTime.now());
 
-            if ("VIDEO".equals(mediaType)) {
+            if ("VIDEO".equals(mediaType) || "AUDIO".equals(mediaType)) {
                 String filePath = saveToFileSystem(file, mediaType, originalFileName);
                 media.setFilePath(filePath);
                 media.setFileContent(new byte[0]);
 
-                MediaTranscodeService.ProbeResult probe = transcodeService.probe(new File(filePath));
+                MediaTranscodeService.ProbeResult probe = "VIDEO".equals(mediaType)
+                        ? transcodeService.probe(new File(filePath)) : null;
                 if (probe != null) {
                     media.setOriginalCodec(probe.videoCodec);
                     if (probe.width > 0) media.setWidth(probe.width);
                     if (probe.height > 0) media.setHeight(probe.height);
                 }
-                if (probe != null && transcodeService.needsTranscode(probe)) {
+                if ("VIDEO".equals(mediaType) && probe != null && transcodeService.needsTranscode(probe)) {
                     media.setTranscodeStatus("PENDING");
                 } else {
                     media.setTranscodeStatus("SKIPPED");
@@ -196,6 +201,11 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             }
             String ext = getFileExtension(fileName).toLowerCase();
             return !ext.isEmpty() && ALLOWED_VIDEO_EXTENSIONS.contains(ext);
+        } else if ("AUDIO".equals(mediaType)) {
+            // 兼容浏览器/客户端对 mp3 等文件返回不同 MIME（audio/mpeg、audio/mp3、application/octet-stream 甚至空值）的情况，
+            // 只要文件扩展名是合法音频扩展名即放行
+            String ext = getFileExtension(fileName).toLowerCase();
+            return !ext.isEmpty() && ALLOWED_AUDIO_EXTENSIONS.contains(ext);
         }
         return false;
     }
@@ -231,8 +241,9 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
      */
     private long resolveMaxSize(String mediaType, Long uploadedBy) {
         boolean isImage = "IMAGE".equals(mediaType);
-        String typeKey  = isImage ? "upload.content_size.image" : "upload.content_size.video";
-        long   envFallback = isImage ? defaultMaxImageSize : defaultMaxVideoSize;
+        boolean isAudio = "AUDIO".equals(mediaType);
+        String typeKey  = isImage ? "upload.content_size.image" : isAudio ? "upload.content_size.audio" : "upload.content_size.video";
+        long   envFallback = isImage ? defaultMaxImageSize : isAudio ? defaultMaxAudioSize : defaultMaxVideoSize;
 
         // 尝试读取角色覆盖
         if (uploadedBy != null) {

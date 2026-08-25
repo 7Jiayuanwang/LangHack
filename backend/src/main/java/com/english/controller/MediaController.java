@@ -46,6 +46,7 @@ public class MediaController {
         "image/jpeg", "image/png", "image/gif", "image/webp",
         "video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo", "video/x-matroska",
         "audio/mpeg", "audio/ogg", "audio/wav", "audio/webm",
+        "audio/mp4", "audio/x-m4a", "audio/aac",
         "application/pdf"
     );
 

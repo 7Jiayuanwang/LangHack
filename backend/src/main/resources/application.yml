@@ -134,6 +134,7 @@ media:
   upload:
     max-image-size: ${MEDIA_UPLOAD_MAX_IMAGE_SIZE:10485760}   # 默认 10 MB
     max-video-size: ${MEDIA_UPLOAD_MAX_VIDEO_SIZE:536870912}  # 默认 512 MB
+    max-audio-size: ${MEDIA_UPLOAD_MAX_AUDIO_SIZE:536870912}  # 默认 512 MB
     storage-path: ${MEDIA_UPLOAD_STORAGE_PATH:/app/uploads}   # 视频文件存储路径
   transcode:
     enabled: ${MEDIA_TRANSCODE_ENABLED:true}                  # 总开关：关闭后所有视频走 SKIPPED

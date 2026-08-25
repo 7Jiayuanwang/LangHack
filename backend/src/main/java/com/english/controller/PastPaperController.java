@@ -3,12 +3,14 @@ package com.english.controller;
 import com.english.dto.Result;
 import com.english.entity.PastPaper;
 import com.english.mapper.PastPaperMapper;
+import com.english.service.MediaService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -18,9 +20,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PastPaperController {
     private static final Set<String> CATEGORIES = new HashSet<>(Arrays.asList("cet4", "cet6", "postgraduate"));
-    private static final Set<String> QUESTION_TYPES = new HashSet<>(Arrays.asList("single_choice", "cloze", "matching", "translation", "writing"));
+    private static final Set<String> QUESTION_TYPES = new HashSet<>(Arrays.asList("single_choice", "cloze", "matching", "translation", "writing", "listening"));
     private final PastPaperMapper pastPaperMapper;
     private final ObjectMapper objectMapper;
+    private final MediaService mediaService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
@@ -68,6 +71,41 @@ public class PastPaperController {
         return Result.success(null);
     }
 
+    @PostMapping(value = "/{id}/audio", consumes = "multipart/form-data")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Map<String, Object>> uploadAudio(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        if (file == null || file.isEmpty()) return Result.error("请选择听力音频文件");
+        PastPaper paper = pastPaperMapper.findById(id);
+        if (paper == null) return Result.error("试卷不存在");
+        try {
+            var media = mediaService.uploadMedia(file, "AUDIO", null);
+            String audioUrl = "/api/media/" + media.getId() + "/download";
+
+            Map<String, Object> contentMap = objectMapper.readValue(paper.getContentJson(), new TypeReference<Map<String, Object>>() {});
+            // 1. 设置 paper-level audioUrl（前端 PastPapers.vue 会优先用题 audioUrl，缺失则回退 paper.audioUrl）
+            contentMap.put("audioUrl", audioUrl);
+            // 2. 仅给 type=listening 的题注入 audioUrl（避免污染写作/阅读/翻译题）
+            Object qsObj = contentMap.get("questions");
+            if (qsObj instanceof List<?> qs) {
+                for (Object qo : qs) {
+                    if (qo instanceof Map<?, ?> qm) {
+                        Object t = qm.get("type");
+                        if ("listening".equals(t)) {
+                            ((Map<String, Object>) qm).put("audioUrl", audioUrl);
+                        }
+                    }
+                }
+            }
+            paper.setContentJson(objectMapper.writeValueAsString(contentMap));
+            pastPaperMapper.update(paper);
+            return Result.success(toPayload(paper));
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            return Result.error("听力绑定失败：" + e.getMessage());
+        }
+    }
+
     private void validateQuestions(JsonNode questions) {
         for (int index = 0; index < questions.size(); index++) {
             JsonNode question = questions.get(index);
@@ -86,7 +124,7 @@ public class PastPaperController {
             } else if ("matching".equals(type)) {
                 JsonNode items = question.get("items");
                 if (options == null || !options.isArray() || options.size() == 0 || items == null || !items.isArray() || items.size() == 0) throw new IllegalArgumentException("第" + (index + 1) + "题匹配内容不完整");
-            } else if (text(question, "referenceAnswer").isEmpty()) {
+            } else if (text(question, "referenceAnswer").isEmpty() && !"listening".equals(type)) {
                 throw new IllegalArgumentException("第" + (index + 1) + "题缺少参考答案");
             }
             if (text(question, "analysis").isEmpty()) throw new IllegalArgumentException("第" + (index + 1) + "题缺少解析");
