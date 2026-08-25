@@ -36,7 +36,10 @@ RUN if [ -n "$ALPINE_MIRROR" ]; then \
 
 # Install all dependencies (including devDependencies for vite build)
 # 内网构建时通过 NPM_REGISTRY 参数指向内网 Nexus npm 代理仓库
-RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi && npm install --include=dev
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi \
+    && npm cache verify \
+    && (npm ci --include=dev --no-audit --no-fund --legacy-peer-deps \
+        || npm install --include=dev --no-audit --no-fund --legacy-peer-deps)
 
 # Copy source code
 COPY . .

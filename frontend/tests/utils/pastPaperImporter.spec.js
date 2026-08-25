@@ -43,6 +43,38 @@ describe('past paper importer', () => {
       .toThrow('完整 A-D')
   })
 
+  it('removes OCR instructions appended to listening options', () => {
+    const paper = parsePaperJson(JSON.stringify({
+      title: '听力边界清洗',
+      audioUrl: '/audio/test.mp3',
+      questions: [
+        {
+          type: 'listening',
+          stem: 'Question 3?',
+          options: ['A3', 'B3', 'C3', 'D3. ## Questions 3 and 4 are based on the news report you have just heard.'],
+          answer: 'D',
+          analysis: 'Reason 3.'
+        },
+        {
+          type: 'listening',
+          stem: 'Question 5?',
+          options: ['A5', 'B5', 'C5', 'D5. 公众号：真题PDF电子版'],
+          answer: 'D',
+          analysis: 'Reason 5.'
+        },
+        {
+          type: 'listening',
+          stem: 'Question 26?',
+          options: ['A26', 'B26', 'C26', 'D26. Section B Directions: In this section, you will hear two conversations.'],
+          answer: 'D',
+          analysis: 'Reason 26.'
+        }
+      ]
+    }), { category: 'cet4' })
+
+    expect(paper.questions.map(question => question.options[3])).toEqual(['D3', 'D5', 'D26'])
+  })
+
   it('validates cloze, matching, translation and writing questions', () => {
     const paper = parsePaperJson(JSON.stringify({
       title: '全题型试卷',
@@ -68,5 +100,21 @@ describe('past paper importer', () => {
     }), { category: 'cet4' })
     expect(paper.questions[0].answers).toEqual([13])
     expect(paper.questions[1].items[0].answer).toBe(11)
+  })
+
+  it('does not treat ordinary "part of" prose as a section heading', () => {
+    const paper = parsePaperJson(JSON.stringify({
+      title: 'Cloze section-heading regression',
+      questions: [{
+        type: 'cloze',
+        stem: 'The part of the brain uses ____ signals and ____ patterns.',
+        options: ['first', 'second'],
+        answers: ['A', 'B'],
+        analysis: 'Cloze analysis.'
+      }]
+    }), { category: 'cet4' })
+
+    expect(paper.questions[0].stem).toContain('part of the brain')
+    expect(paper.questions[0].answers).toEqual([0, 1])
   })
 })

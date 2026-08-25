@@ -140,6 +140,8 @@ public class SecurityConfig {
                 .authorizeRequests()
                 // 健康检查端点保护（必须放在最前面）
                 .antMatchers("/api/health").permitAll()
+                .antMatchers("/actuator/health", "/actuator/info").permitAll()
+                .antMatchers("/", "/login", "/articles", "/article/**", "/student/**", "/assets/**", "/js/**", "/css/**", "/img/**", "/favicon.ico", "/index.html").permitAll()
                 // 允许访问的接口 - 无需认证
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/public/**").permitAll()
@@ -244,6 +246,10 @@ public class SecurityConfig {
         // Security is enforced by Spring Security authorization rules, not by CORS path registration.
         // 安全性由 Spring Security 授权规则保障，而非 CORS 路径注册。
         source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/login", configuration);
+        source.registerCorsConfiguration("/assets/**", configuration);
+        source.registerCorsConfiguration("/js/**", configuration);
+        source.registerCorsConfiguration("/css/**", configuration);
         return source;
     }
 }

@@ -1,0 +1,49 @@
+# 本地开发用：只启动 MySQL + Redis
+# 后端用 IDE/mvn 启动，前端用 npm run dev
+name: langhack-dev
+
+services:
+  # MySQL
+  mysql:
+    image: mysql:8.0
+    container_name: langhack-mysql-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: english_learning
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - langhack-mysql-data:/var/lib/mysql
+      - ./database/english_learning_full_backup_20260206_231342.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max-allowed-packet=256M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: langhack-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - langhack-redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  langhack-mysql-data:
+  langhack-redis-data:

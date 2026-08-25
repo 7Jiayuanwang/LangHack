@@ -1,16 +1,72 @@
 const CATEGORY_VALUES = new Set(['cet4', 'cet6', 'postgraduate'])
-const QUESTION_TYPES = new Set(['single_choice', 'cloze', 'matching', 'translation', 'writing'])
+const QUESTION_TYPES = new Set(['single_choice', 'cloze', 'matching', 'translation', 'writing', 'listening'])
 
-const clean = (value = '') => value
-  .replace(/!\[[^\]]*]\([^)]*\)/g, '')
-  .replace(/<[^>]+>/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim()
+const clean = (value = '') => {
+  const text = value
+    .replace(/!\[[^\]]*]\([^)]*\)/g, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  // 切掉选项里被错误拼接的"下一题引导语"，比如
+  // "Minimum base salary. Questions 22 to 25 are based on the passage you have just heard."
+  // 或带 markdown 分隔符 "## Questions 19 to 21 are based on ..."
+  // 这些是题目之间的指令，不属于当前选项内容。
+  return text
+    .replace(/\.?\s*(?:##\s*)?Questions?\s+\d+\s+(?:to|and)\s+\d+\s+are\s+based\s+on.*$/is, '')
+    .replace(/\.?\s*(?:##\s*)?Questions?\s+\d+\s+are\s+based\s+on.*$/is, '')
+    // Only remove actual exam section headings. The previous broad pattern
+    // treated ordinary prose such as "part of the brain" as "Part O..."
+    // (the `i` flag made the lowercase word eligible) and truncated cloze
+    // stems before their blanks.
+    .replace(/\.?\s*(?:#{1,3}\s*)?(?:Part\s+(?:[IVX]+|\d+)|Section\s+[A-C])\b.*$/is, '')
+    .replace(/\.?\s*={2,}\s*第?\s*\d+\s*页\s*={2,}.*$/is, '')
+    .replace(/[.。]?\s*(?:公众号|微信公众(?:号|平台)?)[：:]?\s*[^\s]+\s*$/i, '')
+    .replace(/\.?\s*(?:##\s*)?听(?:下)?一?段?(?:对话|独白|短文)[^。]*[。]?\s*$/i, '')
+    .replace(/\.?\s*听(?:下)?一?段?(?:对话|独白|短文)[^。]*[。]?\s*$/i, '')
+    .trim()
+}
 
 const answerIndex = (value) => {
   if (Number.isInteger(value) && value >= 0 && value < 26) return value
   const letter = String(value || '').trim().toUpperCase().match(/[A-Z]/)?.[0]
   return letter ? letter.charCodeAt(0) - 65 : -1
+}
+
+const answerLetter = (value) => {
+  const index = answerIndex(value)
+  return index >= 0 ? String.fromCharCode(65 + index) : ''
+}
+
+// Export the normalized internal model in the same shape as the full-question JSON template.
+export function toTemplatePaper(paper) {
+  return {
+    title: paper.title,
+    date: paper.date || '',
+    duration: paper.duration,
+    questions: (paper.questions || []).map((question) => {
+      const output = {
+        type: question.type || 'single_choice',
+        section: question.section || '选择题',
+        stem: question.stem || '',
+        analysis: question.analysis || ''
+      }
+      if (question.passage) output.passage = question.passage
+      if (output.type === 'single_choice' || output.type === 'listening') {
+        output.options = (question.options || []).slice()
+        output.answer = answerLetter(question.answer)
+        if (output.type === 'listening' && question.audioUrl) output.audioUrl = question.audioUrl
+      } else if (output.type === 'cloze') {
+        output.options = (question.options || []).slice()
+        output.answers = (question.answers || []).map(answerLetter)
+      } else if (output.type === 'matching') {
+        output.options = (question.options || []).slice()
+        output.items = (question.items || []).map((item) => ({ id: item.id, prompt: item.prompt, answer: answerLetter(item.answer) }))
+      } else {
+        output.referenceAnswer = question.referenceAnswer || ''
+      }
+      return output
+    })
+  }
 }
 
 export function validatePaper(input, fallback = {}) {
@@ -21,6 +77,7 @@ export function validatePaper(input, fallback = {}) {
     date: clean(input.date || fallback.date || ''),
     duration: Number(input.duration || fallback.duration || 30),
     scope: clean(input.scope || fallback.scope || ''),
+    audioUrl: clean(input.audioUrl || fallback.audioUrl || ''),
     status: 'ready',
     custom: true
   }
@@ -44,7 +101,8 @@ export function validatePaper(input, fallback = {}) {
       section: clean(question.section || '选择题'),
       passage: clean(question.passage),
       stem: clean(question.stem),
-      analysis: clean(question.analysis)
+      analysis: clean(question.analysis),
+      audioUrl: clean(question.audioUrl || paper.audioUrl)
     }
 
     if (type === 'single_choice') {
@@ -62,6 +120,12 @@ export function validatePaper(input, fallback = {}) {
       normalized.options = question.options?.map(clean)
       normalized.items = (question.items || []).map((item, itemIndex) => ({ id: item.id || `${itemIndex + 1}`, prompt: clean(item.prompt), answer: answerIndex(item.answer) }))
       if (!normalized.options?.length || !normalized.items.length || normalized.items.some(item => !item.prompt || item.answer < 0 || item.answer >= normalized.options.length)) throw new Error(`第 ${index + 1} 题段落匹配内容不完整`)
+    } else if (type === 'listening') {
+      normalized.options = question.options?.map(clean)
+      normalized.answer = answerIndex(question.answer)
+      if (!normalized.audioUrl) throw new Error(`第 ${index + 1} 题缺少听力音频`)
+      if (normalized.options?.length !== 4 || normalized.options.some(option => !option)) throw new Error(`第 ${index + 1} 题必须有完整的 A-D 四个选项`)
+      if (normalized.answer < 0 || normalized.answer > 3) throw new Error(`第 ${index + 1} 题答案必须是 A、B、C 或 D`)
     } else {
       normalized.referenceAnswer = clean(question.referenceAnswer)
       if (!normalized.referenceAnswer) throw new Error(`第 ${index + 1} 题缺少参考答案`)
@@ -152,6 +216,9 @@ function parseMineruMarkdown(text, fallback) {
 }
 
 export async function parsePaperFile(file, fallback) {
+  if (file.name.toLowerCase().endsWith('.pdf')) {
+    throw new Error('PDF 尚未直接解析：请先在 MinerU 中上传 PDF 并下载 ZIP，解压后选择其中的 full.md。这样才能保留题目、选项和答案结构。')
+  }
   const text = await file.text()
   if (file.name.toLowerCase().endsWith('.json')) return parsePaperJson(text, fallback)
   if (file.name.toLowerCase().endsWith('.md')) return parsePaperMarkdown(text, fallback)
