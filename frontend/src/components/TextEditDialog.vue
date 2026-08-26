@@ -43,7 +43,7 @@
             <div v-else class="cover-placeholder">
               <el-icon class="upload-icon" :size="32"><Picture /></el-icon>
               <div class="upload-text">点击或拖拽上传封面图</div>
-              <div class="upload-hint">支持 JPG / PNG / GIF / WebP，不超过 10MB</div>
+              <div class="upload-hint">支持 JPG / PNG / GIF / WebP，不超过 10MB；也可直接 Ctrl+V 粘贴图片</div>
             </div>
           </el-upload>
           <div v-if="formData.coverUrl" class="cover-actions">
@@ -58,7 +58,7 @@
       </el-form-item>
 
       <!-- 课程和单元选择（仅在没有传入unitId时显示） -->
-      <el-form-item label="所属课程" v-if="!props.unitId">
+      <el-form-item label="所属课程" v-if="!props.unitId || isEdit">
         <el-select 
           v-model="formData.courseId" 
           placeholder="请选择课程（可选）"
@@ -75,12 +75,14 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="所属单元" v-if="!props.unitId">
+      <el-form-item label="所属单元" v-if="!props.unitId || isEdit">
         <el-select 
-          v-model="formData.unitId" 
-          placeholder="请选择单元（可选）"
+          v-model="formData.unitIds"
+          placeholder="请选择单元（可多选，可不选）"
           clearable
-          :disabled="!formData.courseId"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
           style="width: 100%"
         >
           <el-option
@@ -110,8 +112,15 @@
 
       <!-- 册号（仅课内显示） -->
       <el-form-item v-if="formData.articleType === 'INNER'" label="册号" prop="bookVolume">
-        <el-select v-model="formData.bookVolume" placeholder="请选择册号">
+        <el-select v-model="formData.bookVolume" placeholder="请选择册号" @change="handleBookVolumeChange">
           <el-option v-for="v in bookVolumes" :key="v" :label="v" :value="v" />
+        </el-select>
+      </el-form-item>
+
+      <!-- 内容分类随教材切换 -->
+      <el-form-item v-if="formData.articleType === 'INNER' && formData.bookVolume" label="内容" prop="contentSection">
+        <el-select v-model="formData.contentSection" placeholder="请选择内容分类">
+          <el-option v-for="section in contentSectionOptions" :key="section" :label="section" :value="section" />
         </el-select>
       </el-form-item>
 
@@ -212,6 +221,9 @@ import { Upload, Picture, ZoomIn, Delete } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import MarkdownEditor from './MarkdownEditor.vue'
 import { createText, updateText, getCourses, getUnitsByCourseId } from '@/api/admin'
+import { uploadMedia } from '@/api/media'
+import { getClipboardImageFile } from '@/utils/clipboardImage'
+import { isCoverFileValid } from '@/utils/coverUpload'
 
 const props = defineProps({
   modelValue: {
@@ -264,13 +276,20 @@ const formData = reactive({
   isPublic: 1,
   courseId: null,
   unitId: props.unitId,
+  unitIds: props.unitId ? [props.unitId] : [],
   articleType: 'OUTER',
   bookVolume: '',
+  contentSection: '',
   unitNum: null
 })
 
 const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '理解当代中国']
 const unitNumbers = [1, 2, 3, 4, 5, 6]
+const contentSectionOptions = computed(() => (
+  formData.bookVolume === '理解当代中国'
+    ? ['Understanding China', 'Exploring the world']
+    : ['iExplore1', 'iExplore2']
+))
 
 const rules = {
   title: [
@@ -301,13 +320,17 @@ watch(() => visible.value, (newVal) => {
     formData.audioUrl = props.textData.audioUrl || ''
     formData.coverUrl = props.textData.coverUrl || ''
     formData.isPublic = props.textData.isPublic != null ? props.textData.isPublic : 1
+    formData.articleType = props.textData.articleType || 'OUTER'
+    formData.bookVolume = props.textData.bookVolume || ''
+    formData.contentSection = props.textData.contentSection || ''
+    formData.unitNum = props.textData.unitNum ?? null
     formData.courseId = props.textData.courseId || null
-    formData.unitId = props.textData.unitId || props.unitId
+    formData.unitIds = Array.isArray(props.textData.unitIds)
+      ? [...props.textData.unitIds]
+      : (props.textData.unitId ? [props.textData.unitId] : (props.unitId ? [props.unitId] : []))
+    formData.unitId = formData.unitIds[0] || null
 
-    // 如果有courseId，加载对应的单元
-    if (props.textData.courseId) {
-      loadUnitsByCourse(props.textData.courseId)
-    }
+    // 编辑时由课程列表加载全部单元，支持跨课程的多单元关联。
   } else if (newVal && !props.textData) {
     // 新增模式，清空数据
     formData.id = null
@@ -321,15 +344,32 @@ watch(() => visible.value, (newVal) => {
     formData.audioUrl = ''
     formData.coverUrl = ''
     formData.isPublic = 1
+    formData.articleType = 'OUTER'
+    formData.bookVolume = ''
+    formData.contentSection = ''
+    formData.unitNum = null
     formData.courseId = null
     formData.unitId = props.unitId
+    formData.unitIds = props.unitId ? [props.unitId] : []
   }
 
   // 加载课程列表（仅在没有传入unitId时）
-  if (newVal && !props.unitId) {
+  if (newVal && (!props.unitId || props.textData)) {
     loadCourses()
   }
 })
+
+watch(() => formData.articleType, (articleType) => {
+  if (articleType === 'OUTER') {
+    formData.bookVolume = ''
+    formData.contentSection = ''
+    formData.unitNum = null
+  }
+})
+
+const handleBookVolumeChange = () => {
+  formData.contentSection = ''
+}
 
 // 加载课程列表
 // FIX #1: 完整的响应对象null检查和response.data结构验证
@@ -352,6 +392,7 @@ const loadCourses = async () => {
       } else {
         courses.value = []
       }
+      await loadAllUnits()
     } else {
       courses.value = []
     }
@@ -361,9 +402,29 @@ const loadCourses = async () => {
   }
 }
 
+const loadAllUnits = async () => {
+  const courseList = Array.isArray(courses.value) ? courses.value : []
+  if (courseList.length === 0) {
+    units.value = []
+    return
+  }
+  const lists = await Promise.all(courseList.map(course =>
+    getUnitsByCourseId(course.id).then(response =>
+      response?.code === 200 && Array.isArray(response.data) ? response.data : []
+    ).catch(() => [])
+  ))
+  const seen = new Set()
+  units.value = lists.flat().filter(unit => {
+    if (seen.has(unit.id)) return false
+    seen.add(unit.id)
+    return true
+  })
+}
+
 // 处理课程变化
 const handleCourseChange = async (courseId) => {
   formData.unitId = null
+  formData.unitIds = []
   units.value = []
   
   if (courseId) {
@@ -407,13 +468,13 @@ const uploadHeaders = computed(() => {
 })
 
 const beforeCoverUpload = (rawFile) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  if (!allowedTypes.includes(rawFile.type)) {
-    ElMessage.error('仅支持 JPG/PNG/GIF/WebP 格式的图片')
-    return false
-  }
-  if (rawFile.size / 1024 / 1024 > 10) {
-    ElMessage.error('图片大小不能超过 10MB')
+  if (!isCoverFileValid(rawFile)) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!rawFile || !allowedTypes.includes(rawFile.type)) {
+      ElMessage.error('仅支持 JPG/PNG/GIF/WebP 格式的图片')
+    } else {
+      ElMessage.error('图片大小不能超过 10MB')
+    }
     return false
   }
   return true
@@ -432,6 +493,23 @@ const handleCoverSuccess = (response) => {
 const handleCoverError = (err) => {
   console.error('Upload error:', err)
   ElMessage.error('文件上传失败，请检查网络或登录状态')
+}
+
+const handleClipboardImagePaste = async (event) => {
+  if (!visible.value) return
+
+  const file = getClipboardImageFile(event)
+  if (!file) return
+
+  event.preventDefault()
+  if (!beforeCoverUpload(file)) return
+
+  try {
+    const response = await uploadMedia(file, 'IMAGE')
+    handleCoverSuccess(response)
+  } catch (error) {
+    handleCoverError(error)
+  }
 }
 
 const removeCover = () => {
@@ -459,6 +537,14 @@ const handleSubmit = async () => {
       ElMessage.error('请输入Markdown内容')
       return
     }
+    if (formData.articleType === 'INNER' && !formData.bookVolume) {
+      ElMessage.error('请选择册号')
+      return
+    }
+    if (formData.articleType === 'INNER' && !formData.contentSection) {
+      ElMessage.error('请选择内容分类')
+      return
+    }
 
     submitting.value = true
     try {
@@ -473,10 +559,12 @@ const handleSubmit = async () => {
         audioUrl: formData.audioUrl,
         coverUrl: formData.coverUrl,
         isPublic: formData.isPublic,
-        unitId: formData.unitId,
         articleType: formData.articleType,
-        bookVolume: formData.bookVolume,
-        unitNum: formData.unitNum
+        bookVolume: formData.articleType === 'INNER' ? formData.bookVolume : null,
+        contentSection: formData.articleType === 'INNER' ? formData.contentSection : null,
+        unitNum: formData.articleType === 'INNER' ? formData.unitNum : null,
+        unitId: formData.unitIds[0] || null,
+        unitIds: props.unitId && !isEdit.value ? [props.unitId] : [...formData.unitIds]
       }
 
       if (isEdit.value) {
@@ -518,13 +606,15 @@ const handleMessage = (e) => {
 
 // 组件挂载时加载课程列表
 onMounted(() => {
-  if (!props.unitId) {
+  document.addEventListener('paste', handleClipboardImagePaste)
+  if (!props.unitId || props.textData) {
     loadCourses()
   }
   window.addEventListener('message', handleMessage)
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('paste', handleClipboardImagePaste)
   window.removeEventListener('message', handleMessage)
 })
 </script>

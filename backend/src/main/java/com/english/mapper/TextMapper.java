@@ -12,7 +12,7 @@ public interface TextMapper extends BaseMapper<Text> {
     /**
      * 软删除指定单元下所有未删除的课文（绕过 @TableLogic 的 SELECT 过滤）
      */
-    @Update("UPDATE texts SET deleted = 1 WHERE unit_id = #{unitId} AND deleted = 0")
+    @Update("UPDATE texts SET deleted = 1 WHERE deleted = 0 AND (unit_id = #{unitId} OR id IN (SELECT text_id FROM text_units WHERE unit_id = #{unitId}))")
     int softDeleteByUnitId(@Param("unitId") Long unitId);
 
     /**
@@ -21,6 +21,9 @@ public interface TextMapper extends BaseMapper<Text> {
      */
     @Update("UPDATE texts SET unit_id = NULL WHERE unit_id = #{unitId}")
     int clearUnitReference(@Param("unitId") Long unitId);
+
+    @Update("UPDATE texts SET unit_id = #{unitId}, updated_time = NOW() WHERE id = #{textId}")
+    int updateUnitReference(@Param("textId") Long textId, @Param("unitId") Long unitId);
 
     @Update("UPDATE texts SET like_count = COALESCE(like_count, 0) + 1 WHERE id = #{textId}")
     int incrementLikeCount(@Param("textId") Long textId);

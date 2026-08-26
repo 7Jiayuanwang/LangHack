@@ -11,6 +11,7 @@ const MAX_SIZE_MB = 10
  * Does NOT call ElMessage — callers are responsible for showing errors.
  */
 export function isCoverFileValid(file) {
+  if (!file || typeof file.type !== 'string' || !Number.isFinite(file.size) || file.size < 0) return false
   if (!ALLOWED_TYPES.includes(file.type)) return false
   if (file.size / 1024 / 1024 > MAX_SIZE_MB) return false
   return true

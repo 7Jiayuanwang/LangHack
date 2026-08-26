@@ -5,6 +5,7 @@ import com.english.entity.Unit;
 import com.english.entity.User;
 import com.english.entity.Word;
 import com.english.entity.Text;
+import com.english.entity.ArticleType;
 import com.english.exception.BusinessException;
 import com.english.service.*;
 import com.english.service.impl.DataCleanupServiceImpl;
@@ -530,6 +531,48 @@ class AdminControllerTest {
 
         verify(textService).updateText(argThat(updated ->
                 updated != null && Objects.equals(updated.getId(), 6L) && Objects.equals(updated.getIsFeatured(), 0)));
+    }
+
+    @Test
+    void createText_preservesInClassClassification() throws Exception {
+        Map<String, Object> request = new HashMap<>();
+        request.put("title", "Unit text");
+        request.put("content", "Content");
+        request.put("articleType", "INNER");
+        request.put("bookVolume", "综合教程1");
+        request.put("contentSection", "iExplore2");
+        request.put("unitNum", 3);
+
+        mockMvc.perform(post("/api/admin/texts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(textService).createText(argThat(text ->
+                text.getArticleType() == ArticleType.INNER
+                        && "综合教程1".equals(text.getBookVolume())
+                        && "iExplore2".equals(text.getContentSection())
+                        && Objects.equals(3, text.getUnitNum())));
+    }
+
+    @Test
+    void createText_rejectsContentSectionFromAnotherBook() throws Exception {
+        Map<String, Object> request = new HashMap<>();
+        request.put("title", "China text");
+        request.put("content", "Content");
+        request.put("articleType", "INNER");
+        request.put("bookVolume", "理解当代中国");
+        request.put("contentSection", "iExplore1");
+
+        mockMvc.perform(post("/api/admin/texts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("contentSection 与所选教材不匹配"));
+
+        verify(textService, never()).createText(any(Text.class));
     }
 
     // Data cleanup tests moved to OpsControllerTest (endpoints migrated to /api/ops/)

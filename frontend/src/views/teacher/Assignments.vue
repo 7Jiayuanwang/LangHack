@@ -362,7 +362,7 @@ const unitContent = ref({
   texts: [],
   words: []
 })
-const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '综合教程4']
+const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '理解当代中国']
 const unitNumbers = Array.from({ length: 6 }, (_, index) => index + 1)
 
 // 快捷任务模板

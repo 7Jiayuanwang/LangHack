@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.english.entity.Text;
 import com.english.dto.ArticleFilterDTO;
 import com.english.mapper.TextMapper;
+import com.english.mapper.TextUnitMapper;
 import com.english.service.TextService;
 import org.springframework.stereotype.Service;
 import com.english.exception.BusinessException;
@@ -31,6 +32,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
 
     @Autowired
     private TextExerciseMapper textExerciseMapper;
+
+    @Autowired
+    private TextUnitMapper textUnitMapper;
 
     @Override
     @UseMaster
@@ -89,7 +93,10 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
 
         // 如果指定了unitId，则按unitId过滤；否则显示所有课文（包括未分配的）
         if (unitId != null) {
-            queryWrapper.eq("unit_id", unitId);
+            queryWrapper.and(wrapper -> wrapper
+                .eq("unit_id", unitId)
+                .or()
+                .inSql("id", "SELECT text_id FROM text_units WHERE unit_id = " + unitId));
         }
 
         queryWrapper.eq("deleted", 0);
@@ -97,6 +104,14 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         queryWrapper.orderByDesc("created_time");
 
         IPage<Text> pageResult = page(pageParam, queryWrapper);
+
+        pageResult.getRecords().forEach(text -> {
+            List<Long> unitIds = textUnitMapper.selectUnitIdsByTextId(text.getId());
+            text.setUnitIds(unitIds);
+            if (text.getUnitId() == null && !unitIds.isEmpty()) {
+                text.setUnitId(unitIds.get(0));
+            }
+        });
 
         Map<String, Object> result = new HashMap<>();
         result.put("records", pageResult.getRecords());
@@ -127,6 +142,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         text.setUpdatedAt(LocalDateTime.now());
         text.setDeleted(0);
         save(text);
+        if (text.getId() != null && text.getUnitId() != null && text.getUnitId() > 0) {
+            textUnitMapper.insertRelation(text.getId(), text.getUnitId(), text.getOrderNum() == null ? 0 : text.getOrderNum());
+        }
     }
 
     @Override
@@ -155,9 +173,17 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         }
         if (text.getArticleType() != null) {
             updateWrapper.set("article_type", text.getArticleType().name());
+            if (text.getArticleType() == com.english.entity.ArticleType.OUTER) {
+                updateWrapper.set("book_volume", null);
+                updateWrapper.set("content_section", null);
+                updateWrapper.set("unit_num", null);
+            }
         }
         if (text.getBookVolume() != null) {
             updateWrapper.set("book_volume", text.getBookVolume());
+        }
+        if (text.getContentSection() != null) {
+            updateWrapper.set("content_section", text.getContentSection());
         }
         if (text.getUnitNum() != null) {
             updateWrapper.set("unit_num", text.getUnitNum());
@@ -206,6 +232,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         }
 
         update(updateWrapper);
+        if (text.getUnitId() != null && text.getUnitId() > 0) {
+            textUnitMapper.insertRelation(text.getId(), text.getUnitId(), text.getOrderNum() == null ? 0 : text.getOrderNum());
+        }
     }
 
     @Override
@@ -236,7 +265,10 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
     @Override
     public List<Text> getTextsByUnit(Long unitId) {
         QueryWrapper<Text> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("unit_id", unitId);
+        queryWrapper.and(wrapper -> wrapper
+                .eq("unit_id", unitId)
+                .or()
+                .inSql("id", "SELECT text_id FROM text_units WHERE unit_id = " + unitId));
         queryWrapper.eq("deleted", 0);
         queryWrapper.orderByDesc("created_time");
         return list(queryWrapper);

@@ -9,6 +9,7 @@ import com.english.entity.Assignment;
 import com.english.entity.Unit;
 import com.english.mapper.AssignmentMapper;
 import com.english.mapper.TextMapper;
+import com.english.mapper.TextUnitMapper;
 import com.english.mapper.UnitMapper;
 import com.english.service.UnitService;
 import org.slf4j.Logger;
@@ -32,6 +33,9 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements Un
 
     @Autowired
     private TextMapper textMapper;
+
+    @Autowired
+    private TextUnitMapper textUnitMapper;
 
     @Override
     public Map<String, Object> getUnitsByPage(Map<String, Object> params) {
@@ -139,6 +143,7 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements Un
         // 6. 断开所有课文的 unit_id FK 引用（包括已软删除的课文），
         //    防止 DB 层 ON DELETE CASCADE 物理删除已软删除的课文
         int clearedCount = textMapper.clearUnitReference(id);
+        textUnitMapper.deleteAllRelationsByUnitId(id);
         logger.debug("清除单位 {} 下课文的单位引用：{} 篇", id, clearedCount);
 
         // 7. 删除单元本身（unit_words 由 DB ON DELETE CASCADE 自动清理）

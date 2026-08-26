@@ -618,35 +618,10 @@ BEGIN
                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'read_article_count') THEN
         ALTER TABLE users ADD COLUMN read_article_count INT NOT NULL DEFAULT 0 COMMENT '已读文章数';
     END IF;
-    -- 总阅读时长 [原 V37]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'total_read_time') THEN
-        ALTER TABLE users ADD COLUMN total_read_time INT NOT NULL DEFAULT 0 COMMENT '总阅读时长(分钟)';
-    END IF;
     -- 累计阅读次数 [原 V17]
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'read_total_times') THEN
         ALTER TABLE users ADD COLUMN read_total_times INT NOT NULL DEFAULT 0 COMMENT '累计阅读次数';
-    END IF;
-    -- 完成测验数 [原 V37]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'completed_quizzes') THEN
-        ALTER TABLE users ADD COLUMN completed_quizzes INT NOT NULL DEFAULT 0 COMMENT '完成测验数';
-    END IF;
-    -- 正确答题数 [原 V37]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'correct_answers') THEN
-        ALTER TABLE users ADD COLUMN correct_answers INT NOT NULL DEFAULT 0 COMMENT '正确答题数';
-    END IF;
-    -- 学习天数 [原 V37]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'study_days') THEN
-        ALTER TABLE users ADD COLUMN study_days INT NOT NULL DEFAULT 0 COMMENT '学习天数';
-    END IF;
-    -- 最后学习时间 [原 V37]
-    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'last_study_time') THEN
-        ALTER TABLE users ADD COLUMN last_study_time DATETIME DEFAULT NULL COMMENT '最后学习时间';
     END IF;
 END;
 CALL _v1_users_cols();
@@ -693,32 +668,20 @@ DROP PROCEDURE IF EXISTS _v1_user_text_reads_cols;
 --   - UPDATE users 把被 SSO 错误映射为 TEACHER 的 CAS 学生恢复为 STUDENT
 -- ────────────────────────────────────────
 
-DROP PROCEDURE IF EXISTS _v1_clean_sso_config;
-CREATE PROCEDURE _v1_clean_sso_config()
-BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.TABLES
-               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sso_config') THEN
-        DELETE FROM sso_config
-        WHERE config_type = 'ROLE_MAPPING'
-          AND REPLACE(config_key, 'sso.role_mapping.', '') NOT LIKE '%=%';
-    END IF;
+DELETE FROM sso_config
+WHERE config_type = 'ROLE_MAPPING'
+  AND REPLACE(config_key, 'sso.role_mapping.', '') NOT LIKE '%=%';
 
-    IF EXISTS (SELECT 1 FROM information_schema.TABLES
-               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sso_user_bindings') THEN
-        UPDATE users u
-        INNER JOIN sso_user_bindings b ON u.id = b.user_id AND b.deleted = 0
-        SET u.role = 'STUDENT', u.updated_time = NOW()
-        WHERE u.role = 'TEACHER'
-          AND u.sso_bound = 1
-          AND u.deleted = 0
-          AND b.auto_approved = 1
-          AND b.sso_member_of IS NOT NULL
-          AND b.sso_member_of NOT LIKE '%ou=教师%'
-          AND b.sso_member_of NOT LIKE '%ou=teacher%';
-    END IF;
-END;
-CALL _v1_clean_sso_config();
-DROP PROCEDURE IF EXISTS _v1_clean_sso_config;
+UPDATE users u
+INNER JOIN sso_user_bindings b ON u.id = b.user_id AND b.deleted = 0
+SET u.role = 'STUDENT', u.updated_time = NOW()
+WHERE u.role = 'TEACHER'
+  AND u.sso_bound = 1
+  AND u.deleted = 0
+  AND b.auto_approved = 1
+  AND b.sso_member_of IS NOT NULL
+  AND b.sso_member_of NOT LIKE '%ou=教师%'
+  AND b.sso_member_of NOT LIKE '%ou=teacher%';
 
 
 -- V2__media_annotations.sql
@@ -1196,22 +1159,21 @@ INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`
 -- 2. AI 提供商表 + 数据迁移 [原 V7 + V11 + V13 Part 4]
 --    app_id 字段已内联 [原 V11]
 --    protocol 字段 [原 V13 Part 4]
---    注意: 存储过程需在 CREATE TABLE 之后调用，此处仅定义
 -- ────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
 CREATE PROCEDURE _v5_ai_provider_protocol()
 BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.TABLES
-               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider') THEN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-                       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol') THEN
-            ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible' AFTER `service`;
-        END IF;
-        ALTER TABLE `ai_provider`
-            MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
-                COMMENT '协议类型: openai_compatible | hiagent';
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider' AND COLUMN_NAME = 'protocol') THEN
+        ALTER TABLE `ai_provider` ADD COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible' AFTER `service`;
     END IF;
+    -- Ensure comment is set (idempotent modify)
+    ALTER TABLE `ai_provider`
+        MODIFY COLUMN `protocol` VARCHAR(30) NOT NULL DEFAULT 'openai_compatible'
+            COMMENT '协议类型: openai_compatible | hiagent';
 END;
+CALL _v5_ai_provider_protocol();
+DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
 
 CREATE TABLE IF NOT EXISTS `ai_provider` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1230,10 +1192,6 @@ CREATE TABLE IF NOT EXISTS `ai_provider` (
     `updated_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `updated_by` VARCHAR(50)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI provider configuration';
-
--- 表创建后执行 protocol 字段修正
-CALL _v5_ai_provider_protocol();
-DROP PROCEDURE IF EXISTS _v5_ai_provider_protocol;
 
 INSERT IGNORE INTO `ai_provider`
     (`id`, `service`, `name`, `api_url`, `api_key`, `model`, `weight`, `enabled`, `timeout_ms`, `remark`)
@@ -1413,17 +1371,7 @@ WHERE `config_group` = 'feature_toggle'
   AND `config_key`   = 'page_ai_qa';
 
 -- 清除所有对 page_ai_qa 的禁用覆盖（tag/user scope）
--- 注意: feature_override 表在后面才创建，此处需条件执行
-DROP PROCEDURE IF EXISTS _v6_clean_feature_override;
-CREATE PROCEDURE _v6_clean_feature_override()
-BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.TABLES
-               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feature_override') THEN
-        DELETE FROM `feature_override` WHERE `feature_key` = 'page_ai_qa';
-    END IF;
-END;
-CALL _v6_clean_feature_override();
-DROP PROCEDURE IF EXISTS _v6_clean_feature_override;
+DELETE FROM `feature_override` WHERE `feature_key` = 'page_ai_qa';
 
 -- ────────────────────────────────────────
 -- 11. 删除孤立种子 — 无路由守卫或代码消费 [原 V47]
@@ -3470,7 +3418,7 @@ SELECT 1;
 -- 创建日期: 2026-06-21
 
 -- 1. 活动主表
-CREATE TABLE IF NOT EXISTS campaign_activities (
+CREATE TABLE campaign_activities (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     title VARCHAR(200) NOT NULL COMMENT '活动标题',
     description TEXT COMMENT '活动描述',
@@ -3502,7 +3450,7 @@ CREATE TABLE IF NOT EXISTS campaign_activities (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动主表';
 
 -- 2. 活动任务表
-CREATE TABLE IF NOT EXISTS campaign_tasks (
+CREATE TABLE campaign_tasks (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL COMMENT '活动ID',
     task_name VARCHAR(100) NOT NULL COMMENT '任务名称',
@@ -3522,7 +3470,7 @@ CREATE TABLE IF NOT EXISTS campaign_tasks (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动任务表';
 
 -- 3. 参与记录表
-CREATE TABLE IF NOT EXISTS campaign_participations (
+CREATE TABLE campaign_participations (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -3547,7 +3495,7 @@ CREATE TABLE IF NOT EXISTS campaign_participations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动参与记录';
 
 -- 4. 任务完成记录表
-CREATE TABLE IF NOT EXISTS campaign_task_completions (
+CREATE TABLE campaign_task_completions (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     task_id BIGINT NOT NULL,
@@ -3567,7 +3515,7 @@ CREATE TABLE IF NOT EXISTS campaign_task_completions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务完成明细';
 
 -- 5. 手动数据录入表
-CREATE TABLE IF NOT EXISTS campaign_manual_records (
+CREATE TABLE campaign_manual_records (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     task_id BIGINT NOT NULL,
@@ -3625,22 +3573,9 @@ CREATE TABLE IF NOT EXISTS `text_similarity_matrix_tmp` (
 -- 创建日期: 2026-06-24
 
 -- Part 1: 为活动表添加报名时间字段
-DROP PROCEDURE IF EXISTS _v21_04_enrollment_time;
-CREATE PROCEDURE _v21_04_enrollment_time()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'campaign_activities'
-          AND COLUMN_NAME = 'enrollment_start_time'
-    ) THEN
-        ALTER TABLE campaign_activities
-            ADD COLUMN enrollment_start_time DATETIME NULL COMMENT '报名开始时间' AFTER end_time,
-            ADD COLUMN enrollment_end_time DATETIME NULL COMMENT '报名结束时间' AFTER enrollment_start_time;
-    END IF;
-END;
-CALL _v21_04_enrollment_time();
-DROP PROCEDURE IF EXISTS _v21_04_enrollment_time;
+ALTER TABLE campaign_activities
+ADD COLUMN enrollment_start_time DATETIME NULL COMMENT '报名开始时间' AFTER end_time,
+ADD COLUMN enrollment_end_time DATETIME NULL COMMENT '报名结束时间' AFTER enrollment_start_time;
 
 -- 为已有活动设置默认报名时间（与活动时间一致）
 UPDATE campaign_activities
@@ -3649,59 +3584,20 @@ SET enrollment_start_time = start_time,
 WHERE enrollment_start_time IS NULL;
 
 -- Part 2: 为 campaign_tasks 表添加重复积分相关字段
-DROP PROCEDURE IF EXISTS _v21_04_task_repeatable;
-CREATE PROCEDURE _v21_04_task_repeatable()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'campaign_tasks'
-          AND COLUMN_NAME = 'is_repeatable'
-    ) THEN
-        ALTER TABLE campaign_tasks
-            ADD COLUMN is_repeatable TINYINT(1) DEFAULT 0 COMMENT '是否可重复完成（重复积分）' AFTER auto_collect,
-            ADD COLUMN max_completions INT DEFAULT NULL COMMENT '最大完成次数（NULL=无限制，用于总得分上限控制）' AFTER is_repeatable,
-            ADD COLUMN daily_limit INT DEFAULT NULL COMMENT '单日最大完成次数（NULL=无限制，用于单日得分上限控制）' AFTER max_completions;
-    END IF;
-END;
-CALL _v21_04_task_repeatable();
-DROP PROCEDURE IF EXISTS _v21_04_task_repeatable;
+ALTER TABLE campaign_tasks
+ADD COLUMN is_repeatable TINYINT(1) DEFAULT 0 COMMENT '是否可重复完成（重复积分）' AFTER auto_collect,
+ADD COLUMN max_completions INT DEFAULT NULL COMMENT '最大完成次数（NULL=无限制，用于总得分上限控制）' AFTER is_repeatable,
+ADD COLUMN daily_limit INT DEFAULT NULL COMMENT '单日最大完成次数（NULL=无限制，用于单日得分上限控制）' AFTER max_completions;
 
 -- Part 3: 为 campaign_task_completions 表添加每日完成记录追踪
-DROP PROCEDURE IF EXISTS _v21_04_completion_fields;
-CREATE PROCEDURE _v21_04_completion_fields()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'campaign_task_completions'
-          AND COLUMN_NAME = 'earned_score'
-    ) THEN
-        ALTER TABLE campaign_task_completions
-            ADD COLUMN earned_score INT DEFAULT 0 COMMENT '已获得总积分' AFTER completion_count,
-            ADD COLUMN last_completion_date DATE COMMENT '最后一次完成日期' AFTER earned_score,
-            ADD COLUMN today_completion_count INT DEFAULT 0 COMMENT '今日完成次数' AFTER last_completion_date;
-    END IF;
-END;
-CALL _v21_04_completion_fields();
-DROP PROCEDURE IF EXISTS _v21_04_completion_fields;
+ALTER TABLE campaign_task_completions
+ADD COLUMN earned_score INT DEFAULT 0 COMMENT '已获得总积分' AFTER completion_count,
+ADD COLUMN last_completion_date DATE COMMENT '最后一次完成日期' AFTER earned_score,
+ADD COLUMN today_completion_count INT DEFAULT 0 COMMENT '今日完成次数' AFTER last_completion_date;
 
 -- Part 4: 添加索引优化查询性能
-DROP PROCEDURE IF EXISTS _v21_04_task_date_idx;
-CREATE PROCEDURE _v21_04_task_date_idx()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'campaign_task_completions'
-          AND INDEX_NAME = 'idx_user_task_date'
-    ) THEN
-        ALTER TABLE campaign_task_completions
-            ADD INDEX idx_user_task_date (user_id, task_id, last_completion_date);
-    END IF;
-END;
-CALL _v21_04_task_date_idx();
-DROP PROCEDURE IF EXISTS _v21_04_task_date_idx;
+ALTER TABLE campaign_task_completions
+ADD INDEX idx_user_task_date (user_id, task_id, last_completion_date);
 
 -- Part 5: 数据修复 - 为已完成的任务补充 completion_count 和 earned_score
 UPDATE campaign_task_completions ctc
@@ -3746,46 +3642,26 @@ SET
 -- ========================================================================
 
 -- P0-01 修复: 添加唯一约束防止重复报名（竞态条件）
--- 注意: V20 建表时已定义 UNIQUE KEY uk_campaign_user，此处改为幂等
-DROP PROCEDURE IF EXISTS _v21_04_add_uk_campaign_user;
-CREATE PROCEDURE _v21_04_add_uk_campaign_user()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'campaign_participations'
-          AND INDEX_NAME = 'uk_campaign_user'
-    ) THEN
-        ALTER TABLE campaign_participations
-            ADD UNIQUE INDEX uk_campaign_user (campaign_id, user_id);
-    END IF;
-END;
-CALL _v21_04_add_uk_campaign_user();
-DROP PROCEDURE IF EXISTS _v21_04_add_uk_campaign_user;
+ALTER TABLE campaign_participations
+ADD UNIQUE INDEX uk_campaign_user (campaign_id, user_id);
 
 -- P0-03 修复: 添加关键数据库索引以提升性能
 -- 预期提升: 排名查询 5s → <100ms (50x 提升)
 
 -- 1. 排名查询索引 (campaign_participations)
 -- 用于 getIndividualRanking: 按 campaign_id + enrollment_status + total_score 排序
-DROP PROCEDURE IF EXISTS _v21_04_idx_enrollment_score;
-CREATE PROCEDURE _v21_04_idx_enrollment_score()
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaign_participations' AND INDEX_NAME = 'idx_enrollment_score') THEN
-        CREATE INDEX idx_enrollment_score ON campaign_participations(campaign_id, enrollment_status, total_score DESC);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaign_task_completions' AND INDEX_NAME = 'idx_campaign_task_user') THEN
-        CREATE INDEX idx_campaign_task_user ON campaign_task_completions(campaign_id, task_id, user_id);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS
-                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaign_tasks' AND INDEX_NAME = 'idx_campaign_required') THEN
-        CREATE INDEX idx_campaign_required ON campaign_tasks(campaign_id, is_required, deleted);
-    END IF;
-END;
-CALL _v21_04_idx_enrollment_score();
-DROP PROCEDURE IF EXISTS _v21_04_idx_enrollment_score;
+CREATE INDEX IF NOT EXISTS idx_enrollment_score
+ON campaign_participations(campaign_id, enrollment_status, total_score DESC);
+
+-- 2. 任务完成记录查询索引 (campaign_task_completions)
+-- 用于按活动、任务、用户快速定位完成记录
+CREATE INDEX IF NOT EXISTS idx_campaign_task_user
+ON campaign_task_completions(campaign_id, task_id, user_id);
+
+-- 3. 活动任务筛选索引 (campaign_tasks)
+-- 用于筛选活动下的必做任务
+CREATE INDEX IF NOT EXISTS idx_campaign_required
+ON campaign_tasks(campaign_id, is_required, deleted);
 
 -- 注: 这些索引针对 CampaignStatsServiceImpl 中高频查询场景
 -- idx_enrollment_score: 覆盖 getIndividualRanking/getClassRanking/getCollegeRanking
@@ -3800,21 +3676,8 @@ DROP PROCEDURE IF EXISTS _v21_04_idx_enrollment_score;
 -- 修复: 新增 last_counted_value 记录上次计分时的进度值，
 --       新增积分 = (currentValue - lastCountedValue) / targetValue 向下取整。
 
-DROP PROCEDURE IF EXISTS _v21_04_last_counted;
-CREATE PROCEDURE _v21_04_last_counted()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'campaign_task_completions'
-          AND COLUMN_NAME = 'last_counted_value'
-    ) THEN
-        ALTER TABLE campaign_task_completions
-            ADD COLUMN last_counted_value DECIMAL(10,2) DEFAULT 0.0000 COMMENT '上次计分时的进度值（用于增量计分）' AFTER current_value;
-    END IF;
-END;
-CALL _v21_04_last_counted();
-DROP PROCEDURE IF EXISTS _v21_04_last_counted;
+ALTER TABLE campaign_task_completions
+ADD COLUMN last_counted_value DECIMAL(10,2) DEFAULT 0.0000 COMMENT '上次计分时的进度值（用于增量计分）' AFTER current_value;
 
 -- 为已有的完成记录初始化 last_counted_value = current_value，避免历史数据被重复计分
 UPDATE campaign_task_completions
@@ -3823,8 +3686,7 @@ WHERE last_counted_value = 0 AND current_value > 0;
 
 -- ═══════════════════════════════════════════════════════════════
 -- 扩展 school_student 字段长度（整合自 V21__extend_school_student_fields.sql）
--- 修复 DataIntegrityViolationException: phone/counselor_name VARCHAR(50) → VARCHAR(255/500)
--- V32 进一步扩展: phone → VARCHAR(255), counselor_name → VARCHAR(500)
+-- 修复 DataIntegrityViolationException: phone/counselor_name VARCHAR(50) → VARCHAR(100)
 -- ═══════════════════════════════════════════════════════════════
 DROP PROCEDURE IF EXISTS _v21_extend_student_fields;
 CREATE PROCEDURE _v21_extend_student_fields()
@@ -3833,17 +3695,17 @@ BEGIN
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
                  AND COLUMN_NAME = 'phone'
-                 AND CHARACTER_MAXIMUM_LENGTH < 255) THEN
+                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
         ALTER TABLE school_student
-            MODIFY COLUMN phone VARCHAR(255) NULL COMMENT '联系电话（CDSP 返回加密哈希：MD5 32字符 / SHA-256 64字符）';
+            MODIFY COLUMN phone VARCHAR(100) NULL COMMENT '联系电话（CDSP 可能返回多个号码拼接）';
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
                  AND COLUMN_NAME = 'counselor_name'
-                 AND CHARACTER_MAXIMUM_LENGTH < 500) THEN
+                 AND CHARACTER_MAXIMUM_LENGTH = 50) THEN
         ALTER TABLE school_student
-            MODIFY COLUMN counselor_name VARCHAR(500) NULL COMMENT '辅导员姓名（可能包含多位辅导员逗号分隔）';
+            MODIFY COLUMN counselor_name VARCHAR(100) NULL COMMENT '辅导员姓名（可能包含多个辅导员或职务）';
     END IF;
 END;
 CALL _v21_extend_student_fields();
@@ -3873,56 +3735,21 @@ CREATE TABLE IF NOT EXISTS word_ai_explanations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 生成的单词详细介绍';
 
 
--- V31__add_vocabulary_source_type.sql
-
--- 生词本来源标记：ARTICLE=文章阅读加入 / MANUAL=手动添加或其他来源
--- 注意: V11 已用存储过程安全添加过此列和索引，此处改为幂等写法
-DROP PROCEDURE IF EXISTS _v31_add_source_type;
-CREATE PROCEDURE _v31_add_source_type()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'vocabulary_books'
-          AND COLUMN_NAME = 'source_type'
-    ) THEN
-        ALTER TABLE vocabulary_books
-            ADD COLUMN source_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL'
-            COMMENT '来源类型：ARTICLE-文章阅读，MANUAL-手动添加或其他'
-            AFTER next_review_time;
-    END IF;
-END;
-CALL _v31_add_source_type();
-DROP PROCEDURE IF EXISTS _v31_add_source_type;
-
-UPDATE vocabulary_books SET source_type = 'MANUAL' WHERE source_type IS NULL OR source_type = '';
-
-DROP PROCEDURE IF EXISTS _v31_add_source_idx;
-CREATE PROCEDURE _v31_add_source_idx()
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'vocabulary_books'
-          AND INDEX_NAME = 'idx_vocabulary_source'
-    ) THEN
-        CREATE INDEX idx_vocabulary_source ON vocabulary_books(student_id, source_type);
-    END IF;
-END;
-CALL _v31_add_source_idx();
-DROP PROCEDURE IF EXISTS _v31_add_source_idx;
-
-
 -- V32__extend_school_student_varchar.sql
 
+-- V32__extend_school_student_varchar.sql
 -- 扩展 school_student 表 VARCHAR 字段长度
 -- 背景: CDSP student_basic_info API 返回的 counselor_name / phone 可能是多人/多号码拼接，
---       且 phone 现为 SHA-256 哈希（64 字符）。V12 建表时为 VARCHAR(50)，V21 扩展到 VARCHAR(100)，
---       V32 进一步扩到 phone VARCHAR(255) / counselor_name VARCHAR(500)。
--- 使用存储过程做幂等判断，重复执行不报错。
+--       V12 建表时为 VARCHAR(50)，V21 扩展到 VARCHAR(100)，但仍不够。
+--       V32 安全扩展到 VARCHAR(500)，使用存储过程避免重复执行报错。
+-- 创建日期: 2026-06-30
+
 DROP PROCEDURE IF EXISTS _v32_extend_student_fields;
 CREATE PROCEDURE _v32_extend_student_fields()
 BEGIN
+    -- counselor_name: CDSP 返回逗号分隔的辅导员列表，典型值如:
+    --   "王明玖,石凤翎,韩国栋,娜日苏,云岚,赵金花,付和平,王成杰,王忠武,赵彦,王占义,袁帅,康萨如拉,何欢"
+    -- 14 个姓名 ≈ 60 字符，极端情况可能更多，VARCHAR(500) 足够安全
     IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
@@ -3933,6 +3760,8 @@ BEGIN
             COMMENT '辅导员姓名（CDSP 可能返回逗号分隔的多位辅导员）';
     END IF;
 
+    -- phone: CDSP 现返回 SHA-256 哈希（64 字符），远超过 V12 建表的 VARCHAR(50)。
+    -- V21 扩至 VARCHAR(100)，V32 扩至 VARCHAR(255) 以覆盖任意哈希长度。
     IF EXISTS (SELECT 1 FROM information_schema.COLUMNS
                WHERE TABLE_SCHEMA = DATABASE()
                  AND TABLE_NAME = 'school_student'
@@ -3993,3 +3822,548 @@ CREATE TABLE IF NOT EXISTS `videos` (
     KEY `idx_is_featured` (`is_featured`),
     KEY `idx_created_time` (`created_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频内容';
+
+
+-- V34__create_unit_words.sql
+
+-- 单元单词关联表（从 complete_init.sql 补录）
+CREATE TABLE IF NOT EXISTS `unit_words` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `unit_id` BIGINT NOT NULL COMMENT '单元ID',
+    `word_id` BIGINT NOT NULL COMMENT '单词ID',
+    `order_num` INT DEFAULT 0 COMMENT '排序号',
+    `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_unit_id (`unit_id`),
+    INDEX idx_word_id (`word_id`),
+    UNIQUE KEY uk_unit_word (`unit_id`, `word_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='单元单词关联表';
+
+
+-- V35__campaign_weekly_scores.sql
+
+-- 活动每周积分表：支持按周独立排名
+CREATE TABLE IF NOT EXISTS campaign_weekly_scores (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  campaign_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  week_start DATE NOT NULL COMMENT '周起始日期（周一）',
+  score INT NOT NULL DEFAULT 0 COMMENT '本周得分',
+  created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_campaign_user_week (campaign_id, user_id, week_start),
+  INDEX idx_campaign_week (campaign_id, week_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动每周积分表';
+
+
+-- V36__campaign_incentive_system.sql
+
+-- ============================================================
+-- 活动计分规则激励优化（合并 V36 + V37 + V38）
+-- 1. campaign_activities 表新增激励配置字段
+-- 2. 新增 campaign_streak_records 连续学习记录表
+-- 3. 新增 campaign_score_logs 积分流水表
+-- ============================================================
+
+-- ============================================================
+-- 1. 活动表新增激励配置字段
+-- ============================================================
+ALTER TABLE campaign_activities
+  ADD COLUMN streak_enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用连续学习加成',
+  ADD COLUMN streak_config JSON DEFAULT NULL COMMENT '连续加成阶梯配置，JSON数组 [{day:2,multiplier:1.05},{day:3,multiplier:1.1}...]',
+  ADD COLUMN streak_max_multiplier DECIMAL(3,2) NOT NULL DEFAULT 1.30 COMMENT '连续加成封顶系数',
+  ADD COLUMN streak_reset_days INT NOT NULL DEFAULT 7 COMMENT '连续加成重置周期（天），默认7天',
+  ADD COLUMN streak_start_date DATE DEFAULT NULL COMMENT '连续加成周期起始日期（为空则使用活动开始时间）',
+  ADD COLUMN class_ranking_mode VARCHAR(20) NOT NULL DEFAULT 'WEIGHTED' COMMENT '班级排名模式: WEIGHTED(归一化加权) / AVG_SCORE(纯人均积分) / TOTAL_SCORE(总积分)',
+  ADD COLUMN class_avg_weight DECIMAL(3,2) NOT NULL DEFAULT 0.60 COMMENT '班级排名中人均积分权重(0~1)',
+  ADD COLUMN class_participation_weight DECIMAL(3,2) NOT NULL DEFAULT 0.40 COMMENT '班级排名中参与率权重(0~1)',
+  ADD COLUMN participation_calc_mode VARCHAR(20) NOT NULL DEFAULT 'DENSITY' COMMENT '参与率计算方式: HEAD_COUNT(活跃人数占比) / DENSITY(活跃天数密度)';
+
+-- ============================================================
+-- 2. 新增连续学习记录表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS campaign_streak_records (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  campaign_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  week_start DATE NOT NULL COMMENT '周期起始日期（以活动开始日为锚点，每隔 streak_reset_days 天为一期）',
+  streak_days INT NOT NULL DEFAULT 0 COMMENT '本周期连续活跃天数',
+  current_multiplier DECIMAL(3,2) NOT NULL DEFAULT 1.00 COMMENT '当前积分系数',
+  last_active_date DATE DEFAULT NULL COMMENT '最后活跃日期',
+  active_dates JSON DEFAULT NULL COMMENT '本周期活跃日期数组 ["2026-07-14","2026-07-15"]',
+  created_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_campaign_user_week (campaign_id, user_id, week_start),
+  INDEX idx_campaign_week (campaign_id, week_start),
+  INDEX idx_user_campaign (user_id, campaign_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动连续学习记录表';
+
+-- ============================================================
+-- 3. 新增积分流水表（账单式记录每笔得分明细）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS campaign_score_logs (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  campaign_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  task_id BIGINT DEFAULT NULL COMMENT '关联任务ID',
+  task_name VARCHAR(100) DEFAULT NULL COMMENT '任务名称快照',
+  action VARCHAR(50) NOT NULL COMMENT '动作描述，如 TASK_COMPLETE / STREAK_BONUS',
+  base_score DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '基础得分',
+  multiplier DECIMAL(4,2) NOT NULL DEFAULT 1.00 COMMENT '加成系数',
+  final_score DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '实际得分（base_score * multiplier）',
+  streak_days INT DEFAULT NULL COMMENT '当时的连续天数',
+  remark VARCHAR(255) DEFAULT NULL COMMENT '备注说明',
+  created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_campaign_user (campaign_id, user_id),
+  INDEX idx_user_time (user_id, created_time DESC),
+  INDEX idx_campaign_time (campaign_id, created_time DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动积分流水表';
+
+-- ============================================================
+-- 4. 已有积分字段从 INT 升级为 DECIMAL（精确小数积分）
+-- ============================================================
+ALTER TABLE campaign_task_completions MODIFY COLUMN earned_score DECIMAL(10,2) NOT NULL DEFAULT 0.00;
+ALTER TABLE campaign_participations MODIFY COLUMN total_score DECIMAL(10,2) NOT NULL DEFAULT 0.00;
+ALTER TABLE campaign_weekly_scores MODIFY COLUMN score DECIMAL(10,2) NOT NULL DEFAULT 0.00;
+
+
+-- V37__user_study_stats_fields.sql
+
+-- V37: Add study statistics fields to users table (from author-profile feature)
+ALTER TABLE users
+  ADD COLUMN total_read_time INT NOT NULL DEFAULT 0 COMMENT '总阅读时长(分钟)',
+  ADD COLUMN completed_quizzes INT NOT NULL DEFAULT 0 COMMENT '完成测验数',
+  ADD COLUMN correct_answers INT NOT NULL DEFAULT 0 COMMENT '正确答题数',
+  ADD COLUMN study_days INT NOT NULL DEFAULT 0 COMMENT '学习天数',
+  ADD COLUMN last_study_time DATETIME DEFAULT NULL COMMENT '最后学习时间';
+
+
+-- V38__article_likes_and_collect_count.sql
+
+-- 文章点赞表
+CREATE TABLE IF NOT EXISTS `article_likes` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `user_id` BIGINT NOT NULL COMMENT '点赞用户ID',
+    `text_id` BIGINT NOT NULL COMMENT '文章ID',
+    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_user_text` (`user_id`, `text_id`),
+    KEY `idx_text_id` (`text_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章点赞记录';
+
+-- texts 表添加 collect_count 字段
+ALTER TABLE `texts` ADD COLUMN `collect_count` INT DEFAULT 0 COMMENT '收藏数';
+
+
+-- V39__teacher_class_sync_fields.sql
+
+-- V39: 教师班级同步 — 为 courses / classes 表增加学校数据关联字段
+-- 用于"同步学校班级"功能：从 CDSP 学校数据自动建班时去重
+
+-- courses 表加学校课程代码（NULL = 手动创建的课程，不影响唯一索引）
+DROP PROCEDURE IF EXISTS _v39_courses_school_course_code;
+CREATE PROCEDURE _v39_courses_school_course_code()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'courses'
+                     AND COLUMN_NAME = 'school_course_code') THEN
+        ALTER TABLE courses ADD COLUMN school_course_code VARCHAR(50) NULL
+            COMMENT '关联学校课程代码(school_course.course_code)，用于同步去重';
+        ALTER TABLE courses ADD UNIQUE INDEX uk_school_course_code (school_course_code);
+    END IF;
+END;
+CALL _v39_courses_school_course_code();
+DROP PROCEDURE IF EXISTS _v39_courses_school_course_code;
+
+-- classes 表加学校教学班号（NULL = 手动创建的班级，不影响唯一索引）
+DROP PROCEDURE IF EXISTS _v39_classes_school_class_id;
+CREATE PROCEDURE _v39_classes_school_class_id()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'classes'
+                     AND COLUMN_NAME = 'school_class_id') THEN
+        ALTER TABLE classes ADD COLUMN school_class_id VARCHAR(50) NULL
+            COMMENT '关联学校教学班号(teaching_class.class_id/kcbh)，用于同步去重';
+        ALTER TABLE classes ADD UNIQUE INDEX uk_school_class_id (school_class_id);
+    END IF;
+END;
+CALL _v39_classes_school_class_id();
+DROP PROCEDURE IF EXISTS _v39_classes_school_class_id;
+
+
+-- V40__word_associations.sql
+
+-- ============================================================
+-- V36: 单词联想模块 — 同义词、衍生词、常用搭配
+-- ============================================================
+-- 该表用于缓存/存储单词联想数据，服务端也会从 ECDICT 动态计算
+-- 如果表中无缓存则从 ECDICT/Words 表中实时解析并返回
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS `word_associations` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `word` varchar(100) NOT NULL COMMENT '查询单词（小写）',
+    `type` varchar(20) NOT NULL COMMENT '联想类型：synonym(同义词)/derivative(衍生词)/collocation(搭配)',
+    `associated_word` varchar(200) NOT NULL COMMENT '关联词汇',
+    `definition` varchar(500) DEFAULT NULL COMMENT '关联词汇释义',
+    `part_of_speech` varchar(50) DEFAULT NULL COMMENT '词性',
+    `example_sentence` varchar(1000) DEFAULT NULL COMMENT '例句',
+    `source` varchar(50) DEFAULT 'manual' COMMENT '数据来源：manual/ecdict/ai',
+    `deleted` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=正常 1=已删除',
+    `created_time` datetime DEFAULT NULL COMMENT '创建时间',
+    `updated_time` datetime DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_word_type` (`word`, `type`),
+    KEY `idx_word` (`word`),
+    KEY `idx_deleted` (`deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='单词联想表';
+
+-- ============================================================
+-- 预置常见高频单词的常用搭配 (collocations)
+-- 这些搭配覆盖了英语学习中最常用的词组，后续可扩展
+-- ============================================================
+
+-- 常用动词搭配
+INSERT INTO `word_associations` (`word`, `type`, `associated_word`, `definition`, `part_of_speech`, `example_sentence`, `source`) VALUES
+('take', 'collocation', 'take care of', '照顾，处理', 'v.', 'Please take care of yourself.', 'manual'),
+('take', 'collocation', 'take part in', '参加，参与', 'v.', 'She wants to take part in the competition.', 'manual'),
+('take', 'collocation', 'take place', '发生，举行', 'v.', 'The meeting will take place tomorrow.', 'manual'),
+('take', 'collocation', 'take advantage of', '利用', 'v.', 'You should take advantage of this opportunity.', 'manual'),
+('take', 'collocation', 'take into account', '考虑，顾及', 'v.', 'We must take all factors into account.', 'manual'),
+
+('make', 'collocation', 'make a decision', '做决定', 'v.', 'It is time to make a decision.', 'manual'),
+('make', 'collocation', 'make progress', '取得进步', 'v.', 'He is making good progress in English.', 'manual'),
+('make', 'collocation', 'make sure', '确保，确定', 'v.', 'Make sure you lock the door.', 'manual'),
+('make', 'collocation', 'make use of', '利用，使用', 'v.', 'Make good use of your time.', 'manual'),
+('make', 'collocation', 'make a difference', '有影响，起作用', 'v.', 'Your help really made a difference.', 'manual'),
+
+('get', 'collocation', 'get along with', '与...相处', 'v.', 'She gets along well with her classmates.', 'manual'),
+('get', 'collocation', 'get rid of', '摆脱，除去', 'v.', 'I need to get rid of this bad habit.', 'manual'),
+('get', 'collocation', 'get used to', '习惯于', 'v.', 'It takes time to get used to the new environment.', 'manual'),
+('get', 'collocation', 'get in touch', '取得联系', 'v.', 'I will get in touch with you later.', 'manual'),
+('get', 'collocation', 'get involved in', '参与，卷入', 'v.', 'He got involved in the project.', 'manual'),
+
+('put', 'collocation', 'put off', '推迟', 'v.', 'Never put off till tomorrow what you can do today.', 'manual'),
+('put', 'collocation', 'put up with', '忍受，容忍', 'v.', 'I cannot put up with this noise anymore.', 'manual'),
+('put', 'collocation', 'put forward', '提出', 'v.', 'He put forward a new proposal.', 'manual'),
+('put', 'collocation', 'put on', '穿上；上演', 'v.', 'Put on your coat. It is cold outside.', 'manual'),
+
+('give', 'collocation', 'give up', '放弃', 'v.', 'Never give up on your dreams.', 'manual'),
+('give', 'collocation', 'give in', '屈服，让步', 'v.', 'She refused to give in to pressure.', 'manual'),
+('give', 'collocation', 'give out', '分发；耗尽', 'v.', 'The teacher gave out the test papers.', 'manual'),
+('give', 'collocation', 'give away', '赠送；泄露', 'v.', 'He gave away all his money to charity.', 'manual'),
+
+('look', 'collocation', 'look forward to', '期待，盼望', 'v.', 'I look forward to hearing from you.', 'manual'),
+('look', 'collocation', 'look after', '照顾', 'v.', 'Can you look after my dog while I am away?', 'manual'),
+('look', 'collocation', 'look into', '调查', 'v.', 'The police are looking into the case.', 'manual'),
+('look', 'collocation', 'look up', '查阅，查找', 'v.', 'Look up the word in the dictionary.', 'manual'),
+('look', 'collocation', 'look down on', '看不起', 'v.', 'Never look down on others.', 'manual'),
+
+('go', 'collocation', 'go on', '继续', 'v.', 'Please go on with your story.', 'manual'),
+('go', 'collocation', 'go through', '经历；仔细检查', 'v.', 'She has gone through a lot of difficulties.', 'manual'),
+('go', 'collocation', 'go over', '复习；仔细检查', 'v.', 'Let me go over the report one more time.', 'manual'),
+('go', 'collocation', 'go ahead', '继续；去做吧', 'v.', 'You may go ahead with your plan.', 'manual'),
+
+('come', 'collocation', 'come up with', '想出，提出', 'v.', 'She came up with a brilliant idea.', 'manual'),
+('come', 'collocation', 'come across', '偶然遇到', 'v.', 'I came across an old friend yesterday.', 'manual'),
+('come', 'collocation', 'come true', '实现，成真', 'v.', 'His dream finally came true.', 'manual'),
+('come', 'collocation', 'come to an end', '结束', 'v.', 'The journey has come to an end.', 'manual'),
+
+('turn', 'collocation', 'turn off', '关闭', 'v.', 'Please turn off the lights when you leave.', 'manual'),
+('turn', 'collocation', 'turn on', '打开', 'v.', 'Can you turn on the air conditioner?', 'manual'),
+('turn', 'collocation', 'turn down', '拒绝；调低', 'v.', 'She turned down the job offer.', 'manual'),
+('turn', 'collocation', 'turn out', '结果是；证明是', 'v.', 'It turned out to be a great success.', 'manual'),
+('turn', 'collocation', 'turn up', '出现；调高', 'v.', 'He didn''t turn up at the party.', 'manual'),
+
+-- 常用名词搭配
+('attention', 'collocation', 'pay attention to', '注意，关注', 'n.', 'Pay attention to what the teacher says.', 'manual'),
+('effort', 'collocation', 'make an effort', '努力', 'n.', 'You need to make an effort to improve.', 'manual'),
+('decision', 'collocation', 'make a decision', '做决定', 'n.', 'It is a difficult decision to make.', 'manual'),
+('sense', 'collocation', 'make sense', '有意义，讲得通', 'n.', 'Does this sentence make sense?', 'manual'),
+('contribution', 'collocation', 'make a contribution', '做贡献', 'n.', 'Everyone can make a contribution to society.', 'manual'),
+
+-- 常用形容词搭配
+('important', 'collocation', 'play an important role', '起重要作用', 'adj.', 'Education plays an important role in society.', 'manual'),
+('aware', 'collocation', 'be aware of', '意识到', 'adj.', 'You should be aware of the risks.', 'manual'),
+('responsible', 'collocation', 'be responsible for', '对...负责', 'adj.', 'Who is responsible for this project?', 'manual'),
+('capable', 'collocation', 'be capable of', '有能力做', 'adj.', 'She is capable of handling this task.', 'manual'),
+('interested', 'collocation', 'be interested in', '对...感兴趣', 'adj.', 'I am interested in learning languages.', 'manual'),
+
+-- 更多常用动词搭配
+('set', 'collocation', 'set up', '建立，设立', 'v.', 'They set up a new company last year.', 'manual'),
+('set', 'collocation', 'set off', '出发；引爆', 'v.', 'We set off early in the morning.', 'manual'),
+('set', 'collocation', 'set out', '出发；开始', 'v.', 'He set out to achieve his goals.', 'manual'),
+
+('bring', 'collocation', 'bring about', '引起，导致', 'v.', 'Technology has brought about great changes.', 'manual'),
+('bring', 'collocation', 'bring up', '抚养；提出', 'v.', 'She was brought up by her grandparents.', 'manual'),
+('bring', 'collocation', 'bring out', '出版；使显现', 'v.', 'The new edition will be brought out next month.', 'manual'),
+
+('break', 'collocation', 'break down', '分解；出故障', 'v.', 'The car broke down on the way.', 'manual'),
+('break', 'collocation', 'break up', '分手；解散', 'v.', 'They decided to break up after five years.', 'manual'),
+('break', 'collocation', 'break out', '爆发', 'v.', 'A fire broke out in the building.', 'manual'),
+('break', 'collocation', 'break through', '突破', 'v.', 'Scientists have broken through in cancer research.', 'manual'),
+
+('call', 'collocation', 'call for', '需要；呼吁', 'v.', 'This situation calls for immediate action.', 'manual'),
+('call', 'collocation', 'call off', '取消', 'v.', 'The match was called off due to rain.', 'manual'),
+('call', 'collocation', 'call on', '拜访；号召', 'v.', 'I will call on you tomorrow.', 'manual'),
+
+('carry', 'collocation', 'carry out', '执行，实施', 'v.', 'We need to carry out the plan immediately.', 'manual'),
+('carry', 'collocation', 'carry on', '继续', 'v.', 'Carry on with your work.', 'manual'),
+
+('hold', 'collocation', 'hold on', '坚持；等一下', 'v.', 'Hold on a moment, please.', 'manual'),
+('hold', 'collocation', 'hold back', '抑制；阻止', 'v.', 'She could not hold back her tears.', 'manual'),
+('hold', 'collocation', 'hold up', '举起；耽搁', 'v.', 'The traffic held us up for an hour.', 'manual'),
+
+('keep', 'collocation', 'keep up with', '跟上，不落后', 'v.', 'It is hard to keep up with the latest technology.', 'manual'),
+('keep', 'collocation', 'keep in mind', '记住', 'v.', 'Keep in mind that practice makes perfect.', 'manual'),
+('keep', 'collocation', 'keep on', '继续', 'v.', 'Keep on trying and you will succeed.', 'manual'),
+
+('run', 'collocation', 'run out of', '用完，耗尽', 'v.', 'We have run out of time.', 'manual'),
+('run', 'collocation', 'run into', '偶遇；遭遇', 'v.', 'I ran into an old colleague at the airport.', 'manual'),
+
+('work', 'collocation', 'work out', '解决；锻炼；算出', 'v.', 'Let us work out a solution together.', 'manual'),
+('work', 'collocation', 'work on', '从事于，致力于', 'v.', 'I am working on a new project.', 'manual'),
+
+('figure', 'collocation', 'figure out', '弄清楚，理解', 'v.', 'I cannot figure out what he means.', 'manual'),
+
+('deal', 'collocation', 'deal with', '处理，应对', 'v.', 'How do you deal with stress?', 'manual'),
+
+('depend', 'collocation', 'depend on', '依赖，取决于', 'v.', 'Success depends on hard work.', 'manual'),
+
+('lead', 'collocation', 'lead to', '导致，通向', 'v.', 'Hard work leads to success.', 'manual'),
+
+('result', 'collocation', 'result in', '导致，造成', 'v.', 'The accident resulted in three deaths.', 'manual'),
+
+('consist', 'collocation', 'consist of', '由...组成', 'v.', 'The team consists of five members.', 'manual'),
+
+('belong', 'collocation', 'belong to', '属于', 'v.', 'This book belongs to me.', 'manual'),
+
+('focus', 'collocation', 'focus on', '集中于，专注于', 'v.', 'We should focus on the main issue.', 'manual'),
+
+('refer', 'collocation', 'refer to', '提及；参考', 'v.', 'Please refer to the instructions for details.', 'manual'),
+
+('apply', 'collocation', 'apply for', '申请', 'v.', 'She applied for a scholarship.', 'manual'),
+
+('search', 'collocation', 'search for', '搜索，寻找', 'v.', 'They are searching for the missing child.', 'manual'),
+
+('provide', 'collocation', 'provide with', '提供', 'v.', 'The hotel provides guests with free breakfast.', 'manual'),
+
+('compare', 'collocation', 'compare with', '与...比较', 'v.', 'Compared with last year, sales have increased.', 'manual'),
+
+('communicate', 'collocation', 'communicate with', '与...交流', 'v.', 'It is important to communicate with your team.', 'manual'),
+
+('connect', 'collocation', 'connect with', '与...连接；联系', 'v.', 'I need to connect with more people in my field.', 'manual'),
+
+('struggle', 'collocation', 'struggle with', '与...斗争', 'v.', 'Many students struggle with math.', 'manual'),
+
+('experiment', 'collocation', 'experiment with', '用...做实验', 'v.', 'The artist experiments with different styles.', 'manual'),
+
+-- 常用介词搭配
+('according', 'collocation', 'according to', '根据，按照', 'prep.', 'According to the report, sales have increased.', 'manual'),
+('regard', 'collocation', 'in regard to', '关于', 'v.', 'In regard to your question, here is my answer.', 'manual'),
+('spite', 'collocation', 'in spite of', '尽管，不顾', 'n.', 'In spite of the rain, we went out.', 'manual'),
+('addition', 'collocation', 'in addition to', '除...之外', 'n.', 'In addition to English, she speaks French.', 'manual'),
+('account', 'collocation', 'on account of', '因为，由于', 'n.', 'The game was cancelled on account of rain.', 'manual'),
+('behalf', 'collocation', 'on behalf of', '代表', 'n.', 'I am speaking on behalf of my team.', 'manual'),
+('favor', 'collocation', 'in favor of', '支持，赞成', 'n.', 'Most people are in favor of the new policy.', 'manual'),
+('charge', 'collocation', 'in charge of', '负责，管理', 'n.', 'Who is in charge of this department?', 'manual'),
+('relation', 'collocation', 'in relation to', '与...相关', 'n.', 'What is your role in relation to the project?', 'manual');
+
+
+-- V41__user_follows.sql
+
+﻿-- V38: User follow system
+-- User follow relationship table
+CREATE TABLE IF NOT EXISTS user_follows (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    follower_id BIGINT NOT NULL COMMENT 'Follower user ID',
+    following_id BIGINT NOT NULL COMMENT 'Following user ID',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Follow time',
+    UNIQUE KEY uk_follower_following (follower_id, following_id),
+    KEY idx_following_id (following_id),
+    KEY idx_follower_id (follower_id),
+    CONSTRAINT fk_follow_follower FOREIGN KEY (follower_id) REFERENCES users(id),
+    CONSTRAINT fk_follow_following FOREIGN KEY (following_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='User follow relationship table';
+
+-- Add follow count fields to users table for query performance
+ALTER TABLE users
+    ADD COLUMN following_count INT NOT NULL DEFAULT 0 COMMENT 'Following count',
+    ADD COLUMN followers_count INT NOT NULL DEFAULT 0 COMMENT 'Followers count';
+
+
+-- V42__teaching_class_course_sequence.sql
+
+-- V42: teaching_class 增加「课序号」，供教师与教务处按 课程号+课序号 核对班级
+-- 来源 CDSP teacher_courses 字段：课序号(kxh)，同一教师同一课程下唯一
+-- 采用存储过程守卫，列已存在则跳过，兼容手动/重复执行环境
+
+DROP PROCEDURE IF EXISTS add_teaching_class_seq_col;
+
+DELIMITER $$
+CREATE PROCEDURE add_teaching_class_seq_col()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = 'teaching_class'
+          AND column_name = 'course_sequence'
+    ) THEN
+        ALTER TABLE teaching_class
+            ADD COLUMN course_sequence VARCHAR(20) NULL COMMENT '课序号(CDSP kxh)，同一教师同一课程下唯一' AFTER class_name;
+    END IF;
+END$$
+DELIMITER ;
+
+CALL add_teaching_class_seq_col();
+DROP PROCEDURE IF EXISTS add_teaching_class_seq_col;
+
+
+-- V43__article_classification_fields.sql
+
+-- 文章分类字段：课内教材课文/课外读物
+-- 使用存在性判断，兼容字段已存在的环境
+
+SET @dbname = DATABASE();
+SET @tablename = 'texts';
+
+-- 添加 article_type 字段（如果不存在）
+SET @columnname = 'article_type';
+SET @preparedStatement = (SELECT IF(
+  (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema = @dbname AND table_name = @tablename AND column_name = @columnname) > 0,
+  'SELECT 1',
+  'ALTER TABLE texts ADD COLUMN article_type ENUM(''INNER'', ''OUTER'') DEFAULT ''OUTER'' COMMENT ''文章类型：课内教材课文/课外读物'' AFTER unit_id'
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+-- 添加 book_volume 字段（如果不存在）
+SET @columnname = 'book_volume';
+SET @preparedStatement = (SELECT IF(
+  (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema = @dbname AND table_name = @tablename AND column_name = @columnname) > 0,
+  'SELECT 1',
+  'ALTER TABLE texts ADD COLUMN book_volume VARCHAR(50) DEFAULT NULL COMMENT ''教材册号，例如综合教程1'' AFTER article_type'
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+-- 添加 unit_num 字段（如果不存在）
+SET @columnname = 'unit_num';
+SET @preparedStatement = (SELECT IF(
+  (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema = @dbname AND table_name = @tablename AND column_name = @columnname) > 0,
+  'SELECT 1',
+  'ALTER TABLE texts ADD COLUMN unit_num INT DEFAULT NULL COMMENT ''教材单元编号'' AFTER book_volume'
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+-- 创建索引（如果不存在）
+SET @indexname = 'idx_texts_article_filter';
+SET @preparedStatement = (SELECT IF(
+  (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE table_schema = @dbname AND table_name = @tablename AND index_name = @indexname) > 0,
+  'SELECT 1',
+  'CREATE INDEX idx_texts_article_filter ON texts (article_type, book_volume, unit_num)'
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+
+-- V44__past_paper_library.sql
+
+CREATE TABLE past_papers (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  paper_key VARCHAR(160) NOT NULL,
+  category VARCHAR(32) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  exam_date VARCHAR(32) DEFAULT NULL,
+  duration_minutes INT NOT NULL DEFAULT 30,
+  scope VARCHAR(100) DEFAULT NULL,
+  question_count INT NOT NULL,
+  content_json LONGTEXT NOT NULL,
+  published TINYINT(1) NOT NULL DEFAULT 1,
+  created_by BIGINT DEFAULT NULL,
+  created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_past_paper_key (paper_key),
+  KEY idx_past_papers_category_published (category, published)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Shared past examination paper library';
+
+
+
+-- V45__notifications.sql
+
+﻿-- 通知公告系统
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL COMMENT '通知标题',
+    content TEXT NOT NULL COMMENT '通知内容',
+    target_role VARCHAR(20) NOT NULL DEFAULT 'ALL' COMMENT '目标角色: ALL/TEACHER/STUDENT',
+    created_by BIGINT NOT NULL COMMENT '创建者ID',
+    is_active TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否生效',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_target_role (target_role),
+    INDEX idx_is_active (is_active),
+    INDEX idx_created_at (created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知公告表';
+
+CREATE TABLE IF NOT EXISTS notification_reads (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    notification_id BIGINT NOT NULL COMMENT '通知ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    read_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '阅读时间',
+    UNIQUE KEY uk_notification_user (notification_id, user_id),
+    INDEX idx_user_id (user_id),
+    CONSTRAINT fk_notification_reads_notification FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知已读记录表';
+
+
+-- V46__text_unit_many_to_many.sql
+
+-- 一篇文章可以归属多个单元；没有关联的文章仍可独立存在。
+CREATE TABLE IF NOT EXISTS text_units (
+    text_id BIGINT NOT NULL,
+    unit_id BIGINT NOT NULL,
+    order_num INT NOT NULL DEFAULT 0,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (text_id, unit_id),
+    INDEX idx_text_units_unit (unit_id, order_num),
+    CONSTRAINT fk_text_units_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_text_units_unit FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章-单元多对多关联';
+
+-- 保留旧 unit_id 字段作为兼容主关联，首次升级时迁移到关联表。
+INSERT IGNORE INTO text_units (text_id, unit_id, order_num)
+SELECT id, unit_id, COALESCE(order_num, 0)
+FROM texts
+WHERE unit_id IS NOT NULL AND unit_id > 0;
+
+
+-- V47__text_content_section.sql
+
+-- Add the second-level content classification used by in-class textbooks.
+SET @dbname = DATABASE();
+SET @tablename = 'texts';
+SET @columnname = 'content_section';
+
+SET @preparedStatement = (SELECT IF(
+  (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+   WHERE table_schema = @dbname AND table_name = @tablename AND column_name = @columnname) > 0,
+  'SELECT 1',
+  'ALTER TABLE texts ADD COLUMN content_section VARCHAR(50) DEFAULT NULL COMMENT ''教材内容分类'' AFTER book_volume'
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+-- The fourth option was renamed in the product taxonomy.
+UPDATE texts
+SET book_volume = '理解当代中国'
+WHERE book_volume = '综合教程4';

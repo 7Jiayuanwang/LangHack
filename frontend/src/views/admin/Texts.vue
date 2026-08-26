@@ -108,6 +108,17 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="分类" width="160">
+          <template #default="{ row }">
+            <div v-if="row.articleType === 'INNER'" class="article-type-inner">
+              <el-tag type="warning" size="small">课内</el-tag>
+              <span class="type-detail">
+                {{ row.bookVolume || '-' }} / {{ row.contentSection || '-' }} / Unit{{ row.unitNum || '-' }}
+              </span>
+            </div>
+            <el-tag v-else type="info" size="small">课外</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="isFeatured" label="推荐" width="80" align="center">
           <template #default="{ row }">
             <el-switch

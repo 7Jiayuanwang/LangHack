@@ -3,9 +3,13 @@ package com.english.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @TableName("texts")
 public class Text {
+
+    @TableField(exist = false)
+    private List<Long> unitIds;
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
@@ -18,6 +22,9 @@ public class Text {
 
     @TableField("book_volume")
     private String bookVolume;
+
+    @TableField("content_section")
+    private String contentSection;
 
     @TableField("unit_num")
     private Integer unitNum;
@@ -128,6 +135,14 @@ public class Text {
         this.unitId = unitId;
     }
 
+    public List<Long> getUnitIds() {
+        return unitIds;
+    }
+
+    public void setUnitIds(List<Long> unitIds) {
+        this.unitIds = unitIds;
+    }
+
     public ArticleType getArticleType() {
         return articleType;
     }
@@ -142,6 +157,14 @@ public class Text {
 
     public void setBookVolume(String bookVolume) {
         this.bookVolume = bookVolume;
+    }
+
+    public String getContentSection() {
+        return contentSection;
+    }
+
+    public void setContentSection(String contentSection) {
+        this.contentSection = contentSection;
     }
 
     public Integer getUnitNum() {
