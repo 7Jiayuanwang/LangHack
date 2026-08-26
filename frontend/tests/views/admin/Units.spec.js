@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 
+const routeMock = vi.hoisted(() => ({
+  query: { courseId: '1', courseName: 'Course 1' }
+}))
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
   useRoute: () => ({
     params: {},
-    query: { courseId: '1', courseName: 'Course 1' }
+    query: routeMock.query
   })
 }))
 
@@ -25,6 +29,7 @@ import request from '@/utils/request'
 describe('Units.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    routeMock.query = { courseId: '1', courseName: 'Course 1' }
     request.mockResolvedValue({
       code: 200,
       data: { records: [], total: 0 }
@@ -107,8 +112,24 @@ describe('Units.vue', () => {
 
     await wrapper.vm.loadUnits()
 
-    // Verify that units were loaded (loadUnits should populate units)
-    expect(request).toHaveBeenCalled()
+    expect(wrapper.vm.units).toEqual(mockUnits)
+    expect(request).toHaveBeenLastCalledWith({
+      url: '/api/admin/units',
+      method: 'get',
+      params: { page: 1, size: 10, courseId: 1 }
+    })
+  })
+
+  it('loads all units when opened without a course query parameter', () => {
+    routeMock.query = {}
+
+    shallowMount(Units)
+
+    expect(request).toHaveBeenLastCalledWith({
+      url: '/api/admin/units',
+      method: 'get',
+      params: { page: 1, size: 10 }
+    })
   })
 
   it('loadUnits shows error on API failure', async () => {
