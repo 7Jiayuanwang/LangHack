@@ -120,7 +120,10 @@ public class EnglishTeacherOnboardServiceImpl implements EnglishTeacherOnboardSe
             String teacherName = stringValue(m.get("teacherName"));
 
             // 课序号(kxh)未配置字段映射，applyMapping 会跳过，需从原始 raw 直接取（CDSP 返回中文 key「课序号」）
-            String courseSequence = firstRaw(raw, "课序号", "kxh", "KXH");
+            String courseSequence = firstRaw(raw, "课序号", "kxh", "KXH", "课序号 ", " 课序号");
+            if (matchedClassCount == 0) {
+                logger.info("[englishOnboard] 首条raw keys={}, courseSequence=[{}]", raw.keySet(), courseSequence);
+            }
 
             // 写 teaching_class（供 syncClassesForTeacher 读取）
             if (matchedClassIds.add(classId)) {
