@@ -126,18 +126,17 @@ class CampaignStatsServiceImplTest {
             createStudent(12L, "2023002", "二班"),
             createStudent(14L, "2023004", "四班")
         ));
-        // Fallback path: lookup by username as studentId.
-        // Implementation calls selectByStudentId for every participant's username;
-        // use any() to avoid strict-stubbing argument mismatch, then override for "2023003".
-        when(schoolStudentMapper.selectByStudentId(any())).thenReturn(null);
-        when(schoolStudentMapper.selectByStudentId("2023003")).thenReturn(createStudent(13L, "2023003", "三班"));
+        // Fallback path: lookup by username as studentId is batched through selectList.
+        when(schoolStudentMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(
+            createStudent(13L, "2023003", "三班")
+        ));
 
         Map<String, Object> result = statsService.getMyRanking(1L, 103L);
 
         assertTrue((Boolean) result.get("enrolled"));
         assertEquals(2L, result.get("myRank"));
         assertEquals(5L, result.get("totalParticipants"));
-        assertEquals(90, result.get("totalScore"));
+        assertEquals(90, ((Number) result.get("totalScore")).intValue());
         assertEquals(2, result.get("completedTasks"));
         assertEquals(EnrollmentStatus.ENROLLED, result.get("enrollmentStatus"));
 
@@ -151,7 +150,7 @@ class CampaignStatsServiceImplTest {
         assertEquals(101L, first.get("userId"));
         assertEquals("真实姓名101", first.get("userName"));
         assertEquals("一班", first.get("className"));
-        assertEquals(100, first.get("totalScore"));
+        assertEquals(100, ((Number) first.get("totalScore")).intValue());
         assertFalse((Boolean) first.get("isMe"));
 
         Map<String, Object> second = aroundMe.get(1);
@@ -164,7 +163,7 @@ class CampaignStatsServiceImplTest {
         assertEquals(103L, self.get("userId"));
         assertEquals("2023003", self.get("userName"));
         assertEquals("三班", self.get("className"));
-        assertEquals(90, self.get("totalScore"));
+        assertEquals(90, ((Number) self.get("totalScore")).intValue());
         assertTrue((Boolean) self.get("isMe"));
 
         Map<String, Object> next = aroundMe.get(3);
@@ -196,7 +195,7 @@ class CampaignStatsServiceImplTest {
         Map<String, Object> result = statsService.getMyProgress(1L, 100L);
 
         assertTrue((Boolean) result.get("enrolled"));
-        assertEquals(90, result.get("totalScore"));
+        assertEquals(90, ((Number) result.get("totalScore")).intValue());
         assertEquals(2, result.get("completedTasks"));
         assertEquals("IN_PROGRESS", result.get("completionStatus"));
         assertEquals(2L, result.get("myRank"));

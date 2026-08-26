@@ -15,7 +15,11 @@ vi.mock('@/api/campaign', () => ({
   getMyTaskProgress: vi.fn(),
   getMyRanking: vi.fn(),
   getStudentCampaignDetail: vi.fn(),
-  getMyScoreDetails: vi.fn()
+  getMyScoreDetails: vi.fn(),
+  getMyScoreLogs: vi.fn(),
+  getMyStreak: vi.fn(),
+  getClassActivityToday: vi.fn(),
+  getWeeklyAwards: vi.fn()
 }))
 
 const mockCampaign = {
@@ -107,6 +111,10 @@ describe('MyProgress.vue', () => {
     campaignApi.getMyTaskProgress.mockResolvedValue(createApiResponse(mockTaskProgress))
     campaignApi.getMyRanking.mockResolvedValue(createApiResponse(mockRanking))
     campaignApi.getMyScoreDetails.mockResolvedValue(createApiResponse([]))
+    campaignApi.getMyScoreLogs.mockResolvedValue(createApiResponse([]))
+    campaignApi.getMyStreak.mockResolvedValue(createApiResponse({}))
+    campaignApi.getClassActivityToday.mockResolvedValue(createApiResponse({}))
+    campaignApi.getWeeklyAwards.mockResolvedValue(createApiResponse({}))
   })
 
   it('loads current student campaign data on mount', async () => {
@@ -116,7 +124,7 @@ describe('MyProgress.vue', () => {
     expect(campaignApi.getStudentCampaignDetail).toHaveBeenCalledWith('1')
     expect(campaignApi.getMyProgress).toHaveBeenCalledWith('1')
     expect(campaignApi.getMyTaskProgress).toHaveBeenCalledWith('1')
-    expect(campaignApi.getMyRanking).toHaveBeenCalledWith('1')
+    expect(campaignApi.getMyRanking).toHaveBeenCalledWith('1', expect.any(Object))
     expect(wrapper.vm.campaign.title).toBe('测试活动')
     expect(wrapper.vm.progress.myRank).toBe(15)
     expect(wrapper.vm.ranking.totalParticipants).toBe(120)

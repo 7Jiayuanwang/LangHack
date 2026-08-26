@@ -13,6 +13,7 @@ import com.english.entity.Unit;
 import com.english.exception.BusinessException;
 import com.english.mapper.AssignmentMapper;
 import com.english.mapper.TextMapper;
+import com.english.mapper.TextUnitMapper;
 import com.english.mapper.UnitMapper;
 import com.english.service.impl.UnitServiceImpl;
 import org.junit.jupiter.api.BeforeAll;
@@ -58,6 +59,9 @@ class UnitServiceTest {
 
     @Mock
     private TextMapper textMapper;
+
+    @Mock
+    private TextUnitMapper textUnitMapper;
 
     private Unit testUnit;
 

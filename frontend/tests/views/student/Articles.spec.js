@@ -3,7 +3,9 @@ import { shallowMount } from '@vue/test-utils'
 
 const mockPush = vi.fn()
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: mockPush })
+  useRouter: () => ({ push: mockPush }),
+  useRoute: () => ({ path: '/student/articles' }),
+  onBeforeRouteLeave: vi.fn()
 }))
 
 vi.mock('element-plus', () => ({

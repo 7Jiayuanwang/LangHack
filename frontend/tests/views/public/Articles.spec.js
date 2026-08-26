@@ -4,7 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
-  useRoute: () => ({ path: '/articles' })
+  useRoute: () => ({ path: '/articles' }),
+  onBeforeRouteLeave: vi.fn()
 }))
 
 vi.mock('element-plus', () => ({

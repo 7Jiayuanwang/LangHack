@@ -30,7 +30,7 @@ describe('Media API', () => {
     it('rejects for invalid media type', async () => {
       const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
       await expect(uploadMedia(file, 'AUDIO'))
-        .rejects.toThrow('媒体类型只能是 IMAGE 或 VIDEO')
+        .rejects.toThrow('不支持的文件类型')
     })
 
     it('rejects when mediaType is missing', async () => {

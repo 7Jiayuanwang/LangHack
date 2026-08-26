@@ -196,6 +196,7 @@ class LearnerProfileV3IntegrationTest {
 
         @Mock private LearnerProfileService learnerProfileService;
         @Mock private LearnerProfileSummaryService summaryService;
+        @Mock private LearningRecordsService learningRecordsService;
         @Mock private UserService userService;
 
         @InjectMocks
@@ -204,6 +205,7 @@ class LearnerProfileV3IntegrationTest {
         @BeforeEach
         void setUp() {
             MockitoAnnotations.openMocks(this);
+            when(learningRecordsService.getAchievementStats(anyLong())).thenReturn(Collections.emptyMap());
             mockMvc = MockMvcBuilders.standaloneSetup(controller)
                     .addFilters(TestUtils.authenticationFilter()).build();
 
