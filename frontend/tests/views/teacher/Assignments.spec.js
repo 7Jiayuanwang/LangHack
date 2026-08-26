@@ -94,6 +94,45 @@ describe('Teacher Assignments.vue', () => {
     expect(wrapper.vm.getTextCharacterCount({ content: 'Read', markdownContent: '# Longer markdown' })).toBe(4)
   })
 
+  it('uses iExplore content sections for integrated course textbooks', () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.bookVolume = '综合教程1'
+
+    expect(wrapper.vm.contentSectionOptions).toEqual(['iExplore1', 'iExplore2'])
+  })
+
+  it('uses Understanding China content sections for the Understanding China textbook', () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.bookVolume = '理解当代中国'
+
+    expect(wrapper.vm.contentSectionOptions).toEqual(['Understanding China', 'Exploring the world'])
+  })
+
+  it('filters article options by textbook content section', async () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'INNER'
+    wrapper.vm.assignmentForm.bookVolume = '综合教程2'
+    wrapper.vm.assignmentForm.contentSection = 'iExplore2'
+
+    await wrapper.vm.loadArticles()
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('contentSection=iExplore2'),
+      expect.any(Object)
+    )
+  })
+
+  it('does not require a course unit for selected text assignments', async () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.unitId = 9
+
+    await wrapper.vm.onAssignmentTypeChange('TEXTS')
+
+    expect(wrapper.vm.assignmentForm.unitId).toBeNull()
+    expect(wrapper.vm.assignmentRules.unitId[0].validator).toBeTypeOf('function')
+  })
+
   it('renders the markdown article character count in the assignment selector', async () => {
     const wrapper = createWrapper({
       global: {

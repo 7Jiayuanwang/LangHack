@@ -283,6 +283,9 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (filter != null && filter.getBookVolume() != null && !filter.getBookVolume().trim().isEmpty()) {
             wrapper.eq("book_volume", filter.getBookVolume().trim());
         }
+        if (filter != null && filter.getContentSection() != null && !filter.getContentSection().trim().isEmpty()) {
+            wrapper.eq("content_section", filter.getContentSection().trim());
+        }
         if (filter != null && filter.getUnitNum() != null) {
             wrapper.eq("unit_num", filter.getUnitNum());
         }

@@ -99,7 +99,7 @@
               <div class="template-desc">{{ tpl.desc }}</div>
             </div>
           </div>
-          <div class="template-tip">点击模板可自动填充任务类型和学习时长，再选班级、单元和内容即可发布</div>
+          <div class="template-tip">点击模板可自动填充任务类型和学习时长；指定课文只需选班级和文章，其他任务需选择单元</div>
         </el-form-item>
 
         <el-form-item label="任务标题" prop="title">
@@ -115,7 +115,7 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="选择单元" prop="unitId">
+        <el-form-item v-if="assignmentForm.assignmentType !== 'TEXTS'" label="选择单元" prop="unitId">
           <el-select
             v-model="assignmentForm.unitId"
             placeholder="请选择单元"
@@ -146,8 +146,18 @@
         </el-form-item>
         <template v-if="assignmentForm.assignmentType === 'TEXTS' && assignmentForm.articleType === 'INNER'">
           <el-form-item label="册号">
-            <el-select v-model="assignmentForm.bookVolume" placeholder="选择册号" clearable @change="loadArticles">
+            <el-select v-model="assignmentForm.bookVolume" placeholder="选择教材" clearable @change="onBookVolumeChange">
               <el-option v-for="volume in bookVolumes" :key="volume" :label="volume" :value="volume" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="assignmentForm.bookVolume" label="内容">
+            <el-select v-model="assignmentForm.contentSection" placeholder="选择内容" clearable @change="onContentSectionChange">
+              <el-option
+                v-for="section in contentSectionOptions"
+                :key="section"
+                :label="section"
+                :value="section"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="Unit">
@@ -174,6 +184,7 @@
                       难度：{{ text.difficulty }} |
                       字数：{{ getTextCharacterCount(text) }}
                     </div>
+                    <div class="content-category">{{ getTextClassificationLabel(text) }}</div>
                   </div>
                 </el-checkbox>
               </div>
@@ -341,7 +352,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAuthHeader } from '@/utils/auth'
 
@@ -364,6 +375,11 @@ const unitContent = ref({
 })
 const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '理解当代中国']
 const unitNumbers = Array.from({ length: 6 }, (_, index) => index + 1)
+const contentSectionOptions = computed(() => (
+  assignmentForm.bookVolume === '理解当代中国'
+    ? ['Understanding China', 'Exploring the world']
+    : ['iExplore1', 'iExplore2']
+))
 
 // 快捷任务模板
 const activeTemplate = ref('')
@@ -404,6 +420,7 @@ const assignmentForm = reactive({
   assignmentType: 'UNIT',
   articleType: 'OUTER',
   bookVolume: null,
+  contentSection: null,
   unitNum: null,
   textIds: [],
   wordIds: [],
@@ -423,7 +440,16 @@ const assignmentRules = {
     { required: true, message: '请选择班级', trigger: 'change' }
   ],
   unitId: [
-    { required: true, message: '请选择单元', trigger: 'change' }
+    {
+      validator: (rule, value, callback) => {
+        if (assignmentForm.assignmentType !== 'TEXTS' && !value) {
+          callback(new Error('请选择单元'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
   ],
   assignmentType: [
     { required: true, message: '请选择任务类型', trigger: 'change' }
@@ -706,6 +732,7 @@ const editAssignment = async (assignment) => {
     assignmentType: assignment.assignmentType || 'UNIT',
     articleType: assignment.articleType || 'OUTER',
     bookVolume: assignment.bookVolume || null,
+    contentSection: null,
     unitNum: assignment.unitNum || null,
     textIds: Array.isArray(assignment.textIds) ? [...assignment.textIds] : [],
     wordIds: Array.isArray(assignment.wordIds) ? [...assignment.wordIds] : [],
@@ -736,6 +763,7 @@ const resetAssignmentForm = () => {
     assignmentType: 'UNIT',
     articleType: 'OUTER',
     bookVolume: null,
+    contentSection: null,
     unitNum: null,
     textIds: [],
     wordIds: [],
@@ -762,6 +790,7 @@ const applyTemplate = async (tpl) => {
   assignmentForm.textIds = []
   assignmentForm.wordIds = []
   assignmentForm.bookVolume = null
+  assignmentForm.contentSection = null
   assignmentForm.unitNum = null
   // 加载对应内容
   if (tpl.assignmentType === 'TEXTS') {
@@ -843,7 +872,10 @@ const onUnitChange = async (unitId) => {
 
 // 任务类型变化事件
 const onAssignmentTypeChange = async (assignmentType) => {
-  if (assignmentType !== 'UNIT' && assignmentForm.unitId) {
+  if (assignmentType === 'TEXTS') {
+    assignmentForm.unitId = null
+    unitContent.value = { texts: [], words: [] }
+  } else if (assignmentType !== 'UNIT' && assignmentForm.unitId) {
     await loadUnitContent(assignmentForm.unitId)
   } else {
     unitContent.value = { texts: [], words: [] }
@@ -861,6 +893,21 @@ const onAssignmentTypeChange = async (assignmentType) => {
 
 const onArticleTypeChange = async () => {
   assignmentForm.textIds = []
+  assignmentForm.bookVolume = null
+  assignmentForm.contentSection = null
+  assignmentForm.unitNum = null
+  await loadArticles()
+}
+
+const onBookVolumeChange = async () => {
+  assignmentForm.textIds = []
+  assignmentForm.contentSection = null
+  assignmentForm.unitNum = null
+  await loadArticles()
+}
+
+const onContentSectionChange = async () => {
+  assignmentForm.textIds = []
   await loadArticles()
 }
 
@@ -869,6 +916,7 @@ const loadArticles = async () => {
   const params = new URLSearchParams({ articleType: assignmentForm.articleType || 'OUTER' })
   if (assignmentForm.articleType === 'INNER') {
     if (assignmentForm.bookVolume) params.append('bookVolume', assignmentForm.bookVolume)
+    if (assignmentForm.contentSection) params.append('contentSection', assignmentForm.contentSection)
     if (assignmentForm.unitNum) params.append('unitNum', assignmentForm.unitNum)
   }
   const headers = {}
@@ -891,6 +939,13 @@ const getTextCharacterCount = (text) => {
     ? text.content
     : (typeof text?.markdownContent === 'string' ? text.markdownContent : '')
   return content.length
+}
+
+const getTextClassificationLabel = (text) => {
+  if (text.articleType !== 'INNER') return '课外读物'
+  const details = [text.bookVolume, text.contentSection, text.unitNum ? `Unit ${text.unitNum}` : null]
+    .filter(Boolean)
+  return ['课内教材', ...details].join(' / ')
 }
 
 const saveAssignment = async () => {
@@ -1394,6 +1449,11 @@ onMounted(async () => {
   font-size: 12px;
   color: #909399;
   margin-bottom: 3px;
+}
+
+.content-category {
+  font-size: 12px;
+  color: #409eff;
 }
 
 .content-desc {
