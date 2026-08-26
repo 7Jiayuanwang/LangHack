@@ -5,10 +5,16 @@
         <h2>真题题库管理</h2>
         <p>管理员导入并发布真题后，学生端会自动显示并可以作答。</p>
       </div>
-      <el-button type="primary" @click="importVisible = true">
-        <el-icon><Upload /></el-icon>
-        导入真题
-      </el-button>
+      <div class="header-actions">
+        <el-button @click="previewStudentView">
+          <el-icon><View /></el-icon>
+          学生端预览
+        </el-button>
+        <el-button type="primary" @click="importVisible = true">
+          <el-icon><Upload /></el-icon>
+          导入真题
+        </el-button>
+      </div>
     </header>
 
     <section class="workflow-note">
@@ -49,8 +55,19 @@
           <el-tag type="success" size="small">学生可用</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="110" fixed="right" align="center">
+      <el-table-column label="操作" width="230" fixed="right" align="center">
         <template #default="{ row }">
+          <el-upload
+            class="audio-upload"
+            accept="audio/*"
+            :show-file-list="false"
+            :auto-upload="false"
+            :on-change="file => bindAudio(row, file)"
+          >
+            <el-button type="primary" link :loading="uploadingPaperId === row.id">
+              {{ hasListening(row) ? '更换音频' : '上传音频' }}
+            </el-button>
+          </el-upload>
           <el-button type="danger" link @click="removePaper(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -62,13 +79,16 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload } from '@element-plus/icons-vue'
+import { Upload, View } from '@element-plus/icons-vue'
 import { examCategories } from '@/data/pastPapers'
 import PastPaperImportDialog from '@/components/past-papers/PastPaperImportDialog.vue'
-import { deleteSharedPastPaper, getSharedPastPapers } from '@/api/pastPapers'
+import { deleteSharedPastPaper, getSharedPastPapers, uploadPastPaperAudio } from '@/api/pastPapers'
 
+const router = useRouter()
 const loading = ref(false)
+const uploadingPaperId = ref(null)
 const importVisible = ref(false)
 const selectedCategory = ref('cet4')
 const papers = ref([])
@@ -80,7 +100,26 @@ function countByCategory(category) {
 }
 
 function hasListening(paper) {
-  return Boolean(paper?.audioUrl || paper?.questions?.some((question) => question.type === 'listening' && question.audioUrl))
+  return Boolean(paper?.audioUrl || paper?.questions?.some((question) => question.audioUrl && (question.type === 'listening' || String(question.section || '').includes('听力'))))
+}
+
+function previewStudentView() {
+  router.push({ name: 'AdminPastPapersPreview' })
+}
+
+async function bindAudio(paper, uploadFile) {
+  const file = uploadFile?.raw
+  if (!file || uploadingPaperId.value) return
+  uploadingPaperId.value = paper.id
+  try {
+    await uploadPastPaperAudio(paper.id, file)
+    await loadPapers()
+    ElMessage.success('听力音频已绑定')
+  } catch (error) {
+    ElMessage.error(error.message || '听力音频上传失败')
+  } finally {
+    uploadingPaperId.value = null
+  }
 }
 
 async function loadPapers() {
@@ -118,6 +157,8 @@ onMounted(loadPapers)
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
 .page-header h2 { margin: 0; color: #1f2937; font-size: 24px; }
 .page-header p { margin: 8px 0 0; color: #64748b; font-size: 14px; }
+.header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.audio-upload { display: inline-flex; margin-right: 12px; }
 .workflow-note { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; padding: 14px 16px; border-left: 4px solid #2563eb; background: #eff6ff; color: #475569; font-size: 13px; line-height: 1.6; }
 .workflow-note strong { color: #1e40af; font-size: 14px; }
 .workflow-note code { padding: 1px 4px; border-radius: 3px; background: #dbeafe; color: #1e3a8a; }

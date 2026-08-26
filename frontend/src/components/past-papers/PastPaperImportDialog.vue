@@ -18,7 +18,7 @@
         <input type="file" accept=".pdf,.md,.json,application/pdf,text/markdown,application/json" multiple @change="handleFiles">
         <small>支持一次选择多份 PDF、MinerU 的 full.md 或 JSON。PDF 需先用 MinerU 导出 full.md。</small>
       </label>
-      <label class="file-field">听力音频（可选，MP3/WAV/M4A）
+      <label class="file-field">听力音频（含听力题时必选，MP3/WAV/M4A）
         <input type="file" accept="audio/*" @change="handleAudio">
         <span v-if="form.audioUrl" class="audio-ready">已上传，可用于听力题播放</span>
       </label>
@@ -31,7 +31,7 @@
     <div v-if="previews.length" class="preview-list" aria-live="polite">
       <div v-for="preview in previews" :key="preview.name" :class="['preview-item', { error: preview.error }]">
         <strong>{{ preview.name }}</strong>
-        <span>{{ preview.error || `${preview.paper.title} · ${preview.paper.questions.length} 题` }}</span>
+        <span>{{ preview.error || previewSummary(preview.paper) }}</span>
         <button v-if="preview.paper" class="export-button" type="button" @click="downloadConvertedPaper(preview.paper, preview.name)">下载转换 JSON</button>
       </div>
       <button v-if="validPapers.length > 1" class="batch-export" type="button" @click="downloadAllConverted">下载全部转换 JSON（{{ validPapers.length }} 份）</button>
@@ -60,6 +60,14 @@ const previews = ref([])
 const importing = ref(false)
 const validPapers = computed(() => previews.value.filter(item => item.paper).map(item => item.paper))
 
+const isListeningQuestion = (question) => question?.type === 'listening' || String(question?.section || '').includes('听力')
+const paperNeedsAudio = (paper) => paper?.questions?.some(isListeningQuestion) && !paper.audioUrl
+
+function previewSummary(paper) {
+  const audioStatus = paperNeedsAudio(paper) ? ' · 请上传听力音频' : ''
+  return `${paper.title} · ${paper.questions.length} 题${audioStatus}`
+}
+
 async function handleFiles(event) {
   previews.value = []
   for (const file of Array.from(event.target.files || [])) {
@@ -83,7 +91,7 @@ async function handleAudio(event) {
       if (!preview.paper) return
       preview.paper.audioUrl = form.audioUrl
       preview.paper.questions?.forEach((question) => {
-        if (question.type === 'listening' || !question.audioUrl) question.audioUrl = form.audioUrl
+        if (isListeningQuestion(question)) question.audioUrl = form.audioUrl
       })
     })
     ElMessage.success('听力音频上传成功')
@@ -93,6 +101,11 @@ async function handleAudio(event) {
 }
 
 async function confirmImport() {
+  const missingAudioPaper = validPapers.value.find(paperNeedsAudio)
+  if (missingAudioPaper) {
+    ElMessage.error(`“${missingAudioPaper.title}”包含听力题，请先上传听力音频`)
+    return
+  }
   importing.value = true
   try {
     for (const paper of validPapers.value) await createSharedPastPaper(paper)
