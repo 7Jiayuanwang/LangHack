@@ -158,8 +158,14 @@ const routes = [
       {
         path: "past-papers",
         name: "AdminPastPapers",
-        component: () => import("@/views/student/PastPapers.vue"),
+        component: () => import("@/views/admin/PastPapers.vue"),
         meta: { title: "真题管理", roles: ["ADMIN"] },
+      },
+      {
+        path: "past-papers/preview",
+        name: "AdminPastPapersPreview",
+        component: () => import("@/views/student/PastPapers.vue"),
+        meta: { title: "真题学生端预览", roles: ["ADMIN"] },
       },
       {
         path: "persona-analytics",

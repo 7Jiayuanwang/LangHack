@@ -75,6 +75,23 @@ describe('past paper importer', () => {
     expect(paper.questions.map(question => question.options[3])).toEqual(['D3', 'D5', 'D26'])
   })
 
+  it('allows listening JSON to be parsed before its audio is uploaded', () => {
+    const paper = parsePaperJson(JSON.stringify({
+      title: '待绑定音频的听力试卷',
+      questions: [{
+        type: 'listening',
+        section: '听力理解',
+        stem: 'Question?',
+        options: ['A1', 'B1', 'C1', 'D1'],
+        answer: 'A',
+        analysis: 'Reason.'
+      }]
+    }), { category: 'cet4' })
+
+    expect(paper.audioUrl).toBe('')
+    expect(paper.questions[0].type).toBe('listening')
+  })
+
   it('validates cloze, matching, translation and writing questions', () => {
     const paper = parsePaperJson(JSON.stringify({
       title: '全题型试卷',

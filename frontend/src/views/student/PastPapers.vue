@@ -8,7 +8,7 @@
         <h1>{{ activePaper ? activePaper.title : '历年真题' }}</h1>
         <p>{{ activePaper ? `${answeredCount}/${activePaper.questions.length} 题已作答` : '练习、交卷并查看逐题解析' }}</p>
       </div>
-      <button v-if="!activePaper && isAdmin" class="import-button" type="button" @click="importVisible = true">
+      <button v-if="!activePaper && canManagePapers" class="import-button" type="button" @click="importVisible = true">
         <el-icon><Upload /></el-icon>
         导入
       </button>
@@ -51,7 +51,7 @@
             </div>
           </div>
           <div class="paper-actions">
-            <button v-if="paper.serverManaged && isAdmin" class="delete-button" type="button" aria-label="删除共享试卷" @click="removePaper(paper)">
+            <button v-if="paper.serverManaged && canManagePapers" class="delete-button" type="button" aria-label="删除共享试卷" @click="removePaper(paper)">
               <el-icon><Delete /></el-icon>
             </button>
             <button class="start-button" type="button" :disabled="paper.status !== 'ready'" @click="startPaper(paper)">
@@ -162,6 +162,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, CircleCheck, CircleClose, Delete, Upload } from '@element-plus/icons-vue'
 import { examCategories, pastPapers } from '@/data/pastPapers'
@@ -170,6 +171,7 @@ import { deleteSharedPastPaper, getSharedPastPapers } from '@/api/pastPapers'
 import { useUserStore } from '@/store/user'
 
 const STORAGE_KEY = 'langhack-past-paper-results'
+const route = useRoute()
 const selectedCategory = ref('cet4')
 const activePaper = ref(null)
 const currentIndex = ref(0)
@@ -181,7 +183,7 @@ const userStore = useUserStore()
 const savedResults = ref(readSavedResults())
 
 const currentCategory = computed(() => examCategories.find(item => item.key === selectedCategory.value))
-const isAdmin = computed(() => userStore.userRole === 'ADMIN')
+const canManagePapers = computed(() => userStore.userRole === 'ADMIN' && route.name !== 'AdminPastPapersPreview')
 const allPapers = computed(() => [...sharedPapers.value, ...pastPapers])
 const filteredPapers = computed(() => allPapers.value.filter(item => item.category === selectedCategory.value))
 const currentQuestion = computed(() => activePaper.value?.questions[currentIndex.value])

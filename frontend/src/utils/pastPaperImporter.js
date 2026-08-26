@@ -123,7 +123,6 @@ export function validatePaper(input, fallback = {}) {
     } else if (type === 'listening') {
       normalized.options = question.options?.map(clean)
       normalized.answer = answerIndex(question.answer)
-      if (!normalized.audioUrl) throw new Error(`第 ${index + 1} 题缺少听力音频`)
       if (normalized.options?.length !== 4 || normalized.options.some(option => !option)) throw new Error(`第 ${index + 1} 题必须有完整的 A-D 四个选项`)
       if (normalized.answer < 0 || normalized.answer > 3) throw new Error(`第 ${index + 1} 题答案必须是 A、B、C 或 D`)
     } else {
