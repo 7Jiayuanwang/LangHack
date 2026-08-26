@@ -307,10 +307,7 @@ const searchAvailableTexts = async (query) => {
       const existingTextIds = texts.value.map(t => t.id)
       // FIX: 确保records是数组
       const records = (response.data?.records && Array.isArray(response.data.records)) ? response.data.records : (Array.isArray(response.data) ? response.data : [])
-      availableTexts.value = records.filter(text =>
-        !existingTextIds.includes(text.id) &&
-        (text.unitId === 0 || text.unitId === null || text.unitId === undefined)
-      )
+      availableTexts.value = records.filter(text => !existingTextIds.includes(text.id))
     }
   } catch (error) {
     ElMessage.error('搜索课文失败')

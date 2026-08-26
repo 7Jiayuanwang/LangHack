@@ -261,11 +261,10 @@ const effectiveHideNav = computed(() => {
 // admin 专属：二级管理菜单
 const MORE_ITEMS = {
   admin: [
-    { path: '/admin/texts',          label: '课文管理', icon: Reading,  featureKey: 'admin.texts' },
+    { path: '/admin/content',        label: '课文管理', icon: Reading,  featureKey: 'admin.texts' },
     { path: '/admin/units',          label: '单元管理', icon: Reading,  featureKey: 'admin.units' },
     { path: '/admin/words',          label: '单词管理', icon: EditPen,  featureKey: 'admin.words' },
     { path: '/admin/videos',         label: '视频管理', icon: VideoPlay, featureKey: 'page_admin_videos' },
-    { path: '/admin/content',        label: '内容管理', icon: Document },
     { path: '/admin/assignments',    label: '作业管理', icon: Document, featureKey: 'admin.assignments' },
     { path: '/admin/campaigns',      label: '活动管理', icon: Trophy,   featureKey: 'admin.campaigns' },
     { path: '/admin/notifications',  label: '通知管理', icon: ChatLineRound },

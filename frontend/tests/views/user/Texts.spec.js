@@ -38,19 +38,19 @@ describe("User Texts.vue", () => {
     expect(wrapper.vm.texts).toEqual([]);
   });
 
-  it("has total at 0", () => {
+  it("uses an initial display count of 12", () => {
     const wrapper = createWrapper();
-    expect(wrapper.vm.total).toBe(0);
+    expect(wrapper.vm.displayCount).toBe(12);
   });
 
-  it("has currentPage at 1", () => {
+  it("has an empty allTexts collection", () => {
     const wrapper = createWrapper();
-    expect(wrapper.vm.currentPage).toBe(1);
+    expect(wrapper.vm.allTexts).toEqual([]);
   });
 
-  it("has pageSize at 12", () => {
+  it("has loadingMore disabled initially", () => {
     const wrapper = createWrapper();
-    expect(wrapper.vm.pageSize).toBe(12);
+    expect(wrapper.vm.loadingMore).toBe(false);
   });
 
   it("has selectedCourse as empty string", () => {

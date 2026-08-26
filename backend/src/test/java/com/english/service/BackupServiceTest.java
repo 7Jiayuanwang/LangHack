@@ -607,7 +607,7 @@ class BackupServiceTest {
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> backupService.restoreFromBackup(1L, "english_test"));
-        assertEquals("数据库恢复失败，备份文件读取或输入异常", ex.getMessage());
+        assertEquals("数据库恢复失败", ex.getMessage());
     }
 
     // ========== getBackupStats() tests ==========

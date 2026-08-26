@@ -38,6 +38,9 @@ class UserTextControllerTest {
     @Mock
     private com.english.service.ContentTagService contentTagService;
 
+    @Mock
+    private com.english.service.SystemConfigService systemConfigService;
+
     @InjectMocks
     private UserTextController userTextController;
 
@@ -45,6 +48,7 @@ class UserTextControllerTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         doNothing().when(unitService).ensureUserUploadUnitExists(anyLong());
+        when(systemConfigService.get("feature_toggle", "content.text_auto_approve")).thenReturn("false");
         // Mock filterValidTags to return valid tags
         when(contentTagService.filterValidTags(anyString())).thenAnswer(invocation -> {
             String tags = invocation.getArgument(0);

@@ -137,7 +137,8 @@ describe('SidebarLayout — 导航项（各角色不同）', () => {
     const paths  = extra.map(i => i.path)
     expect(paths).toContain('/admin/units')
     expect(paths).toContain('/admin/words')
-    expect(paths).toContain('/admin/texts')
+    expect(paths).toContain('/admin/content')
+    expect(paths).not.toContain('/admin/texts')
     expect(paths).toContain('/admin/assignments')
   })
 

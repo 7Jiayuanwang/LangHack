@@ -179,7 +179,7 @@
               <div v-else class="cover-placeholder">
                 <el-icon class="upload-icon" :size="32"><Picture /></el-icon>
                 <div class="upload-text">点击或拖拽上传封面图</div>
-                <div class="upload-hint">支持 JPG / PNG / GIF / WebP，不超过 10MB</div>
+                <div class="upload-hint">支持 JPG / PNG / GIF / WebP，不超过 10MB；也可直接 Ctrl+V 粘贴图片</div>
               </div>
             </el-upload>
             <div v-if="uploadForm.coverUrl" class="cover-actions">
@@ -295,7 +295,7 @@
               <div v-else class="cover-placeholder">
                 <el-icon class="upload-icon" :size="32"><Picture /></el-icon>
                 <div class="upload-text">点击或拖拽上传封面图</div>
-                <div class="upload-hint">支持 JPG / PNG / GIF / WebP，不超过 10MB</div>
+                <div class="upload-hint">支持 JPG / PNG / GIF / WebP，不超过 10MB；也可直接 Ctrl+V 粘贴图片</div>
               </div>
             </el-upload>
             <div v-if="editForm.coverUrl" class="cover-actions">
@@ -506,7 +506,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -516,6 +516,7 @@ import { getAuthHeader } from '@/utils/auth'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { isCoverFileValid } from '@/utils/coverUpload'
+import { getClipboardImageFile } from '@/utils/clipboardImage'
 import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
 import { getPublicContentTags } from '@/api/admin'
@@ -810,6 +811,29 @@ const handleEditCoverSuccess = (response) => handleCoverSuccess(response, null, 
 
 const handleCoverError = () => {
   ElMessage.error('文件上传失败，请检查网络或登录状态')
+}
+
+const handleClipboardImagePaste = async (event) => {
+  const targetForm = showUploadDialog.value
+    ? uploadForm
+    : showEditDialog.value
+      ? editForm
+      : null
+  if (!targetForm) return
+
+  const file = getClipboardImageFile(event)
+  if (!file) return
+
+  event.preventDefault()
+  if (!beforeCoverUpload(file)) return
+
+  try {
+    const response = await uploadMedia(file, 'IMAGE')
+    handleCoverSuccess(response, null, null, targetForm)
+  } catch (error) {
+    console.error('Clipboard cover upload error:', error)
+    handleCoverError()
+  }
 }
 
 const removeCover = (form) => {
@@ -1314,10 +1338,15 @@ const playVideo = (video) => {
 
 // 生命周期
 onMounted(() => {
+  document.addEventListener('paste', handleClipboardImagePaste)
   loadToggles({ authenticated: true })
   loadMyUploads()
   loadMyVideos()
   loadContentTags()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('paste', handleClipboardImagePaste)
 })
 </script>
 

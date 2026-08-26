@@ -1,6 +1,7 @@
 package com.english.controller;
 
 import com.english.mapper.TextMapper;
+import com.english.mapper.TextUnitMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -14,6 +15,7 @@ import com.english.entity.TextExercise;
 import com.english.entity.ExerciseOption;
 import com.english.entity.Video;
 import com.english.entity.ContentTag;
+import com.english.entity.ArticleType;
 import com.english.enums.TaskType;
 import com.english.exception.BusinessException;
 import com.english.service.UserService;
@@ -52,6 +54,7 @@ import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +66,9 @@ public class AdminController {
 
     @Autowired
     private TextMapper textMapper;
+
+    @Autowired
+    private TextUnitMapper textUnitMapper;
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
     @Value("${sso.enabled:false}")
@@ -792,6 +798,10 @@ public class AdminController {
             text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
             text.setCategory(textData.get("category") != null ? textData.get("category").toString() : null);
+            Result<String> classificationError = applyArticleClassification(text, textData);
+            if (classificationError != null) {
+                return Result.error(classificationError.getMessage());
+            }
             Object isPublicObj = textData.get("isPublic");
             try {
                 text.setIsPublic(isPublicObj != null ? Integer.parseInt(isPublicObj.toString()) : 1);
@@ -891,6 +901,25 @@ public class AdminController {
             text.setUploadedBy(createdBy);
             textService.createText(text);
 
+            // 显式传入 unitIds 时，以多对多关系为准；空数组表示文章独立存在。
+            Object unitIdsObj = textData.get("unitIds");
+            if (unitIdsObj instanceof List) {
+                textUnitMapper.deleteAllRelations(text.getId());
+                Long firstUnitId = null;
+                for (Object value : (List<?>) unitIdsObj) {
+                    try {
+                        Long targetUnitId = Long.valueOf(value.toString());
+                        if (unitService.getUnitById(targetUnitId) != null) {
+                            textUnitMapper.insertRelation(text.getId(), targetUnitId, text.getOrderNum() == null ? 0 : text.getOrderNum());
+                            if (firstUnitId == null) firstUnitId = targetUnitId;
+                        }
+                    } catch (NumberFormatException ignored) {
+                        // 忽略无效的可选单元 ID，主文章仍正常创建
+                    }
+                }
+                textMapper.updateUnitReference(text.getId(), firstUnitId);
+            }
+
             // 根据内容类型生成不同版本
             if ("MARKDOWN".equals(text.getContentType())) {
                 articleVersionService.checkAndGenerateMarkdownVersions(text.getId());
@@ -927,6 +956,7 @@ public class AdminController {
     }
     @PutMapping("/texts/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    @org.springframework.transaction.annotation.Transactional
     public Result<String> updateText(@PathVariable Long id, @RequestBody Map<String, Object> textData) {
         try {
             Text text = new Text();
@@ -951,6 +981,10 @@ public class AdminController {
             text.setCoverUrl(textData.get("coverUrl") != null ? textData.get("coverUrl").toString() : "");
             text.setTags(textData.get("tags") != null ? textData.get("tags").toString() : "");
             text.setCategory(textData.get("category") != null ? textData.get("category").toString() : null);
+            Result<String> classificationError = applyArticleClassification(text, textData);
+            if (classificationError != null) {
+                return classificationError;
+            }
             Object isPublicObj = textData.get("isPublic");
             try {
                 text.setIsPublic(isPublicObj != null ? Integer.parseInt(isPublicObj.toString()) : 1);
@@ -988,6 +1022,25 @@ public class AdminController {
 
             textService.updateText(text);
 
+            // unitIds 存在时替换全部关系；空数组会清空所有单元绑定。
+            Object unitIdsObj = textData.get("unitIds");
+            if (unitIdsObj instanceof List) {
+                textUnitMapper.deleteAllRelations(id);
+                Long firstUnitId = null;
+                for (Object value : (List<?>) unitIdsObj) {
+                    try {
+                        Long targetUnitId = Long.valueOf(value.toString());
+                        if (unitService.getUnitById(targetUnitId) != null) {
+                            textUnitMapper.insertRelation(id, targetUnitId, text.getOrderNum() == null ? 0 : text.getOrderNum());
+                            if (firstUnitId == null) firstUnitId = targetUnitId;
+                        }
+                    } catch (NumberFormatException ignored) {
+                        // ignore invalid optional unit ids
+                    }
+                }
+                textMapper.updateUnitReference(id, firstUnitId);
+            }
+
             // 根据内容类型重新生成不同版本
             if ("MARKDOWN".equals(text.getContentType())) {
                 // 异步重新生成Markdown版本
@@ -1005,6 +1058,71 @@ public class AdminController {
 
             return Result.error("更新课文失败，请稍后重试");
         }
+    }
+
+    private Result<String> applyArticleClassification(Text text, Map<String, Object> textData) {
+        if (!textData.containsKey("articleType") || textData.get("articleType") == null) {
+            return null;
+        }
+        String articleTypeValue = textData.get("articleType").toString().trim().toUpperCase();
+        final ArticleType articleType;
+        try {
+            articleType = ArticleType.valueOf(articleTypeValue);
+        } catch (IllegalArgumentException e) {
+            return Result.error("articleType 必须为 INNER 或 OUTER");
+        }
+
+        text.setArticleType(articleType);
+        if (articleType == ArticleType.OUTER) {
+            text.setBookVolume(null);
+            text.setContentSection(null);
+            text.setUnitNum(null);
+            return null;
+        }
+
+        String bookVolume = optionalString(textData.get("bookVolume"));
+        String contentSection = optionalString(textData.get("contentSection"));
+        if (bookVolume == null) {
+            return Result.error("课内课文必须选择教材册号");
+        }
+        if (contentSection == null) {
+            return Result.error("课内课文必须选择内容分类");
+        }
+        if (bookVolume != null && !Arrays.asList("综合教程1", "综合教程2", "综合教程3", "理解当代中国").contains(bookVolume)) {
+            return Result.error("bookVolume 不是有效的教材");
+        }
+        if (contentSection != null) {
+            List<String> allowedSections = "理解当代中国".equals(bookVolume)
+                    ? Arrays.asList("Understanding China", "Exploring the world")
+                    : Arrays.asList("iExplore1", "iExplore2");
+            if (!allowedSections.contains(contentSection)) {
+                return Result.error("contentSection 与所选教材不匹配");
+            }
+        }
+
+        text.setBookVolume(bookVolume);
+        text.setContentSection(contentSection);
+        Object unitNumValue = textData.get("unitNum");
+        if (unitNumValue != null && !unitNumValue.toString().trim().isEmpty()) {
+            try {
+                int unitNum = Integer.parseInt(unitNumValue.toString());
+                if (unitNum < 1 || unitNum > 6) {
+                    return Result.error("unitNum 必须在 1 到 6 之间");
+                }
+                text.setUnitNum(unitNum);
+            } catch (NumberFormatException e) {
+                return Result.error("unitNum 必须为有效的数字");
+            }
+        }
+        return null;
+    }
+
+    private String optionalString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String result = value.toString().trim();
+        return result.isEmpty() ? null : result;
     }
 
     /**
@@ -1149,6 +1267,7 @@ public class AdminController {
                 Map<String, Object> textMap = new HashMap<>();
                 textMap.put("id", text.getId());
                 textMap.put("unitId", text.getUnitId());
+                textMap.put("unitIds", textUnitMapper.selectUnitIdsByTextId(text.getId()));
                 textMap.put("title", text.getTitle());
                 textMap.put("content", text.getContent());
                 textMap.put("difficulty", text.getDifficulty());
@@ -1181,13 +1300,19 @@ public class AdminController {
             }
 
             // 检查课文是否已属于某个单元（unit_id = 0 表示未分配）
-            if (existingText.getUnitId() != null && existingText.getUnitId() > 0) {
+            if (textUnitMapper.selectUnitIdsByTextId(textId).contains(unitId)) {
                 return Result.error("该课文已属于其他单元，请先从原单元移除");
             }
 
             // 将课文分配给单元
-            existingText.setUnitId(unitId);
-            textService.updateText(existingText);
+            if (unitService.getUnitById(unitId) == null) {
+                return Result.error("鍗曞厓涓嶅瓨鍦?");
+            }
+            textUnitMapper.insertRelation(textId, unitId, 0);
+            if (existingText.getUnitId() == null) {
+                existingText.setUnitId(unitId);
+                textService.updateText(existingText);
+            }
 
             return Result.success("课文添加到单元成功");
         } catch (BusinessException e) {
@@ -1214,6 +1339,7 @@ public class AdminController {
             Map<String, Object> result = new HashMap<>();
             result.put("id", text.getId());
             result.put("unitId", text.getUnitId());
+            result.put("unitIds", textUnitMapper.selectUnitIdsByTextId(textId));
             result.put("title", text.getTitle());
             result.put("content", text.getContent());
             result.put("difficulty", text.getDifficulty());
@@ -1339,25 +1465,27 @@ public class AdminController {
             logger.debug("课文当前的unitId: {}, 标题: {}", existingText.getUnitId(), existingText.getTitle());
 
             // 检查课文是否属于当前单元（允许unitId为null的情况）
-            if (existingText.getUnitId() != null && !unitId.equals(existingText.getUnitId())) {
+            if (!textUnitMapper.selectUnitIdsByTextId(textId).contains(unitId)
+                    && existingText.getUnitId() != null && !unitId.equals(existingText.getUnitId())) {
                 return Result.error("该课文不属于当前单元");
             }
 
             // 如果课文已经不属于任何单元，也算作成功
-            if (existingText.getUnitId() == null) {
+            if (existingText.getUnitId() == null && textUnitMapper.selectUnitIdsByTextId(textId).isEmpty()) {
                 return Result.success("课文已经不属于任何单元");
             }
 
             // 设置unitId为null并更新
-            existingText.setUnitId(null);
-            textService.updateText(existingText);
+            textUnitMapper.deleteRelation(textId, unitId);
+            List<Long> remainingUnitIds = textUnitMapper.selectUnitIdsByTextId(textId);
+            textMapper.updateUnitReference(textId, remainingUnitIds.isEmpty() ? null : remainingUnitIds.get(0));
 
             // 验证更新是否成功
             Text updatedText = textService.getTextById(textId);
             if (updatedText == null) {
                 return Result.error("课文不存在");
             }
-            if (updatedText.getUnitId() != null) {
+            if (textUnitMapper.selectUnitIdsByTextId(textId).contains(unitId)) {
                 logger.warn("更新后unitId仍不为null: {}", updatedText.getUnitId());
                 return Result.error("移除失败，请重试");
             }
