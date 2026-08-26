@@ -1529,8 +1529,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                         b.setTeacherId(tid);
                         b.setTeacherName(teacherName);
                         b.setStudentId(sid);
-                        // 学生姓名稍后在持久化时通过 resolveStudentName 填充
-                        b.setCollegeName(normalizedCollege);
+                        // collegeName 留空：绑定中的学院应为学生所在学院，非课程开设学院
+                        b.setCollegeName("");
                         b.setCourseCode(kcdm);
                         b.setCourseName(courseCodeToName.get(kcdm));
                         b.setCourseClassCode(kcbh);
@@ -1606,7 +1606,8 @@ public class SchoolDataSyncServiceImpl implements SchoolDataSyncService {
                     if (studentName != null && !studentName.isEmpty()) {
                         mappedStudent.put("studentName", studentName);
                     }
-                    mappedStudent.put("collegeName", normalizedCollege);
+                    // 不设置 collegeName：学生选了外语学院的课不代表属于外语学院
+                    // collegeName 应从 administrative_class 或学生自身数据中获取
                     if (xh != null && xh.length() >= 4) {
                         String gradePrefix = xh.substring(0, 4);
                         if (gradePrefix.matches("\\d{4}")) {
