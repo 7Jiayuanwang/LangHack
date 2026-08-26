@@ -16,7 +16,7 @@
               <el-option
                 v-for="cls in classes"
                 :key="cls.id"
-                :label="cls.name"
+                :label="cls.courseSequence ? `${cls.name}（课序号：${cls.courseSequence}）` : cls.name"
                 :value="cls.id"
               />
             </el-select>
@@ -110,7 +110,7 @@
             <el-option
               v-for="cls in classes"
               :key="cls.id"
-              :label="cls.name"
+              :label="cls.courseSequence ? `${cls.name}（课序号：${cls.courseSequence}）` : cls.name"
               :value="cls.id"
             />
           </el-select>
