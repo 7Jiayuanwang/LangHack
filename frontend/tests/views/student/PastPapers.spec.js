@@ -1,13 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 
+const { sharedPapers } = vi.hoisted(() => ({ sharedPapers: [{
+  id: 1,
+  serverManaged: true,
+  category: 'cet4',
+  title: '已发布四级真题',
+  duration: 30,
+  status: 'ready',
+  questions: [{ id: 'q1', type: 'single_choice', section: '阅读理解', stem: 'Question?', options: ['A', 'B', 'C', 'D'], answer: 0, analysis: 'Reason.' }]
+}] }))
+
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn() },
   ElMessageBox: { confirm: vi.fn().mockResolvedValue('confirm') }
 }))
 
 vi.mock('@/api/pastPapers', () => ({
-  getSharedPastPapers: vi.fn().mockResolvedValue({ data: [] }),
+  getSharedPastPapers: vi.fn().mockResolvedValue({ data: sharedPapers }),
   deleteSharedPastPaper: vi.fn()
 }))
 
@@ -27,16 +37,19 @@ describe('Student PastPapers.vue', () => {
     expect(wrapper.text()).toContain('考研')
   })
 
-  it('starts a ready paper and records an answer', async () => {
+  it('starts a published paper and records an answer', async () => {
     const wrapper = mount(PastPapers, { global: { stubs: { ElIcon: true } } })
-    await wrapper.find('.start-button:not([disabled])').trigger('click')
+    await vi.waitFor(() => expect(wrapper.find('.start-button').exists()).toBe(true))
+    await wrapper.find('.start-button').trigger('click')
     expect(wrapper.find('.question-card').exists()).toBe(true)
     await wrapper.find('.option-button').trigger('click')
     expect(wrapper.find('.option-button').classes()).toContain('selected')
   })
 
-  it('keeps scanned papers disabled until content is verified', () => {
+  it('does not show built-in demo or pending papers', async () => {
     const wrapper = mount(PastPapers, { global: { stubs: { ElIcon: true } } })
-    expect(wrapper.findAll('.start-button[disabled]').length).toBe(2)
+    await vi.waitFor(() => expect(wrapper.text()).toContain('已发布四级真题'))
+    expect(wrapper.text()).not.toContain('功能样题')
+    expect(wrapper.text()).not.toContain('待校对导入')
   })
 })
