@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { nextTick } from 'vue'
 import { shallowMount } from '@vue/test-utils'
 
 vi.mock('element-plus', () => ({
@@ -18,7 +19,7 @@ describe('Teacher Assignments.vue', () => {
     })
   })
 
-  const createWrapper = () => shallowMount(Assignments)
+  const createWrapper = (options = {}) => shallowMount(Assignments, options)
 
   it('has loading as false', () => {
     const wrapper = createWrapper()
@@ -81,5 +82,37 @@ describe('Teacher Assignments.vue', () => {
   it('has studentProgress as empty array', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.studentProgress).toEqual([])
+  })
+
+  it('uses markdown content when calculating an article character count', () => {
+    const wrapper = createWrapper()
+    expect(wrapper.vm.getTextCharacterCount({ content: '', markdownContent: '# Reading' })).toBe(9)
+  })
+
+  it('prefers plain text content when calculating an article character count', () => {
+    const wrapper = createWrapper()
+    expect(wrapper.vm.getTextCharacterCount({ content: 'Read', markdownContent: '# Longer markdown' })).toBe(4)
+  })
+
+  it('renders the markdown article character count in the assignment selector', async () => {
+    const wrapper = createWrapper({
+      global: {
+        stubs: {
+          ElCheckboxGroup: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+    wrapper.vm.dialogVisible = true
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.unitContent.texts = [{
+      id: 1,
+      title: 'Markdown article',
+      difficulty: 'MEDIUM',
+      content: '',
+      markdownContent: '# Reading'
+    }]
+    await nextTick()
+
+    expect(wrapper.text()).toContain('字数：9')
   })
 })

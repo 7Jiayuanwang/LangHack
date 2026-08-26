@@ -172,7 +172,7 @@
                     <div class="content-title">{{ text.title }}</div>
                     <div class="content-meta">
                       难度：{{ text.difficulty }} |
-                      字数：{{ text.content ? text.content.length : 0 }}
+                      字数：{{ getTextCharacterCount(text) }}
                     </div>
                   </div>
                 </el-checkbox>
@@ -884,6 +884,13 @@ const loadArticles = async () => {
     unitContent.value = { ...unitContent.value, texts: [] }
     ElMessage.error('加载文章失败')
   }
+}
+
+const getTextCharacterCount = (text) => {
+  const content = typeof text?.content === 'string' && text.content.length > 0
+    ? text.content
+    : (typeof text?.markdownContent === 'string' ? text.markdownContent : '')
+  return content.length
 }
 
 const saveAssignment = async () => {
