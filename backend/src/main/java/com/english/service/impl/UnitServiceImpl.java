@@ -137,7 +137,8 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements Un
                 .setSql("unit_id = NULL"));
 
         // 5. 软删除该单元下未删除的课文（使用自定义 SQL 绕过 @TableLogic 的 SELECT 过滤）
-        int deletedCount = textMapper.softDeleteByUnitId(id);
+        // Articles are independent content; removing a unit must not delete them.
+        int deletedCount = 0;
         logger.debug("软删除单位 {} 下的课文：{} 篇", id, deletedCount);
 
         // 6. 断开所有课文的 unit_id FK 引用（包括已软删除的课文），

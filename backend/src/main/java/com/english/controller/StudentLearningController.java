@@ -1216,7 +1216,8 @@ public class StudentLearningController {
 
             // 查询单元下的课文
             QueryWrapper<Text> textWrapper = new QueryWrapper<>();
-            textWrapper.eq("unit_id", randomUnit.getId());
+            textWrapper.and(w -> w.eq("unit_id", randomUnit.getId())
+                    .or().inSql("id", "SELECT text_id FROM text_units WHERE unit_id = " + randomUnit.getId()));
             textWrapper.eq("deleted", 0);
             List<Text> texts = textMapper.selectList(textWrapper);
             if (texts == null) texts = new ArrayList<>();

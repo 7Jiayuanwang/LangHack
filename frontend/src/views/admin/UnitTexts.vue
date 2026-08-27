@@ -303,7 +303,7 @@ const searchAvailableTexts = async (query) => {
     })
 
     if (response.code === 200) {
-      // 过滤掉已经在单元中的课文和已分配给其他单元的课文
+      // 只过滤已经绑定当前单元的课文；文章允许同时属于多个单元。
       const existingTextIds = texts.value.map(t => t.id)
       // FIX: 确保records是数组
       const records = (response.data?.records && Array.isArray(response.data.records)) ? response.data.records : (Array.isArray(response.data) ? response.data : [])
