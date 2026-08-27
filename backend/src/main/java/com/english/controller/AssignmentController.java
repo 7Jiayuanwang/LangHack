@@ -198,35 +198,47 @@ public class AssignmentController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> createAssignmentWithContent(@RequestBody Map<String, Object> requestBody, Authentication authentication) {
         try {
-            if (requestBody.get("classId") == null || requestBody.get("unitId") == null
-                    || requestBody.get("title") == null || requestBody.get("assignmentType") == null) {
-                return Result.error("必填字段不能为空：classId、unitId、title、assignmentType");
+            if (requestBody.get("classId") == null || requestBody.get("title") == null || requestBody.get("assignmentType") == null) {
+                return Result.error("必填字段不能为空：classId、title、assignmentType");
             }
 
-            Long classId, unitId;
+            Long classId;
             try {
                 classId = Long.valueOf(requestBody.get("classId").toString());
-                unitId = Long.valueOf(requestBody.get("unitId").toString());
             } catch (NumberFormatException e) {
                 logger.error("ID格式错误", e);
-                return Result.error("classId或unitId格式错误，必须为数字");
+                return Result.error("classId格式错误，必须为数字");
             }
 
             String title = requestBody.get("title").toString();
             String description = requestBody.get("description") != null ? requestBody.get("description").toString() : "";
             String assignmentType = requestBody.get("assignmentType").toString();
+            Long unitId = null;
+            if (requestBody.get("unitId") != null && !requestBody.get("unitId").toString().isBlank()) {
+                try {
+                    unitId = Long.valueOf(requestBody.get("unitId").toString());
+                } catch (NumberFormatException e) {
+                    logger.error("unitId格式错误", e);
+                    return Result.error("unitId格式错误，必须为数字");
+                }
+            }
+            if (!"TEXTS".equals(assignmentType) && unitId == null) {
+                return Result.error("UNIT和WORDS类型任务必须选择单元");
+            }
 
-            // 校验 unitId 与 classId 的课程一致性
+            // 指定课文由文章选择器决定内容，不依赖平台课程或单元。
             com.english.entity.Class classInfoForValidation = classService.getClassById(classId);
             if (classInfoForValidation == null) {
                 return Result.error("班级不存在");
             }
-            Unit unitInfoForValidation = unitService.getUnitById(unitId);
-            if (unitInfoForValidation == null) {
-                return Result.error("单元不存在");
-            }
-            if (classInfoForValidation.getCourseId() == null || !classInfoForValidation.getCourseId().equals(unitInfoForValidation.getCourseId())) {
-                return Result.error("单元与班级所属课程不一致");
+            if (unitId != null) {
+                Unit unitInfoForValidation = unitService.getUnitById(unitId);
+                if (unitInfoForValidation == null) {
+                    return Result.error("单元不存在");
+                }
+                if (classInfoForValidation.getCourseId() == null || !classInfoForValidation.getCourseId().equals(unitInfoForValidation.getCourseId())) {
+                    return Result.error("单元与班级所属课程不一致");
+                }
             }
 
             // 创建任务对象

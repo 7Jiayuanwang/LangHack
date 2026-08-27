@@ -50,7 +50,7 @@ public class FollowController {
     }
 
     /**
-     * Check if current user is following a target user
+     * Check the follow relationship between the current user and a target user.
      */
     @GetMapping("/status/{userId}")
     public Result<Map<String, Object>> getFollowStatus(@PathVariable Long userId, Authentication auth) {
@@ -59,8 +59,11 @@ public class FollowController {
             return Result.error("User not found");
         }
         boolean isFollowing = followService.isFollowing(currentUser.getId(), userId);
+        boolean isFollowedBy = followService.isFollowing(userId, currentUser.getId());
         Map<String, Object> data = new HashMap<>();
         data.put("isFollowing", isFollowing);
+        data.put("isFollowedBy", isFollowedBy);
+        data.put("isMutualFollowing", isFollowing && isFollowedBy);
         return Result.success(data);
     }
 

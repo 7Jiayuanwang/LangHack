@@ -7,6 +7,8 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import com.english.entity.Text;
+import com.english.entity.ArticleType;
+import com.english.dto.ArticleFilterDTO;
 import com.english.exception.BusinessException;
 import com.english.mapper.TextMapper;
 import com.english.mapper.TextExerciseMapper;
@@ -284,6 +286,23 @@ class TextServiceTest {
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("MEDIUM", result.get(0).getDifficulty());
+    }
+
+    @Test
+    void getArticles_filtersByTextbookContentSection() {
+        ArticleFilterDTO filter = new ArticleFilterDTO();
+        filter.setArticleType(ArticleType.INNER);
+        filter.setBookVolume("综合教程1");
+        filter.setContentSection("iExplore1");
+        filter.setUnitNum(2);
+        when(baseMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(testText));
+
+        List<Text> result = textService.getArticles(filter);
+
+        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(baseMapper).selectList(wrapperCaptor.capture());
+        assertEquals(1, result.size());
+        assertTrue(wrapperCaptor.getValue().getSqlSegment().contains("content_section"));
     }
 
     // ==================== searchTexts tests ====================

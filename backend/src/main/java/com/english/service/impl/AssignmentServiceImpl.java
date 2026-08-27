@@ -116,8 +116,9 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     @Override
     @Transactional
     public void createAssignment(Assignment assignment) {
-        // unit_id在数据库中是NOT NULL，确保有值
-        if (assignment.getUnitId() == null) {
+        boolean isTextAssignment = assignment.getAssignmentContent() != null
+                && "TEXTS".equals(assignment.getAssignmentContent().getType());
+        if (assignment.getUnitId() == null && !isTextAssignment) {
             throw new BusinessException("单元ID不能为空");
         }
 

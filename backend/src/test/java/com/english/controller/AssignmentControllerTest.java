@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.MediaType;
@@ -26,6 +27,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.*;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -119,6 +122,30 @@ class AssignmentControllerTest {
                 .andExpect(jsonPath("$.data").value("任务创建成功"));
 
         verify(assignmentService).createAssignment(any(Assignment.class));
+    }
+
+    @Test
+    void createTextAssignment_withoutUnit_succeeds() throws Exception {
+        com.english.entity.Class classInfo = new com.english.entity.Class();
+        classInfo.setTeacherId(1L);
+        when(classService.getClassById(10L)).thenReturn(classInfo);
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("title", "Reading Assignment");
+        request.put("classId", 10L);
+        request.put("assignmentType", "TEXTS");
+        request.put("textIds", List.of(101L));
+
+        mockMvc.perform(post("/api/assignments/create-with-content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        ArgumentCaptor<Assignment> assignmentCaptor = ArgumentCaptor.forClass(Assignment.class);
+        verify(assignmentService).createAssignment(assignmentCaptor.capture());
+        assertNull(assignmentCaptor.getValue().getUnitId());
+        assertEquals("TEXTS", assignmentCaptor.getValue().getAssignmentContent().getType());
     }
 
     // ---- 2. Update assignment: teacher classId authorization check (R43 fix) ----

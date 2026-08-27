@@ -209,7 +209,7 @@ const loadCourses = async () => {
 const loadUnits = async () => {
   try {
     const params = {
-      current: pagination.current,
+      page: pagination.current,
       size: pagination.size
     }
 
@@ -379,9 +379,7 @@ const formatTime = (time) => {
 // 生命周期
 onMounted(() => {
   loadCourses()
-  if (courseId.value) {
-    loadUnits()
-  }
+  loadUnits()
 })
 </script>
 

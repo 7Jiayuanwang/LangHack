@@ -65,7 +65,7 @@
             type="button"
             @click.stop="toggleAuthorFollow"
           >
-            {{ isFollowingAuthor ? '已关注' : '+ 关注' }}
+            {{ isMutualFollowingAuthor ? '互相关注' : isFollowingAuthor ? '已关注' : '+ 关注' }}
           </button>
         </div>
         <div class="article-meta">
@@ -567,8 +567,10 @@ const unitName = ref('')
 const textTitle = ref('')
 const author = ref(null)
 const isFollowingAuthor = ref(false)
+const isFollowedByAuthor = ref(false)
 const followingAuthor = ref(false)
 const isOwnAuthor = computed(() => String(author.value?.id || '') === String(userStore.userInfo?.id || ''))
+const isMutualFollowingAuthor = computed(() => isFollowingAuthor.value && isFollowedByAuthor.value)
 // 平台默认头像（与导航栏/个人中心一致的兜底图）
 const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 // 作者首字母头像（官方内容显示「官」）
@@ -1308,6 +1310,7 @@ const loadAuthorFollowState = async () => {
   try {
     const response = await getFollowStatus(author.value.id)
     isFollowingAuthor.value = Boolean(response?.data?.isFollowing)
+    isFollowedByAuthor.value = Boolean(response?.data?.isFollowedBy)
   } catch (error) {
     console.error('加载作者关注状态失败:', error)
   }
