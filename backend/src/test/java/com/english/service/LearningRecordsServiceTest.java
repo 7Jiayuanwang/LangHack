@@ -939,6 +939,7 @@ class LearningRecordsServiceTest {
             text.setContentType("TEXT");
             text.setDifficulty("BEGINNER");
             text.setUnitId(10L);
+            text.setViewCount(42);
 
             Unit unit = new Unit();
             unit.setId(10L);
@@ -960,6 +961,7 @@ class LearningRecordsServiceTest {
             assertNotNull(result);
             assertEquals(50L, result.get("id"));
             assertEquals("Sample Text", result.get("title"));
+            assertEquals(42, result.get("viewCount"));
         }
 
         @Test

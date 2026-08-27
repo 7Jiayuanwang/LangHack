@@ -8,6 +8,7 @@ import com.english.mapper.*;
 import com.english.service.CampaignStatsService;
 import com.english.service.LearningRecordsService;
 import com.english.exception.BusinessException;
+import com.english.datasource.UseMaster;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -260,6 +261,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     }
 
     @Override
+    @UseMaster
     public Map<String, Object> getTextDetailWithAnnotation(Long studentId, Long textId, Long assignmentId) {
         if (studentId == null) {
             throw new BusinessException("studentId 不能为空");
@@ -280,6 +282,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             detail.put("markdownContent", text.getMarkdownContent());
             detail.put("difficulty", text.getDifficulty());
             detail.put("audioUrl", text.getAudioUrl());
+            // Keep the article view counter in the student detail response. The
+            // controller increments it before loading this map, so callers see
+            // the current value instead of falling back to zero in the client.
+            detail.put("viewCount", text.getViewCount() != null ? text.getViewCount() : 0);
             detail.put("isPublic", text.getIsPublic());
             detail.put("isFeatured", text.getIsFeatured());
 
