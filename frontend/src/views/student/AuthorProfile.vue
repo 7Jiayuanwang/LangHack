@@ -49,7 +49,7 @@
             :disabled="followLoading"
             @click="handleFollow"
           >
-            {{ isFollowing ? '已关注' : '+ 关注' }}
+            {{ isMutualFollowing ? '互相关注' : isFollowing ? '已关注' : '+ 关注' }}
           </button>
         </div>
       </div>
@@ -181,12 +181,14 @@ const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 // Follow state
 const isFollowing = ref(false)
+const isFollowedBy = ref(false)
 const followLoading = ref(false)
 const followCounts = ref({ followingCount: 0, followersCount: 0 })
 const isOwnProfile = computed(() => {
   const userId = route.params.id
   return userStore.userInfo?.id && String(userStore.userInfo.id) === String(userId)
 })
+const isMutualFollowing = computed(() => isFollowing.value && isFollowedBy.value)
 
 const unlockedAchievements = computed(() => {
   if (!authorData.value?.achievements?.achievementList) return []
@@ -305,6 +307,7 @@ const loadFollowData = async () => {
     ])
     if (statusRes?.data) {
       isFollowing.value = statusRes.data.isFollowing
+      isFollowedBy.value = statusRes.data.isFollowedBy
     }
     if (countsRes?.data) {
       followCounts.value = countsRes.data

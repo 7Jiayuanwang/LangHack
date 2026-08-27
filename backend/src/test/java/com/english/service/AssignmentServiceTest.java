@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.english.dto.AssignmentContent;
 import com.english.entity.*;
 import com.english.exception.BusinessException;
 import com.english.mapper.*;
@@ -155,6 +156,21 @@ class AssignmentServiceTest {
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> assignmentService.createAssignment(newAssignment));
         assertEquals("单元ID不能为空", exception.getMessage());
+    }
+
+    @Test
+    void createAssignment_textsWithoutUnit_succeeds() {
+        Assignment textAssignment = new Assignment();
+        textAssignment.setTitle("Selected Text Assignment");
+        textAssignment.setClassId(10L);
+        AssignmentContent content = new AssignmentContent();
+        content.setType("TEXTS");
+        textAssignment.setAssignmentContent(content);
+        when(assignmentMapper.insert(any(Assignment.class))).thenReturn(1);
+
+        assignmentService.createAssignment(textAssignment);
+
+        verify(assignmentMapper).insert(textAssignment);
     }
 
     // ==================== getAssignmentById tests ====================
