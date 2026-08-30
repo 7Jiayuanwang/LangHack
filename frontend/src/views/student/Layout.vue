@@ -51,6 +51,10 @@
           <span class="simple-role">{{ roleDisplayName }}</span>
         </div>
         <div class="simple-menu-actions">
+          <button class="simple-btn" @click="handleUserAction('favorites')">
+            <el-icon><Star /></el-icon>
+            我的收藏
+          </button>
           <button v-if="isEnabled('student.learner_profile_enabled')" class="simple-btn" @click="handleUserAction('profile')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -102,7 +106,8 @@ import {
   ChatLineRound,
   School,
   Clock,
-  Trophy
+  Trophy,
+  Star
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -190,6 +195,7 @@ const pageTitle = computed(() => {
     '/student/ai-qa': 'AI 问答',
     '/student/user-texts': '我的创作',
     '/student/my-study': '我的学习',
+    '/student/favorites': '我的收藏',
     '/student/campaigns': '学习活动'
   }
   return routeMap[route.path] || route.meta?.title || '英语学习'
@@ -253,6 +259,9 @@ const handleUserAction = async (action) => {
   closeUserMenu()
 
   switch (action) {
+    case 'favorites':
+      router.push('/student/favorites')
+      break
     case 'profile':
       router.push('/student/my-profile')
       break
