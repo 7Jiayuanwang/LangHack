@@ -19,86 +19,8 @@
       </div>
     </section>
 
-    <!-- Tab Selector -->
-    <div class="tab-bar">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="tab-btn"
-        :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
-      >
-        <el-icon><component :is="tab.icon" /></el-icon>
-        <span>{{ tab.label }}</span>
-        <span v-if="tab.count !== undefined" class="tab-count">{{ tab.count }}</span>
-      </button>
-    </div>
-
-    <!-- Favorites Tab -->
-    <div v-if="activeTab === 'favorites'" class="tab-content">
-      <div v-if="favLoading" class="loading-state">
-        <el-icon class="is-loading" :size="32"><Loading /></el-icon>
-        <p>加载中...</p>
-      </div>
-      <div v-else-if="favorites.length === 0" class="empty-state">
-        <el-icon :size="48"><StarFilled /></el-icon>
-        <h3>暂无收藏</h3>
-        <p>阅读文章时点击星标即可收藏</p>
-      </div>
-      <div v-else class="article-list">
-        <div
-          v-for="item in paginatedFavorites"
-          :key="item.id"
-          class="article-card"
-          @click="readArticle(item.textId)"
-        >
-          <div class="card-body">
-            <h3 class="card-title">{{ item.title }}</h3>
-            <p class="card-snippet">{{ item.snippet }}</p>
-          </div>
-          <div class="card-footer">
-            <span class="difficulty-tag" :class="item.difficulty">
-              {{ getDifficultyText(item.difficulty) }}
-            </span>
-            <span class="meta-info">
-              <el-icon><Clock /></el-icon>
-              {{ formatDate(item.favoritedAt) }}
-            </span>
-          </div>
-        </div>
-      </div>
-      <!-- 分页 -->
-      <div v-if="favTotalPages > 1" class="pagination">
-        <button class="page-btn" :disabled="favPage === 1" @click="favPage--">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
-        </button>
-        <button
-          v-for="p in favPageList"
-          :key="p"
-          class="page-btn page-number"
-          :class="{ active: favPage === p }"
-          @click="favPage = p"
-        >{{ p }}</button>
-        <button class="page-btn" :disabled="favPage === favTotalPages" @click="favPage++">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>
-        </button>
-        <div class="page-jump">
-          <input
-            v-model="favJumpInput"
-            type="number"
-            min="1"
-            :max="favTotalPages"
-            class="page-jump-input"
-            @keyup.enter="jumpFavPage"
-            placeholder="页"
-          />
-          <button class="page-btn page-jump-btn" @click="jumpFavPage">跳转</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Reading History Tab -->
-    <div v-if="activeTab === 'history'" class="tab-content">
+    <div class="tab-content">
       <!-- Overview Stats -->
       <div v-if="overview" class="stats-row">
         <div class="stat-item">
@@ -190,17 +112,15 @@
 <script setup>
 import { ref, onMounted, watch, computed, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import {
-  StarFilled, Clock, Timer, Reading, Loading,
+  Clock, Timer, Reading, Loading,
   House, Calendar, Trophy, Tickets, Notebook,
   VideoPlay, MessageBox, Edit, User
 } from '@element-plus/icons-vue'
-import { getFavoriteArticles, getReadingHistory } from '@/api/student'
+import { getReadingHistory } from '@/api/student'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 
 const router = useRouter()
-const activeTab = ref('favorites')
 
 // 聚合被移出主导航的子页面入口（按优先级排序）
 // 注：发现页已在底部导航栏首位强制显示，不再重复列出
@@ -228,15 +148,6 @@ const visibleEntries = computed(() =>
   QUICK_ENTRIES.filter(e => isEntryEnabled(e.toggleKey))
 )
 
-const tabs = ref([
-  { key: 'favorites', label: '我的收藏', icon: StarFilled, count: undefined },
-  { key: 'history', label: '阅读记录', icon: Reading, count: undefined }
-])
-
-const favorites = ref([])
-const favLoading = ref(false)
-const favPage = ref(1)
-const favTotal = ref(0)
 const PAGE_SIZE = 5
 
 const history = ref([])
@@ -245,7 +156,6 @@ const historyPage = ref(1)
 const historyTotal = ref(0)
 const overview = ref(null)
 
-const favTotalPages = computed(() => Math.ceil(favTotal.value / PAGE_SIZE) || 1)
 const historyTotalPages = computed(() => Math.ceil(historyTotal.value / PAGE_SIZE) || 1)
 const PAGE_WINDOW = 5
 const buildPageList = (total, current) => {
@@ -254,16 +164,8 @@ const buildPageList = (total, current) => {
   start = Math.max(1, Math.min(start, total - PAGE_WINDOW + 1))
   return Array.from({ length: PAGE_WINDOW }, (_, i) => start + i)
 }
-const favPageList = computed(() => buildPageList(favTotalPages.value, favPage.value))
 const historyPageList = computed(() => buildPageList(historyTotalPages.value, historyPage.value))
-const favJumpInput = ref('')
 const historyJumpInput = ref('')
-const jumpFavPage = () => {
-  const n = parseInt(favJumpInput.value, 10)
-  if (!Number.isFinite(n)) { favJumpInput.value = ''; return }
-  favPage.value = Math.max(1, Math.min(n, favTotalPages.value))
-  favJumpInput.value = ''
-}
 const jumpHistoryPage = () => {
   const n = parseInt(historyJumpInput.value, 10)
   if (!Number.isFinite(n)) { historyJumpInput.value = ''; return }
@@ -271,24 +173,7 @@ const jumpHistoryPage = () => {
   historyJumpInput.value = ''
 }
 
-const paginatedFavorites = computed(() => favorites.value)
 const paginatedHistory = computed(() => history.value)
-
-const loadFavorites = async () => {
-  favLoading.value = true
-  try {
-    const res = await getFavoriteArticles({ page: favPage.value, size: PAGE_SIZE })
-    if (res?.code === 200 && res?.data) {
-      favorites.value = res.data.records || []
-      favTotal.value = res.data.total || 0
-      tabs.value[0].count = favTotal.value
-    }
-  } catch (e) {
-    console.error('加载收藏失败:', e)
-  } finally {
-    favLoading.value = false
-  }
-}
 
 const loadHistory = async () => {
   historyLoading.value = true
@@ -298,9 +183,6 @@ const loadHistory = async () => {
       history.value = res.data.records || []
       historyTotal.value = res.data.total || 0
       overview.value = res.data.overview || null
-      if (overview.value) {
-        tabs.value[1].count = overview.value.totalArticlesRead || 0
-      }
     }
   } catch (e) {
     console.error('加载阅读记录失败:', e)
@@ -313,9 +195,8 @@ const readArticle = (textId) => {
   router.push({ path: `/article/${textId}`, query: { from: 'my-study' } })
 }
 
-const getDifficultyText = (diff) => {
-  const map = { EASY: '简单', MEDIUM: '中等', HARD: '困难' }
-  return map[diff] || diff || '未知'
+const getDifficultyText = (difficulty) => {
+  return ({ EASY: '简单', MEDIUM: '中等', HARD: '困难' })[difficulty] || difficulty || '未知'
 }
 
 const formatDate = (dateStr) => {
@@ -332,16 +213,9 @@ const formatDuration = (seconds) => {
   return `${m}分钟`
 }
 
-watch(activeTab, (tab) => {
-  if (tab === 'favorites') { favPage.value = 1; if (favorites.value.length === 0) loadFavorites() }
-  if (tab === 'history') { historyPage.value = 1; if (history.value.length === 0) loadHistory() }
-})
-
-watch(favPage, () => loadFavorites())
 watch(historyPage, () => loadHistory())
 
 onMounted(() => {
-  loadFavorites()
   loadHistory()
   // 共享 feature-toggles 缓存（路由守卫与 Layout 已在加载；此处仅兜底）
   if (!isLoaded()) {

@@ -254,11 +254,12 @@
     <SelectionMenu
       :visible="showSelectionMenu"
       :position="selectionPosition"
-      underline-label="划线"
+      :selection-text="selectedTextContent"
+      mark-label="标注"
       @copy="handleCopy"
-      @underline="handleUnderline"
+      @mark="handleAnnotate"
       @translate="handleTranslate"
-      @annotate="handleAnnotate"
+      @favorite-sentence="handleFavoriteSentence"
       @ai-qa="handleAiQa"
     />
 
@@ -283,7 +284,7 @@
     <!-- 批注对话框 -->
     <el-dialog
       v-model="showAnnotateDialog"
-      title="添加批注"
+      title="划线与批注"
       width="500px"
     >
       <div class="annotate-source">
@@ -297,7 +298,7 @@
         placeholder="输入你的批注..."
       />
       <template #footer>
-        <el-button @click="showAnnotateDialog = false">取消</el-button>
+        <el-button @click="showAnnotateDialog = false">仅保留划线</el-button>
         <el-button type="primary" @click="saveAnnotation">保存</el-button>
       </template>
     </el-dialog>
@@ -317,6 +318,8 @@ import { getPublicVideoDetail, getUserVideoDetail } from '@/api/video'
 import { getAdminVideoDetail } from '@/api/admin'
 import { getMediaDetail } from '@/api/media'
 import { checkArticleFavorite, toggleArticleFavorite, recordLearning } from '@/api/student'
+import { toggleSentenceFavorite } from '@/api/sentenceFavorite'
+import { createAnnotation } from '@/api/annotation'
 
 import InteractiveText from '@/components/InteractiveText.vue'
 import SelectionMenu from '@/components/SelectionMenu.vue'
@@ -1071,7 +1074,8 @@ const handleCopy = () => {
 }
 
 const handleUnderline = () => {
-  if (!selectedTextContent.value) return
+  if (!selectedTextContent.value) return false
+  let marked = false
   try {
     const selection = window.getSelection()
     if (selection && selection.rangeCount > 0) {
@@ -1083,6 +1087,7 @@ const handleUnderline = () => {
       try {
         range.surroundContents(mark)
         ElMessage.success('已划线')
+        marked = true
       } catch (e) {
         // 跨节点选区无法简单 surroundContents，回退
         ElMessage.warning('请重新选择不跨段的文本')
@@ -1094,6 +1099,7 @@ const handleUnderline = () => {
   }
   showSelectionMenu.value = false
   window.getSelection()?.removeAllRanges()
+  return marked
 }
 
 // 翻译选中的文本
@@ -1142,25 +1148,45 @@ const handleAnnotate = () => {
   if (!selectedTextContent.value) return
   selectedTextForTranslate.value = selectedTextContent.value
   annotateContent.value = ''
+  if (!handleUnderline()) return
   showAnnotateDialog.value = true
   showSelectionMenu.value = false
 }
 
-const saveAnnotation = () => {
+const handleFavoriteSentence = async () => {
+  const sentence = selectedTextContent.value.trim()
+  const textId = video.value?.associatedTextId
+  if (!sentence) return ElMessage.warning('请先选择例句')
+  if (!textId) return ElMessage.warning('该视频没有关联文章，无法收藏例句')
+
+  try {
+    const res = await toggleSentenceFavorite(textId, sentence)
+    ElMessage.success(res?.data?.favorited ? '例句已收藏' : '已取消收藏')
+  } catch (error) {
+    ElMessage.error('收藏例句失败')
+  } finally {
+    showSelectionMenu.value = false
+    window.getSelection()?.removeAllRanges()
+  }
+}
+
+const saveAnnotation = async () => {
   if (!annotateContent.value.trim()) {
     ElMessage.warning('请输入批注内容')
     return
   }
-  // 简化：本地存储批注（按文本内容索引）
+  const textId = video.value?.associatedTextId
+  if (!textId) {
+    ElMessage.warning('该视频没有关联文章，无法保存批注')
+    return
+  }
   try {
-    const key = `video_annotations_${video.value?.id || 0}`
-    const annotations = JSON.parse(localStorage.getItem(key) || '[]')
-    annotations.push({
-      text: selectedTextForTranslate.value,
+    await createAnnotation({
+      textId,
+      selectedText: selectedTextForTranslate.value,
       note: annotateContent.value.trim(),
-      time: Date.now()
+      visibility: 0
     })
-    localStorage.setItem(key, JSON.stringify(annotations))
     ElMessage.success('批注已保存')
     showAnnotateDialog.value = false
     window.getSelection()?.removeAllRanges()

@@ -557,7 +557,8 @@ const loadAssignments = async () => {
         learnedWords: assignment.learnedWords || 0,
         totalTexts: assignment.totalTexts || 0,
         readTexts: assignment.readTexts || 0,
-        studyTime: assignment.studyTime || 0
+        studyTime: assignment.studyTime || 0,
+        idealStudyTimeMinutes: assignment.idealStudyTimeMinutes || 10
       }))
 
       // 如果前端还有状态筛选，再筛选一次（确保准确性）
@@ -602,17 +603,9 @@ const calculateAssignmentStatus = (progress, deadline) => {
 const formatTextTime = (text, assignmentType) => {
   void calculateAssignmentStatus
   if (assignmentType === 'TEXTS') {
-    // 课文任务：显示阅读时间，判断是否达到要求
-    const time = text.studyTime || 0
-    const MIN_TIME = 600 // 10分钟 = 600秒
-    const isCompleted = time >= MIN_TIME
-
-    // 简单的时间格式化：转换为分钟
-    const minutes = Math.floor(time / 60)
-    const seconds = time % 60
-    const timeStr = minutes > 0 ? `${minutes}分${seconds}秒` : `${seconds}秒`
-
-    return `${timeStr} ${isCompleted ? '✅' : '⏳ (需要10分钟)'}`
+    const minutes = Number(text.studyTime) || 0
+    const requiredMinutes = getRequiredTextTimeMinutes()
+    return `${minutes}分钟 ${minutes >= requiredMinutes ? '已达标' : `需要${requiredMinutes}分钟`}`
   } else {
     // 单元任务：显示学习状态
     return text.completed ? '✅ 已完成' : '⏳ 未完成'
@@ -621,8 +614,12 @@ const formatTextTime = (text, assignmentType) => {
 
 // 判断课文学习时间是否达标
 const isTextTimeCompleted = (studyTime) => {
-  const MIN_TIME = 600 // 10分钟 = 600秒
-  return (studyTime || 0) >= MIN_TIME
+  return (Number(studyTime) || 0) >= getRequiredTextTimeMinutes()
+}
+
+const getRequiredTextTimeMinutes = () => {
+  const value = Number(currentAssignment.value?.idealStudyTimeMinutes)
+  return Number.isFinite(value) && value > 0 ? value : 10
 }
 
 // 更新统计数据
@@ -686,6 +683,7 @@ const viewAssignmentDetail = async (assignment) => {
       currentAssignment.value = {
         ...assignment,
         ...detailData,
+        idealStudyTimeMinutes: detailData.idealStudyTimeMinutes || assignment.idealStudyTimeMinutes || 10,
         texts: [], // 需要通过内容API获取
         words: [], // 需要通过内容API获取
         records: [] // 需要通过记录API获取
@@ -759,6 +757,7 @@ const loadAssignmentContent = async (assignmentId) => {
       currentAssignment.value.texts = Array.isArray(contentData.texts) ? contentData.texts : []
       currentAssignment.value.words = Array.isArray(contentData.words) ? contentData.words : []
       currentAssignment.value.assignmentType = contentData.assignmentType || currentAssignment.value.assignmentType
+      currentAssignment.value.idealStudyTimeMinutes = contentData.idealStudyTimeMinutes || currentAssignment.value.idealStudyTimeMinutes || 10
 
       // 同时加载学习记录
       await loadAssignmentRecords(assignmentId)
@@ -1028,7 +1027,7 @@ const getAssignmentTypeText = (assignmentType) => {
 const getCompletionCriteriaText = (assignmentType) => {
   const criteria = {
     'UNIT': '课文和单词均需达到80%进度',
-    'TEXTS': '每篇课文需学习至少10分钟',
+    'TEXTS': `每篇课文需学习至少${getRequiredTextTimeMinutes()}分钟`,
     'WORDS': '需要掌握所有指定单词'
   }
   return criteria[assignmentType] || '未知完成标准'

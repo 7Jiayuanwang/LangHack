@@ -257,8 +257,6 @@ class UnitServiceTest {
         when(assignmentMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         // Soft-delete inactive assignments
         when(assignmentMapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(0);
-        // Soft-delete texts
-        when(textMapper.softDeleteByUnitId(1L)).thenReturn(3);
         // Clear text unit references
         when(textMapper.clearUnitReference(1L)).thenReturn(3);
         // removeById (Unit has no @TableLogic, so this is physical delete)
@@ -270,7 +268,7 @@ class UnitServiceTest {
         // Assert: verify full cascade
         verify(assignmentMapper).selectCount(any(QueryWrapper.class));
         verify(assignmentMapper, times(2)).update(isNull(), any(UpdateWrapper.class));
-        verify(textMapper).softDeleteByUnitId(1L);
+        verify(textMapper, never()).softDeleteByUnitId(1L);
         verify(textMapper).clearUnitReference(1L);
         verify(baseMapper).deleteById(1L);
     }
@@ -304,7 +302,6 @@ class UnitServiceTest {
         when(baseMapper.selectById(1L)).thenReturn(testUnit);
         when(assignmentMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         when(assignmentMapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(0);
-        when(textMapper.softDeleteByUnitId(1L)).thenReturn(0);
         when(textMapper.clearUnitReference(1L)).thenReturn(0);
         when(baseMapper.deleteById(1L)).thenReturn(1);
 
@@ -321,7 +318,6 @@ class UnitServiceTest {
         when(baseMapper.selectById(1L)).thenReturn(testUnit);
         when(assignmentMapper.selectCount(any(QueryWrapper.class))).thenReturn(null);
         when(assignmentMapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(0);
-        when(textMapper.softDeleteByUnitId(1L)).thenReturn(0);
         when(textMapper.clearUnitReference(1L)).thenReturn(0);
         when(baseMapper.deleteById(1L)).thenReturn(1);
 

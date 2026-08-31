@@ -96,7 +96,7 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
     public void afterPropertiesSet() {
         super.afterPropertiesSet();
 // 启动时立即检测一次从库复制状态
-        boolean replicationOk = true; // checkSlaveReplication() - 单库环境跳过从库复制检查
+        boolean replicationOk = checkSlaveReplication();
         if (!replicationOk) {
             markSlaveUnavailable("鍚姩鏃跺鍒剁姸鎬佹娴嬪け璐ワ紝闄嶇骇鍒颁富搴?)");
         } else {
@@ -114,7 +114,7 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         });
         probeScheduler.scheduleWithFixedDelay(() -> {
             try {
-                boolean ok = true; // checkSlaveReplication() - 单库环境跳过从库复制检查
+                boolean ok = checkSlaveReplication();
                 if (ok && !slaveAvailable.get()) {
                     slaveAvailable.set(true);
                     slaveUnavailableSince.set(0);
@@ -274,4 +274,3 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         }
     }
 }
-

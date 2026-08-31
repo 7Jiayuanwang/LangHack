@@ -437,16 +437,17 @@
     <SelectionMenu
       :visible="showSelectionMenu"
       :position="selectionPosition"
-      :underline-label="selectionUnderlineLabel"
+      :selection-text="selectedTextContent"
+      :mark-label="selectionMarkLabel"
       @copy="handleCopy"
-      @underline="handleUnderline"
+      @mark="handleMark"
       @translate="handleTranslateSelection"
-      @annotate="handleAnnotate"
+      @favorite-sentence="handleFavoriteSentence"
       @ai-qa="handleAiQa"
     />
 
     <!-- 批注输入弹窗 -->
-    <el-dialog v-model="showAnnotationDialog" title="添加批注" width="min(480px, 92vw)" align-center>
+    <el-dialog v-model="showAnnotationDialog" title="划线与批注" width="min(480px, 92vw)" align-center>
       <div class="annotation-dialog-body">
         <div class="ann-selected-text">
           <span class="ann-quote-mark">"</span>{{ annotationSelectedText }}<span class="ann-quote-mark">"</span>
@@ -468,7 +469,8 @@
         </div>
       </div>
       <template #footer>
-        <el-button @click="showAnnotationDialog = false">取消</el-button>
+        <el-button @click="showAnnotationDialog = false">仅保留划线</el-button>
+        <el-button type="danger" plain @click="removeAnnotationUnderline">取消划线</el-button>
         <el-button type="primary" :loading="submittingAnnotation" @click="submitAnnotation">发布批注</el-button>
       </template>
     </el-dialog>
@@ -549,6 +551,7 @@ renderer.image = function({ href, title, text }) {
 marked.setOptions({ renderer })
 import SelectionMenu from '@/components/SelectionMenu.vue'
 import { getAnnotations, createAnnotation, deleteAnnotation, toggleUpvote, updateAnnotationVisibility } from '@/api/annotation'
+import { toggleSentenceFavorite } from '@/api/sentenceFavorite'
 import { getArticlesPath } from '@/config/site'
 import rangy from '@/utils/rangy'
 
@@ -773,8 +776,8 @@ const canFavorite = computed(() => {
   return isPublic.value === 1 || isFeatured.value === 1 || (unitId.value && unitId.value !== 999)
 })
 
-/** SelectionMenu 中划线按钮的动态标签 */
-const selectionUnderlineLabel = computed(() => selectionIsUnderlined.value ? '取消划线' : '划线')
+/** SelectionMenu 中统一标注入口的动态标签 */
+const selectionMarkLabel = computed(() => selectionIsUnderlined.value ? '编辑标注' : '标注')
 
 // 练习和学习统计相关
 const isStudyTimeCompleted = ref(false)
@@ -977,12 +980,13 @@ const loadTextDetail = async () => {
         setTimeout(() => ElMessage.success(`本课文有多个学习版本：${versionNames}，可点击切换`), 800)
       }
 
-      // 恢复已学习时长（转换为秒）
+      // 课文详情接口返回分钟，阅读页计时器统一使用秒。
       if (data.readTime && data.readTime > 0) {
-        studyTime.value = data.readTime
-        accumulatedTime = data.readTime // 将已学习时长作为累计时间
+        const savedSeconds = Math.round(Number(data.readTime) * 60)
+        studyTime.value = savedSeconds
+        accumulatedTime = savedSeconds
         // 已保存的时长不应再次发送，同步 lastSavedStudyTime 避免首次保存重复累加
-        lastSavedStudyTime = data.readTime
+        lastSavedStudyTime = savedSeconds
       } else {
         // 确保初始值为0
         studyTime.value = 0
@@ -1074,6 +1078,7 @@ const pauseReading = async () => {
   if (studyStartTime) {
     const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
     accumulatedTime += currentSessionTime
+    studyTime.value = accumulatedTime
     studyStartTime = null // 重置开始时间
   }
 
@@ -1361,6 +1366,7 @@ const handleCompleteReading = async () => {
       if (studyStartTime) {
         const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
         accumulatedTime += currentSessionTime
+        studyTime.value = accumulatedTime
         studyStartTime = null
       }
     }
@@ -2020,6 +2026,7 @@ onBeforeUnmount(() => {
       if (studyStartTime) {
         const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
         accumulatedTime += currentSessionTime
+        studyTime.value = accumulatedTime
         studyStartTime = null
       }
     }
@@ -2180,6 +2187,7 @@ const handleUnderline = async () => {
   const existingUnderline = sharedUnderlines.value.find(u => u.selectedText && u.selectedText.trim() === trimmed)
 
   if (existingUnderline) {
+    let removed = false
     // 取消划线：删除后端记录，移除前端高亮，更新本地状态
     try {
       await deleteUnderline(existingUnderline.id)
@@ -2189,6 +2197,7 @@ const handleUnderline = async () => {
       removeAllHighlights()
       applySharedUnderlines()
       ElMessage.success('已取消划线')
+      removed = true
     } catch (error) {
       console.error('取消划线失败:', error)
       ElMessage.error('取消划线失败')
@@ -2196,7 +2205,7 @@ const handleUnderline = async () => {
       showSelectionMenu.value = false
       window.getSelection().removeAllRanges()
     }
-    return
+    return removed
   }
 
   try {
@@ -2258,9 +2267,11 @@ const handleUnderline = async () => {
     }
     showSelectionMenu.value = false
     window.getSelection().removeAllRanges()
+    return res?.code === 200
   } catch (error) {
     console.error(error)
     ElMessage.error('划线失败')
+    return false
   }
 }
 
@@ -2278,13 +2289,25 @@ const loadAnnotations = async () => {
   }
 }
 
-const handleAnnotate = () => {
+const prepareAnnotation = () => {
   if (!selectedTextContent.value?.trim()) return
   annotationSelectedText.value = selectedTextContent.value.trim()
   annotationNote.value = ''
   annotationVisibility.value = 1
   showAnnotationDialog.value = true
   showSelectionMenu.value = false
+}
+
+const handleMark = async () => {
+  if (!selectedTextContent.value?.trim()) return
+  const alreadyUnderlined = selectionIsUnderlined.value
+  const underlined = alreadyUnderlined || await handleUnderline()
+  if (underlined) prepareAnnotation()
+}
+
+const removeAnnotationUnderline = async () => {
+  await handleUnderline()
+  showAnnotationDialog.value = false
 }
 
 const submitAnnotation = async () => {
@@ -2381,6 +2404,19 @@ const handleTranslateSelection = () => {
     translateSelectedText()
   } else {
     ElMessage.warning('请先选择要翻译的文本')
+  }
+}
+
+const handleFavoriteSentence = async () => {
+  const sentence = selectedTextContent.value?.trim()
+  if (!sentence) return ElMessage.warning('请先选择例句')
+  try {
+    const res = await toggleSentenceFavorite(textId.value, sentence)
+    ElMessage.success(res?.data?.favorited ? '例句已收藏' : '已取消收藏')
+  } catch (e) {
+    ElMessage.error('收藏例句失败')
+  } finally {
+    showSelectionMenu.value = false
   }
 }
 

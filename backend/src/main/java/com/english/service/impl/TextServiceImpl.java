@@ -124,6 +124,7 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
     }
 
     @Override
+    @UseMaster
     public Text getTextById(Long id) {
 //        return getById(id);
          QueryWrapper<Text> wrapper = new QueryWrapper<>();
