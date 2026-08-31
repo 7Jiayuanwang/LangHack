@@ -83,8 +83,16 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     private ScoreRecordService scoreRecordService;
 
     // 在类定义的开头添加这些常量
-    private static final int MIN_TEXT_READ_TIME_MINUTES = 10; // 10分钟（getTextReadTimeForSpecificText返回分钟）
+    private static final int DEFAULT_TEXT_READ_TIME_MINUTES = 10;
     private static final double COMPLETION_THRESHOLD = 80.0; // 完成阈值80%
+
+    private int requiredTextReadTimeMinutes(Assignment assignment) {
+        if (assignment == null || assignment.getIdealStudyTimeMinutes() == null
+                || assignment.getIdealStudyTimeMinutes() <= 0) {
+            return DEFAULT_TEXT_READ_TIME_MINUTES;
+        }
+        return assignment.getIdealStudyTimeMinutes();
+    }
 
     @Override
     public Map<String, Object> getAssignmentsByPage(Map<String, Object> params) {
@@ -306,6 +314,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             assignmentMap.put("readTexts", calculateTextsReadInAssignment(assignment.getId(), studentId));
             assignmentMap.put("studyTime", calculateStudyTimeInAssignment(assignment.getId(), studentId));
             assignmentMap.put("assignmentType", getAssignmentType(assignment));
+            assignmentMap.put("idealStudyTimeMinutes", assignment.getIdealStudyTimeMinutes());
 
             enrichedAssignments.add(assignmentMap);
         }
@@ -333,6 +342,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         detail.put("classId", assignment.getClassId());
         detail.put("unitId", assignment.getUnitId());
         detail.put("createdBy", assignment.getCreatedBy());
+        detail.put("idealStudyTimeMinutes", assignment.getIdealStudyTimeMinutes());
 
         // 添加进度统计逻辑
         double progress = calculateAssignmentProgress(assignmentId, studentId);
@@ -359,6 +369,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         startInfo.put("description", assignment.getDescription());
         startInfo.put("unitId", assignment.getUnitId());
         startInfo.put("deadline", assignment.getDeadline());
+        startInfo.put("idealStudyTimeMinutes", assignment.getIdealStudyTimeMinutes());
         startInfo.put("startTime", LocalDateTime.now());
 
         // 获取单元内容
@@ -378,6 +389,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         Map<String, Object> content = new HashMap<>();
         content.put("unitId", assignment.getUnitId());
         content.put("assignmentType", getAssignmentType(assignment));
+        content.put("idealStudyTimeMinutes", assignment.getIdealStudyTimeMinutes());
 
         // 获取任务指定的课文和单词
         List<com.english.entity.Text> texts = getAssignmentTexts(assignment);
@@ -397,7 +409,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             int readTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(), assignmentId);
             boolean isRead = readTime > 0; // 有阅读时间就算读过
 
-            boolean readingCompleted = readTime >= MIN_TEXT_READ_TIME_MINUTES;
+            boolean readingCompleted = readTime >= requiredTextReadTimeMinutes(assignment);
             boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
 
             boolean completed;
@@ -579,7 +591,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                     // 获取这篇课文的阅读时间
                     int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
                             assignmentId);
-                    boolean readingCompleted = textReadTime >= MIN_TEXT_READ_TIME_MINUTES;
+                    boolean readingCompleted = textReadTime >= requiredTextReadTimeMinutes(assignment);
 
                     // 检查这篇课文的习题完成情况
                     boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
@@ -599,7 +611,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                     // 检查阅读时间
                     int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
                             assignmentId);
-                    boolean readingCompleted = textReadTime >= MIN_TEXT_READ_TIME_MINUTES;
+                    boolean readingCompleted = textReadTime >= requiredTextReadTimeMinutes(assignment);
 
                     // 检查习题完成情况
                     boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
@@ -681,7 +693,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                     boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
 
                     // 必须同时满足阅读时间和习题完成
-                    if (textReadTime >= MIN_TEXT_READ_TIME_MINUTES && exercisesCompleted) {
+                    if (textReadTime >= requiredTextReadTimeMinutes(assignment) && exercisesCompleted) {
                         completedTexts++;
                     }
                 }
@@ -713,7 +725,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                                 text.getId(), assignmentId);
                         boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
 
-                        if (!(textReadTime >= MIN_TEXT_READ_TIME_MINUTES && exercisesCompleted)) {
+                        if (!(textReadTime >= requiredTextReadTimeMinutes(assignment) && exercisesCompleted)) {
                             textsCompleted = false;
                             break;
                         }

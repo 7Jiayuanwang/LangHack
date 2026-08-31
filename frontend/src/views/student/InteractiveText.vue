@@ -980,12 +980,13 @@ const loadTextDetail = async () => {
         setTimeout(() => ElMessage.success(`本课文有多个学习版本：${versionNames}，可点击切换`), 800)
       }
 
-      // 恢复已学习时长（转换为秒）
+      // 课文详情接口返回分钟，阅读页计时器统一使用秒。
       if (data.readTime && data.readTime > 0) {
-        studyTime.value = data.readTime
-        accumulatedTime = data.readTime // 将已学习时长作为累计时间
+        const savedSeconds = Math.round(Number(data.readTime) * 60)
+        studyTime.value = savedSeconds
+        accumulatedTime = savedSeconds
         // 已保存的时长不应再次发送，同步 lastSavedStudyTime 避免首次保存重复累加
-        lastSavedStudyTime = data.readTime
+        lastSavedStudyTime = savedSeconds
       } else {
         // 确保初始值为0
         studyTime.value = 0
@@ -1077,6 +1078,7 @@ const pauseReading = async () => {
   if (studyStartTime) {
     const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
     accumulatedTime += currentSessionTime
+    studyTime.value = accumulatedTime
     studyStartTime = null // 重置开始时间
   }
 
@@ -1364,6 +1366,7 @@ const handleCompleteReading = async () => {
       if (studyStartTime) {
         const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
         accumulatedTime += currentSessionTime
+        studyTime.value = accumulatedTime
         studyStartTime = null
       }
     }
@@ -2023,6 +2026,7 @@ onBeforeUnmount(() => {
       if (studyStartTime) {
         const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
         accumulatedTime += currentSessionTime
+        studyTime.value = accumulatedTime
         studyStartTime = null
       }
     }
