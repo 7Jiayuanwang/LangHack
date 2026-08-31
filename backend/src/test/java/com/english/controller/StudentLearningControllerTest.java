@@ -197,16 +197,18 @@ class StudentLearningControllerTest {
         text.setId(5L);
         when(textMapper.selectById(5L)).thenReturn(text);
 
-        Map<String, Object> detail = Map.of("title", "Sample Text", "content", "Hello world");
+        Map<String, Object> detail = Map.of("title", "Sample Text", "content", "Hello world", "viewCount", 7);
         when(learningRecordsService.getTextDetailWithAnnotation(eq(1L), eq(5L), isNull()))
                 .thenReturn(detail);
 
         mockMvc.perform(get("/api/student/learning/texts/5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.title").value("Sample Text"));
+                .andExpect(jsonPath("$.data.title").value("Sample Text"))
+                .andExpect(jsonPath("$.data.viewCount").value(7));
 
         verify(articleVersionService).checkAndGenerateVersions(5L);
+        verify(textMapper).incrementViewCount(5L);
     }
 
     @Test

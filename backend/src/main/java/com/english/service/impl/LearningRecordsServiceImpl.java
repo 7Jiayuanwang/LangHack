@@ -8,6 +8,7 @@ import com.english.mapper.*;
 import com.english.service.CampaignStatsService;
 import com.english.service.LearningRecordsService;
 import com.english.exception.BusinessException;
+import com.english.datasource.UseMaster;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
     @Autowired
     private TextMapper textMapper;
+
+    @Autowired
+    private TextUnitMapper textUnitMapper;
 
     @Autowired
     private UnitMapper unitMapper;
@@ -175,7 +179,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
         // 获取课文列表
         QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-        textWrapper.eq("unit_id", unitId).eq("deleted", 0);
+        textWrapper.and(w -> w.eq("unit_id", unitId)
+                .or().inSql("id", "SELECT text_id FROM text_units WHERE unit_id = " + unitId))
+                .eq("deleted", 0);
         List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
 
         logger.debug("获取到课文数量: {}", texts.size());
@@ -260,6 +266,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     }
 
     @Override
+    @UseMaster
     public Map<String, Object> getTextDetailWithAnnotation(Long studentId, Long textId, Long assignmentId) {
         if (studentId == null) {
             throw new BusinessException("studentId 不能为空");
@@ -280,8 +287,14 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             detail.put("markdownContent", text.getMarkdownContent());
             detail.put("difficulty", text.getDifficulty());
             detail.put("audioUrl", text.getAudioUrl());
+            // Keep the article view counter in the student detail response. The
+            // controller increments it before loading this map, so callers see
+            // the current value instead of falling back to zero in the client.
+            detail.put("viewCount", text.getViewCount() != null ? text.getViewCount() : 0);
             detail.put("isPublic", text.getIsPublic());
             detail.put("isFeatured", text.getIsFeatured());
+            List<Long> relatedUnitIds = textUnitMapper.selectUnitIdsByTextId(textId);
+            detail.put("unitIds", relatedUnitIds == null ? Collections.emptyList() : relatedUnitIds);
 
             // 填充上传者（作者）信息：无上传者标记为官方内容
             authorEnricher.enrichText(text);
@@ -1448,7 +1461,10 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         }
 
         QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-        textWrapper.in("unit_id", unitIds).eq("deleted", 0).select("id");
+        String unitIdSql = unitIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+        textWrapper.and(w -> w.in("unit_id", unitIds)
+                .or().inSql("id", "SELECT text_id FROM text_units WHERE unit_id IN (" + unitIdSql + ")"))
+                .eq("deleted", 0).select("id");
         List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
         if (texts != null && !texts.isEmpty()) {
             List<Long> textIds = texts.stream()
@@ -1500,7 +1516,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
 
         // 2. 课文阅读时间（TEXT_VIEW 记录按 text_id 关联单元课文，过滤已删除课文）
         QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-        textWrapper.eq("unit_id", unitId).eq("deleted", 0);
+        textWrapper.and(w -> w.eq("unit_id", unitId)
+                .or().inSql("id", "SELECT text_id FROM text_units WHERE unit_id = " + unitId))
+                .eq("deleted", 0);
         List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
         if (texts == null) {
             texts = new ArrayList<>();
@@ -1565,7 +1583,9 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
     private int calculateReadTextsInUnit(Long studentId, Long unitId) {
         // 查询单元下的所有非删除课文
         QueryWrapper<com.english.entity.Text> textWrapper = new QueryWrapper<>();
-        textWrapper.eq("unit_id", unitId).eq("deleted", 0);
+        textWrapper.and(w -> w.eq("unit_id", unitId)
+                .or().inSql("id", "SELECT text_id FROM text_units WHERE unit_id = " + unitId))
+                .eq("deleted", 0);
         List<com.english.entity.Text> texts = textMapper.selectList(textWrapper);
 
         if (texts.isEmpty()) {

@@ -491,6 +491,12 @@ const routes = [
         meta: { title: "我的学习", roles: ["STUDENT", "USER"], featureKey: "page_my_study" },
       },
       {
+        path: "favorites",
+        name: "StudentFavorites",
+        component: () => import("@/views/student/Favorites.vue"),
+        meta: { title: "我的收藏", roles: ["STUDENT", "USER"] },
+      },
+      {
         path: "schedule",
         name: "StudentSchedule",
         component: () => import("@/views/student/Schedule.vue"),

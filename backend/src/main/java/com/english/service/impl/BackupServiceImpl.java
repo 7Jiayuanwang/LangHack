@@ -229,9 +229,9 @@ public class BackupServiceImpl extends ServiceImpl<BackupRecordMapper, BackupRec
         CATEGORY_TABLES.put("system_config", Arrays.asList(
                 "system_config", "sso_config", "ai_provider", "backup_config", "update_config"));
         CATEGORY_TABLES.put("user_data", Arrays.asList(
-                "users", "student_classes", "user_tags", "article_favorites",
+                "users", "student_classes", "user_tags", "article_favorites", "sentence_favorites",
                 "learning_records", "text_learning_records", "user_text_reads",
-                "vocabulary_books", "underlines"));
+                "vocabulary_books", "underlines", "text_annotations", "annotation_upvotes"));
         CATEGORY_TABLES.put("business_data", Arrays.asList(
                 "courses", "units", "texts", "classes", "assignments",
                 "words", "media", "videos", "score_records"));
