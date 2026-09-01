@@ -55,6 +55,7 @@ RUN ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2) \
     && apk add --no-cache \
         curl \
         tzdata \
+        docker-cli \
         mysql-client \
         mariadb-connector-c \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
