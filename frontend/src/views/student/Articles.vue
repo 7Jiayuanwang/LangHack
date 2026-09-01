@@ -22,9 +22,6 @@
     <main
       ref="pageMain"
       class="page-main"
-      @touchstart.passive="onTouchStart"
-      @touchmove="onTouchMove"
-      @touchend="onTouchEnd"
     >
       <!-- Pull-to-Refresh Indicator -->
       <div class="pull-refresh-indicator" :class="{ 'is-refreshing': isRefreshing, 'is-pulling': isPulling }" :style="{ transform: `translateY(${pullDistance}px)` }">
@@ -80,7 +77,7 @@
           </div>
           <h3 class="empty-title">{{ loadError ? '加载失败' : '暂无文章内容' }}</h3>
           <p class="empty-desc">{{ loadError ? '网络异常，请检查连接后重试' : '换个分类试试，或者稍后再来看看' }}</p>
-          <button class="refresh-btn" @click="loadFeed">重新加载</button>
+          <button class="refresh-btn" @click="doRefresh">重新加载</button>
         </div>
 
         <!-- Article / Video Cards -->
@@ -166,14 +163,15 @@
       </div>
     </main>
 
-    <!-- FAB: 换一批推荐 -->
+    <!-- FAB: 刷新当前信息流 -->
     <button
-      v-if="selectedCategory === 'recommendation'"
+      v-if="!isSearchMode"
       class="fab-refresh"
       :class="{ 'is-loading': loading }"
       :disabled="loading"
-      @click="() => { recordRecommendationEvent('RECOMMENDATION_REFRESH', null); loadRecommended() }"
-      title="换一批推荐"
+      @click="doRefresh"
+      title="刷新文章"
+      aria-label="刷新文章"
     >
       <el-icon :size="22"><Refresh /></el-icon>
     </button>
@@ -291,6 +289,7 @@ const pullThreshold = 40
 let touchStartY = 0
 let touchStartX = 0
 let pullLocked = false
+let pullGestureTarget = null
 
 const pullHintText = computed(() => {
   if (isRefreshing.value) return '正在刷新...'
@@ -521,15 +520,26 @@ const loadRecommended = async ({ resetExclusions = false } = {}) => {
   }
 }
 
-const loadFeed = async () => {
+const loadFeed = async ({ forceRefresh = false } = {}) => {
+  const previousVisibleArticleIds = forceRefresh
+    ? allItems.value.filter(item => item?._type === 'article').slice(0, COUNT_PER_BATCH).map(item => item?.id).filter(id => id != null)
+    : []
   loading.value = true
   loadError.value = false
   try {
     const authHeader = getAuthHeader()
     const headers = authHeader ? { Authorization: authHeader } : {}
 
+    const previousIds = previousVisibleArticleIds
+    const params = new URLSearchParams()
+    if (forceRefresh) {
+      params.set('refresh', 'true')
+      params.set('_', String(Date.now()))
+      if (previousIds.length > 0) params.set('exclude', previousIds.join(','))
+    }
+    const query = params.toString() ? `?${params.toString()}` : ''
     const [articlesRes, videosRes] = await Promise.all([
-      fetch(`${apiBase}/api/public/texts/featured`, { headers }).then(r => r.json()),
+      fetch(`${apiBase}/api/public/texts/featured${query}`, { headers }).then(r => r.json()),
       getFeaturedVideos({}).catch(() => ({ code: 0, data: [] }))
     ])
 
@@ -558,6 +568,15 @@ const loadFeed = async () => {
         category: 'video',
         coverGradient: getRandomGradient()
       }))
+    }
+
+    // 手动刷新时即使接口顺序未变化，也轮换文章首屏，确保用户看到新的文章。
+    if (forceRefresh && previousVisibleArticleIds.length > 1) {
+      const nextVisibleArticleIds = articleItems.slice(0, COUNT_PER_BATCH).map(item => item?.id).filter(id => id != null)
+      if (nextVisibleArticleIds.length === previousVisibleArticleIds.length && nextVisibleArticleIds.every((id, index) => id === previousVisibleArticleIds[index])) {
+        const first = articleItems.shift()
+        if (first) articleItems.push(first)
+      }
     }
 
     // Interleave: every 3 articles insert a video
@@ -669,6 +688,14 @@ const getDifficultyIcon = (diff) => {
 }
 
 onMounted(() => {
+  // Register touchmove as non-passive so mobile browser overscroll cannot steal
+  // the gesture before the pull-to-refresh threshold is reached.
+  nextTick(() => {
+    pullGestureTarget = pageMain.value
+    pullGestureTarget?.addEventListener('touchstart', onTouchStart, { passive: true })
+    pullGestureTarget?.addEventListener('touchmove', onTouchMove, { passive: false })
+    pullGestureTarget?.addEventListener('touchend', onTouchEnd, { passive: true })
+  })
   // 注册 scroll 实时追踪
   nextTick(() => {
     if (pageMain.value) pageMain.value.addEventListener('scroll', trackScroll, { passive: true })
@@ -691,7 +718,7 @@ onMounted(() => {
   }
   // 首次加载 / 浏览器刷新 / 无缓存：清除旧缓存并请求新数据
   clearCache()
-  loadFeed()
+  loadFeed({ forceRefresh: true })
   setupObserver()
 })
 
@@ -750,9 +777,11 @@ const onTouchMove = (e) => {
   const deltaY = touch.clientY - touchStartY
   const deltaX = touch.clientX - touchStartX
 
-  // 只在列表滚动到顶部且向下拉时触发
-  const scrollTop = pageMain.value?.scrollTop || 0
-  if (scrollTop > 2 || deltaY < 0) {
+  const contentWrapper = pageMain.value?.closest('.content-wrapper') || null
+  const isAtTop = [pageMain.value, contentWrapper]
+    .filter((element, index, items) => element && items.indexOf(element) === index)
+    .every(element => element.scrollTop <= 2)
+  if (!isAtTop || deltaY <= 0) {
     if (isPulling.value) {
       isPulling.value = false
       pullDistance.value = 0
@@ -791,17 +820,25 @@ const onTouchEnd = async () => {
 }
 
 const doRefresh = async () => {
+  if (loading.value) return
   // 重置分页
   displayCount.value = BATCH_SIZE
   if (selectedCategory.value === 'recommendation') {
-    await loadRecommended({ resetExclusions: true })
+    recordRecommendationEvent('RECOMMENDATION_REFRESH', null)
+    // 保留本次会话已展示的文章 ID，确保手动刷新获取下一批；候选耗尽时由 loadRecommended 自动重置。
+    await loadRecommended({ resetExclusions: false })
   } else {
-    await loadFeed()
+    await loadFeed({ forceRefresh: true })
   }
 }
 
 onBeforeUnmount(() => {
   if (observer) observer.disconnect()
+  if (pullGestureTarget) {
+    pullGestureTarget.removeEventListener('touchstart', onTouchStart)
+    pullGestureTarget.removeEventListener('touchmove', onTouchMove)
+    pullGestureTarget.removeEventListener('touchend', onTouchEnd)
+  }
 })
 </script>
 

@@ -139,6 +139,12 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (text.getDifficulty() == null) {
             text.setDifficulty("MEDIUM");
         }
+        // Admin/teacher-managed material is immediately available to the teacher
+        // assignment picker. User-submitted text keeps its explicit moderation
+        // status because UserTextController sets it before calling save().
+        if (text.getStatus() == null || text.getStatus().trim().isEmpty()) {
+            text.setStatus("APPROVED");
+        }
         text.setCreatedAt(LocalDateTime.now());
         text.setUpdatedAt(LocalDateTime.now());
         text.setDeleted(0);
@@ -290,7 +296,11 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
         if (filter != null && filter.getUnitNum() != null) {
             wrapper.eq("unit_num", filter.getUnitNum());
         }
-        wrapper.eq("deleted", 0).eq("status", "APPROVED").orderByAsc("book_volume", "unit_num", "order_num");
+        // PUBLISHED is the legacy status used before moderation statuses were
+        // introduced. Keep those records selectable while new records use
+        // APPROVED.
+        wrapper.eq("deleted", 0).in("status", "APPROVED", "PUBLISHED")
+                .orderByAsc("book_volume", "unit_num", "order_num");
         return list(wrapper);
     }
 

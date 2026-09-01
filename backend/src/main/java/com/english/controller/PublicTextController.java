@@ -25,6 +25,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -119,7 +121,9 @@ public class PublicTextController {
     @GetMapping("/featured")
     public Result<List<Text>> getFeaturedTexts(
             @RequestParam(required = false) Integer count,
-            @RequestParam(required = false) String difficulty) {
+            @RequestParam(required = false) String difficulty,
+            @RequestParam(defaultValue = "false") boolean refresh,
+            @RequestParam(required = false) String exclude) {
         try {
 
             List<Text> featuredTexts = textService.lambdaQuery()
@@ -158,8 +162,47 @@ public class PublicTextController {
                         .collect(Collectors.toList());
             }
 
+            Set<Long> excludedIds = parseTextIds(exclude);
+
             // No longer filter out read articles – keep all featured texts visible
             // so that returning from an article doesn't remove it from the list.
+
+            // 手动刷新需要真正更换首屏文章，不能只打乱无优先级文章。
+            // 普通请求继续保持运营配置的优先级顺序；refresh=true 时对整个候选池洗牌。
+            if (refresh) {
+                List<Text> refreshed = featuredTexts.stream()
+                        .filter(text -> text.getId() == null || !excludedIds.contains(text.getId()))
+                        .collect(Collectors.toCollection(ArrayList::new));
+                // 精选候选池耗尽时扩展到全部公开文章，避免刷新永远停留在少数精选文章。
+                if (refreshed.isEmpty()) {
+                    refreshed = textService.lambdaQuery()
+                            .eq(Text::getDeleted, 0)
+                            .and(w -> w
+                                .isNull(Text::getUploadedBy)
+                                .or(sub -> sub
+                                    .isNotNull(Text::getUploadedBy)
+                                    .eq(Text::getIsPublic, 1)
+                                    .eq(Text::getStatus, "APPROVED")
+                                )
+                            )
+                            .list()
+                            .stream()
+                            .filter(text -> (difficulty == null || difficulty.trim().isEmpty()
+                                    || difficulty.equals(text.getDifficulty()))
+                                    && (text.getId() == null || !excludedIds.contains(text.getId())))
+                            .collect(Collectors.toCollection(ArrayList::new));
+                }
+                // 全部候选都已展示时允许重新展示，避免返回空列表。
+                if (refreshed.isEmpty()) {
+                    refreshed = new ArrayList<>(featuredTexts);
+                }
+                Collections.shuffle(refreshed, new java.util.Random(System.nanoTime()));
+                if (count != null && count > 0 && refreshed.size() > count) {
+                    refreshed = new ArrayList<>(refreshed.subList(0, count));
+                }
+                authorEnricher.enrichTexts(refreshed);
+                return Result.success(refreshed);
+            }
 
             // 有优先级(>0)的文章按优先级降序排在前面，priority=0 的文章随机填充剩余位置
             List<Text> prioritized = featuredTexts.stream()
@@ -174,8 +217,8 @@ public class PublicTextController {
             // 按 id 先稳定排序，再用 3 小时时间窗口的种子洗牌：
             // 同一 3 小时窗口内顺序固定，跨窗口自动变化一次。
             randomPool.sort(Comparator.comparing(Text::getId));
-            long windowSeed = System.currentTimeMillis() / (3L * 60 * 60 * 1000);
-            Collections.shuffle(randomPool, new java.util.Random(windowSeed));
+            long shuffleSeed = System.currentTimeMillis() / (3L * 60 * 60 * 1000);
+            Collections.shuffle(randomPool, new java.util.Random(shuffleSeed));
 
             List<Text> result = new ArrayList<>();
             if (count == null || count <= 0) {
@@ -196,6 +239,20 @@ public class PublicTextController {
             log.error("获取推荐文章失败", e);
             return Result.error("获取推荐文章失败，请稍后重试");
         }
+    }
+
+    private Set<Long> parseTextIds(String rawIds) {
+        Set<Long> ids = new HashSet<>();
+        if (rawIds == null || rawIds.trim().isEmpty()) return ids;
+        for (String value : rawIds.split(",")) {
+            try {
+                long id = Long.parseLong(value.trim());
+                if (id > 0) ids.add(id);
+            } catch (NumberFormatException ignored) {
+                // Ignore malformed IDs supplied by the client.
+            }
+        }
+        return ids;
     }
 
     /**

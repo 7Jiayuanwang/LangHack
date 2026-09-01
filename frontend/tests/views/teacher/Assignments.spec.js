@@ -83,6 +83,34 @@ describe('Teacher Assignments.vue', () => {
     expect(wrapper.vm.filterForm).toBeDefined()
   })
 
+  it('automatically selects matching in-class articles', async () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'INNER'
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ code: 200, data: [{ id: 4 }, { id: 9 }] })
+    })
+
+    await wrapper.vm.loadArticles()
+
+    expect(wrapper.vm.assignmentForm.textIds).toEqual([4, 9])
+  })
+
+  it('does not auto-select extracurricular articles', async () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ code: 200, data: [{ id: 4 }, { id: 9 }] })
+    })
+
+    await wrapper.vm.loadArticles()
+
+    expect(wrapper.vm.assignmentForm.textIds).toEqual([])
+  })
+
   it('has unitContent reactive object', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.unitContent).toBeDefined()

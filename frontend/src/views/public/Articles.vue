@@ -9,6 +9,21 @@
           <p class="header-subtitle">Daily Picks</p>
         </div>
         <div class="header-actions">
+          <button
+            class="icon-btn"
+            type="button"
+            :disabled="loading || isRefreshing"
+            title="刷新文章"
+            aria-label="刷新文章"
+            @click="refreshArticles"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 11a8.1 8.1 0 0 0-14.9-3L3 11"/>
+              <path d="M3 4v7h7"/>
+              <path d="M4 13a8.1 8.1 0 0 0 14.9 3L21 13"/>
+              <path d="M21 20v-7h-7"/>
+            </svg>
+          </button>
           <button class="icon-btn" @click="handleLogin">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -23,9 +38,6 @@
     <main
       ref="pageMain"
       class="page-main"
-      @touchstart.passive="onTouchStart"
-      @touchmove.passive="onTouchMove"
-      @touchend="onTouchEnd"
     >
       <!-- Pull-to-Refresh Indicator -->
       <div class="pull-refresh-indicator" :class="{ 'is-refreshing': isRefreshing, 'is-pulling': isPulling }" :style="{ transform: `translateY(${pullDistance}px)` }">
@@ -83,7 +95,7 @@
           </div>
           <h3 class="empty-title">{{ loadError ? '加载失败' : '暂无文章内容' }}</h3>
           <p class="empty-desc">{{ loadError ? '网络异常，请检查连接后重试' : '换个分类试试，或者稍后再来看看' }}</p>
-          <button class="refresh-btn" @click="loadArticles">重新加载</button>
+          <button class="refresh-btn" @click="refreshArticles">重新加载</button>
         </div>
 
         <!-- Article Cards -->
@@ -277,6 +289,8 @@ const pullDistance = ref(0)
 const pullThreshold = 60
 let touchStartY = 0
 let touchStartX = 0
+let pullLocked = false
+let pullGestureTarget = null
 
 const pullHintText = computed(() => {
   if (isRefreshing.value) return '正在刷新...'
@@ -329,7 +343,7 @@ const getRandomGradient = () => {
 const selectCategory = (val) => {
   selectedCategory.value = val
   displayCount.value = BATCH_SIZE
-  loadArticles()
+  loadArticles({ forceRefresh: true })
 }
 
 const loadMore = () => {
@@ -357,13 +371,23 @@ const getRandomCategory = () => {
   return cats[Math.floor(Math.random() * cats.length)].value
 }
 
-const loadArticles = async () => {
+const loadArticles = async ({ forceRefresh = false } = {}) => {
+  const previousVisibleIds = forceRefresh
+    ? articles.value.slice(0, BATCH_SIZE).map(item => item?.id).filter(id => id != null)
+    : []
   loading.value = true
   loadError.value = false
   try {
     const authHeader = getAuthHeader()
     const headers = authHeader ? { Authorization: authHeader } : {}
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured`, { headers })
+    const params = new URLSearchParams()
+    if (forceRefresh) {
+      params.set('refresh', 'true')
+      params.set('_', String(Date.now()))
+      if (previousVisibleIds.length > 0) params.set('exclude', previousVisibleIds.join(','))
+    }
+    const query = params.toString() ? `?${params.toString()}` : ''
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured${query}`, { headers })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -392,6 +416,13 @@ const loadArticles = async () => {
         fetched = fetched.filter(item => item.category === selectedCategory.value)
       }
 
+      // 服务端刷新通常会返回新顺序；若缓存/代理仍返回相同顺序，轮换首屏作为兜底。
+      if (forceRefresh && previousVisibleIds.length > 1) {
+        const nextVisibleIds = fetched.slice(0, BATCH_SIZE).map(item => item?.id).filter(id => id != null)
+        if (nextVisibleIds.length === previousVisibleIds.length && nextVisibleIds.every((id, index) => id === previousVisibleIds[index])) {
+          fetched = fetched.slice(1).concat(fetched.slice(0, 1))
+        }
+      }
       allArticles.value = fetched
     } else {
       loadError.value = true
@@ -401,6 +432,17 @@ const loadArticles = async () => {
     loadError.value = true
   } finally {
     loading.value = false
+  }
+}
+
+const refreshArticles = async () => {
+  if (loading.value || isRefreshing.value) return
+  displayCount.value = BATCH_SIZE
+  isRefreshing.value = true
+  try {
+    await loadArticles({ forceRefresh: true })
+  } finally {
+    isRefreshing.value = false
   }
 }
 
@@ -444,6 +486,13 @@ const handleLogin = () => {
 }
 
 onMounted(() => {
+  // Use a native non-passive listener so browser overscroll does not consume the gesture.
+  nextTick(() => {
+    pullGestureTarget = pageMain.value
+    pullGestureTarget?.addEventListener('touchstart', onTouchStart, { passive: true })
+    pullGestureTarget?.addEventListener('touchmove', onTouchMove, { passive: false })
+    pullGestureTarget?.addEventListener('touchend', onTouchEnd, { passive: true })
+  })
   // 仅在从文章详情页返回时恢复缓存（NAV_FLAG_KEY 标记存在）
   // 浏览器刷新时 sessionStorage 虽保留，但 NAV_FLAG 不存在，强制重新加载
   const hasNavFlag = sessionStorage.getItem(NAV_FLAG_KEY)
@@ -462,7 +511,7 @@ onMounted(() => {
   }
   // 首次加载 / 浏览器刷新 / 无缓存：清除旧缓存并请求新数据
   clearCache()
-  loadArticles()
+  loadArticles({ forceRefresh: true })
   setupObserver()
 })
 
@@ -526,6 +575,7 @@ const onTouchStart = (e) => {
   const touch = e.touches[0]
   touchStartY = touch.clientY
   touchStartX = touch.clientX
+  pullLocked = false
 }
 
 const onTouchMove = (e) => {
@@ -534,17 +584,28 @@ const onTouchMove = (e) => {
   const deltaY = touch.clientY - touchStartY
   const deltaX = touch.clientX - touchStartX
 
-  const scrollTop = pageMain.value?.scrollTop || 0
-  if (scrollTop > 0 || deltaY < 0) {
+  const isAtTop = [pageMain.value, getContentWrapper()]
+    .filter((element, index, items) => element && items.indexOf(element) === index)
+    .every(element => element.scrollTop <= 2)
+  if (!isAtTop || deltaY <= 0) {
     isPulling.value = false
     pullDistance.value = 0
     return
   }
 
-  if (Math.abs(deltaX) > Math.abs(deltaY)) return
+  if (!pullLocked && Math.abs(deltaX) + Math.abs(deltaY) > 10) {
+    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      pullLocked = true
+      return
+    }
+  }
+  if (pullLocked) return
 
-  isPulling.value = true
-  pullDistance.value = Math.min(deltaY * 0.4, 120)
+  if (deltaY > 5) {
+    isPulling.value = true
+    pullDistance.value = Math.min(deltaY * 0.55, 120)
+    if (e.cancelable) e.preventDefault()
+  }
 }
 
 const onTouchEnd = async () => {
@@ -555,7 +616,7 @@ const onTouchEnd = async () => {
     isRefreshing.value = true
     pullDistance.value = pullThreshold
     displayCount.value = BATCH_SIZE
-    await loadArticles()
+    await loadArticles({ forceRefresh: true })
     isRefreshing.value = false
   }
   pullDistance.value = 0
@@ -563,6 +624,11 @@ const onTouchEnd = async () => {
 
 onBeforeUnmount(() => {
   if (observer) observer.disconnect()
+  if (pullGestureTarget) {
+    pullGestureTarget.removeEventListener('touchstart', onTouchStart)
+    pullGestureTarget.removeEventListener('touchmove', onTouchMove)
+    pullGestureTarget.removeEventListener('touchend', onTouchEnd)
+  }
 })
 </script>
 
@@ -709,6 +775,11 @@ onBeforeUnmount(() => {
 .icon-btn:hover {
   background: #f1f5f9;
   color: #0f172a;
+}
+
+.icon-btn:disabled {
+  opacity: 0.45;
+  cursor: wait;
 }
 
 /* --- Filter Bar --- */

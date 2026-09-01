@@ -924,7 +924,13 @@ const loadArticles = async () => {
   try {
     const response = await fetch(`/api/assignments/articles?${params.toString()}`, { headers })
     const data = await response.json()
-    unitContent.value = { ...unitContent.value, texts: data.code === 200 ? (data.data || []) : [] }
+    const texts = data.code === 200 && Array.isArray(data.data) ? data.data : []
+    unitContent.value = { ...unitContent.value, texts }
+    // Administrator-maintained in-class classifications are selected as a
+    // group; extracurricular articles remain manual to avoid selecting a huge pool.
+    assignmentForm.textIds = assignmentForm.articleType === 'INNER'
+      ? texts.map(text => text.id)
+      : []
     if (data.code !== 200) ElMessage.error(data.message || '加载文章失败')
   } catch (error) {
     console.error('加载文章失败:', error)
@@ -1011,6 +1017,7 @@ const saveAssignment = async () => {
               assignmentType: assignmentForm.assignmentType,
               articleType: assignmentForm.articleType,
               bookVolume: assignmentForm.bookVolume,
+              contentSection: assignmentForm.contentSection,
               unitNum: assignmentForm.unitNum,
               textIds: assignmentForm.textIds,
               wordIds: assignmentForm.wordIds,

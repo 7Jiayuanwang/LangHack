@@ -96,6 +96,7 @@ class TextServiceTest {
         // Assert
         assertEquals("MEDIUM", newText.getDifficulty()); // default difficulty
         assertEquals(0, newText.getDeleted());
+        assertEquals("APPROVED", newText.getStatus());
         assertNotNull(newText.getCreatedAt());
         assertNotNull(newText.getUpdatedAt());
         verify(baseMapper).insert(any(Text.class));
