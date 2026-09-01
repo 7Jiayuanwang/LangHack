@@ -674,7 +674,8 @@ let quizPanelDragStartY = 0
 let quizPanelDragStartHeight = 0
 let accumulatedTime = 0 // 累计学习时间（秒）
 let lastSavedStudyTime = 0 // 已保存到后端的学习时间（秒），用于计算增量避免重复累加
-let savingLearningRecord = false
+let saveLearningRecordPromise = null
+let saveLearningRecordRequested = false
 
 // 相关文章推荐
 const relatedTexts = ref([])
@@ -1104,28 +1105,42 @@ const pauseReading = async () => {
 }
 
 const saveLearningRecord = async () => {
-  if (savingLearningRecord) return
-  try {
-    if (studyTime.value > 0) {
-      // 计算自上次保存以来的增量，避免重复累加导致时长虚高
-      const increment = studyTime.value - lastSavedStudyTime
-      if (increment <= 0) return
-      savingLearningRecord = true
-      const recordPayload = {
-        type: 'TEXT_VIEW',
-        duration: increment,
-        textId: textId.value,
-        contentVersion: currentVersion.value,
-        ...(assignmentId.value && { assignmentId: assignmentId.value })
+  saveLearningRecordRequested = true
+  if (saveLearningRecordPromise) return saveLearningRecordPromise
+
+  saveLearningRecordPromise = (async () => {
+    while (saveLearningRecordRequested) {
+      saveLearningRecordRequested = false
+      const snapshotStudyTime = studyTime.value
+      const increment = snapshotStudyTime - lastSavedStudyTime
+      if (snapshotStudyTime <= 0 || increment <= 0) continue
+
+      try {
+        const recordPayload = {
+          type: 'TEXT_VIEW',
+          duration: increment,
+          textId: textId.value,
+          contentVersion: currentVersion.value,
+          ...(assignmentId.value && { assignmentId: assignmentId.value })
+        }
+
+        await studentApi.recordLearning(recordPayload)
+        // Only mark the snapshot as saved. Seconds accumulated during the
+        // request remain pending and are sent by the next loop iteration.
+        lastSavedStudyTime = Math.max(lastSavedStudyTime, snapshotStudyTime)
+      } catch (error) {
+        console.error('保存学习记录失败:', error)
+        break
       }
 
-      await studentApi.recordLearning(recordPayload)
-      lastSavedStudyTime = studyTime.value
+      if (studyTime.value > lastSavedStudyTime) saveLearningRecordRequested = true
     }
-  } catch (error) {
-    console.error('保存学习记录失败:', error)
+  })()
+
+  try {
+    await saveLearningRecordPromise
   } finally {
-    savingLearningRecord = false
+    saveLearningRecordPromise = null
   }
 }
 
