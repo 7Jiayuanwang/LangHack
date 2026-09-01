@@ -575,6 +575,29 @@ class AssignmentServiceTest {
         assertEquals(0.0, result.get("completionRate"));
     }
 
+    @Test
+    void getAssignmentProgress_textTask_reportsPartialTimeProgress() {
+        Assignment textAssignment = new Assignment();
+        textAssignment.setId(1L);
+        textAssignment.setClassId(10L);
+        textAssignment.setIdealStudyTimeMinutes(10);
+        AssignmentContent.ContentConfig config = new AssignmentContent.ContentConfig(
+                Collections.singletonList(7L), Collections.emptyList());
+        textAssignment.setAssignmentContent(new AssignmentContent("TEXTS", config));
+
+        Text text = new Text();
+        text.setId(7L);
+        when(assignmentMapper.selectById(1L)).thenReturn(textAssignment);
+        when(textMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(text));
+        when(textExerciseMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
+        when(learningRecordsService.getTextReadTimeSecondsForSpecificText(50L, 7L, 1L)).thenReturn(300L);
+        when(learningRecordMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        Map<String, Object> result = assignmentService.getAssignmentProgress(1L, 50L);
+
+        assertEquals(0.5, (Double) result.get("completionRate"), 0.001);
+    }
+
     // ==================== getAssignmentProgress (teacher) tests ====================
 
     @Test

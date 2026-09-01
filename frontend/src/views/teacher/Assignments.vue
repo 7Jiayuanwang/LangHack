@@ -268,9 +268,9 @@
         <el-form-item label="理想学习时长" prop="idealStudyTimeMinutes">
           <el-input-number
               v-model="assignmentForm.idealStudyTimeMinutes"
-              :min="5"
+              :min="1"
               :max="300"
-              :step="5"
+              :step="1"
               placeholder="理想学习时长（分钟），用于计算分数，默认60分钟"
               style="width: 100%"
           />
@@ -328,12 +328,12 @@
           </el-table-column>
           <el-table-column prop="studyTime" label="学习时长" width="100">
             <template #default="scope">
-              {{ scope.row.studyTime || 0 }}分钟
+              {{ formatStudyDuration(scope.row) }}
             </template>
           </el-table-column>
           <el-table-column prop="progress" label="学习进度" width="100">
             <template #default="scope">
-              <el-progress :percentage="scope.row.progress || 0" :stroke-width="6" />
+              <el-progress :percentage="normalizeProgress(scope.row.progress)" :stroke-width="6" />
             </template>
           </el-table-column>
           <el-table-column prop="score" label="得分" width="80">
@@ -352,7 +352,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAuthHeader } from '@/utils/auth'
 
@@ -368,6 +368,7 @@ const isEdit = ref(false)
 const saving = ref(false)
 const assignmentFormRef = ref()
 const currentAssignment = ref({})
+let progressRefreshTimer = null
 const loadingUnitContent = ref(false)
 const unitContent = ref({
   texts: [],
@@ -518,12 +519,10 @@ const assignmentRules = {
     { required: true, message: '请输入理想学习时长', trigger: 'blur' },
     {
       validator: (rule, value, callback) => {
-        if (value < 5) {
-          callback(new Error('理想学习时长不能少于5分钟'))
+        if (value < 1) {
+          callback(new Error('理想学习时长不能少于1分钟'))
         } else if (value > 300) {
           callback(new Error('理想学习时长不能超过300分钟'))
-        } else if (value % 5 !== 0) {
-          callback(new Error('理想学习时长必须是5的倍数'))
         } else {
           callback()
         }
@@ -1076,6 +1075,7 @@ const viewProgress = async (assignment) => {
           }
 
           progressDialogVisible.value = true
+          startProgressRefresh()
         } else {
           ElMessage.error(data.message || '加载进度信息失败')
         }
@@ -1090,6 +1090,60 @@ const viewProgress = async (assignment) => {
     console.error('加载进度信息失败:', error)
     ElMessage.error('加载进度信息失败')
   }
+}
+
+const refreshCurrentProgress = async () => {
+  const assignment = currentAssignment.value
+  if (!progressDialogVisible.value || !assignment?.id) return
+
+  try {
+    const headers = {}
+    const authHeader = getAuthHeader()
+    if (authHeader) headers.Authorization = authHeader
+    const response = await fetch(`/api/assignments/${assignment.id}/progress`, { headers })
+    if (!response.ok) return
+    const data = await response.json()
+    if (data.code !== 200 || !Array.isArray(data.data)) return
+
+    studentProgress.value = data.data
+    currentAssignment.value = {
+      ...currentAssignment.value,
+      completedCount: data.data.filter(student => student.completed).length,
+      studentCount: data.data.length
+    }
+  } catch (error) {
+    console.debug('刷新任务实时进度失败:', error)
+  }
+}
+
+const stopProgressRefresh = () => {
+  if (progressRefreshTimer) {
+    clearInterval(progressRefreshTimer)
+    progressRefreshTimer = null
+  }
+}
+
+const startProgressRefresh = () => {
+  stopProgressRefresh()
+  progressRefreshTimer = setInterval(refreshCurrentProgress, 5000)
+}
+
+const normalizeProgress = (value) => {
+  const progress = Number(value)
+  return Number.isFinite(progress) ? Math.min(100, Math.max(0, Math.round(progress))) : 0
+}
+
+const formatStudyDuration = (student) => {
+  const rawSeconds = Number(student?.studyTimeSeconds)
+  const seconds = Number.isFinite(rawSeconds)
+    ? Math.max(0, Math.floor(rawSeconds))
+    : Math.max(0, Math.round((Number(student?.studyTime) || 0) * 60))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainingSeconds = seconds % 60
+  return hours > 0
+    ? `${hours}时${minutes}分${remainingSeconds}秒`
+    : `${minutes}分${remainingSeconds}秒`
 }
 
 const deleteAssignment = async (assignment) => {
@@ -1284,12 +1338,18 @@ watch(() => assignmentForm.classId, async (newClassId) => {
   }
 })
 
+watch(progressDialogVisible, (visible) => {
+  if (!visible) stopProgressRefresh()
+})
+
 // 生命周期
 onMounted(async () => {
   // 先加载班级数据，再加载任务数据
   await loadClasses()
   await loadAssignments()
 })
+
+onBeforeUnmount(stopProgressRefresh)
 </script>
 
 <style scoped>

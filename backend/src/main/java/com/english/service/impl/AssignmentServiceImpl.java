@@ -86,12 +86,25 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     private static final int DEFAULT_TEXT_READ_TIME_MINUTES = 10;
     private static final double COMPLETION_THRESHOLD = 80.0; // 完成阈值80%
 
+    /** 返回任务配置的课文阅读达标时长。旧数据未配置时保持10分钟兼容行为。 */
     private int requiredTextReadTimeMinutes(Assignment assignment) {
         if (assignment == null || assignment.getIdealStudyTimeMinutes() == null
                 || assignment.getIdealStudyTimeMinutes() <= 0) {
             return DEFAULT_TEXT_READ_TIME_MINUTES;
         }
         return assignment.getIdealStudyTimeMinutes();
+    }
+
+    private long requiredTextReadTimeSeconds(Assignment assignment) {
+        return requiredTextReadTimeMinutes(assignment) * 60L;
+    }
+
+    private double calculateTextTimeProgress(Assignment assignment, long readTimeSeconds,
+            boolean exercisesCompleted) {
+        long requiredSeconds = Math.max(requiredTextReadTimeSeconds(assignment), 1L);
+        double readingProgress = Math.min(100.0, readTimeSeconds * 100.0 / requiredSeconds);
+        // 阅读达标但习题未完成时保留最后 1%，避免界面显示 100% 却仍未完成。
+        return exercisesCompleted ? readingProgress : Math.min(readingProgress, 99.0);
     }
 
     @Override
@@ -313,6 +326,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             assignmentMap.put("totalTexts", assignmentTexts.size());
             assignmentMap.put("readTexts", calculateTextsReadInAssignment(assignment.getId(), studentId));
             assignmentMap.put("studyTime", calculateStudyTimeInAssignment(assignment.getId(), studentId));
+            assignmentMap.put("studyTimeSeconds", calculateStudyTimeSecondsInAssignment(assignment.getId(), studentId));
             assignmentMap.put("assignmentType", getAssignmentType(assignment));
             assignmentMap.put("idealStudyTimeMinutes", assignment.getIdealStudyTimeMinutes());
 
@@ -406,10 +420,12 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             textMap.put("audioUrl", text.getAudioUrl());
 
             // 获取这篇课文的阅读时间（独立计算）
-            int readTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(), assignmentId);
-            boolean isRead = readTime > 0; // 有阅读时间就算读过
+            long readTimeSeconds = learningRecordsService.getTextReadTimeSecondsForSpecificText(studentId,
+                    text.getId(), assignmentId);
+            double readTime = Math.round(readTimeSeconds / 0.6) / 100.0;
+            boolean isRead = readTimeSeconds > 0; // 有阅读时间就算读过
 
-            boolean readingCompleted = readTime >= requiredTextReadTimeMinutes(assignment);
+            boolean readingCompleted = readTimeSeconds >= requiredTextReadTimeSeconds(assignment);
             boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
 
             boolean completed;
@@ -426,6 +442,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             textMap.put("completed", completed);
             textMap.put("viewed", isRead);
             textMap.put("studyTime", readTime);
+            textMap.put("studyTimeSeconds", readTimeSeconds);
             textMap.put("readingCompleted", readingCompleted);
             textMap.put("exercisesCompleted", exercisesCompleted);
 
@@ -538,6 +555,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         progress.put("wordsLearned", calculateWordsLearnedInAssignment(assignmentId, studentId));
         progress.put("textsRead", calculateTextsReadInAssignment(assignmentId, studentId));
         progress.put("studyTime", calculateStudyTimeInAssignment(assignmentId, studentId));
+        progress.put("studyTimeSeconds", calculateStudyTimeSecondsInAssignment(assignmentId, studentId));
 
         return progress;
     }
@@ -584,44 +602,30 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         double textProgress = 0.0;
         if (totalTexts > 0) {
             if ("TEXTS".equals(assignmentType)) {
-
-                int completedTexts = 0;
-
                 for (com.english.entity.Text text : texts) {
                     // 获取这篇课文的阅读时间
-                    int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
-                            assignmentId);
-                    boolean readingCompleted = textReadTime >= requiredTextReadTimeMinutes(assignment);
+                    long textReadTimeSeconds = learningRecordsService.getTextReadTimeSecondsForSpecificText(studentId,
+                            text.getId(), assignmentId);
 
                     // 检查这篇课文的习题完成情况
                     boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
-
-                    // 必须同时满足阅读时间和习题完成
-                    if (readingCompleted && exercisesCompleted) {
-                        completedTexts++;
-                    }
+                    textProgress += calculateTextTimeProgress(assignment, textReadTimeSeconds, exercisesCompleted);
                 }
-                textProgress = (double) completedTexts / totalTexts * 100;
+                textProgress /= totalTexts;
 
             } else {
                 // 单元任务：基于阅读时间和习题完成情况计算进度（与课文任务相同）
-                int completedTexts = 0;
-
                 for (com.english.entity.Text text : texts) {
                     // 检查阅读时间
-                    int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
-                            assignmentId);
-                    boolean readingCompleted = textReadTime >= requiredTextReadTimeMinutes(assignment);
+                    long textReadTimeSeconds = learningRecordsService.getTextReadTimeSecondsForSpecificText(studentId,
+                            text.getId(), assignmentId);
 
                     // 检查习题完成情况
                     boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
 
-                    // 必须同时满足阅读时间和习题完成
-                    if (readingCompleted && exercisesCompleted) {
-                        completedTexts++;
-                    }
+                    textProgress += calculateTextTimeProgress(assignment, textReadTimeSeconds, exercisesCompleted);
                 }
-                textProgress = (double) completedTexts / totalTexts * 100;
+                textProgress /= totalTexts;
             }
         }
 
@@ -688,12 +692,12 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                 // 检查每篇指定课文的阅读时间是否达到要求且完成习题
                 int completedTexts = 0;
                 for (com.english.entity.Text text : texts) {
-                    int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId, text.getId(),
-                            assignmentId);
+                    long textReadTime = learningRecordsService.getTextReadTimeSecondsForSpecificText(studentId,
+                            text.getId(), assignmentId);
                     boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
 
                     // 必须同时满足阅读时间和习题完成
-                    if (textReadTime >= requiredTextReadTimeMinutes(assignment) && exercisesCompleted) {
+                    if (textReadTime >= requiredTextReadTimeSeconds(assignment) && exercisesCompleted) {
                         completedTexts++;
                     }
                 }
@@ -721,11 +725,11 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                 boolean textsCompleted = true;
                 if (!texts.isEmpty()) {
                     for (com.english.entity.Text text : texts) {
-                        int textReadTime = learningRecordsService.getTextReadTimeForSpecificText(studentId,
+                        long textReadTime = learningRecordsService.getTextReadTimeSecondsForSpecificText(studentId,
                                 text.getId(), assignmentId);
                         boolean exercisesCompleted = checkTextExercisesCompleted(studentId, text.getId(), assignmentId);
 
-                        if (!(textReadTime >= requiredTextReadTimeMinutes(assignment) && exercisesCompleted)) {
+                        if (!(textReadTime >= requiredTextReadTimeSeconds(assignment) && exercisesCompleted)) {
                             textsCompleted = false;
                             break;
                         }
@@ -880,7 +884,11 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     /**
      * 计算在任务中的学习时间（分钟）
      */
-    private int calculateStudyTimeInAssignment(Long assignmentId, Long studentId) {
+    private double calculateStudyTimeInAssignment(Long assignmentId, Long studentId) {
+        return Math.round(calculateStudyTimeSecondsInAssignment(assignmentId, studentId) / 0.6) / 100.0;
+    }
+
+    private long calculateStudyTimeSecondsInAssignment(Long assignmentId, Long studentId) {
         // 查询该任务的所有学习记录
         QueryWrapper<LearningRecord> recordWrapper = new QueryWrapper<>();
         recordWrapper.eq("student_id", studentId)
@@ -891,7 +899,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         // 先求和所有秒数，再除以60转换为分钟（避免逐条除60导致小值截断为0）
         long totalSeconds = records.stream()
                 .mapToLong(record -> record.getDurationSeconds() != null ? record.getDurationSeconds() : 0).sum();
-        return (int) Math.min(totalSeconds / 60, Integer.MAX_VALUE);
+        return Math.max(totalSeconds, 0);
     }
 
     /**
@@ -1027,6 +1035,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             studentProgress.put("wordsLearned", calculateWordsLearnedInAssignment(assignmentId, studentId));
             studentProgress.put("textsRead", calculateTextsReadInAssignment(assignmentId, studentId));
             studentProgress.put("studyTime", calculateStudyTimeInAssignment(assignmentId, studentId));
+            studentProgress.put("studyTimeSeconds", calculateStudyTimeSecondsInAssignment(assignmentId, studentId));
 
             // 检查是否完成（复用统一的完成判定方法）
             boolean isCompleted = isAssignmentCompleted(assignmentId, studentId);
@@ -1226,6 +1235,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                 assignmentMap.put("createdTime", assignment.getCreatedTime());
                 assignmentMap.put("classId", assignment.getClassId());
                 assignmentMap.put("unitId", assignment.getUnitId());
+                assignmentMap.put("idealStudyTimeMinutes", assignment.getIdealStudyTimeMinutes());
 
                 // 获取班级和单元名称
                 Class clazz = classMapper.selectById(assignment.getClassId());
@@ -1328,6 +1338,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             assignmentMap.put("createdTime", assignment.getCreatedTime());
             assignmentMap.put("classId", assignment.getClassId());
             assignmentMap.put("unitId", assignment.getUnitId());
+            assignmentMap.put("idealStudyTimeMinutes", assignment.getIdealStudyTimeMinutes());
 
             // 获取班级名称
             Class clazz = classMapper.selectById(assignment.getClassId());
@@ -1363,6 +1374,8 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                 assignmentMap.put("totalTexts", assignmentTexts.size());
                 assignmentMap.put("readTexts", calculateTextsReadInAssignment(assignment.getId(), studentId));
                 assignmentMap.put("studyTime", calculateStudyTimeInAssignment(assignment.getId(), studentId));
+                assignmentMap.put("studyTimeSeconds",
+                        calculateStudyTimeSecondsInAssignment(assignment.getId(), studentId));
                 assignmentMap.put("assignmentType", getAssignmentType(assignment));
             } else {
                 // 未推荐的任务：进度为0，状态为 not-started
@@ -1373,6 +1386,7 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
                 assignmentMap.put("totalTexts", 0);
                 assignmentMap.put("readTexts", 0);
                 assignmentMap.put("studyTime", 0);
+                assignmentMap.put("studyTimeSeconds", 0);
                 assignmentMap.put("assignmentType", getAssignmentType(assignment));
 
                 // 如果指定了状态筛选，未推荐任务只显示 not-started

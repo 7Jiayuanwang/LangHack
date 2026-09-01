@@ -57,6 +57,11 @@ public interface LearningRecordsService {
     int getTextReadTimeForSpecificText(Long studentId, Long textId, Long assignmentId);
 
     /**
+     * 获取特定课文的累计阅读时间（秒），用于实时进度计算和展示。
+     */
+    long getTextReadTimeSecondsForSpecificText(Long studentId, Long textId, Long assignmentId);
+
+    /**
      * 记录单词查看
      */
     void recordWordView(Long studentId, Long wordId);

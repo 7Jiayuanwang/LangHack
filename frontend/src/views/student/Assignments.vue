@@ -305,15 +305,15 @@
                 >
                   <div class="item-header">
                     <span class="title">{{ text.title }}</span>
-                    <el-tag v-if="currentAssignment.assignmentType === 'TEXTS'" :type="isTextTimeCompleted(text.studyTime) ? 'success' : 'warning'" size="small">
-                      {{ isTextTimeCompleted(text.studyTime) ? '已达标' : '学习中' }}
+                    <el-tag v-if="currentAssignment.assignmentType === 'TEXTS'" :type="isAssignmentTextTimeCompleted(text.studyTime, text.studyTimeSeconds) ? 'success' : 'warning'" size="small">
+                      {{ isAssignmentTextTimeCompleted(text.studyTime, text.studyTimeSeconds) ? '已达标' : '学习中' }}
                     </el-tag>
                     <el-tag v-else-if="text.completed" type="success" size="small">已完成</el-tag>
                     <el-tag v-else type="info" size="small">未学习</el-tag>
                   </div>
                   <div class="item-meta">
                     <span>难度：{{ getDifficultyText(text.difficulty) }}</span>
-                    <span>学习时间：{{ formatTextTime(text, currentAssignment.assignmentType) }}</span>
+                    <span>学习时间：{{ formatAssignmentTextTime(text, currentAssignment.assignmentType) }}</span>
                   </div>
                 </div>
               </div>
@@ -558,6 +558,7 @@ const loadAssignments = async () => {
         totalTexts: assignment.totalTexts || 0,
         readTexts: assignment.readTexts || 0,
         studyTime: assignment.studyTime || 0,
+        studyTimeSeconds: assignment.studyTimeSeconds || 0,
         idealStudyTimeMinutes: assignment.idealStudyTimeMinutes || 10
       }))
 
@@ -599,27 +600,34 @@ const calculateAssignmentStatus = (progress, deadline) => {
   }
 }
 
-// 格式化学习时间显示
-const formatTextTime = (text, assignmentType) => {
-  void calculateAssignmentStatus
-  if (assignmentType === 'TEXTS') {
-    const minutes = Number(text.studyTime) || 0
-    const requiredMinutes = getRequiredTextTimeMinutes()
-    return `${minutes}分钟 ${minutes >= requiredMinutes ? '已达标' : `需要${requiredMinutes}分钟`}`
-  } else {
-    // 单元任务：显示学习状态
-    return text.completed ? '✅ 已完成' : '⏳ 未完成'
-  }
-}
-
-// 判断课文学习时间是否达标
-const isTextTimeCompleted = (studyTime) => {
-  return (Number(studyTime) || 0) >= getRequiredTextTimeMinutes()
-}
-
-const getRequiredTextTimeMinutes = () => {
-  const value = Number(currentAssignment.value?.idealStudyTimeMinutes)
+const requiredTextTimeMinutes = (assignment = currentAssignment.value) => {
+  const value = Number(assignment?.idealStudyTimeMinutes)
   return Number.isFinite(value) && value > 0 ? value : 10
+}
+
+// 后端优先返回秒级时长；studyTime（分钟）仅用于兼容旧接口。
+const formatAssignmentTextTime = (text, assignmentType) => {
+  if (assignmentType !== 'TEXTS') return text?.completed ? '已完成' : '未完成'
+  const seconds = Number(text?.studyTimeSeconds)
+  const totalSeconds = Number.isFinite(seconds) ? seconds : Math.round((Number(text?.studyTime) || 0) * 60)
+  const required = requiredTextTimeMinutes()
+  return `${formatStudyDuration(totalSeconds)} ${totalSeconds >= required * 60 ? '已达标' : `需要${required}分钟`}`
+}
+
+const isAssignmentTextTimeCompleted = (studyTime, studyTimeSeconds) => {
+  const seconds = Number(studyTimeSeconds)
+  const totalSeconds = Number.isFinite(seconds) ? seconds : (Number(studyTime) || 0) * 60
+  return totalSeconds >= requiredTextTimeMinutes() * 60
+}
+
+const formatStudyDuration = (totalSeconds) => {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainingSeconds = seconds % 60
+  return hours > 0
+    ? `${hours}小时${minutes}分${remainingSeconds}秒`
+    : `${minutes}分${remainingSeconds}秒`
 }
 
 // 更新统计数据
@@ -806,6 +814,7 @@ const studyText = (text) => {
       path: `/article/${text.id}`,
       query: {
         assignmentId: currentAssignment.value.id,
+        requiredMinutes: requiredTextTimeMinutes(currentAssignment.value),
         from: 'assignment' // 标记来源，便于返回
       }
     })
@@ -1027,7 +1036,7 @@ const getAssignmentTypeText = (assignmentType) => {
 const getCompletionCriteriaText = (assignmentType) => {
   const criteria = {
     'UNIT': '课文和单词均需达到80%进度',
-    'TEXTS': `每篇课文需学习至少${getRequiredTextTimeMinutes()}分钟`,
+    'TEXTS': `每篇课文需学习至少${requiredTextTimeMinutes()}分钟`,
     'WORDS': '需要掌握所有指定单词'
   }
   return criteria[assignmentType] || '未知完成标准'

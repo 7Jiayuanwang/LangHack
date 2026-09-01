@@ -267,7 +267,9 @@
           </span>
           <div class="btn-glow"></div>
         </button>
-        <p class="completion-hint">完成阅读以记录您的学习进度</p>
+        <p class="completion-hint">
+          已学习 {{ formatStudyTime(studyTime) }} · 实时进度 {{ timeBasedProgress }}%
+        </p>
       </footer>
       
       <div class="reader-footer completed-notif" v-else-if="isCompleted && !isPreviewMode">
@@ -597,6 +599,14 @@ const difficulty = ref('MEDIUM')
 const learningProgress = ref(0) // 原有的学习进度
 const learnedWordsCount = ref(0)
 const studyTime = ref(0)
+const requiredStudyMinutes = computed(() => {
+  const value = Number(route.query.requiredMinutes)
+  return Number.isFinite(value) && value > 0 ? value : 10
+})
+const timeBasedProgress = computed(() => Math.min(
+  100,
+  Math.round(studyTime.value * 100 / (requiredStudyMinutes.value * 60))
+))
 const isCompleted = ref(false)
 const isFavorite = ref(false)
 const favoriteCount = ref(0)
@@ -664,6 +674,7 @@ let quizPanelDragStartY = 0
 let quizPanelDragStartHeight = 0
 let accumulatedTime = 0 // 累计学习时间（秒）
 let lastSavedStudyTime = 0 // 已保存到后端的学习时间（秒），用于计算增量避免重复累加
+let savingLearningRecord = false
 
 // 相关文章推荐
 const relatedTexts = ref([])
@@ -980,9 +991,11 @@ const loadTextDetail = async () => {
         setTimeout(() => ElMessage.success(`本课文有多个学习版本：${versionNames}，可点击切换`), 800)
       }
 
-      // 课文详情接口返回分钟，阅读页计时器统一使用秒。
-      if (data.readTime && data.readTime > 0) {
-        const savedSeconds = Math.round(Number(data.readTime) * 60)
+      // 阅读页统一使用秒；兼容尚未提供 readTimeSeconds 的旧接口。
+      const savedSeconds = Number.isFinite(Number(data.readTimeSeconds))
+        ? Math.max(0, Math.round(Number(data.readTimeSeconds)))
+        : Math.max(0, Math.round((Number(data.readTime) || 0) * 60))
+      if (savedSeconds > 0) {
         studyTime.value = savedSeconds
         accumulatedTime = savedSeconds
         // 已保存的时长不应再次发送，同步 lastSavedStudyTime 避免首次保存重复累加
@@ -1091,11 +1104,13 @@ const pauseReading = async () => {
 }
 
 const saveLearningRecord = async () => {
+  if (savingLearningRecord) return
   try {
     if (studyTime.value > 0) {
       // 计算自上次保存以来的增量，避免重复累加导致时长虚高
       const increment = studyTime.value - lastSavedStudyTime
       if (increment <= 0) return
+      savingLearningRecord = true
       const recordPayload = {
         type: 'TEXT_VIEW',
         duration: increment,
@@ -1109,6 +1124,8 @@ const saveLearningRecord = async () => {
     }
   } catch (error) {
     console.error('保存学习记录失败:', error)
+  } finally {
+    savingLearningRecord = false
   }
 }
 
@@ -1124,8 +1141,12 @@ const startStudyTimer = () => {
       const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
       const totalTime = accumulatedTime + currentSessionTime
       studyTime.value = totalTime
+      // 定期同步增量，教师端和学生任务页可以看到接近实时的时长与进度。
+      if (studyTime.value - lastSavedStudyTime >= 5) {
+        void saveLearningRecord()
+      }
     }
-  }, 100) // 每100毫秒更新一次，提供更平滑的体验
+  }, 1000)
 }
 
 const stopStudyTimer = () => {

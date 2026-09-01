@@ -68,6 +68,16 @@ describe('Teacher Assignments.vue', () => {
     expect(wrapper.vm.assignmentRules.title).toBeDefined()
   })
 
+  it('allows any whole-minute study duration within the valid range', () => {
+    const wrapper = createWrapper()
+    const validator = wrapper.vm.assignmentRules.idealStudyTimeMinutes[1].validator
+    const callback = vi.fn()
+
+    validator(null, 1, callback)
+
+    expect(callback).toHaveBeenCalledWith()
+  })
+
   it('has filterForm reactive object', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.filterForm).toBeDefined()

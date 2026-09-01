@@ -398,6 +398,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             // 检查学习状态
             detail.put("isRead", checkTextReadStatus(studentId, textId));
             detail.put("readTime", getTextReadTime(studentId, textId, assignmentId));
+            detail.put("readTimeSeconds", getTextReadTimeSecondsForSpecificText(studentId, textId, assignmentId));
         } else {
             detail.put("id", textId);
             detail.put("title", "课文不存在");
@@ -1646,6 +1647,12 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
      */
     @Override
     public int getTextReadTimeForSpecificText(Long studentId, Long textId, Long assignmentId) {
+        return (int) Math.min(getTextReadTimeSecondsForSpecificText(studentId, textId, assignmentId) / 60,
+                Integer.MAX_VALUE);
+    }
+
+    @Override
+    public long getTextReadTimeSecondsForSpecificText(Long studentId, Long textId, Long assignmentId) {
         if (studentId == null || textId == null) {
             return 0;
         }
@@ -1670,8 +1677,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         logger.debug("获取课文阅读时间: 学生={}, 课文={}, 任务={}, 总时长={}秒",
                 studentId, textId, assignmentId, totalSeconds);
 
-        // 转换为分钟，防止整数溢出
-        return (int) Math.min(totalSeconds / 60, Integer.MAX_VALUE);
+        return Math.max(totalSeconds, 0);
     }
 
     /**
