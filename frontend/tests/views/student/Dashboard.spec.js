@@ -26,6 +26,13 @@ vi.mock('@/api/student', () => ({
   })
 }))
 
+vi.mock('@/api/learningAgent', () => ({
+  getLearningAgentContext: vi.fn().mockResolvedValue({
+    code: 200,
+    data: { onboardingCompleted: false, goals: [] }
+  })
+}))
+
 import Dashboard from '@/views/student/Dashboard.vue'
 
 describe('Student Dashboard.vue', () => {
