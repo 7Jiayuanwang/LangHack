@@ -2,6 +2,7 @@ package com.english.service;
 
 import com.english.dto.learner.InternetContentRecommendationDto;
 import com.english.entity.LearnerInterest;
+import com.english.entity.StudentSchedule;
 import com.english.entity.Text;
 import com.english.entity.User;
 import com.english.mapper.LearnerGoalMapper;
@@ -84,6 +85,29 @@ class InternetContentRecommendationServiceTest {
         assertEquals(1, result.size());
         assertEquals("/article/42", result.get(0).getUrl());
         assertFalse(result.get(0).isExternal());
+    }
+
+    @Test
+    void doesNotUseGenericScienceTokenForUnrelatedCourseRecommendation() {
+        when(interestMapper.selectList(any())).thenReturn(Collections.emptyList());
+        User user = new User();
+        user.setId(7L);
+        user.setUsername("student01");
+        when(userService.getUserById(7L)).thenReturn(user);
+
+        StudentSchedule physicalEducation = new StudentSchedule();
+        physicalEducation.setCourseName("大学体育2");
+        physicalEducation.setDayOfWeek(java.time.LocalDate.now().getDayOfWeek().getValue());
+        when(schoolDataSyncService.getStudentSchedule("student01", null, null))
+                .thenReturn(List.of(physicalEducation));
+        when(sharedContentPool.currentCandidates()).thenReturn(List.of(
+                candidate("Environmental science", "environmental science", "environment")));
+
+        List<InternetContentRecommendationDto> result = service.recommendForUser(7L, 1);
+
+        assertEquals(1, result.size());
+        assertFalse(result.get(0).getReason().contains("大学体育2"));
+        assertEquals("为你保留的探索性英语内容", result.get(0).getReason());
     }
 
     private SharedOpenContentPool.ContentCandidate candidate(String title, String topic, String id) {

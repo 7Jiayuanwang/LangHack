@@ -204,7 +204,7 @@ public class LearningAgentServiceImpl implements LearningAgentService {
         memory.setContent(content);
         memory.setConfidence(BigDecimal.ONE);
         memory.setSource("USER_CONFIRMED");
-        memory.setSensitive(Boolean.TRUE.equals(request.getSensitive()));
+        memory.setIsSensitive(Boolean.TRUE.equals(request.getSensitive()));
         memory.setStatus("ACTIVE");
         memory.setCreatedTime(now);
         memory.setUpdatedTime(now);
@@ -357,7 +357,7 @@ public class LearningAgentServiceImpl implements LearningAgentService {
         memory.setContent(content);
         memory.setConfidence(BigDecimal.ONE);
         memory.setSource("ONBOARDING");
-        memory.setSensitive(false);
+        memory.setIsSensitive(false);
         memory.setStatus("ACTIVE");
         memory.setCreatedTime(now);
         memory.setUpdatedTime(now);
@@ -381,7 +381,7 @@ public class LearningAgentServiceImpl implements LearningAgentService {
         view.setMemoryType(memory.getMemoryType());
         view.setContent(memory.getContent());
         view.setSource(memory.getSource());
-        view.setSensitive(Boolean.TRUE.equals(memory.getSensitive()));
+        view.setSensitive(Boolean.TRUE.equals(memory.getIsSensitive()));
         view.setUpdatedTime(memory.getUpdatedTime());
         return view;
     }

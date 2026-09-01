@@ -4367,3 +4367,74 @@ DEALLOCATE PREPARE alterIfNotExists;
 UPDATE texts
 SET book_volume = '理解当代中国'
 WHERE book_volume = '综合教程4';
+
+
+-- V48__past_paper_audio_media.sql
+
+ALTER TABLE media MODIFY COLUMN media_type ENUM('IMAGE','VIDEO','AUDIO') NOT NULL COMMENT '媒体类型';
+
+
+-- V49__learning_agent_context.sql
+
+-- 学习伙伴智能体：用户主动目标、兴趣、偏好与可管理记忆。
+
+CREATE TABLE IF NOT EXISTS learner_agent_profiles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    current_level VARCHAR(30) DEFAULT NULL COMMENT 'BEGINNER/ELEMENTARY/INTERMEDIATE/UPPER_INTERMEDIATE/ADVANCED',
+    weekly_minutes INT DEFAULT NULL COMMENT '用户每周可投入的英语学习分钟数',
+    preferred_formats_json VARCHAR(500) DEFAULT NULL COMMENT 'JSON array: READING/VOCABULARY/QUIZ/WRITING/CONVERSATION/VIDEO',
+    encouragement_style VARCHAR(20) DEFAULT 'GENTLE' COMMENT 'GENTLE/DIRECT/CHALLENGE',
+    memory_consent TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否允许从会话和行为中提取长期记忆',
+    onboarding_completed TINYINT(1) NOT NULL DEFAULT 0,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_learner_agent_profile_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习伙伴智能体用户设置';
+
+CREATE TABLE IF NOT EXISTS learner_goals (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    goal_type VARCHAR(30) NOT NULL COMMENT 'CET4/CET6/POSTGRADUATE/ACADEMIC_READING/COURSE/GENERAL/OTHER',
+    title VARCHAR(100) NOT NULL,
+    priority INT NOT NULL DEFAULT 3 COMMENT '1-5，5为最高',
+    target_date DATE DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/PAUSED/COMPLETED',
+    source VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT 'USER/INFERRED',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_learner_goals_user_status (user_id, status),
+    INDEX idx_learner_goals_target_date (target_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习伙伴用户多目标';
+
+CREATE TABLE IF NOT EXISTS learner_interests (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    name VARCHAR(40) NOT NULL,
+    source VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT 'USER/INFERRED',
+    weight DECIMAL(5,4) NOT NULL DEFAULT 1.0000,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_learner_interests_user_name (user_id, name),
+    INDEX idx_learner_interests_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习伙伴用户兴趣';
+
+CREATE TABLE IF NOT EXISTS learner_memories (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    memory_key VARCHAR(80) NOT NULL,
+    memory_type VARCHAR(30) NOT NULL COMMENT 'PROFILE/PREFERENCE/HABIT/GOAL/DIFFICULTY',
+    content VARCHAR(500) NOT NULL,
+    confidence DECIMAL(5,4) NOT NULL DEFAULT 1.0000,
+    source VARCHAR(30) NOT NULL COMMENT 'ONBOARDING/USER_CONFIRMED/CONVERSATION/BEHAVIOR',
+    evidence_type VARCHAR(30) DEFAULT NULL,
+    evidence_id VARCHAR(100) DEFAULT NULL,
+    is_sensitive TINYINT(1) NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT 'CANDIDATE/ACTIVE/REJECTED/EXPIRED',
+    expires_time DATETIME DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_learner_memories_user_key (user_id, memory_key),
+    INDEX idx_learner_memories_user_status (user_id, status),
+    INDEX idx_learner_memories_source (source)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户可查看和管理的学习伙伴长期记忆';
