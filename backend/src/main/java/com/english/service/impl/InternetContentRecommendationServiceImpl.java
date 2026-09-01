@@ -33,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -41,6 +42,8 @@ import java.util.stream.Collectors;
 public class InternetContentRecommendationServiceImpl implements InternetContentRecommendationService {
 
     private static final Map<String, String> TOPIC_RULES = topicRules();
+    private static final Set<String> GENERIC_TOPIC_TOKENS = Set.of(
+            "science", "studies", "study", "general", "information");
     private final SharedOpenContentPool sharedContentPool;
     private final LearnerInterestMapper interestMapper;
     private final LearnerGoalMapper goalMapper;
@@ -229,6 +232,7 @@ public class InternetContentRecommendationServiceImpl implements InternetContent
         if (haystack.contains(topic)) return true;
         return java.util.Arrays.stream(topic.split(" "))
                 .filter(token -> token.length() >= 5)
+                .filter(token -> !GENERIC_TOPIC_TOKENS.contains(token))
                 .anyMatch(haystack::contains);
     }
 

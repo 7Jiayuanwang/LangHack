@@ -6,6 +6,7 @@ import com.english.entity.AiConversation;
 import com.english.mapper.AiCallLogMapper;
 import com.english.service.ConversationService;
 import com.english.service.HiAgentService;
+import com.english.service.LearningAgentPromptContextService;
 import com.english.service.UserService;
 import com.english.service.impl.AiCallMetricsService;
 import com.english.service.impl.AiProviderRuntimeService;
@@ -42,6 +43,9 @@ public class AiQaController {
     private UserService userService;
 
     @Autowired
+    private LearningAgentPromptContextService learningAgentPromptContextService;
+
+    @Autowired
     private AiCallMetricsService aiCallMetricsService;
 
     @Autowired
@@ -66,7 +70,9 @@ public class AiQaController {
             String selectedText = request.getSelectedText() != null ? request.getSelectedText().trim() : "";
             String articleContext = request.getArticleContext() != null ? request.getArticleContext().trim() : "";
             String username = auth != null ? auth.getName() : "anonymous";
-            String prompt = buildChatPrompt(question, selectedText, articleContext, request.getScene());
+            Long userId = resolveUserId(auth);
+            String prompt = buildChatPrompt(question, selectedText, articleContext,
+                    request.getScene(), loadLearningAgentContext(request.getScene(), userId));
             String answer = null;
 
             long startTime = aiCallMetricsService.startTimer();
@@ -96,7 +102,7 @@ public class AiQaController {
             Long conversationId = request.getConversationId();
             if (auth != null) {
                 try {
-                    Long userId = userService.getUserByUsername(auth.getName()).getId();
+                    if (userId == null) throw new IllegalStateException("用户不存在");
                     if (conversationId == null) {
                         AiConversation conv = conversationService.createConversation(userId, question);
                         conversationId = conv.getId();
@@ -157,7 +163,8 @@ public class AiQaController {
         conversationService.addMessage(
                 platformConversationId, userId, "user", question, selectedText, articleContext);
 
-        String prompt = buildChatPrompt(question, selectedText, articleContext, request.getScene());
+        String prompt = buildChatPrompt(question, selectedText, articleContext,
+                request.getScene(), loadLearningAgentContext(request.getScene(), userId));
         String upstreamConversationId = hiAgentService.createConversationForQA();
         return hiAgentService.chatQueryStreamingWithQACredentials(
                 upstreamConversationId,
@@ -194,11 +201,15 @@ public class AiQaController {
         return Result.success(data);
     }
 
-    private String buildChatPrompt(String userQuestion, String selectedText, String articleContext, String scene) {
+    private String buildChatPrompt(String userQuestion, String selectedText, String articleContext,
+                                   String scene, String learningContext) {
         if (isLearningAgentScene(scene)) {
             return "你是一位长期陪伴大学生的英语学习伙伴。请围绕英语学习回答当前问题，"
                     + "给出具体、可执行的下一步；一次最多追问一个关键问题；"
                     + "不要编造用户的学习记录或成就。鼓励用户逐步用英语获取信息、拓展兴趣。\n\n"
+                    + (learningContext != null && !learningContext.isBlank()
+                    ? learningContext + "\n\n请结合画像进行个性化回答，但只引用画像中确实存在的事实。\n\n"
+                    : "当前没有可用的学习画像，请先基于学生消息回答，必要时只追问一个问题。\n\n")
                     + (selectedText != null && !selectedText.isEmpty() ? "【当前选中文本】\n" + selectedText + "\n\n" : "")
                     + (articleContext != null && !articleContext.isEmpty() ? "【当前文章上下文】\n" + articleContext + "\n\n" : "")
                     + "【学生消息】\n" + userQuestion;
@@ -214,6 +225,17 @@ public class AiQaController {
                 + "【选中文本】\n" + selectedText + "\n\n"
                 + (articleContext != null && !articleContext.isEmpty() ? "【文章上下文】\n" + articleContext + "\n\n" : "")
                 + "【学生提问】\n" + userQuestion;
+    }
+
+    private Long resolveUserId(Authentication auth) {
+        if (auth == null) return null;
+        com.english.entity.User user = userService.getUserByUsername(auth.getName());
+        return user == null ? null : user.getId();
+    }
+
+    private String loadLearningAgentContext(String scene, Long userId) {
+        if (!isLearningAgentScene(scene) || userId == null) return "";
+        return learningAgentPromptContextService.buildForUser(userId);
     }
 
     private boolean isLearningAgentScene(String scene) {

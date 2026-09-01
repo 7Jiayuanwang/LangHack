@@ -21,7 +21,7 @@ public class LearnerMemory {
     private String source;
     private String evidenceType;
     private String evidenceId;
-    private Boolean sensitive;
+    private Boolean isSensitive;
     private String status;
     private LocalDateTime expiresTime;
     private LocalDateTime createdTime;
