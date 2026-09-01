@@ -439,6 +439,12 @@ const routes = [
         meta: { title: "我的班级", roles: ["STUDENT", "USER"], featureKey: "page_classes" },
       },
       {
+        path: "learning-agent",
+        name: "StudentLearningAgent",
+        component: () => import("@/views/student/LearningAgent.vue"),
+        meta: { title: "英语学习伙伴", roles: ["STUDENT", "USER"] },
+      },
+      {
         path: "ai-qa",
         name: "StudentAiQa",
         component: () => import("@/views/student/AiQa.vue"),

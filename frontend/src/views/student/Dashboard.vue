@@ -1,5 +1,22 @@
 <template>
   <div class="trend-dashboard">
+    <section class="agent-entry-card" role="button" tabindex="0" @click="openLearningAgent" @keyup.enter="openLearningAgent">
+      <div class="agent-entry-glow"></div>
+      <AgentMascot :size="82" />
+      <div class="agent-entry-copy">
+        <span class="agent-entry-kicker">你的英语学习伙伴 · 小芽</span>
+        <h2>{{ agentCardTitle }}</h2>
+        <p>{{ agentCardDescription }}</p>
+        <div v-if="agentContext?.goals?.length" class="agent-goal-chips">
+          <span v-for="goal in agentContext.goals.slice(0, 3)" :key="goal.id || goal.goalType">{{ goal.title }}</span>
+        </div>
+      </div>
+      <button type="button" class="agent-entry-action" @click.stop="openLearningAgent">
+        {{ agentContext?.onboardingCompleted ? '继续交流' : '开始认识我' }}
+        <span>→</span>
+      </button>
+    </section>
+
     <!-- 现代化统计网格 -->
     <div class="stats-grid">
       <div class="stat-card trend-courses">
@@ -409,7 +426,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import FollowSummary from '@/components/FollowSummary.vue'
+import AgentMascot from '@/components/AgentMascot.vue'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import { getLearningAgentContext } from '@/api/learningAgent'
 import {
   getStudentDashboard,
   getTodayLearningStats,
@@ -425,6 +444,13 @@ const router = useRouter()
 const { isEnabled, load: loadFeatureToggles, isLoaded } = useFeatureToggles()
 
 const loading = ref(false)
+const agentContext = ref(null)
+const agentCardTitle = computed(() => agentContext.value?.onboardingCompleted
+  ? (agentContext.value.greeting || '今天想让英语帮你做什么？')
+  : '先聊聊你的目标和兴趣吧')
+const agentCardDescription = computed(() => agentContext.value?.onboardingCompleted
+  ? '我可以陪你拆解目标、安排学习，也可以直接讨论一个英语问题。'
+  : '告诉我你是为了四六级、考研、论文阅读，还是想用英语探索自己的兴趣。')
 const dashboardData = reactive({
   enrolledCourses: 0,
   vocabularyCount: 0,
@@ -646,6 +672,19 @@ const loadLearningStats = async () => {
   }
 }
 
+const loadAgentContext = async () => {
+  try {
+    const response = await getLearningAgentContext()
+    if (response?.code === 200 && response.data) agentContext.value = response.data
+  } catch (error) {
+    // 智能体数据尚未迁移或暂时不可用时，首页仍展示静态入口。
+  }
+}
+
+const openLearningAgent = () => {
+  router.push('/student/learning-agent')
+}
+
 // 进入课程
 const enterCourse = (courseClass) => {
   router.push(`/student/courses?courseId=${courseClass.courseId}`)
@@ -747,6 +786,7 @@ const formatScore = (score) => {
 }
 
 onMounted(() => {
+  loadAgentContext()
   loadDashboardData()
   loadLearningStats()
   loadDailyWordReciteProgress()
@@ -772,6 +812,42 @@ onMounted(() => {
   padding: 16px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   overflow-x: hidden;
+}
+
+.agent-entry-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 142px;
+  margin-bottom: 22px;
+  padding: 22px 24px;
+  overflow: hidden;
+  border: 1px solid rgba(78, 178, 137, 0.2);
+  border-radius: 24px;
+  background: linear-gradient(125deg, #f4fff9 0%, #e3f8ef 52%, #d1f0e4 100%);
+  box-shadow: 0 14px 36px rgba(31, 122, 92, 0.12);
+  cursor: pointer;
+  outline: none;
+}
+
+.agent-entry-card:focus-visible { box-shadow: 0 0 0 4px rgba(50, 166, 120, 0.18), 0 14px 36px rgba(31, 122, 92, 0.12); }
+.agent-entry-glow { position: absolute; z-index: -1; right: -70px; top: -90px; width: 270px; height: 270px; border-radius: 50%; background: rgba(255,255,255,.52); }
+.agent-entry-copy { flex: 1; min-width: 0; }
+.agent-entry-kicker { color: #278062; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.agent-entry-copy h2 { margin: 6px 0; color: #174c3b; font-size: clamp(19px, 3vw, 26px); line-height: 1.25; }
+.agent-entry-copy p { margin: 0; color: #557369; font-size: 13px; line-height: 1.55; }
+.agent-goal-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.agent-goal-chips span { padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.72); color: #39705d; font-size: 11px; }
+.agent-entry-action { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 9px; border: none; border-radius: 999px; padding: 12px 17px; background: #1f805f; color: white; font-weight: 700; cursor: pointer; box-shadow: 0 9px 20px rgba(27, 112, 82, .2); }
+.agent-entry-action:hover { background: #176b4f; transform: translateY(-1px); }
+
+@media (max-width: 640px) {
+  .agent-entry-card { align-items: flex-start; gap: 12px; padding: 18px; }
+  .agent-entry-card :deep(.agent-mascot) { margin-top: 2px; transform: scale(.82); transform-origin: top left; margin-right: -12px; }
+  .agent-entry-action { position: absolute; right: 16px; bottom: 14px; padding: 9px 13px; font-size: 12px; }
+  .agent-entry-copy { padding-bottom: 37px; }
 }
 
 /* 现代化统计网格 */

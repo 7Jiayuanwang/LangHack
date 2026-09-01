@@ -46,7 +46,14 @@
             >
               <el-icon><Share /></el-icon>
             </button>
-            <div class="qa-avatar">
+            <div v-if="agentMode" class="agent-identity">
+              <AgentMascot :size="36" />
+              <div>
+                <strong>小芽</strong>
+                <span>英语学习伙伴</span>
+              </div>
+            </div>
+            <div v-else class="qa-avatar">
               <el-icon :size="22"><Monitor /></el-icon>
             </div>
           </div>
@@ -72,13 +79,19 @@
 
       <main class="qa-chat-area" ref="chatContainer" id="chat-container">
         <div class="empty-hint" v-if="messages.length === 0">
-          <p>输入问题开始对话，或点击左上角 <strong>☰</strong> 查看历史对话</p>
+          <div v-if="agentMode" class="agent-empty">
+            <AgentMascot :size="92" />
+            <h2>今天想让英语帮你做什么？</h2>
+            <p>可以聊目标、学习安排，也可以带一个具体问题来。</p>
+          </div>
+          <p v-else>输入问题开始对话，或点击左上角 <strong>☰</strong> 查看历史对话</p>
         </div>
 
         <template v-for="(msg, index) in messages" :key="index">
           <div class="msg-row" :class="msg.role === 'user' ? 'msg-user' : 'msg-ai'">
-            <div class="msg-avatar" v-if="msg.role !== 'user'">
-              <el-icon :size="18"><Monitor /></el-icon>
+            <div class="msg-avatar" :class="{ 'agent-avatar': agentMode }" v-if="msg.role !== 'user'">
+              <AgentMascot v-if="agentMode" :size="30" />
+              <el-icon v-else :size="18"><Monitor /></el-icon>
             </div>
             <div class="msg-bubble" :class="msg.role === 'user' ? 'user-bubble' : 'ai-bubble'">
               <div v-if="msg.role === 'user'">{{ msg.content }}</div>
@@ -88,8 +101,9 @@
         </template>
 
         <div class="msg-row msg-ai" v-if="loading">
-          <div class="msg-avatar">
-            <el-icon :size="18"><Monitor /></el-icon>
+          <div class="msg-avatar" :class="{ 'agent-avatar': agentMode }">
+            <AgentMascot v-if="agentMode" :size="30" />
+            <el-icon v-else :size="18"><Monitor /></el-icon>
           </div>
           <div class="msg-bubble ai-bubble loading-bubble">
             <div class="typing-dots">
@@ -118,7 +132,7 @@
           <input
             v-model="inputMessage"
             class="qa-input"
-            placeholder="输入你的问题..."
+            :placeholder="agentMode ? '告诉小芽你现在想学什么…' : '输入你的问题...'"
             @keyup.enter="sendMessage"
             :disabled="loading"
           />
@@ -171,13 +185,15 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
 import { createSseParser } from '@/utils/sse'
+import AgentMascot from '@/components/AgentMascot.vue'
 import {
   getConversations, getConversationDetail, deleteConversation, shareConversation
 } from '@/api/conversation'
 
 const props = defineProps({
   apiPath: { type: String, required: true },
-  backLabel: { type: String, default: '返回阅读' }
+  backLabel: { type: String, default: '返回阅读' },
+  agentMode: { type: Boolean, default: false }
 })
 
 const route = useRoute()
@@ -201,14 +217,26 @@ const sharing = ref(false)
 const shareLink = ref('')
 const shareOptions = ref({ expiresInDays: 7, password: '' })
 
-const candidateQuestions = computed(() => selectedText.value
-  ? [{ label: '结合文章内容解释本段意思' }, { label: '深度解读' }]
-  : [{ label: '英语语法疑问咨询' }, { label: '单词用法与辨析' }]
-)
+const candidateQuestions = computed(() => {
+  if (selectedText.value) {
+    return [{ label: '结合文章内容解释本段意思' }, { label: '深度解读' }]
+  }
+  if (props.agentMode) {
+    return [
+      { label: '帮我安排今天的英语学习' },
+      { label: '怎样用英语探索我的兴趣？' },
+      { label: '分析一下我遇到的学习困难' }
+    ]
+  }
+  return [{ label: '英语语法疑问咨询' }, { label: '单词用法与辨析' }]
+})
 
 onMounted(() => {
   selectedText.value = route.query.text || ''
   articleTitle.value = route.query.articleTitle || ''
+  if (props.agentMode && route.query.question) {
+    inputMessage.value = String(route.query.question)
+  }
   loadConversations()
 })
 
@@ -338,7 +366,8 @@ const sendMessage = async () => {
         userQuestion: userMsg,
         selectedText: selectedText.value,
         articleContext: route.query.context || '',
-        conversationId: currentConversationId.value
+        conversationId: currentConversationId.value,
+        scene: props.agentMode ? 'LEARNING_AGENT' : 'QA'
       })
     })
 
@@ -517,6 +546,10 @@ onBeforeUnmount(() => {
 .qa-back-btn:hover { color: #197fe6; }
 
 .qa-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(25, 127, 230, 0.1); display: flex; align-items: center; justify-content: center; color: #197fe6; border: 1px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.agent-identity { display: flex; align-items: center; gap: 8px; }
+.agent-identity > div:last-child { display: grid; line-height: 1.15; }
+.agent-identity strong { color: #1e5f49; font-size: 13px; }
+.agent-identity span { color: #7b9189; font-size: 10px; }
 
 .share-form { display: flex; flex-direction: column; gap: 16px; }
 .share-field label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
@@ -536,10 +569,14 @@ onBeforeUnmount(() => {
 .qa-chat-area::-webkit-scrollbar { display: none; }
 .empty-hint { display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; font-size: 14px; }
 .empty-hint p { margin: 0; }
+.agent-empty { display: flex; flex-direction: column; align-items: center; max-width: 420px; text-align: center; }
+.agent-empty h2 { margin: 14px 0 6px; color: #255f4b; font-size: 22px; }
+.agent-empty p { color: #7c9189; line-height: 1.6; }
 
 .msg-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 12px; }
 .msg-row.msg-user { justify-content: flex-end; }
 .msg-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #197fe6, #3b82f6); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0; box-shadow: 0 2px 8px rgba(25, 127, 230, 0.25); }
+.msg-avatar.agent-avatar { background: transparent; box-shadow: none; overflow: visible; }
 .msg-bubble { padding: 12px 16px; border-radius: 18px; max-width: 85%; font-size: 15px; line-height: 1.6; word-break: break-word; overflow-wrap: break-word; }
 .ai-bubble { background: white; color: #1e293b; border: 1px solid #f1f5f9; border-bottom-left-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
 .ai-bubble :deep(h1),.ai-bubble :deep(h2),.ai-bubble :deep(h3),.ai-bubble :deep(h4),.ai-bubble :deep(h5),.ai-bubble :deep(h6) { margin-top: 16px; margin-bottom: 8px; font-weight: 700; line-height: 1.3; color: #0f172a; }
