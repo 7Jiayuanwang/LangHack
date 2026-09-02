@@ -115,7 +115,7 @@ import { useRouter } from 'vue-router'
 import {
   Clock, Timer, Reading, Loading,
   House, Calendar, Trophy, Tickets, Notebook,
-  VideoPlay, MessageBox, Edit, User
+  VideoPlay, MessageBox, Edit, User, Histogram
 } from '@element-plus/icons-vue'
 import { getReadingHistory } from '@/api/student'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
@@ -126,6 +126,7 @@ const router = useRouter()
 // 注：发现页已在底部导航栏首位强制显示，不再重复列出
 const QUICK_ENTRIES = [
   { key: 'assignments',       path: '/student/assignments',       label: '任务',      icon: markRaw(Edit),      color: '#f97316', toggleKey: 'page_assignments' },
+  { key: 'task_plans',        path: '/student/task-plans',        label: '学期目标',  icon: markRaw(Histogram), color: '#3b82f6', toggleKey: null },
   { key: 'classes',           path: '/student/classes',           label: '社区',      icon: markRaw(House),     color: '#14b8a6', toggleKey: 'page_classes' },
   { key: 'schedule',          path: '/student/schedule',          label: '课表',      icon: markRaw(Calendar),  color: '#6366f1', toggleKey: 'page_schedule' },
   { key: 'scores',            path: '/student/scores',            label: '成绩',      icon: markRaw(Trophy),    color: '#f59e0b', toggleKey: 'page_scores' },

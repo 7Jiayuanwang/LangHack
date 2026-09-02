@@ -198,17 +198,24 @@ public class AssignmentController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<String> createAssignmentWithContent(@RequestBody Map<String, Object> requestBody, Authentication authentication) {
         try {
-            if (requestBody.get("classId") == null || requestBody.get("title") == null || requestBody.get("assignmentType") == null) {
-                return Result.error("必填字段不能为空：classId、title、assignmentType");
+            if (requestBody.get("title") == null || requestBody.get("assignmentType") == null) {
+                return Result.error("必填字段不能为空：title、assignmentType");
             }
 
-            Long classId;
-            try {
-                classId = Long.valueOf(requestBody.get("classId").toString());
-            } catch (NumberFormatException e) {
-                logger.error("ID格式错误", e);
-                return Result.error("classId格式错误，必须为数字");
+            // 支持多班级：优先读 classIds 数组，兼容旧的单个 classId
+            List<Long> classIds = new ArrayList<>();
+            if (requestBody.get("classIds") instanceof List) {
+                for (Object id : (List<?>) requestBody.get("classIds")) {
+                    classIds.add(Long.valueOf(id.toString()));
+                }
+            } else if (requestBody.get("classId") != null) {
+                classIds.add(Long.valueOf(requestBody.get("classId").toString()));
             }
+            if (classIds.isEmpty()) {
+                return Result.error("请至少选择一个班级");
+            }
+
+            Long firstClassId = classIds.get(0);
 
             String title = requestBody.get("title").toString();
             String description = requestBody.get("description") != null ? requestBody.get("description").toString() : "";
@@ -227,7 +234,7 @@ public class AssignmentController {
             }
 
             // 指定课文由文章选择器决定内容，不依赖平台课程或单元。
-            com.english.entity.Class classInfoForValidation = classService.getClassById(classId);
+            com.english.entity.Class classInfoForValidation = classService.getClassById(firstClassId);
             if (classInfoForValidation == null) {
                 return Result.error("班级不存在");
             }
@@ -243,7 +250,7 @@ public class AssignmentController {
 
             // 创建任务对象
             Assignment assignment = new Assignment();
-            assignment.setClassId(classId);
+            assignment.setClassId(firstClassId);
             assignment.setUnitId(unitId);
             assignment.setTitle(title);
 
@@ -288,17 +295,11 @@ public class AssignmentController {
 
             // 设置教师ID，并验证教师对班级的权限
             String userRole = getCurrentRole(authentication);
+            Long teacherId = null;
             if ("ROLE_TEACHER".equals(userRole)) {
-                Long teacherId = getCurrentUserId(authentication);
+                teacherId = getCurrentUserId(authentication);
                 assignment.setCreatedBy(teacherId);
-
-                // 验证教师是否有权限管理该班级
-                var classInfo = classService.getClassById(classId);
-                if (classInfo == null || !teacherId.equals(classInfo.getTeacherId())) {
-                    return Result.error("没有权限为该班级创建任务");
-                }
             } else {
-                // 管理员也需要设置 createdBy
                 assignment.setCreatedBy(getCurrentUserId(authentication));
             }
 
@@ -332,8 +333,45 @@ public class AssignmentController {
             content.setContent(config);
             assignment.setAssignmentContent(content);
 
-            assignmentService.createAssignment(assignment);
-            return Result.success("任务创建成功");
+            // 多班级批量创建：为每个班级生成独立的任务
+            int created = 0;
+            List<String> failedClasses = new ArrayList<>();
+            for (Long cid : classIds) {
+                try {
+                    com.english.entity.Class cInfo = classService.getClassById(cid);
+                    if (cInfo == null) {
+                        failedClasses.add("班级ID " + cid + " 不存在");
+                        continue;
+                    }
+                    if ("ROLE_TEACHER".equals(userRole) && !teacherId.equals(cInfo.getTeacherId())) {
+                        failedClasses.add("无权限: " + (cInfo.getName() != null ? cInfo.getName() : cid));
+                        continue;
+                    }
+                    Assignment a = new Assignment();
+                    a.setClassId(cid);
+                    a.setUnitId(assignment.getUnitId());
+                    a.setTitle(assignment.getTitle());
+                    a.setWeight(assignment.getWeight());
+                    a.setIdealStudyTimeMinutes(assignment.getIdealStudyTimeMinutes());
+                    a.setDeadline(assignment.getDeadline());
+                    a.setDescription(assignment.getDescription());
+                    a.setCreatedBy(assignment.getCreatedBy());
+                    a.setAssignmentContent(content);
+                    assignmentService.createAssignment(a);
+                    created++;
+                } catch (Exception e) {
+                    logger.warn("为班级{}创建任务失败", cid, e);
+                    failedClasses.add("班级ID " + cid + " 创建失败");
+                }
+            }
+            if (created == 0) {
+                return Result.error("所有班级创建失败: " + String.join("; ", failedClasses));
+            }
+            String msg = "成功为 " + created + " 个班级创建任务";
+            if (!failedClasses.isEmpty()) {
+                msg += "，部分失败: " + String.join("; ", failedClasses);
+            }
+            return Result.success(msg);
         } catch (com.english.exception.BusinessException e) {
             return Result.error(e.getMessage());
         } catch (Exception e) {

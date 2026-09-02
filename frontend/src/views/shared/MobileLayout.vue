@@ -205,6 +205,7 @@ const NAV_ITEMS = {
     { path: '/teacher/dashboard',        label: '首页', icon: DataBoard, badge: null },
     { path: '/teacher/classes',          label: '班级', icon: School,    badge: null },
     { path: '/teacher/assignments',      label: '任务', icon: Edit,      badge: null },
+    { path: '/teacher/task-plans',       label: '默认任务', icon: Document, badge: null },
     { path: '/teacher/texts',            label: '课文', icon: Reading,   badge: null },
     { path: '/teacher/my-courses',       label: '授课', icon: Notebook,  badge: null },
     { path: '/teacher/word-progress',    label: '单词进度', icon: DataLine, badge: null },
@@ -277,6 +278,7 @@ const MORE_ITEMS = {
     { path: '/admin/class-cohort',      label: '班级画像', icon: DataLine,     featureKey: 'admin.class_cohort' },
     { path: '/admin/vocab-learning-stats', label: '生词本统计', icon: DataAnalysis },
     { path: '/admin/tag-management',    label: '标签管理', icon: EditPen,      featureKey: 'admin.tag_management' },
+    { path: '/admin/task-plans',        label: '默认任务', icon: Document },
   ],
 }
 
@@ -309,6 +311,7 @@ const ROUTE_MAP = {
     '/teacher/my-courses':  '我的授课',
     '/teacher/word-progress': '单词进度',
     '/teacher/courses':     '课程浏览',
+    '/teacher/task-plans':  '默认任务',
     '/articles':            '文章',
   },
   user: {
@@ -350,6 +353,7 @@ const ROUTE_MAP = {
     '/admin/vocab-learning-stats': '生词本学习统计',
     '/admin/tag-management':    '标签管理',
     '/admin/notifications':     '通知管理',
+    '/admin/task-plans':        '默认任务',
   },
 }
 

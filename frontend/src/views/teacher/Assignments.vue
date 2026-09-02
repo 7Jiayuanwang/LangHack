@@ -105,8 +105,8 @@
         <el-form-item label="任务标题" prop="title">
           <el-input v-model="assignmentForm.title" placeholder="请输入任务标题" />
         </el-form-item>
-        <el-form-item label="选择班级" prop="classId">
-          <el-select v-model="assignmentForm.classId" placeholder="请选择班级" style="width: 100%">
+        <el-form-item label="选择班级" prop="classIds">
+          <el-select v-model="assignmentForm.classIds" placeholder="请选择班级" style="width: 100%" multiple collapse-tags collapse-tags-tooltip>
             <el-option
               v-for="cls in classes"
               :key="cls.id"
@@ -415,7 +415,7 @@ const filterForm = reactive({
 const assignmentForm = reactive({
   id: null,
   title: '',
-  classId: null,
+  classIds: [],
   unitId: null,
   assignmentType: 'UNIT',
   articleType: 'OUTER',
@@ -426,9 +426,9 @@ const assignmentForm = reactive({
   wordIds: [],
   description: '',
   deadline: null,
-  weight: 1.0,  // 添加权重字段，默认1.0
-  idealStudyTimeMinutes: 60,  // 添加理想学习时长字段，默认60分钟
-  wordGroupCount: 1  // 单词组数，默认1组
+  weight: 1.0,
+  idealStudyTimeMinutes: 60,
+  wordGroupCount: 1
 })
 
 // 表单验证规则
@@ -436,8 +436,8 @@ const assignmentRules = {
   title: [
     { required: true, message: '请输入任务标题', trigger: 'blur' }
   ],
-  classId: [
-    { required: true, message: '请选择班级', trigger: 'change' }
+  classIds: [
+    { required: true, type: 'array', min: 1, message: '请至少选择一个班级', trigger: 'change' }
   ],
   unitId: [
     {
@@ -727,7 +727,7 @@ const editAssignment = async (assignment) => {
   Object.assign(assignmentForm, {
     id: assignment.id,
     title: assignment.title,
-    classId: assignment.classId,
+    classIds: assignment.classId ? [assignment.classId] : [],
     unitId: assignment.unitId,
     assignmentType: assignment.assignmentType || 'UNIT',
     articleType: assignment.articleType || 'OUTER',
@@ -738,12 +738,11 @@ const editAssignment = async (assignment) => {
     wordIds: Array.isArray(assignment.wordIds) ? [...assignment.wordIds] : [],
     description: assignment.description,
     deadline: assignment.deadline ? new Date(assignment.deadline) : null,
-    weight: assignment.weight || 1.0,  // 添加权重
-    idealStudyTimeMinutes: assignment.idealStudyTimeMinutes || 60,  // 添加理想学习时长
-    wordGroupCount: assignment.wordGroupCount || 1  // 单词组数
+    weight: assignment.weight || 1.0,
+    idealStudyTimeMinutes: assignment.idealStudyTimeMinutes || 60,
+    wordGroupCount: assignment.wordGroupCount || 1
   })
 
-  // 加载对应班级的单元列表
   if (assignment.classId) {
     await loadUnitsForClass(assignment.classId)
   }
@@ -758,7 +757,7 @@ const resetAssignmentForm = () => {
   Object.assign(assignmentForm, {
     id: null,
     title: '',
-    classId: null,
+    classIds: [],
     unitId: null,
     assignmentType: 'UNIT',
     articleType: 'OUTER',
@@ -769,9 +768,9 @@ const resetAssignmentForm = () => {
     wordIds: [],
     description: '',
     deadline: null,
-    weight: 1.0,  // 重置权重
-    idealStudyTimeMinutes: 60,  // 重置理想学习时长
-    wordGroupCount: 1  // 重置单词组数
+    weight: 1.0,
+    idealStudyTimeMinutes: 60,
+    wordGroupCount: 1
   })
   unitContent.value = { texts: [], words: [] }
   activeTemplate.value = ''
@@ -972,12 +971,13 @@ const saveAssignment = async () => {
             body: JSON.stringify({
               id: assignmentForm.id,
               title: assignmentForm.title,
-              classId: assignmentForm.classId,
+              classIds: assignmentForm.classIds,
+              classId: assignmentForm.classIds[0],
               unitId: assignmentForm.unitId,
               description: assignmentForm.description,
               deadline: assignmentForm.deadline,
-              weight: assignmentForm.weight || 1.0,  // 添加权重
-              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60  // 添加理想学习时长
+              weight: assignmentForm.weight || 1.0,
+              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60
             })
           })
 
@@ -1007,7 +1007,7 @@ const saveAssignment = async () => {
             headers: fetchHeaders,
             body: JSON.stringify({
               title: assignmentForm.title,
-              classId: assignmentForm.classId,
+              classIds: assignmentForm.classIds,
               unitId: assignmentForm.unitId,
               assignmentType: assignmentForm.assignmentType,
               articleType: assignmentForm.articleType,
@@ -1017,8 +1017,8 @@ const saveAssignment = async () => {
               wordIds: assignmentForm.wordIds,
               description: assignmentForm.description,
               deadline: assignmentForm.deadline,
-              weight: assignmentForm.weight || 1.0,  // 添加权重
-              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60  // 添加理想学习时长
+              weight: assignmentForm.weight || 1.0,
+              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60
             })
           })
 
@@ -1276,9 +1276,9 @@ const formatTime = (time) => {
 }
 
 // 监听班级选择变化，动态加载对应课程单元
-watch(() => assignmentForm.classId, async (newClassId) => {
-  if (newClassId) {
-    await loadUnitsForClass(newClassId)
+watch(() => assignmentForm.classIds, async (newClassIds) => {
+  if (newClassIds && newClassIds.length > 0) {
+    await loadUnitsForClass(newClassIds[0])
   } else {
     units.value = []
   }

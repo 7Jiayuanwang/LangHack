@@ -114,8 +114,8 @@
         <el-form-item label="任务标题" prop="title">
           <el-input v-model="assignmentForm.title" placeholder="请输入任务标题" />
         </el-form-item>
-        <el-form-item label="选择班级" prop="classId">
-          <el-select v-model="assignmentForm.classId" placeholder="请选择班级" style="width: 100%" @change="onClassChange">
+        <el-form-item label="选择班级" prop="classIds">
+          <el-select v-model="assignmentForm.classIds" placeholder="请选择班级" style="width: 100%" multiple collapse-tags collapse-tags-tooltip @change="onClassChange">
             <el-option
               v-for="cls in classes"
               :key="cls.id"
@@ -331,7 +331,7 @@ const filterForm = reactive({
 const assignmentForm = reactive({
   id: null,
   title: '',
-  classId: null,
+  classIds: [],
   unitId: null,
   assignmentType: 'UNIT',
   textIds: [],
@@ -345,8 +345,8 @@ const assignmentRules = {
   title: [
     { required: true, message: '请输入任务标题', trigger: 'blur' }
   ],
-  classId: [
-    { required: true, message: '请选择班级', trigger: 'change' }
+  classIds: [
+    { required: true, type: 'array', min: 1, message: '请至少选择一个班级', trigger: 'change' }
   ],
   unitId: [
     { required: true, message: '请选择单元', trigger: 'change' }
@@ -563,7 +563,7 @@ const editAssignment = async (assignment) => {
   Object.assign(assignmentForm, {
     id: assignment.id,
     title: assignment.title,
-    classId: assignment.classId,
+    classIds: assignment.classId ? [assignment.classId] : [],
     unitId: assignment.unitId,
     assignmentType: assignment.assignmentType || 'UNIT',
     textIds: Array.isArray(assignment.textIds) ? [...assignment.textIds] : [],
@@ -581,7 +581,7 @@ const resetAssignmentForm = () => {
   Object.assign(assignmentForm, {
     id: null,
     title: '',
-    classId: null,
+    classIds: [],
     unitId: null,
     assignmentType: 'UNIT',
     textIds: [],
@@ -624,9 +624,9 @@ const loadUnitContent = async (unitId) => {
   }
 }
 
-const onClassChange = async (classId) => {
-  if (classId) {
-    await loadUnitsForClass(classId)
+const onClassChange = async (classIds) => {
+  if (classIds && classIds.length > 0) {
+    await loadUnitsForClass(classIds[0])
   } else {
     units.value = []
   }
@@ -671,7 +671,8 @@ const saveAssignment = async () => {
             body: JSON.stringify({
               id: assignmentForm.id,
               title: assignmentForm.title,
-              classId: assignmentForm.classId,
+              classIds: assignmentForm.classIds,
+              classId: assignmentForm.classIds[0],
               unitId: assignmentForm.unitId,
               description: assignmentForm.description,
               deadline: assignmentForm.deadline
@@ -700,7 +701,7 @@ const saveAssignment = async () => {
             },
             body: JSON.stringify({
               title: assignmentForm.title,
-              classId: assignmentForm.classId,
+              classIds: assignmentForm.classIds,
               unitId: assignmentForm.unitId,
               assignmentType: assignmentForm.assignmentType,
               textIds: assignmentForm.textIds,
@@ -956,9 +957,9 @@ const formatStudyTime = (minutes) => {
 }
 
 // 监听班级选择变化，动态加载对应课程单元
-watch(() => assignmentForm.classId, async (newClassId) => {
-  if (newClassId) {
-    await loadUnitsForClass(newClassId)
+watch(() => assignmentForm.classIds, async (newClassIds) => {
+  if (newClassIds && newClassIds.length > 0) {
+    await loadUnitsForClass(newClassIds[0])
   } else {
     units.value = []
   }

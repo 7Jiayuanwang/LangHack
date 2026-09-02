@@ -168,6 +168,8 @@ let completionTimeoutId = null
 let studyStartTime = null
 let accumulatedTime = 0 // 累计学习时间（秒）
 let lastSavedStudyTime = 0 // 已保存到后端的学习时间（秒），用于计算增量避免重复累加
+let heartbeatTimer = null
+const HEARTBEAT_INTERVAL = 30 * 1000 // 30 秒自动上报一次，防止页面意外关闭丢失全部时间
 const REQUIRED_STUDY_TIME = 10 * 60 * 1000 // 10分钟，毫秒
 
 // 计算属性
@@ -336,6 +338,11 @@ const pauseReading = async () => {
 
 const saveLearningRecord = async () => {
   try {
+    // heartbeat 调用时 studyTime 可能还没被 100ms 定时器刷新，手动同步一次
+    if (recording.value && studyStartTime) {
+      const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
+      studyTime.value = accumulatedTime + currentSessionTime
+    }
     if (studyTime.value > 0) {
       // 计算自上次保存以来的增量，避免重复累加导致时长虚高
       const increment = studyTime.value - lastSavedStudyTime
@@ -370,12 +377,24 @@ const startStudyTimer = () => {
       studyTime.value = totalTime
     }
   }, 100) // 每100毫秒更新一次，提供更平滑的体验
+
+  // 启动 heartbeat：每 30 秒自动上报增量，防止关闭页面丢失全部时间
+  if (heartbeatTimer) clearInterval(heartbeatTimer)
+  heartbeatTimer = setInterval(() => {
+    if (recording.value && studyTime.value > lastSavedStudyTime) {
+      saveLearningRecord()
+    }
+  }, HEARTBEAT_INTERVAL)
 }
 
 const stopStudyTimer = () => {
   if (studyTimer) {
     clearInterval(studyTimer)
     studyTimer = null
+  }
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
   }
 }
 
