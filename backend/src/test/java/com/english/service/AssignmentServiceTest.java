@@ -598,6 +598,38 @@ class AssignmentServiceTest {
         assertEquals(0.5, (Double) result.get("completionRate"), 0.001);
     }
 
+    @Test
+    void getAssignmentProgress_textTask_countsOnlyTextViewDuration() {
+        Assignment textAssignment = new Assignment();
+        textAssignment.setId(1L);
+        textAssignment.setClassId(10L);
+        textAssignment.setIdealStudyTimeMinutes(10);
+        AssignmentContent.ContentConfig config = new AssignmentContent.ContentConfig(
+                Collections.singletonList(7L), Collections.emptyList());
+        textAssignment.setAssignmentContent(new AssignmentContent("TEXTS", config));
+
+        Text text = new Text();
+        text.setId(7L);
+        LearningRecord textView = new LearningRecord();
+        textView.setRecordType("TEXT_VIEW");
+        textView.setDurationSeconds(300);
+        when(assignmentMapper.selectById(1L)).thenReturn(textAssignment);
+        when(textMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(text));
+        when(textExerciseMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
+        when(learningRecordsService.getTextReadTimeSecondsForSpecificText(50L, 7L, 1L)).thenReturn(300L);
+        when(learningRecordMapper.selectList(any(QueryWrapper.class))).thenAnswer(invocation -> {
+            QueryWrapper<?> wrapper = invocation.getArgument(0);
+            String sqlSegment = wrapper.getSqlSegment();
+            assertTrue(sqlSegment.contains("record_type"));
+            assertTrue(sqlSegment.contains("text_id"));
+            return Collections.singletonList(textView);
+        });
+
+        Map<String, Object> result = assignmentService.getAssignmentProgress(1L, 50L);
+
+        assertEquals(300L, result.get("studyTimeSeconds"));
+    }
+
     // ==================== getAssignmentProgress (teacher) tests ====================
 
     @Test
