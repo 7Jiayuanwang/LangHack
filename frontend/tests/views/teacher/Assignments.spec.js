@@ -135,6 +135,47 @@ describe('Teacher Assignments.vue', () => {
     expect(wrapper.vm.assignmentForm.textIds).toEqual([])
   })
 
+  it('filters extracurricular articles by keyword, difficulty, and tags', async () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    wrapper.vm.unitContent.texts = [
+      { id: 1, title: 'Climate change', difficulty: 'HARD', tags: 'environment, science', content: 'one two' },
+      { id: 2, title: 'Study habits', difficulty: 'EASY', tags: ['education'], content: 'one two' }
+    ]
+
+    wrapper.vm.outerArticleTag = 'environment'
+    expect(wrapper.vm.filteredArticleTexts.map(text => text.id)).toEqual([1])
+    wrapper.vm.outerArticleTag = ''
+    wrapper.vm.outerArticleDifficulty = 'EASY'
+    expect(wrapper.vm.filteredArticleTexts.map(text => text.id)).toEqual([2])
+    wrapper.vm.outerArticleDifficulty = ''
+    wrapper.vm.outerArticleKeyword = 'science'
+    expect(wrapper.vm.filteredArticleTexts.map(text => text.id)).toEqual([1])
+  })
+
+  it('selects all currently visible extracurricular articles without dropping hidden selections', () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    wrapper.vm.unitContent.texts = [
+      { id: 1, title: 'First', tags: 'news' },
+      { id: 2, title: 'Second', tags: 'science' }
+    ]
+    wrapper.vm.assignmentForm.textIds = [2]
+    wrapper.vm.outerArticleTag = 'news'
+
+    wrapper.vm.toggleAllFilteredArticles()
+
+    expect(wrapper.vm.assignmentForm.textIds).toEqual([2, 1])
+  })
+
+  it('estimates at least one minute for short articles', () => {
+    const wrapper = createWrapper()
+    expect(wrapper.vm.getEstimatedReadingMinutes({ content: 'short article' })).toBe(1)
+    expect(wrapper.vm.getTextTags({ tags: 'news， science;reading' })).toEqual(['news', 'science', 'reading'])
+  })
+
   it('has unitContent reactive object', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.unitContent).toBeDefined()
