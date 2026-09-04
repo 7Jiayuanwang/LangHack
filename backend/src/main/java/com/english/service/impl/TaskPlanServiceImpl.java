@@ -1,7 +1,6 @@
 package com.english.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.english.dto.Result;
 import com.english.entity.*;
 import com.english.mapper.*;
@@ -38,6 +37,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
     @Autowired private StudentClassMapper studentClassMapper;
     @Autowired private TeachingClassMapper teachingClassMapper;
 
+    // ── createPlan ──
     @Override
     @Transactional
     public Result<?> createPlan(Map<String, Object> params, Long creatorId) {
@@ -77,6 +77,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         return Result.success(plan.getId());
     }
 
+    // ── updatePlan ──
     @Override
     @Transactional
     public Result<?> updatePlan(Long planId, Map<String, Object> params) {
@@ -118,6 +119,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         return Result.success("更新成功");
     }
 
+    // ── publishPlan / closePlan ──
     @Override
     public Result<?> publishPlan(Long planId) {
         TaskPlan plan = taskPlanMapper.selectById(planId);
@@ -137,6 +139,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         return Result.success("已关闭");
     }
 
+    // ── listPlans ──
     @Override
     public Result<?> listPlans(Map<String, Object> params) {
         LambdaQueryWrapper<TaskPlan> qw = new LambdaQueryWrapper<>();
@@ -145,12 +148,11 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         }
         qw.orderByDesc(TaskPlan::getCreatedTime);
         List<TaskPlan> list = taskPlanMapper.selectList(qw);
-        for (TaskPlan p : list) {
-            enrichPlan(p);
-        }
+        for (TaskPlan p : list) enrichPlan(p);
         return Result.success(list);
     }
 
+    // ── getPlanDetail ──
     @Override
     public Result<?> getPlanDetail(Long planId) {
         TaskPlan plan = taskPlanMapper.selectById(planId);
@@ -158,43 +160,59 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         enrichPlan(plan);
         List<TaskPlanClass> classes = taskPlanClassMapper.selectList(
             new LambdaQueryWrapper<TaskPlanClass>().eq(TaskPlanClass::getPlanId, planId));
-        for (TaskPlanClass tpc : classes) {
-            enrichPlanClass(tpc);
-        }
+        for (TaskPlanClass tpc : classes) enrichPlanClass(tpc);
         Map<String, Object> detail = new HashMap<>();
         detail.put("plan", plan);
         detail.put("classes", classes);
         return Result.success(detail);
     }
 
+    // ── getPlanStats ──
     @Override
     public Result<?> getPlanStats(Long planId) {
         TaskPlan plan = taskPlanMapper.selectById(planId);
         if (plan == null) return Result.error("计划不存在");
         List<TaskPlanClass> classes = taskPlanClassMapper.selectList(
             new LambdaQueryWrapper<TaskPlanClass>().eq(TaskPlanClass::getPlanId, planId).eq(TaskPlanClass::getOptedOut, 0));
-        List<TaskPlanRecord> allRecords = taskPlanRecordMapper.selectList(
-            new LambdaQueryWrapper<TaskPlanRecord>().eq(TaskPlanRecord::getPlanId, planId));
 
+        LocalDate today = LocalDate.now();
         int totalStudents = 0;
         long sumArticles = 0, sumWords = 0, sumPapers = 0;
         List<Map<String, Object>> classDetails = new ArrayList<>();
 
         for (TaskPlanClass tpc : classes) {
             enrichPlanClass(tpc);
-            List<TaskPlanRecord> classRecords = allRecords.stream()
-                .filter(r -> r.getClassId().equals(tpc.getClassId())).collect(Collectors.toList());
-            Set<Long> students = classRecords.stream().map(TaskPlanRecord::getStudentId).collect(Collectors.toSet());
-            int sc = students.size();
-            totalStudents += sc;
-            int ca = classRecords.stream().mapToInt(r -> r.getArticlesCompleted() != null ? r.getArticlesCompleted() : 0).sum();
-            int cw = classRecords.stream().mapToInt(r -> r.getWordsCompleted() != null ? r.getWordsCompleted() : 0).sum();
-            int cp = classRecords.stream().mapToInt(r -> r.getPapersCompleted() != null ? r.getPapersCompleted() : 0).sum();
-            sumArticles += ca; sumWords += cw; sumPapers += cp;
+            int at = resolveInt(tpc.getArticleTargetOverride(), plan.getArticleTarget());
+            int wt = resolveInt(tpc.getWordTargetOverride(), plan.getWordTarget());
+            int pt = resolveInt(tpc.getPaperTargetOverride(), plan.getPaperTarget());
+            String effCycle = (tpc.getCycleTypeOverride() != null) ? tpc.getCycleTypeOverride() : plan.getCycleType();
+            String wordCat = (tpc.getWordCategoryOverride() != null) ? tpc.getWordCategoryOverride() : plan.getWordCategory();
+            boolean artEnabled = resolveEnabled(plan.getArticleEnabled(), tpc.getArticleEnabledOverride());
+            boolean wrdEnabled = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride());
 
-            int at = tpc.getArticleTargetOverride() != null ? tpc.getArticleTargetOverride() : plan.getArticleTarget();
-            int wt = tpc.getWordTargetOverride() != null ? tpc.getWordTargetOverride() : plan.getWordTarget();
-            int pt = tpc.getPaperTargetOverride() != null ? tpc.getPaperTargetOverride() : plan.getPaperTarget();
+            LocalDate periodStart, periodEnd;
+            if ("WEEKLY".equals(effCycle)) {
+                periodStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                periodEnd = periodStart.plusDays(6);
+            } else {
+                periodStart = today.withDayOfMonth(1);
+                periodEnd = today.with(TemporalAdjusters.lastDayOfMonth());
+            }
+            LocalDateTime since = periodStart.atStartOfDay();
+            LocalDateTime until = periodEnd.plusDays(1).atStartOfDay();
+            String cats = wrdEnabled ? buildCategoryIn(wordCat) : null;
+
+            List<StudentClass> scList = studentClassMapper.selectList(
+                new LambdaQueryWrapper<StudentClass>().eq(StudentClass::getClassId, tpc.getClassId()));
+            int sc = scList.size();
+            totalStudents += sc;
+            int ca = 0, cw = 0, cp = 0;
+            for (StudentClass s : scList) {
+                Long sid = s.getStudentId();
+                ca += artEnabled ? learningRecordMapper.countDistinctTextsRead(sid, since, until) : 0;
+                cw += (wrdEnabled && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, since, until, cats) : 0;
+            }
+            sumArticles += ca; sumWords += cw; sumPapers += cp;
 
             Map<String, Object> cd = new HashMap<>();
             cd.put("className", tpc.getClassName());
@@ -214,30 +232,60 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         return Result.success(result);
     }
 
+    // ── exportPlanScore ──
     @Override
     public byte[] exportPlanScore(Long planId) {
         TaskPlan plan = taskPlanMapper.selectById(planId);
         if (plan == null) return new byte[0];
-        List<TaskPlanRecord> records = taskPlanRecordMapper.selectList(
-            new LambdaQueryWrapper<TaskPlanRecord>().eq(TaskPlanRecord::getPlanId, planId));
-        return buildCsv(plan, records);
+        List<TaskPlanClass> classes = taskPlanClassMapper.selectList(
+            new LambdaQueryWrapper<TaskPlanClass>()
+                .eq(TaskPlanClass::getPlanId, planId).eq(TaskPlanClass::getOptedOut, 0));
+        LocalDate today = LocalDate.now();
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            baos.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+            PrintWriter pw = new PrintWriter(baos);
+            pw.println("学号,姓名,班级,文章完成数,单词完成数,真题完成数,平时分");
+            for (TaskPlanClass tpc : classes) {
+                enrichPlanClass(tpc);
+                int[] eff = resolveEffective(plan, tpc);
+                LocalDateTime[] period = resolvePeriod(plan, tpc, today);
+                String cats = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride()) ? buildCategoryIn(resolveWordCat(plan, tpc)) : null;
+                boolean artEn = resolveEnabled(plan.getArticleEnabled(), tpc.getArticleEnabledOverride());
+                boolean wrdEn = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride());
+                List<StudentClass> scList = studentClassMapper.selectList(new LambdaQueryWrapper<StudentClass>().eq(StudentClass::getClassId, tpc.getClassId()));
+                for (StudentClass sc : scList) {
+                    Long sid = sc.getStudentId();
+                    User u = userMapper.selectById(sid);
+                    String name = (u != null && u.getRealName() != null) ? u.getRealName() : (u != null ? u.getUsername() : "");
+                    String studentNo = (u != null && u.getUsername() != null) ? u.getUsername() : String.valueOf(sid);
+                    int articles = artEn ? learningRecordMapper.countDistinctTextsRead(sid, period[0], period[1]) : 0;
+                    int words = (wrdEn && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, period[0], period[1], cats) : 0;
+                    BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, 0);
+                    pw.println(String.join(",", studentNo, name, tpc.getClassName() != null ? tpc.getClassName() : "", String.valueOf(articles), String.valueOf(words), "0", score.toPlainString()));
+                }
+            }
+            pw.flush();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            logger.error("导出CSV失败", e);
+            return new byte[0];
+        }
     }
 
+    // ── listTeacherPlans ──
     @Override
     public Result<?> listTeacherPlans(Long teacherId) {
         List<com.english.entity.Class> teacherClasses = classMapper.selectList(
             new LambdaQueryWrapper<com.english.entity.Class>().eq(com.english.entity.Class::getTeacherId, teacherId));
         if (teacherClasses.isEmpty()) return Result.success(Collections.emptyList());
-
         Set<Long> classIdSet = teacherClasses.stream().map(com.english.entity.Class::getId).collect(Collectors.toSet());
         List<TaskPlanClass> tpcList = taskPlanClassMapper.selectList(
             new LambdaQueryWrapper<TaskPlanClass>().in(TaskPlanClass::getClassId, classIdSet));
         if (tpcList.isEmpty()) return Result.success(Collections.emptyList());
-
         Set<Long> planIds = tpcList.stream().map(TaskPlanClass::getPlanId).collect(Collectors.toSet());
         List<TaskPlan> plans = taskPlanMapper.selectList(
             new LambdaQueryWrapper<TaskPlan>().in(TaskPlan::getId, planIds).eq(TaskPlan::getStatus, "ACTIVE"));
-
         List<Map<String, Object>> result = new ArrayList<>();
         for (TaskPlan p : plans) {
             enrichPlan(p);
@@ -245,33 +293,23 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                 .filter(c -> c.getPlanId().equals(p.getId()) && classIdSet.contains(c.getClassId()))
                 .collect(Collectors.toList());
             myClasses.forEach(this::enrichPlanClass);
-
             Map<String, Object> item = new HashMap<>();
-            item.put("id", p.getId());
-            item.put("title", p.getTitle());
-            item.put("courseName", p.getCourseName());
-            item.put("cycleType", p.getCycleType());
-            item.put("semesterStart", p.getSemesterStart());
-            item.put("semesterEnd", p.getSemesterEnd());
-            item.put("articleTarget", p.getArticleTarget());
-            item.put("wordTarget", p.getWordTarget());
-            item.put("wordCategory", p.getWordCategory());
-            item.put("paperTarget", p.getPaperTarget());
-            item.put("articleWeight", p.getArticleWeight());
-            item.put("wordWeight", p.getWordWeight());
-            item.put("paperWeight", p.getPaperWeight());
-            item.put("totalScore", p.getTotalScore());
-            item.put("articleEnabled", p.getArticleEnabled());
-            item.put("wordEnabled", p.getWordEnabled());
-            item.put("paperEnabled", p.getPaperEnabled());
-            item.put("status", p.getStatus());
-            item.put("creatorName", p.getCreatorName());
-            item.put("classes", myClasses);
+            item.put("id", p.getId()); item.put("title", p.getTitle());
+            item.put("courseName", p.getCourseName()); item.put("cycleType", p.getCycleType());
+            item.put("semesterStart", p.getSemesterStart()); item.put("semesterEnd", p.getSemesterEnd());
+            item.put("articleTarget", p.getArticleTarget()); item.put("wordTarget", p.getWordTarget());
+            item.put("wordCategory", p.getWordCategory()); item.put("paperTarget", p.getPaperTarget());
+            item.put("articleWeight", p.getArticleWeight()); item.put("wordWeight", p.getWordWeight());
+            item.put("paperWeight", p.getPaperWeight()); item.put("totalScore", p.getTotalScore());
+            item.put("articleEnabled", p.getArticleEnabled()); item.put("wordEnabled", p.getWordEnabled());
+            item.put("paperEnabled", p.getPaperEnabled()); item.put("status", p.getStatus());
+            item.put("creatorName", p.getCreatorName()); item.put("classes", myClasses);
             result.add(item);
         }
         return Result.success(result);
     }
 
+    // ── updateClassOverride ──
     @Override
     @Transactional
     public Result<?> updateClassOverride(Long planId, Long classId, Map<String, Object> params, Long teacherId) {
@@ -279,48 +317,33 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         if (tpc == null) return Result.error("关联不存在");
         com.english.entity.Class cls = classMapper.selectById(classId);
         if (cls == null || !teacherId.equals(cls.getTeacherId())) return Result.error("无权限操作此班级");
-
-        if (params.containsKey("articleTargetOverride"))
-            tpc.setArticleTargetOverride(toInt(params.get("articleTargetOverride"), null));
-        if (params.containsKey("wordTargetOverride"))
-            tpc.setWordTargetOverride(toInt(params.get("wordTargetOverride"), null));
-        if (params.containsKey("wordCategoryOverride"))
-            tpc.setWordCategoryOverride((String) params.get("wordCategoryOverride"));
-        if (params.containsKey("paperTargetOverride"))
-            tpc.setPaperTargetOverride(toInt(params.get("paperTargetOverride"), null));
-        if (params.containsKey("articleWeightOverride"))
-            tpc.setArticleWeightOverride(toInt(params.get("articleWeightOverride"), null));
-        if (params.containsKey("wordWeightOverride"))
-            tpc.setWordWeightOverride(toInt(params.get("wordWeightOverride"), null));
-        if (params.containsKey("paperWeightOverride"))
-            tpc.setPaperWeightOverride(toInt(params.get("paperWeightOverride"), null));
-        if (params.containsKey("cycleTypeOverride"))
-            tpc.setCycleTypeOverride((String) params.get("cycleTypeOverride"));
-        if (params.containsKey("semesterStartOverride"))
-            tpc.setSemesterStartOverride(params.get("semesterStartOverride") != null ? LocalDate.parse(params.get("semesterStartOverride").toString()) : null);
-        if (params.containsKey("semesterEndOverride"))
-            tpc.setSemesterEndOverride(params.get("semesterEndOverride") != null ? LocalDate.parse(params.get("semesterEndOverride").toString()) : null);
-        if (params.containsKey("articleEnabledOverride"))
-            tpc.setArticleEnabledOverride(toInt(params.get("articleEnabledOverride"), null));
-        if (params.containsKey("wordEnabledOverride"))
-            tpc.setWordEnabledOverride(toInt(params.get("wordEnabledOverride"), null));
-        if (params.containsKey("paperEnabledOverride"))
-            tpc.setPaperEnabledOverride(toInt(params.get("paperEnabledOverride"), null));
+        if (params.containsKey("articleTargetOverride")) tpc.setArticleTargetOverride(toInt(params.get("articleTargetOverride"), null));
+        if (params.containsKey("wordTargetOverride")) tpc.setWordTargetOverride(toInt(params.get("wordTargetOverride"), null));
+        if (params.containsKey("wordCategoryOverride")) tpc.setWordCategoryOverride((String) params.get("wordCategoryOverride"));
+        if (params.containsKey("paperTargetOverride")) tpc.setPaperTargetOverride(toInt(params.get("paperTargetOverride"), null));
+        if (params.containsKey("articleWeightOverride")) tpc.setArticleWeightOverride(toInt(params.get("articleWeightOverride"), null));
+        if (params.containsKey("wordWeightOverride")) tpc.setWordWeightOverride(toInt(params.get("wordWeightOverride"), null));
+        if (params.containsKey("paperWeightOverride")) tpc.setPaperWeightOverride(toInt(params.get("paperWeightOverride"), null));
+        if (params.containsKey("cycleTypeOverride")) tpc.setCycleTypeOverride((String) params.get("cycleTypeOverride"));
+        if (params.containsKey("semesterStartOverride")) tpc.setSemesterStartOverride(params.get("semesterStartOverride") != null ? LocalDate.parse(params.get("semesterStartOverride").toString()) : null);
+        if (params.containsKey("semesterEndOverride")) tpc.setSemesterEndOverride(params.get("semesterEndOverride") != null ? LocalDate.parse(params.get("semesterEndOverride").toString()) : null);
+        if (params.containsKey("articleEnabledOverride")) tpc.setArticleEnabledOverride(toInt(params.get("articleEnabledOverride"), null));
+        if (params.containsKey("wordEnabledOverride")) tpc.setWordEnabledOverride(toInt(params.get("wordEnabledOverride"), null));
+        if (params.containsKey("paperEnabledOverride")) tpc.setPaperEnabledOverride(toInt(params.get("paperEnabledOverride"), null));
         tpc.setModifiedBy(teacherId);
         tpc.setModifiedTime(LocalDateTime.now());
         taskPlanClassMapper.updateById(tpc);
         return Result.success("已更新");
     }
 
+    // ── optOutClass / optInClass ──
     @Override
     public Result<?> optOutClass(Long planId, Long classId, Long teacherId) {
         TaskPlanClass tpc = findPlanClass(planId, classId);
         if (tpc == null) return Result.error("关联不存在");
         com.english.entity.Class cls = classMapper.selectById(classId);
         if (cls == null || !teacherId.equals(cls.getTeacherId())) return Result.error("无权限操作此班级");
-        tpc.setOptedOut(1);
-        tpc.setModifiedBy(teacherId);
-        tpc.setModifiedTime(LocalDateTime.now());
+        tpc.setOptedOut(1); tpc.setModifiedBy(teacherId); tpc.setModifiedTime(LocalDateTime.now());
         taskPlanClassMapper.updateById(tpc);
         return Result.success("已退出");
     }
@@ -331,166 +354,178 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         if (tpc == null) return Result.error("关联不存在");
         com.english.entity.Class cls = classMapper.selectById(classId);
         if (cls == null || !teacherId.equals(cls.getTeacherId())) return Result.error("无权限操作此班级");
-        tpc.setOptedOut(0);
-        tpc.setModifiedBy(teacherId);
-        tpc.setModifiedTime(LocalDateTime.now());
+        tpc.setOptedOut(0); tpc.setModifiedBy(teacherId); tpc.setModifiedTime(LocalDateTime.now());
         taskPlanClassMapper.updateById(tpc);
         return Result.success("已重新加入");
     }
 
+    // ── getClassProgress (FIXED: real-time from learning_records) ──
     @Override
     public Result<?> getClassProgress(Long planId, Long classId) {
-        List<TaskPlanRecord> records = taskPlanRecordMapper.selectList(
-            new LambdaQueryWrapper<TaskPlanRecord>()
-                .eq(TaskPlanRecord::getPlanId, planId)
-                .eq(TaskPlanRecord::getClassId, classId));
-
-        Map<Long, Map<String, Object>> studentMap = new LinkedHashMap<>();
-        for (TaskPlanRecord r : records) {
-            studentMap.computeIfAbsent(r.getStudentId(), k -> {
-                Map<String, Object> m = new HashMap<>();
-                m.put("studentId", k);
-                m.put("studentName", "");
-                m.put("articlesCompleted", 0);
-                m.put("wordsCompleted", 0);
-                m.put("papersCompleted", 0);
-                return m;
-            });
-            Map<String, Object> m = studentMap.get(r.getStudentId());
-            m.put("articlesCompleted", (int) m.get("articlesCompleted") + (r.getArticlesCompleted() != null ? r.getArticlesCompleted() : 0));
-            m.put("wordsCompleted", (int) m.get("wordsCompleted") + (r.getWordsCompleted() != null ? r.getWordsCompleted() : 0));
-            m.put("papersCompleted", (int) m.get("papersCompleted") + (r.getPapersCompleted() != null ? r.getPapersCompleted() : 0));
+        TaskPlan plan = taskPlanMapper.selectById(planId);
+        if (plan == null) return Result.error("计划不存在");
+        TaskPlanClass tpc = findPlanClass(planId, classId);
+        if (tpc == null) return Result.error("班级未关联此计划");
+        int[] eff = resolveEffective(plan, tpc);
+        boolean artEn = resolveEnabled(plan.getArticleEnabled(), tpc.getArticleEnabledOverride());
+        boolean wrdEn = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride());
+        String cats = wrdEn ? buildCategoryIn(resolveWordCat(plan, tpc)) : null;
+        LocalDateTime[] period = resolvePeriod(plan, tpc, LocalDate.now());
+        List<StudentClass> scList = studentClassMapper.selectList(
+            new LambdaQueryWrapper<StudentClass>().eq(StudentClass::getClassId, classId));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (StudentClass sc : scList) {
+            Long sid = sc.getStudentId();
+            User u = userMapper.selectById(sid);
+            String name = (u != null && u.getRealName() != null) ? u.getRealName() : (u != null ? u.getUsername() : "");
+            int articles = artEn ? learningRecordMapper.countDistinctTextsRead(sid, period[0], period[1]) : 0;
+            int words = (wrdEn && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, period[0], period[1], cats) : 0;
+            BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, 0);
+            Map<String, Object> m = new HashMap<>();
+            m.put("studentId", sid); m.put("studentName", name);
+            m.put("articlesCompleted", articles); m.put("wordsCompleted", words);
+            m.put("papersCompleted", 0); m.put("score", score);
+            result.add(m);
         }
-
-        for (Map<String, Object> m : studentMap.values()) {
-            User u = userMapper.selectById((Long) m.get("studentId"));
-            if (u != null) m.put("studentName", u.getRealName() != null ? u.getRealName() : u.getUsername());
-        }
-
-        return Result.success(new ArrayList<>(studentMap.values()));
+        return Result.success(result);
     }
 
+    // ── exportClassScore (FIXED: real-time + override) ──
     @Override
     public byte[] exportClassScore(Long planId, Long classId) {
         TaskPlan plan = taskPlanMapper.selectById(planId);
         if (plan == null) return new byte[0];
-        List<TaskPlanRecord> records = taskPlanRecordMapper.selectList(
-            new LambdaQueryWrapper<TaskPlanRecord>()
-                .eq(TaskPlanRecord::getPlanId, planId)
-                .eq(TaskPlanRecord::getClassId, classId));
-        return buildCsv(plan, records);
+        TaskPlanClass tpc = findPlanClass(planId, classId);
+        if (tpc == null) return new byte[0];
+        int[] eff = resolveEffective(plan, tpc);
+        boolean artEn = resolveEnabled(plan.getArticleEnabled(), tpc.getArticleEnabledOverride());
+        boolean wrdEn = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride());
+        String cats = wrdEn ? buildCategoryIn(resolveWordCat(plan, tpc)) : null;
+        LocalDateTime[] period = resolvePeriod(plan, tpc, LocalDate.now());
+        List<StudentClass> scList = studentClassMapper.selectList(
+            new LambdaQueryWrapper<StudentClass>().eq(StudentClass::getClassId, classId));
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            baos.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+            PrintWriter pw = new PrintWriter(baos);
+            pw.println("学号,姓名,文章完成数,单词完成数,真题完成数,平时分");
+            for (StudentClass sc : scList) {
+                Long sid = sc.getStudentId();
+                User u = userMapper.selectById(sid);
+                String name = (u != null && u.getRealName() != null) ? u.getRealName() : (u != null ? u.getUsername() : "");
+                String studentNo = (u != null && u.getUsername() != null) ? u.getUsername() : String.valueOf(sid);
+                int articles = artEn ? learningRecordMapper.countDistinctTextsRead(sid, period[0], period[1]) : 0;
+                int words = (wrdEn && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, period[0], period[1], cats) : 0;
+                BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, 0);
+                pw.println(String.join(",", studentNo, name, String.valueOf(articles), String.valueOf(words), "0", score.toPlainString()));
+            }
+            pw.flush();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            logger.error("导出CSV失败", e);
+            return new byte[0];
+        }
     }
 
+    // ── getStudentPlans (FIXED: apply override for targets/weights/semester) ──
     @Override
     public Result<?> getStudentPlans(Long studentId) {
         User student = userMapper.selectById(studentId);
         if (student == null) return Result.error("用户不存在");
-
         List<StudentClass> scList = studentClassMapper.selectList(
             new LambdaQueryWrapper<StudentClass>().eq(StudentClass::getStudentId, studentId));
         Set<Long> myClassIds = scList.stream().map(StudentClass::getClassId).collect(Collectors.toSet());
         if (myClassIds.isEmpty()) return Result.success(Collections.emptyList());
-
         List<TaskPlanClass> tpcList = taskPlanClassMapper.selectList(new LambdaQueryWrapper<TaskPlanClass>()
                 .in(TaskPlanClass::getClassId, myClassIds).eq(TaskPlanClass::getOptedOut, 0));
         if (tpcList.isEmpty()) return Result.success(Collections.emptyList());
-
         Set<Long> planIds = tpcList.stream().map(TaskPlanClass::getPlanId).collect(Collectors.toSet());
         List<TaskPlan> plans = taskPlanMapper.selectList(
             new LambdaQueryWrapper<TaskPlan>().in(TaskPlan::getId, planIds).eq(TaskPlan::getStatus, "ACTIVE"));
-
         LocalDate today = LocalDate.now();
-
         List<Map<String, Object>> result = new ArrayList<>();
         for (TaskPlan p : plans) {
             enrichPlan(p);
             TaskPlanClass tpc = tpcList.stream()
                 .filter(c -> c.getPlanId().equals(p.getId()) && myClassIds.contains(c.getClassId()))
                 .findFirst().orElse(null);
-
-            String effectiveCycle = (tpc != null && tpc.getCycleTypeOverride() != null) ? tpc.getCycleTypeOverride() : p.getCycleType();
-            LocalDate periodStart, periodEnd;
-            if ("WEEKLY".equals(effectiveCycle)) {
-                periodStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-                periodEnd = periodStart.plusDays(6);
-            } else {
-                periodStart = today.withDayOfMonth(1);
-                periodEnd = today.with(TemporalAdjusters.lastDayOfMonth());
-            }
-            LocalDateTime since = periodStart.atStartOfDay();
-            LocalDateTime until = periodEnd.plusDays(1).atStartOfDay();
-
-            boolean artEnabled = resolveEnabled(p.getArticleEnabled(), tpc != null ? tpc.getArticleEnabledOverride() : null);
-            boolean wrdEnabled = resolveEnabled(p.getWordEnabled(), tpc != null ? tpc.getWordEnabledOverride() : null);
-            boolean papEnabled = resolveEnabled(p.getPaperEnabled(), tpc != null ? tpc.getPaperEnabledOverride() : null);
-
-            int articles = artEnabled ? learningRecordMapper.countDistinctTextsRead(studentId, since, until) : 0;
-            int papers = 0;
-
-            String wordCat = (tpc != null && tpc.getWordCategoryOverride() != null) ? tpc.getWordCategoryOverride() : p.getWordCategory();
+            int[] eff = resolveEffective(p, tpc);
+            String effCycle = (tpc != null && tpc.getCycleTypeOverride() != null) ? tpc.getCycleTypeOverride() : p.getCycleType();
+            String wordCat = resolveWordCat(p, tpc);
+            LocalDate effSemStart = (tpc != null && tpc.getSemesterStartOverride() != null) ? tpc.getSemesterStartOverride() : p.getSemesterStart();
+            LocalDate effSemEnd = (tpc != null && tpc.getSemesterEndOverride() != null) ? tpc.getSemesterEndOverride() : p.getSemesterEnd();
+            boolean artEn = resolveEnabled(p.getArticleEnabled(), tpc != null ? tpc.getArticleEnabledOverride() : null);
+            boolean wrdEn = resolveEnabled(p.getWordEnabled(), tpc != null ? tpc.getWordEnabledOverride() : null);
+            boolean papEn = resolveEnabled(p.getPaperEnabled(), tpc != null ? tpc.getPaperEnabledOverride() : null);
+            LocalDateTime[] period = resolvePeriod(p, tpc, today);
+            int articles = artEn ? learningRecordMapper.countDistinctTextsRead(studentId, period[0], period[1]) : 0;
             int words = 0;
-            if (wrdEnabled) {
+            if (wrdEn) {
                 String cats = buildCategoryIn(wordCat);
-                words = learningRecordMapper.countDistinctWordsReviewedByCategory(studentId, since, until, cats);
+                words = learningRecordMapper.countDistinctWordsReviewedByCategory(studentId, period[0], period[1], cats);
             }
-
+            int papers = 0;
+            BigDecimal currentScore = calculateScore(p.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, papers);
             Map<String, Object> item = new HashMap<>();
-            item.put("id", p.getId());
-            item.put("title", p.getTitle());
-            item.put("courseName", p.getCourseName());
-            item.put("cycleType", effectiveCycle);
-            item.put("semesterStart", p.getSemesterStart());
-            item.put("semesterEnd", p.getSemesterEnd());
-            item.put("articleTarget", p.getArticleTarget());
-            item.put("wordTarget", p.getWordTarget());
-            item.put("wordCategory", wordCat);
-            item.put("paperTarget", p.getPaperTarget());
+            item.put("id", p.getId()); item.put("title", p.getTitle());
+            item.put("courseName", p.getCourseName()); item.put("cycleType", effCycle);
+            item.put("semesterStart", effSemStart); item.put("semesterEnd", effSemEnd);
+            item.put("articleTarget", eff[0]); item.put("wordTarget", eff[1]);
+            item.put("wordCategory", wordCat); item.put("paperTarget", eff[2]);
             item.put("totalScore", p.getTotalScore());
-            item.put("articleEnabled", artEnabled);
-            item.put("wordEnabled", wrdEnabled);
-            item.put("paperEnabled", papEnabled);
-            item.put("currentArticles", articles);
-            item.put("currentWords", words);
-            item.put("currentPapers", papers);
+            item.put("articleEnabled", artEn); item.put("wordEnabled", wrdEn); item.put("paperEnabled", papEn);
+            item.put("articleWeight", eff[3]); item.put("wordWeight", eff[4]); item.put("paperWeight", eff[5]);
+            item.put("currentArticles", articles); item.put("currentWords", words); item.put("currentPapers", papers);
+            item.put("currentScore", currentScore);
             result.add(item);
         }
         return Result.success(result);
     }
 
+    // ── refreshPeriodRecords ──
     @Override
     public void refreshPeriodRecords(Long planId) {
         TaskPlan plan = taskPlanMapper.selectById(planId);
         if (plan == null || !"ACTIVE".equals(plan.getStatus())) return;
+        logger.info("refreshPeriodRecords called for plan={} (no-op, progress is real-time)", planId);
+    }
 
-        LocalDate today = LocalDate.now();
+    // ── helpers ──
+
+    /** Resolve effective [artTarget, wrdTarget, papTarget, artWeight, wrdWeight, papWeight] */
+    private int[] resolveEffective(TaskPlan plan, TaskPlanClass tpc) {
+        return new int[] {
+            resolveInt(tpc != null ? tpc.getArticleTargetOverride() : null, plan.getArticleTarget()),
+            resolveInt(tpc != null ? tpc.getWordTargetOverride() : null, plan.getWordTarget()),
+            resolveInt(tpc != null ? tpc.getPaperTargetOverride() : null, plan.getPaperTarget()),
+            resolveInt(tpc != null ? tpc.getArticleWeightOverride() : null, plan.getArticleWeight()),
+            resolveInt(tpc != null ? tpc.getWordWeightOverride() : null, plan.getWordWeight()),
+            resolveInt(tpc != null ? tpc.getPaperWeightOverride() : null, plan.getPaperWeight())
+        };
+    }
+
+    private String resolveWordCat(TaskPlan plan, TaskPlanClass tpc) {
+        return (tpc != null && tpc.getWordCategoryOverride() != null) ? tpc.getWordCategoryOverride() : plan.getWordCategory();
+    }
+
+    /** Returns [since, until] as LocalDateTime pair for the current period */
+    private LocalDateTime[] resolvePeriod(TaskPlan plan, TaskPlanClass tpc, LocalDate today) {
+        String effCycle = (tpc != null && tpc.getCycleTypeOverride() != null) ? tpc.getCycleTypeOverride() : plan.getCycleType();
         LocalDate periodStart, periodEnd;
-        if ("WEEKLY".equals(plan.getCycleType())) {
+        if ("WEEKLY".equals(effCycle)) {
             periodStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
             periodEnd = periodStart.plusDays(6);
         } else {
             periodStart = today.withDayOfMonth(1);
             periodEnd = today.with(TemporalAdjusters.lastDayOfMonth());
         }
-
-        List<TaskPlanClass> classes = taskPlanClassMapper.selectList(
-            new LambdaQueryWrapper<TaskPlanClass>()
-                .eq(TaskPlanClass::getPlanId, planId).eq(TaskPlanClass::getOptedOut, 0));
-
-        for (TaskPlanClass tpc : classes) {
-            List<StudentClass> studentClasses = null;
-            // TODO: query students in class from student_class table
-            // For now, use records that already exist
-            logger.info("Refreshing records for plan={} class={} period={} to {}", planId, tpc.getClassId(), periodStart, periodEnd);
-        }
+        return new LocalDateTime[] { periodStart.atStartOfDay(), periodEnd.plusDays(1).atStartOfDay() };
     }
-
-    // --- helpers ---
 
     private void enrichPlan(TaskPlan plan) {
         Long count = taskPlanClassMapper.selectCount(
             new LambdaQueryWrapper<TaskPlanClass>().eq(TaskPlanClass::getPlanId, plan.getId()));
         plan.setClassCount(count.intValue());
-
         List<TaskPlanClass> tpClasses = taskPlanClassMapper.selectList(
             new LambdaQueryWrapper<TaskPlanClass>().eq(TaskPlanClass::getPlanId, plan.getId()).last("LIMIT 1"));
         if (!tpClasses.isEmpty()) {
@@ -501,7 +536,6 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                 plan.setCourseName(idx > 0 ? n.substring(0, idx) : n);
             }
         }
-
         if (plan.getCreatedBy() != null) {
             User u = userMapper.selectById(plan.getCreatedBy());
             if (u != null) plan.setCreatorName(u.getRealName() != null ? u.getRealName() : u.getUsername());
@@ -532,54 +566,26 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                 .eq(TaskPlanClass::getClassId, classId));
     }
 
-    private byte[] buildCsv(TaskPlan plan, List<TaskPlanRecord> records) {
-        try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            baos.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF}); // UTF-8 BOM
-            PrintWriter pw = new PrintWriter(baos);
-            pw.println("学号,姓名,文章完成数,单词完成数,真题完成数,平时分");
-
-            Map<Long, int[]> studentTotals = new LinkedHashMap<>();
-            for (TaskPlanRecord r : records) {
-                studentTotals.computeIfAbsent(r.getStudentId(), k -> new int[3]);
-                int[] t = studentTotals.get(r.getStudentId());
-                t[0] += r.getArticlesCompleted() != null ? r.getArticlesCompleted() : 0;
-                t[1] += r.getWordsCompleted() != null ? r.getWordsCompleted() : 0;
-                t[2] += r.getPapersCompleted() != null ? r.getPapersCompleted() : 0;
-            }
-
-            for (Map.Entry<Long, int[]> entry : studentTotals.entrySet()) {
-                User u = userMapper.selectById(entry.getKey());
-                String name = u != null ? (u.getRealName() != null ? u.getRealName() : u.getUsername()) : "";
-                String studentNo = u != null && u.getUsername() != null ? u.getUsername() : String.valueOf(entry.getKey());
-                int[] t = entry.getValue();
-                BigDecimal score = calculateScore(plan, t[0], t[1], t[2]);
-                pw.println(String.join(",", studentNo, name, String.valueOf(t[0]), String.valueOf(t[1]), String.valueOf(t[2]), score.toPlainString()));
-            }
-            pw.flush();
-            return baos.toByteArray();
-        } catch (Exception e) {
-            logger.error("导出CSV失败", e);
-            return new byte[0];
-        }
-    }
-
-    private BigDecimal calculateScore(TaskPlan plan, int articles, int words, int papers) {
-        BigDecimal total = plan.getTotalScore() != null ? plan.getTotalScore() : new BigDecimal("100");
-        double aRate = plan.getArticleTarget() > 0 ? Math.min(1.0, (double) articles / plan.getArticleTarget()) : 0;
-        double wRate = plan.getWordTarget() > 0 ? Math.min(1.0, (double) words / plan.getWordTarget()) : 0;
-        double pRate = plan.getPaperTarget() > 0 ? Math.min(1.0, (double) papers / plan.getPaperTarget()) : 0;
+    private BigDecimal calculateScore(BigDecimal totalScore,
+            int artTarget, int wrdTarget, int papTarget,
+            int artWeight, int wrdWeight, int papWeight,
+            int articles, int words, int papers) {
+        BigDecimal total = totalScore != null ? totalScore : new BigDecimal("100");
+        double aRate = artTarget > 0 ? Math.min(1.0, (double) articles / artTarget) : 0;
+        double wRate = wrdTarget > 0 ? Math.min(1.0, (double) words / wrdTarget) : 0;
+        double pRate = papTarget > 0 ? Math.min(1.0, (double) papers / papTarget) : 0;
         double score = total.doubleValue() * (
-            aRate * plan.getArticleWeight() / 100.0 +
-            wRate * plan.getWordWeight() / 100.0 +
-            pRate * plan.getPaperWeight() / 100.0
-        );
+            aRate * artWeight / 100.0 + wRate * wrdWeight / 100.0 + pRate * papWeight / 100.0);
         return new BigDecimal(score).setScale(2, RoundingMode.HALF_UP);
     }
 
     private boolean resolveEnabled(Integer planLevel, Integer classOverride) {
         if (classOverride != null) return classOverride == 1;
         return planLevel == null || planLevel == 1;
+    }
+
+    private int resolveInt(Integer override, int planDefault) {
+        return (override != null) ? override : planDefault;
     }
 
     private String buildCategoryIn(String wordCategory) {
