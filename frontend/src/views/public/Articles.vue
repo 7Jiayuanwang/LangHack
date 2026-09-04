@@ -273,6 +273,18 @@ const clearCache = () => {
   } catch (e) { /* ignore */ }
 }
 
+// A browser reload must fetch fresh data instead of restoring the detail-page cache.
+const isDocumentReload = () => {
+  try {
+    if (typeof performance === 'undefined') return false
+    const navigationType = performance.getEntriesByType?.('navigation')?.[0]?.type
+    const legacyNavigationType = performance.navigation?.type
+    return navigationType === 'reload' || legacyNavigationType === 1
+  } catch (e) {
+    return false
+  }
+}
+
 // ── Scroll Position Memory (keep-alive) ──
 // 不再依赖 let 变量跨 activate/deactivate 传递——改用 sessionStorage
 const WRAPPER_SCROLL_KEY = 'public_articles_wrapper_scroll'
@@ -340,6 +352,20 @@ const getRandomGradient = () => {
   return coverGradients[Math.floor(Math.random() * coverGradients.length)]
 }
 
+// Keep refresh visible even when a proxy or backend returns the same order.
+const rotateFreshFirst = (items, previousIds) => {
+  if (!Array.isArray(items) || items.length < 2 || !Array.isArray(previousIds) || previousIds.length === 0) {
+    return items
+  }
+  const previousSet = new Set(previousIds.map(id => String(id)))
+  const freshIndex = items.findIndex(item => item?.id != null && !previousSet.has(String(item.id)))
+  if (freshIndex > 0) {
+    return [items[freshIndex], ...items.slice(0, freshIndex), ...items.slice(freshIndex + 1)]
+  }
+  if (freshIndex < 0) return [...items.slice(1), items[0]]
+  return items
+}
+
 const selectCategory = (val) => {
   selectedCategory.value = val
   displayCount.value = BATCH_SIZE
@@ -387,7 +413,10 @@ const loadArticles = async ({ forceRefresh = false } = {}) => {
       if (previousVisibleIds.length > 0) params.set('exclude', previousVisibleIds.join(','))
     }
     const query = params.toString() ? `?${params.toString()}` : ''
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured${query}`, { headers })
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/public/texts/featured${query}`, {
+      headers: { ...headers, 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+      cache: 'no-store'
+    })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -417,12 +446,7 @@ const loadArticles = async ({ forceRefresh = false } = {}) => {
       }
 
       // 服务端刷新通常会返回新顺序；若缓存/代理仍返回相同顺序，轮换首屏作为兜底。
-      if (forceRefresh && previousVisibleIds.length > 1) {
-        const nextVisibleIds = fetched.slice(0, BATCH_SIZE).map(item => item?.id).filter(id => id != null)
-        if (nextVisibleIds.length === previousVisibleIds.length && nextVisibleIds.every((id, index) => id === previousVisibleIds[index])) {
-          fetched = fetched.slice(1).concat(fetched.slice(0, 1))
-        }
-      }
+      if (forceRefresh) fetched = rotateFreshFirst(fetched, previousVisibleIds)
       allArticles.value = fetched
     } else {
       loadError.value = true
@@ -495,7 +519,7 @@ onMounted(() => {
   })
   // 仅在从文章详情页返回时恢复缓存（NAV_FLAG_KEY 标记存在）
   // 浏览器刷新时 sessionStorage 虽保留，但 NAV_FLAG 不存在，强制重新加载
-  const hasNavFlag = sessionStorage.getItem(NAV_FLAG_KEY)
+  const hasNavFlag = !isDocumentReload() && sessionStorage.getItem(NAV_FLAG_KEY)
   sessionStorage.removeItem(NAV_FLAG_KEY)
 
   if (hasNavFlag) {

@@ -143,7 +143,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="任务类型" prop="assignmentType">
-          <el-radio-group v-model="assignmentForm.assignmentType" @change="onAssignmentTypeChange">
+          <el-radio-group class="assignment-type-group" v-model="assignmentForm.assignmentType" @change="onAssignmentTypeChange">
             <el-radio value="UNIT">整个单元</el-radio>
             <el-radio value="TEXTS">指定课文</el-radio>
             <el-radio value="WORDS">指定单词</el-radio>
@@ -151,7 +151,7 @@
         </el-form-item>
 
         <el-form-item v-if="assignmentForm.assignmentType === 'TEXTS'" label="文章分类" prop="articleType">
-          <el-radio-group v-model="assignmentForm.articleType" @change="onArticleTypeChange">
+          <el-radio-group class="article-type-group" v-model="assignmentForm.articleType" @change="onArticleTypeChange">
             <el-radio value="INNER">课内教材课文</el-radio>
             <el-radio value="OUTER">课外读物</el-radio>
           </el-radio-group>
@@ -180,9 +180,20 @@
         </template>
 
         <!-- 选择课文 -->
-        <el-form-item v-if="assignmentForm.assignmentType === 'TEXTS'" label="选择课文" prop="textIds">
-          <div v-loading="loadingUnitContent" class="content-selector">
-            <div v-if="assignmentForm.articleType === 'OUTER'" class="outer-article-tools">
+        <el-form-item
+          v-if="assignmentForm.assignmentType === 'TEXTS' && (assignmentForm.articleType === 'INNER' || unitContent.texts.length > 0)"
+          label="选择课文"
+          prop="textIds"
+        >
+          <div
+            v-loading="loadingUnitContent"
+            class="content-selector"
+            :class="{ 'article-selector': assignmentForm.assignmentType === 'TEXTS' }"
+          >
+            <div
+              v-if="assignmentForm.articleType === 'OUTER' && unitContent.texts.length > 0"
+              class="outer-article-tools"
+            >
               <div class="outer-article-filters">
                 <el-input
                   v-model="outerArticleKeyword"
@@ -201,29 +212,36 @@
                   <el-option label="困难" value="HARD" />
                 </el-select>
               </div>
-              <div v-if="outerArticleTags.length" class="outer-article-tag-filter">
-                <span class="tag-filter-label">标签</span>
-                <el-tag
-                  v-for="tag in outerArticleTags"
-                  :key="tag"
-                  size="small"
-                  :type="outerArticleTag === tag ? 'primary' : 'info'"
-                  :effect="outerArticleTag === tag ? 'dark' : 'plain'"
-                  class="tag-filter-item"
-                  @click="outerArticleTag = outerArticleTag === tag ? '' : tag"
-                >
-                  {{ tag }}
-                </el-tag>
-                <el-button
-                  v-if="outerArticleTag"
-                  link
-                  type="primary"
-                  size="small"
-                  @click="outerArticleTag = ''"
-                >
-                  清除标签
-                </el-button>
-              </div>
+              <details v-if="outerArticleTags.length" class="outer-article-tag-filter">
+                <summary class="tag-filter-summary">
+                  <span class="tag-filter-label">标签筛选</span>
+                  <el-tag v-if="outerArticleTag" size="small" type="primary" effect="plain">
+                    {{ outerArticleTag }}
+                  </el-tag>
+                </summary>
+                <div class="tag-filter-options">
+                  <el-tag
+                    v-for="tag in outerArticleTags"
+                    :key="tag"
+                    size="small"
+                    :type="outerArticleTag === tag ? 'primary' : 'info'"
+                    :effect="outerArticleTag === tag ? 'dark' : 'plain'"
+                    class="tag-filter-item"
+                    @click="outerArticleTag = outerArticleTag === tag ? '' : tag"
+                  >
+                    {{ tag }}
+                  </el-tag>
+                  <el-button
+                    v-if="outerArticleTag"
+                    link
+                    type="primary"
+                    size="small"
+                    @click="outerArticleTag = ''"
+                  >
+                    清除标签
+                  </el-button>
+                </div>
+              </details>
               <div class="outer-article-summary">
                 显示 {{ filteredArticleTexts.length }} 篇，已选 {{ assignmentForm.textIds.length }} 篇
                 <el-button link type="primary" size="small" @click="toggleAllFilteredArticles">
@@ -231,46 +249,50 @@
                 </el-button>
               </div>
             </div>
-            <el-checkbox-group v-model="assignmentForm.textIds">
-              <div class="content-grid">
-                <el-checkbox
-                  v-for="text in filteredArticleTexts"
-                  :key="text.id"
-                  :value="text.id"
-                  class="content-item"
-                  :class="{ 'outer-article-item': assignmentForm.articleType === 'OUTER' }"
-                >
-                  <div class="content-info">
-                    <div class="content-title">{{ text.title }}</div>
-                    <div class="content-meta">
-                      <el-tag size="small" effect="plain" :type="getDifficultyTagType(text.difficulty)">
-                        {{ getDifficultyLabel(text.difficulty) }}
-                      </el-tag>
-                      <span>字数：{{ getTextCharacterCount(text) }}</span>
-                      <span v-if="assignmentForm.articleType === 'OUTER'">
-                        预计 {{ getEstimatedReadingMinutes(text) }} 分钟
-                      </span>
+            <div class="article-list-scroll">
+              <el-checkbox-group v-if="filteredArticleTexts.length" v-model="assignmentForm.textIds">
+                <div class="content-grid outer-article-grid">
+                  <el-checkbox
+                    v-for="text in filteredArticleTexts"
+                    :key="text.id"
+                    :value="text.id"
+                    class="content-item"
+                    :class="{ 'outer-article-item': assignmentForm.articleType === 'OUTER' }"
+                  >
+                    <div class="content-info">
+                      <div class="content-row">
+                        <div class="content-title">{{ text.title }}</div>
+                        <div class="content-meta">
+                        <el-tag size="small" effect="plain" :type="getDifficultyTagType(text.difficulty)">
+                          {{ getDifficultyLabel(text.difficulty) }}
+                        </el-tag>
+                        <span>字数：{{ getTextCharacterCount(text) }}</span>
+                        <span v-if="assignmentForm.articleType === 'OUTER'">
+                          预计 {{ getEstimatedReadingMinutes(text) }} 分钟
+                        </span>
+                        </div>
+                      </div>
+                      <div v-if="assignmentForm.articleType !== 'OUTER' && getTextTags(text).length" class="article-tags">
+                        <el-tag
+                          v-for="tag in getTextTags(text)"
+                          :key="tag"
+                          size="small"
+                          effect="plain"
+                          type="info"
+                        >
+                          {{ tag }}
+                        </el-tag>
+                      </div>
+                      <div v-else-if="assignmentForm.articleType !== 'OUTER'" class="content-category">{{ getTextClassificationLabel(text) }}</div>
                     </div>
-                    <div v-if="getTextTags(text).length" class="article-tags">
-                      <el-tag
-                        v-for="tag in getTextTags(text)"
-                        :key="tag"
-                        size="small"
-                        effect="plain"
-                        type="info"
-                      >
-                        {{ tag }}
-                      </el-tag>
-                    </div>
-                    <div v-else class="content-category">{{ getTextClassificationLabel(text) }}</div>
-                  </div>
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-            <el-empty
-              v-if="!loadingUnitContent && filteredArticleTexts.length === 0"
-              :description="assignmentForm.articleType === 'OUTER' ? '没有匹配的课外文章' : '该单元暂无课文'"
-            />
+                  </el-checkbox>
+                </div>
+              </el-checkbox-group>
+              <el-empty
+                v-if="!loadingUnitContent && filteredArticleTexts.length === 0"
+                :description="assignmentForm.articleType === 'OUTER' ? '没有匹配的课外文章' : '该单元暂无课文'"
+              />
+            </div>
           </div>
         </el-form-item>
 
@@ -1251,6 +1273,8 @@ const onContentSectionChange = async () => {
 
 const loadArticles = async () => {
   if (assignmentForm.assignmentType !== 'TEXTS') return
+  loadingUnitContent.value = true
+  unitContent.value = { ...unitContent.value, texts: [] }
   const params = new URLSearchParams({ articleType: assignmentForm.articleType || 'OUTER' })
   if (assignmentForm.articleType === 'INNER') {
     if (assignmentForm.bookVolume) params.append('bookVolume', assignmentForm.bookVolume)
@@ -1275,6 +1299,8 @@ const loadArticles = async () => {
     console.error('加载文章失败:', error)
     unitContent.value = { ...unitContent.value, texts: [] }
     ElMessage.error('加载文章失败')
+  } finally {
+    loadingUnitContent.value = false
   }
 }
 
@@ -1924,6 +1950,24 @@ onBeforeUnmount(stopProgressRefresh)
   margin-top: 8px;
 }
 
+.assignment-type-group,
+.article-type-group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.assignment-type-group .el-radio,
+.article-type-group .el-radio {
+  margin-right: 0;
+  white-space: nowrap;
+}
+
 .progress-overview {
   margin-bottom: 20px;
   padding: 20px;
@@ -1969,35 +2013,85 @@ onBeforeUnmount(stopProgressRefresh)
   padding: 10px;
 }
 
+.article-selector {
+  overflow-y: hidden;
+}
+
+.article-list-scroll {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .outer-article-tools {
-  position: sticky;
-  top: -10px;
-  z-index: 1;
-  margin: -10px -10px 10px;
-  padding: 10px;
-  background: #fff;
+  margin: 0 0 10px;
+  padding: 0 0 10px;
   border-bottom: 1px solid #ebeef5;
 }
 
 .outer-article-filters {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
   gap: 8px;
+  align-items: center;
 }
 
 .outer-article-search {
-  flex: 1;
+  min-width: 0;
+  width: 100%;
 }
 
 .outer-article-difficulty {
   width: 110px;
+  min-width: 0;
 }
 
 .outer-article-tag-filter {
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.tag-filter-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: #606266;
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.tag-filter-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tag-filter-summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid #909399;
+  transition: transform 0.15s ease;
+}
+
+.outer-article-tag-filter[open] .tag-filter-summary::before {
+  transform: rotate(90deg);
+}
+
+.tag-filter-options {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
   margin-top: 8px;
+  min-width: 0;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fafafa;
 }
 
 .tag-filter-label {
@@ -2013,9 +2107,16 @@ onBeforeUnmount(stopProgressRefresh)
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-top: 8px;
   color: #909399;
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.outer-article-summary .el-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .content-grid {
@@ -2024,7 +2125,15 @@ onBeforeUnmount(stopProgressRefresh)
   gap: 10px;
 }
 
+/* 外语文章信息较多，使用单列让标题和元信息保持完整的一行。 */
+.outer-article-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .content-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
   margin-bottom: 0 !important;
   padding: 10px;
   border: 1px solid #e4e7ed;
@@ -2043,7 +2152,16 @@ onBeforeUnmount(stopProgressRefresh)
 }
 
 .content-info {
+  flex: 1 1 auto;
   margin-left: 20px;
+  min-width: 0;
+}
+
+.content-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .content-title {
@@ -2051,6 +2169,15 @@ onBeforeUnmount(stopProgressRefresh)
   font-size: 14px;
   color: #303133;
   margin-bottom: 5px;
+}
+
+.outer-article-item .content-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .content-meta {
@@ -2063,10 +2190,40 @@ onBeforeUnmount(stopProgressRefresh)
   margin-bottom: 3px;
 }
 
+.outer-article-item .content-meta {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-bottom: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.outer-article-item .content-meta > * {
+  flex: 0 0 auto;
+}
+
+.outer-article-item :deep(.el-checkbox__label) {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .article-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.outer-article-item .article-tags {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.outer-article-item .article-tags > * {
+  flex: 0 0 auto;
 }
 
 .content-category {
@@ -2124,7 +2281,7 @@ onBeforeUnmount(stopProgressRefresh)
   }
 
   .outer-article-filters {
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr) 96px;
   }
 
   .outer-article-difficulty {
@@ -2133,6 +2290,11 @@ onBeforeUnmount(stopProgressRefresh)
 
   .content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .assignment-type-group,
+  .article-type-group {
+    gap: 10px;
   }
 }
 </style>
