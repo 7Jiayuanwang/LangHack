@@ -41,4 +41,6 @@ public interface TextService extends IService<Text> {
     void incrementLikeCount(Long textId);
 
     List<Text> getArticles(ArticleFilterDTO filter);
+
+    com.baomidou.mybatisplus.core.metadata.IPage<Text> getArticlesPaged(ArticleFilterDTO filter);
 }

@@ -79,7 +79,10 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑任务' : '布置任务'"
-      width="min(800px, 90%)"
+      width="800px"
+      destroy-on-close
+      :close-on-click-modal="false"
+      class="assignment-dialog"
     >
       <el-form
         ref="assignmentFormRef"
@@ -172,6 +175,20 @@
 
         <!-- 选择课文 -->
         <el-form-item v-if="assignmentForm.assignmentType === 'TEXTS'" label="选择课文" prop="textIds">
+          <!-- 搜索框（仅课外读物显示） -->
+          <el-input
+            v-if="assignmentForm.articleType === 'OUTER'"
+            v-model="articleSearch.keyword"
+            placeholder="输入标题关键词搜索..."
+            clearable
+            style="margin-bottom: 10px"
+            @input="onArticleSearchInput"
+            @clear="onArticleSearchInput"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
           <div v-loading="loadingUnitContent" class="content-selector">
             <el-checkbox-group v-model="assignmentForm.textIds">
               <div class="content-grid">
@@ -184,15 +201,29 @@
                   <div class="content-info">
                     <div class="content-title">{{ text.title }}</div>
                     <div class="content-meta">
-                      难度：{{ text.difficulty }} |
-                      字数：{{ getTextCharacterCount(text) }}
+                      难度：{{ text.difficulty || '-' }}
+                      <template v-if="text.content || text.markdownContent"> | 字数：{{ getTextCharacterCount(text) }}</template>
                     </div>
                     <div class="content-category">{{ getTextClassificationLabel(text) }}</div>
                   </div>
                 </el-checkbox>
               </div>
             </el-checkbox-group>
-            <el-empty v-if="!loadingUnitContent && unitContent.texts.length === 0" description="该单元暂无课文" />
+            <el-empty v-if="!loadingUnitContent && unitContent.texts.length === 0" description="暂无匹配课文" />
+          </div>
+          <!-- 分页器（仅课外读物显示） -->
+          <el-pagination
+            v-if="assignmentForm.articleType === 'OUTER' && articleSearch.total > 0"
+            v-model:current-page="articleSearch.page"
+            :page-size="articleSearch.size"
+            :total="articleSearch.total"
+            layout="total, prev, pager, next"
+            small
+            style="margin-top: 10px; justify-content: center"
+            @current-change="onArticlePageChange"
+          />
+          <div v-if="assignmentForm.textIds.length > 0" class="selected-count">
+            已选 {{ assignmentForm.textIds.length }} 篇文章
           </div>
         </el-form-item>
 
@@ -294,7 +325,10 @@
     <el-dialog
       v-model="progressDialogVisible"
       title="任务完成进度"
-      width="min(700px, 90%)"
+      width="700px"
+      destroy-on-close
+      :close-on-click-modal="false"
+      class="progress-dialog"
     >
       <div class="progress-overview">
         <div class="stats-row">
@@ -321,7 +355,7 @@
       <div class="students-progress">
         <h4>学生完成情况</h4>
         <div class="table-wrapper">
-        <el-table :data="studentProgress" stripe size="small">
+        <el-table :data="studentProgress" stripe size="small" height="300" style="width: 100%">
           <el-table-column prop="username" label="学号" width="120" />
           <el-table-column prop="realName" label="真实姓名" width="120" />
           <el-table-column prop="completedAt" label="完成时间" width="180">
@@ -363,6 +397,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import TaskPlans from './TaskPlans.vue'
 
@@ -385,6 +420,26 @@ const unitContent = ref({
   texts: [],
   words: []
 })
+
+// 课外文章搜索分页状态
+const articleSearch = reactive({
+  keyword: '',
+  page: 1,
+  size: 20,
+  total: 0
+})
+let articleSearchTimer = null
+const onArticleSearchInput = () => {
+  clearTimeout(articleSearchTimer)
+  articleSearchTimer = setTimeout(() => {
+    articleSearch.page = 1
+    loadArticles()
+  }, 300)
+}
+const onArticlePageChange = (page) => {
+  articleSearch.page = page
+  loadArticles()
+}
 const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '理解当代中国']
 const unitNumbers = Array.from({ length: 6 }, (_, index) => index + 1)
 const contentSectionOptions = computed(() => (
@@ -785,6 +840,9 @@ const resetAssignmentForm = () => {
     wordGroupCount: 1
   })
   unitContent.value = { texts: [], words: [] }
+  articleSearch.keyword = ''
+  articleSearch.page = 1
+  articleSearch.total = 0
   activeTemplate.value = ''
 }
 
@@ -907,6 +965,9 @@ const onArticleTypeChange = async () => {
   assignmentForm.bookVolume = null
   assignmentForm.contentSection = null
   assignmentForm.unitNum = null
+  articleSearch.keyword = ''
+  articleSearch.page = 1
+  articleSearch.total = 0
   await loadArticles()
 }
 
@@ -929,19 +990,42 @@ const loadArticles = async () => {
     if (assignmentForm.bookVolume) params.append('bookVolume', assignmentForm.bookVolume)
     if (assignmentForm.contentSection) params.append('contentSection', assignmentForm.contentSection)
     if (assignmentForm.unitNum) params.append('unitNum', assignmentForm.unitNum)
+  } else {
+    // OUTER: 附加分页和搜索参数
+    params.append('page', String(articleSearch.page))
+    params.append('size', String(articleSearch.size))
+    if (articleSearch.keyword) params.append('keyword', articleSearch.keyword)
   }
+  loadingUnitContent.value = true
   const headers = {}
   const authHeader = getAuthHeader()
   if (authHeader) headers.Authorization = authHeader
   try {
     const response = await fetch(`/api/assignments/articles?${params.toString()}`, { headers })
     const data = await response.json()
-    unitContent.value = { ...unitContent.value, texts: data.code === 200 ? (data.data || []) : [] }
-    if (data.code !== 200) ElMessage.error(data.message || '加载文章失败')
+    if (data.code === 200) {
+      const payload = data.data
+      if (payload && payload.records) {
+        // 分页结构（OUTER）
+        unitContent.value = { ...unitContent.value, texts: payload.records }
+        articleSearch.total = payload.total || 0
+      } else {
+        // 非分页数组（INNER）
+        unitContent.value = { ...unitContent.value, texts: Array.isArray(payload) ? payload : [] }
+        articleSearch.total = 0
+      }
+    } else {
+      ElMessage.error(data.message || '加载文章失败')
+      unitContent.value = { ...unitContent.value, texts: [] }
+      articleSearch.total = 0
+    }
   } catch (error) {
     console.error('加载文章失败:', error)
     unitContent.value = { ...unitContent.value, texts: [] }
+    articleSearch.total = 0
     ElMessage.error('加载文章失败')
+  } finally {
+    loadingUnitContent.value = false
   }
 }
 
@@ -1484,6 +1568,13 @@ onMounted(async () => {
   color: #409eff;
 }
 
+.selected-count {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #409eff;
+  font-weight: 500;
+}
+
 .content-desc {
   font-size: 12px;
   color: #606266;
@@ -1532,5 +1623,48 @@ onMounted(async () => {
     margin-right: 0;
     margin-bottom: 12px;
   }
+}
+
+/* 布置任务对话框 - 固定大小居中，内容可滚动 */
+/* 注：dialog 样式移至非 scoped style 块 */
+
+/* 任务进度对话框 - 固定大小居中 */
+/* 注：dialog 样式移至非 scoped style 块 */
+</style>
+
+<style>
+/* 非 scoped：Element Plus dialog 会 teleport 到 body，scoped 选不到 */
+.el-dialog.assignment-dialog {
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: 85vh;
+}
+.el-dialog.assignment-dialog .el-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 20px;
+}
+
+.el-dialog.progress-dialog {
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: 80vh;
+}
+.el-dialog.progress-dialog .el-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 20px;
 }
 </style>

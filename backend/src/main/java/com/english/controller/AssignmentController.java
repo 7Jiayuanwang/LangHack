@@ -65,7 +65,13 @@ public class AssignmentController {
 
     @GetMapping("/articles")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    public Result<List<Text>> getArticleOptions(@ModelAttribute ArticleFilterDTO filter) {
+    public Result<?> getArticleOptions(@ModelAttribute ArticleFilterDTO filter) {
+        // OUTER 类型使用分页查询（数据量大）
+        if (filter != null && filter.getArticleType() == com.english.entity.ArticleType.OUTER
+                && filter.getBookVolume() == null && filter.getContentSection() == null && filter.getUnitNum() == null) {
+            return Result.success(textService.getArticlesPaged(filter));
+        }
+        // INNER 类型或带层级过滤的继续用全量返回（数据量小）
         return Result.success(textService.getArticles(filter));
     }
 
