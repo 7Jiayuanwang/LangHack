@@ -54,8 +54,8 @@ public class TeacherTaskPlanController {
     public ResponseEntity<byte[]> export(@PathVariable Long planId, @PathVariable Long classId) {
         byte[] data = taskPlanService.exportClassScore(planId, classId);
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=class_score.csv")
-            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=class_score.xlsx")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
             .body(data);
     }
 

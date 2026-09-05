@@ -108,13 +108,13 @@
     </el-dialog>
 
     <!-- 学生进度对话框 -->
-    <el-dialog v-model="progressVisible" title="学生完成进度" width="700px" destroy-on-close>
-      <el-table :data="progressData" v-loading="progressLoading" stripe>
-        <el-table-column prop="studentName" label="姓名" width="100" />
-        <el-table-column prop="articlesCompleted" label="文章" width="80" />
-        <el-table-column prop="wordsCompleted" label="单词" width="80" />
-        <el-table-column prop="papersCompleted" label="真题" width="80" />
-        <el-table-column prop="score" label="得分" width="80" />
+    <el-dialog v-model="progressVisible" title="学生完成进度" width="700px" destroy-on-close class="progress-dialog" :close-on-click-modal="false">
+      <el-table :data="progressData" v-loading="progressLoading" stripe height="400" style="width: 100%">
+        <el-table-column prop="studentName" label="姓名" min-width="120" />
+        <el-table-column prop="articlesCompleted" label="文章" min-width="80" align="center" />
+        <el-table-column prop="wordsCompleted" label="单词" min-width="80" align="center" />
+        <el-table-column prop="papersCompleted" label="真题" min-width="80" align="center" />
+        <el-table-column prop="score" label="得分" min-width="80" align="center" />
       </el-table>
     </el-dialog>
   </div>
@@ -227,7 +227,7 @@ const viewProgress = async (plan, cls) => {
 const exportClass = async (plan, cls) => {
   try {
     const res = await teacherTaskPlanApi.exportScore(plan.id, cls.classId)
-    const url = window.URL.createObjectURL(new Blob([res]))
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const a = document.createElement('a')
     a.href = url
     a.download = `${plan.title}_${cls.className}_成绩.xlsx`
@@ -270,5 +270,23 @@ onMounted(() => loadPlans())
 .override-dialog {
   .el-dialog { display: flex; flex-direction: column; max-height: 80vh; }
   .el-dialog__body { flex: 1; min-height: 0; overflow-y: auto; }
+}
+.progress-dialog {
+  .el-dialog {
+    display: flex;
+    flex-direction: column;
+    margin: 0 !important;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-height: 80vh;
+  }
+  .el-dialog__body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 12px 20px;
+  }
 }
 </style>

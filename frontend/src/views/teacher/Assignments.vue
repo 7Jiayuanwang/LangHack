@@ -1,5 +1,8 @@
 <template>
-  <div class="assignments-management">
+  <div class="assignments-page">
+    <el-tabs v-model="activeTab" class="assignments-tabs">
+      <el-tab-pane label="布置任务" name="assignments">
+        <div class="assignments-management">
     <el-card>
       <template #header>
         <div class="card-header">
@@ -349,12 +352,21 @@
       </div>
     </el-dialog>
   </div>
+      </el-tab-pane>
+      <el-tab-pane label="学期目标" name="taskPlans">
+        <TaskPlans />
+      </el-tab-pane>
+    </el-tabs>
+  </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAuthHeader } from '@/utils/auth'
+import TaskPlans from './TaskPlans.vue'
+
+const activeTab = ref('assignments')
 
 // 响应式数据
 const loading = ref(false)
@@ -1293,6 +1305,22 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.assignments-page {
+  padding: 0;
+}
+.assignments-tabs {
+  :deep(.el-tabs__header) {
+    padding: 0 16px;
+    margin-bottom: 0;
+    background: var(--el-bg-color);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  :deep(.el-tabs__content) {
+    padding: 0;
+  }
+}
 .assignments-management {
   padding: 20px;
 }

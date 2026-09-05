@@ -12,9 +12,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
-import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -241,11 +243,17 @@ public class TaskPlanServiceImpl implements TaskPlanService {
             new LambdaQueryWrapper<TaskPlanClass>()
                 .eq(TaskPlanClass::getPlanId, planId).eq(TaskPlanClass::getOptedOut, 0));
         LocalDate today = LocalDate.now();
-        try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            baos.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
-            PrintWriter pw = new PrintWriter(baos);
-            pw.println("学号,姓名,班级,文章完成数,单词完成数,真题完成数,平时分");
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("成绩");
+            CellStyle headerStyle = createHeaderStyle(wb);
+            Row header = sheet.createRow(0);
+            String[] cols = {"学号", "姓名", "班级", "文章完成数", "单词完成数", "真题完成数", "平时分"};
+            for (int i = 0; i < cols.length; i++) {
+                Cell c = header.createCell(i);
+                c.setCellValue(cols[i]);
+                c.setCellStyle(headerStyle);
+            }
+            int rowIdx = 1;
             for (TaskPlanClass tpc : classes) {
                 enrichPlanClass(tpc);
                 int[] eff = resolveEffective(plan, tpc);
@@ -262,13 +270,22 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                     int articles = artEn ? learningRecordMapper.countDistinctTextsRead(sid, period[0], period[1]) : 0;
                     int words = (wrdEn && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, period[0], period[1], cats) : 0;
                     BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, 0);
-                    pw.println(String.join(",", studentNo, name, tpc.getClassName() != null ? tpc.getClassName() : "", String.valueOf(articles), String.valueOf(words), "0", score.toPlainString()));
+                    Row row = sheet.createRow(rowIdx++);
+                    row.createCell(0).setCellValue(studentNo);
+                    row.createCell(1).setCellValue(name);
+                    row.createCell(2).setCellValue(tpc.getClassName() != null ? tpc.getClassName() : "");
+                    row.createCell(3).setCellValue(articles);
+                    row.createCell(4).setCellValue(words);
+                    row.createCell(5).setCellValue(0);
+                    row.createCell(6).setCellValue(score.doubleValue());
                 }
             }
-            pw.flush();
+            for (int i = 0; i < cols.length; i++) sheet.autoSizeColumn(i);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            wb.write(baos);
             return baos.toByteArray();
         } catch (Exception e) {
-            logger.error("导出CSV失败", e);
+            logger.error("导出Excel失败", e);
             return new byte[0];
         }
     }
@@ -404,11 +421,17 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         LocalDateTime[] period = resolvePeriod(plan, tpc, LocalDate.now());
         List<StudentClass> scList = studentClassMapper.selectList(
             new LambdaQueryWrapper<StudentClass>().eq(StudentClass::getClassId, classId));
-        try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            baos.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
-            PrintWriter pw = new PrintWriter(baos);
-            pw.println("学号,姓名,文章完成数,单词完成数,真题完成数,平时分");
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("成绩");
+            CellStyle headerStyle = createHeaderStyle(wb);
+            Row header = sheet.createRow(0);
+            String[] cols = {"学号", "姓名", "文章完成数", "单词完成数", "真题完成数", "平时分"};
+            for (int i = 0; i < cols.length; i++) {
+                Cell c = header.createCell(i);
+                c.setCellValue(cols[i]);
+                c.setCellStyle(headerStyle);
+            }
+            int rowIdx = 1;
             for (StudentClass sc : scList) {
                 Long sid = sc.getStudentId();
                 User u = userMapper.selectById(sid);
@@ -417,12 +440,20 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                 int articles = artEn ? learningRecordMapper.countDistinctTextsRead(sid, period[0], period[1]) : 0;
                 int words = (wrdEn && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, period[0], period[1], cats) : 0;
                 BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, 0);
-                pw.println(String.join(",", studentNo, name, String.valueOf(articles), String.valueOf(words), "0", score.toPlainString()));
+                Row row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(studentNo);
+                row.createCell(1).setCellValue(name);
+                row.createCell(2).setCellValue(articles);
+                row.createCell(3).setCellValue(words);
+                row.createCell(4).setCellValue(0);
+                row.createCell(5).setCellValue(score.doubleValue());
             }
-            pw.flush();
+            for (int i = 0; i < cols.length; i++) sheet.autoSizeColumn(i);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            wb.write(baos);
             return baos.toByteArray();
         } catch (Exception e) {
-            logger.error("导出CSV失败", e);
+            logger.error("导出Excel失败", e);
             return new byte[0];
         }
     }
@@ -592,6 +623,17 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         if ("CET6".equals(wordCategory)) return "'CET6'";
         if ("CET4".equals(wordCategory)) return "'CET4','CET6'";
         return "'GAOKAO','CET4','CET6'";
+    }
+
+    private CellStyle createHeaderStyle(Workbook wb) {
+        CellStyle style = wb.createCellStyle();
+        Font font = wb.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return style;
     }
 
     private Long toLong(Object v) {

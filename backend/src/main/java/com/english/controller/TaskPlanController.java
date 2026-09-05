@@ -91,8 +91,8 @@ public class TaskPlanController {
     public ResponseEntity<byte[]> export(@PathVariable Long id) {
         byte[] data = taskPlanService.exportPlanScore(id);
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=score.csv")
-            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=score.xlsx")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
             .body(data);
     }
 
