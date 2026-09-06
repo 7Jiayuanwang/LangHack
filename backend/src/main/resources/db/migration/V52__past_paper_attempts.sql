@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS past_paper_attempts (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  student_id BIGINT NOT NULL COMMENT '用户ID',
+  paper_key VARCHAR(255) NOT NULL COMMENT '内置或共享试卷唯一标识',
+  past_paper_id BIGINT DEFAULT NULL COMMENT '共享试卷ID',
+  category VARCHAR(32) NOT NULL COMMENT 'cet4/cet6/postgraduate',
+  paper_title VARCHAR(255) NOT NULL,
+  answered_count INT NOT NULL DEFAULT 0,
+  question_count INT NOT NULL DEFAULT 0,
+  objective_score INT NOT NULL DEFAULT 0,
+  objective_total INT NOT NULL DEFAULT 0,
+  subjective_count INT NOT NULL DEFAULT 0,
+  score_percentage DECIMAL(5,2) NOT NULL DEFAULT 0,
+  answers_json LONGTEXT,
+  submitted_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_ppa_student_time (student_id, submitted_time),
+  KEY idx_ppa_student_paper (student_id, paper_key),
+  KEY idx_ppa_paper (past_paper_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生真题练习提交记录';

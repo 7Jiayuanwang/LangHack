@@ -36,6 +36,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
     @Autowired private UserMapper userMapper;
     @Autowired private CourseMapper courseMapper;
     @Autowired private LearningRecordMapper learningRecordMapper;
+    @Autowired private PastPaperAttemptMapper pastPaperAttemptMapper;
     @Autowired private StudentClassMapper studentClassMapper;
     @Autowired private TeachingClassMapper teachingClassMapper;
 
@@ -191,6 +192,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
             String wordCat = (tpc.getWordCategoryOverride() != null) ? tpc.getWordCategoryOverride() : plan.getWordCategory();
             boolean artEnabled = resolveEnabled(plan.getArticleEnabled(), tpc.getArticleEnabledOverride());
             boolean wrdEnabled = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride());
+            boolean papEnabled = resolveEnabled(plan.getPaperEnabled(), tpc.getPaperEnabledOverride());
 
             LocalDate periodStart, periodEnd;
             if ("WEEKLY".equals(effCycle)) {
@@ -213,6 +215,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                 Long sid = s.getStudentId();
                 ca += artEnabled ? learningRecordMapper.countDistinctTextsRead(sid, since, until) : 0;
                 cw += (wrdEnabled && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, since, until, cats) : 0;
+                cp += papEnabled ? pastPaperAttemptMapper.countDistinctSubmittedPapers(sid, since, until) : 0;
             }
             sumArticles += ca; sumWords += cw; sumPapers += cp;
 
@@ -261,6 +264,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                 String cats = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride()) ? buildCategoryIn(resolveWordCat(plan, tpc)) : null;
                 boolean artEn = resolveEnabled(plan.getArticleEnabled(), tpc.getArticleEnabledOverride());
                 boolean wrdEn = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride());
+                boolean papEn = resolveEnabled(plan.getPaperEnabled(), tpc.getPaperEnabledOverride());
                 List<StudentClass> scList = studentClassMapper.selectList(new LambdaQueryWrapper<StudentClass>().eq(StudentClass::getClassId, tpc.getClassId()));
                 for (StudentClass sc : scList) {
                     Long sid = sc.getStudentId();
@@ -269,14 +273,15 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                     String studentNo = (u != null && u.getUsername() != null) ? u.getUsername() : String.valueOf(sid);
                     int articles = artEn ? learningRecordMapper.countDistinctTextsRead(sid, period[0], period[1]) : 0;
                     int words = (wrdEn && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, period[0], period[1], cats) : 0;
-                    BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, 0);
+                    int papers = papEn ? pastPaperAttemptMapper.countDistinctSubmittedPapers(sid, period[0], period[1]) : 0;
+                    BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, papers);
                     Row row = sheet.createRow(rowIdx++);
                     row.createCell(0).setCellValue(studentNo);
                     row.createCell(1).setCellValue(name);
                     row.createCell(2).setCellValue(tpc.getClassName() != null ? tpc.getClassName() : "");
                     row.createCell(3).setCellValue(articles);
                     row.createCell(4).setCellValue(words);
-                    row.createCell(5).setCellValue(0);
+                    row.createCell(5).setCellValue(papers);
                     row.createCell(6).setCellValue(score.doubleValue());
                 }
             }
@@ -386,6 +391,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         int[] eff = resolveEffective(plan, tpc);
         boolean artEn = resolveEnabled(plan.getArticleEnabled(), tpc.getArticleEnabledOverride());
         boolean wrdEn = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride());
+        boolean papEn = resolveEnabled(plan.getPaperEnabled(), tpc.getPaperEnabledOverride());
         String cats = wrdEn ? buildCategoryIn(resolveWordCat(plan, tpc)) : null;
         LocalDateTime[] period = resolvePeriod(plan, tpc, LocalDate.now());
         List<StudentClass> scList = studentClassMapper.selectList(
@@ -397,11 +403,12 @@ public class TaskPlanServiceImpl implements TaskPlanService {
             String name = (u != null && u.getRealName() != null) ? u.getRealName() : (u != null ? u.getUsername() : "");
             int articles = artEn ? learningRecordMapper.countDistinctTextsRead(sid, period[0], period[1]) : 0;
             int words = (wrdEn && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, period[0], period[1], cats) : 0;
-            BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, 0);
+            int papers = papEn ? pastPaperAttemptMapper.countDistinctSubmittedPapers(sid, period[0], period[1]) : 0;
+            BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, papers);
             Map<String, Object> m = new HashMap<>();
             m.put("studentId", sid); m.put("studentName", name);
             m.put("articlesCompleted", articles); m.put("wordsCompleted", words);
-            m.put("papersCompleted", 0); m.put("score", score);
+            m.put("papersCompleted", papers); m.put("score", score);
             result.add(m);
         }
         return Result.success(result);
@@ -417,6 +424,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
         int[] eff = resolveEffective(plan, tpc);
         boolean artEn = resolveEnabled(plan.getArticleEnabled(), tpc.getArticleEnabledOverride());
         boolean wrdEn = resolveEnabled(plan.getWordEnabled(), tpc.getWordEnabledOverride());
+        boolean papEn = resolveEnabled(plan.getPaperEnabled(), tpc.getPaperEnabledOverride());
         String cats = wrdEn ? buildCategoryIn(resolveWordCat(plan, tpc)) : null;
         LocalDateTime[] period = resolvePeriod(plan, tpc, LocalDate.now());
         List<StudentClass> scList = studentClassMapper.selectList(
@@ -439,13 +447,14 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                 String studentNo = (u != null && u.getUsername() != null) ? u.getUsername() : String.valueOf(sid);
                 int articles = artEn ? learningRecordMapper.countDistinctTextsRead(sid, period[0], period[1]) : 0;
                 int words = (wrdEn && cats != null) ? learningRecordMapper.countDistinctWordsReviewedByCategory(sid, period[0], period[1], cats) : 0;
-                BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, 0);
+                int papers = papEn ? pastPaperAttemptMapper.countDistinctSubmittedPapers(sid, period[0], period[1]) : 0;
+                BigDecimal score = calculateScore(plan.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, papers);
                 Row row = sheet.createRow(rowIdx++);
                 row.createCell(0).setCellValue(studentNo);
                 row.createCell(1).setCellValue(name);
                 row.createCell(2).setCellValue(articles);
                 row.createCell(3).setCellValue(words);
-                row.createCell(4).setCellValue(0);
+                row.createCell(4).setCellValue(papers);
                 row.createCell(5).setCellValue(score.doubleValue());
             }
             for (int i = 0; i < cols.length; i++) sheet.autoSizeColumn(i);
@@ -495,7 +504,7 @@ public class TaskPlanServiceImpl implements TaskPlanService {
                 String cats = buildCategoryIn(wordCat);
                 words = learningRecordMapper.countDistinctWordsReviewedByCategory(studentId, period[0], period[1], cats);
             }
-            int papers = 0;
+            int papers = papEn ? pastPaperAttemptMapper.countDistinctSubmittedPapers(studentId, period[0], period[1]) : 0;
             BigDecimal currentScore = calculateScore(p.getTotalScore(), eff[0], eff[1], eff[2], eff[3], eff[4], eff[5], articles, words, papers);
             Map<String, Object> item = new HashMap<>();
             item.put("id", p.getId()); item.put("title", p.getTitle());

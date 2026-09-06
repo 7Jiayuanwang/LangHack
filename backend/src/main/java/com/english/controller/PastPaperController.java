@@ -2,16 +2,25 @@ package com.english.controller;
 
 import com.english.dto.Result;
 import com.english.entity.PastPaper;
+import com.english.entity.PastPaperAttempt;
+import com.english.entity.User;
+import com.english.mapper.PastPaperAttemptMapper;
 import com.english.mapper.PastPaperMapper;
 import com.english.service.MediaService;
+import com.english.service.UserService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -22,6 +31,8 @@ public class PastPaperController {
     private static final Set<String> CATEGORIES = new HashSet<>(Arrays.asList("cet4", "cet6", "postgraduate"));
     private static final Set<String> QUESTION_TYPES = new HashSet<>(Arrays.asList("single_choice", "cloze", "matching", "translation", "writing", "listening"));
     private final PastPaperMapper pastPaperMapper;
+    private final PastPaperAttemptMapper pastPaperAttemptMapper;
+    private final UserService userService;
     private final ObjectMapper objectMapper;
     private final MediaService mediaService;
 
@@ -29,6 +40,57 @@ public class PastPaperController {
     @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
     public Result<List<Map<String, Object>>> list() {
         return Result.success(pastPaperMapper.findPublished().stream().map(this::toPayload).collect(Collectors.toList()));
+    }
+
+    @PostMapping("/attempts")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    @Transactional
+    public Result<Map<String, Object>> submitAttempt(@RequestBody Map<String, Object> payload,
+                                                      Authentication authentication) {
+        User student = userService.getUserByUsername(authentication.getName());
+        if (student == null) return Result.error("用户不存在");
+        String paperKey = stringValue(payload.get("paperKey"));
+        String category = stringValue(payload.get("category")).toLowerCase(Locale.ROOT);
+        String paperTitle = stringValue(payload.get("paperTitle"));
+        if (paperKey.isEmpty() || paperTitle.isEmpty() || !CATEGORIES.contains(category)) {
+            return Result.error("试卷信息无效");
+        }
+        int answeredCount = nonNegativeInt(payload.get("answeredCount"));
+        int questionCount = nonNegativeInt(payload.get("questionCount"));
+        int objectiveScore = nonNegativeInt(payload.get("objectiveScore"));
+        int objectiveTotal = nonNegativeInt(payload.get("objectiveTotal"));
+        int subjectiveCount = nonNegativeInt(payload.get("subjectiveCount"));
+        if (questionCount <= 0 || answeredCount <= 0 || answeredCount > questionCount
+                || objectiveScore > objectiveTotal || subjectiveCount > questionCount) {
+            return Result.error("答题统计无效");
+        }
+        PastPaperAttempt attempt = new PastPaperAttempt();
+        attempt.setStudentId(student.getId());
+        attempt.setPaperKey(paperKey);
+        attempt.setPastPaperId(nullableLong(payload.get("pastPaperId")));
+        attempt.setCategory(category);
+        attempt.setPaperTitle(paperTitle);
+        attempt.setAnsweredCount(answeredCount);
+        attempt.setQuestionCount(questionCount);
+        attempt.setObjectiveScore(objectiveScore);
+        attempt.setObjectiveTotal(objectiveTotal);
+        attempt.setSubjectiveCount(subjectiveCount);
+        BigDecimal percentage = objectiveTotal > 0
+                ? BigDecimal.valueOf(objectiveScore * 100.0 / objectiveTotal).setScale(2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(2);
+        attempt.setScorePercentage(percentage);
+        try {
+            attempt.setAnswersJson(objectMapper.writeValueAsString(payload.getOrDefault("answers", Collections.emptyMap())));
+        } catch (Exception e) {
+            return Result.error("答案格式无效");
+        }
+        attempt.setSubmittedTime(LocalDateTime.now());
+        pastPaperAttemptMapper.insert(attempt);
+        Map<String, Object> result = new HashMap<>();
+        result.put("attemptId", attempt.getId());
+        result.put("scorePercentage", percentage);
+        result.put("submittedTime", attempt.getSubmittedTime());
+        return Result.success(result);
     }
 
     @PostMapping
@@ -145,5 +207,27 @@ public class PastPaperController {
 
     private String text(JsonNode node, String field) {
         return node.path(field).asText("").trim();
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private int nonNegativeInt(Object value) {
+        if (value instanceof Number number) return Math.max(0, number.intValue());
+        try {
+            return Math.max(0, Integer.parseInt(stringValue(value)));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private Long nullableLong(Object value) {
+        if (value == null || stringValue(value).isEmpty()) return null;
+        try {
+            return Long.valueOf(stringValue(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }
