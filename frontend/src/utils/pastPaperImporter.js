@@ -18,7 +18,7 @@ const clean = (value = '') => {
     // treated ordinary prose such as "part of the brain" as "Part O..."
     // (the `i` flag made the lowercase word eligible) and truncated cloze
     // stems before their blanks.
-    .replace(/\.?\s*(?:#{1,3}\s*)?(?:Part\s+(?:[IVX]+|\d+)|Section\s+[A-C])\b.*$/is, '')
+    .replace(/\.?\s*(?:#{1,3}\s*)?(?:(?:Part|PART)\s+(?:[IVX]+|\d+)|(?:Section|SECTION)\s+[A-C])\b.*$/s, '')
     .replace(/\.?\s*={2,}\s*第?\s*\d+\s*页\s*={2,}.*$/is, '')
     .replace(/[.。]?\s*(?:公众号|微信公众(?:号|平台)?)[：:]?\s*[^\s]+\s*$/i, '')
     .replace(/\.?\s*(?:##\s*)?听(?:下)?一?段?(?:对话|独白|短文)[^。]*[。]?\s*$/i, '')

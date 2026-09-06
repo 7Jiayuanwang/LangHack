@@ -267,7 +267,7 @@ function cleanOptionText(text) {
     // 英文引导语：匹配 ". Questions 22 to 25 are based on ..." 或 "## Questions 19 to 21 are based on ..."
     .replace(/\.?\s*(?:##\s*)?Questions?\s+\d+\s+(?:to|and)\s+\d+\s+are\s+based\s+on.*$/is, '')
     .replace(/\.?\s*(?:##\s*)?Questions?\s+\d+\s+are\s+based\s+on.*$/is, '')
-    .replace(/\.?\s*(?:#{1,3}\s*)?(?:Part|Section)\s+[A-Z0-9]+\b.*$/is, '')
+    .replace(/\.?\s*(?:#{1,3}\s*)?(?:(?:Part|PART)\s+(?:[IVX]+|\d+)|(?:Section|SECTION)\s+[A-C])\b.*$/s, '')
     .replace(/\.?\s*={2,}\s*第?\s*\d+\s*页\s*={2,}.*$/is, '')
     .replace(/[.。]?\s*(?:公众号|微信公众(?:号|平台)?)[：:]?\s*[^\s]+\s*$/i, '')
     // 中文引导语："听下一段对话/独白" 等
