@@ -182,6 +182,7 @@ const pageTitle = computed(() => {
     '/student/courses': '课程学习',
     '/student/classes': '学习社区',
     '/student/assignments': '学习任务',
+    '/student/task-plans': '学期目标',
     '/student/schedule': '我的课表',
     '/student/scores': '等级考试',
     '/student/course-selections': '我的选课',

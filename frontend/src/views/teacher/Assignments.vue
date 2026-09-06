@@ -1,5 +1,8 @@
 <template>
-  <div class="assignments-management">
+  <div class="assignments-page">
+    <el-tabs v-model="activeTab" class="assignments-tabs">
+      <el-tab-pane label="布置任务" name="assignments">
+        <div class="assignments-management">
     <el-card>
       <template #header>
         <div class="card-header">
@@ -17,7 +20,7 @@
               <el-option
                 v-for="cls in classes"
                 :key="cls.id"
-                :label="cls.name"
+                :label="cls.courseSequence ? `${cls.name}（课序号：${cls.courseSequence}）` : cls.name"
                 :value="cls.id"
               />
             </el-select>
@@ -77,7 +80,10 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑任务' : '布置任务'"
-      width="min(800px, 90%)"
+      width="800px"
+      destroy-on-close
+      :close-on-click-modal="false"
+      class="assignment-dialog"
     >
       <el-form
         ref="assignmentFormRef"
@@ -122,7 +128,7 @@
             <el-option
               v-for="cls in classes"
               :key="cls.id"
-              :label="cls.name"
+              :label="cls.courseSequence ? `${cls.name}（课序号：${cls.courseSequence}）` : cls.name"
               :value="cls.id"
             />
           </el-select>
@@ -196,10 +202,12 @@
             >
               <div class="outer-article-filters">
                 <el-input
-                  v-model="outerArticleKeyword"
+                  v-model="articleSearch.keyword"
                   clearable
-                  placeholder="搜索文章标题或标签"
+                  placeholder="按标题搜索课外文章"
                   class="outer-article-search"
+                  @input="onArticleSearchInput"
+                  @clear="onArticleSearchInput"
                 />
                 <el-select
                   v-model="outerArticleDifficulty"
@@ -288,11 +296,21 @@
                   </el-checkbox>
                 </div>
               </el-checkbox-group>
-              <el-empty
-                v-if="!loadingUnitContent && filteredArticleTexts.length === 0"
-                :description="assignmentForm.articleType === 'OUTER' ? '没有匹配的课外文章' : '该单元暂无课文'"
-              />
-            </div>
+            <el-empty
+              v-if="!loadingUnitContent && filteredArticleTexts.length === 0"
+              :description="assignmentForm.articleType === 'OUTER' ? '没有匹配的课外文章' : '该单元暂无课文'"
+            />
+            <el-pagination
+              v-if="assignmentForm.articleType === 'OUTER' && articleSearch.total > 0"
+              v-model:current-page="articleSearch.page"
+              :page-size="articleSearch.size"
+              :total="articleSearch.total"
+              layout="total, prev, pager, next"
+              small
+              class="article-pagination"
+              @current-change="onArticlePageChange"
+            />
+          </div>
           </div>
         </el-form-item>
 
@@ -427,7 +445,10 @@
     <el-dialog
       v-model="progressDialogVisible"
       title="任务完成进度"
-      width="min(700px, 90%)"
+      width="700px"
+      destroy-on-close
+      :close-on-click-modal="false"
+      class="progress-dialog"
     >
       <div class="progress-overview">
         <div class="stats-row">
@@ -454,7 +475,7 @@
       <div class="students-progress">
         <h4>学生完成情况</h4>
         <div class="table-wrapper">
-        <el-table :data="studentProgress" stripe size="small">
+        <el-table :data="studentProgress" stripe size="small" height="300" style="width: 100%">
           <el-table-column prop="username" label="学号" width="120" />
           <el-table-column prop="realName" label="真实姓名" width="120" />
           <el-table-column prop="completedAt" label="完成时间" width="180">
@@ -485,12 +506,22 @@
       </div>
     </el-dialog>
   </div>
+      </el-tab-pane>
+      <el-tab-pane label="学期目标" name="taskPlans">
+        <TaskPlans />
+      </el-tab-pane>
+    </el-tabs>
+  </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
+import TaskPlans from './TaskPlans.vue'
+
+const activeTab = ref('assignments')
 
 // 响应式数据
 const loading = ref(false)
@@ -510,6 +541,26 @@ const unitContent = ref({
   texts: [],
   words: []
 })
+
+// 课外文章搜索分页状态
+const articleSearch = reactive({
+  keyword: '',
+  page: 1,
+  size: 20,
+  total: 0
+})
+let articleSearchTimer = null
+const onArticleSearchInput = () => {
+  clearTimeout(articleSearchTimer)
+  articleSearchTimer = setTimeout(() => {
+    articleSearch.page = 1
+    loadArticles()
+  }, 300)
+}
+const onArticlePageChange = (page) => {
+  articleSearch.page = page
+  loadArticles()
+}
 const bookVolumes = ['综合教程1', '综合教程2', '综合教程3', '理解当代中国']
 const unitNumbers = Array.from({ length: 6 }, (_, index) => index + 1)
 const contentSectionOptions = computed(() => (
@@ -571,9 +622,9 @@ const assignmentForm = reactive({
   wordIds: [],
   description: '',
   deadline: null,
-  weight: 1.0,  // 添加权重字段，默认1.0
-  idealStudyTimeMinutes: 60,  // 添加理想学习时长字段，默认60分钟
-  wordGroupCount: 1  // 单词组数，默认1组
+  weight: 1.0,
+  idealStudyTimeMinutes: 60,
+  wordGroupCount: 1
 })
 
 // 表单验证规则
@@ -1091,9 +1142,9 @@ const editAssignment = async (assignment) => {
     wordIds: Array.isArray(assignment.wordIds) ? [...assignment.wordIds] : [],
     description: assignment.description,
     deadline: assignment.deadline ? new Date(assignment.deadline) : null,
-    weight: assignment.weight || 1.0,  // 添加权重
-    idealStudyTimeMinutes: assignment.idealStudyTimeMinutes || 60,  // 添加理想学习时长
-    wordGroupCount: assignment.wordGroupCount || 1  // 单词组数
+    weight: assignment.weight || 1.0,
+    idealStudyTimeMinutes: assignment.idealStudyTimeMinutes || 60,
+    wordGroupCount: assignment.wordGroupCount || 1
   })
 
   // 加载对应班级的单元列表
@@ -1122,11 +1173,14 @@ const resetAssignmentForm = () => {
     wordIds: [],
     description: '',
     deadline: null,
-    weight: 1.0,  // 重置权重
-    idealStudyTimeMinutes: 60,  // 重置理想学习时长
-    wordGroupCount: 1  // 重置单词组数
+    weight: 1.0,
+    idealStudyTimeMinutes: 60,
+    wordGroupCount: 1
   })
   unitContent.value = { texts: [], words: [] }
+  articleSearch.keyword = ''
+  articleSearch.page = 1
+  articleSearch.total = 0
   activeTemplate.value = ''
   resetOuterArticleFilters()
 }
@@ -1255,6 +1309,9 @@ const onArticleTypeChange = async () => {
   assignmentForm.bookVolume = null
   assignmentForm.contentSection = null
   assignmentForm.unitNum = null
+  articleSearch.keyword = ''
+  articleSearch.page = 1
+  articleSearch.total = 0
   resetOuterArticleFilters()
   await loadArticles()
 }
@@ -1280,24 +1337,39 @@ const loadArticles = async () => {
     if (assignmentForm.bookVolume) params.append('bookVolume', assignmentForm.bookVolume)
     if (assignmentForm.contentSection) params.append('contentSection', assignmentForm.contentSection)
     if (assignmentForm.unitNum) params.append('unitNum', assignmentForm.unitNum)
+  } else {
+    // OUTER: 附加分页和搜索参数
+    params.append('page', String(articleSearch.page))
+    params.append('size', String(articleSearch.size))
+    if (articleSearch.keyword) params.append('keyword', articleSearch.keyword)
   }
+  loadingUnitContent.value = true
   const headers = {}
   const authHeader = getAuthHeader()
   if (authHeader) headers.Authorization = authHeader
   try {
     const response = await fetch(`/api/assignments/articles?${params.toString()}`, { headers })
     const data = await response.json()
-    const texts = data.code === 200 && Array.isArray(data.data) ? data.data : []
-    unitContent.value = { ...unitContent.value, texts }
-    // Administrator-maintained in-class classifications are selected as a
-    // group; extracurricular articles remain manual to avoid selecting a huge pool.
-    assignmentForm.textIds = assignmentForm.articleType === 'INNER'
-      ? texts.map(text => text.id)
-      : []
-    if (data.code !== 200) ElMessage.error(data.message || '加载文章失败')
+    if (data.code === 200) {
+      const payload = data.data
+      const texts = payload && Array.isArray(payload.records)
+        ? payload.records
+        : (Array.isArray(payload) ? payload : [])
+      unitContent.value = { ...unitContent.value, texts }
+      articleSearch.total = payload && Array.isArray(payload.records) ? (payload.total || 0) : 0
+      // 课内教材按筛选条件整组选择；课外文章保留跨页已选项。
+      if (assignmentForm.articleType === 'INNER') {
+        assignmentForm.textIds = texts.map(text => text.id)
+      }
+    } else {
+      unitContent.value = { ...unitContent.value, texts: [] }
+      articleSearch.total = 0
+      ElMessage.error(data.message || '加载文章失败')
+    }
   } catch (error) {
     console.error('加载文章失败:', error)
     unitContent.value = { ...unitContent.value, texts: [] }
+    articleSearch.total = 0
     ElMessage.error('加载文章失败')
   } finally {
     loadingUnitContent.value = false
@@ -1434,12 +1506,13 @@ const saveAssignment = async () => {
             body: JSON.stringify({
               id: assignmentForm.id,
               title: assignmentForm.title,
-              classId: assignmentForm.classId,
+              classIds: Array.isArray(assignmentForm.classId) ? assignmentForm.classId : [assignmentForm.classId],
+              classId: Array.isArray(assignmentForm.classId) ? assignmentForm.classId[0] : assignmentForm.classId,
               unitId: assignmentForm.unitId,
               description: assignmentForm.description,
               deadline: assignmentForm.deadline,
-              weight: assignmentForm.weight || 1.0,  // 添加权重
-              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60  // 添加理想学习时长
+              weight: assignmentForm.weight || 1.0,
+              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60
             })
           })
 
@@ -1469,7 +1542,7 @@ const saveAssignment = async () => {
             headers: fetchHeaders,
             body: JSON.stringify({
               title: assignmentForm.title,
-              classId: assignmentForm.classId,
+              classIds: Array.isArray(assignmentForm.classId) ? assignmentForm.classId : [assignmentForm.classId],
               unitId: assignmentForm.unitId,
               assignmentType: assignmentForm.assignmentType,
               articleType: assignmentForm.articleType,
@@ -1480,8 +1553,8 @@ const saveAssignment = async () => {
               wordIds: assignmentForm.wordIds,
               description: assignmentForm.description,
               deadline: assignmentForm.deadline,
-              weight: assignmentForm.weight || 1.0,  // 添加权重
-              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60  // 添加理想学习时长
+              weight: assignmentForm.weight || 1.0,
+              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60
             })
           })
 
@@ -1820,6 +1893,22 @@ onBeforeUnmount(stopProgressRefresh)
 </script>
 
 <style scoped>
+.assignments-page {
+  padding: 0;
+}
+.assignments-tabs {
+  :deep(.el-tabs__header) {
+    padding: 0 16px;
+    margin-bottom: 0;
+    background: var(--el-bg-color);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  :deep(.el-tabs__content) {
+    padding: 0;
+  }
+}
 .assignments-management {
   padding: 20px;
 }
@@ -2231,6 +2320,13 @@ onBeforeUnmount(stopProgressRefresh)
   color: #409eff;
 }
 
+.selected-count {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #409eff;
+  font-weight: 500;
+}
+
 .content-desc {
   font-size: 12px;
   color: #606266;
@@ -2296,5 +2392,48 @@ onBeforeUnmount(stopProgressRefresh)
   .article-type-group {
     gap: 10px;
   }
+}
+
+/* 布置任务对话框 - 固定大小居中，内容可滚动 */
+/* 注：dialog 样式移至非 scoped style 块 */
+
+/* 任务进度对话框 - 固定大小居中 */
+/* 注：dialog 样式移至非 scoped style 块 */
+</style>
+
+<style>
+/* 非 scoped：Element Plus dialog 会 teleport 到 body，scoped 选不到 */
+.el-dialog.assignment-dialog {
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: 85vh;
+}
+.el-dialog.assignment-dialog .el-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 20px;
+}
+
+.el-dialog.progress-dialog {
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: 80vh;
+}
+.el-dialog.progress-dialog .el-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 20px;
 }
 </style>

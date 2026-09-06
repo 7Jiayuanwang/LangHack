@@ -239,6 +239,12 @@ const routes = [
         component: () => import("@/views/admin/campaigns/EnrollmentManagement.vue"),
         meta: { title: "报名管理", roles: ["ADMIN"], featureKey: "admin.campaigns" },
       },
+      {
+        path: "task-plans",
+        name: "AdminTaskPlans",
+        component: () => import("@/views/admin/TaskPlans.vue"),
+        meta: { title: "默认任务", roles: ["ADMIN"] },
+      },
     ],
   },
   {
@@ -378,6 +384,12 @@ const routes = [
         meta: { title: "选课记录", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
       },
       {
+        path: "task-plans",
+        name: "TeacherTaskPlans",
+        component: () => import("@/views/teacher/TaskPlans.vue"),
+        meta: { title: "默认任务", roles: ["TEACHER"] },
+      },
+      {
         path: "ai-qa",
         name: "TeacherAiQa",
         component: () => import("@/views/teacher/AiQa.vue"),
@@ -411,6 +423,12 @@ const routes = [
         name: "StudentAssignments",
         component: () => import("@/views/student/Assignments.vue"),
         meta: { title: "我的任务", roles: ["STUDENT", "USER"], featureKey: "page_assignments" },
+      },
+      {
+        path: "task-plans",
+        name: "StudentTaskPlans",
+        component: () => import("@/views/student/TaskPlans.vue"),
+        meta: { title: "学期目标", roles: ["STUDENT", "USER"] },
       },
       {
         path: "words",

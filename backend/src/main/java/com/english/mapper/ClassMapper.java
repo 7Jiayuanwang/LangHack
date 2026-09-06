@@ -10,6 +10,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface ClassMapper extends BaseMapper<Class> {
@@ -47,4 +48,14 @@ public interface ClassMapper extends BaseMapper<Class> {
      * 查询班级统计信息
      */
     Long selectClassCount();
+
+    @Select("SELECT DISTINCT SUBSTRING_INDEX(name, ' - ', 1) AS label FROM classes WHERE deleted = 0 ORDER BY label")
+    List<String> selectDistinctCourseLabels();
+
+    @Select("SELECT c.id, c.name, u.real_name AS teacherName, tc.course_sequence AS courseSeq " +
+            "FROM classes c LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0 " +
+            "LEFT JOIN teaching_class tc ON c.school_class_id = tc.class_id COLLATE utf8mb4_unicode_ci " +
+            "WHERE c.deleted = 0 AND (c.name LIKE CONCAT(#{label}, ' - ', '%') OR c.name = #{label}) " +
+            "ORDER BY c.name")
+    List<Map<String, Object>> selectClassesByLabel(@Param("label") String label);
 }

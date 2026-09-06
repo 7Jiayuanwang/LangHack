@@ -676,6 +676,8 @@ let accumulatedTime = 0 // 累计学习时间（秒）
 let lastSavedStudyTime = 0 // 已保存到后端的学习时间（秒），用于计算增量避免重复累加
 let saveLearningRecordPromise = null
 let saveLearningRecordRequested = false
+let heartbeatTimer = null
+const HEARTBEAT_INTERVAL = 30 * 1000
 
 // 相关文章推荐
 const relatedTexts = ref([])
@@ -1105,6 +1107,12 @@ const pauseReading = async () => {
 }
 
 const saveLearningRecord = async () => {
+  // Heartbeat 可能早于 UI 定时器触发，先同步当前会话秒数。
+  if (recording.value && studyStartTime) {
+    const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
+    studyTime.value = accumulatedTime + currentSessionTime
+  }
+
   saveLearningRecordRequested = true
   if (saveLearningRecordPromise) return saveLearningRecordPromise
 
@@ -1162,12 +1170,23 @@ const startStudyTimer = () => {
       }
     }
   }, 1000)
+
+  if (heartbeatTimer) clearInterval(heartbeatTimer)
+  heartbeatTimer = setInterval(() => {
+    if (recording.value && studyTime.value > lastSavedStudyTime) {
+      void saveLearningRecord()
+    }
+  }, HEARTBEAT_INTERVAL)
 }
 
 const stopStudyTimer = () => {
   if (studyTimer) {
     clearInterval(studyTimer)
     studyTimer = null
+  }
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
   }
 }
 

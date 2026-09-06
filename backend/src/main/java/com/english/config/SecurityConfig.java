@@ -159,6 +159,7 @@ public class SecurityConfig {
                 .antMatchers("/api/admin/sync/**").hasAnyRole("ADMIN", "OPS")
                 // 数据指标：OPS 也可访问
                 .antMatchers("/api/admin/metrics/**").hasAnyRole("ADMIN", "OPS")
+                .antMatchers("/api/admin/task-plans/**").hasAnyRole("ADMIN", "OPS")
                 // 课文管理：教师也可访问（教师端上传课文功能）
                 .antMatchers("/api/admin/texts/**").hasAnyRole("ADMIN", "TEACHER")
                 .antMatchers("/api/admin/texts").hasAnyRole("ADMIN", "TEACHER")

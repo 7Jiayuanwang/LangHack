@@ -277,6 +277,7 @@ const MORE_ITEMS = {
     { path: '/admin/class-cohort',      label: '班级画像', icon: DataLine,     featureKey: 'admin.class_cohort' },
     { path: '/admin/vocab-learning-stats', label: '生词本统计', icon: DataAnalysis },
     { path: '/admin/tag-management',    label: '标签管理', icon: EditPen,      featureKey: 'admin.tag_management' },
+    { path: '/admin/task-plans',        label: '默认任务', icon: Document },
   ],
 }
 
@@ -350,6 +351,7 @@ const ROUTE_MAP = {
     '/admin/vocab-learning-stats': '生词本学习统计',
     '/admin/tag-management':    '标签管理',
     '/admin/notifications':     '通知管理',
+    '/admin/task-plans':        '默认任务',
   },
 }
 

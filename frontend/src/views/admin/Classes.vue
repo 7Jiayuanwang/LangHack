@@ -25,11 +25,22 @@
             </el-select>
           </el-form-item>
           <el-form-item label="任课教师">
-            <el-select v-model="filterForm.teacherId" placeholder="请选择教师" clearable @change="handleSearch" style="width: 160px">
+            <el-select
+              v-model="filterForm.teacherId"
+              placeholder="可按工号或姓名搜索教师"
+              clearable
+              filterable
+              remote
+              reserve-keyword
+              :remote-method="searchTeachers"
+              :loading="teacherLoading"
+              @change="handleSearch"
+              style="width: 220px"
+            >
               <el-option
                 v-for="teacher in teachers"
                 :key="teacher.id"
-                :label="teacher.nickname || teacher.realName || teacher.username"
+                :label="getTeacherLabel(teacher)"
                 :value="teacher.id"
               />
             </el-select>
@@ -130,11 +141,20 @@
           </el-select>
         </el-form-item>
         <el-form-item label="任课教师" prop="teacherId">
-          <el-select v-model="form.teacherId" placeholder="请选择教师" style="width: 100%">
+          <el-select
+            v-model="form.teacherId"
+            placeholder="可按工号或姓名搜索教师"
+            filterable
+            remote
+            reserve-keyword
+            :remote-method="searchTeachers"
+            :loading="teacherLoading"
+            style="width: 100%"
+          >
             <el-option
               v-for="teacher in teachers"
               :key="teacher.id"
-              :label="teacher.nickname || teacher.realName || teacher.username"
+              :label="getTeacherLabel(teacher)"
               :value="teacher.id"
             />
           </el-select>
@@ -251,6 +271,8 @@ const loading = ref(false)
 const classes = ref([])
 const courses = ref([])
 const teachers = ref([])
+const teacherLoading = ref(false)
+let teacherSearchTimer = null
 const dialogVisible = ref(false)
 const detailVisible = ref(false)
 const isEdit = ref(false)
@@ -392,24 +414,41 @@ const loadCourses = async () => {
   }
 }
 
-// 加载教师列表
-const loadTeachers = async () => {
+// 加载教师列表，后端支持按工号、真实姓名搜索
+const loadTeachers = async (keyword = '') => {
+  teacherLoading.value = true
   try {
-    const response = await fetch('/api/admin/users?role=TEACHER&size=100', {
-      headers: {
-        'Authorization': getAuthHeader() || ''
-      }
+    const params = new URLSearchParams({ role: 'TEACHER', size: '100' })
+    if (keyword.trim()) params.set('keyword', keyword.trim())
+    const response = await fetch(`/api/admin/users?${params.toString()}`, {
+      headers: { 'Authorization': getAuthHeader() || '' }
     })
-
     if (response.ok) {
       const data = await response.json()
       if (data.code === 200) {
-        teachers.value = Array.isArray(data.data?.records) ? data.data.records : []
+        const records = Array.isArray(data.data?.records) ? data.data.records : []
+        const selectedIds = new Set([filterForm.teacherId, form.teacherId].filter(Boolean))
+        const selected = teachers.value.filter(teacher => selectedIds.has(teacher.id))
+        teachers.value = [...selected, ...records.filter(teacher => !selectedIds.has(teacher.id))]
       }
     }
   } catch (error) {
     console.error('加载教师列表失败:', error)
+  } finally {
+    teacherLoading.value = false
   }
+}
+
+const searchTeachers = (keyword) => {
+  clearTimeout(teacherSearchTimer)
+  teacherSearchTimer = setTimeout(() => loadTeachers(keyword), 300)
+}
+
+const getTeacherLabel = (teacher) => {
+  const name = teacher.realName || teacher.nickname || teacher.username
+  return teacher.username && teacher.username !== name
+    ? `${name}（${teacher.username}）`
+    : name
 }
 
 // 显示创建对话框

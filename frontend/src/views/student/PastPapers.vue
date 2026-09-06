@@ -146,7 +146,7 @@
       <footer class="exam-actions">
         <button type="button" class="secondary-button" :disabled="currentIndex === 0" @click="currentIndex--">上一题</button>
         <button v-if="currentIndex < activePaper.questions.length - 1" type="button" class="primary-button" @click="currentIndex++">下一题</button>
-        <button v-else-if="!submitted" type="button" class="primary-button" :disabled="answeredCount === 0" @click="submitPaper">交卷</button>
+        <button v-else-if="!submitted" type="button" class="primary-button" :disabled="answeredCount === 0 || submitting" @click="submitPaper">{{ submitting ? '保存中...' : '交卷' }}</button>
         <button v-else type="button" class="primary-button" @click="leavePaper">查看试卷列表</button>
       </footer>
 
@@ -167,7 +167,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, CircleCheck, CircleClose, Delete, Upload } from '@element-plus/icons-vue'
 import { examCategories, pastPapers } from '@/data/pastPapers'
 import PastPaperImportDialog from '@/components/past-papers/PastPaperImportDialog.vue'
-import { deleteSharedPastPaper, getSharedPastPapers } from '@/api/pastPapers'
+import { deleteSharedPastPaper, getSharedPastPapers, submitPastPaperAttempt } from '@/api/pastPapers'
 import { useUserStore } from '@/store/user'
 
 const STORAGE_KEY = 'langhack-past-paper-results'
@@ -177,6 +177,7 @@ const activePaper = ref(null)
 const currentIndex = ref(0)
 const answers = ref({})
 const submitted = ref(false)
+const submitting = ref(false)
 const importVisible = ref(false)
 const sharedPapers = ref([])
 const userStore = useUserStore()
@@ -351,14 +352,34 @@ async function submitPaper() {
       return
     }
   }
-  submitted.value = true
-  savedResults.value = {
-    ...savedResults.value,
-    [activePaper.value.id]: { score: score.value, total: objectiveCount.value, subjectiveCount: subjectiveCount.value, submittedAt: Date.now() }
+  submitting.value = true
+  try {
+    await submitPastPaperAttempt({
+      paperKey: String(activePaper.value.id),
+      pastPaperId: activePaper.value.serverManaged ? activePaper.value.id : null,
+      category: activePaper.value.category,
+      paperTitle: activePaper.value.title,
+      answeredCount: answeredCount.value,
+      questionCount: activePaper.value.questions.length,
+      objectiveScore: score.value,
+      objectiveTotal: objectiveCount.value,
+      subjectiveCount: subjectiveCount.value,
+      answers: answers.value
+    })
+    submitted.value = true
+    savedResults.value = {
+      ...savedResults.value,
+      [activePaper.value.id]: { score: score.value, total: objectiveCount.value, subjectiveCount: subjectiveCount.value, submittedAt: Date.now() }
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedResults.value))
+    ElMessage.success(`已交卷并保存记录，客观题得分 ${score.value}/${objectiveCount.value}`)
+    currentIndex.value = 0
+  } catch (error) {
+    console.error('保存真题练习记录失败:', error)
+    ElMessage.error(error?.response?.data?.message || '交卷记录保存失败，请稍后重试')
+  } finally {
+    submitting.value = false
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(savedResults.value))
-  ElMessage.success(`已交卷，客观题得分 ${score.value}/${objectiveCount.value}`)
-  currentIndex.value = 0
 }
 
 async function leavePaper() {

@@ -54,4 +54,29 @@ public interface LearningRecordMapper extends BaseMapper<LearningRecord> {
     @Select("SELECT DISTINCT student_id FROM learning_records " +
             "WHERE created_time >= DATE_SUB(NOW(), INTERVAL #{lastNDays} DAY)")
     List<Long> selectActiveUserIds(@Param("lastNDays") int lastNDays);
+
+    @Select("SELECT COUNT(DISTINCT text_id) FROM learning_records " +
+            "WHERE student_id = #{studentId} AND record_type = 'TEXT_VIEW' AND text_id IS NOT NULL " +
+            "AND created_time >= #{since} AND created_time < #{until}")
+    int countDistinctTextsRead(@Param("studentId") Long studentId,
+                               @Param("since") LocalDateTime since,
+                               @Param("until") LocalDateTime until);
+
+    @Select("SELECT COUNT(DISTINCT word_id) FROM learning_records " +
+            "WHERE student_id = #{studentId} AND record_type = 'REVIEW' AND word_id IS NOT NULL " +
+            "AND created_time >= #{since} AND created_time < #{until}")
+    int countDistinctWordsReviewed(@Param("studentId") Long studentId,
+                                   @Param("since") LocalDateTime since,
+                                   @Param("until") LocalDateTime until);
+
+    @Select("SELECT COUNT(DISTINCT lr.word_id) FROM learning_records lr " +
+            "INNER JOIN words w ON lr.word_id = w.id " +
+            "INNER JOIN word_category_map wcm ON LOWER(w.word) = LOWER(wcm.word) COLLATE utf8mb4_unicode_ci " +
+            "WHERE lr.student_id = #{studentId} AND lr.record_type = 'REVIEW' " +
+            "AND lr.created_time >= #{since} AND lr.created_time < #{until} " +
+            "AND wcm.category IN (${categories})")
+    int countDistinctWordsReviewedByCategory(@Param("studentId") Long studentId,
+                                             @Param("since") LocalDateTime since,
+                                             @Param("until") LocalDateTime until,
+                                             @Param("categories") String categories);
 }
