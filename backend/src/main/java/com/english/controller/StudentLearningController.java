@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.english.util.TextEncodingRepair;
 
 /**
  * 学生学习控制器
@@ -345,6 +346,7 @@ public class StudentLearningController {
                     Long otherId = m.getTextId().equals(textId) ? m.getSimilarTextId() : m.getTextId();
                     Text t = textMap.get(otherId);
                     if (t != null) {
+                        TextEncodingRepair.repair(t);
                         Map<String, Object> item = new LinkedHashMap<>();
                         item.put("id", t.getId());
                         item.put("title", t.getTitle());
@@ -384,6 +386,7 @@ public class StudentLearningController {
                     Collections.shuffle(candidates);
                     List<Text> fallback = candidates.subList(0, Math.min(5, candidates.size()));
                     for (Text t : fallback) {
+                        TextEncodingRepair.repair(t);
                         Map<String, Object> item = new LinkedHashMap<>();
                         item.put("id", t.getId());
                         item.put("title", t.getTitle());

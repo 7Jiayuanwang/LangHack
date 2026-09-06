@@ -135,6 +135,47 @@ describe('Teacher Assignments.vue', () => {
     expect(wrapper.vm.assignmentForm.textIds).toEqual([])
   })
 
+  it('filters extracurricular articles by keyword, difficulty, and tags', async () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    wrapper.vm.unitContent.texts = [
+      { id: 1, title: 'Climate change', difficulty: 'HARD', tags: 'environment, science', content: 'one two' },
+      { id: 2, title: 'Study habits', difficulty: 'EASY', tags: ['education'], content: 'one two' }
+    ]
+
+    wrapper.vm.outerArticleTag = 'environment'
+    expect(wrapper.vm.filteredArticleTexts.map(text => text.id)).toEqual([1])
+    wrapper.vm.outerArticleTag = ''
+    wrapper.vm.outerArticleDifficulty = 'EASY'
+    expect(wrapper.vm.filteredArticleTexts.map(text => text.id)).toEqual([2])
+    wrapper.vm.outerArticleDifficulty = ''
+    wrapper.vm.outerArticleKeyword = 'science'
+    expect(wrapper.vm.filteredArticleTexts.map(text => text.id)).toEqual([1])
+  })
+
+  it('selects all currently visible extracurricular articles without dropping hidden selections', () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    wrapper.vm.unitContent.texts = [
+      { id: 1, title: 'First', tags: 'news' },
+      { id: 2, title: 'Second', tags: 'science' }
+    ]
+    wrapper.vm.assignmentForm.textIds = [2]
+    wrapper.vm.outerArticleTag = 'news'
+
+    wrapper.vm.toggleAllFilteredArticles()
+
+    expect(wrapper.vm.assignmentForm.textIds).toEqual([2, 1])
+  })
+
+  it('estimates at least one minute for short articles', () => {
+    const wrapper = createWrapper()
+    expect(wrapper.vm.getEstimatedReadingMinutes({ content: 'short article' })).toBe(1)
+    expect(wrapper.vm.getTextTags({ tags: 'news， science;reading' })).toEqual(['news', 'science', 'reading'])
+  })
+
   it('has unitContent reactive object', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.unitContent).toBeDefined()
@@ -215,5 +256,88 @@ describe('Teacher Assignments.vue', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain('字数：9')
+  })
+
+  it('does not repeat the extracurricular label inside article cards', async () => {
+    const wrapper = createWrapper({
+      global: {
+        stubs: {
+          ElCheckboxGroup: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+    wrapper.vm.dialogVisible = true
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    wrapper.vm.unitContent.texts = [{
+      id: 1,
+      title: 'A short article',
+      difficulty: 'EASY',
+      content: 'one two three'
+    }]
+    await nextTick()
+
+    expect(wrapper.find('.outer-article-grid').exists()).toBe(true)
+    expect(wrapper.findAll('.content-category')).toHaveLength(0)
+    expect(wrapper.findAll('.outer-article-item .article-tags')).toHaveLength(0)
+    expect(wrapper.find('.outer-article-item .content-row').exists()).toBe(true)
+  })
+
+  it('hides article controls and the empty checkbox group when no articles are available', async () => {
+    const wrapper = createWrapper({
+      global: {
+        stubs: {
+          ElCheckboxGroup: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+    wrapper.vm.dialogVisible = true
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    wrapper.vm.unitContent.texts = []
+    await nextTick()
+
+    expect(wrapper.find('.outer-article-tools').exists()).toBe(false)
+    expect(wrapper.find('.outer-article-search').exists()).toBe(false)
+    expect(wrapper.find('.content-grid').exists()).toBe(false)
+    expect(wrapper.find('el-form-item[label="选择课文"]').exists()).toBe(false)
+  })
+
+  it('keeps article tags collapsed until the triangle is opened', async () => {
+    const wrapper = createWrapper({
+      global: {
+        stubs: {
+          ElCheckboxGroup: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+    wrapper.vm.dialogVisible = true
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    wrapper.vm.unitContent.texts = [{
+      id: 1,
+      title: 'Tagged article',
+      tags: 'news, science',
+      content: 'article'
+    }]
+    await nextTick()
+
+    const tagFilter = wrapper.find('.outer-article-tag-filter')
+    expect(tagFilter.exists()).toBe(true)
+    expect(tagFilter.attributes('open')).toBeUndefined()
+    expect(tagFilter.find('.tag-filter-options').exists()).toBe(true)
+  })
+
+  it('does not pin the article toolbar over scrolling article choices', async () => {
+    const wrapper = createWrapper()
+    wrapper.vm.dialogVisible = true
+    wrapper.vm.assignmentForm.assignmentType = 'TEXTS'
+    wrapper.vm.assignmentForm.articleType = 'OUTER'
+    wrapper.vm.unitContent.texts = [{ id: 1, title: 'Article', content: 'text' }]
+    await nextTick()
+
+    const toolbar = wrapper.find('.outer-article-tools')
+    expect(toolbar.exists()).toBe(true)
+    expect(getComputedStyle(toolbar.element).position).not.toBe('sticky')
   })
 })

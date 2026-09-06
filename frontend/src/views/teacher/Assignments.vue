@@ -3,6 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
+          <el-button size="small" @click="openTemplateManager">Template manager</el-button>
           <span>任务管理</span>
           <el-button type="primary" @click="showCreateDialog">布置任务</el-button>
         </div>
@@ -89,15 +90,19 @@
           <div class="template-list">
             <div
               v-for="tpl in assignmentTemplates"
-              :key="tpl.key"
+              :key="tpl.key || tpl.id"
               class="template-card"
-              :class="{ active: activeTemplate === tpl.key }"
+              :class="{ active: activeTemplate === (tpl.key || tpl.id) }"
               @click="applyTemplate(tpl)"
             >
-              <div class="template-icon">{{ tpl.icon }}</div>
+              <div class="template-icon">{{ tpl.icon || '📋' }}</div>
               <div class="template-name">{{ tpl.name }}</div>
               <div class="template-desc">{{ tpl.desc }}</div>
             </div>
+          </div>
+          <div class="template-actions">
+            <el-button size="small" @click="saveCurrentAsTemplate">Save current as template</el-button>
+            <el-button size="small" link type="primary" @click="openTemplateManager">Manage my templates</el-button>
           </div>
           <div class="template-tip">点击模板可自动填充任务类型和学习时长；指定课文只需选班级和文章，其他任务需选择单元</div>
         </el-form-item>
@@ -138,7 +143,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="任务类型" prop="assignmentType">
-          <el-radio-group v-model="assignmentForm.assignmentType" @change="onAssignmentTypeChange">
+          <el-radio-group class="assignment-type-group" v-model="assignmentForm.assignmentType" @change="onAssignmentTypeChange">
             <el-radio value="UNIT">整个单元</el-radio>
             <el-radio value="TEXTS">指定课文</el-radio>
             <el-radio value="WORDS">指定单词</el-radio>
@@ -146,7 +151,7 @@
         </el-form-item>
 
         <el-form-item v-if="assignmentForm.assignmentType === 'TEXTS'" label="文章分类" prop="articleType">
-          <el-radio-group v-model="assignmentForm.articleType" @change="onArticleTypeChange">
+          <el-radio-group class="article-type-group" v-model="assignmentForm.articleType" @change="onArticleTypeChange">
             <el-radio value="INNER">课内教材课文</el-radio>
             <el-radio value="OUTER">课外读物</el-radio>
           </el-radio-group>
@@ -175,28 +180,119 @@
         </template>
 
         <!-- 选择课文 -->
-        <el-form-item v-if="assignmentForm.assignmentType === 'TEXTS'" label="选择课文" prop="textIds">
-          <div v-loading="loadingUnitContent" class="content-selector">
-            <el-checkbox-group v-model="assignmentForm.textIds">
-              <div class="content-grid">
-                <el-checkbox
-                  v-for="text in unitContent.texts"
-                  :key="text.id"
-                  :value="text.id"
-                  class="content-item"
+        <el-form-item
+          v-if="assignmentForm.assignmentType === 'TEXTS' && (assignmentForm.articleType === 'INNER' || unitContent.texts.length > 0)"
+          label="选择课文"
+          prop="textIds"
+        >
+          <div
+            v-loading="loadingUnitContent"
+            class="content-selector"
+            :class="{ 'article-selector': assignmentForm.assignmentType === 'TEXTS' }"
+          >
+            <div
+              v-if="assignmentForm.articleType === 'OUTER' && unitContent.texts.length > 0"
+              class="outer-article-tools"
+            >
+              <div class="outer-article-filters">
+                <el-input
+                  v-model="outerArticleKeyword"
+                  clearable
+                  placeholder="搜索文章标题或标签"
+                  class="outer-article-search"
+                />
+                <el-select
+                  v-model="outerArticleDifficulty"
+                  clearable
+                  placeholder="难度"
+                  class="outer-article-difficulty"
                 >
-                  <div class="content-info">
-                    <div class="content-title">{{ text.title }}</div>
-                    <div class="content-meta">
-                      难度：{{ text.difficulty }} |
-                      字数：{{ getTextCharacterCount(text) }}
-                    </div>
-                    <div class="content-category">{{ getTextClassificationLabel(text) }}</div>
-                  </div>
-                </el-checkbox>
+                  <el-option label="简单" value="EASY" />
+                  <el-option label="中等" value="MEDIUM" />
+                  <el-option label="困难" value="HARD" />
+                </el-select>
               </div>
-            </el-checkbox-group>
-            <el-empty v-if="!loadingUnitContent && unitContent.texts.length === 0" description="该单元暂无课文" />
+              <details v-if="outerArticleTags.length" class="outer-article-tag-filter">
+                <summary class="tag-filter-summary">
+                  <span class="tag-filter-label">标签筛选</span>
+                  <el-tag v-if="outerArticleTag" size="small" type="primary" effect="plain">
+                    {{ outerArticleTag }}
+                  </el-tag>
+                </summary>
+                <div class="tag-filter-options">
+                  <el-tag
+                    v-for="tag in outerArticleTags"
+                    :key="tag"
+                    size="small"
+                    :type="outerArticleTag === tag ? 'primary' : 'info'"
+                    :effect="outerArticleTag === tag ? 'dark' : 'plain'"
+                    class="tag-filter-item"
+                    @click="outerArticleTag = outerArticleTag === tag ? '' : tag"
+                  >
+                    {{ tag }}
+                  </el-tag>
+                  <el-button
+                    v-if="outerArticleTag"
+                    link
+                    type="primary"
+                    size="small"
+                    @click="outerArticleTag = ''"
+                  >
+                    清除标签
+                  </el-button>
+                </div>
+              </details>
+              <div class="outer-article-summary">
+                显示 {{ filteredArticleTexts.length }} 篇，已选 {{ assignmentForm.textIds.length }} 篇
+                <el-button link type="primary" size="small" @click="toggleAllFilteredArticles">
+                  {{ allFilteredArticleIdsSelected ? '取消当前筛选' : '全选当前筛选' }}
+                </el-button>
+              </div>
+            </div>
+            <div class="article-list-scroll">
+              <el-checkbox-group v-if="filteredArticleTexts.length" v-model="assignmentForm.textIds">
+                <div class="content-grid outer-article-grid">
+                  <el-checkbox
+                    v-for="text in filteredArticleTexts"
+                    :key="text.id"
+                    :value="text.id"
+                    class="content-item"
+                    :class="{ 'outer-article-item': assignmentForm.articleType === 'OUTER' }"
+                  >
+                    <div class="content-info">
+                      <div class="content-row">
+                        <div class="content-title">{{ text.title }}</div>
+                        <div class="content-meta">
+                        <el-tag size="small" effect="plain" :type="getDifficultyTagType(text.difficulty)">
+                          {{ getDifficultyLabel(text.difficulty) }}
+                        </el-tag>
+                        <span>字数：{{ getTextCharacterCount(text) }}</span>
+                        <span v-if="assignmentForm.articleType === 'OUTER'">
+                          预计 {{ getEstimatedReadingMinutes(text) }} 分钟
+                        </span>
+                        </div>
+                      </div>
+                      <div v-if="assignmentForm.articleType !== 'OUTER' && getTextTags(text).length" class="article-tags">
+                        <el-tag
+                          v-for="tag in getTextTags(text)"
+                          :key="tag"
+                          size="small"
+                          effect="plain"
+                          type="info"
+                        >
+                          {{ tag }}
+                        </el-tag>
+                      </div>
+                      <div v-else-if="assignmentForm.articleType !== 'OUTER'" class="content-category">{{ getTextClassificationLabel(text) }}</div>
+                    </div>
+                  </el-checkbox>
+                </div>
+              </el-checkbox-group>
+              <el-empty
+                v-if="!loadingUnitContent && filteredArticleTexts.length === 0"
+                :description="assignmentForm.articleType === 'OUTER' ? '没有匹配的课外文章' : '该单元暂无课文'"
+              />
+            </div>
           </div>
         </el-form-item>
 
@@ -288,6 +384,7 @@
       </el-form>
       <template #footer>
         <span class="dialog-footer">
+          <el-button v-if="!isEdit" @click="saveCurrentAsTemplate">Save as template</el-button>
           <el-button @click="dialogVisible = false">取消</el-button>
           <el-button type="primary" @click="saveAssignment" :loading="saving">确定</el-button>
         </span>
@@ -295,6 +392,38 @@
     </el-dialog>
 
     <!-- 任务进度对话框 -->
+    <el-dialog v-model="templateManagerVisible" title="My assignment templates" width="min(680px, 92%)">
+      <div class="template-manager-toolbar">
+        <span class="template-manager-tip">Templates are reusable across classes. Editing one affects future assignments only.</span>
+        <el-button type="primary" size="small" @click="startNewTemplate">New template</el-button>
+      </div>
+      <el-empty v-if="userTemplates.length === 0" description="No custom templates" />
+      <div v-else class="template-manager-list">
+        <div v-for="tpl in userTemplates" :key="tpl.id" class="template-manager-item">
+          <div>
+            <div class="template-manager-name">{{ tpl.name }}</div>
+            <div class="template-manager-desc">{{ tpl.description || 'No description' }}</div>
+          </div>
+          <div class="template-manager-actions">
+            <el-button link type="primary" @click="editTemplate(tpl)">Edit</el-button>
+            <el-button link type="danger" @click="removeTemplate(tpl)">Delete</el-button>
+          </div>
+        </div>
+      </div>
+      <el-form v-if="templateEditorVisible" :model="templateDraft" label-width="90px" class="template-editor">
+        <el-form-item label="Template name" required>
+          <el-input v-model="templateDraft.name" maxlength="120" show-word-limit />
+        </el-form-item>
+        <el-form-item label="Description">
+          <el-input v-model="templateDraft.description" maxlength="500" type="textarea" :rows="2" />
+        </el-form-item>
+        <div class="template-editor-actions">
+          <el-button @click="templateEditorVisible = false">Cancel</el-button>
+          <el-button type="primary" :loading="templateSaving" @click="submitTemplate">Save</el-button>
+        </div>
+      </el-form>
+    </el-dialog>
+
     <el-dialog
       v-model="progressDialogVisible"
       title="任务完成进度"
@@ -391,7 +520,7 @@ const contentSectionOptions = computed(() => (
 
 // 快捷任务模板
 const activeTemplate = ref('')
-const assignmentTemplates = [
+const builtinAssignmentTemplates = [
   {
     key: 'reading',
     name: '读课文',
@@ -412,6 +541,13 @@ const assignmentTemplates = [
     title: '单词背诵任务'
   }
 ]
+const userTemplates = ref([])
+const assignmentTemplates = computed(() => [...builtinAssignmentTemplates, ...userTemplates.value])
+const templateManagerVisible = ref(false)
+const templateEditorVisible = ref(false)
+const templateSaving = ref(false)
+const templateDraft = reactive({ id: null, name: '', description: '' })
+const templateDraftConfig = ref({})
 
 // 筛选表单
 const filterForm = reactive({
@@ -441,6 +577,88 @@ const assignmentForm = reactive({
 })
 
 // 表单验证规则
+// 课外文章筛选只作用于当前弹窗中的显示列表，不改变接口返回的数据。
+const outerArticleKeyword = ref('')
+const outerArticleDifficulty = ref('')
+const outerArticleTag = ref('')
+
+const getTextTags = (text) => {
+  const rawTags = text?.tags
+  if (Array.isArray(rawTags)) return rawTags.map(tag => String(tag).trim()).filter(Boolean)
+  if (typeof rawTags !== 'string') return []
+  return rawTags
+    .split(/[,，;；、|]/)
+    .map(tag => tag.trim())
+    .filter(Boolean)
+}
+
+const outerArticleTags = computed(() => {
+  const tags = new Set()
+  for (const text of unitContent.value.texts || []) {
+    getTextTags(text).forEach(tag => tags.add(tag))
+  }
+  return [...tags]
+})
+
+const filteredArticleTexts = computed(() => {
+  const keyword = outerArticleKeyword.value.trim().toLowerCase()
+  const difficulty = outerArticleDifficulty.value
+  const tag = outerArticleTag.value
+  return (unitContent.value.texts || []).filter(text => {
+    if (assignmentForm.articleType !== 'OUTER') return true
+    const tags = getTextTags(text)
+    const searchableText = [text?.title, text?.category, ...tags]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return (!keyword || searchableText.includes(keyword))
+      && (!difficulty || String(text?.difficulty || '').toUpperCase() === difficulty)
+      && (!tag || tags.includes(tag))
+  })
+})
+
+const allFilteredArticleIdsSelected = computed(() => {
+  const ids = filteredArticleTexts.value.map(text => text.id)
+  return ids.length > 0 && ids.every(id => assignmentForm.textIds.includes(id))
+})
+
+const toggleAllFilteredArticles = () => {
+  const visibleIds = filteredArticleTexts.value.map(text => text.id)
+  if (allFilteredArticleIdsSelected.value) {
+    assignmentForm.textIds = assignmentForm.textIds.filter(id => !visibleIds.includes(id))
+  } else {
+    assignmentForm.textIds = [...new Set([...assignmentForm.textIds, ...visibleIds])]
+  }
+}
+
+const resetOuterArticleFilters = () => {
+  outerArticleKeyword.value = ''
+  outerArticleDifficulty.value = ''
+  outerArticleTag.value = ''
+}
+
+const getDifficultyLabel = (difficulty) => ({ EASY: '简单', MEDIUM: '中等', HARD: '困难' }[
+  String(difficulty || '').toUpperCase()
+] || '未标注')
+
+const getDifficultyTagType = (difficulty) => ({ EASY: 'success', MEDIUM: 'warning', HARD: 'danger' }[
+  String(difficulty || '').toUpperCase()
+] || 'info')
+
+const getEstimatedReadingMinutes = (text) => {
+  const explicitMinutes = Number(text?.readingTimeMinutes || text?.estimatedReadingMinutes)
+  if (Number.isFinite(explicitMinutes) && explicitMinutes > 0) return Math.ceil(explicitMinutes)
+  const content = typeof text?.content === 'string' && text.content.trim()
+    ? text.content
+    : (typeof text?.markdownContent === 'string' ? text.markdownContent : '')
+  const plainText = content
+    .replace(/```[\\s\\S]*?```/g, ' ')
+    .replace(/[#*_>`~-]/g, ' ')
+    .trim()
+  const words = plainText ? plainText.split(/\\s+/).filter(Boolean).length : 0
+  return Math.max(1, Math.ceil(words / 180))
+}
+
 const assignmentRules = {
   title: [
     { required: true, message: '请输入任务标题', trigger: 'blur' }
@@ -728,6 +946,122 @@ const loadUnitsForClass = async (classId) => {
   return Promise.resolve()
 }
 
+const templateHeaders = () => {
+  const headers = { 'Content-Type': 'application/json' }
+  const authHeader = getAuthHeader()
+  if (authHeader) headers.Authorization = authHeader
+  return headers
+}
+
+const templateConfigFromForm = () => ({
+  title: assignmentForm.title,
+  assignmentType: assignmentForm.assignmentType,
+  articleType: assignmentForm.articleType,
+  bookVolume: assignmentForm.bookVolume,
+  contentSection: assignmentForm.contentSection,
+  unitNum: assignmentForm.unitNum,
+  unitId: assignmentForm.unitId,
+  textIds: [...assignmentForm.textIds],
+  wordIds: [...assignmentForm.wordIds],
+  description: assignmentForm.description,
+  weight: assignmentForm.weight,
+  idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes,
+  wordGroupCount: assignmentForm.wordGroupCount
+})
+
+const loadAssignmentTemplates = async () => {
+  try {
+    const response = await fetch('/api/teacher/assignment-templates', { headers: templateHeaders() })
+    const data = await response.json()
+    if (response.ok && data.code === 200) {
+      userTemplates.value = Array.isArray(data.data)
+        ? data.data.map(template => ({ ...template, key: `custom-${template.id}`, desc: template.description }))
+        : []
+    }
+  } catch (error) {
+    console.debug('Failed to load assignment templates', error)
+  }
+}
+
+const openTemplateManager = async () => {
+  templateManagerVisible.value = true
+  templateEditorVisible.value = false
+  await loadAssignmentTemplates()
+}
+
+const startNewTemplate = () => {
+  templateDraft.id = null
+  templateDraft.name = assignmentForm.title || ''
+  templateDraft.description = assignmentForm.description || ''
+  templateDraftConfig.value = templateConfigFromForm()
+  templateEditorVisible.value = true
+}
+
+const saveCurrentAsTemplate = async () => {
+  templateDraft.id = null
+  templateDraft.name = assignmentForm.title || ''
+  templateDraft.description = assignmentForm.description || ''
+  templateDraftConfig.value = templateConfigFromForm()
+  templateManagerVisible.value = true
+  templateEditorVisible.value = true
+  await loadAssignmentTemplates()
+}
+
+const editTemplate = (tpl) => {
+  templateDraft.id = tpl.id
+  templateDraft.name = tpl.name || ''
+  templateDraft.description = tpl.description || ''
+  templateDraftConfig.value = tpl.config || {}
+  templateEditorVisible.value = true
+}
+
+const submitTemplate = async () => {
+  if (!templateDraft.name.trim()) {
+    ElMessage.error('Template name is required')
+    return
+  }
+  templateSaving.value = true
+  try {
+    const editing = Boolean(templateDraft.id)
+    const response = await fetch(editing
+      ? `/api/teacher/assignment-templates/${templateDraft.id}`
+      : '/api/teacher/assignment-templates', {
+      method: editing ? 'PUT' : 'POST',
+      headers: templateHeaders(),
+      body: JSON.stringify({
+        name: templateDraft.name.trim(),
+        description: templateDraft.description,
+        config: templateDraftConfig.value
+      })
+    })
+    const data = await response.json()
+    if (!response.ok || data.code !== 200) throw new Error(data.message || 'Failed to save template')
+    ElMessage.success('Template saved')
+    templateEditorVisible.value = false
+    await loadAssignmentTemplates()
+  } catch (error) {
+    ElMessage.error(error.message || 'Failed to save template')
+  } finally {
+    templateSaving.value = false
+  }
+}
+
+const removeTemplate = async (tpl) => {
+  try {
+    await ElMessageBox.confirm(`Delete template "${tpl.name}"?`, 'Confirm', { type: 'warning' })
+    const response = await fetch(`/api/teacher/assignment-templates/${tpl.id}`, {
+      method: 'DELETE',
+      headers: templateHeaders()
+    })
+    const data = await response.json()
+    if (!response.ok || data.code !== 200) throw new Error(data.message || 'Failed to delete template')
+    ElMessage.success('Template deleted')
+    await loadAssignmentTemplates()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error.message || 'Failed to delete template')
+  }
+}
+
 const showCreateDialog = () => {
   isEdit.value = false
   dialogVisible.value = true
@@ -738,11 +1072,15 @@ const editAssignment = async (assignment) => {
   isEdit.value = true
   dialogVisible.value = true
 
+  const editClassId = Array.isArray(assignment.classId)
+    ? assignment.classId[0] || null
+    : assignment.classId
+
   // 设置表单数据（包含 assignmentType/textIds/wordIds 以便正确展示表单）
   Object.assign(assignmentForm, {
     id: assignment.id,
     title: assignment.title,
-    classId: assignment.classId,
+    classId: editClassId,
     unitId: assignment.unitId,
     assignmentType: assignment.assignmentType || 'UNIT',
     articleType: assignment.articleType || 'OUTER',
@@ -759,8 +1097,8 @@ const editAssignment = async (assignment) => {
   })
 
   // 加载对应班级的单元列表
-  if (assignment.classId) {
-    await loadUnitsForClass(assignment.classId)
+  if (editClassId) {
+    await loadUnitsForClass(editClassId)
   }
 
   // 如果是 TEXTS 或 WORDS 类型，加载单元内容以便编辑
@@ -790,29 +1128,35 @@ const resetAssignmentForm = () => {
   })
   unitContent.value = { texts: [], words: [] }
   activeTemplate.value = ''
+  resetOuterArticleFilters()
 }
 
 // 应用快捷模板
 const applyTemplate = async (tpl) => {
-  activeTemplate.value = tpl.key
+  const config = tpl.config || tpl
+  activeTemplate.value = tpl.key || tpl.id
   // 填充模板预设值
-  assignmentForm.assignmentType = tpl.assignmentType
-  assignmentForm.articleType = tpl.articleType || 'OUTER'
-  assignmentForm.idealStudyTimeMinutes = tpl.idealStudyTimeMinutes
-  assignmentForm.title = tpl.title
-  assignmentForm.wordGroupCount = tpl.key === 'words' ? 1 : 1
+  assignmentForm.assignmentType = config.assignmentType || 'UNIT'
+  assignmentForm.articleType = config.articleType || 'OUTER'
+  assignmentForm.idealStudyTimeMinutes = config.idealStudyTimeMinutes || 60
+  assignmentForm.title = config.title || tpl.name || ''
+  assignmentForm.wordGroupCount = config.wordGroupCount || 1
+  assignmentForm.unitId = config.unitId || null
+  assignmentForm.description = config.description || ''
+  assignmentForm.weight = config.weight || 1
+  assignmentForm.bookVolume = config.bookVolume || null
+  assignmentForm.contentSection = config.contentSection || null
+  assignmentForm.unitNum = config.unitNum || null
   // 清空已选内容
-  assignmentForm.textIds = []
-  assignmentForm.wordIds = []
-  assignmentForm.bookVolume = null
-  assignmentForm.contentSection = null
-  assignmentForm.unitNum = null
+  assignmentForm.textIds = Array.isArray(config.textIds) ? [...config.textIds] : []
+  assignmentForm.wordIds = Array.isArray(config.wordIds) ? [...config.wordIds] : []
   // 加载对应内容
-  if (tpl.assignmentType === 'TEXTS') {
+  if (config.assignmentType === 'TEXTS') {
     await loadArticles()
-  } else if (tpl.assignmentType === 'WORDS' && assignmentForm.unitId) {
+    if (Array.isArray(config.textIds)) assignmentForm.textIds = [...config.textIds]
+  } else if (config.assignmentType === 'WORDS' && assignmentForm.unitId) {
     await loadUnitContent(assignmentForm.unitId)
-    autoSelectWordsByGroup()
+    if (!Array.isArray(config.wordIds) || config.wordIds.length === 0) autoSelectWordsByGroup()
   } else {
     unitContent.value = { texts: [], words: [] }
   }
@@ -911,6 +1255,7 @@ const onArticleTypeChange = async () => {
   assignmentForm.bookVolume = null
   assignmentForm.contentSection = null
   assignmentForm.unitNum = null
+  resetOuterArticleFilters()
   await loadArticles()
 }
 
@@ -928,6 +1273,8 @@ const onContentSectionChange = async () => {
 
 const loadArticles = async () => {
   if (assignmentForm.assignmentType !== 'TEXTS') return
+  loadingUnitContent.value = true
+  unitContent.value = { ...unitContent.value, texts: [] }
   const params = new URLSearchParams({ articleType: assignmentForm.articleType || 'OUTER' })
   if (assignmentForm.articleType === 'INNER') {
     if (assignmentForm.bookVolume) params.append('bookVolume', assignmentForm.bookVolume)
@@ -952,6 +1299,8 @@ const loadArticles = async () => {
     console.error('加载文章失败:', error)
     unitContent.value = { ...unitContent.value, texts: [] }
     ElMessage.error('加载文章失败')
+  } finally {
+    loadingUnitContent.value = false
   }
 }
 
@@ -1463,6 +1812,7 @@ watch(progressDialogVisible, (visible) => {
 onMounted(async () => {
   // 先加载班级数据，再加载任务数据
   await loadClasses()
+  await loadAssignmentTemplates()
   await loadAssignments()
 })
 
@@ -1483,6 +1833,11 @@ onBeforeUnmount(stopProgressRefresh)
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .filter-bar {
@@ -1520,6 +1875,58 @@ onBeforeUnmount(stopProgressRefresh)
   background: #ecf5ff;
 }
 
+.template-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.template-manager-toolbar,
+.template-manager-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.template-manager-toolbar {
+  margin-bottom: 14px;
+}
+
+.template-manager-tip,
+.template-manager-desc {
+  color: #909399;
+  font-size: 12px;
+}
+
+.template-manager-list {
+  border-top: 1px solid #ebeef5;
+}
+
+.template-manager-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.template-manager-name {
+  color: #303133;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.template-editor {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #ebeef5;
+}
+
+.template-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .template-icon {
   font-size: 28px;
   margin-bottom: 8px;
@@ -1541,6 +1948,24 @@ onBeforeUnmount(stopProgressRefresh)
   font-size: 12px;
   color: #909399;
   margin-top: 8px;
+}
+
+.assignment-type-group,
+.article-type-group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.assignment-type-group .el-radio,
+.article-type-group .el-radio {
+  margin-right: 0;
+  white-space: nowrap;
 }
 
 .progress-overview {
@@ -1588,12 +2013,127 @@ onBeforeUnmount(stopProgressRefresh)
   padding: 10px;
 }
 
+.article-selector {
+  overflow-y: hidden;
+}
+
+.article-list-scroll {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.outer-article-tools {
+  margin: 0 0 10px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.outer-article-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 8px;
+  align-items: center;
+}
+
+.outer-article-search {
+  min-width: 0;
+  width: 100%;
+}
+
+.outer-article-difficulty {
+  width: 110px;
+  min-width: 0;
+}
+
+.outer-article-tag-filter {
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.tag-filter-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: #606266;
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.tag-filter-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tag-filter-summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid #909399;
+  transition: transform 0.15s ease;
+}
+
+.outer-article-tag-filter[open] .tag-filter-summary::before {
+  transform: rotate(90deg);
+}
+
+.tag-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+  min-width: 0;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fafafa;
+}
+
+.tag-filter-label {
+  color: #606266;
+  font-size: 12px;
+}
+
+.tag-filter-item {
+  cursor: pointer;
+}
+
+.outer-article-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: #909399;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.outer-article-summary .el-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .content-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 10px;
 }
 
+/* 外语文章信息较多，使用单列让标题和元信息保持完整的一行。 */
+.outer-article-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .content-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
   margin-bottom: 0 !important;
   padding: 10px;
   border: 1px solid #e4e7ed;
@@ -1612,7 +2152,16 @@ onBeforeUnmount(stopProgressRefresh)
 }
 
 .content-info {
+  flex: 1 1 auto;
   margin-left: 20px;
+  min-width: 0;
+}
+
+.content-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .content-title {
@@ -1622,10 +2171,59 @@ onBeforeUnmount(stopProgressRefresh)
   margin-bottom: 5px;
 }
 
+.outer-article-item .content-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .content-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 12px;
   color: #909399;
   margin-bottom: 3px;
+}
+
+.outer-article-item .content-meta {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-bottom: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.outer-article-item .content-meta > * {
+  flex: 0 0 auto;
+}
+
+.outer-article-item :deep(.el-checkbox__label) {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.article-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.outer-article-item .article-tags {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.outer-article-item .article-tags > * {
+  flex: 0 0 auto;
 }
 
 .content-category {
@@ -1680,6 +2278,23 @@ onBeforeUnmount(stopProgressRefresh)
   .filter-bar .el-form-item {
     margin-right: 0;
     margin-bottom: 12px;
+  }
+
+  .outer-article-filters {
+    grid-template-columns: minmax(0, 1fr) 96px;
+  }
+
+  .outer-article-difficulty {
+    width: 100%;
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-type-group,
+  .article-type-group {
+    gap: 10px;
   }
 }
 </style>

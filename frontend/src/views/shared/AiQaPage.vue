@@ -370,10 +370,13 @@ const sendMessage = async () => {
         }
       })
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        parser.feed(decoder.decode(value, { stream: true }))
+      let streamDone = false
+      while (!streamDone) {
+        const chunk = await reader.read()
+        streamDone = chunk.done
+        if (!streamDone) {
+          parser.feed(decoder.decode(chunk.value, { stream: true }))
+        }
       }
       parser.feed(decoder.decode())
       parser.end()

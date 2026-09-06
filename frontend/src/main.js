@@ -235,6 +235,8 @@ const happySentence = [
 ];
 // 全局标记：防止同时弹出多个成就弹窗
 let isShowingAchieve = false;
+let achievementCloseTimer = null;
+const ACHIEVEMENT_DISPLAY_MS = 5000;
 
 function getRandText(){
     return happySentence[Math.floor(Math.random()*happySentence.length)];
@@ -269,6 +271,10 @@ function showAchieve(title,desc){
     mask.addEventListener('click', (e) => {
         // 点击弹窗内部不关闭，只点击外层黑色遮罩才关闭
         if(e.target === mask){
+            if (achievementCloseTimer) {
+                clearTimeout(achievementCloseTimer);
+                achievementCloseTimer = null;
+            }
             mask.remove();
             isShowingAchieve = false;
         }
@@ -276,10 +282,11 @@ function showAchieve(title,desc){
 
     makeStar(box);
     // 计时自动关闭，重置弹窗状态标记
-    setTimeout(()=>{
+    achievementCloseTimer = setTimeout(()=>{
+        achievementCloseTimer = null;
         mask.remove();
         isShowingAchieve = false;
-    },2900);
+    }, ACHIEVEMENT_DISPLAY_MS);
 }
 
 // 所有成就触发函数挂载到window，全局任意Vue组件直接调用
@@ -378,6 +385,6 @@ window.checkAchievements = async function() {
   } finally {
     setTimeout(() => {
       window._achievementChecking = false;
-    }, 3000); // 3秒冷却，防止频繁触发
+    }, ACHIEVEMENT_DISPLAY_MS); // 与弹窗显示时长一致，防止重复触发
   }
 };

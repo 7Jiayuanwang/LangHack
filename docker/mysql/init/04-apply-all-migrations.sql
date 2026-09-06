@@ -4327,7 +4327,7 @@ CREATE TABLE IF NOT EXISTS notification_reads (
 
 -- V46__text_unit_many_to_many.sql
 
--- 一篇文章可以归属多个单元；没有关联的文章仍可独立存在。
+-- Link texts to multiple units while keeping legacy texts.unit_id usable.
 CREATE TABLE IF NOT EXISTS text_units (
     text_id BIGINT NOT NULL,
     unit_id BIGINT NOT NULL,
@@ -4337,9 +4337,9 @@ CREATE TABLE IF NOT EXISTS text_units (
     INDEX idx_text_units_unit (unit_id, order_num),
     CONSTRAINT fk_text_units_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE,
     CONSTRAINT fk_text_units_unit FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章-单元多对多关联';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Text-unit associations';
 
--- 保留旧 unit_id 字段作为兼容主关联，首次升级时迁移到关联表。
+-- Backfill associations from the legacy texts.unit_id column.
 INSERT IGNORE INTO text_units (text_id, unit_id, order_num)
 SELECT id, unit_id, COALESCE(order_num, 0)
 FROM texts
@@ -4375,6 +4375,21 @@ ALTER TABLE media MODIFY COLUMN media_type ENUM('IMAGE','VIDEO','AUDIO') NOT NUL
 
 
 -- V49__sentence_favorites.sql
+
+-- V50__assignment_templates.sql
+
+CREATE TABLE IF NOT EXISTS assignment_templates (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL COMMENT '模板名称',
+    description VARCHAR(500) DEFAULT NULL COMMENT '模板说明',
+    config_json TEXT NOT NULL COMMENT '作业配置 JSON，不包含班级和作业截止时间',
+    created_by BIGINT NOT NULL COMMENT '创建教师用户 ID',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    INDEX idx_assignment_templates_creator (created_by, deleted),
+    INDEX idx_assignment_templates_updated (updated_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='教师作业模板';
 
 CREATE TABLE IF NOT EXISTS sentence_favorites (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,

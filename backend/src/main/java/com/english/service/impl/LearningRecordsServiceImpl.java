@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import com.english.util.TextEncodingRepair;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -189,6 +190,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         // 获取课文信息
         List<Map<String, Object>> textList = new ArrayList<>();
         for (com.english.entity.Text text : texts) {
+            TextEncodingRepair.repair(text);
             Map<String, Object> textMap = new HashMap<>();
             textMap.put("id", text.getId());
             textMap.put("title", text.getTitle());
@@ -280,6 +282,7 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
         // 查询课文详情
         com.english.entity.Text text = textMapper.selectById(textId);
         if (text != null) {
+            TextEncodingRepair.repair(text);
             detail.put("id", text.getId());
             detail.put("title", text.getTitle());
             detail.put("content", text.getContent());
