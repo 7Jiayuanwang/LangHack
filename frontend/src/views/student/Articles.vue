@@ -280,6 +280,18 @@ const clearCache = () => {
   } catch (e) { /* ignore */ }
 }
 
+// A browser reload must fetch fresh data instead of restoring the detail-page cache.
+const isDocumentReload = () => {
+  try {
+    if (typeof performance === 'undefined') return false
+    const navigationType = performance.getEntriesByType?.('navigation')?.[0]?.type
+    const legacyNavigationType = performance.navigation?.type
+    return navigationType === 'reload' || legacyNavigationType === 1
+  } catch (e) {
+    return false
+  }
+}
+
 // ── Pull-to-Refresh State ──
 const pageMain = ref(null)
 const isPulling = ref(false)
@@ -483,7 +495,29 @@ const mapRecommendedText = (text) => ({
   readingTime: Math.max(1, Math.ceil((text.content?.length || text.markdownContent?.length || 0) / 800))
 })
 
+// A refresh must change the first visible article whenever the server has
+// another candidate.  This also covers deployments where an intermediary or
+// an older backend ignores the exclude query parameter.
+const rotateFreshFirst = (items, previousIds) => {
+  if (!Array.isArray(items) || items.length < 2 || !Array.isArray(previousIds) || previousIds.length === 0) {
+    return items
+  }
+  const previousSet = new Set(previousIds.map(id => String(id)))
+  const freshIndex = items.findIndex(item => item?.id != null && !previousSet.has(String(item.id)))
+  if (freshIndex > 0) {
+    return [items[freshIndex], ...items.slice(0, freshIndex), ...items.slice(freshIndex + 1)]
+  }
+  // All candidates were shown already.  Still rotate the feed so the button
+  // has a visible effect instead of appearing to do nothing.
+  if (freshIndex < 0) return [...items.slice(1), items[0]]
+  return items
+}
+
 const loadRecommended = async ({ resetExclusions = false } = {}) => {
+  const previousVisibleIds = recommendedArticles.value
+    .slice(0, COUNT_PER_BATCH)
+    .map(item => item?.id)
+    .filter(id => id != null)
   loading.value = true
   loadError.value = false
   try {
@@ -499,7 +533,7 @@ const loadRecommended = async ({ resetExclusions = false } = {}) => {
         data = await getRecommendedTexts(COUNT_PER_BATCH, [])
         list = Array.isArray(data.data) ? data.data : []
       }
-      recommendedArticles.value = list.map(mapRecommendedText)
+      recommendedArticles.value = rotateFreshFirst(list.map(mapRecommendedText), resetExclusions ? [] : previousVisibleIds)
       // 记录本次展示的 ID
       list.forEach(t => {
         if (t?.id != null && !shownRecommendedIds.value.includes(t.id)) {
@@ -539,7 +573,10 @@ const loadFeed = async ({ forceRefresh = false } = {}) => {
     }
     const query = params.toString() ? `?${params.toString()}` : ''
     const [articlesRes, videosRes] = await Promise.all([
-      fetch(`${apiBase}/api/public/texts/featured${query}`, { headers }).then(r => r.json()),
+      fetch(`${apiBase}/api/public/texts/featured${query}`, {
+        headers: { ...headers, 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+        cache: 'no-store'
+      }).then(r => r.json()),
       getFeaturedVideos({}).catch(() => ({ code: 0, data: [] }))
     ])
 
@@ -571,12 +608,8 @@ const loadFeed = async ({ forceRefresh = false } = {}) => {
     }
 
     // 手动刷新时即使接口顺序未变化，也轮换文章首屏，确保用户看到新的文章。
-    if (forceRefresh && previousVisibleArticleIds.length > 1) {
-      const nextVisibleArticleIds = articleItems.slice(0, COUNT_PER_BATCH).map(item => item?.id).filter(id => id != null)
-      if (nextVisibleArticleIds.length === previousVisibleArticleIds.length && nextVisibleArticleIds.every((id, index) => id === previousVisibleArticleIds[index])) {
-        const first = articleItems.shift()
-        if (first) articleItems.push(first)
-      }
+    if (forceRefresh) {
+      articleItems = rotateFreshFirst(articleItems, previousVisibleArticleIds)
     }
 
     // Interleave: every 3 articles insert a video
@@ -702,7 +735,7 @@ onMounted(() => {
   })
   // 仅在从文章详情/视频页返回时恢复缓存（NAV_FLAG_KEY 标记存在）
   // 浏览器刷新时 sessionStorage 虽保留，但 NAV_FLAG 不存在，强制重新加载
-  const hasNavFlag = sessionStorage.getItem(NAV_FLAG_KEY)
+  const hasNavFlag = !isDocumentReload() && sessionStorage.getItem(NAV_FLAG_KEY)
   sessionStorage.removeItem(NAV_FLAG_KEY)
 
   if (hasNavFlag) {
@@ -799,7 +832,7 @@ const onTouchMove = (e) => {
   if (pullLocked) return
 
   // 进入下拉状态，阻止浏览器默认滚动/overscroll
-  if (deltaY > 5 && scrollTop <= 2) {
+  if (deltaY > 5) {
     isPulling.value = true
     pullDistance.value = Math.min(deltaY * 0.55, 120)
     if (e.cancelable) e.preventDefault()
