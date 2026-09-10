@@ -4405,7 +4405,7 @@ CREATE TABLE IF NOT EXISTS sentence_favorites (
   CONSTRAINT fk_sentence_favorite_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户例句收藏';
 
--- V49__learning_agent_context.sql
+-- V54__learning_agent_context.sql
 
 -- 学习伙伴智能体：用户主动目标、兴趣、偏好与可管理记忆。
 
