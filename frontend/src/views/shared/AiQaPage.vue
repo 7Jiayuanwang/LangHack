@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-qa-page" :class="{ 'sidebar-open': sidebarOpen }">
+  <div class="ai-qa-page" :class="{ 'sidebar-open': sidebarOpen, 'is-companion': articleTitle }">
     <!-- 历史对话侧边栏 -->
     <aside class="history-sidebar" v-if="sidebarOpen">
       <div class="sidebar-header">
@@ -38,6 +38,7 @@
             </button>
           </div>
           <div class="header-right-group">
+            <span v-if="articleTitle" class="qa-companion-title">小芽伴读</span>
             <button
               v-if="currentConversationId"
               class="qa-share-btn"
@@ -46,8 +47,9 @@
             >
               <el-icon><Share /></el-icon>
             </button>
-            <div class="qa-avatar">
-              <el-icon :size="22"><Monitor /></el-icon>
+            <div class="qa-avatar" :class="{ 'is-companion': articleTitle }">
+              <XyMascot v-if="articleTitle" :size="34" />
+              <el-icon v-else :size="22"><Monitor /></el-icon>
             </div>
           </div>
         </div>
@@ -72,13 +74,15 @@
 
       <main class="qa-chat-area" ref="chatContainer" id="chat-container">
         <div class="empty-hint" v-if="messages.length === 0">
-          <p>输入问题开始对话，或点击左上角 <strong>☰</strong> 查看历史对话</p>
+          <p v-if="articleTitle">可以用英语提问或说说你的理解，小芽会结合这篇文章陪你练习。</p>
+          <p v-else>输入问题开始对话，或点击左上角 <strong>☰</strong> 查看历史对话</p>
         </div>
 
         <template v-for="(msg, index) in messages" :key="index">
           <div class="msg-row" :class="msg.role === 'user' ? 'msg-user' : 'msg-ai'">
-            <div class="msg-avatar" v-if="msg.role !== 'user'">
-              <el-icon :size="18"><Monitor /></el-icon>
+            <div class="msg-avatar" :class="{ 'is-companion': articleTitle }" v-if="msg.role !== 'user'">
+              <XyMascot v-if="articleTitle" :size="28" />
+              <el-icon v-else :size="18"><Monitor /></el-icon>
             </div>
             <div class="msg-bubble" :class="msg.role === 'user' ? 'user-bubble' : 'ai-bubble'">
               <div v-if="msg.role === 'user'">{{ msg.content }}</div>
@@ -88,8 +92,9 @@
         </template>
 
         <div class="msg-row msg-ai" v-if="loading">
-          <div class="msg-avatar">
-            <el-icon :size="18"><Monitor /></el-icon>
+          <div class="msg-avatar" :class="{ 'is-companion': articleTitle }">
+            <XyMascot v-if="articleTitle" :size="28" />
+            <el-icon v-else :size="18"><Monitor /></el-icon>
           </div>
           <div class="msg-bubble ai-bubble loading-bubble">
             <div class="typing-dots">
@@ -118,7 +123,7 @@
           <input
             v-model="inputMessage"
             class="qa-input"
-            placeholder="输入你的问题..."
+            :placeholder="articleTitle ? '用英语提问或回答小芽...' : '输入你的问题...'"
             @keyup.enter="sendMessage"
             :disabled="loading"
           />
@@ -170,6 +175,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAuthHeader } from '@/utils/auth'
+import XyMascot from '@/components/ui/XyMascot.vue'
 import { createSseParser } from '@/utils/sse'
 import {
   getConversations, getConversationDetail, deleteConversation, shareConversation
@@ -209,6 +215,11 @@ const candidateQuestions = computed(() => selectedText.value
 onMounted(() => {
   selectedText.value = route.query.text || ''
   articleTitle.value = route.query.articleTitle || ''
+  // 阅读页的小芽伴读只预填问题；仅用户主动点击“试试看”时自动发出自测请求。
+  inputMessage.value = typeof route.query.question === 'string' ? route.query.question : ''
+  if (route.query.autoSend === '1' && inputMessage.value) {
+    nextTick(() => { void sendMessage() })
+  }
   loadConversations()
 })
 
@@ -520,6 +531,8 @@ onBeforeUnmount(() => {
 .qa-back-btn:hover { color: #197fe6; }
 
 .qa-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(25, 127, 230, 0.1); display: flex; align-items: center; justify-content: center; color: #197fe6; border: 1px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.qa-companion-title { color: var(--xy-brand-700); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.qa-avatar.is-companion, .msg-avatar.is-companion { background: transparent; border: 0; box-shadow: none; }
 
 .share-form { display: flex; flex-direction: column; gap: 16px; }
 .share-field label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
@@ -580,6 +593,16 @@ onBeforeUnmount(() => {
 .qa-send-btn { width: 46px; height: 46px; flex-shrink: 0; border: none; border-radius: 50%; background: linear-gradient(135deg, #197fe6, #3b82f6); color: white; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 8px 18px rgba(25, 127, 230, 0.24); }
 .qa-send-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 
+.ai-qa-page.is-companion { background: var(--xy-brand-50); }
+.is-companion .qa-context-bar { background: var(--xy-brand-50); }
+.is-companion .context-accent { background: linear-gradient(180deg, var(--xy-brand-500), var(--xy-brand-700)); }
+.is-companion .context-label, .is-companion .action-arrow { color: var(--xy-brand-700); }
+.is-companion .action-pill { border-color: var(--xy-brand-200); background: #fff; }
+.is-companion .qa-input:focus { border-color: var(--xy-brand-500); box-shadow: 0 0 0 4px var(--xy-brand-100); }
+.is-companion .qa-send-btn, .is-companion .user-bubble { background: linear-gradient(135deg, var(--xy-brand-500), var(--xy-brand-700)); }
+.is-companion .qa-send-btn { box-shadow: 0 8px 18px rgba(34, 139, 103, 0.2); }
+.is-companion .ai-bubble :deep(blockquote) { border-left-color: var(--xy-brand-500); }
+
 @keyframes typing-bounce {
   0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
   40% { transform: translateY(-4px); opacity: 1; }
@@ -587,5 +610,6 @@ onBeforeUnmount(() => {
 
 @media (max-width: 640px) {
   .history-sidebar { position: absolute; left: 0; top: 0; bottom: 0; z-index: 200; box-shadow: 4px 0 16px rgba(0,0,0,0.1); }
+  .qa-companion-title { display: none; }
 }
 </style>                                                                                                                                                                    
