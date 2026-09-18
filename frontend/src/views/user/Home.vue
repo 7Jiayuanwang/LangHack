@@ -370,7 +370,7 @@ onMounted(async () => {
 }
 
 .item-extra {
-  color: #409eff;
+  color: var(--xy-brand-600);
   font-weight: 600;
 }
 

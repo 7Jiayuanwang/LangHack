@@ -1,11 +1,12 @@
 <template>
   <div class="classes-management">
+    <XyPageHeader class="classes-intro" title="班级管理" eyebrow="YOUR CLASSES" description="了解班级规模与学习情况，集中处理日常教学事务。" variant="compact" />
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>班级管理</span>
+          <span>班级列表</span>
           <div>
-            <el-button type="success" :loading="syncing" @click="syncSchoolClasses">同步学校班级</el-button>
+            <el-button type="primary" plain :loading="syncing" @click="syncSchoolClasses">同步学校班级</el-button>
           </div>
         </div>
       </template>
@@ -205,6 +206,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { User, Download, MoreFilled, Edit, Delete, Plus } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 // 响应式数据
 const classes = ref([])
@@ -788,8 +790,12 @@ onMounted(() => {
 
 <style scoped>
 .classes-management {
+  max-width: 1440px;
+  margin: 0 auto;
   padding: 20px;
 }
+.classes-intro { margin-bottom: 18px; }
+.classes-management :deep(.el-card) { border-radius: var(--xy-radius-md); }
 
 .table-wrapper {
   overflow-x: auto;
@@ -813,7 +819,7 @@ onMounted(() => {
   margin: 0;
   padding: 5px 12px;
   font-size: 13px;
-  border-radius: 4px;
+  border-radius: var(--xy-radius-sm);
   transition: all 0.2s ease;
 }
 

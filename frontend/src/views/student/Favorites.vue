@@ -1,8 +1,6 @@
 <template>
   <div class="favorites-page">
-    <header class="page-header">
-      <h1>我的收藏</h1>
-    </header>
+    <XyPageHeader class="favorites-intro" title="我的收藏" eyebrow="SAVED FOR LATER" description="值得回看的文章与例句，都在这里。" variant="compact" />
 
     <div class="favorite-tabs" role="tablist" aria-label="收藏类型">
       <button
@@ -103,6 +101,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Loading, Star } from '@element-plus/icons-vue'
 import { getFavoriteArticles } from '@/api/student'
 import { deleteSentenceFavorite, getSentenceFavorites } from '@/api/sentenceFavorite'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 const PAGE_SIZE = 10
 const router = useRouter()
@@ -201,26 +200,26 @@ onMounted(loadArticles)
 
 <style scoped>
 .favorites-page { max-width: 920px; min-height: 80vh; margin: 0 auto; padding: 18px 16px 32px; }
-.page-header h1 { margin: 0 0 18px; color: #111827; font-size: 22px; letter-spacing: 0; }
-.favorite-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-bottom: 18px; padding: 4px; border-radius: 8px; background: #eef1f4; }
-.tab-button { min-height: 42px; border: 0; border-radius: 6px; background: transparent; color: #64748b; font: inherit; font-weight: 600; cursor: pointer; }
-.tab-button.active { background: #fff; color: #111827; box-shadow: 0 1px 3px #00000014; }
-.tab-count { margin-left: 6px; padding: 1px 6px; border-radius: 10px; background: #e5e7eb; font-size: 12px; }
+.favorites-intro { margin-bottom: 18px; }
+.favorite-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-bottom: 18px; padding: 4px; border-radius: var(--xy-radius-sm); background: var(--xy-surface-tint); }
+.tab-button { min-height: 44px; border: 0; border-radius: var(--xy-radius-sm); background: transparent; color: var(--xy-ink-muted); font: inherit; font-weight: 600; cursor: pointer; }
+.tab-button.active { background: var(--xy-surface); color: var(--xy-brand-700); box-shadow: var(--shadow-sm); }
+.tab-count { margin-left: 6px; padding: 1px 6px; border-radius: 10px; background: var(--xy-brand-100); font-size: 12px; }
 .favorite-list { display: grid; gap: 10px; }
-.article-item, .sentence-item { border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; padding: 15px 16px; }
+.article-item, .sentence-item { border: 1px solid var(--xy-border); border-radius: var(--xy-radius-md); background: var(--xy-surface); padding: 16px; box-shadow: var(--xy-shadow-card); }
 .article-item { cursor: pointer; }
-.article-item:hover, .article-item:focus-visible { border-color: #93c5fd; outline: none; }
-.article-item h2 { margin: 0 0 7px; color: #111827; font-size: 16px; letter-spacing: 0; }
-.article-item p { display: -webkit-box; overflow: hidden; margin: 0; color: #64748b; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.article-item:hover, .article-item:focus-visible { border-color: var(--xy-brand-400); outline: 2px solid var(--xy-brand-400); outline-offset: 2px; }
+.article-item h2 { margin: 0 0 7px; color: var(--xy-ink); font-size: 16px; letter-spacing: 0; }
+.article-item p { display: -webkit-box; overflow: hidden; margin: 0; color: var(--xy-ink-muted); line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .item-meta, .sentence-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.item-meta { margin-top: 12px; color: #94a3b8; font-size: 12px; }
-.source-link { overflow: hidden; border: 0; padding: 0; background: transparent; color: #197fe6; font: inherit; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.sentence-item blockquote { margin: 8px 0; color: #1f2937; line-height: 1.65; }
-.sentence-item time { color: #94a3b8; font-size: 12px; }
-.state-view { display: flex; min-height: 260px; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; text-align: center; }
-.state-view h2 { margin: 14px 0 6px; color: #475569; font-size: 16px; letter-spacing: 0; }
+.item-meta { margin-top: 12px; color: var(--xy-ink-soft); font-size: 12px; }
+.source-link { overflow: hidden; border: 0; padding: 0; background: transparent; color: var(--xy-brand-600); font: inherit; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.sentence-item blockquote { margin: 8px 0; color: var(--xy-ink); line-height: 1.65; }
+.sentence-item time { color: var(--xy-ink-soft); font-size: 12px; }
+.state-view { display: flex; min-height: 260px; flex-direction: column; align-items: center; justify-content: center; color: var(--xy-ink-soft); text-align: center; }
+.state-view h2 { margin: 14px 0 6px; color: var(--xy-ink); font-size: 16px; letter-spacing: 0; }
 .state-view p { margin: 0; font-size: 13px; }
-:deep(.page-controls) { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 18px 0; color: #64748b; font-size: 13px; }
-:deep(.page-controls button) { min-height: 36px; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; padding: 0 14px; color: #334155; cursor: pointer; }
+:deep(.page-controls) { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 18px 0; color: var(--xy-ink-muted); font-size: 13px; }
+:deep(.page-controls button) { min-height: 36px; border: 1px solid var(--xy-border); border-radius: var(--xy-radius-sm); background: var(--xy-surface); padding: 0 14px; color: var(--xy-ink); cursor: pointer; }
 :deep(.page-controls button:disabled) { opacity: .45; cursor: default; }
 </style>

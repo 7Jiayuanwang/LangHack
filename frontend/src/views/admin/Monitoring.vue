@@ -640,7 +640,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   padding-left: 12px;
-  border-left: 4px solid #409eff;
+  border-left: 4px solid var(--xy-brand-600);
 }
 
 .sub-section-title {

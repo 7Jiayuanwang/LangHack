@@ -1062,7 +1062,7 @@ onMounted(async () => {
 }
 
 .content-item:hover {
-  border-color: #409eff;
+  border-color: var(--xy-brand-600);
   background: #f0f7ff;
 }
 

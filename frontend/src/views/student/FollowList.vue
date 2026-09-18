@@ -203,7 +203,7 @@ onMounted(() => {
 .load-more {
   text-align: center;
   padding: 16px;
-  color: #409eff;
+  color: var(--xy-brand-600);
   font-size: 14px;
   cursor: pointer;
 }

@@ -444,7 +444,7 @@ onMounted(() => {
 
 .action-icon {
   font-size: 32px;
-  color: #409EFF;
+  color: var(--xy-brand-600);
   margin-bottom: 10px;
   display: block;
 }

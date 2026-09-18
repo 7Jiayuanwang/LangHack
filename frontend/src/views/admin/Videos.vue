@@ -545,7 +545,7 @@ defineExpose({ loadVideos })
 .stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 20px; }
 .stat-card { text-align: center; padding: 20px; background: #fff; border: 1px solid #e4e7ed; border-radius: 8px; transition: all 0.3s; }
 .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-.stat-value { font-size: 32px; font-weight: bold; color: #409eff; margin-bottom: 8px; }
+.stat-value { font-size: 32px; font-weight: bold; color: var(--xy-brand-600); margin-bottom: 8px; }
 .stat-label { font-size: 14px; color: #909399; }
 .videos-table { background: #fff; border-radius: 8px; overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 .pagination { margin-top: 20px; display: flex; justify-content: center; }

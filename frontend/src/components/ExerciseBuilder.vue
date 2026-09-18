@@ -380,7 +380,7 @@ defineExpose({
 
 .exercise-number {
   font-weight: bold;
-  color: #409EFF;
+  color: var(--xy-brand-600);
   font-size: 16px;
 }
 

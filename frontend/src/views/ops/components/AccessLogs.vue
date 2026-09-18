@@ -424,7 +424,7 @@ defineExpose({ refreshAll })
 .stat-value { font-size: 24px; font-weight: bold; color: #303133; }
 .stat-item.error .stat-value { color: #f56c6c; }
 .stat-item.warn  .stat-value { color: #e6a23c; }
-.stat-item.info  .stat-value { color: #409eff; }
+.stat-item.info  .stat-value { color: var(--xy-brand-600); }
 
 .filter-card { margin-bottom: 20px; }
 .chart-card  { margin-bottom: 20px; }
@@ -488,7 +488,7 @@ defineExpose({ refreshAll })
 
 .bar-fill.excellent  { background: #67c23a; }
 .bar-fill.good       { background: #95d475; }
-.bar-fill.normal     { background: #409eff; }
+.bar-fill.normal     { background: var(--xy-brand-600); }
 .bar-fill.slow       { background: #e6a23c; }
 .bar-fill.slower     { background: #f08a30; }
 .bar-fill.critical   { background: #f56c6c; }
@@ -526,7 +526,7 @@ defineExpose({ refreshAll })
 .login-stat-value { font-size: 28px; font-weight: bold; color: #303133; }
 .login-stat-item.success .login-stat-value { color: #67c23a; }
 .login-stat-item.fail    .login-stat-value { color: #f56c6c; }
-.login-stat-item.logout  .login-stat-value { color: #409eff; }
+.login-stat-item.logout  .login-stat-value { color: var(--xy-brand-600); }
 
 .pagination-container {
   margin-top: 16px;

@@ -635,7 +635,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 10px;
 }
-.section-label { font-size: 14px; font-weight: 600; color: #1d4ed8; }
+.section-label { font-size: 14px; font-weight: 600; color: var(--xy-brand-700); }
 .loading-hint { font-size: 13px; color: #6b7280; }
 .subtitle-loaded-info {
   font-size: 13px;

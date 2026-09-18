@@ -1,15 +1,18 @@
 <template>
   <div class="task-plans-page">
-    <div class="page-header">
-      <el-button type="primary" @click="openCreateDialog">创建计划</el-button>
-      <el-select v-model="filterStatus" placeholder="状态筛选" clearable @change="loadPlans" style="width: 120px; margin-left: 12px;">
-        <el-option label="草稿" value="DRAFT" />
-        <el-option label="进行中" value="ACTIVE" />
-        <el-option label="已关闭" value="CLOSED" />
-      </el-select>
-    </div>
+    <XyPageHeader title="学期学习计划" eyebrow="LEARNING PLANS" description="为课程与班级设定清晰、可追踪的学习目标。" variant="compact">
+      <template #actions>
+        <el-select v-model="filterStatus" placeholder="状态筛选" clearable aria-label="按状态筛选计划" @change="loadPlans" class="status-filter">
+          <el-option label="草稿" value="DRAFT" />
+          <el-option label="进行中" value="ACTIVE" />
+          <el-option label="已关闭" value="CLOSED" />
+        </el-select>
+        <el-button type="primary" @click="openCreateDialog">创建计划</el-button>
+      </template>
+    </XyPageHeader>
 
-    <el-table :data="plans" v-loading="loading" stripe style="width: 100%">
+    <XySurface compact class="plans-surface" title="计划列表" description="查看发布状态、目标与班级覆盖情况。">
+    <el-table :data="plans" v-loading="loading" stripe empty-text="暂无计划，点击右上角创建" style="width: 100%">
       <el-table-column prop="title" label="计划名称" min-width="140" />
       <el-table-column prop="courseName" label="课程" width="120" />
       <el-table-column label="周期" width="70">
@@ -41,6 +44,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </XySurface>
 
     <!-- 创建/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑计划' : '创建计划'" width="600px" destroy-on-close class="task-plan-dialog">
@@ -150,6 +154,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminTaskPlanApi } from '@/api/taskPlan'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
+import XySurface from '@/components/ui/XySurface.vue'
 
 const loading = ref(false)
 const plans = ref([])
@@ -369,13 +375,16 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .task-plans-page {
-  padding: 16px;
+  display: grid;
+  gap: 18px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 8px;
 }
-.page-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-}
+.status-filter { width: 132px; }
+.plans-surface { overflow: hidden; }
+.plans-surface :deep(.el-table th.el-table__cell) { font-weight: 700; }
+.plans-surface :deep(.el-table .el-button + .el-button) { margin-left: 5px; }
 .stats-overview {
   display: flex;
   gap: 16px;
@@ -385,10 +394,14 @@ onMounted(() => {
     text-align: center;
     padding: 12px;
     background: var(--el-fill-color-light);
-    border-radius: 8px;
+    border-radius: var(--xy-radius-md);
     strong { display: block; font-size: 24px; color: var(--el-color-primary); }
     span { font-size: 12px; color: var(--el-text-color-secondary); }
   }
+}
+@media (max-width: 640px) {
+  .task-plans-page { padding: 0; gap: 12px; }
+  .status-filter { flex: 1; min-width: 120px; }
 }
 </style>
 

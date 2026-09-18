@@ -5,13 +5,13 @@
     <header class="glass-header" :class="{ 'header-hidden': headerHidden }" ref="pageHeader">
       <div class="header-inner">
         <div class="header-left">
-          <button class="minimal-back-btn" @click="goBack">
+          <button class="minimal-back-btn" type="button" :aria-label="fromSource === 'assignment' ? '返回任务' : '返回文章列表'" @click="goBack">
             <el-icon><ArrowLeft /></el-icon>
-            <span>{{ fromSource === 'assignment' ? '返回任务' : '返回' }}</span>
+            <span class="back-label">{{ fromSource === 'assignment' ? '返回任务' : '返回' }}</span>
           </button>
           <div class="header-divider"></div>
           <div class="header-title-scroll" ref="headerTitleRef">
-            <h2 class="header-title" :class="{ 'scrolling': isTitleOverflow }" :title="textTitle">{{ textTitle }}</h2>
+            <h1 class="header-title" :class="{ 'scrolling': isTitleOverflow }" :title="textTitle">{{ textTitle }}</h1>
           </div>
         </div>
         
@@ -20,15 +20,15 @@
             <span class="pill-label">难度</span>
             <span class="pill-value">{{ difficultyText }}</span>
           </div>
-          <button class="annotation-header-btn" @click="showAnnotationSidebar = true" :title="`批注 (${annotations.length})`">
+          <button class="annotation-header-btn" type="button" @click="showAnnotationSidebar = true" :title="`批注 (${annotations.length})`" :aria-label="`查看批注，${annotations.length} 条`">
             <el-icon><Comment /></el-icon>
             <span v-if="annotations.length > 0" class="ann-header-count">{{ annotations.length }}</span>
           </button>
-          <button v-if="canFavorite" class="favorite-btn" :class="{ 'is-favorite': isFavorite }" @click="addToFavorite">
+          <button v-if="canFavorite" class="favorite-btn" type="button" :class="{ 'is-favorite': isFavorite }" :aria-label="isFavorite ? '取消收藏文章' : '收藏文章'" @click="addToFavorite">
             <el-icon><Star v-if="!isFavorite" /><StarFilled v-else /></el-icon>
             <span class="action-count">{{ favoriteCount || 0 }}</span>
           </button>
-          <button class="like-btn" :class="{ 'is-liked': isLiked }" @click="toggleLike">
+          <button class="like-btn" type="button" :class="{ 'is-liked': isLiked }" :aria-label="isLiked ? '取消点赞文章' : '点赞文章'" @click="toggleLike">
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path v-if="isLiked" fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
               <path v-else fill="none" stroke="currentColor" stroke-width="2" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
@@ -36,6 +36,9 @@
             <span class="action-count">{{ likeCount || 0 }}</span>
           </button>
         </div>
+      </div>
+      <div class="reading-position-track" role="progressbar" aria-label="文章阅读位置" :aria-valuenow="readingScrollPercent" aria-valuemin="0" aria-valuemax="100">
+        <span :style="{ width: `${readingScrollPercent}%` }"></span>
       </div>
     </header>
 
@@ -71,44 +74,62 @@
         <div class="article-meta">
           <span class="meta-item">
             <el-icon><Clock /></el-icon>
-            {{ estimatedTime }} min read
+            约 {{ estimatedTime }} 分钟
           </span>
           <span class="meta-dot">•</span>
           <span class="meta-item">
             <el-icon><Tickets /></el-icon>
-            {{ wordCount }} words
+            {{ wordCount }} 词
           </span>
-          <span class="meta-dot">•</span>
-          <span class="meta-item">
+          <span class="meta-dot meta-views">•</span>
+          <span class="meta-item meta-views">
             浏览 {{ viewCount }} 次
           </span>
+          <span class="mobile-difficulty-pill" :class="difficultyClass">{{ difficultyText }}</span>
         </div>
 
-        <!-- Redesigned Version Selector -->
-        <div class="version-pill-selector" v-if="availableVersions.length > 1">
-          <div class="pill-container">
-            <button
-              v-for="version in availableVersions"
-              :key="version"
-              class="version-pill"
-              :class="{ 'active': currentVersion === version }"
-              @click="switchVersion(version)"
-            >
-              <el-icon v-if="version === 'original'"><CircleCheck /></el-icon>
-              <el-icon v-else-if="version === 'simplified'"><MagicStick /></el-icon>
-              {{ getVersionLabel(version) }}
+        <div class="reader-toolbar">
+          <div class="version-pill-selector" v-if="availableVersions.length > 1">
+            <div class="pill-container">
+              <button
+                v-for="version in availableVersions"
+                :key="version"
+                class="version-pill"
+                :class="{ 'active': currentVersion === version }"
+                :aria-pressed="currentVersion === version"
+                @click="switchVersion(version)"
+              >
+                <el-icon v-if="version === 'original'"><CircleCheck /></el-icon>
+                <el-icon v-else-if="version === 'simplified'"><MagicStick /></el-icon>
+                {{ getVersionLabel(version) }}
+              </button>
+            </div>
+            <button class="mobile-version-trigger" type="button" @click="showVersionDrawer = true">
+              <span>版本：{{ getVersionLabel(currentVersion) }}</span>
+              <el-icon><ArrowDown /></el-icon>
             </button>
           </div>
+          <button class="reader-settings-trigger" type="button" @click="showReaderSettings = true" aria-label="阅读设置">Aa <span>阅读设置</span></button>
         </div>
       </header>
 
       <!-- Main Content Area -->
-      <section class="article-body">
+      <section class="article-body" :style="readerStyle" aria-label="文章正文">
         <div
           class="markdown-content"
+          :lang="currentVersion === 'chinese_parallel' ? undefined : 'en'"
           v-html="textContent"
           @click="handleMarkdownClick"
         ></div>
+      </section>
+
+      <section class="companion-followup" aria-label="小芽伴读">
+        <XyMascot :size="44" />
+        <div class="companion-followup-copy">
+          <strong>用英语聊聊这篇文章</strong>
+          <span>小芽会结合你正在读的内容，陪你梳理和表达。</span>
+        </div>
+        <button type="button" @click="openArticleConversation">问小芽</button>
       </section>
 
       <!-- AI Quiz Section -->
@@ -134,7 +155,7 @@
       <transition name="quiz-panel-slide">
         <div class="quiz-bottom-panel" v-if="quizQuestions.length > 0" :style="{ height: quizPanelHeight + 'px' }">
           <!-- 拖拽调整手柄 -->
-          <div class="quiz-panel-drag-handle" @mousedown="startDragQuizPanel">
+          <div class="quiz-panel-drag-handle" role="separator" aria-label="调整题目面板高度" tabindex="0" @pointerdown="startDragQuizPanel" @keydown.up.prevent="resizeQuizPanel(40)" @keydown.down.prevent="resizeQuizPanel(-40)">
             <div class="drag-bar"></div>
           </div>
 
@@ -273,14 +294,38 @@
       </footer>
       
       <div class="reader-footer completed-notif" v-else-if="isCompleted && !isPreviewMode">
-        <el-result
-          icon="success"
-          title="阅读已完成"
-          sub-title="您已成功记录此学习记录"
-        >
-        </el-result>
+        <div class="completion-card">
+          <XyMascot :size="56" />
+          <h2>这篇读完了，做得好！</h2>
+          <p>你完成了一篇 {{ wordCount }} 词的阅读。接下来可以用英语向小芽复述印象最深的一段。</p>
+          <div class="completion-actions">
+            <button type="button" @click="scrollToReaderTop">再读一遍</button>
+            <button type="button" class="completion-primary" @click="openArticleConversation">和小芽聊聊</button>
+          </div>
+        </div>
       </div>
     </main>
+
+    <div v-if="showCompanionCheck" class="companion-check" role="region" aria-label="小芽理解自测">
+      <XyMascot :size="36" />
+      <span>读到这里，试一道英文理解题？</span>
+      <button type="button" @click="openComprehensionCheck">试试看</button>
+      <button class="companion-dismiss" type="button" aria-label="稍后再说" @click="companionDismissed = true">×</button>
+    </div>
+
+    <el-drawer v-model="showVersionDrawer" direction="btt" size="min(390px, 72dvh)" :with-header="false" class="reader-bottom-drawer">
+      <div class="reader-drawer-head"><h2>选择阅读版本</h2><button type="button" @click="showVersionDrawer = false" aria-label="关闭版本选择">×</button></div>
+      <button v-for="version in availableVersions" :key="version" class="reader-drawer-option" type="button" :aria-pressed="currentVersion === version" @click="selectVersion(version)">
+        {{ getVersionLabel(version) }}<el-icon v-if="currentVersion === version"><Check /></el-icon>
+      </button>
+    </el-drawer>
+
+    <el-drawer v-model="showReaderSettings" direction="btt" size="min(330px, 72dvh)" :with-header="false" class="reader-bottom-drawer">
+      <div class="reader-drawer-head"><h2>阅读设置</h2><button type="button" @click="showReaderSettings = false" aria-label="关闭阅读设置">×</button></div>
+      <div class="reader-setting-row"><span>字号</span><div><button type="button" aria-label="缩小字号" :disabled="readerFontSize <= 16" @click="adjustReaderFont(-1)">A−</button><span>{{ readerFontSize }}px</span><button type="button" aria-label="放大字号" :disabled="readerFontSize >= 22" @click="adjustReaderFont(1)">A＋</button></div></div>
+      <div class="reader-setting-row"><span>行距</span><div><button v-for="option in [1.55, 1.7, 1.85]" :key="option" type="button" :aria-pressed="readerLineHeight === option" @click="readerLineHeight = option">{{ option === 1.55 ? '紧凑' : option === 1.7 ? '舒适' : '宽松' }}</button></div></div>
+      <div class="reader-setting-row"><span>背景</span><div><button type="button" :aria-pressed="readerTone === 'white'" @click="readerTone = 'white'">纯白</button><button type="button" :aria-pressed="readerTone === 'warm'" @click="readerTone = 'warm'">暖色</button></div></div>
+    </el-drawer>
 
     <!-- 翻译结果弹窗 -->
     <el-dialog
@@ -527,7 +572,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts, User } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowDown, View, Clock, InfoFilled, Check, Timer, Loading, Picture, ZoomIn, ZoomOut, Star, StarFilled, Tickets, CircleCheck, MagicStick, Checked, VideoPlay, Edit, Close, Comment, Reading, Medal, Connection, TrendCharts, User } from '@element-plus/icons-vue'
 import studentApi, { getVocabularyStats, createUnderline, getUnderlines, deleteUnderline, toggleArticleFavorite, checkArticleFavorite, toggleArticleLike, checkArticleLike, getRelatedTexts } from '@/api/student'
 import { getExercisesByTextId, submitQuizAnswers } from '@/api/exercise'
 import { generateAiQuiz } from '@/api/aiQuiz'
@@ -556,6 +601,7 @@ import { getAnnotations, createAnnotation, deleteAnnotation, toggleUpvote, updat
 import { toggleSentenceFavorite } from '@/api/sentenceFavorite'
 import { getArticlesPath } from '@/config/site'
 import rangy from '@/utils/rangy'
+import XyMascot from '@/components/ui/XyMascot.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -570,6 +616,47 @@ const unitId = ref(null)
 const courseName = ref('')
 const unitName = ref('')
 const textTitle = ref('')
+const showVersionDrawer = ref(false)
+const showReaderSettings = ref(false)
+const readingScrollPercent = ref(0)
+const companionDismissed = ref(false)
+const companionInviteVisible = ref(false)
+const companionPromptSeen = ref(false)
+let companionInviteTimerId = null
+const READER_PREFS_KEY = 'langhack.reader.preferences.v1'
+const readerPreferences = (() => {
+  try { return JSON.parse(localStorage.getItem(READER_PREFS_KEY) || '{}') } catch { return {} }
+})()
+const readerFontSize = ref(Math.min(22, Math.max(16, Number(readerPreferences.fontSize) || 18)))
+const readerLineHeight = ref([1.55, 1.7, 1.85].includes(readerPreferences.lineHeight) ? readerPreferences.lineHeight : 1.7)
+const readerTone = ref(readerPreferences.tone === 'warm' ? 'warm' : 'white')
+const readerStyle = computed(() => ({
+  '--reader-font-size': `${readerFontSize.value}px`,
+  '--reader-line-height': readerLineHeight.value,
+  '--reader-surface': readerTone.value === 'warm' ? '#fffaf0' : '#fff'
+}))
+const showCompanionCheck = computed(() =>
+  companionInviteVisible.value && readingScrollPercent.value >= 25 && readingScrollPercent.value < 80 &&
+  !isCompleted.value && !companionDismissed.value && !showSelectionMenu.value && quizQuestions.value.length === 0 &&
+  !showWordDialog.value && !showVersionDrawer.value && !showReaderSettings.value
+)
+const adjustReaderFont = (step) => { readerFontSize.value = Math.min(22, Math.max(16, readerFontSize.value + step)) }
+watch([readerFontSize, readerLineHeight, readerTone], () => {
+  try {
+    localStorage.setItem(READER_PREFS_KEY, JSON.stringify({
+      fontSize: readerFontSize.value,
+      lineHeight: readerLineHeight.value,
+      tone: readerTone.value
+    }))
+  } catch { /* 阅读设置可在当前页面继续使用 */ }
+})
+watch(readingScrollPercent, (percent) => {
+  if (percent >= 25 && percent < 80 && !companionPromptSeen.value && !isCompleted.value) {
+    companionPromptSeen.value = true
+    companionInviteVisible.value = true
+    companionInviteTimerId = setTimeout(() => { companionInviteVisible.value = false }, 9000)
+  }
+})
 const author = ref(null)
 const isFollowingAuthor = ref(false)
 const isFollowedByAuthor = ref(false)
@@ -667,7 +754,8 @@ let studyStartTime = null
 const quizLoading = ref(false)
 const quizQuestions = ref([])
 const quizStartedAt = ref(null) // 进入做题界面的时间戳，用于计算每题用时
-const quizPanelHeight = ref(350) // 底部面板高度
+const initialQuizPanelHeight = Math.min(350, Math.round(window.innerHeight * 0.55))
+const quizPanelHeight = ref(initialQuizPanelHeight) // 手机上避免遮住整页
 const quizPanelCollapsed = ref(false) // 面板是否折叠
 let quizPanelDragging = false
 let quizPanelDragStartY = 0
@@ -943,7 +1031,7 @@ const loadTextDetail = async () => {
           availableVersions.value = Object.keys(data.versions).sort((a, b) => {
             // 按优先级排序：original > cet4 > cet6 > academic > chinese_parallel
             const order = { 'original': 0, 'cet4': 1, 'cet6': 2, 'academic': 3, 'chinese_parallel': 4 }
-            return (order[a] || 999) - (order[b] || 999)
+            return (order[a] ?? 999) - (order[b] ?? 999)
           })
           // 默认选择原始版本
           currentVersion.value = 'original'
@@ -970,7 +1058,7 @@ const loadTextDetail = async () => {
           textVersions.value = data.versions
           availableVersions.value = Object.keys(data.versions).sort((a, b) => {
             const order = { 'original': 0, 'cet4': 1, 'cet6': 2, 'academic': 3, 'chinese_parallel': 4 }
-            return (order[a] || 999) - (order[b] || 999)
+            return (order[a] ?? 999) - (order[b] ?? 999)
           })
           currentVersion.value = 'original'
           textContent.value = plainTextToHtml(textVersions.value['original'] || data.content)
@@ -1860,13 +1948,19 @@ watch(textContent, () => {
 // 监听路由参数变化（相关文章点击时复用组件，需重新加载数据）
 watch(() => route.params.id, (newId, oldId) => {
   if (newId && newId !== oldId) {
+    saveReaderPosition()
     textId.value = newId
     relatedTexts.value = []
     quizQuestions.value = []
     isCompleted.value = false
+    companionDismissed.value = false
+    companionInviteVisible.value = false
+    companionPromptSeen.value = false
+    if (companionInviteTimerId) clearTimeout(companionInviteTimerId)
+    readingScrollPercent.value = 0
     const scrollEl = document.querySelector('.content-wrapper')
     if (scrollEl) scrollEl.scrollTop = 0
-    loadTextDetail()
+    loadTextDetail().then(() => nextTick(restoreReaderPosition))
   }
 })
 
@@ -1922,6 +2016,8 @@ const handleMarkdownWordClick = async (word) => {
 const renderedVersionCache = new Map()
 
 const switchVersion = (version) => {
+  const scrollEl = getReaderScrollElement()
+  const scrollFraction = getReaderScrollFraction(scrollEl)
   currentVersion.value = version
   const versionContent = textVersions.value[version] || ''
 
@@ -1950,7 +2046,17 @@ const switchVersion = (version) => {
     versionSwitchTimerId = null
   }, 300)
 
+  nextTick(() => {
+    if (scrollEl) scrollEl.scrollTop = scrollFraction * Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
+    handleScroll()
+  })
+
   ElMessage.info(`已切换到${getVersionLabel(version)}版本`)
+}
+
+const selectVersion = (version) => {
+  showVersionDrawer.value = false
+  if (version !== currentVersion.value) switchVersion(version)
 }
 
 const getVersionLabel = (version) => {
@@ -1964,12 +2070,69 @@ const getVersionLabel = (version) => {
   return labels[version] || version
 }
 
-// 滚动处理函数（节流优化：使用 requestAnimationFrame）
+// 阅读位置仅保存在此设备，不影响服务端学习记录。
+let readerScrollElement = null
+let positionSaveTimerId = null
+const getReaderScrollElement = () => pageHeader.value?.closest('.content-wrapper') || document.scrollingElement
+const getReaderScrollFraction = (scrollEl = getReaderScrollElement()) => {
+  if (!scrollEl) return 0
+  const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
+  return maxScroll ? Math.min(1, scrollEl.scrollTop / maxScroll) : 0
+}
+const getReaderPositionKey = () => `langhack.reader.position.v1.${userStore.userInfo?.id || 'user'}.${textId.value}`
+const saveReaderPosition = () => {
+  try { localStorage.setItem(getReaderPositionKey(), String(getReaderScrollFraction())) } catch { /* 设备存储不可用时正常阅读 */ }
+}
+const restoreReaderPosition = () => {
+  const scrollEl = getReaderScrollElement()
+  if (!scrollEl) return
+  try {
+    const position = Number(localStorage.getItem(getReaderPositionKey()))
+    if (Number.isFinite(position) && position > 0.01 && position < 0.99) {
+      scrollEl.scrollTop = position * Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
+    }
+  } catch { /* 无保存位置时从头阅读 */ }
+  handleScroll()
+}
+const scrollToReaderTop = () => {
+  const scrollEl = getReaderScrollElement()
+  if (scrollEl) scrollEl.scrollTo({ top: 0, behavior: 'smooth' })
+}
+const getVisibleParagraph = () => {
+  const paragraphs = Array.from(document.querySelectorAll('.markdown-content p'))
+  const viewportTop = getReaderScrollElement()?.getBoundingClientRect().top || 0
+  const paragraph = paragraphs.find(item => item.getBoundingClientRect().bottom > viewportTop + 96) || paragraphs.at(-1)
+  return (paragraph?.textContent || document.querySelector('.markdown-content')?.textContent || '').trim().slice(0, 500)
+}
+const openArticleConversation = ({ comprehension = false } = {}) => {
+  const excerpt = getVisibleParagraph()
+  router.push({
+    path: '/student/ai-qa',
+    query: {
+      textId: textId.value,
+      articleTitle: textTitle.value,
+      text: excerpt,
+      context: excerpt,
+      question: comprehension
+        ? 'Please ask me one short comprehension question in English about this passage. Wait for my answer before explaining.'
+        : 'I want to discuss this article in English. Please ask me one question at a time.',
+      ...(comprehension ? { autoSend: '1' } : {})
+    }
+  })
+}
+const openComprehensionCheck = () => {
+  companionDismissed.value = true
+  openArticleConversation({ comprehension: true })
+}
+
+// 滚动处理函数（监听实际滚动容器，而不是 window）
 let scrollTicking = false
 const handleScroll = () => {
   if (!scrollTicking) {
     window.requestAnimationFrame(() => {
-      const currentScrollY = window.scrollY
+      const scrollEl = getReaderScrollElement()
+      const currentScrollY = scrollEl?.scrollTop || 0
+      readingScrollPercent.value = Math.round(getReaderScrollFraction(scrollEl) * 100)
 
       // 向下滚动超过100px时隐藏头部
       if (currentScrollY > lastScrollY.value && currentScrollY > 100) {
@@ -1981,6 +2144,12 @@ const handleScroll = () => {
       }
 
       lastScrollY.value = currentScrollY
+      if (!positionSaveTimerId) {
+        positionSaveTimerId = setTimeout(() => {
+          saveReaderPosition()
+          positionSaveTimerId = null
+        }, 600)
+      }
       scrollTicking = false
     })
     scrollTicking = true
@@ -1990,11 +2159,13 @@ const handleScroll = () => {
 // 生命周期
 onMounted(async () => {
   await loadTextDetail()
+  await nextTick()
+  readerScrollElement = getReaderScrollElement()
+  if (readerScrollElement) readerScrollElement.addEventListener('scroll', handleScroll, { passive: true })
+  window.requestAnimationFrame(restoreReaderPosition)
   loadAnnotations()
   // 添加页面可见性变化监听
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  // 添加滚动监听
-  window.addEventListener('scroll', handleScroll, { passive: true })
   // 添加窗口大小变化监听
   window.addEventListener('resize', handleWindowResize)
   // 默认启用全屏模式
@@ -2017,12 +2188,19 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (companionInviteTimerId) clearTimeout(companionInviteTimerId)
+  companionInviteTimerId = null
+  saveReaderPosition()
+  if (positionSaveTimerId) clearTimeout(positionSaveTimerId)
+  positionSaveTimerId = null
+  readerScrollElement?.removeEventListener('scroll', handleScroll)
+  readerScrollElement = null
+  stopDragQuizPanel()
   // 清理 TTS 播放
   stopTtsPlayback()
 
   // 移除事件监听
   document.removeEventListener('visibilitychange', handleVisibilityChange);
-  window.removeEventListener('scroll', handleScroll);
   document.removeEventListener('selectionchange', handleSelectionChange);
   window.removeEventListener('resize', handleWindowResize);
 
@@ -2600,7 +2778,7 @@ const showAllAnswers = () => {
 }
 
 // 底部出题面板控制
-let quizPanelSavedHeight = 350
+let quizPanelSavedHeight = initialQuizPanelHeight
 const toggleQuizPanel = () => {
   if (quizPanelCollapsed.value) {
     // 展开：恢复之前的高度
@@ -2613,13 +2791,18 @@ const toggleQuizPanel = () => {
   quizPanelCollapsed.value = !quizPanelCollapsed.value
 }
 
+const resizeQuizPanel = (delta) => {
+  quizPanelHeight.value = Math.max(120, Math.min(window.innerHeight * 0.7, quizPanelHeight.value + delta))
+}
+
 const startDragQuizPanel = (e) => {
   e.preventDefault()
   quizPanelDragging = true
   quizPanelDragStartY = e.clientY
   quizPanelDragStartHeight = quizPanelHeight.value
-  document.addEventListener('mousemove', onDragQuizPanel)
-  document.addEventListener('mouseup', stopDragQuizPanel)
+  document.addEventListener('pointermove', onDragQuizPanel)
+  document.addEventListener('pointerup', stopDragQuizPanel)
+  document.addEventListener('pointercancel', stopDragQuizPanel)
 }
 
 const onDragQuizPanel = (e) => {
@@ -2631,8 +2814,9 @@ const onDragQuizPanel = (e) => {
 
 const stopDragQuizPanel = () => {
   quizPanelDragging = false
-  document.removeEventListener('mousemove', onDragQuizPanel)
-  document.removeEventListener('mouseup', stopDragQuizPanel)
+  document.removeEventListener('pointermove', onDragQuizPanel)
+  document.removeEventListener('pointerup', stopDragQuizPanel)
+  document.removeEventListener('pointercancel', stopDragQuizPanel)
 }
 
 const closeQuiz = () => {
@@ -2902,7 +3086,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 }
 
 .premium-reader {
-  background-color: var(--bg-soft);
+  background-color: var(--xy-canvas);
   min-height: 100vh;
   font-family: 'Inter', -apple-system, sans-serif;
   color: var(--text-main);
@@ -2914,7 +3098,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--glass-bg);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-glass);
@@ -2922,6 +3106,9 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   /* 移除 contain: paint — 该属性创建新的 stacking context，
      与 ElMessage(z-index:2031) 交互时可能导致下方内容区域无法接收 pointer events */
 }
+
+.reading-position-track { height: 3px; background: var(--xy-brand-50); }
+.reading-position-track span { display: block; height: 100%; background: var(--xy-brand-500); transition: width .2s ease; }
 
 .header-hidden {
   transform: translateY(-100%);
@@ -2978,6 +3165,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   white-space: nowrap;
   display: inline-block;
   padding-right: 24px;
+  margin: 0;
 }
 
 .header-title.scrolling {
@@ -3111,7 +3299,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 /* Reader Container */
 .reader-container {
-  max-width: 1200px;
+  max-width: 860px;
   margin: 0 auto;
   padding: 60px 24px;
   position: relative;
@@ -3177,9 +3365,9 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .author-follow-btn {
   margin-left: auto;
   min-width: 76px;
-  border: 1px solid #2563eb;
+  border: 1px solid var(--xy-brand-600);
   border-radius: 8px;
-  background: #2563eb;
+  background: var(--xy-brand-600);
   color: #fff;
   padding: 7px 12px;
   font-size: 13px;
@@ -3188,7 +3376,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 }
 
 .author-follow-btn:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--xy-brand-700);
 }
 
 .author-follow-btn.is-following {
@@ -3219,8 +3407,8 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #2563eb;
-  background: #eff6ff;
+  color: var(--xy-brand-600);
+  background: var(--xy-brand-50);
 }
 
 .byline-label {
@@ -3301,10 +3489,90 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   width: 100%;
 }
 
+.reader-toolbar { display: flex; align-items: center; gap: 12px; margin-top: 28px; }
+.reader-toolbar .version-pill-selector { flex: 1; width: auto; margin-top: 0; }
+.mobile-version-trigger { display: none; }
+.reader-settings-trigger {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--xy-border);
+  border-radius: var(--xy-radius-sm);
+  background: var(--xy-surface);
+  color: var(--xy-brand-700);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.reader-settings-trigger span { margin-left: 6px; font-weight: 500; }
+.mobile-difficulty-pill { display: none; }
+
+.companion-followup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 32px;
+  padding: 16px;
+  background: var(--xy-surface-tint);
+  border: 1px solid var(--xy-border);
+  border-radius: var(--xy-radius-md);
+}
+.companion-followup-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; color: var(--xy-ink); }
+.companion-followup-copy span { font-size: 13px; color: var(--xy-ink-muted); line-height: 1.45; }
+.companion-followup button,
+.companion-check button,
+.completion-primary {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--xy-radius-sm);
+  background: var(--xy-gradient-brand);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+.companion-check {
+  position: fixed;
+  z-index: 950;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(360px, calc(100vw - 24px));
+  padding: 8px;
+  border: 1px solid var(--xy-border);
+  border-radius: var(--xy-radius-md);
+  background: var(--xy-surface);
+  box-shadow: var(--xy-shadow-card);
+}
+.companion-check span { flex: 1; font-size: 13px; line-height: 1.3; color: var(--xy-ink); }
+.companion-check button { padding: 0 10px; white-space: nowrap; }
+.companion-check .companion-dismiss { width: 32px; min-height: 44px; padding: 0; background: transparent; color: var(--xy-ink-muted); font-size: 20px; }
+
+.completion-card { width: 100%; padding: 24px; border: 1px solid var(--xy-border); border-radius: var(--xy-radius-lg); background: var(--xy-surface); text-align: center; box-shadow: var(--xy-shadow-card); }
+.completion-card :deep(.xy-mascot) { margin: 0 auto 8px; }
+.completion-card h2 { margin: 0 0 8px; color: var(--xy-ink); font-size: 22px; }
+.completion-card p { margin: 0 auto 18px; max-width: 38em; color: var(--xy-ink-muted); line-height: 1.6; }
+.completion-actions { display: flex; justify-content: center; gap: 10px; }
+.completion-actions button { min-height: 44px; padding: 0 16px; border: 1px solid var(--xy-border); border-radius: var(--xy-radius-sm); background: white; color: var(--xy-ink); font-weight: 700; cursor: pointer; }
+.completion-actions .completion-primary { border: 0; background: var(--xy-gradient-brand); color: white; }
+
+.reader-drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.reader-drawer-head h2 { margin: 0; font-size: 18px; color: var(--xy-ink); }
+.reader-drawer-head button { width: 44px; height: 44px; border: 0; background: transparent; color: var(--xy-ink-muted); font-size: 24px; cursor: pointer; }
+.reader-drawer-option { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--xy-border); background: transparent; color: var(--xy-ink); font-size: 15px; cursor: pointer; }
+.reader-drawer-option[aria-pressed="true"] { color: var(--xy-brand-700); font-weight: 700; background: var(--xy-brand-50); }
+.reader-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--xy-border); }
+.reader-setting-row > span { flex: 0 0 40px; color: var(--xy-ink); font-weight: 700; }
+.reader-setting-row > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.reader-setting-row button { min-height: 44px; min-width: 44px; padding: 0 10px; border: 1px solid var(--xy-border); border-radius: var(--xy-radius-sm); background: white; color: var(--xy-ink); cursor: pointer; }
+.reader-setting-row button[aria-pressed="true"] { border-color: var(--xy-brand-600); background: var(--xy-brand-50); color: var(--xy-brand-700); font-weight: 700; }
+.reader-setting-row button:disabled { opacity: .4; cursor: not-allowed; }
+
 /* Article Body Typography */
 .article-body {
-  font-size: 18px;
-  line-height: 1.8;
+  font-size: var(--reader-font-size, 18px);
+  line-height: var(--reader-line-height, 1.7);
   color: var(--text-main);
   user-select: text;
   -webkit-user-select: text;
@@ -3344,19 +3612,20 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .article-body :deep(.interactive-text),
 .markdown-content {
-  background: #fff;
+  background: var(--reader-surface, #fff);
   padding: 24px;
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  font-family: 'Georgia', serif;
-  line-height: 1.8;
+  font-family: Georgia, 'Noto Serif', serif;
+  font-size: var(--reader-font-size, 18px);
+  line-height: var(--reader-line-height, 1.7);
   color: #333;
   word-break: break-word;
   overflow-wrap: break-word;
 }
 
 .markdown-content :deep(p) {
-  text-align: justify;
+  text-align: left;
   margin-bottom: 24px;
 }
 
@@ -3398,7 +3667,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   align-items: center;
   justify-content: center;
   padding: 14px 36px;
-  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+  background: var(--xy-gradient-brand);
   border: none;
   border-radius: 12px;
   color: white;
@@ -3410,7 +3679,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .ai-quiz-btn:hover:not(:disabled) {
   transform: scale(1.02);
-  box-shadow: 0 8px 20px -4px rgba(139, 92, 246, 0.4);
+  box-shadow: var(--shadow-brand);
 }
 
 .ai-quiz-btn:active:not(:disabled) {
@@ -3429,7 +3698,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   left: 0;
   right: 0;
   background: #fff;
-  border-top: 2px solid #8b5cf6;
+  border-top: 2px solid var(--xy-brand-500);
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
   z-index: 1000;
   display: flex;
@@ -3448,7 +3717,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 }
 
 .quiz-panel-drag-handle {
-  height: 12px;
+  min-height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3456,6 +3725,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   background: #f8f9fa;
   border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
+  touch-action: none;
 }
 
 .quiz-panel-drag-handle:hover {
@@ -3484,7 +3754,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: #8b5cf6;
+  color: var(--xy-brand-700);
 }
 
 .quiz-panel-actions {
@@ -3546,7 +3816,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+  background: var(--xy-gradient-brand);
   color: white;
   border-radius: 50%;
   font-size: 14px;
@@ -3863,7 +4133,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   align-items: center;
   justify-content: center;
   padding: 16px 40px;
-  background: linear-gradient(135deg, var(--primary-color), #3b82f6);
+  background: var(--xy-gradient-brand);
   border: none;
   border-radius: 16px;
   color: white;
@@ -3915,26 +4185,44 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   }
 
   .glass-header .header-inner {
-    height: 48px;
+    height: 52px;
     padding: 0 8px;
     flex-wrap: nowrap;
+    gap: 4px;
   }
 
   .glass-header .header-left,
   .glass-header .header-right {
-    gap: 8px;
+    gap: 0;
   }
 
+  .glass-header .header-left { flex: 1; min-width: 0; }
+  .glass-header .header-right { flex: 0 0 auto; }
+  .glass-header .minimal-back-btn { width: 44px; height: 44px; flex: 0 0 44px; justify-content: center; padding: 0; font-size: 18px; }
+  .glass-header .back-label,
+  .glass-header .header-divider,
+  .glass-header .difficulty-pill,
+  .glass-header .action-count { display: none; }
+  .glass-header .annotation-header-btn,
+  .glass-header .favorite-btn,
+  .glass-header .like-btn { width: 44px; height: 44px; flex: 0 0 44px; }
+
   .glass-header .header-title-scroll {
-    max-width: 150px;
+    flex: 1;
+    min-width: 0;
+    max-width: none;
   }
 
   .glass-header .header-title {
-    font-size: 13px;
+    display: block;
+    overflow: hidden;
+    padding-right: 0;
+    text-overflow: ellipsis;
+    font-size: 14px;
   }
 
   .glass-header .header-title.scrolling {
-    animation: header-title-scroll-mobile 12s linear infinite;
+    animation: none;
   }
 
   @keyframes header-title-scroll-mobile {
@@ -3958,7 +4246,12 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   .article-meta {
     margin-bottom: 12px;
     font-size: 13px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
+
+  .article-meta .meta-views { display: none; }
+  .mobile-difficulty-pill { display: inline-flex; padding: 3px 8px; border-radius: 8px; font-size: 12px; font-weight: 700; }
 
   .article-body {
     font-size: 16px;
@@ -3968,8 +4261,10 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
   .article-body :deep(.interactive-text),
   .markdown-content {
-    padding: 12px;
+    padding: 16px;
   }
+
+  .markdown-content :deep(p) { text-align: left; hyphens: auto; }
 
   .article-body :deep(.text-content) {
     padding: 12px !important;
@@ -3980,9 +4275,21 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   }
   
   .version-pill-selector {
-    margin-top: 24px;
-    width: 100%;
+    margin-top: 0;
+    min-width: 0;
   }
+
+  .reader-toolbar { margin-top: 18px; gap: 8px; }
+  .reader-toolbar .pill-container { display: none; }
+  .mobile-version-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--xy-border); border-radius: var(--xy-radius-sm); background: var(--xy-surface); color: var(--xy-ink); font-size: 14px; cursor: pointer; }
+  .reader-settings-trigger span { display: none; }
+  .quiz-bottom-panel { max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .quiz-panel-header { padding: 8px 12px; gap: 8px; }
+  .quiz-questions-scroll { padding: 12px; }
+  .quiz-actions { padding: 10px 12px; }
+  .companion-followup { flex-wrap: wrap; }
+  .companion-followup-copy { flex-basis: calc(100% - 60px); }
+  .companion-followup button { margin-left: auto; }
   
   .pill-container {
     display: flex;
@@ -4082,7 +4389,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   margin: 0 0 2px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1890ff;
+  color: var(--xy-brand-600);
   line-height: 1.0;
 }
 
@@ -4111,7 +4418,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   background: #f8f9fa;
   padding: 6px 8px;
   border-radius: 4px;
-  border-left: 2px solid #1890ff;
+  border-left: 2px solid var(--xy-brand-600);
   display: inline-block;
   max-width: 100%;
   text-align: left;
@@ -4166,6 +4473,8 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 <style>
 /* 全局弹窗样式 - 不受 scoped 限制，与 components/InteractiveText.vue 保持一致 */
+.reader-bottom-drawer { border-radius: var(--xy-radius-lg) var(--xy-radius-lg) 0 0; }
+.reader-bottom-drawer .el-drawer__body { padding: 16px 20px calc(20px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
 .word-dialog.el-dialog,
 .word-dialog.el-dialog__wrapper {
   margin: 0 !important;
@@ -4232,7 +4541,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .translate-dialog .translated-text p {
   background: #e6f7ff;
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid var(--xy-brand-600);
 }
 
 @media (max-width: 768px) {
@@ -4341,7 +4650,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   color: #64748b;
   transition: all 0.15s;
 }
-.ann-upvote-btn.active { border-color: #197fe6; color: #197fe6; background: #eff6ff; }
+.ann-upvote-btn.active { border-color: #197fe6; color: #197fe6; background: var(--xy-brand-50); }
 .ann-upvote-btn:hover { border-color: #197fe6; color: #197fe6; }
 .ann-delete-btn {
   background: none;

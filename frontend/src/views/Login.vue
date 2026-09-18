@@ -45,13 +45,14 @@
       <div class="trend-content">
         <!-- 时尚品牌 -->
         <div class="trend-brand">
+          <XyMascot :size="74" />
           <div class="trend-logo">
             <div class="logo-inner">
               <div class="logo-icon">📚</div>
               <div class="logo-text">LangHack</div>
             </div>
           </div>
-          <p class="trend-subtitle">Trend · Learn · Share · Grow</p>
+          <p class="trend-subtitle">用英语发现更大的世界</p>
         </div>
 
         <!-- 时尚登录卡片 -->
@@ -520,6 +521,7 @@ import { useUserStore } from "@/store/user";
 import request from "@/utils/request";
 import { useSsoLogin } from "@/composables/useSsoLogin";
 import PermissionDenied from "@/components/PermissionDenied.vue";
+import XyMascot from "@/components/ui/XyMascot.vue";
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -729,6 +731,7 @@ const handleRegister = async () => {
     "Microsoft YaHei", sans-serif;
   position: relative;
   overflow: hidden;
+  background: var(--xy-gradient-page);
 }
 
 /* 状态栏 */
@@ -739,12 +742,13 @@ const handleRegister = async () => {
 
 /* 时尚背景 */
 .trend-background {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: -1;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .bg-gradient {
@@ -753,8 +757,7 @@ const handleRegister = async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--gradient-hero);
-  opacity: 0.95;
+  background: radial-gradient(circle at 20% 12%, #d6f4e3, transparent 34%), radial-gradient(circle at 85% 80%, #e3f7e9, transparent 36%), var(--xy-canvas);
 }
 
 .bg-pattern {
@@ -828,6 +831,8 @@ const handleRegister = async () => {
 
 /* 时尚容器 */
 .trend-container {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -839,12 +844,15 @@ const handleRegister = async () => {
   margin: 0 auto;
 }
 
+.trend-content { width: 100%; max-width: 420px; }
+
 /* 时尚品牌 */
 .trend-brand {
   text-align: center;
   margin-bottom: 32px;
   animation: fadeInUp 0.8s ease;
 }
+.trend-brand :deep(.xy-mascot) { margin: 0 auto 12px; }
 
 @keyframes fadeInUp {
   from {
@@ -917,7 +925,7 @@ const handleRegister = async () => {
 
 .trend-subtitle {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--xy-ink-muted);
   margin: 0;
   letter-spacing: 2px;
   font-weight: 500;
@@ -1011,7 +1019,7 @@ const handleRegister = async () => {
 
 .trend-input:focus {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+  box-shadow: 0 0 0 3px rgba(23, 110, 81, 0.1);
   background: var(--bg-primary);
 }
 
@@ -1075,7 +1083,7 @@ const handleRegister = async () => {
 
 .trend-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 102, 204, 0.25);
+  box-shadow: 0 8px 24px rgba(23, 110, 81, 0.25);
 }
 
 .trend-button:active:not(:disabled) {
@@ -1111,23 +1119,23 @@ const handleRegister = async () => {
 .identity-btn {
   flex: 1;
   padding: 8px 4px;
-  border: 1.5px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.6);
+  border: 1.5px solid var(--xy-border);
+  border-radius: var(--xy-radius-sm);
+  background: var(--xy-canvas);
+  color: var(--xy-ink-muted);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.3s;
 }
 .identity-btn:hover {
-  border-color: rgba(0, 102, 204, 0.4);
-  background: rgba(0, 102, 204, 0.08);
-  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(23, 110, 81, 0.4);
+  background: rgba(23, 110, 81, 0.08);
+  color: var(--xy-brand-700);
 }
 .identity-btn.active {
-  border-color: var(--primary-color, #0066cc);
-  background: rgba(0, 102, 204, 0.15);
-  color: #fff;
+  border-color: var(--primary-color, var(--xy-brand-600));
+  background: rgba(23, 110, 81, 0.15);
+  color: var(--xy-brand-700);
 }
 
 /* 时尚演示区域 */

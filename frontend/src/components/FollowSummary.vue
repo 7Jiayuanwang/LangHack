@@ -108,11 +108,11 @@ onMounted(async () => {
 }
 
 .summary-stat:hover {
-  background: #eff6ff;
+  background: var(--xy-brand-50);
 }
 
 .summary-stat strong {
-  color: #2563eb;
+  color: var(--xy-brand-600);
   font-size: 24px;
 }
 

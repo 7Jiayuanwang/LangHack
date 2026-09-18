@@ -698,7 +698,7 @@ const onTrendMouseLeave = () => { tooltip.value.visible = false }
   flex: 1;
   box-shadow: 0 1px 4px rgba(0,0,0,.06);
   border: 1px solid #ebeef5;
-  &.highlight { border-color: #409eff; background: linear-gradient(135deg,#ecf5ff 0%,#f0f7ff 100%); }
+  &.highlight { border-color: var(--xy-brand-600); background: linear-gradient(135deg,var(--xy-brand-50) 0%,#f0f7ff 100%); }
   &.warn { border-color: #f56c6c; background: #fef0f0; }
 }
 .ov-icon {
@@ -823,7 +823,7 @@ const onTrendMouseLeave = () => { tooltip.value.visible = false }
 .ir-label { width: 65px; font-size: 12px; color: #606266; white-space: nowrap; }
 .ir-bar-wrap { flex: 1; height: 16px; background: #f5f7fa; border-radius: 8px; overflow: hidden; }
 .ir-bar-fill {
-  height: 100%; background: linear-gradient(90deg,#a0d8f1,#409eff); border-radius: 8px; transition: width .4s;
+  height: 100%; background: linear-gradient(90deg,#a0d8f1,var(--xy-brand-600)); border-radius: 8px; transition: width .4s;
 }
 .ir-count { width: 32px; text-align: right; font-size: 13px; font-weight: 600; color: #303133; }
 
@@ -849,7 +849,7 @@ const onTrendMouseLeave = () => { tooltip.value.visible = false }
 .tl-item {
   display: flex; align-items: center; gap: 5px;
   &::before { content: ''; display: inline-block; width: 20px; height: 2.5px; border-radius: 2px; }
-  &.new-line::before    { background: #409eff; }
+  &.new-line::before    { background: var(--xy-brand-600); }
   &.review-line::before { background: #e6a23c; }
 }
 /* 趋势图包裹层 */
@@ -905,7 +905,7 @@ const onTrendMouseLeave = () => { tooltip.value.visible = false }
 .tt-date { font-size: 11px; color: #bdc3c7; margin-bottom: 4px; }
 .tt-row { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
 .tt-row::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.tt-row.new-dot::before    { background: #409eff; }
+.tt-row.new-dot::before    { background: var(--xy-brand-600); }
 .tt-row.review-dot::before { background: #e6a23c; }
 
 /* ── 学生表 ── */
@@ -932,7 +932,7 @@ const onTrendMouseLeave = () => { tooltip.value.visible = false }
 .last-active {
   font-size: 12px;
   &.ago-today  { color: #67c23a; font-weight: 600; }
-  &.ago-recent { color: #409eff; }
+  &.ago-recent { color: var(--xy-brand-600); }
   &.ago-week   { color: #e6a23c; }
   &.ago-old    { color: #c0c4cc; }
   &.ago-never  { color: #dcdfe6; }

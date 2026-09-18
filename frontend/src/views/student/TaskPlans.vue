@@ -1,9 +1,10 @@
 <template>
   <div class="task-plans">
-    <div class="page-back" @click="$router.back()">
+    <button type="button" class="page-back" @click="$router.back()">
       <el-icon><ArrowLeft /></el-icon>
       <span>返回</span>
-    </div>
+    </button>
+    <XyPageHeader class="plans-intro" title="学期目标" eyebrow="YOUR GOALS" description="看看已经完成了多少，再决定下一小步。" variant="hero" />
     <div v-if="loading" class="loading-state">
       <el-skeleton :rows="4" animated />
     </div>
@@ -34,7 +35,7 @@
             <el-progress
               :percentage="calcPercent(plan.currentArticles, plan.articleTarget)"
               :stroke-width="8"
-              color="#409EFF"
+              color="var(--xy-brand-600)"
             />
           </div>
 
@@ -76,6 +77,7 @@
 import { ref, onMounted } from 'vue'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { studentTaskPlanApi } from '@/api/taskPlan'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 const loading = ref(true)
 const plans = ref([])
@@ -109,8 +111,11 @@ onMounted(() => loadPlans())
 
 <style scoped lang="scss">
 .task-plans {
+  max-width: 1000px;
+  margin: 0 auto;
   padding: 16px;
 }
+.plans-intro { margin-bottom: 20px; }
 
 .page-back {
   display: inline-flex;
@@ -120,6 +125,9 @@ onMounted(() => loadPlans())
   color: var(--el-color-primary);
   cursor: pointer;
   margin-bottom: 12px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
   &:active { opacity: 0.7; }
 }
 
@@ -135,9 +143,10 @@ onMounted(() => loadPlans())
 
 .plan-card {
   background: var(--el-bg-color);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--xy-border);
+  border-radius: var(--xy-radius-lg);
+  padding: 20px;
+  box-shadow: var(--xy-shadow-card);
 }
 
 .plan-header {

@@ -850,15 +850,15 @@ onUnmounted(() => {
   padding: 2px 4px;
   margin: 0 2px;
   cursor: pointer;
-  color: #1890ff;
+  color: var(--xy-brand-600);
   font-weight: 500;
   transition: all 0.3s;
 }
 
 .clickable-word:hover {
-  background-color: #1890ff;
+  background-color: var(--xy-brand-600);
   color: white;
-  border-color: #1890ff;
+  border-color: var(--xy-brand-600);
 }
 
 .word-detail {
@@ -924,7 +924,7 @@ onUnmounted(() => {
   margin: 0 0 6px 0;
   font-size: 24px;
   font-weight: 600;
-  color: #1890ff;
+  color: var(--xy-brand-600);
 }
 
 .pronunciation {
@@ -952,7 +952,7 @@ onUnmounted(() => {
   background: #f8f9fa;
   padding: 12px 16px;
   border-radius: 8px;
-  border-left: 4px solid #1890ff;
+  border-left: 4px solid var(--xy-brand-600);
   display: inline-block;
   max-width: 100%;
   text-align: left;
@@ -978,7 +978,7 @@ onUnmounted(() => {
 
 .synonym-tag {
   background: #e6f7ff;
-  color: #1890ff;
+  color: var(--xy-brand-600);
   padding: 4px 10px;
   border-radius: 16px;
   font-size: 13px;
@@ -988,7 +988,7 @@ onUnmounted(() => {
 }
 
 .synonym-tag:hover {
-  background: #1890ff;
+  background: var(--xy-brand-600);
   color: white;
   transform: scale(1.05);
 }
@@ -1143,7 +1143,7 @@ onUnmounted(() => {
 .translate-fab:active { transform: scale(0.94) !important; }
 
 .fab-default {
-  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  background: linear-gradient(135deg, var(--xy-brand-600) 0%, #096dd9 100%);
   box-shadow: 0 4px 14px rgba(24, 144, 255, 0.5), 0 0 0 3px rgba(24, 144, 255, 0.15);
 }
 
@@ -1266,6 +1266,6 @@ onUnmounted(() => {
 
 .translated-text p {
   background: #e6f7ff;
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid var(--xy-brand-600);
 }
 </style>

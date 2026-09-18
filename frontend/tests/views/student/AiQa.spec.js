@@ -12,7 +12,7 @@ vi.mock('element-plus', () => ({
 vi.mock('@/views/shared/AiQaPage.vue', () => ({
   default: {
     name: 'AiQaPage',
-    props: ['apiPath', 'backLabel'],
+    props: ['apiPath', 'backLabel', 'agentMode'],
     template: '<div class="ai-qa-page-stub">{{ apiPath }}|{{ backLabel }}</div>'
   }
 }))
@@ -47,5 +47,11 @@ describe('Student AiQa.vue (wrapper)', () => {
     const wrapper = createWrapper()
     const child = wrapper.findComponent({ name: 'AiQaPage' })
     expect(child.props('backLabel')).toBe('返回阅读')
+  })
+
+  it('uses normal QA mode when route does not request the agent', () => {
+    const wrapper = createWrapper()
+    const child = wrapper.findComponent({ name: 'AiQaPage' })
+    expect(child.props('agentMode')).toBe(false)
   })
 })
