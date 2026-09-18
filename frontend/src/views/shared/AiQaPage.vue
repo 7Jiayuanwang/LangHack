@@ -492,7 +492,7 @@ onBeforeUnmount(() => {
 .conv-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
 .conv-item { padding: 10px 12px; border-radius: 10px; cursor: pointer; position: relative; margin-bottom: 4px; }
 .conv-item:hover { background: #f8fafc; }
-.conv-item.active { background: #eff6ff; }
+.conv-item.active { background: var(--xy-brand-50); }
 .conv-title { font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 24px; }
 .conv-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 .conv-delete { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; opacity: 0; font-size: 14px; padding: 2px; }

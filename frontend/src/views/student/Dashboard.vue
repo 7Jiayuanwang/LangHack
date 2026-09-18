@@ -1,5 +1,8 @@
 <template>
   <div class="trend-dashboard">
+    <XyPageHeader class="dashboard-intro" variant="hero" eyebrow="GROW WITH XIAOYA" title="今天也从一点好奇开始" description="每一次阅读、练习和提问，都会让你离目标更近一点。">
+      <template #visual><XyMascot :size="88" /></template>
+    </XyPageHeader>
     <!-- 现代化统计网格 -->
     <div class="stats-grid">
       <div class="stat-card trend-courses">
@@ -409,6 +412,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import FollowSummary from '@/components/FollowSummary.vue'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
+import XyMascot from '@/components/ui/XyMascot.vue'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import {
   getStudentDashboard,
@@ -768,11 +773,12 @@ onMounted(() => {
 /* 现代化Dashboard样式 */
 .trend-dashboard {
   min-height: calc(100vh - 120px);
-  background: var(--bg-secondary);
+  background: var(--xy-gradient-page);
   padding: 16px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   overflow-x: hidden;
 }
+.dashboard-intro { margin-bottom: 18px; }
 
 /* 现代化统计网格 */
 .stats-grid {
@@ -783,13 +789,13 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-radius: 16px;
+  border-radius: var(--xy-radius-md);
   padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: var(--xy-shadow-card);
+  border: 1px solid var(--xy-border);
   position: relative;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -912,9 +918,9 @@ onMounted(() => {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, rgba(0, 102, 204, 0.05) 0%, rgba(0, 168, 204, 0.05) 100%);
+  background: linear-gradient(135deg, var(--xy-brand-50), #f8fdf9);
   border: 1px solid var(--border-light);
-  border-radius: 16px;
+  border-radius: var(--xy-radius-md);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1434,7 +1440,7 @@ onMounted(() => {
 }
 
 .rec-type.word {
-  background: rgba(0, 102, 204, 0.1);
+  background: rgba(23, 110, 81, 0.1);
   color: var(--primary-color);
 }
 

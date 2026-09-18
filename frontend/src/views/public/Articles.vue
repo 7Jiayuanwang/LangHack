@@ -660,7 +660,7 @@ onBeforeUnmount(() => {
 :root {
   --app-bg: #f6f7f8;
   --app-surface: #ffffff;
-  --app-primary: #137fec;
+  --app-primary: var(--xy-brand-600);
   --app-text: #0f172a;
   --app-text-muted: #64748b;
   --app-border: #e2e8f0;
@@ -844,11 +844,11 @@ onBeforeUnmount(() => {
 .filter-pill:active { transform: scale(0.96); }
 
 .filter-pill.active {
-  background: #1d4ed8;
+  background: var(--xy-brand-700);
   color: white;
-  border-color: #1d4ed8;
+  border-color: var(--xy-brand-700);
   border-radius: 50px;
-  box-shadow: 0 4px 16px rgba(29, 78, 216, 0.45);
+  box-shadow: 0 4px 16px rgba(23, 110, 81, 0.45);
 }
 
 /* --- Feed --- */
@@ -896,7 +896,7 @@ onBeforeUnmount(() => {
   width: 18px;
   height: 18px;
   border: 2px solid #e2e8f0;
-  border-top-color: #1d4ed8;
+  border-top-color: var(--xy-brand-700);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
@@ -1033,8 +1033,8 @@ onBeforeUnmount(() => {
   padding: 0 6px;
   border-radius: 8px;
   font-size: 11px;
-  color: #2563eb;
-  background: #eff6ff;
+  color: var(--xy-brand-600);
+  background: var(--xy-brand-50);
 }
 
 /* Footer */
@@ -1054,7 +1054,7 @@ onBeforeUnmount(() => {
   font-size: 11px;
   font-weight: 600;
   background: rgba(19, 127, 236, 0.1);
-  color: #137fec;
+  color: var(--xy-brand-600);
 }
 
 .reading-time {
@@ -1163,7 +1163,7 @@ onBeforeUnmount(() => {
   width: 16px;
   height: 16px;
   border: 2px solid #e2e8f0;
-  border-top-color: #1d4ed8;
+  border-top-color: var(--xy-brand-700);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }

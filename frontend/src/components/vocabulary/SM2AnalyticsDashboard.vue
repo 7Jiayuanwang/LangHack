@@ -306,7 +306,7 @@ const refresh = () => {
  font-size: 20px;
  flex-shrink: 0;
 
- &.total { background: #eff6ff; color: #3b82f6; }
+ &.total { background: var(--xy-brand-50); color: #3b82f6; }
  &.retention { background: #ecfdf5; color: #10b981; }
  &.ef { background: #fef3c7; color: #f59e0b; }
  &.due { background: #fee2e2; color: #ef4444; }
@@ -410,7 +410,7 @@ const refresh = () => {
  &.easy { background: #4ade80; }
  &.interval-new { background: #c0ccda; }
  &.interval-short { background: #79bbff; }
- &.interval-medium { background: #409eff; }
+ &.interval-medium { background: var(--xy-brand-600); }
  &.interval-long { background: #067dff; }
 }
 
@@ -437,7 +437,7 @@ const refresh = () => {
 
  &.interval-new { background: #c0ccda; }
  &.interval-short { background: #79bbff; }
- &.interval-medium { background: #409eff; }
+ &.interval-medium { background: var(--xy-brand-600); }
  &.interval-long { background: #067dff; }
 }
 
@@ -490,7 +490,7 @@ const refresh = () => {
  }
 
  &.rec-info {
- background: #eff6ff;
+ background: var(--xy-brand-50);
  border: 1px solid #bfdbfe;
  color: #1e40af;
  }

@@ -100,5 +100,5 @@ onMounted(loadUsers)
 .user-info { display: flex; flex-direction: column; gap: 4px; }
 .user-name { color: #303133; font-size: 15px; font-weight: 600; }
 .user-role { color: #909399; font-size: 12px; }
-.load-more { width: 100%; border: 0; background: transparent; color: #2563eb; padding: 16px; cursor: pointer; }
+.load-more { width: 100%; border: 0; background: transparent; color: var(--xy-brand-600); padding: 16px; cursor: pointer; }
 </style>

@@ -3177,9 +3177,9 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .author-follow-btn {
   margin-left: auto;
   min-width: 76px;
-  border: 1px solid #2563eb;
+  border: 1px solid var(--xy-brand-600);
   border-radius: 8px;
-  background: #2563eb;
+  background: var(--xy-brand-600);
   color: #fff;
   padding: 7px 12px;
   font-size: 13px;
@@ -3188,7 +3188,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 }
 
 .author-follow-btn:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--xy-brand-700);
 }
 
 .author-follow-btn.is-following {
@@ -3219,8 +3219,8 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #2563eb;
-  background: #eff6ff;
+  color: var(--xy-brand-600);
+  background: var(--xy-brand-50);
 }
 
 .byline-label {
@@ -4082,7 +4082,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   margin: 0 0 2px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1890ff;
+  color: var(--xy-brand-600);
   line-height: 1.0;
 }
 
@@ -4111,7 +4111,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   background: #f8f9fa;
   padding: 6px 8px;
   border-radius: 4px;
-  border-left: 2px solid #1890ff;
+  border-left: 2px solid var(--xy-brand-600);
   display: inline-block;
   max-width: 100%;
   text-align: left;
@@ -4232,7 +4232,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 
 .translate-dialog .translated-text p {
   background: #e6f7ff;
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid var(--xy-brand-600);
 }
 
 @media (max-width: 768px) {
@@ -4341,7 +4341,7 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
   color: #64748b;
   transition: all 0.15s;
 }
-.ann-upvote-btn.active { border-color: #197fe6; color: #197fe6; background: #eff6ff; }
+.ann-upvote-btn.active { border-color: #197fe6; color: #197fe6; background: var(--xy-brand-50); }
 .ann-upvote-btn:hover { border-color: #197fe6; color: #197fe6; }
 .ann-delete-btn {
   background: none;

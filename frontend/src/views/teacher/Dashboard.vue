@@ -398,9 +398,9 @@ onMounted(() => {
 .class-item:hover,
 .assignment-item:hover {
   background: #f0f7ff;
-  border-color: #409eff;
+  border-color: var(--xy-brand-600);
   transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+  box-shadow: 0 2px 8px rgba(23, 110, 81, 0.15);
 }
 
 .class-item:last-child,
@@ -421,7 +421,7 @@ onMounted(() => {
 
 .class-item:hover .class-info h4,
 .assignment-item:hover .assignment-info h4 {
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .class-info p,
@@ -455,7 +455,7 @@ onMounted(() => {
 
 .class-actions .el-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(23, 110, 81, 0.3);
 }
 
 .progress-info {

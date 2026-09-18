@@ -696,7 +696,7 @@ const recordLearning = async (type, word, duration) => {
 }
 
 .stat-item .el-icon {
-  color: #1890ff;
+  color: var(--xy-brand-600);
 }
 
 .stat-item.active-timer {
@@ -799,11 +799,11 @@ const recordLearning = async (type, word, duration) => {
   padding: 12px 16px;
   background: #f8f9ff;
   border-radius: 8px;
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid var(--xy-brand-600);
 }
 
 .suggestion-icon {
-  color: #1890ff;
+  color: var(--xy-brand-600);
   margin-top: 2px;
   flex-shrink: 0;
 }

@@ -1259,7 +1259,7 @@ onUnmounted(() => {
 }
 
 .stat-icon.pending {
-  background: linear-gradient(135deg, #409EFF 0%, #67C23A 100%);
+  background: linear-gradient(135deg, var(--xy-brand-600) 0%, #67C23A 100%);
   filter: brightness(1.05) saturate(1.1);
 }
 
@@ -1269,7 +1269,7 @@ onUnmounted(() => {
 }
 
 .stat-icon.completed {
-  background: linear-gradient(135deg, #67C23A 0%, #409EFF 100%);
+  background: linear-gradient(135deg, #67C23A 0%, var(--xy-brand-600) 100%);
   filter: brightness(1.05) saturate(1.1);
 }
 
@@ -1359,7 +1359,7 @@ onUnmounted(() => {
 }
 
 .content-item:hover {
-  border-color: #409EFF;
+  border-color: var(--xy-brand-600);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -1404,7 +1404,7 @@ onUnmounted(() => {
 }
 
 .word-item:hover {
-  border-color: #409EFF;
+  border-color: var(--xy-brand-600);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -1467,7 +1467,7 @@ onUnmounted(() => {
 
 .action-type {
   padding: 2px 8px;
-  background-color: #409EFF;
+  background-color: var(--xy-brand-600);
   color: white;
   border-radius: 12px;
   font-size: 12px;
@@ -1512,7 +1512,7 @@ onUnmounted(() => {
 }
 
 .pronunciation .el-icon {
-  color: #409EFF;
+  color: var(--xy-brand-600);
 }
 
 .word-content {
@@ -1553,7 +1553,7 @@ onUnmounted(() => {
   margin-bottom: 6px;
   padding: 12px;
   background-color: #f8f9ff;
-  border-left: 3px solid #409EFF;
+  border-left: 3px solid var(--xy-brand-600);
   border-radius: 4px;
   word-break: break-word;
   overflow-wrap: break-word;

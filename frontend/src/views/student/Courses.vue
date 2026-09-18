@@ -1198,7 +1198,7 @@ onMounted(async () => {
 }
 
 .stat-item .value {
-  color: #409EFF;
+  color: var(--xy-brand-600);
   font-weight: bold;
 }
 
@@ -1393,7 +1393,7 @@ onMounted(async () => {
 .stat-number {
   font-size: 32px;
   font-weight: bold;
-  color: #409EFF;
+  color: var(--xy-brand-600);
   margin-bottom: 5px;
 }
 
@@ -1618,7 +1618,7 @@ onMounted(async () => {
 
 .example-label {
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .card-actions {

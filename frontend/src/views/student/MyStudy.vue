@@ -352,7 +352,7 @@ onMounted(() => {
 
 .tab-btn.active .tab-count {
   background: rgba(19, 127, 236, 0.1);
-  color: #137fec;
+  color: var(--xy-brand-600);
 }
 
 .stats-row {
@@ -518,15 +518,15 @@ onMounted(() => {
 }
 
 .page-btn:not(:disabled):hover {
-  border-color: #1d4ed8;
-  color: #1d4ed8;
+  border-color: var(--xy-brand-700);
+  color: var(--xy-brand-700);
 }
 
 .page-btn.active {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+  background: var(--xy-brand-700);
+  border-color: var(--xy-brand-700);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+  box-shadow: 0 2px 8px rgba(23, 110, 81, 0.35);
 }
 
 .page-btn.ellipsis {
@@ -557,7 +557,7 @@ onMounted(() => {
 }
 
 .page-jump-input:focus {
-  border-color: #1d4ed8;
+  border-color: var(--xy-brand-700);
 }
 
 .page-jump-input::-webkit-inner-spin-button,
