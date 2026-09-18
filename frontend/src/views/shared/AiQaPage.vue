@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-qa-page" :class="{ 'sidebar-open': sidebarOpen }">
+  <div class="ai-qa-page" :class="{ 'sidebar-open': sidebarOpen, embedded }">
     <!-- 历史对话侧边栏 -->
     <aside class="history-sidebar" v-if="sidebarOpen">
       <div class="sidebar-header">
@@ -32,7 +32,7 @@
             <button class="qa-sidebar-btn" @click="toggleSidebar" title="历史对话">
               <el-icon><List /></el-icon>
             </button>
-            <button class="qa-back-btn" @click="$router.back()">
+            <button v-if="!embedded" class="qa-back-btn" @click="$router.back()">
               <el-icon><ArrowLeft /></el-icon>
               <span>{{ backLabel }}</span>
             </button>
@@ -77,7 +77,7 @@
         </div>
       </div>
 
-      <main class="qa-chat-area" ref="chatContainer" id="chat-container">
+      <main class="qa-chat-area" ref="chatContainer">
         <div class="empty-hint" v-if="messages.length === 0">
           <div v-if="agentMode" class="agent-empty">
             <AgentMascot :size="92" />
@@ -177,7 +177,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Reading, Monitor, Top, ChatLineSquare, List, Share } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -193,7 +193,10 @@ import {
 const props = defineProps({
   apiPath: { type: String, required: true },
   backLabel: { type: String, default: '返回阅读' },
-  agentMode: { type: Boolean, default: false }
+  agentMode: { type: Boolean, default: false },
+  embedded: { type: Boolean, default: false },
+  contextText: { type: String, default: '' },
+  contextTitle: { type: String, default: '' }
 })
 
 const route = useRoute()
@@ -232,12 +235,18 @@ const candidateQuestions = computed(() => {
 })
 
 onMounted(() => {
-  selectedText.value = route.query.text || ''
-  articleTitle.value = route.query.articleTitle || ''
-  if (props.agentMode && route.query.question) {
+  selectedText.value = props.embedded ? props.contextText : route.query.text || ''
+  articleTitle.value = props.embedded ? props.contextTitle : route.query.articleTitle || ''
+  if (props.agentMode && !props.embedded && route.query.question) {
     inputMessage.value = String(route.query.question)
   }
   loadConversations()
+})
+
+watch(() => [props.contextText, props.contextTitle], ([text, title]) => {
+  if (!props.embedded) return
+  selectedText.value = text
+  articleTitle.value = title
 })
 
 const loadConversations = async () => {
@@ -245,7 +254,7 @@ const loadConversations = async () => {
     const res = await getConversations(1, 50)
     if (res?.code === 200) {
       conversations.value = res.data?.records || []
-      if (conversations.value.length > 0 && !selectedText.value) {
+      if (conversations.value.length > 0 && !selectedText.value && !props.embedded) {
         sidebarOpen.value = true
       }
     }
@@ -365,7 +374,7 @@ const sendMessage = async () => {
       body: JSON.stringify({
         userQuestion: userMsg,
         selectedText: selectedText.value,
-        articleContext: route.query.context || '',
+        articleContext: props.embedded ? articleTitle.value : route.query.context || '',
         conversationId: currentConversationId.value,
         scene: props.agentMode ? 'LEARNING_AGENT' : 'QA'
       })
@@ -399,7 +408,7 @@ const sendMessage = async () => {
         }
       })
 
-      while (true) {
+      for (;;) {
         const { done, value } = await reader.read()
         if (done) break
         parser.feed(decoder.decode(value, { stream: true }))
@@ -455,7 +464,7 @@ const sendMessage = async () => {
 
 const scrollToBottom = () => {
   nextTick(() => {
-    const container = document.getElementById('chat-container')
+    const container = chatContainer.value
     if (container) container.scrollTop = container.scrollHeight
   })
 }
@@ -479,6 +488,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
   position: relative;
 }
+
+.ai-qa-page.embedded .history-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 80; width: min(280px, 82%); box-shadow: 12px 0 28px rgba(0, 0, 0, .13); }
+.ai-qa-page.embedded .qa-header-inner { padding: 7px 12px; }
+.ai-qa-page.embedded .qa-chat-area { padding: 12px; }
+.ai-qa-page.embedded .msg-bubble { font-size: 13px; }
+.ai-qa-page.embedded .agent-empty h2 { font-size: 18px; }
 
 .history-sidebar {
   width: 280px;

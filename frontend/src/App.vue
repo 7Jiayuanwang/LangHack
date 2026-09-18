@@ -6,6 +6,7 @@
       </keep-alive>
     </router-view>
     <NotificationPopup />
+    <AgentCompanionWidget />
   </div>
 </template>
 
@@ -13,6 +14,7 @@
 import { useRouter } from 'vue-router'
 import { onErrorCaptured, onMounted, ref } from 'vue'
 import NotificationPopup from '@/components/NotificationPopup.vue'
+import AgentCompanionWidget from '@/components/AgentCompanionWidget.vue'
 
 const router = useRouter()
 const cachedViews = ref(['ArticlesHost'])
@@ -175,4 +177,3 @@ html, body {
 /* student/Layout.vue 鐨?.trend-header 鍦ㄦ枃绔犻〉璁剧疆 pageTitle='' 鏃朵笉闇€瑕佹樉绀猴紝
    浣嗗叾浠?student 椤甸潰浠嶉渶瑕?header銆?   鏀逛负閫氳繃 student Layout 鍐呴儴鐨?scoped 鏍峰紡鎺у埗锛?   姝ゅ叏灞€瑙勫垯鏀逛负鍙殣钘忛《灞?#app 涓嬩笉灞炰簬浠讳綍 Layout 鐨勮８ .trend-header锛堝疄闄呬笉瀛樺湪锛夈€?   娉ㄦ剰锛歴tudent/Layout.vue 鐨?.trend-header 鍙?scoped 浣滅敤鍩熶繚鎶や笉鍙楁褰卞搷锛?   姝よ鍒欏凡鏃犲疄闄呬綔鐢紝淇濈暀浠呯敤浜庡吋瀹规棫閬楃暀鏍囪銆?*/
 </style>
-
