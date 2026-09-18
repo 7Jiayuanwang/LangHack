@@ -1,10 +1,11 @@
 <template>
   <div class="courses-learning">
+    <XyPageHeader class="courses-intro" title="我的课程" eyebrow="COURSE JOURNEY" description="接着上次的进度，稳稳地学下去。" variant="hero" />
     <!-- 课程列表 -->
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>我的课程</span>
+          <span>课程列表</span>
           <div class="header-actions">
             <el-input
               v-model="searchKeyword"
@@ -427,6 +428,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 import {
   getStudentCourses,
   getCourseUnits,
@@ -1079,6 +1081,7 @@ onMounted(async () => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
   min-height: calc(100vh - 120px);
 }
+.courses-intro { margin-bottom: 18px; }
 
 .card-header {
   display: flex;
@@ -1115,12 +1118,12 @@ onMounted(async () => {
   margin-bottom: 20px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 20px;
-  border: 1px solid var(--border-light);
-  background: rgba(255, 255, 255, 0.7);
+  border-radius: var(--xy-radius-lg);
+  border: 1px solid var(--xy-border);
+  background: var(--xy-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--xy-shadow-card);
   overflow: hidden;
 }
 

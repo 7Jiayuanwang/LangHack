@@ -1,17 +1,18 @@
 <template>
   <div class="assignments">
+    <XyPageHeader class="assignments-intro" title="我的任务" eyebrow="NEXT STEPS" description="先完成眼前的一小步，每一步都有积累。" variant="hero" />
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>我的任务</span>
-          <div style="display: flex; gap: 12px; align-items: center;">
+          <span>任务列表</span>
+          <div class="assignment-actions">
             <el-input
               v-model="searchKeyword"
               placeholder="搜索任务标题（全部已发布任务）"
               clearable
               @clear="handleSearchClear"
               @keyup.enter="handleSearch"
-              style="width: 280px;"
+              class="assignment-search"
             >
               <template #prefix>
                 <el-icon><Search /></el-icon>
@@ -437,6 +438,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {Check, Clock, Histogram, Loading, Microphone, Search, Warning, OfficeBuilding, Notebook} from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 // 响应式窗口宽度
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
@@ -1203,14 +1205,17 @@ onUnmounted(() => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
   min-height: calc(100vh - 120px);
 }
+.assignments-intro { margin-bottom: 18px; }
+.assignment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.assignment-search { width: min(280px, 100%); }
 
 .assignments :deep(.el-card) {
-  border-radius: 20px;
-  border: 1px solid var(--border-light);
-  background: rgba(255, 255, 255, 0.7);
+  border-radius: var(--xy-radius-lg);
+  border: 1px solid var(--xy-border);
+  background: var(--xy-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--xy-shadow-card);
 }
 
 .table-scroll-wrapper {
@@ -1222,6 +1227,11 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+@media (max-width: 640px) {
+  .assignments { padding: 16px; }
+  .card-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .assignment-actions, .assignment-search { width: 100%; }
 }
 
 .stats-row {
