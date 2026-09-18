@@ -51,6 +51,8 @@ const notifications = ref([])
 const currentIndex = ref(0)
 
 const currentNotification = computed(() => notifications.value[currentIndex.value] || null)
+// 学生的通知统一交给全站常驻的小芽收件箱，保留未读状态直到主动阅读。
+const usesCompanionInbox = () => ['STUDENT', 'USER'].includes(userStore.userRole)
 
 function formatContent(content) {
   if (!content) return ''
@@ -58,10 +60,11 @@ function formatContent(content) {
 }
 
 async function fetchUnread() {
+  if (usesCompanionInbox()) return
   try {
     const res = await getUnreadNotifications()
-    if (res.data?.code === 200 && res.data.data?.length > 0) {
-      notifications.value = res.data.data
+    if (res?.code === 200 && res.data?.length > 0) {
+      notifications.value = res.data
       currentIndex.value = 0
       visible.value = true
     }
@@ -102,13 +105,13 @@ async function handleClose() {
 
 // 登录后自动检查
 watch(() => userStore.token, (newToken) => {
-  if (newToken) {
+  if (newToken && !usesCompanionInbox()) {
     setTimeout(() => fetchUnread(), 1000)
   }
 }, { immediate: false })
 
 onMounted(() => {
-  if (userStore.token) {
+  if (userStore.token && !usesCompanionInbox()) {
     setTimeout(() => fetchUnread(), 800)
   }
 })

@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-qa-page" :class="{ 'sidebar-open': sidebarOpen, 'is-companion': articleTitle }">
+  <div class="ai-qa-page" :class="{ 'sidebar-open': sidebarOpen, embedded, 'is-companion': isCompanion }">
     <!-- 历史对话侧边栏 -->
     <aside class="history-sidebar" v-if="sidebarOpen">
       <div class="sidebar-header">
@@ -32,13 +32,12 @@
             <button class="qa-sidebar-btn" @click="toggleSidebar" title="历史对话">
               <el-icon><List /></el-icon>
             </button>
-            <button class="qa-back-btn" @click="$router.back()">
+            <button v-if="!embedded" class="qa-back-btn" @click="$router.back()">
               <el-icon><ArrowLeft /></el-icon>
               <span>{{ backLabel }}</span>
             </button>
           </div>
           <div class="header-right-group">
-            <span v-if="articleTitle" class="qa-companion-title">小芽伴读</span>
             <button
               v-if="currentConversationId"
               class="qa-share-btn"
@@ -47,9 +46,15 @@
             >
               <el-icon><Share /></el-icon>
             </button>
-            <div class="qa-avatar" :class="{ 'is-companion': articleTitle }">
-              <XyMascot v-if="articleTitle" :size="34" />
-              <el-icon v-else :size="22"><Monitor /></el-icon>
+            <div v-if="isCompanion" class="agent-identity">
+              <XyMascot :size="36" />
+              <div>
+                <strong>小芽</strong>
+                <span>{{ articleTitle ? '伴读这篇文章' : '英语学习伙伴' }}</span>
+              </div>
+            </div>
+            <div v-else class="qa-avatar">
+              <el-icon :size="22"><Monitor /></el-icon>
             </div>
           </div>
         </div>
@@ -72,16 +77,21 @@
         </div>
       </div>
 
-      <main class="qa-chat-area" ref="chatContainer" id="chat-container">
+      <main class="qa-chat-area" ref="chatContainer">
         <div class="empty-hint" v-if="messages.length === 0">
           <p v-if="articleTitle">可以用英语提问或说说你的理解，小芽会结合这篇文章陪你练习。</p>
+          <div v-else-if="agentMode" class="agent-empty">
+            <XyMascot :size="92" />
+            <h2>今天想让英语帮你做什么？</h2>
+            <p>可以聊目标、学习安排，也可以带一个具体问题来。</p>
+          </div>
           <p v-else>输入问题开始对话，或点击左上角 <strong>☰</strong> 查看历史对话</p>
         </div>
 
         <template v-for="(msg, index) in messages" :key="index">
           <div class="msg-row" :class="msg.role === 'user' ? 'msg-user' : 'msg-ai'">
-            <div class="msg-avatar" :class="{ 'is-companion': articleTitle }" v-if="msg.role !== 'user'">
-              <XyMascot v-if="articleTitle" :size="28" />
+            <div v-if="msg.role !== 'user'" class="msg-avatar" :class="{ 'is-companion': isCompanion }">
+              <XyMascot v-if="isCompanion" :size="28" />
               <el-icon v-else :size="18"><Monitor /></el-icon>
             </div>
             <div class="msg-bubble" :class="msg.role === 'user' ? 'user-bubble' : 'ai-bubble'">
@@ -92,8 +102,8 @@
         </template>
 
         <div class="msg-row msg-ai" v-if="loading">
-          <div class="msg-avatar" :class="{ 'is-companion': articleTitle }">
-            <XyMascot v-if="articleTitle" :size="28" />
+          <div class="msg-avatar" :class="{ 'is-companion': isCompanion }">
+            <XyMascot v-if="isCompanion" :size="28" />
             <el-icon v-else :size="18"><Monitor /></el-icon>
           </div>
           <div class="msg-bubble ai-bubble loading-bubble">
@@ -123,7 +133,7 @@
           <input
             v-model="inputMessage"
             class="qa-input"
-            :placeholder="articleTitle ? '用英语提问或回答小芽...' : '输入你的问题...'"
+            :placeholder="articleTitle ? '用英语提问或回答小芽...' : agentMode ? '告诉小芽你现在想学什么…' : '输入你的问题...'"
             @keyup.enter="sendMessage"
             :disabled="loading"
           />
@@ -168,7 +178,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Reading, Monitor, Top, ChatLineSquare, List, Share } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -183,13 +193,18 @@ import {
 
 const props = defineProps({
   apiPath: { type: String, required: true },
-  backLabel: { type: String, default: '返回阅读' }
+  backLabel: { type: String, default: '返回阅读' },
+  agentMode: { type: Boolean, default: false },
+  embedded: { type: Boolean, default: false },
+  contextText: { type: String, default: '' },
+  contextTitle: { type: String, default: '' }
 })
 
 const route = useRoute()
 
 const selectedText = ref('')
 const articleTitle = ref('')
+const isCompanion = computed(() => props.agentMode || Boolean(articleTitle.value))
 const messages = ref([])
 const inputMessage = ref('')
 const loading = ref(false)
@@ -207,20 +222,35 @@ const sharing = ref(false)
 const shareLink = ref('')
 const shareOptions = ref({ expiresInDays: 7, password: '' })
 
-const candidateQuestions = computed(() => selectedText.value
-  ? [{ label: '结合文章内容解释本段意思' }, { label: '深度解读' }]
-  : [{ label: '英语语法疑问咨询' }, { label: '单词用法与辨析' }]
-)
+const candidateQuestions = computed(() => {
+  if (selectedText.value) {
+    return [{ label: '结合文章内容解释本段意思' }, { label: '深度解读' }]
+  }
+  if (props.agentMode) {
+    return [
+      { label: '帮我安排今天的英语学习' },
+      { label: '怎样用英语探索我的兴趣？' },
+      { label: '分析一下我遇到的学习困难' }
+    ]
+  }
+  return [{ label: '英语语法疑问咨询' }, { label: '单词用法与辨析' }]
+})
 
 onMounted(() => {
-  selectedText.value = route.query.text || ''
-  articleTitle.value = route.query.articleTitle || ''
+  selectedText.value = props.embedded ? props.contextText : route.query.text || ''
+  articleTitle.value = props.embedded ? props.contextTitle : route.query.articleTitle || ''
   // 阅读页的小芽伴读只预填问题；仅用户主动点击“试试看”时自动发出自测请求。
-  inputMessage.value = typeof route.query.question === 'string' ? route.query.question : ''
-  if (route.query.autoSend === '1' && inputMessage.value) {
+  inputMessage.value = !props.embedded && typeof route.query.question === 'string' ? route.query.question : ''
+  if (!props.embedded && route.query.autoSend === '1' && inputMessage.value) {
     nextTick(() => { void sendMessage() })
   }
   loadConversations()
+})
+
+watch(() => [props.contextText, props.contextTitle], ([text, title]) => {
+  if (!props.embedded) return
+  selectedText.value = text
+  articleTitle.value = title
 })
 
 const loadConversations = async () => {
@@ -228,7 +258,7 @@ const loadConversations = async () => {
     const res = await getConversations(1, 50)
     if (res?.code === 200) {
       conversations.value = res.data?.records || []
-      if (conversations.value.length > 0 && !selectedText.value) {
+      if (conversations.value.length > 0 && !selectedText.value && !props.embedded) {
         sidebarOpen.value = true
       }
     }
@@ -348,8 +378,9 @@ const sendMessage = async () => {
       body: JSON.stringify({
         userQuestion: userMsg,
         selectedText: selectedText.value,
-        articleContext: route.query.context || '',
-        conversationId: currentConversationId.value
+        articleContext: props.embedded ? articleTitle.value : route.query.context || '',
+        conversationId: currentConversationId.value,
+        scene: isCompanion.value ? 'LEARNING_AGENT' : 'QA'
       })
     })
 
@@ -381,13 +412,10 @@ const sendMessage = async () => {
         }
       })
 
-      let streamDone = false
-      while (!streamDone) {
-        const chunk = await reader.read()
-        streamDone = chunk.done
-        if (!streamDone) {
-          parser.feed(decoder.decode(chunk.value, { stream: true }))
-        }
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        parser.feed(decoder.decode(value, { stream: true }))
       }
       parser.feed(decoder.decode())
       parser.end()
@@ -440,7 +468,7 @@ const sendMessage = async () => {
 
 const scrollToBottom = () => {
   nextTick(() => {
-    const container = document.getElementById('chat-container')
+    const container = chatContainer.value
     if (container) container.scrollTop = container.scrollHeight
   })
 }
@@ -464,6 +492,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
   position: relative;
 }
+
+.ai-qa-page.embedded .history-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 80; width: min(280px, 82%); box-shadow: 12px 0 28px rgba(0, 0, 0, .13); }
+.ai-qa-page.embedded .qa-header-inner { padding: 7px 12px; }
+.ai-qa-page.embedded .qa-chat-area { padding: 12px; }
+.ai-qa-page.embedded .msg-bubble { font-size: 13px; }
+.ai-qa-page.embedded .agent-empty h2 { font-size: 18px; }
 
 .history-sidebar {
   width: 280px;
@@ -531,8 +565,11 @@ onBeforeUnmount(() => {
 .qa-back-btn:hover { color: #197fe6; }
 
 .qa-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(25, 127, 230, 0.1); display: flex; align-items: center; justify-content: center; color: #197fe6; border: 1px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-.qa-companion-title { color: var(--xy-brand-700); font-size: 14px; font-weight: 700; white-space: nowrap; }
-.qa-avatar.is-companion, .msg-avatar.is-companion { background: transparent; border: 0; box-shadow: none; }
+.agent-identity { display: flex; align-items: center; gap: 8px; }
+.agent-identity > div:last-child { display: grid; line-height: 1.15; }
+.agent-identity strong { color: var(--xy-brand-700); font-size: 13px; }
+.agent-identity span { color: var(--xy-ink-muted); font-size: 10px; }
+.msg-avatar.is-companion { background: transparent; border: 0; box-shadow: none; overflow: visible; }
 
 .share-form { display: flex; flex-direction: column; gap: 16px; }
 .share-field label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
@@ -552,6 +589,9 @@ onBeforeUnmount(() => {
 .qa-chat-area::-webkit-scrollbar { display: none; }
 .empty-hint { display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; font-size: 14px; }
 .empty-hint p { margin: 0; }
+.agent-empty { display: flex; flex-direction: column; align-items: center; max-width: 420px; text-align: center; }
+.agent-empty h2 { margin: 14px 0 6px; color: #255f4b; font-size: 22px; }
+.agent-empty p { color: #7c9189; line-height: 1.6; }
 
 .msg-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 12px; }
 .msg-row.msg-user { justify-content: flex-end; }
@@ -610,6 +650,6 @@ onBeforeUnmount(() => {
 
 @media (max-width: 640px) {
   .history-sidebar { position: absolute; left: 0; top: 0; bottom: 0; z-index: 200; box-shadow: 4px 0 16px rgba(0,0,0,0.1); }
-  .qa-companion-title { display: none; }
+  .agent-identity > div:last-child { display: none; }
 }
 </style>                                                                                                                                                                    

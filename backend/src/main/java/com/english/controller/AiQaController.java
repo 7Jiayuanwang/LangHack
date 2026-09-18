@@ -6,6 +6,7 @@ import com.english.entity.AiConversation;
 import com.english.mapper.AiCallLogMapper;
 import com.english.service.ConversationService;
 import com.english.service.HiAgentService;
+import com.english.service.LearningAgentPromptContextService;
 import com.english.service.UserService;
 import com.english.service.impl.AiCallMetricsService;
 import com.english.service.impl.AiProviderRuntimeService;
@@ -42,6 +43,9 @@ public class AiQaController {
     private UserService userService;
 
     @Autowired
+    private LearningAgentPromptContextService learningAgentPromptContextService;
+
+    @Autowired
     private AiCallMetricsService aiCallMetricsService;
 
     @Autowired
@@ -66,6 +70,9 @@ public class AiQaController {
             String selectedText = request.getSelectedText() != null ? request.getSelectedText().trim() : "";
             String articleContext = request.getArticleContext() != null ? request.getArticleContext().trim() : "";
             String username = auth != null ? auth.getName() : "anonymous";
+            Long userId = resolveUserId(auth);
+            String prompt = buildChatPrompt(question, selectedText, articleContext,
+                    request.getScene(), loadLearningAgentContext(request.getScene(), userId));
             String answer = null;
 
             long startTime = aiCallMetricsService.startTimer();
@@ -73,7 +80,7 @@ public class AiQaController {
             if (aiProviderRuntimeService != null) {
                 try {
                     Optional<String> configuredAnswer = aiProviderRuntimeService.completeIfConfigured(
-                            "chat", "chatQA", buildChatPrompt(question, selectedText, articleContext));
+                            "chat", "chatQA", prompt);
                     if (configuredAnswer.isPresent()) {
                         answer = configuredAnswer.get();
                     }
@@ -84,7 +91,9 @@ public class AiQaController {
             }
 
             if (answer == null) {
-                answer = hiAgentService.chatQA(question, selectedText, articleContext);
+                answer = isLearningAgentScene(request.getScene())
+                        ? hiAgentService.chatQA(prompt, "", "")
+                        : hiAgentService.chatQA(question, selectedText, articleContext);
                 // 仅在 HiAgent 回退路径记录，Provider 路径由其内部记录，避免重复计数
                 aiCallMetricsService.recordSuccess("QA", "chatQA", startTime, username);
             }
@@ -93,7 +102,7 @@ public class AiQaController {
             Long conversationId = request.getConversationId();
             if (auth != null) {
                 try {
-                    Long userId = userService.getUserByUsername(auth.getName()).getId();
+                    if (userId == null) throw new IllegalStateException("用户不存在");
                     if (conversationId == null) {
                         AiConversation conv = conversationService.createConversation(userId, question);
                         conversationId = conv.getId();
@@ -154,7 +163,8 @@ public class AiQaController {
         conversationService.addMessage(
                 platformConversationId, userId, "user", question, selectedText, articleContext);
 
-        String prompt = buildChatPrompt(question, selectedText, articleContext);
+        String prompt = buildChatPrompt(question, selectedText, articleContext,
+                request.getScene(), loadLearningAgentContext(request.getScene(), userId));
         String upstreamConversationId = hiAgentService.createConversationForQA();
         return hiAgentService.chatQueryStreamingWithQACredentials(
                 upstreamConversationId,
@@ -191,7 +201,19 @@ public class AiQaController {
         return Result.success(data);
     }
 
-    private String buildChatPrompt(String userQuestion, String selectedText, String articleContext) {
+    private String buildChatPrompt(String userQuestion, String selectedText, String articleContext,
+                                   String scene, String learningContext) {
+        if (isLearningAgentScene(scene)) {
+            return "你是一位长期陪伴大学生的英语学习伙伴。请围绕英语学习回答当前问题，"
+                    + "给出具体、可执行的下一步；一次最多追问一个关键问题；"
+                    + "不要编造用户的学习记录或成就。鼓励用户逐步用英语获取信息、拓展兴趣。\n\n"
+                    + (learningContext != null && !learningContext.isBlank()
+                    ? learningContext + "\n\n请结合画像进行个性化回答，但只引用画像中确实存在的事实。\n\n"
+                    : "当前没有可用的学习画像，请先基于学生消息回答，必要时只追问一个问题。\n\n")
+                    + (selectedText != null && !selectedText.isEmpty() ? "【当前选中文本】\n" + selectedText + "\n\n" : "")
+                    + (articleContext != null && !articleContext.isEmpty() ? "【当前文章上下文】\n" + articleContext + "\n\n" : "")
+                    + "【学生消息】\n" + userQuestion;
+        }
         if (selectedText == null || selectedText.isEmpty()) {
             return "你是一位专业的英语学习辅导老师，请用中文回答学生的英语学习问题。"
                     + "回答要详细、专业，帮助学生理解英语内容。\n\n"
@@ -205,11 +227,27 @@ public class AiQaController {
                 + "【学生提问】\n" + userQuestion;
     }
 
+    private Long resolveUserId(Authentication auth) {
+        if (auth == null) return null;
+        com.english.entity.User user = userService.getUserByUsername(auth.getName());
+        return user == null ? null : user.getId();
+    }
+
+    private String loadLearningAgentContext(String scene, Long userId) {
+        if (!isLearningAgentScene(scene) || userId == null) return "";
+        return learningAgentPromptContextService.buildForUser(userId);
+    }
+
+    private boolean isLearningAgentScene(String scene) {
+        return scene != null && "LEARNING_AGENT".equalsIgnoreCase(scene.trim());
+    }
+
     @Data
     public static class ChatRequest {
         private String userQuestion;
         private String selectedText;
         private String articleContext;
         private Long conversationId;
+        private String scene;
     }
 }
